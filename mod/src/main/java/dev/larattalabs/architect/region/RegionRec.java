@@ -50,6 +50,11 @@ public final class RegionRec {
 	 */
 	public @Nullable JsonObject brush;
 	/**
+	 * (6c D1) The standing region this region was planned beside (its IR's {@code beside.id}, RegionPlanRequest.beside); null for any
+	 * other region. Written by the mod only.
+	 */
+	public @Nullable String beside;
+	/**
 	 * (6c PT §6) The builds the realise's (or stroke's) consent named and the check accepted (an actor placed at least 10% or holds
 	 * permission level 2): their cells may be written. Validated once at the request; kept so a resumed region keeps it.
 	 */
@@ -226,6 +231,9 @@ public final class RegionRec {
 			o.addProperty("opKey", opKey);
 			o.addProperty("opHash", opHash);
 		}
+		if (beside != null) {
+			o.addProperty("beside", beside);
+		}
 		if (brush != null) {
 			o.add("brush", brush.deepCopy());
 		}
@@ -300,6 +308,7 @@ public final class RegionRec {
 		r.opKey = o.has("opKey") ? o.get("opKey").getAsString() : null;
 		r.opHash = o.has("opHash") ? o.get("opHash").getAsString() : null;
 		r.brush = o.get("brush") instanceof JsonObject b ? b.deepCopy() : null;
+		r.beside = o.has("beside") && o.get("beside").isJsonPrimitive() ? o.get("beside").getAsString() : null;
 		return r;
 	}
 

@@ -1,0 +1,110 @@
+{
+  "about": "a road to a standing region beside the claim (endpoint.region, D1): from the stone to the cell past its street end in the seam",
+  "on": "asks",
+  "covers": [
+    "endpoint.region"
+  ],
+  "standing": [
+    {
+      "id": "rg7",
+      "claim": [
+        -120,
+        100,
+        3,
+        220
+      ],
+      "lots": [
+        [
+          -60,
+          140,
+          -45,
+          155
+        ]
+      ],
+      "keep": [
+        [
+          -30,
+          158,
+          -1,
+          162
+        ]
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "street_e_j1",
+            "kind": "junction",
+            "ref": "street_e",
+            "level": 0,
+            "at": [
+              -30,
+              64,
+              160
+            ],
+            "ports": [
+              {
+                "name": "street",
+                "at": [
+                  -30,
+                  64,
+                  160
+                ],
+                "facing": "up",
+                "width": 5
+              }
+            ]
+          },
+          {
+            "id": "street_e_end",
+            "kind": "junction",
+            "ref": "street_e",
+            "level": 0,
+            "at": [
+              -1,
+              64,
+              160
+            ],
+            "ports": [
+              {
+                "name": "street",
+                "at": [
+                  -1,
+                  64,
+                  160
+                ],
+                "facing": "up",
+                "width": 5
+              }
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "id": "street_e#end",
+            "from": "street_e_j1.street",
+            "to": "street_e_end.street",
+            "type": "road",
+            "width": 5,
+            "stage": "street",
+            "path": "street_e"
+          }
+        ]
+      }
+    }
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "to_rg7",
+        "kind": "road",
+        "from": {
+          "anchor": "street_w"
+        },
+        "to": {
+          "region": "rg7"
+        }
+      }
+    ]
+  }
+}

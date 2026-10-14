@@ -50,7 +50,8 @@ function irGraph(ir, meta, vw) {
   const edges = ir.graph.edges.map((e) => {
     const a = ports.get(e.from), b = ports.get(e.to);
     const v = vg && a && b && nodeReached(vg, a) && nodeReached(vg, b);
-    return { id: e.id, from: e.from, to: e.to, type: e.type, width: e.width, path: e.path, stage: e.stage, mover: v ? ['player', 'villager'] : ['player'] };
+    // (6c D1) an external edge: `to` is another region's port (<region>:<node>.<port>; 7a types it)
+    return { id: e.id, from: e.from, to: e.to, type: e.type, width: e.width, path: e.path, stage: e.stage, mover: v ? ['player', 'villager'] : ['player'], ...(e.external ? { external: true } : {}) };
   });
   return { derived: false, nodes, edges };
 }

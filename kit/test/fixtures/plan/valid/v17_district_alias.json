@@ -1,10 +1,9 @@
 {
-  "about": "zone kind district: the districts program's block",
+  "about": "zone kind district (zone.district, an alias): since D1 its program decides; a lots program is a standard zone (S7 claim)",
   "on": "s7",
-  "expect": {
-    "part": "east",
-    "block": "program.districts"
-  },
+  "covers": [
+    "program.lots"
+  ],
   "plan": {
     "schemaVersion": "plan/0",
     "zones": [

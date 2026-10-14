@@ -272,6 +272,14 @@ public final class PlanChecks {
 		JsonObject bs = new JsonObject();
 		bs.add("builds", dev.larattalabs.architect.placed.BuildViews.planJson(dim, new int[] {c.minX(), c.minY(), c.minZ(), c.maxX(), c.maxY(), c.maxZ()}));
 		params.add("builds", bs);
+		// (6c D1) the owner's standing regions beside the claim (within the seam's reach): endpoint.region ends past one of their street
+		// ends inside the claim; their footprint is hard to the plan
+		JsonArray standing = standingBeside(dim, r.owner(), new int[] {c.minX(), c.minZ(), c.maxX(), c.maxZ()});
+		if (!standing.isEmpty()) {
+			JsonObject sb = new JsonObject();
+			sb.add("standing", standing);
+			params.add("standing", sb);
+		}
 		params.add("budget", budgetJson(budget));
 		if (r.bible() != null) {
 			JsonObject b = new JsonObject();
@@ -543,6 +551,26 @@ public final class PlanChecks {
 		all.add("areas", a);
 		all.add("regions", g);
 		return new Protection(a, g, BatchKeys.sha256(BatchKeys.canonical(all)));
+	}
+
+	/** (6c D1) The owner's standing regions within {@link BesideCheck#SEAM_MAX} of a claim, as {@code beside} data, by id. */
+	static JsonArray standingBeside(String dimension, @Nullable String owner, int[] xz) {
+		TreeMap<String, JsonObject> out = new TreeMap<>();
+		int m = BesideCheck.SEAM_MAX;
+		for (RegionsImpl.Live l : RegionsImpl.all()) {
+			var rec = l.rec();
+			if (rec.state == RegionState.REMOVED || rec.state == RegionState.REMOVING || !java.util.Objects.equals(rec.owner, owner) || !rec.dimension.equals(dimension)) {
+				continue;
+			}
+			int[] c = rec.claim;
+			if (c[0] > xz[2] + m || c[3] < xz[0] - m || c[2] > xz[3] + m || c[5] < xz[1] - m) {
+				continue;
+			}
+			out.put(rec.id, BesideCheck.besideData(rec.id, new int[] {c[0], c[2], c[3], c[5]}, l.ir().json(), xz));
+		}
+		JsonArray a = new JsonArray();
+		out.values().forEach(a::add);
+		return a;
 	}
 
 	private static JsonArray rect(int x0, int z0, int x1, int z1) {

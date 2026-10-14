@@ -90,7 +90,7 @@ steps.unit = async () => {
   out.asks = gap;
   fs.writeFileSync(path.join(OUT, 'asks-gap-table.txt'), `${gap.join('\n')}\n`);
   check(gap.some((l) => /^59 asks: /.test(l)), `item 11: the 59 recorded plans' table (${gap.find((l) => /^59 asks/.test(l)) ?? 'missing'})`);
-  const d = sh('node tools/plan-catalogue-diff.mjs kit/schemas/plan-catalogue.golden.json kit/test/fixtures/plan/catalogue-next.json --pending kit/test/fixtures/plan/pending-two-districts.json');
+  const d = sh('node tools/plan-catalogue-diff.mjs kit/test/fixtures/plan/catalogue-p0.json kit/schemas/plan-catalogue.golden.json --pending kit/test/fixtures/plan/pending-two-districts.json');
   fs.writeFileSync(path.join(OUT, 'catalogue-diff.txt'), d.out);
   out.catalogueDiff = d.out;
   check(d.code === 0 && /reserved -> supported: endpoint\.region, program\.districts\n/.test(d.out) && /recheck \(pending parts now supported\): craftsmen_district \{program\.districts\}/.test(d.out) && /^added: none$/m.test(d.out),

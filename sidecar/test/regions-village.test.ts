@@ -91,3 +91,62 @@ describe.skipIf(!hasKit)('flat_village through the sidecar (real kit)', () => {
     expect(fs.existsSync(path.join(dataDir, 'regions', 'plans', p.planId, 'keepout.json'))).toBe(false);
   }, 180_000);
 });
+
+// (6c D1) region.plan's beside: the standing region reaches the plan CLI (--beside, beside.json), ctx.beside reads it, the IR records
+// its id, the join is routed to the standing street end and siteplan.json carries the external edge.
+describe('region.plan beside (protocol)', () => {
+  it('accepts a standing region and refuses a bad one', () => {
+    const base = { v: 1, type: 'region.plan', id: 'p', program: 'districts', params: {}, claim: CLAIM, surveyBlobId: 'b'.repeat(16) };
+    expect(RegionPlanMsg.safeParse({ ...base, beside: { id: 'rg1', claim: [0, 0, 10, 10], lots: [], keep: [], graph: { nodes: [], edges: [] } } }).success).toBe(true);
+    expect(RegionPlanMsg.safeParse({ ...base, beside: { id: 'rg 1', claim: [0, 0, 10, 10] } }).success).toBe(false);
+    expect(RegionPlanMsg.safeParse({ ...base, beside: { id: 'rg1', claim: [0, 0, 10] } }).success).toBe(false);
+  });
+});
+
+describe.skipIf(!hasKit || !fs.existsSync(path.join(KIT, 'regions', 'districts.mjs')))('districts beside a standing region through the sidecar (real kit)', () => {
+  let root: string;
+  let sc: Sidecar;
+  let dataDir: string;
+  const events: Outbound[] = [];
+  beforeAll(async () => {
+    root = tempDir('arch-region-beside-');
+    const cfg = loadConfig(['--data', path.join(root, 'data'), '--library', path.join(root, 'library'), '--kit', KIT, '--backend', 'sim'], {});
+    fs.mkdirSync(cfg.dataDir, { recursive: true });
+    dataDir = cfg.dataDir;
+    sc = new Sidecar(cfg, new Store(cfg.dataDir, { debounceMs: 5 }), memoryLogger());
+    sc.subscribe((m) => events.push(m));
+    await sc.start(new SimDesigner(sc, 5));
+  });
+  afterAll(async () => {
+    await sc?.close();
+    rmrf(root);
+  });
+
+  it('passes beside to the plan CLI; the join ends past the standing street end; the IR and siteplan record it', async () => {
+    // a standing village's street ends at x = 12 (its terminal junction); the cell past it, x = 11, lies in this claim's seam
+    const beside = { id: 'rg1', claim: [0, 0, 111, 111], lots: [[12, 56, 24, 68]], keep: [[12, 53, 49, 53]], graph: { nodes: [
+      { id: 'street_w_start', kind: 'junction', ref: 'street_w', level: 0, at: [12, 64, 53], ports: [{ name: 'street', at: [12, 64, 53], facing: 'up', width: 5 }] },
+      { id: 'street_w_j1', kind: 'junction', ref: 'street_w', level: 0, at: [30, 64, 53], ports: [{ name: 'street', at: [30, 64, 53], facing: 'up', width: 5 }] }],
+    edges: [{ id: 'street_w#1', from: 'street_w_start.street', to: 'street_w_j1.street', type: 'road', width: 5, stage: 'street', path: 'street_w' }] } };
+    const claim = { minX: -60, minZ: 13, maxX: 11, maxZ: 93, minY: -64, maxY: 319 };
+    const surveyBlobId = sc.blobs.putBytes(arsv(-60, 13, 72, 81, () => 64), 'survey', 'bin');
+    let ack: { ok: boolean; error?: string; result?: Record<string, unknown> } | undefined;
+    await sc.handle({ v: 1, type: 'region.plan', id: 'p', program: 'districts', params: { spec: { districts: [{ id: 'east', size: [48, 48], lots: 4 }] } }, seed: '7', claim, surveyBlobId, beside } as never, (m) => {
+      if (m.type === 'ack') ack = m;
+    });
+    expect(ack?.ok, ack?.error).toBe(true);
+    const planId = ack!.result!.planId as string;
+    await until(() => events.some((e) => (e.type === 'region.planned' || e.type === 'region.failed') && e.planId === planId), 170_000, 50);
+    const failed = events.find((e) => e.type === 'region.failed' && e.planId === planId);
+    expect(failed, failed?.type === 'region.failed' ? failed.message : '').toBeUndefined();
+    const p = events.find((e): e is Planned => e.type === 'region.planned' && e.planId === planId)!;
+    const dir = path.join(dataDir, 'regions', 'plans', p.planId);
+    expect(JSON.parse(fs.readFileSync(path.join(dir, 'beside.json'), 'utf8')).id).toBe('rg1');
+    expect(JSON.parse(fs.readFileSync(path.join(dir, 'request.json'), 'utf8')).beside).toEqual({ id: 'rg1' });
+    const ir = JSON.parse(p.ir ?? fs.readFileSync(sc.blobs.file(p.irBlobId!), 'utf8'));
+    expect(ir.beside.id).toBe('rg1');
+    expect(ir.graph.edges.filter((e: { external?: boolean }) => e.external).map((e: { to: string }) => e.to)).toEqual(['rg1:street_w_start.street']);
+    const site = p.sitePlan as { graph: { edges: { id: string; external?: boolean }[] } } | undefined;
+    expect(site?.graph.edges.filter((e) => e.external).map((e) => e.id)).toEqual(['join_external']);
+  }, 180_000);
+});

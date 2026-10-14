@@ -732,7 +732,7 @@ steps.apicompat = async () => {
   if (state.dev || (await connect(5_000).then(() => true).catch(() => false))) {
     if (!(await call('dev.state')).inWorld) await openWorld(FLAT);
     const v = await api('api114');
-    check(v.oldCtors === true && /^(opKey|consent) opKey$/.test(v.trailing) /* PT appended RealiseRequest.consent after opKey */ && v.byKeyDefaults === true && v.features114?.length === 2 && x114Reasons(v.lastReasons),
+    check(v.oldCtors === true && /^(opKey|consent) (opKey|beside)$/.test(v.trailing) /* PT appended RealiseRequest.consent after opKey; D1 RegionPlanRequest.beside */ && v.byKeyDefaults === true && v.features114?.length === 2 && x114Reasons(v.lastReasons),
       `item 5: apitest api114: old constructors kept, trailing opKey, default methods, no new Reason from X (later slices append after FIELD_LIMIT) (${json(v)})`);
   }
   return { out: t };

@@ -1,0 +1,136 @@
+{
+  "about": "a districts zone (program.districts, D1): three districts on the asks claim, one near another, a road to one district by its port",
+  "on": "asks",
+  "covers": [
+    "program.districts"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "quarters",
+        "label": "Three quarters",
+        "program": {
+          "loopiness": 0.15,
+          "districts": [
+            {
+              "id": "market",
+              "size": {
+                "w": 48,
+                "d": 40
+              },
+              "lots": [
+                {
+                  "id": "mk1",
+                  "type": "cottage",
+                  "size": [
+                    9,
+                    9
+                  ]
+                },
+                {
+                  "id": "mk2",
+                  "type": "house",
+                  "size": [
+                    9,
+                    9
+                  ]
+                },
+                {
+                  "id": "mk3",
+                  "type": "smithy",
+                  "size": [
+                    9,
+                    9
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "crafts",
+              "size": {
+                "w": 40,
+                "d": 40
+              },
+              "near": [
+                "market"
+              ],
+              "lots": [
+                {
+                  "id": "cr1",
+                  "type": "cottage",
+                  "size": [
+                    9,
+                    9
+                  ]
+                },
+                {
+                  "id": "cr2",
+                  "type": "house",
+                  "size": [
+                    9,
+                    9
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "homes",
+              "size": {
+                "preset": "M"
+              },
+              "shared": "well",
+              "lots": [
+                {
+                  "id": "hm1",
+                  "type": "cottage",
+                  "size": [
+                    9,
+                    9
+                  ]
+                },
+                {
+                  "id": "hm2",
+                  "type": "house",
+                  "size": [
+                    9,
+                    9
+                  ]
+                },
+                {
+                  "id": "hm3",
+                  "type": "smithy",
+                  "size": [
+                    9,
+                    9
+                  ]
+                },
+                {
+                  "id": "hm4",
+                  "type": "cottage",
+                  "size": [
+                    9,
+                    9
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "to_stone",
+        "kind": "road",
+        "from": {
+          "anchor": "stone"
+        },
+        "to": {
+          "part": "quarters",
+          "port": "crafts"
+        }
+      }
+    ]
+  }
+}

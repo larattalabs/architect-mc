@@ -348,6 +348,8 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-13 (6c slice D1):** `dev.region.plan` takes `beside` (a standing region's id: RegionPlanRequest.beside); the region
+  view (`dev.region.state`) carries `beside` and, in its ext, `architect_mc:beside` `{region, dangling, since?}`. No hook added.
 - **2026-10-13 (6c slice P0):** new (`SliceP0Dev`, generated headless too) `dev.region.checkPlan {plan, claim: [x0,z0,x1,z1], anchors?:
   {name: [x,y,z]}, owner?, bible?, bibleVersion?, budget?, opKey?, cancelAfterMs?}` (Regions.checkPlan -> `{check, ms}` or `{refused,
   reason}`), `dev.region.cancelCheck {owner?, opKey}`, `dev.region.checkByKey {owner?, opKey}`, `dev.region.planImages {checkId, views?}`,

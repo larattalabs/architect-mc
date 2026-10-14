@@ -967,3 +967,42 @@ A gate, a hall, a chapel and a lookout (9x9 lots) from a valley floor to a shoul
 chapel (villager), chapel - lookout (player-only). Sites from params `gateX` .. `lookoutZ` (the scenario pins them on S3's claim)
 or found; on a flat world a hill raised in stage `ground` (a ridge rising 1 in 2 to 40), routed through the pass's `base`. `edges`
 adds grid edges for the plan-time bench.
+
+## The `districts` pass (`passes/districts.mjs`, `districtsEmit.mjs`, 6c D1)
+
+```js
+export const passes = ['districts', 'route'];
+r.stages(['ground', 'street', 'routes', 'lots', 'props']);
+const d = r.pass('districts', { districts: [
+    { id: 'cloister', size: [32, 32], levelBand: 'high', shared: 'well', lots: [{ id: 'chapel_1', type: 'chapel', size: [7, 7] }] },
+    { id: 'fields', size: [40, 40], levelBand: 'low', prefer: ['open'], near: ['cloister'], lots: 3 } ],
+  loopiness: 0.15 });
+// -> {data: {assign, rects, bandOf, lots, unplaced, edges, treeCost, loopCost, join, ...}}; also meta.districts
+```
+
+- **Candidates** (`districtCandidates`): rects of the district's size on a lattice (step 4) inside the claim's margin, with no water,
+  lava or unknown column, clear of keep-out (the owner's C17 areas and the players' kept builds, `ctx.keepOut`), the caller's
+  `hard` rects, a standing region's footprint (`ctx.beside`) and this region's lots and forms. Each `{id, rect, y, range, band,
+  trees, tags}`: the band is the mean ground's tercile of the claim (`levelBands`), the tags `flat|sloped`, `near_water|dry`,
+  `wet`, `wooded|open`. At most 64 per district (neighbours suppressed), each laid out with V's `layoutStreet` in its rect.
+- **Assignment** (`assignDistricts`): integer costs (range 64 a block, trees 2 each, a missing `prefer` tag 4096, an unplaced lot
+  1,000,000; a band that is not the district's `levelBand` forbidden; `near`: the Chebyshev distance to the placed targets). With
+  at most 64 candidates per district: the Hungarian solution, overlapping picks (within 4 columns) branched on best first (at most
+  512 nodes); else greedy in id order. A district `near` others is placed in a later phase than them. No candidate: `unplaced`.
+- **Edges**: each pair of the 6 nearest districts gets a dry route cost (the pure route pass, the 2 x 2 street ends nearest first,
+  at most 1M expansions each); Kruskal's tree, then the cheapest non-tree pairs while their cost stays within `loopiness` of the
+  tree's. A district outside the largest component is `unplaced` (`unreachable`). Every chosen edge is routed by one route pass
+  (`part` `routes`), each end the cell past a street end (facing out of it), linked to the street's terminal junction by a road edge.
+- **Beside** (`ctx.beside`, Regions.plan's `beside`): the standing region's street ends (terminal junctions of its graph) whose
+  past-end cell lies in this claim; the cheapest dry route from a district's street end to one becomes the routed edge `join`,
+  written by this region; the graph gets `join_external` to `<region>:<node>.<port>` (`external: true`, in siteplan.json too).
+  No such street end in the claim, or no route: `NO_JOIN` (the plan fails, named).
+- Lots by V's `streetLayout` (prefix `<districtId>_`, wall pads: a slope pad's batter undercuts V's verge cells on a slope), props per district, W's lamps over every lot apron and along
+  the routes (`lampFixture` for a snowy claim: soul lanterns). Anchors `entrance`/`spawn` (the first district's bell) and
+  `bell_<district>`.
+
+## `districts` and `districts_demo` (`kit/regions/`, `catalogue = false`)
+
+`districts`: the pass over `params.spec.districts` (a JSON param), with `loopiness` (percent), `gradePct`, `lamps` and `routeLamp`
+(`bible` | `soul`); what Regions.plan's `beside` plans with. `districts_demo`: three districts at three level bands (a cloister high,
+a village mid, fields low) on S3's pinned claim (scenario `districts_demo`, phase `6c-d`).

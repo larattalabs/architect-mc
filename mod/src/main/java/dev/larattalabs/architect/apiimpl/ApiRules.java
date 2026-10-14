@@ -63,6 +63,8 @@ public final class ApiRules {
 					case "region.brush" -> "brushes"; // 6c B: the helper's kit has the bundled brush program
 					case "region.route" -> "routePass"; // 6c T2
 					case "region.planCheck" -> "planCheck"; // 6c P0 (with planCatalogue, below)
+					case "region.districts" -> "districtsPass"; // 6c D1: the helper's kit has the districts pass and program
+					case "region.beside" -> "besideRegion"; // 6c D1: the helper passes a standing region to the plan (region.plan beside)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

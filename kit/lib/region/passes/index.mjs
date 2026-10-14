@@ -3,7 +3,8 @@
 // (`export const passes = ['relief']`, a literal array: the helper reads it to pick the plan budget). Under the realise lint.
 import { reliefPass } from './relief.mjs';
 import { routePass } from './route.mjs';
+import { districtsPass } from './districts.mjs';
 
-/** name -> the pass function. (6c T2) `route`; later slices add `hydrology` (HY), `districts` (D). */
-export const PASSES = Object.freeze({ relief: reliefPass, route: routePass });
+/** name -> the pass function. (6c T2) `route`; (6c D1) `districts` (the pure half; r.pass emits through districtsEmit.mjs); HY adds `hydrology`. */
+export const PASSES = Object.freeze({ relief: reliefPass, route: routePass, districts: districtsPass });
 export const PASS_NAMES = Object.freeze(Object.keys(PASSES));

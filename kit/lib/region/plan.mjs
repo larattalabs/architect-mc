@@ -21,7 +21,7 @@ import { maskTerms } from '../mask.mjs';
 import { PASS_NAMES } from './passes/index.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.27.0';
+export const KIT_VERSION = '0.28.0';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -146,6 +146,24 @@ export function parseKeepOut(v) {
   });
   out.sort((p, q) => p[0] - q[0] || p[1] - q[1] || p[2] - q[2] || p[3] - q[3]);
   return out.filter((r, i) => i === 0 || r.join() !== out[i - 1].join());
+}
+
+/**
+ * (6c D1) A standing region for `beside` (the mod's region.plan `beside`): `{id, claim: [x0, z0, x1, z1], lots: [[x0, z0, x1, z1]],
+ * keep: [[x0, z0, x1, z1]] (its written cells inside this claim), graph: {nodes, edges}}`. Throws on a bad shape.
+ */
+export function parseBeside(b) {
+  const rect = (q) => Array.isArray(q) && q.length === 4 && q.every(Number.isInteger) && q[0] <= q[2] && q[1] <= q[3];
+  if (!b || typeof b !== 'object' || Array.isArray(b)) throw new Error('beside must be an object');
+  if (typeof b.id !== 'string' || !/^[A-Za-z0-9_.-]{1,64}$/.test(b.id)) throw new Error('beside.id must be a region id');
+  if (!rect(b.claim)) throw new Error('beside.claim must be [x0, z0, x1, z1]');
+  for (const k of ['lots', 'keep']) {
+    const a = b[k] ?? [];
+    if (!Array.isArray(a) || a.length > 8192 || !a.every(rect)) throw new Error(`beside.${k} must be at most 8192 [x0, z0, x1, z1] rects`);
+  }
+  const g = b.graph ?? { nodes: [], edges: [] };
+  if (!g || !Array.isArray(g.nodes) || !Array.isArray(g.edges) || g.nodes.length > 4096 || g.edges.length > 8192) throw new Error('beside.graph must be {nodes, edges} (at most 4096 nodes)');
+  return { id: b.id, claim: [...b.claim], lots: (b.lots ?? []).map((q) => [...q]), keep: (b.keep ?? []).map((q) => [...q]), graph: { nodes: g.nodes, edges: g.edges } };
 }
 
 /** Parse a claim: an object or "minX,minZ,maxX,maxZ[,minY,maxY]" (inclusive). */
@@ -291,6 +309,9 @@ export async function planRegion(o) {
 
   const keepOut = parseKeepOut(o.keepOut ?? []);
   let keepOutRead = false;
+  // (6c D1) a standing region the plan lays out beside (Regions.plan's `beside`): read through ctx.beside, recorded in the IR when read
+  const beside = o.beside ? parseBeside(o.beside) : null;
+  let besideRead = false;
   const raw = asColumns(o.survey);
   const { columns: survey, missing } = fillMissing(raw);
   let roles;
@@ -336,6 +357,8 @@ export async function planRegion(o) {
     ctx.region = () => makeRegion(ctx);
     // (6c V) the owner's protected rects; a program that reads them records them in the IR (`keepOut`: the areas it honoured)
     Object.defineProperty(ctx, 'keepOut', { enumerable: true, get: () => { keepOutRead = true; return keepOut.map((k) => [...k]); } });
+    // (6c D1) the standing region beside this claim (null without one; a program that reads it records it in the IR)
+    Object.defineProperty(ctx, 'beside', { enumerable: true, get: () => { if (!beside) return null; besideRead = true; return JSON.parse(JSON.stringify(beside)); } });
     out = await mod.default(ctx);
     regionObj = out;
     ctx.__id = id; ctx.__params = params;
@@ -392,6 +415,8 @@ export async function planRegion(o) {
   // (6c V) the settlement graph (SETTLEMENTS §8.1's shape; a format-1 member the evaluator ignores) and the honoured keep-out
   if (r.graph.nodes.length) ir.graph = { nodes: r.graph.nodes, edges: r.graph.edges };
   if (keepOutRead) ir.keepOut = keepOut.map((k) => [...k]);
+  // (6c D1) the standing region the plan read (its id and the sha of what it read: the join and the obstacles came from it)
+  if (besideRead) ir.beside = { id: beside.id, sha: sha256Hex(canonicalJson(beside)) };
   const kinds = walkKinds(ir);
   if (kinds.length) { ir.format = 2; ir.requires = kinds; }
   const evalBlobs = (sha) => sideBytes.get(sha);
@@ -444,6 +469,6 @@ export async function planRegion(o) {
   stats.irFormat = ir.format;
   stats.requires = ir.requires ?? [];
   stats.passes = r.passRuns.map((x) => ({ ...x }));
-  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}), ...(r.meta.forms ? { forms: r.meta.forms } : {}), ...(r.passRuns.length ? { passes: r.passRuns.map((x) => ({ ...x })) } : {}), ...(r.meta.relief ? { relief: r.meta.relief } : {}), ...(r.meta.scatter ? { scatter: r.meta.scatter } : {}), ...(r.meta.stamps ? { stamps: r.meta.stamps } : {}), ...(r.meta.scatterDemo ? { scatterDemo: r.meta.scatterDemo } : {}), ...(r.meta.route ? { route: r.meta.route } : {}), ...(r.meta.planCheck ? { planCheck: r.meta.planCheck } : {}), ...(r.meta.villageZones ? { villageZones: r.meta.villageZones } : {}) };
+  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}), ...(r.meta.forms ? { forms: r.meta.forms } : {}), ...(r.passRuns.length ? { passes: r.passRuns.map((x) => ({ ...x })) } : {}), ...(r.meta.relief ? { relief: r.meta.relief } : {}), ...(r.meta.scatter ? { scatter: r.meta.scatter } : {}), ...(r.meta.stamps ? { stamps: r.meta.stamps } : {}), ...(r.meta.scatterDemo ? { scatterDemo: r.meta.scatterDemo } : {}), ...(r.meta.route ? { route: r.meta.route } : {}), ...(r.meta.planCheck ? { planCheck: r.meta.planCheck } : {}), ...(r.meta.villageZones ? { villageZones: r.meta.villageZones } : {}), ...(r.meta.districts ? { districts: r.meta.districts } : {}) };
   return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes };
 }

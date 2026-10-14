@@ -44,7 +44,9 @@ class Api114Test {
 			LoadPolicy.class, boolean.class, List.class, boolean.class, JsonObject.class).getDeclaringClass());
 		// the new component is last, and the old constructors leave it null
 		var pc = RegionPlanRequest.class.getRecordComponents();
-		assertEquals("opKey", pc[pc.length - 1].getName());
+		// (6c D1) beside appended after opKey
+		assertEquals("beside", pc[pc.length - 1].getName());
+		assertEquals("opKey", pc[pc.length - 2].getName());
 		var rc = RealiseRequest.class.getRecordComponents();
 		// (6c PT) consent appended after opKey
 		assertEquals("consent", rc[rc.length - 1].getName());

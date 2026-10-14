@@ -7,6 +7,8 @@
 //   anchors     {name: [x, y, z]} the caller's named positions (PlanRequest.anchors)
 //   protected   [{id, rect: [x0, z0, x1, z1]}] the protected areas meeting the claim (any owner: features and obstacles)
 //   regions     [{id, rect}] other owners' standing regions meeting the claim (obstacles)
+//   standing    {standing: [{id, claim, lots, keep, graph}]} (6c D1) the owner's standing regions beside the claim (endpoint.region: a
+//               route ends past one of their street ends inside the claim; their footprint is hard)
 //   builds      [{id, kind, state, bounds, footprint, entrances, cells, revision}] the players' builds meeting the claim (6c PT:
 //               feature.build, target {build}, endpoint.build; each kept build and its door aprons are keep-out, S-PT-4)
 //   budget      {maxNodes, maxEdges, maxCells, maxMs, maxHeapMb} (each at most §7's default)
@@ -23,7 +25,7 @@ export const id = 'plan_v0';
 export const description = 'A geometric plan (plan/0) compiled to one region: zones, relief, terraces, spikes and routes (6c P0).';
 /** Not in Regions.design's pick: plans come through Regions.checkPlan. */
 export const catalogue = false;
-export const passes = ['relief', 'route'];
+export const passes = ['relief', 'route', 'districts'];
 
 const J = (maxChars) => ({ type: 'json', default: null, ...(maxChars ? { maxChars } : {}) });
 export const params = {
@@ -31,6 +33,7 @@ export const params = {
   anchors: { ...J(16384), label: 'Named anchors' },
   protected: { ...J(65536), label: 'Protected areas' },
   regions: { ...J(65536), label: 'Other regions' },
+  standing: { ...J(262144), label: 'Standing regions beside' },
   builds: { ...J(262144), label: 'Player builds' },
   budget: { ...J(), label: 'Check budget' },
   bible: { ...J(), label: 'Bible' },
@@ -45,6 +48,7 @@ export default function planV0(ctx) {
   const list = (v, k) => (v && Array.isArray(v[k]) ? v[k] : []);
   const inputs = {
     plan: P.plan ?? {}, anchors: P.anchors?.anchors ?? {}, protected: list(P.protected, 'areas'), regions: list(P.regions, 'regions'), builds: list(P.builds, 'builds'),
+    standing: list(P.standing, 'standing'),
     budget: P.budget ?? {}, bible: P.bible ?? null, fingerprint: P.fingerprint?.sha ?? null,
   };
   const { region: r, record } = runCheck(ctx, inputs, { makeRegion: () => region(ctx), templates: TEMPLATES });

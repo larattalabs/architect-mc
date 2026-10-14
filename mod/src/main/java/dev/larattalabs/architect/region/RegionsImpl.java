@@ -432,6 +432,27 @@ public final class RegionsImpl implements Regions {
 		if (link == null || !link.connected()) {
 			return failed(Reason.SIDECAR_UNAVAILABLE, "the helper (sidecar) is not connected");
 		}
+		// (6c D1) beside a standing region: it must stand (same dimension, same owner), and the claim may overlap it only in a seam of at
+		// most 16 columns, never over its lots, roads or paths (OVERLAP, nothing planned); the plan reads its footprint and graph
+		if (r.beside() != null) {
+			Live st = REGIONS.get(r.beside());
+			if (st == null || st.rec().state == RegionState.REMOVING || st.rec().state == RegionState.REMOVED) {
+				return failed(Reason.OTHER, "beside: no standing region " + r.beside());
+			}
+			if (!st.rec().dimension.equals(Sites.dimensionId(r.level()))) {
+				return failed(Reason.NOT_ALLOWED, "beside: region " + r.beside() + " is in " + st.rec().dimension);
+			}
+			if (!java.util.Objects.equals(st.rec().owner, r.owner())) {
+				return failed(Reason.OVERLAP_OWNED, "beside: region " + r.beside() + " is " + (st.rec().owner == null ? "the player's" : st.rec().owner + "'s"));
+			}
+			int[] sc = st.rec().claim; // [x0, y0, z0, x1, y1, z1]
+			int[] standing = {sc[0], sc[2], sc[3], sc[5]}, mine = {c.minX(), c.minZ(), c.maxX(), c.maxZ()};
+			String seam = BesideCheck.seamProblem(standing, st.ir().json(), mine);
+			if (seam != null) {
+				return failed(Reason.OVERLAP, "beside " + r.beside() + ": " + seam);
+			}
+			BESIDE.put(r, BesideCheck.besideData(r.beside(), standing, st.ir().json(), mine));
+		}
 		warnKitMismatch();
 		int res = (long) c.getXSpan() * c.getZSpan() <= 256L * 256 ? 1 : 4;
 		progress(s, null, "planning");
@@ -492,12 +513,16 @@ public final class RegionsImpl implements Regions {
 			}));
 		}).thenCompose(o -> onServer(s, () -> finishPlan(r, (JsonObject) o[0], (JsonObject) o[1], (byte[]) o[2], opKey, opHash))).thenCompose(f -> f);
 		out.whenComplete((p, e) -> {
+			BESIDE.remove(r);
 			if (e != null) {
 				progress(s, null, "failed");
 			}
 		});
 		return out;
 	}
+
+	/** (6c D1) The beside data of a plan in flight (by request identity), read by planOnce for its region.plan message. */
+	private static final Map<RegionPlanRequest, JsonObject> BESIDE = java.util.Collections.synchronizedMap(new java.util.IdentityHashMap<>());
 
 	/**
 	 * (6c B) A brush stroke's plan ({@link Brushes}): one {@code region.plan} over a resolution-1 survey of the claim (the brush box
@@ -601,6 +626,11 @@ public final class RegionsImpl implements Regions {
 			c.maxY(), c.maxZ()}, !PlanChecks.PROGRAM.equals(r.program()));
 		if (!keepOut.isEmpty()) {
 			m.add("keepOut", keepOut);
+		}
+		// (6c D1) the standing region beside the claim (an older helper ignores the member; its plan then reads no beside)
+		JsonObject bd = r.beside() != null ? BESIDE.get(r) : null;
+		if (bd != null) {
+			m.add("beside", bd.deepCopy());
 		}
 		MinecraftServer s = r.level().getServer();
 		return link.send(m).thenCompose(ack -> {
@@ -1127,6 +1157,14 @@ public final class RegionsImpl implements Regions {
 		String id = reserved != null ? reserved : "rg" + nextRegion++;
 		Path w = s.getWorldPath(LevelResource.ROOT);
 		RegionRec rec = new RegionRec(id, p.planId(), p.irSha(), p.owner(), r.ext(), p.dimension(), ir.claim(), System.currentTimeMillis());
+		// (6c D1) planned beside a standing region: the record names it (the join is this region's; a dangling end is noted on removal)
+		if (ir.json().get("beside") instanceof JsonObject bs && bs.get("id") instanceof JsonElement bid && bid.isJsonPrimitive()) {
+			rec.beside = bid.getAsString();
+			JsonObject note = new JsonObject();
+			note.addProperty("region", rec.beside);
+			note.addProperty("dangling", REGIONS.get(rec.beside) == null);
+			rec.ext.add(EXT_BESIDE, note);
+		}
 		if (stroke != null) {
 			rec.brush = stroke.deepCopy(); // (6c B) the stroke's kind and destruction rule, read by every tile check
 		}
@@ -1739,7 +1777,7 @@ public final class RegionsImpl implements Regions {
 		PrepareView pv = Prepare.view(r.planId);
 		List<dev.larattalabs.architect.api.WaitAction> actions = actionsOf(l, waiting, waitingItem, heldStage, pv);
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), r.state, st, lots,
-			r.cellsWritten, r.skipped, waiting, pv, actions, 0L, Brushes.kindOf(r), r.buildHitList());
+			r.cellsWritten, r.skipped, waiting, pv, actions, 0L, Brushes.kindOf(r), r.buildHitList(), r.beside);
 	}
 
 	/** (6c X, C22) The view of a removed region: REMOVED, with the time its removal finished. */
@@ -1748,7 +1786,7 @@ public final class RegionsImpl implements Regions {
 		List<LotState> lots = new ArrayList<>();
 		r.lots.forEach((id, ls) -> lots.add(new LotState(id, ls.siteId, ls.state)));
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), RegionState.REMOVED,
-			List.of(), lots, r.cellsWritten, r.skipped, null, null, List.of(), r.removedAt, Brushes.kindOf(r), r.buildHitList());
+			List.of(), lots, r.cellsWritten, r.skipped, null, null, List.of(), r.removedAt, Brushes.kindOf(r), r.buildHitList(), r.beside);
 	}
 
 	/** (6b) The nudge actions for what the region waits for ({@link WaitActions}). */
@@ -2072,6 +2110,32 @@ public final class RegionsImpl implements Regions {
 		}
 		Architect.LOGGER.info("Region {}: removal {} ({})", l.rec().id, removed ? "done: REMOVED" : "stopped: PARTIAL", l.rec().groupId);
 		SiteEvents.REGION_STATE.invoker().onState(view(l));
+		if (removed) {
+			danglingJoins(l.rec().id, at);
+		}
+	}
+
+	/** RegionView ext key (Architect's): {@code {region, dangling, since?}} on a region planned beside another (6c D1). */
+	public static final String EXT_BESIDE = "architect_mc:beside";
+
+	/**
+	 * (6c D1, CONTRACT D §3) The standing region {@code id} was removed first (allowed: journal layering): every region planned beside
+	 * it reports its join's end as dangling in its ext ({@code architect_mc:beside.dangling}, since when), saved, and logged.
+	 */
+	private static void danglingJoins(String id, long at) {
+		for (Live o : List.copyOf(REGIONS.values())) {
+			if (!id.equals(o.rec().beside)) {
+				continue;
+			}
+			JsonObject note = o.rec().ext.get(EXT_BESIDE) instanceof JsonObject n ? n : new JsonObject();
+			note.addProperty("region", id);
+			note.addProperty("dangling", true);
+			note.addProperty("since", at);
+			o.rec().ext.add(EXT_BESIDE, note);
+			save(o);
+			Architect.LOGGER.info("Region {}: its join's end at region {} is dangling (the standing region was removed)", o.rec().id, id);
+			SiteEvents.REGION_STATE.invoker().onState(view(o));
+		}
 	}
 
 	/**
