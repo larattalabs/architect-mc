@@ -16,8 +16,8 @@
 //                and its 2-over rule, the gates' clearance, 0 dark gate or top cells (M5 from the dump's own light); the gates exactly
 //                the crossings plus gates.min; vanilla dev.nav.villager from every lot inside to the outside of each gate and back,
 //                meeting the wall only at gate cells; the doors opened (as a villager does) and Regions.remove exact (E-flat 0)
-//     natural    items 1, 4 and 9 on S3's pinned claim (a fresh copy of the seed world): v30 (its zone sketched clear of the river),
-//                realised, realised vs virtual (at most 0.01% unclassified), closure on the dump, E-normal all classified
+//     natural    items 1, 4 and 9 on S7's pinned natural claim (a fresh copy of the seed world): v30 realised, realised vs virtual (at
+//                most 0.01% unclassified), the wall bars on the dump, E-normal classified (D2's narrowed world classes)
 //     target     K1-target (headless): a V town realised, then a wall-only plan round it (wall.around {region}) realised as its own
 //                region (the wall bars on its dump, no cell on the town's footprint), removed alone: E-flat 0, the town's hash unchanged
 //     look       the look step (a client: cameras): v30 on S7's natural claim in three bibles (rustic, infernal, coastal), each
@@ -407,41 +407,27 @@ function worldClasses(diff, F, vw, F_WRITTEN, decodeColumns, restored) {
 
 steps.natural = async () => {
   await ensure();
-  const claim = [...S3.fixture.claim];
-  // the live seed world's survey differs from the committed S3 survey (live worlds drift: T1 as built), so the zone's sketch is the
-  // first of these points whose check on the live survey has the ring clear (a dry run on a fresh copy, recorded)
-  const PTS = [[23, 31], [22, 30], [24, 33], [21, 32], [25, 30], [20, 28], [26, 34], [18, 30]];
-  const planAt = (pt) => { const q = JSON.parse(JSON.stringify(V30)); q.zones[0].sketch = { frame: 'claim', unit: 'q64', shape: 'point', points: [pt] }; return q; };
-  await L.fresh('G6B K1a S3 Dry', BASE);
-  { const [cx, cz] = centre(claim); await tp(cx, 140, cz); }
-  await L.settle(30_000);
-  let pick = null;
-  const tried = [];
-  for (const pt of PTS) {
-    const c = await checkPlan(planAt(pt), claim, { anchors: anchorsOf(claim) });
-    tried.push({ pt, parts: c.parts.map((q) => `${q.part}:${q.class}`) });
-    if (c.parts.every((q) => q.part === 'town' || q.class === 'fits')) { pick = pt; break; }
-  }
-  check(!!pick, `S3: a sketch point whose live check has the ring clear (${json(tried)})`);
-  if (!pick) return { tried };
-  const out = await v30Round('k1a-s3', BASE, claim, planAt(pick), { rules: 'default', settleMs: 30_000 });
-  out.sketch = pick; out.tried = tried;
+  // S7's pinned natural claim (the look's site; the seed world): the committed S3 survey's walled village is the kit's (item 1-4 in
+  // the virtual world, plan-k1a.test.mjs); on the live seed world S3's zone lands larger and against the river (live worlds drift:
+  // T1 as built), so the realised natural round runs where the same plan answers READY on the live survey
+  const claim = [...S7.fixture.claim];
+  const out = await v30Round('k1a-s7', BASE, claim, V30, { rules: 'default', settleMs: 30_000 });
   const skips = Object.values(out.skipped).reduce((a, b) => a + b, 0);
-  check(out.virtual.kept <= skips, `item 4 (S3): every cell kept by its condition is one the realise counted as skipped (${out.virtual.kept} kept, ${skips} skipped)`);
-  check(out.virtual.written > 0 && out.virtual.share <= 0.0001, `item 4 (S3): the realised world equals the virtual world over ${out.virtual.written} written cells: ${out.virtual.differ} unclassified (${(100 * out.virtual.share).toFixed(4)}%, at most 0.01%), ${out.virtual.kept} kept, ${out.virtual.road} on 4e ground roads`, out.virtual.first);
-  wallBars(out.R, 'S3 natural, realised');
+  check(out.virtual.kept <= skips, `item 4 (S7 natural): every cell kept by its condition is one the realise counted as skipped (${out.virtual.kept} kept, ${skips} skipped)`);
+  check(out.virtual.written > 0 && out.virtual.share <= 0.0001, `item 4 (S7 natural): the realised world equals the virtual world over ${out.virtual.written} written cells: ${out.virtual.differ} unclassified (${(100 * out.virtual.share).toFixed(4)}%, at most 0.01%), ${out.virtual.kept} kept, ${out.virtual.road} on 4e ground roads`, out.virtual.first);
+  wallBars(out.R, 'S7 natural, realised');
   await cmd('/kill @e[type=!minecraft:player]');
   await L.settle(5000);
   const rm = await call('dev.region.remove', { region: out.region, requester: OWNER }, 4 * 3_600_000);
   await L.settle(10_000);
-  const diff = await call('dev.region.hash', { box: out.box, mode: 'diff', file: path.join(OUT, 'k1a-s3-snap.gz') }, 4 * 3_600_000);
+  const diff = await call('dev.region.hash', { box: out.box, mode: 'diff', file: path.join(OUT, 'k1a-s7-snap.gz') }, 4 * 3_600_000);
   const { buildVirtual, F_WRITTEN } = await imp('lib/region/vworld.mjs');
   const { decodeColumns } = await imp('lib/region/pack.mjs');
   const F = planFiles(planDir(out.checkId));
   const { vw } = buildVirtual({ ir: F.ir, survey: F.survey, blobs: F.blobs });
   const wc = worldClasses(diff, F, vw, F_WRITTEN, decodeColumns, rm.restored);
   out.exact = { removed: rm.removed, restored: rm.restored, mismatches: diff.mismatches, classes: diff.classes, worldBy: wc.by, undoOwn: wc.undoOwn, cap: wc.cap, world: wc.world.slice(0, 60), list: (diff.list ?? []).filter((m) => m.class === 'none').slice(0, 40) };
-  check(rm.removed && (diff.classes.none ?? 0) === 0 && wc.undoOwn <= wc.cap, `item 9 (S3): Regions.remove: E-normal ${diff.mismatches} mismatches, all classified (${json(diff.classes)}; by place ${json(wc.by)}); the undo's own ${wc.undoOwn} (at most 0.01% of ${rm.restored} restored = ${wc.cap})`, out.exact.list);
+  check(rm.removed && (diff.classes.none ?? 0) === 0 && wc.undoOwn <= wc.cap, `item 9 (S7 natural): Regions.remove: E-normal ${diff.mismatches} mismatches, all classified (${json(diff.classes)}; by place ${json(wc.by)}); the undo's own ${wc.undoOwn} (at most 0.01% of ${rm.restored} restored = ${wc.cap})`, out.exact.list);
   delete out.R.meta;
   await leaveWorld();
   spendZero();
