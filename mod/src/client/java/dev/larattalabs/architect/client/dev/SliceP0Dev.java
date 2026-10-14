@@ -247,6 +247,37 @@ public final class SliceP0Dev {
 					return o;
 				});
 			});
+		// (C37b) Library.Entry.cells() against PlanChecks.cells (what realiseApproved compares with costRange[1]) and the sum of the Part cells
+		DevBridge.register("dev.library.cells", 30_000, "{ids?: [entry]} - (C37b) per entry {id, entryCells (Library.Entry.cells()), planCells (PlanChecks.cells), partSum (the Part cells summed: NOT the count)} "
+			+ "-> {entries: [...]} (every entry when ids is absent)", (req, mc) -> {
+				java.util.Set<String> want = new java.util.HashSet<>();
+				if (req.has("ids") && req.get("ids").isJsonArray()) {
+					req.getAsJsonArray("ids").forEach(e -> want.add(e.getAsString()));
+				}
+				return ServerTasks.callAsPlayer((level, player) -> {
+					JsonObject o = new JsonObject();
+					JsonArray a = new JsonArray();
+					for (var e : ArchitectApi.get().library().list()) {
+						if (!want.isEmpty() && !want.contains(e.id())) {
+							continue;
+						}
+						JsonObject r = new JsonObject();
+						r.addProperty("id", e.id());
+						r.addProperty("entryCells", e.cells());
+						r.addProperty("planCells", dev.larattalabs.architect.region.PlanChecks.cells(e.id()));
+						r.addProperty("partSum", e.parts().values().stream().mapToLong(p -> p.cells()).sum());
+						r.addProperty("parts", e.parts().size());
+						JsonArray sz = new JsonArray();
+						sz.add(e.size().x());
+						sz.add(e.size().y());
+						sz.add(e.size().z());
+						r.add("size", sz);
+						a.add(r);
+					}
+					o.add("entries", a);
+					return o;
+				});
+			});
 		DevBridge.register("dev.region.tileShas", 10_000, "{region} - (6c P0) the sha of every tile a realise of the region received -> {tiles: {stage|set|key: sha}}",
 			(req, mc) -> {
 				String region = Fields.of(req).nonBlank("region");

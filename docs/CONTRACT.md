@@ -11716,6 +11716,46 @@ Evidence: `artifacts/c36/runs/20261014-044702-slice` (p0-ingame PASS 46 ok; p0-u
 
 Not covered in game: the load-time reconcile (it needs a REMOVED region with a surviving unpinned artifact, which only a crash between the two writes produces).
 
+### C37 as built (street orientation, and C37b entry cells; placeholders API 1.30.0, mod 0.33.0, kit 0.31.0, set at merge; recorded 2026-10-14)
+
+Branch `c37/orientation` (worktree `../architect-mc-c37`, from main 7f9dba35 = v0.32.0, API 1.29.0, kit 0.30.0). Additive. $0.
+
+**C37: `orientation` for street layouts.** Steward's designs and growth handle an east-west street only, but `layoutStreet` took ns
+whenever ns placed more lots or scored higher, so a composed plan could be built or not depending on its lot sizes (9x9 cottages
+gave ew, 13x14 gave ns).
+
+| Item | As built |
+|---|---|
+| Member | `orientation: "ew" \| "ns" \| "auto"`, default `"auto"`. `"auto"` and omitted are exactly the old behaviour (both axes searched, the one that places more lots, then the better score). |
+| Mapping | `L.orientation` is the frame word: **`"ew"` = the street runs east-west, along x (local u = x, v = z); `"ns"` = it runs north-south, along z (u = z, v = x).** The result's `orientation`, a part's `geometry.orientation` and the new param use the same word. |
+| Where | (a) plan/0: `program.template: "flat_village"` as `params.orientation`, and a lots program (`layout` absent or `"street"`) as `program.orientation`; the schema description and the catalogue notes of `program.flat_village`, `program.lots` and `layout.street` name it. (b) The Regions `flat_village` program (non-plan village request, the sidecar's free-form `params`) declares the enum param `orientation`; no sidecar protocol change. A districts program is not changed. |
+| Strict | `layoutStreet({..., orientation})` searches only that axis and never falls back. Lots that do not fit are the usual `unplaced` with the usual reasons, the part's answer class and `count` deviation as for any unplaced lot. An unknown value throws (`orientation must be one of auto, ew, ns`); in a plan, `plan.json` and `validateParams` reject it as malformed. |
+| Nothing placed | When the forced axis places **no** lot in the whole search (or no street fits) while the other axis would place at least one (searched within the move ceiling), the zone answers `refused`, code `NO_ROOM`, `evidence: {orientation, alt, altLots}`, and `wouldFit` holds one entry: the same part with `orientation` set to the other axis (`program.params.orientation` for a template, `program.orientation` for a lots program), with that layout's rect and cost. Applying the fragment checks `fits`. (`wouldFit` names the other concrete axis, not `auto`, because that is the one verified to fit.) A forced axis that places some lots, or no axis that places any, follows the existing paths. |
+| Byte-identical | `orientation` is declared `omitDefault`, a new enum option of `validateParams`/`resolveValues` (as the bool one): at `"auto"` it is dropped from the resolved params, so a Regions plan's seed, params, IR and tiles equal the old ones. Every committed golden re-plans unchanged (plan-p0's catalogue golden aside, which moves for the versions and the notes). |
+| Cache | The part's canonical JSON is in the cache key, so a forced orientation is its own cache entry; a cached zone re-lays its layout with the same orientation. |
+| Catalogue | `catalogueVersion` 3 to 4 (a placeholder: K1's catalogue 4 claims the same number; the second to merge takes 5 and regenerates the golden). No new block id: the members grew additively, so the schemaVersion of `program.flat_village`, `program.lots` and `layout.street` goes 1 to 2, each with a note `C37 (sinceApi 1.30.0, a placeholder set at merge)`, which the merge renumber stamps (the PLAN.md queued item on `sinceApi`). The golden is regenerated. |
+| Rotate | A zone's `rotate` tolerance still turns the zone's rect; the street axis is a world axis: `"ew"` in a rotated rect still runs along x. |
+
+Fixtures (`kit/test/orientation-c37.test.mjs`, on the asks claim): 4 cottages of 13x14 give ns under auto and ew with `"ew"`, 9x9 give ew under auto and ns with `"ns"` (both program forms); `"auto"` equals omitted (geometry); a 30x90 zone with rotate off and `"ew"` is refused NO_ROOM with `wouldFit` ns, a 90x30 zone with `"ns"` the converse, the fragment applied fits; `layoutStreet` strict and throwing on a bad value; the Regions program takes the param, its auto/omitted IR and seed equal, its roads run along x for ew and z for ns.
+
+**C37b: `Library.Entry.cells()`.** Steward pre-checks each design against its lot before `realiseApproved`, which compares an entry's non-air cell count with the top of the lot's approved `costRange`.
+
+| Item | As built |
+|---|---|
+| Accessor | A new record component of `Library.Entry`, **`long cells`** (since API 1.30.0), last. The old canonical constructor (the 1.11.0 shape) stays as an overload (`cells` 0), so the older constructors and compiled callers work. `Entry` was chosen over `EntryVersion` because `Entry` is the view of one template (an `EntryVersion` row has no template). |
+| One function | `Blueprints.nonAirCells(StructureTemplate)`: the non-air blocks of the template's **first palette**. `PlanChecks.cells(id)` (what `realiseApproved` compares with `costRange[1]`) is now `nonAirCells(Blueprints.template(id))`, and `Views.entry` fills `Entry.cells` from the entry's own template with the same function. |
+| Zero | 0 means "unknown or empty": a template that cannot be read, has no palette, or holds only air. As before, `realiseApproved` then never rejects that entry on cost. |
+| Not parts | It is **not** the sum of `Library.Part.cells()`: parts overlap and count boxes (a hollow room: 1,140 non-air blocks, 3,120 part cells). |
+| Versions | `cells()` counts the view's own template, so `Library.entry(id, version).cells()` is that version's count. `realiseApproved` checks the **current** (head) template of an entry (it drops an `id@version` suffix, `PlanChecks.lotProblem`, unchanged here): `Entry.cells()` equals that check for the head version only. Realise behaviour is not changed in this slice. |
+| Cost | Counted when the `Entry` view is made (one pass over the first palette per entry listed). |
+| JS surface | Entries are not exposed to the sidecar (it reads the blueprint JSON); the apitest's entry JSON (`ApiTest.entry`) gains `cells`, and the dev hook `dev.library.cells {ids?}` (headless too) returns `{id, entryCells, planCells, partSum}` per entry. |
+
+**Gate (slice tier, headless).** `tools/gate6c37.mjs` (chain steps `c37-unit`, `c37-ingame`, impact rule "C37 street orientation, C37b entry cells"). `unit` runs the C37, plan-p0 (catalogue golden), plan-ops, scenario-goldens and village suites and api-compat against the unchanged 0.32.0, 0.31.1 and 0.31.0 apitest jars and the 0.32.0 mod jar's surface (jars from `artifacts/gate7a-k1/`). `ingame` checks 4 cottages of 13x14 on the flat world auto (ns) and `"ew"` (ew; the IR's road runs along x), realises the ew plan and removes it with the world hash restored exactly, and checks `Entry.cells() == PlanChecks.cells` for every library entry (93), with hollow entries present (Part cells sum above the non-air count, e.g. `cabin` 495 vs 612) and at least two entries above 0.
+
+Evidence: `artifacts/gate-runs/20261014-065258-slice` (2 shards, ports 8924-8929, head 2768bd7e): **24 of 24 PASS**: unit-mod 672, unit-kit 405, unit-sidecar 744, c37-unit (api-compat clean against the 0.32.0, 0.31.1 and 0.31.0 apitest jars and the 0.32.0 surface), **c37-ingame 10/0**, apijars (the existing step's 1.27.0, 1.26.0 and 1.25.0 jars: 46 ok each), mp-unit, v-unit, w-unit, f1-unit, x-unit, t1-unit, b-unit, pt-unit, pt2-unit, f2-unit, p0-unit, d-unit, sim-jobs, sim-sets, sim-massing, 4e-megalite, 6a-inv3, 6a-staged. What ran: the whole `change` tier for this diff plus `c37-ingame`. What did not: the in-game steps the `slice` impact map adds on top (4d-all, 6a-megaA, v-ingame, w-ingame, 4e-orders, 4e-throughput, 5b-chains, p0-ingame and the rest of its 58-step list; none is a step this diff changes the code path of beyond `layoutStreet`'s default, which the goldens and unit suites cover); a coordinator call. The apijars step's jars are the existing set (1.27.0 and older), not 0.32.0/0.31.1/0.31.0, which `c37-unit` covers statically (api-compat), not in a live game. An earlier run on bffdf95b (`20261014-064435-slice`) failed c37-ingame's two hollow-entry checks only because its hook lacked the `parts` and `size` fields; fixed in 2768bd7e.
+
+**Placeholders to renumber at merge:** API `1.30.0` (`ArchitectApi.VERSION`, `PLAN_API` in `kit/lib/plan/catalogue.mjs`, the golden's `api`, the `plan.json` notes and descriptions "sinceApi 1.30.0", the `Library.java` javadoc "since 1.30.0"); mod `0.33.0` (`mod/gradle.properties`); kit `0.31.0` (`KIT_VERSION` in `kit/lib/region/plan.mjs`, `EVAL_KIT_VERSION` in `kit/lib/realise.mjs`, `IrStale.KIT_VERSION`, the golden's `kitVersion`); `catalogueVersion` 4 (shared with K1's catalogue 4).
+
 ## Phase 6c slice X: region consumer asks C19 and C20 (FROZEN 2026-10-11 after Steward's review)
 
 Next free API minor at merge (expected 1.15.0 if it merges before T1; the house rule applies), mod to match. Wave 1, parallel

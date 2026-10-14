@@ -98,6 +98,7 @@ export function validateParams(params, { region = false } = {}) {
       if (!Array.isArray(p.options) || p.options.length < 2 || !p.options.every((o) => typeof o === 'string' && OPTION.test(o))) throw new Error(`${where}.options must be 2+ strings matching ${OPTION}`);
       if (new Set(p.options).size !== p.options.length) throw new Error(`${where}.options has duplicates`);
       if (!p.options.includes(p.default)) throw new Error(`${where}: default '${p.default}' is not one of its options`);
+      if (p.omitDefault !== undefined && typeof p.omitDefault !== 'boolean') throw new Error(`${where}.omitDefault must be true or false`);
     } else if (p.type === 'lots') {
       if (!region) throw new Error(`${where}: the 'lots' type is allowed in region programs only`);
       validateLots(p.default ?? [], `${where}.default`);
@@ -134,7 +135,8 @@ export function resolveValues(params = {}, given = {}) {
   }
   // (6c MP) a bool param with `omitDefault: true` (an opt-in demo switch) is left out at its default, so a program that gains
   // one keeps its default seed, IR and tiles
-  for (const [k, p] of Object.entries(params)) if (p.type === 'bool' && p.omitDefault === true && out[k] === p.default) delete out[k];
+  // (C37) an enum param may do the same (flat_village's orientation: 'auto' is left out, so no seed or IR changes)
+  for (const [k, p] of Object.entries(params)) if ((p.type === 'bool' || p.type === 'enum') && p.omitDefault === true && out[k] === p.default) delete out[k];
   return out;
 }
 

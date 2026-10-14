@@ -379,6 +379,13 @@ function sharedOf(zone) {
   return v === 'well' || v === 'none' ? { kind: 'well', size: 7 } : { kind: 'square', size };
 }
 
+/** (C37) The zone's street orientation: 'auto' (absent), 'ew' (the street runs east-west) or 'ns'. A template: params.orientation; a lots program: orientation. */
+function orientationOf(zone) {
+  const p = zone.program;
+  return (p.template !== undefined ? p.params?.orientation : p.orientation) ?? 'auto';
+}
+const otherOrientation = (o) => (o === 'ew' ? 'ns' : 'ew');
+
 /** Sizes to try for a zone: [{w, d, asked: [w, d] | null}] (largest first within a range; the program's minimum, growing). */
 function zoneSizes(env, zone, specs, shared) {
   const cw = env.claim.maxX - env.claim.minX + 1 - 2 * MARGIN, cd = env.claim.maxZ - env.claim.minZ + 1 - 2 * MARGIN;
@@ -423,6 +430,7 @@ export function resolveZone(env, z, geomOf, { obstacles = [] } = {}) {
   try { specs = lotSpecs(zone); } catch (e) { return { klass: 'malformed', reasons: [{ code: 'SCHEMA', path: `${z.path}.program`, message: e.message }] }; }
   if (!specs.length) return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: 'the zone lists no lots: nothing to lay out', evidence: { lots: 0 } }] };
   const shared = sharedOf(zone);
+  if (!['auto', 'ew', 'ns'].includes(orientationOf(zone))) return { klass: 'malformed', reasons: [{ code: 'SCHEMA', path: `${z.path}.program${zone.program.template !== undefined ? '.params' : ''}.orientation`, message: 'must be one of "ew", "ns", "auto"' }] };
   const loc = locatorOf(env, zone.where, geomOf);
   if (loc.error) return { klass: loc.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: loc.error.code, message: loc.error.message, evidence: { locator: Object.keys(zone.where ?? {})[0] ?? null, ...(loc.error.evidence ?? {}) } }] };
   const tMove = tolOf(zone, 'move'), tSize = tolOf(zone, 'size'), tCount = tolOf(zone, 'count'), tSketch = tolOf(zone, 'sketch'), tRot = tolOf(zone, 'rotate');
@@ -437,13 +445,14 @@ export function resolveZone(env, z, geomOf, { obstacles = [] } = {}) {
   }
   const obs = obstacles.map((o) => grow(o, ZONE_GAP));
   const keepOut = (env.ctx.keepOut ?? []);
-  const evalAt = (cand) => {
-    const L = layoutStreet({ claim: { ...env.claim, ...cand.rect }, survey: env.S, specs, rules: STREET_RULES, shared, keepOut });
+  const forced = orientationOf(zone);
+  const evalAt = (cand, orientation = forced) => {
+    const L = layoutStreet({ claim: { ...env.claim, ...cand.rect }, survey: env.S, specs, rules: STREET_RULES, shared, keepOut, ...(orientation === 'auto' ? {} : { orientation }) });
     return L.fail ? null : L;
   };
   // the search: every size (and orientation), the top-ranked rects' layouts; most lots placed, then the least size change, then
   // unrotated, then the best score. `maxMove`: the move ceiling (Infinity: the wouldFit search, the same ranking past it)
-  const searchAll = (maxMove) => {
+  const searchAll = (maxMove, orientation = forced) => {
     let best = null;
     for (const t of tries) {
       const orient = asked && tRot.allowed && t.w !== t.d ? [[t.w, t.d, false], [t.d, t.w, true]] : [[t.w, t.d, false]];
@@ -453,7 +462,7 @@ export function resolveZone(env, z, geomOf, { obstacles = [] } = {}) {
         let evals = 0;
         for (const c of cands) {
           if (evals++ >= EVAL_K) break;
-          const L = evalAt(c);
+          const L = evalAt(c, orientation);
           if (!L) continue;
           const unplaced = L.unplaced.length;
           const cand = { ...c, w, d, rot, L, unplaced, sizeDev: t.shrunk ?? sizeDev(asked, rot ? d : w, rot ? w : d) };
@@ -468,6 +477,16 @@ export function resolveZone(env, z, geomOf, { obstacles = [] } = {}) {
     return best;
   };
   const best = searchAll(tMove.ceiling);
+  // (C37) a forced orientation that places no lot where the other one would: refused NO_ROOM, naming the orientation
+  if (forced !== 'auto' && (!best || best.L.lots.length === 0)) {
+    const alt = otherOrientation(forced);
+    const other = searchAll(tMove.ceiling, alt);
+    if (other && other.L.lots.length > 0) {
+      const withO = (o) => (zone.program.template !== undefined ? { program: { ...zone.program, params: { ...zone.program.params, orientation: o } } } : { program: { ...zone.program, orientation: o } });
+      return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `no lot fits with orientation '${forced}' (the street running ${forced === 'ew' ? 'east-west' : 'north-south'}); '${alt}' places ${other.L.lots.length}`, evidence: { orientation: forced, alt, altLots: other.L.lots.length } }],
+        wouldFit: [{ part: zone.id, fragment: withO(alt), geometry: { rect: rectArr(other.rect) }, cost: layoutCost(other.L) }] };
+    }
+  }
   if (!best) {
     // nothing within the move ceiling: what would fit past it (the wouldFit fragment), else no room
     const beyond = tMove.ceiling < Infinity ? searchAll(Infinity) : null;
@@ -938,7 +957,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       const shared = z.shared;
       let props = null;
       const L = streetLayout(r, z.specs, {
-        rules: STREET_RULES, shared, laneWidth: (p.part.program.params?.laneWidth ?? 2), maxHeight: 32, rect: z.rect, prefix, layout: z.layout,
+        rules: STREET_RULES, shared, laneWidth: (p.part.program.params?.laneWidth ?? 2), maxHeight: 32, rect: z.rect, prefix, layout: z.layout, orientation: orientationOf(p.part),
         padEdge: reliefOf.has(p.id) && reliefOf.get(p.id).some((f) => okClass(f)) ? 'blend' : 'slope',
         stages: { ground: stageOf('ground'), street: stageOf('street'), lots: stageOf('lots') },
         planProps: ({ o, sh, res: rs, lots }) => (props = planProps(r, { o, sh, res: rs, lots, laneWidth: 2, lamps: p.part.program.params?.lamps ?? 'street', bell: !!p.part.program.params?.bell, keepOut: ctx.keepOut ?? [], rng: ctx.rng(`props:${p.id}`) })),
@@ -1389,7 +1408,7 @@ function rehydrateZone(env, p, hit) {
   const zone = p.part;
   if (zone.program.template !== undefined && zone.program.template !== 'flat_village') return null;
   const specs = lotSpecs(zone), shared = sharedOf(zone), rect = arrRect(hit.rect);
-  const L = layoutStreet({ claim: { ...env.claim, ...rect }, survey: env.S, specs, rules: STREET_RULES, shared, keepOut: env.ctx.keepOut ?? [] });
+  const L = layoutStreet({ claim: { ...env.claim, ...rect }, survey: env.S, specs, rules: STREET_RULES, shared, keepOut: env.ctx.keepOut ?? [], ...(orientationOf(zone) === 'auto' ? {} : { orientation: orientationOf(zone) }) });
   if (L.fail) return null;
   return { klass: hit.klass, rect, layout: L, specs, shared, deviations: hit.deviations, reasons: hit.reasons, wouldFit: hit.wouldFit ?? undefined, notes: hit.notes, unplaced: L.unplaced };
 }
