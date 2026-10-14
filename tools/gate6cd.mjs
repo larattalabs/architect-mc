@@ -415,9 +415,16 @@ async function d2Round(name, world, claim, district, { beside = null, owner = OW
       for (const rr of Object.values(files.meta.districts?.rects ?? {})) add(rr[0], rr[1], rr[2], rr[3]);
       for (const e of files.meta.route?.edges ?? []) for (const [x, , z] of e.path ?? []) add(x, z, x, z);
       const written = (x, y, z) => { const gy = groundAt(x, z); return near.has(`${x},${z}`) && !(gy !== null && y < gy - 8); };
+      // anywhere: flowing (non-source) water (the scenarios' T1 `flow`; SETTLEMENTS: E-normal can't classify flowing rivers and
+      // waterfalls, and a frozen tick can't let a stream recede), and a
+      // natural leaf already at distance 7 decays on its own random tick
+      const flowing = (b) => /^minecraft:water\[level=[1-9]/.test(b);
       for (const m of diff.list ?? []) {
         if (m.class !== 'none') continue;
         const [x, y, z] = m.pos.split(',').map(Number);
+        const anywhere = (flowing(m.now) && !/^minecraft:water\[level=0/.test(m.was)) || (flowing(m.was) && /^minecraft:(air|cave_air)$/.test(m.now)) ? 'flow'
+          : /_leaves\[distance=7,persistent=false/.test(m.was) && /^minecraft:air$/.test(m.now) ? 'decay' : null;
+        if (anywhere) { m.class = anywhere; diff.classes.none -= 1; diff.classes[anywhere] = (diff.classes[anywhere] ?? 0) + 1; continue; }
         if (written(x, y, z)) continue;
         const fluid = /^minecraft:(water|lava)\b/.test(m.now) || /^minecraft:(water|lava)\b/.test(m.was) || (/lava/.test(m.was) && /^minecraft:(obsidian|cobblestone|stone)$/.test(m.now));
         const decay = /_leaves\[.*persistent=false/.test(m.was) && /^minecraft:air$/.test(m.now);
