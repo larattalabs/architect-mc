@@ -402,9 +402,25 @@ async function d2Round(name, world, claim, district, { beside = null, owner = OW
     let h1, enormal = null;
     if (natural) {
       const diff = await call('dev.region.hash', { box, mode: 'diff', file: snapFile }, 3_600_000);
-      const WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported'];
+      // (as the scenarios' `flow`) the world's own fluids: an unclassified mismatch of water, lava or what they make (obsidian,
+      // cobblestone, stone) at a cell the plan never writes (outside the claim, or more than 8 below the surveyed ground: deeper than
+      // any cut, pad or route) is a cave's flow across the save and reload, classed `flow` (a world class)
+      const { decodeColumns } = await imp('lib/region/pack.mjs');
+      const cols = decodeColumns(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', p.planId, 'survey.bin')));
+      const groundAt = (x, z) => { const i = Math.floor((x - cols.minX) / cols.resolution), j = Math.floor((z - cols.minZ) / cols.resolution); return i < 0 || j < 0 || i >= cols.width || j >= cols.depth ? null : cols.ground[i + j * cols.width]; };
+      const FLUID = /^minecraft:(water|lava|obsidian|cobblestone|stone|bubble_column|air|cave_air)\b/;
+      for (const m of diff.list ?? []) {
+        if (m.class !== 'none' || !FLUID.test(m.was) || !FLUID.test(m.now) || !/(water|lava)/.test(`${m.was} ${m.now}`)) continue;
+        const [x, y, z] = m.pos.split(',').map(Number), gy = groundAt(x, z);
+        const outside = x < claim[0] || x > claim[2] || z < claim[1] || z > claim[3];
+        if (!outside && !(gy !== null && y < gy - 8)) continue;
+        m.class = 'flow';
+        diff.classes.none -= 1;
+        diff.classes.flow = (diff.classes.flow ?? 0) + 1;
+      }
+      const WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported', 'flow'];
       const undoOwn = diff.mismatches - WORLD.reduce((a, k) => a + (diff.classes?.[k] ?? 0), 0);
-      enormal = { mismatches: diff.mismatches, classes: diff.classes ?? {}, undoOwn, cap: Math.floor(0.0001 * (rm.restored ?? 0)), list: (diff.list ?? []).filter((m) => m.class !== 'growth').slice(0, 40) };
+      enormal = { mismatches: diff.mismatches, classes: diff.classes ?? {}, undoOwn, cap: Math.floor(0.0001 * (rm.restored ?? 0)), list: (diff.list ?? []).filter((m) => m.class === 'none').slice(0, 40), flowSample: (diff.list ?? []).filter((m) => m.class === 'flow').slice(0, 5) };
       h1 = enormal.mismatches === 0 ? h0 : null;
     } else h1 = await hash(box);
     const q = await planReq({ program: 'districts', params: spec, claim, owner, ...(beside ? { beside } : {}), check: false });
