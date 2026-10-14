@@ -196,8 +196,10 @@ public interface Library {
 	 *     the plan-check's own count, so the two cannot diverge). <b>Not</b> the sum of {@link Part#cells()} (parts overlap and
 	 *     count air-bounded boxes: a hollow room was 1,140 non-air blocks but 3,120 part cells). <b>0 means "unknown or
 	 *     empty"</b>: a template that cannot be read, has no palette, or holds only air counts 0 (a lot then never fails the
-	 *     cost-range check on this entry). Counted for this exact entry (version) when the view is made; 0 from the pre-1.30.0
-	 *     constructors
+	 *     cost-range check on this entry). Counted from this view's own template when the view is made (so
+	 *     {@code Library.entry(id, version)} counts that version's template); {@code realiseApproved} always checks the entry's
+	 *     <i>current</i> template (it drops an {@code @version} suffix), so {@code cells()} equals that check for the current version
+	 *     only. 0 from the pre-1.30.0 constructors
 	 */
 	record Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source, Map<String, JsonElement> params,
 		Map<String, JsonElement> values, Optional<JsonObject> palette, Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported,

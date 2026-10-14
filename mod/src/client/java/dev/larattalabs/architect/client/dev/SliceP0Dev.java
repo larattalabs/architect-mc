@@ -266,6 +266,12 @@ public final class SliceP0Dev {
 						r.addProperty("entryCells", e.cells());
 						r.addProperty("planCells", dev.larattalabs.architect.region.PlanChecks.cells(e.id()));
 						r.addProperty("partSum", e.parts().values().stream().mapToLong(p -> p.cells()).sum());
+						r.addProperty("parts", e.parts().size());
+						JsonArray sz = new JsonArray();
+						sz.add(e.size().x());
+						sz.add(e.size().y());
+						sz.add(e.size().z());
+						r.add("size", sz);
 						a.add(r);
 					}
 					o.add("entries", a);

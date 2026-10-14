@@ -121,9 +121,11 @@ steps.ingame = async () => {
   const es = cells.entries ?? [];
   out.cells = es;
   check(es.length >= 2 && es.every((e) => e.entryCells === e.planCells), `C37b: Library.Entry.cells() equals PlanChecks.cells for all ${es.length} library entries`, es.filter((e) => e.entryCells !== e.planCells));
-  const hollow = es.filter((e) => e.entryCells > 0 && e.partSum !== e.entryCells);
-  check(hollow.length >= 1, `C37b: at least one entry where the Part cells sum differs from the non-air count (${hollow.slice(0, 3).map((e) => `${e.id}: ${e.entryCells} vs parts ${e.partSum}`).join('; ')})`);
-  check(es.some((e) => e.entryCells > 0), 'C37b: a readable entry counts more than 0');
+  const bySize = (e) => e.size ? e.size[0] * e.size[1] * e.size[2] : 0;
+  const hollow = es.filter((e) => e.entryCells > 0 && e.parts > 0 && e.partSum > e.entryCells);
+  check(hollow.length >= 1, `C37b: a hollow entry (parts present, the Part cells sum above the non-air count): ${hollow.slice(0, 3).map((e) => `${e.id}: ${e.entryCells} non-air vs parts ${e.partSum} (box ${e.size?.join('x')})`).join('; ')}`, es.slice(0, 5));
+  check(es.filter((e) => e.entryCells > 0).length >= 2, `C37b: at least two readable entries count above 0 (${es.filter((e) => e.entryCells > 0).length})`);
+  check(es.some((e) => e.entryCells > 0 && e.entryCells < bySize(e)), 'C37b: a count below its bounding volume (the entry is not solid)');
   return out;
 };
 
