@@ -159,3 +159,27 @@ test('plan/0 (D2): zone.outpost, locator.along, feature.biome_edge, feature.ridg
   assert.equal(c.entries.find((e) => e.id === 'locator.around').state, 'reserved');
   void ROOT; void fs;
 });
+
+test('stable across a reload judged on the plan\'s inputs (tools/lib/d2-replay.mjs): a moved live survey re-plans the first plan\'s inputs to its IR', async () => {
+  const { encodeColumns } = await import('../lib/region/pack.mjs');
+  const { replayStable, movedColumns } = await import(path.join(ROOT, 'tools', 'lib', 'd2-replay.mjs'));
+  const river = (i) => i >= 90 && i < 100;
+  const sA = encodeColumns(surf((i) => [64, river(i)]));
+  const a = await plan({ id: 'quay', size: [96, 24], follow: { shore: {} }, lots: 2 }, sA);
+  // the live survey moved (a spring's water: the river two columns wider on its west bank, the quay's side), so the second plan differs
+  const sB = encodeColumns(surf((i) => [64, i >= 88 && i < 100]));
+  const b = await plan({ id: 'quay', size: [96, 24], follow: { shore: {} }, lots: 2 }, sB);
+  assert.notEqual(b.irSha, a.irSha, 'the perturbed survey moves the second plan');
+  assert.equal(await movedColumns(KIT, sA, sB), 2 * D);
+  const r = await replayStable({ kitDir: KIT, irA: a.ir, irShaA: a.irSha, surveyA: sA, irShaB: b.irSha, surveyB: sB });
+  assert.equal(r.stable, true);
+  assert.equal(r.replay.replayIr, a.irSha);
+  assert.equal(r.replay.surveyColumnsMoved, 2 * D);
+  // the same IR: stable with no re-plan
+  assert.deepEqual(await replayStable({ kitDir: KIT, irA: a.ir, irShaA: a.irSha, surveyA: sA, irShaB: a.irSha, surveyB: sA }), { stable: true, again: a.irSha, replay: null });
+  // not stable: a different IR from an unmoved survey (the plan is not deterministic), no second survey, or a first IR the
+  // first plan's inputs do not re-plan to
+  assert.equal((await replayStable({ kitDir: KIT, irA: a.ir, irShaA: a.irSha, surveyA: sA, irShaB: b.irSha, surveyB: sA })).stable, false);
+  assert.equal((await replayStable({ kitDir: KIT, irA: a.ir, irShaA: a.irSha, surveyA: sA, irShaB: b.irSha, surveyB: null })).stable, false);
+  assert.equal((await replayStable({ kitDir: KIT, irA: a.ir, irShaA: b.irSha, surveyA: sA, irShaB: a.irSha.replace(/^./, (c) => (c === '0' ? '1' : '0')), surveyB: sB })).stable, false);
+});

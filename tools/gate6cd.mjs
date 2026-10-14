@@ -408,48 +408,73 @@ async function d2Round(name, world, claim, district, { beside = null, owner = OW
     let h1, enormal = null;
     if (natural) {
       const diff = await call('dev.region.hash', { box, mode: 'diff', file: snapFile }, 3_600_000);
-      // (as the scenarios' `flow`) the world's own fluids and leaves at cells the plan never writes: every cell more than 6 from the
-      // district's rects and its routes' cells (deeper cells: more than 8 below the surveyed ground, beneath any cut, pad or route).
-      // An unclassified mismatch there that is water or lava moving (or what it makes or washes away: obsidian, cobblestone, a plant
-      // turned water) is classed `flow`; a natural leaf turned air `decay`; the same block in another state `live` (world classes, as
-      // the scenarios' melt and freeze)
+      // Three gate-side world classes (as the scenarios' `flow` and `freeze`), narrowed so that none can hide an undo error: an
+      // unclassified mismatch is classed by its kind ONLY at a cell the plan never writes (its virtual world's written flag, or a
+      // lot's box) and, but for a doomed leaf, away from the district: more than 6 columns from every written column (the virtual
+      // world's, the lots' boxes) and route cell (`far`), or more than 8 below both the surveyed ground and every written cell
+      // within 6 columns (`deep`). There: water or lava appearing, receding or moving (or what lava makes: obsidian, cobblestone,
+      // stone) `flow`; a natural (non-persistent) leaf turned air `decay`; the same block in another state (a leaf whose only change
+      // is `distance` included) `live`. A non-persistent leaf already at distance 7 (it decays on its own random tick) turned air is
+      // `decay` at any unwritten cell (`d7`). Any other change at or near a written cell stays unclassified, whatever its kind
       const { decodeColumns } = await imp('lib/region/pack.mjs');
-      const cols = decodeColumns(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', p.planId, 'survey.bin')));
+      const { buildVirtual, F_WRITTEN } = await imp('lib/region/vworld.mjs');
+      const pdir = path.join(L.SIDECAR_DATA, 'regions', 'plans', p.planId);
+      const survey = fs.readFileSync(path.join(pdir, 'survey.bin'));
+      const cols = decodeColumns(survey);
       const groundAt = (x, z) => { const i = Math.floor((x - cols.minX) / cols.resolution), j = Math.floor((z - cols.minZ) / cols.resolution); return i < 0 || j < 0 || i >= cols.width || j >= cols.depth ? null : cols.ground[i + j * cols.width]; };
+      const { vw } = buildVirtual({ ir: files.ir, survey, blobs: (s) => { const f = path.join(pdir, 'blobs', `${s}.bin`); return fs.existsSync(f) ? fs.readFileSync(f) : null; } });
+      // the plan's written columns (each with its lowest written y) and the lots' boxes
+      const wcol = new Map();
+      const wlow = (x, z, y) => { const k = `${x},${z}`, v = wcol.get(k); if (v === undefined || y < v) wcol.set(k, y); };
+      vw.eachWritten((x, y, z) => wlow(x, z, y));
+      const lotBoxes = files.ir.lots.map((l) => l.box);
+      for (const b of lotBoxes) for (let x = b.minX; x <= b.maxX; x++) for (let z = b.minZ; z <= b.maxZ; z++) wlow(x, z, b.minY);
       const G = 6, near = new Set();
       const add = (x0, z0, x1, z1) => { for (let x = x0 - G; x <= x1 + G; x++) for (let z = z0 - G; z <= z1 + G; z++) near.add(`${x},${z}`); };
-      for (const f of Object.values(files.meta.districts?.follow ?? {})) add(f.rect[0], f.rect[1], f.rect[2], f.rect[3]);
-      for (const rr of Object.values(files.meta.districts?.rects ?? {})) add(rr[0], rr[1], rr[2], rr[3]);
-      for (const e of files.meta.route?.edges ?? []) for (const [x, , z] of e.path ?? []) add(x, z, x, z);
-      const written = (x, y, z) => { const gy = groundAt(x, z); return near.has(`${x},${z}`) && !(gy !== null && y < gy - 8); };
-      // anywhere: flowing (non-source) water (the scenarios' T1 `flow`; SETTLEMENTS: E-normal can't classify flowing rivers and
-      // waterfalls, and a frozen tick can't let a stream recede), and a
-      // natural leaf already at distance 7 decays on its own random tick
-      const flowing = (b) => /^minecraft:water\[level=[1-9]/.test(b);
+      const routeCols = new Set();
+      for (const e of files.meta.route?.edges ?? []) for (const [x, , z] of e.path ?? []) { add(x, z, x, z); routeCols.add(`${x},${z}`); }
+      // for the record: a cell's Chebyshev distance (columns) to the nearest written column or route cell, up to 32 (33: further)
+      const distOf = (x, z) => {
+        for (let r = 0; r <= 32; r++) for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) {
+          if (Math.max(Math.abs(i), Math.abs(j)) !== r) continue;
+          const k = `${x + i},${z + j}`;
+          if (wcol.has(k) || routeCols.has(k)) return r;
+        }
+        return 33;
+      };
+      const isWritten = (x, y, z) => (vw.flags(x, y, z) & F_WRITTEN) !== 0 || lotBoxes.some((b) => x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && z >= b.minZ && z <= b.maxZ);
+      /** 'far' | 'deep' | null (near the district: never classed). */
+      const away = (x, y, z) => {
+        let lowNear = Infinity, nearW = false;
+        for (let i = -G; i <= G; i++) for (let j = -G; j <= G; j++) { const v = wcol.get(`${x + i},${z + j}`); if (v !== undefined) { nearW = true; if (v < lowNear) lowNear = v; } }
+        if (!nearW && !near.has(`${x},${z}`)) return 'far';
+        const gy = groundAt(x, z);
+        return gy !== null && y < gy - 8 && y < lowNear - 8 ? 'deep' : null;
+      };
+      const idOf = (b) => b.split(/[[{]/)[0];
+      const fluidRe = /^minecraft:(water|lava)\b/;
+      const kindOf = (m) => fluidRe.test(m.now) || fluidRe.test(m.was) ? 'flow'
+        : /_leaves\[.*persistent=false/.test(m.was) && /^minecraft:air$/.test(m.now) ? 'decay'
+          : idOf(m.was) === idOf(m.now) ? 'live' : null;
+      const by = {};
       for (const m of diff.list ?? []) {
         if (m.class !== 'none') continue;
-        const [x, y, z] = m.pos.split(',').map(Number);
-        const anywhere = (flowing(m.now) && !/^minecraft:water\[level=0/.test(m.was)) || (flowing(m.was) && /^minecraft:(air|cave_air)$/.test(m.now)) ? 'flow'
-          : /_leaves\[distance=7,persistent=false/.test(m.was) && /^minecraft:air$/.test(m.now) ? 'decay'
-          // a leaf whose distance the game recomputed on a neighbour update (the same leaf, only `distance` differs: worldgen leaves
-          // carry stale distances until something beside them changes): `live`
-          : /_leaves\[/.test(m.was) && m.was.replace(/distance=\d/, '') === m.now.replace(/distance=\d/, '') ? 'live' : null;
-        if (anywhere) { m.class = anywhere; diff.classes.none -= 1; diff.classes[anywhere] = (diff.classes[anywhere] ?? 0) + 1; continue; }
-        if (written(x, y, z)) continue;
-        const fluid = /^minecraft:(water|lava)\b/.test(m.now) || /^minecraft:(water|lava)\b/.test(m.was) || (/lava/.test(m.was) && /^minecraft:(obsidian|cobblestone|stone)$/.test(m.now));
-        const decay = /_leaves\[.*persistent=false/.test(m.was) && /^minecraft:air$/.test(m.now);
-        // the same block in another state (a big dripleaf's tilt, a cave's own ticking blocks): the mod's `live`
-        const idOf = (b) => b.split(/[[{]/)[0];
-        const live = idOf(m.was) === idOf(m.now);
-        const cls = fluid ? 'flow' : decay ? 'decay' : live ? 'live' : null;
+        const cls = kindOf(m);
         if (!cls) continue;
-        m.class = cls;
+        const [x, y, z] = m.pos.split(',').map(Number);
+        if (isWritten(x, y, z)) continue;
+        const where = cls === 'decay' && /_leaves\[distance=7,persistent=false/.test(m.was) ? 'd7' : away(x, y, z);
+        if (!where) continue;
+        m.class = cls; m.where = where; m.dist = distOf(x, z);
+        by[`${cls}:${where}`] = (by[`${cls}:${where}`] ?? 0) + 1;
+        const band = m.dist > G ? 'beyond6' : 'within6';
+        by[`${cls}:${band}`] = (by[`${cls}:${band}`] ?? 0) + 1;
         diff.classes.none -= 1;
         diff.classes[cls] = (diff.classes[cls] ?? 0) + 1;
       }
       const WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported', 'flow', 'decay'];
       const undoOwn = diff.mismatches - WORLD.reduce((a, k) => a + (diff.classes?.[k] ?? 0), 0);
-      enormal = { mismatches: diff.mismatches, classes: diff.classes ?? {}, undoOwn, cap: Math.floor(0.0001 * (rm.restored ?? 0)), list: (diff.list ?? []).filter((m) => m.class === 'none').slice(0, 40), flowSample: (diff.list ?? []).filter((m) => m.class === 'flow' || m.class === 'decay').slice(0, 5) };
+      enormal = { mismatches: diff.mismatches, classes: diff.classes ?? {}, worldBy: by, undoOwn, cap: Math.floor(0.0001 * (rm.restored ?? 0)), list: (diff.list ?? []).filter((m) => m.class === 'none').slice(0, 40), world: (diff.list ?? []).filter((m) => m.where).map((m) => ({ pos: m.pos, was: m.was, now: m.now, class: m.class, where: m.where, dist: m.dist })) };
       h1 = enormal.mismatches === 0 ? h0 : null;
     } else h1 = await hash(box);
     const q = await planReq({ program: 'districts', params: spec, claim, owner, ...(beside ? { beside } : {}), check: false });
@@ -457,20 +482,14 @@ async function d2Round(name, world, claim, district, { beside = null, owner = OW
     // across the save and reload (a spring's water: the claim's surveyed heights and so its IR) can move the second survey; then
     // the first plan's own inputs are planned again offline (as the scenarios' golden row) and must give its IR, and the columns
     // the live survey moved are recorded
-    let replay = null;
-    if (q.irSha && q.irSha !== p.irSha && q.planId) {
-      const dA = path.join(L.SIDECAR_DATA, 'regions', 'plans', p.planId), dB = path.join(L.SIDECAR_DATA, 'regions', 'plans', q.planId);
-      const sA = fs.readFileSync(path.join(dA, 'survey.bin')), sB = fs.existsSync(path.join(dB, 'survey.bin')) ? fs.readFileSync(path.join(dB, 'survey.bin')) : null;
-      const { decodeColumns } = await imp('lib/region/pack.mjs');
-      let cols = null;
-      if (sB) { const a = decodeColumns(sA), b = decodeColumns(sB); cols = 0; for (let i = 0; i < a.ground.length; i++) if (a.ground[i] !== b.ground[i] || a.flags[i] !== b.flags[i] || a.height[i] !== b.height[i]) cols++; }
-      const { planRegion } = await imp('lib/region/plan.mjs');
-      const ir = files.ir, bio = path.join(dA, 'biomes.json');
-      const re = await planRegion({ programFile: path.join(root, 'kit', 'regions', `${ir.id}.mjs`), params: ir.params, survey: sA, seed: ir.seed, claim: { ...ir.claim, minY: -64, maxY: 319 }, roles: ir.roles, kitVersion: ir.kitVersion, keepOut: ir.keepOut ?? [], ...(fs.existsSync(bio) ? { biomes: JSON.parse(fs.readFileSync(bio, 'utf8')) } : {}) });
-      replay = { surveyColumnsMoved: cols, replayIr: re.irSha, again: q.irSha };
-    }
+    const dA = path.join(L.SIDECAR_DATA, 'regions', 'plans', p.planId), dB = q.planId ? path.join(L.SIDECAR_DATA, 'regions', 'plans', q.planId) : null;
+    const bio = path.join(dA, 'biomes.json');
+    const { replayStable } = await import('./lib/d2-replay.mjs');
+    const stab = await replayStable({ kitDir: KIT, irA: files.ir, irShaA: p.irSha, surveyA: fs.readFileSync(path.join(dA, 'survey.bin')), biomesA: fs.existsSync(bio) ? JSON.parse(fs.readFileSync(bio, 'utf8')) : null,
+      irShaB: q.irSha ?? null, surveyB: dB && fs.existsSync(path.join(dB, 'survey.bin')) ? fs.readFileSync(path.join(dB, 'survey.bin')) : null });
+    const replay = stab.replay;
     const view = (await call('dev.region.state', { region }, 60_000).catch(() => ({}))).view ?? null;
-    return { plan: p, files, region, state: st.view.state, viewAtPlace: st.view, again: q.irSha ?? q.refused, sameIr: q.irSha === p.irSha || (replay !== null && replay.surveyColumnsMoved > 0 && replay.replayIr === p.irSha), replay, exact: natural ? (enormal.classes?.none ?? 0) === 0 && enormal.undoOwn <= enormal.cap : h0 === h1, enormal, restored: rm.restored, view };
+    return { plan: p, files, region, state: st.view.state, viewAtPlace: st.view, again: q.irSha ?? q.refused, sameIr: stab.stable, replay, exact: natural ? (enormal.classes?.none ?? 0) === 0 && enormal.undoOwn <= enormal.cap : h0 === h1, enormal, restored: rm.restored, view };
   } finally {
     if (natural) await cmd('/tick unfreeze').catch(() => null);
   }
@@ -551,7 +570,7 @@ steps.boundary = async () => {
     out[id] = { state: r.state, rect: f.rect, mask: f.maskCells, geo, lots: r.files.meta.districts.lots[id], sameIr: r.sameIr, replay: r.replay, exact: r.exact, enormal: r.enormal };
     check(r.state === 'PLACED' && r.files.meta.districts.lots[id].length >= 1, `${id}: placed (${r.files.meta.districts.lots[id].length} lot(s)), its shape a ${f.maskCells}-cell mask in ${json(f.rect)}`);
     check(r.sameIr, `${id}: stable across a reload (the same IR sha planned again after the world was saved and reopened${r.replay ? `; the live survey moved in ${r.replay.surveyColumnsMoved} columns, so the first plan's inputs planned again: ${r.replay.replayIr?.slice(0, 12)} = ${r.plan.irSha?.slice(0, 12)}` : ''})`);
-    check(r.exact, `${id}: one undo restores the claim (ticks frozen; ${r.restored} cells; E-normal ${r.enormal?.mismatches} ${json(r.enormal?.classes ?? {})}, unclassified ${r.enormal?.classes?.none ?? 0}, the undo's own ${r.enormal?.undoOwn} (cap ${r.enormal?.cap}))`);
+    check(r.exact, `${id}: one undo restores the claim (ticks frozen; ${r.restored} cells; E-normal ${r.enormal?.mismatches} ${json(r.enormal?.classes ?? {})}, unclassified ${r.enormal?.classes?.none ?? 0}, world classes by rule ${json(r.enormal?.worldBy ?? {})}, the undo's own ${r.enormal?.undoOwn} (cap ${r.enormal?.cap}))`);
   }
   // ---- the biome edge: the pinned desert/jungle site
   const site = SITE();
@@ -572,9 +591,9 @@ steps.boundary = async () => {
   const far1 = f.boundary.filter((q) => near(q, m) > 4).length;
   const desert = m.filter(([x, z]) => B.familyOf(B.biomeAt(g, x, z)) === 'desert');
   const far2 = desert.filter((q) => near(q, edge) > 4).length;
-  out.oasis = { state: r.state, rect: f.rect, mask: f.maskCells, boundary: f.boundary.length, far1, desertCells: desert.length, far2, lots: r.files.meta.districts.lots.oasis, sameIr: r.sameIr, exact: r.exact, enormal: r.enormal, biomes: r.files.ir.biomes };
+  out.oasis = { state: r.state, rect: f.rect, mask: f.maskCells, boundary: f.boundary.length, far1, desertCells: desert.length, far2, lots: r.files.meta.districts.lots.oasis, sameIr: r.sameIr, replay: r.replay, exact: r.exact, enormal: r.enormal, biomes: r.files.ir.biomes };
   check(r.state === 'PLACED' && far1 === 0 && far2 === 0, `biome edge: the district's shape follows the desert/jungle edge within 4 cells over its ${f.boundary.length}-cell length (${far1} boundary cells and ${far2} desert cells past 4; ${r.files.meta.districts.lots.oasis.length} lot(s))`);
-  check(r.sameIr && r.exact, `biome edge: stable across a reload, one undo restores the claim (${r.restored} cells; E-normal ${r.enormal?.mismatches} ${json(r.enormal?.classes ?? {})}, unclassified ${r.enormal?.classes?.none ?? 0}, the undo's own ${r.enormal?.undoOwn} (cap ${r.enormal?.cap}))`);
+  check(r.sameIr && r.exact, `biome edge: stable across a reload, one undo restores the claim (${r.restored} cells; E-normal ${r.enormal?.mismatches} ${json(r.enormal?.classes ?? {})}, unclassified ${r.enormal?.classes?.none ?? 0}, world classes by rule ${json(r.enormal?.worldBy ?? {})}, the undo's own ${r.enormal?.undoOwn} (cap ${r.enormal?.cap}))`);
   // refused, named: no such edge; protected over the band
   const nr = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'oasis', size: [96, 24], follow: { biome_edge: { between: ['desert', 'mushroom'] } }, lots: 2 }] } }, claim: C, check: false });
   check(/NO_EDGE: no mushroom/.test(nr.refused ?? ''), `biome edge: no such edge refused, named (${nr.refused})`);
