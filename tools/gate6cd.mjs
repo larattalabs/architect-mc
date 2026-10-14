@@ -405,7 +405,8 @@ async function d2Round(name, world, claim, district, { beside = null, owner = OW
       // (as the scenarios' `flow`) the world's own fluids and leaves at cells the plan never writes: every cell more than 6 from the
       // district's rects and its routes' cells (deeper cells: more than 8 below the surveyed ground, beneath any cut, pad or route).
       // An unclassified mismatch there that is water or lava moving (or what it makes or washes away: obsidian, cobblestone, a plant
-      // turned water) is classed `flow`; a natural leaf turned air `decay` (world classes, as the scenarios' melt and freeze)
+      // turned water) is classed `flow`; a natural leaf turned air `decay`; the same block in another state `live` (world classes, as
+      // the scenarios' melt and freeze)
       const { decodeColumns } = await imp('lib/region/pack.mjs');
       const cols = decodeColumns(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', p.planId, 'survey.bin')));
       const groundAt = (x, z) => { const i = Math.floor((x - cols.minX) / cols.resolution), j = Math.floor((z - cols.minZ) / cols.resolution); return i < 0 || j < 0 || i >= cols.width || j >= cols.depth ? null : cols.ground[i + j * cols.width]; };
@@ -428,7 +429,10 @@ async function d2Round(name, world, claim, district, { beside = null, owner = OW
         if (written(x, y, z)) continue;
         const fluid = /^minecraft:(water|lava)\b/.test(m.now) || /^minecraft:(water|lava)\b/.test(m.was) || (/lava/.test(m.was) && /^minecraft:(obsidian|cobblestone|stone)$/.test(m.now));
         const decay = /_leaves\[.*persistent=false/.test(m.was) && /^minecraft:air$/.test(m.now);
-        const cls = fluid ? 'flow' : decay ? 'decay' : null;
+        // the same block in another state (a big dripleaf's tilt, a cave's own ticking blocks): the mod's `live`
+        const idOf = (b) => b.split(/[[{]/)[0];
+        const live = idOf(m.was) === idOf(m.now);
+        const cls = fluid ? 'flow' : decay ? 'decay' : live ? 'live' : null;
         if (!cls) continue;
         m.class = cls;
         diff.classes.none -= 1;
