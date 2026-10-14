@@ -49,6 +49,9 @@ the as-built).
   a gate without `wall` depends on the plan's one wall (validator); a failed leg's UNREACHABLE evidence merges
   `wallsEvidence(K, leg)`; apijars and `api-compat --gate7ak1` run the 0.32.0, 0.31.1 and 0.31.0 tag jars
   (`<main>/artifacts/gate7a-k1/`, keyed by jar version: two share API 1.28.0).
+- **Foundation round 3:** `kit/lib/connectors/bom.mjs` (`bomOf(states)`, C26's block-to-item rules; its map held equal to the
+  mod's `survival_items.json` by `kit/test/k1-foundation.test.mjs`); a part's `cost.bom` comes from `planCheck.links.bom[part]`
+  (finish.mjs), so each half fills `K.record.bom[partId]` with its emitted cells' bill.
 
 ## K1a: state
 
