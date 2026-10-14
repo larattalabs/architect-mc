@@ -51,7 +51,7 @@ function irGraph(ir, meta, vw) {
     const a = ports.get(e.from), b = ports.get(e.to);
     const v = vg && a && b && nodeReached(vg, a) && nodeReached(vg, b);
     // (6c D1) an external edge: `to` is another region's port (<region>:<node>.<port>; 7a types it)
-    return { id: e.id, from: e.from, to: e.to, type: e.type, width: e.width, path: e.path, stage: e.stage, mover: v ? ['player', 'villager'] : ['player'], ...(e.external ? { external: true } : {}) };
+    return { id: e.id, from: e.from, to: e.to, type: e.type, width: e.width, path: e.path, stage: e.stage, mover: v ? ['player', 'villager'] : ['player'], ...(e.external ? { external: true } : {}), ...(e.crossing ? { crossing: { ...e.crossing } } : {}) };
   });
   return { derived: false, nodes, edges };
 }
@@ -138,6 +138,8 @@ export function sitePlan({ ir, meta, planId = null, irSha = null, vw = null }) {
   }
   // (6c T1) the plan-time passes the program ran, with their wall time and the plan's peak memory after each (the plan meta)
   if (meta?.passes?.length) out.passes = meta.passes.map((p) => ({ name: p.name, ms: p.ms, heapMb: p.heapMb }));
+  // (7a K1) the plan's walls and their gates (the plan meta's walls: K1a's emission)
+  if (Array.isArray(meta?.walls) && meta.walls.length) out.walls = meta.walls.map((w) => ({ id: w.id, part: w.part, line: w.line.map((q) => [...q]), closed: !!w.closed, gates: (w.gates ?? []).map((g) => ({ id: g.id, at: [...g.at], width: g.width, door: g.door, auto: !!g.auto })) }));
   return out;
 }
 

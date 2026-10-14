@@ -1,0 +1,16 @@
+{
+  "name": "G7A-K1a coastal walls",
+  "scope": "settlement",
+  "format": 2,
+  "prompt": "K1a look (CONTRACT 7a K1 N-K1-1): W's coastal village walled: a smooth-sandstone curtain capped in sandstone, birch gate frames and doors, sea lanterns at the gates",
+  "roles": {
+    "path": "minecraft:packed_mud",
+    "foundation": "minecraft:stone_bricks",
+    "light": "minecraft:sea_lantern",
+    "rail": "minecraft:birch_fence",
+    "structure": "minecraft:smooth_sandstone",
+    "trim": "minecraft:sandstone",
+    "frame": "minecraft:stripped_birch_log"
+  },
+  "connectors": { "wall": { "body": "structure", "cap": "trim", "frame": "frame" }, "gate": { "frame": "frame" } }
+}

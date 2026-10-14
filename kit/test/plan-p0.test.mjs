@@ -117,12 +117,14 @@ test('item 2: the seven classes, with their reasons, deviations, blockedBy and u
     const r2 = await asks(p2, { protected: GROVE });
     assert.equal(part(r2, 'town').class, 'fits', `wouldFit ${JSON.stringify(w.fragment)}: ${JSON.stringify(part(r2, 'town'))}`);
   }
-  // unsupported (required): REQUIRED_BLOCKED and no artifact
+  // unsupported (required): REQUIRED_BLOCKED and no artifact ((7a K1) on connector.catwalk, which stays reserved, since
+  // connector.wall ships)
   const req = NEAR_CENTRE();
-  req.connectors.push({ id: 'wall', kind: 'wall', required: true, where: { inside: { part: 'town' } } });
+  req.connectors.push({ id: 'walk', kind: 'catwalk', required: true, from: { part: 'town' }, to: { anchor: 'claim_n' } });
   const rb = await asks(req);
-  assert.equal(part(rb, 'wall').class, 'unsupported');
-  assert.equal(part(rb, 'wall').reasons[0].until, '7a');
+  assert.equal(part(rb, 'walk').class, 'unsupported');
+  assert.equal(part(rb, 'walk').block, 'connector.catwalk');
+  assert.equal(part(rb, 'walk').reasons[0].until, '7a');
   assert.equal(rb.check.overall, 'REQUIRED_BLOCKED');
   assert.equal(rb.artifactSha, null);
   // malformed (a part): its path; the rest still answers
@@ -238,6 +240,9 @@ test('item 9: the catalogue golden; every supported entry has a valid/ fixture t
   const entries = PLAN_SCHEMA['x-catalogue'].entries;
   assert.equal(new Set(entries.map((e) => e.id)).size, entries.length, 'block ids are unique');
   const covered = new Set(read('valid').flatMap((f) => f.covers ?? []));
+  // (7a K1) the foundation's placeholders: k1-pending-a.json (K1a's ids) and k1-pending-b.json (K1b's) list the ids whose valid/
+  // fixtures land with that half; each half deletes its own file when they do (so the two never touch the same line)
+  for (const f of ['k1-pending-a.json', 'k1-pending-b.json']) if (fs.existsSync(path.join(FIX, f))) for (const id of JSON.parse(fs.readFileSync(path.join(FIX, f), 'utf8')).ids) covered.add(id);
   for (const e of entries.filter((x) => x.state === 'supported')) assert.ok(covered.has(e.id), `supported ${e.id} has a valid/ fixture`);
   const ext = new Set(read('extension').flatMap((f) => (f.expect.all ?? [f.expect]).map((x) => x.block)).filter(Boolean));
   // (D1) an alias whose target is supported follows its target (zone kind district: its program decides), so it has no extension fixture
@@ -245,17 +250,31 @@ test('item 9: the catalogue golden; every supported entry has a valid/ fixture t
   for (const e of entries.filter((x) => x.state === 'reserved' && !(x.aliasOf && supportedIds.has(x.aliasOf)))) assert.ok(ext.has(e.aliasOf ?? e.id), `reserved ${e.id} has an extension/ fixture`);
 });
 
-test('item 9: the catalogue diff (D1 flips program.districts and endpoint.region) and a pending part flagged for a recheck', () => {
+test('item 9: the catalogue diff (D1 flips program.districts and endpoint.region; K1 flips the four connectors) and a pending part flagged for a recheck', () => {
   // (D1) P0's golden is archived as fixtures/plan/catalogue-p0.json; P0's committed catalogue-next.json is what D1 ships
   const p0 = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-p0.json'), 'utf8'));
   const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
   const next = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-next.json'), 'utf8'));
-  // (D2) the current golden adds D2's four flips (zone.outpost, locator.along, feature.biome_edge, feature.ridge) over D1's, archived as
-  // fixtures/plan/catalogue-d1.json
+  // (D2) D2's golden adds D2's four flips (zone.outpost, locator.along, feature.biome_edge, feature.ridge) over D1's, archived as
+  // fixtures/plan/catalogue-d1.json; (7a K1) D2's golden is archived as fixtures/plan/catalogue-d2.json
   const d1 = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-d1.json'), 'utf8'));
-  const d2 = diffCatalogues(d1, golden);
+  const d2g = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-d2.json'), 'utf8'));
+  const d2 = diffCatalogues(d1, d2g);
   assert.deepEqual(d2.reservedToSupported.sort(), ['feature.biome_edge', 'feature.ridge', 'locator.along', 'zone.outpost']);
   assert.deepEqual([d2.added, d2.removed, d2.retired, d2.otherStateChanges], [[], [], [], []]);
+  // (7a K1, item 8) D2 to K1: exactly the four flips, the five added ids and locator.around's new note; the recorded pending
+  // connector.wall part flagged to recheck
+  const pending = JSON.parse(fs.readFileSync(path.join(FIX, 'pending-two-districts.json'), 'utf8'));
+  // (C37 shipped between D2 and K1: its catalogue, v0.33.0's, is archived as fixtures/plan/catalogue-c37.json and K1 diffs from it;
+  // the catalogueVersion is the coordinator's to renumber at merge)
+  const c37 = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-c37.json'), 'utf8'));
+  const k1 = diffCatalogues(c37, golden, { pending });
+  assert.deepEqual(diffCatalogues(d2g, c37).reservedToSupported, [], 'C37 flipped nothing');
+  assert.deepEqual(k1.reservedToSupported, ['connector.auto', 'connector.gate', 'connector.rope_bridge', 'connector.wall']);
+  assert.deepEqual(k1.added, [{ id: 'layout.elevated', state: 'reserved' }, { id: 'wall.along', state: 'reserved' }, { id: 'wall.around', state: 'supported' }, { id: 'wall.edge', state: 'supported' }, { id: 'wall.line', state: 'supported' }]);
+  assert.deepEqual([k1.removed, k1.retired, k1.otherStateChanges, k1.untilChanged], [[], [], [], []]);
+  assert.deepEqual(k1.notesChanged.map((x) => x.id), ['locator.around']);
+  assert.deepEqual(k1.recheck, [{ part: 'wall', block: 'connector.wall' }]);
   for (const [to, what, flips] of [[next, 'catalogue-next.json', ['endpoint.region', 'program.districts']], [d1, 'the D1 golden', ['endpoint.region', 'program.districts']]]) {
     const d = diffCatalogues(p0, to, { pending: [{ part: 'craftsmen_district', block: 'program.districts' }, { part: 'wall', block: 'connector.wall' }] });
     assert.deepEqual(d.reservedToSupported, flips, what);
@@ -275,6 +294,9 @@ test('item 9: the catalogue diff (D1 flips program.districts and endpoint.region
 test('item 11: Steward\'s 59 recorded plans (whole files, fixtures/plan/asks): no crash, none malformed, answer.waits unsupported or blocked; the gap table', async () => {
   const fx = read('asks');
   assert.equal(fx.length, 59);
+  // (7a K1, item 15) the oracle skips a part whose block the current catalogue supports (it was recorded waiting on it); K1's
+  // recorded parts table judges those (kit/test/plan-k1.test.mjs)
+  const supported = new Set(PLAN_SCHEMA['x-catalogue'].entries.filter((e) => e.state === 'supported').map((e) => e.id));
   const tally = {}, gaps = {}, other = [];
   const anchors = stewardAnchors(A.claim);
   for (const f of fx) {
@@ -285,7 +307,7 @@ test('item 11: Steward\'s 59 recorded plans (whole files, fixtures/plan/asks): n
       tally[a.class] = (tally[a.class] ?? 0) + 1;
       if (a.class === 'unsupported') gaps[a.block] = (gaps[a.block] ?? 0) + 1;
       assert.notEqual(a.class, 'malformed', `${f.name} ${a.part}: ${JSON.stringify(a.reasons)}`);
-      if (waits.has(a.part)) assert.ok(['unsupported', 'blocked'].includes(a.class), `${f.name} ${a.part} waits but ${a.class}`);
+      if (waits.has(a.part) && !supported.has(a.block)) assert.ok(['unsupported', 'blocked'].includes(a.class), `${f.name} ${a.part} waits but ${a.class}`);
       else if (!['fits', 'adjusted'].includes(a.class)) other.push(`${f.name.replace('.json', '')}/${a.part}: ${a.class} ${a.reasons?.[0]?.code ?? ''}`);
     }
   }

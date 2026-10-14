@@ -1,0 +1,67 @@
+{
+  "about": "(7a K1a, \u00a710) a ring round a zone against the claim's north edge: refused OUT_OF_CLAIM (the ring must stay inside the claim's margin)",
+  "on": "asks",
+  "expect": {
+    "part": "w",
+    "code": "OUT_OF_CLAIM"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h3",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "anchor": "claim_n",
+            "within": 0
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "w",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            },
+            "ring": [
+              4,
+              8
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

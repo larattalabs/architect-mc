@@ -1,4 +1,4 @@
-// (6c P0) The plan validator (docs/CONTRACT.md "Phase 6c slice P0" §1, kit/schemas/plan.json `plan/0`, its x-rules R1-R14).
+// (6c P0) The plan validator (docs/CONTRACT.md "Phase 6c slice P0" §1, kit/schemas/plan.json `plan/0`, its x-rules R1-R14; K1 adds R15-R17).
 // The schema subset (lib/specschema.mjs), then dispatch on each part's kind against the capability catalogue, then the x-rules
 // the subset can't say: unique ids, references, the dependency graph (acyclic, topological order with ties by id), the
 // extension envelope's bounds, ext, ranges, anchors. Pure and deterministic; no survey (the resolver, resolve.mjs, places things).
@@ -26,6 +26,8 @@ export const PLAN_LIMITS = Object.freeze({
 export const FAMILIES = Object.freeze([['zones', 'zone'], ['connectors', 'connector'], ['forms', 'form'], ['rules', 'rule']]);
 /** Built-in anchors (R14). */
 export const BUILTIN_ANCHORS = Object.freeze(['claim_center', 'claim_n', 'claim_e', 'claim_s', 'claim_w']);
+/** (K1, R16) The connectors a gate's crossing may name: the routed ones. */
+export const ROUTED_KINDS = Object.freeze(['connector.street', 'connector.road', 'connector.path', 'connector.rope_bridge', 'connector.auto']);
 /** Zone ports besides its lots (an endpoint `{part: zone, port}`): the plaza's bell and the street's two ends. */
 export const ZONE_PORTS = Object.freeze(['bell', 'start', 'end']);
 
@@ -118,6 +120,14 @@ export function targetBlock(t) {
 }
 export const endpointBlock = (e) => `endpoint.${Object.keys(e)[0]}`;
 
+/** (K1, R15) A wall's path form: line (from, via, to), around, edge (where.inside) or along; null when it has none or two. */
+export function wallForm(part) {
+  const forms = [];
+  if (part.from !== undefined || part.to !== undefined || part.via !== undefined) forms.push('line');
+  if (part.where) { const k = Object.keys(part.where)[0]; forms.push(k === 'inside' ? 'edge' : k); }
+  return forms.length === 1 ? forms[0] : null;
+}
+
 /** The first reserved block a supported part names (program, layout, locator, feature, target, endpoint, sketch), or null. */
 function nestedUnsupported(family, part) {
   const stateOk = (id) => entryOf(id)?.state === 'supported';
@@ -160,7 +170,17 @@ function nestedUnsupported(family, part) {
     return whereCheck(part.where, '$.where') ?? sketchCheck(part.sketch, '$.sketch');
   }
   if (family === 'connector') {
-    for (const [k, e] of [['from', part.from], ...(part.via ?? []).map((v, i) => [`via[${i}]`, v]), ['to', part.to]]) {
+    // (K1) a wall's path form is a block id of its own (wall.line, wall.around, wall.edge, wall.along); a reserved one answers for the part
+    if (part.kind === 'wall') {
+      const form = wallForm(part);
+      const r0 = form ? reserved(`wall.${form}`, form === 'line' ? '$.from' : `$.where.${Object.keys(part.where)[0]}`) : null;
+      if (r0) return r0;
+      const w = part.where;
+      // (K1-target) around {region}: the owner's standing region is the wall's own target (feature.region stays reserved elsewhere)
+      if (w?.around && w.around.feature?.region === undefined) { const r1 = featureCheck(w.around.feature, '$.where.around.feature'); if (r1) return r1; }
+      if (w?.along) { const r1 = featureCheck(w.along.feature, '$.where.along.feature'); if (r1) return r1; }
+    }
+    for (const [k, e] of [['from', part.from], ...(part.via ?? []).map((v, i) => [`via[${i}]`, v]), ['to', part.to], ...(part.at ? [['at', part.at]] : [])]) {
       const r0 = endpointCheck(e, `$.${k}`);
       if (r0) return r0;
     }
@@ -209,6 +229,12 @@ function refsOf(family, part) {
     (Array.isArray(part.via) ? part.via : []).forEach((v, i) => endpoint(v, `$.via[${i}]`));
     endpoint(part.to, '$.to');
     (Array.isArray(part.avoid) ? part.avoid : []).forEach((f, i) => feature(f, `$.avoid[${i}]`));
+    // (K1) a gate's place (at), its wall and the connector whose crossing it is
+    if (part.at) endpoint(part.at, '$.at');
+    if (family === 'connector' && part.kind === 'gate') {
+      if (typeof part.wall === 'string') parts.push({ id: part.wall, path: '$.wall', as: 'wall' });
+      if (typeof part.crossing === 'string') parts.push({ id: part.crossing, path: '$.crossing', as: 'crossing' });
+    }
   }
   if (family === 'form' && Array.isArray(part.around)) part.around.forEach((id, i) => { if (typeof id === 'string') parts.push({ id, path: `$.around[${i}]`, as: 'around' }); });
   if (family === 'rule' && Array.isArray(part.scope)) part.scope.forEach((id, i) => { if (typeof id === 'string') parts.push({ id, path: `$.scope[${i}]`, as: 'scope' }); });
@@ -267,6 +293,13 @@ function kindError(family, kind, part) {
       if (lo < 8 || hi > 1024) return { path: `$.size.${k}`, message: `${JSON.stringify(v)}: a zone side is 8..1024 blocks` };
     }
   }
+  // (K1, R15) a wall has exactly one path form; a line has both ends
+  if (family === 'connector' && kind === 'wall') {
+    if (!wallForm(part)) return { path: '$', message: `a wall has exactly one path form: from/to (with via), where.around, where.inside or where.along (R15)` };
+    if (wallForm(part) === 'line' && (part.from === undefined || part.to === undefined)) return { path: part.from === undefined ? '$.from' : '$.to', message: 'a wall on a line names both from and to (R15)' };
+    if (part.gates !== null && typeof part.gates === 'object' && Number.isInteger(part.gates.min) && Number.isInteger(part.gates.max) && part.gates.min > part.gates.max) return { path: '$.gates', message: `gates {min: ${part.gates.min}, max: ${part.gates.max}}: min over max (R8)` };
+  }
+  if (family === 'connector' && (kind === 'rope_bridge' || kind === 'auto') && part.span && Number.isInteger(part.span.min) && Number.isInteger(part.span.max) && part.span.min > part.span.max) return { path: '$.span', message: `span {min: ${part.span.min}, max: ${part.span.max}}: min over max (R8)` };
   if (family === 'form' && (kind === 'ice_spike' || kind === 'rock_spire')) {
     const presets = kind === 'ice_spike' ? ['classic', 'needles', 'stubby'] : ['pinnacle', 'tower', 'hoodoo'];
     if (part.preset !== undefined && !presets.includes(part.preset)) return { path: '$.preset', message: `"${part.preset}" is not a ${kind} preset (${presets.join(', ')})` };
@@ -282,7 +315,7 @@ function kindError(family, kind, part) {
 // ------------------------------------------------------------------ the validator
 
 /**
- * Validate a plan (§1, R1-R14). `anchors`: the names the caller supplies (PlanRequest.anchors); the built-in ones are added.
+ * Validate a plan (§1, R1-R17). `anchors`: the names the caller supplies (PlanRequest.anchors); the built-in ones are added.
  * Never throws on a bad plan: the whole plan's failure is `malformed`, a part's is its verdict.
  */
 export function validatePlan(plan, { anchors = [] } = {}) {
@@ -399,6 +432,9 @@ export function validatePlan(plan, { anchors = [] } = {}) {
     for (const ref of r.parts) {
       if (ref.id === p.id) { partMalformed(p, 'CYCLE', ref.path, `the part names itself (R3)`); break; }
       if (out.byId.has(ref.id)) {
+        // (K1, R16) a gate's wall names a wall; its crossing a routed connector
+        if (ref.as === 'wall' && out.byId.get(ref.id).block !== 'connector.wall') { partMalformed(p, 'UNKNOWN_REF', ref.path, `"${ref.id}" is not a wall of this plan (R16)`); break; }
+        if (ref.as === 'crossing' && !ROUTED_KINDS.includes(out.byId.get(ref.id).block)) { partMalformed(p, 'UNKNOWN_REF', ref.path, `"${ref.id}" is not a street, road, path, rope_bridge or auto connector of this plan (R16)`); break; }
         p.refs.push(ref);
         if (ref.as === 'endpoint' && ref.port !== null) {
           const z = out.byId.get(ref.id);
@@ -406,7 +442,7 @@ export function validatePlan(plan, { anchors = [] } = {}) {
           const lots = [...zoneLots(z.part).map((l) => l.id), ...zoneDistricts(z.part).map((d) => d.id)];
           if (!ZONE_PORTS.includes(ref.port) && !lots.includes(ref.port)) { partMalformed(p, 'UNKNOWN_REF', ref.path.replace(/\.part$/, '.port'), `port "${ref.port}" is not a port of zone ${ref.id} (its lots${zoneDistricts(z.part).length ? ', its districts' : ''}, or ${ZONE_PORTS.join(', ')})`); break; }
         }
-      } else if (out.lotZone.has(ref.id) && ref.as !== 'around' && ref.as !== 'scope') {
+      } else if (out.lotZone.has(ref.id) && !['around', 'scope', 'wall', 'crossing'].includes(ref.as)) {
         // a lot named where a place is expected (Steward's plans name lots as endpoints): the lot, through its zone
         const zone = out.lotZone.get(ref.id);
         if (zone === p.id) { partMalformed(p, 'CYCLE', ref.path, `lot ${ref.id} is the part's own (R3)`); break; }
@@ -415,6 +451,11 @@ export function validatePlan(plan, { anchors = [] } = {}) {
       } else { partMalformed(p, 'UNKNOWN_REF', ref.path, `"${ref.id}" names no part of this plan (R2)`); break; }
     }
   }
+
+  // ---- (7a K1, R16) a gate that leaves out its wall names the plan's one wall (implicitly: a dependency); with none or several
+  // the compiler refuses it NO_FEATURE
+  const wallIds = out.parts.filter((q) => q.block === 'connector.wall').map((q) => q.id);
+  for (const p of out.parts) if (p.verdict !== 'malformed' && p.block === 'connector.gate' && p.part.wall === undefined && wallIds.length === 1) p.refs.push({ id: wallIds[0], path: '$', as: 'wall', implicit: true });
 
   // ---- the dependency graph: explicit (dependencies[]) and implicit (refs); unknown ids; cycles (R3)
   const deps = new Map(out.parts.map((p) => [p.id, new Set()]));

@@ -1,0 +1,29 @@
+59 asks: fits 58, refused 6, unsupported 61, adjusted 6, blocked 1
+gap table (unsupported parts per block id):
+  connector.rope_bridge    11
+  connector.wall           8
+  rule.palette             7
+  connector.tunnel         4
+  layout.ring              3
+  rule.shape               3
+  connector.bridge         2
+  connector.lift           2
+  connector.stair          2
+  form.crater              2
+  rule.variety             2
+  connector.channel        1
+  connector.gate           1
+  connector.ladder         1
+  connector.rail           1
+  form.floating_island     1
+  form.hollow_mountain     1
+  form.mast                1
+  form.seabed_site         1
+  form.ship_hull           1
+  form.waterfall           1
+  layout.grid              1
+  layout.organic           1
+  program.districts        1
+  rule.stacked_floors      1
+  rule.suspended           1
+parts outside answer.waits that did not fit (7): arcology/unused_placeholder: refused NO_ROOM; one_block/gentle_terraces: refused OVERLAP; rival_families/estates: refused NO_FEATURE; spiral_town/spiral_road: refused UNREACHABLE; spiral_town/hill_relief: blocked DEPENDENCY; terraced_hill/terraces: refused OVERLAP; underwater_domes/colony: refused NO_FEATURE

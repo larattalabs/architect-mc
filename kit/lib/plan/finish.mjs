@@ -101,6 +101,8 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
       continue;
     }
     a.cost = { cells: c.removed + c.placed, removed: c.removed, added: c.placed, tiles: tilesOf(a.part) };
+    // (7a K1) a wall's, gate's or rope bridge's exact bill of materials (its emitted cells by C26's block-to-item rules: kit/lib/connectors/bom.mjs)
+    if (pc.links?.bom?.[a.part]) a.cost.bom = { ...pc.links.bom[a.part] };
   }
   // ---- provisional parts: a lot with no library entry, a pending style (R13): the lot's cost band and fit box
   const lots = [];

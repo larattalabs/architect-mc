@@ -306,13 +306,16 @@ export class Regions {
     let roles: Record<string, string> = {};
     // (6c MP) the bible's role patterns ({role: pattern}, kit lib/pattern.mjs), passed to the kit's plan with its roles
     let patterns: Record<string, unknown> | undefined;
+    // (7a K1) the bible's connectors member ({wall?, gate?, rope_bridge?}: role names), passed to the kit's plan with its roles
+    let connectors: Record<string, unknown> | undefined;
     if (msg.bible) {
       const r = this.host.bibleIndex.resolve(msg.bibleVersion ? { id: msg.bible, version: msg.bibleVersion } : msg.bible);
       bible = r.pin;
       roles = { ...r.info.roles };
       try {
-        const j = JSON.parse(fs.readFileSync(r.files.json, 'utf8')) as { patterns?: unknown };
+        const j = JSON.parse(fs.readFileSync(r.files.json, 'utf8')) as { patterns?: unknown; connectors?: unknown };
         if (j.patterns && typeof j.patterns === 'object' && !Array.isArray(j.patterns)) patterns = j.patterns as Record<string, unknown>;
+        if (j.connectors && typeof j.connectors === 'object' && !Array.isArray(j.connectors)) connectors = j.connectors as Record<string, unknown>;
       } catch {
         /* a built-in bible has no file: no patterns */
       }
@@ -360,7 +363,7 @@ export class Regions {
       for (const v of volumes) fs.writeFileSync(path.join(dir, 'volumes', `${v.sha}.bin`), v.gz);
     }
     const hasBible = !!bible || Object.keys(roles).length > 0;
-    if (hasBible) fs.writeFileSync(path.join(dir, 'bible.json'), JSON.stringify({ ...(bible ? { id: bible.id, version: bible.version } : {}), roles, ...(patterns ? { patterns } : {}) }));
+    if (hasBible) fs.writeFileSync(path.join(dir, 'bible.json'), JSON.stringify({ ...(bible ? { id: bible.id, version: bible.version } : {}), roles, ...(patterns ? { patterns } : {}), ...(connectors ? { connectors } : {}) }));
     if (keepOut.length) fs.writeFileSync(path.join(dir, 'keepout.json'), JSON.stringify(keepOut));
     if (beside) fs.writeFileSync(path.join(dir, 'beside.json'), JSON.stringify(beside));
     if (biomes) fs.writeFileSync(path.join(dir, 'biomes.json'), JSON.stringify(biomes));

@@ -348,6 +348,8 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-14 (7a slice K1a):** `dev.nav.villager` takes `cells: true` and then returns the path's nodes as `cells: [[x,y,z]]`
+  (K1a's item 2: a villager's path meets a wall only at its gate cells). No hook added.
 - **2026-10-13 (6c slice D1):** `dev.region.plan` takes `beside` (a standing region's id: RegionPlanRequest.beside); the region
   view (`dev.region.state`) carries `beside` and, in its ext, `architect_mc:beside` `{region, dangling, since?}`. No hook added.
 - **2026-10-13 (6c slice P0):** new (`SliceP0Dev`, generated headless too) `dev.region.checkPlan {plan, claim: [x0,z0,x1,z1], anchors?:

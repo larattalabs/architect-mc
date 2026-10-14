@@ -102,6 +102,14 @@
    "until": "FL"
   },
   {
+   "id": "layout.elevated",
+   "sinceApi": "1.30.0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7b",
+   "note": "Lots carried at a level above the ground (canopy huts in trees, cliff ledges): Claude can write them now and they wait as unsupported (S-K1-6)."
+  },
+  {
    "id": "connector.street",
    "sinceApi": "P0",
    "schemaVersion": 1,
@@ -122,9 +130,16 @@
   {
    "id": "connector.auto",
    "sinceApi": "P0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7a"
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "moves": [
+     "walk",
+     "stair",
+     "ladder",
+     "rope_bridge"
+    ]
+   }
   },
   {
    "id": "connector.bridge",
@@ -150,16 +165,43 @@
   {
    "id": "connector.wall",
    "sinceApi": "P0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7a"
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "height": [
+     3,
+     16
+    ],
+    "thickness": [
+     1,
+     3
+    ],
+    "gates": [
+     0,
+     16
+    ]
+   }
   },
   {
    "id": "connector.gate",
    "sinceApi": "P0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7a"
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "width": [
+     1,
+     5
+    ],
+    "height": [
+     2,
+     6
+    ],
+    "doors": [
+     "none",
+     "door",
+     "fence_gate"
+    ]
+   }
   },
   {
    "id": "connector.ladder",
@@ -185,9 +227,20 @@
   {
    "id": "connector.rope_bridge",
    "sinceApi": "P0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7a"
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "span": [
+     8,
+     40
+    ],
+    "width": [
+     1,
+     3
+    ],
+    "villagerMinWidth": 2,
+    "approach": 32
+   }
   },
   {
    "id": "connector.catwalk",
@@ -237,6 +290,35 @@
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7a"
+  },
+  {
+   "id": "wall.line",
+   "sinceApi": "1.30.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "K1: a wall through from, via[] and to (each leg searched by T2's A* with a wall profile); a lot endpoint is a joined lot."
+  },
+  {
+   "id": "wall.around",
+   "sinceApi": "1.30.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "K1: a wall round a part, build or protected area, or (K1-target) one of the owner's standing regions, around {feature: {region}} (where.around on a wall: the wall's own member, not locator.around; its region not feature.region)."
+  },
+  {
+   "id": "wall.edge",
+   "sinceApi": "1.30.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "K1: a wall on the edge of a zone or the claim (where.inside)."
+  },
+  {
+   "id": "wall.along",
+   "sinceApi": "1.30.0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "K2",
+   "note": "D2's boundary spine plus an offset (where.along on a wall): the same member, no format change."
   },
   {
    "id": "form.relief",
@@ -431,7 +513,8 @@
    "sinceApi": "P0",
    "schemaVersion": 0,
    "state": "reserved",
-   "until": "FL"
+   "until": "FL",
+   "note": "On a wall: wall.around, K1 (the wall's own member). This id stays reserved for zones and forms laid out as a ring (FL)."
   },
   {
    "id": "feature.water",

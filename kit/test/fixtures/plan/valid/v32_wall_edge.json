@@ -1,0 +1,69 @@
+{
+  "about": "(7a K1, \u00a710) a 1-thick wall on the village zone's edge (wall.edge: its outermost clear ring) and a road from claim_s into the zone (its auto gate)",
+  "on": "s7",
+  "covers": [
+    "wall.edge"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "k1_v32",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "h1",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h2",
+                "type": "cottage",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "town_wall",
+        "kind": "wall",
+        "where": {
+          "inside": {
+            "part": "town"
+          }
+        },
+        "thickness": 1
+      },
+      {
+        "id": "in",
+        "kind": "road",
+        "from": {
+          "anchor": "claim_s"
+        },
+        "to": {
+          "part": "town"
+        }
+      }
+    ]
+  }
+}

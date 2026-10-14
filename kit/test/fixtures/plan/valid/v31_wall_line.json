@@ -1,0 +1,69 @@
+{
+  "about": "(7a K1, \u00a710) a wall on a line from claim_n to claim_s round the village, and a road from claim_w to claim_e across it (its auto gate)",
+  "on": "s7",
+  "covers": [
+    "wall.line"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "k1_v31",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "h1",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h2",
+                "type": "cottage",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "divide",
+        "kind": "wall",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "cross",
+        "kind": "road",
+        "from": {
+          "anchor": "claim_w"
+        },
+        "to": {
+          "anchor": "claim_e"
+        }
+      }
+    ]
+  }
+}

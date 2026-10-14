@@ -1,0 +1,87 @@
+// (7a K1) Connector style from the bible (docs/CONTRACT.md "Phase 7a slice K1" §6): bible format 2 gains an optional
+// `connectors` member whose values are role names only, so a re-skin restyles walls, gates and rope bridges without replanning:
+//   connectors?: { wall?: {body?, cap?, frame?}, gate?: {frame?, door?}, rope_bridge?: {deck?, rail?, post?, rope?} }
+// connectorRoles() resolves it against the plan's roles with the contract's defaults, and shapeOf() gives a role's block in the
+// shape a generator needs (slab, stairs, wall block, fence, fence gate, door) from the 26.3 block tables (kit.mjs variant(), which
+// reads lib/blocks.mjs), each with its stated fallback.
+import { qualify } from '../blocks.mjs';
+import { variant, WOODS } from '../kit.mjs';
+
+/** The members and their slots (role names). */
+export const CONNECTOR_SLOTS = Object.freeze({ wall: ['body', 'cap', 'frame'], gate: ['frame', 'door'], rope_bridge: ['deck', 'rail', 'post', 'rope'] });
+
+/**
+ * The default role chain of each slot (§6, N-K1-1, N-K1-2): the first role the plan resolves wins. `door` defaults to the frame's
+ * wood family (else oak), so it has no role chain; `rope` defaults to chains (N-K1-2: they make it read as a rope bridge), which the
+ * bible turns off with "none".
+ */
+export const CONNECTOR_DEFAULTS = Object.freeze({
+  wall: { body: ['structure', 'foundation', 'wall'], cap: ['trim'], frame: ['trim'] },
+  gate: { frame: ['trim'], door: [] },
+  rope_bridge: { deck: ['floor', 'path'], rail: ['rail'], post: ['frame'], rope: [] },
+});
+
+/** A bible's `connectors` member checked: null when fine, else a message (role names must be roles of the bible). */
+export function connectorsError(c, roles = null) {
+  if (c === undefined) return null;
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return 'connectors must be an object { wall?, gate?, rope_bridge? }';
+  for (const [k, v] of Object.entries(c)) {
+    if (!CONNECTOR_SLOTS[k]) return `connectors: unknown member '${k}' (one of ${Object.keys(CONNECTOR_SLOTS).join(', ')})`;
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return `connectors.${k} must be an object { ${CONNECTOR_SLOTS[k].join(', ')} }`;
+    for (const [s, r] of Object.entries(v)) {
+      if (!CONNECTOR_SLOTS[k].includes(s)) return `connectors.${k}: unknown slot '${s}' (one of ${CONNECTOR_SLOTS[k].join(', ')})`;
+      if (k === 'rope_bridge' && s === 'rope' && r === 'none') continue;
+      if (typeof r !== 'string' || !/^[a-z][a-z0-9_]{0,31}$/.test(r)) return `connectors.${k}.${s} must be a role name`;
+      if (roles && !roles[r]) return `connectors.${k}.${s}: '${r}' is not a role of this bible`;
+    }
+  }
+  return null;
+}
+
+/**
+ * The role name each slot resolves to: `{wall: {body, cap, frame}, gate: {frame, door}, rope_bridge: {deck, rail, post, rope}}`.
+ * `roles`: the plan's resolved roles ({role: blockState}); `given`: the bible's `connectors` (or null). A slot the bible names wins when
+ * the plan resolves that role; else the first role of its default chain the plan has. `door` and `rope` are null by default (the
+ * door is the frame's wood family; the rope is chains), `rope` is 'none' when the bible turns chains off.
+ */
+export function connectorRoles(roles, given = null) {
+  const out = {};
+  for (const [k, slots] of Object.entries(CONNECTOR_SLOTS)) {
+    out[k] = {};
+    for (const s of slots) {
+      const g = given?.[k]?.[s];
+      if (k === 'rope_bridge' && s === 'rope' && g === 'none') { out[k][s] = 'none'; continue; }
+      if (typeof g === 'string' && roles?.[g]) { out[k][s] = g; continue; }
+      out[k][s] = CONNECTOR_DEFAULTS[k][s].find((r) => roles?.[r]) ?? null;
+    }
+  }
+  return out;
+}
+
+/** The wood family of a block (spruce_log -> spruce, dark_oak_planks -> dark_oak), or null. */
+export function woodOf(block) {
+  const b = qualify(String(block ?? '')).replace(/^minecraft:/, '').replace(/\[.*$/, '');
+  const ws = [...WOODS].sort((a, c) => c.length - a.length);
+  for (const w of ws) if (b === `${w}_planks` || b.startsWith(`${w}_`) || b.startsWith(`stripped_${w}_`)) return w;
+  return null;
+}
+
+/**
+ * A block in a shape: `slab`, `stairs`, `wall` (the wall block), `fence`, `fence_gate`, `door`, from the 26.3 tables; `null` when the
+ * block has no such variant (the caller's stated fallback applies). A log or wood takes its wood family's planks' variants.
+ */
+export function shapeOf(block, shape) {
+  if (!block) return null;
+  const base = String(block).replace(/\[.*$/, '');
+  const v = variant(base, shape);
+  if (v) return v;
+  const w = woodOf(base);
+  if (w) return variant(`minecraft:${w}_planks`, shape);
+  return null;
+}
+
+/** The door of a gate: the frame's wood family's door, else oak's (§3). */
+export function doorOf(frameBlock) {
+  const w = woodOf(frameBlock);
+  return (w && variant(`minecraft:${w}_planks`, 'door')) || 'minecraft:oak_door';
+}
