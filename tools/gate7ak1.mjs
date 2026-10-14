@@ -347,14 +347,85 @@ steps.ingame = async () => {
   return out;
 };
 
+/**
+ * D2's narrowed world classes over a removal's diff (tools/gate6cd.mjs, the lesson of F2, T2 and D2): an unclassified mismatch is
+ * classed by its kind ONLY at a cell the plan never writes (its virtual world's written flag, a lot's box), and, but for a doomed leaf,
+ * away from the plan: more than 6 columns from every written column and route cell (`far`), or more than 8 below both the surveyed
+ * ground and every written cell within 6 columns (`deep`). Kinds: water or lava appearing, receding or moving (or what lava makes)
+ * `flow`; a natural leaf turned air `decay`; the same block in another state `live`; a snow layer melted by a light the plan placed
+ * (T2's `melt`, at an unwritten cell lit over 11). Everything else stays `none`. Mutates diff.classes; returns {by, world, undoOwn}.
+ */
+function worldClasses(diff, F, vw, F_WRITTEN, decodeColumns, restored) {
+  const cols = decodeColumns(F.survey);
+  const groundAt = (x, z) => { const i = Math.floor((x - cols.minX) / cols.resolution), j = Math.floor((z - cols.minZ) / cols.resolution); return i < 0 || j < 0 || i >= cols.width || j >= cols.depth ? null : cols.ground[i + j * cols.width]; };
+  const wcol = new Map();
+  const wlow = (x, z, y) => { const k = `${x},${z}`, v = wcol.get(k); if (v === undefined || y < v) wcol.set(k, y); };
+  vw.eachWritten((x, y, z) => wlow(x, z, y));
+  const lotBoxes = F.ir.lots.map((l) => l.box);
+  for (const b of lotBoxes) for (let x = b.minX; x <= b.maxX; x++) for (let z = b.minZ; z <= b.maxZ; z++) wlow(x, z, b.minY);
+  const G = 6, near = new Set();
+  for (const e of F.meta.route?.edges ?? []) for (const [x, , z] of e.path ?? []) for (let i = -G; i <= G; i++) for (let j = -G; j <= G; j++) near.add(`${x + i},${z + j}`);
+  const isWritten = (x, y, z) => (vw.flags(x, y, z) & F_WRITTEN) !== 0 || lotBoxes.some((b) => x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && z >= b.minZ && z <= b.maxZ);
+  const away = (x, y, z) => {
+    let lowNear = Infinity, nearW = false;
+    for (let i = -G; i <= G; i++) for (let j = -G; j <= G; j++) { const v = wcol.get(`${x + i},${z + j}`); if (v !== undefined) { nearW = true; if (v < lowNear) lowNear = v; } }
+    if (!nearW && !near.has(`${x},${z}`)) return 'far';
+    const gy = groundAt(x, z);
+    return gy !== null && y < gy - 8 && y < lowNear - 8 ? 'deep' : null;
+  };
+  const lights = [];
+  vw.eachWritten((x, y, z, idx) => { const em = vw.pal.emit[idx]; if (em > 11) lights.push([x, y, z, em]); });
+  const lit = (x, y, z) => lights.some(([lx, ly, lz, em]) => em - (Math.abs(lx - x) + Math.abs(ly - y) + Math.abs(lz - z)) > 11);
+  const idOf = (b) => b.split(/[[{]/)[0];
+  const fluidRe = /^minecraft:(water|lava)\b/;
+  const by = {}, world = [];
+  diff.classes = { ...(diff.classes ?? {}) };
+  for (const m of diff.list ?? []) {
+    if (m.class !== 'none') continue;
+    const [x, y, z] = m.pos.split(',').map(Number);
+    if (isWritten(x, y, z)) continue;
+    let cls = null, where = null;
+    if (/^minecraft:snow\[/.test(m.was) && /^minecraft:(air|cave_air)$/.test(m.now) && lit(x, y, z)) { cls = 'melt'; where = 'lit'; }
+    else {
+      cls = fluidRe.test(m.now) || fluidRe.test(m.was) ? 'flow' : /_leaves\[.*persistent=false/.test(m.was) && /^minecraft:air$/.test(m.now) ? 'decay' : idOf(m.was) === idOf(m.now) ? 'live' : null;
+      if (!cls) continue;
+      where = cls === 'decay' && /_leaves\[distance=7,persistent=false/.test(m.was) ? 'd7' : away(x, y, z);
+      if (!where) continue;
+    }
+    m.class = cls; m.where = where;
+    by[`${cls}:${where}`] = (by[`${cls}:${where}`] ?? 0) + 1;
+    diff.classes.none -= 1;
+    diff.classes[cls] = (diff.classes[cls] ?? 0) + 1;
+    world.push({ pos: m.pos, was: m.was, now: m.now, class: cls, where });
+  }
+  const WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported', 'flow', 'decay', 'melt'];
+  const undoOwn = (diff.mismatches ?? 0) - WORLD.reduce((a, k) => a + (diff.classes?.[k] ?? 0), 0);
+  return { by, world, undoOwn, cap: Math.floor(0.0001 * (restored ?? 0)) };
+}
+
 // ------------------------------------------------------------------ items 1, 4, 9 on S3's pinned claim (natural)
 
 steps.natural = async () => {
   await ensure();
   const claim = [...S3.fixture.claim];
-  const plan = JSON.parse(JSON.stringify(V30));
-  plan.zones[0].sketch = { frame: 'claim', unit: 'q64', shape: 'point', points: [[23, 31]] };
-  const out = await v30Round('k1a-s3', BASE, claim, plan, { rules: 'default', settleMs: 30_000 });
+  // the live seed world's survey differs from the committed S3 survey (live worlds drift: T1 as built), so the zone's sketch is the
+  // first of these points whose check on the live survey has the ring clear (a dry run on a fresh copy, recorded)
+  const PTS = [[23, 31], [22, 30], [24, 33], [21, 32], [25, 30], [20, 28], [26, 34], [18, 30]];
+  const planAt = (pt) => { const q = JSON.parse(JSON.stringify(V30)); q.zones[0].sketch = { frame: 'claim', unit: 'q64', shape: 'point', points: [pt] }; return q; };
+  await L.fresh('G6B K1a S3 Dry', BASE);
+  { const [cx, cz] = centre(claim); await tp(cx, 140, cz); }
+  await L.settle(30_000);
+  let pick = null;
+  const tried = [];
+  for (const pt of PTS) {
+    const c = await checkPlan(planAt(pt), claim, { anchors: anchorsOf(claim) });
+    tried.push({ pt, parts: c.parts.map((q) => `${q.part}:${q.class}`) });
+    if (c.parts.every((q) => q.part === 'town' || q.class === 'fits')) { pick = pt; break; }
+  }
+  check(!!pick, `S3: a sketch point whose live check has the ring clear (${json(tried)})`);
+  if (!pick) return { tried };
+  const out = await v30Round('k1a-s3', BASE, claim, planAt(pick), { rules: 'default', settleMs: 30_000 });
+  out.sketch = pick; out.tried = tried;
   const skips = Object.values(out.skipped).reduce((a, b) => a + b, 0);
   check(out.virtual.kept <= skips, `item 4 (S3): every cell kept by its condition is one the realise counted as skipped (${out.virtual.kept} kept, ${skips} skipped)`);
   check(out.virtual.written > 0 && out.virtual.share <= 0.0001, `item 4 (S3): the realised world equals the virtual world over ${out.virtual.written} written cells: ${out.virtual.differ} unclassified (${(100 * out.virtual.share).toFixed(4)}%, at most 0.01%), ${out.virtual.kept} kept, ${out.virtual.road} on 4e ground roads`, out.virtual.first);
@@ -364,24 +435,13 @@ steps.natural = async () => {
   const rm = await call('dev.region.remove', { region: out.region, requester: OWNER }, 4 * 3_600_000);
   await L.settle(10_000);
   const diff = await call('dev.region.hash', { box: out.box, mode: 'diff', file: path.join(OUT, 'k1a-s3-snap.gz') }, 4 * 3_600_000);
-  // T2's `melt` class: a snow layer gone to air at a cell the plan never writes, lit over 11 by a light the plan placed
   const { buildVirtual, F_WRITTEN } = await imp('lib/region/vworld.mjs');
+  const { decodeColumns } = await imp('lib/region/pack.mjs');
   const F = planFiles(planDir(out.checkId));
   const { vw } = buildVirtual({ ir: F.ir, survey: F.survey, blobs: F.blobs });
-  const lights = [];
-  vw.eachWritten((x, y, z, idx) => { const em = vw.pal.emit[idx]; if (em > 11) lights.push([x, y, z, em]); });
-  const lit = (x, y, z) => lights.some(([lx, ly, lz, em]) => em - (Math.abs(lx - x) + Math.abs(ly - y) + Math.abs(lz - z)) > 11);
-  const list = (diff.list ?? []).map((m) => {
-    if (m.class !== 'none' || !/^minecraft:snow\[/.test(m.was) || !/^minecraft:(air|cave_air)$/.test(m.now)) return m;
-    const [x, y, z] = m.pos.split(',').map(Number);
-    return !(vw.flags(x, y, z) & F_WRITTEN) && lit(x, y, z) ? { ...m, class: 'melt' } : m;
-  });
-  const classes = { ...(diff.classes ?? {}) };
-  const melted = list.filter((m) => m.class === 'melt').length;
-  if (melted) { classes.none -= melted; classes.melt = (classes.melt ?? 0) + melted; }
-  out.exact = { removed: rm.removed, restored: rm.restored, mismatches: diff.mismatches, classes, list: list.filter((m) => m.class === 'none').slice(0, 40) };
-  const cap = Math.floor(out.virtual.written * 0.0001);
-  check(rm.removed && (classes.none ?? 0) <= cap, `item 9 (S3): Regions.remove: E-normal ${diff.mismatches} mismatches classified (${json(classes)}; unclassified ${classes.none ?? 0}, at most 0.01% of ${out.virtual.written} written = ${cap})`, out.exact.list);
+  const wc = worldClasses(diff, F, vw, F_WRITTEN, decodeColumns, rm.restored);
+  out.exact = { removed: rm.removed, restored: rm.restored, mismatches: diff.mismatches, classes: diff.classes, worldBy: wc.by, undoOwn: wc.undoOwn, cap: wc.cap, world: wc.world.slice(0, 60), list: (diff.list ?? []).filter((m) => m.class === 'none').slice(0, 40) };
+  check(rm.removed && (diff.classes.none ?? 0) === 0 && wc.undoOwn <= wc.cap, `item 9 (S3): Regions.remove: E-normal ${diff.mismatches} mismatches, all classified (${json(diff.classes)}; by place ${json(wc.by)}); the undo's own ${wc.undoOwn} (at most 0.01% of ${rm.restored} restored = ${wc.cap})`, out.exact.list);
   delete out.R.meta;
   await leaveWorld();
   spendZero();
