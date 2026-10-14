@@ -1,0 +1,52 @@
+{
+  "about": "(7a K1b) two auto connectors over rift_city on the flat claim: `across` spans the rift (walking round it is longer than the span costs); `stroll` from the claim's north edge to Steward's player anchor walks (nothing to span)",
+  "on": "flat",
+  "anchors": {
+    "lip_n": [
+      1125,
+      65,
+      2056
+    ],
+    "lip_s": [
+      1125,
+      65,
+      2104
+    ]
+  },
+  "covers": [
+    "connector.auto"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "rift",
+        "program": {
+          "template": "rift_city"
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "across",
+        "kind": "auto",
+        "from": {
+          "anchor": "lip_n"
+        },
+        "to": {
+          "anchor": "lip_s"
+        }
+      },
+      {
+        "id": "stroll",
+        "kind": "auto",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "player"
+        }
+      }
+    ]
+  }
+}

@@ -40,14 +40,17 @@ export function riftLayout(claim, survey, P) {
 
 /**
  * rift_city's route land: the rift down to its floor, the ledges at theirs (mid depth, 9 wide on both walls, the north one broken
- * round the hall), over the channel's box widened by the warp (3 columns either side counted carved, so a deck from the rim cuts
- * through a bulge rather than stopping short of it). `{base: {minX, minZ, width, depth, values}}` or null.
+ * round the hall), over the channel's box widened by the warp: 2 columns either side counted carved (the warp of 3 carves at most 2
+ * past the channel at the rim, measured on a flat claim: 15 and 16 from the centre line in part, 17 never), so the lip is the
+ * column 17 out and a deck from it cuts through a bulge rather than stopping short of it. `rails`: the rim rail round the rift (5
+ * past the channel: a fence on the surface, a lantern over every 10th post), which a K1b route opens where it crosses (the links
+ * stage writes air there). `{base: {minX, minZ, width, depth, values}, rails: [[x0, z0, x1, z1]]}` or null.
  */
 export function riftLand(claim, survey, P) {
   const g = riftLayout(claim, survey, P);
   if (!g) return null;
   const { cz, half, x0, x1, floorY, yl, LW, cx } = g;
-  const minX = x0 - half - 3, maxX = x1 + half + 3, minZ = cz - half - 3, maxZ = cz + half + 3;
+  const minX = x0 - half - 2, maxX = x1 + half + 2, minZ = cz - half - 2, maxZ = cz + half + 2;
   const width = maxX - minX + 1, dep = maxZ - minZ + 1, values = new Array(width * dep).fill(0);
   const ledge = [];
   for (const side of [-1, 1]) {
@@ -61,7 +64,10 @@ export function riftLand(claim, survey, P) {
     const onLedge = ledge.some((q) => x >= q[0] && x <= q[2] && z >= q[1] && z <= q[3]);
     values[i + j * width] = (onLedge ? yl - 1 : floorY - 1) - survey.groundAt(x, z);
   }
-  return { base: { minX, minZ, width, depth: dep, values }, layout: g };
+  // the rim rail (rift_city's rim_rail part): a ring of fence 5 past the channel, on the surface
+  const zr = half + 5, xr0 = x0 - half - 5, xr1 = x1 + half + 5;
+  const rails = [[xr0, cz - zr, xr1, cz - zr], [xr0, cz + zr, xr1, cz + zr], [xr0, cz - zr, xr0, cz + zr], [xr1, cz - zr, xr1, cz + zr]];
+  return { base: { minX, minZ, width, depth: dep, values }, rails, layout: g };
 }
 
 /** The templates whose carved ground the routes must see: name -> (claim, survey, params) -> {base} | null. */

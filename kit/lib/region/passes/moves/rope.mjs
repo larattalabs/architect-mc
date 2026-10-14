@@ -8,6 +8,7 @@
 // NO_GAP, SPAN, TOO_STEEP, HEADROOM, ANCHOR, or UNREACHABLE. Under the realise lint (integer math; Math.floor/abs/min/max only).
 import { FLAG_FROZEN, FLAG_LAVA, FLAG_MISSING, FLAG_TREE, FLAG_WATER } from '../../pack.mjs';
 import { ROPE, checkSpan, deckY, maxRiseOf, profile } from '../../../connectors/ropeGeom.mjs';
+import { VC, VOXEL_CLASSES, classAt as volumeClassAt } from '../../volume.mjs';
 
 const NONE = -32768;
 const FP = 16;
@@ -37,9 +38,12 @@ export function ropeInit(env, intent) {
   if (!intent._unsafe?.noKeepOut) for (const b of intent.keepOut ?? []) rect(b);
   const m = Math.max(0, intent.margin ?? 2);
   for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) if (i < m || j < m || i >= W - m || j >= D - m) blocked[i + j * W] = 1;
-  // the pre-region classes the anchors stand in (the virtual world's 2.5D base): soil to 3 under the ground, rock below, water
-  // down a water column (a frozen top ice), unknown columns MISSING
+  // the pre-region classes the anchors stand in: a frozen volume's where the plan holds one over the cell (intent.rope.volumes,
+  // decoded ARVX the plan asked for), else the virtual world's 2.5D base: soil to 3 under the ground, rock below, water down a
+  // water column (a frozen top ice), unknown columns MISSING
+  const vols = Array.isArray(intent.rope?.volumes) ? intent.rope.volumes.filter(Boolean) : [];
   const classAt = (x, y, z) => {
+    for (const v of vols) { const c = volumeClassAt(v, x, y, z); if (c !== VC.MISSING) return VOXEL_CLASSES[c]; }
     const i = x - minX, j = z - minZ;
     if (i < 0 || j < 0 || i >= W || j >= D) return 'MISSING';
     const k = i + j * W, g = G[k], f = flags[k];

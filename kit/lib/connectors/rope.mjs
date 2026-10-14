@@ -12,7 +12,7 @@
 //                  cost.bom; then the wouldFit dry runs
 import { ROPE, emitRouteRopes, slabOf, deckY, profile } from './ropeGeom.mjs';
 import { readParams } from './params.mjs';
-import { inferMovers, VILLAGER } from '../region/passes/route.mjs';
+import { footprintOf, inferMovers, VILLAGER } from '../region/passes/route.mjs';
 import { zoneLots } from '../plan/schema.mjs';
 import { canonicalJson } from '../region/pack.mjs';
 import { WHOLE_CLAIM } from '../plan/compile.mjs';
@@ -95,9 +95,12 @@ export function ropeLeg(K, p) {
  */
 export function ropePassInput(K) {
   if (!K.k1Parts.some((p) => ROPE_KINDS.includes(p.kind))) return null;
-  const whole = K.order.find((p) => p.family === 'zone' && K.res.get(p.id)?.whole && K.okClass(p.id));
-  if (!whole) return null;
   if (K.rope?.land !== undefined) return K.rope.land;
+  // the frozen volumes the caller gave (a lip's real classes: sand is LOOSE, not site-solid): asked for through needVolume, so
+  // the IR records each one the anchors read (none in a plan check without volumes: the 2.5D survey's classes)
+  const volumes = (K.ctx.volumes ?? []).map((v) => K.r.needVolume(v.box)).filter(Boolean);
+  const whole = K.order.find((p) => p.family === 'zone' && K.res.get(p.id)?.whole && K.okClass(p.id));
+  if (!whole) { stateOf(K).land = volumes.length ? { volumes } : null; return stateOf(K).land; }
   const name = whole.part.program.template;
   const mod = WHOLE_CLAIM.get(name)?.module;
   let land = null;
@@ -110,8 +113,10 @@ export function ropePassInput(K) {
       // the template's own ways (bridges, towers, stairs) are obstacles too
       const ways = K.r.paths.filter((q) => q.box).map((q) => [q.box.minX, q.box.minZ, q.box.maxX, q.box.maxZ]);
       land = { base: l.base, hard: ways };
+      stateOf(K).rails = l.rails ?? [];
     }
   }
+  if (volumes.length) land = { ...(land ?? {}), volumes };
   stateOf(K).land = land;
   return land;
 }
@@ -134,12 +139,19 @@ export function ropeFailAnswer(K, l, m) {
 
 /** A span's crossing: over water or a gap, and its depth (the deepest column under the deck's centre line). */
 function crossing(K, s) {
-  const S = K.env.S, ys = profile(s.n, s.from[1], s.rise);
+  const S = K.env.S, ys = profile(s.n, s.from[1], s.rise), base = K.rope?.land?.base ?? null;
+  // the land the routes met: the survey's ground plus a template's carved base (rift_city's rift)
+  const ground = (x, z) => {
+    const g = S.groundAt(x, z);
+    if (!base) return g;
+    const i = x - base.minX, j = z - base.minZ;
+    return i >= 0 && j >= 0 && i < base.width && j < base.depth ? g + base.values[i + j * base.width] : g;
+  };
   let water = false, depth = 0;
   for (let t = 1; t <= s.n; t++) {
     const x = s.from[0] + s.dir[0] * t, z = s.from[2] + s.dir[1] * t;
     if (S.waterAt(x, z)) water = true;
-    depth = Math.max(depth, deckY(ys[t]) - S.groundAt(x, z));
+    depth = Math.max(depth, deckY(ys[t]) - ground(x, z));
   }
   return { type: 'rope_bridge', over: water ? 'water' : 'gap', depth };
 }
@@ -177,6 +189,12 @@ export function emitRopes(K) {
       const style = p.part.lamps === 'none' ? { light: null } : {};
       const recs = emitRouteRopes(K.r, { only: [x.meta.id], stage: K.stageOf('links'), part: `links_r${idx}`, prefix: `rope_r${idx}_`, style, ...(o?.whole ? { whole: true } : {}) });
       K.mark(p.id, K.addedSince(cp));
+      // a rope_bridge connector's graph edge is typed (§8: type rope_bridge, its crossing)
+      if (p.kind === 'rope_bridge') {
+        const ge = K.r.graph.edges.find((e) => e.id === `route_${x.meta.id}`);
+        const g = (x.meta.segments ?? []).find((q) => q.kind === 'rope');
+        if (ge && g) { ge.type = 'rope_bridge'; ge.crossing = crossing(K, { n: g.n, rise: g.rise, dir: g.dir, from: x.meta.path[g.from] }); }
+      }
       const a = K.answers.get(p.id);
       const bom = { ...(a.cost?.bom ?? {}) };
       for (const r of recs) for (const [item, nn] of Object.entries(r.bom ?? {})) bom[item] = (bom[item] ?? 0) + nn;
@@ -187,7 +205,64 @@ export function emitRopes(K) {
       K.ans(p, { class: 'refused', reasons: [{ code, message: `the rope span could not be written: ${e.message}`, evidence: { edge: x.meta.id } }] });
     }
   }
+  openRails(K);
   wouldFits(K);
+}
+
+/**
+ * Where a rope_bridge or auto route crosses a whole-claim template's surface rail (rift_city's rim rail round the rift), the rail
+ * opens and the approach inside it is fenced: air over the route's footprint at the rail's cells (its post at the surface + 1, a
+ * lantern at + 2), and the rail role on both sides of every walk cell inside the rail's ring (so the strip between the rail and the
+ * rift stays closed off), in the links stage, as the connector's own cells. A plan without such a template has no rails.
+ */
+function openRails(K) {
+  const rails = K.rope?.rails ?? [];
+  if (!rails.length) return;
+  const S = K.env.S;
+  const inRail = (x, z) => rails.some((q) => x >= q[0] && x <= q[2] && z >= q[1] && z <= q[3]);
+  const ring = { minX: Math.min(...rails.map((q) => q[0])), minZ: Math.min(...rails.map((q) => q[1])), maxX: Math.max(...rails.map((q) => q[2])), maxZ: Math.max(...rails.map((q) => q[3])) };
+  const inside = (x, z) => x > ring.minX && x < ring.maxX && z > ring.minZ && z < ring.maxZ;
+  const fence = K.r.material(K.r.roles.rail ? 'rail' : 'minecraft:oak_fence', 'rail opening');
+  const done = new Set();
+  for (const x of K.routed ?? []) {
+    const p = x.conn;
+    if (!ROPE_KINDS.includes(p.kind) || !['fits', 'adjusted'].includes(K.answers.get(p.id)?.class) || !x.meta?.ok) continue;
+    const open = [], walls = [];
+    const own = new Set();
+    for (const g of x.meta.segments ?? []) for (const [cx, cz] of footprintOf(x.meta.path.slice(g.from, g.to + 1), x.meta.width)) own.add(`${cx},${cz}`);
+    // the rope posts stand on the rail lines at the landings
+    for (const rr of K.r.meta.ropes ?? []) for (const q of rr.posts ?? []) own.add(`${q.x},${q.z}`);
+    for (const g of x.meta.segments ?? []) {
+      if (g.kind === 'rope') continue;
+      const cells = x.meta.path.slice(g.from, g.to + 1);
+      for (const [cx, cz] of footprintOf(cells, x.meta.width)) {
+        const k = `${cx},${cz}`;
+        if (done.has(k) || !inRail(cx, cz)) continue;
+        done.add(k);
+        const y = S.groundAt(cx, cz) + 1;
+        open.push(cx, cz, y, y + 1, 0);
+      }
+      for (const [cx, cy, cz] of cells) {
+        if (!inside(cx, cz) || inRail(cx, cz)) continue;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (let t = 1; t <= x.meta.width; t++) {
+          const wx = cx + dx * t, wz = cz + dz * t, k = `${wx},${wz}`;
+          if (own.has(k)) continue;
+          if (done.has(`w${k}`) || !inside(wx, wz) || inRail(wx, wz)) break;
+          done.add(`w${k}`);
+          walls.push(wx, wz, cy + 1, cy + 1, 1);
+          break;
+        }
+      }
+    }
+    if (!open.length && !walls.length) continue;
+    const cp = K.checkpoint();
+    try {
+      const part = K.r.parts.find((q) => q.id === `links_r${K.order.indexOf(p)}`) ?? K.r.part(`links_r${K.order.indexOf(p)}`, { stage: K.stageOf('links'), set: 'path' });
+      if (open.length) part.columns({ abs: 0 }, { abs: 0 }, open, [null, fence], { cond: 3 });
+      if (walls.length) part.columns({ abs: 0 }, { abs: 0 }, walls, [null, fence], { cond: 0 });
+      K.mark(p.id, K.addedSince(cp));
+    } catch (e) { K.rollback(cp); K.notes.push(`rails: ${e.message}`); }
+  }
 }
 
 /**

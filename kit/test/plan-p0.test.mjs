@@ -15,13 +15,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { asksSurvey, goldenSurvey, stewardAnchors, checkPlanLocal, memoryCache, FIX, ROOT } from './plan-helpers.mjs';
+import { asksSurvey, goldenSurvey, stewardAnchors, checkPlanLocal, memoryCache, flatSurvey, FIX, ROOT } from './plan-helpers.mjs';
 import { validatePlan, PLAN_SCHEMA } from '../lib/plan/schema.mjs';
 import { planCatalogue, diffCatalogues } from '../lib/plan/catalogue.mjs';
 
-const SV = { s7: goldenSurvey('s7'), s3: goldenSurvey('s3'), asks: asksSurvey() };
+// ((7a K1b) `flat`: a flat claim in rift_city's range, for the rope bridge fixtures; a fixture's `anchors` add to Steward's)
+const SV = { s7: goldenSurvey('s7'), s3: goldenSurvey('s3'), asks: asksSurvey(), flat: flatSurvey() };
 const read = (dir) => fs.readdirSync(path.join(FIX, dir)).filter((f) => f.endsWith('.json') && f !== 'SOURCE.json').sort().map((f) => ({ name: f, ...JSON.parse(fs.readFileSync(path.join(FIX, dir, f), 'utf8')) }));
-const run = (fx, extra = {}) => { const s = SV[fx.on]; return checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: stewardAnchors(s.claim), protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}), ...extra }); };
+const run = (fx, extra = {}) => { const s = SV[fx.on]; return checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}), ...extra }); };
 const lots = (n, p = 'h') => Array.from({ length: n }, (_, i) => ({ id: `${p}${i + 1}`, type: 'house', size: [9, 9] }));
 const A = SV.asks;
 const asks = (plan, o = {}) => checkPlanLocal(plan, { survey: A.bytes, claim: A.claim, anchors: stewardAnchors(A.claim), ...o });
@@ -33,7 +34,7 @@ test('item 1: valid/ fixtures (at least 12) validate and every part fits', async
   const fx = read('valid');
   assert.ok(fx.length >= 12, `${fx.length} valid fixtures`);
   for (const f of fx) {
-    const v = validatePlan(f.plan, { anchors: Object.keys(stewardAnchors(SV[f.on].claim)) });
+    const v = validatePlan(f.plan, { anchors: Object.keys({ ...stewardAnchors(SV[f.on].claim), ...(f.anchors ?? {}) }) });
     assert.equal(v.malformed, null, `${f.name}: ${JSON.stringify(v.malformed)}`);
     for (const p of v.parts) assert.equal(p.verdict, 'compile', `${f.name} ${p.id}: ${p.verdict} ${JSON.stringify(p.reason)}`);
     const r = await run(f);
