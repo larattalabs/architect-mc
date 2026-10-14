@@ -344,6 +344,75 @@ steps.natural = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ the look (client; recorded, not judged)
+
+/** A camera shot from `eye` looking at `at` (the client's own camera), saved into OUT/look. */
+async function shot(name, eye, at) {
+  await call('dev.camera', { x: eye[0], y: eye[1], z: eye[2], lookAt: { x: at[0], y: at[1], z: at[2] }, mode: 'spectator', fov: 70 }, 60_000);
+  await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => null);
+  await L.settle(1500);
+  const r = await call('dev.screenshot', { name: `k1b_${name}`, frames: 10, chunkTimeoutMs: 60_000 }, 180_000);
+  const dir = path.join(OUT, 'look');
+  fs.mkdirSync(dir, { recursive: true });
+  const dst = path.join(dir, `${name}.png`);
+  fs.copyFileSync(r.path, dst);
+  return { name, eye, at, file: dst, width: r.width, height: r.height };
+}
+
+steps.look = async () => {
+  await ensure();
+  const out = { shots: [] };
+  await L.fresh('G6B K1b Look', FLAT);
+  await L.setRules('exact');
+  await cmd('/time set 6000');
+  await cmd('/weather clear');
+  // the ravine: links_demo on the flat claim
+  await tp((FLAT_CLAIM[0] + FLAT_CLAIM[2]) / 2, -20, (FLAT_CLAIM[1] + FLAT_CLAIM[3]) / 2);
+  const p = await L.plan('links_demo', FLAT_CLAIM, { surveyLoad: 'bounded:256', check: true, owner: OWNER });
+  const meta = JSON.parse(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', p.planId, 'meta.json'), 'utf8'));
+  const region = await L.realise(p.planId, {});
+  const st = await L.waitRegion(region, 3_600_000);
+  out.ravine = { planId: p.planId, state: st.view.state, ropes: (meta.ropes ?? []).map((q) => ({ id: q.id, n: q.n, from: q.from, to: q.to })) };
+  const longest = (meta.ropes ?? []).reduce((a, q) => (!a || q.n > a.n ? q : a), null);
+  if (longest) {
+    const mid = [longest.from[0], longest.from[1], Math.floor((longest.from[2] + longest.to[2]) / 2)];
+    out.shots.push(await shot('ravine_side', [mid[0] + 26.5, mid[1] + 3, mid[2] + 0.5], [mid[0] - 0.5, mid[1] - 1, mid[2] + 0.5]));
+    out.shots.push(await shot('ravine_deck', [longest.from[0] - 0.5, longest.from[1] + 2.6, longest.from[2] - 2.5], [longest.to[0] - 0.5, longest.to[1] + 1, longest.to[2] + 0.5]));
+    out.shots.push(await shot('ravine_high', [mid[0] + 40.5, mid[1] + 34, mid[2] + 30.5], [mid[0] - 30, mid[1] - 8, mid[2]]));
+    out.shots.push(await shot('ravine_under', [mid[0] + 10.5, mid[1] - 12, mid[2] + 0.5], [mid[0] - 0.5, mid[1], mid[2] + 0.5]));
+  }
+  // over water: a stone basin with a water channel (built by commands: the world's own), and a rope bridge checked through
+  // Regions.checkPlan between anchors on its banks, then realised from the approved artifact
+  const W0 = [6400, 6000], top = -46;
+  await tp(W0[0] + 32, -20, W0[1] + 32);
+  await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => null);
+  await cmd(`/fill ${W0[0]} -60 ${W0[1]} ${W0[0] + 63} ${top} ${W0[1] + 63} minecraft:stone`);
+  await cmd(`/fill ${W0[0]} ${top} ${W0[1]} ${W0[0] + 63} ${top} ${W0[1] + 63} minecraft:grass_block`);
+  await cmd(`/fill ${W0[0] + 2} -59 ${W0[1] + 22} ${W0[0] + 61} ${top} ${W0[1] + 41} minecraft:air`);
+  await cmd(`/fill ${W0[0] + 2} -59 ${W0[1] + 22} ${W0[0] + 61} -50 ${W0[1] + 41} minecraft:water`);
+  await L.settle(5000);
+  const anchors = { w_n: [W0[0] + 32, top + 1, W0[1] + 21], w_s: [W0[0] + 32, top + 1, W0[1] + 42] };
+  const plan = { schemaVersion: 'plan/0', planId: 'k1b_water', connectors: [{ id: 'over_water', kind: 'rope_bridge', from: { anchor: 'w_n' }, to: { anchor: 'w_s' } }] };
+  const claim = [W0[0] - 8, W0[1] - 8, W0[0] + 71, W0[1] + 71];
+  const c = await call('dev.region.checkPlan', { plan, claim, owner: OWNER, anchors }, 900_000);
+  out.water = { overall: c.check?.overall ?? null, parts: c.check?.parts ?? null, refused: c.refused ?? null };
+  if (c.check?.artifactSha) {
+    const rr = await call('dev.region.realiseApproved', { sha: c.check.artifactSha }, 300_000);
+    const st2 = await L.waitRegion(rr.region, 3_600_000);
+    out.water.state = st2.view.state;
+    const g = c.check.parts.find((a) => a.part === 'over_water')?.geometry?.spans?.[0];
+    if (g) {
+      const mid = [g.from[0], g.from[1], Math.floor((g.from[2] + g.to[2]) / 2)];
+      out.shots.push(await shot('water_side', [mid[0] + 20.5, mid[1] + 2, mid[2] + 0.5], [mid[0] - 0.5, mid[1] - 2, mid[2] + 0.5]));
+      out.shots.push(await shot('water_deck', [g.from[0] - 0.5, g.from[1] + 2.6, g.from[2] - 2.5], [g.to[0] - 0.5, g.to[1] + 1, g.to[2] + 0.5]));
+    }
+  }
+  await call('dev.release', {}).catch(() => null);
+  await leaveWorld();
+  spendZero();
+  return out;
+};
+
 // ------------------------------------------------------------------ the report
 
 steps.report = async () => {
