@@ -11756,6 +11756,36 @@ Evidence: `artifacts/gate-runs/20261014-065258-slice` (2 shards, ports 8924-8929
 
 **Placeholders to renumber at merge:** API `1.30.0` (`ArchitectApi.VERSION`, `PLAN_API` in `kit/lib/plan/catalogue.mjs`, the golden's `api`, the `plan.json` notes and descriptions "sinceApi 1.30.0", the `Library.java` javadoc "since 1.30.0"); mod `0.33.0` (`mod/gradle.properties`); kit `0.31.0` (`KIT_VERSION` in `kit/lib/region/plan.mjs`, `EVAL_KIT_VERSION` in `kit/lib/realise.mjs`, `IrStale.KIT_VERSION`, the golden's `kitVersion`); `catalogueVersion` 4 (shared with K1's catalogue 4).
 
+
+### C38 as built (`Regions.planCatalogue()`; placeholders API 1.31.0, mod 0.34.0, kit 0.32.0, set at merge; recorded 2026-10-14)
+
+Branch `c38/plan-catalogue` (worktree `../architect-mc-c38`, from main 4103f709 = v0.33.0, API 1.30.0, kit 0.31.0). Additive. $0. Steward's ask: notice
+at world start that a block flipped to `supported` (for example `connector.wall` once K1 ships) without a PlanCheck over unloaded land.
+
+| Item | As built |
+|---|---|
+| Method | `Regions.planCatalogue()` returns a `com.google.gson.JsonObject` (the type of `PlanCheck.catalogue()`): `catalogueVersion`, `api`, `kitVersion`, `schemaVersion` and `entries`, each `{id, state, sinceApi, schemaVersion, until?, retiredInApi?, replacedBy?, aliasOf?, limits?, note?}`. A `default` that throws `UnsupportedOperationException("... needs Architect API 1.31.0")`, overridden by `RegionsImpl`; new entry members need no API change. |
+| Same source | PlanCheck's catalogue is built by the kit (`planCatalogue()` in `kit/lib/plan/catalogue.mjs`, read by `finish.mjs`, in the sidecar helper) from `kit/schemas/plan.json`'s `x-catalogue`. The mod used to hold no copy. `mod/build.gradle` now also bundles `plan.json` as `/architect_mc/schemas/plan.json` (beside mask/pattern; the helper's kit is extracted from the same jar, so it is the same file), and `region.PlanCatalogue` applies the kit's own mapping to it (the four always-present members, then `until, retiredInApi, replacedBy, aliasOf, limits, note` when set; the schema-only `def` and `draft` stay out), stamping `api = ArchitectApi.VERSION` and `kitVersion = IrStale.KIT_VERSION` (the kit's `PLAN_API` and `KIT_VERSION`, held equal by `ApiP0Test.kitCatalogueApiIsThisApi` and the committed golden). |
+| Synchronous | No helper round trip, no network: the answer comes from the jar. Parsed once on first use (about 1 ms in game), cached, and each call returns `deepCopy()`, so the view is a defensive copy: changing it changes nothing. Any thread. |
+| Available early | Needs no server, claim, chunk, region or sidecar: the JVM test runs it in a bare JVM from another thread; the in-game gate calls it on the DevBridge connection thread as the first call after the world opens (0 regions). |
+| Feature | `"planCatalogueView"` in `ApiRules.JAVA_FEATURES` (always present, helper or not; pinned in `ApiRulesTest.featureNamesAreStable`). It is distinct from the existing sidecar-derived `"planCatalogue"` (the helper's checks carry a catalogue). Documented in `ArchitectApi.features()`. |
+| Versions | The catalogue's `api` and `kitVersion` are this build's, so the golden (`kit/schemas/plan-catalogue.golden.json`) moves for them; `catalogueVersion` stays 4 (no entry changed). |
+| Dev hooks | `dev.plan.catalogue {}` (SliceP0Dev, headless too): `{catalogue, hasFeature, ms, thread, copy, regions}`; `dev.region.checkPlan` takes `withCatalogue: true` to return the answer's whole catalogue (docs/DEVBRIDGE.md). |
+
+**Gate (slice tier, headless).** `tools/gate6c38.mjs` (chain steps `c38-unit`, `c38-ingame`, impact rule "C38 Regions.planCatalogue"). Only the steps the ask names
+were run (`--only unit-mod,unit-kit,unit-sidecar,c38-unit,c38-ingame`): the diff touches the kit's version constants, so the slice impact map would add 40+
+unrelated in-game steps (about 7 h). Tests: `PlanCatalogueTest` (mod, 7: equals the golden, equals a node run of the kit's `planCatalogue()` entry for entry,
+the bundled `plan.json` equals `kit/schemas/plan.json`, the shape, defensive copies, a bare JVM and another thread, the feature and the default method),
+`kit/test/catalogue-c38.test.mjs` (a READY and a MALFORMED check answer carry `planCatalogue()` entry for entry, and it is the golden). `c38-unit` runs the kit
+tests and api-compat against the unchanged 0.33.0, 0.32.0 and 0.31.1 apitest jars and the 0.33.0 surface (the 0.33.0 jars were built from tag `v0.33.0`
+into `artifacts/gate-c38/v0330`; the others are `artifacts/gate7a-k1`). `c38-ingame`: as the first call after the world opens, `dev.plan.catalogue` returns 77 entries equal to this checkout's kit `planCatalogue()` (0 regions, off the server thread, 1.1 ms, `planCatalogueView` present, defensive copy); a
+real `checkPlan` through the sidecar answers READY with a catalogue that equals it, 77 entries, 0 differ, and a call after the check is unchanged.
+
+Evidence: `artifacts/gate-runs-C38/20261014-081114-slice` (head affd35f6): unit-mod 679/0, unit-kit 408/0, unit-sidecar 744, c38-unit PASS (api-compat 4/4 clean); `20261014-082143-slice` (head df4cab2a, the last code change): c38-ingame 10/0. The first runs
+found two defects in the slice itself, both fixed: the pinned feature-name test did not list the new feature (`20261014-080736-slice`), and the driver called the hook with no world open (`...081114`, c38-ingame).
+
+**Placeholders to renumber at merge:** API `1.31.0` (`ArchitectApi.VERSION`, `PLAN_API` in `kit/lib/plan/catalogue.mjs`, the golden's `api`, the `Regions.planCatalogue` javadoc "Since 1.31.0", the `features()` javadoc, `PlanCatalogueTest` floor 1.31); mod `0.34.0` (`mod/gradle.properties`); kit `0.32.0` (`KIT_VERSION` in `kit/lib/region/plan.mjs`, `EVAL_KIT_VERSION` in `kit/lib/realise.mjs`, `IrStale.KIT_VERSION`, the golden's `kitVersion`). Merge notes: K1a and K1b also change the catalogue (`connector.wall` flips) and the golden; regenerate the golden after the merge (`node -e` on `planCatalogue()`), and `ApiRulesTest.featureNamesAreStable` lists features in three places.
+
 ## Phase 6c slice X: region consumer asks C19 and C20 (FROZEN 2026-10-11 after Steward's review)
 
 Next free API minor at merge (expected 1.15.0 if it merges before T1; the house rule applies), mod to match. Wave 1, parallel
