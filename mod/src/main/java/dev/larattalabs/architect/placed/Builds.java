@@ -723,6 +723,19 @@ public final class Builds {
 		return s.is(Blocks.FARMLAND) || s.is(BlockTags.CROPS) || s.getBlock() instanceof net.minecraft.world.level.block.StemBlock;
 	}
 
+	/**
+	 * (§4, C34b) Whether a door, gate or trapdoor whose lower half is at {@code y} is "at its ground": within 2 of the median ground
+	 * surface {@code g} round it (MIN_VALUE: none found, it counts), or, for a build lifted off the ground (its lowest cell more than 2
+	 * above {@code g}: a hut on a platform or in the air), within 2 of the build's own lowest row {@code minY}. A build standing on the
+	 * ground is judged as before.
+	 */
+	static boolean entranceAt(int y, int g, int minY) {
+		if (g == Integer.MIN_VALUE || y <= g + 2) {
+			return true;
+		}
+		return minY > g + 2 && y <= minY + 2;
+	}
+
 	static boolean entranceBlock(BlockState s) {
 		Block b = s.getBlock();
 		return b instanceof DoorBlock && s.getValue(DoorBlock.HALF) == DoubleBlockHalf.LOWER || b instanceof FenceGateBlock || b instanceof TrapDoorBlock;
@@ -1460,7 +1473,7 @@ public final class Builds {
 				}
 				if (entranceBlock(s)) {
 					int g = j.medianSurface(x, z);
-					if (g == Integer.MIN_VALUE || y <= g + 2) {
+					if (entranceAt(y, g, minY)) {
 						Direction f = s.hasProperty(BlockStateProperties.HORIZONTAL_FACING) ? s.getValue(BlockStateProperties.HORIZONTAL_FACING) : Direction.NORTH;
 						entrances.add(new Ent(p, f, BuiltInRegistries.BLOCK.getKey(s.getBlock()).toString()));
 					}

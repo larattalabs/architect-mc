@@ -136,3 +136,94 @@ test("a captured source is checked with its own empty profile, whatever profile 
   const r = await checkFiles(w.nbtPath, w.jsonPath, { type: 'adopted', profile: ['door', 'lit', 'no_floating'] });
   assert.deepEqual(r.errors, []);
 });
+
+// C35 (docs/CONTRACT.md "C35 as built"): a captured source opts out of the palette. Steward's stub e2e sent the settlement's bible
+// with an "add a floor" versionOf of an adopted hut and the kit threw "ignores the palette it is given". The player's house as built
+// is theirs: a supplied palette or bible is ignored (no error), the captured cells keep their blocks, and the build says so
+// (`paletteIgnored` in its sidecar, a warning in the check). A design that is not captured and drops its palette still throws.
+const KIT_LIB = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'lib');
+/** A designs dir holding the source Adopt.source() generates (floors default `def`: the sim's versionOf bumps it to 1). */
+function generated(id, def = 0) {
+  const root = tmp();
+  fs.symlinkSync(KIT_LIB, path.join(root, 'lib'));
+  fs.mkdirSync(path.join(root, 'designs'));
+  fs.writeFileSync(path.join(root, 'designs', `${id}.mjs`), `// Captured by Architect (6c slice PT2)\nimport { adopted } from '../lib/adopt.mjs';\n\n`
+    + `export const id = '${id}';\nexport const params = {\n  floors: { type: 'int', min: 0, max: 4, default: ${def}, label: 'Storeys added on top' },\n};\n\n`
+    + `export const CAPTURE = ${JSON.stringify(capture())};\n\nexport default function build({ floors = 0 } = {}) {\n  return adopted(id, CAPTURE, { floors });\n}\n`);
+  return path.join(root, 'designs');
+}
+
+test('C35: a captured source given a bible (Steward\'s versionOf with withBible) builds, ignores it and says so', async () => {
+  const { buildDesign } = await import('../build.mjs');
+  const { builtinBible, restraintOf } = await import('../lib/bible.mjs');
+  const id = 'adopted_d04f0165';
+  for (const floors of [0, 1]) {
+    const dir = generated(id, floors);
+    const bible = builtinBible('birch');
+    // what the sidecar runs for a design with a bible: --bible bible/bible.json --restraint bible/bible.json
+    const withB = await buildDesign(id, { dir, out: tmp(), palette: { bible }, restraint: restraintOf(bible), type: 'adopted', profile: ['door', 'lit', 'no_floating'] });
+    const plain0 = await buildDesign(id, { dir, out: tmp(), type: 'adopted' });
+    assert.deepEqual(withB.result.errors, [], `floors ${floors}: ${JSON.stringify(withB.result.errors)}`);
+    // the captured cells (and an added storey) are the same blocks with or without the bible: byte-equal templates
+    assert.ok(fs.readFileSync(withB.written.nbtPath).equals(fs.readFileSync(plain0.written.nbtPath)), `floors ${floors}: the bible changed blocks`);
+    const side = JSON.parse(fs.readFileSync(withB.written.jsonPath, 'utf8'));
+    assert.equal(side.sourceKind, 'captured');
+    assert.deepEqual(side.paletteIgnored, { bible: { id: bible.id, version: bible.version } });
+    // the entry does not read as bible- or palette-driven
+    assert.equal(side.bible, undefined);
+    assert.equal(side.palette, undefined);
+    assert.ok(withB.result.warnings.some((w) => /^palette ignored: /.test(w)), JSON.stringify(withB.result.warnings));
+    const side0 = JSON.parse(fs.readFileSync(plain0.written.jsonPath, 'utf8'));
+    assert.equal(side0.paletteIgnored, undefined);
+    assert.ok(!plain0.result.warnings.some((w) => /^palette ignored: /.test(w)));
+  }
+  // a preset palette too
+  const p = await buildDesign(id, { dir: generated(id), out: tmp(), palette: 'dark' });
+  assert.deepEqual(JSON.parse(fs.readFileSync(p.written.jsonPath, 'utf8')).paletteIgnored, { preset: 'dark' });
+});
+
+test('C35: a design that is not captured and drops its palette still throws', async () => {
+  const { loadDesign } = await import('../build.mjs');
+  const root = tmp();
+  fs.symlinkSync(KIT_LIB, path.join(root, 'lib'));
+  fs.mkdirSync(path.join(root, 'designs'));
+  fs.writeFileSync(path.join(root, 'designs', 'deaf_hut.mjs'), "import { Blueprint } from '../lib/kit.mjs';\nexport const id = 'deaf_hut';\n"
+    + "export default function build() {\n  const bp = new Blueprint({ id, name: 'Deaf hut', type: 'cabin', size: [3, 3, 3], groundY: 1, front: 'south' });\n  bp.set(1, 0, 1, 'minecraft:stone');\n  return bp;\n}\n");
+  await assert.rejects(loadDesign('deaf_hut', { dir: path.join(root, 'designs'), palette: 'dark' }), /ignores the palette it is given/);
+});
+
+test('C35: an added storey takes its materials from the captured mix by role (wall, frame, roof), never a palette', async () => {
+  const { storeyMaterials } = await import('../lib/adopt.mjs');
+  // a 5x3x5 hut: oak log corner posts, spruce plank walls, a cobblestone top layer (its roof), glass (not a full block... counted out)
+  const palette = ['minecraft:oak_log[axis=y]', 'minecraft:spruce_planks', 'minecraft:cobblestone', 'minecraft:air', 'minecraft:glass_pane[east=true,north=false,south=false,waterlogged=false,west=true]'];
+  const runs = [];
+  for (let y = 0; y < 3; y++) {
+    for (let z = 0; z < 5; z++) {
+      if (y === 2) { runs.push(y, z, 0, 4, 2); continue; }
+      if (z === 0 || z === 4) { runs.push(y, z, 0, 0, 0, y, z, 1, 3, y === 1 && z === 4 ? 4 : 1, y, z, 4, 4, 0); continue; }
+      runs.push(y, z, 0, 0, 1, y, z, 1, 3, 3, y, z, 4, 4, 1);
+    }
+  }
+  const cap = { format: 1, size: [5, 3, 5], groundY: 0, front: 'north', palette, runs, wall: 'minecraft:spruce_planks', anchors: {} };
+  const bp = adopted('adopted_c35', cap, { floors: 1 });
+  const w = writeBlueprint(bp, tmp());
+  const t = plain(parse(fs.readFileSync(w.nbtPath)));
+  const at = (x, y, z) => { const b = t.blocks.find((c) => c.pos.join(',') === `${x},${y},${z}`); return b && t.palette[b.state].id; };
+  assert.equal(at(0, 3, 0), 'minecraft:oak_log', 'a corner of the new storey: the frame (the corner posts)');
+  assert.equal(at(2, 4, 0), 'minecraft:spruce_planks', 'a wall of the new storey: the wall');
+  assert.equal(at(2, 7, 2), 'minecraft:cobblestone', 'the new roof: the top layer\'s block');
+  // the captured cells keep their blocks
+  assert.equal(at(2, 1, 4), 'minecraft:glass_pane');
+  // a bible given is ignored (C35): the same template
+  const { buildDesign } = await import('../build.mjs');
+  const { builtinBible } = await import('../lib/bible.mjs');
+  const root = tmp();
+  fs.symlinkSync(KIT_LIB, path.join(root, 'lib'));
+  fs.mkdirSync(path.join(root, 'designs'));
+  fs.writeFileSync(path.join(root, 'designs', 'adopted_c35.mjs'), `import { adopted } from '../lib/adopt.mjs';\nexport const id = 'adopted_c35';\nexport const params = { floors: { type: 'int', min: 0, max: 4, default: 1 } };\nexport const CAPTURE = ${JSON.stringify(cap)};\nexport default function build({ floors = 0 } = {}) { return adopted(id, CAPTURE, { floors }); }\n`);
+  const a = await buildDesign('adopted_c35', { dir: path.join(root, 'designs'), out: tmp(), palette: { bible: builtinBible('oak') } });
+  assert.ok(fs.readFileSync(a.written.nbtPath).equals(fs.readFileSync(w.nbtPath)));
+  // with nothing usable, every role falls back to the wall
+  const m = storeyMaterials({ size: [1, 1, 1], wall: 'minecraft:stone' }, [], [], new Set());
+  assert.deepEqual([m.wall.name, m.frame.name, m.roof.name], ['minecraft:stone', 'minecraft:stone', 'minecraft:stone']);
+});

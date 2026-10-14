@@ -1150,9 +1150,11 @@ export class Blueprint {
     s.anchors = Object.fromEntries(Object.entries(this.anchors).map(([k, v]) => [k, { ...v }]));
     s.source = `${this.id}.mjs`;
     // phase 2: what the build was made from (build.mjs sets params/values from the design's `params` export)
-    if (this.p?.inputs) s.palette = structuredClone(this.p.inputs);
+    // (C35) a captured source has no palette: its blocks are the player's; what it was given and ignored is recorded instead
+    if (this.p?.inputs && !this.captured) s.palette = structuredClone(this.p.inputs);
     // phase 4b: the style bible the build used (a re-skin is a variant with another bible)
-    if (this.p?.bible) s.bible = { ...this.p.bible };
+    if (this.p?.bible && !this.captured) s.bible = { ...this.p.bible };
+    if (this.paletteIgnored) s.paletteIgnored = structuredClone(this.paletteIgnored);
     if (this.params) s.params = structuredClone(this.params);
     if (this.values) s.values = { ...this.values };
     if (this.createdAt !== undefined) s.createdAt = this.createdAt;

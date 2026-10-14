@@ -1004,7 +1004,12 @@ export class Sidecar {
     );
     this.entryVersioned(v.entryId, version, head, 'design', d.id);
     const s = res.sidecar!.size!;
-    this.designs.update(d.id, { status: 'done', step: `done: ${v.entryId} v${version} (versionOf v${base}, ${s.x}x${s.y}x${s.z})${input.notes?.filter(Boolean).length ? `; ${input.notes.filter(Boolean).join('; ')}` : ''}`, blueprintId: v.entryId, size: { x: s.x, y: s.y, z: s.z }, previews: input.previews });
+    // (C35) a captured source (an adopted build) keeps the player's blocks: a bible or palette sent with the change was ignored
+    const ignored = paletteIgnoredNote(json.paletteIgnored);
+    // first: a design's step is cut at 120 characters
+    const notes = [...(ignored ? [ignored] : []), ...(input.notes ?? [])].filter(Boolean);
+    if (ignored) this.log.info(`design ${d.id}: ${v.entryId}: ${ignored}`);
+    this.designs.update(d.id, { status: 'done', step: `done: ${v.entryId} v${version} (versionOf v${base}, ${s.x}x${s.y}x${s.z})${notes.length ? `; ${notes.join('; ')}` : ''}`, blueprintId: v.entryId, size: { x: s.x, y: s.y, z: s.z }, previews: input.previews });
     this.estimates.forget(d.id);
     this.store.flush();
     this.log.info(`design ${d.id}: ${v.entryId} v${version} installed (versionOf v${base})`);
@@ -1114,4 +1119,15 @@ export class Sidecar {
     const critic = this.store.data.work?.[id]?.critique?.critic;
     this.designs.update(id, { cost: critic ? addCost(turns, critic) : turns });
   }
+}
+
+/**
+ * (C35) The note for a captured source that ignored the palette or bible it was given (the kit's `paletteIgnored`: `{ bible: { id,
+ * version } }`, `{ preset }` or palette inputs), or undefined.
+ */
+export function paletteIgnoredNote(x: unknown): string | undefined {
+  if (!x || typeof x !== 'object') return undefined;
+  const o = x as { bible?: { id?: string; version?: number }; preset?: string };
+  const what = o.bible ? `bible ${o.bible.id}${o.bible.version !== undefined ? ` v${o.bible.version}` : ''}` : o.preset && Object.keys(o).length === 1 ? `palette ${o.preset}` : 'palette';
+  return `${what} ignored (captured: the player's blocks kept)`;
 }

@@ -34,6 +34,10 @@
 //                    lets a PLAYER_BLOCKS stroke clear it; growth over the player's lean-to refuses PLAYER_BUILD unless consent names it
 //       states    11 an adopted build never demotes under 20 cells; a merge with an ACTIVE build keeps its id; two adopted builds do not
 //                    merge; a split keeps the id on the largest part; releaseBuild refuses (adopted)
+//       c35bible  C35 (v0.29.3) Steward's repro: cabin D adopted, then versionOf (sim) "add a floor" WITH a bible (withBible 'birch'):
+//                    DONE (0.29.2 threw "ignores the palette it is given"), the design's step notes the bible ignored, v2's capturedChanged
+//                    1 of capturedTotal, checkDelta the same with the frame guard passing, applied: exactly 1 of v1's captured cells rewritten
+//                    (the hatch; the bible re-skinned nothing)
 //       elsewhere 12 place and check of the adopted entry refuse placed_elsewhere; polish refuses adopted_polish; the entry's library
 //                    delete while the site stands refuses
 //     old027      13 (recorded) what a 0.27.0 reader does with this world's journal: 0.27.0's own JournalNbt and JournalStore (built in
@@ -115,7 +119,7 @@ steps.unit = async () => {
   const sc = spawnSync('npx', ['vitest', 'run', 'test/adopt-pt2.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 600_000 });
   const st = `${sc.stdout}${sc.stderr}`;
   out.sidecar = { code: sc.status, tail: st.split('\n').slice(-6) };
-  check(sc.status === 0 && /Tests\s+2 passed/.test(st), 'items 4 and 12 (sidecar, real kit): versionOf of an adopted entry ("add a floor": the sim bumps floors 0 -> 1) installs v2 by design, still adopted and captured; polish refuses adopted_polish', out.sidecar.tail);
+  check(sc.status === 0 && /Tests\s+3 passed/.test(st), 'items 4 and 12 (sidecar, real kit): versionOf of an adopted entry ("add a floor": the sim bumps floors 0 -> 1) installs v2 by design, still adopted and captured, also with a bible (C35: ignored and noted); polish refuses adopted_polish', out.sidecar.tail);
   const tests = ['site.AdoptTest', 'journal.JournalAdoptTest', 'placed.BuildsAdoptTest', 'api.ApiPT2Test', 'api.ApiPTTest', 'journal.JournalPtTest', 'region.ApiP0Test', 'apiimpl.ApiRulesTest'];
   out.java = javaTests(tests);
   const ok = (v) => v && v.tests > 0 && v.failures === 0;
@@ -263,8 +267,8 @@ async function remove(site, force = false) {
   return later(`remove ${site} ${OWNER} ${force ? 'force' : 'noforce'}`);
 }
 /** versionOf (sim) of an adopted entry for its site: "add a floor" (the sim bumps the captured source's floors 0 -> 1). */
-async function addFloor(key, entry, site) {
-  const id = await later(`versionof ${key} ${b64({ type: 'adopted', notes: 'add a floor', size: [16, 20, 16], owner: OWNER })} ${entry} ${site}`, 300_000);
+async function addFloor(key, entry, site, extra = {}) {
+  const id = await later(`versionof ${key} ${b64({ type: 'adopted', notes: 'add a floor', size: [16, 20, 16], owner: OWNER, ...extra })} ${entry} ${site}`, 300_000);
   if (typeof id !== 'string') return { requested: id };
   const end = Date.now() + 600_000;
   while (Date.now() < end) {
@@ -859,6 +863,34 @@ steps.elsewhere = async () => {
   return { place: pl, check: ck, polish: po, delete: del };
 };
 
+// ------------------------------------------------------------------ C35: versionOf of an adopted entry with a bible
+
+steps.c35bible = async () => {
+  const X = 40, Z = 40;
+  const gy = await flatWorld('G6B PT2 C35', X, Z);
+  const y = gy + 1;
+  const D = await buildCabin(X, y, Z);
+  const rd = await adopt('D', D.id);
+  check(rd?.siteId && rd.version === 1, `C35: cabin D ${D.id} adopted as ${rd?.siteId} (${rd?.entryId} v${rd?.version})`, rd);
+  // Steward's stub e2e: the settlement's bible sent with the change (DesignRequest.withBible)
+  const fd = await addFloor('fd', rd.entryId, rd.siteId, { bible: 'birch' });
+  const step = String(fd.design?.step ?? '');
+  check(fd.design?.status === 'DONE', `C35: versionOf(${rd.entryId}, ${rd.siteId}) "add a floor" with the bible birch: ${fd.design?.status} (${String(fd.design?.step ?? fd.design?.error ?? json(fd)).slice(0, 220)})`, fd);
+  check(/bible birch v\d+ ignored \(captured: the player's blocks kept\)/.test(step), `C35: the design's notes record the bible ignored (${step.slice(0, 220)})`);
+  const ev = await api(`eversions ${rd.entryId}`);
+  const v2 = (ev.versions ?? []).find((v) => v.n === 2);
+  check(ev.version === 2 && v2 && /design/i.test(v2.by) && v2.capturedChanged === 1 && v2.capturedTotal === rd.cells, `C35: v2 installed by design (head ${ev.version}); capturedChanged ${v2?.capturedChanged} of capturedTotal ${v2?.capturedTotal} (cells ${rd.cells})`, ev);
+  const cd = await api(`checkdelta ${rd.siteId} 2 keep ${OWNER}`);
+  check(cd.applicable && cd.added >= 100 && cd.kept.length === 0 && cd.capturedChanged === 1 && cd.capturedTotal === rd.cells && !(cd.notes ?? []).some((n) => /frame/.test(n)),
+    `C35: checkDelta reports the growth (added ${cd.added}, changed ${cd.changed}), capturedChanged ${cd.capturedChanged} / ${cd.capturedTotal}; the frame guard passes`, cd);
+  const ad = await later(`applydelta ${rd.siteId} 2 keep ${OWNER}`);
+  const cmp = await compare(rd.siteId, 1);
+  check(ad?.applied && cmp.mismatched === 1 && cd.capturedChanged === cmp.mismatched, `C35: applied; ${cmp.mismatched} of v1's ${cmp.cells} captured cells rewritten (the hatch): the bible re-skinned none`, cmp.sample);
+  await leaveWorld();
+  spendZero();
+  return { adopt: rd, design: fd, versions: ev, check: cd, apply: ad, compare: cmp };
+};
+
 // ------------------------------------------------------------------ item 13 (recorded): a 0.27.0 reader
 
 steps.old027 = async () => {
@@ -883,7 +915,7 @@ steps.old027 = async () => {
 
 steps.report = async () => {
   const lines = ['# Gate 6c PT2 (adopt a build as a site)', '', `Head ${execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim()}, ${new Date().toISOString()}. $0 (sim only).`, ''];
-  for (const s of ['unit', 'refusals', 'adopt', 'flow', 'undoA', 'survival', 'protect', 'states', 'elsewhere', 'old027']) {
+  for (const s of ['unit', 'refusals', 'adopt', 'flow', 'undoA', 'survival', 'protect', 'states', 'elsewhere', 'c35bible', 'old027']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) continue;
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));
@@ -898,7 +930,7 @@ steps.report = async () => {
 
 steps.ingame = async () => {
   // GATE6CPT2_STEPS: a subset while iterating (comma-separated)
-  const pick = process.env.GATE6CPT2_STEPS ? process.env.GATE6CPT2_STEPS.split(',') : ['adopt', 'refusals', 'flow', 'undoA', 'protect', 'states', 'elsewhere'];
+  const pick = process.env.GATE6CPT2_STEPS ? process.env.GATE6CPT2_STEPS.split(',') : ['adopt', 'refusals', 'flow', 'undoA', 'protect', 'states', 'elsewhere', 'c35bible'];
   for (const s of pick) await run(s);
 };
 
