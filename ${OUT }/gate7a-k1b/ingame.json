@@ -1,14 +1,14 @@
 {
   "step": "ingame",
-  "seconds": 67.812,
-  "head": "e45f021f75eeca037bc89d98749b054ef5414d8c",
-  "load1": 11.1162109375,
+  "seconds": 67.478,
+  "head": "f426701d6296d4e94778fd3039ae80f41fe83a36",
+  "load1": 8.3359375,
   "results": {
     "flat: links_demo planned 3 rope bridge(s) (8, 24, 40 deck cells; 0 sites)": {
       "ok": true
     },
     "item 10 (flat): the plan's IR sha and every tile sha equal the golden links_demo_flat (1 = 4 workers)": {
-      "ok": false
+      "ok": true
     },
     "flat: realised (PLACED, 38095 cells)": {
       "ok": true
@@ -58,23 +58,23 @@
       6111
     ],
     "plan": {
-      "planId": "pmv7umspm843ce6",
-      "irSha": "1298eee1f75147f4c07f6bf67026f7ff345410c72b23962a78738fdc499bc953",
+      "planId": "pmv7wpn5h097545",
+      "irSha": "e9cc2e72b4c2d7c7a910ad2f1b0dc30dd8470d8e3437a237d4a0d63df6154674",
       "notes": [
         "pass route: 0.0 s, 81 MB; 3/3 edges routed, 0 hairpin(s)",
         "links_demo (flat): banks 16 high; 3/3 bridges routed (8, 24, 40 deck cells)",
         "progress: planning, checking, rendering",
-        "checked in 195 ms",
-        "previews rendered in 139 ms"
+        "checked in 198 ms",
+        "previews rendered in 148 ms"
       ]
     },
     "tiles": {
-      "irSha": "1298eee1f75147f4c07f6bf67026f7ff345410c72b23962a78738fdc499bc953",
+      "irSha": "e9cc2e72b4c2d7c7a910ad2f1b0dc30dd8470d8e3437a237d4a0d63df6154674",
       "workersSame": true,
       "count": 6
     },
     "golden": {
-      "match": false
+      "match": true
     },
     "realise": {
       "state": "PLACED",

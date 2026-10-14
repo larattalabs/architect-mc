@@ -1,8 +1,8 @@
 {
   "step": "probe",
-  "seconds": 23.434,
-  "head": "e45f021f75eeca037bc89d98749b054ef5414d8c",
-  "load1": 8.16748046875,
+  "seconds": 23.155,
+  "head": "f426701d6296d4e94778fd3039ae80f41fe83a36",
+  "load1": 16.681640625,
   "results": {
     "the villager bar (probe): vanilla dev.nav.villager crosses every slab-deck bridge both ways (40/5/w2, 40/-5/w2, 40/0/w2, 24/3/w2, 24/0/w2, 8/1/w2, 8/0/w2, 36/4/w2, 40/5/w1)": {
       "ok": true,

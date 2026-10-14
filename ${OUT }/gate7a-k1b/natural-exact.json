@@ -12,15 +12,15 @@
   "snapCells": 3015936,
   "removed": true,
   "restored": 110079,
-  "mismatches": 22,
+  "mismatches": 18,
   "classes": {
-    "growth": 22
+    "growth": 18
   },
   "list": [
     {
       "pos": "-1100,64,-10",
-      "was": "minecraft:sugar_cane[age=1]",
-      "now": "minecraft:sugar_cane[age=2]",
+      "was": "minecraft:sugar_cane[age=0]",
+      "now": "minecraft:sugar_cane[age=1]",
       "class": "growth"
     },
     {
@@ -30,27 +30,21 @@
       "class": "growth"
     },
     {
-      "pos": "-1041,73,-29",
-      "was": "minecraft:cactus[age=0]",
-      "now": "minecraft:cactus[age=1]",
-      "class": "growth"
-    },
-    {
-      "pos": "-1085,67,33",
+      "pos": "-1025,74,-57",
       "was": "minecraft:cactus[age=1]",
       "now": "minecraft:cactus[age=4]",
       "class": "growth"
     },
     {
-      "pos": "-1069,64,83",
-      "was": "minecraft:cactus[age=0]",
-      "now": "minecraft:cactus[age=1]",
+      "pos": "-1043,75,-62",
+      "was": "minecraft:cactus[age=1]",
+      "now": "minecraft:cactus[age=2]",
       "class": "growth"
     },
     {
-      "pos": "-1063,64,84",
-      "was": "minecraft:cactus[age=2]",
-      "now": "minecraft:cactus[age=4]",
+      "pos": "-1085,67,33",
+      "was": "minecraft:cactus[age=0]",
+      "now": "minecraft:cactus[age=2]",
       "class": "growth"
     },
     {
@@ -60,92 +54,74 @@
       "class": "growth"
     },
     {
-      "pos": "-1048,67,79",
-      "was": "minecraft:cactus[age=0]",
-      "now": "minecraft:cactus[age=1]",
-      "class": "growth"
-    },
-    {
-      "pos": "-967,76,-70",
-      "was": "minecraft:cactus[age=0]",
-      "now": "minecraft:cactus[age=1]",
-      "class": "growth"
-    },
-    {
-      "pos": "-971,72,-63",
+      "pos": "-1042,67,80",
       "was": "minecraft:cactus[age=1]",
-      "now": "minecraft:cactus[age=3]",
+      "now": "minecraft:cactus[age=2]",
       "class": "growth"
     },
     {
       "pos": "-961,73,-53",
       "was": "minecraft:cactus[age=0]",
-      "now": "minecraft:cactus[age=1]",
-      "class": "growth"
-    },
-    {
-      "pos": "-1010,69,0",
-      "was": "minecraft:cactus[age=1]",
       "now": "minecraft:cactus[age=2]",
       "class": "growth"
     },
     {
-      "pos": "-948,75,-70",
+      "pos": "-994,72,50",
       "was": "minecraft:cactus[age=1]",
-      "now": "minecraft:cactus[age=2]",
+      "now": "minecraft:cactus[age=3]",
       "class": "growth"
     },
     {
       "pos": "-953,76,-77",
-      "was": "minecraft:cactus[age=2]",
-      "now": "minecraft:cactus[age=4]",
-      "class": "growth"
-    },
-    {
-      "pos": "-949,76,-68",
-      "was": "minecraft:cactus[age=2]",
-      "now": "minecraft:cactus[age=3]",
+      "was": "minecraft:cactus[age=0]",
+      "now": "minecraft:cactus[age=2]",
       "class": "growth"
     },
     {
       "pos": "-929,76,-54",
-      "was": "minecraft:cactus[age=1]",
-      "now": "minecraft:cactus[age=3]",
+      "was": "minecraft:cactus[age=0]",
+      "now": "minecraft:cactus[age=2]",
       "class": "growth"
     },
     {
       "pos": "-897,69,48",
-      "was": "minecraft:cactus[age=1]",
-      "now": "minecraft:cactus[age=3]",
-      "class": "growth"
-    },
-    {
-      "pos": "-950,72,47",
       "was": "minecraft:cactus[age=0]",
       "now": "minecraft:cactus[age=1]",
       "class": "growth"
     },
     {
-      "pos": "-929,72,84",
-      "was": "minecraft:cactus[age=0]",
-      "now": "minecraft:cactus[age=1]",
+      "pos": "-897,69,50",
+      "was": "minecraft:cactus[age=3]",
+      "now": "minecraft:cactus[age=5]",
       "class": "growth"
     },
     {
-      "pos": "-931,72,85",
-      "was": "minecraft:cactus[age=2]",
-      "now": "minecraft:cactus[age=3]",
-      "class": "growth"
-    },
-    {
-      "pos": "-895,69,51",
+      "pos": "-953,71,47",
       "was": "minecraft:cactus[age=1]",
       "now": "minecraft:cactus[age=2]",
       "class": "growth"
     },
     {
-      "pos": "-889,70,52",
-      "was": "minecraft:cactus[age=1]",
+      "pos": "-950,72,47",
+      "was": "minecraft:cactus[age=4]",
+      "now": "minecraft:cactus[age=5]",
+      "class": "growth"
+    },
+    {
+      "pos": "-929,72,84",
+      "was": "minecraft:cactus[age=4]",
+      "now": "minecraft:cactus[age=5]",
+      "class": "growth"
+    },
+    {
+      "pos": "-931,72,85",
+      "was": "minecraft:cactus[age=0]",
+      "now": "minecraft:cactus[age=2]",
+      "class": "growth"
+    },
+    {
+      "pos": "-895,69,51",
+      "was": "minecraft:cactus[age=2]",
       "now": "minecraft:cactus[age=3]",
       "class": "growth"
     }

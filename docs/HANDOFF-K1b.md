@@ -17,8 +17,12 @@ gates and the shared foundation) builds in parallel on `slice/K1a`; its foundati
 - [x] rope row `kit/lib/region/passes/moves/rope.mjs` (+ optional `fail` member), compile hooks `kit/lib/connectors/rope.mjs`
 - [x] fixtures: valid/v33, v34 (flat claim, rift_city); fixtures/plan/rope/rb01-rb09; `kit/test/plan-k1b.test.mjs` (§9 rows,
       determinism), `kit/test/rope-k1b.test.mjs`
-- [ ] `links_demo` (flat + rift variants), scenario/in-game steps, gate driver `tools/gate7ak1b.mjs`, chains
-- [ ] slice run, gate-verifier, look step + gallery, as-built
+- [x] `links_demo` (flat + rift variants), goldens, gate driver `tools/gate7ak1b.mjs`, chains (k1b-unit, k1b-ingame, k1b-natural)
+- [x] look step + gallery https://claude.ai/artifact/6AK7FyVJGUWAVSUnZXvbs4; as-built drafted
+- [x] slice run `artifacts/gate-runs-K1b/20261014-084850-slice` (head f426701d, over v0.34.0): 50 PASS, 4 FAIL, each re-run PASS
+      (`20261014-112953-slice`: mp-unit, 4d-all, 6b-volume; `20261014-115214-slice`: pt-nomod, which needs this checkout's
+      mod/build/headless-launch.json; mp-unit failed on a reused shard's stale classes)
+- [ ] gate-verifier
 
 ## Readings recorded for the as-built
 

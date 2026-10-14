@@ -1,16 +1,16 @@
 {
   "step": "unchanged",
-  "seconds": 22.004,
-  "head": "e45f021f75eeca037bc89d98749b054ef5414d8c",
-  "load1": 24.76806640625,
+  "seconds": 18.074,
+  "head": "f426701d6296d4e94778fd3039ae80f41fe83a36",
+  "load1": 18.42626953125,
   "results": {
-    "item 6: 23 of 23 valid/ fixtures without a K1 part answer as on origin/main 4103f709a3 and plan the same IR but its kitVersion (2 K1 fixtures skipped)": {
+    "item 6: 23 of 23 valid/ fixtures without a K1 part answer as on origin/main 1c75007625 and plan the same IR but its kitVersion (2 K1 fixtures skipped)": {
       "ok": true,
       "data": []
     }
   },
   "data": {
-    "mainHead": "4103f709a30e72dcf31dadc084eabc8baebd2b93",
+    "mainHead": "1c750076252811da7c289067403489579318d836",
     "fixtures": {
       "v01_lots_near_stone.json": {
         "answers": true,
