@@ -116,7 +116,7 @@ test('the primitive over a ravine: M10:rope clean, rails (M8), head room (M6), 0
     // the far landing's ground at its y
     for (let z = 0; z < c.depth; z++) for (let x = 60; x < c.width; x++) { const k = x + z * c.width; c.ground[k] = to[1]; c.height[k] = to[1]; c.floor[k] = to[1]; }
     const { rep, p } = await bridgePlan(c, {}, { to });
-    const m = rep.metrics.M10rope?.[0];
+    const m = rep.metrics.ropes?.per?.[0];
     assert.ok(m && m.ok, `rise ${rise}: M10:rope ${JSON.stringify(m)}`);
     assert.equal(m.cells, 20 * 2);
     assert.ok(!rep.findings.some((f) => /^M(3|6|10)/.test(f.rule)), `rise ${rise}: ${rep.findings.map((f) => `${f.rule} ${f.message}`).join('; ')}`);
@@ -126,7 +126,9 @@ test('the primitive over a ravine: M10:rope clean, rails (M8), head room (M6), 0
       const g = walkGraph(vw, [[30, 65, 32]], { mover });
       assert.ok(nodeReached(g, [70, to[1] + 1, 32]), `rise ${rise}: ${mover} across`);
     }
-    assert.equal(p.meta.paths.rb.kind, 'rope');
+    assert.equal(p.meta.ropes[0].id, 'rb');
+    assert.equal(m.railed, 20);
+    assert.equal(m.headroom, 20);
   }
 });
 
@@ -163,7 +165,7 @@ test('the rope move: a rope_bridge edge spans the ravine exactly once (spanned b
   const ropes = e.segments.filter((g) => g.kind === 'rope');
   assert.equal(ropes.length, 1);
   assert.ok(ropes[0].n >= 8 && ropes[0].n <= 40);
-  const m = rep.metrics.M10rope;
+  const m = rep.metrics.ropes.per;
   assert.equal(m.length, 1);
   assert.ok(m[0].ok, JSON.stringify(m[0]));
   assert.ok(rep.metrics.route.edges[0].player && rep.metrics.route.edges[0].villager, JSON.stringify(rep.metrics.route.edges[0]));

@@ -444,7 +444,8 @@ export class Region {
   graphNode({ id, kind, ref = null, at, ports = [] }) {
     if (typeof id !== 'string' || !/^[a-z][a-z0-9_:.-]{0,63}$/.test(id)) throw new Error(`graph node id '${id}' is not valid`);
     if (this.graphIds.has(id)) throw new Error(`graph id '${id}' is used twice`);
-    if (!['lot', 'plaza', 'junction'].includes(kind)) throw new Error(`graph node ${id}: kind must be lot, plaza or junction`);
+    // (7a K1) a gate in a wall is a node too
+    if (!['lot', 'plaza', 'junction', 'gate'].includes(kind)) throw new Error(`graph node ${id}: kind must be lot, plaza, junction or gate`);
     this.graphIds.add(id);
     const n = { id, kind, ref, level: 0, at: [...at], ports: ports.map((p) => ({ name: p.name, at: [...p.at], facing: p.facing, width: p.width })) };
     this.graph.nodes.push(n);
@@ -452,9 +453,10 @@ export class Region {
   }
 
   /** (6c V) A graph edge `{id, from: 'node.port', to: 'node.port', type: road|path, width, path}` in stage `ground`. */
-  graphEdge({ id, from, to, type, width, path, stage = 'ground', movers, segments, external = false }) {
+  graphEdge({ id, from, to, type, width, path, stage = 'ground', movers, segments, external = false, crossing }) {
     if (this.graphIds.has(id)) throw new Error(`graph id '${id}' is used twice`);
-    if (type !== 'road' && type !== 'path') throw new Error(`graph edge ${id}: type must be road or path`);
+    // (7a K1) a rope bridge's edge (with its crossing: {type: rope_bridge, over: gap|water, depth})
+    if (type !== 'road' && type !== 'path' && type !== 'rope_bridge') throw new Error(`graph edge ${id}: type must be road, path or rope_bridge`);
     // (6c D1) an external edge's `to` is another region's port, `<regionId>:<node>.<port>` (CONTRACT D §3; 7a types it)
     if (external && !/^[A-Za-z0-9_.-]{1,64}:[a-z][a-z0-9_:.-]{0,63}\.[a-z][a-z0-9_]{0,63}$/.test(String(to))) throw new Error(`graph edge ${id}: an external edge's to must be <region>:<node>.<port>`);
     for (const end of external ? [from] : [from, to]) {
@@ -468,6 +470,7 @@ export class Region {
     if (movers !== undefined) e.movers = [...movers];
     if (segments !== undefined) e.segments = segments.map((g) => ({ ...g }));
     if (external) e.external = true;
+    if (crossing !== undefined) e.crossing = { ...crossing };
     this.graph.edges.push(e);
     return e;
   }

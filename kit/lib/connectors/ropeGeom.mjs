@@ -181,7 +181,7 @@ export function ropeCells(a, dir, n, rise, width, { lampEvery = 12, chains = tru
  * part = 'links', deck (a role or block: default the `floor` role, then `path`), rail = 'rail', post = 'frame', rope =
  * 'minecraft:iron_chain' (null: no chains), light = 'light' (W's fixture: the lamp spacing from its level), whole = false,
  * movers, _unsafe: {postDepth, noRails}}. Writes the deck (walk cells), the hangers, the rail beds, the fence rails, the chains,
- * the posts and the lamps, and records `meta.paths[id] = {kind: 'rope', ...}` for M10:rope. Returns the path record.
+ * the posts and the lamps, and records the bridge in the plan meta's `ropes` (the checker's M10:rope reads it). Returns the record.
  */
 export function ropeBridge(r, a, b, opts = {}) {
   const what = `ropeBridge ${opts.id ?? ''}`.trim();
@@ -238,13 +238,12 @@ export function ropeBridge(r, a, b, opts = {}) {
     if (item) bomM.set(item, (bomM.get(item) ?? 0) + cols[t + 3] - cols[t + 2] + 1);
   }
   const bom = Object.fromEntries([...bomM.entries()].sort(([a1], [b1]) => (a1 < b1 ? -1 : a1 > b1 ? 1 : 0)));
-  const id = opts.id ?? `${p.id}_rope_${r.paths.length + 1}`;
+  const id = opts.id ?? `${p.id}_rope_${(r.meta.ropes?.length ?? 0) + 1}`;
   const xs = [...g.deck, ...g.beds].map((c) => c[0]).concat(g.posts.map((q) => q.x)), zs = [...g.deck, ...g.beds].map((c) => c[2]).concat(g.posts.map((q) => q.z));
   const ysAll = [...g.deck, ...g.beds].map((c) => c[1]).concat(g.posts.flatMap((q) => [q.y0, q.y1 + 1]));
   const box = { minX: Math.min(...xs), minY: Math.min(...ysAll), minZ: Math.min(...zs), maxX: Math.max(...xs), maxY: Math.max(...ysAll) + 1, maxZ: Math.max(...zs) };
-  r.paths.push({ id, stage: p.stage, part: p.id, kind: 'rope', box });
   const rec = {
-    kind: 'rope', part: p.id, stage: p.stage, width, n, rise, from: [a[0], a[1], a[2]], to: [b[0], b[1], b[2]], dir, lo: g.lo, hi: g.hi,
+    id, kind: 'rope', part: p.id, box, stage: p.stage, width, n, rise, from: [a[0], a[1], a[2]], to: [b[0], b[1], b[2]], dir, lo: g.lo, hi: g.hi,
     whole, deck: deckBlock, slab: slabState, rail, post, rope: chainState, light: fx.light, lampEvery, y2: g.ys,
     cells: g.deck.filter((c) => c[4]).map((c) => [c[0], c[1], c[2]]),
     posts: g.posts.map((q) => ({ x: q.x, z: q.z, y0: q.y0, y1: q.y1, landing: q.landing, end: q.end, side: q.side })),
@@ -252,8 +251,8 @@ export function ropeBridge(r, a, b, opts = {}) {
     ...(opts.movers ? { movers: [...opts.movers] } : {}),
     ...(u.postDepth !== undefined || u.noRails ? { _unsafe: { ...u } } : {}),
   };
-  r.meta.paths[id] = rec;
-  return { id, ...rec };
+  (r.meta.ropes ??= []).push(rec);
+  return rec;
 }
 
 /** W's fixture for the bible's light and rail roles (lib/region/fixtures.mjs); a hanging lantern stands on the post here. */

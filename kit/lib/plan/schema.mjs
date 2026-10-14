@@ -451,6 +451,11 @@ export function validatePlan(plan, { anchors = [] } = {}) {
     }
   }
 
+  // ---- (7a K1, R16) a gate that leaves out its wall names the plan's one wall (implicitly: a dependency); with none or several
+  // the compiler refuses it NO_FEATURE
+  const wallIds = out.parts.filter((q) => q.block === 'connector.wall').map((q) => q.id);
+  for (const p of out.parts) if (p.verdict !== 'malformed' && p.block === 'connector.gate' && p.part.wall === undefined && wallIds.length === 1) p.refs.push({ id: wallIds[0], path: '$', as: 'wall', implicit: true });
+
   // ---- the dependency graph: explicit (dependencies[]) and implicit (refs); unknown ids; cycles (R3)
   const deps = new Map(out.parts.map((p) => [p.id, new Set()]));
   for (const p of out.parts) for (const r of p.refs) deps.get(p.id).add(r.id);

@@ -1,19 +1,21 @@
-// (7a K1b) The checker's M10:rope (docs/CONTRACT.md "Phase 7a slice K1" §5): for every rope bridge the plan records
-// (meta.paths[id].kind === 'rope'), the deck as the world holds it: each deck cell's walk surface measured from its blocks (a bottom
-// slab is an odd half-block surface, a full block an even one) equals §3's formula, adjacent cells (landings included) differ by at
-// most one half block, the span is 8..40, and the four posts stand from 2 below the landing to 2 above it on solid ground. The same
-// rule reads the virtual world (plan time) and a realised dump world (the gate), so the plan's own numbers are only the inputs
-// (n, the landings, the width), never the answer. A warning, as M10.
-import { profile, y2Of, ROPE, sagOf, maxRiseOf, rightOf } from './ropeGeom.mjs';
+// (7a K1b) The rope bridge rules of the checker (docs/CONTRACT.md "Phase 7a slice K1" §5): `M10:rope`, for every rope bridge the
+// plan meta records (`meta.ropes`, written by lib/connectors/ropeGeom.mjs ropeBridge): each deck cell's walk surface measured from
+// the world's blocks (a bottom slab an odd half-block surface, a full block an even one) equals §3's formula, adjacent cells
+// (landings included) differ by at most one half block, the span is 8..40 deck cells, and the four posts stand from 2 below the
+// landing to 2 above it on solid ground. The same rule reads the virtual world (plan time) and a realised dump world (the gate), so
+// the plan's numbers are only its inputs (n, the landings, the width), never the answer. Per bridge it records the rails (a barrier
+// on both sides of each deck cell, M8's) and the head room (2 clear over each walk cell, M6's) as metrics. A warning, as M10.
+// Called by checkRegion (check.mjs), which passes `finding`; leaves `vw` as it found it.
+import { profile, y2Of, ROPE, sagOf, maxRiseOf, rightOf } from '../connectors/ropeGeom.mjs';
 
 const nameOf = (s) => String(s ?? '').replace(/\[.*$/, '');
 
-/** The rule: appends findings `M10:rope` and returns the per-bridge metrics. */
-export function ropeRule({ vw, meta, findings }) {
+/** The rope rules: findings `M10:rope` and `metrics.ropes` (per bridge: the profile, the posts, rails and head room over the deck). */
+export function ropeRules({ vw, ropes, want, findings, metrics, finding }) {
   const P = vw.pal, out = [];
-  const push = (m, count, sample, message) => findings.push({ rule: 'M10:rope', severity: 'warning', part: m.part ?? null, stage: m.stage ?? null, count, sample: sample.slice(0, 20), message });
-  for (const [pid, m] of Object.entries(meta?.paths ?? {})) {
-    if (m?.kind !== 'rope') continue;
+  const push = (m, count, sample, message) => { if (want.has('M10')) findings.push(finding('M10:rope', m.part ?? null, m.stage ?? null, count, sample, message)); };
+  for (const m of ropes) {
+    const pid = m.id;
     const { n, rise, from, dir, lo, hi } = m;
     const [x0, y0, z0] = from, [dx, dz] = dir, [rx, rz] = rightOf(dir);
     // the deck cells 1..n follow the profile; the landings 0 and n + 1 stand at 2 y0 and 2 (y0 + rise)
@@ -65,8 +67,23 @@ export function ropeRule({ vw, meta, findings }) {
     }
     if ((m.posts ?? []).length !== 4) push(m, 1, [from], `rope bridge ${pid}: ${(m.posts ?? []).length} post(s) recorded (4: two at each landing)`);
     if (badPosts.length) push(m, badPosts.length, badPosts, `rope bridge ${pid}: ${badPosts.length} of ${(m.posts ?? []).length} post(s) not standing 2 deep on solid ground (${row.posts.filter((p) => !p.ok).map((p) => `${p.x},${p.z}: ${!p.deep ? 'not 2 deep' : !p.up ? 'not 2 above' : 'no solid ground under it'}`).join('; ')})`);
+    // rails on both edges of every deck cell (a barrier at the feet cell beside the deck: M8's 1.5) and 2 clear over every walk cell
+    row.railed = 0; row.headroom = 0;
+    for (let i = 1; i <= n; i++) {
+      const x = x0 + dx * i, z = z0 + dz * i;
+      const feet = (xx, zz) => { const s = surface(xx, zz); return s === null ? null : Math.floor((s + 1) / 2) + 1; };
+      let ok = true;
+      for (const v of [lo - 1, hi + 1]) {
+        const xr = x + rx * v, zr = z + rz * v, f = feet(x + rx * (v < lo ? lo : hi), z + rz * (v < lo ? lo : hi));
+        if (f === null || !P.barrier[vw.get(xr, f, zr)]) ok = false;
+      }
+      if (ok) row.railed++;
+      let clear = true;
+      for (let v = lo; v <= hi; v++) { const f = feet(x + rx * v, z + rz * v); if (f === null || !P.passable[vw.get(x + rx * v, f, z + rz * v)] || !P.passable[vw.get(x + rx * v, f + 1, z + rz * v)]) clear = false; }
+      if (clear) row.headroom++;
+    }
     row.ok = !row.missing && !row.wrong && row.maxStep <= 1 && n >= ROPE.spanMin && n <= ROPE.spanMax && row.postsOk === 4;
     out.push(row);
   }
-  return out;
+  metrics.ropes = { bridges: out.length, ok: out.filter((r) => r.ok).length, per: out };
 }
