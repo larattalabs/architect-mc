@@ -2,14 +2,14 @@
 // span checks (gap, span, rise, headroom, anchors), the cells a bridge writes, and the `r.ropeBridge` primitive. Plan time only,
 // pure, integer math (Math.floor/abs/min/max): no clock, no random draw.
 //
-// Reading of §3 (recorded in "K1b as built"): a span runs on a cardinal heading from the near landing cell (index 0) to the far
-// landing cell (index n), both walk cells of the route; the deck cells are the n - 1 cells between them (index 1..n-1), and the
-// span n is the landing-to-landing distance (8..40). The profile is in half blocks over the whole span, so y2(0) = 2 * y0 and
-// y2(n) = 2 * (y0 + rise) exactly (the landings), where y0 is the near landing's surface block (T2's path y: the feet stand on
-// y0 + 1). An even y2 = 2m is a full deck block at m; an odd y2 = 2m + 1 is a bottom slab at m + 1 (its walk surface m + 1.5)
+// Reading of §3 (recorded in "K1b as built"): a span of n deck cells (8..40) runs on a cardinal heading from the near landing cell
+// (index 0) over the deck cells (index 1..n) to the far landing cell (index n + 1), both landings walk cells of the route. The
+// profile is in half blocks, y2(0) = 2 * y0 (the near landing) and y2(n) = 2 * (y0 + rise) (the last deck cell, level with the far
+// landing), where y0 is the near landing's surface block (T2's path y: the feet stand on y0 + 1) and rise the far landing's minus
+// it. An even y2 = 2m is a full deck block at m; an odd y2 = 2m + 1 is a bottom slab at m + 1 (its walk surface m + 1.5)
 // over a full block at m (the hanger that keeps the deck face-connected through each half step, so M3 grounds it through the
 // posts and landings). The feet stand at deckY(y2) + 1 whatever the parity.
-import { variant } from '../kit.mjs';
+import { shapeOf } from './style.mjs';
 import { voxelClassOf } from '../blocks.mjs';
 import { fixtureFor } from '../region/fixtures.mjs';
 
@@ -18,7 +18,7 @@ export const ROPE = Object.freeze({
   spanMin: 8, spanMax: 40, widthMin: 1, widthMax: 3, villagerMinWidth: 2, approach: 16, approachMax: 32,
   // the gap: an interior column whose ground is more than this below the deck (or water)
   gapDepth: 4,
-  // the move's cost: (30 + 3 per deck cell) cells, so a short walk round wins (a walk cell is 10)
+  // the move's cost: (30 + 3 per deck cell) cells, so a short walk round wins (a walk cell is 10): 300 + 30 n
   cost: 300, costPer: 30,
   // diagnostics scan this far for a span that would land (a span out of 8..40 answers SPAN)
   diagMax: 64,
@@ -72,18 +72,18 @@ export function checkSpan(land, a, dir, n, rise, width, { gapDepth = ROPE.gapDep
   if (n < ROPE.spanMin || n > ROPE.spanMax) return { ok: false, code: 'SPAN', evidence: { span: n, min: ROPE.spanMin, max: ROPE.spanMax } };
   if (Math.abs(rise) > maxRiseOf(n)) return { ok: false, code: 'TOO_STEEP', evidence: { span: n, rise, max: maxRiseOf(n) } };
   const ys = profile(n, y0, rise);
-  // the gap: an interior column of the centre line whose ground is more than gapDepth below the deck, or water (frozen included)
+  // the gap: a deck column of the centre line whose ground is more than gapDepth below the deck, or water (frozen included)
   let gap = null;
-  for (let i = 1; i < n && !gap; i++) {
+  for (let i = 1; i <= n && !gap; i++) {
     const x = x0 + dx * i, z = z0 + dz * i, y = deckY(ys[i]);
     if (land.waterAt(x, z)) gap = { over: 'water', at: [x, z], depth: y - land.groundAt(x, z) };
     else if (land.groundAt(x, z) < y - gapDepth) gap = { over: 'gap', at: [x, z], depth: y - land.groundAt(x, z) };
   }
-  if (!gap) return { ok: false, code: 'NO_GAP', evidence: { span: n, from: [x0, y0, z0], to: [x0 + dx * n, y0 + rise, z0 + dz * n], depthNeeded: gapDepth + 1 } };
+  if (!gap) return { ok: false, code: 'NO_GAP', evidence: { span: n, from: [x0, y0, z0], to: [x0 + dx * (n + 1), y0 + rise, z0 + dz * (n + 1)], depthNeeded: gapDepth + 1 } };
   // the clear envelope: the deck (and its hangers), the rails and 2 cells over the surface, across the width plus the rails;
   // the pre-region column's top (ground or trunk) must lie below it, and no keep-out under it
   const hits = [];
-  for (let i = 1; i < n; i++) {
+  for (let i = 1; i <= n; i++) {
     const lowest = deckY(ys[i]) - (isSlab(ys[i]) ? 1 : 0);
     for (let v = lo - 1; v <= hi + 1; v++) {
       const x = x0 + dx * i + rx * v, z = z0 + dz * i + rz * v;
@@ -94,7 +94,7 @@ export function checkSpan(land, a, dir, n, rise, width, { gapDepth = ROPE.gapDep
   if (hits.length) return { ok: false, code: 'HEADROOM', evidence: { span: n, cells: hits.length, sample: hits.slice(0, 8) }, gap, ys };
   // the anchors: the 2 cells under each landing cell and under each post (the posts stand on the rail lines at both landings)
   const bad = [];
-  for (const [i, ya] of [[0, y0], [n, y0 + rise]]) {
+  for (const [i, ya] of [[0, y0], [n + 1, y0 + rise]]) {
     for (let v = lo - 1; v <= hi + 1; v++) {
       const x = x0 + dx * i + rx * v, z = z0 + dz * i + rz * v;
       for (const y of [ya - 1, ya - 2]) {
@@ -124,12 +124,12 @@ export function surveyLand(S, { blocked = () => false, written = null, base = nu
   return { groundAt: S.groundAt, topAt: S.topAt, waterAt: S.waterAt, frozenAt: S.frozenAt, blocked, classAt, written };
 }
 
-/** The deck role's slab variant (minecraft:oak_planks -> minecraft:oak_slab), or null (the whole-block fallback: player-only). */
+/** The deck role's slab variant (minecraft:oak_planks -> minecraft:oak_slab; a log its wood's), or null (the whole-block fallback: player-only). */
 export function slabOf(block) {
   if (typeof block !== 'string') return null;
   const name = block.replace(/\[.*$/, '');
   if (/_slab$/.test(name)) return name;
-  return variant(name, 'slab');
+  return shapeOf(name, 'slab');
 }
 
 /** A cardinal heading's name for a block axis (`axis=x` along x). */
@@ -137,7 +137,7 @@ const axisOf = ([dx]) => (dx !== 0 ? 'x' : 'z');
 
 /**
  * The cells a rope bridge writes (§3): `{deck: [[x, y, z, kind]] (kind 'block' | 'slab' | 'hanger'; walk cells flagged), beds, rails,
- * ropes, posts, lamps, clear}` from the near landing `a` = [x, y0, z] on `dir` over `n` with `rise`, `width`, the lamp spacing
+ * ropes, posts, lamps, clear}` from the near landing `a` = [x, y0, z] on `dir` over `n` deck cells with `rise`, `width`, the lamp spacing
  * `lampEvery` (W's: floor(12 * level / 15)), `chains` (rope decoration), `whole` (the whole-block profile: every odd y2 rounds up to
  * a full block; the player-only fallback and the `_unsafe.wholeBlockDeck` variant), `postDepth` (2; the broken variant 1).
  */
@@ -145,7 +145,7 @@ export function ropeCells(a, dir, n, rise, width, { lampEvery = 12, chains = tru
   const [x0, y0, z0] = a, [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo, hi } = lateral(width);
   const ys = profile(n, y0, rise).map((y2) => (whole && isSlab(y2) ? y2 + 1 : y2));
   const deck = [], beds = [], rails = [], ropes = [], posts = [], lamps = [], clear = [];
-  for (let i = 1; i < n; i++) {
+  for (let i = 1; i <= n; i++) {
     const y2 = ys[i], y = deckY(y2), slab = isSlab(y2);
     for (let v = lo - 1; v <= hi + 1; v++) {
       const x = x0 + dx * i + rx * v, z = z0 + dz * i + rz * v;
@@ -166,11 +166,11 @@ export function ropeCells(a, dir, n, rise, width, { lampEvery = 12, chains = tru
     }
   }
   // the four posts, on the rail lines at both landings: from postDepth below the landing's surface block to 2 above it
-  for (const [i, ya] of [[0, y0], [n, y0 + rise]]) for (const v of [lo - 1, hi + 1]) {
+  for (const [i, ya] of [[0, y0], [n + 1, y0 + rise]]) for (const v of [lo - 1, hi + 1]) {
     const x = x0 + dx * i + rx * v, z = z0 + dz * i + rz * v;
     posts.push({ x, z, y0: ya - postDepth, y1: ya + 2, landing: ya, end: i ? 'far' : 'near', side: v === lo - 1 ? 'left' : 'right' });
     // a lamp at each landing, on its right-hand post (the far landing's left one, facing the walker)
-    if ((i === 0 && v === hi + 1) || (i === n && v === lo - 1)) lamps.push([x, ya + 3, z, i, v]);
+    if ((i === 0 && v === hi + 1) || (i === n + 1 && v === lo - 1)) lamps.push([x, ya + 3, z, i, v]);
   }
   return { ys, deck, beds, rails, ropes, posts, lamps, clear, axis: axisOf(dir), lo, hi };
 }
@@ -187,21 +187,24 @@ export function ropeBridge(r, a, b, opts = {}) {
   const what = `ropeBridge ${opts.id ?? ''}`.trim();
   const dx = Math.sign(b[0] - a[0]), dz = Math.sign(b[2] - a[2]);
   if ((dx !== 0) === (dz !== 0)) throw new Error(`${what}: the landings must lie on one axis (a straight cardinal span)`);
-  const n = Math.abs(b[0] - a[0]) + Math.abs(b[2] - a[2]), rise = b[1] - a[1], dir = [dx, dz];
+  const n = Math.abs(b[0] - a[0]) + Math.abs(b[2] - a[2]) - 1, rise = b[1] - a[1], dir = [dx, dz];
   const width = opts.width ?? 1;
   if (!(Number.isInteger(width) && width >= ROPE.widthMin && width <= ROPE.widthMax)) throw new Error(`${what}: width must be ${ROPE.widthMin}..${ROPE.widthMax}`);
-  if (n < ROPE.spanMin || n > ROPE.spanMax) throw new Error(`${what}: SPAN ${n} is outside ${ROPE.spanMin}..${ROPE.spanMax}`);
+  if (n < ROPE.spanMin || n > ROPE.spanMax) throw new Error(`${what}: SPAN ${n} deck cells is outside ${ROPE.spanMin}..${ROPE.spanMax}`);
   if (Math.abs(rise) > maxRiseOf(n)) throw new Error(`${what}: TOO_STEEP: rise ${rise} over ${n} (at most ${maxRiseOf(n)})`);
   const role = (name, fallback) => (Object.prototype.hasOwnProperty.call(r.roles, name) ? name : fallback);
-  const deckBlock = r.material(opts.deck ?? role('floor', role('path', 'minecraft:oak_planks')), `${what} deck`);
+  // (§6) the bible's connectors member (role names; lib/connectors/style.mjs connectorRoles), else the defaults' chains
+  const cr = r.ctx?.connectors?.rope_bridge ?? {};
+  const deckBlock = r.material(opts.deck ?? cr.deck ?? role('floor', role('path', 'minecraft:oak_planks')), `${what} deck`);
   const slab = opts.whole ? null : slabOf(deckBlock);
   const whole = !slab;
-  const rail = r.material(opts.rail ?? role('rail', 'minecraft:oak_fence'), `${what} rail`);
-  const post = r.material(opts.post ?? role('frame', 'minecraft:spruce_log'), `${what} post`);
+  const rail = r.material(opts.rail ?? cr.rail ?? role('rail', 'minecraft:oak_fence'), `${what} rail`);
+  const post = r.material(opts.post ?? cr.post ?? role('frame', 'minecraft:spruce_log'), `${what} post`);
   const lightBlock = r.material(opts.light ?? role('light', 'minecraft:lantern'), `${what} light`);
   const fx = fixtureLight(lightBlock, rail);
   const lampEvery = Math.max(4, Math.floor((12 * fx.level) / 15));
-  const rope = opts.rope === null ? null : r.material(opts.rope ?? 'minecraft:iron_chain', `${what} rope`);
+  const ropeRole = opts.rope !== undefined ? opts.rope : cr.rope === 'none' ? null : cr.rope ?? 'minecraft:iron_chain';
+  const rope = ropeRole === null ? null : r.material(ropeRole, `${what} rope`);
   const u = opts._unsafe ?? {};
   const g = ropeCells([a[0], a[1], a[2]], dir, n, rise, width, { lampEvery, chains: !!rope, whole, postDepth: u.postDepth ?? 2 });
   const part = opts.part ?? 'links';
@@ -261,4 +264,24 @@ function joinedAlong(block, [dx]) {
 function withAxis(block, axis) {
   const name = String(block).replace(/\[.*$/, '');
   return /_chain$/.test(name) ? `${name}[axis=${axis},waterlogged=false]` : block;
+}
+
+/**
+ * Write the rope spans a route pass found (r.meta.route's edges, their `rope` segments: near landing at the segment's first cell,
+ * far landing at its last) with ropeBridge: `{only: [edge ids] | null, stage, part = 'links', prefix = 'rope_', style: {deck, rail,
+ * post, rope, light}, _unsafe}`. Returns [{edge, id, n, rise, from, to, ...}] (the path records). A program that runs the route pass
+ * itself calls it after the pass (plan_v0 does it in its links stage, kit/lib/connectors/rope.mjs).
+ */
+export function emitRouteRopes(r, { only = null, stage, part = 'links', prefix = 'rope_', style = {}, _unsafe = null, whole = false } = {}) {
+  const out = [];
+  for (const e of r.meta.route?.edges ?? []) {
+    if (!e.ok || (only && !only.includes(e.id))) continue;
+    (e.segments ?? []).forEach((g, si) => {
+      if (g.kind !== 'rope') return;
+      const a = e.path[g.from], b = e.path[g.to];
+      const rec = ropeBridge(r, a, b, { ...style, width: e.width, stage, part, id: `${prefix}${e.id}_${si}`.slice(0, 48), movers: e.movers, ...(_unsafe ? { _unsafe } : {}), ...(whole ? { whole: true } : {}) });
+      out.push({ edge: e.id, ...rec });
+    });
+  }
+  return out;
 }

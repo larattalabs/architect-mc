@@ -16,7 +16,8 @@ export function ropeRule({ vw, meta, findings }) {
     if (m?.kind !== 'rope') continue;
     const { n, rise, from, dir, lo, hi } = m;
     const [x0, y0, z0] = from, [dx, dz] = dir, [rx, rz] = rightOf(dir);
-    const want = profile(n, y0, rise);
+    // the deck cells 1..n follow the profile; the landings 0 and n + 1 stand at 2 y0 and 2 (y0 + rise)
+    const want = [...profile(n, y0, rise), 2 * (y0 + rise)];
     const yHi = Math.max(y0, y0 + rise) + 3, yLo = Math.min(y0, y0 + rise) - sagOf(n) - maxRiseOf(n) - 4;
     // the walk surface of a column: the highest cell in the deck's range that a mover stands on (a floor or a bottom slab with
     // two passable cells over it), as half blocks; null when there is none
@@ -34,10 +35,10 @@ export function ropeRule({ vw, meta, findings }) {
     const wrong = [], missing = [];
     for (let v = lo; v <= hi; v++) {
       let prev = null;
-      for (let i = 0; i <= n; i++) {
+      for (let i = 0; i <= n + 1; i++) {
         const x = x0 + dx * i + rx * v, z = z0 + dz * i + rz * v;
         const got = surface(x, z);
-        if (i > 0 && i < n) {
+        if (i > 0 && i <= n) {
           row.cells++;
           if (got === null) { row.missing++; missing.push([x, Math.floor(want[i] / 2), z]); }
           else if (got !== want[i]) { row.wrong++; wrong.push([x, Math.floor((got + 1) / 2), z]); }

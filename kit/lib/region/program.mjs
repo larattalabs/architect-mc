@@ -372,6 +372,7 @@ export class Region {
       const e = edges[i], d = out.data.edges[i];
       const rid = `route_${e.id}`;
       const rec = { id: e.id, from: e.a.name, to: e.b.name, movers: e.movers, ladders: e.ladders, width: e.width, ok: d.ok, failed: d.failed ?? null, length: d.length, rise: d.rise, cost: d.cost, search: d.search, expanded: d.expanded, roads: [], paths: [] };
+      if (d.rope) rec.rope = d.rope; // (7a K1b) why a rope_bridge edge found no route ({code, evidence})
       metaEdges.push(rec);
       if (!d.ok) { this.note(`route ${e.id} (${e.a.name} -> ${e.b.name}): ${d.failed} (${d.note})`); res.push({ id: e.id, ok: false, failed: d.failed }); continue; }
       rec.path = d.path; rec.segments = d.segments; rec.landings = d.landings; rec.ladderCols = d.ladderCols;
