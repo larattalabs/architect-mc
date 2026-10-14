@@ -633,10 +633,16 @@ function emitWall(K, W) {
   if (Number.isInteger(unsafe.gap) && unsafe.gap > 0) for (let a = 2; a + unsafe.gap < n - 2 && !gapRun; a++) if (runFree(W, a, a + unsafe.gap - 1)) gapRun = [a, a + unsafe.gap - 1];
   for (const c of W.cells) {
     if (gapRun && c.pos >= gapRun[0] && c.pos <= gapRun[1]) continue;
-    const g = unsafe.noGates ? null : opening.get(key(c.x, c.z));
-    if (!g && walkSet.has(key(c.x, c.z)) && !unsafe.noGates) continue; // never on a walk cell (a network's crossing is a gate)
+    const g = opening.get(key(c.x, c.z));
+    if (!g && walkSet.has(key(c.x, c.z))) continue; // never on a walk cell (a network's crossing is a gate)
     const foot = S.groundAt(c.x, c.z) - 2;
     const top = T[c.pos];
+    if (g && unsafe.noGates) {
+      // (the broken variant: the walk left under a filled opening)
+      for (let y = g.y + 1; y < top; y++) put(c.x, y, c.z, body);
+      capCells.set(key(c.x, c.z), { y: top, merlon: false });
+      continue;
+    }
     if (g) {
       // the opening: the walk through at the gate's y (filled under where no route or network wrote it), `h` clear, the lintel (an
       // arch: upside-down stairs at its sides, the middle a step higher), the body above, the cap
