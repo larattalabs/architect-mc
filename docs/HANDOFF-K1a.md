@@ -52,6 +52,9 @@ the as-built).
 - **Foundation round 3:** `kit/lib/connectors/bom.mjs` (`bomOf(states)`, C26's block-to-item rules; its map held equal to the
   mod's `survival_items.json` by `kit/test/k1-foundation.test.mjs`); a part's `cost.bom` comes from `planCheck.links.bom[part]`
   (finish.mjs), so each half fills `K.record.bom[partId]` with its emitted cells' bill.
+- **Foundation round 4 (interface addition):** a special-move row may define `prune(state, from, to) -> note | null`, called
+  before an edge's search: a note fails the edge NO_ROUTE at once (the gate row prunes an edge across a sealed wall instead of
+  spending the node budget). `blockLight` is exported from `kit/lib/region/check.mjs` (the wall and rope rules' M5).
 
 ## K1a: state
 
