@@ -12,6 +12,8 @@
 // a corridor search at 4 cells, then the cell search within `corridor` of it (the whole claim if that fails). Ties by (f, g, x,
 // z, heading, k). Plan time only, pure, under the realise lint (integer math; Math.floor/abs/min/max only).
 import { FLAG_LAVA, FLAG_MISSING, FLAG_TREE, FLAG_WATER } from '../pack.mjs';
+import { gateActive, gateCells, gateCommit, gateExpand, gateInit } from './moves/gate.mjs';
+import { ropeActive, ropeCells, ropeCommit, ropeExpand, ropeInit, ropeNeedsFlag } from './moves/rope.mjs';
 
 /** The 8 headings (x east, z south): E, SE, S, SW, W, NW, N, NE. Even headings are cardinal. */
 export const DIRS = Object.freeze([[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]);
@@ -39,6 +41,31 @@ export const PLAYER_ONLY_KINDS = Object.freeze(['lookout', 'watchtower', 'tower'
 const NONE = -32768;
 const INF = 0x7fffffff;
 const isInt = Number.isInteger;
+
+/**
+ * (7a K1) The special route moves (docs/CONTRACT.md "Phase 7a slice K1" §4; the interface K1a and K1b share, frozen by N-K1-4).
+ * Each row, in this order:
+ *   name, code      the move record's kind (the built-in moves are 0 walk, 1 stair, 2 hairpin, 3 ladder, 4 an earlier edge's walk)
+ *   segment         the segment kind its moves make in the edge's `segments` (with the row's `data` merged in)
+ *   flag            the move may set the A* state's flag bit (one bit, shared: the rope move's `spanned`)
+ *   init(env, intent) -> state | null      once per pass; null turns the row off (no wall, no rope edge: the pass is T2's, byte for
+ *                                           byte)
+ *   active(state, edge) -> bool             whether the edge searches with the move
+ *   needsFlag(state, edge) -> bool          whether the edge's goal needs the flag bit (a rope_bridge: exactly one span)
+ *   blocks(state) -> Uint8Array | null      cells every edge treats as hard obstacles (the wall cells), crossed only by a move
+ *   expand(state, S)                        relaxes the move's candidates from an expanded state (S below)
+ *   cells(state, m) -> {cells, data}        the path cells of a move after its start cell ([[x, y, z]]), and the segment's data
+ *   commit(state, env, edgeOut, moves, lat) after an edge routes (the gate move opens its gates for the later edges)
+ * Order and ties: a state's moves are relaxed walk, stair, hairpin, ladder, then each active special row in table order; a row
+ * relaxes its candidates in its own fixed order (the gate move: at most one, straight ahead; the rope move: K1b's, by span length
+ * ascending). The heap breaks ties by (f, g, x, z, heading, k, d, flag), the flag last, so an unflagged state wins a tie.
+ * S: {i, j, k, h, kk, y, q, f, W, D, r, G, inS(k), free(k) (clear of every obstacle but the blocks), dOf(y, k), builtY, latLo, latHi,
+ * w, nearEnd, relax(k, h, kk, q, cost, arg, f?)} (`relax` records the row's code; f defaults to the state's flag).
+ */
+export const SPECIAL_MOVES = Object.freeze([
+  Object.freeze({ name: 'gate', code: 5, segment: 'gate', flag: false, init: gateInit, active: gateActive, needsFlag: () => false, blocks: (st) => st.mask, expand: gateExpand, cells: gateCells, commit: gateCommit }),
+  Object.freeze({ name: 'rope', code: 6, segment: 'rope', flag: true, init: ropeInit, active: ropeActive, needsFlag: ropeNeedsFlag, blocks: () => null, expand: ropeExpand, cells: ropeCells, commit: ropeCommit }),
+]);
 
 /**
  * S-T2-1: an edge's movers from its end nodes' lot kinds. A player-only kind at either end (a lookout, a watchtower) makes the
@@ -191,7 +218,10 @@ function corridorOf(env, blockedW, si, sj, ti, tj, maxGrade, radius = CORRIDOR) 
 function search(env, ctx) {
   const { W, D } = env;
   const { G, corridor, blockedW, blocked1, builtY, prefer, start, goal, Gq, w, laneW, Ld, latLo, latHi, maxCut, maxFill, stairs, ladders, nearEnd, maxStates = 24_000_000, maxExpand = Infinity } = ctx;
-  const ND = maxCut + maxFill + 1, SPC = 32 * ND;
+  // (7a K1) the special moves this edge searches with, the flag bit (F = 2 when a row may set it) and whether the goal needs it
+  const special = ctx.special ?? [], F = special.some((x) => x.m.flag) ? 2 : 1, needFlag = !!ctx.needFlag;
+  const free0 = ctx.free ?? blockedW;
+  const ND = maxCut + maxFill + 1, SPC = 32 * ND * F;
   // the footprint square around a centre cell: an own move may lie beside an earlier edge's built cells only within a step of
   // their y (its writes skip them), and a stair flight never over them (its treads would stack)
   const fLo = latLo, fHi = latHi;
@@ -213,9 +243,9 @@ function search(env, ctx) {
   const S = cells.length * SPC;
   if (S > maxStates) return { moves: null, expanded: 0, tooBig: true };
   const gArr = new Int32Array(S).fill(INF), par = new Int32Array(S).fill(-1), qArr = new Int32Array(S), mv = new Uint8Array(S), arg = new Uint8Array(S), closed = new Uint8Array(S);
-  const st = (k, h, kk, d) => ((cid[k] * 8 + h) * 4 + kk) * ND + d;
+  const st = (k, h, kk, d, f = 0) => (((cid[k] * 8 + h) * 4 + kk) * ND + d) * F + f;
   const cellOf = (s) => cells[Math.floor(s / SPC)];
-  const hOfS = (s) => Math.floor(s / (4 * ND)) & 7, kOfS = (s) => Math.floor(s / ND) & 3;
+  const hOfS = (s) => Math.floor(s / (4 * ND * F)) & 7, kOfS = (s) => Math.floor(s / (ND * F)) & 3, fOfS = (s) => s % F;
   const tie = (a, b) => {
     const ka = cellOf(a), kb = cellOf(b);
     const xa = ka % W, xb = kb % W;
@@ -231,12 +261,13 @@ function search(env, ctx) {
   const dOf = (y, k) => { const d = y - G[k]; return d <= maxFill && -d <= maxCut ? d + maxCut : -1; };
   const inS = (k) => k >= 0 && cid[k] >= 0;
   const open1 = (k) => (!corridor || corridor[k]) && !blocked1[k] && builtY[k] === NONE;
-  const relax = (s0, k, h, kk, q, cost, kind, a, built = false) => {
+  let curF = 0;
+  const relax = (s0, k, h, kk, q, cost, kind, a, built = false, f = curF) => {
     // (a cell an earlier edge built keeps its y whatever this edge's land says: its offset only keys the state)
     let d = dOf(yOf(q), k);
     if (d < 0 && built) d = Math.max(0, Math.min(ND - 1, yOf(q) - G[k] + maxCut));
     if (d < 0) return;
-    const s = st(k, h, kk, d);
+    const s = st(k, h, kk, d, f);
     if (closed[s]) return;
     const ng = gArr[s0] + cost;
     if (ng < gArr[s]) { gArr[s] = ng; par[s] = s0; qArr[s] = q; mv[s] = kind; arg[s] = a; heap.push(ng + hOf(k), ng, s); }
@@ -259,7 +290,8 @@ function search(env, ctx) {
     if (expanded >= maxExpand) return { moves: null, expanded, budget: true };
     expanded++;
     const k = cellOf(s), h = hOfS(s), kk = kOfS(s), q = qArr[s], y = yOf(q);
-    if (k === goal.k && y === goal.y) { found = s; break; }
+    curF = fOfS(s);
+    if (k === goal.k && y === goal.y && (!needFlag || curF === 1)) { found = s; break; }
     const i = k % W, j = (k - i) / W;
     // walk: straight, or 45 degrees after the cooldown; the profile follows the land, or holds, rises or falls by Gq
     for (const dh of kk >= TURN_COOLDOWN ? [0, -1, 1] : [0]) {
@@ -364,10 +396,16 @@ function search(env, ctx) {
         }
       }
     }
+    // (7a K1) the special moves, in table order
+    for (const x of special) {
+      const code = x.m.code, f0 = curF;
+      x.m.expand(x.st, { i, j, k, h, kk, y, q, f: f0, W, D, r: env.r, G, inS, free: (c) => (!corridor || corridor[c]) && !free0[c], dOf, builtY, latLo, latHi, w, nearEnd,
+        relax: (k2, h2, kk2, q2, cost, a2, f2 = f0) => relax(s, k2, h2, kk2, q2, cost, code, a2, false, f2) });
+    }
   }
   if (found < 0) return { moves: null, expanded };
   const moves = [];
-  for (let s = found; s >= 0 && mv[s] !== 255; s = par[s]) moves.push([mv[s], cellOf(s), hOfS(s), arg[s], yOf(qArr[s]), qArr[s]]);
+  for (let s = found; s >= 0 && mv[s] !== 255; s = par[s]) moves.push([mv[s], cellOf(s), hOfS(s), arg[s], yOf(qArr[s]), qArr[s], fOfS(s)]);
   moves.reverse();
   return { moves, cost: gArr[found], expanded };
 }
@@ -473,6 +511,10 @@ export function routePass(survey, volumes, intent) {
     return i < 0 || j < 0 || i >= W || j >= D ? -1 : i + j * W;
   };
   const masks = baseMasks(env, it, { keepOut: !_unsafe.noKeepOut });
+  // (7a K1) the special moves' pass-level states (a row whose init returns null is off) and their blocked cells (the walls)
+  const special = SPECIAL_MOVES.map((m) => ({ m, st: m.init(env, it) })).filter((x) => x.st);
+  let specialBlocks = null;
+  for (const x of special) { const b = x.m.blocks(x.st); if (b) { specialBlocks ??= new Uint8Array(n); for (let k = 0; k < n; k++) specialBlocks[k] |= b[k]; } }
   const builtY = new Int16Array(n).fill(NONE); // an earlier edge's footprint: its surface (or tread) y
   const preferM = new Uint8Array(n);
   for (const p of it.prefer ?? []) { const k = cellAt(p[0], p[1]); if (k >= 0) preferM[k] = 1; }
@@ -525,6 +567,8 @@ export function routePass(survey, volumes, intent) {
       }
     }
     env.G = G;
+    const sp = special.filter((x) => x.m.active(x.st, e));
+    const needFlag = sp.some((x) => x.m.needsFlag(x.st, e));
     const build = (water) => {
       const mk = water ? masks : baseMasks(env, it, { water: false, keepOut: !_unsafe.noKeepOut });
       const hardW = dilate(mk.hard, W, D, Rt), guardW = dilate(mk.guard, W, D, Rw), treeW = dilate(mk.tree, W, D, Rt), earlyW = dilate(earlier, W, D, Rt);
@@ -546,7 +590,12 @@ export function routePass(survey, volumes, intent) {
           blockedW[k] = 0;
         }
       }
-      return { blockedW, blocked1 };
+      // (7a K1) the special moves' blocked cells (the walls, under the footprint and its half width) after the approaches, so no
+      // walk ever writes one; `free` keeps the obstacles without them (a gate move's own cells, the coarse corridor)
+      if (!specialBlocks) return { blockedW, blocked1 };
+      const free = Uint8Array.from(blockedW), sbW = dilate(specialBlocks, W, D, Rt);
+      for (let k = 0; k < n; k++) { blockedW[k] |= sbW[k]; blocked1[k] |= specialBlocks[k]; }
+      return { blockedW, blocked1, free };
     };
     // the edge's own earlier route (6d replanning: `prefer` on the edge) costs a third too, for this edge only
     let preferE = preferM;
@@ -564,7 +613,8 @@ export function routePass(survey, volumes, intent) {
       withinM = dilate(seed, W, D, Math.floor((wr + r - 1) / r));
     }
     const sctx = { G, builtY, prefer: preferE, start: ends[0], goal: ends[1], Gq, w, laneW: Math.floor((w + r - 1) / r), Ld: Math.floor((Math.max(hairpinLanding, w) + r - 1) / r),
-      latLo: Math.floor(lo / r), latHi: Math.floor((hi + r - 1) / r), maxCut, maxFill, stairs: stairs && !coarse, ladders, nearEnd };
+      latLo: Math.floor(lo / r), latHi: Math.floor((hi + r - 1) / r), maxCut, maxFill, stairs: stairs && !coarse, ladders, nearEnd,
+      ...(sp.length ? { special: sp, needFlag } : {}) };
     // ---- the moves as 4-connected centre cells with their surface y, and segments
     const toPath = (res) => {
     const P = [], landings = [], ladderCols = [];
@@ -628,6 +678,16 @@ export function routePass(survey, volumes, intent) {
         const to = lineTo(wx(curK), wz(curK), wx(k), wz(k), curY, y);
         const l = segs[segs.length - 1];
         if (l && l.kind === 'walk' && l.shared && l.to === from) l.to = to; else segs.push({ kind: 'walk', from, to, shared: true });
+      } else if (kind >= 5) {
+        // (7a K1) a special move: its row's cells, one segment of its kind with the row's data
+        const row = SPECIAL_MOVES.find((m) => m.code === kind);
+        const x = special.find((q) => q.m === row);
+        const x0 = wx(curK), z0 = wz(curK), x1 = wx(k), z1 = wz(k);
+        const nst = Math.max(Math.abs(x1 - x0), Math.abs(z1 - z0)) / r;
+        const out = row.cells(x.st, { x0, z0, y0: curY, x1, z1, y1: y, h, arg: a, n: nst, dx: DIRS[h][0] * r, dz: DIRS[h][1] * r });
+        let idx = from;
+        for (const q of out.cells) idx = push(q[0], q[1], q[2]);
+        segs.push({ kind: row.segment, from, to: idx, ...(out.data ?? {}) });
       } else if (kind === 3) {
         const up = a === 1;
         const nx = wx(k), nz = wz(k);
@@ -654,7 +714,7 @@ export function routePass(survey, volumes, intent) {
       res = null;
       // coarse to fine: the corridor (16), then a wider one (48), then the whole claim when it is small enough
       for (const [radius, name] of withinM ? [[-1, 'within']] : [[CORRIDOR, 'corridor'], [3 * CORRIDOR, 'corridor48'], [0, 'claim']]) {
-        const corridor = radius < 0 ? withinM : radius ? corridorOf(env, b.blockedW, si, sj, ti, tj, maxGrade, radius) : null;
+        const corridor = radius < 0 ? withinM : radius ? corridorOf(env, b.free ?? b.blockedW, si, sj, ti, tj, maxGrade, radius) : null;
         if (radius && !corridor) continue;
         edgeOut.search = name;
         res = search(env, { ...sctx, ...b, corridor, maxExpand: cap - spent });
@@ -675,7 +735,7 @@ export function routePass(survey, volumes, intent) {
     if (!built) {
       // why: would it route through water (T3's bridges)?
       const bw = build(false);
-      const cw = corridorOf(env, bw.blockedW, si, sj, ti, tj, maxGrade, 3 * CORRIDOR);
+      const cw = corridorOf(env, bw.free ?? bw.blockedW, si, sj, ti, tj, maxGrade, 3 * CORRIDOR);
       const rw = search(env, { ...sctx, ...bw, corridor: cw, maxExpand: cap === Infinity ? Infinity : Math.max(0, cap - spent) });
       spent += rw?.expanded ?? 0;
       edgeOut.failed = rw?.moves ? 'ROUTE_WATER' : 'NO_ROUTE';
@@ -699,6 +759,16 @@ export function routePass(survey, volumes, intent) {
       if (kk >= 0) { preferM[kk] = 1; builtY[kk] = o.y; }
     }
     for (const lc of edgeOut.ladderCols) { const kk = cellAt(lc.x, lc.z); if (kk >= 0) earlier[kk] = 1; }
+    // (7a K1) the special rows commit what the edge's moves did (the gate move opens its gates for the later edges)
+    if (sp.length) {
+      const ms = [];
+      let ck = ends[0].k, cy = ends[0].y;
+      for (const [kind, k, h, a, y] of res.moves) {
+        if (kind >= 5) ms.push({ code: kind, i0: ck % W, j0: Math.floor(ck / W), dx: DIRS[h][0], dz: DIRS[h][1], n: Math.max(Math.abs((k % W) - (ck % W)), Math.abs(Math.floor(k / W) - Math.floor(ck / W))), y0: cy, y1: y, arg: a });
+        ck = k; cy = y;
+      }
+      for (const x of sp) x.m.commit(x.st, env, edgeOut, ms, { lo: sctx.latLo, hi: sctx.latHi });
+    }
   }
   out.routed = out.edges.filter((x) => x.ok).length;
   out.failed = out.edges.filter((x) => !x.ok).map((x) => ({ id: x.id, failed: x.failed, note: x.note }));

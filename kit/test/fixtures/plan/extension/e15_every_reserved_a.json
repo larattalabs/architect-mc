@@ -1,5 +1,5 @@
 {
-  "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; first half) (D1: program.districts, its alias zone kind district and endpoint.region left the list when they shipped; D2: zone.outpost, locator.along, feature.biome_edge and feature.ridge)",
+  "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; first half) (D1: program.districts, its alias zone kind district and endpoint.region left the list when they shipped; D2: zone.outpost, locator.along, feature.biome_edge and feature.ridge; K1: connector.auto, connector.wall, connector.gate and connector.rope_bridge left it when they shipped, wall.along and layout.elevated joined)",
   "on": "s7",
   "expect": {
     "all": [
@@ -20,10 +20,6 @@
         "block": "layout.organic"
       },
       {
-        "part": "c_auto",
-        "block": "connector.auto"
-      },
-      {
         "part": "c_bridge",
         "block": "connector.bridge"
       },
@@ -36,14 +32,6 @@
         "block": "connector.channel"
       },
       {
-        "part": "c_wall",
-        "block": "connector.wall"
-      },
-      {
-        "part": "c_gate",
-        "block": "connector.gate"
-      },
-      {
         "part": "c_ladder",
         "block": "connector.ladder"
       },
@@ -54,10 +42,6 @@
       {
         "part": "c_rail",
         "block": "connector.rail"
-      },
-      {
-        "part": "c_rope_bridge",
-        "block": "connector.rope_bridge"
       },
       {
         "part": "c_catwalk",
@@ -102,6 +86,14 @@
       {
         "part": "z11",
         "block": "sketch.outline"
+      },
+      {
+        "part": "z12",
+        "block": "layout.elevated"
+      },
+      {
+        "part": "c_wall_along",
+        "block": "wall.along"
       }
     ]
   },
@@ -250,19 +242,25 @@
           ],
           "outline": true
         }
+      },
+      {
+        "id": "z12",
+        "program": {
+          "lots": [
+            {
+              "id": "z12_lot",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ],
+          "layout": "elevated"
+        }
       }
     ],
     "connectors": [
-      {
-        "id": "c_auto",
-        "kind": "auto",
-        "from": {
-          "anchor": "claim_n"
-        },
-        "to": {
-          "anchor": "claim_s"
-        }
-      },
       {
         "id": "c_bridge",
         "kind": "bridge",
@@ -294,26 +292,6 @@
         }
       },
       {
-        "id": "c_wall",
-        "kind": "wall",
-        "from": {
-          "anchor": "claim_n"
-        },
-        "to": {
-          "anchor": "claim_s"
-        }
-      },
-      {
-        "id": "c_gate",
-        "kind": "gate",
-        "from": {
-          "anchor": "claim_n"
-        },
-        "to": {
-          "anchor": "claim_s"
-        }
-      },
-      {
         "id": "c_ladder",
         "kind": "ladder",
         "from": {
@@ -336,16 +314,6 @@
       {
         "id": "c_rail",
         "kind": "rail",
-        "from": {
-          "anchor": "claim_n"
-        },
-        "to": {
-          "anchor": "claim_s"
-        }
-      },
-      {
-        "id": "c_rope_bridge",
-        "kind": "rope_bridge",
         "from": {
           "anchor": "claim_n"
         },
@@ -421,6 +389,17 @@
         },
         "to": {
           "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_wall_along",
+        "kind": "wall",
+        "where": {
+          "along": {
+            "feature": {
+              "water": {}
+            }
+          }
         }
       }
     ],

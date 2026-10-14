@@ -25,6 +25,11 @@ import { keptBuilds, pickBuild, buildEndpoint, buildKeepOut } from '../region/bu
 import { besidePorts, emitDistricts, parseDistricts, placeDistricts } from '../region/districtsEmit.mjs';
 import { placeFollow } from '../region/followEmit.mjs';
 import { zoneDistricts } from './schema.mjs';
+// (7a K1) walls and gates (K1a), rope bridges and auto connectors (K1b): the compiler's hooks for the four connector kinds
+import { WALL_KINDS, emitWalls, finishGates, planWalls, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
+import { ROPE_KINDS, emitRopes, ropeAnswer, ropeLeg, ropePassInput, ropeResolve } from '../connectors/rope.mjs';
+/** (7a K1) The connector kinds K1 compiles (each a supported block in catalogue 4). */
+export const K1_KINDS = Object.freeze([...WALL_KINDS, ...ROPE_KINDS]);
 
 /** §7's caps (each a request may only lower). */
 export const BUDGET_DEFAULTS = Object.freeze({ maxNodes: 2_000_000, maxEdges: 128, maxCells: 20_000_000, maxMs: 120_000, maxHeapMb: 2048 });
@@ -852,7 +857,10 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   }
 
   // ---- 3. emit zones (pads blend where a relief names them), relief, forms
-  const stagesWanted = ['ground', 'street', 'forms', 'routes', 'lots', 'props'];
+  // (7a K1) a plan with a wall, gate, rope bridge or auto connector to compile gets the `links` stage after `routes` (none
+  // otherwise: every plan without K1 parts keeps its stages, so its IR)
+  const k1Parts = order.filter((p) => p.family === 'connector' && K1_KINDS.includes(p.kind) && !answers.has(p.id));
+  const stagesWanted = k1Parts.length ? ['ground', 'street', 'forms', 'routes', 'links', 'lots', 'props'] : ['ground', 'street', 'forms', 'routes', 'lots', 'props'];
   const whole = order.find((p) => p.family === 'zone' && res.get(p.id)?.whole && okClass(p.id));
   let r;
   const partOf = {}; // region part / lot / road id -> plan part id
@@ -877,7 +885,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     }
   }
   if (!r) { r = makeRegion(null); r.stages(stagesWanted); }
-  const stageOf = (s) => (r.stageList.includes(s) ? s : s === 'routes' || s === 'props' || s === 'lots' ? r.stageList[r.stageList.length - 1] : r.stageList[0]);
+  const stageOf = (s) => (r.stageList.includes(s) ? s : s === 'routes' || s === 'props' || s === 'lots' || s === 'links' ? r.stageList[r.stageList.length - 1] : r.stageList[0]);
   const zoneEmit = new Map(); // zone id -> {L, lots, prefix}
   let villages = 0, laneCells = [], reserved = new Set();
   const outposts = [];
@@ -1035,14 +1043,25 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     }
   }
 
+  // ---- (7a K1) the K1 context (docs/CONTRACT.md "Phase 7a slice K1" §4's compile order), then step 2: wall lines and gates placed
+  // `at` an endpoint, open before routing
+  const K = k1Parts.length ? {
+    env, ctx, r, plan: P.plan, V, order, byId, k1Parts, geom, res, zoneEmit, lotZone, answers, ans, depState, okClass, timeUp, stageOf, notes, partOf,
+    checkpoint: () => checkpoint(r), rollback: (c) => rollback(r, c), addedSince: (c) => addedSince(r, c), mark, endpointNode: (e, other, conn, where) => endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where),
+    record: {}, routed: [],
+  } : null;
+  if (K) planWalls(K);
+
   // ---- 4. connectors: legs, one route pass per grade limit (a dry run, then only the connectors whose every leg routed)
-  const conns = order.filter((p) => p.family === 'connector' && !answers.has(p.id));
+  // ((7a K1) a wall or gate is answered by its own steps; a rope_bridge or auto connector routes here with its leg options)
+  const conns = order.filter((p) => p.family === 'connector' && !answers.has(p.id) && !WALL_KINDS.includes(p.kind));
   const legs = []; // {conn, k, from, to, width, movers, grade}
   const connNotes = new Map(); // conn id -> notes
   for (const p of conns) {
     const dep = depState(p);
     if (dep) { ans(p, dep); continue; }
     if (timeUp()) { ans(p, budgetHit('maxMs')); continue; }
+    if (ROPE_KINDS.includes(p.kind)) { const stop = ropeResolve(K, p); if (stop) { ans(p, stop); continue; } }
     const ends = [p.part.from, ...(p.part.via ?? []), p.part.to];
     const pts = [];
     let err = null;
@@ -1056,7 +1075,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     const tGrade = tolOf(p.part, 'grade');
     const grade = Math.max(1 / 64, Math.min(1, q64(tGrade.max)));
     if (snapNotes.length) connNotes.set(p.id, snapNotes);
-    for (let k = 0; k + 1 < pts.length; k++) legs.push({ conn: p, k, from: pts[k], to: pts[k + 1], width: p.part.width ?? WIDTH_DEFAULT[p.kind], movers: p.part.movers, grade });
+    const k1 = ROPE_KINDS.includes(p.kind) ? ropeLeg(K, p) : null;
+    for (let k = 0; k + 1 < pts.length; k++) legs.push({ conn: p, k, from: pts[k], to: pts[k + 1], width: p.part.width ?? WIDTH_DEFAULT[p.kind] ?? 3, movers: p.part.movers, grade, ...(k1 ? { k1 } : {}) });
   }
   // maxEdges: legs past the cap (in order) are incomplete
   const capped = new Set();
@@ -1071,14 +1091,16 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       if (timeUp()) { for (const l of group) if (!answers.has(l.conn.id)) ans(l.conn, budgetHit('maxMs')); group = []; break; }
       const cp = checkpoint(r);
       const part = `routes_${grades.indexOf(g)}`;
-      const edges = group.map((l, i) => ({ id: `c${conns.indexOf(l.conn)}l${l.k}`, from: l.from.name, to: l.to.name, width: l.width, ...(l.movers ? { movers: l.movers } : {}), _i: i }));
+      const edges = group.map((l, i) => ({ id: `c${conns.indexOf(l.conn)}l${l.k}`, from: l.from.name, to: l.to.name, width: l.width, ...(l.movers ? { movers: l.movers } : {}), ...(l.k1 ?? {}), _i: i }));
       const nodes = {};
       for (const l of group) for (const e of [l.from, l.to]) if (e.node) nodes[e.name] = e.node;
       let out;
       try {
         // every protected area and other owner's region meeting the claim is keep-out for the routes (nothing is written there), plus avoid[]
         const ko = [...env.protectedAreas.map((a) => rectArr(a.rect)), ...env.regions.map((a) => rectArr(a.rect)), ...env.buildRects.map((a) => rectArr(a.rect)), ...avoidRects(env, group, geom)];
-        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length ? { hard: env.standingHard } : {}) });
+        // (7a K1) the walls (the gate move) and the rope move's inputs, only when the plan has them (else T2's pass, byte for byte)
+        const walls = K ? wallsPassInput(K) : null, rope = K ? ropePassInput(K) : null;
+        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length ? { hard: env.standingHard } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}) });
       } catch (e) {
         rollback(r, cp);
         for (const l of group) if (!answers.has(l.conn.id)) ans(l.conn, { class: 'refused', reasons: [{ code: /KEEP_OUT/.test(e.message) ? 'KEEP_OUT' : 'UNREACHABLE', message: e.message }] });
@@ -1090,6 +1112,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       const bad = new Set();
       for (let i = 0; i < group.length; i++) { const e = byEdge.get(edges[i].id); if (!e?.ok) bad.add(group[i].conn.id); }
       if (!bad.size) {
+        // (7a K1) the routed edges (their gates opened, their rope spans) for the gate steps and the links stage
+        if (K) { for (let i = 0; i < group.length; i++) K.routed.push({ conn: group[i].conn, leg: group[i], edge: byEdge.get(edges[i].id), meta: metaEdges.get(edges[i].id), part }); wallsRouted(K, out.data.edges); }
         for (let i = 0; i < group.length; i++) {
           const l = group[i], m = metaEdges.get(edges[i].id);
           if (!connOk.has(l.conn.id)) connOk.set(l.conn.id, []);
@@ -1146,7 +1170,18 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     const dv = worst > tDet.max ? [{ what: 'detour', value: worst, max: tDet.max, exceeds: true }] : [];
     const klass = worst > tDet.ceiling ? 'refused' : dv.length ? 'adjusted' : 'fits';
     geom.set(p.id, { legs: legsOut });
-    ans(p, { class: klass, deviations: dv, geometry: { legs: legsOut }, notes: connNotes.get(p.id), reasons: klass === 'refused' ? [{ code: 'TOLERANCE', message: `detour ${worst} is past its ceiling ${tDet.ceiling}`, evidence: { detour: worst } }] : [], ...(p.kind === 'street' && p.part.lamps === undefined ? {} : {}) });
+    const base = { class: klass, deviations: dv, geometry: { legs: legsOut }, notes: connNotes.get(p.id), reasons: klass === 'refused' ? [{ code: 'TOLERANCE', message: `detour ${worst} is past its ceiling ${tDet.ceiling}`, evidence: { detour: worst } }] : [], ...(p.kind === 'street' && p.part.lamps === undefined ? {} : {}) };
+    // (7a K1) a rope_bridge or auto connector's own answer fields (its spans, notes, refusals) over the route's
+    const extra = ROPE_KINDS.includes(p.kind) ? ropeAnswer(K, p, ls) : null;
+    ans(p, extra ? { ...base, ...extra } : base);
+  }
+
+  // ---- (7a K1) step 4: gates by crossing, auto gates and gates.min; step 5: the links stage (walls and gates, rope spans), each
+  // part under a checkpoint
+  if (K) {
+    finishGates(K);
+    emitWalls(K);
+    emitRopes(K);
   }
 
   // ---- 5. apron lamps over every village lot; anchors
@@ -1194,6 +1229,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     lotZone: Object.fromEntries(lotZone), lotMeta: Object.fromEntries(V.parts.filter((p) => p.family === 'zone').flatMap((p) => zoneLots(p.part).map((l) => [l.id, { role: l.lot?.role ?? null, label: l.lot?.label ?? null, ext: l.lot?.ext ?? null }]))), lotEntries: Object.fromEntries(V.parts.filter((p) => p.family === 'zone').flatMap((p) => zoneLots(p.part).map((l) => [l.id, l.lot?.entry ?? null]))),
     styles: Object.fromEntries(V.parts.filter((p) => p.family === 'zone' || p.family === 'connector').map((p) => [p.id, styleOf(P.plan, p.part) ?? null])),
     cacheOut: hit ? {} : env.cacheOut, protectedRects: env.protectedAreas.map((a) => rectArr(a.rect)),
+    ...(K ? { links: K.record } : {}),
     anchors: Object.fromEntries([...env.anchors.entries()].map(([k, v]) => [k, [v[0], env.S.groundAt(v[0], v[1]) + 1, v[1]]])),
   } };
 }
