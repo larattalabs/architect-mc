@@ -17,6 +17,7 @@ import { centreCells } from '../region/geom.mjs';
 import { footprintOf } from '../region/passes/route.mjs';
 import { fixtureCells } from '../region/fixtures.mjs';
 import { lampFixture } from '../region/props.mjs';
+import { besidePorts } from '../region/districtsEmit.mjs';
 import { COND } from '../region/program.mjs';
 
 /** The kinds this module compiles. */
@@ -83,8 +84,12 @@ function standMap(K, walk) {
   return (x, z) => Math.max(S.groundAt(x, z), m.get(key(x, z)) ?? -32768);
 }
 
-/** The obstacle grid of K's claim, with the zones in `allowZones` lifted (a line wall into a joined lot's own zone). */
-function gridOf(K, { allowZones = [] } = {}) {
+/**
+ * The obstacle grid of K's claim, with the zones in `allowZones` lifted (a line wall into a joined lot's own zone). `walkStanding`:
+ * (K1-target) a standing region of the owner the wall rings: its lots stay hard, its roads, paths and ways are walk cells (crossings
+ * that get gates) at the surveyed ground.
+ */
+function gridOf(K, { allowZones = [], walkStanding = null } = {}) {
   const env = K.env, r = K.r;
   const zoneRects = [];
   for (const p of K.order) {
@@ -95,8 +100,12 @@ function gridOf(K, { allowZones = [] } = {}) {
   const lots = r.lots.map((l) => grow(l.box, 1));
   const forms = r.forms.filter((f) => f.bounds).map((f) => f.bounds);
   const protectedR = [...env.protectedAreas.map((a) => a.rect), ...env.keepOut];
-  const overlap = [...zoneRects, ...lots, ...forms, ...env.regions.map((a) => grow(a.rect, 1)), ...env.buildRects.map((a) => grow(a.rect, 1)), ...env.standingHard.map(rect)];
-  return obstacleGrid({ claim: env.claim, cols: env.cols, rects: { [OB.PROTECTED]: protectedR, [OB.OVERLAP]: overlap }, walkCells: K.walk, keepOut: [...protectedR, ...env.regions.map((a) => a.rect), ...env.buildRects.map((a) => a.rect)], kept: r._keptColumns() });
+  const st = walkStanding ? env.standing.find((a) => a.id === walkStanding) : null;
+  const standingHard = st ? env.standing.flatMap((a) => (a === st ? a.lots.map((q) => [q[0] - 1, q[1] - 1, q[2] + 1, q[3] + 1]) : [...a.lots.map((q) => [q[0] - 1, q[1] - 1, q[2] + 1, q[3] + 1]), ...a.keep])) : env.standingHard;
+  const overlap = [...zoneRects, ...lots, ...forms, ...env.regions.map((a) => grow(a.rect, 1)), ...env.buildRects.map((a) => grow(a.rect, 1)), ...standingHard.map(rect)];
+  const walkCells = [...K.walk];
+  if (st) for (const q of st.keep) for (let z = q[1]; z <= q[3]; z++) for (let x = q[0]; x <= q[2]; x++) walkCells.push([x, z, env.S.groundAt(x, z)]);
+  return obstacleGrid({ claim: env.claim, cols: env.cols, rects: { [OB.PROTECTED]: protectedR, [OB.OVERLAP]: overlap }, walkCells, keepOut: [...protectedR, ...env.regions.map((a) => a.rect), ...env.buildRects.map((a) => a.rect)], kept: r._keptColumns() });
 }
 
 // ------------------------------------------------------------------ step 2: wall lines
@@ -113,6 +122,15 @@ function aroundTarget(K, f) {
   if (f.protected !== undefined) {
     const a = K.env.protectedAreas.find((p) => p.id === f.protected);
     return a ? { rect: a.rect, what: `protected ${a.id}` } : { error: { code: 'NO_FEATURE', message: `no protected area "${f.protected}" meets the claim`, evidence: { feature: f } } };
+  }
+  if (f.region !== undefined) {
+    // (K1-target) the owner's standing region: its footprint (lots, roads, paths and ways) bounds the ring; another owner's is refused
+    const st = K.env.standing.find((a) => a.id === f.region);
+    if (!st) return { error: { code: 'NO_FEATURE', message: K.env.regions.some((a) => a.id === f.region) ? `region ${f.region} is another owner's: a wall rings only its owner's standing regions` : `region ${f.region} is not a standing region of this owner meeting the claim`, evidence: { feature: f, standing: K.env.standing.map((a) => a.id) } } };
+    const rs = [...st.lots, ...st.keep];
+    if (!rs.length) return { error: { code: 'NO_FEATURE', message: `region ${f.region} has no footprint in reach of the claim`, evidence: { feature: f } } };
+    const b = { minX: Math.min(...rs.map((q) => q[0])), minZ: Math.min(...rs.map((q) => q[1])), maxX: Math.max(...rs.map((q) => q[2])), maxZ: Math.max(...rs.map((q) => q[3])) };
+    return { rect: b, what: `region ${f.region}`, standing: st };
   }
   if (f.build !== undefined) {
     const id = f.build.id ?? null, kind = f.build.kind ?? null;
@@ -157,7 +175,7 @@ function lineOf(K, p, st) {
     const [r0, r1] = Array.isArray(w.where.around.ring) ? w.where.around.ring : WALL_DEFAULTS.ring;
     const order = [];
     for (let d = r0; d <= r1; d++) order.push(d);
-    const G = gridOf(K, {});
+    const G = gridOf(K, { walkStanding: tg.standing?.id ?? null });
     const pl = placeRing(G, tg.rect, order, t);
     if (!pl.ok) return { error: { code: pl.code, message: `no clear ring round ${tg.what} at offsets ${r0}..${r1} on its ${pl.side} side (${blockerText(pl.blockers)})`, evidence: { side: pl.side, ring: [r0, r1], blockers: pl.blockers, target: arr(tg.rect) } } };
     return { ...ringOf(K, pl, t, st, notes), devs, notes, target: tg, G };
@@ -486,6 +504,7 @@ export function finishGates(K) {
     if (want <= 0) continue;
     const pts = [];
     const z = W.target?.zone ? K.zoneEmit.get(W.target.zone) : null;
+    if (W.target?.standing) for (const q of besidePorts(W.target.standing)) pts.push([q.end[0], q.end[1]]);
     if (z?.districts) for (const ends of Object.values(z.districts.ends ?? {})) for (const e of ends) pts.push([e.x, e.z]);
     else if (z?.L?.orientation && z.L.road) {
       const o = z.L.orientation, sv = z.L.road.sv;

@@ -203,3 +203,30 @@ test('item 11: the broken variants: no gates (M2:wall), a gap left in the wall (
   assert.ok(gp.metrics.walls.town_wall.closure.player.leaks > 0 && gp.findings.some((f) => f.rule === 'M2:wall' && /with its gates blocked/.test(f.message)), 'a gap: the closure fails (player)');
   assert.ok(gp.metrics.walls.town_wall.closure.villager.leaks > 0, 'a gap: the closure fails (villager)');
 });
+
+// (K1-target, the coordinator's addition from Steward) a wall-only plan round one of the owner's standing regions: its footprint
+// bounds the ring and stays hard; its roads and ways are crossings (gates); gates.min faces its street ends; another owner's refused
+test('K1-target: a wall-only plan round the owner\'s standing village (wall.around {region})', async () => {
+  const { planRegion } = await import('../lib/region/plan.mjs');
+  const { besideData } = await import('../lib/region/beside.mjs');
+  const s = SV.asks;
+  const town = { minX: 120, minZ: 120, maxX: 207, maxZ: 199, minY: -64, maxY: 319 };
+  const lots = [{ id: 'hall_1', type: 'hall', size: [13, 11], landmark: true }, { id: 'cottage_1', type: 'cottage', size: [9, 9] }, { id: 'cottage_2', type: 'cottage', size: [9, 9] }];
+  const p = await planRegion({ programFile: path.join(FIX, '..', '..', '..', 'regions', 'flat_village.mjs'), params: { lots }, survey: s.bytes, claim: town, seed: '1' });
+  const standing = besideData('rg1', [town.minX, town.minZ, town.maxX, town.maxZ], p.ir, [s.claim.minX, s.claim.minZ, s.claim.maxX, s.claim.maxZ]);
+  const plan = { schemaVersion: 'plan/0', connectors: [{ id: 'town_wall', kind: 'wall', where: { around: { feature: { region: 'rg1' } } } }] };
+  const r = await checkPlanLocal(plan, { survey: s.bytes, claim: s.claim, anchors: stewardAnchors(s.claim), standing: [standing] });
+  const w = part(r, 'town_wall');
+  assert.equal(w.class, 'fits', JSON.stringify(w));
+  assert.equal(r.check.overall, 'READY');
+  // the ring stays off the village's lots and keep, and has a gate where a street end faces it (gates.min 1)
+  const wm = r.res.meta.walls[0];
+  const hard = [...standing.lots, ...standing.keep];
+  const onHard = wm.cells.filter(([x, z]) => hard.some((q) => x >= q[0] && x <= q[2] && z >= q[1] && z <= q[3]) && !wm.gates.some((g) => g.cells.some(([gx, gz]) => gx === x && gz === z)));
+  assert.equal(onHard.length, 0, 'the village\'s footprint is never written');
+  assert.ok(wm.gates.length >= 1 && wm.closed, JSON.stringify(wm.gates.map((g) => g.kind)));
+  // another owner's region: refused NO_FEATURE
+  const other = await checkPlanLocal({ schemaVersion: 'plan/0', connectors: [{ id: 'w', kind: 'wall', where: { around: { feature: { region: 'rg9' } } } }] }, { survey: s.bytes, claim: s.claim, anchors: stewardAnchors(s.claim), regions: [{ id: 'rg9', rect: [10, 10, 40, 40] }] });
+  assert.equal(part(other, 'w').class, 'refused');
+  assert.equal(part(other, 'w').reasons[0].code, 'NO_FEATURE');
+});

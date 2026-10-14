@@ -176,7 +176,8 @@ function nestedUnsupported(family, part) {
       const r0 = form ? reserved(`wall.${form}`, form === 'line' ? '$.from' : `$.where.${Object.keys(part.where)[0]}`) : null;
       if (r0) return r0;
       const w = part.where;
-      if (w?.around) { const r1 = featureCheck(w.around.feature, '$.where.around.feature'); if (r1) return r1; }
+      // (K1-target) around {region}: the owner's standing region is the wall's own target (feature.region stays reserved elsewhere)
+      if (w?.around && w.around.feature?.region === undefined) { const r1 = featureCheck(w.around.feature, '$.where.around.feature'); if (r1) return r1; }
       if (w?.along) { const r1 = featureCheck(w.along.feature, '$.where.along.feature'); if (r1) return r1; }
     }
     for (const [k, e] of [['from', part.from], ...(part.via ?? []).map((v, i) => [`via[${i}]`, v]), ['to', part.to], ...(part.at ? [['at', part.at]] : [])]) {

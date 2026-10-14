@@ -303,7 +303,7 @@
    "sinceApi": "1.30.0",
    "schemaVersion": 1,
    "state": "supported",
-   "note": "K1: a wall round a part, build or protected area (where.around on a wall: the wall's own member, not locator.around)."
+   "note": "K1: a wall round a part, build or protected area, or (K1-target) one of the owner's standing regions, around {feature: {region}} (where.around on a wall: the wall's own member, not locator.around; its region not feature.region)."
   },
   {
    "id": "wall.edge",

@@ -18,6 +18,8 @@
 //                meeting the wall only at gate cells; the doors opened (as a villager does) and Regions.remove exact (E-flat 0)
 //     natural    items 1, 4 and 9 on S3's pinned claim (a fresh copy of the seed world): v30 (its zone sketched clear of the river),
 //                realised, realised vs virtual (at most 0.01% unclassified), closure on the dump, E-normal all classified
+//     target     K1-target (headless): a V town realised, then a wall-only plan round it (wall.around {region}) realised as its own
+//                region (the wall bars on its dump, no cell on the town's footprint), removed alone: E-flat 0, the town's hash unchanged
 //     look       the look step (a client: cameras): v30 on S7's natural claim in three bibles (rustic, infernal, coastal), each
 //                realised, shot from 6 cameras, removed; the gallery bundle in <out>/look/ (recorded, not judged)
 //     report     REPORT.md over the step JSONs
@@ -386,6 +388,82 @@ steps.natural = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ K1-target: a wall-only plan round a standing village
+
+/**
+ * (K1-target, the coordinator's addition from Steward) a V town realised as a region of its own, then a plan whose only part is a wall
+ * round it (wall.around {region}) checked on a claim that holds the town, realised by realiseApproved as a region of its own, the wall
+ * bars on the realised dump, then removed alone: the world hash back to the town's (E-flat 0) and the town's own hash unchanged
+ * throughout, the town still PLACED.
+ */
+steps.target = async () => {
+  await ensure();
+  const out = {};
+  await L.fresh('G6B K1a Target', FLAT);
+  await L.setRules('exact');
+  const S = S7.fixture.claim;
+  const town = [S[0] + 26, S[1] + 26, S[0] + 85, S[1] + 85];
+  const claim = [...S];
+  const [cx, cz] = centre(claim);
+  await tp(cx, 120, cz);
+  await cmd('/kill @e[type=!minecraft:player]');
+  const lots = [{ id: 'hall_1', type: 'hall', size: [13, 11], landmark: true }, { id: 'cottage_1', type: 'cottage', size: [9, 9] }, { id: 'cottage_2', type: 'cottage', size: [9, 9] }];
+  const pa = await call('dev.region.plan', { program: 'flat_village', params: { lots }, claim: town, surveyLoad: 'bounded:256', owner: OWNER, check: false }, 900_000);
+  if (pa.refused) throw new Error(`the town's plan was refused: ${pa.refused}`);
+  const ra = await L.realise(pa.planId, { lots: {} });
+  const sa = await waitPlaced(ra);
+  check(sa.view.state === 'PLACED', `K1-target: the V town ${ra} PLACED (${sa.view.cellsWritten} cells, its own region)`);
+  const tbox = [town[0], -64, town[1], town[2], 140, town[3]];
+  const box = [claim[0] - 8, -64, claim[1] - 8, claim[2] + 8, 140, claim[3] + 8];
+  const ht0 = (await call('dev.region.hash', { box: tbox }, 3_600_000)).sha256;
+  const plan = { schemaVersion: 'plan/0', planId: 'k1_target', connectors: [{ id: 'town_wall', kind: 'wall', where: { around: { feature: { region: ra } } } }] };
+  await cmd('/tick freeze');
+  let c, rr, st, before, after, h0;
+  try {
+    c = await checkPlan(plan, claim, { anchors: anchorsOf(claim) });
+    out.check = { overall: c.overall, parts: c.parts.map((q) => ({ part: q.part, class: q.class, reasons: q.reasons ?? null, notes: q.notes ?? null })) };
+    check(c.overall === 'READY' && c.parts[0]?.class === 'fits', `K1-target: the wall-only plan round ${ra} checks READY on a claim that holds the town (${c.parts.map((q) => `${q.part}:${q.class}`).join(' ')})`, c.parts);
+    before = path.join(OUT, 'k1a-target-before.arwd.gz'); after = path.join(OUT, 'k1a-target-after.arwd.gz');
+    await call('dev.region.dump', { box, file: before, light: false }, 900_000);
+    h0 = (await call('dev.region.hash', { box }, 3_600_000)).sha256;
+    rr = await call('dev.region.realiseApproved', { sha: c.artifactSha }, 300_000);
+    check(!!rr.region && rr.region !== ra, `K1-target: realiseApproved made a region of its own (${rr.region ?? rr.refused}) beside the town ${ra}`);
+    st = await waitPlaced(rr.region);
+    check(st.view.state === 'PLACED', `K1-target: the wall ${st.view.state} (${st.view.cellsWritten} cells)`);
+    await call('dev.region.dump', { box, file: after, light: true }, 900_000);
+  } finally { await cmd('/tick unfreeze'); }
+  const ht1 = (await call('dev.region.hash', { box: tbox }, 3_600_000)).sha256;
+  out.R = await realisedWalls(planDir(c.checkId), before, after, claim);
+  const w = out.R.meta.walls[0];
+  out.gates = w.gates.map((g) => ({ id: g.id, kind: g.kind, at: g.at, width: g.width }));
+  check(w.closed && w.gates.length >= 1, `K1-target: the ring is closed, with ${w.gates.length} gate(s) (${json(out.gates.map((g) => g.kind))}): where the town's streets meet it, else gates.min facing a street end`);
+  wallBars(out.R, 'K1-target, realised');
+  // the town's own cells: the wall wrote none of them (the town's hash over its claim changes only where the ring stands in its margin)
+  const { decodeArwd } = await imp('lib/region/vworld.mjs');
+  const fa = planFiles(planDir(pa.planId));
+  const { standingFootprint } = await imp('lib/region/beside.mjs');
+  const fp = standingFootprint(fa.ir);
+  const hard = [...fp.lots, ...fp.roads, ...fp.paths, ...fp.ways].map((q) => q.rect);
+  const touched = w.cells.filter(([x, z]) => hard.some((q) => x >= q[0] && x <= q[2] && z >= q[1] && z <= q[3]) && !w.gates.some((g) => g.cells.some(([gx, gz]) => gx === x && gz === z)));
+  check(touched.length === 0, `K1-target: no wall cell on the town's footprint (lots, roads, paths, ways) outside a gate (${touched.length})`);
+  void decodeArwd; void ht1;
+  await cmd('/kill @e[type=!minecraft:player]');
+  const rm = await call('dev.region.remove', { region: rr.region, requester: OWNER }, 3_600_000);
+  await L.settle(3000);
+  const h1 = (await call('dev.region.hash', { box }, 3_600_000)).sha256;
+  const ht2 = (await call('dev.region.hash', { box: tbox }, 3_600_000)).sha256;
+  const ts = await call('dev.region.state', { region: ra }, 60_000);
+  out.undo = { removed: rm.removed, restored: rm.restored, exact: h0 === h1, townSame: ht0 === ht2, town: ts.view.state };
+  check(rm.removed && h0 === h1, `K1-target: the wall's region removed alone, exactly (E-flat 0 over the plan's claim; ${rm.restored} cells restored)`);
+  check(ht0 === ht2 && ts.view.state === 'PLACED', `K1-target: the town untouched: its hash unchanged and ${ra} still ${ts.view.state}`);
+  // the town removed too: the world as it was
+  await call('dev.region.remove', { region: ra, requester: OWNER }, 3_600_000);
+  delete out.R.meta;
+  await leaveWorld();
+  spendZero();
+  return out;
+};
+
 // ------------------------------------------------------------------ the look (a client: cameras)
 
 const LOOK_BIBLES = ['g6cv_village', 'g7ak1_infernal', 'g7ak1_coastal'];
@@ -467,7 +545,7 @@ steps.look = async () => {
 
 steps.report = async () => {
   const rows = [];
-  for (const s of ['unit', 'ingame', 'natural', 'look']) {
+  for (const s of ['unit', 'ingame', 'natural', 'target', 'look']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) { rows.push(`| ${s} | not run | |`); continue; }
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));
