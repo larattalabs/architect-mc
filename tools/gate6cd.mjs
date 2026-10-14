@@ -402,25 +402,34 @@ async function d2Round(name, world, claim, district, { beside = null, owner = OW
     let h1, enormal = null;
     if (natural) {
       const diff = await call('dev.region.hash', { box, mode: 'diff', file: snapFile }, 3_600_000);
-      // (as the scenarios' `flow`) the world's own fluids: an unclassified mismatch of water, lava or what they make (obsidian,
-      // cobblestone, stone) at a cell the plan never writes (outside the claim, or more than 8 below the surveyed ground: deeper than
-      // any cut, pad or route) is a cave's flow across the save and reload, classed `flow` (a world class)
+      // (as the scenarios' `flow`) the world's own fluids and leaves at cells the plan never writes: every cell more than 6 from the
+      // district's rects and its routes' cells (deeper cells: more than 8 below the surveyed ground, beneath any cut, pad or route).
+      // An unclassified mismatch there that is water or lava moving (or what it makes or washes away: obsidian, cobblestone, a plant
+      // turned water) is classed `flow`; a natural leaf turned air `decay` (world classes, as the scenarios' melt and freeze)
       const { decodeColumns } = await imp('lib/region/pack.mjs');
       const cols = decodeColumns(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', p.planId, 'survey.bin')));
       const groundAt = (x, z) => { const i = Math.floor((x - cols.minX) / cols.resolution), j = Math.floor((z - cols.minZ) / cols.resolution); return i < 0 || j < 0 || i >= cols.width || j >= cols.depth ? null : cols.ground[i + j * cols.width]; };
-      const FLUID = /^minecraft:(water|lava|obsidian|cobblestone|stone|bubble_column|air|cave_air)\b/;
+      const G = 6, near = new Set();
+      const add = (x0, z0, x1, z1) => { for (let x = x0 - G; x <= x1 + G; x++) for (let z = z0 - G; z <= z1 + G; z++) near.add(`${x},${z}`); };
+      for (const f of Object.values(files.meta.districts?.follow ?? {})) add(f.rect[0], f.rect[1], f.rect[2], f.rect[3]);
+      for (const rr of Object.values(files.meta.districts?.rects ?? {})) add(rr[0], rr[1], rr[2], rr[3]);
+      for (const e of files.meta.route?.edges ?? []) for (const [x, , z] of e.path ?? []) add(x, z, x, z);
+      const written = (x, y, z) => { const gy = groundAt(x, z); return near.has(`${x},${z}`) && !(gy !== null && y < gy - 8); };
       for (const m of diff.list ?? []) {
-        if (m.class !== 'none' || !FLUID.test(m.was) || !FLUID.test(m.now) || !/(water|lava)/.test(`${m.was} ${m.now}`)) continue;
-        const [x, y, z] = m.pos.split(',').map(Number), gy = groundAt(x, z);
-        const outside = x < claim[0] || x > claim[2] || z < claim[1] || z > claim[3];
-        if (!outside && !(gy !== null && y < gy - 8)) continue;
-        m.class = 'flow';
+        if (m.class !== 'none') continue;
+        const [x, y, z] = m.pos.split(',').map(Number);
+        if (written(x, y, z)) continue;
+        const fluid = /^minecraft:(water|lava)\b/.test(m.now) || /^minecraft:(water|lava)\b/.test(m.was) || (/lava/.test(m.was) && /^minecraft:(obsidian|cobblestone|stone)$/.test(m.now));
+        const decay = /_leaves\[.*persistent=false/.test(m.was) && /^minecraft:air$/.test(m.now);
+        const cls = fluid ? 'flow' : decay ? 'decay' : null;
+        if (!cls) continue;
+        m.class = cls;
         diff.classes.none -= 1;
-        diff.classes.flow = (diff.classes.flow ?? 0) + 1;
+        diff.classes[cls] = (diff.classes[cls] ?? 0) + 1;
       }
-      const WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported', 'flow'];
+      const WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported', 'flow', 'decay'];
       const undoOwn = diff.mismatches - WORLD.reduce((a, k) => a + (diff.classes?.[k] ?? 0), 0);
-      enormal = { mismatches: diff.mismatches, classes: diff.classes ?? {}, undoOwn, cap: Math.floor(0.0001 * (rm.restored ?? 0)), list: (diff.list ?? []).filter((m) => m.class === 'none').slice(0, 40), flowSample: (diff.list ?? []).filter((m) => m.class === 'flow').slice(0, 5) };
+      enormal = { mismatches: diff.mismatches, classes: diff.classes ?? {}, undoOwn, cap: Math.floor(0.0001 * (rm.restored ?? 0)), list: (diff.list ?? []).filter((m) => m.class === 'none').slice(0, 40), flowSample: (diff.list ?? []).filter((m) => m.class === 'flow' || m.class === 'decay').slice(0, 5) };
       h1 = enormal.mismatches === 0 ? h0 : null;
     } else h1 = await hash(box);
     const q = await planReq({ program: 'districts', params: spec, claim, owner, ...(beside ? { beside } : {}), check: false });
