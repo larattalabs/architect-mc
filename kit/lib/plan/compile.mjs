@@ -1046,7 +1046,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   // ---- (7a K1) the K1 context (docs/CONTRACT.md "Phase 7a slice K1" §4's compile order), then step 2: wall lines and gates placed
   // `at` an endpoint, open before routing
   const K = k1Parts.length ? {
-    env, ctx, r, plan: P.plan, V, order, byId, k1Parts, geom, res, zoneEmit, lotZone, answers, ans, depState, okClass, timeUp, stageOf, notes, partOf,
+    env, ctx, r, plan: P.plan, V, order, byId, k1Parts, geom, res, zoneEmit, lotZone, answers, ans, depState, okClass, timeUp, stageOf, notes, partOf, tolOf, judge,
     checkpoint: () => checkpoint(r), rollback: (c) => rollback(r, c), addedSince: (c) => addedSince(r, c), mark, endpointNode: (e, other, conn, where) => endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where),
     record: {}, routed: [],
   } : null;
