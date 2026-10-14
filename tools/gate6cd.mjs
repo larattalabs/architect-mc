@@ -453,8 +453,24 @@ async function d2Round(name, world, claim, district, { beside = null, owner = OW
       h1 = enormal.mismatches === 0 ? h0 : null;
     } else h1 = await hash(box);
     const q = await planReq({ program: 'districts', params: spec, claim, owner, ...(beside ? { beside } : {}), check: false });
+    // stable means deterministic from the plan's inputs (the survey, the biome grid, the seed: C27). A natural world's own changes
+    // across the save and reload (a spring's water: the claim's surveyed heights and so its IR) can move the second survey; then
+    // the first plan's own inputs are planned again offline (as the scenarios' golden row) and must give its IR, and the columns
+    // the live survey moved are recorded
+    let replay = null;
+    if (q.irSha && q.irSha !== p.irSha && q.planId) {
+      const dA = path.join(L.SIDECAR_DATA, 'regions', 'plans', p.planId), dB = path.join(L.SIDECAR_DATA, 'regions', 'plans', q.planId);
+      const sA = fs.readFileSync(path.join(dA, 'survey.bin')), sB = fs.existsSync(path.join(dB, 'survey.bin')) ? fs.readFileSync(path.join(dB, 'survey.bin')) : null;
+      const { decodeColumns } = await imp('lib/region/pack.mjs');
+      let cols = null;
+      if (sB) { const a = decodeColumns(sA), b = decodeColumns(sB); cols = 0; for (let i = 0; i < a.ground.length; i++) if (a.ground[i] !== b.ground[i] || a.flags[i] !== b.flags[i] || a.height[i] !== b.height[i]) cols++; }
+      const { planRegion } = await imp('lib/region/plan.mjs');
+      const ir = files.ir, bio = path.join(dA, 'biomes.json');
+      const re = await planRegion({ programFile: path.join(root, 'kit', 'regions', `${ir.id}.mjs`), params: ir.params, survey: sA, seed: ir.seed, claim: { ...ir.claim, minY: -64, maxY: 319 }, roles: ir.roles, kitVersion: ir.kitVersion, keepOut: ir.keepOut ?? [], ...(fs.existsSync(bio) ? { biomes: JSON.parse(fs.readFileSync(bio, 'utf8')) } : {}) });
+      replay = { surveyColumnsMoved: cols, replayIr: re.irSha, again: q.irSha };
+    }
     const view = (await call('dev.region.state', { region }, 60_000).catch(() => ({}))).view ?? null;
-    return { plan: p, files, region, state: st.view.state, viewAtPlace: st.view, again: q.irSha ?? q.refused, sameIr: q.irSha === p.irSha, exact: natural ? (enormal.classes?.none ?? 0) === 0 && enormal.undoOwn <= enormal.cap : h0 === h1, enormal, restored: rm.restored, view };
+    return { plan: p, files, region, state: st.view.state, viewAtPlace: st.view, again: q.irSha ?? q.refused, sameIr: q.irSha === p.irSha || (replay !== null && replay.surveyColumnsMoved > 0 && replay.replayIr === p.irSha), replay, exact: natural ? (enormal.classes?.none ?? 0) === 0 && enormal.undoOwn <= enormal.cap : h0 === h1, enormal, restored: rm.restored, view };
   } finally {
     if (natural) await cmd('/tick unfreeze').catch(() => null);
   }
@@ -532,9 +548,9 @@ steps.boundary = async () => {
       geo = { on: ds.filter((v) => v <= 4).length, of: ds.length };
       check(geo.on >= geo.of * 0.8, `ridge: the street on the ridge line (${geo.on}/${geo.of} street cells within 4 of the crest)`);
     }
-    out[id] = { state: r.state, rect: f.rect, mask: f.maskCells, geo, lots: r.files.meta.districts.lots[id], sameIr: r.sameIr, exact: r.exact, enormal: r.enormal };
+    out[id] = { state: r.state, rect: f.rect, mask: f.maskCells, geo, lots: r.files.meta.districts.lots[id], sameIr: r.sameIr, replay: r.replay, exact: r.exact, enormal: r.enormal };
     check(r.state === 'PLACED' && r.files.meta.districts.lots[id].length >= 1, `${id}: placed (${r.files.meta.districts.lots[id].length} lot(s)), its shape a ${f.maskCells}-cell mask in ${json(f.rect)}`);
-    check(r.sameIr, `${id}: stable across a reload (the same IR sha planned again after the world was saved and reopened)`);
+    check(r.sameIr, `${id}: stable across a reload (the same IR sha planned again after the world was saved and reopened${r.replay ? `; the live survey moved in ${r.replay.surveyColumnsMoved} columns, so the first plan's inputs planned again: ${r.replay.replayIr?.slice(0, 12)} = ${r.plan.irSha?.slice(0, 12)}` : ''})`);
     check(r.exact, `${id}: one undo restores the claim (ticks frozen; ${r.restored} cells; E-normal ${r.enormal?.mismatches} ${json(r.enormal?.classes ?? {})}, unclassified ${r.enormal?.classes?.none ?? 0}, the undo's own ${r.enormal?.undoOwn} (cap ${r.enormal?.cap}))`);
   }
   // ---- the biome edge: the pinned desert/jungle site
