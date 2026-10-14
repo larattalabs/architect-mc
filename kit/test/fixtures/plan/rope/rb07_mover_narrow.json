@@ -1,0 +1,51 @@
+{
+  "about": "(7a K1b) a 1-wide rope bridge on a villager edge (anchors: movers inferred player and villager)",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1041,
+        "z0": 2000,
+        "x1": 1060,
+        "z1": 2095,
+        "y": 40
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1040,
+      65,
+      2048
+    ],
+    "b": [
+      1061,
+      65,
+      2048
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "span",
+        "kind": "rope_bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        },
+        "width": 1
+      }
+    ]
+  },
+  "expect": {
+    "part": "span",
+    "code": "MOVER"
+  },
+  "on": "flat"
+}

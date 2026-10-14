@@ -1,0 +1,68 @@
+{
+  "about": "(7a K1b) a lip of sand (a frozen volume's LOOSE cells under the near lip): no site-solid for the posts and the landing",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1041,
+        "z0": 2000,
+        "x1": 1060,
+        "z1": 2095,
+        "y": 40
+      }
+    ]
+  },
+  "volume": {
+    "box": [
+      1020,
+      50,
+      2000,
+      1040,
+      70,
+      2095
+    ],
+    "loose": [
+      1020,
+      2000,
+      1040,
+      2095,
+      55,
+      64
+    ]
+  },
+  "anchors": {
+    "a": [
+      1036,
+      65,
+      2048
+    ],
+    "b": [
+      1061,
+      65,
+      2048
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "span",
+        "kind": "rope_bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "part": "span",
+    "code": "ANCHOR"
+  },
+  "on": "flat"
+}

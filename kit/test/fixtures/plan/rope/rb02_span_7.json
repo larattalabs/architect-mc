@@ -1,0 +1,54 @@
+{
+  "about": "(7a K1b) a 7-cell ditch between the ends, no approach: the only span is 7 deck cells",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1041,
+        "z0": 2000,
+        "x1": 1047,
+        "z1": 2095,
+        "y": 40
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1040,
+      65,
+      2048
+    ],
+    "b": [
+      1048,
+      65,
+      2048
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "span",
+        "kind": "rope_bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        },
+        "approach": 0
+      }
+    ]
+  },
+  "expect": {
+    "part": "span",
+    "code": "SPAN",
+    "evidence": {
+      "span": 7
+    }
+  },
+  "on": "flat"
+}

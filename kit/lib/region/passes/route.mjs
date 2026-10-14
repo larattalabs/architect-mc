@@ -614,6 +614,14 @@ export function routePass(survey, volumes, intent) {
       const wr = isInt(e.withinRadius) && e.withinRadius >= 0 && e.withinRadius <= 16 ? e.withinRadius : 3;
       withinM = dilate(seed, W, D, Math.floor((wr + r - 1) / r));
     }
+    // (7a K1b) a rope_bridge edge (`spanOnce`) walks at most `approach` cells at each end: it searches the two squares of that radius
+    // round its ends only (its span's landings lie in them; the deck between needs no search cell)
+    if (!withinM && e.spanOnce) {
+      const A = isInt(e.approach) && e.approach >= 0 && e.approach <= 32 ? e.approach : 16;
+      const seed = new Uint8Array(n);
+      for (const en of ends) seed[en.k] = 1;
+      withinM = dilate(seed, W, D, Math.floor((A + r - 1) / r));
+    }
     const sctx = { G, builtY, prefer: preferE, start: ends[0], goal: ends[1], Gq, w, laneW: Math.floor((w + r - 1) / r), Ld: Math.floor((Math.max(hairpinLanding, w) + r - 1) / r),
       latLo: Math.floor(lo / r), latHi: Math.floor((hi + r - 1) / r), maxCut, maxFill, stairs: stairs && !coarse, ladders, nearEnd,
       ...(sp.length ? { special: sp, needFlag } : {}) };
