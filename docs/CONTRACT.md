@@ -12760,7 +12760,7 @@ scenario steps. **gate-verifier** re-runs items 1, 2, 5 and 9.
   harbour walls in water (H), `region.link` and elevated ports (7b), the other 7a kinds, and building K1's parts in survival
   (N-K1-3).
 
-### Phase 7a slice K1b as built (rope bridges and `connector.auto`; placeholders API 1.30.0, mod 0.33.0, kit 0.31.0 over the K1 foundation; renumbered at merge; recorded 2026-10-14)
+### Phase 7a slice K1b as built (rope bridges and `connector.auto`; placeholders API 1.32.0, mod 0.35.0, kit 0.33.0 over v0.34.0 and the K1 foundation; the coordinator renumbers at merge; recorded 2026-10-14)
 
 | Area | As built |
 |---|---|
