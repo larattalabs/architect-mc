@@ -1,0 +1,528 @@
+{
+ "catalogueVersion": 3,
+ "api": "1.29.0",
+ "kitVersion": "0.30.0",
+ "schemaVersion": "plan/0",
+ "entries": [
+  {
+   "id": "zone.standard",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "zone.outpost",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "zone.district",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "D1",
+   "aliasOf": "program.districts",
+   "note": "Reserved alias of the districts program form; the answer names program.districts (R4c)."
+  },
+  {
+   "id": "program.flat_village",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "program.lots",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "program.districts",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "program.crater_works",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "N-P0-1: the bundled crater_works program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim."
+  },
+  {
+   "id": "program.rift_city",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "N-P0-1: the bundled rift_city program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim."
+  },
+  {
+   "id": "program.floating_islands",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "N-P0-1: the bundled floating_islands program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim."
+  },
+  {
+   "id": "layout.street",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "layout.ring",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "FL"
+  },
+  {
+   "id": "layout.spiral",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "FL"
+  },
+  {
+   "id": "layout.grid",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "FL"
+  },
+  {
+   "id": "layout.organic",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "FL"
+  },
+  {
+   "id": "connector.street",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "connector.road",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "connector.path",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "connector.auto",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7a"
+  },
+  {
+   "id": "connector.bridge",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "T3"
+  },
+  {
+   "id": "connector.tunnel",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "T3"
+  },
+  {
+   "id": "connector.channel",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "HY"
+  },
+  {
+   "id": "connector.wall",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7a"
+  },
+  {
+   "id": "connector.gate",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7a"
+  },
+  {
+   "id": "connector.ladder",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7a"
+  },
+  {
+   "id": "connector.stair",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7a"
+  },
+  {
+   "id": "connector.rail",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7a"
+  },
+  {
+   "id": "connector.rope_bridge",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7a"
+  },
+  {
+   "id": "connector.catwalk",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7a"
+  },
+  {
+   "id": "connector.rock_stair",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7a"
+  },
+  {
+   "id": "connector.switchback",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7a"
+  },
+  {
+   "id": "connector.lift",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7a"
+  },
+  {
+   "id": "connector.branch_walk",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7a"
+  },
+  {
+   "id": "connector.span_bridge",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7a"
+  },
+  {
+   "id": "connector.stairs_around",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7a"
+  },
+  {
+   "id": "form.relief",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "form.terrace",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "form.ice_spike",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "form.rock_spire",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "form.floating_island",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "N-P0-1"
+  },
+  {
+   "id": "form.brush",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "P1",
+   "note": "B shipped brush strokes as their own regions (Regions.brush, one region per stroke, S-B-1); a stroke's destruction rule lives on its region's record, so a brush part inside a plan's single region waits for a later plan slice."
+  },
+  {
+   "id": "form.pond",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "H"
+  },
+  {
+   "id": "form.scatter",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "F2"
+  },
+  {
+   "id": "form.giant_tree",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "F3"
+  },
+  {
+   "id": "form.hidden_room",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7b"
+  },
+  {
+   "id": "form.crater",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7c",
+   "note": "A free-standing crater form. A whole-region crater is already the crater_works template (program.crater_works)."
+  },
+  {
+   "id": "form.hollow_mountain",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7c"
+  },
+  {
+   "id": "form.waterfall",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "H"
+  },
+  {
+   "id": "form.seabed_site",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "later",
+   "note": "Building under water; a later slice, not yet named."
+  },
+  {
+   "id": "form.ship_hull",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "unscheduled",
+   "note": "Structures that move or float; not yet scheduled."
+  },
+  {
+   "id": "form.mast",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "unscheduled",
+   "note": "Structures that move or float; not yet scheduled."
+  },
+  {
+   "id": "rule.palette",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "RC"
+  },
+  {
+   "id": "rule.shape",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "RC"
+  },
+  {
+   "id": "rule.variety",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "RC"
+  },
+  {
+   "id": "rule.density",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "RC"
+  },
+  {
+   "id": "rule.height_cap",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "RC"
+  },
+  {
+   "id": "rule.stacked_floors",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "RC",
+   "note": "Arcology: floors stacked in one volume. RC, or 7b if it needs the interior work."
+  },
+  {
+   "id": "rule.suspended",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7b",
+   "note": "Upside-down or hanging builds; 7b's other surfaces."
+  },
+  {
+   "id": "locator.inside",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "locator.near",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "locator.adjacent",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "locator.along",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "locator.around",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "FL"
+  },
+  {
+   "id": "feature.water",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "feature.part",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "feature.protected",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "feature.region",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "D1"
+  },
+  {
+   "id": "feature.biome_edge",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "feature.ridge",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "feature.build",
+   "sinceApi": "1.24.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "PT (C32): a player's build as a plan feature {build: {id | kind, pick?, to?}}; also target {build: id} (inside, adjacent) and near {feature: {build}}. sinceApi is PT's placeholder, set at merge."
+  },
+  {
+   "id": "endpoint.part",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "endpoint.anchor",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "endpoint.feature",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "endpoint.region",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "endpoint.build",
+   "sinceApi": "1.24.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "PT (C32): {build: id, port?: door | door_<n>}: a road ends on the door's apron (the cells outside it)."
+  },
+  {
+   "id": "sketch.point",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  },
+  {
+   "id": "sketch.outline",
+   "sinceApi": "P0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "FL"
+  },
+  {
+   "id": "dependency.after",
+   "sinceApi": "P0",
+   "schemaVersion": 1,
+   "state": "supported"
+  }
+ ]
+}

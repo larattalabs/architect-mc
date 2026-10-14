@@ -303,7 +303,10 @@ export class Region {
       const movers = inferMovers(a.kind, b.kind, e.movers);
       // (`_unsafe.villagerLadders`: the broken variant, a ladder on a villager edge for the checker to catch)
       // (6c D2) an edge's own preferred cells (a following district's street along its line)
-      return { id, a, b, width: e.width ?? 3, type: e.type ?? ((e.width ?? 3) >= 5 ? 'road' : 'path'), movers, ladders: ladders && (!movers.includes(VILLAGER) || !!it._unsafe?.villagerLadders), ...(Array.isArray(e.prefer) && e.prefer.length ? { prefer: e.prefer.map((q) => [q[0], q[q.length - 1]]) } : {}) };
+      // (7a K1) an edge's special-move options (the rope move's spans, spanOnce, span and approach), passed to the pass as given
+      const k1 = {};
+      for (const key of ['spans', 'spanOnce', 'span', 'approach']) if (e[key] !== undefined) k1[key] = e[key];
+      return { id, a, b, width: e.width ?? 3, type: e.type ?? ((e.width ?? 3) >= 5 ? 'road' : 'path'), movers, ladders: ladders && (!movers.includes(VILLAGER) || !!it._unsafe?.villagerLadders), ...(Array.isArray(e.prefer) && e.prefer.length ? { prefer: e.prefer.map((q) => [q[0], q[q.length - 1]]) } : {}), k1 };
     });
     if (new Set(edges.map((e) => e.id)).size !== edges.length) throw new Error(`${what}: edge ids must be unique`);
     // obstacles: lot footprints and aprons, forms, keep sets (x/z); keep-out (the owner's, read through ctx so the IR records it)
@@ -319,11 +322,13 @@ export class Region {
     const stage = it.stage ?? this.stageList[this.stageList.length - 1];
     const t0 = performance.now();
     const out = PASSES.route(this.survey.columns, this.ctx.volumes ?? [], {
-      edges: edges.map((e) => ({ id: e.id, from: { at: e.a.at, facing: e.a.facing }, to: { at: e.b.at, facing: e.b.facing }, width: e.width, movers: e.movers, ladders: e.ladders, prefer: [...preferOf(e.id), ...(e.prefer ?? [])] })),
+      edges: edges.map((e) => ({ id: e.id, from: { at: e.a.at, facing: e.a.facing }, to: { at: e.b.at, facing: e.b.facing }, width: e.width, movers: e.movers, ladders: e.ladders, prefer: [...preferOf(e.id), ...(e.prefer ?? [])], ...e.k1 })),
       maxGrade: it.maxGrade ?? 0.25, hairpinLanding: it.hairpinLanding ?? 3, stairs: it.stairs ?? true, maxCut: it.maxCut ?? 4, maxFill: it.maxFill ?? 4, margin: it.margin ?? 2,
       hard, keepOut, prefer, clearTrees, base: it.base ?? null, _unsafe: it._unsafe ?? {},
       // (6c P0) the plan check's node budget over all edges (absent: none)
       ...(it.maxExpanded !== undefined ? { maxExpanded: it.maxExpanded } : {}),
+      // (7a K1) the special moves' pass-level inputs: the walls (the gate move) and the rope move's (K1b)
+      ...(it.walls ? { walls: it.walls } : {}), ...(it.rope ? { rope: it.rope } : {}),
     });
     const ms = Math.round(performance.now() - t0);
     const heapMb = Math.round(process.resourceUsage().maxRSS / 1024);
@@ -370,6 +375,7 @@ export class Region {
       metaEdges.push(rec);
       if (!d.ok) { this.note(`route ${e.id} (${e.a.name} -> ${e.b.name}): ${d.failed} (${d.note})`); res.push({ id: e.id, ok: false, failed: d.failed }); continue; }
       rec.path = d.path; rec.segments = d.segments; rec.landings = d.landings; rec.ladderCols = d.ladderCols;
+      if (d.gates) rec.gates = d.gates; // (7a K1) the gates the edge crossed (only when the plan has walls)
       let n = 0;
       const ladderSegs = [];
       const ec = edgeColumns({ path: d.path, segments: d.segments, landings: d.landings, width: e.width });
@@ -379,7 +385,9 @@ export class Region {
         const cells = d.path.slice(g.from, g.to + 1);
         n++;
         if (g.shared) return; // an earlier edge's cells: built by it
-        if (g.kind === 'walk' || g.kind === 'landing') {
+        // (7a K1) a rope span is the links stage's (its deck, rails and posts); the route writes its approaches only
+        if (g.kind === 'rope') return;
+        if (g.kind === 'walk' || g.kind === 'landing' || g.kind === 'gate') {
           // 4e's ground road where a walk lies on the surveyed ground (4e follows the realised ground at realise), else graded columns
           const onGround = g.kind === 'walk' && !it.base && e.width <= 5 && cells.length >= 4 && cells.every(([x, y, z]) => y === s.groundAt(x, z) && !s.waterAt(x, z));
           if (onGround) {

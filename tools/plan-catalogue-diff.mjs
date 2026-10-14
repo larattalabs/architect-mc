@@ -36,6 +36,7 @@ else {
   line('schemaVersion bumps', d.schemaVersionBumps.map((b) => `${b.id} ${b.from} -> ${b.to}`));
   line('until moved', d.untilChanged.map((u) => `${u.id} ${u.from} -> ${u.to}`));
   line('other state changes', d.otherStateChanges.map((s) => `${s.id} ${s.from} -> ${s.to}`));
+  line('notes changed', (d.notesChanged ?? []).map((x) => `${x.id}: ${JSON.stringify(x.to)}`));
   line('REMOVED (never allowed)', d.removed);
   line('recheck (pending parts now supported)', d.recheck.map((p) => `${p.part ?? '?'} {${p.block}}`));
 }

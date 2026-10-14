@@ -21,7 +21,10 @@
     "R4b layout: program.lots.layout is one of street (supported), or ring, spiral, grid, organic (reserved, arriving in slice FL). A reserved layout is checked like any supported lots program and the part answers unsupported {block: layout.<name>}, never malformed. A layout is written only there: not as a connector kind (connector.ring_street, connector.grid) nor as a rule kind (rule.ring_layout, rule.layout_ring)",
     "R4c aliases: zone kind district is a reserved alias of the program form {districts}: the part answers unsupported {block: program.districts} (never zone.district) until D1, so one idea has one block id",
     "R2a lots as places (P0, additive): where a part names a place (a locator target, a near feature, an endpoint) a lot id of a zone of this plan is accepted for a part id: it names that lot (an endpoint: its entrance), through its zone, which is then an implicit dependency (R3). A zone's port is one of its lots or bell, start or end (its street's two ends). Lot ids are unique across the plan (one region's lots)",
-    "R14 anchors: names are caller-supplied positions (PlanRequest.anchors) or the built-in claim_* ones; P0 never interprets a name. Steward passes stone, player, street_w, street_e, district_<id> and stockpile; an unknown anchor name used by a part is malformed (UNKNOWN_REF)"
+    "R14 anchors: names are caller-supplied positions (PlanRequest.anchors) or the built-in claim_* ones; P0 never interprets a name. Steward passes stone, player, street_w, street_e, district_<id> and stockpile; an unknown anchor name used by a part is malformed (UNKNOWN_REF)",
+    "R15 walls (K1): a connector.wall has exactly one path form: from and to (with via[]: wall.line), where.around (wall.around), where.inside (wall.edge) or where.along (wall.along, reserved until K2); none or two is malformed",
+    "R16 gates (K1): a connector.gate's crossing names a street, road, path, rope_bridge or auto connector of this plan (UNKNOWN_REF otherwise); its wall names a wall of this plan; a gate written from/to (the envelope shape) is read as at: from, to noted as the side it faces",
+    "R17 doors (K1): door: door is a wooden double door, so the opening is 2 wide (1 on a 1-wide path); fence_gate is player-only (a crossing used by a villager edge refuses MOVER); params is read leniently and never makes a K1 part malformed: a recorded member that maps (height, closed, gates as a number, torches: true) is read when no first-class member says otherwise, every other one is listed by name in the part's notes"
   ],
   "x-defaults": {
     "about": "Defaults the compiler applies when a member is absent. A contract promise wins over a part's tolerance where both apply (for example C27's within 4 cells for a boundary-following district, once D2 is supported).",
@@ -66,7 +69,7 @@
 
   "x-catalogue": {
     "about": "The capability catalogue that P0 ships (catalogueVersion 1). Each entry: a stable block id (never reused or renamed), the API version it arrived in (sinceApi; P0 is a placeholder the coordinator replaces at merge with the real minor), its own schemaVersion (bumped when its members grow, additively), its state (supported | reserved | retired) and, for reserved, the slice it waits for (until). Checks return this catalogue with every answer; a release commits it as a golden so two catalogues diff by id. Reserved entries carry their parameters through $defs/extension until supported.",
-    "catalogueVersion": 3,
+    "catalogueVersion": 4,
     "entries": [
       { "id": "zone.standard", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.standard" },
       { "id": "zone.outpost", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.outpost" },
@@ -82,19 +85,20 @@
       { "id": "layout.spiral", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
       { "id": "layout.grid", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
       { "id": "layout.organic", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
+      { "id": "layout.elevated", "sinceApi": "1.30.0", "schemaVersion": 0, "state": "reserved", "until": "7b", "note": "Lots carried at a level above the ground (canopy huts in trees, cliff ledges): Claude can write them now and they wait as unsupported (S-K1-6)." },
       { "id": "connector.street", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
       { "id": "connector.road", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
       { "id": "connector.path", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
-      { "id": "connector.auto", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.auto", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.auto", "limits": { "moves": ["walk", "stair", "ladder", "rope_bridge"] } },
       { "id": "connector.bridge", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "T3" },
       { "id": "connector.tunnel", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "T3" },
       { "id": "connector.channel", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "HY" },
-      { "id": "connector.wall", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
-      { "id": "connector.gate", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.wall", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.wall", "limits": { "height": [3, 16], "thickness": [1, 3], "gates": [0, 16] } },
+      { "id": "connector.gate", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.gate", "limits": { "width": [1, 5], "height": [2, 6], "doors": ["none", "door", "fence_gate"] } },
       { "id": "connector.ladder", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
       { "id": "connector.stair", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
       { "id": "connector.rail", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
-      { "id": "connector.rope_bridge", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.rope_bridge", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.rope_bridge", "limits": { "span": [8, 40], "width": [1, 3], "villagerMinWidth": 2, "approach": 32 } },
       { "id": "connector.catwalk", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
       { "id": "connector.rock_stair", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
       { "id": "connector.switchback", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
@@ -102,6 +106,10 @@
       { "id": "connector.branch_walk", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
       { "id": "connector.span_bridge", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
       { "id": "connector.stairs_around", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "wall.line", "sinceApi": "1.30.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall through from, via[] and to (each leg searched by T2's A* with a wall profile); a lot endpoint is a joined lot." },
+      { "id": "wall.around", "sinceApi": "1.30.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall round a part, build or protected area (where.around on a wall: the wall's own member, not locator.around)." },
+      { "id": "wall.edge", "sinceApi": "1.30.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall on the edge of a zone or the claim (where.inside)." },
+      { "id": "wall.along", "sinceApi": "1.30.0", "schemaVersion": 0, "state": "reserved", "until": "K2", "note": "D2's boundary spine plus an offset (where.along on a wall): the same member, no format change." },
       { "id": "form.relief", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.relief" },
       { "id": "form.terrace", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.terrace" },
       { "id": "form.ice_spike", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.spike" },
@@ -129,7 +137,7 @@
       { "id": "locator.near", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
       { "id": "locator.adjacent", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
       { "id": "locator.along", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
-      { "id": "locator.around", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
+      { "id": "locator.around", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL", "note": "On a wall: wall.around, K1 (the wall's own member). This id stays reserved for zones and forms laid out as a ring (FL)." },
       { "id": "feature.water", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
       { "id": "feature.part", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
       { "id": "feature.protected", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
@@ -368,7 +376,7 @@
       "type": "object", "required": ["lots"], "additionalProperties": false,
       "properties": {
         "lots": { "type": "array", "minItems": 1, "maxItems": 40, "items": { "$ref": "#/$defs/lot" } },
-        "layout": { "enum": ["street", "ring", "spiral", "grid", "organic"], "description": "How the lots are laid out. street: supported (flat_village's layout with its defaults). ring, spiral, grid and organic: reserved for slice FL, block ids layout.ring, layout.spiral, layout.grid and layout.organic; a lots program that names one answers unsupported {block: layout.<name>}. Write a free layout here, never as a connector kind (connector.ring_street, connector.grid) or a rule kind (rule.ring_layout)." },
+        "layout": { "enum": ["street", "ring", "spiral", "grid", "organic", "elevated"], "description": "How the lots are laid out. street: supported (flat_village's layout with its defaults). ring, spiral, grid and organic: reserved for slice FL, block ids layout.ring, layout.spiral, layout.grid and layout.organic; elevated (K1, reserved until 7b, layout.elevated): lots carried at a level above the ground (canopy huts in trees, cliff ledges); a lots program that names one answers unsupported {block: layout.<name>}. Write a free layout here, never as a connector kind (connector.ring_street, connector.grid) or a rule kind (rule.ring_layout)." },
         "shared": { "enum": ["square", "well", "none"] }
       }
     },
@@ -458,6 +466,130 @@
         "lamps": { "enum": ["none", "few", "street"] },
         "style": { "$ref": "#/$defs/bibleRef" },
         "tolerance": { "$ref": "#/$defs/tolerance" }
+      }
+    },
+
+    "wallWhere": {
+      "description": "(K1) A wall's own path form (its where): around a part, build or protected area (wall.around; ring is the offset range, default [4, 12]; closed: false leaves out the side nearest the claim's centre), on the edge of a zone or the claim (wall.edge), or along a boundary (wall.along, reserved until K2). Not locator.around: on a wall it is the wall's own member.",
+      "oneOf": [
+        { "type": "object", "required": ["around"], "additionalProperties": false, "properties": { "around": { "type": "object", "required": ["feature"], "additionalProperties": false, "properties": {
+          "feature": { "$ref": "#/$defs/feature" },
+          "ring": { "$ref": "#/$defs/intRange" },
+          "closed": { "type": "boolean" } } } } },
+        { "type": "object", "required": ["inside"], "additionalProperties": false, "properties": { "inside": { "oneOf": [
+          { "type": "object", "required": ["claim"], "additionalProperties": false, "properties": { "claim": { "const": true } } },
+          { "type": "object", "required": ["part"], "additionalProperties": false, "properties": { "part": { "$ref": "#/$defs/id" } } }
+        ], "oneOfMessage": "a wall's inside is {claim: true} or {part}" } } },
+        { "type": "object", "required": ["along"], "additionalProperties": false, "properties": { "along": { "type": "object", "required": ["feature"], "additionalProperties": false, "properties": {
+          "feature": { "$ref": "#/$defs/feature" },
+          "side": { "enum": ["either", "left", "right", "toward_anchor", "away_from_anchor"] },
+          "anchor": { "$ref": "#/$defs/anchor" },
+          "distance": { "$ref": "#/$defs/intRange" } } } } }
+      ],
+      "oneOfMessage": "a wall's where is {around}, {inside} or {along}"
+    },
+
+    "connector.wall": {
+      "type": "object", "required": ["id", "kind"], "additionalProperties": false,
+      "description": "(K1) A wall on a line (wall.line: from, via[], to), around a feature (wall.around) or on the edge of a zone or the claim (wall.edge), R15. Height 3..16 (default 6: 5 body plus the crenel course), thickness 1..3 (default 2, on the outside of a ring), crenels (default on), plain corners (default) or 3x3 corner stubs, styled by the bible's connectors roles. Every crossing of a street, road or path gets a gate (auto), except on a sealed wall (gates 0, or closed with no gate part). params is read leniently (R17).",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "wall" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "where": { "$ref": "#/$defs/wallWhere" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "height": { "type": "integer", "minimum": 3, "maximum": 16 },
+        "thickness": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "crenels": { "type": "boolean" },
+        "corners": { "enum": ["plain", "tower"] },
+        "gates": { "oneOf": [
+          { "type": "integer", "minimum": 0, "maximum": 16 },
+          { "type": "object", "additionalProperties": false, "properties": { "min": { "type": "integer", "minimum": 0, "maximum": 16 }, "max": { "type": "integer", "minimum": 0, "maximum": 16 } } }
+        ], "oneOfMessage": "gates is an integer 0..16 (the least on a closed wall) or {min?, max?}" },
+        "lamps": { "enum": ["gates", "every", "none"] },
+        "params": { "type": "object", "description": "Read leniently, never malformed (R17): height, closed, gates (a number) and torches: true are read when no first-class member says otherwise; every other key is listed in the answer's notes." }
+      }
+    },
+
+    "connector.gate": {
+      "type": "object", "required": ["id", "kind"], "additionalProperties": false,
+      "description": "(K1) An opening in a wall where a street, road or path crosses it: placed at an endpoint (at, before routing), named by the connector whose route opens it (crossing, after routing), or styling the plan's one wall's gate. A gate written from/to is read as at: from (R16). width 1..5 (default the crossing walk's), height 2..6 (default 3), door none (default), door (a wooden double door, R17) or fence_gate (player-only), frame plain or arch (default arch).",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "gate" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "wall": { "$ref": "#/$defs/id" },
+        "at": { "$ref": "#/$defs/endpoint" },
+        "crossing": { "$ref": "#/$defs/id" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "width": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "height": { "type": "integer", "minimum": 2, "maximum": 6 },
+        "door": { "enum": ["none", "door", "fence_gate"] },
+        "frame": { "enum": ["plain", "arch"] },
+        "params": { "type": "object", "description": "Read leniently, never malformed (R17); every key is listed in the answer's notes." }
+      }
+    },
+
+    "connector.rope_bridge": {
+      "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
+      "description": "(K1) A rope bridge (SETTLEMENTS §8.2): a route between from and to that uses exactly one rope span (8..40 deck cells, an integer half-block sag profile, rails, posts anchored 2 deep in site-solid at both ends), walking at most approach cells (default 16) at each end. width 1..3 (default 1 on a player-only edge, 2 on a villager edge: a villager bridge is 2 wide on a slab deck).",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "rope_bridge" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
+        "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" } },
+        "width": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
+        "span": { "type": "object", "additionalProperties": false, "properties": { "min": { "type": "integer", "minimum": 8, "maximum": 40 }, "max": { "type": "integer", "minimum": 8, "maximum": 40 } } },
+        "approach": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "lamps": { "enum": ["none", "few", "street"] },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "params": { "type": "object", "description": "Read leniently, never malformed (R17); every key is listed in the answer's notes." }
+      }
+    },
+
+    "connector.auto": {
+      "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
+      "description": "(K1) A route that may use any move the catalogue lists in limits.moves (walk, stairs, ladders on player-only edges, rope bridges), each costed as T2 and the rope move (S-K1-5: the move set grows as slices ship).",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "auto" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
+        "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" } },
+        "width": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
+        "span": { "type": "object", "additionalProperties": false, "properties": { "min": { "type": "integer", "minimum": 8, "maximum": 40 }, "max": { "type": "integer", "minimum": 8, "maximum": 40 } } },
+        "approach": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "lamps": { "enum": ["none", "few", "street"] },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "params": { "type": "object", "description": "Read leniently, never malformed (R17); every key is listed in the answer's notes." }
       }
     },
 
@@ -572,7 +704,7 @@
     "reason": {
       "type": "object", "required": ["code"], "additionalProperties": false,
       "properties": {
-        "code": { "enum": ["SCHEMA", "UNKNOWN_REF", "CYCLE", "EXTENSION_BOUND", "UNSUPPORTED", "NO_FEATURE", "NO_ROOM", "OUT_OF_CLAIM", "OVERLAP", "PROTECTED", "KEEP_OUT", "TOO_STEEP", "WATER", "UNREACHABLE", "TOLERANCE", "DEPENDENCY", "BUDGET", "CANCELLED", "LIMIT"] },
+        "code": { "enum": ["SCHEMA", "UNKNOWN_REF", "CYCLE", "EXTENSION_BOUND", "UNSUPPORTED", "NO_FEATURE", "NO_ROOM", "OUT_OF_CLAIM", "OVERLAP", "PROTECTED", "KEEP_OUT", "TOO_STEEP", "WATER", "UNREACHABLE", "TOLERANCE", "DEPENDENCY", "BUDGET", "CANCELLED", "LIMIT", "NO_GAP", "SPAN", "ANCHOR", "HEADROOM", "MOVER"] },
         "message": { "type": "string" },
         "path": { "type": "string", "description": "SCHEMA: the JSON path of the first error." },
         "block": { "$ref": "#/$defs/blockId" },
@@ -591,7 +723,7 @@
         "geometry": { "type": "object", "description": "Resolved, in world cells: rect or polygon, y, lots (LotSpec shape), path polylines, form bounds." },
         "cost": { "type": "object", "description": "For a provisional part (a building without a library entry, or a pending style) the range form is used and the artifact also records the part's fit box (R13). {cells, removed, added, tiles, chunksToGenerate, bom?} exact, or {range: {cells: [min, max], bom?}} when provisional." },
         "provisional": { "type": "boolean" },
-        "deviations": { "type": "array", "items": { "type": "object", "required": ["what", "value"], "properties": { "what": { "enum": ["move", "size", "rotate", "count", "grade", "detour", "sketch"] }, "value": { "type": "number" }, "max": { "type": "number" }, "exceeds": { "type": "boolean" } } } },
+        "deviations": { "type": "array", "items": { "type": "object", "required": ["what", "value"], "properties": { "what": { "enum": ["move", "size", "rotate", "count", "grade", "detour", "sketch", "join"] }, "value": { "type": "number" }, "max": { "type": "number" }, "exceeds": { "type": "boolean" } } } },
         "reasons": { "type": "array", "items": { "$ref": "#/$defs/reason" } },
         "wouldFit": { "type": "array", "maxItems": 4, "items": { "type": "object", "description": "A concrete alternative as a plan fragment (for example a smaller size, another where) with its own geometry and cost." } },
         "blockedBy": { "type": "array", "items": { "$ref": "#/$defs/id" } },

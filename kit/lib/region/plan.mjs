@@ -20,9 +20,10 @@ import { validateParams, resolveValues } from '../params.mjs';
 import { mapPatternMats, patternError } from '../pattern.mjs';
 import { maskTerms } from '../mask.mjs';
 import { PASS_NAMES } from './passes/index.mjs';
+import { connectorRoles, connectorsError } from '../connectors/style.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.30.0';
+export const KIT_VERSION = '0.31.0';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -296,6 +297,7 @@ export function opBounds(op, blobs, bytesOf = null) {
  * @param {object|string} o.claim
  * @param {object} [o.roles] extra / bible roles {role: blockState}
  * @param {object} [o.patterns] (6c MP) the bible's role patterns {role: pattern} (lib/pattern.mjs; mats are roles or block states)
+ * @param {object} [o.connectors] (7a K1) the bible's connectors member {wall?, gate?, rope_bridge?} (role names; lib/connectors/style.mjs)
  * @param {string} [o.kitVersion] / [o.node] recorded in the IR (defaults: KIT_VERSION, this Node's major)
  * @returns {Promise<{ir, irJson, irSha, notes: string[], stats}>}
  */
@@ -341,12 +343,16 @@ export async function planRegion(o) {
     if (mod.roles !== undefined && (typeof mod.roles !== 'object' || mod.roles === null || Array.isArray(mod.roles))) throw new Error('the program\'s roles must be {role: blockState}');
     roles = Object.freeze(resolveRoles(o.roles ?? {}, mod.roles ?? {}));
     const patterns = resolvePatterns(o.patterns ?? {}, roles);
+    // (7a K1) the bible's connector roles (each slot a role the plan resolves, else its default chain)
+    const ce = connectorsError(o.connectors ?? undefined, roles);
+    if (ce) throw new Error(ce);
+    const connectors = Object.freeze(connectorRoles(roles, o.connectors ?? null));
     passes = declaredPasses(mod);
     const params = resolveValues(mod.params ?? {}, o.params ?? {});
     const seed = o.seed === undefined || o.seed === null || o.seed === 'default' ? defaultSeed(id, params, claim) : toDecimal64(...fromDecimal64(o.seed));
     const onKeepOut = () => { keepOutRead = true; };
     Object.assign(ctx, {
-      claim: Object.freeze({ ...claim }), survey: surveyApi(survey, claim, { keepOut, onKeepOut }), roles, patterns, seed, params: Object.freeze({ ...params }),
+      claim: Object.freeze({ ...claim }), survey: surveyApi(survey, claim, { keepOut, onKeepOut }), roles, patterns, connectors, seed, params: Object.freeze({ ...params }),
       kitVersion: o.kitVersion ?? KIT_VERSION, rng: (label) => makeRng(seed, String(label)),
       volumes: o.volumes ?? [],
       // (6c F2) the local stamp library (lib/region/stamps.mjs stampLibrary: a dir or an id -> bytes map; local-only, N-F2-1)

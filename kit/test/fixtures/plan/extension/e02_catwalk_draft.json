@@ -1,9 +1,9 @@
 {
-  "about": "a reserved 7a kind in its draft shape",
+  "about": "a reserved 7a kind in its draft shape (K1 moved it off connector.wall, which ships, to connector.catwalk, which stays reserved)",
   "on": "s7",
   "expect": {
-    "part": "wall",
-    "block": "connector.wall"
+    "part": "walk",
+    "block": "connector.catwalk"
   },
   "plan": {
     "schemaVersion": "plan/0",
@@ -34,17 +34,18 @@
     ],
     "connectors": [
       {
-        "id": "wall",
-        "kind": "wall",
-        "where": {
-          "inside": {
-            "part": "town"
-          }
+        "id": "walk",
+        "kind": "catwalk",
+        "from": {
+          "part": "town"
+        },
+        "to": {
+          "anchor": "claim_n"
         },
         "params": {
-          "material": "stone_brick",
+          "material": "spruce_planks",
           "height": 6,
-          "gates": 2
+          "rails": 2
         }
       }
     ]
