@@ -173,7 +173,14 @@ steps.plantime = async () => {
   const g = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 'goldens', 'districts_demo.json'), 'utf8'));
   out.tiles = { count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden: JSON.stringify(ts.tiles) === JSON.stringify(g.tiles) };
   check(ts.workersSame, `item 8: ${out.tiles.count} tile shas equal for 1 and 4 workers, forward and shuffled (S3)`);
-  check(out.tiles.golden && ts.irSha === g.irSha, `item 8: the sandboxed plan equals the committed golden scenarios/goldens/districts_demo.json (IR ${ts.irSha.slice(0, 12)}, ${out.tiles.count} tile shas)`);
+  // (S2 integration) a later kit's KIT_VERSION bump moves the IR sha alone: the plan's IR with the golden's recorded kitVersion must be
+  // the golden's IR byte for byte (recorded as `kitOnly`), and every tile sha the golden's
+  const gIr = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 'goldens', 'districts_demo', 'ir.json'), 'utf8'));
+  const runIrJson = fs.readFileSync(path.join(dir, 'last-s3', 'ir.json'), 'utf8');
+  const asGoldenKit = runIrJson.replace(`"kitVersion":${JSON.stringify(JSON.parse(runIrJson).kitVersion)}`, `"kitVersion":${JSON.stringify(gIr.kitVersion)}`);
+  const kitOnlySha = crypto.createHash('sha256').update(asGoldenKit).digest('hex');
+  out.tiles.kitOnly = ts.irSha !== g.irSha ? { kitVersion: JSON.parse(runIrJson).kitVersion, goldenKit: gIr.kitVersion, irSha: kitOnlySha } : null;
+  check(out.tiles.golden && (ts.irSha === g.irSha || kitOnlySha === g.irSha), `item 8: the sandboxed plan equals the committed golden scenarios/goldens/districts_demo.json (IR ${ts.irSha.slice(0, 12)}${out.tiles.kitOnly ? `; with the golden's kit ${gIr.kitVersion}: ${kitOnlySha.slice(0, 12)}, golden ${g.irSha.slice(0, 12)}` : ''}, ${out.tiles.count} tile shas)`);
   spendZero();
   return out;
 };
