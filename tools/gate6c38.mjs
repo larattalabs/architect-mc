@@ -5,7 +5,7 @@
 //   node tools/gate6c38.mjs <step>
 //     unit      the kit's C38 and golden tests (catalogue-c38, plan-p0), the mod's PlanCatalogueTest result (the unit-mod step runs the
 //               suite), api-compat against the unchanged 0.33.0, 0.32.0 and 0.31.1 apitest jars and the 0.33.0 surface
-//     ingame    headless: the FIRST call after the connection (no region, no claim, no check yet, on the bridge thread, not the server
+//     ingame    headless: the FIRST call after the world opens (no region, no claim, no check yet, on the bridge thread, not the server
 //               thread) returns the catalogue, equal to the kit's planCatalogue() of this checkout; then a real checkPlan through the
 //               sidecar returns a catalogue equal to it, entry for entry; a call after the check is unchanged; copies are defensive
 //
@@ -79,7 +79,9 @@ steps.ingame = async () => {
   const out = {};
   const { planCatalogue } = await import(pathToFileURL(path.join(root, 'kit', 'lib', 'plan', 'catalogue.mjs')).href);
   const kitCat = planCatalogue();
-  // 1. the first call after the connection: nothing has been planned, checked or claimed in this run; no player teleport, no chunk wait
+  // 1. the first call after the world opens (L.fresh opens a copy of the flat base): nothing has been planned, checked or claimed in
+  //    this world; no teleport, no rule change, no chunk wait
+  await L.fresh('G6B C38 Ingame', FLAT);
   const first = await call('dev.plan.catalogue', {}, 30_000);
   out.first = { ms: first.ms, thread: first.thread, regions: first.regions, hasFeature: first.hasFeature, entries: first.catalogue?.entries?.length };
   check(first.regions === 0, `at world start no region exists (Regions.list: ${first.regions})`);
@@ -93,7 +95,6 @@ steps.ingame = async () => {
   const ids = new Set(first.catalogue.entries.map((e) => e.id));
   check(ids.has('connector.wall') && first.catalogue.entries.every((e) => e.id && e.state && e.sinceApi !== undefined && e.schemaVersion !== undefined), 'every entry has id, state, sinceApi, schemaVersion; connector.wall is listed');
   // 2. a real plan check through the sidecar returns the same catalogue, entry for entry
-  await L.fresh('G6B C38 Ingame', FLAT);
   await L.setRules('exact');
   const S7 = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 's7_flat_village.json'), 'utf8')).fixture.claim;
   const claim = [...S7];
