@@ -93,7 +93,7 @@ function nearestPin(c, pin) {
  * columns that keep their ground), `W`, `D`, `R` (the band radius in cells), `iterations`, `maxCut`, `maxFill`, `erode`
  * ({thermal, stream, streamAt}), `minY` (no new ground below it: the world's bottom rows). Returns `{h (Int16Array, the new ground), band (Uint8Array), clamped, eroded, maxExtra}`.
  */
-export function relax({ ground, base = null, pin, fixed, W, D, R, iterations, maxCut, maxFill, erode = null, minY = -32768 }) {
+export function relax({ ground, base = null, pin, fixed, wall = null, W, D, R, iterations, maxCut, maxFill, erode = null, minY = -32768 }) {
   const n = W * D;
   const ref = base ?? ground;
   const { dist, src } = nearestPin({ width: W, depth: D }, pin);
@@ -114,7 +114,10 @@ export function relax({ ground, base = null, pin, fixed, W, D, R, iterations, ma
       for (let x = 0; x < W; x++) {
         const i = x + z * W;
         if (!band[i]) { h2[i] = h[i]; continue; }
-        const e = x + 1 < W ? h[i + 1] : h[i], w = x > 0 ? h[i - 1] : h[i], s = z + 1 < D ? h[i + W] : h[i], nn = z > 0 ? h[i - W] : h[i];
+        // (6c S2) a wall column (a kept natural cell's column: its ground is the kept form's top, not the land) is no neighbour:
+        // the band meets it as it meets the claim's edge
+        const open = (j) => !wall || !wall[j];
+        const e = x + 1 < W && open(i + 1) ? h[i + 1] : h[i], w = x > 0 && open(i - 1) ? h[i - 1] : h[i], s = z + 1 < D && open(i + W) ? h[i + W] : h[i], nn = z > 0 && open(i - W) ? h[i - W] : h[i];
         let v = Math.floor((e + w + s + nn + 2) / 4);
         const a = lo(i), b = hi(i);
         if (v < a) v = a; else if (v > b) v = b;
@@ -190,13 +193,14 @@ export function relax({ ground, base = null, pin, fixed, W, D, R, iterations, ma
 /**
  * The pass. `survey`: the plan's columns (resolution 1 or 4; missing columns filled). `intent`: `{around, radius = 12, maxCut = 6,
  * maxFill = 6, erode: {thermal, stream, streamAt}, base: {minX, minZ, width, depth, values} (added to the land the blend meets,
- * e.g. a hill the program raises with the same op), fill, corridorFill, cut = 0, name = 'relief'}`. Returns `{fields: {<name>,
+ * e.g. a hill the program raises with the same op), fill, corridorFill, cut = 0, name = 'relief', keep: [[x, z]] (6c S2: the
+ * plan's kept columns; `r.pass` passes them)}`. Returns `{fields: {<name>,
  * <name>_target?, <name>_apron?}, ops, data}`: one `delta` op over the blended band, when there are corridors one `target` op over
  * their pinned columns, and one `target` op over the lots' aprons at their pad's top (the footprints are their lots' own).
  */
 export function reliefPass(survey, volumes, intent) {
   const c = survey;
-  const { around, radius = 12, maxCut = 6, maxFill = 6, erode = null, base = null, fill, corridorFill = fill, cut = 0, name = 'relief', minY = -32768 } = intent ?? {};
+  const { around, radius = 12, maxCut = 6, maxFill = 6, erode = null, base = null, fill, corridorFill = fill, cut = 0, name = 'relief', minY = -32768, keep = null } = intent ?? {};
   if (!Array.isArray(around) || !around.length) throw new Error('relief: `around` must list the pads and corridors to blend around');
   if (!(isInt(radius) && radius >= 1 && radius <= 64)) throw new Error('relief: radius must be 1..64');
   for (const [k, v] of [['maxCut', maxCut], ['maxFill', maxFill]]) if (!(isInt(v) && v >= 0 && v <= 64)) throw new Error(`relief: ${k} must be 0..64`);
@@ -231,8 +235,22 @@ export function reliefPass(survey, volumes, intent) {
     }
   }
   for (let k = 0; k < n; k++) if (pin[k] !== NONE) fixed[k] = 0;
+  // (6c S2) the plan's kept natural cells (`keep`: their [x, z] columns, from r.keepNatural): such a column keeps its ground (fixed:
+  // the pass never writes a kept cell) and is a wall to the relaxation (its ground is the kept form's top, an ice spike's tip, not
+  // land the blend should meet). A pin on a kept column stays a pin (the program's own error, which the checker's M1 reports).
+  let wall = null;
+  if (keep && keep.length) {
+    wall = new Uint8Array(n);
+    for (const [x, z] of keep) {
+      const i = Math.floor((x - c.minX) / r), j = Math.floor((z - c.minZ) / r);
+      if (i < 0 || j < 0 || i >= W || j >= D) continue;
+      const k = i + j * W;
+      if (pin[k] !== NONE) continue;
+      wall[k] = 1; fixed[k] = 1;
+    }
+  }
   const iterations = radius * 4;
-  const res = relax({ ground, base: base ? ref : null, pin, fixed, W, D, R, iterations, maxCut, maxFill, erode, minY });
+  const res = relax({ ground, base: base ? ref : null, pin, fixed, wall, W, D, R, iterations, maxCut, maxFill, erode, minY });
   // the program's base outside the band (a raised hill): written as it is, within the clamps (`raised` cells)
   const raised = new Uint8Array(n);
   if (base) for (let k = 0; k < n; k++) {

@@ -65,6 +65,7 @@ public final class ApiRules {
 					case "region.planCheck" -> "planCheck"; // 6c P0 (with planCatalogue, below)
 					case "region.districts" -> "districtsPass"; // 6c D1: the helper's kit has the districts pass and program
 					case "region.beside" -> "besideRegion"; // 6c D1: the helper passes a standing region to the plan (region.plan beside)
+					case "region.outpost" -> "scenarioS2"; // 6c S2: the helper's kit bundles the ice_outpost program
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

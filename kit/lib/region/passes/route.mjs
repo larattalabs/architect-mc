@@ -486,7 +486,12 @@ export function routePass(survey, volumes, intent) {
     for (let j = Math.max(0, j0 - R); j <= Math.min(D - 1, j0 + R); j++) for (let i = Math.max(0, i0 - R); i <= Math.min(W - 1, i0 + R); i++) nearEnd[i + j * W] = 1;
   }
   const coarse = r > 1;
-  const Gq = _unsafe.noGrade ? FP * 16 : Math.max(1, Math.floor(maxGrade * FP * r + 1e-9));
+  // (6c S2) the quantum also keeps every WINDOW-cell window within the checker's whole-block limit floor(maxGrade * WINDOW): at a
+  // grade whose window limit rounds down (0.2: 1.6 -> 1 block), 3/16 a cell rises 1.5 over a window, which rounds to 2. At 0.25
+  // (the default: 2 blocks, 4/16 a cell) both give the same quantum, so no earlier route moves.
+  const GqWin = Math.floor((Math.floor(maxGrade * WINDOW + 1e-9) * FP * r) / WINDOW);
+  // (`_unsafe.coarseGrade`: the broken variant, the quantum before S2)
+  const Gq = _unsafe.noGrade ? FP * 16 : Math.max(1, _unsafe.coarseGrade ? Math.floor(maxGrade * FP * r + 1e-9) : Math.min(Math.floor(maxGrade * FP * r + 1e-9), GqWin));
   const out = { edges: [], resolution: r, maxGrade, hairpinLanding, stairs, coarse };
   // (6c P0) `maxExpanded`: A* expansions over all edges (the plan check's maxNodes); absent, no cap. An edge the budget stops, and
   // every edge after it, fails `BUDGET` (never searched again for a reason)

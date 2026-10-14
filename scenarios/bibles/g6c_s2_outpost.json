@@ -1,0 +1,23 @@
+{
+  "name": "G6C-S2 frontier outpost",
+  "scope": "settlement",
+  "prompt": "S2's fixture bible (CONTRACT 6c S2 §2): a frontier outpost among the ice spikes in spruce and stone bricks with packed-ice accents; packed snow (snow blocks) as the ground's surface; soul lanterns for light (block light 10: under vanilla's melt, so no light near the spikes melts ice or snow, M17); the lot entries are built in its roles too",
+  "roles": {
+    "wall": "minecraft:spruce_planks",
+    "wall_alt": "minecraft:stripped_spruce_log",
+    "frame": "minecraft:spruce_log",
+    "floor": "minecraft:spruce_planks",
+    "roof": "minecraft:dark_oak_planks",
+    "trim": "minecraft:stone_bricks",
+    "accent": "minecraft:packed_ice",
+    "foundation": "minecraft:stone_bricks",
+    "path": "minecraft:spruce_planks",
+    "light": "minecraft:soul_lantern",
+    "surface": "minecraft:snow_block",
+    "subsurface": "minecraft:dirt",
+    "rock": "minecraft:stone",
+    "rubble": "minecraft:cobblestone",
+    "rail": "minecraft:spruce_fence",
+    "structure": "minecraft:stone_bricks"
+  }
+}
