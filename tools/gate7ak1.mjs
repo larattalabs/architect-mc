@@ -236,7 +236,8 @@ const anchorsOf = (claim) => {
 /** One v30 round on a claim: check (3 times under /tick freeze), realise, compare, the wall bars on the realised world. */
 async function v30Round(name, from, claim, plan, { rules = 'exact', settleMs = 0 } = {}) {
   const out = {};
-  await L.fresh(name, from);
+  // (run6b's copyWorld replaces only G6B worlds)
+  await L.fresh(`G6B K1a ${name}`, from);
   await L.setRules(rules);
   const [cx, cz] = centre(claim);
   await tp(cx, 140, cz);
@@ -431,7 +432,7 @@ steps.look = async () => {
   fs.mkdirSync(dir, { recursive: true });
   for (const b of LOOK_BIBLES) installBible(b);
   for (const bible of LOOK_BIBLES) {
-    await L.fresh(`G7A K1a Look ${bible}`, BASE);
+    await L.fresh(`G6B K1a Look ${bible}`, BASE);
     await L.setRules('gallery');
     const [cx, cz] = centre(claim);
     await tp(cx, 140, cz);
