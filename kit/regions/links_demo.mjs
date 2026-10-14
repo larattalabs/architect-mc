@@ -4,8 +4,9 @@
 //                  below its bedrock), three sections of it 8, 24 and 40 wide, so the bridges span 8, 24 and 40 deck cells; routed
 //                  through the pass's `base` (the pass reads the frozen survey, which an earlier op can't change: T1's lesson)
 //   natural claim: rift_city's rift (its own program builds the region) and up to three bridges across it from lip to lip, where the
-//                  lips stand level enough (the rise at most n / 8) and clear of the template's lots and ways; the rift's carved ground
-//                  reaches the pass through lib/connectors/templateLand.mjs
+//                  lips stand level enough (the rise at most n / 8) and clear of the template's lots and ways, each landing on a stone
+//                  footing (the pinned rift site is desert sand); the rift's carved ground reaches the pass through
+//                  lib/connectors/templateLand.mjs
 // Every bridge is 2 wide on a slab deck (a villager edge), with fence rails, posts in the frame role, chains and W's lamps.
 // Anchors: entrance and spawn on the first bridge's near lip; cameras cam_rope (beside the longest span) and cam_high.
 import { region } from '../lib/region/program.mjs';
@@ -101,15 +102,22 @@ function riftVariant(ctx, P) {
   if (!land) throw new Error('links_demo (natural): rift_city has no rift on this claim');
   const { cz, half, x0, x1 } = land.layout;
   const zn = cz - half - 3, zs = cz + half + 3, n = zs - zn - 1; // the lips 17 from the centre line (the warp carves at most 16)
-  // the template's lots (with aprons) and ways are obstacles; a bridge needs its deck, rails and posts clear (x - 1 .. x + 2)
+  // the template's lots (with aprons) and ways are obstacles; a bridge needs its deck, rails and posts clear (a southward deck's
+  // right-hand side is west: x - 2 .. x + 1)
   const hard = [...r.lots.map((l) => [l.box.minX - 1, l.box.minZ - 1, l.box.maxX + 1, l.box.maxZ + 1]), ...r.paths.filter((q) => q.box).map((q) => [q.box.minX, q.box.minZ, q.box.maxX, q.box.maxZ])];
-  const clear = (x) => !hard.some((h) => x + 2 >= h[0] && x - 1 <= h[2] && zs >= h[1] && zn <= h[3]);
+  const clear = (x) => !hard.some((h) => x + 1 >= h[0] && x - 2 <= h[2] && zs >= h[1] && zn <= h[3]);
   const picks = [];
   for (let x = x0; x <= x1 && picks.length < P.bridges; x++) {
     if (!clear(x) || picks.some((p) => Math.abs(p - x) < 12)) continue;
-    if (Math.abs(S.groundAt(x, zs) - S.groundAt(x, zn)) > maxRiseOf(n) || Math.abs(S.groundAt(x + 1, zs) - S.groundAt(x + 1, zn)) > maxRiseOf(n)) continue;
+    if (Math.abs(S.groundAt(x, zs) - S.groundAt(x, zn)) > maxRiseOf(n) || Math.abs(S.groundAt(x - 1, zs) - S.groundAt(x - 1, zn)) > maxRiseOf(n)) continue;
     picks.push(x);
   }
+  // stone footings under each landing and its posts (the 3 cells under the lip, x - 2 .. x + 1): the pinned rift site is desert,
+  // whose sand is no site-solid (§3: a full block the plan writes that M3 grounds is), so the posts stand on the plan's own footing
+  const foot = r.part('footings', { stage: 'ground' });
+  const fcols = [];
+  for (const x of picks) for (const z of [zn, zs]) for (let xx = x - 2; xx <= x + 1; xx++) { const g = S.groundAt(xx, z); fcols.push(xx, z, g - 3, g - 1, 0); }
+  if (fcols.length) { foot.columns({ abs: 0 }, { abs: 0 }, fcols, ['foundation']); (r.meta.parts.footings ??= {}).kind = 'add'; }
   const nodes = {}, edges = [];
   picks.forEach((x, i) => {
     nodes[`n${i}`] = { at: [x, S.groundAt(x, zn) + 1, zn], kind: 'junction' };
