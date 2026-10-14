@@ -41,7 +41,7 @@ gates and the shared foundation) builds in parallel on `slice/K1a`; its foundati
 - `kit/lib/region/program.mjs`: `r.ropeBridge(a, b, opts)`; `_route` records `rec.rope` (a failed rope edge's reason).
 - `kit/lib/plan/compile.mjs`: `ropeFailAnswer` import and the failed-leg mapping (`why === 'ROPE'`); the route call merges
   `rope.hard` into `hard` and passes `rope.base` as `base` (only when `ropePassInput` returns them).
-- `kit/lib/plan/finish.mjs`: an answer's `cost.bom` (set in the links stage) is kept.
+- BOM: the foundation's round-3 mechanism (`K.record.bom[part]`, `connectors/bom.mjs`); no finish.mjs edit of K1b's remains.
 - `kit/lib/region/check.mjs`: `metrics.M5rope` in M5; walkGraph half-slab steps. `kit/lib/region/vworld.mjs`: palette `half`.
 - `kit/test/plan-helpers.mjs`: `checkPlanLocal({volumes})`, `flatSurvey()`. `kit/test/plan-p0.test.mjs`: `SV.flat`, fixture
   `anchors` over Steward's (run and item 1's validation). `kit/test/region-lint.test.mjs`: `lib/connectors/` on the plan path.

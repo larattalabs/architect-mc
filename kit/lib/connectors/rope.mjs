@@ -195,10 +195,10 @@ export function emitRopes(K) {
         const g = (x.meta.segments ?? []).find((q) => q.kind === 'rope');
         if (ge && g) { ge.type = 'rope_bridge'; ge.crossing = crossing(K, { n: g.n, rise: g.rise, dir: g.dir, from: x.meta.path[g.from] }); }
       }
-      const a = K.answers.get(p.id);
-      const bom = { ...(a.cost?.bom ?? {}) };
+      // its bill of materials (§7: planCheck.links.bom[part], which finish.mjs puts in the answer's cost)
+      const bom = { ...((K.record.bom ??= {})[p.id] ?? {}) };
       for (const r of recs) for (const [item, nn] of Object.entries(r.bom ?? {})) bom[item] = (bom[item] ?? 0) + nn;
-      a.cost = { ...(a.cost ?? {}), bom: Object.fromEntries(Object.entries(bom).sort(([u], [v]) => (u < v ? -1 : u > v ? 1 : 0))) };
+      K.record.bom[p.id] = Object.fromEntries(Object.entries(bom).sort(([u], [v]) => (u < v ? -1 : u > v ? 1 : 0)));
     } catch (e) {
       K.rollback(cp);
       const code = /SPAN/.test(e.message) ? 'SPAN' : /TOO_STEEP/.test(e.message) ? 'TOO_STEEP' : 'UNREACHABLE';

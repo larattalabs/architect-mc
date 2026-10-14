@@ -10,7 +10,8 @@
 // over a full block at m (the hanger that keeps the deck face-connected through each half step, so M3 grounds it through the
 // posts and landings). The feet stand at deckY(y2) + 1 whatever the parity.
 import { shapeOf } from './style.mjs';
-import { itemOf, voxelClassOf } from '../blocks.mjs';
+import { voxelClassOf } from '../blocks.mjs';
+import { bomOf } from './bom.mjs';
 import { fixtureFor } from '../region/fixtures.mjs';
 
 /** The limits (catalogue 4: `connector.rope_bridge` limits; §4's move). Costs are in T2's units (a straight walk cell is 10). */
@@ -231,13 +232,10 @@ export function ropeBridge(r, a, b, opts = {}) {
   if (!noLamps) for (const [x, y, z] of g.lamps) solidCols.push(x, z, y, y, M.lamp);
   p.columns({ abs: 0 }, { abs: 0 }, solidCols, mats);
   p.columns({ abs: 0 }, { abs: 0 }, walkCols, mats, { walk: true });
-  // (§7) the bridge's bill of materials: the items of the cells it writes (C26's block-to-item table: blocks.mjs itemOf)
-  const bomM = new Map();
-  for (const cols of [solidCols, walkCols]) for (let t = 0; t < cols.length; t += 5) {
-    const item = itemOf(String(mats[cols[t + 4]]).replace(/\[.*$/, ''));
-    if (item) bomM.set(item, (bomM.get(item) ?? 0) + cols[t + 3] - cols[t + 2] + 1);
-  }
-  const bom = Object.fromEntries([...bomM.entries()].sort(([a1], [b1]) => (a1 < b1 ? -1 : a1 > b1 ? 1 : 0)));
+  // (§7) the bridge's bill of materials: its written cells' states by C26's block-to-item rules (connectors/bom.mjs)
+  const states = [];
+  for (const cols of [solidCols, walkCols]) for (let t = 0; t < cols.length; t += 5) for (let y = cols[t + 2]; y <= cols[t + 3]; y++) states.push(mats[cols[t + 4]]);
+  const bom = bomOf(states);
   const id = opts.id ?? `${p.id}_rope_${(r.meta.ropes?.length ?? 0) + 1}`;
   const xs = [...g.deck, ...g.beds].map((c) => c[0]).concat(g.posts.map((q) => q.x)), zs = [...g.deck, ...g.beds].map((c) => c[2]).concat(g.posts.map((q) => q.z));
   const ysAll = [...g.deck, ...g.beds].map((c) => c[1]).concat(g.posts.flatMap((q) => [q.y0, q.y1 + 1]));
