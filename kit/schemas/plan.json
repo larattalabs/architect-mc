@@ -74,13 +74,13 @@
       { "id": "zone.standard", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.standard" },
       { "id": "zone.outpost", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.outpost" },
       { "id": "zone.district", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D1", "aliasOf": "program.districts", "note": "Reserved alias of the districts program form; the answer names program.districts (R4c)." },
-      { "id": "program.flat_village", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template" },
-      { "id": "program.lots", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.lots" },
+      { "id": "program.flat_village", "sinceApi": "P0", "schemaVersion": 2, "state": "supported", "def": "#/$defs/program.template", "note": "C37 (sinceApi 1.30.0, a placeholder set at merge): additive orientation member (ew | ns | auto) of street layouts." },
+      { "id": "program.lots", "sinceApi": "P0", "schemaVersion": 2, "state": "supported", "def": "#/$defs/program.lots", "note": "C37 (sinceApi 1.30.0, a placeholder set at merge): additive orientation member (ew | ns | auto) of street layouts." },
       { "id": "program.districts", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.districts" },
       { "id": "program.crater_works", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template", "note": "N-P0-1: the bundled crater_works program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim." },
       { "id": "program.rift_city", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template", "note": "N-P0-1: the bundled rift_city program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim." },
       { "id": "program.floating_islands", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template", "note": "N-P0-1: the bundled floating_islands program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim." },
-      { "id": "layout.street", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.lots" },
+      { "id": "layout.street", "sinceApi": "P0", "schemaVersion": 2, "state": "supported", "def": "#/$defs/program.lots", "note": "C37 (sinceApi 1.30.0, a placeholder set at merge): additive orientation member (ew | ns | auto) of street layouts." },
       { "id": "layout.ring", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
       { "id": "layout.spiral", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
       { "id": "layout.grid", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
@@ -369,7 +369,7 @@
       "type": "object", "required": ["template"], "additionalProperties": false,
       "properties": {
         "template": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,47}$", "description": "A named template from the catalogue (program.<name>). v0: flat_village (laid out in the zone's rect), and crater_works, rift_city and floating_islands (N-P0-1; whole-claim programs: only as the plan's sole zone)." },
-        "params": { "type": "object", "description": "The template's own params, checked by the kit's validateParams against the program's declared params; an error is malformed with the param path. A template's lots param is a list of $defs/lot." }
+        "params": { "type": "object", "description": "For flat_village, params.orientation. Street orientation (C37, sinceApi 1.30.0): orientation \"ew\" | \"ns\" | \"auto\" (default auto: the layout picks the axis that places more lots, then scores higher, so it depends on the lot sizes). \"ew\" means the street runs east-west (along x), \"ns\" north-south (along z). \"ew\" and \"ns\" are strict: only that axis is tried, never a fallback, and lots that do not fit are unplaced as ever. If the forced axis places no lot where the other would, the part answers refused NO_ROOM (evidence.orientation names it) and wouldFit holds the same part with the other orientation. The template's own params, checked by the kit's validateParams against the program's declared params; an error is malformed with the param path. A template's lots param is a list of $defs/lot." }
       }
     },
     "program.lots": {
@@ -377,7 +377,8 @@
       "properties": {
         "lots": { "type": "array", "minItems": 1, "maxItems": 40, "items": { "$ref": "#/$defs/lot" } },
         "layout": { "enum": ["street", "ring", "spiral", "grid", "organic", "elevated"], "description": "How the lots are laid out. street: supported (flat_village's layout with its defaults). ring, spiral, grid and organic: reserved for slice FL, block ids layout.ring, layout.spiral, layout.grid and layout.organic; elevated (K1, reserved until 7b, layout.elevated): lots carried at a level above the ground (canopy huts in trees, cliff ledges); a lots program that names one answers unsupported {block: layout.<name>}. Write a free layout here, never as a connector kind (connector.ring_street, connector.grid) or a rule kind (rule.ring_layout)." },
-        "shared": { "enum": ["square", "well", "none"] }
+        "shared": { "enum": ["square", "well", "none"] },
+        "orientation": { "enum": ["ew", "ns", "auto"], "description": "Street orientation (C37, sinceApi 1.30.0): orientation \"ew\" | \"ns\" | \"auto\" (default auto: the layout picks the axis that places more lots, then scores higher, so it depends on the lot sizes). \"ew\" means the street runs east-west (along x), \"ns\" north-south (along z). \"ew\" and \"ns\" are strict: only that axis is tried, never a fallback, and lots that do not fit are unplaced as ever. If the forced axis places no lot where the other would, the part answers refused NO_ROOM (evidence.orientation names it) and wouldFit holds the same part with the other orientation." }
       }
     },
     "program.districts": {

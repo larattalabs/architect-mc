@@ -98,14 +98,17 @@ export function rectWater(wd, r) {
  * Returns `{orientation, streetV, streetY, u0, u1, shared, lots: [{spec, u, v, w, d, side, rect, front, floorY, groundY,
  * slot}], unplaced: [{id, reason}], score}` or `{fail: why}` when no street fits.
  */
-export function layoutStreet({ claim, survey, specs, rules = STREET_RULES, shared = { kind: 'square', size: 11 }, keepOut = [], _unsafe = {} }) {
+export function layoutStreet({ claim, survey, specs, rules = STREET_RULES, shared = { kind: 'square', size: 11 }, keepOut = [], orientation = 'auto', _unsafe = {} }) {
+  // (C37) `orientation`: 'auto' (both, the one that places more lots then the better score: exactly as before), or 'ew' / 'ns' (only that
+  // one, never a fallback). 'ew': u = x, the street runs east-west (along x); 'ns': u = z, it runs north-south. Result `.orientation` is the same word.
+  if (!ORIENTATIONS.includes(orientation)) throw new Error(`orientation must be one of ${ORIENTATIONS.join(', ')}`);
   const ordered = specs.map((s, i) => ({ ...s, _i: i })).sort((a, b) => orderOf(a) - orderOf(b) || a._i - b._i);
   const wd = ordered.some((s) => s.placement === 'near_water' || s.villager === 'farm') ? waterDistance(survey, claim) : null;
   // (6c W) a farm needs unfrozen water (M24); near_water counts frozen water as water (S-W-1)
   const wdFarm = wd && hasFrozen(survey, claim) ? waterDistance(survey, claim, { unfrozen: true }) : wd;
   let best = null;
   const fails = [];
-  for (const o of ['ew', 'ns']) {
+  for (const o of orientation === 'auto' ? ['ew', 'ns'] : [orientation]) {
     const F = frame(o, claim);
     const m = rules.claimMargin;
     const cu = Math.floor((F.u0 + F.u1) / 2), cv = Math.floor((F.v0 + F.v1) / 2);
@@ -133,6 +136,9 @@ export function layoutStreet({ claim, survey, specs, rules = STREET_RULES, share
   const unplaced = specs.filter((s) => !placed.has(s.id)).map((s) => ({ id: s.id, reason: best.why.get(s.id) ?? 'no_room' }));
   return { orientation: best.orientation, streetV: best.streetV, streetY: best.streetY, u0: best.u0, u1: best.u1, shared: best.shared, lots: best.lots, unplaced, score: best.score, road: best.road };
 }
+
+/** (C37) The street orientations a layout accepts; 'ew' = the street runs east-west (along x), 'ns' = north-south (along z). */
+export const ORIENTATIONS = Object.freeze(['auto', 'ew', 'ns']);
 
 /** The shared space at the street's middle: the square centred on the street, or the 7x7 green on one side of it. */
 function placeShared(o, F, claim, survey, sv, cu, shared, rules, keepOut) {
@@ -511,14 +517,14 @@ export function lane(part, id, from, to, w, { o, boxes = [], keepOut = [], _unsa
  * node per lot (port `entrance`), the plaza (ports `bell`, `street_<end>`, `lane_<lot>`), a junction per street lane, road
  * edges along the street and path edges for the lanes. Returns the layout plus `{bell, reserve, lanes, entrances}`.
  */
-export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 'square', size: 11 }, laneWidth = 2, stages = {}, maxHeight = 32, requireAll = false, planProps = null, _unsafe = {}, rect = null, prefix = '', padEdge = null, layout = null } = {}) {
+export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 'square', size: 11 }, laneWidth = 2, stages = {}, maxHeight = 32, requireAll = false, planProps = null, _unsafe = {}, rect = null, prefix = '', padEdge = null, layout = null, orientation = 'auto' } = {}) {
   // (6c P0) `rect`: lay the street out inside this {minX, minZ, maxX, maxZ} (a plan zone's rect), not the claim; `prefix`: before
   // every part, road and graph id the layout makes (a plan's second zone on); `padEdge`: the lot pads' edge (a plan program
   // declares passes, so its default would be blend); `layout`: a layoutStreet result already computed for the same inputs. All
   // absent: exactly as before (flat_village, S7).
   const ctx = r.ctx;
   const keepOut = ctx.keepOut ?? [];
-  const L = layout ?? layoutStreet({ claim: rect ? { ...r.claim, minX: rect.minX, minZ: rect.minZ, maxX: rect.maxX, maxZ: rect.maxZ } : r.claim, survey: r.survey, specs, rules, shared, keepOut, _unsafe });
+  const L = layout ?? layoutStreet({ claim: rect ? { ...r.claim, minX: rect.minX, minZ: rect.minZ, maxX: rect.maxX, maxZ: rect.maxZ } : r.claim, survey: r.survey, specs, rules, shared, keepOut, orientation, _unsafe });
   if (L.fail) throw new Error(`flat village: ${L.fail}`);
   if (requireAll && L.unplaced.length) throw new Error(`flat village: requireAll, and ${L.unplaced.length} lot(s) are unplaced: ${L.unplaced.map((u) => `${u.id} (${u.reason})`).join(', ')}`);
   const o = L.orientation, sh = L.shared;
