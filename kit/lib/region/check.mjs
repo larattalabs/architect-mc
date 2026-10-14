@@ -9,6 +9,7 @@ import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
 import { decodeVoxels } from './voxels.mjs';
 import { VC, classAt, decodeArvx } from './volume.mjs';
 import { windowGrade } from './passes/route.mjs';
+import { ropeRule } from '../connectors/ropeCheck.mjs';
 
 export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17'];
 /** (6c V) The parts a flat village's components emit (the M1 lot-box rule applies to them only). */
@@ -73,6 +74,7 @@ export function walkGraph(vw, starts, { mover = 'player' } = {}) {
     if (!V && P.climb[a]) return true;
     const f = vw.get(x, y - 1, z);
     if (P.floor[f] && !(V && (P.bubble[f] || P.barrier[f]))) return true; // a villager can't stand on a 1.5-tall fence, wall or gate
+    if (P.half[f]) return true; // (7a K1b) on a bottom slab: its surface is half a block lower
     return !V && P.water[f] && P.air[a]; // swimming on the surface (the player only)
   };
   const stands = (x, z) => {
@@ -102,7 +104,11 @@ export function walkGraph(vw, starts, { mover = 'player' } = {}) {
       for (const ny of stands(nx, nz)) {
         if (ny > y + 1 || ny < y - fallMax) continue;
         // a step up needs head room for the jump, unless it is onto a stairs block (walked up without jumping)
-        if (ny === y + 1 && !pass[vw.get(x, y + 2, z)] && !P.stairs[vw.get(nx, ny - 1, nz)]) continue;
+        // (7a K1b) half-slab steps: the real rise between the surfaces (a bottom slab's is half a block lower) decides: at most
+        // 0.5 is a step (no jump, as vanilla's 0.6 step height), over 1.125 no mover makes it (vanilla's jump), between is a jump
+        const rise = ny === y + 1 || ny === y ? (ny - y) * 2 + (P.half[vw.get(x, y - 1, z)] ? 1 : 0) - (P.half[vw.get(nx, ny - 1, nz)] ? 1 : 0) : 0; // half blocks
+        if (rise > 2) continue;
+        if (ny === y + 1 && rise > 1 && !pass[vw.get(x, y + 2, z)] && !P.stairs[vw.get(nx, ny - 1, nz)]) continue;
         if (ny < y) { let ok = true; for (let yy = ny + 2; yy <= y + 1; yy++) if (!pass[vw.get(nx, yy, nz)]) { ok = false; break; } if (!ok) continue; }
         push(nx, ny, nz);
       }
@@ -606,6 +612,9 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
       per.push(row);
     }
     metrics.M10 = per;
+    // (7a K1b) M10:rope (CONTRACT K1 §5): each rope bridge's deck read from the world (not the plan's numbers)
+    const ropes = ropeRule({ vw, meta, findings });
+    if (ropes.length) metrics.M10rope = ropes;
   });
 
   // ---- M11 terrain-op sanity, M12 budget (metrics; findings near the world's limits)

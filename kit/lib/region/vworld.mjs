@@ -33,6 +33,7 @@ export class Palette {
     this.natural = []; this.gravity = []; this.stairs = []; this.emit = []; this.opaque = []; this.cost = []; this.spawn = []; this.climb = []; this.air = [];
     this.top = [];
     this.vpass = []; this.bubble = []; // (6c V) the villager mover: passable for a villager; bubble columns
+    this.half = []; // (7a K1b) a bottom slab: a floor at half height (the movers stand on it, its surface y + 0.5)
     this.of(AIR);
   }
   of(s) {
@@ -75,6 +76,7 @@ export class Palette {
       && fam !== 'fence_gate' && fam !== 'trapdoor' && !(fam === 'door' && /(iron|copper)_door$/.test(st.name));
     this.vpass.push(vp);
     this.bubble.push(st.name === 'minecraft:bubble_column');
+    this.half.push(!air && known && BLOCKS[st.name].family === 'slab' && (st.props.type ?? 'bottom') === 'bottom');
     return i;
   }
 }
