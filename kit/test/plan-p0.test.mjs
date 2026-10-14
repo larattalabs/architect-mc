@@ -15,13 +15,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { asksSurvey, goldenSurvey, stewardAnchors, checkPlanLocal, memoryCache, FIX, ROOT } from './plan-helpers.mjs';
+import { asksSurvey, goldenSurvey, stewardAnchors, checkPlanLocal, memoryCache, flatSurvey, FIX, ROOT } from './plan-helpers.mjs';
 import { validatePlan, PLAN_SCHEMA } from '../lib/plan/schema.mjs';
 import { planCatalogue, diffCatalogues } from '../lib/plan/catalogue.mjs';
 
-const SV = { s7: goldenSurvey('s7'), s3: goldenSurvey('s3'), asks: asksSurvey() };
+// ((7a K1b) `flat`: a flat claim in rift_city's range, for the rope bridge fixtures; a fixture's `anchors` add to Steward's)
+const SV = { s7: goldenSurvey('s7'), s3: goldenSurvey('s3'), asks: asksSurvey(), flat: flatSurvey() };
 const read = (dir) => fs.readdirSync(path.join(FIX, dir)).filter((f) => f.endsWith('.json') && f !== 'SOURCE.json').sort().map((f) => ({ name: f, ...JSON.parse(fs.readFileSync(path.join(FIX, dir, f), 'utf8')) }));
-const run = (fx, extra = {}) => { const s = SV[fx.on]; return checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: stewardAnchors(s.claim), protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}), ...extra }); };
+const run = (fx, extra = {}) => { const s = SV[fx.on]; return checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}), ...extra }); };
 const lots = (n, p = 'h') => Array.from({ length: n }, (_, i) => ({ id: `${p}${i + 1}`, type: 'house', size: [9, 9] }));
 const A = SV.asks;
 const asks = (plan, o = {}) => checkPlanLocal(plan, { survey: A.bytes, claim: A.claim, anchors: stewardAnchors(A.claim), ...o });
@@ -33,7 +34,7 @@ test('item 1: valid/ fixtures (at least 12) validate and every part fits', async
   const fx = read('valid');
   assert.ok(fx.length >= 12, `${fx.length} valid fixtures`);
   for (const f of fx) {
-    const v = validatePlan(f.plan, { anchors: Object.keys(stewardAnchors(SV[f.on].claim)) });
+    const v = validatePlan(f.plan, { anchors: Object.keys({ ...stewardAnchors(SV[f.on].claim), ...(f.anchors ?? {}) }) });
     assert.equal(v.malformed, null, `${f.name}: ${JSON.stringify(v.malformed)}`);
     for (const p of v.parts) assert.equal(p.verdict, 'compile', `${f.name} ${p.id}: ${p.verdict} ${JSON.stringify(p.reason)}`);
     const r = await run(f);
@@ -273,7 +274,11 @@ test('item 9: the catalogue diff (D1 flips program.districts and endpoint.region
   assert.deepEqual(k1.reservedToSupported, ['connector.auto', 'connector.gate', 'connector.rope_bridge', 'connector.wall']);
   assert.deepEqual(k1.added, [{ id: 'layout.elevated', state: 'reserved' }, { id: 'wall.along', state: 'reserved' }, { id: 'wall.around', state: 'supported' }, { id: 'wall.edge', state: 'supported' }, { id: 'wall.line', state: 'supported' }]);
   assert.deepEqual([k1.removed, k1.retired, k1.otherStateChanges, k1.untilChanged], [[], [], [], []]);
+  // C37 -> K1 (K1a's base): only locator.around's note moved
   assert.deepEqual(k1.notesChanged.map((x) => x.id), ['locator.around']);
+  // D2 -> K1 (K1b's base): C37 (v0.33.0, merged under K1) adds its street orientation notes on program.flat_village, program.lots
+  // and layout.street
+  assert.deepEqual(diffCatalogues(d2g, golden).notesChanged.map((x) => x.id).sort(), ['layout.street', 'locator.around', 'program.flat_village', 'program.lots']);
   assert.deepEqual(k1.recheck, [{ part: 'wall', block: 'connector.wall' }]);
   for (const [to, what, flips] of [[next, 'catalogue-next.json', ['endpoint.region', 'program.districts']], [d1, 'the D1 golden', ['endpoint.region', 'program.districts']]]) {
     const d = diffCatalogues(p0, to, { pending: [{ part: 'craftsmen_district', block: 'program.districts' }, { part: 'wall', block: 'connector.wall' }] });

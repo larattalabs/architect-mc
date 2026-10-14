@@ -1,0 +1,26 @@
+{
+ "scenario": "links_demo",
+ "version": 0,
+ "note": "tile shas of the IR over its own plan survey, 1 worker = 4 workers shuffled; inputs in goldens/links_demo/ (written by tools/gate7ak1b.mjs natural)",
+ "irSha": "fd5b5dc60440b26843cde767a000a34aa5f48ce1782a720a73f00b3beb533d65",
+ "kitVersion": "0.33.0",
+ "cells": 151293,
+ "tiles": {
+  "ground|terrain|-15,-1": "76a834661c9d3c3badc1bde0d46ef35eba9a38dd18a6e6b041202fa7e12f920c",
+  "ground|terrain|-15,0": "d1dd6b9b3fedb5149643c919b76e575599059591892d76b987c4395f966111d1",
+  "ground|terrain|-16,-1": "fc19c540054a57e5e9fac8ff9a0307809e867fd85fffdcd97a6ed301430ba996",
+  "ground|terrain|-16,0": "5a81085341d36ce8aa21aca28dc00ec1ab18709ca29660205c0d5bd7d668aa09",
+  "ground|terrain|-17,-1": "cb023df5b175e1169cc64a2e01722af19b7df280f3ffa146e4fbdcfbd0bd2703",
+  "ground|terrain|-17,0": "eeca9beb66289916d362cc18a0e127dd9e8c0ba49f03a5d1d9c4edc181c53e8e",
+  "lots|path|-16,-1": "0cd9c182425bedce0cbea4920e3d3abb3bdb5ca4c5a61a3862cdc44826914209",
+  "lots|path|-16,0": "11dc3e4830620579835453b6bf232f51dde5d812bdb033cf8828062fb645e17f",
+  "lots|path|-17,-1": "5f3b86621c52ee0b93e830e95c667cf26efba76081ee016d29cce9160f2241ac",
+  "lots|path|-17,0": "f35b63634d1c493aa69e65621ef2af91555384551878e2dab1216b30f887dfef",
+  "ways|path|-15,-1": "8338a4671a15ef00b4330325785b2a4ff3a44e86bb594f0fddcc36d7f6eba3db",
+  "ways|path|-15,0": "75811fbb69a33f066f42ede1827f599d9122de9260ea85b68a2b1e388ed26711",
+  "ways|path|-16,-1": "9b871a7a21c63ada0665054fceb4b37bc59580222adbad6c770e963548c8de19",
+  "ways|path|-16,0": "2e63efdefc5b60b6c2be25746b071c07149e9c317f970e1c0e081784d29b4fd1",
+  "ways|path|-17,-1": "116c98649a84327164c65315e0b32c57c93d3578ec1c12cf6daabcad5dedaa2e",
+  "ways|path|-17,0": "025bb733fd67a72a7e7d6a7297546bca992a1c1c6bb66b5079bd2618114bf890"
+ }
+}

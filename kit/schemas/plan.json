@@ -69,7 +69,7 @@
 
   "x-catalogue": {
     "about": "The capability catalogue that P0 ships (catalogueVersion 1). Each entry: a stable block id (never reused or renamed), the API version it arrived in (sinceApi; P0 is a placeholder the coordinator replaces at merge with the real minor), its own schemaVersion (bumped when its members grow, additively), its state (supported | reserved | retired) and, for reserved, the slice it waits for (until). Checks return this catalogue with every answer; a release commits it as a golden so two catalogues diff by id. Reserved entries carry their parameters through $defs/extension until supported.",
-    "catalogueVersion": 4,
+    "catalogueVersion": 5,
     "entries": [
       { "id": "zone.standard", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.standard" },
       { "id": "zone.outpost", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.outpost" },
@@ -85,7 +85,7 @@
       { "id": "layout.spiral", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
       { "id": "layout.grid", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
       { "id": "layout.organic", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
-      { "id": "layout.elevated", "sinceApi": "1.30.0", "schemaVersion": 0, "state": "reserved", "until": "7b", "note": "Lots carried at a level above the ground (canopy huts in trees, cliff ledges): Claude can write them now and they wait as unsupported (S-K1-6)." },
+      { "id": "layout.elevated", "sinceApi": "1.32.0", "schemaVersion": 0, "state": "reserved", "until": "7b", "note": "Lots carried at a level above the ground (canopy huts in trees, cliff ledges): Claude can write them now and they wait as unsupported (S-K1-6)." },
       { "id": "connector.street", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
       { "id": "connector.road", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
       { "id": "connector.path", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
@@ -106,10 +106,10 @@
       { "id": "connector.branch_walk", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
       { "id": "connector.span_bridge", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
       { "id": "connector.stairs_around", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
-      { "id": "wall.line", "sinceApi": "1.30.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall through from, via[] and to (each leg searched by T2's A* with a wall profile); a lot endpoint is a joined lot." },
-      { "id": "wall.around", "sinceApi": "1.30.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall round a part, build or protected area, or (K1-target) one of the owner's standing regions, around {feature: {region}} (where.around on a wall: the wall's own member, not locator.around; its region not feature.region)." },
-      { "id": "wall.edge", "sinceApi": "1.30.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall on the edge of a zone or the claim (where.inside)." },
-      { "id": "wall.along", "sinceApi": "1.30.0", "schemaVersion": 0, "state": "reserved", "until": "K2", "note": "D2's boundary spine plus an offset (where.along on a wall): the same member, no format change." },
+      { "id": "wall.line", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall through from, via[] and to (each leg searched by T2's A* with a wall profile); a lot endpoint is a joined lot." },
+      { "id": "wall.around", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall round a part, build or protected area, or (K1-target) one of the owner's standing regions, around {feature: {region}} (where.around on a wall: the wall's own member, not locator.around; its region not feature.region)." },
+      { "id": "wall.edge", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall on the edge of a zone or the claim (where.inside)." },
+      { "id": "wall.along", "sinceApi": "1.32.0", "schemaVersion": 0, "state": "reserved", "until": "K2", "note": "D2's boundary spine plus an offset (where.along on a wall): the same member, no format change." },
       { "id": "form.relief", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.relief" },
       { "id": "form.terrace", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.terrace" },
       { "id": "form.ice_spike", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.spike" },

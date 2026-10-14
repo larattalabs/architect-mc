@@ -1,0 +1,54 @@
+{
+  "about": "(7a K1b) a 41-cell gap between the ends, no approach: the only span is 41 deck cells",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1041,
+        "z0": 2000,
+        "x1": 1081,
+        "z1": 2095,
+        "y": 40
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1040,
+      65,
+      2048
+    ],
+    "b": [
+      1082,
+      65,
+      2048
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "span",
+        "kind": "rope_bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        },
+        "approach": 0
+      }
+    ]
+  },
+  "expect": {
+    "part": "span",
+    "code": "SPAN",
+    "evidence": {
+      "span": 41
+    }
+  },
+  "on": "flat"
+}

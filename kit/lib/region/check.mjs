@@ -76,6 +76,7 @@ export function walkGraph(vw, starts, { mover = 'player' } = {}) {
     if (!V && P.climb[a]) return true;
     const f = vw.get(x, y - 1, z);
     if (P.floor[f] && !(V && (P.bubble[f] || P.barrier[f]))) return true; // a villager can't stand on a 1.5-tall fence, wall or gate
+    if (P.half[f]) return true; // (7a K1b) on a bottom slab: its surface is half a block lower
     return !V && P.water[f] && P.air[a]; // swimming on the surface (the player only)
   };
   const stands = (x, z) => {
@@ -105,7 +106,11 @@ export function walkGraph(vw, starts, { mover = 'player' } = {}) {
       for (const ny of stands(nx, nz)) {
         if (ny > y + 1 || ny < y - fallMax) continue;
         // a step up needs head room for the jump, unless it is onto a stairs block (walked up without jumping)
-        if (ny === y + 1 && !pass[vw.get(x, y + 2, z)] && !P.stairs[vw.get(nx, ny - 1, nz)]) continue;
+        // (7a K1b) half-slab steps: the real rise between the surfaces (a bottom slab's is half a block lower) decides: at most
+        // 0.5 is a step (no jump, as vanilla's 0.6 step height), over 1.125 no mover makes it (vanilla's jump), between is a jump
+        const rise = ny === y + 1 || ny === y ? (ny - y) * 2 + (P.half[vw.get(x, y - 1, z)] ? 1 : 0) - (P.half[vw.get(nx, ny - 1, nz)] ? 1 : 0) : 0; // half blocks
+        if (rise > 2) continue;
+        if (ny === y + 1 && rise > 1 && !pass[vw.get(x, y + 2, z)] && !P.stairs[vw.get(nx, ny - 1, nz)]) continue;
         if (ny < y) { let ok = true; for (let yy = ny + 2; yy <= y + 1; yy++) if (!pass[vw.get(nx, yy, nz)]) { ok = false; break; } if (!ok) continue; }
         push(nx, ny, nz);
       }
@@ -469,6 +474,17 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
         if (P.spawn[vw.get(x, y - 1, z)] && !(light.at(x, y, z) > 0)) rd++;
       }
       metrics.M5route = { darkSpawnable: rd, walkCells: ra, share: ra ? rd / ra : 0 };
+    }
+    // (7a K1b) the rope bridges' own deck cells (the plan meta's ropes: each walk cell of every deck, reached from the entrance or
+    // not): dark and spawnable ones (CONTRACT K1 item 5: 0)
+    if (Array.isArray(meta?.ropes) && meta.ropes.length) {
+      let rd = 0, ra = 0;
+      const rs = [];
+      for (const q of meta.ropes) for (const [x, y, z] of q.cells ?? []) {
+        ra++;
+        if (P.spawn[vw.get(x, y, z)] && P.passable[vw.get(x, y + 1, z)] && !(light.at(x, y + 1, z) > 0)) { rd++; if (rs.length < 20) rs.push([x, y + 1, z]); }
+      }
+      metrics.M5rope = { darkSpawnable: rd, deckCells: ra, sample: rs };
     }
     if (dark) findings.push(finding('M5', null, null, dark, sample, `${dark} of ${area} walk cell(s) are dark (block light 0) and spawnable (${(100 * dark / Math.max(1, area)).toFixed(1)}%)`));
     // caverns: no dark spawnable floor cell inside

@@ -49,12 +49,27 @@ export function stewardAnchors(claim) {
  * Check a plan in process: plan_v0 over `survey` (bytes) and `claim`, then finish. Options: anchors {name: [x, y, z]}, protected
  * [{id, rect}], regions [{id, rect}], budget, bible, fingerprint, keepOut [[x0, z0, x1, z1]], planCache (key -> entry | null).
  */
-export async function checkPlanLocal(plan, { survey, claim, anchors = {}, protected: prot = [], regions = [], builds = [], standing = null, biomes = null, budget = {}, bible = null, fingerprint = null, keepOut = [], planCache = null } = {}) {
+export async function checkPlanLocal(plan, { survey, claim, anchors = {}, protected: prot = [], regions = [], builds = [], standing = null, biomes = null, budget = {}, bible = null, fingerprint = null, keepOut = [], planCache = null, volumes = [] } = {}) {
   const params = { plan, anchors: { anchors }, protected: { areas: prot }, regions: { regions }, builds: { builds }, ...(standing ? { standing: { standing } } : {}), budget, bible, fingerprint: fingerprint ? { sha: fingerprint } : null };
-  const res = await planRegion({ programFile: PLAN_V0, params, survey, claim, roles: {}, keepOut, planCache, ...(biomes ? { biomes } : {}) });
+  const res = await planRegion({ programFile: PLAN_V0, params, survey, claim, roles: {}, keepOut, planCache, ...(biomes ? { biomes } : {}), ...(volumes.length ? { volumes } : {}) });
   const cols = fillMissing(asColumns(survey)).columns;
   const f = finishCheck({ res, survey: cols, blobs: (sha) => res.blobs.get(sha) ?? null, surveyBytesSha: createHash('sha256').update(survey).digest('hex'), inputs: { surveyRes: cols.resolution } });
   return { ...f, res };
+}
+
+/**
+ * (7a K1b) A flat claim for the rope fixtures (rift_city's claim range): 240x160 at ground 64, from (1000, 2000); `bands` carve or
+ * raise rects `{x0, z0, x1, z1, y, water?}` (ground y; water: a water column from its floor y to y + depth).
+ */
+export function flatSurvey({ W = 240, D = 160, x0 = 1000, z0 = 2000, y = 64, bands = [] } = {}) {
+  const c = makeColumns(x0, z0, W, D, 1);
+  for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) {
+    const k = i + j * W, x = x0 + i, z = z0 + j;
+    let g = y, f = y, flag = 0;
+    for (const b of bands) if (x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1) { if (b.water) { f = b.y; g = b.y + b.water; flag = FLAG_WATER; } else { g = b.y; f = b.y; flag = 0; } }
+    c.ground[k] = g; c.height[k] = g; c.floor[k] = f; c.flags[k] = flag;
+  }
+  return { bytes: encodeColumns(c), claim: { minX: x0, minZ: z0, maxX: x0 + W - 1, maxZ: z0 + D - 1, minY: -64, maxY: 319 } };
 }
 
 /** A cache over a Map (what the sidecar's per-owner directory holds). */

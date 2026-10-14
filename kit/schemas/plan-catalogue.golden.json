@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 4,
- "api": "1.31.0",
- "kitVersion": "0.32.0",
+ "catalogueVersion": 5,
+ "api": "1.32.0",
+ "kitVersion": "0.33.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -103,7 +103,7 @@
   },
   {
    "id": "layout.elevated",
-   "sinceApi": "1.30.0",
+   "sinceApi": "1.32.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7b",
@@ -293,28 +293,28 @@
   },
   {
    "id": "wall.line",
-   "sinceApi": "1.30.0",
+   "sinceApi": "1.32.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "K1: a wall through from, via[] and to (each leg searched by T2's A* with a wall profile); a lot endpoint is a joined lot."
   },
   {
    "id": "wall.around",
-   "sinceApi": "1.30.0",
+   "sinceApi": "1.32.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "K1: a wall round a part, build or protected area, or (K1-target) one of the owner's standing regions, around {feature: {region}} (where.around on a wall: the wall's own member, not locator.around; its region not feature.region)."
   },
   {
    "id": "wall.edge",
-   "sinceApi": "1.30.0",
+   "sinceApi": "1.32.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "K1: a wall on the edge of a zone or the claim (where.inside)."
   },
   {
    "id": "wall.along",
-   "sinceApi": "1.30.0",
+   "sinceApi": "1.32.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "K2",

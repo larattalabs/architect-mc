@@ -1,0 +1,54 @@
+{
+  "about": "(7a K1b) the same 1-wide bridge on a player-only edge fits (S-K1-4: only villager bridges need 2 wide)",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1041,
+        "z0": 2000,
+        "x1": 1060,
+        "z1": 2095,
+        "y": 40
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1040,
+      65,
+      2048
+    ],
+    "b": [
+      1061,
+      65,
+      2048
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "span",
+        "kind": "rope_bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        },
+        "width": 1,
+        "movers": [
+          "player"
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "part": "span",
+    "class": "fits"
+  },
+  "on": "flat"
+}

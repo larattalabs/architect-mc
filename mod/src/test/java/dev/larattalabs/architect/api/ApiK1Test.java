@@ -8,7 +8,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * API 1.30.0 placeholder (docs/CONTRACT.md "Phase 7a slice K1" §8): no new records, methods or IR kinds; the features
+ * API 1.32.0 (docs/CONTRACT.md "Phase 7a slice K1" §8): no new records, methods or IR kinds; the features
  * wallConnectors (sidecar region.walls), ropeBridges and autoConnector (sidecar region.rope).
  */
 class ApiK1Test {

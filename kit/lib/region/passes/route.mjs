@@ -13,7 +13,7 @@
 // z, heading, k). Plan time only, pure, under the realise lint (integer math; Math.floor/abs/min/max only).
 import { FLAG_LAVA, FLAG_MISSING, FLAG_TREE, FLAG_WATER } from '../pack.mjs';
 import { gateActive, gateCells, gateCommit, gateExpand, gateInit, gatePrune } from './moves/gate.mjs';
-import { ropeActive, ropeCells, ropeCommit, ropeExpand, ropeInit, ropeNeedsFlag } from './moves/rope.mjs';
+import { ropeActive, ropeCells, ropeCommit, ropeExpand, ropeFail, ropeInit, ropeNeedsFlag } from './moves/rope.mjs';
 
 /** The 8 headings (x east, z south): E, SE, S, SW, W, NW, N, NE. Even headings are cardinal. */
 export const DIRS = Object.freeze([[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]);
@@ -58,6 +58,8 @@ const isInt = Number.isInteger;
  *   commit(state, env, edgeOut, moves, lat) after an edge routes (the gate move opens its gates for the later edges)
  *   prune(state, from, to) -> note | null   (optional) before an edge's search: a reason no route can exist (a sealed wall between its
  *                                           ends: the edge fails NO_ROUTE at once, instead of spending the node budget)
+ *   fail?(state, edgeOut, inS) -> bool      (K1b, optional) an edge that found no route: the row names why (sets edgeOut.failed);
+ *                                           true skips T2's water check (the rope move: NO_GAP, SPAN, ... on a rope_bridge edge)
  * Order and ties: a state's moves are relaxed walk, stair, hairpin, ladder, then each active special row in table order; a row
  * relaxes its candidates in its own fixed order (the gate move: at most one, straight ahead; the rope move: K1b's, by span length
  * ascending). The heap breaks ties by (f, g, x, z, heading, k, d, flag), the flag last, so an unflagged state wins a tie.
@@ -66,7 +68,7 @@ const isInt = Number.isInteger;
  */
 export const SPECIAL_MOVES = Object.freeze([
   Object.freeze({ name: 'gate', code: 5, segment: 'gate', flag: false, init: gateInit, active: gateActive, needsFlag: () => false, blocks: (st) => st.mask, expand: gateExpand, cells: gateCells, commit: gateCommit, prune: gatePrune }),
-  Object.freeze({ name: 'rope', code: 6, segment: 'rope', flag: true, init: ropeInit, active: ropeActive, needsFlag: ropeNeedsFlag, blocks: () => null, expand: ropeExpand, cells: ropeCells, commit: ropeCommit }),
+  Object.freeze({ name: 'rope', code: 6, segment: 'rope', flag: true, init: ropeInit, active: ropeActive, needsFlag: ropeNeedsFlag, blocks: () => null, expand: ropeExpand, cells: ropeCells, commit: ropeCommit, fail: ropeFail }),
 ]);
 
 /**
@@ -616,6 +618,14 @@ export function routePass(survey, volumes, intent) {
       const wr = isInt(e.withinRadius) && e.withinRadius >= 0 && e.withinRadius <= 16 ? e.withinRadius : 3;
       withinM = dilate(seed, W, D, Math.floor((wr + r - 1) / r));
     }
+    // (7a K1b) a rope_bridge edge (`spanOnce`) walks at most `approach` cells at each end: it searches the two squares of that radius
+    // round its ends only (its span's landings lie in them; the deck between needs no search cell)
+    if (!withinM && e.spanOnce) {
+      const A = isInt(e.approach) && e.approach >= 0 && e.approach <= 32 ? e.approach : 16;
+      const seed = new Uint8Array(n);
+      for (const en of ends) seed[en.k] = 1;
+      withinM = dilate(seed, W, D, Math.floor((A + r - 1) / r));
+    }
     const sctx = { G, builtY, prefer: preferE, start: ends[0], goal: ends[1], Gq, w, laneW: Math.floor((w + r - 1) / r), Ld: Math.floor((Math.max(hairpinLanding, w) + r - 1) / r),
       latLo: Math.floor(lo / r), latHi: Math.floor((hi + r - 1) / r), maxCut, maxFill, stairs: stairs && !coarse, ladders, nearEnd,
       ...(sp.length ? { special: sp, needFlag } : {}) };
@@ -736,6 +746,11 @@ export function routePass(survey, volumes, intent) {
       res = null;
     }
     if (!built && broke) { edgeOut.failed = 'BUDGET'; edgeOut.note = `the node budget (${cap} expansions over all edges) ran out on this edge`; continue; }
+    // (7a K1b) a special row may name why the edge found no route (the rope move on a rope_bridge edge)
+    if (!built && sp.some((x) => x.m.fail)) {
+      const bl = build(true).blockedW;
+      if (sp.some((x) => x.m.fail && x.m.fail(x.st, edgeOut, (k) => k >= 0 && !bl[k]))) continue;
+    }
     if (!built) {
       // why: would it route through water (T3's bridges)?
       const bw = build(false);

@@ -333,7 +333,7 @@ function runFree(W, a, b) {
 function nearestRun(W, pt, width) {
   const n = W.positions.length;
   let proj = 0, pd = Infinity;
-  W.positions.forEach((q, i) => { const d = (q.x - pt[0]) ** 2 + (q.z - pt[1]) ** 2; if (d < pd) { pd = d; proj = i; } });
+  W.positions.forEach((q, i) => { const dx = q.x - pt[0], dz = q.z - pt[1], d = dx * dx + dz * dz; if (d < pd) { pd = d; proj = i; } });
   let best = null;
   for (let a = 1; a + width - 1 < n - 1; a++) {
     const b = a + width - 1;

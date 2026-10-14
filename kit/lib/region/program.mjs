@@ -34,8 +34,8 @@ import { VOXEL_CLASSES, VC, classAt } from './volume.mjs';
 import { PASSES, PASS_NAMES } from './passes/index.mjs';
 import { emitDistricts } from './districtsEmit.mjs';
 import * as CONNECTOR_WALL from '../connectors/wall.mjs';
-import * as CONNECTOR_ROPE from '../connectors/rope.mjs';
 import { edgeColumns, inferMovers, footprintOf, polylineOf, VILLAGER } from './passes/route.mjs';
+import { ropeBridge } from '../connectors/ropeGeom.mjs';
 import { CARDINALS, cardinalOf, centreCells, circlePolygon, compassDir, crossOffsets, dominantCardinal, rightOf, segmentAxis } from './geom.mjs';
 
 export const COND = Object.freeze({ IF_NATURAL: 0, IF_SOLID_NATURAL: 1, IF_AIR_OR_FLUID: 2, ALWAYS_OURS: 3 });
@@ -373,6 +373,7 @@ export class Region {
       const e = edges[i], d = out.data.edges[i];
       const rid = `route_${e.id}`;
       const rec = { id: e.id, from: e.a.name, to: e.b.name, movers: e.movers, ladders: e.ladders, width: e.width, ok: d.ok, failed: d.failed ?? null, length: d.length, rise: d.rise, cost: d.cost, search: d.search, expanded: d.expanded, roads: [], paths: [] };
+      if (d.rope) rec.rope = d.rope; // (7a K1b) why a rope_bridge edge found no route ({code, evidence})
       metaEdges.push(rec);
       if (!d.ok) { this.note(`route ${e.id} (${e.a.name} -> ${e.b.name}): ${d.failed} (${d.note})`); res.push({ id: e.id, ok: false, failed: d.failed }); continue; }
       rec.path = d.path; rec.segments = d.segments; rec.landings = d.landings; rec.ladderCols = d.ladderCols;
@@ -433,6 +434,11 @@ export class Region {
     this.passRuns.push({ name: 'route', ms, heapMb });
     this.note(`pass route: ${(ms / 1000).toFixed(1)} s, ${heapMb} MB${out.data.coarse ? ` (coarse: resolution ${out.data.resolution})` : ''}; ${out.data.routed}/${edges.length} edges routed, ${hairpins} hairpin(s)`);
     return { edges: res, data: { ...out.data, ms } };
+  }
+
+  /** (7a K1b) A rope bridge between two landings on one axis (lib/connectors/ropeGeom.mjs, CONTRACT K1 §3); returns its path record. */
+  ropeBridge(a, b, opts = {}) {
+    return ropeBridge(this, a, b, opts);
   }
 
   /** (6c V) A graph node (SETTLEMENTS §8.1): `{id, kind: lot|plaza|junction, ref, at, ports}`; ids unique. */
@@ -758,26 +764,22 @@ export class Region {
   }
 
   /**
-   * (6b) A generated form (plan time): `gen` is a generator result `{ops, bounds, generator, version, params, seed}`; its ops
-   * go into part `id` (created in `stage`) and its provenance into the IR's `forms`.
-   */
-  /**
    * (7a K1) Connector primitives, usable by any program (docs/CONTRACT.md "Phase 7a slice K1" §3; kit/lib/connectors/):
    * `r.wall(line, opts)` a wall on a polyline ([[x, z], ...] corners) or a ring ({ring: [x0, z0, x1, z1]}, the line's inner rect),
    * `opts` {id, stage, height, thickness, crenels, corners, closed, lamps, gates: [{at: [x, z], width, door, frame, height}]}: built
    * now, or with `defer: true` a handle whose `.gate(at, o)` adds gates and `.done()` builds it; `r.gate(handle, at, opts)` is
-   * `handle.gate(at, opts)`; `r.ropeBridge(a, b, opts)` a rope span between two landing cells (K1b's rope.mjs ropePrimitive).
+   * `handle.gate(at, opts)`; `r.ropeBridge(a, b, opts)` is K1b's (above, lib/connectors/ropeGeom.mjs).
    */
   wall(line, opts = {}) { return CONNECTOR_WALL.wallPrimitive(this, line, opts); }
   gate(wall, at, opts = {}) {
     if (!wall || typeof wall.gate !== 'function') throw new Error('r.gate: the wall must be a deferred r.wall(line, {defer: true}) handle');
     return wall.gate(at, opts);
   }
-  ropeBridge(a, b, opts = {}) {
-    if (typeof CONNECTOR_ROPE.ropePrimitive !== 'function') throw new Error('r.ropeBridge: rope bridges come with slice K1b');
-    return CONNECTOR_ROPE.ropePrimitive(this, a, b, opts);
-  }
 
+  /**
+   * (6b) A generated form (plan time): `gen` is a generator result `{ops, bounds, generator, version, params, seed}`; its ops
+   * go into part `id` (created in `stage`) and its provenance into the IR's `forms`.
+   */
   form(id, gen, { stage, set = 'terrain', bake = 'auto' } = {}) {
     if (![true, false, 'auto'].includes(bake)) throw new Error(`form ${id}: bake must be true, false or 'auto'`);
     const p = this.part(id, { stage, set });
