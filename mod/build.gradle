@@ -264,8 +264,9 @@ processResources {
 		into "architect_mc"
 	}
 	// 6c MP: the mask and pattern schemas (api.Mask / api.Pattern validate with the kit's own schema; a drift test keeps them equal)
+	// C38: plan.json too (region.PlanCatalogue reads its x-catalogue for Regions.planCatalogue(); a test holds it equal to the kit's planCatalogue())
 	from("../kit/schemas") {
-		include "mask.json", "pattern.json"
+		include "mask.json", "pattern.json", "plan.json"
 		into "architect_mc/schemas"
 	}
 	from("../kit/examples") {
