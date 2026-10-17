@@ -1,0 +1,27 @@
+{
+  "id": "tunnel_hill",
+  "purpose": "slice T3b's natural hill (docs/CONTRACT.md \"Phase 6c slice T3\" §10): a straight east-west line through a hill with at least 2 cover over a 32-cell bore (a surface bore of 32 to 60 floor cells, ends on low ground), no fluid within 4 of the bore, no tree within reach of the corridor; pinned by tools/gate6ct3b.mjs pin (find-site's spiral and summary, then the line, the corridor's trees and water, crossings_demo's hill variant planned with its frozen volume, and the fluids within 4 read from it)",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "default"
+  },
+  "needs": {
+    "size": [
+      160,
+      160
+    ],
+    "relief": [
+      18,
+      70
+    ],
+    "waterMax": 0,
+    "treesMax": 4,
+    "candidates": 120,
+    "step": 384,
+    "center": [
+      0,
+      0
+    ]
+  }
+}
