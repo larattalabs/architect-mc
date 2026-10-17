@@ -50,7 +50,7 @@ import net from 'node:net';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DevClient } from './lib/devclient.mjs';
-import { changedFiles, describeImpact, impactOf, validateImpact } from './gate-impact.mjs';
+import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFiles } from './gate-impact.mjs';
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
 import { effectiveTimeout, estimateMin, loadHistory } from './lib/gate-history.mjs';
 
@@ -166,7 +166,8 @@ function select() {
   let imp = null;
   if (range || listed) {
     const files = listed ?? changedFiles(SRC, range);
-    imp = impactOf(files, cfg.impact ?? {});
+    // a file whose only changes are version constants maps to its unit suite (gate-impact.mjs versionOnlyFiles; needs a range)
+    imp = impactOf(files, cfg.impact ?? {}, { versionOnly: listed ? new Set() : versionOnlyFiles(SRC, range, cfg.impact?.versionConstants) });
     info.range = range ?? `--files (${files.length})`;
     info.impact = { files: imp.files, rules: Object.fromEntries(Object.entries(imp.rules).map(([k, v]) => [k, v.files.length])), unmapped: imp.unmapped, ignored: imp.ignored.length, tags: imp.tags };
     info.impactText = describeImpact(imp);

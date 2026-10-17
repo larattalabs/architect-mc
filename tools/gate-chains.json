@@ -162,6 +162,19 @@
   "impact": {
     "$comment": "Change-impact map (tools/gate-impact.mjs): every rule matching a changed path counts. change: steps a `change` run picks; slice: extra steps a `slice` run adds (on top of quick and the change steps); tags: engine (realise, the journal, regions, tiles, the undo: slices add tiers.slice.engineSlice; releases run the full megaB), placement (realise/placement throughput: releases run the full throughput). A path no rule covers is UNMAPPED: change falls back to every unit suite, and it is printed. Extend the map when a slice adds a package or a gate step.",
     "ignore": ["docs/**", "**/*.md", "eval/results/**", "eval/briefs/**", ".github/**", ".gitignore", "LICENSE*", "**/*.png", "mod/logs/**"],
+    "versionConstants": {
+      "$comment": "Version-only diffs (docs/GATES.md): a listed file whose every changed line (git diff -U0) matches one of its patterns maps to its unit suite only, never to in-game steps; any other change in it maps as usual.",
+      "lines": {
+        "mod/gradle.properties": ["^mod_version=\\d+\\.\\d+\\.\\d+$"],
+        "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java": ["^\\tString VERSION = \"\\d+\\.\\d+\\.\\d+\";$"],
+        "mod/src/main/java/dev/larattalabs/architect/region/IrStale.java": ["^\\tpublic static final String KIT_VERSION = \"\\d+\\.\\d+\\.\\d+\";$"],
+        "kit/lib/region/plan.mjs": ["^export const KIT_VERSION = '\\d+\\.\\d+\\.\\d+';$"],
+        "kit/lib/realise.mjs": ["^export const EVAL_KIT_VERSION = '\\d+\\.\\d+\\.\\d+';$"],
+        "kit/lib/plan/catalogue.mjs": ["^export const PLAN_API = '\\d+\\.\\d+\\.\\d+';$"],
+        "kit/schemas/plan-catalogue.golden.json": ["^ \"api\": \"\\d+\\.\\d+\\.\\d+\",$", "^ \"kitVersion\": \"\\d+\\.\\d+\\.\\d+\",$"]
+      },
+      "change": { "mod/": ["unit-mod"], "kit/": ["unit-kit"] }
+    },
     "rules": [
       { "name": "journal", "paths": ["mod/src/main/java/dev/larattalabs/architect/journal/**"], "change": ["unit-mod", "4e-orders", "4e-crash", "6a-eflat"], "slice": [], "tags": ["engine"] },
       { "name": "region", "paths": ["mod/src/main/java/dev/larattalabs/architect/region/**"], "change": ["unit-mod", "6a-staged"], "slice": ["6a-megaA", "6a-inv3", "6b-ghost", "6b-volume", "6b-nudges", "6b-versions"], "tags": ["engine", "placement"] },
