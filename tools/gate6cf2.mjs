@@ -25,9 +25,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { kitReuse } from './lib/kit-reuse.mjs';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { srcGradle } from './lib/src-gradle.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-F2-run');
@@ -95,13 +97,15 @@ function nodeTest(files, env = {}) {
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), names: t.split('\n').filter((l) => /^✔|^✖/.test(l)) };
 }
-const gradle = (args) => spawnSync('./gradlew', args, { cwd: path.join(root, 'mod'), encoding: 'utf8', timeout: 1_800_000, env: { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') } });
+/** The kit suite once per gate run (tools/lib/kit-reuse.mjs): files whose checks are pass/fail only take this run's unit-kit results when exact. */
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
+const gradle = (args) => srcGradle(root, () => spawnSync('./gradlew', args, { cwd: path.join(root, 'mod'), encoding: 'utf8', timeout: 1_800_000, env: { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') } }));
 
 steps.unit = async () => {
   const out = {};
   out.f2 = nodeTest(['kit/test/scatter-f2.test.mjs']);
   check(out.f2.code === 0 && out.f2.fail === 0 && out.f2.pass >= 9, `items 1-3, 5, 7, 10 (kit): scatter-f2 (tiles 1 = 4 workers and the K2 window, density over 50 seeds, supports over 60 claims, stamps turned + skirt, 4 turns identity, anchors, the lantern's melt clearing, the missing-stamp fallback, IR x3 and the kit golden): ${out.f2.pass} pass, ${out.f2.fail} fail`, out.f2.failing);
-  out.goldens = nodeTest(['--test-skip-pattern=evaluation cost', 'kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/forms-f1.test.mjs', 'kit/test/relief-t1.test.mjs', 'kit/test/village.test.mjs']);
+  out.goldens = kitOnce(['--test-skip-pattern=evaluation cost', 'kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/forms-f1.test.mjs', 'kit/test/relief-t1.test.mjs', 'kit/test/village.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 10: the goldens that must not move (mega_bench tiles, S1, S7, forms_demo, relief_demo, the 6b fixtures, villages) and scatter_demo's committed scenario golden: ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   const j = gradle(['test', '--offline', '-q', '--tests', 'dev.larattalabs.architect.region.ApiF2Test', '--tests', 'dev.larattalabs.architect.region.ApiT1Test', '--tests', 'dev.larattalabs.architect.region.PlanStaleTest']);
   check(j.status === 0, `item 10 (mod): ApiF2Test (features, kinds appended after relief, a T1 game refuses scatter/stamp), ApiT1Test, PlanStaleTest (exit ${j.status})`, j.status ? `${j.stdout}${j.stderr}`.slice(-1500) : undefined);

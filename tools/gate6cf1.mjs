@@ -19,8 +19,10 @@
 // scenario runs under artifacts/scenarios/6c-f1/forms_demo/.
 import fs from 'node:fs';
 import path from 'node:path';
+import { kitReuse } from './lib/kit-reuse.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { srcGradle } from './lib/src-gradle.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-F1-run');
@@ -88,6 +90,8 @@ function nodeTest(files) {
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), names: t.split('\n').filter((l) => /^✔|^✖/.test(l)) };
 }
+/** The kit suite once per gate run (tools/lib/kit-reuse.mjs): files whose checks are pass/fail only take this run's unit-kit results when exact. */
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 const load1 = () => Number(execFileSync('sysctl', ['-n', 'vm.loadavg']).toString().trim().replace(/[{}]/g, '').trim().split(/\s+/)[0]);
 
 /**
@@ -136,7 +140,7 @@ steps.unit = async () => {
   out.forms = nodeTest(['kit/test/forms-f1.test.mjs']);
   check(out.forms.code === 0 && out.forms.fail === 0 && out.forms.pass >= 9, `items 1, 2-4 (kit), 7, 9: the forms tests (200 seeds per generator: ops at most 32 primitives, 0 forms over BAKE_OPS unbaked, settled; voxels exact and tile-independent; the bake; M17, M3, keep; forms_demo 3 plans identical): ${out.forms.pass} pass, ${out.forms.fail} fail`, out.forms.failing);
   // (the islands' evaluation-cost test is a wall-time measure that unit-kit runs; skipped here, it flakes under load)
-  out.goldens = nodeTest(['--test-skip-pattern=evaluation cost', 'kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/village.test.mjs']);
+  out.goldens = kitOnce(['--test-skip-pattern=evaluation cost', 'kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/village.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `items 9, 12: goldens (mega_bench tiles, S1 and S7 tile shas, forms_demo's golden when committed, 6b fixtures, islands, villages): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   out.bake = await bakeCost();
   // (GATES.md "Timing bars") a timing bar: recorded in change and slice, judged at release
@@ -246,7 +250,7 @@ const MAIN_ART = () => path.join(path.resolve(here, '..', 'architect-mc'), 'arti
 
 steps.apicompat = async () => {
   const classes = path.join(root, 'mod', 'build', 'classes', 'java', 'main');
-  if (!fs.existsSync(classes)) execFileSync('./gradlew', ['compileJava', 'compileClientJava', '--offline', '-q'], { cwd: path.join(root, 'mod'), env: { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') }, stdio: 'ignore' });
+  if (!fs.existsSync(classes)) srcGradle(root, () => execFileSync('./gradlew', ['compileJava', 'compileClientJava', '--offline', '-q'], { cwd: path.join(root, 'mod'), env: { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') }, stdio: 'ignore' }));
   const r = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), '--gate6cf1'], { cwd: root, encoding: 'utf8', env: { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25' } });
   const t = `${r.stdout}${r.stderr}`;
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), t);

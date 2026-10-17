@@ -47,19 +47,54 @@ export function changedFiles(dir, range) {
 }
 
 /**
+ * Version-constant-only files (docs/GATES.md "Version-only diffs"): a file of `impact.versionConstants.lines` whose every changed
+ * line (added or removed, `git diff -U0`) matches one of its patterns, e.g. `mod_version=0.36.0` or KIT_VERSION. A version bump
+ * changes no behaviour the in-game steps see that the unit suites don't already check (the stale-plan rules, the catalogue golden
+ * and the scenario goldens are unit tests), so such a file maps to its unit suite only. Any other changed line, a file outside the
+ * list, or no range (--files: no hunks) maps as usual.
+ */
+export function versionOnlyFiles(dir, range, vc) {
+  const out = new Set();
+  if (!range || !vc?.lines) return out;
+  for (const [file, pats] of Object.entries(vc.lines)) {
+    let diff;
+    try {
+      diff = execFileSync('git', ['-C', dir, 'diff', '-U0', '--no-color', range, '--', file], { stdio: ['ignore', 'pipe', 'pipe'] }).toString();
+    } catch {
+      continue;
+    }
+    const res = pats.map((p) => new RegExp(p));
+    const changed = diff.split('\n').filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l)).map((l) => l.slice(1));
+    if (changed.length && changed.every((l) => res.some((re) => re.test(l)))) out.add(file);
+  }
+  return out;
+}
+
+/**
  * The impact of a list of paths under `impact` (gate-chains.json). Returns the files per rule, the unmapped and ignored files,
  * the union of the rules' `change` and `slice` steps (in config order) and the tags.
  */
-export function impactOf(files, impact) {
+export function impactOf(files, impact, { versionOnly = new Set() } = {}) {
   const ignore = (impact.ignore ?? []).map(globToRe);
   const rules = (impact.rules ?? []).map((r) => ({ ...r, res: r.paths.map(globToRe) }));
   const res = { files: files.length, ignored: [], unmapped: [], rules: {}, change: [], slice: [], tags: [] };
   const change = new Set();
   const slice = new Set();
   const tags = new Set();
+  const vc = impact.versionConstants ?? {};
   for (const f of files) {
     if (ignore.some((re) => re.test(f))) {
       res.ignored.push(f);
+      continue;
+    }
+    if (versionOnly.has(f)) {
+      const steps = Object.entries(vc.change ?? {}).filter(([prefix]) => f.startsWith(prefix)).flatMap(([, s]) => s);
+      const name = 'version constants only (no in-game steps)';
+      (res.rules[name] ??= { files: [], change: [], slice: [], tags: [] }).files.push(f);
+      for (const s of steps) {
+        change.add(s);
+        if (!res.rules[name].change.includes(s)) res.rules[name].change.push(s);
+      }
       continue;
     }
     const hit = rules.filter((r) => r.res.some((re) => re.test(f)));
@@ -86,6 +121,16 @@ export function validateImpact(impact, steps) {
   for (const r of impact.rules ?? []) {
     if (!r.name || !Array.isArray(r.paths)) bad.push(`rule ${JSON.stringify(r).slice(0, 60)}: needs name and paths`);
     for (const s of [...(r.change ?? []), ...(r.slice ?? [])]) if (!steps[s]) bad.push(`rule ${r.name}: unknown step ${s}`);
+  }
+  for (const s of Object.values(impact.versionConstants?.change ?? {}).flat()) if (!steps[s]) bad.push(`versionConstants: unknown step ${s}`);
+  for (const [f, pats] of Object.entries(impact.versionConstants?.lines ?? {})) {
+    for (const p of pats) {
+      try {
+        new RegExp(p);
+      } catch {
+        bad.push(`versionConstants ${f}: bad pattern ${p}`);
+      }
+    }
   }
   return bad;
 }
@@ -123,7 +168,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.error('usage: node tools/gate-impact.mjs --since <ref> | --range A...B | <file> ... [--json]');
     process.exit(2);
   }
-  const imp = impactOf(files, cfg.impact ?? {});
+  const imp = impactOf(files, cfg.impact ?? {}, { versionOnly: versionOnlyFiles(SRC, range, cfg.impact?.versionConstants) });
   if (argv.includes('--json')) console.log(JSON.stringify({ range, ...imp }, null, 2));
   else console.log(`${range ? `${range}: ` : ''}${describeImpact(imp, { max: 20 })}\nchange steps: ${imp.change.join(' ') || '(none)'}\nslice adds: ${imp.slice.join(' ') || '(none)'}`);
 }

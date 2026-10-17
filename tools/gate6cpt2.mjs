@@ -51,6 +51,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { srcGradle } from './lib/src-gradle.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= here;
@@ -102,7 +103,7 @@ function nodeTest(files) {
 }
 function javaTests(tests) {
   const env = { ...process.env, JAVA_HOME, GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', ...tests.flatMap((t) => ['--tests', `*${t.split('.').pop()}`])], { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 3_600_000 });
+  const g = srcGradle(root, () => spawnSync('./gradlew', ['test', '--offline', ...tests.flatMap((t) => ['--tests', `*${t.split('.').pop()}`])], { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 3_600_000 }));
   const xml = (n) => {
     const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-dev.larattalabs.architect.${n}.xml`);
     const t = fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '';
