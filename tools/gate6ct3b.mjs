@@ -619,9 +619,9 @@ steps.pin = async () => {
     row.line = line ? { a: line.a, b: line.b, L: line.L, run: line.run } : null;
     log(`  candidate ${x0},${z0}: line ${json(row.line)}`);
     if (!line) continue;
-    // the corridor's columns: no tree and no water or lava within reach (the line +- 12 along z, its x span +- 8)
+    // the corridor's columns: no tree and no water or lava within reach of the bore (the line +- 6 along z, its x span +- 6)
     let trees = 0, wet = 0;
-    for (let z = line.a[2] - 12; z <= line.a[2] + 12; z++) for (let x = line.a[0] - 8; x <= line.b[0] + 8; x++) {
+    for (let z = line.a[2] - 6; z <= line.a[2] + 6; z++) for (let x = line.a[0] - 6; x <= line.b[0] + 6; x++) {
       if (x < x0 || x > x1 || z < z0 || z > z1) continue;
       const fl = S.columns.flags[(x - S.columns.minX) + (z - S.columns.minZ) * S.columns.width];
       if (fl & FLAG_TREE) trees++;
