@@ -788,7 +788,7 @@
         "geometry": { "type": "object", "description": "Resolved, in world cells: rect or polygon, y, lots (LotSpec shape), path polylines, form bounds." },
         "cost": { "type": "object", "description": "For a provisional part (a building without a library entry, or a pending style) the range form is used and the artifact also records the part's fit box (R13). {cells, removed, added, tiles, chunksToGenerate, bom?} exact, or {range: {cells: [min, max], bom?}} when provisional." },
         "provisional": { "type": "boolean" },
-        "deviations": { "type": "array", "items": { "type": "object", "required": ["what", "value"], "properties": { "what": { "enum": ["move", "size", "rotate", "count", "grade", "detour", "sketch", "join"] }, "value": { "type": "number" }, "max": { "type": "number" }, "exceeds": { "type": "boolean" } } } },
+        "deviations": { "type": "array", "items": { "type": "object", "required": ["what", "value"], "properties": { "what": { "enum": ["move", "size", "rotate", "count", "grade", "detour", "sketch", "join", "crossing"] }, "value": { "type": "number" }, "max": { "type": "number" }, "exceeds": { "type": "boolean" } } } },
         "reasons": { "type": "array", "items": { "$ref": "#/$defs/reason" } },
         "wouldFit": { "type": "array", "maxItems": 4, "items": { "type": "object", "description": "A concrete alternative as a plan fragment (for example a smaller size, another where) with its own geometry and cost." } },
         "blockedBy": { "type": "array", "items": { "$ref": "#/$defs/id" } },
