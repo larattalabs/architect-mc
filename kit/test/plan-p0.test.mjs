@@ -179,7 +179,7 @@ test('item 3: three checks of each crafted plan give identical answers and artif
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'p0-det-'));
     try {
       fs.writeFileSync(path.join(dir, 'ir.json'), rs[0].res.irJson);
-      fs.writeFileSync(path.join(dir, 'survey.bin'), SV[f.on].bytes);
+      fs.writeFileSync(path.join(dir, 'survey.bin'), f.terrain ? flatSurvey(f.terrain).bytes : SV[f.on].bytes);
       fs.mkdirSync(path.join(dir, 'blobs'));
       for (const [sha, b] of rs[0].res.blobs) fs.writeFileSync(path.join(dir, 'blobs', `${sha}.bin`), b);
       const ts = await tileShas(dir);
