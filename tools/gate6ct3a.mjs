@@ -516,6 +516,7 @@ steps.look = async () => {
     const meta = JSON.parse(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', p.planId, 'meta.json'), 'utf8'));
     const region = await L.realise(p.planId, {});
     const st = await L.waitRegion(region, 3_600_000);
+    check(st.view.state === 'PLACED' && (meta.bridges ?? []).length === 2, `look (${tag}): crossings_demo flat realised with its beam and arch (${st.view.state}; recorded, not judged: Noah's call, N-T3-1)`);
     out.bibles[tag] = { planId: p.planId, state: st.view.state, bridges: (meta.bridges ?? []).map((q) => ({ id: q.id, form: q.form, n: q.n, deck: q.deck, rail: q.rail, pier: q.pier, arch: q.arch, light: q.light, from: q.from, to: q.to })) };
     for (const q of meta.bridges ?? []) {
       const mid = [q.from[0], q.from[1], Math.floor((q.from[2] + q.to[2]) / 2)];
