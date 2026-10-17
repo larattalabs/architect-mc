@@ -1,0 +1,42 @@
+{
+  "about": "(6c T3a, R18) a bridge whose ends are one place (end_city_ruins' dwelling bridges): NO_GAP before routing",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": []
+  },
+  "anchors": {
+    "a": [
+      1080,
+      65,
+      2026
+    ],
+    "b": [
+      1080,
+      65,
+      2074
+    ]
+  },
+  "expect": {
+    "part": "b",
+    "code": "NO_GAP",
+    "message": "one place"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "b",
+        "kind": "bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "a"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "about": "(6c T3a) a 16-wide water channel (its water 6 under the banks) across the claim, clearance 2: form auto gives a stone arch, its intrados 2 clear over the middle third of the water, nothing written in it",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2040,
+        "x1": 1159,
+        "z1": 2055,
+        "y": 52,
+        "water": 6
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1080,
+      65,
+      2028
+    ],
+    "b": [
+      1080,
+      65,
+      2068
+    ]
+  },
+  "covers": [
+    "bridge.arch"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "channel_arch",
+        "kind": "bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        },
+        "width": 3,
+        "clearance": 2
+      }
+    ]
+  }
+}

@@ -216,15 +216,16 @@ steps.probe = async () => {
   const X0 = 7400, Z0 = 7400, WTOP = GROUND;
   await tp(X0 + 20, WTOP + 12, Z0 + 3);
   await call('dev.waitChunks', { timeoutMs: 30_000 }).catch(() => null);
-  await cmd(`/fill ${X0 - 2} ${WTOP + 1} ${Z0 - 3} ${X0 + 60} ${WTOP + 8} ${Z0 + 9} air`);
-  await cmd(`/fill ${X0} ${WTOP - 2} ${Z0} ${X0 + 58} ${WTOP} ${Z0 + 6} water`);
-  for (const [k, clear] of [[0, 1], [1, 2], [2, 3]]) {
-    const dx = X0 + 12 + k * 16, y = WTOP + clear + 1;
+  await cmd(`/fill ${X0 - 2} ${WTOP + 1} ${Z0 - 3} ${X0 + 74} ${WTOP + 8} ${Z0 + 9} air`);
+  await cmd(`/fill ${X0} ${WTOP - 2} ${Z0} ${X0 + 72} ${WTOP} ${Z0 + 6} water`);
+  const CLEARS = [[0, 0], [1, 1], [2, 2], [3, 3]];
+  for (const [k, clear] of CLEARS) {
+    const dx = X0 + 12 + k * 14, y = WTOP + clear + 1;
     await cmd(`/fill ${dx} ${y} ${Z0 - 1} ${dx + 2} ${y} ${Z0 + 7} stone_bricks`);
   }
   await L.settle(2000);
-  for (const [k, clear] of [[0, 1], [1, 2], [2, 3]]) {
-    const dx = X0 + 12 + k * 16, bx = dx - 6;
+  for (const [k, clear] of CLEARS) {
+    const dx = X0 + 12 + k * 14, bx = dx - 6;
     await cmd('/kill @e[type=minecraft:oak_boat]');
     await cmd(`/summon minecraft:oak_boat ${bx + 0.5} ${WTOP + 1} ${Z0 + 3.5}`);
     await L.settle(4000);
@@ -233,8 +234,11 @@ steps.probe = async () => {
     out.boat.push({ clear, deck: dx, ...r, passes: !r.error && !r.blocked && r.inWall === 0 });
   }
   const at = (c) => out.boat.find((q) => q.clear === c);
-  check(at(2)?.passes && at(3)?.passes, `item 1 (N-T3-2 probe): a player seated in a boat, moved by vanilla collision, passes under decks with 2 and 3 clear cells over the water (${json(out.boat.map((q) => ({ clear: q.clear, blocked: q.blocked, inWall: q.inWall, riderHit: q.riderHit, eye: q.maxEyeY })))})`);
-  check(at(1) && !at(1).passes, `item 1 (N-T3-2 probe): not under 1 clear cell (blocked ${at(1)?.blocked}, eyes in the deck ${at(1)?.inWall} step(s))`);
+  check(at(2)?.passes && at(3)?.passes, `item 1 (N-T3-2 probe): a player seated in a boat, moved by vanilla collision, passes under decks with 2 and 3 clear cells over the water (the default clearance 2: ${json(out.boat.map((q) => ({ clear: q.clear, blocked: q.blocked, inWall: q.inWall, riderHit: q.riderHit, boatY: q.boatY, eye: q.maxEyeY })))})`);
+  check(at(0) && at(0).blocked, `item 1 (N-T3-2 probe, the negative control): a deck straight over the water (0 clear) stops the boat (blocked ${at(0)?.blocked})`);
+  // (the contract assumed a boat does not pass under 1 clear cell; vanilla 26.3 measured here: recorded, the finding goes to N-T3-2)
+  out.oneClear = { passes: !!at(1)?.passes, blocked: at(1)?.blocked ?? null, inWall: at(1)?.inWall ?? null, riderHit: at(1)?.riderHit ?? null, eyeY: at(1)?.maxEyeY ?? null, deckBottom: WTOP + 2 };
+  log(`note item 1 (N-T3-2 probe, recorded): under 1 clear cell the boat ${out.oneClear.passes ? 'PASSES (the contract assumed it would not; the rider\'s eyes ' + (WTOP + 2 - out.oneClear.eyeY).toFixed(2) + ' under the deck)' : 'does not pass'}`);
   await cmd('/kill @e[type=!minecraft:player]');
   await leaveWorld();
   spendZero();

@@ -1,0 +1,62 @@
+{
+  "about": "(6c T3a, R18) params read leniently: width and form read, three other keys listed by name in the notes, never malformed",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2036,
+        "x1": 1159,
+        "z1": 2063,
+        "y": 52
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1080,
+      65,
+      2026
+    ],
+    "b": [
+      1080,
+      65,
+      2074
+    ]
+  },
+  "expect": {
+    "part": "b",
+    "class": "fits",
+    "notes": [
+      "params.material not read (style is the bible's)",
+      "params.railing not read",
+      "params.span_style not read"
+    ],
+    "form": "beam"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "b",
+        "kind": "bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        },
+        "params": {
+          "width": 3,
+          "form": "beam",
+          "material": "oak",
+          "railing": "rope",
+          "span_style": "gothic"
+        }
+      }
+    ]
+  }
+}

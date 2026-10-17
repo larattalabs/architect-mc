@@ -31,7 +31,7 @@ A headless gate server (docs/GATES.md "Headless gates") serves the same protocol
 `headless: true`.
 
 - **Generated hooks.** The hooks in the client's `client/dev/` files `JournalDev`, `RegionDev`, `RegionDev6b`, `DeltaDev`,
-  `SliceVDev`, `SliceWDev`, `SliceF2Dev`, `SliceBDev`, `SliceP0Dev`, `SlicePTDev`, `SlicePT2Dev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
+  `SliceVDev`, `SliceWDev`, `SliceF2Dev`, `SliceBDev`, `SliceP0Dev`, `SlicePTDev`, `SlicePT2Dev`, `SliceT3Dev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
   only the package and imports changed.
   - **Rule for those files:** no reference to client classes (`net.minecraft.client.*`, `dev.larattalabs.architect.client.*`)
     besides `ServerTasks`, `DevBridge` and the handler's `mc` parameter. A new one fails the build, `unit-mod` included.
@@ -347,6 +347,12 @@ region. Previews print as file links (with a [copy] link).
 ## Changelog
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
+
+- **2026-10-17 (6c slice T3a):** new (`SliceT3Dev`, generated headless too) `dev.t3.boat {at: [x,y,z] (a settled boat within 4), dir:
+  [dx,dz], distance, step?: 0.1}`: the player rides the boat nearest `at`, which moves `distance` along `dir` by vanilla's
+  `Entity.move(MoverType.SELF, ...)` in `step` steps, the rider positioned after each -> `{moved, blocked, blockedAt?, inWall (steps with
+  the rider's eyes in a block), riderHit (steps with the rider's box in a block), boatY, eyeY, maxEyeY, steps, end}`; the rider is
+  dismounted and the boat discarded (CONTRACT T3 item 1's boat probe, N-T3-2).
 
 - **2026-10-14 (7a slice K1a):** `dev.nav.villager` takes `cells: true` and then returns the path's nodes as `cells: [[x,y,z]]`
   (K1a's item 2: a villager's path meets a wall only at its gate cells). No hook added.

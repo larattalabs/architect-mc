@@ -12,8 +12,9 @@
 // - A deck cell at an even y2 is a full block at y2 / 2; at an odd y2 a bottom slab at floor(y2 / 2) + 1 over a full block (K1b's
 //   reading), the whole width plus the rail beds; the rail (the trim role's wall block, else the rail role's fence) stands on the
 //   beds at the deck block + 1.
-// - The gap: a centre column that is water (frozen included) or whose ground is more than 4 below the deck; or, for n <= 7 (a
-//   narrow gap), water or a drop of 2 or more.
+// - The gap: a centre column that is water (frozen included) or whose ground is more than 4 below the banks (the lower landing's
+//   ground: a landing raised on the walk's fill or a stair makes no gap out of flat land); or, for n <= 7 (a narrow gap), a drop of 2
+//   or more under them.
 // - Head room: every deck column's land (ground, or a tree column's 64 high) lies under the bridge's lowest cell there, across the
 //   width plus the rails, and none is blocked (keep-out, other regions, builds); the deck is never written into the land, so the 2
 //   cells over the walk surface are the pre-region air.
@@ -97,13 +98,15 @@ export function checkBridge(land, a, dir, n, rise, width, opts = {}) {
   const sMin = Math.max(BRIDGE.spanMin, opts.span?.min ?? BRIDGE.spanMin), sMax = Math.min(BRIDGE.spanMax, opts.span?.max ?? BRIDGE.spanMax);
   const fail = (code, evidence, extra = {}) => ({ ok: false, form, code, evidence: { span: n, form, ...evidence }, ...extra });
   const col = (i, v) => [x0 + dx * i + rx * v, z0 + dz * i + rz * v];
-  // the gap, on the straight deck line (the form's camber never makes a gap)
+  // the gap: under the straight deck line (the form's camber never makes one), measured from the banks' own ground (the lower
+  // landing's), so a landing raised on the walk's fill or a stair makes no gap out of flat land
   const line = profile(n, y0, rise, 0);
+  const bank = Math.min(land.groundAt(...col(0, 0)), land.groundAt(...col(n + 1, 0)), y0, y0 + rise);
   let gap = null;
   for (let i = 1; i <= n && !gap; i++) {
     const [x, z] = col(i, 0), y = deckY(line[i]), g = land.groundAt(x, z);
     if (land.waterAt(x, z)) gap = { over: 'water', at: [x, z], depth: y - g };
-    else if (g < y - BRIDGE.gapDepth || (n <= BRIDGE.narrowMax && g <= y - BRIDGE.narrowDrop)) gap = { over: 'gap', at: [x, z], depth: y - g };
+    else if (g < bank - BRIDGE.gapDepth || (n <= BRIDGE.narrowMax && g <= bank - BRIDGE.narrowDrop)) gap = { over: 'gap', at: [x, z], depth: y - g };
   }
   if (!gap) return fail('NO_GAP', { from: [x0, y0, z0], to: [x0 + dx * (n + 1), y0 + rise, z0 + dz * (n + 1)], depthNeeded: n <= BRIDGE.narrowMax ? BRIDGE.narrowDrop : BRIDGE.gapDepth + 1 });
   if (n < sMin || n > sMax) return fail('SPAN', { min: sMin, max: sMax });
@@ -160,9 +163,12 @@ export function checkBridge(land, a, dir, n, rise, width, opts = {}) {
   const bad = [];
   const solidAt = (x, y, z) => (land.written && land.written(x, y, z)) || SITE_SOLID.includes(land.classAt(x, y, z));
   const anchorTop = (x, z, ya) => Math.min(ya - 1, land.groundAt(x, z));
+  const fillMax = opts.fillMax ?? 4;
   for (const [i, ya] of [[0, y0], [n + 1, y0 + rise]]) for (let v = lo - 1; v <= hi + 1; v++) {
     const [x, z] = col(i, v), t = anchorTop(x, z, ya);
     if (land.waterAt(x, z)) { bad.push({ at: [x, t, z], class: 'WATER', end: i ? 'far' : 'near' }); continue; }
+    // (a landing stands at most the walk's fill, T2's maxFill 4, over the ground: higher, nothing holds it)
+    if (ya - 1 - t > fillMax) { bad.push({ at: [x, t + 1, z], class: 'AIR', end: i ? 'far' : 'near', fill: ya - 1 - t }); continue; }
     for (const y of [t, t - 1]) if (!solidAt(x, y, z)) bad.push({ at: [x, y, z], class: land.classAt(x, y, z), end: i ? 'far' : 'near' });
   }
   // an arch's abutments: the landings' ground solid from 2 under the springing up to the landing (the fill over the ground counts)

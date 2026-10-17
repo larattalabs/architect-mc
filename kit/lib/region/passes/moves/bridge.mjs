@@ -128,7 +128,7 @@ export function bridgeExpand(state, S) {
     // half width plus one, so a bridge over water starts on the bank), and a gap (water, or a drop of 2) lies ahead within the span
     const k1 = i1 + j1 * W;
     if (!(water[k1] || top[k1] < y)) continue;
-    if (!gapAhead(state, i, j, di, dj, y, c.nMax)) continue;
+    if (!gapAhead(state, i, j, di, dj, Math.min(y, G[k]), c.nMax)) continue;
     for (let n = c.nMin; n <= c.nMax; n++) {
       const ci = i + di * (n + 1), cj = j + dj * (n + 1);
       if (ci < 0 || cj < 0 || ci >= W || cj >= D) break;
@@ -147,15 +147,15 @@ export function bridgeExpand(state, S) {
   }
 }
 
-/** Whether a gap (water, or ground 2 or more under y) lies within `nMax` cells ahead, the land never rising to y before it. */
-function gapAhead(state, i, j, di, dj, y, nMax) {
+/** Whether a gap (water, or ground 2 or more under the bank `g`) lies within `nMax` cells ahead, the land never rising over the bank first. */
+function gapAhead(state, i, j, di, dj, g, nMax) {
   const { W, D, top, water } = state;
   for (let t = 1; t <= nMax; t++) {
     const ci = i + di * t, cj = j + dj * t;
     if (ci < 0 || cj < 0 || ci >= W || cj >= D) return false;
     const k = ci + cj * W;
-    if (water[k] || top[k] <= y - BRIDGE.narrowDrop) return true;
-    if (top[k] >= y) return false;
+    if (water[k] || top[k] <= g - BRIDGE.narrowDrop) return true;
+    if (top[k] > g) return false;
   }
   return false;
 }
@@ -183,11 +183,17 @@ export function bridgeCommit(state, env, edgeOut) {
 
 const cmpKey = (a, b) => { for (let t = 0; t < a.length; t++) if (a[t] !== b[t]) return a[t] - b[t]; return 0; };
 
+/** The checks in §4's diagnosis order: a failure later in it got further. */
+const ORDER = ['NO_GAP', 'SPAN', 'TOO_STEEP', 'HEADROOM', 'ANCHOR', 'WATER'];
+const rankOf = (r) => (r.ok ? ORDER.length : ORDER.indexOf(r.code));
+
 /**
  * Why a bridge edge (or a fallback edge with `diagnose`) found no route: over the near cells its search reached, every cardinal span of
- * 1..diagMax deck cells landing on a walk cell (a bridge edge: within `approach` of its goal). NO_GAP when none has a gap under it;
- * else the first failing check (SPAN, TOO_STEEP, HEADROOM, ANCHOR, WATER) of the candidate nearest the goal (then the shortest, then x,
- * z, heading); UNREACHABLE when one passes. Sets `edgeOut.failed = 'BRIDGE'`, `edgeOut.bridge = {code, evidence, until?}`.
+ * 1..diagMax deck cells landing on a walk cell (a bridge edge: within `approach` of its goal), each tried from the near cell's ground
+ * and from the highest y the search reached there, to the far cell's ground or level with the near landing (within the fill). NO_GAP
+ * when none has a gap under it; else the candidate nearest the goal names its check (the landing heights that got furthest through
+ * §4's order: SPAN, TOO_STEEP, HEADROOM, ANCHOR, WATER), spans within 1..32 before longer ones (SPAN then means only longer spans
+ * cross); UNREACHABLE when one passes. Sets `edgeOut.failed = 'BRIDGE'`, `edgeOut.bridge = {code, evidence, until?}`.
  */
 export function bridgeFail(state, edgeOut, inS) {
   const c = state?.cur;
@@ -197,36 +203,45 @@ export function bridgeFail(state, edgeOut, inS) {
   let best = null, gaps = 0, tried = 0;
   for (let k = 0; k < W * D; k++) {
     if (!c.reached[k]) continue;
-    const i = k % W, j = (k - i) / W, y = c.reached[k] - 32768 - 1;
+    const i = k % W, j = (k - i) / W, yTop = c.reached[k] - 32768 - 1;
+    const nearYs = yTop === G[k] ? [G[k]] : [G[k], yTop];
     for (let hf = 0; hf < 8; hf += 2) {
       const di = DIRS[hf][0], dj = DIRS[hf][1];
       const k1 = (i + di) + (j + dj) * W;
-      if (i + di < 0 || j + dj < 0 || i + di >= W || j + dj >= D || !(water[k1] || state.top[k1] < y)) continue;
+      if (i + di < 0 || j + dj < 0 || i + di >= W || j + dj >= D) continue;
+      if (!gapAhead(state, i, j, di, dj, G[k], BRIDGE.diagMax)) continue;
       for (let n = 1; n <= BRIDGE.diagMax; n++) {
         const ci = i + di * (n + 1), cj = j + dj * (n + 1);
         if (ci < 0 || cj < 0 || ci >= W || cj >= D) break;
         const k2 = ci + cj * W;
         if (!inS(k2) || water[k2] || (c.once && cheb(W, k2, c.goalK) > c.approach)) continue;
         tried++;
-        const rise = G[k2] - y;
-        const r = n > BRIDGE.spanMax ? null : spanCheck(state, i, j, y, hf, n, G[k2]);
-        if (r && r.code === 'NO_GAP') continue;
-        if (!r) {
+        let res = null;
+        if (n > BRIDGE.spanMax) {
           // past the longest span: a gap under it is still a gap (SPAN)
           let gap = false;
-          for (let t = 1; t <= n && !gap; t++) { const kk = (i + di * t) + (j + dj * t) * W; if (water[kk] || G[kk] < y - BRIDGE.gapDepth) gap = true; }
+          for (let t = 1; t <= n && !gap; t++) { const kk = (i + di * t) + (j + dj * t) * W; if (water[kk] || G[kk] < Math.min(G[k], G[k2]) - BRIDGE.gapDepth) gap = true; }
           if (!gap) continue;
+          res = { ok: false, code: 'SPAN', evidence: { span: n, min: c.nMin, max: c.nMax }, y: G[k], yf: G[k2] };
+        } else {
+          for (const y of nearYs) {
+            if (!(water[k1] || state.top[k1] < y)) continue;
+            for (const yf of y > G[k2] && y - G[k2] <= c.maxFill ? [G[k2], y] : [G[k2]]) {
+              const r = spanCheck(state, i, j, y, hf, n, yf);
+              if (!res || rankOf(r) > rankOf(res)) res = { ...r, y, yf };
+            }
+          }
+          if (!res || res.code === 'NO_GAP') continue;
         }
         gaps++;
-        const res = r ?? { ok: false, code: 'SPAN', evidence: { span: n, min: c.nMin, max: c.nMax } };
         const code = res.ok ? 'UNREACHABLE' : res.code;
-        const key = [Math.max(Math.abs(ci - gi), Math.abs(cj - gj)), n, minX + i, minZ + j, hf];
-        if (!best || cmpKey(key, best.key) < 0) best = { key, code, until: res.until, evidence: { ...(res.evidence ?? {}), span: n, rise, from: [minX + i, y, minZ + j], to: [minX + ci, G[k2], minZ + cj] } };
+        const key = [n > BRIDGE.spanMax ? 1 : 0, Math.max(Math.abs(ci - gi), Math.abs(cj - gj)), n, minX + i, minZ + j, hf];
+        if (!best || cmpKey(key, best.key) < 0) best = { key, code, until: res.until, evidence: { ...(res.evidence ?? {}), span: n, rise: res.yf - res.y, from: [minX + i, res.y, minZ + j], to: [minX + ci, res.yf, minZ + cj] } };
       }
     }
   }
   const why = !gaps
-    ? { code: 'NO_GAP', evidence: { tried, approach: c.once ? c.approach : null, message: `no span${c.once ? ` within ${c.approach} of both ends` : ''} crosses a gap (ground more than ${BRIDGE.gapDepth} below the deck, a narrow drop of ${BRIDGE.narrowDrop}, or water)` } }
+    ? { code: 'NO_GAP', evidence: { tried, approach: c.once ? c.approach : null, message: `no span${c.once ? ` within ${c.approach} of both ends` : ''} crosses a gap (ground more than ${BRIDGE.gapDepth} below the banks, a narrow drop of ${BRIDGE.narrowDrop}, or water)` } }
     : { code: best.code, evidence: best.evidence, ...(best.until ? { until: best.until } : {}) };
   edgeOut.failed = 'BRIDGE';
   edgeOut.bridge = why;

@@ -131,7 +131,7 @@ export function bridgeFailAnswer(K, l, m) {
   const why = m?.bridge ?? { code: 'UNREACHABLE', evidence: {} };
   const st = stateOf(K);
   const o = st.parts.get(l.conn.id);
-  if (why.code === 'NO_GAP' || why.code === 'WATER') st.would.push({ id: l.conn.id, code: why.code, leg: l.k, evidence: why.evidence });
+  if (why.code === 'NO_GAP' || why.code === 'WATER' || (why.code === 'SPAN' && o?.form === 'arch')) st.would.push({ id: l.conn.id, code: why.code, leg: l.k, evidence: why.evidence });
   const reason = { code: why.code, message: `leg ${l.k + 1}: ${MESSAGES[why.code] ?? why.code}`, ...(why.until ? { until: why.until } : {}), evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, ...(why.evidence ?? {}) } };
   return { class: 'refused', ...(o?.notes?.length ? { notes: o.notes } : {}), reasons: [reason] };
 }
@@ -166,9 +166,17 @@ export function bridgeAnswer(K, p, legs) {
   return out;
 }
 
-/** The gate (K1) a landing stands at: a gate cell next to it (the gate move ends on the walk cell just outside the wall). */
-function gateAt(K, cell) {
-  for (const W of K.walls ?? []) for (const g of W.gates ?? []) for (const [x, z] of g.cells ?? []) if (Math.max(Math.abs(x - cell[0]), Math.abs(z - cell[2])) <= 1) return g.id;
+/**
+ * The gate (K1) a bridge lands at: the route's segment just before or after the span is a gate move (it ends on the walk cell outside
+ * the wall, where the span starts), and the gate is the one whose opening that move's cells pass through.
+ */
+function landsAt(K, e, si) {
+  for (const sj of [si - 1, si + 1]) {
+    const g = e.segments[sj];
+    if (!g || g.kind !== 'gate') continue;
+    const cells = new Set(e.path.slice(g.from, g.to + 1).map((q) => `${q[0]},${q[2]}`));
+    for (const W of K.walls ?? []) for (const gate of W.gates ?? []) if ((gate.cells ?? []).some(([x, z]) => cells.has(`${x},${z}`))) return gate.id;
+  }
   return null;
 }
 
@@ -187,7 +195,7 @@ export function emitBridges(K) {
     try {
       const idx = K.order.indexOf(p);
       const style = p.part.lamps === 'none' ? { light: null } : {};
-      const lands = (e, si) => { const g = e.segments[si]; return gateAt(K, e.path[g.from]) ?? gateAt(K, e.path[g.to]); };
+      const lands = (e, si) => landsAt(K, e, si);
       const recs = emitRouteBridges(K.r, { only: [x.meta.id], stage, part: `links_b${idx}`, prefix: `bridge_b${idx}_`, style, lands, ...(o?.unsafe && Object.keys(o.unsafe).length ? { _unsafe: o.unsafe } : {}) });
       K.mark(p.id, K.addedSince(cp));
       // the answer's crossings gain `lands`; the graph edge: a bridge connector's is typed bridge with its crossing (§8), an auto or a
@@ -235,7 +243,7 @@ function fragmentOf(part, kind, extra = {}, drop = []) {
 
 /**
  * The repairs (§3, §9, S-T3-3): a bridge refused WATER (a pier in water, until H) gets the arch when its span fits, else a rope_bridge of
- * the same ends when that fits alone; NO_GAP gets a plain `path` when one routes. Each is a dry run of the route pass (rolled back);
+ * the same ends when that fits alone; an arch refused SPAN gets the beam, else a rope; NO_GAP gets a plain `path` when one routes. Each is a dry run of the route pass (rolled back);
  * the first that routes is the part's `wouldFit` (its fragment, the legs' geometry, the cost).
  */
 function wouldFits(K) {
@@ -257,10 +265,12 @@ function wouldFits(K) {
     }
     if (err || pts.length < 2 || sameEnd(part.from, part.to)) continue;
     const width = o?.width ?? 2;
-    const cands = w.code === 'WATER'
-      ? [...(o?.form !== 'arch' ? [{ frag: fragmentOf(part, 'bridge', { form: 'arch' }), opts: { spans: ['bridge'], once: 'bridge', approach: o?.approach ?? BRIDGE.approach, t3: { bridge: { form: 'arch', clearance: o?.clearance ?? BRIDGE.clearance, width } } } }] : []),
-        { frag: fragmentOf(part, 'rope_bridge', width > 3 ? { width: 3 } : {}, ['form', 'clearance', 'span']), opts: { spans: ['rope'], spanOnce: true, approach: o?.approach ?? BRIDGE.approach, width: Math.min(3, width) } }]
-      : [{ frag: fragmentOf(part, 'path', {}, ['form', 'clearance', 'span', 'approach']), opts: {} }];
+    const asForm = (form) => ({ frag: fragmentOf(part, 'bridge', { form }), opts: { spans: ['bridge'], once: 'bridge', approach: o?.approach ?? BRIDGE.approach, t3: { bridge: { form, clearance: o?.clearance ?? BRIDGE.clearance, width } } } });
+    const asRope = { frag: fragmentOf(part, 'rope_bridge', width > 3 ? { width: 3 } : {}, ['form', 'clearance', 'span']), opts: { spans: ['rope'], spanOnce: true, approach: o?.approach ?? BRIDGE.approach, width: Math.min(3, width) } };
+    // WATER: the arch (unless it was the arch), else a rope; an arch's SPAN: the beam, else a rope; NO_GAP: a plain path
+    const cands = w.code === 'WATER' ? [...(o?.form !== 'arch' ? [asForm('arch')] : []), asRope]
+      : w.code === 'SPAN' ? [asForm('beam'), asRope]
+        : [{ frag: fragmentOf(part, 'path', {}, ['form', 'clearance', 'span', 'approach']), opts: {} }];
     for (const c of cands) {
       const cp = K.checkpoint();
       let fit = null;

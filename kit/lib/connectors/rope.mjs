@@ -166,7 +166,9 @@ export function ropeAnswer(K, p, legs) {
     spans.push({ ...s, crossing: crossing(K, s), deck: o?.whole ? 'whole' : 'slab' });
   }
   const notes = [...(o?.notes ?? [])];
-  if (p.kind === 'auto' && !spans.length && o?.spans) notes.push('no rope span: walking is cheaper (or nothing to span)');
+  // ((6c T3) an auto connector that crossed on a bridge or a tunnel instead says so in their own fields)
+  const other = legs.some(({ meta }) => (meta?.segments ?? []).some((g) => g.kind === 'bridge' || g.kind === 'tunnel'));
+  if (p.kind === 'auto' && !spans.length && o?.spans && !other) notes.push('no rope span: walking is cheaper (or nothing to span)');
   const g = K.geom.get(p.id) ?? {};
   K.geom.set(p.id, { ...g, spans });
   return { geometry: { ...(g.legs ? { legs: g.legs } : {}), spans, movers: o?.movers ?? null }, ...(notes.length ? { notes } : {}) };

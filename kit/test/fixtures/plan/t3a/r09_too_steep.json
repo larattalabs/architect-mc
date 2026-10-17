@@ -1,0 +1,57 @@
+{
+  "about": "(6c T3a) a ravine 16 wide whose far bank stands 14 over the near one: no span within the rise limit: TOO_STEEP",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2040,
+        "x1": 1159,
+        "z1": 2055,
+        "y": 40
+      },
+      {
+        "x0": 1000,
+        "z0": 2056,
+        "x1": 1159,
+        "z1": 2095,
+        "y": 78
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1080,
+      65,
+      2030
+    ],
+    "b": [
+      1080,
+      79,
+      2066
+    ]
+  },
+  "expect": {
+    "part": "b",
+    "code": "TOO_STEEP"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "b",
+        "kind": "bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        },
+        "width": 2
+      }
+    ]
+  }
+}

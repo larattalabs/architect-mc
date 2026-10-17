@@ -1,0 +1,53 @@
+{
+  "about": "(6c T3a) a 16-wide channel whose water is 2 under the banks, clearance 6 asked: HEADROOM with evidence.under {need, have}",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2040,
+        "x1": 1159,
+        "z1": 2055,
+        "y": 56,
+        "water": 6
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1080,
+      65,
+      2028
+    ],
+    "b": [
+      1080,
+      65,
+      2068
+    ]
+  },
+  "expect": {
+    "part": "b",
+    "code": "HEADROOM",
+    "under": true
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "b",
+        "kind": "bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        },
+        "width": 2,
+        "clearance": 6
+      }
+    ]
+  }
+}
