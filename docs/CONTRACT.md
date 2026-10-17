@@ -13340,6 +13340,16 @@ gate-verifier reviews the diff and the evidence, and re-runs items 2, 6 and 9 (r
   edges prefer stone?
 - **N-T3-6. The split.** T3a and T3b in parallel after the foundation, batched into one release, or T3a first?
 
+### Coordinator decisions (2026-10-17, on Noah's behalf; Noah can overrule at the look step)
+
+- **N-T3-1:** as proposed. Arch where it fits, else beam; `structure` body, `path` deck, `trim` wall-block rails.
+- **N-T3-2:** clearance 2 by default. The boat probe gate item stays.
+- **N-T3-3:** as proposed. 3 by 3, raw rock lined only where needed, arched portals, hanging lanterns.
+- **N-T3-4:** `tunnel.under` stays reserved until 7b. T3 holds its scope, and Steward's secret tunnels wait as `unsupported`.
+- **N-T3-5:** rope wins by cost where both fit, as drafted. K1's auto answers and the v34 fixture don't move. A bible-level
+  preference for stone on villager edges can come later as a style key without a route change.
+- **N-T3-6:** foundation first (frozen, about half a day), then T3a and T3b in parallel, released as one batch, as K1 was.
+
 ### Deferred
 
 - Piers, footings and any write in water or ice (H); underwater tubes (UW, after H); `tunnel.under` and cellar ends (7b); tunnel
