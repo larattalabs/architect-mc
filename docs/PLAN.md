@@ -600,3 +600,12 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   marks as its own, through an entity tag `architect:owner=<owner>` matching the request's owner. That works for every API path
   (remove, delta, batch, revert) with no new request fields. An optional explicit UUID set on RemoveOptions/DeltaRequest/Batch
   can be added if a caller needs it.
+
+## Queued from gate-speed (coordinator, 2026-10-17)
+
+- **pt-nomod reads the source checkout's `mod/build/headless-launch*.json`.** It fails whenever that checkout hasn't built
+  headless; make it build or locate the launch file in its own run worktree.
+- **A literal `${OUT }/gate7a-k1b/` directory is committed** (from 1f946e2f). Remove it from git.
+- **More headless:** w-ingame (about 13 min on the client), t1-ingame and the sch/y/y2/mp-ingame steps use no client-only hooks.
+  A/B them with `--host server` and move the ones that match.
+- **Split the slow kit test files.** plan-p0 (187 s) and one village test (138 s) set the kit suite's wall time.
