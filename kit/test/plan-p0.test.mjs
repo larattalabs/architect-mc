@@ -243,9 +243,16 @@ test('item 9: the catalogue golden; every supported entry has a valid/ fixture t
   const covered = new Set(read('valid').flatMap((f) => f.covers ?? []));
   // (7a K1) the foundation's placeholders: k1-pending-a.json (K1a's ids) and k1-pending-b.json (K1b's) list the ids whose valid/
   // fixtures land with that half; each half deletes its own file when they do (so the two never touch the same line)
-  for (const f of ['k1-pending-a.json', 'k1-pending-b.json']) if (fs.existsSync(path.join(FIX, f))) for (const id of JSON.parse(fs.readFileSync(path.join(FIX, f), 'utf8')).ids) covered.add(id);
+  // (6c T3) likewise t3-pending-a.json (T3a's bridge ids) and t3-pending-b.json (T3b's tunnel ids, and its `reserved` tunnel.under,
+  // which only the compiler answers: T3b's fixtures cover it)
+  const reservedPending = new Set();
+  for (const f of ['k1-pending-a.json', 'k1-pending-b.json', 't3-pending-a.json', 't3-pending-b.json']) if (fs.existsSync(path.join(FIX, f))) {
+    const j = JSON.parse(fs.readFileSync(path.join(FIX, f), 'utf8'));
+    for (const id of j.ids) covered.add(id);
+    for (const id of j.reserved ?? []) reservedPending.add(id);
+  }
   for (const e of entries.filter((x) => x.state === 'supported')) assert.ok(covered.has(e.id), `supported ${e.id} has a valid/ fixture`);
-  const ext = new Set(read('extension').flatMap((f) => (f.expect.all ?? [f.expect]).map((x) => x.block)).filter(Boolean));
+  const ext = new Set([...read('extension').flatMap((f) => (f.expect.all ?? [f.expect]).map((x) => x.block)).filter(Boolean), ...reservedPending]);
   // (D1) an alias whose target is supported follows its target (zone kind district: its program decides), so it has no extension fixture
   const supportedIds = new Set(entries.filter((x) => x.state === 'supported').map((x) => x.id));
   for (const e of entries.filter((x) => x.state === 'reserved' && !(x.aliasOf && supportedIds.has(x.aliasOf)))) assert.ok(ext.has(e.aliasOf ?? e.id), `reserved ${e.id} has an extension/ fixture`);
@@ -254,7 +261,8 @@ test('item 9: the catalogue golden; every supported entry has a valid/ fixture t
 test('item 9: the catalogue diff (D1 flips program.districts and endpoint.region; K1 flips the four connectors) and a pending part flagged for a recheck', () => {
   // (D1) P0's golden is archived as fixtures/plan/catalogue-p0.json; P0's committed catalogue-next.json is what D1 ships
   const p0 = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-p0.json'), 'utf8'));
-  const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
+  // (6c T3) K1's golden (catalogue 5) is archived as fixtures/plan/catalogue-k1.json: the K1 expectations below read it
+  const golden = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-k1.json'), 'utf8'));
   const next = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-next.json'), 'utf8'));
   // (D2) D2's golden adds D2's four flips (zone.outpost, locator.along, feature.biome_edge, feature.ridge) over D1's, archived as
   // fixtures/plan/catalogue-d1.json; (7a K1) D2's golden is archived as fixtures/plan/catalogue-d2.json

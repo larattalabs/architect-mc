@@ -1,0 +1,4 @@
+{
+  "about": "(6c T3) The foundation's placeholder for P0 item 9's coverage: the bridge ids whose valid/ fixtures land with slice T3a. T3a deletes this file when they do.",
+  "ids": ["connector.bridge", "bridge.beam", "bridge.arch"]
+}

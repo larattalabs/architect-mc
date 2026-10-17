@@ -1,5 +1,5 @@
 {
-  "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; first half) (D1: program.districts, its alias zone kind district and endpoint.region left the list when they shipped; D2: zone.outpost, locator.along, feature.biome_edge and feature.ridge; K1: connector.auto, connector.wall, connector.gate and connector.rope_bridge left it when they shipped, wall.along and layout.elevated joined)",
+  "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; first half) (D1: program.districts, its alias zone kind district and endpoint.region left the list when they shipped; D2: zone.outpost, locator.along, feature.biome_edge and feature.ridge; K1: connector.auto, connector.wall, connector.gate and connector.rope_bridge left it when they shipped, wall.along and layout.elevated joined); T3: connector.bridge and connector.tunnel left it when they shipped, connector.tube and connector.drawbridge (a bridge whose params name a mechanism, R18) joined; tunnel.under is answered by the compiler only (a tunnel without cover), so T3b's fixtures cover it",
   "on": "s7",
   "expect": {
     "all": [
@@ -20,16 +20,16 @@
         "block": "layout.organic"
       },
       {
-        "part": "c_bridge",
-        "block": "connector.bridge"
-      },
-      {
-        "part": "c_tunnel",
-        "block": "connector.tunnel"
-      },
-      {
         "part": "c_channel",
         "block": "connector.channel"
+      },
+      {
+        "part": "c_tube",
+        "block": "connector.tube"
+      },
+      {
+        "part": "c_drawbridge",
+        "block": "connector.drawbridge"
       },
       {
         "part": "c_ladder",
@@ -262,26 +262,6 @@
     ],
     "connectors": [
       {
-        "id": "c_bridge",
-        "kind": "bridge",
-        "from": {
-          "anchor": "claim_n"
-        },
-        "to": {
-          "anchor": "claim_s"
-        }
-      },
-      {
-        "id": "c_tunnel",
-        "kind": "tunnel",
-        "from": {
-          "anchor": "claim_n"
-        },
-        "to": {
-          "anchor": "claim_s"
-        }
-      },
-      {
         "id": "c_channel",
         "kind": "channel",
         "from": {
@@ -289,6 +269,30 @@
         },
         "to": {
           "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_tube",
+        "kind": "tube",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_drawbridge",
+        "kind": "bridge",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        },
+        "params": {
+          "mechanism": "redstone",
+          "movable": true
         }
       },
       {

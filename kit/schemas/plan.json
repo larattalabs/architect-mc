@@ -24,7 +24,10 @@
     "R14 anchors: names are caller-supplied positions (PlanRequest.anchors) or the built-in claim_* ones; P0 never interprets a name. Steward passes stone, player, street_w, street_e, district_<id> and stockpile; an unknown anchor name used by a part is malformed (UNKNOWN_REF)",
     "R15 walls (K1): a connector.wall has exactly one path form: from and to (with via[]: wall.line), where.around (wall.around), where.inside (wall.edge) or where.along (wall.along, reserved until K2); none or two is malformed",
     "R16 gates (K1): a connector.gate's crossing names a street, road, path, rope_bridge or auto connector of this plan (UNKNOWN_REF otherwise); its wall names a wall of this plan; a gate written from/to (the envelope shape) is read as at: from, to noted as the side it faces",
-    "R17 doors (K1): door: door is a wooden double door, so the opening is 2 wide (1 on a 1-wide path); fence_gate is player-only (a crossing used by a villager edge refuses MOVER); params is read leniently and never makes a K1 part malformed: a recorded member that maps (height, closed, gates as a number, torches: true) is read when no first-class member says otherwise, every other one is listed by name in the part's notes"
+    "R17 doors (K1): door: door is a wooden double door, so the opening is 2 wide (1 on a 1-wide path); fence_gate is player-only (a crossing used by a villager edge refuses MOVER); params is read leniently and never makes a K1 part malformed: a recorded member that maps (height, closed, gates as a number, torches: true) is read when no first-class member says otherwise, every other one is listed by name in the part's notes",
+    "R18 crossings (T3): a connector.bridge or connector.tunnel needs from and to that resolve to different places; a self-loop answers refused NO_GAP before routing. A bridge whose params name a mechanism or movable (a moving bridge) answers unsupported {block: connector.drawbridge} (S-T3-7). params is read leniently and never makes a T3 part malformed (width, form; material only as a note); every key not read is listed by name in the part's notes",
+    "R19 tunnel via (T3, Steward S-T3-6): a tunnel is one straight bore; its via is read leniently: the first leg (from to via[0]) is used and the rest is listed in the part's notes, never malformed",
+    "R20 clearance (T3): a bridge's clearance applies only over water; on a dry span it is noted, not read"
   ],
   "x-defaults": {
     "about": "Defaults the compiler applies when a member is absent. A contract promise wins over a part's tolerance where both apply (for example C27's within 4 cells for a boundary-following district, once D2 is supported).",
@@ -44,7 +47,7 @@
     "adjacent.side": "any",
     "around.ring": [4, 24],
     "feature.pick": "largest, then nearest to the claim's centre, then the smallest min x, then the smallest min z",
-    "connector.width": { "street": 3, "road": 3, "path": 1 },
+    "connector.width": { "street": 3, "road": 3, "path": 1, "bridge": "2 on a villager edge, 1 player-only (T3)", "tunnel": "3 on a villager edge, 2 player-only (T3)" },
     "connector.movers": "inferred from the end nodes' lot kinds (T2, S-T2-1); villager edges never use ladders (S-T2-2)",
     "relief.radius": 12,
     "relief.maxCut": 6,
@@ -69,7 +72,7 @@
 
   "x-catalogue": {
     "about": "The capability catalogue that P0 ships (catalogueVersion 1). Each entry: a stable block id (never reused or renamed), the API version it arrived in (sinceApi: the API version at which the entry reached its current state and schemaVersion, always a real semver; a new or changed entry carries the branch's placeholder API version and the merge-time renumber restamps it, which tools/catalogue-since-check.mjs enforces), its own schemaVersion (bumped when its members grow, additively), its state (supported | reserved | retired) and, for reserved, the slice it waits for (until). Checks return this catalogue with every answer; a release commits it as a golden so two catalogues diff by id. Reserved entries carry their parameters through $defs/extension until supported.",
-    "catalogueVersion": 5,
+    "catalogueVersion": 6,
     "entries": [
       { "id": "zone.standard", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.standard" },
       { "id": "zone.outpost", "sinceApi": "1.29.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.outpost" },
@@ -89,10 +92,12 @@
       { "id": "connector.street", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
       { "id": "connector.road", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
       { "id": "connector.path", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
-      { "id": "connector.auto", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.auto", "limits": { "moves": ["walk", "stair", "ladder", "rope_bridge"] } },
-      { "id": "connector.bridge", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "T3" },
-      { "id": "connector.tunnel", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "T3" },
+      { "id": "connector.auto", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.auto", "limits": { "moves": ["walk", "stair", "ladder", "rope_bridge", "bridge", "tunnel"] } },
+      { "id": "connector.bridge", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.bridge", "limits": { "span": [1, 32], "width": [1, 5], "villagerMinWidth": 2, "forms": ["beam", "arch"], "archSpan": [4, 24], "pierEvery": 8, "pierDepth": 24, "clearance": [0, 6], "approach": 32 } },
+      { "id": "connector.tunnel", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.tunnel", "limits": { "length": [4, 64], "width": [1, 5], "height": [2, 5], "cover": 2, "fluidBuffer": 2, "approach": 32 } },
       { "id": "connector.channel", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "HY" },
+      { "id": "connector.tube", "sinceApi": "1.33.0", "schemaVersion": 0, "state": "reserved", "until": "UW", "note": "An underwater glass passage through water (after H's fluid writes and undo); a recorded glass tunnel through water names it instead of connector.tunnel (S-T3-7)." },
+      { "id": "connector.drawbridge", "sinceApi": "1.33.0", "schemaVersion": 0, "state": "reserved", "until": "mechanism", "note": "A moving bridge (redstone, a lifting deck): a connector.bridge whose params name a mechanism or movable answers this block (R18, S-T3-7)." },
       { "id": "connector.wall", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.wall", "limits": { "height": [3, 16], "thickness": [1, 3], "gates": [0, 16] } },
       { "id": "connector.gate", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.gate", "limits": { "width": [1, 5], "height": [2, 6], "doors": ["none", "door", "fence_gate"] } },
       { "id": "connector.ladder", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
@@ -110,6 +115,10 @@
       { "id": "wall.around", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall round a part, build or protected area, or (K1-target) one of the owner's standing regions, around {feature: {region}} (where.around on a wall: the wall's own member, not locator.around; its region not feature.region)." },
       { "id": "wall.edge", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall on the edge of a zone or the claim (where.inside)." },
       { "id": "wall.along", "sinceApi": "1.32.0", "schemaVersion": 0, "state": "reserved", "until": "K2", "note": "D2's boundary spine plus an offset (where.along on a wall): the same member, no format change." },
+      { "id": "bridge.beam", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "note": "T3: a deck on piers to dry, site-solid ground (no pier in water or ice until H)." },
+      { "id": "bridge.arch", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "note": "T3: one masonry arch between two abutments, no piers (span 4..24)." },
+      { "id": "tunnel.through", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "note": "T3: a level bore through rising ground, portal to portal." },
+      { "id": "tunnel.under", "sinceApi": "1.33.0", "schemaVersion": 0, "state": "reserved", "until": "7b", "note": "A passage under flat ground whose ends sit in cellars: a tunnel whose every line lacks cover answers this block; it waits for 7b's ports in buildings (K5 forbids writes in lot boxes)." },
       { "id": "form.relief", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.relief" },
       { "id": "form.terrace", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.terrace" },
       { "id": "form.ice_spike", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.spike" },
@@ -571,7 +580,7 @@
 
     "connector.auto": {
       "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
-      "description": "(K1) A route that may use any move the catalogue lists in limits.moves (walk, stairs, ladders on player-only edges, rope bridges), each costed as T2 and the rope move (S-K1-5: the move set grows as slices ship).",
+      "description": "(K1) A route that may use any move the catalogue lists in limits.moves (walk, stairs, ladders on player-only edges, rope bridges; T3: bridges and tunnels, a tunnel only inside a frozen volume the plan already holds), each costed as T2 and the special moves (S-K1-5: the move set grows as slices ship). span stays the rope move's (8..40); bridges take their own limits.",
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "kind": { "const": "auto" },
@@ -591,6 +600,61 @@
         "style": { "$ref": "#/$defs/bibleRef" },
         "tolerance": { "$ref": "#/$defs/tolerance" },
         "params": { "type": "object", "description": "Read leniently, never malformed (R17); every key is listed in the answer's notes." }
+      }
+    },
+
+    "connector.bridge": {
+      "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
+      "description": "(T3) A bridge: a route from from to to over exactly one built span (a gap or water), walking at most approach (default 16) at each end. form: beam (deck on piers, bridge.beam), arch (span 4..24, bridge.arch), auto (default: arch where it fits). width default 2 villager, 1 player-only. clearance: clear cells over water (default 2; R20). No write in water or ice: a pier needed in water refuses WATER until H. R18.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "bridge" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
+        "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" } },
+        "width": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
+        "lamps": { "enum": ["none", "few", "street"] },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "form": { "enum": ["auto", "beam", "arch"] },
+        "span": { "type": "object", "additionalProperties": false, "properties": { "min": { "type": "integer", "minimum": 1, "maximum": 32 }, "max": { "type": "integer", "minimum": 1, "maximum": 32 } } },
+        "approach": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "clearance": { "type": "integer", "minimum": 0, "maximum": 6 },
+        "params": { "type": "object", "description": "Read leniently (R18): width, form; every other key noted." }
+      }
+    },
+
+    "connector.tunnel": {
+      "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
+      "description": "(T3) A tunnel (tunnel.through): one straight level bore through rising ground, portal to portal, lined where soil, sand or ice shows, lit, 2 cells from any fluid, walking at most approach (default 16) at each end. width default 3 villager, 2 player-only; height 2..5 clear (default 3); lining exposed (default) or all; portal arch (default) or plain. Flat ground between the ends answers unsupported {tunnel.under, until 7b}. R18, R19.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "tunnel" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
+        "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" } },
+        "width": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
+        "lamps": { "enum": ["none", "few", "street"] },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "height": { "type": "integer", "minimum": 2, "maximum": 5 },
+        "length": { "type": "object", "additionalProperties": false, "properties": { "min": { "type": "integer", "minimum": 4, "maximum": 64 }, "max": { "type": "integer", "minimum": 4, "maximum": 64 } } },
+        "approach": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "lining": { "enum": ["exposed", "all"] },
+        "portal": { "enum": ["plain", "arch"] },
+        "params": { "type": "object", "description": "Read leniently (R18): width; every other key noted." }
       }
     },
 
@@ -705,7 +769,7 @@
     "reason": {
       "type": "object", "required": ["code"], "additionalProperties": false,
       "properties": {
-        "code": { "enum": ["SCHEMA", "UNKNOWN_REF", "CYCLE", "EXTENSION_BOUND", "UNSUPPORTED", "NO_FEATURE", "NO_ROOM", "OUT_OF_CLAIM", "OVERLAP", "PROTECTED", "KEEP_OUT", "TOO_STEEP", "WATER", "UNREACHABLE", "TOLERANCE", "DEPENDENCY", "BUDGET", "CANCELLED", "LIMIT", "NO_GAP", "SPAN", "ANCHOR", "HEADROOM", "MOVER"] },
+        "code": { "enum": ["SCHEMA", "UNKNOWN_REF", "CYCLE", "EXTENSION_BOUND", "UNSUPPORTED", "NO_FEATURE", "NO_ROOM", "OUT_OF_CLAIM", "OVERLAP", "PROTECTED", "KEEP_OUT", "TOO_STEEP", "WATER", "UNREACHABLE", "TOLERANCE", "DEPENDENCY", "BUDGET", "CANCELLED", "LIMIT", "NO_GAP", "SPAN", "ANCHOR", "HEADROOM", "MOVER", "NO_COVER", "VOLUME"] },
         "message": { "type": "string" },
         "path": { "type": "string", "description": "SCHEMA: the JSON path of the first error." },
         "block": { "$ref": "#/$defs/blockId" },

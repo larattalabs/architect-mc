@@ -34,12 +34,12 @@ test('lenient params: read where they map, every other key listed, lot-naming ke
 test('connector roles: the bible names roles, else the contract defaults (§6, N-K1-1, N-K1-2)', () => {
   const roles = resolveRoles({});
   const d = connectorRoles(roles, null);
-  assert.deepEqual(d, { wall: { body: 'structure', cap: 'trim', frame: 'trim' }, gate: { frame: 'trim', door: null }, rope_bridge: { deck: 'floor', rail: 'rail', post: 'frame', rope: null } });
+  assert.deepEqual({ wall: d.wall, gate: d.gate, rope_bridge: d.rope_bridge }, { wall: { body: 'structure', cap: 'trim', frame: 'trim' }, gate: { frame: 'trim', door: null }, rope_bridge: { deck: 'floor', rail: 'rail', post: 'frame', rope: null } });
   const g = connectorRoles(roles, { wall: { body: 'wall_alt' }, rope_bridge: { rope: 'none' } });
   assert.equal(g.wall.body, 'wall_alt');
   assert.equal(g.rope_bridge.rope, 'none');
   assert.equal(connectorsError({ wall: { body: 'nope' } }, roles), "connectors.wall.body: 'nope' is not a role of this bible");
-  assert.equal(connectorsError({ moat: {} }, roles), "connectors: unknown member 'moat' (one of wall, gate, rope_bridge)");
+  assert.equal(connectorsError({ moat: {} }, roles), "connectors: unknown member 'moat' (one of wall, gate, rope_bridge, bridge, tunnel)");
   assert.equal(shapeOf('minecraft:stone_bricks', 'wall'), 'minecraft:stone_brick_wall');
   assert.equal(shapeOf('minecraft:spruce_log', 'slab'), 'minecraft:spruce_slab');
   assert.equal(shapeOf('minecraft:glass', 'wall'), null);
@@ -59,8 +59,8 @@ test('the bill of materials: C26\'s rules, and the obtainability map equal to th
     { 'minecraft:lantern': 1, 'minecraft:oak_door': 1, 'minecraft:stone_bricks': 2 });
 });
 
-test('the route pass\'s special-move table: the frozen interface, gate then rope', () => {
-  assert.deepEqual(SPECIAL_MOVES.map((m) => [m.name, m.code, m.segment, m.flag]), [['gate', 5, 'gate', false], ['rope', 6, 'rope', true]]);
+test('the route pass\'s special-move table: the frozen interface, gate then rope (6c T3 appends bridge and tunnel)', () => {
+  assert.deepEqual(SPECIAL_MOVES.slice(0, 2).map((m) => [m.name, m.code, m.segment, m.flag]), [['gate', 5, 'gate', false], ['rope', 6, 'rope', true]]);
   for (const m of SPECIAL_MOVES) for (const f of ['init', 'active', 'needsFlag', 'blocks', 'expand', 'cells', 'commit']) assert.equal(typeof m[f], 'function', `${m.name}.${f}`);
   // off without walls or rope edges: init returns null (the pass is T2's)
   const env = { W: 4, D: 4, r: 1, minX: 0, minZ: 0 };

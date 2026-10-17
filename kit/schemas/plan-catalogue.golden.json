@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 5,
- "api": "1.32.0",
- "kitVersion": "0.33.0",
+ "catalogueVersion": 6,
+ "api": "1.33.0",
+ "kitVersion": "0.34.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -129,7 +129,7 @@
   },
   {
    "id": "connector.auto",
-   "sinceApi": "1.32.0",
+   "sinceApi": "1.33.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -137,23 +137,66 @@
      "walk",
      "stair",
      "ladder",
-     "rope_bridge"
+     "rope_bridge",
+     "bridge",
+     "tunnel"
     ]
    }
   },
   {
    "id": "connector.bridge",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "T3"
+   "sinceApi": "1.33.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "span": [
+     1,
+     32
+    ],
+    "width": [
+     1,
+     5
+    ],
+    "villagerMinWidth": 2,
+    "forms": [
+     "beam",
+     "arch"
+    ],
+    "archSpan": [
+     4,
+     24
+    ],
+    "pierEvery": 8,
+    "pierDepth": 24,
+    "clearance": [
+     0,
+     6
+    ],
+    "approach": 32
+   }
   },
   {
    "id": "connector.tunnel",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "T3"
+   "sinceApi": "1.33.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "length": [
+     4,
+     64
+    ],
+    "width": [
+     1,
+     5
+    ],
+    "height": [
+     2,
+     5
+    ],
+    "cover": 2,
+    "fluidBuffer": 2,
+    "approach": 32
+   }
   },
   {
    "id": "connector.channel",
@@ -161,6 +204,22 @@
    "schemaVersion": 0,
    "state": "reserved",
    "until": "HY"
+  },
+  {
+   "id": "connector.tube",
+   "sinceApi": "1.33.0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "UW",
+   "note": "An underwater glass passage through water (after H's fluid writes and undo); a recorded glass tunnel through water names it instead of connector.tunnel (S-T3-7)."
+  },
+  {
+   "id": "connector.drawbridge",
+   "sinceApi": "1.33.0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "mechanism",
+   "note": "A moving bridge (redstone, a lifting deck): a connector.bridge whose params name a mechanism or movable answers this block (R18, S-T3-7)."
   },
   {
    "id": "connector.wall",
@@ -319,6 +378,35 @@
    "state": "reserved",
    "until": "K2",
    "note": "D2's boundary spine plus an offset (where.along on a wall): the same member, no format change."
+  },
+  {
+   "id": "bridge.beam",
+   "sinceApi": "1.33.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "T3: a deck on piers to dry, site-solid ground (no pier in water or ice until H)."
+  },
+  {
+   "id": "bridge.arch",
+   "sinceApi": "1.33.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "T3: one masonry arch between two abutments, no piers (span 4..24)."
+  },
+  {
+   "id": "tunnel.through",
+   "sinceApi": "1.33.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "T3: a level bore through rising ground, portal to portal."
+  },
+  {
+   "id": "tunnel.under",
+   "sinceApi": "1.33.0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "7b",
+   "note": "A passage under flat ground whose ends sit in cellars: a tunnel whose every line lacks cover answers this block; it waits for 7b's ports in buildings (K5 forbids writes in lot boxes)."
   },
   {
    "id": "form.relief",
