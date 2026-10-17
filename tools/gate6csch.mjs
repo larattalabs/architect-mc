@@ -33,6 +33,7 @@ import { fileURLToPath } from 'node:url';
 import { DevClient } from './lib/devclient.mjs';
 import { parse } from '../kit/lib/nbt.mjs';
 import { parseSchem, schemToStructure, structureCells, sortedState, canonTag } from '../kit/lib/schem.mjs';
+import { srcGradle } from './lib/src-gradle.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -160,8 +161,8 @@ async function unit() {
   const kf = /ℹ fail (\d+)/.exec(k.out)?.[1];
   check(k.status === 0 && kf === '0', `items 1-4 (kit): kit/test/schem.test.mjs ${kp} pass, ${kf} fail (round trip of every example, determinism + goldens, v2/v3, refusals)`);
   const env = { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(RUN ?? root, '.gradle-home') };
-  const m = run('unit-mod', './gradlew', ['--offline', '--no-daemon', 'test', '--tests', 'dev.larattalabs.architect.library.SchematicTest', '--tests',
-    'dev.larattalabs.architect.api.ApiSchTest'], { cwd: path.join(RUN ?? root, 'mod'), env });
+  const m = srcGradle(root, () => run('unit-mod', './gradlew', ['--offline', '--no-daemon', 'test', '--tests', 'dev.larattalabs.architect.library.SchematicTest', '--tests',
+    'dev.larattalabs.architect.api.ApiSchTest'], { cwd: path.join(RUN ?? root, 'mod'), env }));
   const dirs = path.join(RUN ?? root, 'mod', 'build', 'test-results', 'test');
   const junit = {};
   for (const n of ['dev.larattalabs.architect.library.SchematicTest', 'dev.larattalabs.architect.api.ApiSchTest']) {

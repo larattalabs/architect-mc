@@ -27,6 +27,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { kitReuse } from './lib/kit-reuse.mjs';
 import crypto from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -102,18 +103,20 @@ function nodeTest(files, timeout = 3_600_000) {
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), names: t.split('\n').filter((l) => /^✔|^✖/.test(l)) };
 }
+/** The kit suite once per gate run (tools/lib/kit-reuse.mjs): files whose checks are pass/fail only take this run's unit-kit results when exact. */
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 
 steps.unit = async () => {
   const out = {};
   out.k1b = nodeTest(['kit/test/rope-k1b.test.mjs', 'kit/test/plan-k1b.test.mjs']);
   check(out.k1b.code === 0 && out.k1b.fail === 0 && out.k1b.pass >= 17, `items 5, 6, 7, 10, 11 (kit): the profile over every span 8-40 and rise, the span checks in order, ropeCells and the primitive (M10:rope, rails, head room, M3, both movers on the slab deck), the broken variants (posts 1 deep: M10:rope; no rails: M8; the whole-block deck off the formula; the whole-block deck on a villager edge: MOVER), the rope move (exactly one span, off without spans), links_demo flat (8, 24, 40, soul lanterns), v33 and v34, the refusal fixtures, §9 (treetop's 9 NO_GAP with a path wouldFit that fits alone, swamp_stilts, upside_down), determinism: ${out.k1b.pass} pass, ${out.k1b.fail} fail`, out.k1b.failing);
-  out.p0 = nodeTest(['kit/test/plan-p0.test.mjs', 'kit/test/k1-foundation.test.mjs']);
+  out.p0 = kitOnce(['kit/test/plan-p0.test.mjs', 'kit/test/k1-foundation.test.mjs']);
   check(out.p0.code === 0 && out.p0.fail === 0, `item 15: P0's tests after K1 (the valid/ fixtures with v33 and v34 fit, item 9's catalogue coverage, item 11's asks): ${out.p0.pass} pass, ${out.p0.fail} fail`, out.p0.failing);
-  out.goldens = nodeTest(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/region-lint.test.mjs', 'kit/test/relief-t1.test.mjs', 'kit/test/route-t2.test.mjs']);
+  out.goldens = kitOnce(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/region-lint.test.mjs', 'kit/test/relief-t1.test.mjs', 'kit/test/route-t2.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 12: S1, S7, S2, mega_bench, relief_demo, route_demo, forms_demo, scatter_demo, districts_demo tile goldens and links_demo's own; T2's routes; the lint (lib/connectors on the plan path): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   const gl = ['links_demo.json', 'links_demo_flat.json'].filter((f) => fs.existsSync(path.join(GOLD, f)));
   check(gl.length === 2, `item 10: links_demo's goldens committed (${gl.join(', ') || 'none'})`);
-  out.kit = nodeTest(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
+  out.kit = kitOnce(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   spendZero();
   return out;

@@ -21,6 +21,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DevClient } from './lib/devclient.mjs';
+import { srcGradle } from './lib/src-gradle.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -404,8 +405,8 @@ async function apicompat() {
 
 async function unit() {
   const env = { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*ApiY2Test', '--tests', '*SiteWaitTest', '--tests', '*FullBomTest', '--tests', '*ApiRulesTest'],
-    { cwd: path.join(root, 'mod'), encoding: 'utf8', env });
+  const g = srcGradle(root, () => spawnSync('./gradlew', ['test', '--offline', '--tests', '*ApiY2Test', '--tests', '*SiteWaitTest', '--tests', '*FullBomTest', '--tests', '*ApiRulesTest'],
+    { cwd: path.join(root, 'mod'), encoding: 'utf8', env }));
   fs.writeFileSync(path.join(OUT, 'unit-gradle.txt'), `${g.stdout}${g.stderr}`);
   check(g.status === 0, `item 1: ApiY2Test, SiteWaitTest, FullBomTest, ApiRulesTest pass (gradle test exit ${g.status})`);
   const res = path.join(root, 'mod', 'build', 'test-results', 'test');
