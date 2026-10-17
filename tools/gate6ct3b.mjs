@@ -120,6 +120,20 @@ steps.unit = async () => {
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 13: the tile goldens that must not move (S1, S7, S2, mega_bench, relief_demo, route_demo, forms_demo, scatter_demo, districts_demo, links_demo); T2's routes (its water test unchanged); K1's tests; the lint (the tunnel files on the plan path): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   out.kit = nodeTest(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
+  // item 14 (recorded): v37's check time with and without the volume pass (the kit's in-process two-plan flow)
+  {
+    const H = await import(pathToFileURL(path.join(KIT, 'test', 'plan-helpers.mjs')).href);
+    const fx = JSON.parse(fs.readFileSync(path.join(KIT, 'test', 'fixtures', 'plan', 'valid', 'v37_tunnel.json'), 'utf8'));
+    const sv = H.flatSurvey(fx.terrain);
+    const o = { survey: sv.bytes, claim: sv.claim, anchors: { ...H.stewardAnchors(sv.claim), ...fx.anchors } };
+    const t0 = Date.now();
+    const one = await H.checkPlanLocal(fx.plan, o);
+    const t1 = Date.now();
+    const two = await H.checkPlanVolumes(fx.plan, { ...o, volume: fx.volume });
+    const t2 = Date.now();
+    out.timing = { firstPlanMs: t1 - t0, twoPlanMs: t2 - t1, overall: [one.check.overall, two.check.overall], note: 'recorded, not judged' };
+    log(`  item 14 (recorded): v37 checked once ${out.timing.firstPlanMs} ms (${one.check.overall}), with the volume pass ${out.timing.twoPlanMs} ms (${two.check.overall})`);
+  }
   // the Java side: the plan check's tunnel gate, the load option's key, the rock comparison (PlanChecksT3Test)
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
   const g = spawnSync('./gradlew', ['test', '--offline', '-q', '--tests', '*PlanChecksT3Test*', '--tests', '*ApiT3Test*'], { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 1_800_000 });
