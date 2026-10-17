@@ -537,10 +537,13 @@ const HIST = flag('--no-history') ? { steps: {}, runs: 0 } : loadHistory(path.jo
 const estOf = new Map(steps.map((s) => [s.id, estimateMin(s, HIST)]));
 const est = (s) => estOf.get(s.id).min;
 // Timeouts from history: max(2 x the step's p90, 10 min), capped by its configured timeoutMin, once it has 5 samples (--no-history-
-// timeouts keeps the configured ones). A bench step running next to others with only isolated samples gets 3 x p90.
+// timeouts keeps the configured ones). A bench step running next to others with only isolated samples gets 3 x p90; a stopOnFail
+// barrier keeps its configured timeout.
 const HIST_TIMEOUTS = !flag('--no-history-timeouts') && !flag('--no-history');
 for (const s of steps) {
-  const t = HIST_TIMEOUTS ? effectiveTimeout(s, HIST, { contendedBench: isBench(s) && !isIsolated(s) }) : { min: s.timeoutMin, source: 'configured (--no-history-timeouts)' };
+  // a stopOnFail step is a barrier (a false TIMEOUT there stops the whole run): it keeps its configured timeout
+  const t = !HIST_TIMEOUTS ? { min: s.timeoutMin, source: 'configured (--no-history-timeouts)' } : s.stopOnFail ? { min: s.timeoutMin, source: 'configured (stopOnFail barrier)' }
+    : effectiveTimeout(s, HIST, { contendedBench: isBench(s) && !isIsolated(s) });
   s.effTimeoutMin = t.min;
   s.timeoutSource = t.source;
 }
