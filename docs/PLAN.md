@@ -605,7 +605,7 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 
 - **pt-nomod reads the source checkout's `mod/build/headless-launch*.json`.** It fails whenever that checkout hasn't built
   headless; make it build or locate the launch file in its own run worktree.
-- **A literal `${OUT }/gate7a-k1b/` directory is committed** (from 1f946e2f). Remove it from git.
+- ~~A literal `${OUT }/gate7a-k1b/` directory committed in 1f946e2f~~: already removed (K1b's verifier fix); nothing tracked on main.
 - **More headless:** w-ingame (about 13 min on the client), t1-ingame and the sch/y/y2/mp-ingame steps use no client-only hooks.
   A/B them with `--host server` and move the ones that match.
 - **Split the slow kit test files.** plan-p0 (187 s) and one village test (138 s) set the kit suite's wall time.
