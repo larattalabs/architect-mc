@@ -62,15 +62,8 @@ steps.stop = async () => {
 /** The base worlds: the pinned seed's normal world (default rules) and a flat one (the exact rules); the stub blueprints. */
 steps.base = async () => {
   await ensure();
-  for (const [name, preset] of [[BASE, 'normal'], [FLAT, 'flat']]) {
-    if (fs.existsSync(path.join(SAVES, name, 'level.dat'))) continue;
-    await leaveWorld();
-    await openWorld(name, { mode: 'creative', preset, seed: SEED, cheats: true });
-    await setRules(preset === 'flat' ? 'exact' : 'default');
-    await tp(0.5, 200, 0.5);
-    await cmd('/save-all flush');
-    await leaveWorld();
-  }
+  // a reused run dir's base world from an older creation recipe is moved aside and made again (tools/lib/basestamp.mjs)
+  for (const name of [BASE, FLAT]) await L6.ensureBase(name);
   if (!STUB_IDS.every((id) => fs.existsSync(path.join(LIBRARY, id)) || fs.existsSync(path.join(LIBRARY, `${id}.nbt`)))) execFileSync('node', [path.join(root, 'tools', 'gate6a-stubs.mjs'), LIBRARY]);
   return { worlds: [BASE, FLAT], seed: SEED };
 };

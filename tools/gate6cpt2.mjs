@@ -893,18 +893,43 @@ steps.c35bible = async () => {
 
 // ------------------------------------------------------------------ item 13 (recorded): a 0.27.0 reader
 
+/**
+ * The v0.27.0 source for item 13, extracted from the tag (git archive, no git metadata) into the main checkout's artifacts, keyed by
+ * the tag's commit and reused once complete, like the apijars baselines. PT2_V0270 names an existing checkout instead. Extracted into
+ * a temporary sibling and renamed into place, so an interrupted run leaves no half-built reader that a later run would trust.
+ */
+function old027Source() {
+  if (process.env.PT2_V0270) return path.resolve(process.env.PT2_V0270);
+  const git = (...a) => execFileSync('git', ['-C', root, ...a], { encoding: 'utf8' }).trim();
+  let sha;
+  try { sha = git('rev-parse', 'v0.27.0^{commit}'); } catch {
+    log('tag v0.27.0 not local: fetching it');
+    git('fetch', '--no-tags', 'origin', 'tag', 'v0.27.0');
+    sha = git('rev-parse', 'v0.27.0^{commit}');
+  }
+  const dir = path.join(MAIN, 'artifacts', 'gate6c-pt2', `v0270-${sha.slice(0, 12)}`);
+  if (fs.existsSync(path.join(dir, 'HEAD.txt'))) return dir;
+  const tmp = `${dir}.tmp-${process.pid}`;
+  fs.mkdirSync(tmp, { recursive: true });
+  log(`item 13: extracting v0.27.0 (${sha.slice(0, 12)}) into ${dir}`);
+  execFileSync('/bin/sh', ['-c', `git -C "$1" archive v0.27.0 | tar -x -C "$2"`, 'sh', root, tmp]);
+  fs.writeFileSync(path.join(tmp, 'HEAD.txt'), `${sha}\n`);
+  fs.renameSync(tmp, dir);
+  return dir;
+}
+
 steps.old027 = async () => {
   // the journal of the adopt step's world (an adopt entry) and of the refusals step's world before any adoption is not kept; the
-  // undoA world after its un-adoption is read too (released files gone). 0.27.0's own classes, built in its worktree, read them.
-  const wt = process.env.PT2_V0270 ?? path.resolve(root, '..', 'architect-mc-PT2-v0270');
+  // undoA world after its un-adoption is read too (released files gone). 0.27.0's own classes, built from its tag, read them.
+  const wt = old027Source();
   const worlds = ['G6B PT2 Adopt', 'G6B PT2 UndoA', 'G6B PT2 Flow'].map((w) => path.join(SAVES, w, 'architect-journal')).filter((d) => fs.existsSync(d));
-  check(fs.existsSync(path.join(wt, 'mod')) && worlds.length > 0, `item 13: the v0.27.0 worktree ${wt} and ${worlds.length} journals to read`);
+  check(fs.existsSync(path.join(wt, 'mod')) && worlds.length > 0, `item 13: the v0.27.0 source ${wt} and ${worlds.length} journals to read`);
   const test = path.join(wt, 'mod', 'src', 'test', 'java', 'dev', 'larattalabs', 'architect', 'journal', 'Pt2Old027ReadTest.java');
   fs.copyFileSync(path.join(root, 'tools', 'pt2', 'Pt2Old027ReadTest.java'), test);
   const report = path.join(OUT, 'old027.txt');
-  const env = { ...process.env, JAVA_HOME, GRADLE_USER_HOME: path.join(wt, '.gradle-home'), PT2_JOURNALS: worlds.join(path.delimiter), PT2_REPORT: report };
+  const env = { ...process.env, JAVA_HOME, GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home'), PT2_JOURNALS: worlds.join(path.delimiter), PT2_REPORT: report };
   const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*Pt2Old027ReadTest', '--rerun'], { cwd: path.join(wt, 'mod'), env, encoding: 'utf8', timeout: 1_800_000 });
-  fs.rmSync(test, { force: true });
+  try { fs.unlinkSync(test); } catch { /* already gone */ }
   const t = fs.existsSync(report) ? fs.readFileSync(report, 'utf8') : `${g.stdout}${g.stderr}`.slice(-3000);
   const n = (k) => Number((new RegExp(`^${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   check(g.status === 0 && n('adoptRefused') > 0 && n('otherRead') > 0 && n('otherRefused') === 0 && n('indexKeptAdopt') > 0, `item 13 (recorded): 0.27.0's reader refuses every adopt entry file (${n('adoptRefused')}), reads every other file (${n('otherRead')} read, ${n('otherRefused')} refused) and keeps the adopt rows of the index (${n('indexKeptAdopt')})`, t.split('\n').slice(0, 30));

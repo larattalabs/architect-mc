@@ -106,15 +106,8 @@ steps.stop = async () => {
 };
 steps.base = async () => {
   await ensure();
-  for (const [name, preset] of [[BASE, 'normal'], [FLAT, 'flat']]) {
-    if (fs.existsSync(path.join(SAVES, name, 'level.dat'))) continue;
-    await leaveWorld();
-    await openWorld(name, { mode: 'creative', preset, seed: SEED, cheats: true });
-    await L.setRules(preset === 'flat' ? 'exact' : 'default');
-    await tp(0.5, 200, 0.5);
-    await cmd('/save-all flush');
-    await leaveWorld();
-  }
+  // a reused run dir's base world from an older creation recipe is moved aside and made again (tools/lib/basestamp.mjs)
+  for (const name of [BASE, FLAT]) await L.ensureBase(name);
   const frozenBase = await L.seedBase(FROZEN_SEED);
   spendZero();
   return { worlds: [BASE, FLAT, frozenBase], seed: SEED };

@@ -379,6 +379,8 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
 ## Queued (coordinator, 2026-10-12)
 
 - `tools/p2-library-check.mjs` is stale on main (sets a `floors` param the bundled cabin no longer has); fix or retire it.
+  **DONE (chore/housekeeping-1): retired.** Removed it and `tools/run-p2-client.sh` (its only launcher). A manual phase-2 screenshot walk
+  in no chain or tier; the `ui` step covers the Library's import/export, and the `dev.library.*` hooks stay for apitest.
 - T1 follow-up: in game, 7 of 26 written falling-water cells were not the planned block after the build (verifier note);
   T1 changes no tile-write code. Investigate with H (fluids).
 - The mod's no-check plan wait went from 120 s to 300 s for every program (T1), not only pass programs.
@@ -424,6 +426,11 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
   data packs recorded, allowCommands 0) generated magma and bubble columns where the golden has water, moving S1's pinned
   survey sha. Fresh run dirs pass. Have gate-run detect and rebuild stale base worlds (or stamp base worlds with the creating
   tool version).
+  **DONE (chore/housekeeping-1):** base worlds carry `architect-base-stamp.json` (hash of the creation recipe: recipe version, Minecraft
+  version, preset, seed, rules; `tools/lib/basestamp.mjs`). `ensureBase()` in `tools/lib/run6b.mjs` (used by every `base` step of the
+  G6B drivers, `seedBase` and `fresh`) moves an unstamped or mismatched base to `saves-stale/` (never deletes) and rebuilds it. Bump
+  `BASE_RECIPE_VERSION` when the creation path changes. Unit test: `kit/test/basestamp.test.mjs`. Not covered: the G6A/G6C0c/6cx drivers'
+  own base steps (other worlds).
 - PT verifier notes: `PredicatePathsTest` matches only the literal `level.setBlock(`; comment or lock the off-thread clear in
   `Placed.changed`.
 
@@ -432,6 +439,9 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
 - PT2 gate item 13 (`old027`, a 0.27.0 reader refuses adopt journal files) reads `../architect-mc-PT2-v0270`, a tag checkout that
   no longer has a `mod/` tree. Make the driver build or fetch the 0.27.0 reader into `artifacts/` (like the apijars baselines)
   instead of depending on a sibling worktree.
+  **DONE (chore/housekeeping-1):** `old027Source()` in `tools/gate6cpt2.mjs` `git archive`s the v0.27.0 tag (fetching it if absent) into
+  `<main>/artifacts/gate6c-pt2/v0270-<sha12>` (built via a temp dir and a rename, reused once `HEAD.txt` exists) and builds the reader with the
+  run dir's `.gradle-home`; `PT2_V0270` still overrides.
 - C35 limit: an adopted build's change never uses a bible for new cells, even if asked (new cells come from the captured
   blocks by role: wall, frame, roof). Forwarding a bible needs `Adopt.source()` to change; revisit if players ask.
 
@@ -449,6 +459,10 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
 - **Catalogue `sinceApi` placeholders.** 75 plan-catalogue entries still say `sinceApi: "P0"` and the D1/D2 flips did not
   record a real version. `state` is what Steward compares across releases, so this isn't blocking, but stamp real API
   versions (P0 = 1.23.0; D1 = 1.27.0; D2 = 1.29.0; PT = 1.24.0) and make the merge-time renumber stamp new ones.
+  **DONE (chore/housekeeping-1):** all 75 stamped from git history (unchanged since P0 = 1.23.0; reserved-to-supported flips D1 =
+  1.27.0, D2 = 1.29.0, K1 = 1.32.0; C37's schemaVersion-2 entries 1.30.0; PT's two stay 1.24.0), schema pattern is semver only,
+  `tools/catalogue-since-check.mjs` (run by `kit/test/catalogue-since.test.mjs`) fails on a non-semver or a future `sinceApi`,
+  golden regenerated, `catalogueVersion` stays 5 (no entry's state or schemaVersion changed; metadata only).
 
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?

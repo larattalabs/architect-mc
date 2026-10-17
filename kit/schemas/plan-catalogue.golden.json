@@ -6,19 +6,19 @@
  "entries": [
   {
    "id": "zone.standard",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "zone.outpost",
-   "sinceApi": "P0",
+   "sinceApi": "1.29.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "zone.district",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "D1",
@@ -27,76 +27,76 @@
   },
   {
    "id": "program.flat_village",
-   "sinceApi": "P0",
+   "sinceApi": "1.30.0",
    "schemaVersion": 2,
    "state": "supported",
    "note": "C37 (sinceApi 1.30.0, a placeholder set at merge): additive orientation member (ew | ns | auto) of street layouts."
   },
   {
    "id": "program.lots",
-   "sinceApi": "P0",
+   "sinceApi": "1.30.0",
    "schemaVersion": 2,
    "state": "supported",
    "note": "C37 (sinceApi 1.30.0, a placeholder set at merge): additive orientation member (ew | ns | auto) of street layouts."
   },
   {
    "id": "program.districts",
-   "sinceApi": "P0",
+   "sinceApi": "1.27.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "program.crater_works",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "N-P0-1: the bundled crater_works program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim."
   },
   {
    "id": "program.rift_city",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "N-P0-1: the bundled rift_city program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim."
   },
   {
    "id": "program.floating_islands",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "N-P0-1: the bundled floating_islands program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim."
   },
   {
    "id": "layout.street",
-   "sinceApi": "P0",
+   "sinceApi": "1.30.0",
    "schemaVersion": 2,
    "state": "supported",
    "note": "C37 (sinceApi 1.30.0, a placeholder set at merge): additive orientation member (ew | ns | auto) of street layouts."
   },
   {
    "id": "layout.ring",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "FL"
   },
   {
    "id": "layout.spiral",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "FL"
   },
   {
    "id": "layout.grid",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "FL"
   },
   {
    "id": "layout.organic",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "FL"
@@ -111,25 +111,25 @@
   },
   {
    "id": "connector.street",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "connector.road",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "connector.path",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "connector.auto",
-   "sinceApi": "P0",
+   "sinceApi": "1.32.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -143,28 +143,28 @@
   },
   {
    "id": "connector.bridge",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "T3"
   },
   {
    "id": "connector.tunnel",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "T3"
   },
   {
    "id": "connector.channel",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "HY"
   },
   {
    "id": "connector.wall",
-   "sinceApi": "P0",
+   "sinceApi": "1.32.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -184,7 +184,7 @@
   },
   {
    "id": "connector.gate",
-   "sinceApi": "P0",
+   "sinceApi": "1.32.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -205,28 +205,28 @@
   },
   {
    "id": "connector.ladder",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7a"
   },
   {
    "id": "connector.stair",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7a"
   },
   {
    "id": "connector.rail",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7a"
   },
   {
    "id": "connector.rope_bridge",
-   "sinceApi": "P0",
+   "sinceApi": "1.32.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -244,49 +244,49 @@
   },
   {
    "id": "connector.catwalk",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7a"
   },
   {
    "id": "connector.rock_stair",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7a"
   },
   {
    "id": "connector.switchback",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7a"
   },
   {
    "id": "connector.lift",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7a"
   },
   {
    "id": "connector.branch_walk",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7a"
   },
   {
    "id": "connector.span_bridge",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7a"
   },
   {
    "id": "connector.stairs_around",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7a"
@@ -322,38 +322,38 @@
   },
   {
    "id": "form.relief",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "form.terrace",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "form.ice_spike",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "form.rock_spire",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "form.floating_island",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "N-P0-1"
   },
   {
    "id": "form.brush",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "P1",
@@ -361,35 +361,35 @@
   },
   {
    "id": "form.pond",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "H"
   },
   {
    "id": "form.scatter",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "F2"
   },
   {
    "id": "form.giant_tree",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "F3"
   },
   {
    "id": "form.hidden_room",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7b"
   },
   {
    "id": "form.crater",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7c",
@@ -397,21 +397,21 @@
   },
   {
    "id": "form.hollow_mountain",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7c"
   },
   {
    "id": "form.waterfall",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "H"
   },
   {
    "id": "form.seabed_site",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "later",
@@ -419,7 +419,7 @@
   },
   {
    "id": "form.ship_hull",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "unscheduled",
@@ -427,7 +427,7 @@
   },
   {
    "id": "form.mast",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "unscheduled",
@@ -435,42 +435,42 @@
   },
   {
    "id": "rule.palette",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "RC"
   },
   {
    "id": "rule.shape",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "RC"
   },
   {
    "id": "rule.variety",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "RC"
   },
   {
    "id": "rule.density",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "RC"
   },
   {
    "id": "rule.height_cap",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "RC"
   },
   {
    "id": "rule.stacked_floors",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "RC",
@@ -478,7 +478,7 @@
   },
   {
    "id": "rule.suspended",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7b",
@@ -486,31 +486,31 @@
   },
   {
    "id": "locator.inside",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "locator.near",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "locator.adjacent",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "locator.along",
-   "sinceApi": "P0",
+   "sinceApi": "1.29.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "locator.around",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "FL",
@@ -518,38 +518,38 @@
   },
   {
    "id": "feature.water",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "feature.part",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "feature.protected",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "feature.region",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "D1"
   },
   {
    "id": "feature.biome_edge",
-   "sinceApi": "P0",
+   "sinceApi": "1.29.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "feature.ridge",
-   "sinceApi": "P0",
+   "sinceApi": "1.29.0",
    "schemaVersion": 1,
    "state": "supported"
   },
@@ -562,25 +562,25 @@
   },
   {
    "id": "endpoint.part",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "endpoint.anchor",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "endpoint.feature",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "endpoint.region",
-   "sinceApi": "P0",
+   "sinceApi": "1.27.0",
    "schemaVersion": 1,
    "state": "supported"
   },
@@ -593,20 +593,20 @@
   },
   {
    "id": "sketch.point",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   },
   {
    "id": "sketch.outline",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "FL"
   },
   {
    "id": "dependency.after",
-   "sinceApi": "P0",
+   "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
   }
