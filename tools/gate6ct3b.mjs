@@ -414,7 +414,7 @@ steps.natural = async () => {
 
   // ---- A: item 5 (the check with volumes, answers equal the kit's) and item 4 (water 2 refused, at 3 fits, realised, stand: dry)
   await L.fresh('G6B T3b Hill A', BASE);
-  await L.setRules('default');
+  await L.setRules('exact'); // (stricter than K1b's natural round: no random ticks, no spawns, so nothing grows or grazes near the bore)
   await at();
   const c0 = await checkHill(f);
   const bore0 = c0.check?.parts?.find((a) => a.part === 'bore');
@@ -444,7 +444,7 @@ steps.natural = async () => {
   const fluidTest = async (kind, refuseD, fitD, worldName) => {
     const res = {};
     await L.fresh(worldName, BASE);
-    await L.setRules('default');
+    await L.setRules('exact');
     await at();
     const [rx, ry, rz] = hz(refuseD);
     const was = await stateAt(rx, ry, rz);
@@ -488,7 +488,7 @@ steps.natural = async () => {
 
   // ---- C: item 6 (stale rock), then the realise with neither (items 2, 3, 9 natural)
   await L.fresh('G6B T3b Hill Stale', BASE);
-  await L.setRules('default');
+  await L.setRules('exact'); // (stricter than K1b's natural round: no random ticks, no spawns, so nothing grows or grazes near the bore)
   await at();
   const c3 = await checkHill(f);
   const sha = c3.check?.artifactSha;
@@ -532,7 +532,7 @@ steps.natural = async () => {
 
   // ---- D: load "generate": the hill's corridor never generated (a fresh copy, the bot at spawn)
   await L.fresh('G6B T3b Hill Gen', BASE);
-  await L.setRules('default');
+  await L.setRules('exact');
   await tp(0.5, 200, 0.5);
   const g1 = await checkHill(f);
   const ga = g1.check?.parts?.find((a) => a.part === 'bore');
@@ -546,7 +546,7 @@ steps.natural = async () => {
   const cx = Math.floor((f.claim[0] + f.claim[2]) / 2);
   const capClaim = [cx - 511, zl - 40, cx + 512, zl + 40];
   const capPlan = { schemaVersion: 'plan/0', planId: 't3b_cap', connectors: [{ id: 'far', kind: 'tunnel', approach: 32, width: 5, from: { anchor: 'far_w' }, to: { anchor: 'far_e' } }] };
-  const g3 = await call('dev.region.checkPlan', { plan: capPlan, claim: capClaim, owner: OWNER, anchors: { far_w: [cx - 500, 64, zl], far_e: [cx + 500, 64, zl] }, load: 'generate' }, 900_000);
+  const g3 = await call('dev.region.checkPlan', { plan: capPlan, claim: capClaim, owner: OWNER, anchors: { far_w: [cx - 500, 30, zl], far_e: [cx + 500, 30, zl] }, load: 'generate' }, 900_000);
   const gc = g3.check?.parts?.find((a) => a.part === 'far');
   out.generate.cap = { overall: g3.check?.overall ?? null, class: gc?.class ?? null, reasons: gc?.reasons ?? null };
   check(gc?.class === 'incomplete' && gc.reasons[0].code === 'VOLUME' && gc.reasons[0].evidence?.cap === 'edgeCells', `load (hill): ends 1000 apart (approach 32, width 5) with load "generate": still incomplete VOLUME past the per-edge cap (${json(gc?.reasons?.[0]?.evidence ?? null)})`);
