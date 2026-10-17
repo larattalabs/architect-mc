@@ -434,6 +434,9 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
 - PT2 gate item 13 (`old027`, a 0.27.0 reader refuses adopt journal files) reads `../architect-mc-PT2-v0270`, a tag checkout that
   no longer has a `mod/` tree. Make the driver build or fetch the 0.27.0 reader into `artifacts/` (like the apijars baselines)
   instead of depending on a sibling worktree.
+  **DONE (chore/housekeeping-1):** `old027Source()` in `tools/gate6cpt2.mjs` `git archive`s the v0.27.0 tag (fetching it if absent) into
+  `<main>/artifacts/gate6c-pt2/v0270-<sha12>` (built via a temp dir and a rename, reused once `HEAD.txt` exists) and builds the reader with the
+  run dir's `.gradle-home`; `PT2_V0270` still overrides.
 - C35 limit: an adopted build's change never uses a bible for new cells, even if asked (new cells come from the captured
   blocks by role: wall, frame, roof). Forwarding a bible needs `Adopt.source()` to change; revisit if players ask.
 
