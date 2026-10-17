@@ -252,8 +252,9 @@ export function checkBridge(land, a, dir, n, rise, width, opts = {}) {
   }
   let depth = 0;
   for (let i = 1; i <= n; i++) { const [x, z] = col(i, 0); depth = Math.max(depth, deckY(ys[i]) - land.groundAt(x, z)); }
+  // the land under each landing column (the newel posts reach down to it; the checker re-reads the anchors from it)
   const ground = {};
-  for (const [i] of [[0], [n + 1]]) for (const v of [lo - 1, hi + 1]) { const [x, z] = col(i, v); ground[`${x},${z}`] = land.groundAt(x, z); }
+  for (const [i] of [[0], [n + 1]]) for (let v = lo - 1; v <= hi + 1; v++) { const [x, z] = col(i, v); ground[`${x},${z}`] = land.groundAt(x, z); }
   return { ok: true, form, ys, lowest, piers, springing, intrados, wetTop, ground, over: wet.length ? 'water' : 'gap', depth, under, gap };
 }
 
@@ -413,6 +414,10 @@ export function bridgeSpan(r, a, b, opts = {}) {
     id, kind: 'bridge', part: p.id, box, stage: p.stage, form: c.form, width, n, rise, from: [a[0], a[1], a[2]], to: [b[0], b[1], b[2]], dir, lo: g.lo, hi: g.hi,
     deck: dc.block, slab: slabState, rail: railState, pier: pierBlock, arch: archBlock, light: noLamps ? null : fx.light, lampEvery, y2: c.ys,
     clearance: opts.clearance ?? BRIDGE.clearance, over: c.over, depth: c.depth, under: c.under ?? null, springing: c.springing, intrados: c.intrados,
+    anchors: [[0, a[1]], [n + 1, b[1]]].flatMap(([i, ya]) => Array.from({ length: g.hi - g.lo + 3 }, (_, t) => {
+      const v = g.lo - 1 + t, [rx, rz] = [-dz, dx], x = a[0] + dx * i + rx * v, z = a[2] + dz * i + rz * v, gr = c.ground?.[`${x},${z}`];
+      return { x, z, landing: ya, top: gr === undefined ? ya - 1 : Math.min(ya - 1, gr) };
+    })),
     cells: g.cells, piers: centre, pierCols: g.piers.map(([x, y0, y1, z, i]) => [x, y0, y1, z, i]), body: g.body.map((q) => [...q]),
     posts: g.posts.map((q) => ({ ...q })), lamps: g.lamps.map((q) => [q[0], q[1], q[2]]), bom,
     ...(opts.edge ? { edge: opts.edge } : {}), ...(opts.lands ? { lands: opts.lands } : {}), ...(opts.movers ? { movers: [...opts.movers] } : {}),

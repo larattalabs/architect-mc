@@ -147,7 +147,8 @@ steps.unchanged = async () => {
     for (const f of fs.readdirSync(fixDir).filter((x) => x.endsWith('.json')).sort()) {
       const fx = JSON.parse(fs.readFileSync(path.join(fixDir, f), 'utf8'));
       if (!fx.plan) continue;
-      if ((fx.plan.connectors ?? []).some((c) => ['bridge', 'tunnel'].includes(c.kind))) { t3++; continue; }
+      // (a T3 part, or a fixture T3 added: v38's auto edge that bridges)
+      if ((fx.plan.connectors ?? []).some((c) => ['bridge', 'tunnel'].includes(c.kind)) || !fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', dir, f))) { t3++; continue; }
       if (fx.volume) continue; // (a frozen volume built by its own test)
       const sv = (h) => (fx.terrain ? h.flatSurvey(fx.terrain) : fx.on === 'asks' ? h.asksSurvey() : fx.on === 'flat' ? h.flatSurvey() : fx.on ? h.goldenSurvey(fx.on) : h.flatSurvey());
       const runOn = async (h) => { const s = sv(h); return h.checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...h.stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}) }); };
@@ -275,6 +276,7 @@ async function item1(tag, { meta, world, rep }) {
   check(rep.metrics.M5bridge && rep.metrics.M5bridge.darkSpawnable === 0 && rep.metrics.M5bridge.deckCells > 0, `item 1 (${tag}): 0 dark spawnable deck cells (M5 over the realised light: ${json(rep.metrics.M5bridge)})`);
   const beams = per.filter((q) => q.form === 'beam'), arches = per.filter((q) => q.form === 'arch');
   if (beams.length) check(beams.every((q) => q.piersOk === q.piers && q.piers >= 1), `item 1 (${tag}): every pier solid from the deck to 2 deep in the ground, at most 24 tall, at most 8 deck cells apart (${beams.map((q) => `${q.piersOk}/${q.piers}`).join(', ')}; ${recs.filter((b) => b.form === 'beam').map((b) => `heights ${b.piers.map((p) => p.height).join('/')}`).join('; ')})`);
+  check(per.every((q) => q.anchorsOk === q.anchors && q.anchors > 0 && q.postsOk === 4), `item 1 (${tag}): every landing 2 deep in solid ground (under its fill), every arch's abutments solid from 2 under the springing, the 4 newel posts on solid ground (${per.map((q) => `${q.anchorsOk}/${q.anchors} anchors, ${q.postsOk}/4 posts`).join('; ')})`);
   if (arches.length) check(arches.every((q) => q.bodyOk), `item 1 (${tag}): every arch's ring and spandrels solid from the intrados to the deck`);
   check(per.every((q) => q.wet === 0), `item 1 (${tag}): 0 cells written in water, lava or ice (${per.map((q) => q.wet).join(', ')})`);
   const wet = per.filter((q) => q.under);

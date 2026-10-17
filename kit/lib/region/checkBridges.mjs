@@ -10,8 +10,9 @@
 //               an arch over the middle third of the water's run) at least the asked clearance
 //   M8          a barrier (rail) beside every deck cell on both edges
 //   M6          2 clear over every walk cell
-// Per bridge `metrics.bridges.per` records the counts (cells, wrong, missing, maxStep, railed, headroom, piersOk, bodyOk, wet,
-// under). Warnings, as M10. Called by checkRegion (check.mjs); leaves `vw` as it found it.
+// Also under M10:bridge: the landings' anchors 2 deep in solid ground (under the walk's fill when the landing stands on it), an arch's
+// abutments, the newel posts. Per bridge `metrics.bridges.per` records the counts (cells, wrong, missing, maxStep, railed, headroom,
+// piersOk, bodyOk, anchorsOk/anchors, postsOk, wet, under). Warnings, as M10. Called by checkRegion (check.mjs); leaves `vw` as it found it.
 import { profile, y2Of, rightOf } from '../connectors/ropeGeom.mjs';
 import { BRIDGE, sagFor, piersFor } from '../connectors/bridgeGeom.mjs';
 import { F_WRITTEN } from './vworld.mjs';
@@ -83,7 +84,27 @@ export function bridgeRules({ ir, vw, bridges, want, findings, metrics, finding 
     } else if (form === 'arch') {
       for (const [x, by0, by1, z] of m.body ?? []) for (let y = by0; y <= by1; y++) { const b = vw.get(x, y, z); if (!P.solid[b] || P.gravity[b]) { row.bodyOk = false; badSup.push({ why: 'ring', at: [x, y, z] }); break; } }
     }
-    if (badSup.length) push('M10:bridge', m, badSup.length, badSup.slice(0, 8).map((q) => q.at ?? from), `bridge ${pid}: ${badSup.length} support fault(s): ${badSup.slice(0, 4).map((q) => (q.why === 'spacing' ? `deck cells ${q.from}..${q.to} unsupported (more than ${BRIDGE.pierEvery})` : q.why === 'count' ? `${q.have} pier(s), at least ${q.need}` : q.why === 'pier' ? `pier at deck cell ${q.i} not solid from the deck to 2 under the ground (or over ${BRIDGE.pierDepth} tall, or on water)` : 'the arch ring is not solid')).join('; ')}`);
+    // the landings' anchors (re-read from the world): under each landing cell across the width plus the rails (the record's `anchors`),
+    // solid cells (no gravity block, no fluid) from the landing down to 2 into the land under it (a landing on the walk's fill anchors
+    // under the fill); an arch's abutments solid from 2 under the springing up to the landing; the newel posts solid from their foot to
+    // the landing, standing on solid ground
+    row.anchors = 0; row.anchorsOk = 0;
+    const firm = (b) => P.solid[b] && !P.gravity[b] && !P.fluid[b];
+    for (const q of m.anchors ?? []) {
+      row.anchors++;
+      // solid from the landing down through the walk's fill to 2 cells into the land under it (`top`: the land's top there at plan time)
+      let ok = true;
+      for (let y = q.landing - 1; y >= q.top - 1 && ok; y--) if (!firm(vw.get(q.x, y, q.z))) ok = false;
+      if (ok && form === 'arch' && Number.isInteger(m.springing)) for (let y = m.springing - 2; y <= q.landing - 3 && ok; y++) if (!firm(vw.get(q.x, y, q.z))) ok = false;
+      if (ok) row.anchorsOk++; else badSup.push({ why: 'anchor', at: [q.x, q.landing - 1, q.z] });
+    }
+    for (const q of m.posts ?? []) {
+      let ok = firm(vw.get(q.x, q.y0 - 1, q.z));
+      for (let y = q.y0; y <= q.y1 && ok; y++) if (!firm(vw.get(q.x, y, q.z))) ok = false;
+      if (!ok) badSup.push({ why: 'post', at: [q.x, q.y0, q.z] });
+    }
+    row.postsOk = (m.posts ?? []).length - badSup.filter((q) => q.why === 'post').length;
+    if (badSup.length) push('M10:bridge', m, badSup.length, badSup.slice(0, 8).map((q) => q.at ?? from), `bridge ${pid}: ${badSup.length} support fault(s): ${badSup.slice(0, 4).map((q) => (q.why === 'spacing' ? `deck cells ${q.from}..${q.to} unsupported (more than ${BRIDGE.pierEvery})` : q.why === 'count' ? `${q.have} pier(s), at least ${q.need}` : q.why === 'pier' ? `pier at deck cell ${q.i} not solid from the deck to 2 under the ground (or over ${BRIDGE.pierDepth} tall, or on water)` : q.why === 'anchor' ? `landing at ${q.at.join(',')} not 2 deep in solid ground (or the abutment under it)` : q.why === 'post' ? `newel post at ${q.at.join(',')} not solid on solid ground` : 'the arch ring is not solid')).join('; ')}`);
     // no cell written where the pre-region world held water, lava or ice (the bridge's own part)
     const wetCells = [];
     const pi = ir.parts.findIndex((q) => q.id === m.part);
