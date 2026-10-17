@@ -571,7 +571,9 @@ steps.pin = async () => {
   const [w, d] = needs.size;
   const out = { tried: [] };
   let found = null;
-  for (const [ox, oz] of FS.candidates(needs.candidates, needs.step)) {
+  const [c0x, c0z] = needs.center ?? [0, 0];
+  for (const [ox0, oz0] of FS.candidates(needs.candidates, needs.step)) {
+    const ox = ox0 + c0x, oz = oz0 + c0z;
     const x0 = ox - Math.floor(w / 2), z0 = oz - Math.floor(d / 2), x1 = x0 + w - 1, z1 = z0 + d - 1;
     await tp(ox + 0.5, 220, oz + 0.5);
     const r = await cmd(`/apitest survey ${x0} ${z0} ${x1} ${z1} 4 bounded:64`);
