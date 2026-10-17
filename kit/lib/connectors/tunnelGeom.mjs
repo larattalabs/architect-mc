@@ -306,14 +306,17 @@ export function tunnelGeom(land, a, dir, L, rise, opts = {}) {
   // air under it, would fall at the first neighbour update: it is lined (a fixed point, at most 8 rounds)
   const portalCells = new Set(portals.flatMap((p) => p.cells.map((c) => key(c[0], c[1], c[2]))));
   const touched = () => [...V.values(), ...F.values(), ...lined.values(), ...[...portalCells].map((k) => k.split(',').map(Number))];
-  for (let round = 0; round < 8; round++) {
+  for (let round = 0; round < 64; round++) {
     let added = 0;
     for (const [x, y, z] of touched()) for (const [ax, ay, az] of N6) {
       const nx = x + ax, ny = y + ay, nz = z + az, k = key(nx, ny, nz);
       if (V.has(k) || F.has(k) || lined.has(k) || portalCells.has(k)) continue;
       if (land.classAt(nx, ny, nz) !== 'LOOSE' || ny > land.groundAt(nx, nz)) continue;
       const kb = key(nx, ny - 1, nz);
-      if (V.has(kb) || (!F.has(kb) && !lined.has(kb) && !portalCells.has(kb) && land.classAt(nx, ny - 1, nz) === 'AIR')) { lined.set(k, [nx, ny, nz, 'gravity']); added++; }
+      // (a sand or gravel cell resting on a cell the tunnel rewrites is lined too: in game its support's rewrite let the sand above
+      // a lined roof fall and vanish, T3b as built)
+      const onWrite = ay === 1 && !V.has(kb);
+      if (onWrite || V.has(kb) || (!F.has(kb) && !lined.has(kb) && !portalCells.has(kb) && land.classAt(nx, ny - 1, nz) === 'AIR')) { lined.set(k, [nx, ny, nz, 'gravity']); added++; }
     }
     if (!added) break;
   }
