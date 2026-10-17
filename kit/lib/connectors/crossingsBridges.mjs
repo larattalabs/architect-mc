@@ -70,7 +70,8 @@ export function bridgeSection(ctx, r, { rect, variant, base, P }) {
   if (variant === 'flat') return flatSection(ctx, r, rect, base, P);
   const picks = pickCrossings(S, ctx.claim, variant === 'frozen' ? { frozen: true, minLen: 8 } : { maxLen: 20, dry: 5 });
   // the first crossing (of the best 40) whose arch passes §3's checks over the survey with its pads
-  const c = picks.slice(0, 40).find((q) => archFits(S, q));
+  let fit = null;
+  const c = picks.slice(0, 40).find((q) => (fit = archFits(S, q)));
   if (!c) return { nodes: {}, edges: [], input: null, note: `crossings_demo (${variant}): no straight crossing of the water takes an arch` };
   // the landings 3 cells off the water (a walk keeps its half width plus one from water), each on a level pad raised in stage
   // `ground` (the foundation role, in the shared base) to L: the higher bank, and high enough for the arch's clearance over the water
@@ -82,11 +83,15 @@ export function bridgeSection(ctx, r, { rect, variant, base, P }) {
   const pad = r.part('pads', { stage: 'ground' });
   const mats = [r.material('foundation', 'pad'), r.material('path', 'pad')];
   const cols = [];
+  // the landing row's footing goes down to 2 under the arch's springing (the abutment), replacing what stood there: a live bank can be
+  // sand (no site-solid; the 2.5D survey can't tell), which the realised world's re-read refuses
+  const foot = Math.min(fit.springing - 2, L - 3);
   for (const e of ends) for (let d = 0; d <= 2; d++) for (let v = -2; v <= 2; v++) {
     const [x, z] = lat(...at(e.t + e.away * d), v), g = S.groundAt(x, z);
-    if (g >= L) continue;
-    base.values[(x - base.minX) + (z - base.minZ) * base.width] += L - g;
-    cols.push(x, z, g + 1, L - 1, 0, x, z, L, L, 1);
+    const y0 = d === 0 ? Math.min(foot, g + 1) : g + 1;
+    if (g < L) base.values[(x - base.minX) + (z - base.minZ) * base.width] += L - g;
+    if (y0 <= L - 1) cols.push(x, z, y0, L - 1, 0);
+    if (g < L || d === 0) cols.push(x, z, L, L, 1);
   }
   if (cols.length) { pad._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: mats, cond: 0, walk: false }); (r.meta.parts.pads ??= {}).kind = 'add'; }
   const [ax, az] = at(ends[0].t), [bx, bz] = at(ends[1].t);
@@ -108,7 +113,8 @@ function archFits(S, c) {
   const g = (x, z) => (pads.has(`${x},${z}`) ? Math.max(c.level, S.groundAt(x, z)) : S.groundAt(x, z));
   const land = surveyLand({ ...S, groundAt: g, topAt: (x, z) => (pads.has(`${x},${z}`) ? g(x, z) : S.topAt(x, z)) });
   const [ax, az] = at(-3);
-  return checkBridge(land, [ax, c.level, az], dir, c.len + 4, 0, 3, { form: 'arch', clearance: BRIDGE.clearance }).ok;
+  const r = checkBridge(land, [ax, c.level, az], dir, c.len + 4, 0, 3, { form: 'arch', clearance: BRIDGE.clearance });
+  return r.ok ? r : null;
 }
 
 function flatSection(ctx, r, rect, base, P) {
