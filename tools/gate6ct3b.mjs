@@ -598,6 +598,7 @@ steps.pin = async () => {
     const S = surveyApi(fs.readFileSync(file), claim);
     const line = pickLine(S, [x0, z0, x1, z1], 3, 3);
     row.line = line ? { a: line.a, b: line.b, L: line.L, run: line.run } : null;
+    log(`  candidate ${x0},${z0}: line ${json(row.line)}`);
     if (!line) continue;
     // the corridor's columns: no tree and no water or lava within reach (the line +- 12 along z, its x span +- 8)
     let trees = 0, wet = 0;
@@ -608,13 +609,15 @@ steps.pin = async () => {
       if (fl & (FLAG_WATER | FLAG_LAVA)) wet++;
     }
     row.corridor = { trees, wet };
+    log(`  candidate ${x0},${z0}: corridor trees ${trees}, water ${wet}`);
     if (trees || wet) continue;
     // crossings_demo's hill variant on the claim (its two-plan flow reads the corridor's volume): one tunnel, its checks clean
     const p = await L.plan('crossings_demo', [x0, z0, x1, z1], { params: { variant: 'hill' }, surveyLoad: 'bounded:256', check: true, owner: OWNER });
     const meta = JSON.parse(fs.readFileSync(path.join(sideDir(p.planId), 'meta.json'), 'utf8'));
     const t = (meta.tunnels ?? [])[0];
     const bad = (p.report?.findings ?? []).filter((q) => /^M(3|4)(:tunnel|:gravity)/.test(q.rule));
-    row.plan = { planId: p.planId, tunnels: (meta.tunnels ?? []).length, findings: bad.map((q) => q.rule) };
+    row.plan = { planId: p.planId, tunnels: (meta.tunnels ?? []).length, findings: bad.map((q) => q.rule), notes: (p.notes ?? []).slice(-2) };
+    log(`  candidate ${x0},${z0}: crossings_demo hill ${json(row.plan)}`);
     if (!t || bad.length) continue;
     // no fluid within 4 of the void, from the plan's own frozen volume
     const ir = JSON.parse(fs.readFileSync(path.join(sideDir(p.planId), 'ir.json'), 'utf8'));
@@ -623,6 +626,7 @@ steps.pin = async () => {
     let near = 0;
     if (vol) for (const [x, y, z] of t.voids) for (let ax = -4; ax <= 4 && !near; ax++) for (let ay = -4; ay <= 4 && !near; ay++) for (let az = -4; az <= 4 && !near; az++) if ([6, 7, 4].includes(classAt(vol, x + ax, y + ay, z + az))) near++;
     row.fluid4 = vol ? near : null;
+    log(`  candidate ${x0},${z0}: fluid within 4 of the void ${row.fluid4}`);
     if (!vol || near) continue;
     found = { claim: [x0, z0, x1, z1], line: { a: line.a, b: line.b, L: line.L, run: line.run }, tunnel: { from: t.from, to: t.to, length: t.length, bore: t.bore.filter(Boolean).length, coverMin: Math.min(...t.cover.filter((c, i) => t.bore[i])) }, stats: { relief: row.relief, water: s.water, trees: s.trees, biomes: s.biomes, min: s.min, max: s.max }, volumeSha: vol.sha };
     break;
