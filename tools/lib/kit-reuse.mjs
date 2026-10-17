@@ -28,14 +28,17 @@ function report(file) {
   }
   if (!/<\/testsuites>\s*$/.test(text)) return null; // unit-kit still running, or killed mid-write
   const files = {};
-  for (const m of text.matchAll(/<testcase\b([^>]*?)(\/>|>([\s\S]*?)<\/testcase>)/g)) {
+  // attribute values may hold a raw `>` (a test named "plan -> LotSpec"), so attributes are matched as name="value" pairs
+  for (const m of text.matchAll(/<testcase((?:\s+[\w:.-]+="[^"]*")*)\s*(\/>|>([\s\S]*?)<\/testcase>)/g)) {
     const f = /\bfile="([^"]+)"/.exec(m[1])?.[1];
     if (!f) return null; // a test the report can't place: don't guess
     const k = `kit/test/${path.basename(f)}`;
     const e = (files[k] ??= { tests: 0, failures: 0, skipped: 0 });
     e.tests++;
     const body = m[3] ?? '';
-    if (/<failure\b|<error\b/.test(body)) e.failures++;
+    // a todo test that fails is not a failure (node --test exits 0 for it); a skipped or todo test is not a pass
+    if (/<skipped\b[^>]*type="todo"/.test(body)) e.skipped++;
+    else if (/<failure\b|<error\b/.test(body)) e.failures++;
     else if (/<skipped\b/.test(body)) e.skipped++;
   }
   parsed = { file, files };
