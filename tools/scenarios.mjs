@@ -360,17 +360,27 @@ async function runScenario(id) {
   // in lot:hall stalled a fresh world's run for 33 minutes. Clear the mobs just before placing and whenever an item waits OCCUPIED,
   // as gate6a's megaA driver does (entities only: no block changes, so the snapshot and the exactness are untouched); run.json
   // records `mobs` (the pre-place clear, the OCCUPIED clears and their waits)
-  const clearMobs = isT2(sc) || isD(sc) || isS2(sc); // (6c D1) districts_demo on S3 too; (6c S2) W's megaA stall was a polar bear: S2's land has them
-  const mobs = clearMobs ? { beforePlace: true, occupiedClears: 0, waits: [] } : null;
-  if (clearMobs) await L.cmd('/kill @e[type=!minecraft:player]');
+  // (gate speed, 2026-10-17) every scenario now: K1a's 6cv-scenario-s7 burned its whole 60-minute timeout on lot:hall_1 waiting
+  // OCCUPIED for a horse (client log: "in the box: horse (move them out)"), then passed on re-run. A killed mob drops its loot, which
+  // is an entity in the box too, so the drops go a second later. A PLAYER_IN_BOX wait moves the player 32 blocks up (it stands at
+  // the claim centre at the top of the y range; the claim itself is never touched).
+  const mobs = { beforePlace: true, occupiedClears: 0, playerMoves: 0, waits: [] };
+  const clearAll = async () => {
+    await L.cmd('/kill @e[type=!minecraft:player]');
+    await L.settle(1000);
+    await L.cmd('/kill @e[type=minecraft:item]');
+    await L.cmd('/kill @e[type=minecraft:experience_orb]');
+  };
+  await clearAll();
   // realise
   await L.call('dev.mspt.trace', { start: true });
   await L.call('dev.placement.stats', { reset: true });
   t0 = Date.now();
   const region = await L.realise(p2.planId, { lots: sc.lotEntries });
-  const st = await L.waitRegion(region, 3 * 3_600_000, clearMobs ? async (s) => {
-    if (s.waiting?.OCCUPIED) { mobs.occupiedClears++; if (mobs.waits.length < 20) mobs.waits.push(s.waiting); L.log(`  ${region}: an item waits OCCUPIED (${JSON.stringify(s.waiting)}): clearing the mobs`); await L.cmd('/kill @e[type=!minecraft:player]'); }
-  } : null);
+  const st = await L.waitRegion(region, 3 * 3_600_000, async (s) => {
+    if (s.waiting?.OCCUPIED) { mobs.occupiedClears++; if (mobs.waits.length < 20) mobs.waits.push(s.waiting); L.log(`  ${region}: an item waits OCCUPIED (${JSON.stringify(s.waiting)}): clearing the mobs`); await clearAll(); }
+    if (s.waiting?.PLAYER_IN_BOX) { mobs.playerMoves++; if (mobs.waits.length < 20) mobs.waits.push(s.waiting); L.log(`  ${region}: an item waits PLAYER_IN_BOX: moving the player 32 blocks up`); await L.tp((claim[0] + claim[2]) / 2, sc.fixture.yRange[1] + 32, (claim[1] + claim[3]) / 2); }
+  });
   if (mobs?.occupiedClears) L.log(`  mobs cleared ${mobs.occupiedClears}x while placing`);
   T('realise', t0);
   const mspt = await L.call('dev.mspt.trace', { stop: true });
@@ -424,7 +434,7 @@ async function runScenario(id) {
     planId: p2.planId, region, state: st.view.state, cellsWritten: rec.cellsWritten, lots: sc.lotEntries,
     versions: { mod: /mod_version\s*=\s*(\S+)/.exec(gp)?.[1], api, kit: ir.kitVersion, sidecar: hello.sidecar?.version ?? hello.sidecarVersion ?? null, minecraft: /minecraft_version\s*=\s*(\S+)/.exec(gp)?.[1], node: process.versions.node.split('.')[0], head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim() },
     wallSeconds: t, prepare: pr.stats ?? null, dumps: { before: { sha: d0.sha, cells: d0.cells }, after: { sha: d1.sha, cells: d1.cells } }, snap: { cells: snap.cells }, before, shots,
-    spendUsd: 0, lotStates, ...(mobs ? { mobs } : {}),
+    spendUsd: 0, lotStates, mobs,
   };
   fs.writeFileSync(path.join(out, 'run.json'), `${JSON.stringify(run, null, 2)}\n`);
   const ev = evidenceSha(out);
