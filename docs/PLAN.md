@@ -379,6 +379,8 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
 ## Queued (coordinator, 2026-10-12)
 
 - `tools/p2-library-check.mjs` is stale on main (sets a `floors` param the bundled cabin no longer has); fix or retire it.
+  **DONE (chore/housekeeping-1): retired.** Removed it and `tools/run-p2-client.sh` (its only launcher). A manual phase-2 screenshot walk
+  in no chain or tier; the `ui` step covers the Library's import/export, and the `dev.library.*` hooks stay for apitest.
 - T1 follow-up: in game, 7 of 26 written falling-water cells were not the planned block after the build (verifier note);
   T1 changes no tile-write code. Investigate with H (fluids).
 - The mod's no-check plan wait went from 120 s to 300 s for every program (T1), not only pass programs.

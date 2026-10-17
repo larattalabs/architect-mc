@@ -10238,7 +10238,8 @@ gate scans the diff for WorldEdit code, packages and imports).
 - **The `importSchematic` ext overload** (above).
 - **`tools/p2-library-check.mjs`** (named in the contract's tier) is stale on main: it sets the bundled cabin's `floors`
   param, which the cabin has not had since phase 2 (its params are width, depth and porch). It is not in the runner. The `ui`
-  step covers the Library's import and export instead.
+  step covers the Library's import and export instead. Retired in chore/housekeeping-1 (with `tools/run-p2-client.sh`, its only client launcher): it ran in no chain, the
+  `dev.library.*` hooks it drove stay for apitest, and git history keeps the file.
 - **API tests:** `ApiSchTest`, `apitest.mjs` and the gate read the version from `ArchitectApi.java` or assert only a floor,
   so a renumber at merge needs no other edit.
 - **N-SCH-1:** no WorldEdit-made fixture yet. Add one to `kit/test/fixtures/schem/` if Noah exports one.
