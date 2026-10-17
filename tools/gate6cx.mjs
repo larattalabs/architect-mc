@@ -29,6 +29,7 @@ import path from 'node:path';
 import { kitReuse } from './lib/kit-reuse.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { srcGradle } from './lib/src-gradle.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-X-run');
@@ -127,17 +128,17 @@ function nodeTest(files) {
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), names: t.split('\n').filter((l) => /^✔|^✖/.test(l)) };
 }
-
 /** The kit suite once per gate run (tools/lib/kit-reuse.mjs): files whose checks are pass/fail only take this run's unit-kit results when exact. */
 const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
+
 steps.unit = async () => {
   const out = {};
   out.c19 = nodeTest(['kit/test/village.test.mjs']);
   const c19 = out.c19.names.filter((l) => /C19/.test(l));
   check(out.c19.code === 0 && out.c19.fail === 0 && c19.length === 2 && c19.every((l) => l.startsWith('✔')), `item 1: the kit's C19 tests (ext validated, 4096/4097, namespace guard, plan -> LotSpec) and the rest of the village suite: ${out.c19.pass} pass, ${out.c19.fail} fail`, out.c19.failing);
   const env = { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*Api114Test', '--tests', '*RegionKeysTest', '--tests', '*Api113Test', '--tests', '*PlanStaleTest'],
-    { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 1_800_000 });
+  const g = srcGradle(root, () => spawnSync('./gradlew', ['test', '--offline', '--tests', '*Api114Test', '--tests', '*RegionKeysTest', '--tests', '*Api113Test', '--tests', '*PlanStaleTest'],
+    { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 1_800_000 }));
   const xml = (n) => {
     const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-dev.larattalabs.architect.${n}.xml`);
     const t = fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '';

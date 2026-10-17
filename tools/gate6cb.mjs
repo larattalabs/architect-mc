@@ -27,6 +27,7 @@ import path from 'node:path';
 import { kitReuse } from './lib/kit-reuse.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { srcGradle } from './lib/src-gradle.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-B-run');
@@ -77,9 +78,9 @@ function nodeTest(files) {
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), names: t.split('\n').filter((l) => /^✔|^✖/.test(l)), notes: t.split('\n').filter((l) => l.startsWith('# ')) };
 }
-
 /** The kit suite once per gate run (tools/lib/kit-reuse.mjs): files whose checks are pass/fail only take this run's unit-kit results when exact. */
 const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
+
 steps.unit = async () => {
   const out = {};
   out.b = nodeTest(['kit/test/brush-b.test.mjs']);
@@ -93,8 +94,8 @@ steps.unit = async () => {
   out.goldens = kitOnce(['kit/test/region-golden.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/scenario-goldens.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 11: the tile goldens hold (mega_bench, the 6b families, S1, S7): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   const env = { ...process.env, JAVA_HOME, GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*ApiBTest', '--tests', '*BrushesTest', '--tests', '*ArvxBlocksTest', '--tests', '*ArvxTest'],
-    { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 3_600_000 });
+  const g = srcGradle(root, () => spawnSync('./gradlew', ['test', '--offline', '--tests', '*ApiBTest', '--tests', '*BrushesTest', '--tests', '*ArvxBlocksTest', '--tests', '*ArvxTest'],
+    { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 3_600_000 }));
   const xml = (n) => {
     const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-dev.larattalabs.architect.${n}.xml`);
     const t = fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '';

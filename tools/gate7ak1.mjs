@@ -31,6 +31,7 @@ import path from 'node:path';
 import { kitReuse } from './lib/kit-reuse.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { srcGradle } from './lib/src-gradle.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-K1a-run');
@@ -103,9 +104,9 @@ function nodeTest(files) {
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), comments: t.split('\n').filter((l) => /^# /.test(l)).slice(0, 60) };
 }
-function sh(cmdline, opts = {}) {
 /** The kit suite once per gate run (tools/lib/kit-reuse.mjs): files whose checks are pass/fail only take this run's unit-kit results when exact. */
 const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
+function sh(cmdline, opts = {}) {
   const r = spawnSync('bash', ['-c', cmdline], { cwd: root, encoding: 'utf8', timeout: 3_600_000, env: { ...process.env, JAVA_HOME, PATH: `${JAVA_HOME}/bin:${process.env.PATH}` }, ...opts });
   return { code: r.status, out: `${r.stdout}${r.stderr}` };
 }
@@ -132,7 +133,7 @@ steps.unit = async () => {
   const s = sh('cd sidecar && npx vitest run test/plan-check.test.ts test/jobs.test.ts');
   out.sidecar = s.out.split('\n').filter((l) => /Tests|Test Files/.test(l)).join(' | ');
   check(s.code === 0, `the sidecar's plan check (ajv 2020-12 over the fixtures, K1's included) and features (region.walls, region.rope appended): ${out.sidecar}`);
-  sh(`cd mod && GRADLE_USER_HOME=${path.join(root, '.gradle-home')} ./gradlew compileJava compileClientJava --offline -q`);
+  srcGradle(root, () => sh(`cd mod && GRADLE_USER_HOME=${path.join(root, '.gradle-home')} ./gradlew compileJava compileClientJava --offline -q`));
   const a = sh('node tools/api-compat.mjs --gate7ak1');
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), a.out);
   check(a.code === 0 && /all 4 checks clean/.test(a.out), `item 14: api-compat against the 0.32.0, 0.31.1 and 0.31.0 apitest jars and the 0.32.0 surface: ${a.out.trim().split('\n').pop()}`);

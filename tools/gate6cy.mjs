@@ -44,6 +44,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { srcGradle } from './lib/src-gradle.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-Y1-run');
@@ -1552,8 +1553,8 @@ steps.c29pause = async () => {
 
 steps.unit = async () => {
   const env = { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*StockpileTest', '--tests', '*FeedOrderTest', '--tests', '*ApiY1Test', '--tests', '*StockpileFileTest', '--tests', '*LedgerTest'],
-    { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 1_800_000 });
+  const g = srcGradle(root, () => spawnSync('./gradlew', ['test', '--offline', '--tests', '*StockpileTest', '--tests', '*FeedOrderTest', '--tests', '*ApiY1Test', '--tests', '*StockpileFileTest', '--tests', '*LedgerTest'],
+    { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 1_800_000 }));
   const xml = (n) => {
     const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-dev.larattalabs.architect.${n}.xml`);
     const t = fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '';
@@ -1573,7 +1574,7 @@ const API_NOW = /String VERSION = "([0-9.]+)"/.exec(fs.readFileSync(path.join(ro
 /** C29's unit part: ApiC29Test (Sites.pause a default that throws, the features), C29CreditTest (a road removal's credit saved with its job). */
 steps.c29unit = async () => {
   const env = { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*ApiC29Test', '--tests', '*C29CreditTest', '--tests', '*ApiRulesTest'], { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 1_800_000 });
+  const g = srcGradle(root, () => spawnSync('./gradlew', ['test', '--offline', '--tests', '*ApiC29Test', '--tests', '*C29CreditTest', '--tests', '*ApiRulesTest'], { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 1_800_000 }));
   const xml = (n) => {
     const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-dev.larattalabs.architect.${n}.xml`);
     const t = fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '';

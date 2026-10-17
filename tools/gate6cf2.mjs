@@ -29,6 +29,7 @@ import { kitReuse } from './lib/kit-reuse.mjs';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { srcGradle } from './lib/src-gradle.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-F2-run');
@@ -98,7 +99,7 @@ function nodeTest(files, env = {}) {
 }
 /** The kit suite once per gate run (tools/lib/kit-reuse.mjs): files whose checks are pass/fail only take this run's unit-kit results when exact. */
 const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
-const gradle = (args) => spawnSync('./gradlew', args, { cwd: path.join(root, 'mod'), encoding: 'utf8', timeout: 1_800_000, env: { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') } });
+const gradle = (args) => srcGradle(root, () => spawnSync('./gradlew', args, { cwd: path.join(root, 'mod'), encoding: 'utf8', timeout: 1_800_000, env: { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') } }));
 
 steps.unit = async () => {
   const out = {};
