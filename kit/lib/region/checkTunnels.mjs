@@ -2,7 +2,7 @@
 // (`meta.tunnels`, written by lib/connectors/tunnelGeom.mjs `tunnel`). They read the world's blocks (the virtual world at plan time,
 // a realised dump world in the gate), so the plan's numbers are only the tunnel's inputs (its line, profile, width, height):
 //   M3:tunnel  (warning) cover: at least 2 site-solid cells (solid, not falling, not fluid) over the void of every bore cell, and a
-//              bore of at least 4 cells; the shell: every cell face-adjacent to a bore cell's void solid (lining or rock); no
+//              bore of at least 4 cells; the shell: every cell face-adjacent to a bore cell's void solid and not falling (lining or rock); no
 //              gravity block over a void or cut cell without support (`M3:gravity`)
 //   M4:tunnel  (warning) no water, lava or ice within 2 (Chebyshev, 3D) of a void or floor cell; a tunnel whose volume the virtual
 //              world does not hold (a 2.5D-only world) is the finding "no volume", never a pass
@@ -76,10 +76,11 @@ export function tunnelRules({ ir, vw, tunnels, want, findings, metrics, finding 
         if (ay === 0 && (ax === dx && az === dz || ax === -dx && az === -dz)) continue;
         row.shell++;
         const b = vw.get(nx, ny, nz);
-        if (!solid(b) && !P.stairs[b]) { row.shellOpen++; if (open.length < 16) open.push([nx, ny, nz]); }
+        // (a falling block in the shell is no wall: it leaves at the first update; the lining replaces it)
+        if ((!solid(b) && !P.stairs[b]) || P.gravity[b]) { row.shellOpen++; if (open.length < 16) open.push([nx, ny, nz]); }
       }
     }
-    if (open.length) f3(row.shellOpen, open, `tunnel ${t.id}: ${row.shellOpen} shell cell(s) open (a cave or a gap breaching the bore)`);
+    if (open.length) f3(row.shellOpen, open, `tunnel ${t.id}: ${row.shellOpen} shell cell(s) open or loose (a cave breaching the bore, or sand or gravel not lined)`);
     // ---- gravity: no falling block over a void or cut cell (its own cell under it air)
     const grav = [];
     for (const k of voids) {

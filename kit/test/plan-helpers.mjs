@@ -77,3 +77,45 @@ export function memoryCache() {
   const m = new Map();
   return { get: (k) => m.get(k) ?? null, put: (out) => { for (const [k, v] of Object.entries(out ?? {})) m.set(k, JSON.parse(JSON.stringify(v))); }, size: () => m.size };
 }
+
+/**
+ * (6c T3b) A fixture's frozen volume over `box` (what the game would sample): air over the ground, soil to 3 under it, rock below,
+ * then `spec.edits` ([{box: [x0, y0, z0, x1, y1, z1], class}] in order, each a voxel class name over its cells). Returns
+ * `{box, bytes, sha, decoded}` (the shape ctx.volumes holds).
+ */
+export async function fixtureVolume(box, spec, survey, claim) {
+  const { encodeArvx, decodeArvx, VC } = await import('../lib/region/volume.mjs');
+  const { surveyApi } = await import('../lib/region/survey.mjs');
+  const S = surveyApi(survey, claim);
+  const W = box.maxX - box.minX + 1, H = box.maxY - box.minY + 1, D = box.maxZ - box.minZ + 1;
+  const classes = new Uint8Array(W * H * D);
+  const edits = (spec?.edits ?? []).map((e) => ({ b: e.box, c: VC[e.class] }));
+  for (let x = box.minX; x <= box.maxX; x++) for (let z = box.minZ; z <= box.maxZ; z++) {
+    const inClaim = x >= claim.minX && x <= claim.maxX && z >= claim.minZ && z <= claim.maxZ;
+    const g = inClaim ? S.groundAt(x, z) : 64;
+    for (let y = box.minY; y <= box.maxY; y++) {
+      let c = y > g ? VC.AIR : y >= g - 3 ? VC.SOIL : VC.ROCK;
+      for (const e of edits) if (x >= e.b[0] && x <= e.b[3] && y >= e.b[1] && y <= e.b[4] && z >= e.b[2] && z <= e.b[5]) c = e.c;
+      classes[((x - box.minX) * D + (z - box.minZ)) * H + (y - box.minY)] = c;
+    }
+  }
+  const bytes = encodeArvx(box, classes);
+  const decoded = decodeArvx(bytes);
+  return { box, bytes, sha: decoded.sha, decoded };
+}
+
+/**
+ * (6c T3b, CONTRACT T3 §6) The plan check's two-plan flow in process: plan once; when a tunnel part asked for volumes, build each
+ * asked box from `volume` (fixtureVolume's spec; `volume.missing: true` gives none, as chunks not loaded), plan again with them.
+ * Returns the second check (or the first when nothing was asked), with `volumes` and `first` (the first plan's check).
+ */
+export async function checkPlanVolumes(plan, { volume = {}, ...o } = {}) {
+  const first = await checkPlanLocal(plan, o);
+  const need = first.res.needVolumes ?? [];
+  const hasTunnel = (plan.connectors ?? []).some((p) => p?.kind === 'tunnel');
+  if (!need.length || !hasTunnel || volume.missing) return { ...first, volumes: o.volumes ?? [], first, asked: need };
+  const vols = [...(o.volumes ?? [])];
+  for (const b of need) if (!vols.some((v) => v.box.minX === b.minX && v.box.minY === b.minY && v.box.minZ === b.minZ && v.box.maxX === b.maxX && v.box.maxY === b.maxY && v.box.maxZ === b.maxZ)) vols.push(await fixtureVolume(b, volume, o.survey, o.claim));
+  const second = await checkPlanLocal(plan, { ...o, volumes: vols });
+  return { ...second, volumes: vols, first, asked: need };
+}

@@ -28,7 +28,7 @@ export const TUNNEL = Object.freeze({
   // §6: the corridor a tunnel edge asks a volume for, and the caps (past them: incomplete VOLUME)
   corridorPad: 3, corridorDown: 16, edgeCells: 4_000_000, planCells: 16_000_000,
   // the diagnosis scans this far for a bore that would land
-  diagMax: 72,
+  diagMax: 128,
 });
 
 /** §3: the largest |rise| a tunnel of L floor cells takes (else TOO_STEEP). */
@@ -126,7 +126,10 @@ export function tunnelLand(S, { volumes = [], base = null, blocked = () => null,
     if (S.waterAt(x, z)) return S.frozenAt(x, z) && y === g ? 'ICE' : 'WATER';
     return y >= g - 3 ? 'SOIL' : 'ROCK';
   };
-  const known = (x, y, z) => written(x, y, z) || (baseAt(x, z) < 0 && y > surveyGround(x, z) + baseAt(x, z) && y <= surveyGround(x, z)) || fromVolume(x, y, z) !== null;
+  // (the air over a column's surveyed top is known without a volume: the survey read that column, and nothing stands over its top
+  // but a tree, whose crown it does not measure)
+  const overTop = (x, y, z) => !S.missingAt(x, z) && !(S.treeAt && S.treeAt(x, z)) && y > groundAt(x, z);
+  const known = (x, y, z) => written(x, y, z) || (baseAt(x, z) < 0 && y > surveyGround(x, z) + baseAt(x, z) && y <= surveyGround(x, z)) || fromVolume(x, y, z) !== null || overTop(x, y, z);
   return { groundAt, classAt, known, written, blocked, routeLow, wallAt, missingAt: (x, z) => S.missingAt(x, z) };
 }
 
@@ -208,9 +211,13 @@ export function tunnelGeom(land, a, dir, L, rise, opts = {}) {
     }
   }
   // ---- the shell: the face neighbours of the void outside it and the floor
+  // (the cells over the walk cells at either end, slices 0 and L + 1, are the route's approach: its own cut clears them)
+  const sliceOf = (x, z) => (x - x0) * dx + (z - z0) * dz;
   const S = new Map();
   for (const [x, y, z] of V.values()) for (const [ax, ay, az] of N6) {
     const k = key(x + ax, y + ay, z + az);
+    const sl = sliceOf(x + ax, z + az);
+    if (sl < 1 || sl > L) continue;
     if (!V.has(k) && !F.has(k) && !S.has(k)) S.set(k, [x + ax, y + ay, z + az]);
   }
   // ---- protection: keep-out columns, protected classes, a tree over a cut, routes and walls over the bore
@@ -229,7 +236,7 @@ export function tunnelGeom(land, a, dir, L, rise, opts = {}) {
       else { const p = posterns.get(w.id) ?? { wall: w.id, sealed: !!w.sealed, cells: [] }; p.cells.push([x, z]); posterns.set(w.id, p); }
     }
   }
-  for (const m of [V, S]) for (const c of m.values()) {
+  for (const m of [V, S, F]) for (const c of m.values()) {
     const k = cls(c[0], c[1], c[2]);
     if (PROTECTED_CLASSES.includes(k)) protect.push({ at: [c[0], c[1], c[2]], class: k });
   }
@@ -272,6 +279,14 @@ export function tunnelGeom(land, a, dir, L, rise, opts = {}) {
       if (y > g || V.has(key(x, y, z)) || F.has(key(x, y, z))) continue;
       const c = cls(x, y, z);
       if (c === 'AIR' || LINED_CLASSES.includes(c) || (all && c === 'ROCK')) lined.set(key(x, y, z), [x, y, z, 'face']);
+    }
+    // over a portal that opens on a cut, a parapet along the hillside's edge (M8: no fall from the hill into the cut)
+    const o = i + out;
+    if (o >= 1 && o <= L && !bore[o]) {
+      for (let v = lo - 1; v <= hi + 1; v++) {
+        const [x, z] = at(i, v), g = land.groundAt(x, z);
+        if (g - fy >= 2 && !V.has(key(x, g + 1, z))) lined.set(key(x, g + 1, z), [x, g + 1, z, 'parapet']);
+      }
     }
     portals.push({ i, out, cells });
   };
@@ -434,13 +449,24 @@ export function tunnel(r, a, b, opts = {}) {
   (r.meta.parts[p.id] ??= {}).kind ??= 'path';
   const mats = [null, floorB, slab ? `${slab}[type=bottom,waterlogged=false]` : floorB, liningB, portalB, lights.hanging, lights.flush, lights.standing];
   const M = { air: 0, floor: 1, slab: 2, lining: 3, portal: 4, hanging: 5, flush: 6, post: 7 };
+  // a parapet is the lining's wall block (M8: a barrier of 1.5, never a step), joined to its neighbouring parapets; without a wall
+  // variant, the rail role's fence
+  const wallB = shapeOf(liningB, 'wall') ?? null;
+  const fenceB = wallB ? null : r.material(role('rail', 'minecraft:oak_fence'), `${what} parapet`);
+  const par = new Set(g.lined.filter((c) => c[3] === 'parapet').map((c) => `${c[0]},${c[1]},${c[2]}`));
+  const parapetState = (x, y, z) => {
+    const n = (ax, az) => par.has(`${x + ax},${y},${z + az}`);
+    const sides = { east: n(1, 0), west: n(-1, 0), south: n(0, 1), north: n(0, -1) };
+    if (wallB) return `${wallB}[east=${sides.east ? 'low' : 'none'},north=${sides.north ? 'low' : 'none'},south=${sides.south ? 'low' : 'none'},up=true,waterlogged=false,west=${sides.west ? 'low' : 'none'}]`;
+    return `${String(fenceB).replace(/\[.*$/, '')}[east=${sides.east},north=${sides.north},south=${sides.south},waterlogged=false,west=${sides.west}]`;
+  };
   const archIdx = new Map();
   const matOf = (st) => { if (!archIdx.has(st)) { archIdx.set(st, mats.length); mats.push(st); } return archIdx.get(st); };
   const solid = [], walk = [], air = [];
   const lampAt = new Set(g.lamps.map((l) => `${l[0]},${l[1]},${l[2]}`));
   for (const [x, y, z, c] of g.voids) if (c !== 'AIR' && !lampAt.has(`${x},${y},${z}`)) air.push(x, z, y, y, M.air);
   for (const [x, y, z, kind] of g.floor) (kind === 'bed' ? solid : walk).push(x, z, y, y, kind === 'slab' && slab ? M.slab : M.floor);
-  for (const [x, y, z] of g.lined) solid.push(x, z, y, y, M.lining);
+  for (const [x, y, z, why] of g.lined) solid.push(x, z, y, y, why === 'parapet' ? matOf(parapetState(x, y, z)) : M.lining);
   for (const pt of g.portals) for (const [x, y, z, kind, facing] of pt.cells) {
     if (kind === 'arch' && stairs) solid.push(x, z, y, y, matOf(`${stairs}[facing=${facing},half=top,shape=straight,waterlogged=false]`));
     else solid.push(x, z, y, y, M.portal);

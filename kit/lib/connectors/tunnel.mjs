@@ -130,7 +130,7 @@ function corridors(K) {
     const c = { box, cells, from: [...a.at], to: [...b.at], status: null, volume: null };
     const lowFeet = Math.min(a.at[1], b.at[1]);
     if (g.missing) c.status = 'missing';
-    else if (g.top - (lowFeet - 1) < o.height + TUNNEL.cover) c.status = 'flat';
+    else if (g.top - (lowFeet - 1) < o.height + (Number.isInteger(o.unsafe?.cover) ? o.unsafe.cover : TUNNEL.cover)) c.status = 'flat';
     else if (cells > TUNNEL.edgeCells) c.status = 'capEdge';
     else if (total + cells > TUNNEL.planCells) c.status = 'capPlan';
     else {
@@ -159,7 +159,14 @@ export function tunnelPassInput(K) {
   const vols = [];
   for (const v of K.ctx.volumes ?? []) { const d = K.r.needVolume(v.box); if (d && !vols.includes(d)) vols.push(d); }
   for (const c of st.corridors.values()) if (c.volume && !vols.includes(c.volume)) vols.push(c.volume);
-  st.input = { volumes: vols };
+  // the explicit tunnels' corridors: an edge whose corridor holds no volume searches no bore (the row's `idle`)
+  const parts = {};
+  for (const [id, c] of st.corridors) parts[id] = { status: c.status, volume: !!c.volume };
+  // the keep-out rects by what they are (the route's keepOut merges them): a refusal names the class
+  const rect = (a) => [a.minX, a.minZ, a.maxX, a.maxZ];
+  const classes = [...K.env.protectedAreas.map((a) => ({ rect: rect(a.rect), class: 'PROTECTED_AREA', id: a.id })), ...K.env.regions.map((a) => ({ rect: rect(a.rect), class: 'REGION', id: a.id })),
+    ...K.env.buildRects.map((a) => ({ rect: rect(a.rect), class: 'BUILD', id: a.id }))];
+  st.input = { volumes: vols, parts, ...(classes.length ? { classes } : {}) };
   return st.input;
 }
 

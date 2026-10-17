@@ -18,7 +18,7 @@
 //   tunnelCommit(state, env, edgeOut, moves, lat)  edgeOut.tunnels for the links stage
 //   tunnelFail(state, edgeOut, inS) -> bool        edgeOut.failed = 'TUNNEL', edgeOut.tunnel = {code, evidence, under?}
 //   tunnelPrune(state, from, to) -> note | null    (the gate row already prunes a sealed wall between the ends: none here)
-import { FLAG_FROZEN, FLAG_LAVA, FLAG_MISSING, FLAG_WATER } from '../../pack.mjs';
+import { FLAG_FROZEN, FLAG_LAVA, FLAG_MISSING, FLAG_TREE, FLAG_WATER } from '../../pack.mjs';
 import { TUNNEL, maxRiseOf, surfaceCover, tunnelGeom, tunnelLand } from '../../../connectors/tunnelGeom.mjs';
 import { deckY } from '../../../connectors/ropeGeom.mjs';
 import { VOXEL_CLASSES, classAt as volumeClassAt } from '../../volume.mjs';
@@ -56,6 +56,16 @@ export function tunnelInit(env, intent) {
   for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) if ((i < m || j < m || i >= W - m || j >= D - m) && !blocked[i + j * W]) blocked[i + j * W] = 3;
   for (let k = 0; k < n; k++) if (!blocked[k] && (flags[k] & FLAG_LAVA)) blocked[k] = 4;
   const CLASS = [null, 'KEEP_OUT', 'HARD', 'MARGIN', 'LAVA'];
+  // the compiler names the keep-out rects (a protected area, another owner's region, a kept build): those columns carry their class
+  for (const q of Array.isArray(intent.tunnel?.classes) ? intent.tunnel.classes : []) {
+    if (!Array.isArray(q.rect)) continue;
+    let ci = CLASS.indexOf(q.class);
+    if (ci < 0) { CLASS.push(q.class); ci = CLASS.length - 1; }
+    for (let z = Math.max(minZ, q.rect[1]); z <= Math.min(minZ + D - 1, q.rect[3]); z++) for (let x = Math.max(minX, q.rect[0]); x <= Math.min(minX + W - 1, q.rect[2]); x++) {
+      const k = (x - minX) + (z - minZ) * W;
+      if (blocked[k] === 1 || !blocked[k]) blocked[k] = ci;
+    }
+  }
   // K1's walls: a bore may pass under one only as a postern (2 site-solid between its roof and the wall's footing, 2 under the ground)
   const walls = Array.isArray(intent.walls) ? intent.walls.filter((w) => w && Array.isArray(w.cells)) : [];
   const wallOf = new Map();
@@ -73,10 +83,14 @@ export function tunnelInit(env, intent) {
     missingAt: (x, z) => { const k = kOf(x, z); return k < 0 || (flags[k] & FLAG_MISSING) !== 0; },
     waterAt: (x, z) => { const k = kOf(x, z); return k >= 0 && (flags[k] & FLAG_WATER) !== 0; },
     frozenAt: (x, z) => { const k = kOf(x, z); return k >= 0 && (flags[k] & FLAG_FROZEN) !== 0; },
+    treeAt: (x, z) => { const k = kOf(x, z); return k >= 0 && (flags[k] & FLAG_TREE) !== 0; },
   };
   const volumes = Array.isArray(intent.tunnel?.volumes) ? intent.tunnel.volumes.filter(Boolean) : [];
+  // the explicit tunnels' corridors (compile's): an edge whose corridor holds no volume searches no bore (its answer is VOLUME,
+  // tunnel.under or a cap, from `fail` and the compiler), so the first plan of a check costs no bore search
+  const parts = intent.tunnel?.parts && typeof intent.tunnel.parts === 'object' ? intent.tunnel.parts : {};
   return {
-    W, D, minX, minZ, G, flags, blocked, CLASS, walls, wallOf, S, base, volumes, kOf, cur: null,
+    W, D, minX, minZ, G, flags, blocked, CLASS, walls, wallOf, S, base, volumes, parts, kOf, cur: null, grids: new Map(),
     posterns: new Map(walls.map((w) => [w.id, 0])),
   };
 }
@@ -97,6 +111,8 @@ export function tunnelActive(state, edge) {
     length: { min: Math.max(TUNNEL.lengthMin, isInt(t.length?.min) ? t.length.min : TUNNEL.lengthMin), max: Math.min(TUNNEL.lengthMax, isInt(t.length?.max) ? t.length.max : TUNNEL.lengthMax) },
     approach: isInt(edge.approach) && edge.approach >= 0 && edge.approach <= TUNNEL.approachMax ? edge.approach : TUNNEL.approach,
     unsafe: t._unsafe ?? null, part: t.part ?? null,
+    // no bore to search: an explicit tunnel whose corridor has no volume (first plan, chunks not read, past a cap, flat ground)
+    idle: !!t.part && !t.auto && !!state.parts[t.part] && !state.parts[t.part].volume,
     startK: kOf(edge.from), goalK: kOf(edge.to), reached: once ? new Int32Array(state.W * state.D) : null,
     memo: new Map(), builtY: null,
   };
@@ -151,6 +167,7 @@ export function tunnelExpand(state, S) {
     if (!c.reached[k]) c.reached[k] = y + 32768 + 1; // (the near cells the search reached, for `fail`)
     if (cheb(W, k, c.startK) > c.approach) return;
   }
+  if (c.idle) return;
   const x0 = minX + i, z0 = minZ + j;
   for (const hf of cardinalNear(h)) {
     const di = DIRS[hf][0], dj = DIRS[hf][1];
@@ -173,7 +190,7 @@ export function tunnelExpand(state, S) {
       const rise = yf - y;
       if (Math.abs(rise) > maxRiseOf(L)) continue;
       if (surfaceCover(landOf(state).groundAt, [x0, y, z0], [di, dj], L, rise, c.width, c.height, c.unsafe?.cover ?? TUNNEL.cover).run < TUNNEL.boreMin) continue;
-      const g = geomOf(state, x0, y, z0, hf, L, rise);
+      const g = fastCheck(state, x0, y, z0, hf, L, rise);
       if (!g.ok) continue;
       // a postern (a bore under a K1 wall) counts against its wall's gates.max, as a gate; a sealed wall never takes one
       let extra = 0, okWall = true;
@@ -188,6 +205,154 @@ export function tunnelExpand(state, S) {
     }
   }
 }
+
+
+/**
+ * The volume grids of one frozen volume over the pass's land (built once per pass): per cell its class code (land.classAt, so a
+ * plan's raised ridge reads ROCK), `near2` (a WATER, LAVA or ICE cell within 2, Chebyshev: the fluid buffer), `prot1` (an OWNED,
+ * PLAYER or BLOCK_ENTITY cell at it or a face neighbour: the void's shell), `unk2` (an unknown cell within 2), and per column the
+ * prefix counts of site-solid cells (cover).
+ */
+function gridOf(state, v) {
+  let g = state.grids.get(v);
+  if (g) return g;
+  const land = landOf(state);
+  const b = v.box, W = b.maxX - b.minX + 1, H = b.maxY - b.minY + 1, D = b.maxZ - b.minZ + 1, n = W * H * D;
+  const at = (x, y, z) => ((x - b.minX) * D + (z - b.minZ)) * H + (y - b.minY);
+  const fluid = new Uint8Array(n), prot = new Uint8Array(n), unk = new Uint8Array(n), solid = new Uint16Array(W * D * (H + 1)), tree = new Uint8Array(n);
+  const SOLID = new Set(['ROCK', 'SOIL']), FL = new Set(['WATER', 'LAVA', 'ICE']), PR = new Set(['OWNED', 'PLAYER', 'BLOCK_ENTITY']);
+  const cls = new Array(n);
+  for (let x = b.minX; x <= b.maxX; x++) for (let z = b.minZ; z <= b.maxZ; z++) {
+    const col = ((x - b.minX) * D + (z - b.minZ)) * (H + 1);
+    for (let y = b.minY; y <= b.maxY; y++) {
+      const i = at(x, y, z), c = land.classAt(x, y, z);
+      cls[i] = c;
+      if (c === 'MISSING' || !land.known(x, y, z)) unk[i] = 1;
+      if (FL.has(c)) fluid[i] = 1;
+      if (PR.has(c)) prot[i] = 1;
+      if (c === 'LOG' || c === 'LEAVES') tree[i] = 1;
+      solid[col + (y - b.minY) + 1] = solid[col + (y - b.minY)] + (SOLID.has(c) || land.written(x, y, z) ? 1 : 0);
+    }
+  }
+  // dilate: fluids and unknowns by 2 (Chebyshev, separable max filters), the protected cells by their face neighbours
+  const dilate = (src, r) => {
+    let a = src;
+    for (const [sx, sy, sz] of [[1, 0, 0], [0, 1, 0], [0, 0, 1]]) {
+      const o = new Uint8Array(n);
+      for (let x = b.minX; x <= b.maxX; x++) for (let z = b.minZ; z <= b.maxZ; z++) for (let y = b.minY; y <= b.maxY; y++) {
+        if (!a[at(x, y, z)]) continue;
+        for (let t = -r; t <= r; t++) {
+          const xx = x + sx * t, yy = y + sy * t, zz = z + sz * t;
+          if (xx < b.minX || xx > b.maxX || yy < b.minY || yy > b.maxY || zz < b.minZ || zz > b.maxZ) continue;
+          o[at(xx, yy, zz)] = 1;
+        }
+      }
+      a = o;
+    }
+    return a;
+  };
+  const prot1 = Uint8Array.from(prot);
+  for (let x = b.minX; x <= b.maxX; x++) for (let z = b.minZ; z <= b.maxZ; z++) for (let y = b.minY; y <= b.maxY; y++) {
+    if (!prot[at(x, y, z)]) continue;
+    for (const [ax, ay, az] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+      const xx = x + ax, yy = y + ay, zz = z + az;
+      if (xx >= b.minX && xx <= b.maxX && yy >= b.minY && yy <= b.maxY && zz >= b.minZ && zz <= b.maxZ) prot1[at(xx, yy, zz)] = 1;
+    }
+  }
+  g = { b, W, H, D, at, cls, near2: dilate(fluid, 2), prot1, unk2: dilate(unk, 2), solid, tree };
+  state.grids.set(v, g);
+  return g;
+}
+
+/**
+ * A candidate's quick check in the search (the same rules as tunnelGeom, over the precomputed grids): the bore's volume holds its
+ * envelope (the void, the floor, the shell and the 2-cell buffer), cover over 4+ consecutive cells, no fluid within 2, no protected
+ * cell in the void or its shell, no keep-out column, no tree over a cut, no route or wall too close over the roof (a wall far
+ * enough over it is a postern). `{ok, posterns}`; the emission re-checks the chosen bore with tunnelGeom itself.
+ */
+function fastCheck(state, x0, y0, z0, hf, L, rise) {
+  const c = state.cur, key = `${x0},${y0},${z0},${hf},${L},${rise}`;
+  const m = c.fast ??= new Map();
+  const had = m.get(key);
+  if (had !== undefined) return had;
+  const res = fast0(state, x0, y0, z0, hf, L, rise);
+  m.set(key, res);
+  return res;
+}
+
+function fast0(state, x0, y0, z0, hf, L, rise) {
+  const c = state.cur, land = landOf(state);
+  const [dx, dz] = DIRS[hf], rx = -dz, rz = dx;
+  const lo = -Math.floor((c.width - 1) / 2), hi = Math.floor(c.width / 2), h = c.height;
+  const coverNeed = isInt(c.unsafe?.cover) ? c.unsafe.cover : TUNNEL.cover;
+  const buf = isInt(c.unsafe?.fluidBuffer) ? c.unsafe.fluidBuffer : TUNNEL.fluidBuffer;
+  if (L < c.length.min || L > c.length.max || Math.abs(rise) > maxRiseOf(L)) return BAD;
+  const nn = L * L;
+  const fy = (i) => deckY(Math.floor((2 * y0 * nn + 2 * rise * i * L) / nn));
+  // the envelope: lanes lo - 3 .. hi + 3, slices -2 .. L + 3, y from the lowest floor - 3 to the highest ground over it
+  // (the air over the land's surface needs no volume: a buffer cell over a column's surveyed top is known air)
+  let yLo = Infinity;
+  for (let i = 0; i <= L + 1; i++) { const f = i === 0 ? y0 : i === L + 1 ? y0 + rise : fy(i); yLo = Math.min(yLo, f - 3); }
+  const xs = [x0 + dx * -2 + rx * (lo - 3), x0 + dx * (L + 3) + rx * (hi + 3), x0 + dx * -2 + rx * (hi + 3), x0 + dx * (L + 3) + rx * (lo - 3)];
+  const zs = [z0 + dz * -2 + rz * (lo - 3), z0 + dz * (L + 3) + rz * (hi + 3), z0 + dz * -2 + rz * (hi + 3), z0 + dz * (L + 3) + rz * (lo - 3)];
+  const ex0 = Math.min(...xs), ex1 = Math.max(...xs), ez0 = Math.min(...zs), ez1 = Math.max(...zs);
+  const v = state.volumes.find((q) => q.box.minX <= ex0 && q.box.maxX >= ex1 && q.box.minZ <= ez0 && q.box.maxZ >= ez1 && q.box.minY <= yLo);
+  if (!v) return BAD;
+  const g = gridOf(state, v);
+  const { b, H, D, at } = g;
+  const colS = (x, z) => ((x - b.minX) * D + (z - b.minZ)) * (H + 1);
+  // cover and the bore run
+  let run = 0, best = 0;
+  const bore = new Uint8Array(L + 2);
+  for (let i = 1; i <= L; i++) {
+    const top = fy(i) + h;
+    let mn = Infinity;
+    for (let v2 = lo; v2 <= hi; v2++) {
+      const x = x0 + dx * i + rx * v2, z = z0 + dz * i + rz * v2, gr = Math.min(land.groundAt(x, z), b.maxY);
+      const cs = colS(x, z);
+      const n = gr > top ? g.solid[cs + (gr - b.minY) + 1] - g.solid[cs + (Math.max(top, b.minY - 1) - b.minY) + 1] : 0;
+      mn = Math.min(mn, n);
+    }
+    bore[i] = mn >= coverNeed ? 1 : 0;
+    run = bore[i] ? run + 1 : 0;
+    best = Math.max(best, run);
+  }
+  if (best < TUNNEL.boreMin) return BAD;
+  // the void, floor and shell: fluids, protected cells, unknowns, keep-out, trees over a cut, routes and walls over it
+  const posterns = new Map();
+  for (let i = 1; i <= L; i++) {
+    const f = fy(i), top = f + h;
+    for (let v2 = lo - 1; v2 <= hi + 1; v2++) {
+      const x = x0 + dx * i + rx * v2, z = z0 + dz * i + rz * v2;
+      if (land.blocked(x, z)) return BAD;
+      if (v2 < lo || v2 > hi) continue;
+      const gr = land.groundAt(x, z);
+      const y1 = bore[i] ? top : Math.max(top, gr);
+      for (let y = f; y <= y1; y++) {
+        if (y > b.maxY) { if (gr >= b.maxY) return BAD; continue; } // over the volume: the land's air (its top is under the box's)
+        const ii = at(x, y, z);
+        if (buf > 0 && g.near2[ii]) return BAD;
+        if (g.unk2[ii]) return BAD;
+        if (y > f && g.prot1[ii]) return BAD;
+      }
+      if (!bore[i]) for (let y = gr + 1; y <= Math.min(gr + 12, b.maxY); y++) if (g.tree[at(x, y, z)]) return BAD;
+      const rl = land.routeLow(x, z);
+      if (rl !== null && rl - y1 - 1 < TUNNEL.cover) return BAD;
+      const w = land.wallAt(x, z);
+      if (w) {
+        if (w.footing - y1 - 1 < TUNNEL.cover) return BAD;
+        const p = posterns.get(w.id) ?? { wall: w.id, sealed: !!w.sealed, cells: [] };
+        p.cells.push([x, z]);
+        posterns.set(w.id, p);
+      }
+    }
+  }
+  // the landings' slices (the shell along the axis)
+  for (const i of [0, L + 1]) for (let v2 = lo; v2 <= hi; v2++) if (land.blocked(x0 + dx * i + rx * v2, z0 + dz * i + rz * v2)) return BAD;
+  return { ok: true, posterns: [...posterns.values()] };
+}
+
+const BAD = Object.freeze({ ok: false });
 
 /** The path cells of a tunnel move (after its start cell: the floor cells 1..L at their floor block's y, then the landing) and its data. */
 export function tunnelCells(state, m) {

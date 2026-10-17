@@ -1,0 +1,35 @@
+{
+  "about": "flat ends: unsupported {tunnel.under, until 7b}",
+  "on": "flat",
+  "anchors": {
+    "west": [
+      1096,
+      65,
+      2080
+    ],
+    "east": [
+      1154,
+      65,
+      2080
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "bore",
+        "kind": "tunnel",
+        "from": {
+          "anchor": "west"
+        },
+        "to": {
+          "anchor": "east"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "class": "unsupported",
+    "block": "tunnel.under"
+  }
+}
