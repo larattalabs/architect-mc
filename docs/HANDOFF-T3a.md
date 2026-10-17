@@ -76,6 +76,23 @@ nothing. T3b replaces the bodies only.
   reads `t3-pending-a/b.json`; the K1 diff expectations read `catalogue-k1.json`. `k1-foundation.test.mjs` adjusted;
   `t3-foundation.test.mjs` new.
 
+### Foundation round 2 (pushed to `t3/foundation` after round 1; additive)
+
+- `kit/lib/region/plan.mjs`: the plan meta exports `bridges` and `tunnels` (round 1 missed it: `res.meta` had neither).
+- `route.mjs`: a row may say `crossesWater: true` (the bridge row does): its edges find their coarse corridor over the claim without the
+  water obstacle, so a corridor exists across a river (a street fallback's search was otherwise too big for the whole claim).
+- `program.mjs`: the route writes a `bridge` segment's far landing (its last path cell) as a one-cell walk run (a landing on the walk's
+  fill is no natural ground). The rope and tunnel segment lines are now separate (`if (g.kind === 'tunnel') return;` is T3b's line to
+  change for a tunnel segment's own handling).
+- `compile.mjs` `mergeExtras`: a hook's `class` applies only over `fits` (an `adjusted` never hides a refusal).
+- `plan.json`: deviation `what` gains `crossing` (a street's fallback bridges, S-T3-2: `{what: crossing, kind: crossing, value, bridges}`).
+- `plan-p0.test.mjs`: a fixture may give `terrain` ({W, D, x0, z0, y, bands}: plan-helpers.mjs `flatSurvey`) instead of `on`.
+- `kit/regions/crossings_demo.mjs` (T3a owns it): params `variant` (auto | flat | river | frozen | hill) and `bank`; stages ground, routes,
+  links; a shared base; it calls `bridgeSection` (`lib/connectors/crossingsBridges.mjs`, T3a) and `tunnelSection`
+  (`lib/connectors/crossingsTunnels.mjs`, **T3b's file**, a stub here: see its header for the interface), routes both halves' edges in
+  one pass (`bridge`/`tunnel` pass inputs from the halves), emits the bridges then the tunnels in `links`. The flat claim (at least
+  256x112) gives the bridges its west 128 columns and the tunnel the rest; `hill` gives the tunnel the whole claim.
+
 ## T3a status
 
 - [x] Foundation committed and pushed as `t3/foundation`.

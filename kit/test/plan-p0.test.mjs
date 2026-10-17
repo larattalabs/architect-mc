@@ -22,7 +22,10 @@ import { planCatalogue, diffCatalogues } from '../lib/plan/catalogue.mjs';
 // ((7a K1b) `flat`: a flat claim in rift_city's range, for the rope bridge fixtures; a fixture's `anchors` add to Steward's)
 const SV = { s7: goldenSurvey('s7'), s3: goldenSurvey('s3'), asks: asksSurvey(), flat: flatSurvey() };
 const read = (dir) => fs.readdirSync(path.join(FIX, dir)).filter((f) => f.endsWith('.json') && f !== 'SOURCE.json').sort().map((f) => ({ name: f, ...JSON.parse(fs.readFileSync(path.join(FIX, dir, f), 'utf8')) }));
-const run = (fx, extra = {}) => { const s = SV[fx.on]; return checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}), ...extra }); };
+// ((6c T3) a fixture's `terrain` ({W, D, x0, z0, y, bands}: plan-helpers.mjs flatSurvey) instead of `on`: a synthetic claim, e.g. a
+// ravine or a water channel)
+const svOf = (fx) => (fx.terrain ? flatSurvey(fx.terrain) : SV[fx.on]);
+const run = (fx, extra = {}) => { const s = svOf(fx); return checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}), ...extra }); };
 const lots = (n, p = 'h') => Array.from({ length: n }, (_, i) => ({ id: `${p}${i + 1}`, type: 'house', size: [9, 9] }));
 const A = SV.asks;
 const asks = (plan, o = {}) => checkPlanLocal(plan, { survey: A.bytes, claim: A.claim, anchors: stewardAnchors(A.claim), ...o });
@@ -34,7 +37,7 @@ test('item 1: valid/ fixtures (at least 12) validate and every part fits', async
   const fx = read('valid');
   assert.ok(fx.length >= 12, `${fx.length} valid fixtures`);
   for (const f of fx) {
-    const v = validatePlan(f.plan, { anchors: Object.keys({ ...stewardAnchors(SV[f.on].claim), ...(f.anchors ?? {}) }) });
+    const v = validatePlan(f.plan, { anchors: Object.keys({ ...stewardAnchors(svOf(f).claim), ...(f.anchors ?? {}) }) });
     assert.equal(v.malformed, null, `${f.name}: ${JSON.stringify(v.malformed)}`);
     for (const p of v.parts) assert.equal(p.verdict, 'compile', `${f.name} ${p.id}: ${p.verdict} ${JSON.stringify(p.reason)}`);
     const r = await run(f);
@@ -173,7 +176,7 @@ test('item 3: three checks of each crafted plan give identical answers and artif
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'p0-det-'));
     try {
       fs.writeFileSync(path.join(dir, 'ir.json'), rs[0].res.irJson);
-      fs.writeFileSync(path.join(dir, 'survey.bin'), SV[f.on].bytes);
+      fs.writeFileSync(path.join(dir, 'survey.bin'), svOf(f).bytes);
       fs.mkdirSync(path.join(dir, 'blobs'));
       for (const [sha, b] of rs[0].res.blobs) fs.writeFileSync(path.join(dir, 'blobs', `${sha}.bin`), b);
       const ts = await tileShas(dir);

@@ -1515,14 +1515,15 @@ function legOptions(K, p) {
 
 /**
  * (6c T3) A routed connector's answer with its hooks' extra fields merged in order: `geometry` merged member by member, `notes` and
- * `deviations` appended, any other member (class, reasons, provisional) the later hook's. Null extras are skipped; with none the
- * answer is the base, as before.
+ * `deviations` appended, any other member (reasons, provisional) the later hook's; a hook's `class` applies only over `fits` (an
+ * `adjusted` never hides a refusal). Null extras are skipped; with none the answer is the base, as before.
  */
 function mergeExtras(base, extras) {
   let out = base;
   for (const x of extras) {
     if (!x) continue;
     const next = { ...out, ...x };
+    if (x.class !== undefined && out.class !== undefined && out.class !== 'fits') next.class = out.class;
     if (out.geometry || x.geometry) next.geometry = { ...(out.geometry ?? {}), ...(x.geometry ?? {}) };
     if (out.notes || x.notes) next.notes = [...(out.notes ?? []), ...(x.notes ?? [])];
     if (x.deviations) next.deviations = [...(out.deviations ?? []), ...x.deviations];
