@@ -61,8 +61,9 @@ schema or the reason-code files; anything it needs there is listed under "Asks o
 - [x] crossings_demo's tunnel half (`crossingsTunnels.mjs`: the flat ridge with a sand band, a 3x3 and a 1-wide bore; the hill
       variant's line)
 - [x] gate driver `tools/gate6ct3b.mjs` and its gate-chains rows (t3b-unit, t3b-ingame, t3b-natural, t3b-look; impact rule)
-- [ ] in game: t3b-ingame (run 1 at 20261017-200006-change), pin the hill, t3b-natural, look and gallery
-- [ ] slice tier, gate-verifier, as-built, push
+- [x] in game: t3b-ingame PASS 32/0 (20261017-201916-change), the hill pinned, t3b-natural PASS 31/0 (20261017-203707-change), look (gallery https://claude.ai/artifact/4oVNheMo3faYYgioxVWpZy)
+- [x] as-built drafted in CONTRACT ("T3b as built")
+- [ ] slice tier (20261017-204916-slice, running), gate-verifier, push
 
 ## Asks of the foundation (T3a) and notes for the merge
 
