@@ -12807,7 +12807,7 @@ primitive hooks). Resolutions, both sides' semantics kept, no test dropped:
 | New test | `kit/test/plan-k1-batch.test.mjs`: no fixture had both a wall and a rope bridge, so one plan on a flat claim with a dry ravine holds a rope bridge, a wall line and a path across it (its auto gate): READY, no findings, M10:rope and the wall bars clean, both movers across, deterministic; and a sealed wall round a town beside the bridge (the path pruned UNREACHABLE with `evidence.walls`, the bridge fits). |
 | Checks at `integrate/k1` | kit `node --test test/*.test.mjs` 446/446 (48 files); sidecar `npm test` 744/744 (43 files); mod `./gradlew build --offline` 680 tests, 0 failed; api-compat: the unchanged 0.34.0 (built from the v0.34.0 tag, `artifacts/gate-k1int/v0340/`), 0.33.0 (`gate-c38/v0330`) and 0.32.0 (`gate7a-k1/v0320`) apitest jars and the 0.34.0 mod jar's surface, every member present. In game (headless, ports 8912-8917, 3 shards, at d8d00d7e, a local commit later rewritten for a missing trailer: its tree is 095ec770's): `artifacts/gate-runs-K1int/20261014-125107-change` PASS 3/3: k1a-ingame 19/0, k1b-ingame 17/0, k1a-target 16/0; offline through the runner `artifacts/gate-runs-K1int/20261014-125419-change` PASS 2/2: k1a-unit 8/0, k1b-unit 6/0 (item 6 `unchanged` 23/23 against v0.34.0 also run alone). $0.00. |
 
-## Phase 6c slice T3: bridges and tunnels (DRAFT for Steward review)
+## Phase 6c slice T3: bridges and tunnels (FROZEN 2026-10-17, Steward reviewed)
 
 The last 6c crossing slice: the typed `connector.bridge` and `connector.tunnel` (reserved `until: T3` since P0), as route moves
 like K1b's rope, so roads cross water and gaps on built spans and pass through ridges. **This section supersedes the wave-3 draft
@@ -13340,6 +13340,30 @@ gate-verifier reviews the diff and the evidence, and re-runs items 2, 6 and 9 (r
   don't move. Stone bridges fill rope's gaps: short spans, sand lips with rock below, and roads wider than 3. Or should villager
   edges prefer stone?
 - **N-T3-6. The split.** T3a and T3b in parallel after the foundation, batched into one release, or T3a first?
+
+### Steward's review (2026-10-17, at b528dc9b): binding, and it overrides the sections above where they differ
+
+- **S-T3-2.** Yes. Streets, roads and paths fall back to a bridge when every route crosses water.
+- **S-T3-3.** Yes. WATER until H, with the arch or rope `wouldFit` offered as a repair.
+- **S-T3-4.** A tunnel under flat ground stays `unsupported {tunnel.under, until: 7b}`, never a `NO_COVER` path repair.
+- **S-T3-5.** Posterns as drafted.
+- **S-T3-6.**
+  - **New check option `load`** (T3b), mirroring `RegionPlanRequest`'s LoadPolicy:
+    - `"loaded"` is the default and today's behaviour;
+    - `"generate"` prepares and generates the plan's tiles needed by the volume pass, within the existing tile caps, before the
+      second plan.
+    - With `"generate"`, `incomplete VOLUME` only remains past the caps.
+  - `ARTIFACT_STALE` on a rock change is accepted.
+  - A tunnel `via` is read leniently: the first leg is used and the rest is listed in `notes`, as in S-K1-3.
+  - Gate items: one fixture where `load: "generate"` turns `incomplete VOLUME` into a fit, and one where it stays incomplete
+    past the cap.
+- **S-T3-7.** Reserve `connector.tube` (`until: UW`) and `connector.drawbridge` (`until: mechanism`) in catalogue 6.
+  - Recorded drawbridges then answer `unsupported {block: connector.drawbridge}` rather than `NO_GAP`. A drawbridge is a
+    connector kind, so §9's drawbridge row changes accordingly.
+  - Unknown codes pass through.
+- **S-T3-8.** Add to the `crossing` shape on bridge and tunnel edges:
+  - `span`, the deck length in cells, for bridges (tunnels already carry `length`);
+  - `lands`, the id of the gate or postern the bridge or tunnel lands at, if any.
 
 ### Coordinator decisions (2026-10-17, on Noah's behalf; Noah can overrule at the look step)
 
