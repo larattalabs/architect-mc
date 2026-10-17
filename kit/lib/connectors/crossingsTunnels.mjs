@@ -151,7 +151,7 @@ export function emitDemoTunnels(r, { stage }) {
       if (g.kind !== 'tunnel') return;
       const a = e.path[g.from], b = e.path[g.to];
       const v = st.volumes[0];
-      const rec = tunnel(r, a, b, { land, width: e.width ?? st.width, height: st.height, stage, part: 'links_tunnels', id: `tunnel_${e.id}_${si}`.slice(0, 48), movers: e.movers,
+      const rec = tunnel(r, a, b, { land, width: e.width ?? st.width, height: st.height, stage, liningStage: 'routes', part: 'links_tunnels', id: `tunnel_${e.id}_${si}`.slice(0, 48), movers: e.movers,
         ...(v ? { volume: { sha: v.sha, box: [v.box.minX, v.box.minY, v.box.minZ, v.box.maxX, v.box.maxY, v.box.maxZ] } } : {}) });
       out.push({ edge: e.id, ...rec });
     });

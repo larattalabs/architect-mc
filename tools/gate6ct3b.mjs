@@ -54,7 +54,7 @@ const OWNER = 'test:t3b';
 const FLAT_CLAIM = [6000, 6000, 6255, 6111];
 const SITE_FILE = path.join(root, 'scenarios', 'sites', 'tunnel_hill.json');
 const imp = (p) => import(pathToFileURL(path.join(KIT, p)).href);
-const json = (o) => JSON.stringify(o).replaceAll(' ', '');
+const json = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function refuseKeysSafe() { L.refuseKeys(); }
@@ -333,9 +333,11 @@ async function posternRun() {
   const out = {};
   await L.fresh('G6B T3b Postern', FLAT);
   await L.setRules('exact');
-  const G = -61, CL = 7157, Z0 = 7000, Z1 = 7159; // the cliff's east face at x 7157 (v40's shape moved by +6000, +5000; ground -61)
-  await tp(CL, -20, (Z0 + Z1) / 2);
+  const CL = 7157, Z0 = 7000, Z1 = 7159; // the cliff's east face at x 7157 (v40's shape moved by +6000, +5000)
+  await tp(CL, 100, (Z0 + Z1) / 2);
   await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => null);
+  const G = await groundAt(CL - 80, (Z0 + Z1) >> 1); // the flat world's surface block
+  out.ground = G;
   for (let h = 1; h <= 14; h++) await cmd(`/fill ${CL - 50 + h} ${G + h} ${Z0} ${CL} ${G + h} ${Z1} minecraft:stone`);
   await cmd(`/fill ${CL - 49} ${G + 1} ${Z0} ${CL} ${G + 14} ${Z1} minecraft:stone replace minecraft:air`).catch(() => null);
   // grass over the ridge's top surface (a natural look; the volume reads SOIL there)
@@ -384,6 +386,16 @@ async function stateAt(x, y, z) {
   await call('dev.region.dump', { box: [x, y, z, x, y, z], file: f }, 60_000);
   const d = await decodeArwd(fs.readFileSync(f));
   return d.palette[d.cells[d.at(x, y, z)]];
+}
+
+/** The highest non-air block of a column (a dump of y -64..319 at one column). */
+async function groundAt(x, z) {
+  const { decodeArwd } = await imp('lib/region/vworld.mjs');
+  const f = path.join(OUT, `col-${x}_${z}.arwd.gz`);
+  await call('dev.region.dump', { box: [x, -64, z, x, 319, z], file: f }, 60_000);
+  const d = await decodeArwd(fs.readFileSync(f));
+  for (let y = 319; y >= -64; y--) if (!/^minecraft:(air|cave_air|void_air)$/.test(d.palette[d.cells[d.at(x, y, z)]])) return y;
+  return -64;
 }
 
 /** A check of the hill's tunnel (plan_v0 through Regions.checkPlan): the DevBridge answer. */

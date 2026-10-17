@@ -369,6 +369,13 @@ export function tunnelGeom(land, a, dir, L, rise, opts = {}) {
       side = -side;
     }
   }
+  // ---- a parapet or a lamp post standing on soil: its support lined too (grass under a block the tunnel writes would die to dirt
+  // during a stand, a change the removal could not undo; E-normal's bar near a tunnel is 0)
+  for (const c of [...lined.values()].filter((q) => q[3] === 'parapet').concat(lamps.filter((l) => l[3] === 'post'))) {
+    const [x, y, z] = c, k = key(x, y - 1, z);
+    if (V.has(k) || F.has(k) || lined.has(k) || portalCells.has(k)) continue;
+    if (LINED_CLASSES.includes(land.classAt(x, y - 1, z)) && y - 1 <= land.groundAt(x, z)) lined.set(k, [x, y - 1, z, 'support']);
+  }
   // ---- the guard cells (§6): the void, the shell and the buffer, as per-column y runs (sorted by x, z, y)
   const G = new Set();
   for (const m of [V, S, B, F]) for (const k of m.keys()) G.add(k);
@@ -473,18 +480,26 @@ export function tunnel(r, a, b, opts = {}) {
   const lampAt = new Set(g.lamps.map((l) => `${l[0]},${l[1]},${l[2]}`));
   for (const [x, y, z, c] of g.voids) if (c !== 'AIR' && !lampAt.has(`${x},${y},${z}`)) air.push(x, z, y, y, M.air);
   for (const [x, y, z, kind] of g.floor) (kind === 'bed' ? solid : walk).push(x, z, y, y, kind === 'slab' && slab ? M.slab : M.floor);
-  for (const [x, y, z, why] of g.lined) solid.push(x, z, y, y, why === 'parapet' ? matOf(parapetState(x, y, z)) : M.lining);
+  // (the lining, sealing and falling-block lining go first, in `liningStage` when the caller gives an earlier stage: every sand or
+  // gravel cell the carve would leave over air is lined before the carve, whatever order a stage's cells are written in)
+  const early = opts.liningStage && opts.liningStage !== opts.stage ? [] : solid;
+  for (const [x, y, z, why] of g.lined) (why === 'parapet' ? solid : early).push(x, z, y, y, why === 'parapet' ? matOf(parapetState(x, y, z)) : M.lining);
   for (const pt of g.portals) for (const [x, y, z, kind, facing] of pt.cells) {
     if (kind === 'arch' && stairs) solid.push(x, z, y, y, matOf(`${stairs}[facing=${facing},half=top,shape=straight,waterlogged=false]`));
     else solid.push(x, z, y, y, M.portal);
   }
   for (const [x, y, z, kind] of g.lamps) solid.push(x, z, y, y, M[kind]);
   // ALWAYS_OURS (3): natural cells, or this region's own earlier stage (a ridge raised in `ground`), never another owner's
+  if (early !== solid && early.length) {
+    const lp = r.parts.find((q) => q.id === `${p.id}_lining`) ?? r.part(`${p.id}_lining`, { stage: opts.liningStage, set: 'path' });
+    (r.meta.parts[lp.id] ??= {}).kind ??= 'path';
+    lp.columns({ abs: 0 }, { abs: 0 }, early, mats, { cond: 3 });
+  }
   if (air.length) p.columns({ abs: 0 }, { abs: 0 }, air, mats, { cond: 3 });
   if (solid.length) p.columns({ abs: 0 }, { abs: 0 }, solid, mats, { cond: 3 });
   if (walk.length) p.columns({ abs: 0 }, { abs: 0 }, walk, mats, { cond: 3, walk: true });
   const states = [];
-  for (const cols of [solid, walk]) for (let t = 0; t < cols.length; t += 5) states.push(mats[cols[t + 4]]);
+  for (const cols of early === solid ? [solid, walk] : [early, solid, walk]) for (let t = 0; t < cols.length; t += 5) states.push(mats[cols[t + 4]]);
   const bom = bomOf(states);
   const id = opts.id ?? `${p.id}_tunnel_${(r.meta.tunnels?.length ?? 0) + 1}`;
   const xs = [], yz = [], zs = [];
@@ -497,7 +512,8 @@ export function tunnel(r, a, b, opts = {}) {
     lamps: g.lamps.map((c) => [c[0], c[1], c[2], c[3]]), lined: g.lined.length, carved: g.carved, guard: g.guard, posterns: g.posterns,
     lining: liningB, portal: portalB, floorBlock: floorB, light: lights.hanging, bom,
     // the floor blocks (feet one over: check.mjs's M5 over `cells`), and the journal's counts
-    cells: g.floor.filter((c) => c[3] !== 'bed').map((c) => [c[0], c[1], c[2]]), counts: { carved: g.carved, lined: g.lined.length, written: solid.length / 5 + walk.length / 5 + g.carved },
+    cells: g.floor.filter((c) => c[3] !== 'bed').map((c) => [c[0], c[1], c[2]]), counts: { carved: g.carved, lined: g.lined.length, written: (solid.length + walk.length + (early === solid ? 0 : early.length)) / 5 + g.carved },
+    ...(early !== solid && early.length ? { liningPart: `${p.id}_lining`, liningStage: opts.liningStage } : {}),
     ...(opts.volume ? { volume: { ...opts.volume } } : {}),
     ...(opts.movers ? { movers: [...opts.movers] } : {}),
     ...(opts._unsafe ? { _unsafe: { ...opts._unsafe } } : {}),

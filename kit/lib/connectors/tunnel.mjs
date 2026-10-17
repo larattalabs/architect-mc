@@ -281,7 +281,7 @@ export function emitTunnels(K) {
         const vol = own ?? vols.find((v) => v.box.minX <= Math.min(a[0], b[0]) && v.box.maxX >= Math.max(a[0], b[0]) && v.box.minZ <= Math.min(a[2], b[2]) && v.box.maxZ >= Math.max(a[2], b[2])) ?? null;
         const style = p.part.lamps === 'none' ? { _unsafe: { ...(o.unsafe ?? {}), noLamps: true } } : o.unsafe ? { _unsafe: { ...o.unsafe } } : {};
         const rec = tunnelPrimitive(K.r, a, b, {
-          land, width: o.width, height: o.height, lining: o.lining, portal: o.portal, stage: K.stageOf('links'), part: `links_t${idx}`, id: `tunnel_t${idx}_${x.meta.id}_${si}`.slice(0, 48), movers: o.movers ?? x.meta.movers,
+          land, width: o.width, height: o.height, lining: o.lining, portal: o.portal, stage: K.stageOf('links'), liningStage: K.stageOf('routes'), part: `links_t${idx}`, id: `tunnel_t${idx}_${x.meta.id}_${si}`.slice(0, 48), movers: o.movers ?? x.meta.movers,
           ...(vol ? { volume: { sha: vol.sha, box: [vol.box.minX, vol.box.minY, vol.box.minZ, vol.box.maxX, vol.box.maxY, vol.box.maxZ] } } : {}), ...style,
         });
         recs.push(rec);

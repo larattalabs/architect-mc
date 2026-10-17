@@ -88,7 +88,7 @@ test('a fit: bore and cut cells, every bore cell under 2+ site-solid, height cle
   }
   // rock stays raw: the lined cells are the soil near the surface (the cut walls and the hillside face) and the parapets
   assert.ok(g.lined.length > 0);
-  assert.ok(g.lined.every((c) => ['lining', 'face', 'parapet', 'seal', 'gravity'].includes(c[3])));
+  assert.ok(g.lined.every((c) => ['lining', 'face', 'parapet', 'seal', 'gravity', 'support'].includes(c[3])));
   assert.ok(g.carved > 0);
   assert.ok(g.lamps.length >= 4, `lamps ${g.lamps.length}`);
   // the guard runs cover the void, the floor and the buffer
