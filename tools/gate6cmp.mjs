@@ -24,8 +24,10 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { kitReuse } from './lib/kit-reuse.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { srcGradle } from './lib/src-gradle.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-MP-run');
@@ -104,6 +106,8 @@ function nodeTest(files) {
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), names: t.split('\n').filter((l) => /^✔|^✖/.test(l)), notes: t.split('\n').filter((l) => l.startsWith('# ')) };
 }
+/** The kit suite once per gate run (tools/lib/kit-reuse.mjs): files whose checks are pass/fail only take this run's unit-kit results when exact. */
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 
 steps.unit = async () => {
   const out = {};
@@ -117,11 +121,11 @@ steps.unit = async () => {
   check(okAll(item(/item 6:/)), 'item 6 (kit): the drift fixture (200 generated specs) is current', item(/item 6:/));
   check(okAll(item(/item 8:/)), 'item 8: crater_works without the toolbox: the same IR with or without toolbox: false (left out of the params)', item(/item 8:/));
   check(out.mp.code === 0 && out.mp.fail === 0, `kit/test/mp.test.mjs: ${out.mp.pass} pass, ${out.mp.fail} fail`, out.mp.failing);
-  out.goldens = nodeTest(['kit/test/region-golden.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/scenario-goldens.test.mjs']);
+  out.goldens = kitOnce(['kit/test/region-golden.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/scenario-goldens.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 8: the tile goldens hold (mega_bench, the 6b family fixtures with crater_works's tiles, S1, S7): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   const env = { ...process.env, JAVA_HOME, GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*ApiMPTest', '--tests', '*MaskPatternDriftTest', '--tests', '*PlanStaleTest', '--tests', '*Api114Test'],
-    { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 3_600_000 });
+  const g = srcGradle(root, () => spawnSync('./gradlew', ['test', '--offline', '--tests', '*ApiMPTest', '--tests', '*MaskPatternDriftTest', '--tests', '*PlanStaleTest', '--tests', '*Api114Test'],
+    { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 3_600_000 }));
   const xml = (n) => {
     const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-dev.larattalabs.architect.${n}.xml`);
     const t = fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '';
@@ -166,7 +170,7 @@ steps.stale = async () => {
   const modOld = runJar(path.join(BASELINE, 'architect_mc-0.18.0.jar'));
   check(/^plan needs kit \d+\.\d+\.\d+ \/ kinds \[mask, pattern\]; this is kit 0\.18\.0$/.test(modOld[0]) && /^plan needs kinds \[mask, pattern\]; this is kit 0\.18\.0$/.test(modOld[1]),
     `item 9: the 0.18.0 mod (IrStale) refuses it PLAN_STALE: "${modOld[0]}"; at kit 0.18.0: "${modOld[1]}"`);
-  const newClasses = fs.existsSync(path.join(RUN, 'mod', 'build', 'classes', 'java', 'main')) ? path.join(RUN, 'mod', 'build', 'classes', 'java', 'main') : path.join(root, 'mod', 'build', 'classes', 'java', 'main');
+  const newClasses = fs.existsSync(path.join(BUILT, 'mod', 'build', 'classes', 'java', 'main')) ? path.join(BUILT, 'mod', 'build', 'classes', 'java', 'main') : path.join(root, 'mod', 'build', 'classes', 'java', 'main');
   const modNew = runJar(newClasses);
   check(modNew[0] === 'null', `this build's IrStale accepts it (${modNew[0]}; classes ${newClasses})`);
   spendZero();
@@ -175,9 +179,13 @@ steps.stale = async () => {
 
 // ------------------------------------------------------------------ item 11: API compatibility
 
+// the run worktree where unit-mod built this head (the runner sets GATE_UNIT_MOD_RUN once unit-mod passed: with --shards the step's
+// own run worktree may still hold an older head's classes); else this shard's run worktree, as before
+const BUILT = process.env.GATE_UNIT_MOD_RUN || RUN;
+
 steps.apicompat = async () => {
   // the run worktree's classes (built by unit-mod at this head): main and client (the client API lives there)
-  const classes = fs.existsSync(path.join(RUN, 'mod', 'build', 'classes', 'java', 'main')) ? [['main', 'client'].map((d) => path.join(RUN, 'mod', 'build', 'classes', 'java', d)).join(path.delimiter)] : [];
+  const classes = fs.existsSync(path.join(BUILT, 'mod', 'build', 'classes', 'java', 'main')) ? [['main', 'client'].map((d) => path.join(BUILT, 'mod', 'build', 'classes', 'java', d)).join(path.delimiter)] : [];
   const r = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), '--gate6cmp', ...classes], { cwd: root, encoding: 'utf8', env: { ...process.env, JAVA_HOME } });
   const t = `${r.stdout}${r.stderr}`;
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), t);
