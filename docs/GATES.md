@@ -38,6 +38,9 @@ from each slice's own focused items, the verifier's code review and Steward's re
    merge (next free minor), so branches never renumber; builders use a placeholder until the coordinator sets it.
 6. **At most 3 gate runs on the machine at once** (a machine-wide slot lock in the runner); more only causes load failures.
    *Implemented:* see "Slot lock" below.
+7. **Bench isolation only where timing is judged (Noah, 2026-10-17).** A bench step runs alone only at `release`, in the named
+   chains and with `--judge-timing`. In `change` and `slice` it schedules like any other step (same client, host and
+   resources) and its timing is recorded as **contended**. No check is dropped. *Implemented:* see "Gate speed" below.
 
 **Headless gates (Noah, 2026-10-12): implemented**, see "Headless gates" below. Steps marked `"host": "server"` run on a
 dedicated server with the DevBridge and a bot player, not a client. The client stays for screenshots, galleries, the UI and the
@@ -75,6 +78,93 @@ free, so a SIGKILLed run does not hold one. `--slots N` / `GATE_SLOTS` overrides
 separate from the run's own `--lock`, which still guards one runner's run dir and ports. The plan shows how many slots are in
 use; `SUMMARY.md` and `summary.json` (`slot`) record the slot and the wait. Runners started before this change take no slot, so
 for the first runs the count is a floor.
+
+## Gate speed (2026-10-17): scheduling, timeouts, one kit suite
+
+Evidence: K1a's slice run (`artifacts/gate-runs-K1a/20261014-084850-slice`) took 193 min for 325 min of steps on 3 shards.
+Shard 2 took 190 min because it got every bench step, which the runner held until everything else had started and then ran one
+at a time; 6cv-scenario-s7 burned its whole 60-minute timeout on a horse standing in a lot. Each of nine slice unit steps re-ran
+the whole kit suite (about 190 s and 950 CPU-s each) next to `unit-kit`. The changes below keep every check; measurements are in
+"Measured" at the end of this section.
+
+### Scheduling and timeouts
+
+- **Benches.** An *isolated* bench step (release, named chains, `--judge-timing`, or a step marked `"isolate": true`: megaB,
+  whose resume-time checks are not `BAR` lines) behaves as before: it waits until every other step has started and drained,
+  runs alone, the other shards' idle clients are stopped, and `--quiet-wait` applies. In `change`/`slice` a bench step is an
+  ordinary step. Its result records `ranWith` (the steps that overlapped it) and `contended: true|false`. Its timing bars stay
+  recorded, not judged, and its functional checks judge as before.
+- **Longest first.** Sharded, a free shard takes the ready step with the highest priority: the step's estimate plus the longest
+  chain of steps waiting on it (`after`, `waitFor`), less the cost of getting its client there (0 if it is up, 0.15 min for a
+  world switch in the family, 0.6 min for a start or for stopping the client before a no-client step). One shard still runs
+  the order exactly. The rules are unchanged: `resources` never overlap, `after` runs on its dependency's shard, and a
+  `stopOnFail` step is a barrier.
+- **`waitFor`** (new step field): the step starts only after those steps have ended (any status, any shard). It is never skipped,
+  unlike `after`. The kit-suite readers wait for `unit-kit` this way.
+- **Estimates from history.** `tools/lib/gate-history.mjs` rebuilds `artifacts/gate-step-history.json` (in the main checkout) at
+  every run and `--plan` from all past `summary.json` files. A sample is a PASS or FAIL step's seconds minus its client
+  setup; the newest 30 per step are kept. The file is written atomically, and a missing or corrupt one is simply rebuilt.
+  - **Estimate:** the history p50, else `estMin`, else a third of `timeoutMin`.
+  - **Effective timeout:** `max(2 x p90, 10 min)`, capped by the configured `timeoutMin`, once the step has at least 5 samples.
+    A contended bench step whose history has no contended sample gets 3 x p90. A `stopOnFail` barrier always keeps its
+    configured timeout.
+  - `summary.json` records `estimateMin`, `effectiveTimeoutMin` and `timeoutSource` per step.
+  - `--no-history-timeouts` keeps the configured timeouts; `--no-history` also ignores the history for the order.
+- **`--plan`** shows `~estimate / effective(configured) min`, the shard each step lands on, per-shard busy time and
+  whether benches are isolated. `--verbose` adds each step's estimate source, timeout source and priority.
+
+### Kit suite once per run
+
+- `unit-kit` runs the whole kit suite. When the runner sets `GATE_KIT_RESULTS` (only if `unit-kit` is in the run), it also
+  writes a JUnit report there, and `GATE_KIT_TREE` is `HEAD:kit`.
+- The drivers' kit calls whose checks are pass/fail only take their files' results from that report through
+  `tools/lib/kit-reuse.mjs`. These are the whole-kit-suite checks (gate6cv, cw, cx, ct1, ct2, cs2, cd, gate7ak1, gate7ak1b),
+  the "goldens that must not move" checks (the same drivers plus cb, cmp, cf1, cf2), and "P0's tests after" (cd, gate7ak1,
+  gate7ak1b). Each prints a `kit: reused from this run's unit-kit ...` line.
+- A report is reused only when it is complete, this checkout's `kit/` is clean at that tree, and every requested file is in it
+  with at least one test and no failure. The only flag allowed is `--test-skip-pattern`.
+- A slice's own kit tests always run: a name pattern, a pass-count threshold, the test names, or the diagnostics.
+- Without `unit-kit` in the run (`--only`, a named chain, the verifier's re-runs), or when a file failed, the driver runs the files
+  itself, exactly as before. So a failing kit file fails the driver's check as before, and `unit-kit` fails too.
+- The 13 unit steps that read the report `waitFor` `unit-kit`.
+- Within the suite, `--test-concurrency` doesn't help. The suite's wall time (about 190 s on a loaded box) is set by single
+  files run serially in one process: `plan-p0.test.mjs` (187 s of tests), `plan-k1a` (150 s), `village` (147 s; one test of
+  500 seeded claims takes 138 s). Splitting those tests is kit work, not runner work.
+
+### Gradle in the source checkout
+
+The drivers' unit and apicompat steps run `./gradlew test --tests ...` or `compileJava` in this checkout's `mod/`. Two of
+those at once fight over one project dir. K1a's b-unit and pt-unit started 5 s apart, and both ended `gradlew` exit 1 with
+every test passing.
+
+- `tools/lib/src-gradle.mjs` wraps the 18 call sites in a cross-process lock, `mod/.gradle/gate-gradle.lock`. A lock whose pid
+  has died is taken over, and the lock gives up waiting after 45 min.
+- gate6cmp's stale and apicompat checks read the classes of the run worktree where unit-mod built this head
+  (`GATE_UNIT_MOD_RUN`). Sharded, the step's own worktree may still hold an older head's classes, which caused K1b's mp-unit
+  "kit 0.31.0" failure.
+
+### Mobs in scenario lots
+
+`tools/scenarios.mjs` now clears entities before every placement, not only for T2/D/S2: `/kill` of every non-player entity,
+then a second later the loot it dropped. It clears again whenever an item waits `OCCUPIED`, and on `PLAYER_IN_BOX` it moves
+the player 32 blocks up. This touches entities only, never blocks, so the snapshot and the exactness are unchanged.
+`run.json` records `mobs`.
+
+### Version-only diffs
+
+`impact.versionConstants` lists the lines a version bump touches:
+- `mod_version`, `ArchitectApi.VERSION` and `IrStale.KIT_VERSION`;
+- `KIT_VERSION`, `EVAL_KIT_VERSION` and `PLAN_API`;
+- the catalogue golden's `api` and `kitVersion`.
+
+A listed file whose every changed line (`git diff -U0` over the range) matches its patterns maps only to `unit-mod` or
+`unit-kit`, under the rule "version constants only (no in-game steps)". The slice tier's units and apijars still run. Any other
+changed line maps as usual, and so does `--files`, which has no hunks. On a throwaway commit bumping all seven, the slice went
+from 45 steps to 4.
+
+### Measured
+
+Pending: the first slice run with these changes (K1a's selection, `--range 1c750076...819d1f79`) is in `artifacts/gate-runs-gatespeed/`.
 
 ## Headless gates
 
@@ -274,6 +364,7 @@ its tags. Every matching rule counts. The main rules:
 | a gate driver (`tools/gate4e.mjs`, ...) | that gate's cheap steps | its longer steps |
 | any other `mod/src/main/java/**` | unit-mod | |
 
+Version-constant-only files map to their unit suite only (see "Version-only diffs" above).
 Ignored (nothing to run): `docs/**`, `**/*.md`, eval results and briefs, `.github/**`, images, `mod/logs/**`. A path no rule and
 no ignore glob covers is **unmapped**: `change` and `slice` fall back to the unit suites (slice: and apijars), and the plan prints it. A changed `tools/gate*.mjs` driver no rule covers is flagged in the plan: add a rule so the slice's own steps are found. Extend the
 map when a slice adds a package or a gate step (`node tools/gate-impact.mjs <path>` shows what a path maps to).
@@ -288,9 +379,14 @@ map when a slice adds a package or a gate step (`node tools/gate-impact.mjs <pat
 - **A client stays up between compatible steps.** Steps on the same client reuse it; steps on another client of the same family
   (same sidecar kind and mods: `stub` = 4d/4e/5b, `sim` = sim/6a) switch worlds in the same process instead of restarting.
 - **Parallel shards.** `--shards N` (2-3) runs N clients at once, each with its own run worktree, port pair and evidence dir
-  (`<run>/s<k>/`). Steps declare what they need: steps sharing a `resources` entry never overlap; a `bench` step (timing or MSPT
-  bars: mega-lite, throughput, megaA/B, heap) waits until everything else has started and drained, then runs alone; a step with
-  `after` (4e-crash after 4e-orders) runs on its dependency's shard; a `stopOnFail` step (unit-mod) is a barrier.
+  (`<run>/s<k>/`). Steps declare what they need:
+  - steps sharing a `resources` entry never overlap;
+  - a step with `after` (4e-crash after 4e-orders) runs on its dependency's shard;
+  - `waitFor` waits for steps on any shard;
+  - a `stopOnFail` step (unit-mod) is a barrier.
+
+  A `bench` step (timing or MSPT bars: mega-lite, throughput, megaA/B, heap, the scenarios) runs alone only where timing is
+  judged; elsewhere it schedules like any other step. The order is longest first from the step history. See "Gate speed" above.
 
 ### Bench steps: tick bars, load, exclusivity
 
@@ -323,8 +419,10 @@ map when a slice adds a package or a gate step (`node tools/gate-impact.mjs <pat
   `--quiet-max-min` minutes (default 30). If it never drops, the step runs marked noisy and ends **NOISY**: inconclusive, neither
   pass nor fail (its outcome and fail lines are kept, so a functional failure still shows). A run whose only non-PASS steps are
   NOISY has the verdict `INCONCLUSIVE`; re-run those steps on a quiet box.
-- **Benches are exclusive** within a run: a bench step starts only when no other step is running on any shard, nothing else
-  starts while it runs, and the other shards' idle clients are stopped first. Across runners on the same machine there is no
+- **Benches are exclusive where timing is judged** (`release`, the named chains, `--judge-timing`, `"isolate": true`). There a
+  bench step starts only when no other step is running on any shard, nothing else starts while it runs, and the other shards'
+  idle clients are stopped first. In `change`/`slice` it runs next to other steps and records `contended` and `ranWith`;
+  `--quiet-wait` then waits only before isolated benches. Across runners on the same machine there is no
   lock: check that no other run is in a bench step (its summary.json; `pgrep -f <its run worktree>`) before starting clients.
 
 ### Lighter verification (gate-verifier guidance)
@@ -360,7 +458,8 @@ The runner never calls Claude. The independent gate-verifier is launched by the 
    **The clients run the committed HEAD. The drivers (`tools/*.mjs`) run from this checkout's working tree.** `--plan` warns
    when the tree is dirty, so commit before a run.
 5. **Steps.** Each step names its client: one of `cfg.clients`, `none` (unit tests) or `self` (the step starts its own clients, as
-   apijars does). Each step runs in its own process group, with the timeout from the config.
+   apijars does). Each step runs in its own process group, with its effective timeout: from the step history (max(2 x p90,
+   10 min), at most the configured `timeoutMin`, with at least 5 samples) or the configured one (see "Gate speed").
    - **TIMEOUT.** The step's group gets SIGTERM, then SIGKILL. After that, the shard's run-worktree processes are stopped (gradle
      and its daemon/workers, the client JVM, the sidecar, vitest, the client scripts, matched by their paths in that worktree).
      Nothing else is touched. Stray apitest jars are removed from `mods/`.
@@ -406,7 +505,9 @@ Everything goes to `<out>/<YYYYMMDD-HHMMSS>-<chain or tier>/`:
 - `summary.json`: `state` is `running` | `done` | `stopped` | `aborted`, and `verdict` is `PASS` | `FAIL`. `tier` holds the range,
   the impact (files, rules, unmapped), the engine/placement tags, the rotation key and the rotation (ran, skipped, next). Each step
   has its status, shard, seconds, ok/FAIL counts, the first FAIL lines and key numbers (unit test counts, mega-lite cells/s,
-  throughput median, megaA cells/s and MSPT p99, megaB resume times). Rewritten after every step.
+  throughput median, megaA cells/s and MSPT p99, megaB resume times), its `estimateMin`, `effectiveTimeoutMin` and
+  `timeoutSource`, and `ranWith` (the steps that overlapped it; a bench step also gets `contended`). `schedule` records the
+  order, the history size and whether benches were isolated. Rewritten after every step.
 - `SUMMARY.md`: the verdict, the tier and rotation, a step table and the steps that didn't pass.
 - `runner.pid`, `runner.log`, `setup[-s<k>].log`, `client[-s<k>].log`, `<step>.log`.
 - The gates' evidence: `[s<k>/]gate4d/`, `gate4e/`, `gate5b/`, `gate6a/` (shared by a gate's steps on that shard, so context

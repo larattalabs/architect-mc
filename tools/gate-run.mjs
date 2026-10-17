@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Unattended gate runner (docs/GATES.md): runs a named chain, or a tier (change | slice | release), of gate steps from
 // tools/gate-chains.json against dev clients in the runner's own run worktrees, with no agent watching. Non-interactive;
-// per-step timeouts (a hung step is killed: its own process group, then its run worktree's processes only); continues past
-// failures unless a step is `stopOnFail`; one lock; no notify unless asked (Noah: no Discord pings). No Claude: it refuses to
-// start with Claude credentials in the environment, strips every ANTHROPIC_* / CLAUDE* variable from its children, and runs
-// only the stub/sim client scripts.
+// per-step timeouts, from the step history where it has 5 samples (a hung step is killed: its own process group, then its run
+// worktree's processes only); continues past failures unless a step is `stopOnFail`; one lock; no notify unless asked (Noah: no
+// Discord pings). No Claude: it refuses to start with Claude credentials in the environment, strips every ANTHROPIC_* / CLAUDE*
+// variable from its children, and runs only the stub/sim client scripts.
 //
 //   node tools/gate-run.mjs <chain> [--shards N] [--only a,b] [--from step] [--plan]
 //   node tools/gate-run.mjs change  --since <ref> | --range A...B | --files a,b [--shards N] [--plan]   unit suites + mapped steps
@@ -13,8 +13,9 @@
 //   node tools/gate-run.mjs --list                  the chains and tiers
 //   [--notify | --notify-dry-run]                   off by default (Noah: no Discord pings)
 //
-// --plan prints the selection (impact, rotation and what it skipped), the steps, clients, timeouts, resources, shards and an
-// estimated wall time, and exits without running anything.
+// --plan prints the selection (impact, rotation and what it skipped), the steps, clients, estimates and timeouts, resources,
+// shards, per-shard busy time and an estimated wall time, and exits without running anything (--verbose: each step's estimate
+// and timeout source and its priority).
 //
 // Where it runs (flag, else environment, else default). Several agents share this machine: a second runner names its own.
 //   --ports S:D[,S:D...]   GATE_PORTS     every shard's sidecar:DevBridge pair. Without it shard 1 is ARCHITECT_GATE_SIDECAR_PORT /
@@ -28,6 +29,9 @@
 //                                         takes a slot file in --slots-dir (GATE_SLOTS_DIR; <LarattaLabs>/.gate-slots) and waits for a
 //                                         free one; a slot held by a dead pid counts as free. Separate from the per-run --lock.
 //   --judge-timing         in change/slice timing bars (lines `FAIL BAR ...`) are recorded, not judged; this judges them as at release
+//                          (and isolates the bench steps again)
+//   --no-history-timeouts  the configured timeoutMin for every step; --no-history also ignores the history for the order
+//                          GATE_HISTORY_FILE  the step history (<main checkout>/artifacts/gate-step-history.json, rebuilt every run)
 //   --quiet-wait [load]    on by default at release (load 8); opt-in elsewhere. --no-quiet-wait turns it off
 //   --host auto|client|server  GATE_HOST  where steps run (tools/lib/hosts.mjs): auto (default) runs the steps marked
 //                                         "host": "server" on a headless server, the rest on clients; client runs all on clients
@@ -36,8 +40,13 @@
 //                          GATE_NOTIFY=send|dry, GATE_NOTIFY_SCRIPT (~/Developer/_infra/discord-notify.sh); off by default
 //
 // Shards (--shards N, at most shards.max): each has its own client, run worktree, port pair and evidence dir (<out>/s<k>/ when
-// N > 1). Steps declare what they need: steps sharing a resource never overlap, a `bench` step (timing or MSPT bars) runs alone,
-// a step with `after` runs on its dependency's shard, and a `stopOnFail` step is a barrier.
+// N > 1). Steps declare what they need: steps sharing a resource never overlap, a step with `after` runs on its dependency's
+// shard, `waitFor` waits for steps on any shard (any status), and a `stopOnFail` step is a barrier. A free shard takes the ready
+// step with the longest estimate (history p50 plus the chain waiting on it), less its client cost there (docs/GATES.md "Gate
+// speed"). A `bench` step (timing or MSPT bars) runs alone only where timing is judged (release, named chains, --judge-timing,
+// `"isolate": true`); in change/slice it schedules like any step and records `contended`/`ranWith`.
+// The kit suite runs once: unit-kit writes a JUnit report to GATE_KIT_RESULTS (tools/lib/kit-reuse.mjs), and the drivers'
+// kit-suite and goldens checks read it when exact; the runner also passes GATE_UNIT_MOD_RUN (where unit-mod built this head).
 //
 // Output: <out>/<timestamp>-<chain>/: summary.json (written at the start with state "running", rewritten after every step,
 // final state "done" | "stopped" | "aborted"), SUMMARY.md, runner.log, <step>.log, the gates' own evidence under
