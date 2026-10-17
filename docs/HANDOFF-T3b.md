@@ -47,13 +47,38 @@ schema or the reason-code files; anything it needs there is listed under "Asks o
 
 ## Status
 
-- [ ] Java: `PlanRequest.load`, two-plan check, `generate`, stale rock
-- [ ] kit: tunnelGeom (bore, cut, shell, lining, sealing, gravity, fluids, portals, lamps)
-- [ ] foundation merged (`origin/t3/foundation`)
-- [ ] tunnel row, compile hooks, posterns, lenient via, emission, checks, fixtures
-- [ ] gate driver and items 2-6, 9 (tunnels), §9 tunnel rows, look
+- [x] Java: `PlanRequest.load`, the two-plan check, `generate`, the stale rock (PlanChecks, RegionsImpl.volumesFor's policy,
+      SliceP0Dev `load`/`volumePass`), `PlanChecksT3Test`
+- [x] kit: `tunnelGeom.mjs` (profile, survey-first cover, corridor box, bore/cut, shell lining, cave sealing, falling-block
+      lining (a fixed point over every written or carved cell's sand and gravel neighbours), the 2-cell fluid buffer, portals with
+      arch stairs, parapets as wall blocks (cut sides and over a portal that opens on a cut), lamps, guard runs, `r.tunnel`)
+- [x] foundation merged (rounds 1 and 2); the three stub files replaced by T3b's; `r.tunnel` defined in program.mjs
+- [x] the tunnel row (with a fast grid check in the search; the emission re-checks with tunnelGeom), compile hooks (corridors,
+      caps, `tunnel.under`, `incomplete VOLUME`), posterns (checkWalls: a postern's floor is no cut, its bore an opening in
+      closure; `_unsafe.ignorePostern`), `M3:tunnel`/`M4:tunnel`/M6 (checkTunnels), the artifact's `guards` (finish.mjs)
+- [x] fixtures: v37, v38b (auto tunnel), v40 (postern), e17 (tunnel.under), fixtures/plan/tunnel tn01-tn15; plan-t3b and
+      tunnel-t3b tests; P0's harness runs a fixture's `terrain` and `volume`; t3-pending-b.json retired
+- [x] crossings_demo's tunnel half (`crossingsTunnels.mjs`: the flat ridge with a sand band, a 3x3 and a 1-wide bore; the hill
+      variant's line)
+- [x] gate driver `tools/gate6ct3b.mjs` and its gate-chains rows (t3b-unit, t3b-ingame, t3b-natural, t3b-look; impact rule)
+- [ ] in game: t3b-ingame (run 1 at 20261017-200006-change), pin the hill, t3b-natural, look and gallery
 - [ ] slice tier, gate-verifier, as-built, push
 
-## Asks of the foundation (T3a)
+## Asks of the foundation (T3a) and notes for the merge
 
-(none yet)
+- `kit/lib/region/plan.mjs` meta: T3b added `bridges` and `tunnels` before round 2 did the same (identical line, merged clean).
+- `kit/test/plan-p0.test.mjs`: round 2's `svOf` kept; T3b's `run` adds the two-plan flow for a fixture with `volume`
+  (`plan-helpers.mjs` `checkPlanVolumes`, `fixtureVolume`).
+- `kit/lib/region/checkWalls.mjs` (K1a's file) gained the postern reading (additive; no other behaviour changes).
+- `kit/lib/plan/finish.mjs` gained the artifact's `guards` (only in a plan with a tunnel: every other artifact byte-identical).
+- v38 is T3a's (the auto edge that bridges); T3b's auto tunnel is `v38b_auto_tunnel`.
+- crossings_demo's goldens: both halves change the program; the golden is cut once at integration.
+
+## Deviations to record in "T3b as built"
+
+- §9: `underwater_domes/glass_tunnels` answers `blocked` as recorded (its endpoint zone `colony` wants ocean water: refused
+  NO_FEATURE on the asks claim); with the zone placed it answers `unsupported {tunnel.under}`. Gap table: connector.tunnel 4 ->
+  tunnel.under 3, blocked 1.
+- NO_COVER is answered only when some line has surface cover but the volume's rock does not give 2 site-solid (sand, caves); every
+  line without surface cover is `tunnel.under` (S-T3-4), so the "hump with 1 cover" refusal reads as tn01 (sand over the roof).
+- The refusal fixtures pin the line with `approach: 0` (else the route moves the bore away from the hazard).
