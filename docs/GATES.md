@@ -164,7 +164,33 @@ from 45 steps to 4.
 
 ### Measured
 
-Pending: the first slice run with these changes (K1a's selection, `--range 1c750076...819d1f79`) is in `artifacts/gate-runs-gatespeed/`.
+Before and after, both measured on a shared, busy box:
+- **Before:** K1a, `artifacts/gate-runs-K1a/20261014-084850-slice`, old runner, 50 steps, run alongside K1b.
+- **After:** `artifacts/gate-runs-gatespeed/20261017-215441-slice`, this branch on main, `--range 1c750076...819d1f79`, which is K1a's
+  50 steps plus k1b's three. It ran alongside the two T3 slice runs (old runner), on 3 fresh run worktrees.
+
+| | K1a (before) | after |
+|---|---|---|
+| wall | 193 min | **81.5 min** |
+| sum of step times | 325 min | 239 min |
+| per-shard busy | 71 / 191 / 64 min | 80 / 79 / 80 min |
+| load average at step starts/ends, median / max | 11.8 / 69 | 9.2 / 24.9 |
+| the 10 unit steps K1a shares, summed | 67 min | 25 min (k1a-unit 11.2 -> 3.6, d-unit 11.5 -> 3.5, v-unit 7.4 -> 1.6) |
+| 6cv-scenario-s7 | TIMEOUT 60.3 min | PASS 7.6 min, timeout now 25 min |
+
+- **Verdicts.** Every step K1a passed passed again. pt-nomod failed the same way:
+  `no mod/build/headless-launch*.json`, because it reads this checkout's `mod/build`. That is pre-existing.
+- **K1a non-passes that passed this time:**
+  - b-unit and pt-unit (the gradle overlap; the lock never had to wait in this run);
+  - 6cv-scenario-s7 (no mob was in a lot this time);
+  - 4d-all's "group undo ... back exactly", the known intermittent failure.
+- **Benches.** The 8 bench steps ran contended. They passed their functional checks, and their timings matched isolated
+  history: the scenario steps took 7.6-9.1 min against p50s of 7.5-8.2. One timing bar was recorded rather than judged:
+  pt-ingame's classifier CPU at 1.02 ms against its 1 ms budget.
+- **Kit reuse.** The suite's report served 8 whole-suite calls and 13 goldens or P0 calls.
+- **Scheduler alone, replayed on recorded durations with no contention model:**
+  - K1a 196 -> 118 min with s7's timeout as recorded, 144 -> 93 min with s7 at its p50;
+  - K1b 160 -> 89 min.
 
 ## Headless gates
 
