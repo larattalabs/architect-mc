@@ -110,6 +110,11 @@ export async function fixtureVolume(box, spec, survey, claim) {
  * Returns the second check (or the first when nothing was asked), with `volumes` and `first` (the first plan's check).
  */
 export async function checkPlanVolumes(plan, { volume = {}, ...o } = {}) {
+  // (the caller's own volumes, given before any plan: `volume.given` [[x0, y0, z0, x1, y1, z1]], built from the same spec)
+  if (Array.isArray(volume.given) && volume.given.length) {
+    o = { ...o, volumes: [...(o.volumes ?? [])] };
+    for (const b of volume.given) o.volumes.push(await fixtureVolume({ minX: b[0], minY: b[1], minZ: b[2], maxX: b[3], maxY: b[4], maxZ: b[5] }, volume, o.survey, o.claim));
+  }
   const first = await checkPlanLocal(plan, o);
   const need = first.res.needVolumes ?? [];
   const hasTunnel = (plan.connectors ?? []).some((p) => p?.kind === 'tunnel');

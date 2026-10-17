@@ -97,7 +97,7 @@ test('v37: fits; geometry.tunnels with its crossing; M3:tunnel, M4:tunnel, M5, M
 test('refusals (fixtures/plan/tunnel): each its code and evidence; the pocket at 3 fits; R18, R19 and lenient params', async () => {
   for (const f of read('tunnel')) {
     const r = await run(f);
-    const a = part(r, 'bore');
+    const a = part(r, f.part ?? 'bore');
     const e = f.expect;
     assert.equal(a.class, e.class, `${f.name}: ${a.class} ${JSON.stringify(a.reasons)}`);
     if (e.code) {
@@ -111,6 +111,7 @@ test('refusals (fixtures/plan/tunnel): each its code and evidence; the pocket at
     if (e.cap) assert.equal(r.asked.length, 0, `${f.name}: a corridor past the cap is never asked`);
     if (e.block) { assert.equal(a.block, e.block, f.name); assert.equal(a.reasons[0].block, e.block); assert.equal(a.reasons[0].until, '7b'); }
     if (e.note) assert.ok((a.notes ?? []).some((n) => n.includes(e.note)), `${f.name}: ${JSON.stringify(a.notes)}`);
+    if (e.walls) assert.ok(a.reasons[0].evidence.walls?.some((q) => q.sealed), `${f.name}: evidence.walls names the sealed wall`);
     for (const n of e.notes ?? []) assert.ok((a.notes ?? []).some((x) => x.startsWith(n)), `${f.name}: ${n} in ${JSON.stringify(a.notes)}`);
   }
   // the protected classes are named (S-K1-3's evidence): an area, a build
@@ -175,4 +176,40 @@ test('determinism: three checks of v37 and of each refusal give identical answer
     assert.equal(j[2], j[0], `${f.name}: answers`);
     assert.ok(rs.every((r) => r.artifactSha === rs[0].artifactSha), `${f.name}: artifact sha`);
   }
+});
+
+test('v40, a postern: the bore passes under the wall with rock between, counts as an opening (closure 0 leaks with it blocked, every node across with it open), no route cut; ignored by closure it leaks (M2:wall)', async () => {
+  const fx = read('valid').find((x) => x.name.startsWith('v40'));
+  const r = await run(fx);
+  assert.equal(r.check.overall, 'READY', JSON.stringify(r.check.parts));
+  const t = part(r, 'postern').geometry.tunnels[0];
+  assert.equal(t.crossing.lands, 'postern_town_wall');
+  assert.deepEqual(t.posterns.map((q) => q.wall), ['town_wall']);
+  const rep = checkOf(r);
+  const w = rep.metrics.walls.town_wall;
+  assert.ok(w.posternCells > 0, JSON.stringify(w));
+  assert.equal(w.cut, 0);
+  for (const mv of ['player', 'villager']) {
+    assert.equal(w.closure[mv].leaks, 0, `${mv}: closure with the postern blocked`);
+    assert.equal(w.closure[mv].across, w.closure[mv].nodes, `${mv}: across with it open`);
+  }
+  assert.ok(!rep.findings.some((f) => /^M(1|2|3|4|6)(:|$)/.test(f.rule)), rep.findings.map((f) => `${f.rule} ${f.message}`).join('; '));
+  // the broken variant: the postern ignored by closure leaks
+  const bad = await run({ ...fx, plan: { ...fx.plan, connectors: fx.plan.connectors.map((c) => (c.kind === 'tunnel' ? { ...c, ext: { 'architect_mc:unsafe': { ignorePostern: true } } } : c)) } });
+  const leaks = checkOf(bad).findings.filter((f) => f.rule === 'M2:wall');
+  assert.ok(leaks.length && /gets from inside to outside/.test(leaks[0].message), leaks.map((f) => f.message).join('; '));
+});
+
+test('v38b, auto: the edge over the tall ridge tunnels (in the caller\'s volume, asking for none of its own), the flat one walks', async () => {
+  const fx = read('valid').find((x) => x.name.startsWith('v38b'));
+  const r = await run(fx);
+  assert.equal(r.check.overall, 'READY');
+  const pass = part(r, 'pass'), stroll = part(r, 'stroll');
+  assert.equal(pass.geometry.tunnels?.length, 1, JSON.stringify(pass.geometry));
+  assert.equal(pass.geometry.tunnels[0].crossing.type, 'tunnel');
+  assert.equal(stroll.geometry.tunnels, undefined);
+  const rep = checkOf(r);
+  assert.ok(!rep.findings.some((f) => /^M(1|3|4|5|6)(:|$)/.test(f.rule)), rep.findings.map((f) => `${f.rule} ${f.message}`).join('; '));
+  // no tunnel part: the plan asks for nothing beyond the caller's volume
+  assert.ok(r.asked.every((b) => b.minX === 1060 && b.maxX === 1190), JSON.stringify(r.asked));
 });

@@ -1,0 +1,202 @@
+{
+  "about": "(6c T3b, S-T3-5) v30's walled village (a flat_village zone, a wall round it, ring [4, 8], height 6) east of a ridge whose east face is a cliff under the wall's west side; a tunnel from the hill's west foot under the wall (a postern: 2+ site-solid between its roof and the wall's footing) into the yard between the wall and the town. It counts as a gate: closure holds with it blocked, every node reaches across with it open",
+  "on": "flat",
+  "terrain": {
+    "bands": [
+      {
+        "x0": 1108,
+        "z0": 2000,
+        "x1": 1157,
+        "z1": 2159,
+        "y": 65
+      },
+      {
+        "x0": 1109,
+        "z0": 2000,
+        "x1": 1157,
+        "z1": 2159,
+        "y": 66
+      },
+      {
+        "x0": 1110,
+        "z0": 2000,
+        "x1": 1157,
+        "z1": 2159,
+        "y": 67
+      },
+      {
+        "x0": 1111,
+        "z0": 2000,
+        "x1": 1157,
+        "z1": 2159,
+        "y": 68
+      },
+      {
+        "x0": 1112,
+        "z0": 2000,
+        "x1": 1157,
+        "z1": 2159,
+        "y": 69
+      },
+      {
+        "x0": 1113,
+        "z0": 2000,
+        "x1": 1157,
+        "z1": 2159,
+        "y": 70
+      },
+      {
+        "x0": 1114,
+        "z0": 2000,
+        "x1": 1157,
+        "z1": 2159,
+        "y": 71
+      },
+      {
+        "x0": 1115,
+        "z0": 2000,
+        "x1": 1157,
+        "z1": 2159,
+        "y": 72
+      },
+      {
+        "x0": 1116,
+        "z0": 2000,
+        "x1": 1157,
+        "z1": 2159,
+        "y": 73
+      },
+      {
+        "x0": 1117,
+        "z0": 2000,
+        "x1": 1157,
+        "z1": 2159,
+        "y": 74
+      },
+      {
+        "x0": 1118,
+        "z0": 2000,
+        "x1": 1157,
+        "z1": 2159,
+        "y": 75
+      },
+      {
+        "x0": 1119,
+        "z0": 2000,
+        "x1": 1157,
+        "z1": 2159,
+        "y": 76
+      },
+      {
+        "x0": 1120,
+        "z0": 2000,
+        "x1": 1157,
+        "z1": 2159,
+        "y": 77
+      },
+      {
+        "x0": 1121,
+        "z0": 2000,
+        "x1": 1157,
+        "z1": 2159,
+        "y": 78
+      }
+    ]
+  },
+  "anchors": {
+    "town_c": [
+      1180,
+      65,
+      2080
+    ],
+    "hill_w": [
+      1100,
+      65,
+      2070
+    ],
+    "yard": [
+      1159,
+      65,
+      2070
+    ]
+  },
+  "volume": {},
+  "covers": [
+    "connector.tunnel",
+    "tunnel.through",
+    "connector.wall"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "where": {
+          "near": {
+            "anchor": "town_c",
+            "within": 0
+          }
+        },
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "h1",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h2",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "town_wall",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            },
+            "ring": [
+              4,
+              8
+            ]
+          }
+        },
+        "height": 6
+      },
+      {
+        "id": "postern",
+        "kind": "tunnel",
+        "from": {
+          "anchor": "hill_w"
+        },
+        "to": {
+          "anchor": "yard"
+        }
+      }
+    ]
+  }
+}
