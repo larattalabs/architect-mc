@@ -449,6 +449,10 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
 - **Catalogue `sinceApi` placeholders.** 75 plan-catalogue entries still say `sinceApi: "P0"` and the D1/D2 flips did not
   record a real version. `state` is what Steward compares across releases, so this isn't blocking, but stamp real API
   versions (P0 = 1.23.0; D1 = 1.27.0; D2 = 1.29.0; PT = 1.24.0) and make the merge-time renumber stamp new ones.
+  **DONE (chore/housekeeping-1):** all 75 stamped from git history (unchanged since P0 = 1.23.0; reserved-to-supported flips D1 =
+  1.27.0, D2 = 1.29.0, K1 = 1.32.0; C37's schemaVersion-2 entries 1.30.0; PT's two stay 1.24.0), schema pattern is semver only,
+  `tools/catalogue-since-check.mjs` (run by `kit/test/catalogue-since.test.mjs`) fails on a non-semver or a future `sinceApi`,
+  golden regenerated, `catalogueVersion` stays 5 (no entry's state or schemaVersion changed; metadata only).
 
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
