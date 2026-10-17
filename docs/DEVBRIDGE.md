@@ -348,6 +348,11 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-17 (6c slice T3b):** `dev.region.checkPlan` takes `load: "loaded" | "generate"` (PlanRequest.load: "generate" is
+  `LoadPolicy.LOAD_BOUNDED` over the claim's chunks plus the survey margin, so the survey and the tunnels' volume pass load and
+  generate their chunks) and answers `volumePass` (the check's two-plan flow: `{asked, cells, sampleMs, firstPlanMs, load, read,
+  secondPlanMs | why}`; null for a plan that planned once). No hook added.
+
 - **2026-10-14 (7a slice K1a):** `dev.nav.villager` takes `cells: true` and then returns the path's nodes as `cells: [[x,y,z]]`
   (K1a's item 2: a villager's path meets a wall only at its gate cells). No hook added.
 - **2026-10-13 (6c slice D1):** `dev.region.plan` takes `beside` (a standing region's id: RegionPlanRequest.beside); the region
