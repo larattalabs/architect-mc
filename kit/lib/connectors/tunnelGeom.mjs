@@ -462,7 +462,9 @@ export function tunnel(r, a, b, opts = {}) {
     bore: g.bore.slice(1), cover: g.cover.slice(1), floor: g.floor.filter((c) => c[3] !== 'bed').map((c) => [c[0], c[1], c[2], c[3]]),
     voids: g.voids.map((c) => [c[0], c[1], c[2]]), portals: g.portals.map((q) => ({ i: q.i, out: q.out, cells: q.cells.map((c) => [c[0], c[1], c[2], c[3]]) })),
     lamps: g.lamps.map((c) => [c[0], c[1], c[2], c[3]]), lined: g.lined.length, carved: g.carved, guard: g.guard, posterns: g.posterns,
-    lining: liningB, portal: portalB, floorBlock: floorB, light: lights.hanging, bom, cells: { carved: g.carved, lined: g.lined.length, written: solid.length / 5 + walk.length / 5 + g.carved },
+    lining: liningB, portal: portalB, floorBlock: floorB, light: lights.hanging, bom,
+    // the floor blocks (feet one over: check.mjs's M5 over `cells`), and the journal's counts
+    cells: g.floor.filter((c) => c[3] !== 'bed').map((c) => [c[0], c[1], c[2]]), counts: { carved: g.carved, lined: g.lined.length, written: solid.length / 5 + walk.length / 5 + g.carved },
     ...(opts.volume ? { volume: { ...opts.volume } } : {}),
     ...(opts.movers ? { movers: [...opts.movers] } : {}),
     ...(opts._unsafe ? { _unsafe: { ...opts._unsafe } } : {}),

@@ -152,6 +152,9 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
       region: { program: ir.id, irSha: res.irSha, irFormat: ir.format, requires: ir.requires ?? [], blobs: Object.fromEntries(Object.entries(ir.blobs ?? {}).filter(([, b]) => b.sha).map(([n, b]) => [n, b.sha])), stages: ir.stages, tiles: ev.tiles },
       parts: answers.map((a) => ({ part: a.part, class: a.class, block: a.block, ...(a.geometry ? { geometry: a.geometry } : {}), ...(a.cost ? { cost: a.cost } : {}), ...(a.provisional ? { provisional: true } : {}), ...(a.ext ? { ext: a.ext } : {}) })),
       lots, dropped: answers.filter((a) => !OK.has(a.class)).map((a) => ({ part: a.part, class: a.class, block: a.block })), overall,
+      // (6c T3b, §6) the tunnels' guard cells (void, shell, 2-cell buffer) and the frozen volume each was checked against:
+      // realiseApproved compares their classes with the world now (ARTIFACT_STALE on a change). Only in a plan with a tunnel
+      ...(pc.links?.guards?.length ? { guards: pc.links.guards.filter((g) => answers.some((a) => a.part === g.part && OK.has(a.class))) } : {}),
     };
     artifactSha = sha256Hex(canonicalJson(artifact));
   }
