@@ -682,7 +682,7 @@ public final class RegionsImpl implements Regions {
 		});
 	}
 
-	private static void addNote(JsonObject planned, String note) {
+	static void addNote(JsonObject planned, String note) {
 		JsonArray n = planned.has("notes") && planned.get("notes").isJsonArray() ? planned.getAsJsonArray("notes") : new JsonArray();
 		n.add(note);
 		planned.add("notes", n);
@@ -694,6 +694,16 @@ public final class RegionsImpl implements Regions {
 	 * {@code [{sha, blobId, box}]} for the second {@code region.plan}. Over the per-region cell limit fails REGION_LIMIT.
 	 */
 	private static CompletableFuture<@Nullable JsonArray> volumesFor(ServerLevel level, JsonArray need) {
+		return volumesFor(level, need, null);
+	}
+
+	/**
+	 * (6c T3) {@code load}: null keeps 6b's rule (every chunk of every box generated, else null). A policy that loads (a plan check's
+	 * {@code load: "generate"}) skips that test and samples each box under {@link LoadPolicy#LOAD_BOUNDED} (generating the chunks
+	 * never generated) or, for a policy that never generates, {@link LoadPolicy#GENERATED_ONLY} (a chunk never generated is
+	 * MISSING in the volume), bounded by the boxes' own chunks.
+	 */
+	static CompletableFuture<@Nullable JsonArray> volumesFor(ServerLevel level, JsonArray need, @Nullable LoadPolicy load) {
 		MinecraftServer s = level.getServer();
 		return onServer(s, () -> {
 			long cells = 0;
@@ -724,14 +734,16 @@ public final class RegionsImpl implements Regions {
 				}
 			}
 			int bound = chunks + 8;
+			boolean loads = load != null && load.loads();
+			LoadPolicy policy = loads && load.generate() ? LoadPolicy.LOAD_BOUNDED(bound) : LoadPolicy.GENERATED_ONLY(bound);
 			return CompletableFuture.allOf(qs.toArray(new CompletableFuture[0])).thenCompose(v -> {
-				if (qs.stream().anyMatch(q -> !q.join())) {
+				if (!loads && qs.stream().anyMatch(q -> !q.join())) {
 					return CompletableFuture.<@Nullable JsonArray>completedFuture(null);
 				}
 				CompletableFuture<JsonArray> chain = CompletableFuture.completedFuture(new JsonArray());
 				for (BoundingBox bb : boxes) {
 					chain = chain.thenCompose(arr -> dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, bb,
-						dev.larattalabs.architect.api.LoadPolicy.GENERATED_ONLY(bound), null, withBlocks.contains(bb)).thenCompose(
+						policy, null, withBlocks.contains(bb)).thenCompose(
 							dev.larattalabs.architect.apiimpl.SurveyImpl::upload).thenApply(vol -> {
 								JsonObject o = new JsonObject();
 								o.addProperty("sha", vol.sha());

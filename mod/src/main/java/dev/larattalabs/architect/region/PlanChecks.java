@@ -227,6 +227,13 @@ public final class PlanChecks {
 			o.addProperty("bibleVersion", r.bibleVersion());
 		}
 		o.add("budget", budgetJson(b));
+		// (6c T3) the load option only when it is not the default, so the keys of checks without it keep their hash
+		if (r.load() != null && r.load().loads()) {
+			JsonObject l = new JsonObject();
+			l.addProperty("maxChunks", r.load().maxChunks());
+			l.addProperty("generate", r.load().generate());
+			o.add("load", l);
+		}
 		return o;
 	}
 
@@ -305,10 +312,14 @@ public final class PlanChecks {
 		extra.add("biomes", BiomeGrid.sample(level, c.minX(), c.minZ(), c.maxX(), c.maxZ()));
 		CompletableFuture<PlanCheck> out = new CompletableFuture<>();
 		RegionsImpl.progress(s, null, "planning");
-		RegionSurvey.sample(level, c.minX(), c.minZ(), c.maxX(), c.maxZ(), 1, LoadPolicy.LOADED_ONLY).thenCompose(cols -> {
+		// (6c T3, Steward's S-T3-6) load: "generate" lets the survey and the tunnels' volume pass load (and generate) their chunks
+		LoadPolicy load = r.load() != null && r.load().loads() ? r.load() : null;
+		long t0 = System.nanoTime();
+		RegionSurvey.sample(level, c.minX(), c.minZ(), c.maxX(), c.maxZ(), 1, load != null ? load : LoadPolicy.LOADED_ONLY).thenCompose(cols -> {
 			byte[] survey = cols.encode();
 			String surveySha = Packed.sha256(survey);
-			return BlobPut.put(link, survey, "survey").thenCompose(blobId -> RegionsImpl.planOnce(link, rp, blobId, surveySha, survey, null, false, extra));
+			return BlobPut.put(link, survey, "survey").thenCompose(blobId -> RegionsImpl.planOnce(link, rp, blobId, surveySha, survey, null, false, extra)
+				.thenCompose(o -> secondPlan(link, rp, r, budget, extra, blobId, surveySha, survey, load, t0, o)));
 		}).thenCompose(o -> RegionsImpl.onServer(s, () -> {
 			if (out.isCancelled()) {
 				return CompletableFuture.<PlanCheck>failedFuture(new CancellationException("cancelled"));
@@ -342,6 +353,91 @@ public final class PlanChecks {
 			}
 		});
 		return out;
+	}
+
+	/** (6c T3) The last check's volume pass (DevBridge {@code dev.region.checkPlan}'s {@code volumePass}; gate item 14, recorded). */
+	public static volatile @Nullable JsonObject lastVolumePass;
+
+	/** Whether a plan has a part of connector kind {@code tunnel} (only those ask for volumes in a check, CONTRACT T3 §6). */
+	static boolean hasTunnel(JsonObject plan) {
+		if (plan.get("connectors") instanceof JsonArray a) {
+			for (JsonElement e : a) {
+				if (e instanceof JsonObject p && p.get("kind") instanceof JsonElement k && k.isJsonPrimitive() && "tunnel".equals(k.getAsString())) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * (6c T3 §6) The check's two-plan flow: a plan with a tunnel part whose first plan asked for volumes (the tunnels' corridors) has
+	 * them sampled ({@link RegionsImpl#volumesFor}, under the check's {@code load}) and is planned again with them; the answers come
+	 * from the second plan. The budget covers both: the second plan's sandbox gets the time left (its params, so the IR and the
+	 * artifact, are unchanged). Volumes not available (chunks not generated or not loaded under "loaded", or over the region's
+	 * volume limit): the first plan stands, its tunnels {@code incomplete VOLUME}, with a note. A plan without a tunnel part plans
+	 * once, as before.
+	 */
+	private static CompletableFuture<Object[]> secondPlan(TileStream.Link link, RegionPlanRequest rp, PlanRequest r, PlanBudget budget, JsonObject extra,
+		String blobId, String surveySha, byte[] survey, @Nullable LoadPolicy load, long t0, Object[] first) {
+		JsonObject planned = (JsonObject) first[0];
+		JsonArray need = planned.get("needVolumes") instanceof JsonArray a ? a : new JsonArray();
+		if (need.isEmpty() || !hasTunnel(r.plan())) {
+			lastVolumePass = null;
+			return CompletableFuture.completedFuture(first);
+		}
+		long cells = 0;
+		for (JsonElement e : need) {
+			JsonObject b = e.getAsJsonObject();
+			cells += (long) (b.get("maxX").getAsInt() - b.get("minX").getAsInt() + 1) * (b.get("maxY").getAsInt() - b.get("minY").getAsInt() + 1) * (b.get("maxZ")
+				.getAsInt() - b.get("minZ").getAsInt() + 1);
+		}
+		long nCells = cells;
+		long tv = System.nanoTime();
+		return RegionsImpl.volumesFor(r.level(), need, load).handle((vols, e) -> {
+			double volMs = (System.nanoTime() - tv) / 1e6;
+			JsonObject vp = new JsonObject();
+			vp.addProperty("asked", need.size());
+			vp.addProperty("cells", nCells);
+			vp.addProperty("sampleMs", volMs);
+			vp.addProperty("firstPlanMs", (tv - t0) / 1e6);
+			vp.addProperty("load", load == null ? "loaded" : "generate");
+			if (e != null || vols == null) {
+				String why = e != null ? String.valueOf(unwrap(e).getMessage()) : "chunks not " + (load == null ? "loaded or not generated" : "generated");
+				vp.addProperty("read", 0);
+				vp.addProperty("why", why);
+				lastVolumePass = vp;
+				checkNote(planned, "the tunnels asked for " + need.size() + " volume" + (need.size() == 1 ? "" : "s") + " (" + nCells + " cells) that could not be read ("
+					+ why + "): prepare (or check with load: \"generate\"), then check again");
+				Architect.LOGGER.info("Plan check: volume pass not read ({}), {} boxes, {} cells", why, need.size(), nCells);
+				return CompletableFuture.completedFuture(first);
+			}
+			long left = Math.max(1_000L, budget.maxMs() - (System.nanoTime() - t0) / 1_000_000L);
+			JsonObject extra2 = extra.deepCopy();
+			extra2.addProperty("timeoutMs", Math.min(600_000L, left + GRACE_MS));
+			long t2 = System.nanoTime();
+			return RegionsImpl.planOnce(link, rp, blobId, surveySha, survey, vols, false, extra2).thenApply(o2 -> {
+				JsonObject p2 = (JsonObject) o2[0];
+				p2.add("volumes", vols);
+				checkNote(p2, "read " + vols.size() + " frozen volume" + (vols.size() == 1 ? "" : "s") + " (two-plan flow)");
+				vp.addProperty("read", vols.size());
+				vp.addProperty("secondPlanMs", (System.nanoTime() - t2) / 1e6);
+				lastVolumePass = vp;
+				Architect.LOGGER.info("Plan check: read {} volumes ({} cells) in {} ms, second plan {} ms", vols.size(), nCells, Math.round(volMs), Math.round(
+					(System.nanoTime() - t2) / 1e6));
+				return o2;
+			});
+		}).thenCompose(f -> f);
+	}
+
+	/** A note on a check's answer ({@code planCheck.notes}, which the PlanCheck carries; not in the artifact). */
+	private static void checkNote(JsonObject planned, String note) {
+		if (planned.get("planCheck") instanceof JsonObject k) {
+			JsonArray n = k.get("notes") instanceof JsonArray a ? a : new JsonArray();
+			n.add(note);
+			k.add("notes", n);
+		}
+		RegionsImpl.addNote(planned, note);
 	}
 
 	/** A check the sandbox stopped (time or heap): every part incomplete, no artifact, nothing kept. */
@@ -798,13 +894,103 @@ public final class PlanChecks {
 		if (plan == null) {
 			return refused(Reason.ARTIFACT_UNAPPROVED, "artifact " + sha.substring(0, 12) + ": its plan survey is gone");
 		}
-		return RegionSurvey.sample(level, x0, z0, x1, z1, res, LoadPolicy.LOADED_ONLY).thenCompose(now -> RegionsImpl.onServer(s, () -> {
+		// (6c T3 §6) the tunnels' rock first (a mine near the surface would also move a column: the tunnel names it), then the land
+		return RegionsImpl.onServer(s, () -> tunnelRock(level, body)).thenCompose(f -> f).thenCompose(rock -> {
+			if (rock != null) {
+				throw RegionsImpl.refusal(Reason.ARTIFACT_STALE, rock);
+			}
+			return RegionSurvey.sample(level, x0, z0, x1, z1, res, LoadPolicy.LOADED_ONLY);
+		}).thenCompose(now -> RegionsImpl.onServer(s, () -> {
 			String drift = terrainDiff(plan, now, body.getAsJsonObject("region").getAsJsonObject("tiles"), x0, z0, x1, z1);
 			if (drift != null) {
 				throw RegionsImpl.refusal(Reason.ARTIFACT_STALE, "the land under the plan's tiles changed since the check: " + drift);
 			}
 			return RegionsImpl.INSTANCE.realise(rr);
 		})).thenCompose(f -> f);
+	}
+
+	/** At most this many changed cells are named in a tunnel's ARTIFACT_STALE. */
+	static final int ROCK_CELLS_NAMED = 16;
+
+	/**
+	 * (6c T3 §6) The approved tunnels' rock against the world now: the artifact's {@code guards} (per tunnel part: the frozen volume it
+	 * was checked against, {@code {sha, box}}, and its void, shell and 2-cell fluid buffer as per-column y runs {@code [x, z, y0, y1,
+	 * ...]}) are compared cell by cell: the frozen volume ({@code <world>/architect/volumes/<sha>.bin}) against the same box sampled
+	 * again (GENERATED_ONLY). PLANT and AIR count as one class (grass and flowers never stale an artifact); a cell MISSING now is not
+	 * judged. Null when every guard holds (or the artifact has none), else the ARTIFACT_STALE message naming the tunnel part and up to
+	 * {@link #ROCK_CELLS_NAMED} cells with the class before and now. Server thread.
+	 */
+	static CompletableFuture<@Nullable String> tunnelRock(ServerLevel level, JsonObject body) {
+		if (!(body.get("guards") instanceof JsonArray guards) || guards.isEmpty()) {
+			return CompletableFuture.completedFuture(null);
+		}
+		Path vols = level.getServer().getWorldPath(LevelResource.ROOT).resolve(dev.larattalabs.architect.region.volume.VolumeSurvey.STANDALONE_DIR);
+		CompletableFuture<@Nullable String> chain = CompletableFuture.completedFuture(null);
+		for (JsonElement ge : guards) {
+			JsonObject g = ge.getAsJsonObject();
+			chain = chain.thenCompose(prev -> prev != null ? CompletableFuture.completedFuture(prev) : RegionsImpl.onServer(level.getServer(), () -> guardDiff(level,
+				vols, g)).thenCompose(f -> f));
+		}
+		return chain;
+	}
+
+	private static CompletableFuture<@Nullable String> guardDiff(ServerLevel level, Path vols, JsonObject g) {
+		String part = RegionsImpl.str(g, "part", "?");
+		JsonObject v = g.getAsJsonObject("volume");
+		String sha = RegionsImpl.str(v, "sha");
+		JsonArray bx = v.getAsJsonArray("box");
+		BoundingBox bb = new BoundingBox(bx.get(0).getAsInt(), bx.get(1).getAsInt(), bx.get(2).getAsInt(), bx.get(3).getAsInt(), bx.get(4).getAsInt(), bx.get(5)
+			.getAsInt());
+		dev.larattalabs.architect.region.volume.Arvx.Decoded before;
+		try {
+			before = dev.larattalabs.architect.region.volume.Arvx.decode(dev.larattalabs.architect.region.volume.Arvx.gunzip(Files.readAllBytes(vols.resolve(sha
+				+ ".bin"))));
+		} catch (IOException | RuntimeException e) {
+			return CompletableFuture.completedFuture("tunnel " + part + ": the frozen volume " + sha.substring(0, Math.min(12, sha.length()))
+				+ " it was checked against is gone (" + e.getMessage() + "): check again");
+		}
+		int chunks = ((bb.maxX() >> 4) - (bb.minX() >> 4) + 1) * ((bb.maxZ() >> 4) - (bb.minZ() >> 4) + 1);
+		return dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, bb, LoadPolicy.GENERATED_ONLY(chunks + 8), null).thenApply(res -> {
+			dev.larattalabs.architect.region.volume.Arvx.Decoded now;
+			try {
+				now = dev.larattalabs.architect.region.volume.Arvx.decode(dev.larattalabs.architect.region.volume.Arvx.gunzip(res.gz()));
+			} catch (IOException e) {
+				throw new java.io.UncheckedIOException(e);
+			}
+			return rockDiff(part, before, now, g.getAsJsonArray("runs"));
+		});
+	}
+
+	/** The guard cells' classes before and now (PLANT as AIR; MISSING now not judged): null when equal, else the message. */
+	static @Nullable String rockDiff(String part, dev.larattalabs.architect.region.volume.Arvx.Decoded before, dev.larattalabs.architect.region.volume.Arvx.Decoded now,
+		JsonArray runs) {
+		int[] b = before.box();
+		var classes = dev.larattalabs.architect.api.VoxelClass.values();
+		int air = dev.larattalabs.architect.api.VoxelClass.AIR.ordinal(), plant = dev.larattalabs.architect.api.VoxelClass.PLANT.ordinal();
+		int missing = dev.larattalabs.architect.api.VoxelClass.MISSING.ordinal();
+		int n = 0;
+		List<String> named = new ArrayList<>();
+		for (int i = 0; i + 3 < runs.size(); i += 4) {
+			int x = runs.get(i).getAsInt(), z = runs.get(i + 1).getAsInt(), y0 = runs.get(i + 2).getAsInt(), y1 = runs.get(i + 3).getAsInt();
+			for (int y = y0; y <= y1; y++) {
+				if (x < b[0] || x > b[3] || y < b[1] || y > b[4] || z < b[2] || z > b[5]) {
+					continue;
+				}
+				int was = before.classAt(x, y, z), is = now.classAt(x, y, z);
+				if (is == missing || was == missing) {
+					continue;
+				}
+				int w = was == plant ? air : was, k = is == plant ? air : is;
+				if (w != k) {
+					n++;
+					if (named.size() < ROCK_CELLS_NAMED) {
+						named.add("(" + x + ", " + y + ", " + z + ") " + classes[was] + "->" + classes[is]);
+					}
+				}
+			}
+		}
+		return n == 0 ? null : "tunnel " + part + ": the rock it was checked against changed since the check, " + n + " cell" + (n == 1 ? "" : "s") + ": " + String
+			.join("; ", named);
 	}
 
 	/**

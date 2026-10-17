@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import dev.larattalabs.architect.api.ApprovedRealise;
 import dev.larattalabs.architect.api.ArchitectApi;
+import dev.larattalabs.architect.api.LoadPolicy;
 import dev.larattalabs.architect.api.Mode;
 import dev.larattalabs.architect.api.PlanArtifact;
 import dev.larattalabs.architect.api.PlanBudget;
@@ -111,8 +112,9 @@ public final class SliceP0Dev {
 
 	public static void init() {
 		DevBridge.register("dev.region.checkPlan", 900_000, "{plan, claim: [x0,z0,x1,z1], anchors?: {name: [x,y,z]}, owner?, bible?, bibleVersion?, budget?: {maxNodes, maxEdges, "
-			+ "maxCells, maxMs, maxHeapMb}, opKey?, cancelAfterMs?, withCatalogue?} (C38: withCatalogue adds check.catalogue, the answer's whole catalogue) - (6c P0) Regions.checkPlan -> {check: {checkId, overall, parts, cost, preview, artifactSha, ...}, ms} "
-			+ "or {refused, reason}; cancelAfterMs cancels the future that long after the call (the answer is then CANCELLED)", (req, mc) -> {
+			+ "maxCells, maxMs, maxHeapMb}, opKey?, cancelAfterMs?, withCatalogue?, load?: \"loaded\" | \"generate\"} (C38: withCatalogue adds check.catalogue, the answer's whole catalogue; 6c T3: load \"generate\" "
+			+ "lets the survey and the tunnels' volume pass load and generate their chunks, LoadPolicy.LOAD_BOUNDED) - (6c P0) Regions.checkPlan -> {check: {checkId, overall, parts, cost, preview, artifactSha, ...}, ms, "
+			+ "volumePass (6c T3: the two-plan flow's asked boxes, cells, sample and plan times; null without one)} or {refused, reason}; cancelAfterMs cancels the future that long after the call (the answer is then CANCELLED)", (req, mc) -> {
 				Fields f = Fields.of(req);
 				JsonObject plan = req.getAsJsonObject("plan");
 				JsonArray c = req.getAsJsonArray("claim");
@@ -135,10 +137,17 @@ public final class SliceP0Dev {
 				PlanBudget bud = budget;
 				String key = f.optStr("opKey", null);
 				long cancelAfter = f.optLong("cancelAfterMs", -1, -1, 600_000);
+				String loadName = f.optStr("load", "loaded");
+				if (!"loaded".equals(loadName) && !"generate".equals(loadName)) {
+					throw new IllegalArgumentException("load: \"loaded\" or \"generate\"");
+				}
+				// (6c T3) "generate": the claim's chunks plus the survey margin, loaded or generated as needed
+				int genChunks = ((c.get(2).getAsInt() >> 4) - (c.get(0).getAsInt() >> 4) + 5) * ((c.get(3).getAsInt() >> 4) - (c.get(1).getAsInt() >> 4) + 5);
+				LoadPolicy load = "generate".equals(loadName) ? LoadPolicy.LOAD_BOUNDED(genChunks) : null;
 				long t0 = System.nanoTime();
 				return ServerTasks.callAsPlayer((level, player) -> {
 					CompletableFuture<PlanCheck> fut = ArchitectApi.get().regions().checkPlan(new PlanRequest(plan, level, new BoundingBox(c.get(0).getAsInt(), level.getMinY(), c
-						.get(1).getAsInt(), c.get(2).getAsInt(), level.getMaxY(), c.get(3).getAsInt()), anchors, owner, bible, bibleVersion, bud, key, new JsonObject()));
+						.get(1).getAsInt(), c.get(2).getAsInt(), level.getMaxY(), c.get(3).getAsInt()), anchors, owner, bible, bibleVersion, bud, key, new JsonObject(), load));
 					if (cancelAfter >= 0) {
 						CompletableFuture.delayedExecutor(cancelAfter, java.util.concurrent.TimeUnit.MILLISECONDS).execute(() -> fut.cancel(true));
 					}
@@ -147,6 +156,8 @@ public final class SliceP0Dev {
 					JsonObject o = new JsonObject();
 					o.add("check", checkJson(pc, req.has("withCatalogue") && req.get("withCatalogue").getAsBoolean()));
 					o.addProperty("ms", (System.nanoTime() - t0) / 1e6);
+					JsonObject vp = dev.larattalabs.architect.region.PlanChecks.lastVolumePass;
+					o.add("volumePass", vp == null ? null : vp.deepCopy());
 					return o;
 				}));
 			});
