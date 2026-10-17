@@ -551,7 +551,11 @@ const est = (s) => estOf.get(s.id).min;
 const HIST_TIMEOUTS = !flag('--no-history-timeouts') && !flag('--no-history');
 for (const s of steps) {
   // a stopOnFail step is a barrier (a false TIMEOUT there stops the whole run): it keeps its configured timeout
+  // a step that normally waits for another (the kit-suite readers wait for unit-kit) but runs without it takes its slow path (the
+  // drivers re-run the whole kit suite): its fast history doesn't apply, so it keeps its configured timeout
+  const missing = (s.waitFor ?? []).filter((w) => !stepIds.includes(w));
   const t = !HIST_TIMEOUTS ? { min: s.timeoutMin, source: 'configured (--no-history-timeouts)' } : s.stopOnFail ? { min: s.timeoutMin, source: 'configured (stopOnFail barrier)' }
+    : missing.length ? { min: s.timeoutMin, source: `configured (runs without ${missing.join(' ')}: its slow path)` }
     : effectiveTimeout(s, HIST, { contendedBench: isBench(s) && !isIsolated(s) });
   s.effTimeoutMin = t.min;
   s.timeoutSource = t.source;

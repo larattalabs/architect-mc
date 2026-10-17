@@ -107,7 +107,8 @@ the whole kit suite (about 190 s and 950 CPU-s each) next to `unit-kit`. The cha
   - **Estimate:** the history p50, else `estMin`, else a third of `timeoutMin`.
   - **Effective timeout:** `max(2 x p90, 10 min)`, capped by the configured `timeoutMin`, once the step has at least 5 samples.
     A contended bench step whose history has no contended sample gets 3 x p90. A `stopOnFail` barrier always keeps its
-    configured timeout.
+    configured timeout, and so does a step whose `waitFor` target is not in the run (a kit-suite reader without `unit-kit`, e.g.
+    the verifier's `--only d-unit`, re-runs the whole suite: its fast history doesn't apply).
   - `summary.json` records `estimateMin`, `effectiveTimeoutMin` and `timeoutSource` per step.
   - `--no-history-timeouts` keeps the configured timeouts; `--no-history` also ignores the history for the order.
 - **`--plan`** shows `~estimate / effective(configured) min`, the shard each step lands on, per-shard busy time and
@@ -187,7 +188,7 @@ Before and after, both measured on a shared, busy box:
 - **Benches.** The 8 bench steps ran contended. They passed their functional checks, and their timings matched isolated
   history: the scenario steps took 7.6-9.1 min against p50s of 7.5-8.2. One timing bar was recorded rather than judged:
   pt-ingame's classifier CPU at 1.02 ms against its 1 ms budget.
-- **Kit reuse.** The suite's report served 8 whole-suite calls and 13 goldens or P0 calls.
+- **Kit reuse.** The suite's report served 20 calls: 8 whole-suite calls and 12 goldens or P0 calls.
 - **Scheduler alone, replayed on recorded durations with no contention model:**
   - K1a 196 -> 118 min with s7's timeout as recorded, 144 -> 93 min with s7 at its p50;
   - K1b 160 -> 89 min.
