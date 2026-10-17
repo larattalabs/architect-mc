@@ -46,6 +46,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { srcGradle } from './lib/src-gradle.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= here;
@@ -99,7 +100,7 @@ steps.unit = async () => {
   check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 5, `item 14 (kit): plan/0's feature.build, target {build}, endpoint.build validate and their catalogue entries are supported; the pick, the door apron and the keep-outs (${out.kit.pass} pass, ${out.kit.fail} fail)`, out.kit.failing);
   const env = { ...process.env, JAVA_HOME, GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
   const tests = ['*PlacedChunkTest', '*JournalPtTest', '*RecordRulesTest', '*PredicatePathsTest', '*ApiPTTest'];
-  const g = spawnSync('./gradlew', ['test', '--offline', ...tests.flatMap((t) => ['--tests', t])], { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 3_600_000 });
+  const g = srcGradle(root, () => spawnSync('./gradlew', ['test', '--offline', ...tests.flatMap((t) => ['--tests', t])], { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 3_600_000 }));
   const xml = (n) => {
     const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-dev.larattalabs.architect.${n}.xml`);
     const t = fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '';

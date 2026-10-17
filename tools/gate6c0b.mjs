@@ -21,6 +21,7 @@ import path from 'node:path';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DevClient } from './lib/devclient.mjs';
+import { srcGradle } from './lib/src-gradle.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -99,7 +100,7 @@ async function unit() {
     check(false, `sidecar suites ran (${e.message})`);
   }
   // the mod
-  const gradle = run(path.join(root, 'mod', 'gradlew'), ['test', '--offline', '--tests', '*MirrorOracleTest', '--tests', '*Wire0bTest', '--tests', '*MirrorFitTest'], path.join(root, 'mod'), { JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') });
+  const gradle = srcGradle(root, () => run(path.join(root, 'mod', 'gradlew'), ['test', '--offline', '--tests', '*MirrorOracleTest', '--tests', '*Wire0bTest', '--tests', '*MirrorFitTest'], path.join(root, 'mod'), { JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') }));
   fs.writeFileSync(path.join(OUT, 'unit-mod.log'), gradle.out);
   const kitCase = (re) => kc.filter((c) => re.test(c.name));
   const scCase = (re, file) => tests.filter((t) => (!file || t.file === file) && re.test(t.name) && t.status !== 'skipped');

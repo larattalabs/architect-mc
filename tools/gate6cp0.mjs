@@ -24,6 +24,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { srcGradle } from './lib/src-gradle.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-P0-run');
@@ -98,7 +99,7 @@ steps.unit = async () => {
   const s = sh('cd sidecar && npx vitest run test/plan-check.test.ts');
   fs.writeFileSync(path.join(OUT, 'unit-sidecar.log'), s.out);
   check(s.code === 0 && /Tests\s+\d+ passed/.test(s.out), `item 1 (ajv 2020-12) and the sidecar half: ${(/Tests\s+[^\n]+/.exec(s.out) ?? ['?'])[0]}`);
-  sh(`cd mod && GRADLE_USER_HOME=${path.join(root, '.gradle-home')} ./gradlew compileJava compileClientJava --offline -q`);
+  srcGradle(root, () => sh(`cd mod && GRADLE_USER_HOME=${path.join(root, '.gradle-home')} ./gradlew compileJava compileClientJava --offline -q`));
   const a = sh(`node tools/api-compat.mjs --gate6cp0`);
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), a.out);
   check(a.code === 0 && /all 4 checks clean/.test(a.out), `item 13: api-compat against the 0.25.0, 0.24.0 and 0.23.0 apitest jars and the 0.25.0 surface: ${a.out.trim().split('\n').pop()}`);

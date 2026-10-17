@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Unattended gate runner (docs/GATES.md): runs a named chain, or a tier (change | slice | release), of gate steps from
 // tools/gate-chains.json against dev clients in the runner's own run worktrees, with no agent watching. Non-interactive;
-// per-step timeouts (a hung step is killed: its own process group, then its run worktree's processes only); continues past
-// failures unless a step is `stopOnFail`; one lock; no notify unless asked (Noah: no Discord pings). No Claude: it refuses to
-// start with Claude credentials in the environment, strips every ANTHROPIC_* / CLAUDE* variable from its children, and runs
-// only the stub/sim client scripts.
+// per-step timeouts, from the step history where it has 5 samples (a hung step is killed: its own process group, then its run
+// worktree's processes only); continues past failures unless a step is `stopOnFail`; one lock; no notify unless asked (Noah: no
+// Discord pings). No Claude: it refuses to start with Claude credentials in the environment, strips every ANTHROPIC_* / CLAUDE*
+// variable from its children, and runs only the stub/sim client scripts.
 //
 //   node tools/gate-run.mjs <chain> [--shards N] [--only a,b] [--from step] [--plan]
 //   node tools/gate-run.mjs change  --since <ref> | --range A...B | --files a,b [--shards N] [--plan]   unit suites + mapped steps
@@ -13,8 +13,9 @@
 //   node tools/gate-run.mjs --list                  the chains and tiers
 //   [--notify | --notify-dry-run]                   off by default (Noah: no Discord pings)
 //
-// --plan prints the selection (impact, rotation and what it skipped), the steps, clients, timeouts, resources, shards and an
-// estimated wall time, and exits without running anything.
+// --plan prints the selection (impact, rotation and what it skipped), the steps, clients, estimates and timeouts, resources,
+// shards, per-shard busy time and an estimated wall time, and exits without running anything (--verbose: each step's estimate
+// and timeout source and its priority).
 //
 // Where it runs (flag, else environment, else default). Several agents share this machine: a second runner names its own.
 //   --ports S:D[,S:D...]   GATE_PORTS     every shard's sidecar:DevBridge pair. Without it shard 1 is ARCHITECT_GATE_SIDECAR_PORT /
@@ -28,6 +29,9 @@
 //                                         takes a slot file in --slots-dir (GATE_SLOTS_DIR; <LarattaLabs>/.gate-slots) and waits for a
 //                                         free one; a slot held by a dead pid counts as free. Separate from the per-run --lock.
 //   --judge-timing         in change/slice timing bars (lines `FAIL BAR ...`) are recorded, not judged; this judges them as at release
+//                          (and isolates the bench steps again)
+//   --no-history-timeouts  the configured timeoutMin for every step; --no-history also ignores the history for the order
+//                          GATE_HISTORY_FILE  the step history (<main checkout>/artifacts/gate-step-history.json, rebuilt every run)
 //   --quiet-wait [load]    on by default at release (load 8); opt-in elsewhere. --no-quiet-wait turns it off
 //   --host auto|client|server  GATE_HOST  where steps run (tools/lib/hosts.mjs): auto (default) runs the steps marked
 //                                         "host": "server" on a headless server, the rest on clients; client runs all on clients
@@ -36,8 +40,13 @@
 //                          GATE_NOTIFY=send|dry, GATE_NOTIFY_SCRIPT (~/Developer/_infra/discord-notify.sh); off by default
 //
 // Shards (--shards N, at most shards.max): each has its own client, run worktree, port pair and evidence dir (<out>/s<k>/ when
-// N > 1). Steps declare what they need: steps sharing a resource never overlap, a `bench` step (timing or MSPT bars) runs alone,
-// a step with `after` runs on its dependency's shard, and a `stopOnFail` step is a barrier.
+// N > 1). Steps declare what they need: steps sharing a resource never overlap, a step with `after` runs on its dependency's
+// shard, `waitFor` waits for steps on any shard (any status), and a `stopOnFail` step is a barrier. A free shard takes the ready
+// step with the longest estimate (history p50 plus the chain waiting on it), less its client cost there (docs/GATES.md "Gate
+// speed"). A `bench` step (timing or MSPT bars) runs alone only where timing is judged (release, named chains, --judge-timing,
+// `"isolate": true`); in change/slice it schedules like any step and records `contended`/`ranWith`.
+// The kit suite runs once: unit-kit writes a JUnit report to GATE_KIT_RESULTS (tools/lib/kit-reuse.mjs), and the drivers'
+// kit-suite and goldens checks read it when exact; the runner also passes GATE_UNIT_MOD_RUN (where unit-mod built this head).
 //
 // Output: <out>/<timestamp>-<chain>/: summary.json (written at the start with state "running", rewritten after every step,
 // final state "done" | "stopped" | "aborted"), SUMMARY.md, runner.log, <step>.log, the gates' own evidence under
@@ -50,8 +59,9 @@ import net from 'node:net';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DevClient } from './lib/devclient.mjs';
-import { changedFiles, describeImpact, impactOf, validateImpact } from './gate-impact.mjs';
+import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFiles } from './gate-impact.mjs';
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
+import { effectiveTimeout, estimateMin, loadHistory } from './lib/gate-history.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(SRC, '..', 'architect-mc');
@@ -165,7 +175,8 @@ function select() {
   let imp = null;
   if (range || listed) {
     const files = listed ?? changedFiles(SRC, range);
-    imp = impactOf(files, cfg.impact ?? {});
+    // a file whose only changes are version constants maps to its unit suite (gate-impact.mjs versionOnlyFiles; needs a range)
+    imp = impactOf(files, cfg.impact ?? {}, { versionOnly: listed ? new Set() : versionOnlyFiles(SRC, range, cfg.impact?.versionConstants) });
     info.range = range ?? `--files (${files.length})`;
     info.impact = { files: imp.files, rules: Object.fromEntries(Object.entries(imp.rules).map(([k, v]) => [k, v.files.length])), unmapped: imp.unmapped, ignored: imp.ignored.length, tags: imp.tags };
     info.impactText = describeImpact(imp);
@@ -503,9 +514,16 @@ function childEnv(sh, extra = {}) {
     // eval sidecars (if a step starts one) on an ephemeral port, never the fixed 8894/8895 another run may hold
     ARCHITECT_EVAL_PORT: process.env.ARCHITECT_EVAL_PORT ?? '0',
   });
+  // the kit suite once per run (tools/lib/kit-reuse.mjs): unit-kit writes its JUnit report here; the drivers' kit-suite and goldens
+  // checks take it when exact. Only when unit-kit is in this run.
+  if (runShared.kitJunit) Object.assign(env, { GATE_KIT_RESULTS: runShared.kitJunit, GATE_KIT_TREE: runShared.kitTree });
+  // the run worktree where unit-mod built this HEAD (gate6cmp reads its classes): set once unit-mod passed
+  if (runShared.unitModRun) env.GATE_UNIT_MOD_RUN = runShared.unitModRun;
   for (const [k, v] of Object.entries(extra)) env[k] = expand(String(v), sh);
   return env;
 }
+/** Run-level facts the steps' environment carries (filled in when the run starts and as steps end). */
+const runShared = { kitJunit: null, kitTree: null, unitModRun: null };
 const expand = (s, sh) => s.replace(/\$\{(\w+)\}/g, (_, n) => ({ RUN: sh.RUN, SRC, MAIN, OUT: sh.ev })[n] ?? '');
 const resolveCwd = (c, sh) => (!c ? SRC : c.startsWith('run:') ? path.join(sh.RUN, c.slice(4)) : c.startsWith('src:') ? path.join(SRC, c.slice(4)) : path.resolve(SRC, c));
 const getPath = (obj, p) => p.split('.').filter(Boolean).reduce((o, k) => (o == null ? undefined : o[k]), obj);
@@ -515,17 +533,59 @@ const getPath = (obj, p) => p.split('.').filter(Boolean).reduce((o, k) => (o == 
 const steps = stepIds.map((id) => ({ id, ...cfg.steps[id] }));
 const famOf = (key) => (key && cfg.clients[key] ? cfg.clients[key].family ?? key : null);
 const isBench = (s) => (s.resources ?? []).includes('bench');
+// Bench isolation only where timing is judged (docs/GATES.md "Scheduling and timeouts"): at release, in the named chains and with
+// --judge-timing a bench step runs alone, as before; in change and slice (timing bars recorded, not judged) it schedules like any
+// other step, keeping its client, host and resources, and its result records which steps ran next to it (`contended`). A step
+// marked `"isolate": true` runs alone in every tier (a bench with a timing check that is not a BAR line).
+const ISOLATE_BENCH = !RECORD_TIMING;
+const isIsolated = (s) => isBench(s) && (ISOLATE_BENCH || s.isolate === true);
+
+// the step-duration history (tools/lib/gate-history.mjs): built from the past runs' summary.json under the main checkout's artifacts/
+const HISTORY_FILE = path.resolve(process.env.GATE_HISTORY_FILE ?? path.join(MAIN, 'artifacts', 'gate-step-history.json'));
+const HIST = flag('--no-history') ? { steps: {}, runs: 0 } : loadHistory(path.join(MAIN, 'artifacts'), HISTORY_FILE);
+const estOf = new Map(steps.map((s) => [s.id, estimateMin(s, HIST)]));
+const est = (s) => estOf.get(s.id).min;
+// Timeouts from history: max(2 x the step's p90, 10 min), capped by its configured timeoutMin, once it has 5 samples (--no-history-
+// timeouts keeps the configured ones). A bench step running next to others with only isolated samples gets 3 x p90; a stopOnFail
+// barrier keeps its configured timeout.
+const HIST_TIMEOUTS = !flag('--no-history-timeouts') && !flag('--no-history');
+for (const s of steps) {
+  // a stopOnFail step is a barrier (a false TIMEOUT there stops the whole run): it keeps its configured timeout
+  // a step that normally waits for another (the kit-suite readers wait for unit-kit) but runs without it takes its slow path (the
+  // drivers re-run the whole kit suite): its fast history doesn't apply, so it keeps its configured timeout
+  const missing = (s.waitFor ?? []).filter((w) => !stepIds.includes(w));
+  const t = !HIST_TIMEOUTS ? { min: s.timeoutMin, source: 'configured (--no-history-timeouts)' } : s.stopOnFail ? { min: s.timeoutMin, source: 'configured (stopOnFail barrier)' }
+    : missing.length ? { min: s.timeoutMin, source: `configured (runs without ${missing.join(' ')}: its slow path)` }
+    : effectiveTimeout(s, HIST, { contendedBench: isBench(s) && !isIsolated(s) });
+  s.effTimeoutMin = t.min;
+  s.timeoutSource = t.source;
+}
+// longest-processing-time first: a step's priority is its estimate plus the longest chain of steps that wait for it (`after`,
+// `waitFor`), so 4e-orders (with 4e-crash behind it) and unit-kit (the kit-suite readers behind it) start early
+const prio = new Map();
+const prioOf = (s, seen = new Set()) => {
+  if (prio.has(s.id)) return prio.get(s.id);
+  if (seen.has(s.id)) return est(s);
+  seen.add(s.id);
+  const deps = steps.filter((d) => d.after === s.id || (d.waitFor ?? []).includes(s.id));
+  const p = est(s) + Math.max(0, ...deps.map((d) => prioOf(d, seen)));
+  prio.set(s.id, p);
+  return p;
+};
+for (const s of steps) prioOf(s);
 
 /**
  * The next step shard `sh` may start, or null. st: { pending: [index], running: Map(index -> shardK), done: Map(id -> {status,
  * shard}) }. Rules: a stopOnFail step earlier in the order is a barrier until it is done; `after` waits for its dependency and
- * runs on the dependency's shard; steps sharing a resource never overlap. One shard runs the order exactly. Sharded, a bench
- * step (timing or MSPT bars) waits until every other step has started and the running ones have drained, then runs alone; among
- * the other ready steps a shard prefers the one its current client serves (no restart).
+ * runs on the dependency's shard; `waitFor` waits until those steps have ended (any status, any shard); steps sharing a resource
+ * never overlap. One shard runs the order exactly. Sharded: an isolated bench step (release, chains, --judge-timing) waits until
+ * every other step has started and the running ones have drained, then runs alone; every other step is picked longest-first
+ * (its priority above), less the cost of getting its client here (none if the client is up, a world switch within a family,
+ * else a start), so the long steps spread over the shards instead of piling up at the end.
  */
 function pick(sh, st, all) {
   const runningSteps = [...st.running.keys()].map((i) => steps[i]);
-  if (runningSteps.some(isBench)) return null;
+  if (runningSteps.some(isIsolated)) return null;
   const held = new Set(runningSteps.flatMap((s) => (s.resources ?? []).filter((r) => r !== 'bench')));
   const ready = [];
   for (const i of st.pending) {
@@ -535,34 +595,43 @@ function pick(sh, st, all) {
       const d = st.done.get(s.after);
       if (!d || d.shard !== sh.k) continue;
     }
+    if ((s.waitFor ?? []).some((w) => stepIds.includes(w) && !st.done.has(w))) continue;
     if ((s.resources ?? []).some((r) => held.has(r))) continue;
     ready.push(i);
   }
   if (!ready.length) return null;
   if (all.length === 1) return ready[0]; // one shard: the chain order, exactly
-  // sharded: bench steps go after every other step has started, then one at a time with nothing else running
-  const rest = ready.filter((i) => !isBench(steps[i]));
+  // sharded: isolated bench steps go after every other step has started, then one at a time with nothing else running
+  const rest = ready.filter((i) => !isIsolated(steps[i]));
   if (!rest.length) {
-    if (st.pending.some((i) => !isBench(steps[i])) || st.running.size) return null;
+    if (st.pending.some((i) => !isIsolated(steps[i])) || st.running.size) return null;
     return ready[0];
   }
-  // prefer: the client already up here; then no client / its own clients; then a client family no other shard has up (the
-  // shard that has it takes those); ties in order
+  // longest first, less the client cost here: 0 when this shard's client serves it, 0.15 min for a world switch in the same
+  // family, 0.6 min for a start (or for stopping the client up here before a step with no client); ties keep the order
   const fam = famOf(sh.current);
-  const elsewhere = new Set(all.filter((o) => o.k !== sh.k).map((o) => famOf(o.current)).filter(Boolean));
-  const score = (i) => {
-    const f = famOf(steps[i].client);
-    return fam && f === fam ? 0 : !f ? 1 : !elsewhere.has(f) ? 2 : 3;
+  const cost = (s) => {
+    if (s.client === 'none' || s.client === 'self') return sh.current ? 0.6 : 0;
+    if (sh.current === s.client && !s.restartClient) return 0;
+    if (fam && fam === famOf(s.client) && !s.restartClient) return 0.15;
+    return 0.6;
   };
   let best = null;
-  for (const i of rest) if (best === null || score(i) < score(best)) best = i;
+  let bestScore = -Infinity;
+  for (const i of rest) {
+    const sc = prio.get(steps[i].id) - cost(steps[i]);
+    if (sc > bestScore + 1e-9) {
+      best = i;
+      bestScore = sc;
+    }
+  }
   return best;
 }
 
-/** --plan's estimate: the schedule with every step taking its estMin (measured) and passing; client starts ~0.35 min (0.15 for a world switch). */
-function estimate() {
+/** --plan's estimate: the schedule with every step taking its estimate (history p50, else estMin) and passing; client starts ~0.6 min (0.15 for a world switch). */
+function estimate(durOf = est) {
   const st = { pending: steps.map((_, i) => i), running: new Map(), done: new Map() };
-  const sim = shards.map((s) => ({ k: s.k, current: null, freeAt: 0 }));
+  const sim = shards.map((s) => ({ k: s.k, current: null, freeAt: 0, busy: 0 }));
   const ends = [];
   const assign = {};
   let now = 0;
@@ -574,10 +643,12 @@ function estimate() {
       const s = steps[i];
       st.pending.splice(st.pending.indexOf(i), 1);
       st.running.set(i, sh.k);
-      if (sim.length > 1 && isBench(s)) for (const o of sim) if (o !== sh) o.current = null; // the run stops idle clients for a bench step
-      const start = (s.client === 'none' || s.client === 'self') ? 0 : sh.current === s.client && !s.restartClient ? 0 : famOf(sh.current) === famOf(s.client) && !s.restartClient ? 0.15 : 0.35;
+      if (sim.length > 1 && isIsolated(s)) for (const o of sim) if (o !== sh) o.current = null; // the run stops idle clients for an isolated bench step
+      const start = (s.client === 'none' || s.client === 'self') ? 0 : sh.current === s.client && !s.restartClient ? 0 : famOf(sh.current) === famOf(s.client) && !s.restartClient ? 0.15 : 0.6;
       sh.current = s.client === 'none' || s.client === 'self' ? null : s.client;
-      sh.freeAt = now + start + (s.estMin ?? s.timeoutMin);
+      const d = start + durOf(s);
+      sh.freeAt = now + d;
+      sh.busy += d;
       ends.push({ i, at: sh.freeAt, k: sh.k });
       assign[s.id] = sh.k;
     }
@@ -588,13 +659,13 @@ function estimate() {
     st.running.delete(e.i);
     st.done.set(steps[e.i].id, { status: 'PASS', shard: e.k });
   }
-  const serial = steps.reduce((a, s) => a + (s.estMin ?? s.timeoutMin), 0);
-  return { wallMin: now, serialMin: serial, assign };
+  const serial = steps.reduce((a, s) => a + durOf(s), 0);
+  return { wallMin: now, serialMin: serial, assign, perShard: sim.map((s) => ({ k: s.k, busyMin: s.busy })) };
 }
 
 // ------------------------------------------------------------------ the plan
 
-const totalTimeout = steps.reduce((a, s) => a + s.timeoutMin, 0);
+const totalTimeout = steps.reduce((a, s) => a + s.effTimeoutMin, 0);
 
 function printSelection() {
   if (tierInfo.kind !== 'tier') return;
@@ -623,7 +694,7 @@ function printPlan() {
   console.log(`slots: at most ${SLOTS} gate runs on the machine (${SLOT_DIR}); in use now ${slotHolders().length}${slotHolders().length ? `: ${slotHolders().map((h) => `pid ${h.pid} ${h.chain}`).join(', ')}` : ''}; timing bars ${RECORD_TIMING ? 'RECORDED, not judged (change/slice)' : 'JUDGED'}`);
   console.log(`seed ${SEED} (read-only, APFS clones); snapshots ${SNAP}; artifacts ${RUNS_ROOT}/<timestamp>-${chainName}/; lock ${LOCK}; notify ${NOTIFY_MODE}; quiet-wait ${QUIET === null ? 'off (load recorded)' : `load < ${QUIET}, at most ${QUIET_MAX_MIN} min`}`);
   console.log('setup (each shard): sidecar npm run build (run worktree)');
-  const est = estimate();
+  const sched = estimate();
   let cur = null;
   steps.forEach((s, i) => {
     let clientNote = '';
@@ -640,13 +711,17 @@ function printPlan() {
       }
     } else clientNote = `client ${s.client}; `;
     const cmd = s.shell ?? s.cmd.join(' ');
-    const tags = [s.stopOnFail ? 'stopOnFail' : '', isBench(s) ? 'bench' : '', ...(s.resources ?? []).filter((r) => r !== 'bench'), s.after ? `after ${s.after}` : '',
+    const tags = [s.stopOnFail ? 'stopOnFail' : '', isBench(s) ? (isIsolated(s) ? 'bench, isolated' : 'bench (not isolated: timing recorded)') : '', ...(s.waitFor ?? []).filter((w) => stepIds.includes(w)).map((w) => `waits for ${w}`), ...(s.resources ?? []).filter((r) => r !== 'bench'), s.after ? `after ${s.after}` : '',
       s.restore ? `restore ${s.restore.map((w) => `"${w}"`).join(',')}` : ''].filter(Boolean).join(', ');
-    console.log(`${String(i + 1).padStart(2)}. ${s.id.padEnd(19)} ~${String(s.estMin ?? '?').padStart(4)} / ${String(s.timeoutMin).padStart(3)} min${NSHARDS > 1 ? ` s${est.assign[s.id]}` : ''}  ${clientNote}${cmd}${tags ? `  [${tags}]` : ''}`);
+    console.log(`${String(i + 1).padStart(2)}. ${s.id.padEnd(19)} ~${est(s).toFixed(1).padStart(5)} / ${String(s.effTimeoutMin).padStart(3)}${s.effTimeoutMin < s.timeoutMin ? `(${s.timeoutMin})` : ''} min${NSHARDS > 1 ? ` s${sched.assign[s.id]}` : ''}  ${clientNote}${cmd}${tags ? `  [${tags}]` : ''}`);
     if (tierInfo.why?.[s.id]) console.log(`      why: ${tierInfo.why[s.id].join('; ')}`);
+    if (flag('--verbose')) console.log(`      estimate: ${estOf.get(s.id).source}; timeout: ${s.timeoutSource}; priority ${prio.get(s.id).toFixed(1)} min`);
   });
   if (NSHARDS === 1 && cur) console.log(`    end: stop client ${cur}`);
-  console.log(`estimate: ~${fmtDur(est.wallMin * 60)} wall on ${NSHARDS} shard(s) (serial sum of the measured step times ~${fmtDur(est.serialMin * 60)}; client starts ~40 s each)`);
+  console.log(`estimate: ~${fmtDur(sched.wallMin * 60)} wall on ${NSHARDS} shard(s) (serial sum of the step estimates ~${fmtDur(sched.serialMin * 60)}; client starts ~40 s each); `
+    + `${NSHARDS > 1 ? `per shard busy ${sched.perShard.map((p) => `s${p.k} ${fmtDur(p.busyMin * 60)}`).join(', ')}; ` : ''}`
+    + `schedule: longest first from ${HIST.runs} past runs (${HISTORY_FILE}); benches ${ISOLATE_BENCH ? 'isolated (timing judged)' : 'not isolated (timing recorded)'}; `
+    + `timeouts ${HIST_TIMEOUTS ? `from history on ${steps.filter((s) => s.effTimeoutMin < s.timeoutMin).length}/${steps.length} steps` : 'configured'} (--verbose: per step)`);
 }
 
 if (!steps.length) {
@@ -728,7 +803,8 @@ const summary = {
   tier: tierInfo.kind === 'tier' ? { name: tierInfo.tier, range: tierInfo.range ?? null, engine: tierInfo.engine, placement: tierInfo.placement, impact: tierInfo.impact ?? null,
     rotationKey: tierInfo.rotationKey ?? null, rotationSource: tierInfo.rotationSource ?? null, rotation: tierInfo.rotation ?? null, notes: tierInfo.notes } : null,
   counts: {}, setup: null, slot: slotNote, hosts: { mode: HOSTS.mode, server: HOSTS.server.filter((id) => stepIds.includes(id)) }, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
-  steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin, ...(tierInfo.why?.[s.id] ? { why: tierInfo.why[s.id] } : {}) })),
+  schedule: { order: 'longest first', historyRuns: HIST.runs, historyFile: HISTORY_FILE, benches: ISOLATE_BENCH ? 'isolated' : 'not isolated (timing recorded)', historyTimeouts: HIST_TIMEOUTS },
+  steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin, effectiveTimeoutMin: s.effTimeoutMin, timeoutSource: s.timeoutSource, estimateMin: Math.round(est(s) * 10) / 10, ...(tierInfo.why?.[s.id] ? { why: tierInfo.why[s.id] } : {}) })),
 };
 const writeSummary = () => {
   const c = {};
@@ -991,10 +1067,10 @@ function runProcess(sh, step, logFile) {
     let killTimer;
     const timer = setTimeout(() => {
       timedOut = true;
-      log(`  TIMEOUT after ${step.timeoutMin} min: killing step group ${child.pid}`, sh);
+      log(`  TIMEOUT after ${step.effTimeoutMin} min (${step.timeoutSource}): killing step group ${child.pid}`, sh);
       killGroup(child.pid, 'SIGTERM');
       killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 20_000);
-    }, step.timeoutMin * 60_000);
+    }, step.effTimeoutMin * 60_000);
     child.on('error', (e) => {
       clearTimeout(timer);
       fs.writeSync(fd, `spawn error: ${e.message}\n`);
@@ -1169,7 +1245,7 @@ function summaryMd() {
     `${summary.state}, ${fmtDur(summary.durationSeconds)}, head ${summary.head?.slice(0, 9) ?? '?'}${summary.sourceDirty ? ' (source dirty)' : ''}, `
       + `${shards.map((s) => `${NSHARDS > 1 ? `s${s.k} ` : ''}ports ${s.SIDECAR_PORT}/${s.DEV_PORT}`).join(', ')}.`,
     `Steps: ${Object.entries(c).map(([k, v]) => `${v} ${k}`).join(', ')}.${summary.timingRecorded.length ? ` ${summary.timingRecorded.length} timing bar miss(es) recorded.` : ''}${summary.error ? ` Error: ${summary.error}` : ''}`,
-    `Slot ${summary.slot.slot}/${summary.slot.limit}${summary.slot.waitedSeconds ? ` (waited ${fmtDur(summary.slot.waitedSeconds)})` : ''}; timing bars ${summary.timingPolicy}.`,
+    `Slot ${summary.slot.slot}/${summary.slot.limit}${summary.slot.waitedSeconds ? ` (waited ${fmtDur(summary.slot.waitedSeconds)})` : ''}; timing bars ${summary.timingPolicy}; benches ${summary.schedule.benches}; ${summary.schedule.historyTimeouts ? 'timeouts from history' : 'configured timeouts'}.`,
   ];
   const t = summary.tier;
   if (t) {
@@ -1184,7 +1260,8 @@ function summaryMd() {
   lines.push('', `| step | ${NSHARDS > 1 ? 'shard | ' : ''}status | time | ok/FAIL | key numbers |`, `|---|${NSHARDS > 1 ? '---|' : ''}---|---|---|---|`);
   for (const s of summary.steps) {
     const m = [s.metrics ? Object.entries(s.metrics).map(([k, v]) => `${k} ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ') : '',
-      s.load1 ? `load ${s.load1.start}->${s.load1.end ?? '?'}` : '', s.noisy ? `noisy (outcome ${s.noisyOutcome ?? '?'})` : ''].filter(Boolean).join('; ');
+      s.load1 ? `load ${s.load1.start}->${s.load1.end ?? '?'}` : '', s.noisy ? `noisy (outcome ${s.noisyOutcome ?? '?'})` : '',
+      s.contended ? `bench contended (ran with ${s.ranWith.length} step(s))` : '', s.timeoutSource?.startsWith('history') && s.status === 'TIMEOUT' ? `history timeout ${s.effectiveTimeoutMin} of ${s.timeoutMin} min` : ''].filter(Boolean).join('; ');
     lines.push(`| ${s.id} | ${NSHARDS > 1 ? `${s.shard ?? '-'} | ` : ''}${s.status} | ${s.seconds != null ? fmtDur(s.seconds) : '-'} | ${s.ok ?? '-'}/${s.fail ?? '-'} | ${m.replace(/\|/g, '/')} |`);
   }
   const rec = summary.steps.filter((s) => s.timingRecorded?.length);
@@ -1192,7 +1269,7 @@ function summaryMd() {
     lines.push('', '## Timing bars recorded, not judged (change/slice policy)', '',
       'These steps PASS on their functional checks; the timing bars below missed and are judged only at release (with --quiet-wait and the CI runners paused).', '');
     for (const s of rec) {
-      lines.push(`- **${s.id}** (load ${s.timingLoad1?.start ?? '?'} -> ${s.timingLoad1?.end ?? '?'}; log \`${s.log ?? '-'}\`)`);
+      lines.push(`- **${s.id}** (load ${s.timingLoad1?.start ?? '?'} -> ${s.timingLoad1?.end ?? '?'}${s.contended ? `; contended: ran next to ${s.ranWith.join(' ')}` : ''}; log \`${s.log ?? '-'}\`)`);
       for (const l of s.timingRecorded) lines.push(`  - \`${l.replace(/`/g, "'").slice(0, 220)}\``);
     }
   } else if (summary.timingPolicy === 'recorded') lines.push('', 'Timing bars: recorded, not judged in this tier; none missed.');
@@ -1294,6 +1371,10 @@ try {
   }
   const head = git(SRC, 'rev-parse', 'HEAD');
   summary.head = head;
+  if (stepIds.includes('unit-kit')) {
+    runShared.kitJunit = path.join(OUT, 'kit-suite.junit.xml');
+    runShared.kitTree = git(SRC, 'rev-parse', 'HEAD:kit');
+  }
   summary.sourceDirty = !!git(SRC, 'status', '--porcelain', '--untracked-files=no');
   summary.setup = [];
   for (const sh of shards) summary.setup.push(await setupShard(sh, head));
@@ -1308,6 +1389,7 @@ try {
 // the scheduler: one worker per shard, each starting the next step `pick` allows
 const st = { pending: steps.map((_, i) => i), running: new Map(), done: new Map() };
 let stopped = false;
+const overlaps = new Map(); // running step id -> the ids of the steps that ran at the same time
 let waiters = [];
 const wake = () => new Promise((r) => {
   waiters.push(r);
@@ -1355,9 +1437,9 @@ async function worker(sh) {
     st.running.set(i, sh.k);
     const step = steps[i];
     const rec = summary.steps[i];
-    // a bench step runs alone (pick drained the others): the other shards' idle clients would load the machine, so stop them
-    if (isBench(step)) for (const o of shards) if (o !== sh && ownProcs(o).length) await stopClient(o, `bench step ${step.id} on s${sh.k}`);
-    if (isBench(step) && QUIET !== null) {
+    // an isolated bench step runs alone (pick drained the others): the other shards' idle clients would load the machine, so stop them
+    if (isIsolated(step)) for (const o of shards) if (o !== sh && ownProcs(o).length) await stopClient(o, `bench step ${step.id} on s${sh.k}`);
+    if (isIsolated(step) && QUIET !== null) {
       const tq = Date.now();
       if (load1() >= QUIET) log(`  ${step.id}: waiting for the 1-min load average ${load1()} to drop below ${QUIET} (at most ${QUIET_MAX_MIN} min)`, sh);
       while (load1() >= QUIET && Date.now() - tq < QUIET_MAX_MIN * 60_000 && !stopped) await sleep(15_000);
@@ -1367,7 +1449,18 @@ async function worker(sh) {
         log(`  ${step.id}: load ${load1()} still >= ${QUIET} after ${QUIET_MAX_MIN} min: running it marked noisy (NOISY: neither passes nor fails)`, sh);
       }
     }
+    // which steps ran next to this one (a bench step's timing is then contended; recorded, never judged in change/slice)
+    for (const o of overlaps.values()) o.add(step.id);
+    overlaps.set(step.id, new Set([...st.running.keys()].filter((j) => j !== i).map((j) => steps[j].id)));
     await runStep(sh, step, rec);
+    const ov = [...overlaps.get(step.id)];
+    overlaps.delete(step.id);
+    rec.ranWith = ov;
+    if (isBench(step)) {
+      rec.contended = ov.length > 0;
+      if (ov.length) log(`  ${step.id}: bench step ran next to ${ov.join(' ')} (contended: its timing is recorded only)`, sh);
+    }
+    if (step.id === 'unit-mod' && rec.status === 'PASS') runShared.unitModRun = sh.RUN;
     st.running.delete(i);
     st.done.set(step.id, { status: rec.status, shard: sh.k });
     writeSummary();

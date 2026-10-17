@@ -17,6 +17,7 @@
 // Evidence: artifacts/gate6c-v/<step>.json in the main checkout (GATE6CV_OUT overrides), all.log, REPORT.md, spend.json.
 import fs from 'node:fs';
 import path from 'node:path';
+import { kitReuse } from './lib/kit-reuse.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -134,14 +135,16 @@ function nodeTest(files) {
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), names: t.split('\n').filter((l) => /^✔|^✖/.test(l)) };
 }
+/** The kit suite once per gate run (tools/lib/kit-reuse.mjs): files whose checks are pass/fail only take this run's unit-kit results when exact. */
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 
 steps.unit = async () => {
   const out = {};
   out.village = nodeTest(['kit/test/village.test.mjs']);
   check(out.village.code === 0 && out.village.fail === 0 && out.village.pass >= 10, `item 1: kit village tests (500 claims, parity, props, mover, lots type, schema, variants): ${out.village.pass} pass, ${out.village.fail} fail`, out.village.failing);
-  out.goldens = nodeTest(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/forms-island.test.mjs']);
+  out.goldens = kitOnce(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/forms-island.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 1: goldens unchanged (mega_bench tiles, S1's tile shas, 6b fixtures, islands): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
-  out.kit = nodeTest(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
+  out.kit = kitOnce(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `item 1: the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   const sc = spawnSync('npx', ['vitest', 'run', 'test/regions-village.test.ts', 'test/regions-real-kit-6b.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
   const st = `${sc.stdout}${sc.stderr}`;
