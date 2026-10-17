@@ -68,7 +68,8 @@ const isInt = Number.isInteger;
  * row's init returns null when no edge lists it, so a plan without T3 parts plans byte for byte as before. `once` names the one row
  * an edge uses exactly once (a bridge edge `once: 'bridge'`, a tunnel edge `once: 'tunnel'`; a rope_bridge edge keeps K1b's
  * `spanOnce`, read as once 'rope'): only that row's needsFlag is true for the edge and only it sets the one flag bit, and the edge
- * walks at most `approach` (default 16) at each end. An edge's T3 options ride in `edge.t3` ({bridge: {...}, tunnel: {...}}, opaque
+ * walks at most `approach` (default 16) at each end. A row with `crossesWater` (the bridge) has its edges' coarse corridor found over the
+ * claim without the water obstacle, so a corridor exists across a river the row may span. An edge's T3 options ride in `edge.t3` ({bridge: {...}, tunnel: {...}}, opaque
  * to this pass), the pass-level inputs in `intent.bridge` and `intent.tunnel`.
  * Order and ties: a state's moves are relaxed walk, stair, hairpin, ladder, then each active special row in table order; a row
  * relaxes its candidates in its own fixed order (the gate move: at most one, straight ahead; the rope move: K1b's, by span length
@@ -79,7 +80,7 @@ const isInt = Number.isInteger;
 export const SPECIAL_MOVES = Object.freeze([
   Object.freeze({ name: 'gate', code: 5, segment: 'gate', flag: false, init: gateInit, active: gateActive, needsFlag: () => false, blocks: (st) => st.mask, expand: gateExpand, cells: gateCells, commit: gateCommit, prune: gatePrune }),
   Object.freeze({ name: 'rope', code: 6, segment: 'rope', flag: true, init: ropeInit, active: ropeActive, needsFlag: ropeNeedsFlag, blocks: () => null, expand: ropeExpand, cells: ropeCells, commit: ropeCommit, fail: ropeFail }),
-  Object.freeze({ name: 'bridge', code: 7, segment: 'bridge', flag: true, init: bridgeInit, active: bridgeActive, needsFlag: bridgeNeedsFlag, blocks: () => null, expand: bridgeExpand, cells: bridgeCells, commit: bridgeCommit, fail: bridgeFail }),
+  Object.freeze({ name: 'bridge', code: 7, segment: 'bridge', flag: true, crossesWater: true, init: bridgeInit, active: bridgeActive, needsFlag: bridgeNeedsFlag, blocks: () => null, expand: bridgeExpand, cells: bridgeCells, commit: bridgeCommit, fail: bridgeFail }),
   Object.freeze({ name: 'tunnel', code: 8, segment: 'tunnel', flag: true, init: tunnelInit, active: tunnelActive, needsFlag: tunnelNeedsFlag, blocks: tunnelBlocks, expand: tunnelExpand, cells: tunnelCells, commit: tunnelCommit, fail: tunnelFail, prune: tunnelPrune }),
 ]);
 
@@ -737,13 +738,21 @@ export function routePass(survey, volumes, intent) {
     // a route that crosses or overlaps itself is searched again with the crossing cells blocked (at most 8 times)
     const selfBlock = new Uint8Array(n);
     let res = null, built = null;
+    // (6c T3) an edge with a row that spans water (the bridge) finds its coarse corridor over the claim without the water obstacle
+    const wetCorridor = sp.some((x) => x.m.crossesWater);
     for (let attempt = 0; attempt <= 8; attempt++) {
       const b = build(true);
       if (attempt) { const sb = dilate(selfBlock, W, D, Rt); for (let k = 0; k < n; k++) b.blockedW[k] |= sb[k]; }
       res = null;
+      let cmask = b.free ?? b.blockedW;
+      if (wetCorridor) {
+        const bw = build(false);
+        cmask = bw.free ?? bw.blockedW;
+        if (attempt) { const sb = dilate(selfBlock, W, D, Rt); cmask = Uint8Array.from(cmask); for (let k = 0; k < n; k++) cmask[k] |= sb[k]; }
+      }
       // coarse to fine: the corridor (16), then a wider one (48), then the whole claim when it is small enough
       for (const [radius, name] of withinM ? [[-1, 'within']] : [[CORRIDOR, 'corridor'], [3 * CORRIDOR, 'corridor48'], [0, 'claim']]) {
-        const corridor = radius < 0 ? withinM : radius ? corridorOf(env, b.free ?? b.blockedW, si, sj, ti, tj, maxGrade, radius) : null;
+        const corridor = radius < 0 ? withinM : radius ? corridorOf(env, cmask, si, sj, ti, tj, maxGrade, radius) : null;
         if (radius && !corridor) continue;
         edgeOut.search = name;
         res = search(env, { ...sctx, ...b, corridor, maxExpand: cap - spent });

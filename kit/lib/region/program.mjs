@@ -35,7 +35,8 @@ import { PASSES, PASS_NAMES } from './passes/index.mjs';
 import { emitDistricts } from './districtsEmit.mjs';
 import * as CONNECTOR_WALL from '../connectors/wall.mjs';
 import { edgeColumns, inferMovers, footprintOf, polylineOf, VILLAGER } from './passes/route.mjs';
-import { ropeBridge } from '../connectors/ropeGeom.mjs';
+import { ropeBridge, surveyLand } from '../connectors/ropeGeom.mjs';
+import { bridgeSpan } from '../connectors/bridgeGeom.mjs';
 import { CARDINALS, cardinalOf, centreCells, circlePolygon, compassDir, crossOffsets, dominantCardinal, rightOf, segmentAxis } from './geom.mjs';
 
 export const COND = Object.freeze({ IF_NATURAL: 0, IF_SOLID_NATURAL: 1, IF_AIR_OR_FLUID: 2, ALWAYS_OURS: 3 });
@@ -393,8 +394,15 @@ export class Region {
         n++;
         if (g.shared) return; // an earlier edge's cells: built by it
         // (7a K1) a rope span is the links stage's (its deck, rails and posts); the route writes its approaches only; (6c T3) so are a
-        // bridge's span and a tunnel's bore
-        if (g.kind === 'rope' || g.kind === 'bridge' || g.kind === 'tunnel') return;
+        // bridge's span and a tunnel's bore, but the route writes a bridge's far landing (the segment's last cell: on the walk's fill it is
+        // no natural ground; the walk after the span starts from it)
+        if (g.kind === 'bridge') {
+          const land = cells[cells.length - 1];
+          const fp = footprintOf([land], e.width).filter((q) => !taken.has(`${q[0]},${q[1]}`)).map((q) => [q[0], q[1], q[2], q[3]]);
+          if (fp.length) rec.paths.push(p._routeRun(`${rid}_${n}l`, fp, mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells: [land], noRetain, fillTop }));
+          return;
+        }
+        if (g.kind === 'rope' || g.kind === 'tunnel') return;
         if (g.kind === 'walk' || g.kind === 'landing' || g.kind === 'gate') {
           // 4e's ground road where a walk lies on the surveyed ground (4e follows the realised ground at realise), else graded columns
           const onGround = g.kind === 'walk' && !it.base && e.width <= 5 && cells.length >= 4 && cells.every(([x, y, z]) => y === s.groundAt(x, z) && !s.waterAt(x, z));
@@ -447,7 +455,13 @@ export class Region {
     return ropeBridge(this, a, b, opts);
   }
 
-  // (6c T3) r.bridgeSpan(a, b, opts) (T3a, lib/connectors/bridgeGeom.mjs) is defined here, once, by T3a.
+  /**
+   * (6c T3a) A bridge (beam or arch) between two landings on one axis (lib/connectors/bridgeGeom.mjs, CONTRACT T3 §3); returns its
+   * record. Without `opts.land` or `opts.check` the span is checked against the plan survey (the 2.5D classes).
+   */
+  bridgeSpan(a, b, opts = {}) {
+    return bridgeSpan(this, a, b, opts.land || opts.check ? opts : { ...opts, land: surveyLand(this.ctx.survey) });
+  }
 
   // (6c T3) r.tunnel(a, b, opts) (T3b, lib/connectors/tunnelGeom.mjs) is defined here, once, by T3b.
 
