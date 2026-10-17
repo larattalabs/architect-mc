@@ -96,7 +96,12 @@ export function corridorBox(from, to, { approach = TUNNEL.approach, width = TUNN
  * where one covers the cell, else the 2.5D estimate (soil to 3 under the ground, rock below, water down a water column); `known`
  * says whether the class came from a volume or from the plan's own writes (a tunnel needs every cell it reads known: else VOLUME).
  */
-export function tunnelLand(S, { volumes = [], base = null, blocked = () => null, routeLow = () => null, wallAt = () => null, classOfVolume } = {}) {
+export function tunnelLand(S, { volumes = [], base = null, blocked = () => null, routeLow = () => null, wallAt = () => null, classOfVolume, written: writtenBoxes = [] } = {}) {
+  // (a program's own earlier writes by class: [{box: [x0, y0, z0, x1, y1, z1], class}], e.g. crossings_demo's sand band in its raised
+  // ridge; a written cell no box names is ROCK)
+  const wb = (writtenBoxes ?? []).filter((q) => q && Array.isArray(q.box));
+  const writtenClass = (x, y, z) => { for (let t = wb.length - 1; t >= 0; t--) { const b = wb[t].box; if (x >= b[0] && x <= b[3] && y >= b[1] && y <= b[4] && z >= b[2] && z <= b[5]) return wb[t].class; } return 'ROCK'; };
+  const writtenClassOf = writtenClass;
   const vols = volumes.filter(Boolean);
   const baseAt = (x, z) => {
     if (!base) return 0;
@@ -112,9 +117,11 @@ export function tunnelLand(S, { volumes = [], base = null, blocked = () => null,
     }
     return null;
   };
-  const written = (x, y, z) => { const b = baseAt(x, z); return b > 0 && y > surveyGround(x, z) && y <= surveyGround(x, z) + b; };
+  // (a written cell counts as site-solid only when its class is: a written sand band is LOOSE)
+  const raised = (x, y, z) => { const b = baseAt(x, z); return b > 0 && y > surveyGround(x, z) && y <= surveyGround(x, z) + b; };
+  const written = (x, y, z) => raised(x, y, z) && ['ROCK', 'SOIL'].includes(writtenClassOf(x, y, z));
   const classAt = (x, y, z) => {
-    if (written(x, y, z)) return 'ROCK';
+    if (raised(x, y, z)) return writtenClass(x, y, z);
     // a program's base lowers the land: the cells it carved are air
     const b = baseAt(x, z);
     if (b < 0 && y > surveyGround(x, z) + b && y <= surveyGround(x, z)) return 'AIR';
@@ -129,7 +136,7 @@ export function tunnelLand(S, { volumes = [], base = null, blocked = () => null,
   // (the air over a column's surveyed top is known without a volume: the survey read that column, and nothing stands over its top
   // but a tree, whose crown it does not measure)
   const overTop = (x, y, z) => !S.missingAt(x, z) && !(S.treeAt && S.treeAt(x, z)) && y > groundAt(x, z);
-  const known = (x, y, z) => written(x, y, z) || (baseAt(x, z) < 0 && y > surveyGround(x, z) + baseAt(x, z) && y <= surveyGround(x, z)) || fromVolume(x, y, z) !== null || overTop(x, y, z);
+  const known = (x, y, z) => raised(x, y, z) || (baseAt(x, z) < 0 && y > surveyGround(x, z) + baseAt(x, z) && y <= surveyGround(x, z)) || fromVolume(x, y, z) !== null || overTop(x, y, z);
   return { groundAt, classAt, known, written, blocked, routeLow, wallAt, missingAt: (x, z) => S.missingAt(x, z) };
 }
 

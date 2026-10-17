@@ -89,8 +89,10 @@ export function tunnelInit(env, intent) {
   // the explicit tunnels' corridors (compile's): an edge whose corridor holds no volume searches no bore (its answer is VOLUME,
   // tunnel.under or a cap, from `fail` and the compiler), so the first plan of a check costs no bore search
   const parts = intent.tunnel?.parts && typeof intent.tunnel.parts === 'object' ? intent.tunnel.parts : {};
+  // a program's own written cells by class (crossings_demo's raised ridge and its sand band), over the base's heights
+  const written = Array.isArray(intent.tunnel?.written) ? intent.tunnel.written : [];
   return {
-    W, D, minX, minZ, G, flags, blocked, CLASS, walls, wallOf, S, base, volumes, parts, kOf, cur: null, grids: new Map(),
+    W, D, minX, minZ, G, flags, blocked, CLASS, walls, wallOf, S, base, volumes, parts, written, kOf, cur: null, grids: new Map(),
     posterns: new Map(walls.map((w) => [w.id, 0])),
   };
 }
@@ -135,7 +137,7 @@ function landOf(state) {
   if (c.land) return c.land;
   const { blocked, CLASS, kOf, wallOf, G } = state;
   c.land = tunnelLand(state.S, {
-    volumes: state.volumes, base: state.base, classOfVolume: (v, x, y, z) => VOXEL_CLASSES[volumeClassAt(v, x, y, z)],
+    volumes: state.volumes, base: state.base, classOfVolume: (v, x, y, z) => VOXEL_CLASSES[volumeClassAt(v, x, y, z)], written: state.written,
     blocked: (x, z) => { const k = kOf(x, z); return k < 0 ? { class: 'OUTSIDE' } : blocked[k] ? { class: CLASS[blocked[k]] } : null; },
     routeLow: (x, z) => { const k = kOf(x, z); return k < 0 || !c.builtY || c.builtY[k] === NONE ? null : c.builtY[k] - ROUTE_FILL; },
     wallAt: (x, z) => { const w = wallOf.get(`${x},${z}`); if (!w) return null; const k = kOf(x, z); return { id: w.id, footing: (k < 0 ? 0 : G[k]) - 2, sealed: w.max === 0 }; },
