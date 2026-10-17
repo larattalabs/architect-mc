@@ -24,6 +24,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { kitReuse } from './lib/kit-reuse.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -77,6 +78,8 @@ function nodeTest(files) {
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), names: t.split('\n').filter((l) => /^✔|^✖/.test(l)), notes: t.split('\n').filter((l) => l.startsWith('# ')) };
 }
 
+/** The kit suite once per gate run (tools/lib/kit-reuse.mjs): files whose checks are pass/fail only take this run's unit-kit results when exact. */
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 steps.unit = async () => {
   const out = {};
   out.b = nodeTest(['kit/test/brush-b.test.mjs']);
@@ -87,7 +90,7 @@ steps.unit = async () => {
   check(okAll(item(/item 8:/)), 'item 8 (kit): every kind plans; the same request and seed give the same IR sha and tile shas; another seed another worm', item(/item 8:/));
   check(okAll(item(/ARVX version 2|block mask term/)) && item(/ARVX version 2|block mask term/).length === 2, 'the block mask term is real over an ARVX v2 volume (the mod\'s fixture decodes byte for byte), refused MASK_NEEDS_VOLUME over a v1 volume', item(/ARVX|block mask/));
   check(out.b.code === 0 && out.b.fail === 0, `kit/test/brush-b.test.mjs: ${out.b.pass} pass, ${out.b.fail} fail`, out.b.failing);
-  out.goldens = nodeTest(['kit/test/region-golden.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/scenario-goldens.test.mjs']);
+  out.goldens = kitOnce(['kit/test/region-golden.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/scenario-goldens.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 11: the tile goldens hold (mega_bench, the 6b families, S1, S7): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   const env = { ...process.env, JAVA_HOME, GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
   const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*ApiBTest', '--tests', '*BrushesTest', '--tests', '*ArvxBlocksTest', '--tests', '*ArvxTest'],

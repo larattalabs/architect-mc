@@ -17,6 +17,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { kitReuse } from './lib/kit-reuse.mjs';
 import crypto from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -44,15 +45,17 @@ function nodeTest(files) {
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };
 }
 
+/** The kit suite once per gate run (tools/lib/kit-reuse.mjs): files whose checks are pass/fail only take this run's unit-kit results when exact. */
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 const steps = {};
 
 steps.unit = async () => {
   const out = {};
   out.s2 = nodeTest(['kit/test/outpost-s2.test.mjs']);
   check(out.s2.code === 0 && out.s2.fail === 0 && out.s2.pass >= 6, `unit (kit): ice_outpost on a synthetic ice-spike claim (lots on dry ice-free land, every lot routed, 0 kept cells written, no M1-M4, M17 0, soul lanterns for a bright light role, deterministic); keep sets as route obstacles by column, no retaining column on a kept column, the relief keeps the kept columns, the grade quantum at 0.2, lightCover's format-2 draft, each with its broken variant: ${out.s2.pass} pass, ${out.s2.fail} fail`, out.s2.failing);
-  out.goldens = nodeTest(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/region-lint.test.mjs', 'kit/test/relief-t1.test.mjs', 'kit/test/route-t2.test.mjs']);
+  out.goldens = kitOnce(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/region-lint.test.mjs', 'kit/test/relief-t1.test.mjs', 'kit/test/route-t2.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `the goldens that must not move (format-1 goldens, S1's and S7's tiles, mega_bench, the 6b fixtures, relief_demo, route_demo, forms_demo, scatter_demo, crater_toolbox) and the T1/T2 suites over the changed passes: ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
-  out.kit = nodeTest(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
+  out.kit = kitOnce(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   const sc = spawnSync('npx', ['vitest', 'run', 'test/jobs.test.ts', 'test/plan-check.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
   const st = `${sc.stdout}${sc.stderr}`;

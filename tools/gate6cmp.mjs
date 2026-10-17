@@ -24,6 +24,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { kitReuse } from './lib/kit-reuse.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -105,6 +106,8 @@ function nodeTest(files) {
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), names: t.split('\n').filter((l) => /^✔|^✖/.test(l)), notes: t.split('\n').filter((l) => l.startsWith('# ')) };
 }
 
+/** The kit suite once per gate run (tools/lib/kit-reuse.mjs): files whose checks are pass/fail only take this run's unit-kit results when exact. */
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 steps.unit = async () => {
   const out = {};
   out.mp = nodeTest(['kit/test/mp.test.mjs']);
@@ -117,7 +120,7 @@ steps.unit = async () => {
   check(okAll(item(/item 6:/)), 'item 6 (kit): the drift fixture (200 generated specs) is current', item(/item 6:/));
   check(okAll(item(/item 8:/)), 'item 8: crater_works without the toolbox: the same IR with or without toolbox: false (left out of the params)', item(/item 8:/));
   check(out.mp.code === 0 && out.mp.fail === 0, `kit/test/mp.test.mjs: ${out.mp.pass} pass, ${out.mp.fail} fail`, out.mp.failing);
-  out.goldens = nodeTest(['kit/test/region-golden.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/scenario-goldens.test.mjs']);
+  out.goldens = kitOnce(['kit/test/region-golden.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/scenario-goldens.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 8: the tile goldens hold (mega_bench, the 6b family fixtures with crater_works's tiles, S1, S7): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   const env = { ...process.env, JAVA_HOME, GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
   const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*ApiMPTest', '--tests', '*MaskPatternDriftTest', '--tests', '*PlanStaleTest', '--tests', '*Api114Test'],

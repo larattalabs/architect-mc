@@ -26,6 +26,7 @@
 // Evidence: artifacts/gate6c-x/<step>.json in the main checkout (GATE6CX_OUT overrides), all.log, REPORT.md, spend.json.
 import fs from 'node:fs';
 import path from 'node:path';
+import { kitReuse } from './lib/kit-reuse.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -127,6 +128,8 @@ function nodeTest(files) {
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), names: t.split('\n').filter((l) => /^✔|^✖/.test(l)) };
 }
 
+/** The kit suite once per gate run (tools/lib/kit-reuse.mjs): files whose checks are pass/fail only take this run's unit-kit results when exact. */
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 steps.unit = async () => {
   const out = {};
   out.c19 = nodeTest(['kit/test/village.test.mjs']);
@@ -144,7 +147,7 @@ steps.unit = async () => {
   out.java = { code: g.status, api114: xml('api.Api114Test'), keys: xml('region.RegionKeysTest') };
   check(g.status === 0 && out.java.api114?.tests >= 6 && out.java.api114.failures === 0 && out.java.keys?.tests >= 5 && out.java.keys.failures === 0,
     `item 1: Api114Test (old constructors, trailing components, default methods, no new Reason, ext bounds at 4096/4097) ${JSON.stringify(out.java.api114)} and RegionKeysTest (body hashes, scopes, plan ext -> site ext, region record) ${JSON.stringify(out.java.keys)}`);
-  out.kit = nodeTest(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
+  out.kit = kitOnce(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `item 1: the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   spendZero();
   return out;

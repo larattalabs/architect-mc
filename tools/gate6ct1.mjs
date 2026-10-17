@@ -22,6 +22,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { kitReuse } from './lib/kit-reuse.mjs';
 import crypto from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -98,13 +99,15 @@ function nodeTest(files) {
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), names: t.split('\n').filter((l) => /^✔|^✖/.test(l)) };
 }
 
+/** The kit suite once per gate run (tools/lib/kit-reuse.mjs): files whose checks are pass/fail only take this run's unit-kit results when exact. */
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 steps.unit = async () => {
   const out = {};
   out.t1 = nodeTest(['kit/test/relief-t1.test.mjs']);
   check(out.t1.code === 0 && out.t1.fail === 0 && out.t1.pass >= 9, `unit (kit): the relief op (evaluation, clamps, refusals), Jacobi on a 5x5 hand case, erosion never moves a pin, the pass, declared passes (an undeclared pass fails), N-T1-1, relief_demo, the passes lint: ${out.t1.pass} pass, ${out.t1.fail} fail`, out.t1.failing);
-  out.goldens = nodeTest(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/region-lint.test.mjs']);
+  out.goldens = kitOnce(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/region-lint.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 11: format-1 goldens, S1's and S7's tile goldens, mega_bench and the 6b fixtures unchanged; the realise lint: ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
-  out.kit = nodeTest(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
+  out.kit = kitOnce(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   const sc = spawnSync('npx', ['vitest', 'run', 'test/regions-passes.test.ts', 'test/regions-real-kit-6b.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
   const st = `${sc.stdout}${sc.stderr}`;

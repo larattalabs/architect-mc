@@ -28,6 +28,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { kitReuse } from './lib/kit-reuse.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -103,6 +104,8 @@ function nodeTest(files) {
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), comments: t.split('\n').filter((l) => /^# /.test(l)).slice(0, 60) };
 }
 function sh(cmdline, opts = {}) {
+/** The kit suite once per gate run (tools/lib/kit-reuse.mjs): files whose checks are pass/fail only take this run's unit-kit results when exact. */
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
   const r = spawnSync('bash', ['-c', cmdline], { cwd: root, encoding: 'utf8', timeout: 3_600_000, env: { ...process.env, JAVA_HOME, PATH: `${JAVA_HOME}/bin:${process.env.PATH}` }, ...opts });
   return { code: r.status, out: `${r.stdout}${r.stderr}` };
 }
@@ -114,11 +117,11 @@ steps.unit = async () => {
   const rows = out.k1a.comments.find((l) => /K1a §9 rows/.test(l)) ?? '';
   check(/\((\d) of 9/.test(rows) && Number(/\((\d) of 9/.exec(rows)[1]) >= 7, `item 7: ${rows.slice(2, 400)}`);
   fs.writeFileSync(path.join(OUT, 'asks-k1a.txt'), `${out.k1a.comments.map((l) => l.slice(2)).join('\n')}\n`);
-  out.p0 = nodeTest(['kit/test/plan-p0.test.mjs', 'kit/test/plan-ops.test.mjs']);
+  out.p0 = kitOnce(['kit/test/plan-p0.test.mjs', 'kit/test/plan-ops.test.mjs']);
   check(out.p0.code === 0 && out.p0.fail === 0, `item 15: P0's tests after the moves (connector.catwalk the reserved example; the oracle skips the supported blocks; item 9's D2 -> K1 diff): ${out.p0.pass} pass, ${out.p0.fail} fail`, out.p0.failing);
-  out.goldens = nodeTest(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/route-t2.test.mjs', 'kit/test/relief-t1.test.mjs', 'kit/test/districts-d.test.mjs', 'kit/test/districts-d2.test.mjs', 'kit/test/village.test.mjs', 'kit/test/region-lint.test.mjs']);
+  out.goldens = kitOnce(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/route-t2.test.mjs', 'kit/test/relief-t1.test.mjs', 'kit/test/districts-d.test.mjs', 'kit/test/districts-d2.test.mjs', 'kit/test/village.test.mjs', 'kit/test/region-lint.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 12: S1, S7, S2, mega_bench, relief_demo, route_demo, forms_demo, scatter_demo and districts_demo goldens unchanged (every committed scenario golden), T2's and D's tests, the realise lint: ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
-  out.kit = nodeTest(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
+  out.kit = kitOnce(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   const d = sh('node tools/plan-catalogue-diff.mjs kit/test/fixtures/plan/catalogue-c37.json kit/schemas/plan-catalogue.golden.json --pending kit/test/fixtures/plan/pending-two-districts.json');
   fs.writeFileSync(path.join(OUT, 'catalogue-diff.txt'), d.out);
