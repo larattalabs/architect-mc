@@ -301,7 +301,7 @@ steps.ingame = async () => {
   // ---- crossings_demo's tunnels on the flat claim: the two-plan flow (Regions.plan), realised, re-read, villagers, removal
   await L.fresh('G6B T3b Flat', FLAT);
   await L.setRules('exact');
-  await tp((FLAT_CLAIM[0] + FLAT_CLAIM[2]) / 2, -20, (FLAT_CLAIM[1] + FLAT_CLAIM[3]) / 2);
+  await tp((FLAT_CLAIM[0] + FLAT_CLAIM[2]) / 2, 100, (FLAT_CLAIM[1] + FLAT_CLAIM[3]) / 2);
   const p = await L.plan('crossings_demo', FLAT_CLAIM, { params: { variant: 'flat' }, surveyLoad: 'bounded:256', check: true, owner: OWNER });
   const planDir = sideDir(p.planId);
   const meta = JSON.parse(fs.readFileSync(path.join(planDir, 'meta.json'), 'utf8'));
@@ -319,8 +319,8 @@ steps.ingame = async () => {
   // ---- item 5's control: a plan without a tunnel part (v34's auto on rift_city) plans once: no volume pass
   await L.fresh('G6B T3b V34', FLAT);
   const v34 = JSON.parse(fs.readFileSync(path.join(KIT, 'test', 'fixtures', 'plan', 'valid', 'v34_auto.json'), 'utf8'));
-  await tp(1120, -20, 2080);
-  const c34 = await call('dev.region.checkPlan', { plan: v34.plan, claim: [1000, 2000, 1239, 2159], owner: OWNER, anchors: Object.fromEntries(Object.entries(v34.anchors ?? {}).map(([k, v]) => [k, [v[0], -60, v[2]]])) }, 900_000);
+  await tp(1120, 100, 2080);
+  const c34 = await call('dev.region.checkPlan', { plan: v34.plan, claim: [1000, 2000, 1239, 2159], owner: OWNER, anchors: v34.anchors ?? {} }, 900_000);
   out.v34 = { overall: c34.check?.overall ?? null, volumePass: c34.volumePass ?? null, notes: (c34.check?.notes ?? []).filter((n) => /volume/.test(n)) };
   check(c34.check && c34.volumePass === null && !out.v34.notes.length, `item 5: a plan without a tunnel part (v34's auto) plans once: no volume pass, no volume note (${out.v34.overall})`);
   await leaveWorld();
@@ -659,7 +659,7 @@ steps.look = async () => {
   await L.setRules('exact');
   await cmd('/time set 13000'); // dusk: the lanterns read against the evening
   await cmd('/weather clear');
-  await tp((FLAT_CLAIM[0] + FLAT_CLAIM[2]) / 2, -20, (FLAT_CLAIM[1] + FLAT_CLAIM[3]) / 2);
+  await tp((FLAT_CLAIM[0] + FLAT_CLAIM[2]) / 2, 100, (FLAT_CLAIM[1] + FLAT_CLAIM[3]) / 2);
   const p = await L.plan('crossings_demo', FLAT_CLAIM, { params: { variant: 'flat' }, surveyLoad: 'bounded:256', check: true, owner: OWNER });
   const meta = JSON.parse(fs.readFileSync(path.join(sideDir(p.planId), 'meta.json'), 'utf8'));
   const region = await L.realise(p.planId, {});
