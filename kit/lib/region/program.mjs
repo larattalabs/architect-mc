@@ -402,7 +402,9 @@ export class Region {
           if (fp.length) rec.paths.push(p._routeRun(`${rid}_${n}l`, fp, mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells: [land], noRetain, fillTop }));
           return;
         }
-        if (g.kind === 'rope' || g.kind === 'tunnel') return;
+        // (6c T3b: a tunnel segment's own handling goes here)
+        if (g.kind === 'tunnel') return;
+        if (g.kind === 'rope') return;
         if (g.kind === 'walk' || g.kind === 'landing' || g.kind === 'gate') {
           // 4e's ground road where a walk lies on the surveyed ground (4e follows the realised ground at realise), else graded columns
           const onGround = g.kind === 'walk' && !it.base && e.width <= 5 && cells.length >= 4 && cells.every(([x, y, z]) => y === s.groundAt(x, z) && !s.waterAt(x, z));
