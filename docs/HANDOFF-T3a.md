@@ -95,13 +95,41 @@ nothing. T3b replaces the bodies only.
 
 ## T3a status
 
-- [x] Foundation committed and pushed as `t3/foundation`.
-- [ ] Bridge geometry (`bridgeGeom.mjs`): span, beam, arch, clearance, piers, lamps; `r.bridgeSpan`.
-- [ ] Bridge row (`moves/bridge.mjs`) and its `fail`; compile hooks; the street fallback; `M10:bridge`.
-- [ ] Fixtures (v35, v36, v38 bridge part, v39; refusals), §9 rows, gap tables.
-- [ ] Gate driver `tools/gate6ct3a.mjs` (t3a-unit, t3a-ingame, t3a-natural, t3a-look); probes (boat, villager).
-- [ ] Look gallery, slice tier, gate-verifier, as-built.
+- [x] Foundation committed and pushed as `t3/foundation` (round 1 43013f14, round 2 a3549aca).
+- [x] Bridge geometry (`bridgeGeom.mjs`): span checks in §4's order, beam piers, the arch's intrados and ring, clearance, lamps,
+      newel posts; `r.bridgeSpan`; `emitRouteBridges`.
+- [x] Bridge row (`moves/bridge.mjs`) and its `fail`; compile hooks (`connectors/bridge.mjs`); the street fallback; wouldFits (WATER:
+      arch then rope; an arch's SPAN: beam then rope; NO_GAP: path); `lands`; `M10:bridge`, M8, M6 (`checkBridges.mjs`).
+- [x] Fixtures: valid/v35, v36, v38 (bridge half); t3a/ v39 (fallback) and r01-r12; §9 rows; the asks gap tables
+      (`fixtures/plan/t3a/asks-gap-*.txt`); `t3-pending-a.json` deleted.
+- [x] Gate driver `tools/gate6ct3a.mjs` (unit, unchanged, probe, ingame, natural, frozen, look, report) and the `dev.t3.boat` hook
+      (`SliceT3Dev`, headless too).
+- [ ] In-game items (probe, ingame with the crossings_demo_flat golden, natural, frozen), the look gallery, the slice tier,
+      gate-verifier, as-built.
 
 ## Decisions and deviations (to record in "T3a as built")
 
 - A 1-deck-cell span is level (rise at most floor(n / 2) besides §3's max(1, floor(n / 8))), so every step is one half block.
+- The gap is measured from the banks (the lower landing's natural ground), not the deck: a landing raised on the walk's fill or a
+  stair makes no gap out of flat land (found: a "bridge" of 7 over flat ground on a 2-step stair).
+- A landing may stand on the walk's fill (at most 4, T2's maxFill): its anchors are the 2 natural cells under the fill; the route
+  writes a bridge's far landing (foundation round 2); the newel posts reach down to the ground.
+- A bridge's first deck cell only has to clear the land (not drop 2 as rope's): a walk keeps 2 cells off water, so a bridge over water
+  starts on the bank; a gap must lie ahead within 32 (`gapAhead`).
+- Over water an arch's ring starts one over the surface at a water column (no write in water); only the middle third is judged for the
+  clearance.
+- Piers: the fewest evenly spaced (one spacing, one offset) within two of the minimum count, ties by total height, then the smallest
+  longest run, then the most symmetric ends, then offset, spacing; else the greedy farthest-site set.
+- `form: auto` failing both: the beam's failure (the arch's code in `evidence.arch`).
+- The street fallback answers `adjusted` with a deviation `{what: crossing, kind: crossing, value: bridges, bridges: [...]}`; its graph
+  edge keeps its type, the bridged segment carries `crossing`. v39 lives in `fixtures/plan/t3a/` (valid/ fixtures must answer fits).
+- Width defaults: a bridge part 2 on a villager edge, 1 player-only (as rope); a fallback bridge the walk's width, at least 2 on a
+  villager edge.
+- The diagnosis tries each candidate from the near cell's ground and the highest y the search reached there, to the far ground or
+  level, and names the landing heights that got furthest; spans within 1..32 before longer ones.
+- crossings_demo's natural variants stand their landings on level pads raised in stage `ground` (the foundation role, 3 cells off the
+  water, at most 8 over the land), the crossing picked as the lowest water run (the river, not a mountain pool) whose arch passes.
+- The deck: the first of the bible's slot, path, floor, structure that is no gravity block and has a slab (gravel and dirt paths fall
+  through); the rail: the trim's wall block, else the rail's fence.
+- auto's rope note ("no rope span: walking is cheaper") is left out when the connector crossed on a bridge or a tunnel (rope.mjs).
+- The sidecar's compact plan/0 bound 60,000 -> 66,000 (catalogue 6 and the two defs).

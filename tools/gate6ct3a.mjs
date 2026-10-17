@@ -190,7 +190,7 @@ steps.probe = async () => {
   await ensure();
   await L.fresh('G6B T3a Probe', FLAT);
   await L.setRules('exact');
-  const GROUND = -61, Y0 = -45;
+  const GROUND = 64, Y0 = 80; // (the flat base world's surface is y 64)
   // ---- the villager: command-built beam and arch decks (the kit's profiles), both ways
   const cases = [{ n: 24, rise: 0, w: 3, form: 'beam' }, { n: 16, rise: 2, w: 2, form: 'beam' }, { n: 3, rise: 0, w: 2, form: 'beam' }, { n: 32, rise: -4, w: 3, form: 'beam' },
     { n: 16, rise: 0, w: 3, form: 'arch' }, { n: 24, rise: 3, w: 2, form: 'arch' }, { n: 4, rise: 0, w: 2, form: 'arch' }, { n: 16, rise: 0, w: 3, form: 'beam', hole: true }];
@@ -400,7 +400,7 @@ async function crossRun(tag, claim, { kind, golden }) {
 /** A bridge part over a command-built channel through Regions.checkPlan, realised from its artifact, crossed and removed (E-flat). */
 async function checkPlanRun(tag) {
   const out = {};
-  const W0 = [6400, 6200], G = -61, top = G + 10;
+  const W0 = [6400, 6200], G = 64, top = G + 10; // (the flat base world's surface is y 64)
   await tp(W0[0] + 32, top + 20, W0[1] + 32);
   await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => null);
   // a stone bank block with a 14-wide water channel through it, the water 3 under the rim (the world's own, made by commands)
@@ -472,7 +472,9 @@ steps.frozen = async () => {
   await ensure();
   const base = await L.seedBase(FROZEN_SEED);
   await L.fresh('G6B T3a Cross Frozen', base);
-  await L.setRules('default');
+  // (the frozen biome freezes water and grows snow on random ticks, and a freeze beside worldgen sand standing on water drops it: the
+  // first run found such cells 8-13 columns from any written cell, unclassified; the stand runs with random ticks off, as E-flat's)
+  await L.setRules('exact');
   const out = await crossRun('frozen', FROZEN_CLAIM, { kind: 'frozen', golden: null });
   await leaveWorld();
   spendZero();
