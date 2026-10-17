@@ -700,6 +700,7 @@ steps.look = async () => {
     const n = (meta.tunnels ?? []).find((q) => q.width === 1);
     if (n) out.shots.push(await shot('narrow', [n.from[0] - 6.5, n.from[1] + 3, n.from[2] + 2.5], [n.from[0] + 6.5, n.from[1] + 1.5, n.from[2] + 0.5]));
   }
+  check(out.shots.length >= 3 && st.view.state === 'PLACED', `look (recorded, not judged: Noah's call, N-T3-3): ${out.shots.length} shots of the realised tunnels (${out.shots.map((q) => q.name).join(', ')})`);
   await call('dev.release', {}).catch(() => null);
   await leaveWorld();
   spendZero();
