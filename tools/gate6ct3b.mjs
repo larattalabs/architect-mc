@@ -86,7 +86,7 @@ steps.start = async () => {
   const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim();
   execFileSync('git', ['-C', L.RUN, 'checkout', '-q', '--detach', head]);
   execFileSync('npm', ['run', 'build'], { cwd: path.join(L.RUN, 'sidecar'), stdio: 'ignore' });
-  await startClient(process.argv[3] ?? 'G6C T3b Lobby', { backend: 'sim' });
+  await startClient(process.argv[3] ?? 'G6B T3b Lobby', { backend: 'sim' });
   spendZero();
   return { head };
 };
@@ -299,7 +299,7 @@ steps.ingame = async () => {
   await ensure();
   const out = {};
   // ---- crossings_demo's tunnels on the flat claim: the two-plan flow (Regions.plan), realised, re-read, villagers, removal
-  await L.fresh('G6C T3b Flat', FLAT);
+  await L.fresh('G6B T3b Flat', FLAT);
   await L.setRules('exact');
   await tp((FLAT_CLAIM[0] + FLAT_CLAIM[2]) / 2, -20, (FLAT_CLAIM[1] + FLAT_CLAIM[3]) / 2);
   const p = await L.plan('crossings_demo', FLAT_CLAIM, { params: { variant: 'flat' }, surveyLoad: 'bounded:256', check: true, owner: OWNER });
@@ -317,7 +317,7 @@ steps.ingame = async () => {
   // ---- the postern: v40's walled village east of a cliff ridge built by commands (the world's own rock), checked, approved, realised
   out.postern = await posternRun();
   // ---- item 5's control: a plan without a tunnel part (v34's auto on rift_city) plans once: no volume pass
-  await L.fresh('G6C T3b V34', FLAT);
+  await L.fresh('G6B T3b V34', FLAT);
   const v34 = JSON.parse(fs.readFileSync(path.join(KIT, 'test', 'fixtures', 'plan', 'valid', 'v34_auto.json'), 'utf8'));
   await tp(1120, -20, 2080);
   const c34 = await call('dev.region.checkPlan', { plan: v34.plan, claim: [1000, 2000, 1239, 2159], owner: OWNER, anchors: Object.fromEntries(Object.entries(v34.anchors ?? {}).map(([k, v]) => [k, [v[0], -60, v[2]]])) }, 900_000);
@@ -331,7 +331,7 @@ steps.ingame = async () => {
 /** v40 in game: a cliff ridge by commands, the walled village and its postern checked through plan_v0, realised from the artifact. */
 async function posternRun() {
   const out = {};
-  await L.fresh('G6C T3b Postern', FLAT);
+  await L.fresh('G6B T3b Postern', FLAT);
   await L.setRules('exact');
   const G = -61, CL = 7157, Z0 = 7000, Z1 = 7159; // the cliff's east face at x 7157 (v40's shape moved by +6000, +5000; ground -61)
   await tp(CL, -20, (Z0 + Z1) / 2);
@@ -401,7 +401,7 @@ steps.natural = async () => {
   // (the hazard cells beside the bore's middle: the void's lanes are z - 1 .. z + 1 (3 wide); a cell 2 from the void is z + 3)
 
   // ---- A: item 5 (the check with volumes, answers equal the kit's) and item 4 (water 2 refused, at 3 fits, realised, stand: dry)
-  await L.fresh('G6C T3b Hill A', BASE);
+  await L.fresh('G6B T3b Hill A', BASE);
   await L.setRules('default');
   await at();
   const c0 = await checkHill(f);
@@ -471,11 +471,11 @@ steps.natural = async () => {
     await leaveWorld();
     return res;
   };
-  out.water = await fluidTest('water', 2, 3, 'G6C T3b Hill Water');
-  out.lava = await fluidTest('lava', 1, 3, 'G6C T3b Hill Lava');
+  out.water = await fluidTest('water', 2, 3, 'G6B T3b Hill Water');
+  out.lava = await fluidTest('lava', 1, 3, 'G6B T3b Hill Lava');
 
   // ---- C: item 6 (stale rock), then the realise with neither (items 2, 3, 9 natural)
-  await L.fresh('G6C T3b Hill Stale', BASE);
+  await L.fresh('G6B T3b Hill Stale', BASE);
   await L.setRules('default');
   await at();
   const c3 = await checkHill(f);
@@ -519,7 +519,7 @@ steps.natural = async () => {
   await leaveWorld();
 
   // ---- D: load "generate": the hill's corridor never generated (a fresh copy, the bot at spawn)
-  await L.fresh('G6C T3b Hill Gen', BASE);
+  await L.fresh('G6B T3b Hill Gen', BASE);
   await L.setRules('default');
   await tp(0.5, 200, 0.5);
   const g1 = await checkHill(f);
@@ -554,7 +554,7 @@ steps.pin = async () => {
   const { decodeArvx, classAt } = await imp('lib/region/volume.mjs');
   const site = JSON.parse(fs.readFileSync(SITE_FILE, 'utf8'));
   const needs = site.needs;
-  await L.fresh('G6C T3b Pin', BASE);
+  await L.fresh('G6B T3b Pin', BASE);
   await L.setRules('default');
   const [w, d] = needs.size;
   const out = { tried: [] };
@@ -643,7 +643,7 @@ async function shot(name, eye, lookAt) {
 steps.look = async () => {
   await ensure();
   const out = { shots: [] };
-  await L.fresh('G6C T3b Look', FLAT);
+  await L.fresh('G6B T3b Look', FLAT);
   await L.setRules('exact');
   await cmd('/time set 13000'); // dusk: the lanterns read against the evening
   await cmd('/weather clear');
