@@ -1,6 +1,6 @@
 {
   "id": "tunnel_hill",
-  "purpose": "slice T3b's natural hill (docs/CONTRACT.md \"Phase 6c slice T3\" §10): a straight east-west line through a hill with at least 2 cover over a 32-cell bore (a surface bore of 32 to 60 floor cells, ends on low ground), no fluid within 4 of the bore, no tree within reach of the corridor; pinned by tools/gate6ct3b.mjs pin (find-site's spiral and summary, then the line, the corridor's trees and water, crossings_demo's hill variant planned with its frozen volume, and the fluids within 4 read from it)",
+  "purpose": "slice T3b's natural hill (docs/CONTRACT.md \"Phase 6c slice T3\" \u00a710): a straight east-west line through a hill with at least 2 cover over a 32-cell bore (a surface bore of 32 to 60 floor cells, ends on low ground), no fluid within 4 of the bore, no tree within reach of the corridor; pinned by tools/gate6ct3b.mjs pin (find-site's spiral and summary, then the line, the corridor's trees and water, crossings_demo's hill variant planned with its frozen volume, and the fluids within 4 read from it)",
   "world": {
     "seed": "2026100906",
     "preset": "normal",
@@ -17,62 +17,11 @@
     ],
     "waterMax": 30,
     "treesMax": 12,
-    "candidates": 120,
+    "candidates": 200,
     "step": 256,
     "center": [
-      -848,
-      304
+      0,
+      0
     ]
-  },
-  "fixture": {
-    "claim": [
-      -928,
-      224,
-      -769,
-      383
-    ],
-    "line": {
-      "a": [
-        -852,
-        62,
-        335
-      ],
-      "b": [
-        -791,
-        57,
-        335
-      ],
-      "L": 60,
-      "run": 52
-    },
-    "tunnel": {
-      "from": [
-        -848,
-        62,
-        335
-      ],
-      "to": [
-        -791,
-        57,
-        335
-      ],
-      "length": 56,
-      "bore": 18,
-      "coverMin": 2
-    },
-    "stats": {
-      "relief": 30,
-      "water": 0,
-      "trees": 0,
-      "biomes": {
-        "desert": 100
-      },
-      "min": 47,
-      "max": 77
-    },
-    "volumeSha": "5982257bcff0e993853cfba26e4cab76f608474edcf31e69c5f15d8dfff7db51",
-    "foundBy": "tools/gate6ct3b.mjs pin @ seed 2026100906",
-    "worldSeed": "2026100906",
-    "tried": 1
   }
 }

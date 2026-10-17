@@ -593,6 +593,9 @@ steps.pin = async () => {
     out.tried.push(row);
     log(`  candidate ${x0},${z0}: relief ${row.relief}, water ${s.water}%, trees ${s.trees}% -> ${sc}`);
     if (sc === null) continue;
+    // a hill of rock, not of sand: a desert's or a beach's sand is no site-solid (its bore would be short), a badlands' red sand likewise
+    const sandy = Object.entries(s.biomes).filter(([b]) => /desert|beach|badlands/.test(b)).reduce((a, [, v]) => a + v, 0);
+    if (sandy > 20) { log(`  candidate ${x0},${z0}: sandy ${sandy}%`); continue; }
     // the line: the claim's survey at resolution 1, a surface bore of 32-60 cells between low ends
     const file = path.join(OUT, `pin-${x0}_${z0}.arsv`);
     await call('dev.region.survey', { claim: [x0, z0, x1, z1], surveyLoad: 'bounded:256', file }, 900_000);
@@ -618,9 +621,10 @@ steps.pin = async () => {
     const meta = JSON.parse(fs.readFileSync(path.join(sideDir(p.planId), 'meta.json'), 'utf8'));
     const t = (meta.tunnels ?? [])[0];
     const bad = (p.report?.findings ?? []).filter((q) => /^M(3|4)(:tunnel|:gravity)/.test(q.rule));
-    row.plan = { planId: p.planId, tunnels: (meta.tunnels ?? []).length, findings: bad.map((q) => q.rule), notes: (p.notes ?? []).slice(-2) };
+    row.plan = { planId: p.planId, tunnels: (meta.tunnels ?? []).length, bore: t ? t.bore.filter(Boolean).length : 0, findings: bad.map((q) => q.rule), notes: (p.notes ?? []).slice(-2) };
     log(`  candidate ${x0},${z0}: crossings_demo hill ${json(row.plan)}`);
-    if (!t || bad.length) continue;
+    // at least 2 cover over a 32-cell bore by the frozen volume's rock (§10's pin), not only by the surface
+    if (!t || bad.length || row.plan.bore < 32) continue;
     // no fluid within 4 of the void, from the plan's own frozen volume
     const ir = JSON.parse(fs.readFileSync(path.join(sideDir(p.planId), 'ir.json'), 'utf8'));
     const vb = Object.values(ir.volumes ?? {})[0];
