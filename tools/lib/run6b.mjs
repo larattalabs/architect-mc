@@ -7,6 +7,7 @@ import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DevClient } from './devclient.mjs';
+import { baseCurrent as baseCurrentIn, baseRecipe, writeStamp } from './basestamp.mjs';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -148,25 +149,50 @@ export function copyWorld(from, to) {
   execFileSync('cp', ['-c', '-R', src, dst]);
   fs.rmSync(path.join(dst, 'session.lock'), { force: true });
 }
+/** The creation recipe of a gate base world, by name ('G6B Flat Base' is flat; 'G6B Seed Base' the pinned seed; 'G6B Seed <n>' seed n). */
+const PINNED_SEED = '2026100906';
+export function baseSpec(name) {
+  if (name === 'G6B Flat Base') return { preset: 'flat', seed: PINNED_SEED };
+  if (name === 'G6B Seed Base') return { preset: 'normal', seed: PINNED_SEED };
+  const m = /^G6B Seed (\S+)$/.exec(name);
+  return m ? { preset: 'normal', seed: m[1] } : null;
+}
+/**
+ * True when the base world exists and was made by the current creation recipe. A stale or unstamped one (a reused run dir's old
+ * level.dat) is moved to ../saves-stale and false is returned, so the driver's "make it if missing" path rebuilds it.
+ */
+export function baseCurrent(name, spec = baseSpec(name)) {
+  return baseCurrentIn(SAVES, name, spec, { log });
+}
+/** Records the recipe in a base world the driver just made (call after leaving it). */
+export function stampBase(name, spec = baseSpec(name)) {
+  writeStamp(SAVES, name, baseRecipe(spec));
+}
+/** Makes a gate base world (creative, cheats, the preset's rules, spawn tp, then left) unless one made by the current recipe exists. */
+export async function ensureBase(name) {
+  const spec = baseSpec(name);
+  if (!spec) throw new Error(`not a gate base world: ${name}`);
+  if (baseCurrent(name, spec)) return name;
+  await leaveWorld();
+  await openWorld(name, { mode: 'creative', preset: spec.preset, seed: spec.seed, cheats: true });
+  await setRules(spec.preset === 'flat' ? 'exact' : 'default');
+  await tp(0.5, 200, 0.5);
+  await cmd('/save-all flush');
+  await leaveWorld();
+  stampBase(name, spec);
+  return name;
+}
 /**
  * (6c V) The normal-preset base world of a world seed: 'G6B Seed Base' for 6b's pinned seed 2026100906 (made by gate6b base),
- * else 'G6B Seed <seed>', created here the first time (creative, cheats, default rules), then left.
+ * else 'G6B Seed <seed>', created here the first time, then left. A stale one (older creation recipe) is rebuilt.
  */
 export async function seedBase(seed) {
-  if (!seed || String(seed) === '2026100906') return 'G6B Seed Base';
-  const name = `G6B Seed ${seed}`;
-  if (!fs.existsSync(path.join(SAVES, name, 'level.dat'))) {
-    await leaveWorld();
-    await openWorld(name, { mode: 'creative', preset: 'normal', seed: String(seed), cheats: true });
-    await setRules('default');
-    await tp(0.5, 200, 0.5);
-    await cmd('/save-all flush');
-    await leaveWorld();
-  }
-  return name;
+  return ensureBase(!seed || String(seed) === PINNED_SEED ? 'G6B Seed Base' : `G6B Seed ${seed}`);
 }
 export async function fresh(name, from) {
   await leaveWorld();
+  // a reused run dir's old base world is rebuilt before it is cloned (PLAN "Stale base worlds")
+  if (baseSpec(from)) await ensureBase(from);
   copyWorld(from, name);
   await openWorld(name);
 }

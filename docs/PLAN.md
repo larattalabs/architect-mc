@@ -426,6 +426,11 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
   data packs recorded, allowCommands 0) generated magma and bubble columns where the golden has water, moving S1's pinned
   survey sha. Fresh run dirs pass. Have gate-run detect and rebuild stale base worlds (or stamp base worlds with the creating
   tool version).
+  **DONE (chore/housekeeping-1):** base worlds carry `architect-base-stamp.json` (hash of the creation recipe: recipe version, Minecraft
+  version, preset, seed, rules; `tools/lib/basestamp.mjs`). `ensureBase()` in `tools/lib/run6b.mjs` (used by every `base` step of the
+  G6B drivers, `seedBase` and `fresh`) moves an unstamped or mismatched base to `saves-stale/` (never deletes) and rebuilds it. Bump
+  `BASE_RECIPE_VERSION` when the creation path changes. Unit test: `kit/test/basestamp.test.mjs`. Not covered: the G6A/G6C0c/6cx drivers'
+  own base steps (other worlds).
 - PT verifier notes: `PredicatePathsTest` matches only the literal `level.setBlock(`; comment or lock the off-thread clear in
   `Placed.changed`.
 
