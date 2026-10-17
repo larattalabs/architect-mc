@@ -624,7 +624,8 @@ steps.pin = async () => {
     for (let z = line.a[2] - 6; z <= line.a[2] + 6; z++) for (let x = line.a[0] - 6; x <= line.b[0] + 6; x++) {
       if (x < x0 || x > x1 || z < z0 || z > z1) continue;
       const fl = S.columns.flags[(x - S.columns.minX) + (z - S.columns.minZ) * S.columns.width];
-      if (fl & FLAG_TREE) trees++;
+      // (a tree over the bore stands on 2+ cover and is never touched; only near the ends, where the cuts and portals write the surface)
+      if ((fl & FLAG_TREE) && (x <= line.a[0] + 14 || x >= line.b[0] - 14)) trees++;
       if (fl & (FLAG_WATER | FLAG_LAVA)) wet++;
     }
     row.corridor = { trees, wet };
