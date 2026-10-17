@@ -9442,7 +9442,7 @@ v0.30.0 (D1) merged with `slice/S2`, the placeholders renumbered in the merge: `
 `--gate6cs2` against the 0.30.0, 0.29.0 and 0.28.0 apitest jars and the 0.30.0 surface (`artifacts/gate6c-s2/v0300` built from the v0.30.0
 tag with its tools/); `--gate6cd` kept.
 
-## Phase 6c slice T3: bridge and tunnel moves (DRAFT for Steward review)
+## Phase 6c slice T3: bridge and tunnel moves (DRAFT; SUPERSEDED 2026-10-17 by "Phase 6c slice T3: bridges and tunnels" at the end)
 
 API 1.22.0, mod 0.25.0 (wave 3). SETTLEMENTS §4.3 (the `bridge` and `tunnel` moves).
 
@@ -12806,3 +12806,553 @@ primitive hooks). Resolutions, both sides' semantics kept, no test dropped:
 | CONTRACT | Both as-built sections; K1a's verifier line; HANDOFF-K1a deleted (HANDOFF-K1b was retired by K1b). |
 | New test | `kit/test/plan-k1-batch.test.mjs`: no fixture had both a wall and a rope bridge, so one plan on a flat claim with a dry ravine holds a rope bridge, a wall line and a path across it (its auto gate): READY, no findings, M10:rope and the wall bars clean, both movers across, deterministic; and a sealed wall round a town beside the bridge (the path pruned UNREACHABLE with `evidence.walls`, the bridge fits). |
 | Checks at `integrate/k1` | kit `node --test test/*.test.mjs` 446/446 (48 files); sidecar `npm test` 744/744 (43 files); mod `./gradlew build --offline` 680 tests, 0 failed; api-compat: the unchanged 0.34.0 (built from the v0.34.0 tag, `artifacts/gate-k1int/v0340/`), 0.33.0 (`gate-c38/v0330`) and 0.32.0 (`gate7a-k1/v0320`) apitest jars and the 0.34.0 mod jar's surface, every member present. In game (headless, ports 8912-8917, 3 shards, at d8d00d7e, a local commit later rewritten for a missing trailer: its tree is 095ec770's): `artifacts/gate-runs-K1int/20261014-125107-change` PASS 3/3: k1a-ingame 19/0, k1b-ingame 17/0, k1a-target 16/0; offline through the runner `artifacts/gate-runs-K1int/20261014-125419-change` PASS 2/2: k1a-unit 8/0, k1b-unit 6/0 (item 6 `unchanged` 23/23 against v0.34.0 also run alone). $0.00. |
+
+## Phase 6c slice T3: bridges and tunnels (DRAFT for Steward review)
+
+The last 6c crossing slice: the typed `connector.bridge` and `connector.tunnel` (reserved `until: T3` since P0), as route moves
+like K1b's rope, so roads cross water and gaps on built spans and pass through ridges. **This section supersedes the wave-3 draft
+"Phase 6c slice T3: bridge and tunnel moves" above**: plan/0, the catalogue, K1's special-move table and the plan check exist now,
+and that draft predates all four. SETTLEMENTS §4.3 (the moves), §8.2 (`tunnel`, `span_bridge`), §8.3 (styling); P0, T2, W, F1,
+K1 (frozen contract, K1a, K1b and the batch as integrated). API: the next free minor at merge (placeholder 1.33.0 over v0.35.0),
+mod 0.36.0, kit 0.34.0, catalogue 6.
+
+- **Branch:** `slice/T3` (or `slice/T3a` and `slice/T3b`, §11), worktree `../architect-mc-T3`. **Spend:** $0. No Claude call;
+  sim and stub only.
+- **Scope:**
+  - `connector.bridge`: a solid span over a gap or water, for villagers and roads, in two forms: `beam` (a deck on piers) and
+    `arch` (a single masonry arch between abutments). A route move, used by explicit bridges, by `connector.auto`, and by
+    street, road and path when every route crosses water (§4, S-T3-2);
+  - `connector.tunnel`: a straight bore through a hill or ridge, cut and lined at the portals, lit, with a 2-cell fluid buffer
+    read from a frozen volume. A route move, used by explicit tunnels and by `connector.auto`;
+  - the plan check reading frozen volumes (the two-plan flow, §6), and the approval artifact going stale when the rock it read
+    changes;
+  - catalogue 6, the P0 answers and typed refusals, the checker rules, and the gate.
+- **Not in scope:**
+  - piers, footings or any write in water or ice (they wait for H's fluid writes and undo, as K1's harbour walls do);
+  - tunnels that go down and up again under flat ground (`tunnel.under`, N-T3-4), bends, and tunnels with `via`;
+  - underwater passages (a glass tube through water: after H, S-T3-7);
+  - moving bridges (drawbridges, redstone), overpasses (a deck over another route), and bridges over or tunnels under lot
+    boxes;
+  - building T3's parts in survival (as K1, N-K1-3: RS), and bible format 3 (7c).
+- **Depends on** (all on main): K1 (the special-move table, the `links` stage, bible `connectors`, `cost.bom`, `crossing` on graph
+  edges), T2 (the route pass), P0 (answers, artifact, stale rule), W (frozen water is water, the `gravity` flag, lamp fixtures), F1
+  and 6b (frozen volumes, `needVolume`, `keepNatural`), PT and C17 (builds and protected areas are never written).
+
+### 0. Facts (v0.35.0)
+
+- **The catalogue:** `connector.bridge` and `connector.tunnel` are `reserved`, `until: T3`, schemaVersion 0, so a recorded part
+  goes through the envelope and answers `unsupported`. `connector.auto`'s `limits.moves` is `["walk", "stair", "ladder",
+  "rope_bridge"]`, and K1's catalogue note says "T3 adds `bridge` and `tunnel`". Catalogue 5's golden is
+  `kit/schemas/plan-catalogue.golden.json`.
+- **"Until T3" promises in the code:** a street, road or path whose only route crosses water answers `refused WATER`, `until: 'T3'`
+  (`compile.mjs`), from the route pass's `ROUTE_WATER` and its note "bridges come with T3" (`route.mjs`). T3 must keep or retire
+  both (§4).
+- **The special-move table** (`route.mjs` `SPECIAL_MOVES`, frozen by N-K1-4): the rows are gate (code 5) and rope (code 6), with
+  the hooks `init/active/needsFlag/blocks/expand/cells/commit` and the optional `prune` and `fail`. There is **one shared flag bit**:
+  K1b's `spanOnce`, so that a rope_bridge edge uses exactly one span. Each row's `init` returns null when no edge asks for it, which
+  keeps the pass byte for byte T2's.
+- **K1b's profile:** `ropeGeom.mjs` `profile(n, y0, rise)` gives half-block deck surfaces from one floor over the whole expression,
+  with the sag `d = floor(n / 12)` and the rise at most `floor(n / 8)`. Anchor classes are read from a frozen volume when one is
+  given, else from the 2.5D survey (soil to 3 under the ground, rock below).
+- **6a's `bridge`** (`program.mjs`: a polyline deck, pillar, arch or ends supports, `maxSpan` default 24) and **M10** (an unsupported
+  span against the part's `maxSpan`) are shipped ops. Their semantics don't change (COMPOSITION-ANSWERS "a shipped op's semantics
+  never change"). T3 writes its own generator.
+- **The plan check reads no volumes.** `PlanChecks.java` calls `RegionsImpl.planOnce(..., volumes = null, ...)` once. Only
+  `Regions.plan` has the 6b two-plan flow: `needVolumes`, then `volumesFor` (generated chunks only, at most
+  `VolumeSurvey.MAX_CELLS` per region), then the second plan. K1b's `ANCHOR` sees a frozen volume's classes only in kit fixtures; in
+  game it reads the 2.5D survey.
+- **The approval artifact's stale rule** (P0 §6) re-surveys the plan's columns (ground, height, floor, flags). It does not look
+  underground. An IR records each volume it read (`volumes: {name: {blob, box, sha}}`), and the realise reads those blobs.
+- **No fluid guard at realise.** SETTLEMENTS §4.2's "a tile skips air writes that would let water in" is not built: `CellCond` has
+  none, and only the checker's **M4** (a cleared cell beside water or lava in the virtual world) stands between a carve and a flood.
+  Underground, the virtual world knows only what a volume says.
+- **Write conditions:** `IF_NATURAL` refuses a cell this region wrote in an earlier stage. `ALWAYS_OURS` passes natural cells and
+  the region's own earlier tile entries, never another owner's or a player's. A block entity passes no condition.
+- **E-normal:** the mod's diff has a `gravity` class (a falling block moved). The scenario world classes (`flow`, `decay`, `live`,
+  `growth`, `melt`) are admitted only at unwritten cells away from the plan, more than 6 columns from written cells, or `deep`. The
+  verifiers refused looser classes in F2, T2 and D2. T3 adds none.
+- **Steward's recorded plans** (`kit/test/fixtures/plan/asks/`, steward-mc 8703dbd): six parts, two bridges and four tunnels (§9).
+  All are written in the envelope shape: `from`/`to`, `notes`, sometimes `params`. The asks claim (`plan-helpers.mjs`
+  `asksSurvey`) is 320x320 of flat grass at y 64, with a lake (x 240-279, z 240-267, bed 60) and a stream (x >= 280, z 252-255).
+  It has no hill and no gap.
+- **S-T3-1 is answered and binding** (wave-3 review): stone bridges and plain tunnels are accepted, and the plan and the region report
+  each crossing edge's `crossing` and what it crossed. K1 gave rope edges `crossing: {type: "rope_bridge", over, depth}`.
+- **Vanilla 26.3:** villagers walk 1-wide corridors and cross the
+  half-slab steps that K1b proved. Monsters spawn at block light 0 underground, and sand, gravel and concrete powder fall when a
+  neighbour update finds air under them. **Assumed, probed in item 1:** a boat with a seated player passes under 2 clear cells over
+  the water, not under 1.
+
+### 1. The plan: defs, block ids and reading the recorded shapes
+
+Two strict defs, each a new optional shape for an existing reserved kind (additive). Both take `connector.routed`'s members, so
+every recorded shape still validates:
+
+```
+connector.bridge: connector.routed's members (id, kind: "bridge", required?, label?, notes?, ext?, from, to, via?, avoid?,
+                  width?: 1..5, movers?, lamps?, style?, tolerance?), plus
+                  form?: "auto" | "beam" | "arch", span?: {min?, max?} (1..32), approach?: 0..32,
+                  clearance?: 0..6 (clear cells over water under the bridge), params?
+connector.tunnel: connector.routed's members (kind: "tunnel"; no via: a tunnel is one straight bore, R19), plus
+                  width?: 1..5, height?: 2..5 (clear over the floor), length?: {min?, max?} (4..64), approach?: 0..32,
+                  lining?: "exposed" | "all", portal?: "plain" | "arch", params?
+```
+
+- **Block ids** (as K1's `wall.*`: one idea, one id):
+
+  | Block id | Meaning | T3 state |
+  |---|---|---|
+  | `bridge.beam` | a deck on piers to dry, site-solid ground | supported |
+  | `bridge.arch` | one masonry arch between two abutments, no piers | supported |
+  | `tunnel.through` | a level bore through rising ground, portal to portal | supported |
+  | `tunnel.under` | a passage that stairs down from flat ground, runs covered and stairs up | reserved, `until: 7b` (N-T3-4) |
+
+  `form: auto` (the default) is decided per span (§3). An explicit `form` the span can't take is `refused` with that form's code,
+  never silently swapped.
+- **`params` is read leniently, never `malformed`** (S-K1-3), and every unread key is listed in `notes`. Read when no first-class
+  member says otherwise: `width` (an integer), `form` and `material` (only as a note: style is the bible's). Not read:
+  `mechanism` and `movable` (a moving bridge), and every other key.
+- **x-rules** (additive):
+  - **R18:** a bridge or tunnel needs `from` and `to` that resolve to different places. A self-loop is `refused NO_GAP` before
+    routing, as K1b did for `upside_down`.
+  - **R19:** a tunnel has no `via`. With one it is `malformed`, but no recorded part has one; Steward's v1 stops on `malformed`, so
+    S-T3-6 asks whether a lenient "first leg only" reading is preferred.
+  - **R20:** `clearance` applies only over water, and is noted (not read) on a dry span.
+- **Reason codes appended to `$defs/reason.code`** (additive output, no Java `Reason`), each with `evidence`. Existing codes are
+  reused where they fit:
+  - `NO_GAP`, `SPAN`, `ANCHOR`, `HEADROOM`, `TOO_STEEP` and `WATER` for bridges. `WATER` is a pier needed in water, with
+    `until: H`.
+  - `MOVER` for a villager bridge under 2 wide. `SPAN`, `TOO_STEEP`, `WATER`, `PROTECTED` and `UNREACHABLE` for tunnels. `WATER` here is fluid within 2, with
+    `evidence.kind` water, lava or ice.
+  - New: **`NO_COVER`**, a tunnel with no line along which at least 2 site-solid cells lie over the roof for 4 or more cells.
+  - New: **`VOLUME`**, the corridor's rock could not be read: chunks not generated, or over the cell cap. Its part answers
+    `incomplete` (§6).
+
+### 2. Catalogue 6
+
+| Id | Before | T3 | limits / note |
+|---|---|---|---|
+| `connector.bridge` | reserved (T3) | **supported**, schemaVersion 1 | `{span: [1, 32], width: [1, 5], villagerMinWidth: 2, forms: ["beam", "arch"], archSpan: [4, 24], pierEvery: 8, pierDepth: 24, clearance: [0, 6], approach: 32}` |
+| `connector.tunnel` | reserved (T3) | **supported**, schemaVersion 1 | `{length: [4, 64], width: [1, 5], height: [2, 5], cover: 2, fluidBuffer: 2, approach: 32}` |
+| `connector.auto` | supported | `limits.moves` gains `"bridge"`, `"tunnel"` | S-K1-5: it grows, with no `moves` member |
+| `bridge.beam`, `bridge.arch`, `tunnel.through` | (new) | supported | |
+| `tunnel.under` | (new) | reserved, `until: 7b` | a passage under flat ground whose ends sit in cellars; it waits for 7b's ports in buildings (K5 forbids writes in lot boxes) |
+| `connector.channel` | reserved (HY) | unchanged | |
+| `connector.rope_bridge`, `wall`, `gate` | supported | unchanged | |
+
+- **Archive and diff.** Catalogue 5's golden is archived as `fixtures/plan/catalogue-k1.json`. The K1 to T3 diff is exactly: the two
+  flips, `connector.auto`'s `limits.moves`, and the four added ids. If S-T3-7 agrees, also `connector.tube` (reserved,
+  `until: UW`).
+- `sinceApi` on the new entries is the merge's real API, set by the coordinator (PLAN "Catalogue `sinceApi` placeholders").
+
+### 3. Generators (kit, plan time, deterministic)
+
+`kit/lib/connectors/{bridge,tunnel}.mjs`, with region primitives `r.bridgeSpan(a, b, opts)` and `r.tunnel(a, b, opts)`, beside
+K1's `r.ropeBridge`. They use integer cells, break ties by (x, z), and use no clock or random draw except `ctx.rng(label)`. The 6a
+`bridge` primitive is untouched.
+
+**The span (both bridge forms).** A straight, axis-aligned run of `n` deck cells between two landing cells (K1b's reading: landings
+at offsets 0 and n + 1).
+- **Limits:** `1 <= n <= 32`, and width 1-5 (default the edge's walk width: 3 for a road or street, 2 for a path on a villager
+  edge, 1 player-only).
+- **Gap:** as K1, at least one interior column whose ground is more than 4 below the deck line, or that is water (any depth,
+  frozen included). Unlike rope, a bridge also takes a **narrow gap**: n <= 7 over water, or a drop of 2 or more. Else `NO_GAP`.
+- **Profile:** K1b's `profile`, gaining a signed sag argument (additive: the default is rope's `d`, so every rope deck is
+  unchanged). A beam takes `d = 0`, a straight half-block line. An arch takes a **camber** `d = -floor(n / 12)`, a hump of the same
+  size as rope's sag, so the same slope bound holds: adjacent cells differ by at most one half block, which villagers walk.
+- **Rise:** `|rise| <= max(1, floor(n / 8))`, else `TOO_STEEP`.
+- **Deck:** full blocks and bottom slabs in the deck role, the whole width.
+- **Rails:** the rail role at surface + 1 on both edges (M8's 1.5), as wall blocks when the role has a wall variant, else the
+  role's fence.
+- **Headroom:** 2 clear over the deck surface across the width plus the rails (M6, the virtual world's air or replaceable
+  plants), else `HEADROOM`.
+
+**Over water** (the surveyed water surface; an ice top counts as the surface, W):
+- No write in water or ice, ever (§0). Every bridge cell over a water column lies at least `1 + clearance` above its surface, where
+  `clearance` is the clear air under the bridge's lowest cell.
+- The default `clearance` is 2 (N-T3-2: a boat with a seated player passes under every bridge). On a beam that is the deck
+  underside. On an arch it is the intrados, and only the middle third of the water's width must meet it (an arch is low at its
+  springing).
+- A clearance the rise and camber can't meet: `HEADROOM`, with `evidence.under: {need, have}`.
+
+**Beam** (`bridge.beam`):
+- **Supports** at both landings (abutments) and piers every at most `pierEvery` (8) deck cells, the deck's cross-section in the
+  pier role.
+- **Piers** run down to the gap floor and end 2 deep in **site-solid**: ROCK or SOIL in the pre-region classes (a volume's when the
+  plan holds one, else the survey's), or a full block this plan writes that M3 grounds. Else `ANCHOR`, naming the column and the
+  class found.
+- A pier is at most `pierDepth` (24) tall, else `ANCHOR` with `evidence.depth`.
+- **No pier in water or ice:** a water run wider than 8 between dry pier sites needs one there, so it is `refused WATER` with
+  `until: H` (S-T3-3), plus a `wouldFit`: the arch when its span fits, else a `rope_bridge` of the same ends when that fits alone.
+- Pier positions are the evenly spaced set with the fewest piers, ties by the lowest pier total height, then by position.
+
+**Arch** (`bridge.arch`):
+- **Span:** `4 <= n <= 24` (`archSpan`), else `SPAN` (with the beam or a rope as `wouldFit`).
+- **Abutments:** at both landings, from the springing to 2 deep in site-solid, else `ANCHOR`.
+- **Intrados:** a segmental curve, `yi(i) = ys + floor(4 * R * i * (n + 1 - i) / (n + 1)^2)` for i = 0..n + 1, with rise
+  `R = max(2, floor(n / 4))`. The springing `ys` is the lowest y that keeps one solid course under the deck's lowest cell at the
+  crown.
+- **Spandrels:** solid between the intrados and the deck in the body role, so every deck cell is grounded (M3) through the ring.
+
+**`form: auto`:** an arch when `n` fits `archSpan` and its abutments and clearance hold; else a beam. Ties go to the arch. The
+look step (N-T3-1) can change this default without a contract change.
+
+**Lamps and ends:**
+- Lamps are W's fixture on rail posts at least every `floor(12 * level / 15)` deck cells, and one at each landing (M5: 0 dark deck
+  cells).
+- A landing on a lot port is the cell just outside the box at the port's feet y (K1 §3).
+
+**The tunnel** (`tunnel.through`): a straight cardinal run of `L` floor cells (`4 <= L <= 64`; §8.2's 64 wins over §4.3's
+`tunnelMax` 48) from a start walk cell to a landing walk cell.
+- **Cross-section:** width 1-5 (default 3 on a villager edge, 2 player-only); clear height 2-5 (default 3) over every floor cell.
+- **Floor:** K1b's profile with `d = 0`, rise at most `max(1, floor(L / 8))`, full blocks and bottom slabs in the floor role.
+- **Classes:** cover, site-solid and the shell read this plan's own written cells (a ridge raised in stage `ground`) over the
+  volume's classes, as K1b's anchors do: a full block the plan writes and M3 grounds counts as ROCK.
+- **Cut and bore:** each floor cell is a **cut** cell while fewer than 2 site-solid cells lie over the roof, else a **bore** cell.
+  - The bore must hold at least 4 consecutive cells (else `NO_COVER`).
+  - Cut cells are open above. Their walls are lined to the ground and stand 1 over it as a parapet (M8: no fall into the cut),
+    and they are counted against T2's cut limit only for the approach outside the move.
+- **Shell:** the ring of cells one out from the void (walls, roof and floor bed).
+  - **Lining:** every shell cell whose class is SOIL, LOOSE, ICE, SNOW, LOG, LEAVES or PLANT becomes the lining role. Rock stays
+    raw (a rock-cut look), unless `lining: all`.
+  - **Sealing:** a shell cell that is AIR (a cave breaching the bore) is filled with lining, so the void stays closed and no cave
+    opens onto the lit floor.
+  - **Gravity:** every gravity block (W's flag) whose column would stand on the void is lined. A LOOSE cell above the roof rests
+    on lining, never on air (M3:gravity).
+- **Fluids:** no WATER or LAVA class cell (a source, flowing, or waterlogged in the volume), and no ICE, within **2** (Chebyshev,
+  3D) of any void or cut cell. Else `refused WATER` with `evidence.kind` and the cells. A tunnel never opens an aquifer or a lava
+  pocket, by construction against the frozen volume (§6). The stale rule covers fluids that move afterwards.
+- **Never written, never undercut:** a protected area or keep-out (columns at every depth), a build (PT), a kept column, another
+  region, a lot box or apron, or a volume cell of class OWNED, PLAYER or BLOCK_ENTITY anywhere in the void or shell. Else
+  `refused PROTECTED`, naming the class. A tunnel may pass under another route's walk cells when at least 2 site-solid cells lie
+  between its roof and the route's lowest written cell (T2 fills 3 under a walk surface).
+- **Write conditions:** the carve, lining and floor use `ALWAYS_OURS` (natural, or this region's own earlier stage, such as a
+  ridge raised in `ground` in a flat fixture), never `ALWAYS`.
+- **Portals:** jambs and a lintel in the portal role at the first and last bore cell. `portal: arch` (the default) steps the
+  lintel with upside-down stairs, as K1's gate frame does. The hillside face around the portal is lined one cell out.
+- **Lamps** (M5: 0 dark spawnable floor cells; mandatory):
+  - With height 3 or more, a lantern hangs from the roof at most every `floor(12 * level / 15)` floor cells, offset from the
+    centre line, leaving 2 clear over the floor under it.
+  - With height 2, a light-emitting full block from the bible's `light` family is set flush in the wall.
+  - One lamp each side of each portal.
+- **Carved count:** `geometry.tunnels[].carved` (cells cleared) and `lined` are reported, for RS later and for Steward's card.
+
+### 4. Routing (T2), and the K1 interplay
+
+- **Two rows are appended to `SPECIAL_MOVES`,** in this order: gate (5), rope (6), **bridge (7)**, **tunnel (8)**. Within a state
+  the moves relax walk, stair, hairpin and ladder, then gate, rope, bridge and tunnel. Each row relaxes its candidates by length
+  ascending, then by heading. The heap's tie key is unchanged.
+- **Opt-in per edge, as rope was.** An edge's `spans` lists the rows it may use, and each row's `init` returns null when no edge
+  lists it, so **a plan without T3 parts plans byte for byte as on v0.35.0**. Who gets which rows:
+  - **bridge:** `spans: ['bridge']`, and `once: 'bridge'` (it uses exactly one);
+  - **tunnel:** `spans: ['tunnel']`, and `once: 'tunnel'`;
+  - **auto:** `spans: ['rope', 'bridge', 'tunnel']`, with no `once`;
+  - **rope_bridge:** keeps K1b's `spanOnce`, read as `once: 'rope'`;
+  - **street, road and path:** none, with one fallback (below).
+- **The flag bit** stays one bit. An edge has at most one `once`, so at most one row's `needsFlag` is true for it, and auto sets
+  none. A row sets the flag only on an edge whose `once` names it. An explicit bridge or tunnel may walk at most `approach`
+  (default 16) at each end, which is K1b's `withinM` squares.
+- **Costs** are in the pass's units, where a straight cell is 10:
+  - **Bridge:** 320 + 30 per deck cell + 40 per pier. That is rope's 300 + 30n plus 20, so where both fit, auto keeps K1's rope:
+    v34 and the K1 batch test stay as they are (N-T3-5). A short bridge still loses to a short walk round.
+  - **Tunnel:** 400 + 30 per floor cell. It wins only where the climb's grade, cut and hairpins cost more.
+- **The fallback for street, road and path:** an edge whose search fails `ROUTE_WATER` (today's "WATER, until T3") is searched once
+  more with `spans: ['bridge']` and no `once`.
+  - An edge that routes today never runs it. A plan with no `WATER (until T3)` refusal is byte-identical; in a plan with one,
+    later edges may move, because they share the newly bridged edge's cells (hysteresis).
+  - An edge that refused `WATER` before now answers `fits` with its bridges, `adjusted` with a `kind: crossing` deviation, or a
+    bridge code.
+  - No tunnel fallback: a street does not go underground unasked.
+  - It is done in `compile.mjs`, not the pass, so T2's own unit test ("bridges are T3") keeps its meaning. Its note is reworded to
+    "every route crosses water; a bridge part, auto, or the street fallback crosses it". S-T3-2 asks whether Steward wants this.
+- **Failure diagnosis (`fail` hooks):** a bridge or tunnel edge that finds no route answers why, from its reached near cells and every
+  cardinal candidate landing within `approach` of the goal (K1b's method). The candidate nearest the goal names the first failing
+  check:
+  - **bridge:** NO_GAP, SPAN, TOO_STEEP, HEADROOM, ANCHOR, then WATER (until H);
+  - **tunnel:** NO_COVER, SPAN, TOO_STEEP, WATER, PROTECTED, then VOLUME.
+
+  UNREACHABLE if a candidate passes.
+- **`tunnel.under`:** a tunnel edge whose every candidate fails `NO_COVER`, because the ground between its ends never rises
+  `height + 2` over the line, answers **`unsupported {block: tunnel.under, until: 7b}`**, not `refused`. It is the shape the part
+  needs, and it waits like any pending block (S-T3-4).
+- **Movers:** inferred as in T2 (S-T2-1, S-K1-4). A villager bridge is at least 2 wide (`villagerMinWidth` 2, as rope), else
+  `MOVER`; a tunnel carries villagers at any width (walls bound both sides; item 3 proves a 1-wide one).
+- **auto's `span` member** stays rope's (8..40); bridges in an auto edge take their own limits (§2).
+- **K1 interplay:**
+  - **A bridge may land at a gate.** The gate move ends on the walk cell outside the wall, and a bridge move may start there. A
+    bridge's deck or rails never cross or overhang a wall cell, and a deck never passes over a wall's top (closure).
+  - **A tunnel may pass under a wall** only as a **postern**: the bore crosses the wall line with at least 2 site-solid cells
+    between its roof and the wall's footing (2 under the ground). It costs like a gate (`gateCost` 60) and counts against the
+    wall's `gates.max`. A sealed wall (S-K1-1) prunes it (`refused UNREACHABLE`, `evidence.walls`).
+  - **Closure** (`M2:wall`): a postern's portals count as gate openings, blocked in the closed test and open in the across test.
+  - **auto never tunnels under a wall;** it uses gates. S-T3-5 asks Steward to confirm the postern model.
+  - A bridge or tunnel crossing a closed wall's ring gets the same auto gate (or postern) a street would.
+- **Plan time:** the bridge and tunnel rows run at survey resolution 1 only, as rope does. The tunnel row judges cover from the
+  survey first (§6), then reads the plan's frozen volumes. A candidate with surface cover whose void, shell and 2-cell buffer are
+  not all inside a volume the plan holds is not tried; on an explicit tunnel edge that is `VOLUME` in the diagnosis (only after
+  NO_COVER, so a flat claim answers `tunnel.under` with no volume).
+- **Compile order in `plan_v0`** is K1's, with T3 in steps 3 and 5:
+  - step 3, the connectors: the bridge and tunnel rows join the route pass;
+  - step 5, emission in `links`: K1's walls, gates and ropes, then T3's bridges, then tunnels. Each part emits under a
+    checkpoint, so a failure rolls back that part only.
+  - Emitted cells are disjoint from every other part's; an overlap is `M1`, an error.
+
+### 5. Checker guarantees (virtual world, then the realised world in the gate)
+
+| Guarantee | Rule | On |
+|---|---|---|
+| Profile: each deck cell's `y2` equals §3's formula (beam d = 0, arch camber); adjacent cells at most one half block | `M10:bridge` (new) | bridges |
+| Supports: beam piers at most every 8 deck cells; piers and abutments 2 deep in site-solid; pier at most 24 tall; arch intrados continuous and every deck cell grounded through it | `M10:bridge`, M3 | bridges |
+| No bridge or tunnel cell in a water, lava or ice cell; clearance over water as §3 | `M10:bridge` | bridges |
+| Rails on both deck edges; parapets on cut walls | M8 | bridges, tunnels |
+| Headroom: 2 over every deck cell; `height` over every tunnel floor cell; portal clear | M6 | both |
+| Cover: at least 2 site-solid over the roof of every bore cell, and at least 4 bore cells | `M3:tunnel` (new) | tunnels |
+| Shell: every shell cell solid after emission (lining or rock); no gravity block over the void or a cut without support | `M3:tunnel`, `M3:gravity` | tunnels |
+| Fluid buffer: no WATER, LAVA or ICE cell within 2 of a void or cut cell | `M4:tunnel` (new; M4 itself unchanged) | tunnels |
+| Light: 0 dark spawnable cells on deck and floor cells | M5 | both |
+| Villager reachability across every span and through every bore (kit mover) | `M2:villager` | villager edges |
+| Wall closure with posterns as openings | `M2:wall` | walls with posterns |
+| No write inside a lot restore box (K5) or into an OWNED, PLAYER or BLOCK_ENTITY cell | M1 (error) | both |
+
+- `M3:tunnel` and `M4:tunnel` read the virtual world built over the frozen volumes the IR records. Without one (a 2.5D-only virtual
+  world), a tunnel part is a finding (`M4:tunnel` "no volume"), never a pass.
+
+### 6. Volumes in the plan check, and the artifact going stale
+
+The part the rest stands on: without it, a tunnel is checked against a 2.5D guess and realised blind.
+
+- **Surface first:** cover is judged first from the survey: a candidate line whose surveyed ground never stands `height + 2` over its
+  roof for 4 consecutive cells fails `NO_COVER` with no volume (and a tunnel whose every line fails so answers `tunnel.under`, §4).
+  Only lines with surface cover need the rock read.
+- **Asking:** in its first plan, a plan with a **tunnel part** asks `needVolume` for each tunnel edge's **corridor**: the rect of its
+  two ends dilated by `approach + width + 3`, with `y` from the lower end's feet `- 16` to the highest ground in the rect `+ 1`,
+  when some line in it has surface cover.
+  - The cap is 4,000,000 cells per edge and 16,000,000 per plan. Past it, the tunnel answers `incomplete VOLUME`.
+  - **Auto edges ask for nothing.** They tunnel only inside volumes the plan already holds (an explicit tunnel's corridor, or the
+    caller's `volumes`), silently, with no note. So an auto plan without a tunnel part plans and checks exactly as on v0.35.0, and
+    K1b's rope anchors read no new volume in any plan without a tunnel part. (In a plan with one, they read its corridor's real
+    classes where it covers them: the honest reading, listed as intended.)
+  - Bridges ask volumes only through K1b's existing anchor path.
+- **The plan check gains the two-plan flow** (`PlanChecks.java`): when the plan has a tunnel part and the first plan's `needVolumes`
+  is non-empty, `volumesFor`
+  samples the boxes and the check plans again with them, as `Regions.plan` does. The answers come from the second plan.
+  - The check's budget covers both plans (P0 §7). A timeout is `incomplete BUDGET`, as today.
+  - Chunks not generated: the tunnel parts answer `incomplete` with `VOLUME`. The overall result is `INCOMPLETE`, never READY,
+    with the note "prepare, then check again".
+  - A plan without a tunnel part plans once, so its check is byte-identical.
+- **The artifact** records each volume's sha and box (already in its IR). **`realiseApproved` re-samples every recorded volume box**
+  that a tunnel part's void, shell or buffer touches, and compares the classes of those cells exactly. Any difference is
+  `ARTIFACT_STALE`, naming the tunnel part and up to 16 cells with the class before and now (a player's mine, a lava flow, a
+  changed aquifer). Cells outside a tunnel's corridor are not compared, so surface growth over the hill does not stale it.
+- **Determinism:** the corridor boxes are integer functions of the plan and the survey, so the same inputs ask for the same volumes
+  and the second plan is reproducible from the IR's recorded volume shas (P0's artifact inputs, extended).
+
+### 7. Style from the bible (format 2, additive)
+
+K1's `connectors` member gains two keys (role names only):
+
+```
+connectors?: { ..., bridge?: {deck?, rail?, pier?, arch?}, tunnel?: {lining?, portal?, floor?} }
+```
+
+- **Defaults** (so S2's and S7's bibles style T3's parts unchanged):
+  - **bridge:** deck `path`, then `floor`; rail `trim` (its wall variant), then `rail`; pier and arch `structure`, then
+    `foundation`, then `wall`;
+  - **tunnel:** lining `foundation`, then `structure`; portal `trim`; floor `path`, then `floor`;
+  - **lamps:** the `light` role through W's fixtures (N-T3-1, N-T3-3).
+- Shape variants come from K1's variant table (`kit.mjs variant()`), with the fallbacks stated in §3.
+
+### 8. Undo, exactness, survival, API
+
+- **Ordinary tiles.** T3's parts are region tile cells in the `links` stage, and `Regions.remove` undoes them with the region.
+  Exactness is designed in, not classified away:
+  - no write touches water or ice (bridges);
+  - a 2-cell fluid buffer, read from the frozen volume and re-checked at approval (tunnels);
+  - every gravity block over the void lined;
+  - the shell sealed, so a cave can't flow or spawn into the bore.
+  - **T3 adds no E-normal world class.** Underground nothing should change: a mismatch within 6 cells (3D) of a **tunnel's** written
+    cells is unclassified whatever its kind, the mod's `gravity` class included, and the bar is 0. **Bridges** take K1b's rule
+    (its natural round passed with 16-22 mismatches, all the mod's `growth`, beside its decks): at a river, kelp, grass spread and
+    plants grow by its abutments, so the mod's `growth` and `grazed` are admitted there, `gravity` is not, and unclassified is 0.
+- **Journal size** is recorded per tunnel (cells carved, lined and written): a 64-cell bore 3x3 with its shell is about 1,600 cells.
+- **Survival:** INSTANT-only, as K1 (N-K1-3: RS). Each part's answer carries `cost.bom` (C26's table) and, for tunnels, `carved`.
+  What carving yields in survival is RS's call.
+- **API** (additive; no new records, methods or IR kinds: decks, piers, arches and bores are `columns` and `voxels` ops):
+  - `VERSION` is the next free minor (placeholder 1.33.0), with the mod to match. `PLAN_API` and the catalogue's `api` follow it.
+    `KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` is next (0.34.0).
+  - **Features:** `bridgeConnectors`, `tunnelConnectors` and `planCheckVolumes`. The sidecar features `region.bridges` and
+    `region.tunnels` are appended.
+  - **Behaviour:** `checkPlan` may plan twice and sample volumes (§6), and `realiseApproved` may answer `ARTIFACT_STALE` for a
+    tunnel's rock.
+  - **Wire shapes** (additive): `siteplan/1` gains `bridges: [{id, part, form, span, piers, landings}]` and
+    `tunnels: [{id, part, portals, length, carved}]`. Graph edges gain `type: bridge | tunnel` with S-T3-1's `crossing`:
+    `{type: "bridge", form, over: "gap" | "water", depth, clearance}` or `{type: "tunnel", through: "rock", length, cover}`. A
+    street that took the fallback carries `crossing` on its bridged segments.
+  - **api-compat:** clean against the previous three apitest jars (0.35.0, 0.34.0, 0.33.0).
+
+### 9. Steward's recorded T3 parts: expected answers as recorded (the asks claim)
+
+Predicted from the design, not run. The builder runs them and records the before and after gap tables.
+
+| Plan / part | Shape | Expected | Why |
+|---|---|---|---|
+| end_city_ruins / dwelling_bridges (optional) | `city` to `city` | refused `NO_GAP` (R18 self-loop) | both ends are one place, as upside_down; the dwellings already share the zone's street. Linking dwellings in the air waits for elevated lots (7b) |
+| redstone_gate / drawbridge (required) | port `fortress.gatehouse_1` to anchor `claim_s` | refused `NO_GAP`, `wouldFit` a `path` (fits alone) | the moat is `connector.channel` (reserved until HY), so the ground between is dry and level; `params.mechanism` and `movable` listed as not read. It crosses the curtain wall, so it would take an auto gate (K1a answers `main_gate` NO_ROOM today). When HY ships the moat, a recheck finds water and the bridge lands at the gate |
+| secret_tunnels / tunnel_cellar (required) | `tavern_1` to `warehouse_1` | `unsupported {tunnel.under, until: 7b}` | flat claim: no line has cover; the ends belong in cellars (K5) |
+| secret_tunnels / tunnel_dock (required) | `warehouse_1` to `dock_1` | `unsupported {tunnel.under}` | as above |
+| secret_tunnels / tunnel_hatch (optional) | `cottage_1` to `tavern_1` | `unsupported {tunnel.under}` | as above |
+| underwater_domes / glass_tunnels (optional) | anchor `stone` to zone `colony` | `unsupported {tunnel.under}` | the shape can't say "submerged"; on the flat claim it answers as a covered passage would. `params.width` 3 read, `material` noted. A glass tube through water is S-T3-7 |
+
+**Also re-answered:** every recorded street, road or path that answers `refused WATER (until T3)` today. With S-T3-2 they take the
+bridge fallback, cross the stream or the lake's narrows on a bridge, and are listed with their new answers.
+
+**Bar (item 7):**
+- Of the six parts, 0 `malformed`, and none answers `unsupported {connector.bridge}` or `{connector.tunnel}`.
+- Every refusal names its code with evidence. drawbridge's `path` `wouldFit` answers `fits` re-checked alone.
+- The four tunnels name `tunnel.under`.
+- No recorded part changes class except these six and the listed fallback edges.
+- The before and after gap tables are both committed: `connector.tunnel` 4 becomes `tunnel.under` 4, and `connector.bridge` 2
+  becomes 0.
+
+This bar asks for no `fits`: the asks claim has no hill and no gap, and the gate's own fixtures prove the fits.
+
+### 10. Gate (slice tier, $0)
+
+**Fixtures:**
+- **Plan fixtures**, under P0's harness:
+  - `valid/v35_bridge_beam`: a flat claim with a dry ravine, its floor 12 down, carved in stage `ground`; a road across it,
+    giving a beam with piers.
+  - `v36_bridge_arch`: a 16-wide water channel in a synthetic survey (water flags), with `clearance` 2.
+  - `v37_tunnel`: a synthetic ridge with its fixture volume, holding a 40-cell bore and a sand band over the roof (lining).
+  - `v38_auto_crossings`: on the same claims, an auto edge that bridges, one that tunnels, and one that walks because walking is
+    cheaper.
+  - `v39_street_fallback`: a road whose only route crosses the asks claim's stream.
+  - `v40_postern`: v30's walled village with a tunnel under its wall from a hill outside.
+- **`crossings_demo`** (bundled, `catalogue = false`):
+  - flat variant (E-flat): the ravine and a ridge raised in stage `ground` (T1's lesson: routed through the pass's `base`),
+    with a beam of span 24 (3 piers), an arch of span 16 and a 48-cell tunnel with a sand band;
+  - natural variant: a pinned hill site for the tunnel and S3's river for the arch. S3's river is pinned and D2's `quay` used it.
+    The builder pins a hill site with at least 2 cover over a 32-cell bore and no fluid within 4, recorded in
+    `scenarios/sites/`.
+  - frozen variant: S7's rejected site 2026101102 (a frozen river), crossed by an arch with nothing written in the ice.
+- **Refusal fixtures:**
+  - bridges: `NO_GAP`; `SPAN` (a bridge of 33, an arch of 25); `ANCHOR` (a pier on sand; a pier 25 tall); `WATER` (a 20-wide
+    river with a forced beam: until H, with arch and rope `wouldFit`s, each `fits` alone); `HEADROOM` (clearance unmet);
+    `TOO_STEEP`;
+  - tunnels: `NO_COVER` (a hump with 1 cover); `SPAN` (65); `WATER` three ways (a water pocket 2 from the bore, lava 1 from it,
+    and the same pocket at 3, which fits); `PROTECTED` (under a protected area, under a build, through an OWNED cell);
+    `incomplete VOLUME` (a corridor over the cap); `unsupported {tunnel.under}` (flat ends); a postern under a sealed wall
+    (UNREACHABLE).
+
+**Evidence:** `artifacts/gate6c-t3/`, driver `tools/gate6ct3.mjs`. `spend.json` $0.00. Every in-game step runs headless (`host:
+server`) except the look step (cameras), which records but doesn't judge.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Bridges, realised | `crossings_demo` flat and natural, re-read from the world: every deck cell on its formula, steps at most one half block, rails on 100% (M8), 2 headroom on 100% (M6), 0 dark deck cells (M5), every pier and abutment 2 deep in site-solid, no pier over 24, M3 0; clearance over water as asked on the arch's middle third; 0 cells written in water or ice (frozen variant: the ice cells' states equal before and after); a headless probe: a bot in a boat passes under command-built decks at 2 clear cells and not at 1 (N-T3-2 rests on it) |
+| 2 | Tunnels, realised | the bore re-read: cover at least 2 over every bore cell; every shell cell solid; every exposed soil, loose and ice shell cell lined; the sand band: 0 falling-block entities during the realise and the stand, 0 gravity cells over air; `height` clear over 100% of floor cells; 0 dark spawnable floor cells; 0 fluid cells within 2 of the void (re-surveyed); M4 0, M3 0, M1 0 |
+| 3 | Villagers (hard bar: T3a and T3b each don't pass without it) | vanilla `dev.nav.villager` both ways across every bridge (beam, arch, frozen-river arch) and through every tunnel (a 1-wide one included) and the postern: 100% found; kit `villager` and `player` movers 100% |
+| 4 | Fluid safety | offline, on fixture volumes: a water pocket 2 from the bore and lava 1 from it refused `WATER` with the cells, the pocket at 3 fits. In game, on the pinned natural hill (the stage-`ground` ridge doesn't exist at check time, and the region must never write over a fluid): a water source set by `/setblock` 2 from the corridor before the check: refused `WATER` with the cell; at 3: fits, realised, and after a 2-minute stand 0 fluid cells inside the void or cut; the same with lava |
+| 5 | Plan check with volumes | `checkPlan` of the natural hill's tunnel in game: notes "read N frozen volumes", answers equal the kit's for the same volume shas; an unloaded corridor: `incomplete VOLUME`, overall INCOMPLETE; a plan without a tunnel part (v34's auto included) plans once (no volume asked) |
+| 6 | Stale rock | on the pinned natural hill: approve the tunnel's artifact, then `/setblock` air at one shell cell (a player's mine) and, separately, water 2 from the bore: `realiseApproved` answers `ARTIFACT_STALE` naming the tunnel and the cell each time; with neither, it realises |
+| 7 | Recorded plans | §9's bar on the 59 asks in kit CI |
+| 8 | P0 answers | every T3 `valid/` fixture `fits` (or `adjusted` as expected); every refusal fixture answers its code with evidence and its `wouldFit`s, each `fits` re-checked alone; **every committed `valid/` and K1 fixture without a T3 part re-plans byte-identical** (answers and IR, but its kitVersion); the exceptions are listed by name: any fixture that refused `WATER (until T3)` (expected: none in `valid/`). v34_auto and the K1 batch test are expected identical (no tunnel part, so no volume; §4 costs keep their rope) and are named if they move |
+| 9 | Exact undo | after items 1-6, `Regions.remove`: E-flat 0 on `crossings_demo` flat (tunnel through the stage-`ground` ridge included); natural and frozen E-normal: 0 unclassified, no classified mismatch within 6 of a tunnel's written cells, bridges as K1b (§8); journal cells recorded per part |
+| 10 | Catalogue | the golden equals catalogue 6; the diff against `catalogue-k1.json` is exactly §2's; recorded pending parts naming `connector.bridge` or `connector.tunnel` flagged to recheck |
+| 11 | Broken variants | `_unsafe.noPiers` (M10:bridge), `_unsafe.noRails` (M8), `_unsafe.pierInWater` (M10:bridge, a write in water), `_unsafe.noLining` over the sand band (M3:gravity and M3:tunnel), `_unsafe.noLamps` (M5), `_unsafe.fluidBuffer: 0` (M4:tunnel), `_unsafe.cover: 1` (M3:tunnel), a postern ignored by closure (M2:wall) |
+| 12 | Determinism | 3 checks of each fixture give identical answers and artifact shas; tile shas 1 = 4 workers; goldens `crossings_demo*`; macOS and Linux CI |
+| 13 | Unchanged | S1, S7, S2, mega_bench, relief_demo, route_demo, forms_demo, scatter_demo, districts_demo and links_demo tile goldens |
+| 14 | Timing (recorded) | check time of v37 with and without the volume pass; volume sample time; own CPU, tile p99 |
+| 15 | API, spend | api-compat clean; apijars; $0.00 |
+| 16 | P0 and K1 unbroken | P0's tests after the flips: `e15_every_reserved_a/b` drop `connector.bridge` and `connector.tunnel` (K1's step 3 precedent; `connector.catwalk` stays the reserved example); `route-t2.test.mjs`'s water test unchanged; k1a-unit, k1b-unit and the K1 batch test pass |
+| 17 | Look (camera, client; recorded) | a beam, an arch over S3's river, the frozen-river arch, and the tunnel's portals and interior, in three bibles: Noah's call (N-T3-1, N-T3-3) |
+
+**Tier:** slice: the units, apijars, api-compat, the impact map's steps for `region/**`, `kit/lib/connectors/**`,
+`kit/lib/region/passes/**` and `PlanChecks`, and T3's own steps (`t3-unit`, `t3-ingame`, `t3-natural`, `6ct3-look`). The
+gate-verifier reviews the diff and the evidence, and re-runs items 2, 6 and 9 (removal, staleness and undo: GATES policy 3).
+
+### 11. Build order, and the split
+
+1. **Foundation** (one owner, frozen before the split): archive the previous apitest jar and catalogue 5 (`catalogue-k1.json`);
+   schema defs, R18-R20, lenient params, reason codes `NO_COVER` and `VOLUME`, catalogue 6; `profile`'s signed `d`; the two
+   `SPECIAL_MOVES` rows as stubs with their order, codes, `once` and costs (§4); the `links` stage hooks (`t3Resolve`, `bridgeLeg`,
+   `tunnelLeg`, `t3PassInput`, `bridgeAnswer`, `tunnelAnswer`, `emitBridges`, `emitTunnels`); bible keys; siteplan and graph wire
+   shapes; P0's tests moved off the flipped ids (item 16).
+2. **T3a, bridges:** span, beam, arch, clearance; the bridge row and its `fail`; the street fallback; `M10:bridge`; items 1, 3
+   (bridges), 7 and 8 for bridges, 9 (flat beam and arch).
+3. **T3b, tunnels:** volumes in the plan check and the stale rule (the only Java beyond features and versions); bore, shell, lining,
+   portals, lamps; the tunnel row and its `fail`; posterns; `M3:tunnel`, `M4:tunnel`; items 2-6, 9 (tunnels).
+4. Shared: items 10-17, the asks tables, the batch test (one plan with a rope, a bridge, a tunnel and a walled postern).
+
+**Recommendation: split, in parallel, one batched release** (as K1):
+- **The foundation** is about half a day.
+- **T3a** is about 1 day: it reuses K1b's span search, profile and diagnosis.
+- **T3b** is about 1.5-2 days: the plan check's two-plan flow, the stale rule, the carve's exactness and the fluid buffer.
+- They meet in the same files as K1a and K1b did (`route.mjs`, `compile.mjs`'s connector section, `check.mjs`, `program.mjs`).
+  The foundation's stubs are the agreed interface, and the coordinator merges.
+- **If serial, T3a first:** it retires "WATER until T3" for Steward's streets at once, while every recorded tunnel answers
+  `tunnel.under` either way.
+
+### Open questions for Steward
+
+- **S-T3-2. The street fallback.** A street, road or path that only fails because every route crosses water is searched again with
+  bridges. Today that is `refused WATER (until T3)`; after T3 it `fits` with a bridge. A plan with no such refusal is
+  byte-identical; in a plan with one, later edges may share the bridged edge's cells and move. Is that what you want, or should only bridge and auto parts ever bridge, with streets still refusing?
+- **S-T3-3. Water is H's.** T3 never writes in water or ice. A crossing wider than an arch (24), or wider than 8 with no dry pier
+  sites, refuses `WATER` `until: H`, with arch or rope `wouldFit`s. Acceptable until H?
+- **S-T3-4. Tunnels under flat ground.** A tunnel with no hill between its ends answers `unsupported {tunnel.under, until: 7b}`, so
+  your secret tunnels keep waiting. The alternative is `refused NO_COVER` with a `path` `wouldFit`, which your recheck would offer
+  as a repair, losing the "secret". Which do you want?
+- **S-T3-5. Posterns.** A tunnel may pass under a K1 wall as a postern: it counts as a gate in closure and in `gates.max`, it is
+  never allowed under a sealed wall, and auto never makes one. Is that the model, or should tunnels never pass under walls?
+- **S-T3-6. Volumes in the check.** Plans with a tunnel part now check in two plans (auto parts never ask) and sample volumes. That is slower
+  (recorded, item 14), answers `incomplete VOLUME` over chunks not generated yet, and stales an approved artifact when the rock
+  under it changes.
+  - Can your Start flow prepare chunks and check again on `VOLUME`?
+  - Is `ARTIFACT_STALE` for rock acceptable?
+  - Should R19 (a tunnel with `via`) be read leniently (first leg only, the rest noted) rather than `malformed`?
+- **S-T3-7. New ids and codes.**
+  - `NO_COVER` and `VOLUME` are appended. Your parser keeps unknown codes (S-K1-7).
+  - Should Architect reserve `connector.tube` (an underwater glass passage, after H, `until: UW`) so the next recording names it
+    instead of a tunnel?
+  - Moving bridges (`params.mechanism`, `movable`) are only noted: is a reserved id worth it?
+- **S-T3-8. `crossing` on bridge and tunnel edges** (§8), as your S-T3-1 addition. Is `{type, form, over, depth, clearance}` /
+  `{type, through, length, cover}` enough for your card and history?
+
+### Open questions for Noah
+
+- **N-T3-1. How bridges look.** Proposed:
+  - an arch wherever the span fits (24 or less), else a beam;
+  - body, piers and arch in `structure`; deck in `path`; rails as `trim` wall blocks;
+  - lamps on rail posts every 12 or closer.
+
+  The look step shows a beam, an arch and the frozen-river arch in three bibles.
+- **N-T3-2. Boat clearance.** Proposed: 2 clear cells over water under every bridge by default, so a boat passes. It costs
+  higher decks and longer ramps on low banks. The alternative is 1 (no write touches water, but boats can't pass), with
+  `clearance: 2` on request.
+- **N-T3-3. How tunnels look.** Proposed:
+  - 3 wide and 3 clear, for villagers;
+  - raw rock walls, lined only where soil, sand or ice shows;
+  - arched portals in `trim`, hanging lanterns from the roof, parapets on the approach cuts.
+- **N-T3-4. Passages under flat ground** (`tunnel.under`: stairs down at each end, a covered run, stairs up). All four recorded
+  tunnels want this, and the secret ones want their ends inside buildings. Proposed: reserve it until 7b, when lots get ports
+  inside them. The alternative is to build it in T3b (about half a day more) with its ends outside the lots.
+- **N-T3-5. Rope or stone on auto edges.** Where both fit, auto keeps K1's rope bridge (a bridge costs 20 more), so K1's fixtures
+  don't move. Stone bridges fill rope's gaps: short spans, sand lips with rock below, and roads wider than 3. Or should villager
+  edges prefer stone?
+- **N-T3-6. The split.** T3a and T3b in parallel after the foundation, batched into one release, or T3a first?
+
+### Coordinator decisions (2026-10-17, on Noah's behalf; Noah can overrule at the look step)
+
+- **N-T3-1:** as proposed. Arch where it fits, else beam; `structure` body, `path` deck, `trim` wall-block rails.
+- **N-T3-2:** clearance 2 by default. The boat probe gate item stays.
+- **N-T3-3:** as proposed. 3 by 3, raw rock lined only where needed, arched portals, hanging lanterns.
+- **N-T3-4:** `tunnel.under` stays reserved until 7b. T3 holds its scope, and Steward's secret tunnels wait as `unsupported`.
+- **N-T3-5:** rope wins by cost where both fit, as drafted. K1's auto answers and the v34 fixture don't move. A bible-level
+  preference for stone on villager edges can come later as a style key without a route change.
+- **N-T3-6:** foundation first (frozen, about half a day), then T3a and T3b in parallel, released as one batch, as K1 was.
+
+### Deferred
+
+- Piers, footings and any write in water or ice (H); underwater tubes (UW, after H); `tunnel.under` and cellar ends (7b); tunnel
+  bends and `via`; overpasses; moving bridges; covered bridges and bridge houses; bible format 3's preferred types (7c); building T3's
+  parts in survival (RS).
