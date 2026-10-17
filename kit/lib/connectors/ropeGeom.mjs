@@ -32,9 +32,13 @@ export const sagOf = (n) => Math.floor(n / 12);
 /** §3: the largest |rise| a span of n takes (else TOO_STEEP). */
 export const maxRiseOf = (n) => Math.floor(n / 8);
 
-/** §3's profile: y2(i) for i = 0..n, one floor over the whole expression. `y0`: the near landing's surface block; `rise`: far minus near. */
-export function profile(n, y0, rise) {
-  const d = sagOf(n), nn = n * n, out = new Array(n + 1);
+/**
+ * §3's profile: y2(i) for i = 0..n, one floor over the whole expression. `y0`: the near landing's surface block; `rise`: far minus near.
+ * (6c T3, additive) `d`: the signed sag in blocks, default rope's floor(n / 12) (so every rope deck is unchanged); a beam takes 0 (a
+ * straight half-block line), an arch a camber -floor(n / 12) (a hump of the same size, the same one-half-block slope bound).
+ */
+export function profile(n, y0, rise, d = sagOf(n)) {
+  const nn = n * n, out = new Array(n + 1);
   for (let i = 0; i <= n; i++) out[i] = Math.floor((2 * y0 * nn + 2 * rise * i * n - 8 * d * i * (n - i)) / nn);
   return out;
 }

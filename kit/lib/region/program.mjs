@@ -36,6 +36,8 @@ import { emitDistricts } from './districtsEmit.mjs';
 import * as CONNECTOR_WALL from '../connectors/wall.mjs';
 import { edgeColumns, inferMovers, footprintOf, polylineOf, VILLAGER } from './passes/route.mjs';
 import { ropeBridge } from '../connectors/ropeGeom.mjs';
+// (6c T3b) the tunnel primitive (a pure module: it imports neither this file nor the plan compiler)
+import { tunnel as tunnelPrimitive } from '../connectors/tunnelGeom.mjs';
 import { CARDINALS, cardinalOf, centreCells, circlePolygon, compassDir, crossOffsets, dominantCardinal, rightOf, segmentAxis } from './geom.mjs';
 
 export const COND = Object.freeze({ IF_NATURAL: 0, IF_SOLID_NATURAL: 1, IF_AIR_OR_FLUID: 2, ALWAYS_OURS: 3 });
@@ -306,7 +308,8 @@ export class Region {
       // (6c D2) an edge's own preferred cells (a following district's street along its line)
       // (7a K1) an edge's special-move options (the rope move's spans, spanOnce, span and approach), passed to the pass as given
       const k1 = {};
-      for (const key of ['spans', 'spanOnce', 'span', 'approach']) if (e[key] !== undefined) k1[key] = e[key];
+      // ((6c T3) and the bridge and tunnel rows': `once` and the opaque per-edge `t3` options)
+      for (const key of ['spans', 'spanOnce', 'span', 'approach', 'once', 't3']) if (e[key] !== undefined) k1[key] = e[key];
       return { id, a, b, width: e.width ?? 3, type: e.type ?? ((e.width ?? 3) >= 5 ? 'road' : 'path'), movers, ladders: ladders && (!movers.includes(VILLAGER) || !!it._unsafe?.villagerLadders), ...(Array.isArray(e.prefer) && e.prefer.length ? { prefer: e.prefer.map((q) => [q[0], q[q.length - 1]]) } : {}), k1 };
     });
     if (new Set(edges.map((e) => e.id)).size !== edges.length) throw new Error(`${what}: edge ids must be unique`);
@@ -330,6 +333,8 @@ export class Region {
       ...(it.maxExpanded !== undefined ? { maxExpanded: it.maxExpanded } : {}),
       // (7a K1) the special moves' pass-level inputs: the walls (the gate move) and the rope move's (K1b)
       ...(it.walls ? { walls: it.walls } : {}), ...(it.rope ? { rope: it.rope } : {}),
+      // (6c T3) the bridge and tunnel moves' pass-level inputs
+      ...(it.bridge ? { bridge: it.bridge } : {}), ...(it.tunnel ? { tunnel: it.tunnel } : {}),
     });
     const ms = Math.round(performance.now() - t0);
     const heapMb = Math.round(process.resourceUsage().maxRSS / 1024);
@@ -374,6 +379,8 @@ export class Region {
       const rid = `route_${e.id}`;
       const rec = { id: e.id, from: e.a.name, to: e.b.name, movers: e.movers, ladders: e.ladders, width: e.width, ok: d.ok, failed: d.failed ?? null, length: d.length, rise: d.rise, cost: d.cost, search: d.search, expanded: d.expanded, roads: [], paths: [] };
       if (d.rope) rec.rope = d.rope; // (7a K1b) why a rope_bridge edge found no route ({code, evidence})
+      if (d.bridge) rec.bridge = d.bridge; // (6c T3) why a bridge edge found no route ({code, evidence, ...})
+      if (d.tunnel) rec.tunnel = d.tunnel; // (6c T3) why a tunnel edge found no route
       metaEdges.push(rec);
       if (!d.ok) { this.note(`route ${e.id} (${e.a.name} -> ${e.b.name}): ${d.failed} (${d.note})`); res.push({ id: e.id, ok: false, failed: d.failed }); continue; }
       rec.path = d.path; rec.segments = d.segments; rec.landings = d.landings; rec.ladderCols = d.ladderCols;
@@ -387,8 +394,9 @@ export class Region {
         const cells = d.path.slice(g.from, g.to + 1);
         n++;
         if (g.shared) return; // an earlier edge's cells: built by it
-        // (7a K1) a rope span is the links stage's (its deck, rails and posts); the route writes its approaches only
-        if (g.kind === 'rope') return;
+        // (7a K1) a rope span is the links stage's (its deck, rails and posts); the route writes its approaches only; (6c T3) so are a
+        // bridge's span and a tunnel's bore
+        if (g.kind === 'rope' || g.kind === 'bridge' || g.kind === 'tunnel') return;
         if (g.kind === 'walk' || g.kind === 'landing' || g.kind === 'gate') {
           // 4e's ground road where a walk lies on the surveyed ground (4e follows the realised ground at realise), else graded columns
           const onGround = g.kind === 'walk' && !it.base && e.width <= 5 && cells.length >= 4 && cells.every(([x, y, z]) => y === s.groundAt(x, z) && !s.waterAt(x, z));
@@ -441,6 +449,16 @@ export class Region {
     return ropeBridge(this, a, b, opts);
   }
 
+  // (6c T3) r.bridgeSpan(a, b, opts) (T3a, lib/connectors/bridgeGeom.mjs) is defined here, once, by T3a.
+
+  /**
+   * (6c T3b) A tunnel from a start walk cell to a landing walk cell on one axis (lib/connectors/tunnelGeom.mjs `tunnel`, CONTRACT T3
+   * §3): `opts.land` is tunnelLand over the plan survey and the frozen volumes the program asked for. Returns its record.
+   */
+  tunnel(a, b, opts = {}) {
+    return tunnelPrimitive(this, a, b, opts);
+  }
+
   /** (6c V) A graph node (SETTLEMENTS §8.1): `{id, kind: lot|plaza|junction, ref, at, ports}`; ids unique. */
   graphNode({ id, kind, ref = null, at, ports = [] }) {
     if (typeof id !== 'string' || !/^[a-z][a-z0-9_:.-]{0,63}$/.test(id)) throw new Error(`graph node id '${id}' is not valid`);
@@ -456,8 +474,8 @@ export class Region {
   /** (6c V) A graph edge `{id, from: 'node.port', to: 'node.port', type: road|path, width, path}` in stage `ground`. */
   graphEdge({ id, from, to, type, width, path, stage = 'ground', movers, segments, external = false, crossing }) {
     if (this.graphIds.has(id)) throw new Error(`graph id '${id}' is used twice`);
-    // (7a K1) a rope bridge's edge (with its crossing: {type: rope_bridge, over: gap|water, depth})
-    if (type !== 'road' && type !== 'path' && type !== 'rope_bridge') throw new Error(`graph edge ${id}: type must be road, path or rope_bridge`);
+    // (7a K1) a rope bridge's edge (with its crossing: {type: rope_bridge, over: gap|water, depth}); (6c T3) a bridge's and a tunnel's
+    if (!['road', 'path', 'rope_bridge', 'bridge', 'tunnel'].includes(type)) throw new Error(`graph edge ${id}: type must be road, path, rope_bridge, bridge or tunnel`);
     // (6c D1) an external edge's `to` is another region's port, `<regionId>:<node>.<port>` (CONTRACT D §3; 7a types it)
     if (external && !/^[A-Za-z0-9_.-]{1,64}:[a-z][a-z0-9_:.-]{0,63}\.[a-z][a-z0-9_]{0,63}$/.test(String(to))) throw new Error(`graph edge ${id}: an external edge's to must be <region>:<node>.<port>`);
     for (const end of external ? [from] : [from, to]) {

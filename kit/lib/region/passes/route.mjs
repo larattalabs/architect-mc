@@ -14,6 +14,9 @@
 import { FLAG_LAVA, FLAG_MISSING, FLAG_TREE, FLAG_WATER } from '../pack.mjs';
 import { gateActive, gateCells, gateCommit, gateExpand, gateInit, gatePrune } from './moves/gate.mjs';
 import { ropeActive, ropeCells, ropeCommit, ropeExpand, ropeFail, ropeInit, ropeNeedsFlag } from './moves/rope.mjs';
+// (6c T3) the bridge row (T3a's file) and the tunnel row (T3b's file): each file owns its row's hooks, this table only lists them
+import { bridgeActive, bridgeCells, bridgeCommit, bridgeExpand, bridgeFail, bridgeInit, bridgeNeedsFlag } from './moves/bridge.mjs';
+import { tunnelActive, tunnelBlocks, tunnelCells, tunnelCommit, tunnelExpand, tunnelFail, tunnelInit, tunnelNeedsFlag, tunnelPrune } from './moves/tunnel.mjs';
 
 /** The 8 headings (x east, z south): E, SE, S, SW, W, NW, N, NE. Even headings are cardinal. */
 export const DIRS = Object.freeze([[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]);
@@ -60,6 +63,13 @@ const isInt = Number.isInteger;
  *                                           ends: the edge fails NO_ROUTE at once, instead of spending the node budget)
  *   fail?(state, edgeOut, inS) -> bool      (K1b, optional) an edge that found no route: the row names why (sets edgeOut.failed);
  *                                           true skips T2's water check (the rope move: NO_GAP, SPAN, ... on a rope_bridge edge)
+ * (6c T3) Rows 7 (bridge) and 8 (tunnel) follow gate and rope (docs/CONTRACT.md "Phase 6c slice T3" §4). Each is opt-in per edge as
+ * rope is: an edge's `spans` lists the rows it may use (['bridge'], ['tunnel'], an auto edge ['rope', 'bridge', 'tunnel']), and each
+ * row's init returns null when no edge lists it, so a plan without T3 parts plans byte for byte as before. `once` names the one row
+ * an edge uses exactly once (a bridge edge `once: 'bridge'`, a tunnel edge `once: 'tunnel'`; a rope_bridge edge keeps K1b's
+ * `spanOnce`, read as once 'rope'): only that row's needsFlag is true for the edge and only it sets the one flag bit, and the edge
+ * walks at most `approach` (default 16) at each end. An edge's T3 options ride in `edge.t3` ({bridge: {...}, tunnel: {...}}, opaque
+ * to this pass), the pass-level inputs in `intent.bridge` and `intent.tunnel`.
  * Order and ties: a state's moves are relaxed walk, stair, hairpin, ladder, then each active special row in table order; a row
  * relaxes its candidates in its own fixed order (the gate move: at most one, straight ahead; the rope move: K1b's, by span length
  * ascending). The heap breaks ties by (f, g, x, z, heading, k, d, flag), the flag last, so an unflagged state wins a tie.
@@ -69,7 +79,12 @@ const isInt = Number.isInteger;
 export const SPECIAL_MOVES = Object.freeze([
   Object.freeze({ name: 'gate', code: 5, segment: 'gate', flag: false, init: gateInit, active: gateActive, needsFlag: () => false, blocks: (st) => st.mask, expand: gateExpand, cells: gateCells, commit: gateCommit, prune: gatePrune }),
   Object.freeze({ name: 'rope', code: 6, segment: 'rope', flag: true, init: ropeInit, active: ropeActive, needsFlag: ropeNeedsFlag, blocks: () => null, expand: ropeExpand, cells: ropeCells, commit: ropeCommit, fail: ropeFail }),
+  Object.freeze({ name: 'bridge', code: 7, segment: 'bridge', flag: true, init: bridgeInit, active: bridgeActive, needsFlag: bridgeNeedsFlag, blocks: () => null, expand: bridgeExpand, cells: bridgeCells, commit: bridgeCommit, fail: bridgeFail }),
+  Object.freeze({ name: 'tunnel', code: 8, segment: 'tunnel', flag: true, init: tunnelInit, active: tunnelActive, needsFlag: tunnelNeedsFlag, blocks: tunnelBlocks, expand: tunnelExpand, cells: tunnelCells, commit: tunnelCommit, fail: tunnelFail, prune: tunnelPrune }),
 ]);
+
+/** (6c T3) The row an edge uses exactly once: `once` ('rope' | 'bridge' | 'tunnel'), or K1b's `spanOnce` read as 'rope'; else null. */
+export const onceOf = (edge) => (typeof edge?.once === 'string' ? edge.once : edge?.spanOnce ? 'rope' : null);
 
 /**
  * S-T2-1: an edge's movers from its end nodes' lot kinds. A player-only kind at either end (a lookout, a watchtower) makes the
@@ -619,8 +634,8 @@ export function routePass(survey, volumes, intent) {
       withinM = dilate(seed, W, D, Math.floor((wr + r - 1) / r));
     }
     // (7a K1b) a rope_bridge edge (`spanOnce`) walks at most `approach` cells at each end: it searches the two squares of that radius
-    // round its ends only (its span's landings lie in them; the deck between needs no search cell)
-    if (!withinM && e.spanOnce) {
+    // round its ends only (its span's landings lie in them; the deck between needs no search cell); (6c T3) so does any `once` edge
+    if (!withinM && onceOf(e)) {
       const A = isInt(e.approach) && e.approach >= 0 && e.approach <= 32 ? e.approach : 16;
       const seed = new Uint8Array(n);
       for (const en of ends) seed[en.k] = 1;

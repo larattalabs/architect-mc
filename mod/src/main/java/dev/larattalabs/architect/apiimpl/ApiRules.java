@@ -69,6 +69,8 @@ public final class ApiRules {
 					case "region.boundary" -> "boundaryDistricts"; // 6c D2: districts following a biome edge, shore or ridge (with outposts, below)
 					case "region.walls" -> "wallConnectors"; // 7a K1: plan/0's connector.wall and connector.gate (walls, gates, the gate move)
 					case "region.rope" -> "ropeBridges"; // 7a K1: plan/0's connector.rope_bridge (with autoConnector, below)
+					case "region.bridges" -> "bridgeConnectors"; // 6c T3: plan/0's connector.bridge (beam and arch; auto's bridge move; the street fallback)
+					case "region.tunnels" -> "tunnelConnectors"; // 6c T3: plan/0's connector.tunnel (with planCheckVolumes, below)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}
@@ -88,6 +90,9 @@ public final class ApiRules {
 			}
 			if (sidecarFeatures.contains("region.rope")) {
 				out.add("autoConnector"); // 7a K1: plan/0's connector.auto (walk, stair, ladder and rope moves)
+			}
+			if (sidecarFeatures.contains("region.tunnels")) {
+				out.add("planCheckVolumes"); // 6c T3: checkPlan of a plan with a tunnel part plans twice, reading frozen volumes
 			}
 			if (sidecarFeatures.contains("region.planCheck")) {
 				out.add("planCatalogue"); // 6c P0: a P0 helper's kit returns the capability catalogue with every check
