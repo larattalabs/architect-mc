@@ -176,7 +176,8 @@ public final class RegionItems {
 			i.reason = null;
 		}
 		if (p.check == null) {
-			p.check = tileCheck(tile.cells(), r, win);
+			// (6c H) a fluids-stage tile leaves out the cells of a body its gate did not let through
+			p.check = tileCheck(dev.larattalabs.architect.region.RegionFluids.filter(r, t[1], tile.cells()), r, win);
 		}
 		TileCheck.Result res = p.check.step(level, deadline);
 		if (res == null) {
@@ -223,17 +224,41 @@ public final class RegionItems {
 		}
 	}
 
+	/**
+	 * (6c H) A region stage waits on its queued items (the fluids stage's gate: a player or a mob in a body's box): ITEM_WAITING with
+	 * the reason, never counted against a wait limit it does not have.
+	 */
+	public static void waitStage(QBatch b, String stage, Reason why, String msg) {
+		for (QItem i : b.inStage(stage)) {
+			if (i.status == QItem.Status.QUEUED || i.status == QItem.Status.WAITING) {
+				Batches.waitFor(b, i, why, msg);
+			}
+		}
+	}
+
 	/** A tile's check; (6c B) a brush stroke's carries its destruction rule and the owner's other strokes (layered over). */
 	private static TileCheck tileCheck(dev.larattalabs.architect.region.Packed.Tile cells, RegionsImpl.Live r, Anchors.Bounds win) {
 		var rec = r.rec();
 		// (6c PT) the consented builds (validated at the realise or stroke): their cells pass as natural
 		dev.larattalabs.architect.placed.Placed.Consent consent = new dev.larattalabs.architect.placed.Placed.Consent(java.util.Set.copyOf(rec.consented));
+		// (6c H §4.4) the tile's frozen heights: a dependent cleared under natural water becomes a source
+		var hts = heightsOf(r, win);
 		if (rec.brush == null) {
-			return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win).consent(consent); // (C31) the owner's areas bound felling
+			return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win).consent(consent).heights(hts); // (C31) the owner's areas bound felling
 		}
 		boolean pb = rec.brush.has("playerBlocks") && rec.brush.get("playerBlocks").getAsBoolean();
 		return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win, pb, dev.larattalabs.architect.region.Brushes.layerGroups(rec.owner))
-			.consent(consent);
+			.consent(consent).heights(hts);
+	}
+
+	/** (6c H) The tile's frozen heights window (its 80x80 columns), or null. */
+	private static dev.larattalabs.architect.region.@Nullable Columns heightsOf(RegionsImpl.Live r, Anchors.Bounds win) {
+		int tx = Math.floorDiv(win.minX() + Heights.MARGIN, Heights.TILE), tz = Math.floorDiv(win.minZ() + Heights.MARGIN, Heights.TILE);
+		try {
+			return Heights.window(r.world(), r.rec().id, tx, tz);
+		} catch (RuntimeException e) {
+			return null;
+		}
 	}
 
 	/** Liveness (gate item 4): when a tile item holding its tickets first waited for its (all generated) chunks to load. */
@@ -361,9 +386,10 @@ public final class RegionItems {
 				TileStream.Tile tile = TileStream.get(t[0], t[1], t[2], t[3]);
 				if (tile == null && TileStream.available() && TileStream.outstanding(region) < w) {
 					request(r, t);
-				} else if (tile != null && tile.phase == TileStream.Phase.DECODED && p.check == null) {
+				} else if (tile != null && tile.phase == TileStream.Phase.DECODED && p.check == null && dev.larattalabs.architect.region.RegionFluids.checkedAhead(r,
+					t[1])) {
 					// its cells sorted and turned into journal values off the server thread now; the world checks run when it is next
-					p.check = tileCheck(tile.cells(), r, window(t[3], r.rec().claim));
+					p.check = tileCheck(dev.larattalabs.architect.region.RegionFluids.filter(r, t[1], tile.cells()), r, window(t[3], r.rec().claim));
 				}
 				continue;
 			}

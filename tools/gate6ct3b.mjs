@@ -26,7 +26,8 @@
 //                                       neither it realises); the realised bore re-read (item 2), villagers through (item 3), the removal's
 //                                       E-normal (0 unclassified, no classified mismatch within 6 of the bore's written cells); load:
 //                                       "generate" (an unloaded corridor incomplete VOLUME under "loaded", fits under "generate"; ends a
-//                                       thousand apart stay incomplete VOLUME past the per-edge cap under "generate")
+//                                       thousand apart and 40 across stay incomplete VOLUME past the per-edge cap under "generate",
+//                                       the corridor at least 1.25x the cap, the same twice)
 //     look                              the look (client, recorded not judged): the flat demo's portal and its lit interior, the hill's
 //                                       portal; cameras for the gallery
 //     report                            REPORT.md over the step JSONs
@@ -114,7 +115,7 @@ steps.unit = async () => {
   const out = {};
   out.t3b = nodeTest(['kit/test/tunnel-t3b.test.mjs', 'kit/test/plan-t3b.test.mjs']);
   check(out.t3b.code === 0 && out.t3b.fail === 0 && out.t3b.pass >= 19, `items 2, 4, 7, 8, 11, 12 (kit, tunnels): the floor profile, the survey-first cover, the corridor box, the geometry's checks in order (NO_COVER, SPAN, TOO_STEEP, WATER, PROTECTED, VOLUME), the lining, cave sealing, falling-block lining and the fluid buffer (a pocket 2 from the bore and lava 1 from it refused, at 3 fits); the two-plan flow (the first plan asks one corridor and answers incomplete VOLUME); v37 (fits, M3:tunnel, M4:tunnel, M5, M6, M8 clean, both movers through); the refusal fixtures; the broken variants (noLining, noLamps, fluidBuffer 0, cover 1, the postern ignored); §9's recorded tunnels; v40's postern; v38b's auto tunnel; determinism: ${out.t3b.pass} pass, ${out.t3b.fail} fail`, out.t3b.failing);
-  out.p0 = nodeTest(['kit/test/plan-p0.test.mjs', 'kit/test/k1-foundation.test.mjs', 'kit/test/t3-foundation.test.mjs', 'kit/test/plan-k1-batch.test.mjs']);
+  out.p0 = nodeTest(['kit/test/plan-p0.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/plan-p0-det-1.test.mjs', 'kit/test/plan-p0-det-2.test.mjs', 'kit/test/plan-p0-det-3.test.mjs', 'kit/test/plan-p0-asks.test.mjs', 'kit/test/k1-foundation.test.mjs', 'kit/test/t3-foundation.test.mjs', 'kit/test/plan-k1-batch.test.mjs']);
   check(out.p0.code === 0 && out.p0.fail === 0, `item 16: P0's tests after T3 (v37, v38b, v40 fit; e17 answers tunnel.under; item 9's coverage without t3-pending-b.json), the K1 foundation and batch tests: ${out.p0.pass} pass, ${out.p0.fail} fail`, out.p0.failing);
   out.goldens = nodeTest(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/region-lint.test.mjs', 'kit/test/relief-t1.test.mjs', 'kit/test/route-t2.test.mjs', 'kit/test/rope-k1b.test.mjs', 'kit/test/plan-k1b.test.mjs', 'kit/test/plan-k1a.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 13: the tile goldens that must not move (S1, S7, S2, mega_bench, relief_demo, route_demo, forms_demo, scatter_demo, districts_demo, links_demo); T2's routes (its water test unchanged); K1's tests; the lint (the tunnel files on the plan path): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
@@ -556,14 +557,22 @@ steps.natural = async () => {
   const gb = g2.check?.parts?.find((a) => a.part === 'bore');
   out.generate.generate = { overall: g2.check?.overall ?? null, class: gb?.class ?? null, volumePass: g2.volumePass ?? null, ms: g2.ms ?? null };
   check(g2.check?.overall === 'READY' && gb?.class === 'fits', `load (hill): the same check with load "generate" prepares and generates the corridor: fits, READY (${json(out.generate.generate)})`);
-  // past the cap: ends a thousand apart over the hill (a corridor over 4,000,000 cells), even with "generate"
+  // past the cap: ends a thousand apart over the hill, and 40 apart across it (a corridor over 4,000,000 cells), even with
+  // "generate". The claim is at its 1024-column limit along x, so (housekeeping 2) the ends moved apart diagonally: the corridor is
+  // about 1.6x the cap (it was 4,290,489 cells, 7% over), and the check asserts at least 1.25x, so a change to the corridor box that
+  // brought it near the cap fails here rather than turning the expected incomplete VOLUME into a fit. Checked twice: the same size.
   const cx = Math.floor((f.claim[0] + f.claim[2]) / 2);
-  const capClaim = [cx - 511, zl - 40, cx + 512, zl + 40];
+  const capClaim = [cx - 511, zl - 80, cx + 512, zl + 80];
   const capPlan = { schemaVersion: 'plan/0', planId: 't3b_cap', connectors: [{ id: 'far', kind: 'tunnel', approach: 32, width: 5, from: { anchor: 'far_w' }, to: { anchor: 'far_e' } }] };
-  const g3 = await call('dev.region.checkPlan', { plan: capPlan, claim: capClaim, owner: OWNER, anchors: { far_w: [cx - 500, 30, zl], far_e: [cx + 500, 30, zl] }, load: 'generate' }, 900_000);
+  const capCheck = () => call('dev.region.checkPlan', { plan: capPlan, claim: capClaim, owner: OWNER, anchors: { far_w: [cx - 500, 30, zl - 20], far_e: [cx + 500, 30, zl + 20] }, load: 'generate' }, 900_000);
+  const g3 = await capCheck();
   const gc = g3.check?.parts?.find((a) => a.part === 'far');
-  out.generate.cap = { overall: g3.check?.overall ?? null, class: gc?.class ?? null, reasons: gc?.reasons ?? null };
-  check(gc?.class === 'incomplete' && gc.reasons[0].code === 'VOLUME' && gc.reasons[0].evidence?.cap === 'edgeCells', `load (hill): ends 1000 apart (approach 32, width 5) with load "generate": still incomplete VOLUME past the per-edge cap (${json(gc?.reasons?.[0]?.evidence ?? null)})`);
+  const ev = gc?.reasons?.[0]?.evidence ?? null;
+  const g4 = await capCheck();
+  const ev2 = g4.check?.parts?.find((a) => a.part === 'far')?.reasons?.[0]?.evidence ?? null;
+  out.generate.cap = { overall: g3.check?.overall ?? null, class: gc?.class ?? null, reasons: gc?.reasons ?? null, cells: ev?.cells ?? null, ratio: ev?.cells && ev?.limit ? ev.cells / ev.limit : null, again: ev2?.cells ?? null };
+  check(gc?.class === 'incomplete' && gc.reasons[0].code === 'VOLUME' && ev?.cap === 'edgeCells', `load (hill): ends 1000 apart and 40 across (approach 32, width 5) with load "generate": still incomplete VOLUME past the per-edge cap (${json(ev)})`);
+  check(ev?.cells >= 1.25 * (ev?.limit ?? Infinity) && ev2?.cells === ev.cells && json(ev2?.corridor) === json(ev.corridor), `load (hill): the past-the-cap corridor is at least 1.25x the cap, the same on a second check (${ev?.cells} cells, ${out.generate.cap.ratio?.toFixed(2)}x the ${ev?.limit} cap; again ${ev2?.cells})`);
   await leaveWorld();
   spendZero();
   return out;

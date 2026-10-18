@@ -1121,8 +1121,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       fluidEmit(ensureK(), p, res.get(p.id));
       mark(p.id, addedSince(r, cp));
       // (§10) the approval guards: each body's shell, buffer and joins, each wet column, over the frozen volume it was planned on
-      for (const b of (r._fluidBodies ?? []).slice(bodies0)) if (b.volume && b.guardRuns) (K.record.guards ??= []).push({ part: p.id, body: b.id, kind: 'body', fluids: true, volume: b.volume, runs: b.guardRuns });
-      for (const w of (r.meta.wet ?? []).slice(wet0)) if (w.volume && w.columns) (K.record.guards ??= []).push({ part: p.id, body: w.id, kind: 'wet', fluids: true, volume: w.volume, runs: w.columns });
+      for (const b of (r._fluidBodies ?? []).slice(bodies0)) if (b.volume && b.guardRuns) (K.record.guards ??= []).push({ part: p.id, body: b.id, kind: 'body', fluids: true, volume: b.volume, runs: b.guardRuns.flat() });
+      for (const w of (r.meta.wet ?? []).slice(wet0)) if (w.volume && w.columns) (K.record.guards ??= []).push({ part: p.id, body: w.id, kind: 'wet', fluids: true, volume: w.volume, runs: w.columns.flat() });
     } catch (e) {
       rollback(r, cp);
       const m = /^([A-Z_]{3,20}): /.exec(String(e.message));

@@ -76,6 +76,13 @@ final class TileCheck {
 	/** (6c B) The groups of the stroke owner's other strokes: their tile entries are layered over as this region's own. */
 	private final java.util.Set<String> layerGroups;
 	private final String dim;
+	/**
+	 * (6c H §4.4) The tile's frozen heights (its window, resolution 1): a dependent cleared under a natural water surface (the column's
+	 * surveyed water) becomes a water source, not air. Null: no heights (a dependent with a fluid state of its own still becomes water).
+	 */
+	private dev.larattalabs.architect.region.@Nullable Columns heights;
+	/** (6c H) Dependents written as water because they stood under a natural water surface. */
+	private int wetDeps;
 	/** (6c PT) The builds the request's consent names (validated at realise or stroke time): their cells pass as natural. */
 	private dev.larattalabs.architect.placed.Placed.Consent consent = dev.larattalabs.architect.placed.Placed.Consent.NONE;
 	/** (6c PT) The kept builds' cells this tile skipped (the region's findings, at most 8 builds). */
@@ -146,6 +153,26 @@ final class TileCheck {
 		this.claim = claim.clone();
 		this.window = window;
 		this.prep = CompletableFuture.supplyAsync(() -> prepare(tile, claim));
+	}
+
+	/** (6c H §4.4) With the tile's frozen heights (the natural water surface for dependents cleared under it). */
+	TileCheck heights(dev.larattalabs.architect.region.@Nullable Columns h) {
+		this.heights = h;
+		return this;
+	}
+
+	/** (6c H §4.4) Whether a cell stands under the natural water surface of its column (the frozen heights: water flagged, y at most ground). */
+	boolean underWater(int x, int y, int z) {
+		var h = heights;
+		if (h == null || x < h.minX || z < h.minZ || x >= h.minX + h.width * h.resolution || z >= h.minZ + h.depth * h.resolution) {
+			return false;
+		}
+		int k = h.at(x, z);
+		if (k < 0) {
+			return false;
+		}
+		return (h.flags[k] & dev.larattalabs.architect.region.Columns.WATER) != 0 && (h.flags[k] & dev.larattalabs.architect.region.Columns.MISSING) == 0
+			&& y <= h.ground[k] && y >= h.floor[k];
 	}
 
 	/** (6c PT) With the consented builds (a region realise's, or a PLAYER_BLOCKS stroke's). */
@@ -546,7 +573,12 @@ final class TileCheck {
 				if (bdu != null && !consent.allows(bdu)) {
 					break; // (6c PT) a build's cell is never a dependent written away (its support was kept: supports)
 				}
-				boolean wet = !us.getFluidState().isEmpty();
+				// (6c H §4.4) a dependent with a fluid state of its own, or one under the column's natural water surface, becomes a source
+				boolean ownFluid = !us.getFluidState().isEmpty();
+				boolean wet = ownFluid || underWater(x, y, z);
+				if (wet && !ownFluid) {
+					wetDeps++;
+				}
 				added.add(u);
 				addedVals.add(wet ? water : air);
 				target.put(u, wet ? Blocks.WATER.defaultBlockState() : Blocks.AIR.defaultBlockState());
@@ -559,6 +591,9 @@ final class TileCheck {
 		}
 		if (gravityKept > 0) {
 			skipped.merge("gravityKept", (long) gravityKept, Long::sum);
+		}
+		if (wetDeps > 0) {
+			skipped.merge("dependentsUnderWater", (long) wetDeps, Long::sum);
 		}
 		return true;
 	}

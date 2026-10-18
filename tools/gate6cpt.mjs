@@ -953,7 +953,7 @@ steps.nomod = async () => {
   for (const mode of ['never loaded', 'loaded']) {
     const w = path.join(G, 'saves', 'NoMod');
     // the launch file of the run worktree, whose headless server this step ran (GATE6B_RUN; by hand, this checkout): never the source's
-    const s = await startNoMod({ root: L.RUN, log, gameDir: G, world: 'NoMod', port: Number(process.env.GATE6CPT_NOMOD_PORT ?? 0), eula, logFile: path.join(OUT, `nomod-${mode.replace(' ', '-')}.log`) });
+    const s = await startNoMod({ root: L.RUN, log: L.log, gameDir: G, world: 'NoMod', port: Number(process.env.GATE6CPT_NOMOD_PORT ?? 0), eula, logFile: path.join(OUT, `nomod-${mode.replace(' ', '-')}.log`) });
     await s.waitFor(/Done \(/, 600_000);
     if (mode === 'loaded') {
       s.send(`forceload add ${X} ${Z}`);

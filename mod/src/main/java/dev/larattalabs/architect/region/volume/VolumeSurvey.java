@@ -91,6 +91,9 @@ public final class VolumeSurvey {
 		final int @Nullable [] blocks;
 		final List<String> palette = new ArrayList<>(List.of(Arvx.AIR));
 		final IdentityHashMap<BlockState, Integer> blockMemo = new IdentityHashMap<>();
+		/** (6c H) With the fluid layer (ARVX version 3): per cell its fluid code ({@link Arvx#FLUID_CODES}), same index as {@link #cells}. */
+		final byte @Nullable [] fluids;
+		final IdentityHashMap<BlockState, Byte> fluidMemo = new IdentityHashMap<>();
 		int next;
 		int loaded;
 		boolean queried;
@@ -100,6 +103,10 @@ public final class VolumeSurvey {
 		long maxTick;
 
 		Task(ServerLevel level, int[] box, LoadPolicy load, Path dir, boolean withBlocks) {
+			this(level, box, load, dir, withBlocks, false);
+		}
+
+		Task(ServerLevel level, int[] box, LoadPolicy load, Path dir, boolean withBlocks, boolean withFluids) {
 			this.level = level;
 			this.box = box;
 			this.load = load;
@@ -108,7 +115,8 @@ public final class VolumeSurvey {
 			d = box[5] - box[2] + 1;
 			h = box[4] - box[1] + 1;
 			cells = new byte[Math.toIntExact((long) w * d * h)];
-			blocks = withBlocks ? new int[cells.length] : null;
+			blocks = withBlocks || withFluids ? new int[cells.length] : null;
+			fluids = withFluids ? new byte[cells.length] : null;
 			missingCol = new boolean[w * d];
 			for (int cx = box[0] >> 4; cx <= box[3] >> 4; cx++) {
 				for (int cz = box[2] >> 4; cz <= box[5] >> 4; cz++) {
@@ -156,6 +164,12 @@ public final class VolumeSurvey {
 
 	/** (6c B) {@code blocks}: also each cell's block id (ARVX version 2). */
 	public static CompletableFuture<Result> start(ServerLevel level, BoundingBox box, LoadPolicy load, @Nullable Path dir, boolean blocks) {
+		return start(level, box, load, dir, blocks, false);
+	}
+
+	/** (6c H) {@code fluids}: also each cell's fluid (ARVX version 3, which carries the block ids too). */
+	public static CompletableFuture<Result> start(ServerLevel level, BoundingBox box, LoadPolicy load, @Nullable Path dir, boolean blocks, boolean fluids) {
+		blocks = blocks || fluids;
 		if (blocks && cells(box) > MAX_BLOCK_CELLS) {
 			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.RegionRefused(Reason.REGION_LIMIT, "the volume with block ids is "
 				+ cells(box) + " cells (at most " + MAX_BLOCK_CELLS + ")"));
@@ -167,7 +181,7 @@ public final class VolumeSurvey {
 		MinecraftServer s = level.getServer();
 		Path out = dir != null ? dir : s.getWorldPath(LevelResource.ROOT).resolve(STANDALONE_DIR);
 		Task t = new Task(level, new int[] {box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ()}, load == null ? LoadPolicy.LOADED_ONLY
-			: load, out, blocks);
+			: load, out, blocks, fluids);
 		Runnable add = () -> TASKS.add(t);
 		if (s.isSameThread()) {
 			add.run();
@@ -281,6 +295,23 @@ public final class VolumeSurvey {
 							for (int y = ya; y <= yb; y++) {
 								t.blocks[base + (y - ya)] = blockIndex(t, sec.getBlockState(x & 15, y & 15, z & 15));
 							}
+						}
+					}
+				}
+			}
+			if (t.fluids != null && sec != null && !sec.hasOnlyAir()) {
+				// (6c H) every cell's fluid code (none outside the build height and in an all-air section; the array starts at 0 = none)
+				for (int x = x0; x <= x1; x++) {
+					for (int z = z0; z <= z1; z++) {
+						int base = t.idx(x, ya, z);
+						for (int y = ya; y <= yb; y++) {
+							BlockState bs = sec.getBlockState(x & 15, y & 15, z & 15);
+							Byte f = t.fluidMemo.get(bs);
+							if (f == null) {
+								f = fluidCode(bs);
+								t.fluidMemo.put(bs, f);
+							}
+							t.fluids[base + (y - ya)] = f;
 						}
 					}
 				}
@@ -424,7 +455,7 @@ public final class VolumeSurvey {
 	}
 
 	private static Result encodeAndFreeze(Task t) throws IOException {
-		Encoded enc = encode(t.box, t.cells, t.owners, t.missingCol, t.blocks, t.palette);
+		Encoded enc = encode(t.box, t.cells, t.owners, t.missingCol, t.blocks, t.palette, t.fluids);
 		byte[] gz = Arvx.gzip(enc.raw);
 		Path file = t.dir.resolve(enc.sha + ".bin");
 		freeze(file, gz, enc.sha);
@@ -507,10 +538,37 @@ public final class VolumeSurvey {
 
 	/** (6c B) With {@code blocks} (per cell a {@code palette} index, air first): ARVX version 2. Pure. */
 	public static Encoded encode(int[] box, byte[] cells, Map<Integer, String> owners, boolean[] missingCol, int @Nullable [] blocks, List<String> palette) {
+		return encode(box, cells, owners, missingCol, blocks, palette, null);
+	}
+
+	/**
+	 * (6c H) The fluid code of a block state (ARVX version 3, {@link Arvx#FLUID_CODES}): a liquid block's water source 1, flowing 2,
+	 * falling 3, lava source 5, flowing (or falling) 6; any other block holding a fluid (a waterlogged block, kelp, seagrass, a bubble
+	 * column) 4; none 0.
+	 */
+	public static byte fluidCode(BlockState s) {
+		net.minecraft.world.level.material.FluidState f = s.getFluidState();
+		if (f.isEmpty()) {
+			return 0;
+		}
+		boolean lava = f.is(net.minecraft.tags.FluidTags.LAVA);
+		if (!(s.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock)) {
+			return 4;
+		}
+		if (lava) {
+			return (byte) (f.isSource() ? 5 : 6);
+		}
+		return (byte) (f.isSource() ? 1 : f.getValue(net.minecraft.world.level.material.FlowingFluid.FALLING) ? 3 : 2);
+	}
+
+	/** (6c H) With {@code fluids} (per cell a fluid code): ARVX version 3 (blocks must be given too). Pure. */
+	public static Encoded encode(int[] box, byte[] cells, Map<Integer, String> owners, boolean[] missingCol, int @Nullable [] blocks, List<String> palette,
+		byte @Nullable [] fluids) {
 		int w = box[3] - box[0] + 1;
 		int d = box[5] - box[2] + 1;
 		int h = box[4] - box[1] + 1;
-		Arvx.Encoder e = new Arvx.Encoder(box, blocks != null);
+		Arvx.Encoder e = new Arvx.Encoder(box, blocks != null, fluids != null);
+		byte[] fcol = fluids == null ? null : new byte[h];
 		if (blocks != null) {
 			for (String id : palette) {
 				e.block(id); // the encoder's indexes = the palette's (air first)
@@ -536,7 +594,11 @@ public final class VolumeSurvey {
 						anyOwned = true;
 					}
 				}
-				if (bcol != null) {
+				if (fcol != null) {
+					System.arraycopy(blocks, c * h, bcol, 0, h);
+					System.arraycopy(fluids, c * h, fcol, 0, h);
+					e.column(col, anyOwned ? own : null, bcol, fcol);
+				} else if (bcol != null) {
 					System.arraycopy(blocks, c * h, bcol, 0, h);
 					e.column(col, anyOwned ? own : null, bcol);
 				} else {
