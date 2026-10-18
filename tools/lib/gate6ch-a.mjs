@@ -142,16 +142,16 @@ async function bodiesOfPlan(ctx, planDir) {
 }
 
 /** The bank cells round a body (feet cells: the first air over a solid column next to its surface), at most `n`, spread out. */
-function banksOf(b, R, n = 4) {
+function banksOf(b, R, n = 4, g = 2) {
   const own = new Set(b.cells.map((c) => `${c[0]},${c[2]}`));
   const shell = new Set(b.shell.map((c) => `${c[0]},${c[2]}`));
   const xs = b.cells.map((c) => c[0]), zs = b.cells.map((c) => c[2]);
-  const box = { minX: Math.min(...xs) - 2, maxX: Math.max(...xs) + 2, minZ: Math.min(...zs) - 2, maxZ: Math.max(...zs) + 2 };
+  const box = { minX: Math.min(...xs) - g, maxX: Math.max(...xs) + g, minZ: Math.min(...zs) - g, maxZ: Math.max(...zs) + g };
   const out = [];
   for (let x = box.minX; x <= box.maxX; x++) for (let z = box.minZ; z <= box.maxZ; z++) {
     if (own.has(`${x},${z}`) || shell.has(`${x},${z}`)) continue;
     if (x !== box.minX && x !== box.maxX && z !== box.minZ && z !== box.maxZ) continue;
-    for (let y = b.level + 6; y >= b.level - 2; y--) {
+    for (let y = b.level + 9; y >= b.level - 4; y--) {
       const a = stateAt(R.after, x, y, z), f = stateAt(R.after, x, y - 1, z), h = stateAt(R.after, x, y + 1, z);
       if (!a || !f) continue;
       if (/air$/.test(a) && /air$/.test(h ?? 'air') && !/air$|water|lava/.test(f)) { out.push([x, y, z]); break; }
@@ -321,7 +321,8 @@ async function villagers(ctx, tag, run) {
   const R = run.R;
   await L.cmd('/kill @e[type=!minecraft:player]');
   for (const b of run.bodies.filter((q) => q.fluid === 'water' && q.cells.length >= 4)) {
-    const banks = banksOf(b, R, 8);
+    // (3 out: past a raised body's works, which a walk goes round, not over)
+    const banks = banksOf(b, R, 8, 3);
     if (banks.length < 2) { out.nav[b.id] = { banks: banks.length }; continue; }
     // (opposite banks at one height: a header pool on a cliff has banks down its face too, which no walk joins)
     let pair = null;
