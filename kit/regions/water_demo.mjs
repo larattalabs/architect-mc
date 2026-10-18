@@ -5,7 +5,8 @@
 //            outcrop into a pond basin, and a small walled yard ringed by a moat with one road crossing it on a bridge (landing at the
 //            wall's gate). H-b adds its quay and harbour wall beside a synthetic lake (`wet: true`, its half).
 //   natural  (S3's pinned claim): a pond on the river's bank and a waterfall from a natural drop (lip existing) into a pond.
-//   cold     (a frozen claim: S7's rejected site 2026101102, S2's ice spikes): a pond in the freezing biome, capped with ice.
+//   cold     (a frozen claim: S7's rejected site 2026101102, S2's ice spikes): a pond in the freezing biome, capped with ice; `twin`
+//            adds an uncapped twin (item 4's freezing probe).
 // `only` keeps one body (pond, pool, pit, fountain, waterfall, moat) for a gate round of its own; `cx`/`cz` move the layout's centre.
 import { region } from '../lib/region/program.mjs';
 import { runCheck } from '../lib/plan/compile.mjs';
@@ -21,6 +22,8 @@ export const params = {
   only: { type: 'enum', options: ['all', 'pond', 'pool', 'pit', 'fountain', 'waterfall', 'moat'], default: 'all', label: 'One body' },
   cx: { type: 'int', min: -30000000, max: 30000000, default: AUTO, label: 'Centre x' },
   cz: { type: 'int', min: -30000000, max: 30000000, default: AUTO, label: 'Centre z' },
+  // (cold) the uncapped twin pond of item 4 (the freezing probe: its surface left open, ext architect_mc:unsafe noCap)
+  twin: { type: 'bool', default: false, omitDefault: true, label: 'Uncapped twin (cold)' },
 };
 
 /** The plan/0 of a variant over a claim (its anchors as [x, y, z]; the y is the compiler's own). */
@@ -50,6 +53,7 @@ export function waterPlan(claim, P) {
     if (want('waterfall')) forms.push({ id: 'falls', kind: 'waterfall', drop: 6, width: 3, lip: 'existing', basin: 'pond' });
   } else {
     if (want('pond')) forms.push({ id: 'pond', kind: 'pond', size: { w: 9, d: 7 }, depth: 2, where: near('pond_at', 0, 0, 24) });
+    if (P.twin) forms.push({ id: 'twin', kind: 'pond', size: { w: 7, d: 5 }, depth: 2, where: near('twin_at', 0, 24, 24), ext: { 'architect_mc:unsafe': { noCap: true } } });
   }
   return { plan: { schemaVersion: 'plan/0', planId: `water_demo_${P.variant}`, zones, forms, connectors }, anchors };
 }

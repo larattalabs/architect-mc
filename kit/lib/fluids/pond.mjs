@@ -295,7 +295,11 @@ export function emit(K, p, res) {
     const shape = sp.fluid === 'water' && sp.edge !== 'built' ? 'round' : 'rect';
     let ice = null;
     const notes = [];
-    if (sp.fluid === 'water') {
+    // (the gate's uncapped twin, item 4: ext 'architect_mc:unsafe' {noCap: true} leaves a freezing surface open, the probe of §0's
+    // freezing assumption; dev only, never a plan's)
+    const noCap = p.part.ext?.['architect_mc:unsafe']?.noCap === true;
+    if (noCap) notes.push('architect_mc:unsafe noCap: the surface is left open (the gate\'s uncapped twin)');
+    if (sp.fluid === 'water' && !noCap) {
       const dec = iceFor(K.ctx, surfaceOf(r, res.water, shape), p.part.ice);
       if (dec.refuse) throw refusal(dec.refuse.code, dec.refuse.message, dec.refuse.evidence);
       ice = dec.ice; notes.push(...dec.notes);
