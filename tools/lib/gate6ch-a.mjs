@@ -503,32 +503,53 @@ async function haCold(ctx) {
   return out;
 }
 
-/** Item 19 (client): water_demo flat in three bibles; the cameras over each body. */
+/** Item 19 (client): water_demo flat in three bibles; a camera over each body, and one over the moat's bridge. */
 async function haLook(ctx) {
   const { L, OUT, log } = ctx;
   const out = { shots: [] };
+  const dir = path.join(OUT, 'ha-look');
+  fs.mkdirSync(dir, { recursive: true });
+  for (const id of LOOK_BIBLES) if (id) {
+    const dst = path.join(L.GAME_DIR, 'architect', 'bibles', id, 'versions', '1');
+    fs.mkdirSync(dst, { recursive: true });
+    fs.copyFileSync(path.join(ctx.root, 'scenarios', 'bibles', `${id}.json`), path.join(dst, 'bible.json'));
+  }
+  const shot = async (name, eye, at) => {
+    await L.call('dev.camera', { x: eye[0], y: eye[1], z: eye[2], lookAt: { x: at[0], y: at[1], z: at[2] }, mode: 'spectator', fov: 70 }, 60_000);
+    await L.call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => null);
+    await L.settle(1500);
+    const r = await L.call('dev.screenshot', { name: `ha_${name}`, frames: 10, chunkTimeoutMs: 60_000 }, 180_000);
+    const file = path.join(dir, `${name}.png`);
+    fs.copyFileSync(r.path, file);
+    log(`  shot ${name}`);
+    return { name, eye, at, file };
+  };
   for (const bible of LOOK_BIBLES) {
     const tag = bible ?? 'default';
     await L.fresh(`G6B Ha Look ${tag}`, FLAT);
-    await L.setRules('exact');
     const { plan, anchors } = await demoPlan(ctx, FLAT_CLAIM, { variant: 'flat' });
     const run = await realiseRun(ctx, `look-${tag}`, { claim: FLAT_CLAIM, plan, anchors, rules: 'exact', bible });
     if (!run.R) continue;
-    for (const b of run.bodies) {
-      const xs = b.cells.map((c) => c[0]), zs = b.cells.map((c) => c[2]);
-      const at = [(Math.min(...xs) + Math.max(...xs)) >> 1, b.level, (Math.min(...zs) + Math.max(...zs)) >> 1];
-      const eye = [at[0] + 9, at[1] + 9, at[2] + 13];
-      await L.cmd(`/tp @s ${eye[0]} ${eye[1]} ${eye[2]} facing ${at[0]} ${at[1]} ${at[2]}`);
-      await L.settle(2500);
-      const name = `ha-look-${tag}-${b.id}`;
-      const s = await L.call('dev.screenshot', { name }, 120_000).catch((e) => ({ error: String(e.message ?? e) }));
-      out.shots.push({ bible: tag, body: b.id, file: s.file ?? s.path ?? null, error: s.error ?? null });
-      log(`  shot ${name}: ${s.file ?? s.path ?? s.error}`);
+    await L.cmd('/time set 6000');
+    const byPart = new Map();
+    for (const b of run.bodies) { const k = b.id.replace(/_(basin|spout)$/, ''); if (!byPart.has(k)) byPart.set(k, []); byPart.get(k).push(b); }
+    for (const [k, bs] of byPart) {
+      const all = bs.flatMap((b) => [...b.cells, ...b.shell]);
+      const xs = all.map((c) => c[0]), ys = all.map((c) => c[1]), zs = all.map((c) => c[2]);
+      const at = [(Math.min(...xs) + Math.max(...xs)) / 2 + 0.5, (Math.min(...ys) + Math.max(...ys)) / 2, (Math.min(...zs) + Math.max(...zs)) / 2 + 0.5];
+      const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs));
+      const d = k === 'w_moat' ? span * 0.6 : Math.max(10, span * 1.1);
+      out.shots.push({ bible: tag, body: k, ...(await shot(`${tag}_${k}`, [at[0] + d * 0.55, Math.max(...ys) + d * 0.6, at[2] + d * 0.85], at)) });
     }
+    for (const q of run.R.meta.bridges ?? []) {
+      const mid = [(q.from[0] + q.to[0]) / 2 + 0.5, q.from[1] + 1, (q.from[2] + q.to[2]) / 2 + 0.5];
+      out.shots.push({ bible: tag, body: 'moat_bridge', ...(await shot(`${tag}_moat_bridge`, [mid[0] + 2, mid[1] + 4, mid[2] + 14], mid)) });
+    }
+    await L.call('dev.release', {}).catch(() => null);
     await L.call('dev.region.remove', { region: run.realise.region, requester: OWNER }, 4 * 3_600_000).catch(() => null);
   }
-  fs.writeFileSync(path.join(OUT, 'ha-look.json'), `${JSON.stringify(out, null, 2)}\n`);
-  ctx.check(out.shots.length >= 6 && out.shots.every((s) => !s.error), `item 19 (look, recorded): ${out.shots.length} camera shot(s) of H-a's bodies in ${LOOK_BIBLES.length} bibles`);
+  fs.writeFileSync(path.join(dir, 'look.json'), `${JSON.stringify(out, null, 2)}\n`);
+  ctx.check(out.shots.length >= 18, `item 19 (look, recorded not judged): ${out.shots.length} camera shot(s) of H-a's bodies and the moat's bridge in ${LOOK_BIBLES.length} bibles (${dir})`);
   return out;
 }
 
