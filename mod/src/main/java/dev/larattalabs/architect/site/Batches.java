@@ -764,6 +764,9 @@ public final class Batches {
 		if (rs == Stage.State.APPROVED && RegionItems.isRegion(b) && !RegionsImpl.stageGate(server, b, running)) {
 			approved = false; // phase 6a: the stage's drift check runs, or the stage holds (land changed since planning)
 		}
+		if (approved && rs == Stage.State.APPROVED && RegionItems.isRegion(b) && !dev.larattalabs.architect.region.RegionFluids.gate(server, b, running)) {
+			approved = false; // (6c H) the fluids stage's gate: an entity in a body's box, then the containment check
+		}
 		if (RegionItems.isRegion(b) && approved) {
 			t0 = System.nanoTime();
 			RegionItems.ahead(server, b, running); // phase 6a: freeze and request the tiles after the head
@@ -783,7 +786,7 @@ public final class Batches {
 				Placement.lap("tryStart:" + item.key, t0);
 			}
 		}
-		if (BatchRules.allDone(b) && !hasJob(b) && stagesDone(b)) {
+		if (BatchRules.allDone(b) && !hasJob(b) && stagesDone(b) && !dev.larattalabs.architect.region.RegionFluids.holding(b)) {
 			t0 = System.nanoTime();
 			finish(server, b, QBatch.Status.DONE, "");
 			Placement.lap("finish", t0);

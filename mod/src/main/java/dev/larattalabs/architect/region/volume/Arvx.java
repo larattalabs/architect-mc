@@ -25,6 +25,7 @@ import java.util.zip.GZIPOutputStream;
  * varint ownedRuns, then per OWNED run in file order: varint ownerIndex
  * (version 2 only, 6c B) varint blockCount, then blockCount x (varint byteLength + UTF-8 block id; entry 0 is minecraft:air)
  *                   columns, x-major: runs bottom-up of (varint blockIndex, varint length)
+ * (version 3 only, 6c H) version 2, then columns, x-major: runs bottom-up of (u8 fluid code, varint length) ({@link #FLUID_CODES})
  * </pre>
  * The file on disk is the gzip of these bytes; the volume's sha is SHA-256 of the <b>uncompressed</b> bytes. Varints are
  * unsigned LEB128 (as {@code kit/lib/region/pack.mjs}). Pure: no Minecraft classes.
@@ -33,6 +34,10 @@ public final class Arvx {
 	public static final int VERSION = 1;
 	/** (6c B) A volume that also records each cell's block id (no properties): a mask's {@code block} term reads it. */
 	public static final int VERSION_BLOCKS = 2;
+	/** (6c H) Version 2 plus each cell's fluid ({@link #FLUID_CODES}): asked with {@code fluids: true}, read by H's checks and guards. */
+	public static final int VERSION_FLUIDS = 3;
+	/** (6c H) The fluid codes of version 3 (index = code), as kit/lib/region/volume.mjs FLUID_CODES. */
+	public static final List<String> FLUID_CODES = List.of("none", "water_source", "water_flowing", "water_falling", "waterlogged", "lava_source", "lava_flowing");
 	public static final String AIR = "minecraft:air";
 	private static final byte[] MAGIC = "ARVX".getBytes(StandardCharsets.US_ASCII);
 	private static final int OWNED = VoxelClass.OWNED.ordinal();
@@ -58,6 +63,9 @@ public final class Arvx {
 		final boolean blocks;
 		final Map<String, Integer> palette = new LinkedHashMap<>();
 		final Out blockRuns = new Out(1 << 12);
+		/** (6c H) version 3: the fluid runs, written after the block runs. */
+		final boolean fluids;
+		final Out fluidRuns = new Out(1 << 10);
 
 		/** {@code box} = {minX, minY, minZ, maxX, maxY, maxZ}, inclusive. */
 		public Encoder(int[] box) {
@@ -66,6 +74,14 @@ public final class Arvx {
 
 		/** (6c B) {@code blocks}: version 2, every column also gives its cells' block ids ({@link #column(byte[], String[], int[])}). */
 		public Encoder(int[] box, boolean blocks) {
+			this(box, blocks, false);
+		}
+
+		/** (6c H) {@code fluids}: version 3 (blocks too), every column also gives its cells' fluid codes. */
+		public Encoder(int[] box, boolean blocks, boolean fluids) {
+			if (fluids && !blocks) {
+				throw new IllegalArgumentException("a version-3 volume also carries blocks");
+			}
 			if (box[3] < box[0] || box[4] < box[1] || box[5] < box[2]) {
 				throw new IllegalArgumentException("empty box");
 			}
@@ -73,11 +89,12 @@ public final class Arvx {
 			this.height = box[4] - box[1] + 1;
 			this.columnsTotal = (long) (box[3] - box[0] + 1) * (box[5] - box[2] + 1);
 			this.blocks = blocks;
+			this.fluids = fluids;
 			if (blocks) {
 				palette.put(AIR, 0);
 			}
 			out.bytes(MAGIC);
-			out.u8(blocks ? VERSION_BLOCKS : VERSION);
+			out.u8(fluids ? VERSION_FLUIDS : blocks ? VERSION_BLOCKS : VERSION);
 			out.u8(0);
 			out.u8(0);
 			out.u8(0);
@@ -109,6 +126,34 @@ public final class Arvx {
 
 		/** (6c B) The next column of a version-2 volume: classes, owners, and per cell its {@link #block} index. */
 		public void column(byte[] cls, String[] owner, int[] block) {
+			if (fluids) {
+				throw new IllegalStateException("a version-3 volume needs its column's fluids");
+			}
+			column1(cls, owner, block);
+		}
+
+		/** (6c H) The next column of a version-3 volume: classes, owners, blocks, and per cell its fluid code. */
+		public void column(byte[] cls, String[] owner, int[] block, byte[] fluid) {
+			if (!fluids) {
+				throw new IllegalStateException("a version-" + (blocks ? 2 : 1) + " volume has no fluids");
+			}
+			if (fluid.length != height) {
+				throw new IllegalArgumentException("column of " + fluid.length + " fluids, the box is " + height + " high");
+			}
+			column1(cls, owner, block);
+			int i = 0;
+			while (i < height) {
+				int j = i + 1;
+				while (j < height && fluid[j] == fluid[i]) {
+					j++;
+				}
+				fluidRuns.u8(fluid[i] & 0xFF);
+				fluidRuns.varint(j - i);
+				i = j;
+			}
+		}
+
+		private void column1(byte[] cls, String[] owner, int[] block) {
 			if (!blocks) {
 				throw new IllegalStateException("a version-1 volume has no blocks");
 			}
@@ -174,6 +219,10 @@ public final class Arvx {
 				blockRuns.varint(0); // air: a MISSING column has no blocks (a reader asks the class first)
 				blockRuns.varint(height);
 			}
+			if (fluids) {
+				fluidRuns.u8(0);
+				fluidRuns.varint(height);
+			}
 		}
 
 		public long[] counts() {
@@ -202,16 +251,46 @@ public final class Arvx {
 				}
 				out.bytes(blockRuns.result());
 			}
+			if (fluids) {
+				out.bytes(fluidRuns.result());
+			}
 			return out.result();
 		}
 	}
 
 	/** A decoded volume: per column (x-major) its runs as {class, length} pairs, the owners, and per OWNED run its owner. */
 	public record Decoded(int[] box, List<int[][]> columns, List<String> owners, int[] ownedRuns, @org.jspecify.annotations.Nullable List<String> blockPalette,
-		@org.jspecify.annotations.Nullable List<int[][]> blockColumns) {
+		@org.jspecify.annotations.Nullable List<int[][]> blockColumns, @org.jspecify.annotations.Nullable List<int[][]> fluidColumns) {
 		/** A version-1 volume (no blocks). */
 		public Decoded(int[] box, List<int[][]> columns, List<String> owners, int[] ownedRuns) {
-			this(box, columns, owners, ownedRuns, null, null);
+			this(box, columns, owners, ownedRuns, null, null, null);
+		}
+
+		/** (6c B) A version-1 or version-2 volume (no fluids). */
+		public Decoded(int[] box, List<int[][]> columns, List<String> owners, int[] ownedRuns, @org.jspecify.annotations.Nullable List<String> blockPalette,
+			@org.jspecify.annotations.Nullable List<int[][]> blockColumns) {
+			this(box, columns, owners, ownedRuns, blockPalette, blockColumns, null);
+		}
+
+		/** (6c H) The fluid code of a cell of a version-3 volume ({@link #FLUID_CODES}), -1 for a volume without the fluid layer. */
+		public int fluidAt(int x, int y, int z) {
+			if (fluidColumns == null) {
+				return -1;
+			}
+			int[][] runs = fluidColumns.get((x - box[0]) * depth() + (z - box[2]));
+			int at = y - box[1];
+			for (int[] r : runs) {
+				if (at < r[1]) {
+					return r[0];
+				}
+				at -= r[1];
+			}
+			throw new IllegalArgumentException("outside the box");
+		}
+
+		/** (6c H) Whether a world cell is inside the box. */
+		public boolean contains(int x, int y, int z) {
+			return x >= box[0] && x <= box[3] && y >= box[1] && y <= box[4] && z >= box[2] && z <= box[5];
 		}
 
 		/** (6c B) The block id of a cell of a version-2 volume (no properties), null for version 1. */
@@ -261,7 +340,7 @@ public final class Arvx {
 			}
 		}
 		int ver = in.u8();
-		if (ver != VERSION && ver != VERSION_BLOCKS) {
+		if (ver != VERSION && ver != VERSION_BLOCKS && ver != VERSION_FLUIDS) {
 			throw new IllegalArgumentException("ARVX version " + ver);
 		}
 		in.p += 3;
@@ -308,7 +387,7 @@ public final class Arvx {
 		}
 		List<String> palette = null;
 		List<int[][]> bcols = null;
-		if (ver == VERSION_BLOCKS) {
+		if (ver >= VERSION_BLOCKS) {
 			int bc = (int) in.varint();
 			palette = new ArrayList<>();
 			for (int i = 0; i < bc; i++) {
@@ -338,10 +417,31 @@ public final class Arvx {
 				bcols.add(runs.toArray(new int[0][]));
 			}
 		}
+		List<int[][]> fcols = null;
+		if (ver == VERSION_FLUIDS) {
+			fcols = new ArrayList<>();
+			for (long c = 0; c < n; c++) {
+				List<int[]> runs = new ArrayList<>();
+				int sum = 0;
+				while (sum < h) {
+					int f = in.u8();
+					int len = (int) in.varint();
+					if (len <= 0 || f >= FLUID_CODES.size()) {
+						throw new IllegalArgumentException("bad fluid run in column " + c);
+					}
+					runs.add(new int[] {f, len});
+					sum += len;
+				}
+				if (sum != h) {
+					throw new IllegalArgumentException("column " + c + "'s fluids sum to " + sum + ", not " + h);
+				}
+				fcols.add(runs.toArray(new int[0][]));
+			}
+		}
 		if (in.p != a.length) {
 			throw new IllegalArgumentException((a.length - in.p) + " trailing bytes");
 		}
-		return new Decoded(box, cols, owners, ownedRuns, palette, bcols);
+		return new Decoded(box, cols, owners, ownedRuns, palette, bcols, fcols);
 	}
 
 	public static String sha256(byte[] a) {

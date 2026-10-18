@@ -129,6 +129,7 @@ public final class RegionsImpl implements Regions {
 
 	public static void init() {
 		dev.larattalabs.architect.site.Groups.GROUP_ENDED = RegionsImpl::groupEnded;
+		DamageLog.init(); // (6c H) dev.entity.damage (a villager stand's drowning)
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STARTED.register(RegionsImpl::started);
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPING.register(s -> Heights.flush());
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
@@ -143,6 +144,7 @@ public final class RegionsImpl implements Regions {
 			Prepare.stopAll();
 			STAGE_CHECKS.clear();
 			GENERATED.clear();
+			RegionFluids.forget(null);
 			GenCounter.realising(false);
 		});
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(s -> {
@@ -156,6 +158,7 @@ public final class RegionsImpl implements Regions {
 			generatedDuringRealise(s);
 			actionsTick(s);
 			Brushes.tick(s);
+			RegionFluids.tick(s); // (6c H) the fluids stage: forced ticks, settle and census, the escape guard
 		});
 	}
 
@@ -709,6 +712,7 @@ public final class RegionsImpl implements Regions {
 			long cells = 0;
 			List<BoundingBox> boxes = new ArrayList<>();
 			java.util.Set<BoundingBox> withBlocks = new java.util.HashSet<>();
+			java.util.Set<BoundingBox> withFluids = new java.util.HashSet<>();
 			for (JsonElement e : need) {
 				JsonObject b = e.getAsJsonObject();
 				BoundingBox bb = new BoundingBox(b.get("minX").getAsInt(), b.get("minY").getAsInt(), b.get("minZ").getAsInt(), b.get("maxX").getAsInt(), b.get(
@@ -716,6 +720,9 @@ public final class RegionsImpl implements Regions {
 				boxes.add(bb);
 				if (b.get("blocks") instanceof JsonElement bl && bl.isJsonPrimitive() && bl.getAsBoolean()) {
 					withBlocks.add(bb); // (6c B) r.needVolume(box, {blocks: true}): ARVX version 2
+				}
+				if (b.get("fluids") instanceof JsonElement fl && fl.isJsonPrimitive() && fl.getAsBoolean()) {
+					withFluids.add(bb); // (6c H) r.needVolume(box, {fluids: true}): ARVX version 3
 				}
 				cells += dev.larattalabs.architect.region.volume.VolumeSurvey.cells(bb);
 			}
@@ -743,7 +750,7 @@ public final class RegionsImpl implements Regions {
 				CompletableFuture<JsonArray> chain = CompletableFuture.completedFuture(new JsonArray());
 				for (BoundingBox bb : boxes) {
 					chain = chain.thenCompose(arr -> dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, bb,
-						policy, null, withBlocks.contains(bb)).thenCompose(
+						policy, null, withBlocks.contains(bb), withFluids.contains(bb)).thenCompose(
 							dev.larattalabs.architect.apiimpl.SurveyImpl::upload).thenApply(vol -> {
 								JsonObject o = new JsonObject();
 								o.addProperty("sha", vol.sha());
@@ -1723,7 +1730,8 @@ public final class RegionsImpl implements Regions {
 		if (l == null) {
 			return;
 		}
-		boolean allPlaced = b.items.stream().allMatch(i -> i.status == QItem.Status.PLACED);
+		// (6c H) a body not written (its containment check failed) or drained by the escape guard ends the region PARTIAL (S-H-6: no new state)
+		boolean allPlaced = b.items.stream().allMatch(i -> i.status == QItem.Status.PLACED) && !RegionFluids.anyDrained(l);
 		l.rec().state = b.status == QBatch.Status.DONE && allPlaced ? RegionState.PLACED : b.status == QBatch.Status.DONE ? RegionState.PARTIAL
 			: RegionState.FAILED;
 		l.rec().stats.addProperty("doneAt", System.currentTimeMillis());
@@ -2153,6 +2161,7 @@ public final class RegionsImpl implements Regions {
 			REGIONS.remove(l.rec().id);
 			Heights.forget(l.rec().id);
 			TileStream.forgetRegion(l.rec().id);
+			RegionFluids.forget(l.rec().id);
 			try {
 				RegionStore.writeJson(RegionStore.region(l.world(), l.rec().id).resolve("removed.json"), l.rec().toJson());
 				Files.deleteIfExists(RegionStore.region(l.world(), l.rec().id).resolve("region.json"));
