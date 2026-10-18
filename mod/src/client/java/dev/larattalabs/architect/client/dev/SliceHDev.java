@@ -76,6 +76,28 @@ public final class SliceHDev {
 					return RegionFluids.stateJson(l);
 				});
 			});
+		DevBridge.register("dev.fluid.beforeGate", 10_000, "{protect?: [x0,z0,x1,z1], owner?, setblock?: [[x,y,z,state]]} - (6c H) TEST: at the next "
+			+ "fluids gate, right before its containment check, mark a protected area for the owner and/or set blocks -> {armed}", (req, mc) -> {
+				JsonArray pr = req.has("protect") ? req.getAsJsonArray("protect") : null;
+				String owner = req.has("owner") ? req.get("owner").getAsString() : null;
+				JsonArray sb = req.has("setblock") ? req.getAsJsonArray("setblock") : null;
+				RegionFluids.beforeCheck = level -> {
+					if (pr != null && owner != null) {
+						dev.larattalabs.architect.site.Protected.protect(new dev.larattalabs.architect.api.ProtectedArea(owner, "h-gate-" + System.currentTimeMillis(),
+							level.dimension(), pr.get(0).getAsInt(), pr.get(1).getAsInt(), pr.get(2).getAsInt(), pr.get(3).getAsInt(), "H gate item 3"));
+					}
+					if (sb != null) {
+						for (var c : sb) {
+							JsonArray q = c.getAsJsonArray();
+							level.setBlock(new BlockPos(q.get(0).getAsInt(), q.get(1).getAsInt(), q.get(2).getAsInt()), dev.larattalabs.architect.region.Packed.parse(q.get(3)
+								.getAsString()), 3);
+						}
+					}
+				};
+				JsonObject o = new JsonObject();
+				o.addProperty("armed", true);
+				return CompletableFuture.completedFuture(o);
+			});
 		DevBridge.register("dev.fluid.bypass", 10_000, "{on: bool} - (6c H) TEST: the fluids stage's containment check is not run (every body is written: "
 			+ "gate item 2's negative control) -> {on}", (req, mc) -> {
 				RegionFluids.bypassCheck = req.get("on").getAsBoolean();

@@ -81,6 +81,8 @@ public final class RegionFluids {
 	static final int CENSUS_EVERY = 5;
 	/** DevBridge {@code dev.fluid.bypass} (gate item 2's negative control): the containment check is not run (every body is written). */
 	public static volatile boolean bypassCheck;
+	/** DevBridge {@code dev.fluid.beforeGate} (gate item 3): run once, at the next fluids gate, right before its containment check. */
+	public static volatile java.util.function.@Nullable Consumer<ServerLevel> beforeCheck;
 	private static final Map<String, Regional> STATE = new HashMap<>();
 
 	private RegionFluids() {
@@ -301,6 +303,11 @@ public final class RegionFluids {
 			}
 		}
 		// the realise-time containment check (§2.4), then the before states, saved before any source is written
+		var hook = beforeCheck;
+		if (hook != null) {
+			beforeCheck = null;
+			hook.accept(level);
+		}
 		for (Body body : st.bodies) {
 			BodyState bs = st.states.get(body.id);
 			if (!"pending".equals(bs.state)) {
@@ -349,6 +356,10 @@ public final class RegionFluids {
 			BlockPos bp = BlockPos.of(p);
 			BlockState now = level.getBlockState(bp);
 			boolean ok;
+			if (areas.stream().anyMatch(a -> a.contains(bp.getX(), bp.getZ()))) {
+				bad.add(new long[] {bp.getX(), bp.getY(), bp.getZ()}); // a protected area marked since: never written against
+				continue;
+			}
 			try {
 				List<WorldJournal.Layer> stack = WorldJournal.stack(dim, p);
 				if (!stack.isEmpty()) {

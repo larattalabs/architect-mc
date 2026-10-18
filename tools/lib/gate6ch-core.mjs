@@ -48,20 +48,438 @@ export async function unchanged(root) {
   return out;
 }
 
-/** Items 1-3, 5, 6 on h_core_demo (a flat world). */
+// ------------------------------------------------------------------ in game: shared helpers
+
+const OWNER = 'test:h';
+const FLAT = 'G6B Flat Base';
+/** h_core_demo's claim on the flat world (96 x 96). */
+const CLAIM = [9000, 9000, 9095, 9095];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** The bodies of a plan's IR (its fluid ops), cells unpacked: {id, fluid, level, cells, spill, joins, watch, ice, shell, predicted, settleTicks}. */
+function bodiesOf(ir) {
+  const cellsOf = (runs) => { const out = []; for (const [x, z, y0, y1] of runs ?? []) for (let y = y0; y <= y1; y++) out.push([x, y, z]); return out; };
+  const out = [];
+  for (const p of ir.parts) for (const o of p.ops) if (o.op === 'fluid') out.push({ id: o.id, fluid: o.fluid, level: o.level, cells: cellsOf(o.cells), spill: cellsOf(o.spill), joins: cellsOf(o.joins), watch: cellsOf(o.watch), ice: cellsOf(o.ice), shell: cellsOf(o.shell), predicted: o.predicted ?? [], settleTicks: o.settleTicks });
+  return out;
+}
+const k3 = (c) => `${c[0]},${c[1]},${c[2]}`;
+/** A box around cells grown by g: [x0, y0, z0, x1, y1, z1]. */
+function boxAround(cells, g = 2) {
+  const b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  for (const [x, y, z] of cells) { b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y); b[2] = Math.min(b[2], z); b[3] = Math.max(b[3], x); b[4] = Math.max(b[4], y); b[5] = Math.max(b[5], z); }
+  return [b[0] - g, b[1] - g, b[2] - g, b[3] + g, b[4] + g, b[5] + g];
+}
+
+/**
+ * A body's census against its prediction, from dev.fluid.census over its watch box: {ok, sources, flowing, mismatch: [...], outside:
+ * [...] (fluid of the body's kind outside its cells, spill and joins that the before-census did not hold), ticks}.
+ */
+async function censusOf(ctx, body, before = null) {
+  const all = [...body.cells, ...body.shell, ...body.spill, ...body.watch];
+  const box = boxAround(all, 2);
+  const c = await ctx.L.call('dev.fluid.census', { box }, 120_000);
+  const now = new Map(c.fluids.map(([x, y, z, s]) => [`${x},${y},${z}`, s]));
+  const pred = new Map(body.predicted.map(([x, y, z, lv]) => [`${x},${y},${z}`, lv]));
+  const own = new Set(body.cells.map(k3)), ice = new Set(body.ice.map(k3)), declared = new Set([...body.cells, ...body.spill, ...body.joins].map(k3));
+  const kind = body.fluid === 'lava' ? 'minecraft:lava' : 'minecraft:water';
+  const levelOf = (s) => { const m = /level=(\d+)/.exec(s); return m ? Number(m[1]) : 0; };
+  const mismatch = [], outside = [];
+  let sources = 0, flowing = 0;
+  for (const k of own) {
+    const s = now.get(k);
+    if (ice.has(k)) { if (s !== 'minecraft:ice') mismatch.push([k, s ?? 'none', 'ice']); continue; }
+    if (!s || !s.startsWith(kind) || levelOf(s) !== 0) mismatch.push([k, s ?? 'none', 'source']); else sources++;
+  }
+  for (const [k, lv] of pred) {
+    const s = now.get(k);
+    if (!s || !s.startsWith(kind) || levelOf(s) !== lv) mismatch.push([k, s ?? 'none', `level ${lv}`]); else flowing++;
+  }
+  for (const [k, s] of now) {
+    if (own.has(k) || pred.has(k) || !s.startsWith(kind)) continue;
+    if (before && before.has(k)) continue;
+    if (declared.has(k)) mismatch.push([k, s, 'none']); else outside.push([k, s]);
+  }
+  return { ok: !mismatch.length && !outside.length, sources, flowing, mismatch: mismatch.slice(0, 20), outside: outside.slice(0, 20), outsideCount: outside.length, ticks: c.ticks.length, box, fluids: now };
+}
+
+/** A fresh copy of the flat base, its rules ('exact' or the base's own defaults), the player over the claim. */
+async function freshFlat(ctx, name, rules) {
+  const L = ctx.L;
+  await L.fresh(name, FLAT);
+  if (rules === 'exact') await L.setRules('exact');
+  else { await L.cmd('/weather clear'); await L.cmd('/time set 6000'); }
+  await L.tp((CLAIM[0] + CLAIM[2]) / 2, 120, (CLAIM[1] + CLAIM[3]) / 2);
+}
+
+/** Plan h_core_demo (the two-plan flow: its volumes with the fluid layer), its IR and meta read from the sidecar's plan dir. */
+async function planDemo(ctx, params = {}) {
+  const L = ctx.L;
+  const p = await L.plan('h_core_demo', CLAIM, { params, surveyLoad: 'bounded:256', check: true, owner: OWNER });
+  const dir = path.join(L.SIDECAR_DATA, 'regions', 'plans', p.planId);
+  const ir = JSON.parse(fs.readFileSync(path.join(dir, 'ir.json'), 'utf8'));
+  const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
+  const report = fs.existsSync(path.join(dir, 'report.json')) ? JSON.parse(fs.readFileSync(path.join(dir, 'report.json'), 'utf8')) : null;
+  return { p, dir, ir, meta, report, bodies: bodiesOf(ir) };
+}
+
+/** The region's box for snapshots: the claim + 8 around, from 8 under the lowest body cell to 16 over the ground. */
+function demoBox(bodies) {
+  const all = bodies.flatMap((b) => [...b.cells, ...b.shell, ...b.spill, ...b.watch]);
+  const b = boxAround(all, 0);
+  return [CLAIM[0] - 8, b[1] - 8, CLAIM[1] - 8, CLAIM[2] + 8, b[4] + 16, CLAIM[3] + 8];
+}
+
+async function realiseWait(ctx, planId, opts = {}) {
+  const L = ctx.L;
+  const region = await L.realise(planId, opts);
+  const st = await L.waitRegion(region, 3_600_000, async (s) => { if (s.view?.waiting?.reason === 'OCCUPIED') await L.cmd('/kill @e[type=!minecraft:player]'); });
+  return { region, st, view: st.view, fluids: st.view.ext?.['architect_mc:fluids'] ?? null };
+}
+
+async function removeWait(ctx, region) {
+  const L = ctx.L;
+  const t0 = Date.now();
+  const r = await L.call('dev.region.remove', { region, requester: OWNER }, 3_600_000);
+  for (let i = 0; i < 2400; i++) {
+    const st = await L.call('dev.region.state', { region }, 60_000).catch(() => null);
+    const s = st?.view?.state;
+    if (!s || s === 'REMOVED') return { ...r, seconds: (Date.now() - t0) / 1000, state: s ?? 'REMOVED' };
+    if (s === 'PARTIAL' || s === 'FAILED') return { ...r, seconds: (Date.now() - t0) / 1000, state: s };
+    await sleep(500);
+  }
+  throw new Error(`removal of ${region} did not finish`);
+}
+
+const snap = async (ctx, box, name) => { const file = path.join(ctx.OUT, `${name}.snap.gz`); await ctx.L.call('dev.region.hash', { box, mode: 'snap', file }, 4 * 3_600_000); return file; };
+const diff = async (ctx, box, file) => { const r = await ctx.L.call('dev.region.hash', { box, mode: 'diff', file }, 4 * 3_600_000); return { mismatches: r.mismatches, classes: r.classes ?? {}, sample: (r.list ?? []).slice(0, 12) }; };
+
+/** The shell cell a breach opens (§14 item 6): the deepest side cell of a body (a shell cell beside a body cell, lowest, ties by x, z). */
+function breachCell(body) {
+  const own = new Set(body.cells.map(k3));
+  const side = body.shell.filter(([x, y, z]) => y <= body.level && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => own.has(`${x + dx},${y},${z + dz}`)));
+  side.sort((a, b) => a[1] - b[1] || a[0] - b[0] || a[2] - b[2]);
+  return side[0] ?? body.shell.find((c) => c[1] <= body.level) ?? null;
+}
+
+// ------------------------------------------------------------------ in game: items 1-3, 5, 6
+
+/** Items 1-3, 5, 6 on h_core_demo (a flat world, headless). */
 export async function ingame(ctx) {
-  ctx.check(false, 'h-ingame: H-core\'s in-game items are not built yet');
-  return null;
+  const { L, check, json, log } = ctx;
+  const out = {};
+  // ---- (A) default rules: item 1 in game, item 2 (census, settle, a 2-minute stand), item 6 (the single breach and its undo)
+  {
+    await freshFlat(ctx, 'G6B H Default', 'default');
+    const d = await planDemo(ctx, { lava: true });
+    const f = (d.report?.findings ?? []).filter((x) => /^M(25|20)/.test(x.rule));
+    out.plan = { planId: d.p.planId, irSha: d.p.irSha, notes: (d.p.notes ?? []).filter((n) => /volume/.test(n)), bodies: d.bodies.map((b) => [b.id, b.cells.length, b.spill.length, b.watch.length, b.settleTicks]), findings: f };
+    check(d.bodies.length === 4 && (d.p.notes ?? []).some((n) => /read 4 frozen volumes/.test(n)), `item 1 (in game): h_core_demo planned 4 bodies over 4 frozen volumes with the fluid layer (two-plan flow: ${json(out.plan.notes)}; ${json(out.plan.bodies)})`);
+    check(d.report && f.length === 0, `item 1 (in game): M25 and M20 0 on the plan's own check (${f.map((x) => `${x.rule} ${x.count}`).join(', ') || 'none'})`);
+    const before = new Map();
+    for (const b of d.bodies) { const c = await censusOf(ctx, b); for (const [k, s] of c.fluids) before.set(k, s); }
+    const t0 = Date.now();
+    const r = await realiseWait(ctx, d.p.planId);
+    out.realise = { region: r.region, state: r.view.state, ms: Date.now() - t0, fluids: r.fluids };
+    check(r.view.state === 'PLACED' && (r.fluids ?? []).length === 4 && r.fluids.every((x) => x.state === 'settled'), `item 2: PLACED only when every body settled (${r.view.state}; ${json((r.fluids ?? []).map((x) => [x.body, x.state, x.settledAt]))})`);
+    const bound = new Map(d.bodies.map((b) => [b.id, b.settleTicks]));
+    check((r.fluids ?? []).every((x) => x.settledAt <= bound.get(x.body)), `item 2: each body settled within its settleTicks (${json((r.fluids ?? []).map((x) => [x.body, x.settledAt, bound.get(x.body)]))})`);
+    const c1 = {};
+    for (const b of d.bodies) c1[b.id] = await censusOf(ctx, b, before);
+    out.census = Object.fromEntries(Object.entries(c1).map(([k, v]) => [k, { ok: v.ok, sources: v.sources, flowing: v.flowing, mismatch: v.mismatch, outside: v.outside, ticks: v.ticks }]));
+    check(Object.values(c1).every((c) => c.ok && c.ticks === 0), `item 2: every body's census equals its prediction exactly (sources, flowing levels), 0 fluid outside its cells, spill and joins, no fluid tick scheduled (${json(Object.entries(c1).map(([k, v]) => [k, v.sources, v.flowing, v.mismatch.length, v.outsideCount]))})`);
+    // the stand: 2 minutes at default rules (random ticks, fire, spawns): the census unchanged
+    await sleep(120_000);
+    const c2 = {};
+    for (const b of d.bodies) c2[b.id] = await censusOf(ctx, b, before);
+    out.stand = Object.fromEntries(Object.entries(c2).map(([k, v]) => [k, { ok: v.ok, mismatch: v.mismatch, outside: v.outside }]));
+    check(Object.values(c2).every((c) => c.ok), `item 2: a 2-minute stand at default rules adds nothing (${json(Object.entries(c2).map(([k, v]) => [k, v.mismatch.length, v.outsideCount]))})`, out.stand);
+    // item 6: one shell cell of each body opened (a player's pickaxe); after a settle bound the water reaches only its declared and
+    // watched cells (the breach reach as predicted, re-surveyed), never a lot, a build, a protected area or keep-out (none here: the claim)
+    const opened = {};
+    for (const b of d.bodies) { const c = breachCell(b); opened[b.id] = c; if (c) await L.cmd(`/setblock ${c[0]} ${c[1]} ${c[2]} minecraft:air`); }
+    await sleep(Math.max(...d.bodies.map((b) => b.settleTicks)) * 50 * 2 + 3000);
+    const c3 = {};
+    for (const b of d.bodies) {
+      const c = await censusOf(ctx, b, before);
+      const allowed = new Set([...b.cells, ...b.spill, ...b.watch, ...b.joins].map(k3));
+      const kind = b.fluid === 'lava' ? 'minecraft:lava' : 'minecraft:water';
+      const beyond = [...c.fluids].filter(([k, s]) => s.startsWith(kind) && !allowed.has(k) && !before.has(k));
+      c3[b.id] = { opened: opened[b.id], beyond: beyond.slice(0, 12), n: beyond.length };
+    }
+    out.breach = c3;
+    check(Object.values(c3).every((x) => x.opened && x.n === 0), `item 6: a single breach of each body (${json(Object.fromEntries(Object.entries(c3).map(([k, v]) => [k, v.opened])))}) reaches nothing past its cells, spill and watched breach reach (${json(Object.fromEntries(Object.entries(c3).map(([k, v]) => [k, v.n])))})`, c3);
+    // its undo: the watched cells restored, 0 fluid in the watch boxes the before-census did not hold, 0 new sources anywhere in them
+    const rm = await removeWait(ctx, r.region);
+    out.breachUndo = { removed: rm.removed, state: rm.state, seconds: rm.seconds };
+    let extra = 0, newSources = 0;
+    const left = [];
+    for (const b of d.bodies) {
+      const c = await censusOf(ctx, b, before);
+      for (const [k, s] of c.fluids) if (!before.has(k) && s !== 'minecraft:ice') { extra++; if (!/level=[1-9]/.test(s)) newSources++; if (left.length < 12) left.push([k, s]); }
+    }
+    out.breachUndo.extra = extra;
+    out.breachUndo.newSources = newSources;
+    check(rm.state === 'REMOVED' && extra === 0 && newSources === 0, `item 6: Regions.remove after the breach: ${rm.state} in ${rm.seconds} s; 0 fluid cells in the watch boxes the before-census did not hold (${extra}), 0 new sources (${newSources})`, left);
+    await L.leaveWorld();
+  }
+  // ---- (B) exact rules: item 5, exact undo (E-flat 0 over the claim, fluid cells compared by state)
+  {
+    await freshFlat(ctx, 'G6B H Exact', 'exact');
+    const d = await planDemo(ctx, { lava: true });
+    const box = demoBox(d.bodies);
+    const file = await snap(ctx, box, 'h-exact');
+    const r = await realiseWait(ctx, d.p.planId);
+    check(r.view.state === 'PLACED' && (r.fluids ?? []).every((x) => x.state === 'settled'), `item 5: the exact-rules realise PLACED, every body settled (${r.view.state}; ${json((r.fluids ?? []).map((x) => [x.body, x.state]))})`);
+    const ticks = [];
+    for (const b of d.bodies) ticks.push((await censusOf(ctx, b)).ticks);
+    const rm = await removeWait(ctx, r.region);
+    await sleep(3000);
+    const df = await diff(ctx, box, file);
+    out.exact = { region: r.region, box, removed: rm.removed, state: rm.state, seconds: rm.seconds, restored: rm.restored ?? null, mismatches: df.mismatches, classes: df.classes, sample: df.sample };
+    check(rm.state === 'REMOVED' && df.mismatches === 0, `item 5: Regions.remove (drain, a settle bound, then the solids) restores the box exactly under the exact rules: E-flat ${df.mismatches} over ${(box[3] - box[0] + 1) * (box[4] - box[1] + 1) * (box[5] - box[2] + 1)} cells (fluid cells by state; ${rm.seconds} s)`, df.sample);
+    // the same, with item 6's breach before the removal (its exactness is item 5's)
+    await L.leaveWorld();
+    await freshFlat(ctx, 'G6B H ExactBreach', 'exact');
+    const d2 = await planDemo(ctx, { lava: true });
+    const file2 = await snap(ctx, box, 'h-exact-breach');
+    const r2 = await realiseWait(ctx, d2.p.planId);
+    for (const b of d2.bodies) { const c = breachCell(b); if (c) await L.cmd(`/setblock ${c[0]} ${c[1]} ${c[2]} minecraft:air`); }
+    await sleep(Math.max(...d2.bodies.map((b) => b.settleTicks)) * 50 * 2 + 3000);
+    const rm2 = await removeWait(ctx, r2.region);
+    await sleep(3000);
+    const df2 = await diff(ctx, box, file2);
+    out.exactBreach = { state: rm2.state, seconds: rm2.seconds, mismatches: df2.mismatches, classes: df2.classes, sample: df2.sample };
+    check(rm2.state === 'REMOVED' && df2.mismatches === 0, `item 6 (exactness, item 5's rule): the breached bodies' removal restores the box exactly: E-flat ${df2.mismatches}`, df2.sample);
+    await L.leaveWorld();
+  }
+  // ---- (C) item 2's negative control: no_shell_cell realised with the containment check bypassed leaks; the census names the cell
+  {
+    await freshFlat(ctx, 'G6B H Leak', 'exact');
+    const d = await planDemo(ctx, { variant: 'no_shell_cell' });
+    const pond = d.bodies.find((b) => b.id === 'pond');
+    const hole = (() => { const own = new Set(pond.cells.map(k3)); const sh = new Set(pond.shell.map(k3)); for (const c of pond.shell) void c; return pond.shell.find(([x, y, z]) => y === pond.level && x === Math.min(...pond.cells.map((q) => q[0])) - 1 && z === Math.round(pond.cells.reduce((a, q) => a + q[2], 0) / pond.cells.length) && own && sh); })();
+    await L.call('dev.fluid.bypass', { on: true }, 10_000);
+    const r = await realiseWait(ctx, d.p.planId);
+    await L.call('dev.fluid.bypass', { on: false }, 10_000);
+    const fp = (r.fluids ?? []).find((x) => x.body === 'pond');
+    out.negative = { state: r.view.state, pond: fp, hole };
+    check(r.view.state === 'PARTIAL' && fp?.state === 'drained' && /^escaped/.test(fp.reason ?? '') && (fp.at ?? []).some((c) => hole && c[0] === hole[0] && c[1] === hole[1] && c[2] === hole[2]), `item 2 (negative control): no_shell_cell with the check bypassed leaks in game within its settle bound: the census names the open rim cell ${json(hole)} (${r.view.state}; ${json(fp)})`);
+    const c = await censusOf(ctx, pond);
+    check([...c.fluids.values()].filter((s) => s.startsWith('minecraft:water')).length === 0, `item 2 (negative control): the escape guard drained it: 0 water in the pond's watch box (${c.fluids.size} fluid cells)`);
+    await L.leaveWorld();
+  }
+  // ---- (D) item 3: the escape guard (predict_short) and the realise check (a protected area over a shell cell)
+  {
+    await freshFlat(ctx, 'G6B H Escape', 'exact');
+    const d = await planDemo(ctx, { variant: 'predict_short' });
+    const spout = d.bodies.find((b) => b.id === 'spout');
+    const r = await realiseWait(ctx, d.p.planId);
+    const fs1 = (r.fluids ?? []).find((x) => x.body === 'spout');
+    out.escape = { state: r.view.state, spout: fs1 };
+    check(r.view.state === 'PARTIAL' && fs1?.state === 'drained' && fs1.escaped === true && (fs1.at ?? []).length >= 1, `item 3: predict_short (a spill declared one cell short): the guard drains the spout, escaped names the cell ${json(fs1?.at)}, the region PARTIAL (${r.view.state})`);
+    await sleep(spout.settleTicks * 50 + 2000);
+    const c = await L.call('dev.fluid.census', { box: boxAround([...spout.cells, ...spout.spill], 1) }, 60_000);
+    const water = c.fluids.filter(([x, y, z, s]) => s.startsWith('minecraft:water') && !(d.bodies.find((b) => b.id === 'spout_basin').cells.some((q) => q[0] === x && q[1] === y && q[2] === z)));
+    out.escape.after = water.length;
+    check(water.length === 0, `item 3: after a settle bound, 0 fluid in the spout's cells and spill (the basin's own water aside: ${water.length})`, water.slice(0, 8));
+    await L.leaveWorld();
+    await freshFlat(ctx, 'G6B H Uncontained', 'exact');
+    const d2 = await planDemo(ctx, {});
+    const pond = d2.bodies.find((b) => b.id === 'pond');
+    const cell = breachCell(pond);
+    await L.call('dev.fluid.beforeGate', { protect: [cell[0], cell[2], cell[0], cell[2]], owner: OWNER }, 10_000);
+    const r2 = await realiseWait(ctx, d2.p.planId);
+    const fp = (r2.fluids ?? []).find((x) => x.body === 'pond');
+    const c2 = await censusOf(ctx, pond);
+    out.uncontained = { state: r2.view.state, pond: fp, cell, water: c2.sources };
+    check(r2.view.state === 'PARTIAL' && fp?.state === 'drained' && /^uncontained/.test(fp.reason ?? '') && (fp.at ?? []).some((c) => c[0] === cell[0] && c[2] === cell[2]), `item 3: a protected area added over one shell cell before the fluids stage: the pond is not written, PARTIAL naming it and the cell (${json(fp)})`);
+    check(c2.sources === 0 && [...c2.fluids.values()].every((s) => !s.startsWith('minecraft:water')), `item 3: 0 fluid written for the uncontained pond (${c2.fluids.size} fluid cells in its watch box)`);
+    await L.leaveWorld();
+  }
+  log(`  ingame: ${json(Object.keys(out))}`);
+  return out;
 }
 
-/** Item 7: the crashes. */
+// ------------------------------------------------------------------ item 7: crashes
+
+/**
+ * Halt the server at a kill point (dev.journal.killAt), then open the world again: the headless host keeps the DevBridge and starts the
+ * server again on the next dev.world.open (docs/GATES.md "Headless gates").
+ */
+async function crashAt(ctx, world, point, action) {
+  const L = ctx.L;
+  await L.call('dev.journal.killAt', { point }, 10_000);
+  action().catch(() => null); // the halt drops the call
+  let down = false;
+  for (let i = 0; i < 180 && !down; i++) {
+    await sleep(2000);
+    const s = await L.call('dev.state', {}, 10_000).catch(() => null);
+    down = !!s && s.inWorld === false;
+  }
+  if (!down) throw new Error(`the kill point ${point} did not halt the server`);
+  ctx.log(`  ${point}: the server halted; opening ${world} again`);
+  await L.openWorld(world);
+  await L.tp((CLAIM[0] + CLAIM[2]) / 2, 120, (CLAIM[1] + CLAIM[3]) / 2);
+  return true;
+}
+
+/** Item 7: a crash before the fluids stage (FL1), one mid-stage (FL2: written, settling), one during removal (FL3: drained, before the solids). */
 export async function crash(ctx) {
-  ctx.check(false, 'h-crash: H-core\'s crash items are not built yet');
-  return null;
+  const { L, check, json } = ctx;
+  const out = {};
+  const world = 'G6B H Crash';
+  await freshFlat(ctx, world, 'exact');
+  const d = await planDemo(ctx, { lava: true });
+  const box = demoBox(d.bodies);
+  const file = await snap(ctx, box, 'h-crash');
+  // FL1: the gate checked, the before states saved, no source written
+  let region = null;
+  await crashAt(ctx, world, 'FL1', async () => { region = await L.realise(d.p.planId); });
+  region ??= (await L.call('dev.region.list', {}, 60_000)).regions?.at(-1)?.id;
+  let st = await L.waitRegion(region, 3_600_000);
+  let fl = st.view.ext?.['architect_mc:fluids'] ?? [];
+  out.fl1 = { state: st.view.state, fluids: fl };
+  check(st.view.state === 'PLACED' && fl.length === 4 && fl.every((x) => x.state === 'settled'), `item 7 (FL1, after the shells, before any source): settle at start completes the realise: ${st.view.state}, every body settled (${json(fl.map((x) => [x.body, x.state]))})`);
+  for (const b of d.bodies) { const c = await censusOf(ctx, b); check(c.outsideCount === 0 && c.mismatch.length === 0, `item 7 (FL1): body ${b.id}: the census equals the prediction, 0 fluid outside its declared cells (${c.mismatch.length}, ${c.outsideCount})`); }
+  // FL3 during removal: drained (step 2), before the solids (step 3): the removal finishes after the restart, exact
+  await crashAt(ctx, world, 'FL3', async () => { await L.call('dev.region.remove', { region, requester: OWNER }, 600_000); });
+  const rm = await removeWait(ctx, region).catch((e) => ({ state: `error ${e.message}` }));
+  await sleep(3000);
+  let df = await diff(ctx, box, file);
+  out.fl3 = { removal: rm.state, mismatches: df.mismatches, classes: df.classes, sample: df.sample };
+  check(rm.state === 'REMOVED' && df.mismatches === 0, `item 7 (FL3, a stop between the drain and the solids): settle at start finishes the removal: ${rm.state}, E-flat ${df.mismatches}`, df.sample);
+  // FL2 mid-stage: the sources written and ticked, settling; then the removal, exact
+  await L.leaveWorld();
+  await freshFlat(ctx, `${world} 2`, 'exact');
+  const d2 = await planDemo(ctx, { lava: true });
+  const file2 = await snap(ctx, box, 'h-crash2');
+  let region2 = null;
+  await crashAt(ctx, `${world} 2`, 'FL2', async () => { region2 = await L.realise(d2.p.planId); });
+  region2 ??= (await L.call('dev.region.list', {}, 60_000)).regions?.at(-1)?.id;
+  st = await L.waitRegion(region2, 3_600_000);
+  fl = st.view.ext?.['architect_mc:fluids'] ?? [];
+  out.fl2 = { state: st.view.state, fluids: fl };
+  check(st.view.state === 'PLACED' && fl.every((x) => x.state === 'settled'), `item 7 (FL2, mid-stage: written, settling): settle at start resumes the census and completes: ${st.view.state} (${json(fl.map((x) => [x.body, x.state]))})`);
+  let outside = 0;
+  for (const b of d2.bodies) outside += (await censusOf(ctx, b)).outsideCount;
+  check(outside === 0, `item 7 (FL2): 0 fluid outside the declared cells (${outside})`);
+  const rm2 = await removeWait(ctx, region2);
+  await sleep(3000);
+  df = await diff(ctx, box, file2);
+  out.fl2.removal = rm2.state;
+  out.fl2.mismatches = df.mismatches;
+  check(rm2.state === 'REMOVED' && df.mismatches === 0, `item 7 (FL2): the undo exact as item 5: E-flat ${df.mismatches}`, df.sample);
+  await L.leaveWorld();
+  return out;
 }
 
-/** Items 13 and 14: the probes. */
+// ------------------------------------------------------------------ items 13, 14: the probes
+
+/** Item 14 (a): the sand anomaly under water and dry; (b) T1's falling water (offline); item 13: the lava fire reach. */
 export async function probe(ctx) {
-  ctx.check(false, 'h-probe: H-core\'s probes are not built yet');
-  return null;
+  const { L, check, json, imp, root, log } = ctx;
+  const out = {};
+  // ---- (b) offline: relief_demo's committed inputs re-planned: no op carries a flowing state; which ops write water at all
+  {
+    const { planRegion } = await imp('lib/region/plan.mjs');
+    const { lintFluidState } = await imp('lib/fluids/body.mjs');
+    const gdir = path.join(root, 'scenarios', 'goldens', 'relief_demo');
+    const ir0 = JSON.parse(fs.readFileSync(path.join(gdir, 'ir.json'), 'utf8'));
+    const prog = await import(pathToFileURL(path.join(root, 'kit', 'regions', 'relief_demo.mjs')).href);
+    const survey = fs.readFileSync(path.join(gdir, 'survey.bin'));
+    const res = await planRegion({ program: prog, programSource: fs.readFileSync(path.join(root, 'kit', 'regions', 'relief_demo.mjs'), 'utf8'), params: ir0.params, survey, seed: ir0.seed, claim: ir0.claim, roles: ir0.roles, kitVersion: ir0.kitVersion, node: ir0.node });
+    const water = [];
+    for (const p of res.ir.parts) p.ops.forEach((o, i) => { const s = JSON.stringify(o.material ?? o.materials ?? o.fill ?? null); if (/minecraft:(water|lava)/.test(s)) water.push({ part: p.id, op: i, material: s.slice(0, 120) }); });
+    out.t1 = { flowing: lintFluidState(res.ir), waterOps: water, irSha: res.irSha, goldenSha: JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 'goldens', 'relief_demo.json'), 'utf8')).irSha };
+    check(out.t1.flowing.length === 0, `item 14 (b): relief_demo's committed inputs re-planned: FLUID_STATE 0 (no op carries a flowing state); ops naming water or lava: ${water.length} (${json(water)})`);
+    log(`  item 14 (b): the level-8 cells came from no op (${water.length} ops name a fluid): vanilla flow into cells the plan cleared beside the stream, or dependents (recorded)`);
+  }
+  // ---- (a) the sand anomaly: a sand cell on a rewritten (solid -> solid) cell, dry and under natural water, re-read with its column's
+  // journal entries (chore/housekeeping-2's TileCheck.keepsGravity); and sand on a cell rewritten to air under water: cleared as a
+  // dependent, written back as a water source (§4.4), the undo exact
+  {
+    await freshFlat(ctx, 'G6B H Sand', 'exact');
+    const gy = await groundY(ctx, 40, 40);
+    out.sand = { gy, cases: {} };
+    const brush = async (o) => L.call('dev.brush', { owner: OWNER, ...o }, 600_000);
+    const stack = async (x, y, z) => (await L.call('dev.journal.at', { x, y, z }, 60_000));
+    const state = async (x, y, z) => (await L.call('dev.fluid.census', { box: [x, y, z, x, y, z] }, 60_000)).fluids[0]?.[3] ?? null;
+    const isSand = async (x, y, z) => { const r = await L.call('dev.box.hash', { min: [x, y, z], max: [x, y, z] }, 60_000); return r; };
+    void isSand;
+    for (const [tag, X, Z, wet] of [['dry', 40, 40, false], ['wet', 40, 100, true]]) {
+      await L.tp(X + 0.5, gy + 25, Z + 0.5);
+      if (wet) { await L.cmd(`/fill ${X - 4} ${gy + 1} ${Z - 4} ${X + 4} ${gy + 3} ${Z + 4} minecraft:water`); await L.cmd(`/fill ${X - 5} ${gy + 1} ${Z - 5} ${X + 5} ${gy + 3} ${Z - 5} minecraft:stone`); }
+      await L.cmd(`/setblock ${X} ${gy + 1} ${Z} minecraft:sand strict`);
+      await L.settle(1500);
+      const box = [X - 8, gy - 4, Z - 8, X + 8, gy + 8, Z + 8];
+      const f = await snap(ctx, box, `h-sand-${tag}`);
+      const v = await brush({ kind: 'overlay', shape: 'cylinder', at: [X, gy, Z], radius: 1, strength: 2, mask: { block: ['grass_block'] }, pattern: { mix: [{ w: 1, mat: 'stone' }] } });
+      await L.settle(1500);
+      const col = [];
+      for (let y = gy - 1; y <= gy + 3; y++) col.push({ y, entry: (await stack(X, y, Z))?.stack?.at(-1) ?? null });
+      const sandNow = await L.call('dev.region.dump', { box: [X, gy + 1, Z, X, gy + 1, Z], file: path.join(ctx.OUT, `h-sand-${tag}.arwd.gz`) }, 60_000).then(async () => {
+        const { decodeArwd } = await imp('lib/region/vworld.mjs');
+        const dd = await decodeArwd(fs.readFileSync(path.join(ctx.OUT, `h-sand-${tag}.arwd.gz`)));
+        return dd.palette[dd.cells[dd.at(X, gy + 1, Z)]];
+      });
+      if (v.region) await L.call('dev.region.remove', { region: v.region, requester: OWNER }, 600_000);
+      await sleep(3000);
+      const df = await diff(ctx, box, f);
+      out.sand.cases[tag] = { stroke: { state: v.state, cells: v.cellsWritten, skipped: v.cellsSkipped }, sandNow, column: col, diff: df };
+      check(v.state === 'PLACED' && sandNow === 'minecraft:sand' && (v.cellsSkipped?.gravityKept ?? 0) >= 1, `item 14 (a, ${tag}): a sand cell on a rewritten solid support ${wet ? 'under natural water ' : ''}stays sand (${sandNow}; gravityKept ${v.cellsSkipped?.gravityKept ?? 0}; the column's entries ${json(col.map((c) => [c.y, c.entry ? `${c.entry.before}->${c.entry.after}` : null]))})`);
+      check(df.mismatches === 0, `item 14 (a, ${tag}): the undo restores the box exactly (${df.mismatches})`, df.sample);
+      void state;
+    }
+    await L.leaveWorld();
+  }
+  // ---- item 13: the fire reach: a 3x3 lava pool, flammable posts at distances 1-4 sideways and heights -1..3, random ticks 300, fire on
+  {
+    await freshFlat(ctx, 'G6B H Fire', 'default');
+    const gy = await groundY(ctx, 200, 200);
+    const X = 200, Z = 200;
+    await L.tp(X + 0.5, gy + 6, Z - 6.5);
+    await L.cmd(`/fill ${X - 1} ${gy} ${Z - 1} ${X + 1} ${gy} ${Z + 1} minecraft:lava`);
+    // posts of oak planks: one per (distance, dy) on the four sides, separated so fire on one post can't spread to the next quickly
+    const posts = [];
+    for (let dist = 1; dist <= 4; dist++) for (const dy of [-1, 0, 1, 2, 3]) {
+      for (const [sx, sz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const x = X + sx * (1 + dist) + (sz !== 0 ? (dy + 1) * 3 - 6 : 0), z = Z + sz * (1 + dist) + (sx !== 0 ? (dy + 1) * 3 - 6 : 0);
+        posts.push({ dist, dy, x, y: gy + dy, z });
+      }
+    }
+    for (const p of posts) await L.cmd(`/setblock ${p.x} ${p.y} ${p.z} minecraft:oak_planks`);
+    await L.cmd('/gamerule random_tick_speed 300');
+    await sleep(120_000);
+    await L.cmd('/gamerule random_tick_speed 3');
+    let farthest = { side: 0, above: -9, below: 9 };
+    const burnt = [];
+    const cen = await L.call('dev.region.dump', { box: [X - 8, gy - 2, Z - 8, X + 8, gy + 5, Z + 8], file: path.join(ctx.OUT, 'h-fire.arwd.gz') }, 60_000).then(async () => {
+      const { decodeArwd } = await imp('lib/region/vworld.mjs');
+      return decodeArwd(fs.readFileSync(path.join(ctx.OUT, 'h-fire.arwd.gz')));
+    });
+    let fires = 0;
+    for (let x = X - 8; x <= X + 8; x++) for (let y = gy - 2; y <= gy + 5; y++) for (let z = Z - 8; z <= Z + 8; z++) {
+      const s = cen.palette[cen.cells[cen.at(x, y, z)]];
+      if (/^minecraft:(soul_)?fire/.test(s)) fires++;
+    }
+    for (const p of posts) {
+      const s = cen.palette[cen.cells[cen.at(p.x, p.y, p.z)]];
+      if (s !== 'minecraft:oak_planks') { burnt.push(p); farthest = { side: Math.max(farthest.side, p.dist + 1), above: Math.max(farthest.above, p.dy), below: Math.min(farthest.below, p.dy) }; }
+    }
+    out.fire = { posts: posts.length, burnt: burnt.length, farthest, fires, list: burnt.slice(0, 30) };
+    const { FIRE_REACH } = await imp('lib/region/checkFluids.mjs');
+    check(farthest.side <= FIRE_REACH.side + 1 && farthest.above <= FIRE_REACH.above && (burnt.length === 0 || farthest.below >= -FIRE_REACH.below), `item 13 (the probe): a lava pool with random ticks at 300 for 2 minutes ignited ${burnt.length} of ${posts.length} flammable posts; the farthest at ${farthest.side} sideways (Chebyshev from the nearest lava cell), ${farthest.below}..${farthest.above} in height; M20's reach ${json(FIRE_REACH)} covers it`, burnt.slice(0, 10));
+    await L.leaveWorld();
+  }
+  return out;
+}
+
+/** The flat world's surface y at (x, z) (its plan survey's ground). */
+async function groundY(ctx, x, z) {
+  const f = path.join(ctx.OUT, `survey-${x}-${z}.bin`);
+  await ctx.L.call('dev.region.survey', { claim: [x - 1, z - 1, x + 1, z + 1], surveyLoad: 'loaded', file: f }, 300_000);
+  const { decodeColumns } = await ctx.imp('lib/region/pack.mjs');
+  const c = decodeColumns(fs.readFileSync(f));
+  return c.ground[1 + 3 * 1];
 }
