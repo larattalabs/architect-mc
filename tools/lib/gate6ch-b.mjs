@@ -30,7 +30,7 @@ import { spawnSync } from 'node:child_process';
 
 const OWNER = 'test:hb';
 const FLAT = 'G6B Flat Base', BASE = 'G6B Seed Base', FROZEN_SEED = '2026101102';
-const FLAT0 = [6400, 6600]; // the flat claim's corner (96 x 96)
+const FLAT0 = [6400, 6600]; // the flat claim's corner (96 x 128; the lake south of its centre, so the claim's spawn stands dry)
 const FROZEN_CLAIM = [4168, 1480, 4279, 1591];
 const EXPECTED_CHANGES = ['refused/k1a_r01_wall_water.json', 't3a/r06_water_arch.json', 't3a/r07_water_rope.json'];
 const LOOK_BIBLES = [null, 'g7ak1_infernal', 'g7ak1_coastal'];
@@ -91,7 +91,7 @@ const surveyOf = async (ctx, claim, tag) => {
  * wet one stands piers there (waterDepth 8). Best first: the fewest wet cells, then the shortest, then the claim's centre. Returns
  * [{a, b, dir, n, rise, wet, deep?}] (a, b: anchors 8 past the landings on the line), and the deepest-only candidates for the record.
  */
-async function wetCrossings(ctx, S, claim) {
+export async function wetCrossings(ctx, S, claim) {
   const { checkBridge, surveyLand } = await ctx.imp('lib/connectors/bridgeGeom.mjs');
   const m = 10;
   const land = surveyLand(S, { blocked: (x, z) => x < claim[0] + m || z < claim[1] + m || x > claim[2] - m || z > claim[3] - m });
@@ -112,7 +112,18 @@ async function wetCrossings(ctx, S, claim) {
         const dry = checkBridge(land, [x, y0, z], [dx, dz], n, rise, 3, { form: 'beam' });
         if (dry.ok || dry.code !== 'WATER') continue;
         const wet = checkBridge(land, [x, y0, z], [dx, dz], n, rise, 3, { form: 'beam', wet: { waterDepth: 8, floorAt: S.floorAt, vols: [] } });
-        const a = [x - dx * 8, S.groundAt(x - dx * 8, z - dz * 8) + 1, z - dz * 8], b = [fx + dx * 8, S.groundAt(fx + dx * 8, fz + dz * 8) + 1, fz + dz * 8];
+        // (each anchor the first cell 3..14 past its landing on the line that is dry with no water within 3: a walk keeps off water)
+        const anchor = (x0, z0, s) => {
+          for (let t = 3; t <= 14; t++) {
+            const ax = x0 + s * dx * t, az = z0 + s * dz * t;
+            let wet = false;
+            for (let u = -3; u <= 3 && !wet; u++) for (let v = -3; v <= 3 && !wet; v++) if (S.waterAt(ax + u, az + v)) wet = true;
+            if (!wet && ax > claim[0] + 4 && az > claim[1] + 4 && ax < claim[2] - 4 && az < claim[3] - 4) return [ax, S.groundAt(ax, az) + 1, az];
+          }
+          return null;
+        };
+        const a = anchor(x, z, -1), b = anchor(fx, fz, 1);
+        if (!a || !b) break;
         const rec = { a, b, dir: [dx, dz], n, rise, from: [x, y0, z] };
         if (wet.ok) { ok.push({ ...rec, wet: wet.piers.reduce((t, p) => t + (p.wet ?? 0), 0), d: Math.abs(x - cx) + Math.abs(z - cz) }); done = true; break; }
         if (wet.code === 'WATER' && !deep.some((q) => q.from[0] === x && q.from[2] === z)) deep.push({ ...rec, kind: wet.evidence.kind, depth: wet.evidence.depth ?? null });
@@ -323,17 +334,17 @@ async function item8(ctx, tag, R, expect) {
 async function flatScene(ctx) {
   const { L } = ctx;
   const [X, Z] = FLAT0, G = 64;
-  await L.tp(X + 48, G + 40, Z + 48);
+  await L.tp(X + 48, G + 40, Z + 64);
   await L.call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => null);
-  for (let x = X - 8; x < X + 112; x += 16) await L.cmd(`/fill ${x} ${G - 9} ${Z - 8} ${x + 15} ${G - 1} ${Z + 103} minecraft:stone`);
-  // the lake: x X+16 .. X+111 (past the claim's east edge), z Z+40 .. Z+67 (28 wide), surface G - 1, bed G - 6 (stone): 5 deep
+  for (let x = X - 8; x < X + 112; x += 16) for (const [z0, z1] of [[Z - 8, Z + 63], [Z + 64, Z + 135]]) await L.cmd(`/fill ${x} ${G - 9} ${z0} ${x + 15} ${G - 1} ${z1} minecraft:stone`);
+  // the lake: x X+16 .. X+111 (past the claim's east edge), z Z+70 .. Z+97 (28 wide), surface G - 1, bed G - 6 (stone): 5 deep
   for (let x = X + 16; x < X + 112; x += 16) {
-    await L.cmd(`/fill ${x} ${G - 5} ${Z + 40} ${x + 15} ${G} ${Z + 67} minecraft:air`);
-    await L.cmd(`/fill ${x} ${G - 5} ${Z + 40} ${x + 15} ${G - 1} ${Z + 67} minecraft:water`);
+    await L.cmd(`/fill ${x} ${G - 5} ${Z + 70} ${x + 15} ${G} ${Z + 97} minecraft:air`);
+    await L.cmd(`/fill ${x} ${G - 5} ${Z + 70} ${x + 15} ${G - 1} ${Z + 97} minecraft:water`);
   }
   await L.settle(5000);
-  const claim = [X, Z, X + 95, Z + 95];
-  const anchors = { a: [X + 60, G + 1, Z + 28], b: [X + 60, G + 1, Z + 80], q: [X + 34, G + 1, Z + 37] };
+  const claim = [X, Z, X + 95, Z + 127];
+  const anchors = { a: [X + 60, G + 1, Z + 58], b: [X + 60, G + 1, Z + 110], q: [X + 34, G + 1, Z + 67] };
   const plan = {
     schemaVersion: 'plan/0', planId: 'hb_flat',
     forms: [{ id: 'landing', kind: 'quay', where: { near: { anchor: 'q', within: 8 } }, length: 12, reach: 3 }],
@@ -460,8 +471,8 @@ async function hbLook(ctx) {
       const [hx, hz] = q.heading, mid = [Math.floor((q.along[0][0] + q.along[1][0]) / 2), q.along[0][1], Math.floor((q.along[0][2] + q.along[1][2]) / 2)];
       out.shots.push({ ...(await shot(ctx, `${tag}_quay`, [mid[0] + hx * 12 + 6.5, mid[1] + 5, mid[2] + hz * 12 + 0.5], [mid[0] + 0.5, mid[1], mid[2] + 0.5])), what: 'quay', bible: tag });
     }
-    out.shots.push({ ...(await shot(ctx, `${tag}_harbour_wall`, [X + 70.5, 72, Z + 54.5], [X + 94.5, 66, Z + 54.5])), what: 'harbour wall', bible: tag });
-    if (tag === 'default') out.shots.push({ ...(await shot(ctx, `${tag}_overview`, [X + 48.5, 110, Z + 10.5], [X + 60.5, 62, Z + 54.5])), what: 'the scene', bible: tag });
+    out.shots.push({ ...(await shot(ctx, `${tag}_harbour_wall`, [X + 70.5, 72, Z + 84.5], [X + 94.5, 66, Z + 84.5])), what: 'harbour wall', bible: tag });
+    if (tag === 'default') out.shots.push({ ...(await shot(ctx, `${tag}_overview`, [X + 48.5, 110, Z + 40.5], [X + 60.5, 62, Z + 84.5])), what: 'the scene', bible: tag });
     await L.call('dev.release', {}).catch(() => null);
     await L.call('dev.region.remove', { region: rr.region, requester: OWNER }, 3_600_000).catch(() => null);
     await L.leaveWorld();
