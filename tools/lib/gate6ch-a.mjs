@@ -46,7 +46,7 @@ function nodeTest(root, files, timeout = 3_600_000) {
 // ------------------------------------------------------------------ unit
 
 async function haKit(ctx) {
-  const r = nodeTest(ctx.root, ['kit/test/h-a.test.mjs', 'kit/test/h-core.test.mjs', 'kit/test/h-foundation.test.mjs', 'kit/test/plan-p0.test.mjs']);
+  const r = nodeTest(ctx.root, ['kit/test/h-a.test.mjs', 'kit/test/h-core.test.mjs', 'kit/test/h-foundation.test.mjs', 'kit/test/plan-p0.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/plan-p0-asks.test.mjs']);
   ctx.check(r.code === 0 && r.fail === 0 && r.pass >= 40, `items 1, 4, 10, 11, 15 (kit, H-a): v41-v45 and v49 fit through the two-plan flow with M25, M20 and M17 clean; the refusals answer LEAK, FIRE, WATER level and freezes, PROTECTED, VOLUME, NO_FEATURE and channel.course with evidence, their wouldFits fitting alone; the road over the moat clear 1 (N-H-5); ice caps (R23); the farm pond opt-in; the wet well; the bible's fluids roles; §13's waterfall and moat; determinism; H-core's and P0's tests: ${r.pass} pass, ${r.fail} fail`, r.failing);
   return r;
 }
@@ -182,35 +182,46 @@ async function realisedOf(ctx, planDir, beforeFile, afterFile) {
   return { ir, meta, world, rep, before, after };
 }
 
+const k3 = (c) => `${c[0]},${c[1]},${c[2]}`;
+/** A box around cells grown by g: [x0, y0, z0, x1, y1, z1]. */
+function boxAround(cells, g = 2) {
+  const b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  for (const [x, y, z] of cells) { b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y); b[2] = Math.min(b[2], z); b[3] = Math.max(b[3], x); b[4] = Math.max(b[4], y); b[5] = Math.max(b[5], z); }
+  return [b[0] - g, b[1] - g, b[2] - g, b[3] + g, b[4] + g, b[5] + g];
+}
+
 /**
- * Item 2 for a body against the world: every source where planned, every predicted flowing cell at its level, no other fluid in its
- * watch box than the before-snapshot's (the census from the after dump: the same rule as the mod's).
+ * Item 2 for a body, live (H-core's censusOf, gate6ch-core.mjs): dev.fluid.census over its watch box against its prediction: every
+ * source (and ice cap cell) where planned, every predicted flowing cell at its level, no fluid of its kind outside its cells, spill and
+ * joins that the before-census (`before`: a Set of "x,y,z") did not hold; the region's other bodies' cells and flow are theirs.
  */
-function census(b, R) {
-  const level = (s) => { const m = /level=(\d+)/.exec(String(s)); return m ? Number(m[1]) : 0; };
-  const isFluid = (s) => /^minecraft:(water|lava)/.test(String(s));
-  const want = new Map();
-  for (const [x, y, z] of b.cells) want.set(`${x},${y},${z}`, 0);
-  for (const [x, y, z, lv] of b.predicted) want.set(`${x},${y},${z}`, lv);
-  const iced = new Set(b.ice.map((c) => `${c[0]},${c[1]},${c[2]}`));
-  const pts = [...b.cells, ...b.shell, ...b.spill, ...b.watch];
-  const xs = pts.map((c) => c[0]), ys = pts.map((c) => c[1]), zs = pts.map((c) => c[2]);
-  const box = [Math.min(...xs) - 2, Math.min(...ys) - 2, Math.min(...zs) - 2, Math.max(...xs) + 2, Math.max(...ys) + 2, Math.max(...zs) + 2];
-  const out = { sources: 0, sourcesWant: b.cells.length - iced.size, ice: 0, iceWant: iced.size, flowing: 0, flowingWant: b.predicted.length, wrong: [], extra: [] };
-  for (let x = box[0]; x <= box[3]; x++) for (let y = box[1]; y <= box[4]; y++) for (let z = box[2]; z <= box[5]; z++) {
-    const k = `${x},${y},${z}`, a = stateAt(R.after, x, y, z), bf = stateAt(R.before, x, y, z);
-    if (a === null) continue;
-    if (iced.has(k)) { if (/^minecraft:ice$/.test(String(a).replace(/\[.*$/, ''))) out.ice++; else out.wrong.push([x, y, z, a]); continue; }
-    if (want.has(k)) {
-      const lv = want.get(k);
-      if (isFluid(a) && level(a) === lv) { if (lv === 0) out.sources++; else out.flowing++; } else out.wrong.push([x, y, z, a, lv]);
-      continue;
-    }
-    if (isFluid(a) && !(isFluid(bf) && a === bf)) out.extra.push([x, y, z, a]);
+async function census(ctx, body, before = null, siblings = []) {
+  const all = [...body.cells, ...body.shell, ...body.spill, ...body.watch];
+  const box = boxAround(all, 2);
+  const c = await ctx.L.call('dev.fluid.census', { box }, 120_000);
+  const now = new Map(c.fluids.map(([x, y, z, st]) => [`${x},${y},${z}`, st]));
+  const pred = new Map(body.predicted.map(([x, y, z, lv]) => [`${x},${y},${z}`, lv]));
+  const others = new Set(siblings.filter((o) => o.id !== body.id).flatMap((o) => [...o.cells.map(k3), ...o.ice.map(k3), ...o.predicted.map(k3)]));
+  const own = new Set(body.cells.map(k3)), ice = new Set(body.ice.map(k3)), declared = new Set([...body.cells, ...body.spill, ...body.joins].map(k3));
+  const kind = body.fluid === 'lava' ? 'minecraft:lava' : 'minecraft:water';
+  const levelOf = (st) => { const m = /level=(\d+)/.exec(st); return m ? Number(m[1]) : 0; };
+  const mismatch = [], outside = [];
+  let sources = 0, flowing = 0, iceN = 0;
+  for (const k of own) {
+    const st = now.get(k);
+    if (ice.has(k)) { if (st !== 'minecraft:ice') mismatch.push([k, st ?? 'none', 'ice']); else iceN++; continue; }
+    if (!st || !st.startsWith(kind) || levelOf(st) !== 0) mismatch.push([k, st ?? 'none', 'source']); else sources++;
   }
-  out.ok = out.sources === out.sourcesWant && out.ice === out.iceWant && out.flowing === out.flowingWant && !out.wrong.length && !out.extra.length;
-  out.wrong = out.wrong.slice(0, 16); out.extra = out.extra.slice(0, 16);
-  return out;
+  for (const [k, lv] of pred) {
+    const st = now.get(k);
+    if (!st || !st.startsWith(kind) || levelOf(st) !== lv) mismatch.push([k, st ?? 'none', `level ${lv}`]); else flowing++;
+  }
+  for (const [k, st] of now) {
+    if (own.has(k) || pred.has(k) || others.has(k) || !st.startsWith(kind)) continue;
+    if (before && before.has(k)) continue;
+    if (declared.has(k)) mismatch.push([k, st, 'none']); else outside.push([k, st]);
+  }
+  return { ok: !mismatch.length && !outside.length, sources, sourcesWant: body.cells.length - ice.size, ice: iceN, flowing, flowingWant: pred.size, mismatch: mismatch.slice(0, 16), outside: outside.slice(0, 16), outsideCount: outside.length, ticks: c.ticks.length };
 }
 
 /** The plan through Regions.checkPlan (the two-plan flow) and its artifact realised; the before/after dumps; the bodies. */
@@ -240,10 +251,12 @@ async function realiseRun(ctx, tag, { claim, plan, anchors, rules = 'default', b
   const before = path.join(OUT, `ha-${tag}-before.arwd.gz`), after = path.join(OUT, `ha-${tag}-after.arwd.gz`), snapF = path.join(OUT, `ha-${tag}-snap.gz`);
   await L.call('dev.region.dump', { box, file: before, light: true }, 1_800_000);
   out.snap = await L.call('dev.region.hash', { box, mode: 'snap', file: snapF }, 4 * 3_600_000);
+  const fb = await L.call('dev.fluid.census', { box }, 600_000).catch(() => ({ fluids: [] }));
+  out.before = new Set(fb.fluids.map(([x, y, z]) => `${x},${y},${z}`));
   const rr = await L.call('dev.region.realiseApproved', { sha: c.check.artifactSha }, 300_000);
   if (rr.refused) { check(false, `${tag}: realiseApproved refused (${j(rr.refused)})`); return out; }
-  const st = await L.waitRegion(rr.region, 3 * 3_600_000, async (s) => { if (s.waiting?.OCCUPIED || s.waiting?.PLAYER_IN_BOX) await L.cmd('/kill @e[type=!minecraft:player]'); });
-  out.realise = { region: rr.region, state: st.view.state, cells: st.record?.cellsWritten ?? st.view.cellsWritten, planId: st.view.planId, fluids: st.view.fluids ?? st.record?.fluids ?? null };
+  const st = await L.waitRegion(rr.region, 3 * 3_600_000, async (s) => { if (s.view?.waiting?.reason === 'OCCUPIED' || s.waiting?.OCCUPIED) await L.cmd('/kill @e[type=!minecraft:player]'); });
+  out.realise = { region: rr.region, state: st.view.state, cells: st.record?.cellsWritten ?? st.view.cellsWritten, planId: st.view.planId, fluids: st.view.ext?.['architect_mc:fluids'] ?? null };
   check(st.view.state === 'PLACED', `${tag}: realised from the approved artifact and settled (${st.view.state}, ${out.realise.cells} cells written; fluids ${j(out.realise.fluids)})`);
   await L.settle(5000);
   await L.call('dev.region.dump', { box, file: after, light: true }, 1_800_000);
@@ -321,8 +334,9 @@ async function villagers(ctx, tag, run) {
     swims[p.body] = bank ? (await ctx.L.call('dev.nav.villager', { from: [p.at[0], p.at[1], p.at[2]], to: bank, range: 64 }, 120_000)).canReach === true : false;
   }
   out.stand = { placed: placed.length, alive: n, damage: dmg, swims };
-  const drown = dmg.error ? null : (dmg.count ?? dmg.events?.length ?? dmg.total ?? null);
-  check(!dmg.error && drown === 0 && n === placed.length && Object.values(swims).every(Boolean), `item 9 (${tag}): the villager stand (${placed.length} villagers: 4 by each body's edge, 1 in its surface's centre; 2 minutes at default rules): ${drown} drowning damage, ${placed.length - n} death(s), a path from each swimmer to a bank (${j(swims)})${dmg.error ? `; dev.entity.damage: ${dmg.error}` : ''}`);
+  const drown = dmg.error ? null : (dmg.damage ?? dmg.events?.length ?? null);
+  const deaths = dmg.error ? null : (dmg.deaths ?? null);
+  check(!dmg.error && drown === 0 && (deaths === 0 || deaths?.length === 0) && n === placed.length && Object.values(swims).every(Boolean), `item 9 (${tag}): the villager stand (${placed.length} villagers: 4 by each body's edge, 1 in its surface's centre; 2 minutes at default rules): ${drown} drowning damage, ${placed.length - n} death(s), a path from each swimmer to a bank (${j(swims)})${dmg.error ? `; dev.entity.damage: ${dmg.error}` : ''}`);
   await L.cmd('/kill @e[type=minecraft:villager,tag=ha_stand]');
   return out;
 }
@@ -338,17 +352,15 @@ async function haFlat(ctx) {
   if (!run.R) return run;
   const out = { check: run.check, realise: run.realise, bodies: {} };
   // item 2 (bodies): every body's census equals its prediction
-  for (const b of run.bodies) out.bodies[b.id] = census(b, run.R);
-  check(Object.values(out.bodies).every((c) => c.ok), `item 2 (flat, H-a's bodies): every body settled with its census equal to the prediction (sources, ice, flowing levels; no other fluid in its watch box): ${json(Object.fromEntries(Object.entries(out.bodies).map(([k, c]) => [k, `${c.sources}/${c.sourcesWant}s ${c.flowing}/${c.flowingWant}f ${c.wrong.length}w ${c.extra.length}x`])))}`);
+  for (const b of run.bodies) out.bodies[b.id] = await census(ctx, b, run.before, run.bodies);
+  check(Object.values(out.bodies).every((c) => c.ok), `item 2 (flat, H-a's bodies): every body settled with its census equal to the prediction (sources, ice, flowing levels; no other fluid in its watch box): ${json(Object.fromEntries(Object.entries(out.bodies).map(([k, c]) => [k, `${c.sources}/${c.sourcesWant}s ${c.flowing}/${c.flowingWant}f ${c.mismatch.length}m ${c.outsideCount}x`])))}`);
   const m25 = run.R.rep.findings.filter((f) => /^M25|^M20|^M17/.test(f.rule));
   check(!m25.length, `item 1 (flat): M25, M20 and M17 0 on the realised world (${m25.map((f) => `${f.rule} ${f.message}`).join('; ').slice(0, 300) || 'none'})`);
   // a 2-minute stand at default rules adds nothing
   await L.settle(120_000);
-  const after2 = path.join(ctx.OUT, 'ha-flat-after2.arwd.gz');
-  await L.call('dev.region.dump', { box: run.box, file: after2, light: true }, 1_800_000);
-  const R2 = await realisedOf(ctx, run.planDir, path.join(ctx.OUT, 'ha-flat-before.arwd.gz'), after2);
-  const stand = Object.fromEntries(run.bodies.map((b) => [b.id, census(b, R2)]));
-  check(Object.values(stand).every((c) => c.ok), `item 2 (flat): after a 2-minute stand at default rules every census still equals its prediction (${json(Object.fromEntries(Object.entries(stand).map(([k, c]) => [k, c.ok])))})`);
+  const stand = {};
+  for (const b of run.bodies) stand[b.id] = await census(ctx, b, run.before, run.bodies);
+  check(Object.values(stand).every((c) => c.ok), `item 2 (flat): after a 2-minute stand at default rules every census still equals its prediction (${json(Object.fromEntries(Object.entries(stand).map(([k, c]) => [k, c.ok ? true : { m: c.mismatch, x: c.outside }])))})`);
   // item 13 (bodies): the lava pit with fire ticks on and random ticks at 300: no fire block in the claim
   await L.cmd('/gamerule random_tick_speed 300');
   await L.cmd('/gamerule do_fire_tick true').catch(() => null);
@@ -390,7 +402,7 @@ async function haNatural(ctx) {
   const run = await realiseRun(ctx, 'natural', { claim: S3, plan, anchors, rules: 'exact' });
   if (!run.R) return run;
   const out = { check: run.check, realise: run.realise, bodies: {} };
-  for (const b of run.bodies) out.bodies[b.id] = census(b, run.R);
+  for (const b of run.bodies) out.bodies[b.id] = await census(ctx, b, run.before, run.bodies);
   check(Object.values(out.bodies).every((c) => c.ok), `item 2 (natural): every body's census equals its prediction (${json(Object.fromEntries(Object.entries(out.bodies).map(([k, c]) => [k, c.ok])))})`);
   out.villagers = await villagers(ctx, 'natural', run);
   await L.setRules('exact');

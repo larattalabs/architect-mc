@@ -7,6 +7,7 @@
 import { FLAG_FROZEN, FLAG_LAVA, FLAG_WATER } from '../region/pack.mjs';
 import { isFluidStopping, isGravity } from '../blocks.mjs';
 import { bomOf } from '../connectors/bom.mjs';
+import { freezesAt as freezesTable } from './biomes.mjs';
 
 /** The claim margin no H part writes in (compile.mjs's MARGIN). */
 export const MARGIN = 2;
@@ -319,25 +320,9 @@ export function shellBlock(roles, role, fallback = 'minecraft:stone') {
 
 // ------------------------------------------------------------------ freezing (§1.3, R23)
 
-// The 26.3 overworld biomes' base temperature (Biome.ClimateSettings) where it is under 0.15 (a biome that freezes at its surface:
-// Biome.shouldFreeze's coldEnoughToSnow), and the height adjustment over y 80 (0.05 / 40 a block, the temperature noise left out:
-// conservative only above y 80). (H-a's reading until H-core round 2's generated table lands: docs/HANDOFF-Ha.md.)
-const COLD = Object.freeze({
-  'minecraft:snowy_plains': 0, 'minecraft:ice_spikes': 0, 'minecraft:snowy_taiga': -0.5, 'minecraft:snowy_beach': 0.05, 'minecraft:frozen_river': 0,
-  'minecraft:frozen_ocean': 0, 'minecraft:deep_frozen_ocean': 0.5, 'minecraft:grove': -0.2, 'minecraft:snowy_slopes': -0.3, 'minecraft:jagged_peaks': -0.7,
-  'minecraft:frozen_peaks': -0.7, 'minecraft:windswept_hills': 0.2, 'minecraft:windswept_gravelly_hills': 0.2, 'minecraft:windswept_forest': 0.2,
-  'minecraft:taiga': 0.25, 'minecraft:old_growth_pine_taiga': 0.3, 'minecraft:old_growth_spruce_taiga': 0.25, 'minecraft:stony_shore': 0.2,
-});
-/** Frozen ocean's surface freezes whatever its base temperature (vanilla's frozen-ocean rule: ice at the surface). */
-const ALWAYS = new Set(['minecraft:frozen_ocean', 'minecraft:deep_frozen_ocean']);
-
-/** Whether water at the surface y freezes in biome `id` (26.3's shouldFreeze temperature rule). */
+/** Whether water at the surface y freezes in biome `id`: H-core's generated table (lib/fluids/biomes.mjs, 26.3's shouldFreeze rule). */
 export function biomeFreezes(id, y) {
-  const b = id && !id.includes(':') ? `minecraft:${id}` : id;
-  if (!b || COLD[b] === undefined) return false;
-  if (ALWAYS.has(b)) return true;
-  const t = COLD[b] - (y > 80 ? ((y - 80) * 0.05) / 40 : 0);
-  return t < 0.15;
+  return freezesTable(id, y);
 }
 
 /**
