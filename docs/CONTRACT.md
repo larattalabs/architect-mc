@@ -9530,7 +9530,7 @@ re-runs items 2, 4 and 6.
 
 - Rope bridges, catwalks, lifts, suspension and sag (7a). Tunnels through player-built or other owners' blocks (never).
 
-## Phase 6c slice H: contained fluids (DRAFT for Steward review)
+## Phase 6c slice H: contained fluids (DRAFT; SUPERSEDED 2026-10-18 by "Phase 6c slice H: contained fluids" at the end)
 
 API 1.23.0, mod 0.26.0 (wave 3). SETTLEMENTS §4.2 ("designed water, contained"), §11 (M20), §18 ("Fluids"); PLAN toolbox "Fluids" and the fill/drain
 brushes.
@@ -13430,3 +13430,893 @@ foundation only four files changed on both sides. Resolutions, both sides' seman
 | New test | `kit/test/plan-t3-batch.test.mjs`: one plan on v40's claim plus a dry ravine holds a rope bridge, a stone bridge (an explicit `bridge`: an arch of 20), and v40's walled village with its postern tunnel: READY through the two-plan flow (one corridor asked and read), `checkRegion` with no findings (M10:rope, M10:bridge, M3/M4:tunnel, the wall bars), the IR graph typing rope_bridge, bridge and tunnel edges, both movers, a second check with identical answers, IR and artifact sha. Negative: the wall sealed, the gate row prunes the postern (UNREACHABLE naming the wall) while both bridges fit. |
 | Checks at `integrate/t3` | kit `node --test test/*.test.mjs` 494/494; sidecar `npm run check` 744/744 (43 files, with the bundle; one run under parallel load met the known window-timing flake in regions.test.ts and passed alone); mod `./gradlew build --offline` 685 tests, 0 failed; api-compat as item 15. In game (headless, ports 8912-8917, 3 shards, head 910a69ee): `artifacts/gate-runs-T3int/20261018-020959-change` **8 PASS**: t3a-ingame 23/0 (golden matched, E-flat 0 over 74,886 cells, the channel bridge removed exactly), t3b-ingame 32/0 (two tunnels through the two-plan flow, the postern E-flat 0), k1a-ingame 19/0, k1b-ingame 17/0, t3a-unit 7/0, t3b-unit 5/0, k1a-unit 8/0, k1b-unit 6/0. $0.00. |
 | Queued (PLAN "Queued from the T3 batch") | The sand cell that vanishes on a tile-rewritten support (T3b; K1b likely met a relative); the cap fixture's thin margin (4,290,489 cells against the 4M cap); a street whose bridge fallback also fails still says `WATER (until T3)`. |
+
+## Phase 6c slice H: contained fluids (DRAFT for Steward review)
+
+Still water that Architect writes, contains, and undoes exactly. This covers ponds, fountains, waterfalls and moats, plus solid
+structures standing in natural water: bridge piers, harbour walls and quays. Every `until: H` that K1 and T3 left behind is
+retired. **This section supersedes the wave-3 draft "Phase 6c slice H: contained fluids" above.** That draft predates plan/0,
+the catalogue, P0's answer classes, K1/T3's special-move table and T3b's volumes in the plan check. It was frozen with the batch
+on 2026-10-11 but never built. Its Steward and Noah answers bind here (§0, "Binding answers carried over").
+
+SETTLEMENTS §4.2 ("designed water, contained"), §11 (M16, M17, M20), §18 ("Fluids"); PLAN toolbox "Fluids" and fill/drain; P0, W,
+T1, T2, B, K1 and T3 as built. API: the next free minor at merge (placeholder 1.34.0 over v0.36.0), mod 0.37.0, kit 0.35.0,
+catalogue 7.
+
+- **Branch:** `slice/H` (or `h/core`, `slice/Ha` and `slice/Hb`, §15), worktree `../architect-mc-H`. **Spend:** $0. No Claude call;
+  sim and stub only.
+- **Scope:**
+  - **H-core, the fluid model:**
+    - **writes:** source-only fluid bodies with a written shell, declared spill cells, and wet writes into natural water;
+    - **checks:** M25 containment on the virtual world over frozen volumes, and the realise-time containment check;
+    - **realise:** the `fluids` stage, occupancy waits, settle and census, and the escape guard;
+    - **undo:** exact undo with drain, the "still ours" rules for fluids, and dependents under water;
+    - **plan:** the wet fallback for routes and walls, catalogue 7, reason codes and the gate.
+  - **Water bodies:** `form.pond` (water or lava), `form.fountain`, `form.waterfall`, the moat (`connector.channel` as
+    `channel.moat`), S-H-1's farm pond and V's wet well.
+  - **Wet structures:** T3's beam piers in water, K1's walls through water (harbour walls), and `form.quay`.
+  - **Optional (H-c, N-H-6):** the fluid brushes `FILL`, `DRAIN` and `FLOOD_FILL`.
+- **Not in scope:**
+  - **HY's half:** the `hydrology` pass, `flow`/`wet` fields, and `channel.course`, a channel with reaches at several levels or
+    joined to natural water (§7.4 draws the line);
+  - flowing rivers, and any written flowing state;
+  - **M16** flood behaviour, beyond the single-breach check (§2.5);
+  - **later slices:** working farms (7b, S-H-1); lots over water and stilt lots (7b's site lots); underwater tubes (UW) and seabed
+    sites (later); bubble-column lifts (7a); coral (F3); lava falls and lava channels (N-H-3);
+  - building H's parts in survival (RS; N-H-1 sets the price);
+  - the route lamps' melt (§0, queued separately).
+- **Depends on** (all on main):
+  - **T3:** the bridge row, `bridgeGeom`, and T3b's two-plan flow, `guards` and the `load` option;
+  - **K1:** walls, `line.mjs` and the `links` stage;
+  - **P0:** answers, the artifact and the stale rule;
+  - **W:** FROZEN, `gravity`, M17 and fixtures;
+  - **T1:** passes and `base`;
+  - **B:** brush strokes, ARVX v2 and one region per stroke;
+  - **PT and C17:** builds and protected areas are never written or flooded.
+
+### 0. Facts (v0.36.0)
+
+**What exists today**
+- **No region writes a fluid:**
+  - Every program avoids water: the route pass treats it as an obstacle (`ROUTE_WATER`), and walls class it `OB.WATER`
+    (`line.mjs`). T3's bridges write no cell in water or ice, and V's well is a `water_cauldron`.
+  - The realise could already write into water: `CellCond.natural` passes water, so `IF_NATURAL` and `ALWAYS_OURS` writes over a
+    source succeed. Nothing in the kit plans such a write, and the checker has no rule for it.
+- **Write flags:** region tiles write with `CELL_FLAGS` (`UPDATE_CLIENTS | UPDATE_SKIP_ALL_SIDEEFFECTS`). A written fluid gets no
+  scheduled tick, and a solid written beside water does not wake it. A basin that leaks does not leak until something ticks it.
+- **Write conditions:** there are four (`IF_NATURAL`, `IF_SOLID_NATURAL`, `IF_AIR_OR_FLUID`, `ALWAYS_OURS`), and ARTL's two cond bits
+  are full (B as built). H adds no condition: fluid handling is a member of a new op (§12).
+
+**Fluids in the journal**
+- **`TileCheck.dependents`:**
+  - What stood on a changed cell (snow, plants, sugar cane, kelp, sand, gravel) is cleared as cells of the entry.
+  - A dependent with a fluid state (kelp, seagrass, a waterlogged plant) becomes `Blocks.WATER.defaultBlockState()`, a source.
+    Every other dependent becomes air, sand under water included.
+  - PLAN's open sand anomaly (T3b) is probably this rule: a sand cell on a rewritten support is cleared by design.
+- **`StillOurs`:**
+  - `waterlogged` is volatile.
+  - A water or lava cell where the entry wrote air counts as ours (6a: it flowed in).
+  - Water's `level` is **not** volatile. So a source the entry wrote that later reads as flowing, ice or frosted ice is "not ours"
+    and would be kept on undo, leaving a remnant.
+
+**Surveys, volumes and the virtual world**
+- **ARSV flags:** WATER 1, MISSING 2, TREE 4, LAVA 8, FROZEN 16 (W: ice over water within 3 is water, `floor` is the bed). Bits 32-128
+  are free.
+- **Volumes:**
+  - `VoxelClass` has one `WATER` class, with no source/flowing split and no waterlogged flag. ARVX v2 (B) adds block ids, not states.
+  - A volume can't tell a river's sources from its flowing edges.
+- **The virtual world** (`vworld.mjs`) marks water, bubble columns and waterlogged blocks as fluid, with no levels. M4 finds cleared
+  cells that open onto water or lava. Nothing simulates where a placed fluid goes.
+
+**The plan check and the catalogue**
+- **The plan check's two-plan flow** (T3b, `PlanChecks.check0`) runs only for a plan with a `tunnel` part. The artifact's `guards`
+  (`finish.mjs`) hold tunnels only. `realiseApproved` re-samples guard volumes and answers `ARTIFACT_STALE`.
+- **The catalogue (6) and "until H":**
+  - `form.pond` and `form.waterfall` are reserved `until: H`, and `connector.channel` `until: HY`.
+  - `connector.tube` is reserved `until: UW`, with the note "after H's fluid writes and undo".
+  - `bridge.beam`'s note says "no pier in water or ice until H".
+  - In code, `until: 'H'` appears twice:
+    - `bridgeGeom.mjs:246`, a beam that needs a pier in water;
+    - `compile.mjs:1198`, a street, road or path whose bridge fallback still meets water (0e3a2827).
+  - K1's walls refuse water as `WATER` (`OB.WATER`) with no `until`. K1 deferred "walls in water (harbour walls, after H)".
+
+**Steward's recorded plans** (`fixtures/plan/asks/`, steward-mc 8703dbd)
+- Two parts are H-shaped:
+  - `hidden_village/waterfall_curtain`, `form.waterfall` (optional);
+  - `redstone_gate/moat`, `connector.channel` (required), `where.around` the fortress, ring [6, 12], `closed: true`,
+    `params {width: 5, depth: 3}`.
+- Water that never reaches H:
+  - **Lot briefs:** docks, piers on stilts, boathouses, a fish pond, a garden water source, a sluice, lava forges. These are lot
+    designs, not region parts.
+  - **Other parts:** `ring_city/crater_lake` (`form.crater`, 7c, `params.lake`), `underwater_domes` (`form.seabed_site`; the
+    tunnels are blocked by their zone), and `ship_town` (unscheduled).
+- **The asks claim** has a lake (x 240-279, z 240-267, bed 60, ground 64) and a stream. So no farm there is on a dry claim (S-H-1).
+
+**Defects and anomalies that touch fluids** (PLAN)
+- **T1:** 7 of 26 written falling-water cells (level 8) were not the planned block after the build. The cause was not in T1's diff.
+  T1's E-normal `flow` class "doesn't require the cell to be unwritten" (CONTRACT T1 as built).
+- **T2:** route lamps melt natural snow and ice beside routes, and the melt water can run into a keep-out area (`melt` class,
+  accounting only).
+- **T3a:** the frozen site, under default rules, met freezing water and worldgen sand dropping into water 8-13 columns from any
+  written cell. Its stand ran with random ticks off.
+
+**Vanilla 26.3**
+
+Each line is marked **assumed** where §14's probes measure it.
+- Water:
+  - Water spreads at most 7 cells over a floor (level 1-7) and falls without limit as level 8. Its tick delay is 5. Falling water
+    does not spread sideways until it lands.
+  - A non-source cell with at least 2 horizontal water sources beside it and a solid or source below becomes a source
+    (`waterSourceConversion`, default true; lava's is false). This is the one way a flow leaves a permanent change.
+  - Flowing water can't enter a full block, a door, a sign, a ladder or a waterloggable block. It breaks plants, torches and rails.
+    Only a source waterlogs.
+- Lava spreads at most 3 in the Overworld, with tick delay 30.
+- Lava against water: a lava source beside water becomes obsidian; flowing lava becomes cobblestone; lava falling onto water makes
+  stone.
+- **Assumed:** lava's random tick lights fire within 2 cells sideways and up to 3 cells up of an exposed lava cell
+  (`doFireTick`). Probed in item 13.
+- **Assumed:** open water in a freezing biome turns to ice on random ticks (sky-lit, block light under 10). Ice melts at block light
+  over 11 (M17). Probed in item 4.
+- **Assumed:** villagers and players float in open water and drown only under a solid ceiling. Probed in item 9.
+
+### 1. The fluid model
+
+**1.1 Bodies, sources only.** Every fluid a plan writes belongs to one **body**, a fluid part:
+`{id, fluid: water | lava, level: y, cells, shell, spill, ice?, joins?}`.
+- **Sources only:** `cells` are written as sources (`level=0`), all at or under the surface `level`. The kit refuses to emit a
+  flowing state (lint `FLUID_STATE`: no IR op carries a water or lava state with `level` over 0).
+- **The shell** is every cell face-adjacent to `cells` that is not itself in `cells`: the floor, the sides, and the cell over each
+  surface cell's sides up to `level + 1`.
+  - Every shell cell is **written by the body's own part** in an earlier stage.
+  - It is a fluid-stopping, non-gravity block (§2.2). The open top is the only exception: the cells directly over the surface
+    stay air.
+  - Containment is by construction. A cave, sand or a player's tunnel behind the shell can't open the body, because the shell is
+    written whatever stood there (`ALWAYS_OURS`, never another owner's cell, §2.4).
+- **`spill`** is the declared cells that flowing fluid will fill: a waterfall's lip run and falling column, or a fountain's spout
+  sides. They are computed by M25, never written by the plan, and journaled as watched cells (§4.2).
+- **`joins`** are natural water cells a spill lands in (a waterfall into a lake). They are allowed only into natural **sources** at
+  least 2 deep, read from the frozen volume (§10). They are guarded at approval.
+
+**1.2 Wet writes.** These are solid cells a plan writes where natural water stands: piers, harbour walls, quay bodies.
+- A wet write replaces **water sources, ice over water (W's FROZEN), and water plants** (kelp, seagrass, sea pickle: dependents
+  that become water), all read from the frozen volume.
+- It never replaces flowing water (`refused WATER`, `evidence.kind: "flowing"`), lava, or a bubble column.
+- The block is **full and non-waterloggable**, so H writes no `waterlogged=true` state and creates no new source.
+- Waterloggable blocks (slabs, stairs, walls, fences, lanterns) stand only over the water surface.
+- A wet write never leaves air under the surface (`M25:wet`): a cell of a wet column is either the written block or untouched
+  water.
+
+**1.3 Ice and frozen water** (W: frozen water is water).
+- **The cap:** a body whose surface cells are sky-lit in a biome that freezes there (the kit's biome table gains `freezes`,
+  generated from 26.3's `Biome.shouldFreeze` temperature rule at the surface y) gets its open surface cells written as `ice` in
+  the same `fluids` stage. W's rule then reads it back as FROZEN water. Nature would freeze them anyway, and an ice cap the plan
+  wrote undoes exactly; ice that formed on its own would not be ours (§0).
+- **Opting out:** `ice: false` on a body leaves the surface open. Such a body is refused `WATER`, `evidence.kind: "freezes"`,
+  unless every surface cell is within a planned light's reach (block light 10 or more keeps water open). A roof is no exception (it would be `M25:trap`). M17 still
+  applies to all ice, so no planned light over 11 reaches it.
+- **Wet writes into FROZEN columns** replace the ice and the water under it. The undo restores both (T3a's frozen fixture
+  extended with a pier).
+- **Farm ponds** (S-H-1) are never capped: a farm pond in a freezing biome is not added. The note says so, and M24 already counts
+  FROZEN as dry.
+
+**1.4 Lava** (default, N-H-3: in, narrowly).
+- `fluid: lava` is allowed only on `form.pond`: a pit, 1-2 deep, fully lined in a non-flammable shell, open to the sky.
+  - No lava spill, fall, fountain, moat, brush or wet write.
+  - No lava cell within **2** (Chebyshev, 3D) of any water cell: plan, natural or volume (`M25:mix`).
+- **M20 (fire):** no flammable block (`blocks.mjs` gains `flammable`, generated from 26.3's fire odds) within the fire reach of an
+  exposed lava cell. Assumed 2 sideways and 1 below to 3 above; item 13 probes it, and the reach constant follows the probe.
+  - A plan-written flammable block there moves or is refused `FIRE`.
+  - A natural one (a tree, tall grass, leaves) is cleared only where the plan may write it. Otherwise the pit
+    is refused `FIRE`, with a water-pond `wouldFit`.
+  - Promoted from warning to error for lava bodies.
+- **Light:** lava is light 15, so M17 counts it as a light (it melts snow and ice).
+- **Survival** (N-H-1, binding): one lava bucket per lava source in `cost.bom`.
+
+### 2. Containment: M25
+
+**2.1 The simulation.** M25 runs on the virtual world after every stage, over the frozen volumes the IR records (§10). It is
+integer and deterministic.
+- **The flow:** a breadth-first flow from every body's surface and spill outlets under vanilla's rules (§0).
+  - Falling first, then horizontal spread to 7 (water) or 3 (lava), into any cell that is not fluid-stopping.
+  - **Conservative:** it spreads in every direction, ignoring vanilla's preference for the nearest drop within 4. So the reached set
+    is a superset of vanilla's.
+- **`spill`** is the reached set minus `cells`. **`predicted`** is vanilla's exact steady state, computed with the drop preference,
+  with levels. It is used only for the census (§3.3), never for safety.
+- **Sub-findings, all errors in the checker:**
+  - `M25:leak`: a reached cell outside the body's declared region (`cells` ∪ `spill` ∪ `joins`). The finding lists the escaping
+    cells.
+  - `M25:convert`: a reached non-body cell that source conversion would turn into a source (2 horizontal sources beside it, a solid
+    or source under it).
+  - `M25:mix`: lava within 2 of water, or any lava reach touching water.
+  - `M25:shell`: a shell cell that is not written, not fluid-stopping, a gravity block over a gap, or not this part's.
+  - `M25:keep`: a body, shell, spill or breach-reach cell (§2.5) in or face-adjacent to a protected area or keep-out column, a build
+    (PT), a lot box or apron (K5), a kept column, another region, an OWNED, PLAYER or BLOCK_ENTITY volume cell, or the claim's
+    outer ring.
+  - `M25:wet`: a wet write that leaves air under a natural water surface, writes a waterloggable or non-full block under the
+    surface, or replaces a flowing, lava or bubble-column cell.
+  - `M25:trap`: a fluid cell under a solid ceiling with no surface cell within 4 of it. A mob can't surface there; bridge decks
+    with clearance 1 or more are not ceilings.
+  - `M25:exit`: a surface cell more than 8 (Manhattan) from an **exit**, a bank cell at most 1 over the surface that is walkable
+    for the `villager` mover. A mover that falls in can climb out.
+
+**2.2 Fluid-stopping blocks.** `blocks.mjs` gains a generated flag `fs` from the 26.3 dump (`kit/tools/BlockDump.java`, like
+`gravity`): a default state that vanilla's `FlowingFluid.canHoldFluid` refuses for both flowing water and flowing lava. Full
+solid blocks, doors, signs, ladders and waterloggable blocks qualify. A block the dump can't decide is not `fs`
+(conservative). Shell blocks must be `fs` and not `g`.
+
+**2.3 Never flood.**
+- `M25:keep` is a plan error, so a body's region keeps one cell clear of everything that isn't the plan's own. Lot boxes are kept
+  even when they are the plan's own: a lot is a BOX site (K5).
+- At realise, the fluids stage waits while any player or mob is inside a body's box grown by 1. For players this is
+  `PLAYER_IN_BOX`; for villagers, animals and other mobs it is `OCCUPIED`, with C30's logging. Hostile mobs are removed as for
+  lots. A body is never written over an entity.
+
+**2.4 The realise-time containment check.** Immediately before a body's sources are written, the stage re-reads every shell cell
+and every `joins` cell in the live world.
+- Each shell cell must hold exactly what its tile wrote. A cell its tile skipped (another owner's, a protected area added since,
+  a block entity) fails the check.
+- Each join must still be a water source.
+- If any check fails, the body is **not written**: the region ends `PARTIAL`, naming the body and up to 16 cells. The approval
+  artifact's guards (§10) catch most of these earlier, as `ARTIFACT_STALE`.
+
+**2.5 The single breach (overflow).** For each shell cell at or under a body's surface, M25 also runs the flow with that one
+cell opened (a player's pickaxe, a creeper).
+- The breach reach must satisfy `M25:keep`. A breach may wet the plan's own walk cells, which is a nuisance, not a danger.
+- **Sunk bodies** (surface at least 1 under the ground of every column around the body) pass trivially: the water fills the hole
+  and stops.
+- **Raised bodies** (a waterfall's header pool, a fountain's bowl) must pass it explicitly, and the generators size their rims and
+  set-backs so they do.
+- The breach reach is journaled as watched cells (§4.2), so even a breached body undoes exactly. M16 proper (barrier thickness
+  under a water surface) stays 7a's.
+
+### 3. Realise, settle and ticks
+
+**3.1 The `fluids` stage** is appended last (`[..., 'lots', 'props', 'fluids']`) only when the plan has a body.
+- **Byte-identity:** as K1's `links`, a plan without a body keeps its stage list, so its IR is unchanged.
+- **Barrier:** every solid of every stage, shells included, is written before any source.
+- **Order:** bodies are written in plan order, cells in (y, x, z) order, with `CELL_FLAGS`. The ice cap is written right after its
+  body's sources.
+
+**3.2 Ticks.** When a body's cells are written, the stage **forces one fluid tick** on every source and on every face-neighbour
+of a source that is not in `cells`. Writes skip updates, so without this a leaky basin would never show its leak (and the gate's
+negative control, item 2, depends on it). Spill cells then fill by vanilla's own ticks.
+
+**3.3 Settled, and measured.**
+- **The settle bound:** `settleTicks = delay × (longest predicted flow path + 2) + 20`, computed by the kit and carried in the IR.
+  The delay is 5 for water and 30 for lava; the path is in cells, falls counted.
+- **Settled** means both of these:
+  - no fluid tick is scheduled at any cell of the body's **watch box** (its cells, shell, spill and breach reach, grown by 2);
+  - the box's **census** equals `predicted` exactly: every source where planned, every flowing cell at its predicted level, and no
+    other fluid that wasn't in the box's fluid map captured before the write.
+- **Status:** the region is `PLACED` only when every body has settled. A body that hasn't settled within `2 × settleTicks` fails.
+- The mod reports `fluids: [{part, sources, spill, settledAt, escaped}]` in the realise report.
+
+**3.4 The escape guard.** If a body's census shows fluid outside `cells ∪ spill ∪ joins`, or a body fails to settle:
+- the stage drains that body at once: its sources, spill and watched cells go back to their before states (§4);
+- the body is reported `escaped` with up to 16 cells, and the region ends `PARTIAL`.
+
+This is the "never flood" backstop against a model error. With M25 passing it should never run; the gate drives it with a broken
+prediction (item 3).
+
+**3.5 Crash.** A crash before the `fluids` stage leaves solids only, a valid partial region: settle at start resumes the stage or
+undoes it (6a's crash rules). A crash mid-stage leaves some sources: settle at start re-runs the stage, which is idempotent per
+cell, or undoes it, draining as §4. Scheduled fluid ticks are saved with their chunks.
+
+**3.6 Own time.** Writing sources and scheduling ticks are the stage's own CPU (bars as usual: recorded in change and slice). The
+vanilla fluid ticks are the world's, recorded as `fluidTickShare`, not judged (AGENTS: tick bars judge Architect's own time).
+
+### 4. Exact undo
+
+**4.1 Order.** `Regions.remove` takes each body first, in reverse plan order:
+1. the ice cap and sources, back to their before states;
+2. the watched cells (spill and breach reach), each back to its before state **if it now holds a fluid it did not hold before**;
+3. then, after one settle bound (§3.3, measured from the removal's write), the region's solids as today, shells included. Writing
+   shells last means no source ever stands against a removed shell.
+
+Wet writes are ordinary cells of their stage, restored with the region (sources, ice and water plants back exactly).
+
+**4.2 Watched cells.** A body's entry journals its spill and breach-reach cells' before states (as `dependents` adds cells), with
+no write at realise. At undo, a watched cell holding a fluid it didn't hold before is the body's doing, so it is restored. Any
+other change there (a player's block) is kept and reported, as the CELL policy does today. Journal size is recorded per body.
+
+**4.3 "Still ours" for fluids** (`StillOurs.holds`, additive):
+- For a cell the entry wrote as a **water source or ice cap**, any water state (any `level`), ice or frosted ice holds it: it froze,
+  thawed, or a bucket took it.
+- For a **lava source**, any lava state.
+- A **shell cell** of a body that now holds that body's fluid is the entry's (a breach that converted).
+- Nothing else changes: a player's block in a pond is still kept and reported.
+
+**4.4 Dependents under water** (`TileCheck.dependents`).
+- A dependent cleared in a cell under a **natural water surface** (the column's surveyed water, or the volume's) becomes a water
+  source, not air. Today only a dependent with its own fluid state does, so sand on a riverbed leaves an air hole that flowing
+  water fills.
+- **The sand anomaly** stays a PLAN item, with a probe in H-core. It shares this function. H's bar is 0 gravity mismatches within
+  6 of any body, shell or wet write (item 5).
+
+**4.5 Exactness: what is measured, and when.**
+- **When:** after `Regions.remove` plus one settle bound plus no fluid tick scheduled in any watch box. Exactness rounds run under
+  the exact rules (random ticks 0, `doFireTick` false, no spawns). Scheduled fluid ticks still run, so water does settle. Safety
+  stands run separately at default rules (§14).
+- **E-flat:** 0 on the flat variants, **fluid cells compared exactly** (block state, `level` included).
+- **E-normal, natural:**
+  - 0 unclassified;
+  - **no classified mismatch of any class within 6 cells (3D) of any body cell, shell cell, watched cell or wet write**: the
+    tunnel rule (T3 §8);
+  - wet writes in natural water add K1b's/T3's bridge rule: the mod's `growth` and `grazed` (kelp, seagrass, grass spread) are
+    admitted at **unwritten** cells; `gravity` never is.
+- **H adds no world class.** The scenario classes (`flow`, `decay`, `live`, `melt`, `freeze`) keep D2's narrowing: unwritten cells,
+  more than 6 columns from written columns, or `deep`. **H narrows T1's `flow` deviation to that rule** (it never required an
+  unwritten cell), so no class can hide a fluid undo error.
+- **T1's falling-water cells:** under H no IR carries a flowing state (lint `FLUID_STATE`, §1.1). H-core's probe re-plans
+  relief_demo's committed inputs and either names the op that carried level 8 or shows the cells came from `dependents`. The
+  finding is recorded in "as built" whichever it is.
+
+### 5. The plan: defs, block ids, x-rules and codes
+
+Strict defs, each a new optional shape for a reserved kind (additive). `params` is read leniently, never `malformed`, and every
+unread key is listed in `notes` (S-K1-3).
+
+```
+form.pond:      {id, kind: "pond", required?, label?, notes?, ext?, style?, tolerance?, where?, size?,
+                 fluid?: "water" | "lava", depth?: 1..6 (lava 1..2), edge?: "natural" | "built", ice?: bool, params?}
+form.fountain:  {id, kind: "fountain", ..., where?, basin?: 3..9 (odd), spout?: 1..4 (height over the rim), params?}
+form.waterfall: {id, kind: "waterfall", ..., where?, drop?: 3..24, width?: 1..5, lip?: "auto" | "existing" | "sculpt",
+                 basin?: "auto" | "pond" | "join", params?}
+form.quay:      {id, kind: "quay", ..., where?: {along: {feature: {water}}} | {near: ...}, length?: 4..48, reach?: 1..6, params?}
+connector.channel: {id, kind: "channel", required?, label?, notes?, ext?, style?, tolerance?,
+                 where?: {around: {feature, ring?, closed?}},     // channel.moat
+                 from?, via?[], to?,                              // channel.course (reserved, HY)
+                 width?: 1..7, depth?: 1..4, params?}
+connector.wall:   + waterDepth?: 0..8 (the deepest water the wall may stand in; default 6)
+connector.bridge: + waterDepth?: 0..16 (the deepest water a pier may stand in; default 8)
+```
+
+**Block ids** (one idea, one id, as `wall.*` and `tunnel.*`):
+
+| Block id | Meaning | H state |
+|---|---|---|
+| `channel.moat` | a level ring of water round a feature, written `where.around` | supported |
+| `channel.course` | a channel along a line (reaches, drops, joined to natural water), written `from`/`to` | reserved, `until: HY` |
+
+**Lenient params.** These are read when no first-class member says otherwise:
+- `width` and `depth` (channel, pond), `fluid` and `drop`;
+- `lake: true` on a pond, as a note only (the size comes from `size`);
+- `torches` / `lamps`, as for walls.
+
+These are noted and not read: `material` (the bible's), `existing` on a waterfall (§7.3), `mechanism`, and every other key.
+
+**x-rules** (additive):
+- **R21:** a channel has exactly one path form. A `from`/`to` channel answers `unsupported {block: channel.course, until: HY}`.
+- **R22:** `fluid: lava` only on `form.pond`. Elsewhere it is `refused FIRE`, `evidence.kind: "lava"`, with the water shape as a
+  `wouldFit`.
+- **R23:** `ice` applies only where the biome freezes (§1.3). Elsewhere it is noted, not read.
+
+**Reason codes appended to `$defs/reason.code`** (additive, each with `evidence`):
+- `LEAK`: M25 can't close the body (a spill, breach or join reaches what `M25:keep` forbids), naming the cells.
+- `FIRE`: lava near flammables (M20), or lava asked where only water is supported.
+
+These are reused:
+- `WATER`, with `evidence.kind`:
+  - `deep`: over `waterDepth`;
+  - `flowing`: a wet write on moving water;
+  - `lava`;
+  - `freezes`;
+  - `level`: a join or body meeting natural water at another level.
+
+  It **never carries `until`** after H.
+- `NO_FEATURE` (no water for a quay or a waterfall's join), `NO_ROOM`, `PROTECTED`, `ANCHOR`, `HEADROOM`, `VOLUME` (§10).
+
+### 6. Catalogue 7
+
+| Id | Before | H | limits / note |
+|---|---|---|---|
+| `form.pond` | reserved (H) | **supported**, schemaVersion 1 | `{depth: [1, 6], lavaDepth: [1, 2], area: [4, 1024], fluids: ["water", "lava"], edges: ["natural", "built"]}` |
+| `form.waterfall` | reserved (H) | **supported**, schemaVersion 1 | `{drop: [3, 24], width: [1, 5], sculpt: 12}` (the highest lip H raises) |
+| `form.fountain` | (new) | supported | `{basin: [3, 9], spout: [1, 4]}` |
+| `form.quay` | (new) | supported | `{length: [4, 48], reach: [1, 6], waterDepth: [0, 8]}` |
+| `connector.channel` | reserved (HY) | **supported**, schemaVersion 1 | `{width: [1, 7], depth: [1, 4], forms: ["moat"]}`; note: `channel.course` waits for HY |
+| `channel.moat` | (new) | supported | |
+| `channel.course` | (new) | reserved, `until: HY` | |
+| `connector.wall` | supported | `limits` gains `waterDepth: [0, 8]` | harbour walls (§8.2) |
+| `connector.bridge` | supported | `limits` gains `waterDepth: [0, 16]` | wet piers (§8.1) |
+| `bridge.beam` | supported | note: "piers stand in water up to `waterDepth`; never in flowing water or lava" | |
+| `connector.tube` | reserved (UW) | note: "after H; builds on H's shell rule" | |
+| `form.seabed_site`, `form.crater`, `connector.drawbridge` | | unchanged | |
+
+- **Archive and diff:** catalogue 6's golden is archived as `fixtures/plan/catalogue-t3.json`. The T3 to H diff is exactly the three
+  flips, the four new ids, the two `limitsChanged`, and the two note changes.
+- `sinceApi` on the new and flipped entries is the merge's real API, set by the coordinator.
+
+### 7. Water bodies (kit, plan time, deterministic)
+
+`kit/lib/fluids/{body,sim,pond,fountain,waterfall,moat}.mjs`. They use integer cells, break ties by (x, z), and draw no random
+number except through `ctx.rng(label)`.
+- **`r.fluidBody(cells, {fluid, shellRole, ice, spill, joins})`** is the one primitive every generator ends in. It emits the shell
+  in the generator's stage and the body as a `fluid` op in `fluids`.
+
+**7.1 `form.pond`.**
+- **The outline:** the integer disc or rounded rect of `size`, `shape: round` by default, or `ctx.rng` noise on the radius
+  (`organic`).
+- **The basin:** carved `IF_NATURAL`.
+- **The surface:** 1 under the lowest ground of its rim columns, so every pond is **sunk** (§2.5).
+- **Depth:** `depth` (default 2) at the centre, stepping up 1 per ring towards the edge.
+- **The shell:** 1 cell thick.
+- **`edge: natural`** (the default): the bed and sides in the bible's `bed` role (clay, mud, dirt; never a gravity block), the rim
+  ring in `grass`/`subsurface`, and the shallow ring in `bed` with plants allowed over it (F2's scatter may decorate it).
+- **`edge: built`:** the shell and a 1-high coping in `structure`.
+- **Lava:** a 1-2 deep pit; the shell in `foundation` (never flammable); a coping ring of non-flammable `trim`; M20's reach clear.
+
+**7.2 `form.fountain`.**
+- **The basin:** a built pond, 1 deep, raised 1 over the ground, with a coping in `trim`.
+- **The spout:** a 1x1 pillar of height `spout` in its centre, a source on top.
+- **The spill:** the spout's 4 sides fall into the basin. The basin cells under them are sources, so nothing spreads.
+- **The breach check (§2.5):** the raised basin passes when its coping is 2 thick or the ground around is within 1. The generator
+  thickens the coping until it passes.
+
+**7.3 `form.waterfall`.** A **header pool** (a raised body: sources at the lip), a **lip run** (the flowing cells that leave the
+pool over the edge), a **falling column** (spill), and a **basin** (a pond body, or a `join` into natural water at least 2 deep).
+- **`lip: existing`:** the fall uses a natural drop of at least `drop` within the part's `where`. The falling column's cells must lie
+  over their columns' surveyed height (2.5D: certainly air), and the face must be site-solid in the frozen volume.
+- **`lip: sculpt`:** raises a rock outcrop in stage `ground` (T1's base, as crossings_demo's ridge) up to `sculpt` (12). The header
+  pool is set in its top, and the outcrop is lined as a shell.
+- **`auto`** (the default): existing where one passes, else sculpt.
+- `params.existing` and "use an existing waterfall if found" are read as `lip: auto` (noted). A flowing waterfall already in the
+  world is not adopted: the survey can't tell one from a pond.
+- **The curtain:** width `width` (default 3), the column one cell out from the face.
+- **The cliff behind:** not hollowed. A hollow behind the fall is 7b's.
+
+**7.4 Moats, and the line with HY.** `channel.moat`:
+- **The ring:** wall.around's ring search (K1's `placeRing`) at `ring` offsets (default [6, 12]).
+- **The cross-section:** width 5 and depth 3 by default (Steward's recorded params), surface 1 under the ground, sunk, the shell in
+  `foundation`.
+- **`closed: true`** makes a full ring. `closed: false` leaves the ring open at the side facing the claim's centre, capped with
+  shell.
+- **Compiled with the forms** (step 2), so the route pass sees its water.
+- **Beside a wall on the same feature:** the moat's ring starts at least 1 cell outside the wall's ring plus its thickness (the
+  wall's ring is searched first when both name the feature; a moat whose ring would cut the wall is `adjusted` outward, or
+  `refused NO_ROOM`).
+- **Crossings:** a street, road or path crossing a moat fails `ROUTE_WATER` and takes T3's bridge fallback (S-T3-2), landing at
+  the wall's auto gate when there is one (T3 §4). Over plan-made water the fallback's `clearance` defaults to 1 (N-H-5).
+
+**Where H stops and HY starts:**
+- **H owns** every body with **one surface level**: ponds, pools, fountain basins, moats (a closed or capped level ring), header
+  pools, and the falls between them as declared spill.
+- **HY owns** water that **follows the land**: `channel.course` with reaches at several levels, channels joined to natural rivers,
+  the `hydrology` pass, and the `flow`/`wet` fields. HY's channels are built from H's `r.fluidBody` and M25, so HY adds generators,
+  not a fluid model.
+- T3 §9's line "when HY ships the moat" is superseded: the moat ships in H.
+
+**7.5 The farm pond** (S-H-1, binding). In a `flat_village` or plan/0 village whose claim has **no surface water** (M24's
+`waterInClaim: false`):
+- each farm lot gets a 3x3, 1-deep sunk water pond (a `form.pond` body, `edge: natural`) within 2 of its rect;
+- it sits in the lot's yard, **outside the lot's restore box** (K5: a region never writes in a lot box), and is removed with the
+  region;
+- the S-H-1 refinement, "on the lot", is read as the lot's yard (S-H-2 confirms).
+
+Where it applies:
+- **plan/0:** on by default, so a plan/0 village with farms on a dry claim gains a body and its IR moves (listed in item 11).
+- **Bundled programs:** behind a param (`farmPond: true`), off by default, so S7's and the flat goldens don't move.
+- **M24:** counts plan-written, unfrozen water.
+
+**7.6 The wet well** (V's deferred). `well` gains `water: true`: a 1-cell source in the well shaft, its 3x3 ring the shell. It is
+off by default (S7's golden holds), and plan/0 never sets it.
+
+### 8. Wet structures and the wet fallback
+
+**The fallback rule** keeps every plan that fits today byte-identical, the way S-T3-2's street fallback did:
+- A move or wall is first searched exactly as on v0.36.0.
+- **Only surveyed (natural) water is ever made passable.** Plan-made water (a moat, a pond) stays an obstacle to walls and wet
+  piers: a wall never stands in its own plan's moat, and a route crosses plan water only on a bridge whose piers stay dry.
+- Only a leg or part that fails **because of water** (`WATER until H` today) is searched once more with wet writes allowed.
+- A plan with no such failure plans and checks byte for byte as before (answers, IR, artifact). Its realise differs only through
+  §4.4's dependents rule, which applies to every region: a dependent cleared under natural water becomes a source, not air. The
+  existing natural steps over water (t3a-natural on S3's river, d2-ingame's quay) cover that change and must stay green. A plan with one may move later edges
+  (hysteresis), as T3 recorded.
+
+**8.1 Wet piers** (`bridge.beam`).
+- **The re-search:** a bridge row candidate that failed only `WATER` (pier needed in water) is re-checked with piers allowed in
+  water sources up to `waterDepth` (default 8).
+- **The pier:** the deck's cross-section, from the deck down through the water to the bed (W's `floor`). Its **footing replaces
+  the bed's top 2 cells whatever their class** (LOOSE included: sand and gravel beds are the norm). Bearing is M3's.
+- **Volume:** the pier column's cells come from the frozen volume (§10), so no pier stands in flowing water (`WATER`,
+  `evidence.kind: flowing`).
+- **Cost:** the row's cost is unchanged (320 + 30 n + 40 per pier), plus 10 per wet pier cell, so a dry arch still wins where it
+  fits.
+- **The arch** is unchanged: an arch never needs a pier.
+- **What remains of `WATER`:** water deeper than `waterDepth` (`kind: deep`), lava, or flowing water.
+
+**8.2 Harbour walls** (K1's walls through water).
+- **The re-search:** a wall whose ring or line fails `OB.WATER` is searched again with water columns up to `waterDepth` (default
+  6) as clear, at cost 3 a cell (dry 1).
+- **The wet section:** full height over the **surface** (K1's `height` measured from the water surface, crenels on top), and solid
+  through the water to a footing 2 into the bed, in `structure` (non-waterloggable full blocks under the surface, §1.2).
+- **Gates:** none in a wet section, since a gate needs a walk crossing. A route crossing water there is a bridge's job.
+- **The answer:** the wall's geometry reports `wet: [{from, to, depth}]` and its `crossing {type: "wall", over: "water", depth}`.
+  Closure (`M2:wall`) treats the wet section as wall.
+
+**8.3 `form.quay`.** A level platform from the shore out over natural water, along the bank. It needs at least one natural water
+body within the locator, else `NO_FEATURE`.
+- **The deck:** `reach` (default 3) cells out, 1 over the water surface, solid to a footing 2 into the bed (no overhang, so no
+  trap, `M25:trap`).
+- **The edge:** mooring posts (the `frame` fence) every 4, lamps per W's fixture (M5), and a 1-cell step down to the water every
+  16 cells. Those steps are the exits (`M25:exit`) for a mover that falls in.
+- **No rail:** M8 counts water at least 2 deep as the guard (SETTLEMENTS §11). Over shallower water the edge gets the rail role.
+- **Answers and routes:** it answers `geometry.quays[{along, length, reach, wetCells}]`, and its deck is a walk area the route pass
+  may end on.
+
+**8.4 Re-answering "until H".**
+- **The pier in water** (`bridgeGeom.mjs:246`) now fits through §8.1, or answers `WATER` with `kind: deep | flowing | lava` and no
+  `until`.
+  - S-T3-3's `wouldFit`s stay: the arch, else a rope.
+  - fixtures `t3a/r06_water_arch` and `r07_water_rope` re-answer `fits` (beam with wet piers), listed as expected changes.
+  - A new `r06b` keeps a `deep` refusal with both `wouldFit`s.
+- **The street fallback that still meets water** (`compile.mjs:1198`) runs the bridge fallback with wet piers. A leg that still
+  fails answers `WATER` (`deep`, or `SPAN` over 32) with no `until`.
+- **K1's wall `WATER`** takes §8.2's re-search. K1a's refusal fixture "a ring across a lake" re-answers `fits` (a harbour wall) or
+  `WATER deep`, listed.
+- **The bar:** no reachable code path, fixture expectation or catalogue note says `until: H` or `until: 'H'` (a grep in item 11).
+
+**8.5 Villagers and water.**
+- **Routes never walk through water.** The `villager` and `player` movers' walk graphs exclude fluid cells. Routes go round bodies
+  (the route pass keeps 1 off plan water, as it keeps 2 off natural water) or over them on bridges.
+- **The checks:** M8 (water at least 2 deep counts as a guard, else a rail), `M25:exit` and `M25:trap` make a fall into any body
+  survivable.
+
+### 9. Checker guarantees (virtual world, then the realised world in the gate)
+
+| Guarantee | Rule | On |
+|---|---|---|
+| Every reached cell is in the body, its spill or its joins; nothing converts; lava never meets water | `M25:leak`, `M25:convert`, `M25:mix` (new) | bodies |
+| A written, fluid-stopping, non-gravity shell, the part's own | `M25:shell` | bodies |
+| A single breach reaches no lot, build, protected area, other owner or keep-out | `M25:keep` (breach reach) | bodies |
+| A wet write leaves no air under water, writes no waterloggable state, and never takes flowing water, lava or a bubble column | `M25:wet` | wet writes |
+| No trapping ceiling; an exit within 8 of every surface cell | `M25:trap`, `M25:exit` | bodies, quays |
+| No flammable within the fire reach of exposed lava | M20 (error for lava bodies) | lava ponds |
+| No planned light over 11 reaches planned ice; lava counts as light 15 | M17 (extended) | ice caps, lava |
+| No IR op carries a flowing fluid state | lint `FLUID_STATE` | every IR |
+| Piers: footing 2 into the bed, at most `waterDepth` of water, grounded | `M10:bridge`, M3 | wet piers |
+| Harbour walls: closure with wet sections as wall | `M2:wall` | walls |
+| Villagers around or over every body; none through water | `M2:villager` | villager edges |
+| No write in a lot box or into an OWNED, PLAYER or BLOCK_ENTITY cell | M1 (error) | all |
+
+- M25 reads the virtual world built over the frozen volumes the IR records. A body or wet write without one is a finding
+  (`M25:shell "no volume"`), never a pass. The checker's `RULES` gains `M20` and `M25`.
+
+### 10. Volumes in the plan check, and the guards
+
+H reuses T3b's two-plan flow and stale rule, widening their trigger. It needs volumes for three things:
+- a body's basin, shell and buffer: caves, owned cells and natural water behind the shell;
+- a wet column: source against flowing, and the bed;
+- a waterfall's join.
+
+**Asking (first plan).** These ask `needVolume(box, {fluids: true})`:
+- each body's bounding box grown by 2 (by 9 under a raised body, for the breach reach);
+- each wet pier's or wet wall section's columns from the bed - 3 to the surface + 1;
+- each quay's rect from the bed - 3 to the surface + 1.
+
+The caps are T3b's: 4,000,000 cells per part and 16,000,000 per plan. Past them, the part answers `incomplete VOLUME`.
+
+**ARVX version 3** (additive): version 2 plus a per-cell **fluid layer** as per-column runs (0 none, 1 water source, 2 water
+flowing, 3 water falling, 4 waterlogged, 5 lava source, 6 lava flowing).
+- It is sampled only when the request carries `fluids: true`. Every other volume stays version 1 or 2, byte for byte.
+- `VoxelClass` is unchanged (no reclassification of existing volumes).
+- Built as `Arvx`/`VolumeSurvey` in Java and `decodeArvx` in the kit, with a cross-language fixture.
+
+**The trigger** (`PlanChecks.check0`): the two-plan flow runs for a plan with a tunnel part (T3b), **or a body part (pond,
+fountain, waterfall, moat), a quay, or an edge or wall that took the wet fallback** in its first plan (meta `wet.asked`). Every
+other plan plans once, so its check is byte-identical. The `load` option (S-T3-6) applies unchanged.
+
+**Guards** (`finish.mjs`, P0's artifact): each body's shell and buffer cells, each join, and each wet column, as per-column y runs.
+- `realiseApproved` re-samples them, comparing classes and the fluid layer.
+- Any difference is `ARTIFACT_STALE` naming the part and up to 16 cells (a player's pond, a drained lake, a new flow).
+- Surface growth outside the guards doesn't stale.
+
+**Kit CI and the asks.** The asks harness (`plan-helpers.mjs` `checkPlanVolumes`) synthesizes the volume of any asked box from the
+asks survey: grass, 3 dirt, stone; the lake and stream as water sources from the surface to the bed. So recorded H parts answer
+`fits`, not `incomplete VOLUME`.
+
+### 11. Style from the bible (format 2, additive)
+
+A new `fluids` member (role names only):
+
+```
+fluids?: { bed?, rim?, coping?, spout?, quay?, mooring? }
+```
+
+Defaults, so existing bibles style H's parts unchanged:
+- **bed:** `subsurface`, then `foundation` (never a gravity block: the first non-`g` of the chain, else `stone`);
+- **rim:** `surface`; **coping:** `trim`, then `structure`; **spout:** `structure`;
+- **quay:** `path`, then `structure`; **mooring:** `frame` (its fence);
+- **lamps:** the `light` role through W's fixtures.
+
+Harbour walls and wet piers keep K1's and T3's roles.
+
+### 12. Survival, API and wire shapes
+
+- **Survival:** INSTANT only, as K1 and T3 (N-K1-3). RS builds it. Each part's answer carries `cost.bom` (C26's table, N-H-1's
+  rule):
+  - water sources free;
+  - one `lava_bucket` per lava source (C26: one `bucket` back);
+  - ice caps priced as `ice`; RS decides how they are supplied.
+
+  RS's "Fluid parts (H, HY): refused until Noah decides" row is answered by N-H-1. RS itself is unchanged.
+- **API** (additive; no new records or methods except H-c's):
+  - **Versions:** `VERSION` is the next free minor (1.34.0 at integration), with the mod to match. `PLAN_API` and the
+    catalogue's `api` follow it. `KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` 0.35.0.
+  - **Features:** `regionFluids`, `wetWrites` and `fluidVolumes`; the sidecar features `region.fluids` and `region.wet`. With
+    H-c: `fluidBrushes`.
+  - **IR:** op kind `fluid` (format 2, `requires: ['fluids']`, `KINDS_FORMAT2` appended):
+    `{part, fluid, level, cells, shell, spill, joins, predicted, settleTicks, ice}`, with cells as voxel runs. The previous
+    mod refuses it `PLAN_STALE`. Wet writes are ordinary `columns`/`voxels` cells.
+  - **Behaviour:**
+    - `checkPlan` may plan twice for H parts (§10);
+    - `realiseApproved` may answer `ARTIFACT_STALE` for a body's or wet column's water;
+    - a realise may end `PARTIAL` with an `escaped` or `uncontained` body (§2.4, §3.4);
+    - `PLACED` waits for the fluids to settle.
+  - **H-c only:** `BrushKind` appends `FILL`, `DRAIN`, `FLOOD_FILL`. `BrushRequest` gains a trailing `@Nullable String fluid`
+    after PT's `consent` (the old constructor gives null).
+  - **DevBridge** (dev only): `dev.fluid.census {box}` (fluid states and scheduled fluid ticks in a box), `dev.fluid.tick
+    {cells}`, and `dev.entity.damage {since, type}` (drowning counts).
+  - **api-compat:** clean against the 0.36.0, 0.35.0 and 0.34.0 apitest jars.
+- **Wire shapes** (additive):
+  - `siteplan/1` gains `waters: [{id, part, kind: pond | fountain | waterfall | moat | farm_pond | well, fluid, level, cells, spill,
+    ice}]` and `quays: [...]`.
+  - Graph edges over a moat carry T3's bridge `crossing` with `over: "water"`.
+  - Walls gain `crossing {type: "wall", over: "water", depth}` on wet sections, and bridges `piers[].wet`.
+  - The realise report gains `fluids` (§3.3).
+
+### 13. Steward's recorded parts: expected answers as recorded (the asks claim)
+
+Predicted from the design, not run. The builder runs them and commits the before and after gap tables (`fixtures/plan/h/`).
+
+| Plan / part | Shape | Expected | Why |
+|---|---|---|---|
+| hidden_village / waterfall_curtain (optional) | `form.waterfall`, near the largest water within 16 | `fits` (or `adjusted` move) | the asks claim is flat: `lip: auto` finds no drop and sculpts a 6-high outcrop beside the lake; the fall joins the lake (bed 60, 3 deep: a valid join); "use an existing waterfall" read as `auto` and noted; the hollow behind the curtain is not built (7b), noted. If the hollow zone takes the whole shore within 16: `refused NO_ROOM`; if the raised header pool's single-breach reach (§2.5) meets the zone's lots: `refused LEAK`; each with a smaller-drop `wouldFit` |
+| redstone_gate / moat (required) | `connector.channel`, `where.around` the fortress, ring [6, 12], closed | `fits` as `channel.moat` (or `adjusted` move) | `params.width` 5 and `depth` 3 read; nothing crosses it (the drawbridge is pending), so the fortress is ringed and no route needs a bridge. If the fortress sits within ring 12 of the lake: `refused WATER kind: level` |
+| redstone_gate / drawbridge (required) | unchanged | `unsupported {connector.drawbridge, until: mechanism}` | S-T3-7; once a mechanism slice ships, a recheck finds the moat's water and the bridge lands at the gate |
+| redstone_gate / main_gate, curtain_wall | unchanged | as on v0.36.0 | the moat is outside the wall ring |
+| ring_city / crater_lake | unchanged | `unsupported {form.crater, until: 7c}` | when 7c's crater ships, its `lake` is an H pond body |
+| underwater_domes / sea_floor, glass_tunnels | unchanged | `unsupported {form.seabed_site}`; `blocked` | UW and later |
+| lot water (docks, piers on stilts, fish pond, garden source, sluice, lava forges) | lots | unchanged | lot designs; no lot box moves onto water (7b's site lots) |
+| farms on the asks claim | lots | unchanged | the claim has a lake, so no farm pond (S-H-1 is dry claims only) |
+| any recorded wall, street, road or path refused `WATER` today | | re-answered | the wet fallback (§8); the before table lists them (expected: none or few, since T3's table had no street refusing water) |
+
+**Bar (item 10):**
+- 0 `malformed`.
+- `form.waterfall` 1 -> 0 and `connector.channel` 1 -> 0 in the gap table.
+- No recorded part changes class except these two and the listed fallback parts.
+- No answer carries `until: H`.
+
+### 14. Gate (slice tier plus the engine tag, $0)
+
+**Fixtures.**
+- **Plan fixtures**, under P0's harness:
+  - `valid/v41_pond` (water, natural edge), `v42_lava_pit` (with a tree outside M20's reach), `v43_fountain`, `v44_waterfall_sculpt`
+    (flat claim beside a synthetic lake), `v45_moat` (v30's walled village ringed by a moat, a road crossing it on a bridge
+    landing at the gate), `v46_quay` (the asks lake's shore), `v47_wet_beam` (a 28-wide synthetic river with a beam on wet piers),
+    `v48_harbour_wall` (a wall ring crossing the asks lake's corner), and `v49_farm_pond` (a plan/0 village with farms on a dry
+    flat claim).
+  - Refusal fixtures in `fixtures/plan/h/`:
+    - `LEAK`: a raised pool whose breach reaches a lot;
+    - `FIRE`: lava beside a protected tree; lava on a fountain;
+    - `WATER`, one per kind: `deep` (a pier in 20 of water), `flowing` (a pier on a volume's flowing cells), `level` (a pond
+      touching the lake at another level), `freezes` (`ice: false` in a snowy biome);
+    - `NO_FEATURE`: a quay with no water;
+    - `PROTECTED`: a pond whose shell meets a build;
+    - `VOLUME`: a body over the cap;
+    - `channel.course`, `unsupported until HY`.
+- **`water_demo`** (bundled, `catalogue = false`) has three variants:
+  - **flat:** E-flat. A sunk pond, a lava pit, a fountain, a waterfall from a sculpted outcrop into a pond basin, a moat round a
+    small walled yard with one bridged road, and a quay and a harbour wall beside a synthetic lake carved in stage `ground` and
+    filled by a body. The "natural" water there is the fixture's own, so E-flat covers it.
+  - **natural:**
+    - S3's pinned river (D2's quay and T3a's arch used it): a quay, a beam on wet piers, and a pond on the bank;
+    - S3's cliff (D2's falling column at x 3723-3726): a `lip: existing` waterfall into a pond.
+  - **cold:** S7's rejected frozen site 2026101102 (an ice-capped pond and a wet pier through the frozen river), and S2's pinned
+    ice-spike claim (an ice-capped pond).
+- The builder pins any new site in `scenarios/sites/`.
+
+**Evidence:** `artifacts/gate6c-h/`, driver `tools/gate6ch.mjs`. `spend.json` $0.00. Every in-game step runs headless (`host:
+server`) except the look step.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Containment, plan | M25 0 on every valid fixture and `water_demo`; each broken variant caught with its cells (below) |
+| 2 | Containment, world, with a negative control | after the realise and settle: every body's census equals `predicted` exactly (sources, flowing levels), 0 fluid cells outside `cells ∪ spill ∪ joins` in each watch box, settled within `settleTicks`; a 2-minute stand at **default** rules adds nothing; **negative control:** `_unsafe.noShellCell` (one rim cell left unwritten) realised with the containment check bypassed by a dev flag: the forced ticks make it leak within 1 settle bound and the census names the cell (proves the measure can fail) |
+| 3 | Escape guard and realise check | `_unsafe.predictShort` (a spill declared one cell short): the guard drains the body, `escaped` names the cell, the region ends PARTIAL, then 0 fluid in the watch box after a settle bound; a protected area added over one shell cell before realise: the body is not written, PARTIAL naming it, 0 fluid written |
+| 4 | Ice | cold variant: every capped surface cell reads `ice` after the stand at default rules, re-surveyed FROZEN; an uncapped twin (`_unsafe.noCap`) freezes on its own (the probe for §0's freezing assumption, recorded), and its undo leaves no water or ice where the snapshot had none (§4.3; the remaining cells are judged by item 5's exact-rules round) |
+| 5 | Exact undo | **its own realise under the exact rules** (random ticks 0, `doFireTick` false, no spawns; scheduled fluid ticks run), separate from the default-rule stands of items 2, 4, 6 and 13, which judge safety only (census, remnants, ice, fire): settle, then `Regions.remove`, a settle bound and no fluid tick scheduled: E-flat 0 on flat **with fluid cells compared by state**; natural and cold E-normal 0 unclassified, no classified mismatch within 6 of any body, shell, watched cell or wet write (wet writes: the bridge rule, growth and grazed at unwritten cells only), **0 gravity mismatches** within 6; the river's sources, the frozen river's ice and water, and any kelp restored exactly; journal cells recorded per part |
+| 6 | Overflow (single breach) | flat and natural: after settle, `/setblock` air at one shell cell of each body (the deepest side cell of the pond, the fountain's coping, the header pool's rim): after a settle bound the water reaches no lot box, build, protected area or keep-out cell (the breach reach as predicted, re-surveyed); then `Regions.remove`: 0 fluid cells in the watch box that the before-snapshot didn't hold, and 0 new sources anywhere in it (the watched cells restored). The breach round is at default rules, so its exactness is item 5's, run again on an exact-rules realise with the same breach |
+| 7 | Crash | 6a's crash harness: a crash after the shells and before the `fluids` stage, one mid-stage, and one **during removal** between §4.1's step 2 (drained) and step 3 (solids): settle at start completes the realise or undoes it, and finishes a removal; 0 fluid outside the declared cells; the undo exact as item 5 |
+| 8 | Wet structures | S3's river: the beam on wet piers re-read (footing 2 into the bed, no air under the surface, no waterlogged state written, M10:bridge, M3 0); the quay (deck solid to the bed, exits every 16, M5 0 dark cells, M8); the flat harbour wall (closure with the wet section, height over the surface) |
+| 9 | Villagers (hard bar) | vanilla `dev.nav.villager` both ways round every body and over the moat's bridge, the wet beam and the quay: 100% found, no path cell in a fluid; **the stand:** 4 villagers set by each body's edge and 1 in each body's surface centre, 2 minutes at default rules: 0 drowning damage (`dev.entity.damage`), 0 deaths, and a nav path from each swimmer to an exit found; kit movers 100% |
+| 10 | Recorded plans | §13's bar on the 59 asks in kit CI |
+| 11 | P0 answers and byte identity | every H `valid/` fixture `fits` (or `adjusted` as expected); every refusal answers its code with evidence and `wouldFit`s, each `fits` re-checked alone; **every committed `valid/`, K1 and T3 fixture without an H part re-plans byte-identical** (answers and IR, but its kitVersion), except by name: `t3a/r06_water_arch`, `t3a/r07_water_rope`, K1a's lake-ring refusal, and any plan/0 farm fixture on a dry claim (§7.5); a search for `until` naming exactly `H` (both forms: `until: 'H'` and `"until":"H"`, word-bounded so `HY` doesn't match) over kit/ and the catalogue golden finds nothing |
+| 12 | Catalogue | the golden equals catalogue 7; the diff against `catalogue-t3.json` is exactly §6's; recorded pending parts naming `form.waterfall` or `connector.channel` flagged to recheck |
+| 13 | Fire | lava pit after a stand at default rules with `doFireTick` on and random ticks at 300 (the probe): 0 fire blocks within the claim; a flammable ring at distances 1-4 records the farthest ignition (sets M20's reach; the bar is M20 0 at the measured reach) |
+| 14 | Probes | (a) the sand anomaly: one sand cell on one rewritten cell, dry and under water, re-read after the realise with that column's journal entries (recorded, PLAN item); (b) T1's falling water: relief_demo's committed inputs re-planned, `FLUID_STATE` 0, the source of the level-8 cells named |
+| 15 | Determinism | 3 checks of each fixture give identical answers and artifact shas; tile shas 1 = 4 workers; goldens `water_demo_flat*`; macOS and Linux CI |
+| 16 | Unchanged | S1, S7, S2, mega_bench, relief_demo, route_demo, forms_demo, scatter_demo, districts_demo, links_demo and crossings_demo tile goldens |
+| 17 | Timing (recorded) | the second plan's time with fluid volumes; settle ticks per body; own CPU of the `fluids` stage; `fluidTickShare` |
+| 18 | API, spend | api-compat clean; apijars; $0.00 |
+| 19 | Look (camera, client; recorded) | the pond (natural and built), the lava pit, the fountain, both waterfalls, the moat with its bridge, the quay and the harbour wall, in three bibles: Noah's call (N-H-2) |
+| 20 | Brushes (H-c only) | FILL, DRAIN, FLOOD_FILL: M25 0 at plan time, census as item 2, one undo exact as item 5; a FLOOD_FILL that escapes its bound refused `LEAK` with nothing written; DRAIN of a body only partly inside the shape refused `LEAK` (the rest would flow in) |
+
+**Broken variants** (each caught by its rule):
+- `_unsafe.noShellCell` (`M25:shell`, `M25:leak`) and `_unsafe.sandShell` over a gap (`M25:shell`);
+- `_unsafe.flowingPier` (`M25:wet`) and `_unsafe.waterloggedWet` (`M25:wet`);
+- `_unsafe.twoSourceCorner` (a spill cell beside 2 sources: `M25:convert`);
+- `_unsafe.lavaNearWater` (`M25:mix`) and `_unsafe.flammableRim` (M20);
+- `_unsafe.roofedPond` (`M25:trap`) and `_unsafe.noExit` (`M25:exit`);
+- `_unsafe.capUnderLamp` (M17);
+- `_unsafe.flowingState` (lint `FLUID_STATE`).
+
+**Tier:** slice, plus the engine tag (`region/**`, `journal/**`, `site/TileCheck`, the volume code):
+- the units, apijars and api-compat;
+- the impact map's steps for those paths (4e-orders, 4e-crash or 6a-crash, 6a-eflat, 6a-megaA, 6b-volume, the scenario steps);
+- T3's steps for `bridgeGeom` and `PlanChecks` (t3a-unit, t3a-ingame, t3b-unit);
+- K1a's for `line.mjs`;
+- H's own: `h-unit`, `h-ingame`, `h-natural`, `h-cold`, `6ch-look`.
+
+The gate-verifier reviews the diff and the evidence, and **re-runs items 3, 5, 6 and 7** (escape, undo, breach-undo and crash:
+GATES policy 3). **Steward's RC check comes before release** (GATES policy 4): H changes the removal order (a settle bound
+between draining and restoring solids), when `PLACED` is reached (after settle), and adds `PARTIAL` with a drained body.
+
+### 15. Build order, the split and the shared interface
+
+1. **H-core (the foundation, one owner):**
+   - **Archives and plan:** archive the previous apitest jar and catalogue 6 (`catalogue-t3.json`); the schema defs, R21-R23,
+     codes `LEAK` and `FIRE`, and catalogue 7 with every new entry (supported entries' generators as stubs).
+   - **Kit:** `blocks.mjs` `fs` and `flammable` (BlockDump), the biome `freezes` table, `vworld` fluid levels, `kit/lib/fluids/sim.mjs`
+     (M25 and `predicted`), `r.fluidBody`, the `fluid` op and lint `FLUID_STATE`, and checker M25/M20/M17.
+   - **Java:** ARVX v3's fluid layer; the trigger widening and fluid guards (`PlanChecks`, `finish.mjs`, `realiseApproved`); the
+     `fluids` stage (containment check, occupancy waits, forced ticks, settle and census, the escape guard); watched cells; undo
+     order and drain; `StillOurs` for fluids; dependents under water; crash settle.
+   - **Fallback and probes:** the wet-fallback hooks (`wetBridgeFallback`, `wetWallFallback`) as stubs with their order and costs;
+     DevBridge hooks; the two probes (item 14).
+   - **Gate:** items 1-3, 5-7, 14 and 17 on one plain pond body.
+2. **H-a, bodies:** pond (water and lava), fountain, waterfall (existing and sculpt), moat and its route interplay, ice caps, the
+   farm pond, the wet well, bible `fluids`; items 4, 9 (bodies), 10, 13 and 19.
+3. **H-b, wet structures:** wet piers (T3's bridge row and `bridgeGeom`), harbour walls (`line.mjs`, `wall.mjs`), the quay; the
+   street fallback with wet piers; items 8, 9 (wet), and 11's re-answered fixtures.
+4. **Shared:** items 10-12 and 15-18, the asks tables, and a batch test: one plan with a pond, a moat crossed by a road on a
+   bridge, a wet beam and a harbour wall, READY through the two-plan flow, `checkRegion` clean, three checks identical.
+5. **H-c (optional, N-H-6), brushes:** `FILL`, `DRAIN`, `FLOOD_FILL` on B's stroke path (one region per stroke, S-B-1), each ending in
+   `r.fluidBody` over a frozen stroke volume with `fluids: true`; item 20.
+
+**The shared interface** (frozen at the end of H-core's round 1, before H-a and H-b start, as T3's foundation was):
+- the `fluid` op shape and `settleTicks`;
+- `r.fluidBody`'s signature and its stage rule (shell in the generator's stage, body in `fluids`);
+- `sim.mjs`'s `simulate(vworld, bodies, {breach}) -> {reached, predicted, findings}`;
+- the guard runs' shape;
+- `needVolume(box, {fluids: true})`;
+- the wet-fallback hook names, their position in `compile.mjs` (after T3's street fallback, before the answer) and costs;
+- the stage list;
+- `siteplan` `waters`/`quays`;
+- the gate driver's step names.
+
+H-a and H-b own disjoint files beyond that: `fluids/{pond,fountain,waterfall,moat}.mjs` against `bridgeGeom.mjs`,
+`moves/bridge.mjs`, `line.mjs` and `fluids/quay.mjs`. They meet in `compile.mjs`'s connector section and `check.mjs`'s dispatch,
+as K1 and T3 did. The coordinator merges.
+
+**Size:**
+- **H-core:** about 2 days, the largest part. It is the only Java beyond features and versions: the stage, the guard, undo,
+  ARVX v3 and the trigger. Every exactness bar rests on it.
+- **H-a:** about 1.5 days.
+- **H-b:** about 1 day; it reuses T3a's pier placement and K1a's ring search.
+- **H-c:** about 0.5-1 day.
+
+**Recommendation:** H-core first (merged into a `h/core` branch that both halves merge, not released alone), then H-a and H-b in
+parallel, released as one batch (as K1 and T3). H-c follows in the same batch if it is ready, else in the next toolbox batch.
+- **If serial:** core, then H-b first. It retires every `until: H` for Steward's routes and walls at once; the recorded waterfall
+  and moat wait one slice longer as `unsupported`.
+- **Elapsed:** about 3.5-4 days in parallel, 5 serial.
+
+### Binding answers carried over (from the batch review of the old draft, 2026-10-11)
+
+- **S-H-1 (Noah, via Steward):** a small contained pond beside a decorative farm lot on a dry claim: on the lot, never outside the
+  claim or in a protected area, removed with the region. Working farms (water designed for yield, every farmland hydrated) are
+  7b. Built as §7.5; S-H-2 confirms the "on the lot" reading.
+- **N-H-1 (Noah):** survival fluids: placed water sources are free, and each placed lava source costs one lava bucket from the
+  crate (C26 returns the bucket). Containment (M25) applies in both modes. RS uses it; H reports the BOM (§12).
+- **N-HY-1:** S3 v1 has no stream. H changes nothing in S3.
+- **The batch's scope decision:** M25 is accepted as a new rule beyond SETTLEMENTS §11, and the fluid brushes as part of Noah's
+  toolbox. **S-B-1:** one region per brush stroke.
+- **Constraints from K1 and T3 that H's re-answers keep:**
+  - S-T3-3: `WATER` keeps the arch or rope `wouldFit`;
+  - S-T3-7: `connector.tube` stays UW, and the drawbridge stays `connector.drawbridge`;
+  - S-K1-6: a pending part newly refused is a repair, never a build stop;
+  - S-K1-3: lenient params with unread keys listed;
+  - S-T3-6: `load: "generate"` and `ARTIFACT_STALE` for volumes.
+
+### Open questions for Steward
+
+- **S-H-2. The farm pond's place.** A region never writes inside a lot's restore box (K5), so "on the lot" is built as a 3x3 pond
+  in the lot's yard, within 2 of its rect and outside its box. Is that what you meant? It is on by default in plan/0 on dry claims
+  only, which moves those plans' IRs. It also brings every fluid cost to such a plan: the two-plan check with volume reads (so
+  `incomplete VOLUME` over ungenerated chunks unless you check with `load: "generate"`), the `fluids` stage, and the settle
+  wait before `PLACED`. Or should it be an explicit zone member (`farmPond: true`, default off)?
+- **S-H-3. The moat is H's, as `channel.moat`.** `connector.channel` turns supported with one form: a level ring written
+  `where.around`, like your recorded moat. Your `width` and `depth` params are read. A `from`/`to` channel answers
+  `unsupported {channel.course, until: HY}`. Routes cross a moat on T3's bridge fallback and land at the wall's gate. Is this
+  split, and the `channel.*` ids, what you want?
+- **S-H-4. The wet fallback.** Wet piers and harbour walls are tried only where the dry search fails on water, so every plan that
+  fits today stays byte-identical. T3's `WATER (until H)` refusals then answer `fits` (a beam on wet piers), or `WATER` with
+  `kind: deep | flowing | lava` and no `until`, keeping the arch or rope `wouldFit`. Or would you rather wet piers be an ordinary
+  option everywhere, re-routing some plans that fit today?
+- **S-H-5. Planned water and `feature.water`.** `feature.water` keeps reading the surveyed world only. A plan's own pond is reached
+  as `{feature: {part: <pond id>}}`, and M24 counts plan-written unfrozen water. Should `feature.water` also match bodies the same
+  plan makes (order-dependent: a part after the pond could then sit "near water")?
+- **S-H-6. Realise behaviour.** These are new:
+  - `PLACED` waits for the water to settle (seconds; `2 × settleTicks` at most);
+  - the fluids stage waits on players (`PLAYER_IN_BOX`) and mobs (`OCCUPIED`) in a body's box, so you'll see `ITEM_WAITING` there;
+  - a body that fails its containment check or escapes is drained, and the region ends `PARTIAL` naming it;
+  - `ARTIFACT_STALE` fires when the water under a wet write or beside a body changed since the check.
+
+  Is that acceptable for your Start flow? Should PARTIAL for a drained body be a distinct status? Because these touch removal and
+  `PLACED`, H takes your RC check before its release (GATES policy 4).
+- **S-H-7. The recorded waterfall.** H can't adopt a waterfall already in the world: the survey can't tell a falling column from a
+  pond. So `lip: auto` uses a natural drop when one fits, else sculpts an outcrop, and the hollow behind the curtain is not built
+  (7b). Your hidden village then gets a built fall beside its lake. Fine, or should the part keep waiting until the hollow can be
+  built?
+- **S-H-8. New ids, codes and shapes.**
+  - **Ids:** `form.fountain`, `form.quay`, `channel.moat`, `channel.course`.
+  - **Codes:** `LEAK` and `FIRE` (your parser passes unknown codes, S-K1-7).
+  - **New `WATER` evidence kinds:** `deep`, `flowing`, `lava`, `freezes`, `level`.
+  - **Wire shapes:** `siteplan` `waters` and `quays`; a wall's `crossing {type: wall, over: water, depth}`; `piers[].wet`; the
+    realise report's `fluids`.
+
+  Enough for your card and history?
+
+### Open questions for Noah
+
+- **N-H-2. How water looks.** Proposed:
+  - ponds with a natural edge by default (a clay and mud bed, the bank in the bible's surface, plants in the shallows);
+  - built pools, fountains and moats in `structure` with a `trim` coping;
+  - waterfalls 3 wide;
+  - quays in `path` with fence mooring posts and lamps every 12 or closer.
+
+  The look step shows them in three bibles.
+- **N-H-3. Lava.** Proposed: in H, but only as lined pits 1-2 deep in `form.pond`. That means no lava falls, fountains, moats or
+  brushes; no lava within 2 of water; and fire-safe by M20 at the probed reach. The alternative is no lava in H at all (a later
+  slice), which removes M20 and item 13.
+- **N-H-4. Water in freezing biomes.** Proposed: the plan caps open water with ice in biomes where it would freeze anyway, so the
+  undo stays exact and the look matches nature. `ice: false` keeps it open only where it is roofed or lit. The alternative is open
+  water that freezes on its own, which takes the §4.3 "still ours" rule and a looser look.
+- **N-H-5. Bridges over the plan's own water.** Proposed: clearance 1 over moats and ponds (no boats there), so moat bridges sit
+  one step over the road. Natural water keeps T3's 2 (N-T3-2).
+- **N-H-6. The fluid brushes.** Proposed: build them as H-c in the same batch only if they're ready when H-a and H-b are, else in
+  the next toolbox batch. They are Noah's toolbox items, and no Steward part needs them.
+- **N-H-7. The split.** Proposed: H-core first, then H-a and H-b in parallel, released as one batch. The alternative is serial,
+  H-b before H-a.
+
+### Coordinator decisions (2026-10-18, on Noah's behalf; Noah can overrule at the look step)
+
+- **N-H-2, the look:** as proposed. Natural-edged ponds; built pools in `structure` with a `trim` coping; waterfalls 3 wide;
+  quays in `path` with lamps.
+- **N-H-3, lava:** pits only, as proposed: lined, 1-2 deep, at least 2 from any water, and the M20 fire reach probed in game
+  before its number is fixed. N-H-1's bucket cost stands.
+- **N-H-4, freezing biomes:** cap open water with ice, consistent with W.
+- **N-H-5, bridges over the plan's own water:** clearance 1, since a boat passes under 1 in 26.3 (T3a's finding). Natural water
+  keeps T3's 2.
+- **N-H-6, fluid brushes:** not in this batch. H-c moves to the next toolbox batch, to keep H's scope.
+- **N-H-7, the split:** H-core first on `h/core`, then H-a and H-b in parallel against §15's frozen interface, released as one
+  batch with Steward's RC check (GATES policy 4).
+
+### Deferred
+
+- **Flowing water:**
+  - written flowing states and flowing rivers;
+  - `channel.course` and the hydrology pass (HY);
+  - M16 flood behaviour beyond the single breach (7a).
+- **Building in and over water:**
+  - lots over water, stilt lots and docks as site lots (7b);
+  - working farms with designed irrigation (7b);
+  - a hollow behind a waterfall (7b);
+  - underwater tubes (UW) and seabed sites;
+  - bubble-column lifts (7a).
+- **Lava** falls, channels and moats.
+- **Adopting** a natural waterfall or spring.
+- **Building** H's parts in survival (RS).
+- **The route lamps' melt** (T2's defect): it stays queued. Its fix needs snow in the survey (a free ARSV bit), and M17 extended to
+  route lamps. That moves S2's survey and route lamps, so it gets its own small slice with the re-pins.
