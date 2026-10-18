@@ -1,0 +1,47 @@
+{
+  "about": "(6c H-a, §10) a moat round a 700x700 protected estate on an 800x800 claim: its frozen volume is past the per-part cap (4,000,000 cells): incomplete VOLUME",
+  "terrain": {
+    "W": 800,
+    "D": 800,
+    "x0": 0,
+    "z0": 0
+  },
+  "protected": [
+    {
+      "id": "estate",
+      "rect": [
+        50,
+        50,
+        749,
+        749
+      ]
+    }
+  ],
+  "volume": {},
+  "expect": {
+    "part": "moat",
+    "class": "incomplete",
+    "code": "VOLUME"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "ha_r07",
+    "connectors": [
+      {
+        "id": "moat",
+        "kind": "channel",
+        "where": {
+          "around": {
+            "feature": {
+              "protected": "estate"
+            },
+            "ring": [
+              6,
+              12
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

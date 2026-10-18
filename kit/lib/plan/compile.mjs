@@ -730,7 +730,10 @@ function checkpoint(r) {
 function rollback(r, c) {
   r.parts.length = c.parts; r.partIds = c.partIds; r.lots.length = c.lots; r.lotIds = c.lotIds; r.roads.length = c.roads; r.roadIds = c.roadIds;
   r.paths.length = c.paths; r.graph.nodes.length = c.nodes; r.graph.edges.length = c.edges; r.graphIds = c.graphIds; r.forms.length = c.forms; r.opCount = c.opCount;
-  r.notes.length = c.notes; r.passRuns.length = c.passRuns; r.blendLots.length = c.blend; r.reliefLots = c.relief; r.fields = c.fields; r.sideBlobs = c.sideBlobs;
+  // ((6c H-a) a frozen volume read under the checkpoint stays read: r.volumesUsed keeps it, so its side blob stays with it (else the IR
+  // would name a volume blob it does not hold, and a retry asking the same box would plan without the volume))
+  const volBlobs = Object.fromEntries(Object.values(r.volumesUsed ?? {}).map((u) => [u.blob, r.sideBlobs[u.blob]]).filter(([, b]) => b));
+  r.notes.length = c.notes; r.passRuns.length = c.passRuns; r.blendLots.length = c.blend; r.reliefLots = c.relief; r.fields = c.fields; r.sideBlobs = { ...c.sideBlobs, ...volBlobs };
   const m = JSON.parse(c.meta);
   r.meta.paths = m.paths; r.meta.lots = m.lots; r.meta.parts = m.parts;
   for (const k of ['route', 'gravity', 'forms', 'village', 'villageZones', 'walls', 'ropes', 'bridges', 'tunnels']) { if (m[k] === null) delete r.meta[k]; else r.meta[k] = m[k]; }
@@ -1123,7 +1126,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     } catch (e) {
       rollback(r, cp);
       const m = /^([A-Z_]{3,20}): /.exec(String(e.message));
-      ans(p, { class: 'refused', reasons: [{ code: m ? m[1] : 'NO_ROOM', message: String(e.message) }] });
+      // ((H-a) a generator's refusal may carry its evidence and a wouldFit on the error)
+      ans(p, { class: 'refused', reasons: [{ code: m ? m[1] : 'NO_ROOM', message: String(e.message), ...(e.evidence ? { evidence: e.evidence } : {}) }], ...(e.wouldFit ? { wouldFit: e.wouldFit } : {}) });
       geom.delete(p.id);
     }
   }

@@ -25,7 +25,7 @@
 import { VC, classAt } from '../region/volume.mjs';
 import { FLAG_FROZEN, FLAG_LAVA, FLAG_TREE, FLAG_WATER } from '../region/pack.mjs';
 import { bodiesMark, bodiesRollback, flagsAt, fluidRolesOf, grow, inside, intIn, linesBody, locatorOf, locatorRefusal, meets, protectedMet, reachMeetsKeep,
-  readParams, rectArr, scanRects, shellBlock, sketchPoint, spawnAvoid, takenRects, volumeAnswer, volumeKeep, MARGIN } from './place.mjs';
+  readParams, rectArr, scanRects, shellBlock, sketchPoint, spawnAvoid, takenRects, volumeAnswer, volumeKeep, MARGIN, refusal, leakRefusal } from './place.mjs';
 import { bodyAnswer, bodyId, emitPond, iceFor, naturalOf, shellStatesOf } from './pond.mjs';
 
 export const WATERFALL = Object.freeze({ width: 3, drop: 6, pool: 3, sculpt: 12, basinRows: 4, basinDepth: 2, maxRough: 1 });
@@ -313,7 +313,7 @@ export function emit(K, p, res) {
       const surf = [];
       for (let rr = 1; rr <= WATERFALL.basinRows; rr++) for (let l = -1; l <= sp.width; l++) { const [x, z] = F.col(rr, l); surf.push([x, res.site.Lb, z]); }
       const dec = iceFor(K.ctx, surf, p.part.ice);
-      if (dec.refuse) throw new Error(`${dec.refuse.code}: ${dec.refuse.message}`);
+      if (dec.refuse) throw refusal(dec.refuse.code, dec.refuse.message, dec.refuse.evidence);
       const under = new Set(); for (let l = 0; l < sp.width; l++) { const [x, z] = F.col(1, l); under.add(`${x},${z}`); }
       basinIce = dec.ice ? dec.ice.filter(([x, , z]) => !under.has(`${x},${z}`)) : null;
       notes.push(...dec.notes);
@@ -322,7 +322,7 @@ export function emit(K, p, res) {
     const vk = volumeKeep(r, VC, classAt);
     for (const b of out.bodies) {
       const hit = reachMeetsKeep(r, env, b, { volClass: vk });
-      if (hit) throw new Error(`LEAK: body ${b.id}'s shell, spill or single-breach reach meets ${hit.reasons.join(', ')} at ${hit.cells.slice(0, 4).map((q) => q.join(' ')).join('; ')}`);
+      if (hit) throw leakRefusal(b, hit);
     }
     res.emitted = { bodies: out.bodies, notes };
   } catch (e) {

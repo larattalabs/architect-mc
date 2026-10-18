@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { planRegion, fillMissing } from '../lib/region/plan.mjs';
-import { asColumns, encodeColumns, makeColumns, FLAG_WATER } from '../lib/region/pack.mjs';
+import { asColumns, encodeColumns, makeColumns, FLAG_WATER, FLAG_TREE } from '../lib/region/pack.mjs';
 import { finishCheck } from '../lib/plan/finish.mjs';
 
 export const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -61,7 +61,7 @@ export async function checkPlanLocal(plan, { survey, claim, anchors = {}, protec
  * (7a K1b) A flat claim for the rope fixtures (rift_city's claim range): 240x160 at ground 64, from (1000, 2000); `bands` carve or
  * raise rects `{x0, z0, x1, z1, y, water?}` (ground y; water: a water column from its floor y to y + depth).
  */
-export function flatSurvey({ W = 240, D = 160, x0 = 1000, z0 = 2000, y = 64, bands = [] } = {}) {
+export function flatSurvey({ W = 240, D = 160, x0 = 1000, z0 = 2000, y = 64, bands = [], trees = [] } = {}) {
   const c = makeColumns(x0, z0, W, D, 1);
   for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) {
     const k = i + j * W, x = x0 + i, z = z0 + j;
@@ -69,6 +69,8 @@ export function flatSurvey({ W = 240, D = 160, x0 = 1000, z0 = 2000, y = 64, ban
     for (const b of bands) if (x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1) { if (b.water) { f = b.y; g = b.y + b.water; flag = FLAG_WATER; } else { g = b.y; f = b.y; flag = 0; } }
     c.ground[k] = g; c.height[k] = g; c.floor[k] = f; c.flags[k] = flag;
   }
+  // (6c H-a) trees: [[x, z, height]] trunk columns (FLAG_TREE, the column's top `height` over the ground)
+  for (const [x, z, h] of trees) { const k = (x - x0) + (z - z0) * W; if (k >= 0 && k < W * D) { c.flags[k] |= FLAG_TREE; c.height[k] = c.ground[k] + h; } }
   return { bytes: encodeColumns(c), claim: { minX: x0, minZ: z0, maxX: x0 + W - 1, maxZ: z0 + D - 1, minY: -64, maxY: 319 } };
 }
 

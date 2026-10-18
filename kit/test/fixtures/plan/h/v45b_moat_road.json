@@ -1,0 +1,94 @@
+{
+  "about": "(6c H-a, §7.4, N-H-5) v45 with v30's road from claim_e: it fails ROUTE_WATER at the moat, takes T3's street fallback (adjusted, a crossing deviation) and crosses on a bridge clear 1 over the plan's water, landing at the wall's auto gate",
+  "on": "flat",
+  "volume": {},
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "ha_v45b",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "h1",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h2",
+                "type": "cottage",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "town_wall",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            },
+            "ring": [
+              4,
+              8
+            ]
+          }
+        },
+        "height": 6
+      },
+      {
+        "id": "moat",
+        "kind": "channel",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            },
+            "ring": [
+              6,
+              16
+            ]
+          }
+        }
+      },
+      {
+        "id": "in",
+        "kind": "road",
+        "from": {
+          "anchor": "claim_e"
+        },
+        "to": {
+          "part": "town"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "part": "in",
+    "class": "adjusted",
+    "crossing": true,
+    "clearance": 1
+  }
+}

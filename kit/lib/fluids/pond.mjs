@@ -27,7 +27,7 @@ import { F_WRITTEN } from '../region/vworld.mjs';
 import {
   PRESET_SIZES, arrRect, bodiesMark, bodiesRollback, bodyBom, centre, flagsAt, fluidRolesOf, gap, grow, intIn, inside, linesBody, locatorOf,
   locatorRefusal, meets, protectedMet, reachMeetsKeep, readParams, rectArr, rectOf, rectSurvey, scanRects, shellBlock, sketchPoint, surfaceFreezes,
-  takenRects, volumeAnswer, volumeKeep, waterInClaim, MARGIN, freezesAt, spawnAvoid,
+  takenRects, volumeAnswer, volumeKeep, waterInClaim, MARGIN, freezesAt, spawnAvoid, refusal, leakRefusal,
 } from './place.mjs';
 
 const k2 = (x, z) => `${x},${z}`;
@@ -243,12 +243,12 @@ export function resolve(C, p) {
   if (!c) {
     // why: the water (a body meeting natural water at another level), a protected area or build, the fire reach, else no room
     const anyRect = scanWith({ ok: () => true, keep: 0, obstacles: [] })[0] ?? null;
-    if (anyRect && waterOk(anyRect.rect) !== true && !scanWith({ ok: (a) => (lava ? lavaSiteOk(env, a) : true) })[0]) {
+    if (anyRect && waterOk(anyRect.rect) !== true && scanWith({ ok: (a) => (lava ? lavaSiteOk(env, a) : true), keep: 2 })[0]) {
       const st = rectSurvey(env, grow(anyRect.rect, 2));
       return { klass: 'refused', notes: sp.notes, reasons: [{ code: 'WATER', message: `every place for the ${lava ? 'pit' : 'pond'} within its locator meets natural water at another level (a body is never joined to natural water)`, evidence: { kind: 'level', at: rectArr(anyRect.rect), water: st.water } }] };
     }
     if (lava) {
-      const noFire = scanWith({ ok: waterOk })[0];
+      const noFire = scanWith({ ok: waterOk, keep: 2 })[0];
       if (noFire) {
         const why = lavaSiteOk(env, noFire.rect);
         const water = resolve(C, { ...p, part: { ...part, fluid: 'water', depth: Math.min(part.depth ?? 2, 2) } });
@@ -256,7 +256,7 @@ export function resolve(C, p) {
         return { klass: 'refused', notes: sp.notes, wouldFit: wf, reasons: [{ code: 'FIRE', message: `every place for the lava pit within its locator has ${why === 'tree' ? 'a tree' : 'a protected area or build'} within its fire reach (M20: ${FIRE_REACH.side} sideways, ${FIRE_REACH.below} below to ${FIRE_REACH.above} above, plus a tree's leaves)`, evidence: { kind: why, at: rectArr(noFire.rect), reach: FIRE_REACH } }] };
       }
     }
-    const raw = scanRects(env, sp.w, sp.d, { ...loc, valid: loc.valid }, { sketch: sk, maxMove: tMove.ceiling, keep: 0, limit: 1, ok: () => true });
+    const raw = scanRects(env, sp.w, sp.d, loc, { sketch: sk, maxMove: tMove.ceiling, keep: 0, limit: 1, ok: () => true, hard: false });
     const met = raw[0] ? protectedMet(env, grow(raw[0].rect, keep)) : null;
     if (met) return { klass: 'refused', notes: sp.notes, reasons: [{ code: 'PROTECTED', message: `the ${lava ? 'pit' : 'pond'}'s shell and its clear cell would meet ${met.kind}${met.id ? ` ${met.id}` : ''} (nothing is written or flooded there)`, evidence: { ...met, at: rectArr(raw[0].rect) } }] };
     return { klass: 'refused', notes: sp.notes, reasons: [{ code: obstacles.length ? 'OVERLAP' : 'NO_ROOM', message: `no ${sp.w}x${sp.d} place for the ${lava ? 'pit' : 'pond'} within its locator, clear of the zones, forms, keep-out and natural water`, evidence: { size: [sp.w, sp.d], obstacles: obstacles.length } }] };
@@ -297,7 +297,7 @@ export function emit(K, p, res) {
     const notes = [];
     if (sp.fluid === 'water') {
       const dec = iceFor(K.ctx, surfaceOf(r, res.water, shape), p.part.ice);
-      if (dec.refuse) throw Object.assign(new Error(`${dec.refuse.code}: ${dec.refuse.message}`), { evidence: dec.refuse.evidence });
+      if (dec.refuse) throw refusal(dec.refuse.code, dec.refuse.message, dec.refuse.evidence);
       ice = dec.ice; notes.push(...dec.notes);
     }
     const rec = emitPond(r, { id: bodyId(p.id), part: p.id, kind: 'pond', rect: res.water, shape, depth: sp.depth, edge: sp.edge, fluid: sp.fluid, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice });
@@ -313,7 +313,7 @@ export function emit(K, p, res) {
 /** A body's reach (its cells, shell, spill and single breach) meeting a lot, a build, a protected area, keep-out or another owner: LEAK. */
 export function leakCheck(r, env, rec) {
   const hit = reachMeetsKeep(r, env, rec, { volClass: volumeKeep(r, VC, classAt) });
-  if (hit) throw new Error(`LEAK: body ${rec.id}'s shell, spill or single-breach reach meets ${hit.reasons.join(', ')} at ${hit.cells.slice(0, 4).map((q) => q.join(' ')).join('; ')}`);
+  if (hit) throw leakRefusal(rec, hit);
 }
 
 /** Lava within 2 of any water (M25:mix): the plan's earlier bodies. */
@@ -321,7 +321,7 @@ function mixCheck(r, rec) {
   const lava = rec.cells;
   for (const b of r._fluidBodies ?? []) {
     if (b === rec || b.fluid !== 'water') continue;
-    for (const w of [...b.cells, ...b.spill]) for (const q of lava) if (Math.max(Math.abs(w[0] - q[0]), Math.abs(w[1] - q[1]), Math.abs(w[2] - q[2])) <= 2) throw new Error(`LEAK: lava pit ${rec.id} within 2 of ${b.id}'s water at ${w.join(' ')} (M25:mix)`);
+    for (const w of [...b.cells, ...b.spill]) for (const q of lava) if (Math.max(Math.abs(w[0] - q[0]), Math.abs(w[1] - q[1]), Math.abs(w[2] - q[2])) <= 2) throw refusal('LEAK', `lava pit ${rec.id} within 2 of ${b.id}'s water at ${w.join(' ')} (M25:mix)`, { kind: 'mix', body: rec.id, water: b.id, at: w });
   }
 }
 

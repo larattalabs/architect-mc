@@ -1,0 +1,64 @@
+{
+  "about": "(6c H-a, §2.5) a raised fountain over a cave that runs under a protected area: the single breach of its floor floods the cave to the area: refused LEAK (a thicker coping cannot help a floor)",
+  "on": "flat",
+  "protected": [
+    {
+      "id": "grove",
+      "rect": [
+        1118,
+        2060,
+        1128,
+        2070
+      ]
+    }
+  ],
+  "volume": {
+    "edits": [
+      {
+        "box": [
+          1104,
+          58,
+          2062,
+          1132,
+          63,
+          2068
+        ],
+        "class": "AIR"
+      }
+    ]
+  },
+  "expect": {
+    "part": "fount",
+    "code": "LEAK"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "ha_r01",
+    "forms": [
+      {
+        "id": "fount",
+        "kind": "fountain",
+        "basin": 5,
+        "where": {
+          "near": {
+            "anchor": "cave",
+            "within": 0
+          }
+        },
+        "tolerance": {
+          "move": {
+            "max": 0,
+            "hard": true
+          }
+        }
+      }
+    ]
+  },
+  "anchors": {
+    "cave": [
+      1110,
+      65,
+      2065
+    ]
+  }
+}

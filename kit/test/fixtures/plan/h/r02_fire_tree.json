@@ -1,0 +1,60 @@
+{
+  "about": "(6c H-a, M20, §1.4) a lava pit asked right beside a protected grove (its trees): every place within its locator has the grove inside its fire reach: refused FIRE with a water pond as the wouldFit",
+  "on": "flat",
+  "terrain": {
+    "trees": [
+      [
+        1124,
+        2079,
+        6
+      ],
+      [
+        1126,
+        2081,
+        6
+      ]
+    ]
+  },
+  "protected": [
+    {
+      "id": "grove",
+      "rect": [
+        1122,
+        2077,
+        1128,
+        2083
+      ]
+    }
+  ],
+  "volume": {},
+  "expect": {
+    "part": "pit",
+    "code": "FIRE",
+    "wouldFit": "pond"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "ha_r02",
+    "forms": [
+      {
+        "id": "pit",
+        "kind": "pond",
+        "fluid": "lava",
+        "where": {
+          "near": {
+            "feature": {
+              "protected": "grove"
+            },
+            "within": 5
+          }
+        },
+        "tolerance": {
+          "move": {
+            "max": 0,
+            "hard": true
+          }
+        }
+      }
+    ]
+  }
+}

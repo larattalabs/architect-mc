@@ -20,11 +20,12 @@
 // every body's water (passInput), streets, roads and paths crossing it take T3's bridge fallback (clearance 1 over plan water, N-H-5)
 // and land at the wall's gate. Plan water stays an obstacle to walls and wet piers (§8): a pier never stands in it.
 import { VC, classAt } from '../region/volume.mjs';
+import { VOLUME_CAP } from './body.mjs';
 import { WALL_DEFAULTS } from '../connectors/wall.mjs';
 import { FLAG_WATER } from '../region/pack.mjs';
 import { channelForm } from '../plan/schema.mjs';
 import { bodiesMark, bodiesRollback, centre, featureOf, fluidRolesOf, grow, inside, intIn, linesBody, meets, protectedMet, reachMeetsKeep, readParams, rectArr,
-  rectSurvey, shellBlock, takenRects, volumeAnswer, volumeKeep, MARGIN, flagsAt } from './place.mjs';
+  rectSurvey, shellBlock, takenRects, volumeAnswer, volumeKeep, MARGIN, flagsAt, refusal, leakRefusal } from './place.mjs';
 import { bodyAnswer, bodyId, iceFor, naturalOf, shellStatesOf } from './pond.mjs';
 
 export const MOAT = Object.freeze({ width: 5, depth: 3, ring: [6, 12], berm: 5 });
@@ -198,11 +199,16 @@ export function emit(K, p, res) {
     const S = r.ctx.survey;
     const { water, all } = ringColumns(res.T, res.ring, sp.width, res.omit);
     const level = Math.min(...all.map(([x, z]) => S.groundAt(x, z))) - 1;
+    // (§10) past the per-part volume cap the moat answers incomplete VOLUME before anything is written (its box: the cells and the
+    // shell, grown by 2: r.fluidBody's for a sunk body)
+    const R = res.ring + sp.width + 1 + 2;
+    const vcells = (res.T.maxX - res.T.minX + 1 + 2 * R) * (res.T.maxZ - res.T.minZ + 1 + 2 * R) * (sp.depth + 2 + 4);
+    if (vcells > VOLUME_CAP) { res.capped = { cells: vcells }; return; }
     const dec = iceFor(K.ctx, water.map(([x, z]) => [x, level, z]), p.part.ice);
-    if (dec.refuse) throw new Error(`${dec.refuse.code}: ${dec.refuse.message}`);
+    if (dec.refuse) throw refusal(dec.refuse.code, dec.refuse.message, dec.refuse.evidence);
     const rec = emitMoat(r, { id: bodyId(p.id), part: p.id, T: res.T, ring: res.ring, width: sp.width, depth: sp.depth, omit: res.omit, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice: dec.ice });
     const hit = reachMeetsKeep(r, env, rec, { volClass: volumeKeep(r, VC, classAt) });
-    if (hit) throw new Error(`LEAK: the moat's shell, spill or single-breach reach meets ${hit.reasons.join(', ')} at ${hit.cells.slice(0, 4).map((q) => q.join(' ')).join('; ')}`);
+    if (hit) throw leakRefusal(rec, hit);
     res.emitted = { bodies: [rec], notes: dec.notes };
   } catch (e) {
     bodiesRollback(r, m);
@@ -212,6 +218,7 @@ export function emit(K, p, res) {
 
 /** The answer's fields. */
 export function answer(K, p, res) {
+  if (res.capped) return { class: 'incomplete', reasons: [{ code: 'VOLUME', message: `the moat's frozen volume is ${res.capped.cells} cells, past the per-part cap (${VOLUME_CAP})`, evidence: { cells: res.capped.cells, cap: 'partCells', limit: VOLUME_CAP } }] };
   const e = res.emitted;
   if (!e) return null;
   const vol = volumeAnswer(K.r, e.bodies);

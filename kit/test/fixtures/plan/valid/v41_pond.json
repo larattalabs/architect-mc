@@ -1,0 +1,29 @@
+{
+  "about": "(6c H-a, §7.1) a natural-edged pond (11x9, 3 deep at its centre) near the claim's centre on a flat claim: sunk 1 under its banks, a clay bed and a moss rim (each shell cell unlike the ground it replaces)",
+  "on": "flat",
+  "volume": {},
+  "covers": [
+    "form.pond"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "ha_v41",
+    "forms": [
+      {
+        "id": "pond",
+        "kind": "pond",
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 16
+          }
+        },
+        "size": {
+          "w": 11,
+          "d": 9
+        },
+        "depth": 3
+      }
+    ]
+  }
+}

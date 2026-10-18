@@ -1,0 +1,45 @@
+{
+  "about": "(6c H-a, §5 WATER level) a pond asked within 0 of the lake (its surface 1 under the bank, the lake's at the bank): every place meets natural water at another level: refused WATER {kind: level}",
+  "terrain": {
+    "bands": [
+      {
+        "x0": 1150,
+        "z0": 2050,
+        "x1": 1189,
+        "z1": 2089,
+        "y": 60,
+        "water": 4
+      }
+    ]
+  },
+  "volume": {},
+  "expect": {
+    "part": "pond",
+    "code": "WATER",
+    "kind": "level"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "ha_r04",
+    "forms": [
+      {
+        "id": "pond",
+        "kind": "pond",
+        "where": {
+          "near": {
+            "feature": {
+              "water": {}
+            },
+            "within": 0
+          }
+        },
+        "tolerance": {
+          "move": {
+            "max": 0,
+            "hard": true
+          }
+        }
+      }
+    ]
+  }
+}

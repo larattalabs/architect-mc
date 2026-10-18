@@ -1,0 +1,26 @@
+{
+  "about": "(6c H, R21) a channel from/to (a course with reaches): unsupported {channel.course, until: HY}",
+  "on": "flat",
+  "expect": {
+    "part": "canal",
+    "class": "unsupported",
+    "block": "channel.course",
+    "until": "HY"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "ha_r08",
+    "connectors": [
+      {
+        "id": "canal",
+        "kind": "channel",
+        "from": {
+          "anchor": "street_w"
+        },
+        "to": {
+          "anchor": "street_e"
+        }
+      }
+    ]
+  }
+}

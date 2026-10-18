@@ -1,0 +1,82 @@
+{
+  "about": "(6c H-a, §7.4) v30's walled village on a flat claim ringed by a moat (width 5, depth 3): the ring starts outside the wall's ring, its thickness and a berm (the crossing roads are fixtures/plan/h/v45b, adjusted by T3's fallback)",
+  "on": "flat",
+  "volume": {},
+  "covers": [
+    "connector.channel",
+    "channel.moat"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "ha_v45",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "h1",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h2",
+                "type": "cottage",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "town_wall",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            },
+            "ring": [
+              4,
+              8
+            ]
+          }
+        },
+        "height": 6
+      },
+      {
+        "id": "moat",
+        "kind": "channel",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            },
+            "ring": [
+              6,
+              16
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "about": "(6c H-a, §7.5, S-H-2) a plan/0 village with two farms on a dry flat claim, farmPond: true on its zone: each farm lot gets a 3x3 pond outside its box (its rim 2 clear of it)",
+  "on": "flat",
+  "volume": {},
+  "covers": [],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "ha_v49",
+    "zones": [
+      {
+        "id": "farms",
+        "farmPond": true,
+        "program": {
+          "lots": [
+            {
+              "id": "f1",
+              "type": "farm",
+              "size": [
+                13,
+                11
+              ],
+              "villager": "farm"
+            },
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "f2",
+              "type": "farm",
+              "size": [
+                11,
+                11
+              ],
+              "villager": "farm"
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

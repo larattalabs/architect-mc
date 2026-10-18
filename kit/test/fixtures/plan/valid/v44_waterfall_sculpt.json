@@ -1,0 +1,40 @@
+{
+  "about": "(6c H-a, §7.3) a flat claim beside a synthetic lake (40x40, its bed at 60, 4 deep): lip sculpt raises an outcrop on the shore and the 3-wide fall joins the lake (basin auto)",
+  "terrain": {
+    "bands": [
+      {
+        "x0": 1150,
+        "z0": 2050,
+        "x1": 1189,
+        "z1": 2089,
+        "y": 60,
+        "water": 4
+      }
+    ]
+  },
+  "volume": {},
+  "covers": [
+    "form.waterfall"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "ha_v44",
+    "forms": [
+      {
+        "id": "falls",
+        "kind": "waterfall",
+        "drop": 6,
+        "width": 3,
+        "lip": "sculpt",
+        "where": {
+          "near": {
+            "feature": {
+              "water": {}
+            },
+            "within": 8
+          }
+        }
+      }
+    ]
+  }
+}

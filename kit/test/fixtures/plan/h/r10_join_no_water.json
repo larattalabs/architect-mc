@@ -1,0 +1,20 @@
+{
+  "about": "(6c H-a, §7.3) a waterfall asked to join natural water on a dry claim: refused NO_FEATURE",
+  "on": "flat",
+  "volume": {},
+  "expect": {
+    "part": "falls",
+    "code": "NO_FEATURE"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "ha_r10",
+    "forms": [
+      {
+        "id": "falls",
+        "kind": "waterfall",
+        "basin": "join"
+      }
+    ]
+  }
+}

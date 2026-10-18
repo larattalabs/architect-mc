@@ -17,7 +17,7 @@
 // floor under it written) and tries again; failing that, LEAK.
 import { VC, classAt } from '../region/volume.mjs';
 import { bodiesMark, bodiesRollback, centre, fluidRolesOf, grow, intIn, linesBody, locatorOf, locatorRefusal, protectedMet, reachMeetsKeep, readParams, rectArr,
-  rectOf, rectSurvey, scanRects, shellBlock, sketchPoint, spawnAvoid, takenRects, volumeAnswer, volumeKeep } from './place.mjs';
+  rectOf, rectSurvey, scanRects, shellBlock, sketchPoint, spawnAvoid, takenRects, volumeAnswer, volumeKeep, refusal, leakRefusal } from './place.mjs';
 import { bodyAnswer, bodyId, iceFor, naturalOf, shellStatesOf } from './pond.mjs';
 
 const k3 = (x, y, z) => `${x},${y},${z}`;
@@ -52,7 +52,7 @@ export function resolve(C, p) {
   const scan = (o) => scanRects(env, S, S, loc, { sketch: sk, obstacles: takenRects(C, 1), maxMove: tMove.ceiling, keep: 1, limit: 1, avoid: spawnAvoid(C), ok, ...o })[0];
   const c = scan({});
   if (!c) {
-    const raw = scan({ keep: 0, obstacles: [], ok: () => true });
+    const raw = scan({ keep: 0, obstacles: [], ok: () => true, hard: false });
     const met = raw ? protectedMet(env, grow(raw.rect, 1)) : null;
     if (met) return { klass: 'refused', notes: sp.notes, reasons: [{ code: 'PROTECTED', message: `the fountain would meet ${met.kind}${met.id ? ` ${met.id}` : ''}`, evidence: { ...met, at: rectArr(raw.rect) } }] };
     return { klass: 'refused', notes: sp.notes, reasons: [{ code: 'NO_ROOM', message: `no level, dry ${S}x${S} place for the fountain (its basin ${sp.basin} and a coping up to 2 thick) within its locator`, evidence: { size: [S, S] } }] };
@@ -135,7 +135,7 @@ export function emit(K, p, res) {
   const surface = [];
   for (let x = cx - h; x <= cx + h; x++) for (let z = cz - h; z <= cz + h; z++) if (x !== cx || z !== cz) surface.push([x, f + 1, z]);
   const dec = iceFor(K.ctx, surface, p.part.ice);
-  if (dec.refuse) throw new Error(`${dec.refuse.code}: ${dec.refuse.message}`);
+  if (dec.refuse) throw refusal(dec.refuse.code, dec.refuse.message, dec.refuse.evidence);
   // (the spout's spill lands on the basin: under an ice cap the falling water would meet ice, so a capped fountain keeps the four
   // cells under the spout open)
   const ice = dec.ice ? dec.ice.filter(([x, , z]) => Math.abs(x - cx) + Math.abs(z - cz) !== 1) : null;
@@ -148,7 +148,7 @@ export function emit(K, p, res) {
       const out = emitFountain(r, { id: bodyId(p.id), part: p.id, rect: res.rect, basin: sp.basin, spout: sp.spout, thick, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice });
       for (const rec of [out.basin, out.spout]) {
         const hit = reachMeetsKeep(r, env, rec, { volClass: vk });
-        if (hit) throw Object.assign(new Error(`LEAK: body ${rec.id}'s shell or single-breach reach meets ${hit.reasons.join(', ')} at ${hit.cells.slice(0, 4).map((q) => q.join(' ')).join('; ')}`), { hit });
+        if (hit) throw leakRefusal(rec, hit);
       }
       if (thick === 2) notes.push('the coping is 2 thick: a 1-thick coping\'s single breach would reach what the plan may not flood');
       res.emitted = { bodies: [out.basin, out.spout], notes, thick, floor: out.floor, top: out.top };

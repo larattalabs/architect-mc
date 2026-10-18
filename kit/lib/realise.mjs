@@ -45,7 +45,8 @@ const CLIP_COUNT_MARGIN = 64;
  * and `stamp` are built: none is reserved now. */
 export const OPS_RESERVED = [];
 /** (6b) The members a format-2 IR may have (anything else throws). */
-export const MEMBERS_FORMAT2 = ['anchors', 'blobs', 'blockTags', 'budget', 'claim', 'fields', 'floating', 'format', 'forms', 'graph', 'id', 'keepOut', 'kitVersion', 'lots', 'node', 'params',
+// ((6c H-a) `biomes`: the biome grid's sha a plan records when it reads ctx.biomes (D2), now also in format 2: a body's ice cap reads it)
+export const MEMBERS_FORMAT2 = ['anchors', 'biomes', 'blobs', 'blockTags', 'budget', 'claim', 'fields', 'floating', 'format', 'forms', 'graph', 'id', 'keepOut', 'kitVersion', 'lots', 'node', 'params',
   'parts', 'paths', 'programSha', 'requires', 'roads', 'roles', 'rules', 'seed', 'stages', 'tiles', 'utility', 'volumes'];
 // (6c V) `graph` (the settlement graph, SETTLEMENTS §8.1) and `keepOut` (the protected rects a program honoured) are known
 // members from kit 0.16.0, in format 1 and 2; the evaluator ignores them. An older kit refuses such a plan PLAN_STALE by the

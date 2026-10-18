@@ -177,7 +177,7 @@ export function sketchPoint(env, s) {
  * `limit`. `keep`: the cells around the rect the body's shell, rim and buffer take (the rect grown by `keep` must stay inside the claim
  * less its margin and clear of env.hard and of `obstacles`).
  */
-export function scanRects(env, w, d, loc, { sketch = null, obstacles = [], limit = 16, maxMove = Infinity, keep = 0, ok = () => true, avoid = [] } = {}) {
+export function scanRects(env, w, d, loc, { sketch = null, obstacles = [], limit = 16, maxMove = Infinity, keep = 0, ok = () => true, avoid = [], hard: useHard = true } = {}) {
   const c = grow(env.claim, -MARGIN);
   const area = loc.areaFor ? loc.areaFor(w, d, maxMove) : null;
   const A = area ? { minX: Math.max(c.minX, area.minX), minZ: Math.max(c.minZ, area.minZ), maxX: Math.min(c.maxX, area.maxX), maxZ: Math.min(c.maxZ, area.maxZ) } : c;
@@ -192,7 +192,7 @@ export function scanRects(env, w, d, loc, { sketch = null, obstacles = [], limit
     if (!inside(k, c)) continue;
     if (!loc.valid(a)) continue;
     if (obstacles.some((o) => meets(k, o))) continue;
-    if (hard.some((h) => meets(k, h))) continue;
+    if (useHard && hard.some((h) => meets(k, h))) continue;
     if (avoid.some(([px, pz, pr]) => px >= k.minX - pr && px <= k.maxX + pr && pz >= k.minZ - pr && pz <= k.maxZ + pr)) continue;
     const move = loc.move(a);
     if (move > maxMove) continue;
@@ -442,4 +442,14 @@ export function volumeKeep(r, VC, classAt) {
     }
     return null;
   };
+}
+
+/** A generator's refusal: an Error 'CODE: message' carrying its evidence (and a wouldFit) for compile.mjs's answer. */
+export function refusal(code, message, evidence = {}, wouldFit = null) {
+  return Object.assign(new Error(`${code}: ${message}`), { evidence, ...(wouldFit ? { wouldFit } : {}) });
+}
+
+/** The LEAK refusal of a body whose reach meets what M25:keep forbids (reachMeetsKeep's hit). */
+export function leakRefusal(rec, hit, what = 'shell, spill or single-breach reach') {
+  return refusal('LEAK', `body ${rec.id}'s ${what} meets ${hit.reasons.join(', ')} at ${hit.cells.slice(0, 4).map((q) => q.join(' ')).join('; ')}`, { body: rec.id, meets: hit.reasons, cells: hit.cells });
 }

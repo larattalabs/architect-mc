@@ -1,0 +1,55 @@
+{
+  "about": "(6c H-a, R22) lava asked on a moat (params.fluid): refused FIRE, the water moat as its wouldFit",
+  "on": "flat",
+  "volume": {},
+  "expect": {
+    "part": "moat",
+    "code": "FIRE",
+    "wouldFit": "channel"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "ha_r09",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "moat",
+        "kind": "channel",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            }
+          }
+        },
+        "params": {
+          "fluid": "lava"
+        }
+      }
+    ]
+  }
+}

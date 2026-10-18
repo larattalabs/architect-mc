@@ -1,0 +1,47 @@
+{
+  "about": "(6c H-a, M25:keep) a pond asked against a player's kept build (gap 0): its shell would meet the build: refused PROTECTED",
+  "on": "flat",
+  "volume": {},
+  "builds": [
+    {
+      "id": "build-1",
+      "bounds": [
+        1130,
+        65,
+        2074,
+        1138,
+        72,
+        2084
+      ],
+      "kept": true
+    }
+  ],
+  "expect": {
+    "part": "pond",
+    "code": "PROTECTED"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "ha_r06",
+    "forms": [
+      {
+        "id": "pond",
+        "kind": "pond",
+        "where": {
+          "adjacent": {
+            "to": {
+              "build": "build-1"
+            },
+            "gap": 0
+          }
+        },
+        "tolerance": {
+          "move": {
+            "max": 0,
+            "hard": true
+          }
+        }
+      }
+    ]
+  }
+}
