@@ -314,6 +314,16 @@ async function navBoth(ctx, a, b) {
   return { there: !!ab.canReach, back: !!ba.canReach };
 }
 
+/** Item 9's walk, judged after the removal's control: a pair failing only while the region stands is the body's. */
+async function navJudge(ctx, tag, v) {
+  const control = {};
+  for (const f of v.navFailed ?? []) control[f.body] = await navBoth(ctx, f.a, f.c);
+  const bodyBlocked = (v.navFailed ?? []).filter((f) => control[f.body].there && control[f.body].back).map((f) => f.body);
+  const terrain = (v.navFailed ?? []).filter((f) => !(control[f.body].there && control[f.body].back)).map((f) => f.body);
+  ctx.check(Object.keys(v.nav).length >= 2 && !bodyBlocked.length && !(v.navOther ?? []).length, `item 9 (${tag}, the hard bar): vanilla dev.nav.villager round every body (bank to opposite bank) and over the moat's bridge, both ways (${j(Object.fromEntries(Object.entries(v.nav).map(([k, q]) => [k, [q.there, q.back]])))})${terrain.length ? `; ${terrain.join(', ')}: the same banks unjoined on the restored world too (the land's, recorded)` : ''}`);
+  return { control, bodyBlocked, terrain };
+}
+
 /** Item 9 (bodies): round every body both ways (opposite banks), over the moat's bridge; then the villager stand. */
 async function villagers(ctx, tag, run) {
   const { L, check } = ctx;
@@ -331,11 +341,13 @@ async function villagers(ctx, tag, run) {
       const d = Math.abs(a[0] - c[0]) + Math.abs(a[2] - c[2]), dy = Math.abs(a[1] - c[1]);
       if (dy <= 1 && (!pair || d > pair.d)) pair = { a, c, d };
     }
-    out.nav[b.id] = pair ? await navBoth(ctx, pair.a, pair.c) : { banks: banks.length };
+    out.nav[b.id] = pair ? { ...(await navBoth(ctx, pair.a, pair.c)), a: pair.a, c: pair.c } : { banks: banks.length };
   }
   for (const q of R.meta.bridges ?? []) out.nav[`bridge_${q.id}`] = await navBoth(ctx, [q.from[0], q.from[1] + 1, q.from[2]], [q.to[0], q.to[1] + 1, q.to[2]]);
-  const navOk = Object.values(out.nav).every((v) => v.there && v.back);
-  check(Object.keys(out.nav).length >= 2 && navOk, `item 9 (${tag}, the hard bar): vanilla dev.nav.villager round every body (bank to opposite bank) and over the moat's bridge, both ways (${j(Object.fromEntries(Object.entries(out.nav).map(([k, v]) => [k, [v.there, v.back]])))})`);
+  // (a pair that fails is walked again once the region is removed (the caller's control, `navControl`): failing on the restored world too,
+  // it is the land's (a cliff), not the body's, and is recorded as such)
+  out.navFailed = Object.entries(out.nav).filter(([, v]) => v.a && !(v.there && v.back)).map(([k, v]) => ({ body: k, a: v.a, c: v.c }));
+  out.navOther = Object.entries(out.nav).filter(([, v]) => !v.a && !(v.there && v.back)).map(([k]) => k);
   // the stand: 4 villagers by each water body's edge, 1 in its surface's centre; 2 minutes at default rules
   await L.setRules('default');
   await L.cmd('/gamerule spawn_monsters false');
@@ -409,6 +421,8 @@ async function haFlat(ctx) {
   await L.cmd('/gamerule random_tick_speed 3');
   out.villagers = await villagers(ctx, 'flat', run);
   await L.call('dev.region.remove', { region: run.realise.region, requester: OWNER }, 4 * 3_600_000).catch(() => null);
+  await L.settle(10_000);
+  out.navJudge = await navJudge(ctx, 'flat', out.villagers);
   return out;
 }
 
@@ -436,6 +450,8 @@ async function haNatural(ctx) {
   check(Object.values(out.bodies).every((c) => c.ok), `item 2 (natural): every body's census equals its prediction (${json(Object.fromEntries(Object.entries(out.bodies).map(([k, c]) => [k, c.ok ? true : { m: c.mismatch, x: c.outside }])))})`);
   out.villagers = await villagers(ctx, 'natural', run);
   await L.call('dev.region.remove', { region: run.realise.region, requester: OWNER }, 4 * 3_600_000).catch(() => null);
+  await L.settle(10_000);
+  out.navJudge = await navJudge(ctx, 'natural', out.villagers);
   // round 2 (the exact rules, a fresh copy): realised, removed, E-normal
   await L.fresh('G6B Ha Natural Exact', BASE);
   const ex = await realiseRun(ctx, 'natural-exact', { claim: S3, plan, anchors, rules: 'exact' });
