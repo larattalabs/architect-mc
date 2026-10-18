@@ -404,17 +404,22 @@ async function haExact(ctx) {
 async function haNatural(ctx) {
   const { L, check, json } = ctx;
   const S3 = JSON.parse(fs.readFileSync(path.join(ctx.root, 'scenarios', 's3_monastery.json'), 'utf8')).fixture.claim;
-  await L.fresh('G6B Ha Natural', BASE);
-  await L.setRules('exact');
   const { plan, anchors } = await demoPlan(ctx, S3, { variant: 'natural' });
-  const run = await realiseRun(ctx, 'natural', { claim: S3, plan, anchors, rules: 'exact' });
+  // round 1 (default rules): the census and the villagers; the removal not judged (random ticks move the land far from the plan)
+  await L.fresh('G6B Ha Natural', BASE);
+  const run = await realiseRun(ctx, 'natural', { claim: S3, plan, anchors, rules: 'default' });
   if (!run.R) return run;
   const out = { check: run.check, realise: run.realise, bodies: {} };
   for (const b of run.bodies) out.bodies[b.id] = await census(ctx, b, run.before, run.bodies);
-  check(Object.values(out.bodies).every((c) => c.ok), `item 2 (natural): every body's census equals its prediction (${json(Object.fromEntries(Object.entries(out.bodies).map(([k, c]) => [k, c.ok])))})`);
+  check(Object.values(out.bodies).every((c) => c.ok), `item 2 (natural): every body's census equals its prediction (${json(Object.fromEntries(Object.entries(out.bodies).map(([k, c]) => [k, c.ok ? true : { m: c.mismatch, x: c.outside }])))})`);
   out.villagers = await villagers(ctx, 'natural', run);
-  await L.setRules('exact');
-  out.exact = await removeRun(ctx, 'natural', run, { kind: 'E-normal' });
+  await L.call('dev.region.remove', { region: run.realise.region, requester: OWNER }, 4 * 3_600_000).catch(() => null);
+  // round 2 (the exact rules, a fresh copy): realised, removed, E-normal
+  await L.fresh('G6B Ha Natural Exact', BASE);
+  const ex = await realiseRun(ctx, 'natural-exact', { claim: S3, plan, anchors, rules: 'exact' });
+  if (!ex.R) return out;
+  out.exact = await removeRun(ctx, 'natural-exact', ex, { kind: 'E-normal' });
+  out.exact.list = out.exact.list.slice(0, 20);
   return out;
 }
 

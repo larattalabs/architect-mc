@@ -20,7 +20,7 @@
 // site), its plants cleared in stage `forms` (IF_NATURAL air over the ground within the reach).
 import { FIRE_REACH } from '../region/checkFluids.mjs';
 import { FLAG_TREE, FLAG_WATER, FLAG_LAVA } from '../region/pack.mjs';
-import { VC, classAt } from '../region/volume.mjs';
+import { VC, blockAt, classAt } from '../region/volume.mjs';
 import { isFlammable } from '../blocks.mjs';
 import { localWorld } from './body.mjs';
 import { F_WRITTEN } from '../region/vworld.mjs';
@@ -178,7 +178,13 @@ const nameOf = (b) => String(b).replace(/\[.*$/, '');
 export function naturalOf(r, rect, y0, y1) {
   const lw = localWorld(r, { minX: rect.minX - 2, maxX: rect.maxX + 2, minZ: rect.minZ - 2, maxZ: rect.maxZ + 2, minY: y0, maxY: y1 });
   const P = lw.vw.pal;
-  return (x, y, z) => nameOf(P.states[lw.vw.get(x, y, z)]);
+  // (the frozen volumes the plan was given, by block id, first: a body asks its own volume after its shell is chosen, so the draft world
+  // here may not hold it yet; a cell the plan already wrote keeps the draft's state)
+  const vols = (r.ctx.volumes ?? []).map((v) => v.decoded).filter((d) => d?.blocks);
+  return (x, y, z) => {
+    if (!(lw.vw.flags(x, y, z) & F_WRITTEN)) for (const v of vols) { const b = blockAt(v, x, y, z); if (b) return nameOf(b); }
+    return nameOf(P.states[lw.vw.get(x, y, z)]);
+  };
 }
 
 /** The surface cells a pond over `rect` would have (for the ice decision before it is written). */
