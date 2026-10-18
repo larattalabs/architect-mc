@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { asksSurvey, goldenSurvey, stewardAnchors, checkPlanLocal, memoryCache, flatSurvey, FIX, ROOT } from './plan-helpers.mjs';
+import { asksSurvey, goldenSurvey, stewardAnchors, checkPlanLocal, checkPlanVolumes, memoryCache, flatSurvey, FIX, ROOT } from './plan-helpers.mjs';
 import { validatePlan, PLAN_SCHEMA } from '../lib/plan/schema.mjs';
 import { planCatalogue, diffCatalogues } from '../lib/plan/catalogue.mjs';
 
@@ -23,9 +23,14 @@ import { planCatalogue, diffCatalogues } from '../lib/plan/catalogue.mjs';
 const SV = { s7: goldenSurvey('s7'), s3: goldenSurvey('s3'), asks: asksSurvey(), flat: flatSurvey() };
 const read = (dir) => fs.readdirSync(path.join(FIX, dir)).filter((f) => f.endsWith('.json') && f !== 'SOURCE.json').sort().map((f) => ({ name: f, ...JSON.parse(fs.readFileSync(path.join(FIX, dir, f), 'utf8')) }));
 // ((6c T3) a fixture's `terrain` ({W, D, x0, z0, y, bands}: plan-helpers.mjs flatSurvey) instead of `on`: a synthetic claim, e.g. a
-// ravine or a water channel)
+// ravine, a water channel or a ridge; (T3b) and its `volume`: the frozen rock a tunnel's corridor reads, through the check's two-plan
+// flow (plan_v0 asks, the fixture answers))
 const svOf = (fx) => (fx.terrain ? flatSurvey(fx.terrain) : SV[fx.on]);
-const run = (fx, extra = {}) => { const s = svOf(fx); return checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}), ...extra }); };
+const run = (fx, extra = {}) => {
+  const s = svOf(fx);
+  const o = { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}), ...extra };
+  return fx.volume ? checkPlanVolumes(fx.plan, { ...o, volume: fx.volume }) : checkPlanLocal(fx.plan, o);
+};
 const lots = (n, p = 'h') => Array.from({ length: n }, (_, i) => ({ id: `${p}${i + 1}`, type: 'house', size: [9, 9] }));
 const A = SV.asks;
 const asks = (plan, o = {}) => checkPlanLocal(plan, { survey: A.bytes, claim: A.claim, anchors: stewardAnchors(A.claim), ...o });

@@ -1,0 +1,23 @@
+{
+  "about": "(6c T3b, S-T3-4) a tunnel between two places on flat ground answers unsupported {tunnel.under, until 7b}: no line has cover, so it is the reserved passage under flat ground, never a NO_COVER path repair",
+  "on": "asks",
+  "expect": {
+    "part": "secret",
+    "block": "tunnel.under"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "secret",
+        "kind": "tunnel",
+        "from": {
+          "anchor": "stone"
+        },
+        "to": {
+          "anchor": "street_e"
+        }
+      }
+    ]
+  }
+}

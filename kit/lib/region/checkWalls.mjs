@@ -33,12 +33,22 @@ export function wallRules({ ir, vw, walls, meta, want, findings, metrics, partSt
     const gateCell = new Map();
     for (const g of w.gates) for (const [x, z] of g.cells) gateCell.set(key(x, z), g);
     const wallCell = new Map(w.cells.map((c) => [key(c[0], c[1]), c]));
-    // ---- M2:wall, the cut: a walk cell in a wall column that is not a gate's opening
+    // ---- M2:wall, the cut: a walk cell in a wall column that is not a gate's opening; (6c T3b) nor a postern's floor (a tunnel's bore
+    // under the wall, with its rock between, counts as a gate: CONTRACT T3 §4)
+    const posternFloor = new Set();
+    for (const t of meta?.tunnels ?? []) if ((t.posterns ?? []).some((q) => q.wall === w.id)) for (const c of t.floor ?? []) posternFloor.add(`${c[0]},${c[1]},${c[2]}`);
     const cut = [];
+    let posternCells = 0;
     for (const [x, z, T] of w.cells) {
       if (gateCell.has(key(x, z))) continue;
-      for (let y = T + 2; y >= T - 64 && y > claim.minY; y--) if (vw.flags(x, y, z) & F_WALK) { cut.push([x, y, z]); break; }
+      for (let y = T + 2; y >= T - 64 && y > claim.minY; y--) {
+        if (!(vw.flags(x, y, z) & F_WALK)) continue;
+        if (posternFloor.has(`${x},${y},${z}`)) { posternCells++; continue; }
+        cut.push([x, y, z]);
+        break;
+      }
     }
+    if (posternCells) m.posternCells = posternCells;
     m.cut = cut.length;
     if (cut.length && want.has('M2')) findings.push(finding('M2:wall', part, stage, cut.length, cut, `wall ${w.id}: ${cut.length} walk cell(s) under the wall outside its gates (a route or network cut)`));
     // ---- M6 at the gates: `h` clear over each opening cell's walk surface
@@ -135,7 +145,14 @@ export function closure(ir, vw, meta, w, gateCell) {
   // the gates' openings blocked (restored after)
   const P = vw.pal, stone = P.of('minecraft:stone');
   const saved = [];
-  const block = () => { for (const g of w.gates) for (const [x, z] of g.cells) for (let y = g.y + 1; y <= g.y + Math.max(g.h, 3); y++) { saved.push([x, y, z, vw.get(x, y, z), vw.flags(x, y, z), vw.partAt(x, y, z)]); vw.set(x, y, z, stone, vw.flags(x, y, z), vw.partAt(x, y, z)); } };
+  // (6c T3b) a postern (a tunnel under this wall) is an opening too: its bore blocked with the gates (its broken variant
+  // `_unsafe.ignorePostern` leaves it open, so closure leaks through it)
+  const postern = [];
+  for (const t of meta?.tunnels ?? []) if (!t._unsafe?.ignorePostern && (t.posterns ?? []).some((q) => q.wall === w.id)) for (const c of t.voids ?? []) postern.push(c);
+  const block = () => {
+    for (const g of w.gates) for (const [x, z] of g.cells) for (let y = g.y + 1; y <= g.y + Math.max(g.h, 3); y++) { saved.push([x, y, z, vw.get(x, y, z), vw.flags(x, y, z), vw.partAt(x, y, z)]); vw.set(x, y, z, stone, vw.flags(x, y, z), vw.partAt(x, y, z)); }
+    for (const [x, y, z] of postern) { saved.push([x, y, z, vw.get(x, y, z), vw.flags(x, y, z), vw.partAt(x, y, z)]); vw.set(x, y, z, stone, vw.flags(x, y, z), vw.partAt(x, y, z)); }
+  };
   const restore = () => { while (saved.length) { const [x, y, z, i, f, p] = saved.pop(); vw.set(x, y, z, i, f, p); } };
   for (const mover of ['player', 'villager']) {
     block();

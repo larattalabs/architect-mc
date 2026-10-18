@@ -37,6 +37,8 @@ import * as CONNECTOR_WALL from '../connectors/wall.mjs';
 import { edgeColumns, inferMovers, footprintOf, polylineOf, VILLAGER } from './passes/route.mjs';
 import { ropeBridge, surveyLand } from '../connectors/ropeGeom.mjs';
 import { bridgeSpan } from '../connectors/bridgeGeom.mjs';
+// (6c T3b) the tunnel primitive (a pure module: it imports neither this file nor the plan compiler)
+import { tunnel as tunnelPrimitive } from '../connectors/tunnelGeom.mjs';
 import { CARDINALS, cardinalOf, centreCells, circlePolygon, compassDir, crossOffsets, dominantCardinal, rightOf, segmentAxis } from './geom.mjs';
 
 export const COND = Object.freeze({ IF_NATURAL: 0, IF_SOLID_NATURAL: 1, IF_AIR_OR_FLUID: 2, ALWAYS_OURS: 3 });
@@ -465,7 +467,13 @@ export class Region {
     return bridgeSpan(this, a, b, opts.land || opts.check ? opts : { ...opts, land: surveyLand(this.ctx.survey) });
   }
 
-  // (6c T3) r.tunnel(a, b, opts) (T3b, lib/connectors/tunnelGeom.mjs) is defined here, once, by T3b.
+  /**
+   * (6c T3b) A tunnel from a start walk cell to a landing walk cell on one axis (lib/connectors/tunnelGeom.mjs `tunnel`, CONTRACT T3
+   * §3): `opts.land` is tunnelLand over the plan survey and the frozen volumes the program asked for. Returns its record.
+   */
+  tunnel(a, b, opts = {}) {
+    return tunnelPrimitive(this, a, b, opts);
+  }
 
   /** (6c V) A graph node (SETTLEMENTS §8.1): `{id, kind: lot|plaza|junction, ref, at, ports}`; ids unique. */
   graphNode({ id, kind, ref = null, at, ports = [] }) {

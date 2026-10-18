@@ -353,6 +353,10 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `Entity.move(MoverType.SELF, ...)` in `step` steps, the rider positioned after each -> `{moved, blocked, blockedAt?, inWall (steps with
   the rider's eyes in a block), riderHit (steps with the rider's box in a block), boatY, eyeY, maxEyeY, steps, end}`; the rider is
   dismounted and the boat discarded (CONTRACT T3 item 1's boat probe, N-T3-2).
+- **2026-10-17 (6c slice T3b):** `dev.region.checkPlan` takes `load: "loaded" | "generate"` (PlanRequest.load: "generate" is
+  `LoadPolicy.LOAD_BOUNDED` over the claim's chunks plus the survey margin, so the survey and the tunnels' volume pass load and
+  generate their chunks) and answers `volumePass` (the check's two-plan flow: `{asked, cells, sampleMs, firstPlanMs, load, read,
+  secondPlanMs | why}`; null for a plan that planned once). No hook added.
 
 - **2026-10-14 (7a slice K1a):** `dev.nav.villager` takes `cells: true` and then returns the path's nodes as `cells: [[x,y,z]]`
   (K1a's item 2: a villager's path meets a wall only at its gate cells). No hook added.
