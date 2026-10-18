@@ -89,7 +89,7 @@ const surveyOf = async (ctx, claim, tag) => {
 /**
  * The straight crossings of the claim's water a beam needs a pier in: the dry search refuses them WATER (a pier needed in water), the
  * wet one stands piers there (waterDepth 8). Best first: the fewest wet cells, then the shortest, then the claim's centre. Returns
- * [{a, b, dir, n, rise, wet, deep?}] (a, b: anchors 5 past the landings on the line), and the deepest-only candidates for the record.
+ * [{a, b, dir, n, rise, wet, deep?}] (a, b: anchors 8 past the landings on the line), and the deepest-only candidates for the record.
  */
 async function wetCrossings(ctx, S, claim) {
   const { checkBridge, surveyLand } = await ctx.imp('lib/connectors/bridgeGeom.mjs');
@@ -112,7 +112,7 @@ async function wetCrossings(ctx, S, claim) {
         const dry = checkBridge(land, [x, y0, z], [dx, dz], n, rise, 3, { form: 'beam' });
         if (dry.ok || dry.code !== 'WATER') continue;
         const wet = checkBridge(land, [x, y0, z], [dx, dz], n, rise, 3, { form: 'beam', wet: { waterDepth: 8, floorAt: S.floorAt, vols: [] } });
-        const a = [x - dx * 5, S.groundAt(x - dx * 5, z - dz * 5) + 1, z - dz * 5], b = [fx + dx * 5, S.groundAt(fx + dx * 5, fz + dz * 5) + 1, fz + dz * 5];
+        const a = [x - dx * 8, S.groundAt(x - dx * 8, z - dz * 8) + 1, z - dz * 8], b = [fx + dx * 8, S.groundAt(fx + dx * 8, fz + dz * 8) + 1, fz + dz * 8];
         const rec = { a, b, dir: [dx, dz], n, rise, from: [x, y0, z] };
         if (wet.ok) { ok.push({ ...rec, wet: wet.piers.reduce((t, p) => t + (p.wet ?? 0), 0), d: Math.abs(x - cx) + Math.abs(z - cz) }); done = true; break; }
         if (wet.code === 'WATER' && !deep.some((q) => q.from[0] === x && q.from[2] === z)) deep.push({ ...rec, kind: wet.evidence.kind, depth: wet.evidence.depth ?? null });
@@ -121,7 +121,8 @@ async function wetCrossings(ctx, S, claim) {
       break;
     }
   }
-  ok.sort((p, q) => p.wet - q.wet || p.n - q.n || p.d - q.d || p.from[0] - q.from[0] || p.from[2] - q.from[2]);
+  // (the most wet pier cells first: a crossing that shows piers standing in the water, not a sliver of it; then the lowest landing)
+  ok.sort((p, q) => q.wet - p.wet || p.from[1] - q.from[1] || p.n - q.n || p.d - q.d || p.from[0] - q.from[0] || p.from[2] - q.from[2]);
   return { ok, deep };
 }
 
