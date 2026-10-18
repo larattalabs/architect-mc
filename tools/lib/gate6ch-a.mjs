@@ -179,7 +179,9 @@ async function realisedOf(ctx, planDir, beforeFile, afterFile) {
   const before = await decodeArwd(fs.readFileSync(beforeFile)), after = await decodeArwd(fs.readFileSync(afterFile));
   const world = dumpWorld(before, after, ir.claim, { virtual: vw, lots: ir.lots });
   const rep = checkRegion({ ir, meta, world, prefix: false, blobs });
-  return { ir, meta, world, rep, before, after };
+  const written = new Set(), cols = new Set();
+  vw.eachWritten((x, y, z) => { written.add(`${x},${y},${z}`); cols.add(`${x},${z}`); });
+  return { ir, meta, world, rep, before, after, written, cols };
 }
 
 const k3 = (c) => `${c[0]},${c[1]},${c[2]}`;
@@ -287,6 +289,18 @@ async function removeRun(ctx, tag, run, { kind }) {
     const cells = run.bodies.flatMap((b) => [...b.cells, ...b.shell, ...b.spill, ...b.watch]);
     const near = (x, y, z) => cells.some((q) => Math.max(Math.abs(q[0] - x), Math.abs(q[1] - y), Math.abs(q[2] - z)) <= 6);
     const bad = (diff.list ?? []).filter((mm) => { const [x, y, z] = String(mm.pos).split(',').map(Number); return near(x, y, z); });
+    // T1's flow class as H narrows it (§4.5): a fluid change at an unwritten cell more than 6 columns from every written column (a
+    // natural spring the chunk load set flowing): the world's, not the undo's
+    const wc = [...run.R.cols].map((k) => k.split(',').map(Number));
+    const farFrom = (x, z) => wc.every(([cx, cz]) => Math.max(Math.abs(cx - x), Math.abs(cz - z)) > 6);
+    const isFl = (v) => /^minecraft:(water|lava)/.test(String(v ?? ''));
+    let flow = 0;
+    for (const mm of diff.list ?? []) {
+      if (mm.class !== 'none') continue;
+      const [x, y, z] = String(mm.pos).split(',').map(Number);
+      if ((isFl(mm.was) || isFl(mm.now)) && !run.R.written.has(`${x},${y},${z}`) && farFrom(x, z)) { mm.class = 'flow'; flow++; }
+    }
+    if (diff.classes && flow) { diff.classes.none = (diff.classes.none ?? 0) - flow; diff.classes.flow = flow; }
     const none = diff.classes ? diff.classes.none ?? 0 : diff.mismatches;
     check(rm.removed && none === 0 && (diff.classes?.gravity ?? 0) === 0 && bad.length === 0, `item 5 (${tag}): the removal's E-normal: ${diff.mismatches} mismatch(es) (${j(diff.classes ?? {})}), 0 unclassified, 0 gravity, ${bad.length} within 6 of a body, shell or watched cell${bad.length ? ` (${j(bad.slice(0, 4))})` : ''}`);
   }
@@ -307,9 +321,16 @@ async function villagers(ctx, tag, run) {
   const R = run.R;
   await L.cmd('/kill @e[type=!minecraft:player]');
   for (const b of run.bodies.filter((q) => q.fluid === 'water' && q.cells.length >= 4)) {
-    const banks = banksOf(b, R, 4);
+    const banks = banksOf(b, R, 8);
     if (banks.length < 2) { out.nav[b.id] = { banks: banks.length }; continue; }
-    out.nav[b.id] = await navBoth(ctx, banks[0], banks[Math.floor(banks.length / 2)]);
+    // (opposite banks at one height: a header pool on a cliff has banks down its face too, which no walk joins)
+    let pair = null;
+    for (let i = 0; i < banks.length; i++) for (let k = i + 1; k < banks.length; k++) {
+      const [a, c] = [banks[i], banks[k]];
+      const d = Math.abs(a[0] - c[0]) + Math.abs(a[2] - c[2]), dy = Math.abs(a[1] - c[1]);
+      if (dy <= 1 && (!pair || d > pair.d)) pair = { a, c, d };
+    }
+    out.nav[b.id] = pair ? await navBoth(ctx, pair.a, pair.c) : { banks: banks.length };
   }
   for (const q of R.meta.bridges ?? []) out.nav[`bridge_${q.id}`] = await navBoth(ctx, [q.from[0], q.from[1] + 1, q.from[2]], [q.to[0], q.to[1] + 1, q.to[2]]);
   const navOk = Object.values(out.nav).every((v) => v.there && v.back);
