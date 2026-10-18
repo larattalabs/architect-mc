@@ -1,0 +1,39 @@
+after T3 (the T3 batch, integrate/t3: T3a bridges + T3b tunnels; catalogue 6)
+59 asks: fits 61, refused 19, unsupported 39, adjusted 11, blocked 2
+gap table (unsupported parts per block id):
+  rule.palette             7
+  layout.ring              3
+  rule.shape               3
+  tunnel.under             3
+  connector.lift           2
+  connector.stair          2
+  form.crater              2
+  rule.variety             2
+  connector.channel        1
+  connector.drawbridge     1
+  connector.ladder         1
+  connector.rail           1
+  form.floating_island     1
+  form.hollow_mountain     1
+  form.mast                1
+  form.seabed_site         1
+  form.ship_hull           1
+  form.waterfall           1
+  layout.grid              1
+  layout.organic           1
+  program.districts        1
+  rule.stacked_floors      1
+  rule.suspended           1
+
+parts whose answer changed (6):
+  end_city_ruins/dwelling_bridges: unsupported UNSUPPORTED (until T3) [connector.bridge] -> refused NO_GAP [connector.bridge]
+  redstone_gate/drawbridge: unsupported UNSUPPORTED (until T3) [connector.bridge] -> unsupported UNSUPPORTED (until mechanism) [connector.drawbridge]
+  secret_tunnels/tunnel_cellar: unsupported UNSUPPORTED (until T3) [connector.tunnel] -> unsupported UNSUPPORTED (until 7b) [tunnel.under]
+  secret_tunnels/tunnel_dock: unsupported UNSUPPORTED (until T3) [connector.tunnel] -> unsupported UNSUPPORTED (until 7b) [tunnel.under]
+  secret_tunnels/tunnel_hatch: unsupported UNSUPPORTED (until T3) [connector.tunnel] -> unsupported UNSUPPORTED (until 7b) [tunnel.under]
+  underwater_domes/glass_tunnels: unsupported UNSUPPORTED (until T3) [connector.tunnel] -> blocked DEPENDENCY [connector.tunnel]
+
+note: glass_tunnels is blocked by its zone `colony` (it wants ocean water; none on the asks claim); with the zone placed it answers
+unsupported [tunnel.under] (plan-t3b.test.mjs), so the recorded tunnels read 3 tunnel.under + 1 blocked.
+
+streets, roads and paths that answered WATER (until T3) before (0): none

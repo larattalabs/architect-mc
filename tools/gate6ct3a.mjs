@@ -25,7 +25,8 @@
 //                                       gravity, 0 unclassified)
 //     frozen                            items 1, 3, 9 on S7's rejected site 2026101102 (a frozen river): the frozen arch, nothing written in
 //                                       the ice (the ice cells' states equal before and after), E-normal as natural
-//     look                              item 17 (client, recorded not judged): crossings_demo flat in three bibles, cameras for the gallery
+//     look                              item 17 (client, recorded not judged): crossings_demo flat in three bibles (bridges and, since the
+//                                       T3 batch, the tunnels' portal and interior), cameras for the gallery
 //     report                            REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate6c-t3/t3a/<step>.json in the main checkout (GATE6CT3A_OUT overrides), all.log, REPORT.md, spend.json.
@@ -527,6 +528,20 @@ steps.look = async () => {
       out.shots.push(await shot(`${name}_deck`, [q.from[0] + 0.5, q.from[1] + 2.6, q.from[2] - 3.5], [q.to[0] + 0.5, q.to[1] + 1, q.to[2] + 0.5]));
       if (tag === 'default') out.shots.push(await shot(`${name}_high`, [mid[0] + 34.5, mid[1] + 22, mid[2] + 26.5], [mid[0] - 0.5, mid[1] - 8, mid[2] + 0.5]));
     }
+    // (6c T3 batch, item 17) the tunnel half in the same three bibles: the 3x3 bore's portal and lit interior, the 1-wide bore
+    // (T3b's cameras, gate6ct3b.mjs look)
+    out.bibles[tag].tunnels = (meta.tunnels ?? []).map((q) => ({ id: q.id, from: q.from, to: q.to, width: q.width, height: q.height }));
+    const t = (meta.tunnels ?? []).find((q) => q.width === 3) ?? meta.tunnels?.[0];
+    if (t) {
+      const [x, y, z] = t.from;
+      const portal = t.portals?.[0];
+      const px = portal ? portal.cells.find((c) => c[3] === 'lintel')[0] : x + 3;
+      out.shots.push(await shot(`${tag}_tunnel_portal`, [x - 9.5, y + 4, z + 4.5], [px + 0.5, y + 2, z + 0.5]));
+      out.shots.push(await shot(`${tag}_tunnel_interior`, [px + 1.5, y + 2.6, z + 0.5], [px + 30.5, y + 1.5, z + 0.5]));
+      const n = (meta.tunnels ?? []).find((q) => q.width === 1);
+      if (n && tag === 'default') out.shots.push(await shot(`${tag}_tunnel_narrow`, [n.from[0] - 6.5, n.from[1] + 3, n.from[2] + 2.5], [n.from[0] + 6.5, n.from[1] + 1.5, n.from[2] + 0.5]));
+    }
+    check((meta.tunnels ?? []).length === 2, `look (${tag}): crossings_demo flat's two tunnels realised beside the bridges (recorded, not judged: Noah's call, N-T3-3)`);
     await call('dev.release', {}).catch(() => null);
     await call('dev.region.remove', { region, requester: OWNER }, 3_600_000).catch(() => null);
     await leaveWorld();

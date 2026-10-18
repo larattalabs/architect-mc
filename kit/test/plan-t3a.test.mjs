@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { asksSurvey, stewardAnchors, checkPlanLocal, flatSurvey, FIX } from './plan-helpers.mjs';
+import { asksSurvey, stewardAnchors, checkPlanLocal, checkPlanVolumes, flatSurvey, FIX } from './plan-helpers.mjs';
 import { checkRegion } from '../lib/region/check.mjs';
 import { encodeArvx, decodeArvx, VC } from '../lib/region/volume.mjs';
 import { surveyApi } from '../lib/region/survey.mjs';
@@ -38,6 +38,11 @@ function volumeOf(spec, survey, claim) {
 /** Check a fixture: its terrain (flat with bands) or the asks claim, its anchors over Steward's, its protected areas, its volume. */
 async function run(fx, extra = {}) {
   const s = fx.on === 'asks' ? asksSurvey() : flatSurvey(fx.terrain ?? {});
+  // ((6c T3 batch) a fixture with T3b's `volume.given` (v38_auto_crossings: the auto edge that tunnels) runs T3b's two-plan harness)
+  if (fx.volume?.given) {
+    const r = await checkPlanVolumes(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], volume: fx.volume, ...extra });
+    return { ...r, survey: s };
+  }
   const volumes = fx.volume ? [volumeOf(fx.volume, s.bytes, s.claim)] : [];
   const r = await checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], volumes, ...extra });
   return { ...r, survey: s, volumes };
@@ -76,9 +81,16 @@ test('v35, v36, v38: the bridges fit; the checker clean on the virtual world (M1
   const { sitePlan } = await import('../lib/region/siteplan.mjs');
   const sp = sitePlan({ ir: v36.res.ir, meta: v36.res.meta });
   assert.deepEqual(sp.bridges.map((b) => [b.form, b.span, b.piers.length, b.landings.length]), [['arch', 20, 0, 2]]);
+  // (6c T3 batch) v38_auto_crossings: one auto edge bridges, one tunnels (T3b's half, in the caller's volume), one walks
   const v38 = await run(read('valid', /^v38_/)[0]);
   assert.equal(part(v38, 'across').geometry.bridges.length, 1, 'across crosses the ditch on a bridge');
+  assert.equal(part(v38, 'across').geometry.tunnels, undefined, 'across bores nothing');
+  assert.equal(part(v38, 'pass').geometry.tunnels?.length, 1, 'pass tunnels through the ridge');
+  assert.equal(part(v38, 'pass').geometry.bridges, undefined, 'pass spans nothing');
   assert.equal(part(v38, 'stroll').geometry.bridges, undefined, 'stroll walks');
+  assert.equal(part(v38, 'stroll').geometry.tunnels, undefined, 'stroll walks');
+  // rope.mjs's note (T3a's shared edit): only the edge that crossed on nothing says walking is cheaper
+  assert.deepEqual(['across', 'pass', 'stroll'].filter((id) => (part(v38, id).notes ?? []).some((n) => /walking is cheaper/.test(n))), ['stroll']);
 });
 
 test('the street fallback (S-T3-2): a road whose every route crosses water takes a bridge, adjusted with a `crossing` deviation', async () => {
@@ -169,12 +181,16 @@ test('§9: end_city_ruins\' dwelling bridges are a self-loop (NO_GAP); redstone_
 });
 
 test('§9: the gap tables (committed before and after); no recorded part changes class but the bridge and tunnel parts', async () => {
-  const after = fs.readFileSync(path.join(FIX, 't3a', 'asks-gap-after-t3a.txt'), 'utf8');
+  // (6c T3 batch) the combined table after both halves (fixtures/plan/t3); the slices' own tables (t3a/, t3b/) stay as records
+  const after = fs.readFileSync(path.join(FIX, 't3', 'asks-gap-after-t3.txt'), 'utf8');
   const before = fs.readFileSync(path.join(FIX, 't3a', 'asks-gap-before.txt'), 'utf8');
   assert.match(before, /connector\.bridge\s+2/);
   assert.match(before, /connector\.tunnel\s+4/);
   assert.doesNotMatch(after.split('parts whose answer changed')[0], /connector\.bridge\s+\d/);
   assert.match(after, /connector\.drawbridge\s+1/);
+  assert.match(after.split('parts whose answer changed')[0], /tunnel\.under\s+3\n/);
+  assert.doesNotMatch(after.split('parts whose answer changed')[0], /connector\.tunnel\s+\d/);
+  assert.match(after, /underwater_domes\/glass_tunnels: .* -> blocked DEPENDENCY/);
   // the changed parts are exactly the six recorded bridge and tunnel parts; no street, road or path refused WATER (until T3) before
   const changed = after.split('\n').filter((l) => /^ {2}\S+\/\S+: /.test(l)).map((l) => l.trim().split(':')[0]).sort();
   assert.deepEqual(changed, ['end_city_ruins/dwelling_bridges', 'redstone_gate/drawbridge', 'secret_tunnels/tunnel_cellar', 'secret_tunnels/tunnel_dock', 'secret_tunnels/tunnel_hatch', 'underwater_domes/glass_tunnels']);
@@ -188,6 +204,8 @@ test('§9: the gap tables (committed before and after); no recorded part changes
   }
   for (const [block, n] of Object.entries(gaps)) assert.match(after, new RegExp(`${block.replace('.', '\\.')}\\s+${n}\\n`), `${block} ${n}`);
   assert.equal(gaps['connector.bridge'], undefined);
+  assert.equal(gaps['connector.tunnel'], undefined);
+  assert.equal(gaps['tunnel.under'], 3);
 });
 
 test('determinism: 3 checks of v35, v36, v39 and each refusal fixture give identical answers, IR and artifact shas', async () => {

@@ -8,7 +8,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * API 1.33.0, a placeholder the coordinator renumbers at merge (docs/CONTRACT.md "Phase 6c slice T3" §8): no new records, methods or
+ * API 1.33.0 (v0.36.0, the T3 batch; docs/CONTRACT.md "Phase 6c slice T3" §8): no new records, methods or
  * IR kinds; the features bridgeConnectors (sidecar region.bridges), tunnelConnectors and planCheckVolumes (sidecar region.tunnels).
  */
 class ApiT3Test {
