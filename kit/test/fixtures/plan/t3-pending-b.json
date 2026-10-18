@@ -1,0 +1,5 @@
+{
+  "about": "(6c T3) The foundation's placeholder for P0 item 9's coverage: the tunnel ids whose valid/ fixtures land with slice T3b (ids), and tunnel.under (reserved), which only the compiler answers (a tunnel whose every line lacks cover) and T3b's fixtures cover. T3b deletes this file when they land.",
+  "ids": ["connector.tunnel", "tunnel.through"],
+  "reserved": ["tunnel.under"]
+}

@@ -22,7 +22,10 @@ import { planCatalogue, diffCatalogues } from '../lib/plan/catalogue.mjs';
 // ((7a K1b) `flat`: a flat claim in rift_city's range, for the rope bridge fixtures; a fixture's `anchors` add to Steward's)
 const SV = { s7: goldenSurvey('s7'), s3: goldenSurvey('s3'), asks: asksSurvey(), flat: flatSurvey() };
 const read = (dir) => fs.readdirSync(path.join(FIX, dir)).filter((f) => f.endsWith('.json') && f !== 'SOURCE.json').sort().map((f) => ({ name: f, ...JSON.parse(fs.readFileSync(path.join(FIX, dir, f), 'utf8')) }));
-const run = (fx, extra = {}) => { const s = SV[fx.on]; return checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}), ...extra }); };
+// ((6c T3) a fixture's `terrain` ({W, D, x0, z0, y, bands}: plan-helpers.mjs flatSurvey) instead of `on`: a synthetic claim, e.g. a
+// ravine or a water channel)
+const svOf = (fx) => (fx.terrain ? flatSurvey(fx.terrain) : SV[fx.on]);
+const run = (fx, extra = {}) => { const s = svOf(fx); return checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}), ...extra }); };
 const lots = (n, p = 'h') => Array.from({ length: n }, (_, i) => ({ id: `${p}${i + 1}`, type: 'house', size: [9, 9] }));
 const A = SV.asks;
 const asks = (plan, o = {}) => checkPlanLocal(plan, { survey: A.bytes, claim: A.claim, anchors: stewardAnchors(A.claim), ...o });
@@ -34,7 +37,7 @@ test('item 1: valid/ fixtures (at least 12) validate and every part fits', async
   const fx = read('valid');
   assert.ok(fx.length >= 12, `${fx.length} valid fixtures`);
   for (const f of fx) {
-    const v = validatePlan(f.plan, { anchors: Object.keys({ ...stewardAnchors(SV[f.on].claim), ...(f.anchors ?? {}) }) });
+    const v = validatePlan(f.plan, { anchors: Object.keys({ ...stewardAnchors(svOf(f).claim), ...(f.anchors ?? {}) }) });
     assert.equal(v.malformed, null, `${f.name}: ${JSON.stringify(v.malformed)}`);
     for (const p of v.parts) assert.equal(p.verdict, 'compile', `${f.name} ${p.id}: ${p.verdict} ${JSON.stringify(p.reason)}`);
     const r = await run(f);
@@ -173,7 +176,7 @@ test('item 3: three checks of each crafted plan give identical answers and artif
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'p0-det-'));
     try {
       fs.writeFileSync(path.join(dir, 'ir.json'), rs[0].res.irJson);
-      fs.writeFileSync(path.join(dir, 'survey.bin'), SV[f.on].bytes);
+      fs.writeFileSync(path.join(dir, 'survey.bin'), svOf(f).bytes);
       fs.mkdirSync(path.join(dir, 'blobs'));
       for (const [sha, b] of rs[0].res.blobs) fs.writeFileSync(path.join(dir, 'blobs', `${sha}.bin`), b);
       const ts = await tileShas(dir);
@@ -243,9 +246,16 @@ test('item 9: the catalogue golden; every supported entry has a valid/ fixture t
   const covered = new Set(read('valid').flatMap((f) => f.covers ?? []));
   // (7a K1) the foundation's placeholders: k1-pending-a.json (K1a's ids) and k1-pending-b.json (K1b's) list the ids whose valid/
   // fixtures land with that half; each half deletes its own file when they do (so the two never touch the same line)
-  for (const f of ['k1-pending-a.json', 'k1-pending-b.json']) if (fs.existsSync(path.join(FIX, f))) for (const id of JSON.parse(fs.readFileSync(path.join(FIX, f), 'utf8')).ids) covered.add(id);
+  // (6c T3) likewise t3-pending-a.json (T3a's bridge ids) and t3-pending-b.json (T3b's tunnel ids, and its `reserved` tunnel.under,
+  // which only the compiler answers: T3b's fixtures cover it)
+  const reservedPending = new Set();
+  for (const f of ['k1-pending-a.json', 'k1-pending-b.json', 't3-pending-a.json', 't3-pending-b.json']) if (fs.existsSync(path.join(FIX, f))) {
+    const j = JSON.parse(fs.readFileSync(path.join(FIX, f), 'utf8'));
+    for (const id of j.ids) covered.add(id);
+    for (const id of j.reserved ?? []) reservedPending.add(id);
+  }
   for (const e of entries.filter((x) => x.state === 'supported')) assert.ok(covered.has(e.id), `supported ${e.id} has a valid/ fixture`);
-  const ext = new Set(read('extension').flatMap((f) => (f.expect.all ?? [f.expect]).map((x) => x.block)).filter(Boolean));
+  const ext = new Set([...read('extension').flatMap((f) => (f.expect.all ?? [f.expect]).map((x) => x.block)).filter(Boolean), ...reservedPending]);
   // (D1) an alias whose target is supported follows its target (zone kind district: its program decides), so it has no extension fixture
   const supportedIds = new Set(entries.filter((x) => x.state === 'supported').map((x) => x.id));
   for (const e of entries.filter((x) => x.state === 'reserved' && !(x.aliasOf && supportedIds.has(x.aliasOf)))) assert.ok(ext.has(e.aliasOf ?? e.id), `reserved ${e.id} has an extension/ fixture`);
@@ -254,7 +264,8 @@ test('item 9: the catalogue golden; every supported entry has a valid/ fixture t
 test('item 9: the catalogue diff (D1 flips program.districts and endpoint.region; K1 flips the four connectors) and a pending part flagged for a recheck', () => {
   // (D1) P0's golden is archived as fixtures/plan/catalogue-p0.json; P0's committed catalogue-next.json is what D1 ships
   const p0 = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-p0.json'), 'utf8'));
-  const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
+  // (6c T3) K1's golden (catalogue 5) is archived as fixtures/plan/catalogue-k1.json: the K1 expectations below read it
+  const golden = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-k1.json'), 'utf8'));
   const next = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-next.json'), 'utf8'));
   // (D2) D2's golden adds D2's four flips (zone.outpost, locator.along, feature.biome_edge, feature.ridge) over D1's, archived as
   // fixtures/plan/catalogue-d1.json; (7a K1) D2's golden is archived as fixtures/plan/catalogue-d2.json

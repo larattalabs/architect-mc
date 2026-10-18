@@ -30,6 +30,13 @@ import { WALL_KINDS, emitWalls, finishGates, planWalls, wallsEvidence, wallsPass
 import { ROPE_KINDS, emitRopes, ropeAnswer, ropeFailAnswer, ropeLeg, ropePassInput, ropeResolve } from '../connectors/rope.mjs';
 /** (7a K1) The connector kinds K1 compiles (each a supported block in catalogue 4). */
 export const K1_KINDS = Object.freeze([...WALL_KINDS, ...ROPE_KINDS]);
+// (6c T3) bridges (T3a) and tunnels (T3b): the compiler's hooks for connector.bridge and connector.tunnel, auto's bridge and tunnel
+// moves and the street fallback (each hook module owns its kind; the kinds live in a leaf module, so no import cycle)
+import { BRIDGE_KINDS, FALLBACK_KINDS, T3_KINDS, TUNNEL_KINDS } from '../connectors/t3kinds.mjs';
+import { bridgeAnswer, bridgeAutoLeg, bridgeFailAnswer, bridgeFallback, bridgeLeg, bridgePassInput, bridgeResolve, emitBridges } from '../connectors/bridge.mjs';
+import { emitTunnels, tunnelAnswer, tunnelAutoLeg, tunnelFailAnswer, tunnelLeg, tunnelPassInput, tunnelResolve } from '../connectors/tunnel.mjs';
+/** (6c T3) The connector kinds that get the `links` stage and the K context: K1's and T3's. */
+export const LINK_KINDS = Object.freeze([...K1_KINDS, ...T3_KINDS]);
 
 /** §7's caps (each a request may only lower). */
 export const BUDGET_DEFAULTS = Object.freeze({ maxNodes: 2_000_000, maxEdges: 128, maxCells: 20_000_000, maxMs: 120_000, maxHeapMb: 2048 });
@@ -713,7 +720,7 @@ function checkpoint(r) {
     paths: r.paths.length, nodes: r.graph.nodes.length, edges: r.graph.edges.length, graphIds: new Set(r.graphIds), forms: r.forms.length, opCount: r.opCount,
     notes: r.notes.length, passRuns: r.passRuns.length, blend: r.blendLots.length, relief: new Set(r.reliefLots), fields: { ...r.fields }, sideBlobs: { ...r.sideBlobs },
     pathIds: Object.keys(r.meta.paths), nodeIds: r.graph.nodes.length, edgeIds: r.graph.edges.length,
-    meta: JSON.stringify({ paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, route: r.meta.route ?? null, gravity: r.meta.gravity ?? null, forms: r.meta.forms ?? null, village: r.meta.village ?? null, villageZones: r.meta.villageZones ?? null, walls: r.meta.walls ?? null, ropes: r.meta.ropes ?? null }),
+    meta: JSON.stringify({ paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, route: r.meta.route ?? null, gravity: r.meta.gravity ?? null, forms: r.meta.forms ?? null, village: r.meta.village ?? null, villageZones: r.meta.villageZones ?? null, walls: r.meta.walls ?? null, ropes: r.meta.ropes ?? null, bridges: r.meta.bridges ?? null, tunnels: r.meta.tunnels ?? null }),
     anchors: { ...r.anchors },
   };
 }
@@ -723,7 +730,7 @@ function rollback(r, c) {
   r.notes.length = c.notes; r.passRuns.length = c.passRuns; r.blendLots.length = c.blend; r.reliefLots = c.relief; r.fields = c.fields; r.sideBlobs = c.sideBlobs;
   const m = JSON.parse(c.meta);
   r.meta.paths = m.paths; r.meta.lots = m.lots; r.meta.parts = m.parts;
-  for (const k of ['route', 'gravity', 'forms', 'village', 'villageZones', 'walls', 'ropes']) { if (m[k] === null) delete r.meta[k]; else r.meta[k] = m[k]; }
+  for (const k of ['route', 'gravity', 'forms', 'village', 'villageZones', 'walls', 'ropes', 'bridges', 'tunnels']) { if (m[k] === null) delete r.meta[k]; else r.meta[k] = m[k]; }
   r.anchors = c.anchors;
 }
 /** The region parts (and lots) added since a checkpoint. */
@@ -877,8 +884,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
 
   // ---- 3. emit zones (pads blend where a relief names them), relief, forms
   // (7a K1) a plan with a wall, gate, rope bridge or auto connector to compile gets the `links` stage after `routes` (none
-  // otherwise: every plan without K1 parts keeps its stages, so its IR)
-  const k1Parts = order.filter((p) => p.family === 'connector' && K1_KINDS.includes(p.kind) && !answers.has(p.id));
+  // otherwise: every plan without K1 parts keeps its stages, so its IR); (6c T3) so does one with a bridge or tunnel
+  const k1Parts = order.filter((p) => p.family === 'connector' && LINK_KINDS.includes(p.kind) && !answers.has(p.id));
   const stagesWanted = k1Parts.length ? ['ground', 'street', 'forms', 'routes', 'links', 'lots', 'props'] : ['ground', 'street', 'forms', 'routes', 'lots', 'props'];
   const whole = order.find((p) => p.family === 'zone' && res.get(p.id)?.whole && okClass(p.id));
   let r;
@@ -1064,12 +1071,16 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
 
   // ---- (7a K1) the K1 context (docs/CONTRACT.md "Phase 7a slice K1" §4's compile order), then step 2: wall lines and gates placed
   // `at` an endpoint, open before routing
-  const K = k1Parts.length ? {
+  const makeK = () => ({
     env, ctx, r, plan: P.plan, V, order, byId, k1Parts, geom, res, zoneEmit, lotZone, answers, ans, depState, okClass, timeUp, stageOf, notes, partOf, tolOf, judge,
     checkpoint: () => checkpoint(r), rollback: (c) => rollback(r, c), addedSince: (c) => addedSince(r, c), mark, endpointNode: (e, other, conn, where) => endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where),
     record: {}, routed: [],
-  } : null;
+  });
+  let K = k1Parts.length ? makeK() : null;
   if (K) planWalls(K);
+  // (6c T3, S-T3-2) the street fallback needs the context in a plan without K1 or T3 parts too: made when a leg first falls back (no
+  // walls are planned then: the plan has none)
+  const ensureK = () => (K ??= makeK());
 
   // ---- 4. connectors: legs, one route pass per grade limit (a dry run, then only the connectors whose every leg routed)
   // ((7a K1) a wall or gate is answered by its own steps; a rope_bridge or auto connector routes here with its leg options)
@@ -1081,7 +1092,13 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     if (dep) { ans(p, dep); continue; }
     if (timeUp()) { ans(p, budgetHit('maxMs')); continue; }
     if (ROPE_KINDS.includes(p.kind)) { const stop = ropeResolve(K, p); if (stop) { ans(p, stop); continue; } }
-    const ends = [p.part.from, ...(p.part.via ?? []), p.part.to];
+    // (6c T3) a bridge's or tunnel's own checks before routing (R18's self-loop, the drawbridge, movers, width)
+    if (BRIDGE_KINDS.includes(p.kind)) { const stop = bridgeResolve(K, p); if (stop) { ans(p, stop); continue; } }
+    if (TUNNEL_KINDS.includes(p.kind)) { const stop = tunnelResolve(K, p); if (stop) { ans(p, stop); continue; } }
+    // (6c T3, R19, S-T3-6) a tunnel's via is read leniently: the first leg (from to via[0]), the rest listed in its notes
+    const tunnelVia = TUNNEL_KINDS.includes(p.kind) && (p.part.via ?? []).length;
+    const ends = tunnelVia ? [p.part.from, p.part.via[0]] : [p.part.from, ...(p.part.via ?? []), p.part.to];
+    if (tunnelVia) connNotes.set(p.id, [...(connNotes.get(p.id) ?? []), `via read leniently: the first leg only (to via[0]); ${p.part.via.length > 1 ? `via[1..${p.part.via.length - 1}] and ` : ''}to not read (R19)`]);
     const pts = [];
     let err = null;
     for (let k = 0; k < ends.length && !err; k++) {
@@ -1093,8 +1110,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     if (err) { ans(p, { class: 'refused', reasons: [err] }); continue; }
     const tGrade = tolOf(p.part, 'grade');
     const grade = Math.max(1 / 64, Math.min(1, q64(tGrade.max)));
-    if (snapNotes.length) connNotes.set(p.id, snapNotes);
-    const k1 = ROPE_KINDS.includes(p.kind) ? ropeLeg(K, p) : null;
+    if (snapNotes.length) connNotes.set(p.id, [...(connNotes.get(p.id) ?? []), ...snapNotes]);
+    const k1 = ROPE_KINDS.includes(p.kind) ? legOptions(K, p) : BRIDGE_KINDS.includes(p.kind) ? bridgeLeg(K, p) : TUNNEL_KINDS.includes(p.kind) ? tunnelLeg(K, p) : null;
     for (let k = 0; k + 1 < pts.length; k++) legs.push({ conn: p, k, from: pts[k], to: pts[k + 1], width: p.part.width ?? WIDTH_DEFAULT[p.kind] ?? 3, movers: p.part.movers, grade, ...(k1 ? { k1 } : {}) });
   }
   // maxEdges: legs past the cap (in order) are incomplete
@@ -1106,7 +1123,9 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   const grades = [...new Set(live.map((l) => l.grade))].sort((a, b) => a - b);
   for (const g of grades) {
     let group = live.filter((l) => l.grade === g && !answers.has(l.conn.id));
-    for (let round = 0; round < 3 && group.length; round++) {
+    // (6c T3) each street fallback (a leg searched once more with bridges) adds a round
+    let rounds = 3;
+    for (let round = 0; round < rounds && group.length; round++) {
       if (timeUp()) { for (const l of group) if (!answers.has(l.conn.id)) ans(l.conn, budgetHit('maxMs')); group = []; break; }
       const cp = checkpoint(r);
       const part = `routes_${grades.indexOf(g)}`;
@@ -1117,9 +1136,10 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       try {
         // every protected area and other owner's region meeting the claim is keep-out for the routes (nothing is written there), plus avoid[]
         const ko = [...env.protectedAreas.map((a) => rectArr(a.rect)), ...env.regions.map((a) => rectArr(a.rect)), ...env.buildRects.map((a) => rectArr(a.rect)), ...avoidRects(env, group, geom)];
-        // (7a K1) the walls (the gate move) and the rope move's inputs, only when the plan has them (else T2's pass, byte for byte)
-        const walls = K ? wallsPassInput(K) : null, rope = K ? ropePassInput(K) : null;
-        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length || rope?.hard?.length ? { hard: [...env.standingHard, ...(rope?.hard ?? [])] } : {}), ...(rope?.base ? { base: rope.base } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}) });
+        // (7a K1) the walls (the gate move) and the rope move's inputs, only when the plan has them (else T2's pass, byte for byte);
+        // (6c T3) the bridge and tunnel moves' pass-level inputs, likewise
+        const walls = K ? wallsPassInput(K) : null, rope = K ? ropePassInput(K) : null, bridge = K ? bridgePassInput(K) : null, tunnel = K ? tunnelPassInput(K) : null;
+        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length || rope?.hard?.length ? { hard: [...env.standingHard, ...(rope?.hard ?? [])] } : {}), ...(rope?.base ? { base: rope.base } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}), ...(bridge ? { bridge } : {}), ...(tunnel ? { tunnel } : {}) });
       } catch (e) {
         rollback(r, cp);
         for (const l of group) if (!answers.has(l.conn.id)) ans(l.conn, { class: 'refused', reasons: [{ code: /KEEP_OUT/.test(e.message) ? 'KEEP_OUT' : 'UNREACHABLE', message: e.message }] });
@@ -1158,6 +1178,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       }
       // a connector with a failed leg is answered and its other legs dropped; route the rest again
       rollback(r, cp);
+      const retry = new Set();
       for (let i = 0; i < group.length; i++) {
         const l = group[i];
         if (!bad.has(l.conn.id) || answers.has(l.conn.id)) continue;
@@ -1165,12 +1186,20 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         if (e && e.ok) continue;
         const m = metaEdges.get(edges[i].id);
         const why = m?.failed ?? e?.failed ?? 'NO_ROUTE';
+        // ((6c T3, S-T3-2) a street, road or path leg whose every route crosses water is searched once more with bridges)
+        if (why === 'ROUTE_WATER' && FALLBACK_KINDS.includes(l.conn.kind) && !l.fallback) {
+          const fb = bridgeFallback(ensureK(), l);
+          if (fb) { l.k1 = { ...(l.k1 ?? {}), ...fb }; l.fallback = true; retry.add(l.conn.id); continue; }
+        }
+        // ((6c T3) a bridge or tunnel leg the route pass could not span or bore answers its typed reason)
+        if ((why === 'BRIDGE' || why === 'TUNNEL') && K) { ans(l.conn, why === 'BRIDGE' ? bridgeFailAnswer(K, l, m) : tunnelFailAnswer(K, l, m)); continue; }
         // ((7a K1b) a rope_bridge leg the route pass could not span answers its typed reason: NO_GAP, SPAN, ...)
         ans(l.conn, why === 'ROPE' && K ? ropeFailAnswer(K, l, m) : why === 'BUDGET' ? budgetHit('maxNodes') : why === 'ROUTE_WATER'
           ? { class: 'refused', reasons: [{ code: 'WATER', message: `leg ${l.k + 1}: every route crosses water`, until: 'T3', evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at } }] }
           : { class: 'refused', reasons: [{ code: 'UNREACHABLE', message: `leg ${l.k + 1}: no route within the grade (${g}), the cut and fill limits and the obstacles`, evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, grade: g, ...(K ? wallsEvidence(K, l) : {}) } }] });
       }
-      group = group.filter((l) => !bad.has(l.conn.id));
+      if (retry.size) rounds++;
+      group = group.filter((l) => !bad.has(l.conn.id) || (retry.has(l.conn.id) && !answers.has(l.conn.id)));
     }
   }
   for (const p of conns) {
@@ -1191,9 +1220,14 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     const klass = worst > tDet.ceiling ? 'refused' : dv.length ? 'adjusted' : 'fits';
     geom.set(p.id, { legs: legsOut });
     const base = { class: klass, deviations: dv, geometry: { legs: legsOut }, notes: connNotes.get(p.id), reasons: klass === 'refused' ? [{ code: 'TOLERANCE', message: `detour ${worst} is past its ceiling ${tDet.ceiling}`, evidence: { detour: worst } }] : [], ...(p.kind === 'street' && p.part.lamps === undefined ? {} : {}) };
-    // (7a K1) a rope_bridge or auto connector's own answer fields (its spans, notes, refusals) over the route's
+    // (7a K1) a rope_bridge or auto connector's own answer fields (its spans, notes, refusals) over the route's; (6c T3) a bridge's,
+    // a tunnel's, an auto connector's bridges and bores, a street's fallback bridges
+    // (K1b's fields replace the route's, as before; T3's merge over them)
     const extra = ROPE_KINDS.includes(p.kind) ? ropeAnswer(K, p, ls) : null;
-    ans(p, extra ? { ...base, ...extra } : base);
+    const extras = [];
+    if (K && (BRIDGE_KINDS.includes(p.kind) || p.kind === 'auto' || ls.some((x) => x.leg.fallback))) extras.push(bridgeAnswer(K, p, ls));
+    if (K && (TUNNEL_KINDS.includes(p.kind) || p.kind === 'auto')) extras.push(tunnelAnswer(K, p, ls));
+    ans(p, mergeExtras(extra ? { ...base, ...extra } : base, extras));
   }
 
   // ---- (7a K1) step 4: gates by crossing, auto gates and gates.min; step 5: the links stage (walls and gates, rope spans), each
@@ -1202,6 +1236,9 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     finishGates(K);
     emitWalls(K);
     emitRopes(K);
+    // (6c T3) then the bridges, then the tunnels (each part under its own checkpoint)
+    emitBridges(K);
+    emitTunnels(K);
   }
 
   // ---- 5. apron lamps over every village lot; anchors
@@ -1457,3 +1494,40 @@ function clean(o) {
   return out;
 }
 void cmp; void entryOf;
+
+/**
+ * (6c T3) A rope_bridge's or auto connector's leg options: K1b's (ropeLeg), and for auto the bridge and tunnel moves' (their `spans`
+ * appended, their `t3` options merged). A row whose hook gives nothing leaves the options exactly K1b's (so an auto plan is unchanged
+ * until a row is built).
+ */
+function legOptions(K, p) {
+  const o = ropeLeg(K, p);
+  if (p.kind !== 'auto') return o;
+  let spans = o.spans ? [...o.spans] : null, t3 = null;
+  for (const x of [bridgeAutoLeg(K, p), tunnelAutoLeg(K, p)]) {
+    if (!x || !Array.isArray(x.spans) || !x.spans.length) continue;
+    spans = [...(spans ?? []), ...x.spans];
+    if (x.t3) t3 = { ...(t3 ?? {}), ...x.t3 };
+  }
+  if (!spans || (o.spans && spans.length === o.spans.length)) return o;
+  return { ...o, spans, ...(t3 ? { t3 } : {}) };
+}
+
+/**
+ * (6c T3) A routed connector's answer with its hooks' extra fields merged in order: `geometry` merged member by member, `notes` and
+ * `deviations` appended, any other member (reasons, provisional) the later hook's; a hook's `class` applies only over `fits` (an
+ * `adjusted` never hides a refusal). Null extras are skipped; with none the answer is the base, as before.
+ */
+function mergeExtras(base, extras) {
+  let out = base;
+  for (const x of extras) {
+    if (!x) continue;
+    const next = { ...out, ...x };
+    if (x.class !== undefined && out.class !== undefined && out.class !== 'fits') next.class = out.class;
+    if (out.geometry || x.geometry) next.geometry = { ...(out.geometry ?? {}), ...(x.geometry ?? {}) };
+    if (out.notes || x.notes) next.notes = [...(out.notes ?? []), ...(x.notes ?? [])];
+    if (x.deviations) next.deviations = [...(out.deviations ?? []), ...x.deviations];
+    out = next;
+  }
+  return out;
+}

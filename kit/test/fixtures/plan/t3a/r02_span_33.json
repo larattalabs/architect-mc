@@ -1,0 +1,50 @@
+{
+  "about": "(6c T3a) a dry ravine 33 wide: past the longest span (32): SPAN",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2032,
+        "x1": 1159,
+        "z1": 2064,
+        "y": 52
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1080,
+      65,
+      2022
+    ],
+    "b": [
+      1080,
+      65,
+      2075
+    ]
+  },
+  "expect": {
+    "part": "b",
+    "code": "SPAN"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "b",
+        "kind": "bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        },
+        "width": 3
+      }
+    ]
+  }
+}

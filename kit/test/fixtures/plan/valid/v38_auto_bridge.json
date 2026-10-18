@@ -1,0 +1,66 @@
+{
+  "about": "(6c T3a) auto edges on a claim cut by a narrow ditch (6 wide, 12 deep) across it: `across` crosses on a short beam (a rope needs 8 deck cells; no walk or stair fits down and up in 6), `stroll` walks (both ends on one side). T3b adds the auto edge that tunnels",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2046,
+        "x1": 1159,
+        "z1": 2051,
+        "y": 52
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1080,
+      65,
+      2036
+    ],
+    "b": [
+      1080,
+      65,
+      2060
+    ],
+    "c": [
+      1040,
+      65,
+      2030
+    ],
+    "d": [
+      1120,
+      65,
+      2030
+    ]
+  },
+  "covers": [],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "across",
+        "kind": "auto",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        }
+      },
+      {
+        "id": "stroll",
+        "kind": "auto",
+        "from": {
+          "anchor": "c"
+        },
+        "to": {
+          "anchor": "d"
+        }
+      }
+    ]
+  }
+}

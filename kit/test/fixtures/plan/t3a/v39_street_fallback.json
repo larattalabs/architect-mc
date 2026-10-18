@@ -1,0 +1,47 @@
+{
+  "about": "(6c T3a, S-T3-2) a road whose only route crosses the asks claim's stream (a grove protected west of the lake cuts the way round): it refused WATER (until T3) on v0.35.0; now it takes the street fallback, crossing on a bridge, adjusted with a `crossing` deviation",
+  "on": "asks",
+  "protected": [
+    {
+      "id": "grove",
+      "rect": [
+        200,
+        200,
+        239,
+        319
+      ]
+    }
+  ],
+  "anchors": {
+    "s_n": [
+      300,
+      65,
+      236
+    ],
+    "s_s": [
+      300,
+      65,
+      272
+    ]
+  },
+  "expect": {
+    "part": "r",
+    "class": "adjusted",
+    "deviation": "crossing"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "r",
+        "kind": "road",
+        "from": {
+          "anchor": "s_n"
+        },
+        "to": {
+          "anchor": "s_s"
+        }
+      }
+    ]
+  }
+}

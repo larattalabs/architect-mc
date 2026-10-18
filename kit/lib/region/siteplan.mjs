@@ -140,6 +140,10 @@ export function sitePlan({ ir, meta, planId = null, irSha = null, vw = null }) {
   if (meta?.passes?.length) out.passes = meta.passes.map((p) => ({ name: p.name, ms: p.ms, heapMb: p.heapMb }));
   // (7a K1) the plan's walls and their gates (the plan meta's walls: K1a's emission)
   if (Array.isArray(meta?.walls) && meta.walls.length) out.walls = meta.walls.map((w) => ({ id: w.id, part: w.part, line: w.line.map((q) => [...q]), closed: !!w.closed, gates: (w.gates ?? []).map((g) => ({ id: g.id, at: [...g.at], width: g.width, door: g.door, auto: !!g.auto })) }));
+  // (6c T3) the plan's bridges (span: deck cells; piers: each pier's centre column [x, z]; landings: the near and far landing cells) and
+  // tunnels (portals: the first and last bore cells' floor; length: floor cells; carved: cells cleared), from the plan meta (§8)
+  if (Array.isArray(meta?.bridges) && meta.bridges.length) out.bridges = meta.bridges.map((b) => ({ id: b.id, part: b.part, form: b.form, span: b.n, piers: (b.piers ?? []).map((q) => [q.x, q.z]), landings: [[...b.from], [...b.to]] }));
+  if (Array.isArray(meta?.tunnels) && meta.tunnels.length) out.tunnels = meta.tunnels.map((t) => ({ id: t.id, part: t.part, portals: (t.portals ?? []).map((q) => [...q]), length: t.length, carved: t.carved ?? 0 }));
   return out;
 }
 

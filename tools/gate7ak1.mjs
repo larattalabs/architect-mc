@@ -124,7 +124,8 @@ steps.unit = async () => {
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 12: S1, S7, S2, mega_bench, relief_demo, route_demo, forms_demo, scatter_demo and districts_demo goldens unchanged (every committed scenario golden), T2's and D's tests, the realise lint: ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   out.kit = kitOnce(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
-  const d = sh('node tools/plan-catalogue-diff.mjs kit/test/fixtures/plan/catalogue-c37.json kit/schemas/plan-catalogue.golden.json --pending kit/test/fixtures/plan/pending-two-districts.json');
+  // ((6c T3) K1's catalogue is archived as fixtures/plan/catalogue-k1.json: the golden is catalogue 6 now)
+  const d = sh('node tools/plan-catalogue-diff.mjs kit/test/fixtures/plan/catalogue-c37.json kit/test/fixtures/plan/catalogue-k1.json --pending kit/test/fixtures/plan/pending-two-districts.json');
   fs.writeFileSync(path.join(OUT, 'catalogue-diff.txt'), d.out);
   out.catalogueDiff = d.out;
   check(d.code === 0 && /^reserved -> supported: connector\.auto, connector\.gate, connector\.rope_bridge, connector\.wall$/m.test(d.out) && /^added: layout\.elevated \(reserved\), wall\.along \(reserved\), wall\.around \(supported\), wall\.edge \(supported\), wall\.line \(supported\)$/m.test(d.out)

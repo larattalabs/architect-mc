@@ -23,7 +23,7 @@ import { PASS_NAMES } from './passes/index.mjs';
 import { connectorRoles, connectorsError } from '../connectors/style.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.33.0';
+export const KIT_VERSION = '0.34.0';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -483,6 +483,6 @@ export async function planRegion(o) {
   stats.irFormat = ir.format;
   stats.requires = ir.requires ?? [];
   stats.passes = r.passRuns.map((x) => ({ ...x }));
-  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}), ...(r.meta.forms ? { forms: r.meta.forms } : {}), ...(r.passRuns.length ? { passes: r.passRuns.map((x) => ({ ...x })) } : {}), ...(r.meta.relief ? { relief: r.meta.relief } : {}), ...(r.meta.scatter ? { scatter: r.meta.scatter } : {}), ...(r.meta.stamps ? { stamps: r.meta.stamps } : {}), ...(r.meta.scatterDemo ? { scatterDemo: r.meta.scatterDemo } : {}), ...(r.meta.route ? { route: r.meta.route } : {}), ...(r.meta.planCheck ? { planCheck: r.meta.planCheck } : {}), ...(r.meta.villageZones ? { villageZones: r.meta.villageZones } : {}), ...(r.meta.districts ? { districts: r.meta.districts } : {}), ...(r.meta.outpost ? { outpost: r.meta.outpost } : {}), ...(r.meta.walls ? { walls: r.meta.walls } : {}), ...(r.meta.ropes ? { ropes: r.meta.ropes } : {}) };
+  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}), ...(r.meta.forms ? { forms: r.meta.forms } : {}), ...(r.passRuns.length ? { passes: r.passRuns.map((x) => ({ ...x })) } : {}), ...(r.meta.relief ? { relief: r.meta.relief } : {}), ...(r.meta.scatter ? { scatter: r.meta.scatter } : {}), ...(r.meta.stamps ? { stamps: r.meta.stamps } : {}), ...(r.meta.scatterDemo ? { scatterDemo: r.meta.scatterDemo } : {}), ...(r.meta.route ? { route: r.meta.route } : {}), ...(r.meta.planCheck ? { planCheck: r.meta.planCheck } : {}), ...(r.meta.villageZones ? { villageZones: r.meta.villageZones } : {}), ...(r.meta.districts ? { districts: r.meta.districts } : {}), ...(r.meta.outpost ? { outpost: r.meta.outpost } : {}), ...(r.meta.walls ? { walls: r.meta.walls } : {}), ...(r.meta.ropes ? { ropes: r.meta.ropes } : {}), ...(r.meta.bridges ? { bridges: r.meta.bridges } : {}), ...(r.meta.tunnels ? { tunnels: r.meta.tunnels } : {}) };
   return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes };
 }

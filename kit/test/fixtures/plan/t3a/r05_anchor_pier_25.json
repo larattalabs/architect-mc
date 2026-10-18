@@ -1,0 +1,52 @@
+{
+  "about": "(6c T3a) a beam over a dry ravine 26 down: its piers would stand 27 tall (at most 24): ANCHOR with evidence.depth",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2036,
+        "x1": 1159,
+        "z1": 2055,
+        "y": 38
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1080,
+      65,
+      2026
+    ],
+    "b": [
+      1080,
+      65,
+      2066
+    ]
+  },
+  "expect": {
+    "part": "b",
+    "code": "ANCHOR",
+    "depth": true
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "b",
+        "kind": "bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        },
+        "width": 3,
+        "form": "beam"
+      }
+    ]
+  }
+}

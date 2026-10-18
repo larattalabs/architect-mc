@@ -1,0 +1,42 @@
+{
+  "about": "(6c T3a) a bridge over flat ground: NO_GAP, with a `path` wouldFit that fits alone",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": []
+  },
+  "anchors": {
+    "a": [
+      1080,
+      65,
+      2040
+    ],
+    "b": [
+      1080,
+      65,
+      2060
+    ]
+  },
+  "expect": {
+    "part": "b",
+    "code": "NO_GAP",
+    "wouldFit": "path"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "b",
+        "kind": "bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        }
+      }
+    ]
+  }
+}

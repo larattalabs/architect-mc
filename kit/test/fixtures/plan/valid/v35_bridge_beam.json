@@ -1,0 +1,50 @@
+{
+  "about": "(6c T3a) a dry ravine 28 wide across the claim, its floor 12 down: a road-wide bridge (3) across it; the arch can't take 28 (archSpan 4..24), so form auto gives a beam with 3 piers 2 deep in the ravine floor",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2036,
+        "x1": 1159,
+        "z1": 2063,
+        "y": 52
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1080,
+      65,
+      2026
+    ],
+    "b": [
+      1080,
+      65,
+      2074
+    ]
+  },
+  "covers": [
+    "connector.bridge",
+    "bridge.beam"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "ravine_road",
+        "kind": "bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        },
+        "width": 3
+      }
+    ]
+  }
+}
