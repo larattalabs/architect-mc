@@ -612,7 +612,8 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 
 ## Queued from the T3 batch (integration, 2026-10-18)
 
-- **Investigate: a sand cell resting on a tile-rewritten cell vanishes, with no falling entity.** T3b found it in game
+- **Done (housekeeping 2, mod 0.36.1 placeholder):** the cause was TileCheck's dependents stage clearing every gravity block on any changed cell (a08669ff widened it from cleared cells); one whose support is solid before and after now stays (`gravityKept`), one over a free cell is still cleared and restored; probe `tile-gravity`, `TileGravityTest`.
+  ~~Investigate: a sand cell resting on a tile-rewritten cell vanishes, with no falling entity.~~ T3b found it in game
   (crossings_demo flat): a sand cell of the band over the tunnel's lined roof was gone after the realise, and no falling-block
   entity was seen. T3b lines around it (73fc14bf: sand or gravel resting on any cell the tunnel rewrites is lined too), so T3's
   bars hold, but the cause is open. K1b likely met a relative on the rift site (desert sand under the landings; 15f77f67 put stone
