@@ -603,7 +603,7 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 
 ## Queued from gate-speed (coordinator, 2026-10-17)
 
-- **pt-nomod reads the source checkout's `mod/build/headless-launch*.json`.** It fails whenever that checkout hasn't built
+- **Done (housekeeping 2):** pt-nomod takes the launch file from its run worktree (GATE6B_RUN), building it there with `gradlew headlessLaunch` when missing. ~~pt-nomod reads the source checkout's `mod/build/headless-launch*.json`.~~ It fails whenever that checkout hasn't built
   headless; make it build or locate the launch file in its own run worktree.
 - ~~A literal `${OUT }/gate7a-k1b/` directory committed in 1f946e2f~~: already removed (K1b's verifier fix); nothing tracked on main.
 - **More headless:** w-ingame (about 13 min on the client), t1-ingame and the sch/y/y2/mp-ingame steps use no client-only hooks.
@@ -612,7 +612,8 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 
 ## Queued from the T3 batch (integration, 2026-10-18)
 
-- **Investigate: a sand cell resting on a tile-rewritten cell vanishes, with no falling entity.** T3b found it in game
+- **Done (housekeeping 2, mod 0.36.1 placeholder):** the cause was TileCheck's dependents stage clearing every gravity block on any changed cell (a08669ff widened it from cleared cells); one whose support is solid before and after now stays (`gravityKept`), one over a free cell is still cleared and restored; probe `tile-gravity`, `TileGravityTest`.
+  ~~Investigate: a sand cell resting on a tile-rewritten cell vanishes, with no falling entity.~~ T3b found it in game
   (crossings_demo flat): a sand cell of the band over the tunnel's lined roof was gone after the realise, and no falling-block
   entity was seen. T3b lines around it (73fc14bf: sand or gravel resting on any cell the tunnel rewrites is lined too), so T3's
   bars hold, but the cause is open. K1b likely met a relative on the rift site (desert sand under the landings; 15f77f67 put stone
@@ -631,6 +632,6 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 
 ## Queued (coordinator, 2026-10-18)
 
-- **History timeouts for young steps.** History put t3a-ingame's effective timeout at 10 min, so the T3 integration ran with
+- **Done (housekeeping 2):** a history timeout counts only samples of the step's current definition (its chain entry and driver files, hashed at each sample's head through git); kit/test/gate-history.test.mjs. ~~History timeouts for young steps.~~ History put t3a-ingame's effective timeout at 10 min, so the T3 integration ran with
   `--no-history-timeouts`. Use the configured `timeoutMin` until a step has enough samples *from its current definition*
   (e.g. reset a step's history when its driver or chain entry changes), or raise the floor for in-game steps.

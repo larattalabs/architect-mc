@@ -105,6 +105,8 @@ final class TileCheck {
 	private final LongArrayList removedLogs = new LongArrayList();
 	private long @Nullable [] cleared;
 	private int deps;
+	/** Gravity blocks on a changed cell left alone: their support stays solid ({@link #keepsGravity}). */
+	private int gravityKept;
 	private final LongArrayList added = new LongArrayList();
 	private final List<Value> addedVals = new ArrayList<>();
 	private final LongOpenHashSet held = new LongOpenHashSet();
@@ -508,7 +510,9 @@ final class TileCheck {
 	/**
 	 * Stage 3: what stood on a cell this tile changes (snow layers, leaf litter, plants, sugar cane, kelp, sand and gravel) goes
 	 * too, as cells of this entry (the undo puts it back); left alone it breaks or falls at the next update (phase 6a, E-normal).
-	 * A plant can't stand on most new blocks either (grass on stone): any changed cell.
+	 * A plant can't stand on most new blocks either (grass on stone): any changed cell. A gravity block whose support is solid
+	 * before and after stays ({@link #keepsGravity}, counted {@code gravityKept}): it would not fall, and clearing it lost the
+	 * sand over T3b's lined tunnel roof.
 	 */
 	private boolean dependents(ServerLevel level, long deadline) {
 		if (cleared == null) {
@@ -534,6 +538,10 @@ final class TileCheck {
 				if (!dependent(us)) {
 					break;
 				}
+				if (y == BlockPos.getY(q) + 1 && keepsGravity(us, level.getBlockState(m.set(x, y - 1, z)), target.get(q))) {
+					gravityKept++; // its support is solid before and after: nothing makes it fall, so the writer leaves it (and what it holds up)
+					break;
+				}
 				String bdu = dev.larattalabs.architect.placed.Placed.build(level, null, x, y, z);
 				if (bdu != null && !consent.allows(bdu)) {
 					break; // (6c PT) a build's cell is never a dependent written away (its support was kept: supports)
@@ -549,7 +557,22 @@ final class TileCheck {
 		if (deps > 0) {
 			skipped.merge("dependentCells", (long) deps, Long::sum);
 		}
+		if (gravityKept > 0) {
+			skipped.merge("gravityKept", (long) gravityKept, Long::sum);
+		}
 		return true;
+	}
+
+	/**
+	 * Whether a gravity block resting on a changed cell stays: its support holds it up now and the cell's new state holds it up too
+	 * (vanilla's own rule, {@link net.minecraft.world.level.block.FallingBlock#isFree}: not air, fire, fluid or a replaceable block).
+	 * It is no cell of the entry then, and the undo, which puts the support's old (solid) state back, leaves it exactly as it was. A
+	 * gravity block hanging over a free cell (worldgen sand over air) is still cleared with the entry, so the undo restores it. Plants,
+	 * snow and the other dependents are cleared as before (grass can't stand on stone).
+	 */
+	static boolean keepsGravity(BlockState above, BlockState supportNow, @Nullable BlockState supportNew) {
+		return above.getBlock() instanceof net.minecraft.world.level.block.FallingBlock && supportNew != null
+			&& !net.minecraft.world.level.block.FallingBlock.isFree(supportNow) && !net.minecraft.world.level.block.FallingBlock.isFree(supportNew);
 	}
 
 	/** Stage 4: leaves that may hang on the removed logs and stay: held persistent while the tile stands (4e's leaves entry). */

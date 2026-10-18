@@ -4,16 +4,34 @@
 // path groups. Commands go to the server's console (stdin). Its game port is used for nothing (port 0: the system picks a free one).
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+
+/**
+ * The checkout's mod/build/headless-launch*.json; when it has none, `gradlew headlessLaunch` builds it there (apitest off), as the
+ * headless host does (tools/lib/server-host.mjs). -> the file's path.
+ */
+export function launchFile(root, { log = () => {} } = {}) {
+  const modDir = path.join(root, 'mod');
+  const find = () => ['headless-launch-noapitest.json', 'headless-launch.json'].map((f) => path.join(modDir, 'build', f)).find((f) => fs.existsSync(f));
+  let lf = find();
+  if (lf) return lf;
+  log(`no ${path.join(modDir, 'build')}/headless-launch*.json: gradlew headlessLaunch (apitest off) in ${root}`);
+  const env = { ...process.env, ARCHITECT_HEADLESS: '1', ARCHITECT_APITEST: '0', JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25',
+    GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
+  for (const k of Object.keys(env)) if (/^(ANTHROPIC_|CLAUDE)/.test(k)) delete env[k];
+  const g = spawnSync('./gradlew', ['--offline', '--no-daemon', '-q', 'headlessLaunch'], { cwd: modDir, env, stdio: 'inherit' });
+  lf = find();
+  if (g.status !== 0 || !lf) throw new Error(`no ${modDir}/build/headless-launch*.json: gradlew headlessLaunch exited ${g.status}`);
+  return lf;
+}
 
 /**
  * Starts the server in `gameDir` (it holds saves/<world>) and returns {send(cmd), waitFor(re, ms), stop(), log()}. `root`: the checkout
- * whose mod/build/headless-launch*.json is used. `eula`: Noah's own acceptance file (copied, as the headless host does).
+ * whose mod/build/headless-launch*.json is used (the gate's run worktree, which built the step's own server; built there if missing).
+ * `eula`: Noah's own acceptance file (copied, as the headless host does).
  */
-export async function startNoMod({ root, gameDir, world, port = 8915, eula, logFile }) {
-  const modDir = path.join(root, 'mod');
-  const lf = ['headless-launch-noapitest.json', 'headless-launch.json'].map((f) => path.join(modDir, 'build', f)).find((f) => fs.existsSync(f));
-  if (!lf) throw new Error('no mod/build/headless-launch*.json (run a headless server once)');
+export async function startNoMod({ root, gameDir, world, port = 8915, eula, logFile, log }) {
+  const lf = launchFile(root, { log });
   const launch = JSON.parse(fs.readFileSync(lf, 'utf8'));
   const ours = (p) => p.startsWith(path.join(root, 'mod', 'build')) || p.startsWith(path.join(root, 'devserver')) || p.startsWith(path.join(root, 'apitest'))
     || /lab[_-]ui/.test(path.basename(p)) || /architect_(mc|devserver|apitest)/.test(path.basename(p));
