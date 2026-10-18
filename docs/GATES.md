@@ -277,6 +277,7 @@ ARCHITECT_DEV_PORT=8943 ARCHITECT_PORT=8942 HEADLESS_SIDECAR=sim ARCHITECT_AUTOW
 | 6a | 6a-megaA, 6a-eflat, 6a-forest, 6a-inv3, 6a-staged |
 | 6b | 6b-smoke, 6b-volume, 6b-commands, 6b-nudges, 6b-pathstyle, 6b-versions |
 | 6c | x-ingame (removal included), x-resume (C23), v-ingame, b-ingame (6c B), pt-ingame and pt-nomod (6c PT), pt2-ingame and pt2-survival (6c PT2) |
+| housekeeping 2 | t1-ingame (6c T1): its 3 check lines equal the client's at the same head (c2b094ea) |
 
 **On the client (`"host": "client"`, `hostWhy` says why):**
 
@@ -290,6 +291,15 @@ ARCHITECT_DEV_PORT=8943 ARCHITECT_PORT=8942 HEADLESS_SIDECAR=sim ARCHITECT_AUTOW
 
 **Not tried yet (still client):** the crash suites, 6a-megaB/-heap, 4e-throughput, 5b-chains, 0a-*, 0b-* and the Y2 steps.
 Try one with `--host server --only <step>`, then mark it.
+
+**Tried and kept on the client (housekeeping 2, 2026-10-18, both hosts at c2b094ea):**
+- mp-ingame: its scenarios shoot cameras (`run it on a client`).
+- sch-ingame: the `ui` part calls `dev.library.export.schem`, which has no headless twin.
+- y2-ingame: `dev.crate.open` is client-only.
+- w-ingame: the plan surveys differ by host (5906 against 5907 frozen-water columns; other s1/s3 survey shas). Both hosts fail
+  item 7's s1 golden (572271bdae83 against 3e5bd5b77e40), which predates this batch.
+- y-ingame: headless fails `store`'s feed order (5 of 6 targets); on the client `store` fails NOT_ALLOWED (the INSTANT twins
+  need permission level 2). Neither matches, so it stays.
 
 ### Headless against client (same commit, 3 rounds each, interleaved, other slices' runs on the box)
 
