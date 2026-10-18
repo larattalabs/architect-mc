@@ -304,7 +304,7 @@ async function villagers(ctx, tag, run) {
   const out = { nav: {}, stand: null };
   const R = run.R;
   await L.cmd('/kill @e[type=!minecraft:player]');
-  for (const b of run.bodies.filter((q) => q.fluid === 'water')) {
+  for (const b of run.bodies.filter((q) => q.fluid === 'water' && q.cells.length >= 4)) {
     const banks = banksOf(b, R, 4);
     if (banks.length < 2) { out.nav[b.id] = { banks: banks.length }; continue; }
     out.nav[b.id] = await navBoth(ctx, banks[0], banks[Math.floor(banks.length / 2)]);
@@ -317,7 +317,7 @@ async function villagers(ctx, tag, run) {
   await L.cmd('/gamerule spawn_monsters false');
   const since = Date.now();
   const placed = [];
-  for (const b of run.bodies.filter((q) => q.fluid === 'water')) {
+  for (const b of run.bodies.filter((q) => q.fluid === 'water' && q.cells.length >= 4)) {
     for (const p of banksOf(b, R, 4)) { await L.cmd(`/summon minecraft:villager ${p[0] + 0.5} ${p[1]} ${p[2] + 0.5} {Tags:["ha_stand"]}`); placed.push({ body: b.id, at: p, swim: false }); }
     const c = centreOf(b);
     if (c) { await L.cmd(`/summon minecraft:villager ${c[0] + 0.5} ${c[1]} ${c[2] + 0.5} {Tags:["ha_stand","ha_swim"]}`); placed.push({ body: b.id, at: [c[0], c[1], c[2]], swim: true }); }
@@ -327,16 +327,22 @@ async function villagers(ctx, tag, run) {
   const alive = await L.cmd('/execute if entity @e[type=minecraft:villager,tag=ha_stand]');
   const n = Number((/(\d+)/.exec(String(alive.messages?.join(' ') ?? '')) ?? [0, 0])[1]);
   // each swimmer finds a path to a bank
+  // (the exits: the body's rim notches, the shell rule's rim cells its op leaves out: a swimmer's way out, M25:exit)
+  const { shellOf } = await ctx.imp('lib/fluids/body.mjs');
   const swims = {};
   for (const p of placed.filter((q) => q.swim)) {
     const b = run.bodies.find((q) => q.id === p.body);
-    const bank = banksOf(b, R, 1)[0];
-    swims[p.body] = bank ? (await ctx.L.call('dev.nav.villager', { from: [p.at[0], p.at[1], p.at[2]], to: bank, range: 64 }, 120_000)).canReach === true : false;
+    const sh = new Set(b.shell.map((c) => `${c[0]},${c[1]},${c[2]}`));
+    const exits = shellOf(b.cells).filter((c) => c[1] === b.level + 1 && !sh.has(`${c[0]},${c[1]},${c[2]}`))
+      .sort((a, c) => (Math.abs(a[0] - p.at[0]) + Math.abs(a[2] - p.at[2])) - (Math.abs(c[0] - p.at[0]) + Math.abs(c[2] - p.at[2])));
+    let ok = false;
+    for (const e of exits.slice(0, 3)) if ((await ctx.L.call('dev.nav.villager', { from: [p.at[0], p.at[1], p.at[2]], to: e, range: 64 }, 120_000)).canReach === true) { ok = true; break; }
+    swims[p.body] = exits.length ? ok : 'no exit';
   }
   out.stand = { placed: placed.length, alive: n, damage: dmg, swims };
   const drown = dmg.error ? null : (dmg.damage ?? dmg.events?.length ?? null);
   const deaths = dmg.error ? null : (dmg.deaths ?? null);
-  check(!dmg.error && drown === 0 && (deaths === 0 || deaths?.length === 0) && n === placed.length && Object.values(swims).every(Boolean), `item 9 (${tag}): the villager stand (${placed.length} villagers: 4 by each body's edge, 1 in its surface's centre; 2 minutes at default rules): ${drown} drowning damage, ${placed.length - n} death(s), a path from each swimmer to a bank (${j(swims)})${dmg.error ? `; dev.entity.damage: ${dmg.error}` : ''}`);
+  check(!dmg.error && drown === 0 && (deaths === 0 || deaths?.length === 0) && n === placed.length && Object.values(swims).every((v) => v === true), `item 9 (${tag}): the villager stand (${placed.length} villagers: 4 by each body's edge, 1 in its surface's centre; 2 minutes at default rules): ${drown} drowning damage, ${placed.length - n} death(s), a path from each swimmer to a bank (${j(swims)})${dmg.error ? `; dev.entity.damage: ${dmg.error}` : ''}`);
   await L.cmd('/kill @e[type=minecraft:villager,tag=ha_stand]');
   return out;
 }

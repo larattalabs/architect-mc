@@ -25,7 +25,7 @@ import { WALL_DEFAULTS } from '../connectors/wall.mjs';
 import { FLAG_WATER } from '../region/pack.mjs';
 import { channelForm } from '../plan/schema.mjs';
 import { bodiesMark, bodiesRollback, centre, featureOf, fluidRolesOf, grow, inside, intIn, linesBody, meets, protectedMet, reachMeetsKeep, readParams, rectArr,
-  rectSurvey, shellBlock, takenRects, volumeAnswer, volumeKeep, MARGIN, flagsAt, refusal, leakRefusal } from './place.mjs';
+  rectSurvey, shellBlock, takenRects, volumeAnswer, volumeKeep, MARGIN, flagsAt, refusal, leakRefusal, exitNotches } from './place.mjs';
 import { bodyAnswer, bodyId, iceFor, naturalOf, shellStatesOf } from './pond.mjs';
 
 export const MOAT = Object.freeze({ width: 5, depth: 3, ring: [6, 12], berm: 5 });
@@ -181,7 +181,12 @@ export function emitMoat(r, o) {
   const natural = naturalOf(r, box, level - o.depth - 1, level + 2);
   const pick = (x, y, z, chain) => chain.find((b) => b && String(b).replace(/\[.*$/, '') !== natural(x, y, z)) ?? chain[chain.length - 1];
   const shellRole = (x, y, z, where) => (where === 'rim' ? pick(x, y, z, [coping, lining, 'minecraft:stone_bricks']) : pick(x, y, z, [lining, 'minecraft:stone_bricks', 'minecraft:cobblestone']));
-  const rec = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: 'moat', stage: o.stage, level, shellRole, ice: o.ice ?? null });
+  // the exits: notches in both rims every 12 (a swimmer climbs out on either side), the bank over each cleared
+  const exits = exitNotches(cells, level, { every: 12, max: 256 });
+  const ec = [];
+  for (const [x, y, z] of exits) { const t = S.topAt(x, z); if (t >= y) ec.push(x, z, y, t, 0); }
+  if (ec.length) { const ex = r.part(`${o.id}_exits`.slice(0, 48), { stage: o.stage }); ex.columns({ abs: 0 }, { abs: 0 }, ec, [null], { cond: 0 }); (r.meta.parts[ex.id] ??= {}).kind = 'carve'; }
+  const rec = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: 'moat', stage: o.stage, level, shellRole, ice: o.ice ?? null, outlets: exits });
   rec.shellStates = shellStatesOf(rec, shellRole);
   return Object.assign(rec, { ring: o.ring, columns: water.length });
 }

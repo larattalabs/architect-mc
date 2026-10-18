@@ -438,3 +438,32 @@ export function refusal(code, message, evidence = {}, wouldFit = null) {
 export function leakRefusal(rec, hit, what = 'shell, spill or single-breach reach') {
   return refusal('LEAK', `body ${rec.id}'s ${what} meets ${hit.reasons.join(', ')} at ${hit.cells.slice(0, 4).map((q) => q.join(' ')).join('; ')}`, { body: rec.id, meets: hit.reasons, cells: hit.cells });
 }
+
+/**
+ * A body's exits (§2.1 M25:exit, §8.5, item 9): notches in its rim. The shell's rim stands one over each side wall beside a surface cell,
+ * so its banks are 2 over the water (vanilla's villager path can't climb that out of water: dev.nav.villager finds no path); a notch
+ * leaves one rim cell out (r.fluidBody's `outlets`: no shell cell, the side wall under it stays), so a swimmer steps 1 up onto the side
+ * wall and 1 up again onto the bank. Water at the surface never rises into it. Rim cells chosen greedily in (x, z) order at least `every`
+ * apart (Chebyshev), at most `max`; `skip(x, y, z)` leaves a cell out (a waterfall's lip). Returns [[x, level + 1, z]].
+ */
+export function exitNotches(cells, level, { every = 8, max = 64, skip = null } = {}) {
+  const own = new Set(cells.map((c) => `${c[0]},${c[1]},${c[2]}`));
+  const rim = new Map();
+  for (const [x, y, z] of cells) {
+    if (y !== level || own.has(`${x},${y + 1},${z}`)) continue;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (own.has(`${x + dx},${y},${z + dz}`)) continue;
+      const q = [x + dx, level + 1, z + dz];
+      if (skip && skip(...q)) continue;
+      rim.set(`${q[0]},${q[2]}`, q);
+    }
+  }
+  const list = [...rim.values()].sort((a, b) => a[0] - b[0] || a[2] - b[2]);
+  const out = [];
+  for (const q of list) {
+    if (out.length >= max) break;
+    if (out.some((o) => Math.max(Math.abs(o[0] - q[0]), Math.abs(o[2] - q[2])) < every)) continue;
+    out.push(q);
+  }
+  return out;
+}

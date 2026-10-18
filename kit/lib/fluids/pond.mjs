@@ -27,7 +27,7 @@ import { F_WRITTEN } from '../region/vworld.mjs';
 import {
   PRESET_SIZES, arrRect, bodiesMark, bodiesRollback, bodyBom, centre, flagsAt, fluidRolesOf, gap, grow, intIn, inside, linesBody, locatorOf,
   locatorRefusal, meets, protectedMet, reachMeetsKeep, readParams, rectArr, rectOf, rectSurvey, scanRects, shellBlock, sketchPoint, surfaceFreezes,
-  takenRects, volumeAnswer, volumeKeep, waterInClaim, MARGIN, freezesAt, spawnAvoid, refusal, leakRefusal,
+  takenRects, volumeAnswer, volumeKeep, waterInClaim, MARGIN, freezesAt, spawnAvoid, refusal, leakRefusal, exitNotches,
 } from './place.mjs';
 
 const k2 = (x, z) => `${x},${z}`;
@@ -149,7 +149,15 @@ export function emitPond(r, o) {
       (r.meta.parts[fp.id] ??= {}).kind = 'carve';
     }
   }
-  const rec = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: o.kind ?? 'pond', fluid, stage: o.stage, level, shellRole, ice: o.ice ?? null, _unsafe: o._unsafe ?? null });
+  // the exits (water only): notches in the rim a swimmer climbs out through, the bank over each cleared
+  const exits = fluid === 'water' && o.exits !== false ? exitNotches(cells, level, { every: o.exitEvery ?? 6 }) : [];
+  if (exits.length) {
+    const ex = r.part(`${o.id}_exits`.slice(0, 48), { stage: o.stage });
+    const ec = [];
+    for (const [x, y, z] of exits) { const t = S.topAt(x, z); if (t >= y) ec.push(x, z, y, t, 0); }
+    if (ec.length) { ex.columns({ abs: 0 }, { abs: 0 }, ec, [null], { cond: 0 }); (r.meta.parts[ex.id] ??= {}).kind = 'carve'; }
+  }
+  const rec = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: o.kind ?? 'pond', fluid, stage: o.stage, level, shellRole, ice: o.ice ?? null, outlets: exits, _unsafe: o._unsafe ?? null });
   return Object.assign(rec, { rect: o.rect, level, depth, cols: cols.length, rim, shellStates: shellStatesOf(rec, shellRole) });
 }
 

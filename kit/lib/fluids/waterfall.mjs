@@ -292,7 +292,11 @@ export function emitWaterfall(r, o) {
   const pick = (x, y, z, chain) => chain.find((b) => b && String(b).replace(/\[.*$/, '') !== natural(x, y, z)) ?? chain[chain.length - 1];
   const shellRole = (x, y, z, where) => (s.lip === 'sculpt' ? (where === 'rim' ? coping : rock) : where === 'rim' ? pick(x, y, z, [coping, rock, 'minecraft:stone_bricks']) : pick(x, y, z, [rock, 'minecraft:cobblestone', 'minecraft:stone_bricks']));
   const basinSet = new Set((basin?.cells ?? []).map((c) => k3(...c)));
-  const pool = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: 'waterfall', stage: o.stage, level: L, outlets, joins, shellRole, ice: null,
+  // the exit: a notch in the back rim's middle (a swimmer climbs out onto the outcrop's top, away from the lip); the outer course
+  // behind it is the step up
+  const backMid = F.col(-P, (w - 1) >> 1);
+  const notch = [backMid[0], L + 1, backMid[1]];
+  const pool = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: 'waterfall', stage: o.stage, level: L, outlets: [...outlets, notch], joins, shellRole, ice: null,
     world: (x, y, z) => (basinSet.has(k3(x, y, z)) ? 'water' : null) });
   pool.shellStates = shellStatesOf(pool, shellRole);
   pool.works = frameRect(F, -(P + 1), 0, -2, w + 1);

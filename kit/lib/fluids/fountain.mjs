@@ -100,7 +100,8 @@ export function emitFountain(r, o) {
   if (o.thick === 2) {
     for (let x = cx - h - 2; x <= cx + h + 2; x++) for (let z = cz - h - 2; z <= cz + h + 2; z++) {
       if (Math.max(Math.abs(x - cx), Math.abs(z - cz)) !== h + 2) continue;
-      cols.push(x, z, f, f + 1, 1, x, z, f + 2, f + 2, 2);
+      cols.push(x, z, f, f + 1, 1);
+      if (!(x === cx && Math.abs(z - cz) === h + 2)) cols.push(x, z, f + 2, f + 2, 2);
     }
   }
   solid.columns({ abs: 0 }, { abs: 0 }, cols, mats, { cond: 3 });
@@ -110,14 +111,17 @@ export function emitFountain(r, o) {
   const natural = naturalOf(r, o.rect, f - 2, top + 1);
   const pick = (x, y, z, chain) => chain.find((b) => b && String(b).replace(/\[.*$/, '') !== natural(x, y, z)) ?? chain[chain.length - 1];
   const shellRole = (x, y, z, where) => (x === cx && z === cz ? spoutB : where === 'rim' ? pick(x, y, z, [coping, structure, 'minecraft:stone_bricks']) : pick(x, y, z, [structure, 'minecraft:stone_bricks', 'minecraft:cobblestone']));
-  const basin = r.fluidBody(basinCells, { id: o.id, part: o.part ?? null, kind: 'fountain', stage: o.stage, level: wy, shellRole, solid: pillar, ice: o.ice ?? null });
+  // the exits: a notch in the coping on two opposite sides (both courses when it is 2 thick): a swimmer steps onto the side ring and
+  // down to the ground
+  const exits = [[cx, wy + 1, cz - h - 1], [cx, wy + 1, cz + h + 1]];
+  const basin = r.fluidBody(basinCells, { id: o.id, part: o.part ?? null, kind: 'fountain', stage: o.stage, level: wy, shellRole, solid: pillar, ice: o.ice ?? null, outlets: exits });
   const basinSet = new Set(basinCells.map((c) => k3(...c)));
   const outlets = [[cx + 1, top, cz], [cx - 1, top, cz], [cx, top, cz + 1], [cx, top, cz - 1]];
   const spout = r.fluidBody([[cx, top, cz]], { id: `${o.id}_spout`.slice(0, 48), part: o.part ?? null, kind: 'fountain', stage: o.stage, level: top, outlets, shellRole: spoutB, solid: pillar,
     world: (x, y, z) => (basinSet.has(k3(x, y, z)) ? 'water' : null) });
   basin.shellStates = shellStatesOf(basin, shellRole);
   spout.shellStates = [];
-  if (o.thick === 2) for (let i = 0; i < 4 * (o.basin + 3); i++) basin.shellStates.push(structure, structure, coping);
+  if (o.thick === 2) for (let i = 0; i < 4 * (o.basin + 3); i++) basin.shellStates.push(structure, structure, ...(i < 2 ? [] : [coping]));
   return { basin, spout, floor: f, top, thick: o.thick };
 }
 
