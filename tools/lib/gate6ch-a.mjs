@@ -229,6 +229,8 @@ async function realiseRun(ctx, tag, { claim, plan, anchors, rules = 'default', b
   const { L, OUT, check } = ctx;
   const out = { claim };
   const cx = (claim[0] + claim[2]) / 2, cz = (claim[1] + claim[3]) / 2;
+  // (the rules before the check: under default rules a frozen site's water freezes between the check and the realise: ARTIFACT_STALE)
+  await L.setRules(rules);
   await L.tp(cx, 200, cz);
   await L.call('dev.waitChunks', { timeoutMs: 120_000 }, 180_000).catch(() => null);
   const c = await L.call('dev.region.checkPlan', { plan, claim, owner: OWNER, anchors, load: 'generate', ...(bible ? { bible } : {}) }, 900_000);
@@ -422,13 +424,15 @@ async function haCold(ctx) {
   await L.fresh('G6B Ha Cold', base);
   await L.setRules('default');
   const { plan, anchors } = await demoPlan(ctx, FROZEN_CLAIM, { variant: 'cold', twin: true });
-  const run = await realiseRun(ctx, 'cold', { claim: FROZEN_CLAIM, plan, anchors, rules: 'default' });
+  // (checked and realised under the exact rules: the frozen river keeps the state the check read; the stand below is at default rules)
+  await L.setRules('exact');
+  const run = await realiseRun(ctx, 'cold', { claim: FROZEN_CLAIM, plan, anchors, rules: 'exact' });
   if (!run.R) return run;
   const out = { check: run.check, realise: run.realise };
   const capped = run.bodies.find((b) => b.ice.length), twin = run.bodies.find((b) => /twin/.test(b.id));
   check(!!capped && capped.ice.length > 0, `item 4 (cold): the pond is capped with ice by the plan (${capped?.ice.length ?? 0} cell(s))`);
   // the stand at default rules: every capped cell still ice; the twin left open freezes on its own (the probe of §0's assumption)
-  await L.cmd('/gamerule random_tick_speed 300');
+  for (const r of ['random_tick_speed 300', 'advance_time true', 'advance_weather true']) await L.cmd(`/gamerule ${r}`);
   await L.settle(120_000);
   await L.cmd('/gamerule random_tick_speed 3');
   const after2 = path.join(ctx.OUT, 'ha-cold-after2.arwd.gz');
