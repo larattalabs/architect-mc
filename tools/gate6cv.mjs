@@ -140,7 +140,7 @@ const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 
 steps.unit = async () => {
   const out = {};
-  out.village = nodeTest(['kit/test/village.test.mjs']);
+  out.village = nodeTest(['kit/test/village.test.mjs', 'kit/test/village-layout-1.test.mjs', 'kit/test/village-layout-2.test.mjs', 'kit/test/village-layout-3.test.mjs', 'kit/test/village-layout-4.test.mjs']);
   check(out.village.code === 0 && out.village.fail === 0 && out.village.pass >= 10, `item 1: kit village tests (500 claims, parity, props, mover, lots type, schema, variants): ${out.village.pass} pass, ${out.village.fail} fail`, out.village.failing);
   out.goldens = kitOnce(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/forms-island.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 1: goldens unchanged (mega_bench tiles, S1's tile shas, 6b fixtures, islands): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);

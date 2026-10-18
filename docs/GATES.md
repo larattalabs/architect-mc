@@ -136,6 +136,9 @@ the whole kit suite (about 190 s and 950 CPU-s each) next to `unit-kit`. The cha
 - Within the suite, `--test-concurrency` doesn't help. The suite's wall time (about 190 s on a loaded box) is set by single
   files run serially in one process: `plan-p0.test.mjs` (187 s of tests), `plan-k1a` (150 s), `village` (147 s; one test of
   500 seeded claims takes 138 s). Splitting those tests is kit work, not runner work.
+- *Housekeeping 2 (2026-10-18):* plan-p0 is now plan-p0, -valid, -det-1..3 and -asks (37-61 s each), and the 500 claims are
+  village-layout-1..4 (17-23 s each). The suite went from 214/267 s to 139/145 s (A/B/A/B, load 3-10). A driver that names
+  plan-p0 or village lists the split files too.
 
 ### Gradle in the source checkout
 

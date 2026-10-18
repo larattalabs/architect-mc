@@ -608,7 +608,7 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 - ~~A literal `${OUT }/gate7a-k1b/` directory committed in 1f946e2f~~: already removed (K1b's verifier fix); nothing tracked on main.
 - **More headless:** w-ingame (about 13 min on the client), t1-ingame and the sch/y/y2/mp-ingame steps use no client-only hooks.
   A/B them with `--host server` and move the ones that match.
-- **Split the slow kit test files.** plan-p0 (187 s) and one village test (138 s) set the kit suite's wall time.
+- **Done (housekeeping 2):** plan-p0 split into plan-p0 + -valid + -det-1..3 + -asks (helpers in plan-p0-shared.mjs), the 500 claims into village-layout-1..4 (125 each); every driver lists the new files; kit suite 214/267 s -> 139/145 s (A/B/A/B, same box). ~~Split the slow kit test files.~~ plan-p0 (187 s) and one village test (138 s) set the kit suite's wall time.
 
 ## Queued from the T3 batch (integration, 2026-10-18)
 
