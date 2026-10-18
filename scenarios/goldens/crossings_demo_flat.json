@@ -2,17 +2,27 @@
  "scenario": "crossings_demo_flat",
  "version": 0,
  "note": "tile shas of the IR over its own plan survey, 1 worker = 4 workers shuffled; inputs in goldens/crossings_demo_flat/ (written by tools/gate6ct3a.mjs flat)",
- "irSha": "7d64095e1d18d8598d8f43f05095849bf47f99d205c5f9d6d9f76ab4a559a175",
+ "irSha": "bdc5f9c85a59ef0830b113e56ba9ab1530743519e80425089ff2b845517de9aa",
  "kitVersion": "0.34.0",
- "cells": 26269,
+ "cells": 75225,
  "tiles": {
   "ground|terrain|94,94": "b0fd33e028d612ed5749050469bd42eb4a434371bd057d75ecf2610c6b155a4f",
   "ground|terrain|94,95": "70c3648f04f720c52ea7f4995615dd0c607fc511523d895b3dbb68d5b66cbdf3",
   "ground|terrain|95,94": "98a7f19f1d9c12bf837cf2bcc9bb75f163d9dbaafdab381dbb1121487785d8ea",
   "ground|terrain|95,95": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+  "ground|terrain|96,93": "0d3103793e4fb07625b5faf53d995ef255fc41114920610ba2c77da2d4b8bdec",
+  "ground|terrain|96,94": "e79edd9b3e9758ad9cb40bd81e611a67975b58f75b30bad9db6da0f4123449b7",
+  "ground|terrain|96,95": "7732b2ba6f456df2796f88778f06ed4181b485b462a64ac10dd38195d547eadf",
+  "ground|terrain|97,93": "2c526702f57f33fef1d1ec1bb79b0622af48ec586ee5aff33746b8d53aedef0f",
+  "ground|terrain|97,94": "227cf6c8b903d37ff6794a9354a0046ae4e22e48d2b0b0baab8d31330790990a",
+  "ground|terrain|97,95": "7965d6298437725917681aa02c7556ae026badac1bdfb3aee8c0b4fa5d106cf2",
   "links|path|94,94": "0f34a2f534487e8624dff2780107cb51cb07a3073ce377af539c000bcd5d81c0",
   "links|path|95,94": "1e988126cb17fca95b164e47369551d656888d486511998bffd550f73ce1911c",
+  "links|path|96,94": "eb2ae2278c75916d13cb07821f522706bacb5610ab6084cf711d264633c2cd2a",
+  "links|path|97,94": "9fd94fee8bfbec2fd260786a9b583263a89a8ab77657b5d2ffd4c444bd53f9a5",
   "routes|path|94,94": "ae31658b144d2b3a55f883a3b7fdfb7354a57ba91c4bd5b8313fcc2a58dbbf32",
-  "routes|path|95,94": "fdec9639f712e0bce0ce60edeef446349b2836fb488f274fa0d724380b663078"
+  "routes|path|95,94": "fdec9639f712e0bce0ce60edeef446349b2836fb488f274fa0d724380b663078",
+  "routes|path|96,94": "6523b462d21d5653844b9c491513216cbd0af76d93a52f7b7d6cba80adb4198e",
+  "routes|path|97,94": "bb1aed4ca2fc92ad41531921abddfaab5208432947a705beffd7bc04cca6ae17"
  }
 }

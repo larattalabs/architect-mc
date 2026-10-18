@@ -609,3 +609,22 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 - **More headless:** w-ingame (about 13 min on the client), t1-ingame and the sch/y/y2/mp-ingame steps use no client-only hooks.
   A/B them with `--host server` and move the ones that match.
 - **Split the slow kit test files.** plan-p0 (187 s) and one village test (138 s) set the kit suite's wall time.
+
+## Queued from the T3 batch (integration, 2026-10-18)
+
+- **Investigate: a sand cell resting on a tile-rewritten cell vanishes, with no falling entity.** T3b found it in game
+  (crossings_demo flat): a sand cell of the band over the tunnel's lined roof was gone after the realise, and no falling-block
+  entity was seen. T3b lines around it (73fc14bf: sand or gravel resting on any cell the tunnel rewrites is lined too), so T3's
+  bars hold, but the cause is open. K1b likely met a relative on the rift site (desert sand under the landings; 15f77f67 put stone
+  footings there), and T3a's frozen site saw worldgen sand drop 8-13 columns from any written cell under default rules. First
+  suspect: the tile writer's own rule that what stood on a changed cell (snow, plants, sand, gravel, ...) is cleared with it as
+  cells of the entry (d3f36c95, a08669ff), which would remove the sand by design rather than by gravity. Decide whether a
+  gravity block on a rewritten support should be kept when the new support is solid, and add a probe: one sand cell on one
+  rewritten cell, re-read after the realise, with the journal's entries for that column.
+- **Thin margin on T3b's cap fixture.** t3b-natural's "past the cap" case puts the corridor at 4,290,489 cells against the
+  4,000,000-cell cap (7% over). A change to the corridor box (approach, dilation, the y span) could drop it under the cap and turn
+  the expected `incomplete VOLUME` into a fit without any cap bug. Widen the ends (or assert the computed size is at least, say,
+  1.5x the cap) the next time the driver is touched.
+- **A street whose bridge fallback also fails still says `WATER (until T3)`** (compile.mjs's ROUTE_WATER answer). After T3 the
+  `until` is stale: it should name H (S-T3-3) when the bridge fallback ran and still met water. No recorded ask hits it today
+  (the before table lists none); fix with a fixture when T3's follow-ups are next touched.
