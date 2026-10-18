@@ -157,6 +157,17 @@ const snap = async (ctx, box, name) => { const file = path.join(ctx.OUT, `${name
 const diff = async (ctx, box, file) => { const r = await ctx.L.call('dev.region.hash', { box, mode: 'diff', file }, 4 * 3_600_000); return { mismatches: r.mismatches, classes: r.classes ?? {}, sample: (r.list ?? []).slice(0, 12) }; };
 
 /** The shell cell a breach opens (§14 item 6): the deepest side cell of a body (a shell cell beside a body cell, lowest, ties by x, z). */
+/**
+ * A body and the same-fluid siblings it touches: one whose sources or predicted flow lie in or beside (26 neighbours) this one's cells,
+ * predicted flow, spill or watch, or the other way round (a fountain's spout falls onto its basin).
+ */
+function linkedOf(body, bodies) {
+  const grow = (cells) => { const s = new Set(); for (const [x, y, z] of cells) for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) s.add(`${x + dx},${y + dy},${z + dz}`); return s; };
+  const reachOf = (o) => [...o.cells, ...o.predicted, ...o.spill, ...o.watch];
+  const mine = grow(reachOf(body));
+  return bodies.filter((o) => o === body || (o.fluid === body.fluid && reachOf(o).some((c) => mine.has(k3(c)))));
+}
+
 function breachCell(body) {
   const own = new Set(body.cells.map(k3));
   const side = body.shell.filter(([x, y, z]) => y <= body.level && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => own.has(`${x + dx},${y},${z + dz}`)));
@@ -205,8 +216,7 @@ export async function ingame(ctx) {
     for (const b of d.bodies) {
       const c = await censusOf(ctx, b, before, d.bodies);
       // every body was breached at once: each one's reach is its own cells, spill and watch plus its siblings' (a spout over its basin)
-      const mine = new Set([...b.cells, ...b.spill, ...b.watch].map(k3));
-      const linked = d.bodies.filter((o) => o === b || (o.fluid === b.fluid && [...o.cells, ...o.predicted].some((c) => mine.has(k3(c)))));
+      const linked = linkedOf(b, d.bodies);
       const allowed = new Set(linked.flatMap((o) => [...o.cells, ...o.spill, ...o.watch, ...o.joins, ...o.predicted]).map(k3));
       const kind = b.fluid === 'lava' ? 'minecraft:lava' : 'minecraft:water';
       const beyond = [...c.fluids].filter(([k, s]) => s.startsWith(kind) && !allowed.has(k) && !before.has(k));
@@ -338,9 +348,9 @@ export async function crash(ctx) {
   const d = await planDemo(ctx, { lava: true });
   const box = demoBox(d.bodies);
   const file = await snap(ctx, box, 'h-crash');
-  // FL1: the gate checked, the before states saved, no source written
+  // FL1: the gate checked, the before states saved, no source written; the world saved at the halt (the shells stand, as item 7 says)
   let region = null;
-  await crashAt(ctx, world, 'FL1', async () => { region = await L.realise(d.p.planId); });
+  await crashAt(ctx, world, 'FL1+save', async () => { region = await L.realise(d.p.planId); });
   region ??= (await L.call('dev.region.list', {}, 60_000)).regions?.at(-1)?.id;
   let st = await L.waitRegion(region, 3_600_000);
   let fl = st.view.ext?.['architect_mc:fluids'] ?? [];
@@ -376,6 +386,23 @@ export async function crash(ctx) {
   out.fl2.mismatches = df.mismatches;
   check(rm2.state === 'REMOVED' && df.mismatches === 0, `item 7 (FL2): the undo exact as item 5: E-flat ${df.mismatches}`, df.sample);
   await L.leaveWorld();
+  // FL1 without the save: the halt loses the chunks written since the last save (the shells may be gone while the journal has them):
+  // the resumed stage checks every body again, so a body is written settled or not written (uncontained), never into a lost shell
+  await freshFlat(ctx, `${world} 3`, 'exact');
+  const d3 = await planDemo(ctx, { lava: true });
+  let region3 = null;
+  await crashAt(ctx, `${world} 3`, 'FL1', async () => { region3 = await L.realise(d3.p.planId); });
+  region3 ??= (await L.call('dev.region.list', {}, 60_000)).regions?.at(-1)?.id;
+  st = await L.waitRegion(region3, 3_600_000);
+  fl = st.view.ext?.['architect_mc:fluids'] ?? [];
+  out.fl1Lost = { state: st.view.state, fluids: fl };
+  check(fl.length === 4 && fl.every((x) => x.state === 'settled' || (x.state === 'drained' && /^uncontained/.test(x.reason ?? ''))), `item 7 (FL1, no save: the shells lost with the chunks): every body settled or not written, uncontained (${json(fl.map((x) => [x.body, x.state, (x.reason ?? '').split(':')[0]]))})`);
+  let outside3 = 0;
+  for (const b of d3.bodies) outside3 += (await censusOf(ctx, b, null, d3.bodies)).outsideCount;
+  out.fl1Lost.outside = outside3;
+  check(outside3 === 0, `item 7 (FL1, no save): 0 fluid outside the declared cells (${outside3})`);
+  await removeWait(ctx, region3).catch(() => null);
+  await L.leaveWorld();
   return out;
 }
 
@@ -405,14 +432,14 @@ export async function probe(ctx) {
   // dependent, written back as a water source (§4.4), the undo exact
   {
     await freshFlat(ctx, 'G6B H Sand', 'exact');
-    const gy = await groundY(ctx, 40, 40);
-    out.sand = { gy, cases: {} };
+    out.sand = { cases: {} };
     const brush = async (o) => L.call('dev.brush', { owner: OWNER, ...o }, 600_000);
     const stack = async (x, y, z) => (await L.call('dev.journal.at', { x, y, z }, 60_000));
     const state = async (x, y, z) => (await L.call('dev.fluid.census', { box: [x, y, z, x, y, z] }, 60_000)).fluids[0]?.[3] ?? null;
     const isSand = async (x, y, z) => { const r = await L.call('dev.box.hash', { min: [x, y, z], max: [x, y, z] }, 60_000); return r; };
     void isSand;
     for (const [tag, X, Z, wet] of [['dry', 40, 40, false], ['wet', 40, 100, true]]) {
+      const gy = await groundY(ctx, X, Z);
       await L.tp(X + 0.5, gy + 25, Z + 0.5);
       if (wet) { await L.cmd(`/fill ${X - 4} ${gy + 1} ${Z - 4} ${X + 4} ${gy + 3} ${Z + 4} minecraft:water`); await L.cmd(`/fill ${X - 5} ${gy + 1} ${Z - 5} ${X + 5} ${gy + 3} ${Z - 5} minecraft:stone`); }
       await L.cmd(`/setblock ${X} ${gy + 1} ${Z} minecraft:sand strict`);
@@ -431,7 +458,7 @@ export async function probe(ctx) {
       if (v.region) await L.call('dev.region.remove', { region: v.region, requester: OWNER }, 600_000);
       await sleep(3000);
       const df = await diff(ctx, box, f);
-      out.sand.cases[tag] = { stroke: { state: v.state, cells: v.cellsWritten, skipped: v.cellsSkipped }, sandNow, column: col, diff: df };
+      out.sand.cases[tag] = { gy, stroke: { state: v.state, cells: v.cellsWritten, skipped: v.cellsSkipped }, sandNow, column: col, diff: df };
       check(v.state === 'PLACED' && sandNow === 'minecraft:sand' && (v.cellsSkipped?.gravityKept ?? 0) >= 1, `item 14 (a, ${tag}): a sand cell on a rewritten solid support ${wet ? 'under natural water ' : ''}stays sand (${sandNow}; gravityKept ${v.cellsSkipped?.gravityKept ?? 0}; the column's entries ${json(col.map((c) => [c.y, c.entry ? `${c.entry.before}->${c.entry.after}` : null]))})`);
       check(df.mismatches === 0, `item 14 (a, ${tag}): the undo restores the box exactly (${df.mismatches})`, df.sample);
       void state;
@@ -481,10 +508,15 @@ export async function probe(ctx) {
 }
 
 /** The flat world's surface y at (x, z) (its plan survey's ground). */
+/** The ground's y at (x, z): the survey reads loaded chunks only, so the player stands over the column first. */
 async function groundY(ctx, x, z) {
+  await ctx.L.tp(x + 0.5, 120, z + 0.5);
+  await ctx.L.settle(2000);
   const f = path.join(ctx.OUT, `survey-${x}-${z}.bin`);
   await ctx.L.call('dev.region.survey', { claim: [x - 1, z - 1, x + 1, z + 1], surveyLoad: 'loaded', file: f }, 300_000);
   const { decodeColumns } = await ctx.imp('lib/region/pack.mjs');
   const c = decodeColumns(fs.readFileSync(f));
-  return c.ground[1 + 3 * 1];
+  const gy = c.ground[1 + 3 * 1];
+  if (!(gy > -64 && gy !== 0)) throw new Error(`no ground found at ${x}, ${z} (${gy}): the chunk is not loaded`);
+  return gy;
 }

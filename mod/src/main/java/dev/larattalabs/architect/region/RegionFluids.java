@@ -26,6 +26,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.TicketType;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -84,6 +86,15 @@ public final class RegionFluids {
 	/** DevBridge {@code dev.fluid.beforeGate} (gate item 3): run once, at the next fluids gate, right before its containment check. */
 	public static volatile java.util.function.@Nullable Consumer<ServerLevel> beforeCheck;
 	private static final Map<String, Regional> STATE = new HashMap<>();
+	/**
+	 * The bodies' chunks stay loaded and simulated (fluid ticks run) while the stage writes and settles and while a removal waits its
+	 * settle bound, as a forced chunk (level 31), whoever is near: a census never judges a cell it cannot see. Not persisted: a restart
+	 * takes it again from the saved phase.
+	 */
+	static final TicketType TICKET = net.minecraft.core.Registry.register(net.minecraft.core.registries.BuiltInRegistries.TICKET_TYPE, Architect.id(
+		"region_fluids"), new TicketType(0L, TicketType.FLAG_LOADING | TicketType.FLAG_SIMULATION));
+	/** The forced chunk's ticket radius (ChunkMap.FORCED_TICKET_LEVEL 31 = 33 - 2). */
+	static final int TICKET_RADIUS = 2;
 
 	private RegionFluids() {
 	}
@@ -152,6 +163,8 @@ public final class RegionFluids {
 		int sources;
 		int spill;
 		boolean escaped;
+		/** Not written: the check refused it (at the gate, or again after a stop); its tiles leave its cells. */
+		boolean uncontained;
 		/** Before the write: the cells', ice cap's, spill's and watched cells' states. */
 		final Long2ObjectOpenHashMap<String> before = new Long2ObjectOpenHashMap<>();
 
@@ -174,6 +187,11 @@ public final class RegionFluids {
 		long lastCensus;
 		/** This session drained already (a removal resumed after a stop drains again first). */
 		boolean redrained;
+		/** Loaded in phase writing (a stop before the stage was written): the gate checks the bodies again before the tiles (§3.5). */
+		boolean recheck;
+		/** The chunks this record holds a {@link #TICKET} on, and their level. */
+		final LongOpenHashSet ticketed = new LongOpenHashSet();
+		@Nullable ServerLevel ticketLevel;
 
 		Regional(List<Body> bodies) {
 			this.bodies = bodies;
@@ -295,6 +313,13 @@ public final class RegionFluids {
 		}
 		RegionsImpl.Live l = RegionsImpl.live(b.ext.get(RegionItems.EXT_REGION).getAsString());
 		Regional st = l == null ? null : of(l);
+		if (st != null && st.recheck) {
+			ServerLevel level = l.level(s);
+			if (level == null) {
+				return false;
+			}
+			recheck(level, l, st);
+		}
 		if (st == null || !"gate".equals(st.phase)) {
 			return true;
 		}
@@ -338,6 +363,7 @@ public final class RegionFluids {
 			List<long[]> bad = bypassCheck ? List.of() : check(level, l, body);
 			if (!bad.isEmpty()) {
 				bs.state = "drained";
+				bs.uncontained = true;
 				bs.reason = "uncontained: " + bad.size() + "+ shell or join cell(s) do not hold what the body was checked against";
 				bs.at.addAll(bad.subList(0, Math.min(NAMED, bad.size())));
 				Architect.LOGGER.info("Region {}: fluid body {} is not written ({}): {}", l.rec().id, body.id, bs.reason, cells(bs.at));
@@ -365,10 +391,45 @@ public final class RegionFluids {
 	}
 
 	/**
+	 * (§3.5) A stop after the check and before the stage was written: the world may have lost what the check saw (chunks not saved since
+	 * the shells were written), so each body is checked again before its tiles. One that fails now is drained (its own cells back to
+	 * their before states: idempotent, a no-op when nothing was written) and not written, uncontained, naming the cells.
+	 */
+	static void recheck(ServerLevel level, RegionsImpl.Live l, Regional st) {
+		st.recheck = false;
+		if (!"writing".equals(st.phase)) {
+			return;
+		}
+		boolean changed = false;
+		for (Body body : st.bodies) {
+			BodyState bs = st.states.get(body.id);
+			if (!"pending".equals(bs.state) || bs.before.isEmpty()) {
+				continue;
+			}
+			List<long[]> bad = bypassCheck ? List.of() : check(level, l, body);
+			if (bad.isEmpty()) {
+				continue;
+			}
+			drain(level, st, body, bs, false, st.othersOf(body));
+			bs.state = "drained";
+			bs.uncontained = true;
+			bs.reason = "uncontained: " + bad.size() + "+ shell or join cell(s) do not hold what the body was checked against (checked again after a stop)";
+			bs.at.clear();
+			bs.at.addAll(bad.subList(0, Math.min(NAMED, bad.size())));
+			Architect.LOGGER.warn("Region {}: fluid body {} is not written ({}): {}", l.rec().id, body.id, bs.reason, cells(bs.at));
+			changed = true;
+		}
+		if (changed) {
+			save(l, st);
+			report(l, st);
+		}
+	}
+
+	/**
 	 * The containment check of one body (§2.4): the shell cells and joins that fail, as [x, y, z] (empty: it holds). A shell cell holds
 	 * when the region's own top journal cell there holds in the world, or (a cell its tile found already so) no entry has a cell there,
 	 * no protected area of the owner covers it, and the world holds natural, fluid-stopping, non-gravity ground; a join holds when it is
-	 * still a water source.
+	 * still a water source; every cell of the body (and its ice cap) is open: air, water, lava or ice.
 	 */
 	static List<long[]> check(ServerLevel level, RegionsImpl.Live l, Body body) {
 		List<long[]> bad = new ArrayList<>();
@@ -400,6 +461,16 @@ public final class RegionFluids {
 			}
 			if (!ok) {
 				bad.add(new long[] {bp.getX(), bp.getY(), bp.getZ()});
+			}
+		}
+		// the body's own cells are open (dug in an earlier stage, or already its fluid): a cell that is not (lost with unsaved chunks, or
+		// filled since) is not what the body was checked against
+		for (long[] a : new long[][] {body.cells, body.ice}) {
+			for (long p : a) {
+				BlockState now = level.getBlockState(BlockPos.of(p));
+				if (!(now.isAir() || now.is(Blocks.WATER) || now.is(Blocks.LAVA) || now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE))) {
+					bad.add(new long[] {BlockPos.getX(p), BlockPos.getY(p), BlockPos.getZ(p)});
+				}
 			}
 		}
 		for (long p : body.joins) {
@@ -434,7 +505,7 @@ public final class RegionFluids {
 		LongOpenHashSet drop = new LongOpenHashSet();
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
-			if ("drained".equals(bs.state) && bs.before.isEmpty()) { // not contained at the gate: never written
+			if ("drained".equals(bs.state) && (bs.uncontained || bs.before.isEmpty())) { // not contained: never written
 				for (long p : b.cells) {
 					drop.add(p);
 				}
@@ -495,6 +566,7 @@ public final class RegionFluids {
 			if (level == null) {
 				continue;
 			}
+			hold(level, st, "writing".equals(st.phase) || "settling".equals(st.phase));
 			if ("writing".equals(st.phase) && stageWritten(l)) {
 				force(level, l, st);
 			}
@@ -569,6 +641,7 @@ public final class RegionFluids {
 		for (long p : b.watchSet()) {
 			m.set(p);
 			if (!level.isLoaded(m)) {
+				ticking = true; // not seen is not settled (the ticket loads it)
 				continue;
 			}
 			BlockState s = level.getBlockState(m);
@@ -712,12 +785,27 @@ public final class RegionFluids {
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = level.getBlockState(bp);
 				if (now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(src)) {
-					dev.larattalabs.architect.placed.Placed.set(level, bp, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+					// a cell another body recorded (its breached shell cell, its watched cell) goes back to that record, not to air: that body's
+					// own drain, later in the removal, finds no fluid there any more
+					String was = beforeAny(st, p);
+					dev.larattalabs.architect.placed.Placed.set(level, bp, was == null ? Blocks.AIR.defaultBlockState() : parse(was), Block.UPDATE_CLIENTS
+						| Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
 					n++;
 				}
 			}
 		}
 		return n;
+	}
+
+	/** The before state any body of the region recorded for a cell (null: none did). */
+	static @Nullable String beforeAny(Regional st, long p) {
+		for (BodyState bs : st.states.values()) {
+			String s = bs.before.get(p);
+			if (s != null) {
+				return s;
+			}
+		}
+		return null;
 	}
 
 	/** Server thread (Batches): the region's batch holds its end while a written body settles (PLACED waits for the water, §3.3). */
@@ -793,6 +881,7 @@ public final class RegionFluids {
 				Architect.LOGGER.info("Region {}: the resumed removal drained {} fluid cell(s) again", l.rec().id, n);
 			}
 		}
+		hold(level, st, true);
 		if (level.getGameTime() < st.until) {
 			return false;
 		}
@@ -802,6 +891,7 @@ public final class RegionFluids {
 			}
 		}
 		st.removal = "done";
+		hold(level, st, false);
 		save(l, st);
 		Architect.LOGGER.info("Region {}: fluids drained and settled; the solids are restored next", l.rec().id);
 		return true;
@@ -909,6 +999,9 @@ public final class RegionFluids {
 			b.addProperty("sources", bs.sources);
 			b.addProperty("spill", bs.spill);
 			b.addProperty("escaped", bs.escaped);
+			if (bs.uncontained) {
+				b.addProperty("uncontained", true);
+			}
 			b.add("before", packStates(bs.before));
 			bodies.add(e.getKey(), b);
 		}
@@ -951,10 +1044,12 @@ public final class RegionFluids {
 					bs.sources = b.has("sources") ? b.get("sources").getAsInt() : 0;
 					bs.spill = b.has("spill") ? b.get("spill").getAsInt() : 0;
 					bs.escaped = b.has("escaped") && b.get("escaped").getAsBoolean();
+					bs.uncontained = b.has("uncontained") && b.get("uncontained").getAsBoolean();
 					unpackStates(b.get("before"), bs.before);
 				}
 			}
 			unpackStates(o.get("fluidBefore"), st.fluidBefore);
+			st.recheck = "writing".equals(st.phase);
 			// (§3.5) a crash while the sources were written but before every tile was: the stage's tiles run again (idempotent per cell),
 			// then the forced ticks; a crash while settling: the census goes on (the scheduled fluid ticks were saved with their chunks)
 		} catch (IOException | RuntimeException e) {
@@ -1029,10 +1124,40 @@ public final class RegionFluids {
 	/** The region was removed or forgotten: its record leaves memory. */
 	public static void forget(@Nullable String regionId) {
 		if (regionId == null) {
+			STATE.values().forEach(st -> hold(null, st, false));
 			STATE.clear();
 		} else {
-			STATE.remove(regionId);
+			Regional st = STATE.remove(regionId);
+			if (st != null) {
+				hold(null, st, false);
+			}
 		}
+	}
+
+	/** Takes ({@code want}) or releases the record's {@link #TICKET} on every chunk of its bodies' watch sets. */
+	static void hold(@Nullable ServerLevel level, Regional st, boolean want) {
+		if (!want) {
+			if (st.ticketLevel != null) {
+				for (long k : st.ticketed) {
+					st.ticketLevel.getChunkSource().removeTicketWithRadius(TICKET, ChunkPos.unpack(k), TICKET_RADIUS);
+				}
+			}
+			st.ticketed.clear();
+			st.ticketLevel = null;
+			return;
+		}
+		if (level == null || !st.ticketed.isEmpty()) {
+			return;
+		}
+		for (Body b : st.bodies) {
+			for (long p : b.watchSet()) {
+				st.ticketed.add(ChunkPos.pack(BlockPos.getX(p) >> 4, BlockPos.getZ(p) >> 4));
+			}
+		}
+		for (long k : st.ticketed) {
+			level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(k), TICKET_RADIUS);
+		}
+		st.ticketLevel = level;
 	}
 
 	/** DevBridge {@code dev.fluid.census}: every fluid cell of a box and every scheduled fluid tick there. */
