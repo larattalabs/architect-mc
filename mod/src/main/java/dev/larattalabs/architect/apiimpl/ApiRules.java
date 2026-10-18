@@ -71,6 +71,8 @@ public final class ApiRules {
 					case "region.rope" -> "ropeBridges"; // 7a K1: plan/0's connector.rope_bridge (with autoConnector, below)
 					case "region.bridges" -> "bridgeConnectors"; // 6c T3: plan/0's connector.bridge (beam and arch; auto's bridge move; the street fallback)
 					case "region.tunnels" -> "tunnelConnectors"; // 6c T3: plan/0's connector.tunnel (with planCheckVolumes, below)
+					case "region.fluids" -> "regionFluids"; // 6c H: fluid bodies (ponds, fountains, waterfalls, moats), the fluids stage (with fluidVolumes, below)
+					case "region.wet" -> "wetWrites"; // 6c H: wet piers, harbour walls and quays (the wet fallback)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}
@@ -93,6 +95,9 @@ public final class ApiRules {
 			}
 			if (sidecarFeatures.contains("region.tunnels")) {
 				out.add("planCheckVolumes"); // 6c T3: checkPlan of a plan with a tunnel part plans twice, reading frozen volumes
+			}
+			if (sidecarFeatures.contains("region.fluids")) {
+				out.add("fluidVolumes"); // 6c H: frozen volumes with a fluid layer (ARVX version 3), read by H's plan check and its guards
 			}
 			if (sidecarFeatures.contains("region.planCheck")) {
 				out.add("planCatalogue"); // 6c P0: a P0 helper's kit returns the capability catalogue with every check

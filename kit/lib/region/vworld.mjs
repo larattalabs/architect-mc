@@ -3,11 +3,11 @@
 // stage with the cell conditions resolved against the world as it stands, as the mod does at P1. The checker (check.mjs)
 // and the previews read it. A dump-backed world (two ARWD dumps of the realised claim, before and after) gives the same
 // interface for the scenario metrics.
-import { BLOCKS, collisionOf, emissionOf, isClimbable, isFloor, isPassable, isSpawnable, lightCost, opticsOf, topOf, voxelClassOf, isGravity } from '../blocks.mjs';
+import { BLOCKS, collisionOf, emissionOf, isClimbable, isFloor, isPassable, isSpawnable, lightCost, opticsOf, topOf, voxelClassOf, isGravity, isFluidStopping, isFlammable } from '../blocks.mjs';
 import { compileIR, evalTile } from '../realise.mjs';
 import { FLAG_MISSING, FLAG_TREE, FLAG_WATER, asColumns, makeColumns, unpack } from './pack.mjs';
 import { sampleIndex } from './survey.mjs';
-import { VC, classAt } from './volume.mjs';
+import { VC, classAt, fluidAt } from './volume.mjs';
 import { centreCells, crossOffsets, segmentAxis, rightOf } from './geom.mjs';
 
 export const AIR = 'minecraft:air';
@@ -34,6 +34,7 @@ export class Palette {
     this.top = [];
     this.vpass = []; this.bubble = []; // (6c V) the villager mover: passable for a villager; bubble columns
     this.half = []; // (7a K1b) a bottom slab: a floor at half height (the movers stand on it, its surface y + 0.5)
+    this.fs = []; this.flammable = []; // (6c H) fluid-stopping (M25's shell and flow) and flammable (M20)
     this.of(AIR);
   }
   of(s) {
@@ -77,6 +78,9 @@ export class Palette {
     this.vpass.push(vp);
     this.bubble.push(st.name === 'minecraft:bubble_column');
     this.half.push(!air && known && BLOCKS[st.name].family === 'slab' && (st.props.type ?? 'bottom') === 'bottom');
+    // (6c H) a block the table doesn't know stops fluids (it is solid as far as the rules know) and burns (conservative for M20)
+    this.fs.push(!air && (known ? isFluidStopping(st.name) : true));
+    this.flammable.push(!air && (known ? isFlammable(st.name) : true));
     return i;
   }
 }
@@ -182,10 +186,18 @@ export function surveyBase(survey, palette, volumes = []) {
     P.of('minecraft:stone_bricks'), P.of('minecraft:stone_bricks'), P.of('minecraft:chest'), -1];
   const at = (x, z) => sampleIndex(c, x, z);
   const top = (x, z) => { const k = at(x, z); return Math.max(c.ground[k], c.height[k]); };
+  // (6c H) a version-3 volume's fluid layer: flowing and falling water and flowing lava with a level (the level within a flow is not
+  // recorded: 1 for flowing, 8 for falling), a source in a plant cell (kelp, seagrass) as water
+  const FLUID = [-1, S.water, P.of('minecraft:water[level=1]'), P.of('minecraft:water[level=8]'), -1, S.lava, P.of('minecraft:lava[level=1]')];
   const base = (x, y, z) => {
     for (const v of volumes) {
       const cl = classAt(v, x, y, z);
-      if (cl !== VC.MISSING) return VCS[cl];
+      if (cl === VC.MISSING) continue;
+      if (v.fluids) {
+        const f = fluidAt(v, x, y, z);
+        if (f && FLUID[f] >= 0 && (cl === VC.WATER || cl === VC.LAVA || f === 1)) return FLUID[f];
+      }
+      return VCS[cl];
     }
     const k = at(x, z);
     const g = c.ground[k], h = c.height[k], f = c.floor[k], fl = c.flags[k];

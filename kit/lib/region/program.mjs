@@ -159,6 +159,14 @@ export function region(ctx) {
   return r;
 }
 
+// (6c H) r.fluidBody's implementation, bound late by kit/lib/fluids/body.mjs (which reads the plan's draft virtual world: plan.mjs, which
+// imports this module; binding it here keeps this module free of the plan module, as scatterPlan.mjs and light.mjs are)
+// (a property of a function declaration: hoisted, so the binding works while this module is still being evaluated in an import cycle)
+/** (6c H) Bind r.fluidBody's implementation (kit/lib/fluids/body.mjs does, when it loads). */
+export function _bindFluidBody(fn) {
+  _bindFluidBody.fn = fn;
+}
+
 export class Region {
   constructor(ctx) {
     this.ctx = ctx;
@@ -475,6 +483,16 @@ export class Region {
     return tunnelPrimitive(this, a, b, opts);
   }
 
+  /**
+   * (6c H) A fluid body (lib/fluids/body.mjs `fluidBody`, CONTRACT H §7): the shell in the generator's stage, the sources (and ice cap)
+   * as a `fluid` op in the `fluids` stage (which must be the region's last), the flow computed (spill, vanilla's steady state, the
+   * settle bound, the breach reach). Returns the body record.
+   */
+  fluidBody(cells, opts = {}) {
+    if (!_bindFluidBody.fn) throw new Error('fluidBody: the fluid body primitive is not loaded (kit/lib/fluids/body.mjs)');
+    return _bindFluidBody.fn(this, cells, opts);
+  }
+
   /** (6c V) A graph node (SETTLEMENTS §8.1): `{id, kind: lot|plaza|junction, ref, at, ports}`; ids unique. */
   graphNode({ id, kind, ref = null, at, ports = [] }) {
     if (typeof id !== 'string' || !/^[a-z][a-z0-9_:.-]{0,63}$/.test(id)) throw new Error(`graph node id '${id}' is not valid`);
@@ -695,24 +713,28 @@ export class Region {
    * (6c B) `{blocks: true}`: a volume that also records each cell's block id (ARVX version 2), for a mask's `block` term; a
    * version-1 volume of the same box does not answer it (null: the game samples one with blocks).
    */
-  needVolume(box, { blocks = false } = {}) {
+  needVolume(box, { blocks = false, fluids = false } = {}) {
     const b = { minX: box.minX, minY: box.minY, minZ: box.minZ, maxX: box.maxX, maxY: box.maxY, maxZ: box.maxZ };
     if (!Object.values(b).every(isInt)) throw new Error('needVolume: box needs integer minX..maxZ');
     // (6c F1) asking again for the same box gives the same volume (keepNatural and the program may both read it)
     const same = (x) => x.minX === b.minX && x.minY === b.minY && x.minZ === b.minZ && x.maxX === b.maxX && x.maxY === b.maxY && x.maxZ === b.maxZ;
-    const had = Object.entries(this.volumesUsed).find(([, u]) => same(u.box) && (!blocks || u.blocks));
+    // (6c H) {fluids: true}: a volume that also records each cell's fluid (ARVX version 3's fluid layer, CONTRACT H §10); a volume
+    // without it does not answer such a request (the game samples one with fluids)
+    const has = (d) => (!blocks || d?.blocks) && (!fluids || d?.fluids);
+    const had = Object.entries(this.volumesUsed).find(([, u]) => same(u.box) && (!blocks || u.blocks) && (!fluids || u.fluids));
     if (had) return this._volumeDecoded?.get(had[0]) ?? null;
     const asked = this.needVolumes.find(same);
     if (asked) {
       if (blocks && !asked.blocks) asked.blocks = true;
+      if (fluids && !asked.fluids) asked.fluids = true;
       return null;
     }
-    this.needVolumes.push(blocks ? { ...b, blocks: true } : b);
-    const v = this.ctx.volumes?.find((x) => same(x.box) && (!blocks || x.decoded?.blocks));
+    this.needVolumes.push({ ...b, ...(blocks ? { blocks: true } : {}), ...(fluids ? { fluids: true } : {}) });
+    const v = this.ctx.volumes?.find((x) => same(x.box) && has(x.decoded));
     if (!v) return null;
     const name = `vol_${Object.keys(this.volumesUsed).length + 1}`;
     this._sideBlob(name, 'volume', v.bytes);
-    this.volumesUsed[name] = v.decoded?.blocks ? { blob: name, blocks: true, box: b, sha: v.sha } : { blob: name, box: b, sha: v.sha };
+    this.volumesUsed[name] = { blob: name, ...(v.decoded?.blocks ? { blocks: true } : {}), box: b, ...(v.decoded?.fluids ? { fluids: true } : {}), sha: v.sha };
     (this._volumeDecoded ??= new Map()).set(name, v.decoded ?? null);
     return v.decoded ?? null;
   }

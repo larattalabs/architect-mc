@@ -27,7 +27,10 @@
     "R17 doors (K1): door: door is a wooden double door, so the opening is 2 wide (1 on a 1-wide path); fence_gate is player-only (a crossing used by a villager edge refuses MOVER); params is read leniently and never makes a K1 part malformed: a recorded member that maps (height, closed, gates as a number, torches: true) is read when no first-class member says otherwise, every other one is listed by name in the part's notes",
     "R18 crossings (T3): a connector.bridge or connector.tunnel needs from and to that resolve to different places; a self-loop answers refused NO_GAP before routing. A bridge whose params name a mechanism or movable (a moving bridge) answers unsupported {block: connector.drawbridge} (S-T3-7). params is read leniently and never makes a T3 part malformed (width, form; material only as a note); every key not read is listed by name in the part's notes",
     "R19 tunnel via (T3, Steward S-T3-6): a tunnel is one straight bore; its via is read leniently: the first leg (from to via[0]) is used and the rest is listed in the part's notes, never malformed",
-    "R20 clearance (T3): a bridge's clearance applies only over water; on a dry span it is noted, not read"
+    "R20 clearance (T3): a bridge's clearance applies only over water; on a dry span it is noted, not read",
+    "R21 channels (H): a connector.channel has exactly one path form: where.around (channel.moat) or from/via/to (channel.course); none or both is malformed (SCHEMA); a from/to channel answers unsupported {block: channel.course, until: HY}. params is read leniently and never makes an H part malformed: width, depth, fluid, drop and torches/lamps are read when no first-class member says otherwise, lake on a pond is a note only, and every other key (material, existing, mechanism) is listed by name in the part's notes",
+    "R22 lava (H): fluid lava (a member on form.pond, or params.fluid elsewhere) is allowed only on form.pond, a lined pit 1..2 deep; anywhere else it answers refused FIRE with evidence.kind lava and the water shape as a wouldFit",
+    "R23 ice (H): ice applies only where the biome freezes at the body's surface (the kit's biome table, freezes); elsewhere it is noted, not read. A body in a freezing biome is capped with ice unless ice: false, which is refused WATER {kind: freezes} unless every surface cell is lit to block light 10 or more"
   ],
   "x-defaults": {
     "about": "Defaults the compiler applies when a member is absent. A contract promise wins over a part's tolerance where both apply (for example C27's within 4 cells for a boundary-following district, once D2 is supported).",
@@ -72,7 +75,7 @@
 
   "x-catalogue": {
     "about": "The capability catalogue that P0 ships (catalogueVersion 1). Each entry: a stable block id (never reused or renamed), the API version it arrived in (sinceApi: the API version at which the entry reached its current state and schemaVersion, always a real semver; a new or changed entry carries the branch's placeholder API version and the merge-time renumber restamps it, which tools/catalogue-since-check.mjs enforces), its own schemaVersion (bumped when its members grow, additively), its state (supported | reserved | retired) and, for reserved, the slice it waits for (until). Checks return this catalogue with every answer; a release commits it as a golden so two catalogues diff by id. Reserved entries carry their parameters through $defs/extension until supported.",
-    "catalogueVersion": 6,
+    "catalogueVersion": 7,
     "entries": [
       { "id": "zone.standard", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.standard" },
       { "id": "zone.outpost", "sinceApi": "1.29.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.outpost" },
@@ -93,12 +96,12 @@
       { "id": "connector.road", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
       { "id": "connector.path", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
       { "id": "connector.auto", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.auto", "limits": { "moves": ["walk", "stair", "ladder", "rope_bridge", "bridge", "tunnel"] } },
-      { "id": "connector.bridge", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.bridge", "limits": { "span": [1, 32], "width": [1, 5], "villagerMinWidth": 2, "forms": ["beam", "arch"], "archSpan": [4, 24], "pierEvery": 8, "pierDepth": 24, "clearance": [0, 6], "approach": 32 } },
+      { "id": "connector.bridge", "sinceApi": "1.34.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.bridge", "limits": { "span": [1, 32], "width": [1, 5], "villagerMinWidth": 2, "forms": ["beam", "arch"], "archSpan": [4, 24], "pierEvery": 8, "pierDepth": 24, "clearance": [0, 6], "approach": 32, "waterDepth": [0, 16] } },
       { "id": "connector.tunnel", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.tunnel", "limits": { "length": [4, 64], "width": [1, 5], "height": [2, 5], "cover": 2, "fluidBuffer": 2, "approach": 32 } },
-      { "id": "connector.channel", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "HY" },
-      { "id": "connector.tube", "sinceApi": "1.33.0", "schemaVersion": 0, "state": "reserved", "until": "UW", "note": "An underwater glass passage through water (after H's fluid writes and undo); a recorded glass tunnel through water names it instead of connector.tunnel (S-T3-7)." },
+      { "id": "connector.channel", "sinceApi": "1.34.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.channel", "limits": { "width": [1, 7], "depth": [1, 4], "forms": ["moat"] }, "note": "H: a level ring of water round a feature (channel.moat); channel.course, a channel along a line at several levels or joined to natural water, waits for HY." },
+      { "id": "connector.tube", "sinceApi": "1.33.0", "schemaVersion": 0, "state": "reserved", "until": "UW", "note": "An underwater glass passage through water (after H; it builds on H's shell rule); a recorded glass tunnel through water names it instead of connector.tunnel (S-T3-7)." },
       { "id": "connector.drawbridge", "sinceApi": "1.33.0", "schemaVersion": 0, "state": "reserved", "until": "mechanism", "note": "A moving bridge (redstone, a lifting deck): a connector.bridge whose params name a mechanism or movable answers this block (R18, S-T3-7)." },
-      { "id": "connector.wall", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.wall", "limits": { "height": [3, 16], "thickness": [1, 3], "gates": [0, 16] } },
+      { "id": "connector.wall", "sinceApi": "1.34.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.wall", "limits": { "height": [3, 16], "thickness": [1, 3], "gates": [0, 16], "waterDepth": [0, 8] } },
       { "id": "connector.gate", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.gate", "limits": { "width": [1, 5], "height": [2, 6], "doors": ["none", "door", "fence_gate"] } },
       { "id": "connector.ladder", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
       { "id": "connector.stair", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
@@ -115,23 +118,27 @@
       { "id": "wall.around", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall round a part, build or protected area, or (K1-target) one of the owner's standing regions, around {feature: {region}} (where.around on a wall: the wall's own member, not locator.around; its region not feature.region)." },
       { "id": "wall.edge", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall on the edge of a zone or the claim (where.inside)." },
       { "id": "wall.along", "sinceApi": "1.32.0", "schemaVersion": 0, "state": "reserved", "until": "K2", "note": "D2's boundary spine plus an offset (where.along on a wall): the same member, no format change." },
-      { "id": "bridge.beam", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "note": "T3: a deck on piers to dry, site-solid ground (no pier in water or ice until H)." },
+      { "id": "bridge.beam", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "note": "T3: a deck on piers to site-solid ground; H: piers stand in water up to waterDepth, never in flowing water or lava." },
       { "id": "bridge.arch", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "note": "T3: one masonry arch between two abutments, no piers (span 4..24)." },
       { "id": "tunnel.through", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "note": "T3: a level bore through rising ground, portal to portal." },
       { "id": "tunnel.under", "sinceApi": "1.33.0", "schemaVersion": 0, "state": "reserved", "until": "7b", "note": "A passage under flat ground whose ends sit in cellars: a tunnel whose every line lacks cover answers this block; it waits for 7b's ports in buildings (K5 forbids writes in lot boxes)." },
+      { "id": "channel.moat", "sinceApi": "1.34.0", "schemaVersion": 1, "state": "supported", "note": "H: a level ring of still water round a feature (where.around; ring default [6, 12]), sunk, lined, closed or capped on the side facing the claim's centre; routes cross it on T3's bridge fallback." },
+      { "id": "channel.course", "sinceApi": "1.34.0", "schemaVersion": 0, "state": "reserved", "until": "HY", "note": "A channel along a line (from, via, to) with reaches at several levels or joined to natural water: HY's, built from H's fluid bodies." },
       { "id": "form.relief", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.relief" },
       { "id": "form.terrace", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.terrace" },
       { "id": "form.ice_spike", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.spike" },
       { "id": "form.rock_spire", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.spike" },
       { "id": "form.floating_island", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "N-P0-1" },
       { "id": "form.brush", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "P1", "note": "B shipped brush strokes as their own regions (Regions.brush, one region per stroke, S-B-1); a stroke's destruction rule lives on its region's record, so a brush part inside a plan's single region waits for a later plan slice." },
-      { "id": "form.pond", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "H" },
+      { "id": "form.pond", "sinceApi": "1.34.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.pond", "limits": { "depth": [1, 6], "lavaDepth": [1, 2], "area": [4, 1024], "fluids": ["water", "lava"], "edges": ["natural", "built"] } },
+      { "id": "form.fountain", "sinceApi": "1.34.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.fountain", "limits": { "basin": [3, 9], "spout": [1, 4] } },
       { "id": "form.scatter", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "F2" },
       { "id": "form.giant_tree", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "F3" },
       { "id": "form.hidden_room", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7b" },
       { "id": "form.crater", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7c", "note": "A free-standing crater form. A whole-region crater is already the crater_works template (program.crater_works)." },
       { "id": "form.hollow_mountain", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7c" },
-      { "id": "form.waterfall", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "H" },
+      { "id": "form.waterfall", "sinceApi": "1.34.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.waterfall", "limits": { "drop": [3, 24], "width": [1, 5], "sculpt": 12 } },
+      { "id": "form.quay", "sinceApi": "1.34.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.quay", "limits": { "length": [4, 48], "reach": [1, 6], "waterDepth": [0, 8] } },
       { "id": "form.seabed_site", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "later", "note": "Building under water; a later slice, not yet named." },
       { "id": "form.ship_hull", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "unscheduled", "note": "Structures that move or float; not yet scheduled." },
       { "id": "form.mast", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "unscheduled", "note": "Structures that move or float; not yet scheduled." },
@@ -370,6 +377,7 @@
         "villager": { "enum": ["dwelling", "job", "trading_hall", "farm", "none"] },
         "brief": { "type": "string", "pattern": "^[\\s\\S]{0,500}$" },
         "entry": { "type": "string", "pattern": "^[A-Za-z0-9_.:/-]{1,100}(@[0-9]{1,6})?$", "description": "A library entry (id or id@version) already designed for this lot; absent: the building is provisional (a cost range) until Steward binds one." },
+        "farmPond": { "type": "boolean", "description": "(H, S-H-2) A farm lot's small pond: a 3x3, 1-deep sunk water body within 2 of the lot, outside its restore box, removed with the region; only on a claim with no surface water (never added in a freezing biome). Off by default." },
         "ext": { "$ref": "#/$defs/ext" }
       }
     },
@@ -424,6 +432,7 @@
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "kind": { "const": "standard" },
+        "farmPond": { "type": "boolean", "description": "(H, S-H-2) Every farm lot of the zone gets a farm pond (as a lot's farmPond). Off by default." },
         "required": { "type": "boolean" },
         "label": { "$ref": "#/$defs/label" },
         "notes": { "$ref": "#/$defs/text500" },
@@ -524,6 +533,7 @@
           { "type": "object", "additionalProperties": false, "properties": { "min": { "type": "integer", "minimum": 0, "maximum": 16 }, "max": { "type": "integer", "minimum": 0, "maximum": 16 } } }
         ], "oneOfMessage": "gates is an integer 0..16 (the least on a closed wall) or {min?, max?}" },
         "lamps": { "enum": ["gates", "every", "none"] },
+        "waterDepth": { "type": "integer", "minimum": 0, "maximum": 8, "description": "(H) The deepest natural water the wall may stand in (a harbour wall; default 6). Only a wall that fails on water is searched again with wet sections (the wet fallback)." },
         "params": { "type": "object", "description": "Read leniently, never malformed (R17): height, closed, gates (a number) and torches: true are read when no first-class member says otherwise; every other key is listed in the answer's notes." }
       }
     },
@@ -605,7 +615,7 @@
 
     "connector.bridge": {
       "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
-      "description": "(T3) A bridge: a route from from to to over exactly one built span (a gap or water), walking at most approach (default 16) at each end. form: beam (deck on piers, bridge.beam), arch (span 4..24, bridge.arch), auto (default: arch where it fits). width default 2 villager, 1 player-only. clearance: clear cells over water (default 2; R20). No write in water or ice: a pier needed in water refuses WATER until H. R18.",
+      "description": "(T3) A bridge: a route from from to to over exactly one built span (a gap or water), walking at most approach (default 16) at each end. form: beam (deck on piers, bridge.beam), arch (span 4..24, bridge.arch), auto (default: arch where it fits). width default 2 villager, 1 player-only. clearance: clear cells over water (default 2; R20). No write in water or ice, except H's wet fallback: a crossing that fails only on water is searched again with piers in natural water sources up to waterDepth (default 8; never flowing water, lava or a bubble column); past that it refuses WATER {kind: deep | flowing | lava}. R18.",
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "kind": { "const": "bridge" },
@@ -626,6 +636,7 @@
         "span": { "type": "object", "additionalProperties": false, "properties": { "min": { "type": "integer", "minimum": 1, "maximum": 32 }, "max": { "type": "integer", "minimum": 1, "maximum": 32 } } },
         "approach": { "type": "integer", "minimum": 0, "maximum": 32 },
         "clearance": { "type": "integer", "minimum": 0, "maximum": 6 },
+        "waterDepth": { "type": "integer", "minimum": 0, "maximum": 16, "description": "(H) The deepest natural water a pier may stand in (default 8). Only a crossing that fails on water is searched again with wet piers (the wet fallback)." },
         "params": { "type": "object", "description": "Read leniently (R18): width, form; every other key noted." }
       }
     },
@@ -655,6 +666,28 @@
         "lining": { "enum": ["exposed", "all"] },
         "portal": { "enum": ["plain", "arch"] },
         "params": { "type": "object", "description": "Read leniently (R18): width; every other key noted." }
+      }
+    },
+
+    "connector.channel": {
+      "type": "object", "required": ["id", "kind"], "additionalProperties": false,
+      "description": "(H) A channel of still water. One path form (R21): where.around (channel.moat: a level ring round a feature at ring offsets, default [6, 12], width 1..7 (default 5) and depth 1..4 (default 3), surface 1 under the ground, sunk and lined; closed: false leaves the side facing the claim's centre capped) or from/via/to (channel.course, reserved until HY). Streets, roads and paths cross a moat on T3's bridge fallback (clearance 1 over plan water), landing at a wall's gate. params read leniently (R21): width, depth.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "channel" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "where": { "type": "object", "required": ["around"], "additionalProperties": false, "properties": { "around": { "type": "object", "required": ["feature"], "additionalProperties": false, "properties": { "feature": { "$ref": "#/$defs/feature" }, "ring": { "$ref": "#/$defs/intRange" }, "closed": { "type": "boolean" } } } } },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "width": { "type": "integer", "minimum": 1, "maximum": 7 },
+        "depth": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "params": { "type": "object", "description": "Read leniently, never malformed (R21)." }
       }
     },
 
@@ -714,6 +747,84 @@
       }
     },
 
+    "form.pond": {
+      "type": "object", "required": ["id", "kind"], "additionalProperties": false,
+      "description": "(H) A pond: still water (or a lined lava pit, fluid lava, 1..2 deep) sunk 1 under the lowest ground of its rim, depth (default 2) at the centre stepping up 1 per ring, in a 1-thick shell; edge natural (default: a bed of the bible's fluids.bed, plants in the shallows) or built (structure with a 1-high coping). Capped with ice where the biome freezes (ice: false refuses WATER {kind: freezes} unless lit). params read leniently (R21): depth, fluid, lake (a note); every other key noted.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "pond" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "where": { "$ref": "#/$defs/where" },
+        "size": { "$ref": "#/$defs/size" },
+        "fluid": { "enum": ["water", "lava"] },
+        "depth": { "type": "integer", "minimum": 1, "maximum": 6, "description": "Water 1..6 (default 2), lava 1..2." },
+        "edge": { "enum": ["natural", "built"] },
+        "ice": { "type": "boolean", "description": "Default: capped where the biome freezes (R23); false keeps the surface open, refused WATER {kind: freezes} there unless lit." },
+        "params": { "type": "object", "description": "Read leniently, never malformed (R21)." }
+      }
+    },
+    "form.fountain": {
+      "type": "object", "required": ["id", "kind"], "additionalProperties": false,
+      "description": "(H) A fountain: a built basin (basin cells square, odd, 3..9; 1 deep, raised 1 over the ground, a trim coping thick enough to pass the single breach) with a 1x1 spout pillar spout cells (1..4) over the rim, a source on top whose four sides fall into the basin. Water only (R22). params read leniently (R21).",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "fountain" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "where": { "$ref": "#/$defs/where" },
+        "basin": { "type": "integer", "minimum": 3, "maximum": 9, "description": "The basin's side in cells, odd (default 5)." },
+        "spout": { "type": "integer", "minimum": 1, "maximum": 4, "description": "The spout's height over the rim (default 2)." },
+        "params": { "type": "object", "description": "Read leniently, never malformed (R21)." }
+      }
+    },
+    "form.waterfall": {
+      "type": "object", "required": ["id", "kind"], "additionalProperties": false,
+      "description": "(H) A waterfall: a raised header pool (sources at the lip), a lip run and a falling column (declared spill) of width (1..5, default 3) one cell out from the face, dropping drop (3..24) into a basin: a pond body or a join into natural water at least 2 deep (basin auto, pond or join). lip existing uses a natural drop within where; sculpt raises a rock outcrop (at most 12 high) in stage ground; auto (default) is existing where one passes, else sculpt. A flowing waterfall already in the world is never adopted; the hollow behind it is 7b's (form.hidden_room). params read leniently (R21): existing is read as lip auto (noted).",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "waterfall" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "where": { "$ref": "#/$defs/where" },
+        "drop": { "type": "integer", "minimum": 3, "maximum": 24 },
+        "width": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "lip": { "enum": ["auto", "existing", "sculpt"] },
+        "basin": { "enum": ["auto", "pond", "join"] },
+        "params": { "type": "object", "description": "Read leniently, never malformed (R21)." }
+      }
+    },
+    "form.quay": {
+      "type": "object", "required": ["id", "kind"], "additionalProperties": false,
+      "description": "(H) A quay: a level deck from the shore out over natural water (reach 1..6 cells, default 3; length 4..48), 1 over the surface, solid to a footing 2 into the bed, with mooring posts every 4, lamps, and a step down to the water every 16 (the exits). Needs natural water within its locator (NO_FEATURE otherwise). params read leniently (R21).",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "quay" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "where": { "$ref": "#/$defs/where" },
+        "length": { "type": "integer", "minimum": 4, "maximum": 48 },
+        "reach": { "type": "integer", "minimum": 1, "maximum": 6 },
+        "params": { "type": "object", "description": "Read leniently, never malformed (R21)." }
+      }
+    },
+
     "rule.common": {
       "description": "Members every rule has. Rules are verified on the fitted output with evidence (the rule-check slice, RC); in plan/0 every rule kind is reserved and answers unsupported. The drafts below are guidance for the plan writer; RC makes them strict, widening only additively.",
       "type": "object",
@@ -769,7 +880,7 @@
     "reason": {
       "type": "object", "required": ["code"], "additionalProperties": false,
       "properties": {
-        "code": { "enum": ["SCHEMA", "UNKNOWN_REF", "CYCLE", "EXTENSION_BOUND", "UNSUPPORTED", "NO_FEATURE", "NO_ROOM", "OUT_OF_CLAIM", "OVERLAP", "PROTECTED", "KEEP_OUT", "TOO_STEEP", "WATER", "UNREACHABLE", "TOLERANCE", "DEPENDENCY", "BUDGET", "CANCELLED", "LIMIT", "NO_GAP", "SPAN", "ANCHOR", "HEADROOM", "MOVER", "NO_COVER", "VOLUME"] },
+        "code": { "enum": ["SCHEMA", "UNKNOWN_REF", "CYCLE", "EXTENSION_BOUND", "UNSUPPORTED", "NO_FEATURE", "NO_ROOM", "OUT_OF_CLAIM", "OVERLAP", "PROTECTED", "KEEP_OUT", "TOO_STEEP", "WATER", "UNREACHABLE", "TOLERANCE", "DEPENDENCY", "BUDGET", "CANCELLED", "LIMIT", "NO_GAP", "SPAN", "ANCHOR", "HEADROOM", "MOVER", "NO_COVER", "VOLUME", "LEAK", "FIRE"] },
         "message": { "type": "string" },
         "path": { "type": "string", "description": "SCHEMA: the JSON path of the first error." },
         "block": { "$ref": "#/$defs/blockId" },

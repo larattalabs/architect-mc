@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 6,
- "api": "1.33.0",
- "kitVersion": "0.34.0",
+ "catalogueVersion": 7,
+ "api": "1.34.0",
+ "kitVersion": "0.35.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -145,7 +145,7 @@
   },
   {
    "id": "connector.bridge",
-   "sinceApi": "1.33.0",
+   "sinceApi": "1.34.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -172,7 +172,11 @@
      0,
      6
     ],
-    "approach": 32
+    "approach": 32,
+    "waterDepth": [
+     0,
+     16
+    ]
    }
   },
   {
@@ -200,10 +204,23 @@
   },
   {
    "id": "connector.channel",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "HY"
+   "sinceApi": "1.34.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "width": [
+     1,
+     7
+    ],
+    "depth": [
+     1,
+     4
+    ],
+    "forms": [
+     "moat"
+    ]
+   },
+   "note": "H: a level ring of water round a feature (channel.moat); channel.course, a channel along a line at several levels or joined to natural water, waits for HY."
   },
   {
    "id": "connector.tube",
@@ -211,7 +228,7 @@
    "schemaVersion": 0,
    "state": "reserved",
    "until": "UW",
-   "note": "An underwater glass passage through water (after H's fluid writes and undo); a recorded glass tunnel through water names it instead of connector.tunnel (S-T3-7)."
+   "note": "An underwater glass passage through water (after H; it builds on H's shell rule); a recorded glass tunnel through water names it instead of connector.tunnel (S-T3-7)."
   },
   {
    "id": "connector.drawbridge",
@@ -223,7 +240,7 @@
   },
   {
    "id": "connector.wall",
-   "sinceApi": "1.32.0",
+   "sinceApi": "1.34.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -238,6 +255,10 @@
     "gates": [
      0,
      16
+    ],
+    "waterDepth": [
+     0,
+     8
     ]
    }
   },
@@ -384,7 +405,7 @@
    "sinceApi": "1.33.0",
    "schemaVersion": 1,
    "state": "supported",
-   "note": "T3: a deck on piers to dry, site-solid ground (no pier in water or ice until H)."
+   "note": "T3: a deck on piers to site-solid ground; H: piers stand in water up to waterDepth, never in flowing water or lava."
   },
   {
    "id": "bridge.arch",
@@ -407,6 +428,21 @@
    "state": "reserved",
    "until": "7b",
    "note": "A passage under flat ground whose ends sit in cellars: a tunnel whose every line lacks cover answers this block; it waits for 7b's ports in buildings (K5 forbids writes in lot boxes)."
+  },
+  {
+   "id": "channel.moat",
+   "sinceApi": "1.34.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "H: a level ring of still water round a feature (where.around; ring default [6, 12]), sunk, lined, closed or capped on the side facing the claim's centre; routes cross it on T3's bridge fallback."
+  },
+  {
+   "id": "channel.course",
+   "sinceApi": "1.34.0",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "HY",
+   "note": "A channel along a line (from, via, to) with reaches at several levels or joined to natural water: HY's, built from H's fluid bodies."
   },
   {
    "id": "form.relief",
@@ -449,10 +485,47 @@
   },
   {
    "id": "form.pond",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "H"
+   "sinceApi": "1.34.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "depth": [
+     1,
+     6
+    ],
+    "lavaDepth": [
+     1,
+     2
+    ],
+    "area": [
+     4,
+     1024
+    ],
+    "fluids": [
+     "water",
+     "lava"
+    ],
+    "edges": [
+     "natural",
+     "built"
+    ]
+   }
+  },
+  {
+   "id": "form.fountain",
+   "sinceApi": "1.34.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "basin": [
+     3,
+     9
+    ],
+    "spout": [
+     1,
+     4
+    ]
+   }
   },
   {
    "id": "form.scatter",
@@ -492,10 +565,40 @@
   },
   {
    "id": "form.waterfall",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "H"
+   "sinceApi": "1.34.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "drop": [
+     3,
+     24
+    ],
+    "width": [
+     1,
+     5
+    ],
+    "sculpt": 12
+   }
+  },
+  {
+   "id": "form.quay",
+   "sinceApi": "1.34.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "length": [
+     4,
+     48
+    ],
+    "reach": [
+     1,
+     6
+    ],
+    "waterDepth": [
+     0,
+     8
+    ]
+   }
   },
   {
    "id": "form.seabed_site",
