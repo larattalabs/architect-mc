@@ -486,9 +486,11 @@ export async function probe(ctx) {
       }
     }
     for (const p of posts) await L.cmd(`/setblock ${p.x} ${p.y} ${p.z} minecraft:oak_planks`);
-    // the gate's base turns fire off (fire_spread_radius_around_player 0): lava ignites nothing then; 128 is vanilla's default
-    await L.cmd('/gamerule fire_spread_radius_around_player 128');
+    // the gate's base turns fire off (fire_spread_radius_around_player 0): lava ignites nothing then; -1: fire spreads anywhere
+    await L.cmd('/gamerule fire_spread_radius_around_player -1');
     await L.cmd('/gamerule random_tick_speed 300');
+    const rules = [];
+    for (const r of ['fire_spread_radius_around_player', 'random_tick_speed']) rules.push((await L.cmd(`/gamerule ${r}`))?.messages ?? null);
     await sleep(120_000);
     await L.cmd('/gamerule random_tick_speed 3');
     await L.cmd('/gamerule fire_spread_radius_around_player 0');
@@ -507,9 +509,9 @@ export async function probe(ctx) {
       const s = cen.palette[cen.cells[cen.at(p.x, p.y, p.z)]];
       if (s !== 'minecraft:oak_planks') { burnt.push(p); farthest = { side: Math.max(farthest.side, p.dist + 1), above: Math.max(farthest.above, p.dy), below: Math.min(farthest.below, p.dy) }; }
     }
-    out.fire = { posts: posts.length, burnt: burnt.length, farthest, fires, list: burnt.slice(0, 30) };
+    out.fire = { rules, posts: posts.length, burnt: burnt.length, farthest, fires, list: burnt.slice(0, 30) };
     const { FIRE_REACH } = await imp('lib/region/checkFluids.mjs');
-    check(burnt.length > 0, `item 13 (the probe's control): the lava ignited at least one post (${burnt.length}; ${fires} fire cells)`);
+    check(burnt.length > 0, `item 13 (the probe's control): the lava ignited at least one post (${burnt.length}; ${fires} fire cells; rules ${json(rules)})`);
     check(farthest.side <= FIRE_REACH.side + 1 && farthest.above <= FIRE_REACH.above && (burnt.length === 0 || farthest.below >= -FIRE_REACH.below), `item 13 (the probe): a lava pool with random ticks at 300 for 2 minutes ignited ${burnt.length} of ${posts.length} flammable posts; the farthest at ${farthest.side} sideways (Chebyshev from the nearest lava cell), ${farthest.below}..${farthest.above} in height; M20's reach ${json(FIRE_REACH)} covers it`, burnt.slice(0, 10));
     await L.leaveWorld();
   }
