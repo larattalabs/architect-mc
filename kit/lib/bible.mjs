@@ -3,7 +3,8 @@
 // (lib/kit.mjs) derives every palette field from a role, so a palette-driven design re-skins under any bible.
 //
 //   bible.json      { id, name, version, format?, prompt, scope, roles, proportions, roofLanguage, silhouette, motifs, tiers,
-//                     lighting, avoid, components, restraint? (format 2), connectors? (format 2, 7a K1), createdAt, cost }
+//                     lighting, avoid, components, restraint? (format 2), connectors? (format 2, 7a K1), fluids? (format 2, 6c H),
+//                     createdAt, cost }
 //   Format 2 (phase 5a): `format: 2`, `restraint: { heroMotifs (<= 3 of the motifs), accentShareMax (0.04-0.20, 0.12),
 //   detailDensity (sparse|moderate|rich, moderate), windowsPerFacadeMin (int, 2) }` (defaults filled in by validateBible),
 //   at most 6 motifs, the 5 required components plus at most 3. Format 1 (no `format`) keeps its limits; restraintOf()
@@ -15,6 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connectorsError } from './connectors/style.mjs';
+import { fluidsError } from './fluids/place.mjs';
 import { CORE_ROLES, MACRO_ROLES, PALETTES, PALETTE_PRESETS, ROLE_NAME, palette, rolesOfPalette } from './kit.mjs';
 import { info, qualify } from './blocks.mjs';
 import { patternError, patternMats } from './pattern.mjs';
@@ -216,6 +218,11 @@ export function validateBible(j, opts = {}) {
   if (b.connectors !== undefined) {
     if (!f2) err('connectors needs format: 2');
     else { const ce = connectorsError(b.connectors, b.roles ?? {}); if (ce) err(ce); }
+  }
+  // (6c H) fluids: {bed?, rim?, coping?, spout?, quay?, mooring?}, each slot a role this bible names (format 2; lib/fluids/place.mjs)
+  if (b.fluids !== undefined) {
+    if (!f2) err('fluids needs format: 2');
+    else { const fe = fluidsError(b.fluids, b.roles ?? {}); if (fe) err(fe); }
   }
   if (b.components !== undefined && !(Array.isArray(b.components) && b.components.every((c) => typeof c === 'string' && /^[a-z][a-z0-9_]{0,39}$/.test(c)))) err('components must be a list of component names ([a-z][a-z0-9_]*)');
   b.components = [...new Set([...REQUIRED_COMPONENTS, ...(Array.isArray(b.components) ? b.components.filter((c) => typeof c === 'string') : [])])];

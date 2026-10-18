@@ -313,10 +313,22 @@ function breachReach(world, own, fluid, others, body, shell) {
   const out = new Set();
   let capped = null;
   const level = body.level;
+  // (H-a, a shortcut that changes no result) a body whose flow stays in its own cells (no spill: every reached cell is a source) and a
+  // shell cell with no neighbour a flow could enter (open, or flowing of this fluid): opening it lets the fluid into that one cell and
+  // no further, and changes no other cell's amount (a source's sideways spread only ever meets body and shell cells), so the reach is
+  // the body's cells plus the opened cell. Every other breach runs the full reach as before. (A moat's thousands of shell cells.)
+  const base = reach(bodyWorld(world, own, fluid, others), body.cells, fluid, { cap: BREACH_CAP });
+  const noSpill = !base.capped && base.amt.size === own.size && [...base.amt.keys()].every((k) => own.has(k));
+  const D6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
   for (const [x, y, z] of shell) {
     if (y > level) continue;
     const opened = k3(x, y, z);
     const at = bodyWorld(world, own, fluid, others, opened);
+    if (noSpill && D6.every(([dx, dy, dz]) => { const w = at(x + dx, y + dy, z + dz); return w !== 'open' && w !== `flowing_${fluid}`; })) {
+      for (const k of base.amt.keys()) out.add(k);
+      out.add(opened);
+      continue;
+    }
     // the opened cell is reached from a body cell beside it: start the flow from the sources as before
     const r = reach(at, body.cells, fluid, { cap: BREACH_CAP });
     if (r.capped && !capped) capped = [x, y, z];
@@ -418,11 +430,18 @@ export function simulate(world, bodies, { breach = false } = {}) {
     // trap and exit: a surface cell is a body or spill cell with sky (no ceiling) over it
     if (world.surface) {
       const fluidCells = [...own, ...spillSet].map(un3);
-      const surf = fluidCells.filter(([x, y, z]) => !isFluid(at(x, y + 1, z), fluid) && world.surface(x, y, z));
-      // a fluid cell is trapped when no surface cell is within TRAP_REACH steps through the body's own fluid cells (a swimmer's way up)
+      // (H-a) a spill cell under another reached cell is inside a falling column (the world holds no spill yet): no surface there
+      const reachedSet = new Set([...own, ...spillSet]);
+      const surf = fluidCells.filter(([x, y, z]) => !isFluid(at(x, y + 1, z), fluid) && !reachedSet.has(k3(x, y + 1, z)) && world.surface(x, y, z));
+      // a fluid cell is trapped when no surface cell is within TRAP_REACH steps through the body's own fluid cells (a swimmer's way up);
+      // (H-a) a cell of a falling column (reached cells straight up to a surface cell) has no ceiling: it is open too (a mover falls
+      // through it into what it lands on)
       const fset = new Set(fluidCells.map((c) => k3(...c)));
-      const dist = new Map(surf.map((s) => [k3(...s), 0]));
-      const q = surf.map((s) => [...s]);
+      const surfSet = new Set(surf.map((c) => k3(...c)));
+      const openUp = (x, y, z) => { for (let yy = y + 1; reachedSet.has(k3(x, yy, z)); yy++) if (surfSet.has(k3(x, yy, z))) return true; return false; };
+      const seeds = [...surf, ...fluidCells.filter(([x, y, z]) => !surfSet.has(k3(x, y, z)) && spillSet.has(k3(x, y, z)) && openUp(x, y, z))];
+      const dist = new Map(seeds.map((s) => [k3(...s), 0]));
+      const q = seeds.map((s) => [...s]);
       for (let h = 0; h < q.length; h++) {
         const [x, y, z] = q[h];
         const d = dist.get(k3(x, y, z));
