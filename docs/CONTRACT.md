@@ -14290,6 +14290,19 @@ parallel, released as one batch (as K1 and T3). H-c follows in the same batch if
 - **N-H-7. The split.** Proposed: H-core first, then H-a and H-b in parallel, released as one batch. The alternative is serial,
   H-b before H-a.
 
+### Coordinator decisions (2026-10-18, on Noah's behalf; Noah can overrule at the look step)
+
+- **N-H-2, the look:** as proposed. Natural-edged ponds; built pools in `structure` with a `trim` coping; waterfalls 3 wide;
+  quays in `path` with lamps.
+- **N-H-3, lava:** pits only, as proposed: lined, 1-2 deep, at least 2 from any water, and the M20 fire reach probed in game
+  before its number is fixed. N-H-1's bucket cost stands.
+- **N-H-4, freezing biomes:** cap open water with ice, consistent with W.
+- **N-H-5, bridges over the plan's own water:** clearance 1, since a boat passes under 1 in 26.3 (T3a's finding). Natural water
+  keeps T3's 2.
+- **N-H-6, fluid brushes:** not in this batch. H-c moves to the next toolbox batch, to keep H's scope.
+- **N-H-7, the split:** H-core first on `h/core`, then H-a and H-b in parallel against §15's frozen interface, released as one
+  batch with Steward's RC check (GATES policy 4).
+
 ### Deferred
 
 - **Flowing water:**
