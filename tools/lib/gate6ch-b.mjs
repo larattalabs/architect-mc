@@ -55,7 +55,9 @@ async function hbUnchanged(ctx) {
   const { unchanged } = await import('./gate6ch-core.mjs');
   const u = await unchanged(ctx.root);
   const differ = u.differ.map(([k]) => k).sort();
-  ctx.check(u.n >= 40 && differ.join() === [...EXPECTED_CHANGES].sort().join(), `item 11 (H-b): ${u.same} of ${u.n} committed valid/, K1 and T3 fixtures without an H part plan as on origin/main ${u.mainHead.slice(0, 10)}; the ones that differ are exactly the named re-answers (${differ.join(', ') || 'none'})`, u.differ);
+  // (k1a_r01 now carries a `volume` (the two-plan harness): the core's comparison skips it; r06 and r07 must be among the differing)
+  const named = ['t3a/r06_water_arch.json', 't3a/r07_water_rope.json'];
+  ctx.check(u.n >= 40 && differ.every((k) => EXPECTED_CHANGES.includes(k)) && named.every((k) => differ.includes(k)), `item 11 (H-b): ${u.same} of ${u.n} committed valid/, K1 and T3 fixtures without an H part plan as on origin/main ${u.mainHead.slice(0, 10)}; the ones that differ are only the named re-answers (${differ.join(', ') || 'none'}; named: ${EXPECTED_CHANGES.join(', ')})`, u.differ);
   return { same: u.same, n: u.n, differ };
 }
 
