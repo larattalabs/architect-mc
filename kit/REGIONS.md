@@ -1035,3 +1035,26 @@ const d = r.pass('districts', { districts: [
 `districts`: the pass over `params.spec.districts` (a JSON param), with `loopiness` (percent), `gradePct`, `lamps` and `routeLamp`
 (`bible` | `soul`); what Regions.plan's `beside` plans with. `districts_demo`: three districts at three level bands (a cloister high,
 a village mid, fields low) on S3's pinned claim (scenario `districts_demo`, phase `6c-d`).
+
+# Phase 6c slice H additions (contained fluids; CONTRACT "Phase 6c slice H")
+
+## Kit 0.35.0
+
+- **The `fluid` op** (format 2, kind `fluid`): `{op: 'fluid', id, part, fluid: water|lava, level, cond: 2, walk: false, cells, ice, shell,
+  spill, joins, watch, predicted, settleTicks}`. `cells`, `ice`, `shell`, `spill`, `joins` and `watch` are column runs `[[x, z, y0, y1]]`
+  sorted by (x, z, y0); `predicted` is `[[x, y, z, level]]` (vanilla's steady state of the body's flow: 1..7 flowing, 8 falling). The
+  evaluator writes `cells` as sources and `ice` as ice (after them); the rest is the mod's `fluids` stage (lib/fluids/body.mjs, the
+  mod's RegionFluids). Lint FLUID_STATE: no op carries a water or lava state with a `level` over 0 (planRegion refuses the plan).
+- **`r.fluidBody(cells, opts)`** (lib/fluids/body.mjs, bound late into program.mjs): the shell (every face neighbour, the rim one over
+  each side wall; never the open top, never an outlet) written ALWAYS_OURS in the generator's stage, the frozen volume asked with the
+  fluid layer (the box grown by 2, by 9 for a raised body), the flow simulated over the plan's own draft virtual world (sim.mjs: the
+  conservative reach, vanilla's steady state, the single breach), the op in the `fluids` stage (the region's last). `r.meta.waters`.
+- **ARVX version 3**: version 2 plus per-column runs of `(u8 fluid code, varint length)` after the block runs; codes 0 none, 1 water
+  source, 2 water flowing, 3 water falling, 4 waterlogged (any non-liquid block holding a fluid: kelp, seagrass, a waterlogged slab), 5
+  lava source, 6 lava flowing. `fluidAt(v, x, y, z)`. Asked with `r.needVolume(box, {fluids: true})` (`needVolumes[].fluids`); an IR
+  with such a volume requires `volume:fluids`. Fixture `mod/src/test/resources/arvx/fluids.{bin,json}` (ArvxFluidsTest).
+- **blocks.mjs** `fs` (fluid-stopping: 26.3's canHoldFluid refuses flowing water and lava) and `fl` (flammable: ignitedByLava or ignite
+  odds over 0), from BlockDump and the jar's block tags; **lib/fluids/biomes.mjs** (`freezesAt(biome, y)`, kit/tools/gen-biomes.mjs).
+- **The checker**: M25 (leak, convert, mix, shell, keep with the single breach, wet, trap, exit, model) and M20 (lava's fire reach),
+  errors, run only for an IR with a fluid op or meta `wet` records (lib/region/checkFluids.mjs).
+- **siteplan/1**: `waters` (counts per body) and `quays`.
