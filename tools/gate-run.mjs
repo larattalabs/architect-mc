@@ -61,7 +61,7 @@ import { fileURLToPath } from 'node:url';
 import { DevClient } from './lib/devclient.mjs';
 import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFiles } from './gate-impact.mjs';
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
-import { effectiveTimeout, estimateMin, loadHistory } from './lib/gate-history.mjs';
+import { currentHistory, definitionNow, definitionsAt, effectiveTimeout, estimateMin, loadHistory } from './lib/gate-history.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(SRC, '..', 'architect-mc');
@@ -549,6 +549,10 @@ const est = (s) => estOf.get(s.id).min;
 // timeouts keeps the configured ones). A bench step running next to others with only isolated samples gets 3 x p90; a stopOnFail
 // barrier keeps its configured timeout.
 const HIST_TIMEOUTS = !flag('--no-history-timeouts') && !flag('--no-history');
+// a history timeout counts only the samples taken under the step's current definition (its chain entry and the driver files its
+// shell names, at each sample's run head through git): a changed step starts over from its configured timeout until it has 5 again
+const CHAINS_NOW = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+const DEF_AT = definitionsAt(SRC, { chainsPath: path.relative(SRC, CONFIG_PATH) });
 for (const s of steps) {
   // a stopOnFail step is a barrier (a false TIMEOUT there stops the whole run): it keeps its configured timeout
   // a step that normally waits for another (the kit-suite readers wait for unit-kit) but runs without it takes its slow path (the
@@ -556,7 +560,7 @@ for (const s of steps) {
   const missing = (s.waitFor ?? []).filter((w) => !stepIds.includes(w));
   const t = !HIST_TIMEOUTS ? { min: s.timeoutMin, source: 'configured (--no-history-timeouts)' } : s.stopOnFail ? { min: s.timeoutMin, source: 'configured (stopOnFail barrier)' }
     : missing.length ? { min: s.timeoutMin, source: `configured (runs without ${missing.join(' ')}: its slow path)` }
-    : effectiveTimeout(s, HIST, { contendedBench: isBench(s) && !isIsolated(s) });
+    : effectiveTimeout(s, currentHistory(s.id, HIST, definitionNow(SRC, CHAINS_NOW, s.id), DEF_AT), { contendedBench: isBench(s) && !isIsolated(s) });
   s.effTimeoutMin = t.min;
   s.timeoutSource = t.source;
 }

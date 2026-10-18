@@ -105,7 +105,12 @@ the whole kit suite (about 190 s and 950 CPU-s each) next to `unit-kit`. The cha
   every run and `--plan` from all past `summary.json` files. A sample is a PASS or FAIL step's seconds minus its client
   setup; the newest 30 per step are kept. The file is written atomically, and a missing or corrupt one is simply rebuilt.
   - **Estimate:** the history p50, else `estMin`, else a third of `timeoutMin`.
-  - **Effective timeout:** `max(2 x p90, 10 min)`, capped by the configured `timeoutMin`, once the step has at least 5 samples.
+  - **Effective timeout:** `max(2 x p90, 10 min)`, capped by the configured `timeoutMin`, once the step has at least 5 samples
+    *of its current definition*. A step's definition is a hash of its chain entry (less `desc`, `estMin`, `timeoutMin`; `host`
+    counts) and the git blob ids of the driver files its shell names (`tools/*.mjs|sh`). Each sample is dated by its run's `head`:
+    the definition at that commit comes from `git ls-tree` (cached per head). A sample with no head, an unknown head or another
+    definition doesn't count, so a changed step keeps its configured timeout until it has 5 runs of its own (2026-10-18: history
+    had put t3a-ingame at 10 min). The estimate still uses every sample.
     A contended bench step whose history has no contended sample gets 3 x p90. A `stopOnFail` barrier always keeps its
     configured timeout, and so does a step whose `waitFor` target is not in the run (a kit-suite reader without `unit-kit`, e.g.
     the verifier's `--only d-unit`, re-runs the whole suite: its fast history doesn't apply).
