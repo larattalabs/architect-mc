@@ -13592,7 +13592,7 @@ Each line is marked **assumed** where §14's probes measure it.
   the same `fluids` stage. W's rule then reads it back as FROZEN water. Nature would freeze them anyway, and an ice cap the plan
   wrote undoes exactly; ice that formed on its own would not be ours (§0).
 - **Opting out:** `ice: false` on a body leaves the surface open. Such a body is refused `WATER`, `evidence.kind: "freezes"`,
-  unless every surface cell is roofed or within a planned light's reach (block light 10 or more keeps water open). M17 still
+  unless every surface cell is within a planned light's reach (block light 10 or more keeps water open). A roof is no exception (it would be `M25:trap`). M17 still
   applies to all ice, so no planned light over 11 reaches it.
 - **Wet writes into FROZEN columns** replace the ice and the water under it. The undo restores both (T3a's frozen fixture
   extended with a pier).
@@ -13872,6 +13872,9 @@ pool over the edge), a **falling column** (spill), and a **basin** (a pond body,
 - **`closed: true`** makes a full ring. `closed: false` leaves the ring open at the side facing the claim's centre, capped with
   shell.
 - **Compiled with the forms** (step 2), so the route pass sees its water.
+- **Beside a wall on the same feature:** the moat's ring starts at least 1 cell outside the wall's ring plus its thickness (the
+  wall's ring is searched first when both name the feature; a moat whose ring would cut the wall is `adjusted` outward, or
+  `refused NO_ROOM`).
 - **Crossings:** a street, road or path crossing a moat fails `ROUTE_WATER` and takes T3's bridge fallback (S-T3-2), landing at
   the wall's auto gate when there is one (T3 §4). Over plan-made water the fallback's `clearance` defaults to 1 (N-H-5).
 
@@ -13902,8 +13905,12 @@ off by default (S7's golden holds), and plan/0 never sets it.
 
 **The fallback rule** keeps every plan that fits today byte-identical, the way S-T3-2's street fallback did:
 - A move or wall is first searched exactly as on v0.36.0.
+- **Only surveyed (natural) water is ever made passable.** Plan-made water (a moat, a pond) stays an obstacle to walls and wet
+  piers: a wall never stands in its own plan's moat, and a route crosses plan water only on a bridge whose piers stay dry.
 - Only a leg or part that fails **because of water** (`WATER until H` today) is searched once more with wet writes allowed.
-- A plan with no such failure plans, checks and realises byte for byte as before. A plan with one may move later edges
+- A plan with no such failure plans and checks byte for byte as before (answers, IR, artifact). Its realise differs only through
+  §4.4's dependents rule, which applies to every region: a dependent cleared under natural water becomes a source, not air. The
+  existing natural steps over water (t3a-natural on S3's river, d2-ingame's quay) cover that change and must stay green. A plan with one may move later edges
   (hysteresis), as T3 recorded.
 
 **8.1 Wet piers** (`bridge.beam`).
@@ -14030,7 +14037,7 @@ Harbour walls and wet piers keep K1's and T3's roles.
   rule):
   - water sources free;
   - one `lava_bucket` per lava source (C26: one `bucket` back);
-  - ice caps as `ice` (creative-only in the survival table until RS says otherwise).
+  - ice caps priced as `ice`; RS decides how they are supplied.
 
   RS's "Fluid parts (H, HY): refused until Noah decides" row is answered by N-H-1. RS itself is unchanged.
 - **API** (additive; no new records or methods except H-c's):
@@ -14064,7 +14071,7 @@ Predicted from the design, not run. The builder runs them and commits the before
 
 | Plan / part | Shape | Expected | Why |
 |---|---|---|---|
-| hidden_village / waterfall_curtain (optional) | `form.waterfall`, near the largest water within 16 | `fits` (or `adjusted` move) | the asks claim is flat: `lip: auto` finds no drop and sculpts a 6-high outcrop beside the lake; the fall joins the lake (bed 60, 3 deep: a valid join); "use an existing waterfall" read as `auto` and noted; the hollow behind the curtain is not built (7b), noted. If the hollow zone takes the whole shore within 16: `refused NO_ROOM` with a `wouldFit` |
+| hidden_village / waterfall_curtain (optional) | `form.waterfall`, near the largest water within 16 | `fits` (or `adjusted` move) | the asks claim is flat: `lip: auto` finds no drop and sculpts a 6-high outcrop beside the lake; the fall joins the lake (bed 60, 3 deep: a valid join); "use an existing waterfall" read as `auto` and noted; the hollow behind the curtain is not built (7b), noted. If the hollow zone takes the whole shore within 16: `refused NO_ROOM`; if the raised header pool's single-breach reach (§2.5) meets the zone's lots: `refused LEAK`; each with a smaller-drop `wouldFit` |
 | redstone_gate / moat (required) | `connector.channel`, `where.around` the fortress, ring [6, 12], closed | `fits` as `channel.moat` (or `adjusted` move) | `params.width` 5 and `depth` 3 read; nothing crosses it (the drawbridge is pending), so the fortress is ringed and no route needs a bridge. If the fortress sits within ring 12 of the lake: `refused WATER kind: level` |
 | redstone_gate / drawbridge (required) | unchanged | `unsupported {connector.drawbridge, until: mechanism}` | S-T3-7; once a mechanism slice ships, a recheck finds the moat's water and the bridge lands at the gate |
 | redstone_gate / main_gate, curtain_wall | unchanged | as on v0.36.0 | the moat is outside the wall ring |
@@ -14117,14 +14124,14 @@ server`) except the look step.
 | 1 | Containment, plan | M25 0 on every valid fixture and `water_demo`; each broken variant caught with its cells (below) |
 | 2 | Containment, world, with a negative control | after the realise and settle: every body's census equals `predicted` exactly (sources, flowing levels), 0 fluid cells outside `cells ∪ spill ∪ joins` in each watch box, settled within `settleTicks`; a 2-minute stand at **default** rules adds nothing; **negative control:** `_unsafe.noShellCell` (one rim cell left unwritten) realised with the containment check bypassed by a dev flag: the forced ticks make it leak within 1 settle bound and the census names the cell (proves the measure can fail) |
 | 3 | Escape guard and realise check | `_unsafe.predictShort` (a spill declared one cell short): the guard drains the body, `escaped` names the cell, the region ends PARTIAL, then 0 fluid in the watch box after a settle bound; a protected area added over one shell cell before realise: the body is not written, PARTIAL naming it, 0 fluid written |
-| 4 | Ice | cold variant: every capped surface cell reads `ice` after the stand at default rules, re-surveyed FROZEN; an uncapped twin (`_unsafe.noCap`) freezes on its own (the probe for §0's freezing assumption, recorded), and its undo is still exact under §4.3 |
-| 5 | Exact undo | after items 2-4: `Regions.remove`, a settle bound and no fluid tick scheduled: E-flat 0 on flat **with fluid cells compared by state**; natural and cold E-normal 0 unclassified, no classified mismatch within 6 of any body, shell, watched cell or wet write (wet writes: the bridge rule, growth and grazed at unwritten cells only), **0 gravity mismatches** within 6; the river's sources, the frozen river's ice and water, and any kelp restored exactly; journal cells recorded per part |
-| 6 | Overflow (single breach) | flat and natural: after settle, `/setblock` air at one shell cell of each body (the deepest side cell of the pond, the fountain's coping, the header pool's rim): after a settle bound the water reaches no lot box, build, protected area or keep-out cell (the breach reach as predicted, re-surveyed); then `Regions.remove` and the item 5 bars hold (the watched cells restored; 0 new sources anywhere in the watch box) |
-| 7 | Crash | 6a's crash harness: a crash after the shells and before the `fluids` stage, and one mid-stage: settle at start completes or undoes; 0 fluid outside the declared cells; the undo exact as item 5 |
+| 4 | Ice | cold variant: every capped surface cell reads `ice` after the stand at default rules, re-surveyed FROZEN; an uncapped twin (`_unsafe.noCap`) freezes on its own (the probe for §0's freezing assumption, recorded), and its undo leaves no water or ice where the snapshot had none (§4.3; the remaining cells are judged by item 5's exact-rules round) |
+| 5 | Exact undo | **its own realise under the exact rules** (random ticks 0, `doFireTick` false, no spawns; scheduled fluid ticks run), separate from the default-rule stands of items 2, 4, 6 and 13, which judge safety only (census, remnants, ice, fire): settle, then `Regions.remove`, a settle bound and no fluid tick scheduled: E-flat 0 on flat **with fluid cells compared by state**; natural and cold E-normal 0 unclassified, no classified mismatch within 6 of any body, shell, watched cell or wet write (wet writes: the bridge rule, growth and grazed at unwritten cells only), **0 gravity mismatches** within 6; the river's sources, the frozen river's ice and water, and any kelp restored exactly; journal cells recorded per part |
+| 6 | Overflow (single breach) | flat and natural: after settle, `/setblock` air at one shell cell of each body (the deepest side cell of the pond, the fountain's coping, the header pool's rim): after a settle bound the water reaches no lot box, build, protected area or keep-out cell (the breach reach as predicted, re-surveyed); then `Regions.remove`: 0 fluid cells in the watch box that the before-snapshot didn't hold, and 0 new sources anywhere in it (the watched cells restored). The breach round is at default rules, so its exactness is item 5's, run again on an exact-rules realise with the same breach |
+| 7 | Crash | 6a's crash harness: a crash after the shells and before the `fluids` stage, one mid-stage, and one **during removal** between §4.1's step 2 (drained) and step 3 (solids): settle at start completes the realise or undoes it, and finishes a removal; 0 fluid outside the declared cells; the undo exact as item 5 |
 | 8 | Wet structures | S3's river: the beam on wet piers re-read (footing 2 into the bed, no air under the surface, no waterlogged state written, M10:bridge, M3 0); the quay (deck solid to the bed, exits every 16, M5 0 dark cells, M8); the flat harbour wall (closure with the wet section, height over the surface) |
 | 9 | Villagers (hard bar) | vanilla `dev.nav.villager` both ways round every body and over the moat's bridge, the wet beam and the quay: 100% found, no path cell in a fluid; **the stand:** 4 villagers set by each body's edge and 1 in each body's surface centre, 2 minutes at default rules: 0 drowning damage (`dev.entity.damage`), 0 deaths, and a nav path from each swimmer to an exit found; kit movers 100% |
 | 10 | Recorded plans | §13's bar on the 59 asks in kit CI |
-| 11 | P0 answers and byte identity | every H `valid/` fixture `fits` (or `adjusted` as expected); every refusal answers its code with evidence and `wouldFit`s, each `fits` re-checked alone; **every committed `valid/`, K1 and T3 fixture without an H part re-plans byte-identical** (answers and IR, but its kitVersion), except by name: `t3a/r06_water_arch`, `t3a/r07_water_rope`, K1a's lake-ring refusal, and any plan/0 farm fixture on a dry claim (§7.5); `rg "until: ?'?H'?"` over kit/ and the catalogue finds nothing reachable |
+| 11 | P0 answers and byte identity | every H `valid/` fixture `fits` (or `adjusted` as expected); every refusal answers its code with evidence and `wouldFit`s, each `fits` re-checked alone; **every committed `valid/`, K1 and T3 fixture without an H part re-plans byte-identical** (answers and IR, but its kitVersion), except by name: `t3a/r06_water_arch`, `t3a/r07_water_rope`, K1a's lake-ring refusal, and any plan/0 farm fixture on a dry claim (§7.5); a search for `until` naming exactly `H` (both forms: `until: 'H'` and `"until":"H"`, word-bounded so `HY` doesn't match) over kit/ and the catalogue golden finds nothing |
 | 12 | Catalogue | the golden equals catalogue 7; the diff against `catalogue-t3.json` is exactly §6's; recorded pending parts naming `form.waterfall` or `connector.channel` flagged to recheck |
 | 13 | Fire | lava pit after a stand at default rules with `doFireTick` on and random ticks at 300 (the probe): 0 fire blocks within the claim; a flammable ring at distances 1-4 records the farthest ignition (sets M20's reach; the bar is M20 0 at the measured reach) |
 | 14 | Probes | (a) the sand anomaly: one sand cell on one rewritten cell, dry and under water, re-read after the realise with that column's journal entries (recorded, PLAN item); (b) T1's falling water: relief_demo's committed inputs re-planned, `FLUID_STATE` 0, the source of the level-8 cells named |
@@ -14152,7 +14159,8 @@ server`) except the look step.
 - H's own: `h-unit`, `h-ingame`, `h-natural`, `h-cold`, `6ch-look`.
 
 The gate-verifier reviews the diff and the evidence, and **re-runs items 3, 5, 6 and 7** (escape, undo, breach-undo and crash:
-GATES policy 3).
+GATES policy 3). **Steward's RC check comes before release** (GATES policy 4): H changes the removal order (a settle bound
+between draining and restoring solids), when `PLACED` is reached (after settle), and adds `PARTIAL` with a drained body.
 
 ### 15. Build order, the split and the shared interface
 
@@ -14225,7 +14233,9 @@ parallel, released as one batch (as K1 and T3). H-c follows in the same batch if
 
 - **S-H-2. The farm pond's place.** A region never writes inside a lot's restore box (K5), so "on the lot" is built as a 3x3 pond
   in the lot's yard, within 2 of its rect and outside its box. Is that what you meant? It is on by default in plan/0 on dry claims
-  only, which moves those plans' IRs. Or should it be an explicit zone member (`farmPond: true`)?
+  only, which moves those plans' IRs. It also brings every fluid cost to such a plan: the two-plan check with volume reads (so
+  `incomplete VOLUME` over ungenerated chunks unless you check with `load: "generate"`), the `fluids` stage, and the settle
+  wait before `PLACED`. Or should it be an explicit zone member (`farmPond: true`, default off)?
 - **S-H-3. The moat is H's, as `channel.moat`.** `connector.channel` turns supported with one form: a level ring written
   `where.around`, like your recorded moat. Your `width` and `depth` params are read. A `from`/`to` channel answers
   `unsupported {channel.course, until: HY}`. Routes cross a moat on T3's bridge fallback and land at the wall's gate. Is this
@@ -14243,7 +14253,8 @@ parallel, released as one batch (as K1 and T3). H-c follows in the same batch if
   - a body that fails its containment check or escapes is drained, and the region ends `PARTIAL` naming it;
   - `ARTIFACT_STALE` fires when the water under a wet write or beside a body changed since the check.
 
-  Is that acceptable for your Start flow? Should PARTIAL for a drained body be a distinct status?
+  Is that acceptable for your Start flow? Should PARTIAL for a drained body be a distinct status? Because these touch removal and
+  `PLACED`, H takes your RC check before its release (GATES policy 4).
 - **S-H-7. The recorded waterfall.** H can't adopt a waterfall already in the world: the survey can't tell a falling column from a
   pond. So `lip: auto` uses a natural drop when one fits, else sculpts an outcrop, and the hollow behind the curtain is not built
   (7b). Your hidden village then gets a built fall beside its lake. Fine, or should the part keep waiting until the hollow can be
