@@ -438,7 +438,8 @@ export async function probe(ctx) {
     const state = async (x, y, z) => (await L.call('dev.fluid.census', { box: [x, y, z, x, y, z] }, 60_000)).fluids[0]?.[3] ?? null;
     const isSand = async (x, y, z) => { const r = await L.call('dev.box.hash', { min: [x, y, z], max: [x, y, z] }, 60_000); return r; };
     void isSand;
-    for (const [tag, X, Z, wet] of [['dry', 40, 40, false], ['wet', 40, 100, true]]) {
+    // the dry case is gate step tile-gravity's (housekeeping-2, v0.36.1; H-core's impact rule runs it): here only under natural water
+    for (const [tag, X, Z, wet] of [['wet', 40, 100, true]]) {
       const gy = await groundY(ctx, X, Z);
       await L.tp(X + 0.5, gy + 25, Z + 0.5);
       // wet: a pool walled on every side (still water: nothing flows while the box is snapped and compared)
@@ -491,28 +492,44 @@ export async function probe(ctx) {
     await L.cmd('/gamerule random_tick_speed 300');
     const rules = [];
     for (const r of ['fire_spread_radius_around_player', 'random_tick_speed']) rules.push((await L.cmd(`/gamerule ${r}`))?.messages ?? null);
-    await sleep(120_000);
+    // sampled every 5 s for 2 minutes: a post lit by the lava is one that burns while no fire and no burnt post was within 2 cells of it at
+    // the sample before (posts on one ray stand side by side, and a burning post sets its neighbour alight: that is fire's spread, not
+    // the lava's reach)
+    const { decodeArwd } = await imp('lib/region/vworld.mjs');
+    const dumpBox = [X - 8, gy - 2, Z - 8, X + 8, gy + 5, Z + 8];
+    const sample = async (i) => {
+      const f = path.join(ctx.OUT, `h-fire-${i}.arwd.gz`);
+      await L.call('dev.region.dump', { box: dumpBox, file: f }, 60_000);
+      const dd = await decodeArwd(fs.readFileSync(f));
+      fs.rmSync(f);
+      const fire = [];
+      for (let x = dumpBox[0]; x <= dumpBox[3]; x++) for (let y = dumpBox[1]; y <= dumpBox[4]; y++) for (let z = dumpBox[2]; z <= dumpBox[5]; z++) if (/^minecraft:(soul_)?fire/.test(dd.palette[dd.cells[dd.at(x, y, z)]])) fire.push([x, y, z]);
+      return { fire, gone: new Set(posts.filter((p) => dd.palette[dd.cells[dd.at(p.x, p.y, p.z)]] !== 'minecraft:oak_planks').map((p) => k3([p.x, p.y, p.z]))) };
+    };
+    const near = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2])) <= 2;
+    let prev = { fire: [], gone: new Set() };
+    const direct = [], spread = [];
+    for (let i = 0; i < 24; i++) {
+      await sleep(5000);
+      const cur = await sample(i);
+      for (const p of posts) {
+        const k = k3([p.x, p.y, p.z]);
+        if (!cur.gone.has(k) || prev.gone.has(k)) continue;
+        const c = [p.x, p.y, p.z];
+        const byFire = prev.fire.some((f) => near(f, c) && !near([X, gy, Z], f) && Math.max(Math.abs(f[0] - X), Math.abs(f[2] - Z)) > 3) || posts.some((q) => q !== p && prev.gone.has(k3([q.x, q.y, q.z])) && near([q.x, q.y, q.z], c));
+        (byFire ? spread : direct).push(p);
+      }
+      prev = cur;
+    }
     await L.cmd('/gamerule random_tick_speed 3');
     await L.cmd('/gamerule fire_spread_radius_around_player 0');
-    let farthest = { side: 0, above: -9, below: 9 };
-    const burnt = [];
-    const cen = await L.call('dev.region.dump', { box: [X - 8, gy - 2, Z - 8, X + 8, gy + 5, Z + 8], file: path.join(ctx.OUT, 'h-fire.arwd.gz') }, 60_000).then(async () => {
-      const { decodeArwd } = await imp('lib/region/vworld.mjs');
-      return decodeArwd(fs.readFileSync(path.join(ctx.OUT, 'h-fire.arwd.gz')));
-    });
-    let fires = 0;
-    for (let x = X - 8; x <= X + 8; x++) for (let y = gy - 2; y <= gy + 5; y++) for (let z = Z - 8; z <= Z + 8; z++) {
-      const s = cen.palette[cen.cells[cen.at(x, y, z)]];
-      if (/^minecraft:(soul_)?fire/.test(s)) fires++;
-    }
-    for (const p of posts) {
-      const s = cen.palette[cen.cells[cen.at(p.x, p.y, p.z)]];
-      if (s !== 'minecraft:oak_planks') { burnt.push(p); farthest = { side: Math.max(farthest.side, p.dist + 1), above: Math.max(farthest.above, p.dy), below: Math.min(farthest.below, p.dy) }; }
-    }
-    out.fire = { rules, posts: posts.length, burnt: burnt.length, farthest, fires, list: burnt.slice(0, 30) };
+    // Chebyshev sideways from the nearest lava cell (the pool spans X-1..X+1): a post at X + 1 + dist is dist away
+    const reachOf = (list) => list.reduce((a, p) => ({ side: Math.max(a.side, p.dist), above: Math.max(a.above, p.dy), below: Math.min(a.below, p.dy) }), { side: 0, above: -9, below: 9 });
+    const farthest = reachOf(direct);
+    out.fire = { rules, posts: posts.length, direct: direct.length, spread: spread.length, farthest, all: reachOf([...direct, ...spread]), list: direct.slice(0, 30).map((p) => [p.dist, p.dy]) };
     const { FIRE_REACH } = await imp('lib/region/checkFluids.mjs');
-    check(burnt.length > 0, `item 13 (the probe's control): the lava ignited at least one post (${burnt.length}; ${fires} fire cells; rules ${json(rules)})`);
-    check(farthest.side <= FIRE_REACH.side + 1 && farthest.above <= FIRE_REACH.above && (burnt.length === 0 || farthest.below >= -FIRE_REACH.below), `item 13 (the probe): a lava pool with random ticks at 300 for 2 minutes ignited ${burnt.length} of ${posts.length} flammable posts; the farthest at ${farthest.side} sideways (Chebyshev from the nearest lava cell), ${farthest.below}..${farthest.above} in height; M20's reach ${json(FIRE_REACH)} covers it`, burnt.slice(0, 10));
+    check(direct.length > 0, `item 13 (the probe's control): the lava lit at least one post itself (${direct.length} by the lava, ${spread.length} by spreading fire; rules ${json(rules)})`);
+    check(farthest.side <= FIRE_REACH.side && farthest.above <= FIRE_REACH.above && (direct.length === 0 || farthest.below >= -FIRE_REACH.below), `item 13 (the probe): a lava pool with random ticks at 300 for 2 minutes lit ${direct.length} of ${posts.length} flammable posts itself (${spread.length} more by spreading fire, recorded); the farthest at ${farthest.side} sideways (Chebyshev from the nearest lava cell), ${farthest.below}..${farthest.above} in height; M20's reach ${json(FIRE_REACH)} covers it (vanilla's LavaFluid.randomTick: fire at most 2 up and 2 aside, the block it lights one more)`, direct.slice(0, 10));
     await L.leaveWorld();
   }
   return out;
