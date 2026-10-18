@@ -26,7 +26,8 @@
 //                                       neither it realises); the realised bore re-read (item 2), villagers through (item 3), the removal's
 //                                       E-normal (0 unclassified, no classified mismatch within 6 of the bore's written cells); load:
 //                                       "generate" (an unloaded corridor incomplete VOLUME under "loaded", fits under "generate"; ends a
-//                                       thousand apart stay incomplete VOLUME past the per-edge cap under "generate")
+//                                       thousand apart and 40 across stay incomplete VOLUME past the per-edge cap under "generate",
+//                                       the corridor at least 1.25x the cap, the same twice)
 //     look                              the look (client, recorded not judged): the flat demo's portal and its lit interior, the hill's
 //                                       portal; cameras for the gallery
 //     report                            REPORT.md over the step JSONs
@@ -556,14 +557,22 @@ steps.natural = async () => {
   const gb = g2.check?.parts?.find((a) => a.part === 'bore');
   out.generate.generate = { overall: g2.check?.overall ?? null, class: gb?.class ?? null, volumePass: g2.volumePass ?? null, ms: g2.ms ?? null };
   check(g2.check?.overall === 'READY' && gb?.class === 'fits', `load (hill): the same check with load "generate" prepares and generates the corridor: fits, READY (${json(out.generate.generate)})`);
-  // past the cap: ends a thousand apart over the hill (a corridor over 4,000,000 cells), even with "generate"
+  // past the cap: ends a thousand apart over the hill, and 40 apart across it (a corridor over 4,000,000 cells), even with
+  // "generate". The claim is at its 1024-column limit along x, so (housekeeping 2) the ends moved apart diagonally: the corridor is
+  // about 1.6x the cap (it was 4,290,489 cells, 7% over), and the check asserts at least 1.25x, so a change to the corridor box that
+  // brought it near the cap fails here rather than turning the expected incomplete VOLUME into a fit. Checked twice: the same size.
   const cx = Math.floor((f.claim[0] + f.claim[2]) / 2);
-  const capClaim = [cx - 511, zl - 40, cx + 512, zl + 40];
+  const capClaim = [cx - 511, zl - 80, cx + 512, zl + 80];
   const capPlan = { schemaVersion: 'plan/0', planId: 't3b_cap', connectors: [{ id: 'far', kind: 'tunnel', approach: 32, width: 5, from: { anchor: 'far_w' }, to: { anchor: 'far_e' } }] };
-  const g3 = await call('dev.region.checkPlan', { plan: capPlan, claim: capClaim, owner: OWNER, anchors: { far_w: [cx - 500, 30, zl], far_e: [cx + 500, 30, zl] }, load: 'generate' }, 900_000);
+  const capCheck = () => call('dev.region.checkPlan', { plan: capPlan, claim: capClaim, owner: OWNER, anchors: { far_w: [cx - 500, 30, zl - 20], far_e: [cx + 500, 30, zl + 20] }, load: 'generate' }, 900_000);
+  const g3 = await capCheck();
   const gc = g3.check?.parts?.find((a) => a.part === 'far');
-  out.generate.cap = { overall: g3.check?.overall ?? null, class: gc?.class ?? null, reasons: gc?.reasons ?? null };
-  check(gc?.class === 'incomplete' && gc.reasons[0].code === 'VOLUME' && gc.reasons[0].evidence?.cap === 'edgeCells', `load (hill): ends 1000 apart (approach 32, width 5) with load "generate": still incomplete VOLUME past the per-edge cap (${json(gc?.reasons?.[0]?.evidence ?? null)})`);
+  const ev = gc?.reasons?.[0]?.evidence ?? null;
+  const g4 = await capCheck();
+  const ev2 = g4.check?.parts?.find((a) => a.part === 'far')?.reasons?.[0]?.evidence ?? null;
+  out.generate.cap = { overall: g3.check?.overall ?? null, class: gc?.class ?? null, reasons: gc?.reasons ?? null, cells: ev?.cells ?? null, ratio: ev?.cells && ev?.limit ? ev.cells / ev.limit : null, again: ev2?.cells ?? null };
+  check(gc?.class === 'incomplete' && gc.reasons[0].code === 'VOLUME' && ev?.cap === 'edgeCells', `load (hill): ends 1000 apart and 40 across (approach 32, width 5) with load "generate": still incomplete VOLUME past the per-edge cap (${json(ev)})`);
+  check(ev?.cells >= 1.25 * (ev?.limit ?? Infinity) && ev2?.cells === ev.cells && json(ev2?.corridor) === json(ev.corridor), `load (hill): the past-the-cap corridor is at least 1.25x the cap, the same on a second check (${ev?.cells} cells, ${out.generate.cap.ratio?.toFixed(2)}x the ${ev?.limit} cap; again ${ev2?.cells})`);
   await leaveWorld();
   spendZero();
   return out;

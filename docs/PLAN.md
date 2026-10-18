@@ -622,7 +622,7 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   cells of the entry (d3f36c95, a08669ff), which would remove the sand by design rather than by gravity. Decide whether a
   gravity block on a rewritten support should be kept when the new support is solid, and add a probe: one sand cell on one
   rewritten cell, re-read after the realise, with the journal's entries for that column.
-- **Thin margin on T3b's cap fixture.** t3b-natural's "past the cap" case puts the corridor at 4,290,489 cells against the
+- **Done (housekeeping 2):** the ends moved apart diagonally too (1000 along, 40 across; the claim is at 1024 columns in x), so the corridor is ~1.6x the cap; t3b-natural asserts at least 1.25x and the same size on a second check. ~~Thin margin on T3b's cap fixture.~~ t3b-natural's "past the cap" case puts the corridor at 4,290,489 cells against the
   4,000,000-cell cap (7% over). A change to the corridor box (approach, dilation, the y span) could drop it under the cap and turn
   the expected `incomplete VOLUME` into a fit without any cap bug. Widen the ends (or assert the computed size is at least, say,
   1.5x the cap) the next time the driver is touched.
