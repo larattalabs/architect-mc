@@ -185,7 +185,8 @@ Before and after, both measured on a shared, busy box:
 | 6cv-scenario-s7 | TIMEOUT 60.3 min | PASS 7.6 min, timeout now 25 min |
 
 - **Verdicts.** Every step K1a passed passed again. pt-nomod failed the same way:
-  `no mod/build/headless-launch*.json`, because it reads this checkout's `mod/build`. That is pre-existing.
+  `no mod/build/headless-launch*.json`, because it read this checkout's `mod/build`. That was pre-existing; since housekeeping 2
+  it reads the run worktree's (`tools/lib/nomod-server.mjs` `launchFile`, built there when missing).
 - **K1a non-passes that passed this time:**
   - b-unit and pt-unit (the gradle overlap; the lock never had to wait in this run);
   - 6cv-scenario-s7 (no mob was in a lot this time);
