@@ -16,6 +16,8 @@
 //                 flat-misc (7, 8, 10, 12, commands)
 //     natural     items 5 (E-normal) and 6 on a corner of S3's pinned claim (6b's seed world): five overlapping strokes, a cave carve
 //                 (M3 0 floating, M4 0 breaches, judged on the realised dumps) and a melt, all undone; item 9 (own CPU, BAR)
+//     gravity     (the T3 sand-vanish anomaly) a sand cell on a support a stroke rewrites solid -> solid stays (gravityKept), no
+//                 falling block; one over air a raise fills is cleared and restored; each undo exact (headless)
 //     felling     (v0.24.1, C31) felling stays within the region's bounds: a tree straddling the cutter's protected area, one resting
 //                 on another owner's region, one wholly inside the claim; no forbidden cell changes, each undo exact (headless)
 //     report      REPORT.md over the step JSONs
@@ -584,6 +586,106 @@ steps.felling = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ in game: a gravity block on a rewritten support
+
+// (PLAN "Queued from the T3 batch": the sand-vanish anomaly) The tile writer clears what stood on a cell it changes, as cells of
+// the entry. A gravity block (sand, gravel) whose support stays solid, before and after, is kept instead: nothing makes it fall.
+// One whose support is free now (air or fluid under it) is still cleared and restored by the undo (it hangs only until its next
+// update). Flat world, 'exact' rules.
+const GRAV = 'G6B Tile Gravity';
+const fallingNear = async (x, y, z, r = 24) => {
+  const res = await cmd(`/execute positioned ${x} ${y} ${z} if entity @e[type=minecraft:falling_block,distance=..${r}]`);
+  const m = /count: (\d+)/.exec((res.messages ?? []).join(' '));
+  return m ? Number(m[1]) : 0;
+};
+const blockAt = async (x, y, z) => {
+  const d = await call('dev.journal.at', { x, y, z }, 60_000);
+  const h = await boxHash([x, y, z], [x, y, z]);
+  return { stack: d, sha: h.sha256 };
+};
+
+steps.gravity = async () => {
+  await ensure();
+  await freshWorld(GRAV, FLAT_BASE, 'exact');
+  await tp(40.5, 0, 40.5);
+  const gy = await groundAt(40, 40);
+  const out = { gy, cases: {} };
+  const one = async (x, y, z, block) => { await cmd(`/setblock ${x} ${y} ${z} ${block}`); };
+  const shaOf = async (block, x, y, z) => {
+    // the sha of one cell holding `block`, taken on a scratch cell well away from the strokes
+    await one(x, y, z, `${block} strict`);
+    const h = await boxHash([x, y, z], [x, y, z]);
+    await one(x, y, z, 'minecraft:air strict');
+    return h.sha256;
+  };
+  const SAND = await shaOf('minecraft:sand', 300, gy + 20, 300);
+  const AIR = await shaOf('minecraft:air', 300, gy + 20, 300);
+
+  // (A) the anomaly: one sand cell on a grass cell that an overlay masked to grass_block rewrites to stone (solid before and after)
+  {
+    const [X, Z] = [40, 40];
+    await tp(X + 0.5, gy + 25, Z + 0.5);
+    await one(X, gy + 1, Z, 'minecraft:sand');
+    await settle(1500);
+    const box = [X - 6, gy - 4, Z - 6, X + 6, gy + 6, Z + 6];
+    const before = await blockAt(X, gy + 1, Z);
+    const snap = await snapBox(box, 'gravity-solid');
+    const v = await brush({ kind: 'overlay', shape: 'cylinder', at: [X, gy, Z], radius: 1, strength: 2, mask: { block: ['grass_block'] }, pattern: { mix: [{ w: 1, mat: 'stone' }] } });
+    check(!v.refused && v.state === 'PLACED' && v.cellsWritten > 0, `gravity (A): the overlay over the support realised (${v.state ?? v.refused}; ${v.cellsWritten} cells, skipped ${json(v.cellsSkipped)})`);
+    await settle(1500);
+    const support = await blockAt(X, gy, Z);
+    const after = await blockAt(X, gy + 1, Z);
+    const falling = await fallingNear(X, gy, Z);
+    log(`  gravity (A): support stack ${json(support.stack)}; sand cell stack ${json(after.stack)}`);
+    check(before.sha === SAND && after.sha === SAND, `gravity (A): the sand cell on the rewritten (solid -> solid) support is still sand after the realise (${after.sha === SAND ? 'sand' : after.sha === AIR ? 'AIR' : 'other'})`);
+    check(falling === 0, `gravity (A): no falling block entity near the stroke (${falling})`);
+    check((v.cellsSkipped?.gravityKept ?? 0) >= 1 && !(v.cellsSkipped?.dependentCells > 0), `gravity (A): the kept cell is recorded (gravityKept ${v.cellsSkipped?.gravityKept ?? 0}, dependentCells ${v.cellsSkipped?.dependentCells ?? 0})`);
+    if (v.region) await undo(v.region);
+    await settle(1500);
+    const d = await diffBox(box, snap);
+    check(d.mismatches === 0, `gravity (A): one undo restores the box exactly (${d.mismatches} mismatches ${json(d.classes)})`, d.sample);
+    out.cases.solid = { stroke: v, support: support.stack, sand: after.stack, falling, diff: d };
+  }
+
+  // (B) a sand cell hanging over a free cell (a water source) that an overlay masked to water rewrites to stone: free before, so the
+  // sand is cleared with the entry and the undo puts both back. Vanilla drops sand over water at once, so /setblock's strict mode
+  // builds it (no updates). The overlay's top two cells of the column are the sand and the water; the mask keeps the water only.
+  {
+    const [X, Z] = [40, 100];
+    await tp(X + 0.5, gy + 25, Z + 0.5);
+    const box = [X - 8, gy - 4, Z - 8, X + 8, gy + 10, Z + 8];
+    const r1 = await cmd(`/setblock ${X} ${gy} ${Z} minecraft:water strict`);
+    const r2 = await cmd(`/setblock ${X} ${gy + 1} ${Z} minecraft:sand strict`);
+    await settle(1500);
+    const WATER = await shaOf('minecraft:water', 300, gy + 20, 300);
+    const hung = (await blockAt(X, gy + 1, Z)).sha === SAND && (await blockAt(X, gy, Z)).sha === WATER;
+    check(hung, `gravity (B): a sand cell hangs over a water source (/setblock strict: ${json([...(r1.messages ?? []), ...(r2.messages ?? [])])})`);
+    if (hung) {
+      const snap = await snapBox(box, 'gravity-free');
+      const v = await brush({ kind: 'overlay', shape: 'cylinder', at: [X, gy, Z], radius: 1, strength: 2, mask: { block: ['water'] }, pattern: { mix: [{ w: 1, mat: 'stone' }] } });
+      check(!v.refused && v.state === 'PLACED' && v.cellsWritten > 0, `gravity (B): the overlay of the water under the hanging sand realised (${v.state ?? v.refused}; ${v.cellsWritten} cells, skipped ${json(v.cellsSkipped)})`);
+      await settle(1500);
+      const col = [];
+      for (let y = gy - 1; y <= gy + 3; y++) {
+        const c = await blockAt(X, y, Z);
+        col.push({ y, entry: c.stack?.stack?.at(-1) ?? null });
+      }
+      log(`  gravity (B): column ${json(col)}`);
+      const sup = col[1].entry;
+      const cell = col[2].entry;
+      check(sup && /water/.test(sup.before ?? '') && /stone/.test(sup.after ?? ''), `gravity (B): the free support under the sand is written solid (${sup ? `${sup.before} -> ${sup.after}` : 'not written'})`);
+      check(cell && /sand/.test(cell.before ?? '') && /air/.test(cell.after ?? '') && (v.cellsSkipped?.dependentCells ?? 0) >= 1, `gravity (B): the hanging sand is cleared as a cell of the entry (${cell ? `${cell.before} -> ${cell.after}` : 'not in the entry'}; dependentCells ${v.cellsSkipped?.dependentCells ?? 0})`);
+      if (v.region) await undo(v.region);
+      await settle(1500);
+      const d = await diffBox(box, snap);
+      check(d.mismatches === 0, `gravity (B): one undo restores the box exactly, the hanging sand included (${d.mismatches} mismatches ${json(d.classes)})`, d.sample);
+      out.cases.free = { stroke: v, column: col, diff: d };
+    }
+  }
+  spendZero();
+  return out;
+};
+
 // ------------------------------------------------------------------ in game: S3's corner
 
 /** Cells of an ARWD dump as a lookup: (x, y, z) -> block name (no properties). */
@@ -696,7 +798,7 @@ function caveJudge(d0, d1, box) {
 
 steps.report = async () => {
   const rows = [];
-  for (const s of ['unit', 'stale', 'apicompat', 'ingame', 'flat-owned', 'flat-undo', 'flat-permission', 'flat-misc', 'natural', 'felling']) {
+  for (const s of ['unit', 'stale', 'apicompat', 'ingame', 'flat-owned', 'flat-undo', 'flat-permission', 'flat-misc', 'natural', 'felling', 'gravity']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) continue;
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));
