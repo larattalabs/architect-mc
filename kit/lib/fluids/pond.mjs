@@ -326,6 +326,34 @@ export function emit(K, p, res) {
 export function leakCheck(r, env, rec) {
   const hit = reachMeetsKeep(r, env, rec, { volClass: volumeKeep(r, VC, classAt) });
   if (hit) throw leakRefusal(rec, hit);
+  shellCheck(r, rec);
+}
+
+/**
+ * A body's shell cells the realise would not write (§1.1, M25:shell "not written"): a cell whose block the plan's own world says is no
+ * natural block (ice, packed ice, snow block, a player's block: the realise's ALWAYS_OURS passes natural terrain and its own cells only),
+ * read from the frozen volume the plan was given (without one the world is the survey's, all natural). Returns [[x, y, z, block]].
+ */
+export function unwrittenShell(r, rec) {
+  if (rec.volumeState !== 'given') return [];
+  const xs = rec.shell.map((c) => c[0]), ys = rec.shell.map((c) => c[1]), zs = rec.shell.map((c) => c[2]);
+  const lw = localWorld(r, { minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs), minY: Math.min(...ys), maxY: Math.max(...ys) });
+  const out = [];
+  // (the mod's natural terrain, TerrainFit.natural, holds no ice: the kit's ICE class counts as natural in the virtual world, so an ice
+  // block under a shell cell is named here from the world before the plan)
+  const P = lw.vw.pal;
+  const iceOf = (i) => /^minecraft:(ice|packed_ice|blue_ice|frosted_ice)$/.test(String(P.states[i]).replace(/\[.*$/, ''));
+  for (const [x, y, z] of rec.shell) {
+    const unwritten = !(lw.vw.flags(x, y, z) & F_WRITTEN) || iceOf(lw.vw.base(x, y, z));
+    if (unwritten) { out.push([x, y, z, P.states[iceOf(lw.vw.base(x, y, z)) ? lw.vw.base(x, y, z) : lw.vw.get(x, y, z)]]); if (out.length >= 16) break; }
+  }
+  return out;
+}
+
+/** A body whose shell can't be written: refused LEAK (the body could not be closed), naming the cells and what stands there. */
+export function shellCheck(r, rec) {
+  const bad = unwrittenShell(r, rec);
+  if (bad.length) throw refusal('LEAK', `body ${rec.id}: ${bad.length}+ shell cell(s) stand on blocks the realise never replaces (${[...new Set(bad.map((q) => q[3]))].slice(0, 4).join(', ')}): the body could not be closed`, { kind: 'unwritable', body: rec.id, cells: bad.map((q) => q.slice(0, 3)), blocks: [...new Set(bad.map((q) => q[3]))] });
 }
 
 /** Lava within 2 of any water (M25:mix): the plan's earlier bodies. */

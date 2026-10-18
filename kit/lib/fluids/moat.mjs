@@ -26,7 +26,7 @@ import { FLAG_WATER } from '../region/pack.mjs';
 import { channelForm } from '../plan/schema.mjs';
 import { bodiesMark, bodiesRollback, centre, featureOf, fluidRolesOf, grow, inside, intIn, linesBody, meets, protectedMet, reachMeetsKeep, readParams, rectArr,
   rectSurvey, shellBlock, takenRects, volumeAnswer, volumeKeep, MARGIN, flagsAt, refusal, leakRefusal, exitNotches } from './place.mjs';
-import { bodyAnswer, bodyId, iceFor, naturalOf, shellStatesOf } from './pond.mjs';
+import { shellCheck, bodyAnswer, bodyId, iceFor, naturalOf, shellStatesOf } from './pond.mjs';
 
 export const MOAT = Object.freeze({ width: 5, depth: 3, ring: [6, 12], berm: 5 });
 const cheb = (x, z, T) => Math.max(Math.max(0, T.minX - x, x - T.maxX), Math.max(0, T.minZ - z, z - T.maxZ));
@@ -214,6 +214,7 @@ export function emit(K, p, res) {
     const rec = emitMoat(r, { id: bodyId(p.id), part: p.id, T: res.T, ring: res.ring, width: sp.width, depth: sp.depth, omit: res.omit, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice: dec.ice });
     const hit = reachMeetsKeep(r, env, rec, { volClass: volumeKeep(r, VC, classAt) });
     if (hit) throw leakRefusal(rec, hit);
+    shellCheck(r, rec);
     res.emitted = { bodies: [rec], notes: dec.notes };
   } catch (e) {
     bodiesRollback(r, m);

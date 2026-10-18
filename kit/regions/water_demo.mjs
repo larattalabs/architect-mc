@@ -49,11 +49,12 @@ export function waterPlan(claim, P) {
       connectors.push({ id: 'road', kind: 'road', width: 3, from: { anchor: 'road_end' }, to: { part: 'yard' } });
     }
   } else if (P.variant === 'natural') {
-    if (want('pond')) forms.push({ id: 'pond', kind: 'pond', size: { w: 9, d: 7 }, depth: 2, where: { near: { feature: { water: { body: 'river' } }, within: 12 } } });
-    if (want('waterfall')) forms.push({ id: 'falls', kind: 'waterfall', drop: 6, width: 3, lip: 'existing', basin: 'pond' });
+    // (S3's pinned claim: the river in the south valley; the bank north of it at x 3640..3660; the cliffs north-east of it)
+    if (want('pond')) { anchors.bank = [3650, 75, -888]; forms.push({ id: 'pond', kind: 'pond', size: { w: 9, d: 7 }, depth: 2, where: { near: { anchor: 'bank', within: 12 } } }); }
+    if (want('waterfall')) { anchors.cliff = [3700, 90, -905]; forms.push({ id: 'falls', kind: 'waterfall', drop: 5, width: 3, lip: 'existing', where: { near: { anchor: 'cliff', within: 80 } } }); }
   } else {
-    if (want('pond')) forms.push({ id: 'pond', kind: 'pond', size: { w: 9, d: 7 }, depth: 2, where: near('pond_at', 0, 0, 24) });
-    if (P.twin) forms.push({ id: 'twin', kind: 'pond', size: { w: 7, d: 5 }, depth: 2, where: near('twin_at', 0, 24, 24), ext: { 'architect_mc:unsafe': { noCap: true } } });
+    if (want('pond')) forms.push({ id: 'pond', kind: 'pond', size: { w: 9, d: 7 }, depth: 2, where: near('pond_at', 0, 0, 8) });
+    if (P.twin) forms.push({ id: 'twin', kind: 'pond', size: { w: 7, d: 5 }, depth: 2, where: near('twin_at', 14, 6, 8), ext: { 'architect_mc:unsafe': { noCap: true } } });
   }
   return { plan: { schemaVersion: 'plan/0', planId: `water_demo_${P.variant}`, zones, forms, connectors }, anchors };
 }

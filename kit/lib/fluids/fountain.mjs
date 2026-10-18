@@ -18,7 +18,7 @@
 import { VC, classAt } from '../region/volume.mjs';
 import { bodiesMark, bodiesRollback, centre, fluidRolesOf, grow, intIn, linesBody, locatorOf, locatorRefusal, protectedMet, reachMeetsKeep, readParams, rectArr,
   rectOf, rectSurvey, scanRects, shellBlock, sketchPoint, spawnAvoid, takenRects, volumeAnswer, volumeKeep, refusal, leakRefusal } from './place.mjs';
-import { bodyAnswer, bodyId, iceFor, naturalOf, shellStatesOf } from './pond.mjs';
+import { shellCheck, bodyAnswer, bodyId, iceFor, naturalOf, shellStatesOf } from './pond.mjs';
 
 const k3 = (x, y, z) => `${x},${y},${z}`;
 export const FOUNTAIN = Object.freeze({ basin: 5, spout: 2, maxRough: 1 });
@@ -153,6 +153,7 @@ export function emit(K, p, res) {
       for (const rec of [out.basin, out.spout]) {
         const hit = reachMeetsKeep(r, env, rec, { volClass: vk });
         if (hit) throw leakRefusal(rec, hit);
+      shellCheck(r, rec);
       }
       if (thick === 2) notes.push('the coping is 2 thick: a 1-thick coping\'s single breach would reach what the plan may not flood');
       res.emitted = { bodies: [out.basin, out.spout], notes, thick, floor: out.floor, top: out.top };

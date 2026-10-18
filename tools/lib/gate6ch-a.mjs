@@ -423,7 +423,8 @@ async function haCold(ctx) {
   const base = await L.seedBase(FROZEN_SEED);
   await L.fresh('G6B Ha Cold', base);
   await L.setRules('default');
-  const { plan, anchors } = await demoPlan(ctx, FROZEN_CLAIM, { variant: 'cold', twin: true });
+  // (the frozen site's dry land in its south-west: its centre is shallow ice on sand, which the realise never replaces)
+  const { plan, anchors } = await demoPlan(ctx, FROZEN_CLAIM, { variant: 'cold', twin: true, cx: 4176, cz: 1577 });
   // (checked and realised under the exact rules: the frozen river keeps the state the check read; the stand below is at default rules)
   await L.setRules('exact');
   const run = await realiseRun(ctx, 'cold', { claim: FROZEN_CLAIM, plan, anchors, rules: 'exact' });

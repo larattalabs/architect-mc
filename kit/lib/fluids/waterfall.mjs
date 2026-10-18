@@ -26,9 +26,9 @@ import { VC, classAt } from '../region/volume.mjs';
 import { FLAG_FROZEN, FLAG_LAVA, FLAG_TREE, FLAG_WATER } from '../region/pack.mjs';
 import { bodiesMark, bodiesRollback, flagsAt, fluidRolesOf, grow, inside, intIn, linesBody, locatorOf, locatorRefusal, meets, protectedMet, reachMeetsKeep,
   readParams, rectArr, scanRects, shellBlock, sketchPoint, spawnAvoid, takenRects, volumeAnswer, volumeKeep, MARGIN, refusal, leakRefusal } from './place.mjs';
-import { bodyAnswer, bodyId, emitPond, iceFor, naturalOf, shellStatesOf } from './pond.mjs';
+import { shellCheck, bodyAnswer, bodyId, emitPond, iceFor, naturalOf, shellStatesOf } from './pond.mjs';
 
-export const WATERFALL = Object.freeze({ width: 3, drop: 6, pool: 3, sculpt: 12, basinRows: 4, basinDepth: 2, maxRough: 1 });
+export const WATERFALL = Object.freeze({ width: 3, drop: 6, pool: 3, sculpt: 12, basinRows: 4, basinDepth: 2, maxRough: 1, maxRoughExisting: 3 });
 const DIRS = Object.freeze({ n: [0, -1], e: [1, 0], s: [0, 1], w: [-1, 0] });
 const FACINGS = Object.freeze(['n', 'e', 's', 'w']);
 /** A frame's lane vector (right of the facing). */
@@ -79,8 +79,16 @@ export function judgeSite(env, F, w, drop, lip, basin) {
   if (wf.some((f) => f & (FLAG_WATER | FLAG_LAVA))) return { ok: false, why: 'water' };
   if (wf.some((f) => f & FLAG_TREE)) return { ok: false, why: 'tree' };
   const gw = works.map((q) => S.groundAt(q[0], q[1]));
-  const top = Math.min(...gw), topMax = Math.max(...gw);
-  if (topMax - top > WATERFALL.maxRough) return { ok: false, why: 'rough' };
+  let top = Math.min(...gw);
+  const topMax = Math.max(...gw);
+  if (lip === 'existing') {
+    // (a natural cliff's top is rarely level: the pool's surface is the lip's own lowest ground, every pool column at least that high
+    // (the rest carved), every wall column at most 1 under it (the walls stand on it), and no column over 8 above it)
+    const lipG = Math.min(...cells(0, 0, 0, w - 1).map((q) => S.groundAt(q[0], q[1])));
+    if (cells(-(WATERFALL.pool - 1), 0, 0, w - 1).some((q) => S.groundAt(q[0], q[1]) < lipG)) return { ok: false, why: 'rough' };
+    if (gw.some((g) => g < lipG - 1 || g > lipG + 8)) return { ok: false, why: 'rough' };
+    top = lipG;
+  } else if (topMax - top > WATERFALL.maxRough) return { ok: false, why: 'rough' };
   // row 1 (the curtain's column) and the basin
   const row1 = cells(1, 1, 0, w - 1);
   if (!row1.every(inClaim)) return { ok: false, why: 'claim' };
@@ -102,7 +110,9 @@ export function judgeSite(env, F, w, drop, lip, basin) {
     if (bf.some((f) => f & (FLAG_WATER | FLAG_LAVA))) return { ok: false, why: 'water' };
     const bg = bc.map((q) => S.groundAt(q[0], q[1]));
     foot = Math.min(...bg);
-    if (Math.max(...bg) - foot > WATERFALL.maxRough) return { ok: false, why: 'rough' };
+    if (Math.max(...bg) - foot > (lip === 'existing' ? WATERFALL.maxRoughExisting : WATERFALL.maxRough)) return { ok: false, why: 'rough' };
+    // the basin sunk (§2.5): no column within 2 round it lower than its banks (a breach would run downhill off a slope)
+    for (const q of cells(1, WATERFALL.basinRows + 3, -4, w + 3)) if (S.groundAt(q[0], q[1]) < foot) return { ok: false, why: 'slope' };
   }
   // the basin's surface: the join's water top, or the pond's (1 under its banks' lowest ground)
   const Lb = useBasin === 'join' ? Wl : foot - 1;
@@ -327,6 +337,7 @@ export function emit(K, p, res) {
     for (const b of out.bodies) {
       const hit = reachMeetsKeep(r, env, b, { volClass: vk });
       if (hit) throw leakRefusal(b, hit);
+      shellCheck(r, b);
     }
     res.emitted = { bodies: out.bodies, notes };
   } catch (e) {
