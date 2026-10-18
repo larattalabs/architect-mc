@@ -635,3 +635,10 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 - **Done (housekeeping 2):** a history timeout counts only samples of the step's current definition (its chain entry and driver files, hashed at each sample's head through git); kit/test/gate-history.test.mjs. ~~History timeouts for young steps.~~ History put t3a-ingame's effective timeout at 10 min, so the T3 integration ran with
   `--no-history-timeouts`. Use the configured `timeoutMin` until a step has enough samples *from its current definition*
   (e.g. reset a step's history when its driver or chain entry changes), or raise the floor for in-game steps.
+
+## Queued from housekeeping 2 (coordinator, 2026-10-18)
+
+- **w-ingame's s1_floating_islands golden fails on both hosts** (sha 572271bd vs 3e5bd5b7), and its survey differs by host
+  (5906 vs 5907 frozen-water columns). Confirm on main whether this is pre-existing, then re-pin or fix.
+- **y-ingame:** the client fails `store` with NOT_ALLOWED (instant placements need permission level 2); headless misses one
+  target in the feed order. Investigate both before moving it to headless.
