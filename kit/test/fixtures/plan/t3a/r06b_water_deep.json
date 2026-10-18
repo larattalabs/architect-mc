@@ -1,0 +1,56 @@
+{
+ "about": "(H-b \u00a78.4) r06's forced beam over a 20-wide river 12 deep: deeper than waterDepth 8, no wet pier: refused WATER {kind: deep}, no until, with the arch as its wouldFit (S-T3-3, fits alone)",
+ "terrain": {
+  "W": 160,
+  "D": 96,
+  "x0": 1000,
+  "z0": 2000,
+  "bands": [
+   {
+    "x0": 1000,
+    "z0": 2036,
+    "x1": 1159,
+    "z1": 2055,
+    "y": 46,
+    "water": 12
+   }
+  ]
+ },
+ "anchors": {
+  "a": [
+   1080,
+   65,
+   2024
+  ],
+  "b": [
+   1080,
+   65,
+   2068
+  ]
+ },
+ "expect": {
+  "part": "b",
+  "code": "WATER",
+  "kind": "deep",
+  "wouldFit": "bridge",
+  "wouldForm": "arch"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "connectors": [
+   {
+    "id": "b",
+    "kind": "bridge",
+    "from": {
+     "anchor": "a"
+    },
+    "to": {
+     "anchor": "b"
+    },
+    "width": 2,
+    "form": "beam"
+   }
+  ]
+ },
+ "wet": true
+}

@@ -93,7 +93,9 @@ test('the compiler\'s H hooks: the foundation\'s parts answer refused (until Ha,
   const plan = { schemaVersion: 'plan/0', zones: [], connectors: [{ id: 'moat', kind: 'channel', where: { around: { feature: { water: {} } } } }], forms: [{ id: 'pond', kind: 'pond', where: { near: { anchor: 'claim_center' } } }, { id: 'fall', kind: 'waterfall' }, { id: 'jet', kind: 'fountain' }, { id: 'quay', kind: 'quay' }], rules: [] };
   const r = await checkPlanLocal(plan, o);
   const by = Object.fromEntries(r.check.parts.map((a) => [a.part, a]));
-  for (const [id, until] of [['moat', 'Ha'], ['pond', 'Ha'], ['fall', 'Ha'], ['jet', 'Ha'], ['quay', 'Hb']]) {
+  // ((6c H-b) the quay is built: on this dry claim it answers NO_FEATURE (no natural water), never malformed)
+  assert.deepEqual([by.quay.class, by.quay.reasons[0].code], ['refused', 'NO_FEATURE']);
+  for (const [id, until] of [['moat', 'Ha'], ['pond', 'Ha'], ['fall', 'Ha'], ['jet', 'Ha']]) {
     assert.equal(by[id].class, 'refused', id);
     assert.equal(by[id].reasons[0].code, 'UNREACHABLE', id);
     assert.equal(by[id].reasons[0].until, until, id);

@@ -1,7 +1,7 @@
 // (6c T3a) Bridges through the plan check (docs/CONTRACT.md "Phase 6c slice T3" §1, §3, §4, §8, §9, §10 items 7, 8, 10, 12; Steward's
 // review S-T3-2, S-T3-3, S-T3-7, S-T3-8): v35 (a beam over a dry ravine), v36 (an arch over a water channel), v38's auto bridge, the
 // street fallback (t3a/v39), the refusal fixtures (fixtures/plan/t3a: NO_GAP, SPAN 33 and an arch of 25, ANCHOR on sand and a pier 25
-// tall, WATER until H with the arch's and a rope's wouldFit, HEADROOM, TOO_STEEP, MOVER, the self-loop, lenient params), a bridge landing
+// tall, WATER (after H-b: kind deep, flowing or lava) with the arch's and a rope's wouldFit, HEADROOM, TOO_STEEP, MOVER, the self-loop, lenient params), a bridge landing
 // at a K1 gate (`lands`), Steward's recorded bridge parts (§9) and the gap tables, determinism.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -39,8 +39,9 @@ function volumeOf(spec, survey, claim) {
 async function run(fx, extra = {}) {
   const s = fx.on === 'asks' ? asksSurvey() : flatSurvey(fx.terrain ?? {});
   // ((6c T3 batch) a fixture with T3b's `volume.given` (v38_auto_crossings: the auto edge that tunnels) runs T3b's two-plan harness)
-  if (fx.volume?.given) {
-    const r = await checkPlanVolumes(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], volume: fx.volume, ...extra });
+  // ((6c H-b) a fixture the wet fallback answers (`wet`): the two-plan flow, the water's frozen volume synthesized from the survey)
+  if (fx.volume?.given || fx.wet) {
+    const r = await checkPlanVolumes(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], volume: fx.volume ?? {}, ...extra });
     return { ...r, survey: s };
   }
   const volumes = fx.volume ? [volumeOf(fx.volume, s.bytes, s.claim)] : [];
@@ -112,7 +113,7 @@ test('the street fallback (S-T3-2): a road whose every route crosses water takes
   assert.equal(part(r2, 'r').geometry?.bridges, undefined);
 });
 
-test('the refusal fixtures (fixtures/plan/t3a): each answers its code with evidence; WATER until H; the wouldFits fit re-checked alone', async () => {
+test('the refusal fixtures (fixtures/plan/t3a): each answers its code with evidence; (H-b) r06 and r07 re-answered on wet piers, r06b WATER deep; the wouldFits fit re-checked alone', async () => {
   const fx = read('t3a', /^r\d/);
   assert.ok(fx.length >= 12, `${fx.length} fixtures`);
   for (const f of fx) {
@@ -122,12 +123,15 @@ test('the refusal fixtures (fixtures/plan/t3a): each answers its code with evide
       assert.equal(a.class, f.expect.class, `${f.name}: ${JSON.stringify(a)}`);
       for (const n of f.expect.notes ?? []) assert.ok(a.notes?.includes(n), `${f.name}: note '${n}' in ${JSON.stringify(a.notes)}`);
       if (f.expect.form) assert.equal(a.geometry.bridges[0].form, f.expect.form);
+      if (f.expect.wet) assert.ok(a.geometry.bridges[0].wet?.cells > 0, `${f.name}: wet piers ${JSON.stringify(a.geometry.bridges[0])}`);
       continue;
     }
     assert.equal(a.class, 'refused', `${f.name}: ${JSON.stringify(a)}`);
     assert.equal(a.reasons[0].code, f.expect.code, `${f.name}: ${JSON.stringify(a.reasons)}`);
     assert.ok(a.reasons[0].evidence && Object.keys(a.reasons[0].evidence).length, `${f.name}: evidence`);
     if (f.expect.until) assert.equal(a.reasons[0].until, f.expect.until, `${f.name}: until`);
+    if (f.expect.code === 'WATER') assert.equal(a.reasons[0].until, undefined, `${f.name}: WATER never carries until after H`);
+    if (f.expect.kind) assert.equal(a.reasons[0].evidence.kind, f.expect.kind, `${f.name}: ${JSON.stringify(a.reasons[0].evidence)}`);
     if (f.expect.message) assert.match(a.reasons[0].message, new RegExp(f.expect.message));
     if (f.expect.depth) assert.ok(a.reasons[0].evidence.depth > 24, `${f.name}: evidence.depth ${JSON.stringify(a.reasons[0].evidence)}`);
     if (f.expect.under) assert.ok(a.reasons[0].evidence.under && a.reasons[0].evidence.under.have < a.reasons[0].evidence.under.need, `${f.name}: ${JSON.stringify(a.reasons[0].evidence)}`);

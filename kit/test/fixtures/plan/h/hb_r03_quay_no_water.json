@@ -1,0 +1,24 @@
+{
+ "about": "(H-b \u00a78.3, \u00a714) NO_FEATURE: a quay on a dry flat claim (no natural water)",
+ "terrain": {
+  "W": 96,
+  "D": 96,
+  "x0": 1000,
+  "z0": 2000,
+  "bands": []
+ },
+ "volume": {},
+ "expect": {
+  "part": "landing",
+  "code": "NO_FEATURE"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "forms": [
+   {
+    "id": "landing",
+    "kind": "quay"
+   }
+  ]
+ }
+}

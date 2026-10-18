@@ -1,0 +1,28 @@
+{
+ "about": "(H-b \u00a78.3, \u00a714) a quay on the asks lake's shore: 12 long, 3 out, 1 over the water, solid to 2 into the bed, posts, lamps, a step down to the water",
+ "covers": [
+  "form.quay"
+ ],
+ "on": "asks",
+ "volume": {},
+ "plan": {
+  "schemaVersion": "plan/0",
+  "forms": [
+   {
+    "id": "landing",
+    "kind": "quay",
+    "where": {
+     "along": {
+      "feature": {
+       "water": {
+        "body": "lake"
+       }
+      }
+     }
+    },
+    "length": 12,
+    "reach": 3
+   }
+  ]
+ }
+}

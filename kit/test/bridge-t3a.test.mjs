@@ -84,11 +84,11 @@ test('checkBridge: NO_GAP, SPAN, TOO_STEEP, HEADROOM, ANCHOR, WATER in §4\'s or
   const deep = checkBridge(landOf({ deep: 38 }), [39, 64, 32], [1, 0], 20, 0, 3, { form: 'beam' });
   assert.equal(deep.code, 'ANCHOR');
   assert.ok(deep.evidence.depth > BRIDGE.pierDepth, JSON.stringify(deep.evidence));
-  // WATER (until H): a 20-wide river under a beam needs a pier in the water
+  // WATER: a 20-wide river under a beam needs a pier in the water (the dry search; (6c H-b) no `until`: the wet fallback answers it)
   const river = landOf({ water: true, deep: 58 });
   const wb = checkBridge(river, [37, 66, 32], [1, 0], 24, 0, 3, { form: 'beam' });
   assert.equal(wb.code, 'WATER', JSON.stringify(wb));
-  assert.equal(wb.until, 'H');
+  assert.equal(wb.until, undefined);
   assert.equal(wb.evidence.kind, 'water');
 });
 
@@ -189,7 +189,7 @@ test('the primitive and the checker: beam and arch clean (M10:bridge, M8, M6, M5
   const river = ravine({ water: true, deep: 58, x0: 42, x1: 61 });
   const pw = await primitiveCase(river, [39, 66, 32], [64, 66, 32], { form: 'beam', clearance: 0, _unsafe: { pierInWater: true }, floorAt: (x, z) => river.floor[x + z * river.width] });
   assert.ok(pw.rep.findings.some((f) => f.rule === 'M10:bridge' && /water/.test(f.message)), pw.rep.findings.map((f) => `${f.rule} ${f.message}`).join('; '));
-  // without the variant the same beam refuses WATER (until H)
+  // without the variant the same beam refuses WATER (a pier needed in water: the dry search)
   await assert.rejects(() => primitiveCase(river, [39, 66, 32], [64, 66, 32], { form: 'beam', clearance: 0 }), /WATER/);
 });
 

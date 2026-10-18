@@ -525,7 +525,8 @@ export function routePass(survey, volumes, intent) {
       if (bi >= 0 && bj >= 0 && bi < base.width && bj < base.depth) G0[i + j * W] += base.values[bi + bj * base.width];
     }
   }
-  const env = { W, D, r, minX: c.minX, minZ: c.minZ, flags: c.flags, G: G0 };
+  // ((6c H-b) the survey's floor too: the bed under water, for the bridge row's wet piers)
+  const env = { W, D, r, minX: c.minX, minZ: c.minZ, flags: c.flags, G: G0, F: c.floor };
   const cellAt = (x, z) => {
     const i = Math.floor((x - c.minX) / r), j = Math.floor((z - c.minZ) / r);
     return i < 0 || j < 0 || i >= W || j >= D ? -1 : i + j * W;

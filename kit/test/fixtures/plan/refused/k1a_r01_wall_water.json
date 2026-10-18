@@ -1,71 +1,74 @@
 {
-  "about": "(7a K1a, \u00a710) a ring round a zone beside the lake with no clear ring in [4, 6]: refused WATER, naming the side and the blockers",
-  "on": "asks",
-  "expect": {
-    "part": "w",
-    "code": "WATER"
-  },
-  "plan": {
-    "schemaVersion": "plan/0",
-    "zones": [
+ "about": "(7a K1a, \u00a710; H-b \u00a78.2, \u00a78.4) a ring round a zone beside the lake with no clear dry ring in [4, 6]: refused WATER on K1a; after H the same ring is a harbour wall (v48), so here waterDepth 3 (the lake is 4 deep): refused WATER {kind: deep}, naming the side and the blockers",
+ "on": "asks",
+ "expect": {
+  "part": "w",
+  "code": "WATER",
+  "kind": "deep"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "zones": [
+   {
+    "id": "town",
+    "program": {
+     "lots": [
       {
-        "id": "town",
-        "program": {
-          "lots": [
-            {
-              "id": "h1",
-              "type": "house",
-              "size": [
-                9,
-                9
-              ]
-            },
-            {
-              "id": "h2",
-              "type": "cottage",
-              "size": [
-                9,
-                9
-              ]
-            },
-            {
-              "id": "h3",
-              "type": "house",
-              "size": [
-                9,
-                9
-              ]
-            }
-          ]
-        },
-        "where": {
-          "near": {
-            "feature": {
-              "water": {
-                "body": "lake"
-              }
-            },
-            "within": 2
-          }
-        }
-      }
-    ],
-    "connectors": [
+       "id": "h1",
+       "type": "house",
+       "size": [
+        9,
+        9
+       ]
+      },
       {
-        "id": "w",
-        "kind": "wall",
-        "where": {
-          "around": {
-            "feature": {
-              "part": "town"
-            },
-            "ring": [
-              4,
-              6
-            ]
-          }
-        }
+       "id": "h2",
+       "type": "cottage",
+       "size": [
+        9,
+        9
+       ]
+      },
+      {
+       "id": "h3",
+       "type": "house",
+       "size": [
+        9,
+        9
+       ]
       }
-    ]
-  }
+     ]
+    },
+    "where": {
+     "near": {
+      "feature": {
+       "water": {
+        "body": "lake"
+       }
+      },
+      "within": 2
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "w",
+    "kind": "wall",
+    "where": {
+     "around": {
+      "feature": {
+       "part": "town"
+      },
+      "ring": [
+       4,
+       6
+      ]
+     }
+    },
+    "waterDepth": 3
+   }
+  ]
+ },
+ "volume": {}
 }

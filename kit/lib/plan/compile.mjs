@@ -1242,7 +1242,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         if ((why === 'BRIDGE' || why === 'TUNNEL') && K) { ans(l.conn, why === 'BRIDGE' ? bridgeFailAnswer(K, l, m) : tunnelFailAnswer(K, l, m)); continue; }
         // ((7a K1b) a rope_bridge leg the route pass could not span answers its typed reason: NO_GAP, SPAN, ...)
         ans(l.conn, why === 'ROPE' && K ? ropeFailAnswer(K, l, m) : why === 'BUDGET' ? budgetHit('maxNodes') : why === 'ROUTE_WATER'
-          ? { class: 'refused', reasons: [{ code: 'WATER', message: `leg ${l.k + 1}: every route crosses water`, until: 'H', evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at } }] }
+          ? { class: 'refused', reasons: [{ code: 'WATER', message: `leg ${l.k + 1}: every route crosses water`, evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, kind: 'crossing' } }] }
           : { class: 'refused', reasons: [{ code: 'UNREACHABLE', message: `leg ${l.k + 1}: no route within the grade (${g}), the cut and fill limits and the obstacles`, evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, grade: g, ...(K ? wallsEvidence(K, l) : {}) } }] });
       }
       if (retry.size) rounds++;

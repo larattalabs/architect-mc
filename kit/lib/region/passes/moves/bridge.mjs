@@ -6,7 +6,10 @@
 // `approach` at each end, route.mjs's withinM). The row's land is the pass's (the survey's ground plus the program's base, a frozen
 // volume's classes where the pass holds one); trees, the pass's hard rects, keep-out, the claim margin and the walls are never under
 // a deck. A bridge edge (or a fallback edge, `t3.bridge.diagnose`) with no route answers why (`fail`): NO_GAP, SPAN, TOO_STEEP,
-// HEADROOM, ANCHOR, WATER (until H), or UNREACHABLE. Under the realise lint (integer math; Math.floor/abs/min/max only).
+// HEADROOM, ANCHOR, WATER, or UNREACHABLE. Under the realise lint (integer math; Math.floor/abs/min/max only).
+// (6c H-b, §8.1) An edge with `t3.bridge.wet` ({waterDepth}: the wet fallback only) may stand piers in natural water sources up to
+// waterDepth (the frozen volumes' fluid layer where the pass holds one over the column, else the survey's floor), each wet pier cell
+// costing 10 more; its failures name WATER's kind (deep, flowing, lava).
 //
 // The interface (foundation, docs/HANDOFF-T3a.md): bridgeInit, bridgeActive, bridgeNeedsFlag, bridgeExpand, bridgeCells, bridgeCommit,
 // bridgeFail; the edge's options in `edge.t3.bridge` ({form, clearance, width, diagnose}), the pass-level input in `intent.bridge`
@@ -15,6 +18,7 @@ import { FLAG_FROZEN, FLAG_LAVA, FLAG_MISSING, FLAG_TREE, FLAG_WATER } from '../
 import { BRIDGE, checkBridge, maxRiseOf } from '../../../connectors/bridgeGeom.mjs';
 import { deckY } from '../../../connectors/ropeGeom.mjs';
 import { VC, VOXEL_CLASSES, classAt as volumeClassAt } from '../../volume.mjs';
+import { fluidVolumes } from '../../../fluids/wet.mjs';
 
 const NONE = -32768;
 const FP = 16;
@@ -68,7 +72,10 @@ export function bridgeInit(env, intent) {
     groundAt: (x, z) => (inside(x, z) ? G[at(x, z)] : -64), topAt: (x, z) => (inside(x, z) ? top[at(x, z)] : 320), waterAt: (x, z) => inside(x, z) && water[at(x, z)] === 1,
     frozenAt: (x, z) => inside(x, z) && frozen[at(x, z)] === 1, blocked: (x, z) => !inside(x, z) || blocked[at(x, z)] === 1, classAt, written: null,
   };
-  return { W, D, minX, minZ, G, top, water, land, cur: null, memo: new Map() };
+  // ((H-b) the wet piers' bed: the survey's floor; their columns re-read from the frozen volumes with a fluid layer)
+  const F = env.F ?? null;
+  const wetLand = { floorAt: (x, z) => (F && inside(x, z) ? F[at(x, z)] : land.groundAt(x, z)), vols: fluidVolumes(vols) };
+  return { W, D, minX, minZ, G, top, water, land, wetLand, cur: null, memo: new Map() };
 }
 
 /** Whether an edge searches with the bridge move; sets the edge's own options for its search. */
@@ -88,6 +95,7 @@ export function bridgeActive(state, edge) {
     approach: isInt(edge.approach) && edge.approach >= 0 && edge.approach <= BRIDGE.approachMax ? edge.approach : BRIDGE.approach,
     nMin: Math.max(BRIDGE.spanMin, isInt(sp.min) ? sp.min : BRIDGE.spanMin), nMax: Math.min(BRIDGE.spanMax, isInt(sp.max) ? sp.max : BRIDGE.spanMax),
     startK: kOf(edge.from), goalK: kOf(edge.to), reached: diagnose ? new Int32Array(state.W * state.D) : null, _unsafe: o._unsafe ?? null,
+    wet: o.wet && isInt(o.wet.waterDepth) ? { waterDepth: o.wet.waterDepth } : null,
   };
   state.memo = new Map();
   return true;
@@ -102,11 +110,11 @@ const cheb = (W, a, b) => { const ai = a % W, bi = b % W; return Math.max(Math.a
 
 /** One span's check, memoised per edge (the same landing pair is reached from many states). */
 function spanCheck(state, i, j, y, hf, n, yf) {
-  const c = state.cur, key = `${i},${j},${y},${hf},${n},${yf}`;
+  const c = state.cur, key = `${i},${j},${y},${hf},${n},${yf}${c.wet ? `,w${c.wet.waterDepth}` : ''}`;
   let r = state.memo.get(key);
   if (r) return r;
   const di = DIRS[hf][0], dj = DIRS[hf][1];
-  r = checkBridge(state.land, [state.minX + i, y, state.minZ + j], [di, dj], n, yf - y, c.width, { form: c.form, clearance: c.clearance, span: { min: c.nMin, max: c.nMax } });
+  r = checkBridge(state.land, [state.minX + i, y, state.minZ + j], [di, dj], n, yf - y, c.width, { form: c.form, clearance: c.clearance, span: { min: c.nMin, max: c.nMax }, ...(c.wet ? { wet: { ...c.wet, ...state.wetLand, ...(c._unsafe?.flowingPier ? { unsafeFlowing: true } : {}) } } : {}) });
   state.memo.set(key, r);
   return r;
 }
@@ -141,11 +149,14 @@ export function bridgeExpand(state, S) {
         if (Math.abs(yf - y) > maxRiseOf(n)) continue;
         const r = spanCheck(state, i, j, y, hf, n, yf);
         if (!r.ok) continue;
-        S.relax(k2, hf, 2, yf * FP, BRIDGE.cost + BRIDGE.costPer * n + BRIDGE.costPier * r.piers.length, n, c.once ? 1 : f);
+        S.relax(k2, hf, 2, yf * FP, BRIDGE.cost + BRIDGE.costPer * n + BRIDGE.costPier * r.piers.length + (c.wet ? BRIDGE.costWet * wetCells(r) : 0), n, c.once ? 1 : f);
       }
     }
   }
 }
+
+/** (H-b) A span's wet pier cells (0 for a dry span). */
+const wetCells = (r) => { let t = 0; for (const p of r.piers ?? []) t += p.wet ?? 0; return t; };
 
 /** Whether a gap (water, or ground 2 or more under the bank `g`) lies within `nMax` cells ahead, the land never rising over the bank first. */
 function gapAhead(state, i, j, di, dj, g, nMax) {
@@ -170,7 +181,8 @@ export function bridgeCells(state, m) {
   cells.push([m.x1, m.y1, m.z1]);
   const c = state.cur;
   const check = { ok: true, form: r.form, ys: r.ys, lowest: r.lowest, piers: r.piers, springing: r.springing, intrados: r.intrados, wetTop: r.wetTop, ground: r.ground, over: r.over, depth: r.depth, under: r.under };
-  return { cells, data: { n, rise: m.y1 - m.y0, dir: [sx, sz], form: r.form, width: c.width, clearance: c.clearance, piers: r.piers.length, over: r.over, depth: r.depth, check } };
+  const wet = wetCells(r);
+  return { cells, data: { n, rise: m.y1 - m.y0, dir: [sx, sz], form: r.form, width: c.width, clearance: c.clearance, piers: r.piers.length, over: r.over, depth: r.depth, check, ...(wet ? { wet: { cells: wet, waterDepth: c.wet.waterDepth } } : {}) } };
 }
 
 /** After an edge routes: its spans, for the links stage and the answer (`edgeOut.bridges`). */
@@ -235,7 +247,8 @@ export function bridgeFail(state, edgeOut, inS) {
         }
         gaps++;
         const code = res.ok ? 'UNREACHABLE' : res.code;
-        const key = [n > BRIDGE.spanMax ? 1 : 0, Math.max(Math.abs(ci - gi), Math.abs(cj - gj)), n, minX + i, minZ + j, hf];
+        // ((H-b) a span over water the plan read names the leg's WATER before one over water it did not: a dry search never has one)
+        const key = [res.evidence?.kind === 'unread' ? 1 : 0, n > BRIDGE.spanMax ? 1 : 0, Math.max(Math.abs(ci - gi), Math.abs(cj - gj)), n, minX + i, minZ + j, hf];
         if (!best || cmpKey(key, best.key) < 0) best = { key, code, until: res.until, evidence: { ...(res.evidence ?? {}), span: n, rise: res.yf - res.y, from: [minX + i, res.y, minZ + j], to: [minX + ci, res.yf, minZ + cj] } };
       }
     }

@@ -1,60 +1,61 @@
 {
-  "about": "(6c T3a, S-T3-3) a 26-wide river with a 2-cell beach each side 6 under the banks, a bridge (auto): wider than any arch, and no pier site in 26 cells of water: WATER until H, with a rope_bridge from bank to bank as its wouldFit (fits alone)",
-  "terrain": {
-    "W": 160,
-    "D": 96,
+ "about": "(6c T3a, S-T3-3; H-b \u00a78.4) a 26-wide river with a 2-cell beach each side 6 under the banks, a bridge (auto): wider than any arch, no dry pier site in 26 cells of water. T3 refused it WATER (until H) with a rope_bridge as its wouldFit; H-b's wet fallback: fits, a beam on wet piers",
+ "terrain": {
+  "W": 160,
+  "D": 96,
+  "x0": 1000,
+  "z0": 2000,
+  "bands": [
+   {
     "x0": 1000,
-    "z0": 2000,
-    "bands": [
-      {
-        "x0": 1000,
-        "z0": 2032,
-        "x1": 1159,
-        "z1": 2061,
-        "y": 58
-      },
-      {
-        "x0": 1000,
-        "z0": 2034,
-        "x1": 1159,
-        "z1": 2059,
-        "y": 50,
-        "water": 8
-      }
-    ]
-  },
-  "anchors": {
-    "a": [
-      1080,
-      65,
-      2022
-    ],
-    "b": [
-      1080,
-      65,
-      2072
-    ]
-  },
-  "expect": {
-    "part": "b",
-    "code": "WATER",
-    "until": "H",
-    "wouldFit": "rope_bridge"
-  },
-  "plan": {
-    "schemaVersion": "plan/0",
-    "connectors": [
-      {
-        "id": "b",
-        "kind": "bridge",
-        "from": {
-          "anchor": "a"
-        },
-        "to": {
-          "anchor": "b"
-        },
-        "width": 2
-      }
-    ]
-  }
+    "z0": 2032,
+    "x1": 1159,
+    "z1": 2061,
+    "y": 58
+   },
+   {
+    "x0": 1000,
+    "z0": 2034,
+    "x1": 1159,
+    "z1": 2059,
+    "y": 50,
+    "water": 8
+   }
+  ]
+ },
+ "anchors": {
+  "a": [
+   1080,
+   65,
+   2022
+  ],
+  "b": [
+   1080,
+   65,
+   2072
+  ]
+ },
+ "expect": {
+  "part": "b",
+  "class": "fits",
+  "form": "beam",
+  "wet": true
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "connectors": [
+   {
+    "id": "b",
+    "kind": "bridge",
+    "from": {
+     "anchor": "a"
+    },
+    "to": {
+     "anchor": "b"
+    },
+    "width": 2
+   }
+  ]
+ },
+ "wet": true
 }
