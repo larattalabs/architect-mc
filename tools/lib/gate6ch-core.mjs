@@ -370,7 +370,7 @@ export async function crash(ctx) {
   const d2 = await planDemo(ctx, { lava: true });
   const file2 = await snap(ctx, box, 'h-crash2');
   let region2 = null;
-  await crashAt(ctx, `${world} 2`, 'FL2', async () => { region2 = await L.realise(d2.p.planId); });
+  await crashAt(ctx, `${world} 2`, 'FL2+save', async () => { region2 = await L.realise(d2.p.planId); });
   region2 ??= (await L.call('dev.region.list', {}, 60_000)).regions?.at(-1)?.id;
   st = await L.waitRegion(region2, 3_600_000);
   fl = st.view.ext?.['architect_mc:fluids'] ?? [];
@@ -441,7 +441,8 @@ export async function probe(ctx) {
     for (const [tag, X, Z, wet] of [['dry', 40, 40, false], ['wet', 40, 100, true]]) {
       const gy = await groundY(ctx, X, Z);
       await L.tp(X + 0.5, gy + 25, Z + 0.5);
-      if (wet) { await L.cmd(`/fill ${X - 4} ${gy + 1} ${Z - 4} ${X + 4} ${gy + 3} ${Z + 4} minecraft:water`); await L.cmd(`/fill ${X - 5} ${gy + 1} ${Z - 5} ${X + 5} ${gy + 3} ${Z - 5} minecraft:stone`); }
+      // wet: a pool walled on every side (still water: nothing flows while the box is snapped and compared)
+      if (wet) { await L.cmd(`/fill ${X - 5} ${gy + 1} ${Z - 5} ${X + 5} ${gy + 3} ${Z + 5} minecraft:stone`); await L.cmd(`/fill ${X - 4} ${gy + 1} ${Z - 4} ${X + 4} ${gy + 3} ${Z + 4} minecraft:water`); }
       await L.cmd(`/setblock ${X} ${gy + 1} ${Z} minecraft:sand strict`);
       await L.settle(1500);
       const box = [X - 8, gy - 4, Z - 8, X + 8, gy + 8, Z + 8];
@@ -459,7 +460,11 @@ export async function probe(ctx) {
       await sleep(3000);
       const df = await diff(ctx, box, f);
       out.sand.cases[tag] = { gy, stroke: { state: v.state, cells: v.cellsWritten, skipped: v.cellsSkipped }, sandNow, column: col, diff: df };
-      check(v.state === 'PLACED' && sandNow === 'minecraft:sand' && (v.cellsSkipped?.gravityKept ?? 0) >= 1, `item 14 (a, ${tag}): a sand cell on a rewritten solid support ${wet ? 'under natural water ' : ''}stays sand (${sandNow}; gravityKept ${v.cellsSkipped?.gravityKept ?? 0}; the column's entries ${json(col.map((c) => [c.y, c.entry ? `${c.entry.before}->${c.entry.after}` : null]))})`);
+      const entries = json(col.map((c) => [c.y, c.entry ? `${c.entry.before}->${c.entry.after}` : null]));
+      if (!wet) check(v.state === 'PLACED' && sandNow === 'minecraft:sand' && (v.cellsSkipped?.gravityKept ?? 0) >= 1, `item 14 (a, dry): a sand cell on a rewritten solid support stays sand (${sandNow}; gravityKept ${v.cellsSkipped?.gravityKept ?? 0}; the column's entries ${entries})`);
+      // a brush never takes a water column (brush.mjs: the column is not water, lava or missing), so no stroke rewrites a support under
+      // natural water: the sand there is never a dependent of one (recorded; TileCheck's gravity rule runs before the under-water one)
+      else check(sandNow === 'minecraft:sand' && col.every((c) => !c.entry), `item 14 (a, wet): under natural water the stroke leaves the column alone: the sand stays, no entry in its column (${sandNow}; ${v.state}, ${v.cellsWritten ?? 0} cells; ${entries})`);
       check(df.mismatches === 0, `item 14 (a, ${tag}): the undo restores the box exactly (${df.mismatches})`, df.sample);
       void state;
     }
@@ -481,9 +486,12 @@ export async function probe(ctx) {
       }
     }
     for (const p of posts) await L.cmd(`/setblock ${p.x} ${p.y} ${p.z} minecraft:oak_planks`);
+    // the gate's base turns fire off (fire_spread_radius_around_player 0): lava ignites nothing then; 128 is vanilla's default
+    await L.cmd('/gamerule fire_spread_radius_around_player 128');
     await L.cmd('/gamerule random_tick_speed 300');
     await sleep(120_000);
     await L.cmd('/gamerule random_tick_speed 3');
+    await L.cmd('/gamerule fire_spread_radius_around_player 0');
     let farthest = { side: 0, above: -9, below: 9 };
     const burnt = [];
     const cen = await L.call('dev.region.dump', { box: [X - 8, gy - 2, Z - 8, X + 8, gy + 5, Z + 8], file: path.join(ctx.OUT, 'h-fire.arwd.gz') }, 60_000).then(async () => {
@@ -501,6 +509,7 @@ export async function probe(ctx) {
     }
     out.fire = { posts: posts.length, burnt: burnt.length, farthest, fires, list: burnt.slice(0, 30) };
     const { FIRE_REACH } = await imp('lib/region/checkFluids.mjs');
+    check(burnt.length > 0, `item 13 (the probe's control): the lava ignited at least one post (${burnt.length}; ${fires} fire cells)`);
     check(farthest.side <= FIRE_REACH.side + 1 && farthest.above <= FIRE_REACH.above && (burnt.length === 0 || farthest.below >= -FIRE_REACH.below), `item 13 (the probe): a lava pool with random ticks at 300 for 2 minutes ignited ${burnt.length} of ${posts.length} flammable posts; the farthest at ${farthest.side} sideways (Chebyshev from the nearest lava cell), ${farthest.below}..${farthest.above} in height; M20's reach ${json(FIRE_REACH)} covers it`, burnt.slice(0, 10));
     await L.leaveWorld();
   }
