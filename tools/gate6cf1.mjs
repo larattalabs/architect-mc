@@ -140,7 +140,7 @@ steps.unit = async () => {
   out.forms = nodeTest(['kit/test/forms-f1.test.mjs']);
   check(out.forms.code === 0 && out.forms.fail === 0 && out.forms.pass >= 9, `items 1, 2-4 (kit), 7, 9: the forms tests (200 seeds per generator: ops at most 32 primitives, 0 forms over BAKE_OPS unbaked, settled; voxels exact and tile-independent; the bake; M17, M3, keep; forms_demo 3 plans identical): ${out.forms.pass} pass, ${out.forms.fail} fail`, out.forms.failing);
   // (the islands' evaluation-cost test is a wall-time measure that unit-kit runs; skipped here, it flakes under load)
-  out.goldens = kitOnce(['--test-skip-pattern=evaluation cost', 'kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/village.test.mjs']);
+  out.goldens = kitOnce(['--test-skip-pattern=evaluation cost', 'kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/village.test.mjs', 'kit/test/village-layout-1.test.mjs', 'kit/test/village-layout-2.test.mjs', 'kit/test/village-layout-3.test.mjs', 'kit/test/village-layout-4.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `items 9, 12: goldens (mega_bench tiles, S1 and S7 tile shas, forms_demo's golden when committed, 6b fixtures, islands, villages): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   out.bake = await bakeCost();
   // (GATES.md "Timing bars") a timing bar: recorded in change and slice, judged at release

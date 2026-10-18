@@ -133,7 +133,7 @@ const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 
 steps.unit = async () => {
   const out = {};
-  out.c19 = nodeTest(['kit/test/village.test.mjs']);
+  out.c19 = nodeTest(['kit/test/village.test.mjs', 'kit/test/village-layout-1.test.mjs', 'kit/test/village-layout-2.test.mjs', 'kit/test/village-layout-3.test.mjs', 'kit/test/village-layout-4.test.mjs']);
   const c19 = out.c19.names.filter((l) => /C19/.test(l));
   check(out.c19.code === 0 && out.c19.fail === 0 && c19.length === 2 && c19.every((l) => l.startsWith('✔')), `item 1: the kit's C19 tests (ext validated, 4096/4097, namespace guard, plan -> LotSpec) and the rest of the village suite: ${out.c19.pass} pass, ${out.c19.fail} fail`, out.c19.failing);
   const env = { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
