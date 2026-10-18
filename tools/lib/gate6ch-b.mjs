@@ -165,13 +165,14 @@ const isWater = (s) => /^minecraft:water/.test(String(s)) || /waterlogged=true/.
  * left air.
  */
 function wetReread(R) {
-  const out = { records: 0, cells: 0, air: 0, water: 0, waterlogged: 0, sample: [] };
+  const out = { records: 0, cells: 0, ice: 0, air: 0, water: 0, waterlogged: 0, sample: [] };
   for (const w of R.meta.wet ?? []) {
     out.records++;
     for (const [x, z, y0, y1] of w.columns) for (let y = y0; y <= y1; y++) {
       const b = stateAt(R.before, x, y, z), a = stateAt(R.after, x, y, z);
       if (b === null || !(isWater(b) || /(^|:)(ice|packed_ice|blue_ice)$/.test(nameOf(b)))) continue;
       out.cells++;
+      if (/(^|:)(ice|packed_ice|blue_ice)$/.test(nameOf(b))) out.ice++;
       if (nameOf(a) === 'minecraft:air') { out.air++; if (out.sample.length < 8) out.sample.push([x, y, z, b, a]); }
       else if (/^minecraft:water/.test(String(a))) { out.water++; if (out.sample.length < 8) out.sample.push([x, y, z, b, a]); }
       else if (/waterlogged=true/.test(String(a))) { out.waterlogged++; if (out.sample.length < 8) out.sample.push([x, y, z, b, a]); }
@@ -412,10 +413,15 @@ async function hbCold(ctx) {
   const frozen = cr.ok.filter((q) => { for (let t = 1; t <= q.n; t++) { const x = q.from[0] + q.dir[0] * t, z = q.from[2] + q.dir[1] * t; if (S.frozenAt(x, z)) return true; } return false; });
   const pick = frozen[0] ?? cr.ok[0] ?? null;
   const out = { crossings: { wet: cr.ok.length, frozen: frozen.length, deep: cr.deep.length, pick } };
-  ctx.check(!!pick, `item 8 (cold): a crossing of the frozen river a wet beam fits (${cr.ok.length} wet, ${frozen.length} through ice; ${j(pick)})`);
-  if (!pick) { await L.leaveWorld(); return out; }
-  const plan = { schemaVersion: 'plan/0', planId: 'hb_frozen', connectors: [{ id: 'crossing', kind: 'bridge', from: { anchor: 'a' }, to: { anchor: 'b' }, width: 3, form: 'beam' }] };
-  out.run = await wetRun(ctx, 'cold', { claim, plan, anchors: { a: pick.a, b: pick.b }, kind: 'cold', expect: { classes: { crossing: ['fits', 'adjusted'] }, navMin: 1 } });
+  // a quay into the frozen water (its deck replaces the ice and the water under it), and a beam over the frozen river where the scan
+  // found one: on wet piers when the frozen volume reads the water shallow enough, else WATER deep (no until), recorded
+  const plan = { schemaVersion: 'plan/0', planId: 'hb_frozen', forms: [{ id: 'landing', kind: 'quay', where: { along: { feature: { water: {} } } }, length: 12, reach: 3 }], connectors: [] };
+  const anchors = {};
+  if (pick) { plan.connectors.push({ id: 'crossing', kind: 'bridge', from: { anchor: 'a' }, to: { anchor: 'b' }, width: 3, form: 'beam' }); anchors.a = pick.a; anchors.b = pick.b; }
+  out.run = await wetRun(ctx, 'cold', { claim, plan, anchors, kind: 'cold', expect: { classes: { landing: ['fits', 'adjusted'], ...(pick ? { crossing: ['fits', 'adjusted', 'refused'] } : {}) }, navMin: 1 } });
+  const a = out.run.check?.parts?.find((q) => q.part === 'crossing');
+  if (a?.class === 'refused') ctx.check(a.reasons?.[0]?.code === 'WATER' && !a.reasons[0].until, `item 11 (cold): the frozen river under a beam: refused ${a.reasons?.[0]?.code} {kind: ${a.reasons?.[0]?.evidence?.kind}, depth ${a.reasons?.[0]?.evidence?.depth}} read from the frozen volume (the survey's floor under the ice is shallower than the water), no until (recorded)`);
+  ctx.check((out.run.items?.reread?.ice ?? 0) > 0, `item 8 (cold): the wet writes replaced ice over water (${out.run.items?.reread?.ice ?? 0} ice cell(s); the undo restores them: item 5 above)`);
   await L.leaveWorld();
   return out;
 }
