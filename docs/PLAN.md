@@ -628,3 +628,9 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 - **A street whose bridge fallback also fails still says `WATER (until T3)`** (compile.mjs's ROUTE_WATER answer). After T3 the
   `until` is stale: it should name H (S-T3-3) when the bridge fallback ran and still met water. No recorded ask hits it today
   (the before table lists none); fix with a fixture when T3's follow-ups are next touched.
+
+## Queued (coordinator, 2026-10-18)
+
+- **History timeouts for young steps.** History put t3a-ingame's effective timeout at 10 min, so the T3 integration ran with
+  `--no-history-timeouts`. Use the configured `timeoutMin` until a step has enough samples *from its current definition*
+  (e.g. reset a step's history when its driver or chain entry changes), or raise the floor for in-game steps.
