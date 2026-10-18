@@ -181,6 +181,28 @@ public final class RegionFluids {
 				states.put(b.id, new BodyState());
 			}
 		}
+
+		/**
+		 * The cells the region's other standing bodies plan (their sources, ice and predicted flow): a fountain's spout stands in its basin,
+		 * so one body's census and drain leave them to their own body (never an escape, never drained for another body).
+		 */
+		LongOpenHashSet othersOf(Body b) {
+			LongOpenHashSet out = new LongOpenHashSet();
+			for (Body o : bodies) {
+				BodyState os = states.get(o.id);
+				if (o == b || os != null && "drained".equals(os.state)) {
+					continue;
+				}
+				for (long p : o.cells) {
+					out.add(p);
+				}
+				for (long p : o.ice) {
+					out.add(p);
+				}
+				out.addAll(o.predicted.keySet());
+			}
+			return out;
+		}
 	}
 
 	// ------------------------------------------------------------------ the bodies of an IR
@@ -531,6 +553,10 @@ public final class RegionFluids {
 	}
 
 	static Census census(ServerLevel level, Body b, Long2ObjectOpenHashMap<String> fluidBefore) {
+		return census(level, b, fluidBefore, new LongOpenHashSet());
+	}
+
+	static Census census(ServerLevel level, Body b, Long2ObjectOpenHashMap<String> fluidBefore, LongOpenHashSet others) {
 		Fluid src = b.source();
 		LongOpenHashSet own = new LongOpenHashSet(b.cells);
 		LongOpenHashSet ice = new LongOpenHashSet(b.ice);
@@ -574,7 +600,7 @@ public final class RegionFluids {
 				}
 				continue;
 			}
-			if (f.isEmpty() || fluidBefore.containsKey(p)) {
+			if (f.isEmpty() || fluidBefore.containsKey(p) || others.contains(p)) {
 				continue;
 			}
 			// fluid where none was before and none is predicted: in the declared spill or joins it is a mismatch (not settled), outside them
@@ -596,7 +622,7 @@ public final class RegionFluids {
 			if (!"written".equals(bs.state)) {
 				continue;
 			}
-			Census c = census(level, b, st.fluidBefore);
+			Census c = census(level, b, st.fluidBefore, st.othersOf(b));
 			if (!c.escaped().isEmpty()) {
 				escape(level, l, st, b, bs, "escaped", c.escaped());
 				changed = true;
@@ -622,7 +648,7 @@ public final class RegionFluids {
 
 	/** §3.4: the escape guard: drain the body now, report it drained with the cells. */
 	static void escape(ServerLevel level, RegionsImpl.Live l, Regional st, Body b, BodyState bs, String why, List<long[]> at) {
-		int n = drain(level, st, b, bs, true);
+		int n = drain(level, st, b, bs, true, st.othersOf(b));
 		bs.state = "drained";
 		bs.escaped = "escaped".equals(why);
 		bs.reason = why + ": " + at.size() + " cell(s) " + ("escaped".equals(why) ? "outside the body's cells, spill and joins" : "not as predicted after 2 x "
@@ -638,6 +664,11 @@ public final class RegionFluids {
 	 * was before (an escape) goes to air. Writes skip updates (nothing flows). Returns the cells written.
 	 */
 	static int drain(ServerLevel level, Regional st, Body b, BodyState bs, boolean strays) {
+		return drain(level, st, b, bs, strays, new LongOpenHashSet());
+	}
+
+	/** {@code others}: cells another standing body plans, left alone (the escape guard drains one body of several). */
+	static int drain(ServerLevel level, Regional st, Body b, BodyState bs, boolean strays, LongOpenHashSet others) {
 		int n = 0;
 		Fluid src = b.source();
 		for (long[] a : new long[][] {b.ice, b.cells}) {
@@ -660,7 +691,7 @@ public final class RegionFluids {
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = level.getBlockState(bp);
 				FluidState f = now.getFluidState();
-				if (f.isEmpty()) {
+				if (f.isEmpty() || others.contains(p)) {
 					continue;
 				}
 				String before = bs.before.get(p);
@@ -675,7 +706,7 @@ public final class RegionFluids {
 		if (strays) {
 			LongOpenHashSet own = new LongOpenHashSet(b.cells);
 			for (long p : b.watchSet()) {
-				if (own.contains(p) || st.fluidBefore.containsKey(p)) {
+				if (own.contains(p) || st.fluidBefore.containsKey(p) || others.contains(p)) {
 					continue;
 				}
 				BlockPos bp = BlockPos.of(p);

@@ -57,6 +57,18 @@ class RegionFluidsTest {
 	}
 
 	@Test
+	void othersAreTheSiblingsStandingBodies() {
+		List<RegionFluids.Body> bodies = RegionFluids.bodiesOf(JsonParser.parseString(IR).getAsJsonObject());
+		RegionFluids.Regional st = new RegionFluids.Regional(bodies);
+		var others = st.othersOf(bodies.get(0));
+		assertTrue(others.contains(BlockPos.asLong(9, 60, 9)), "the lava pit's source is its own, never the pond's escape");
+		assertFalse(others.contains(BlockPos.asLong(0, 62, 0)), "not the body's own cells");
+		assertTrue(st.othersOf(bodies.get(1)).contains(BlockPos.asLong(3, 64, 0)), "a sibling's predicted flow");
+		st.states.get("lava").state = "drained";
+		assertTrue(st.othersOf(bodies.get(0)).isEmpty(), "a drained sibling claims nothing");
+	}
+
+	@Test
 	void runs() {
 		JsonObject o = JsonParser.parseString("{\"r\":[[5,-3,10,12]]}").getAsJsonObject();
 		assertArrayEquals(new long[] {BlockPos.asLong(5, 10, -3), BlockPos.asLong(5, 11, -3), BlockPos.asLong(5, 12, -3)}, RegionFluids.runs(o.get("r")));

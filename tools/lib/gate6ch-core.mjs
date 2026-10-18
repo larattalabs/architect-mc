@@ -75,12 +75,14 @@ function boxAround(cells, g = 2) {
  * A body's census against its prediction, from dev.fluid.census over its watch box: {ok, sources, flowing, mismatch: [...], outside:
  * [...] (fluid of the body's kind outside its cells, spill and joins that the before-census did not hold), ticks}.
  */
-async function censusOf(ctx, body, before = null) {
+async function censusOf(ctx, body, before = null, siblings = []) {
   const all = [...body.cells, ...body.shell, ...body.spill, ...body.watch];
   const box = boxAround(all, 2);
   const c = await ctx.L.call('dev.fluid.census', { box }, 120_000);
   const now = new Map(c.fluids.map(([x, y, z, s]) => [`${x},${y},${z}`, s]));
   const pred = new Map(body.predicted.map(([x, y, z, lv]) => [`${x},${y},${z}`, lv]));
+  // the region's other bodies' sources and predicted flow are theirs (a fountain's spout stands in its basin): never this one's outside
+  const others = new Set(siblings.filter((o) => o.id !== body.id).flatMap((o) => [...o.cells.map(k3), ...o.ice.map(k3), ...o.predicted.map(k3)]));
   const own = new Set(body.cells.map(k3)), ice = new Set(body.ice.map(k3)), declared = new Set([...body.cells, ...body.spill, ...body.joins].map(k3));
   const kind = body.fluid === 'lava' ? 'minecraft:lava' : 'minecraft:water';
   const levelOf = (s) => { const m = /level=(\d+)/.exec(s); return m ? Number(m[1]) : 0; };
@@ -96,7 +98,7 @@ async function censusOf(ctx, body, before = null) {
     if (!s || !s.startsWith(kind) || levelOf(s) !== lv) mismatch.push([k, s ?? 'none', `level ${lv}`]); else flowing++;
   }
   for (const [k, s] of now) {
-    if (own.has(k) || pred.has(k) || !s.startsWith(kind)) continue;
+    if (own.has(k) || pred.has(k) || others.has(k) || !s.startsWith(kind)) continue;
     if (before && before.has(k)) continue;
     if (declared.has(k)) mismatch.push([k, s, 'none']); else outside.push([k, s]);
   }
@@ -185,13 +187,13 @@ export async function ingame(ctx) {
     const bound = new Map(d.bodies.map((b) => [b.id, b.settleTicks]));
     check((r.fluids ?? []).every((x) => x.settledAt <= bound.get(x.body)), `item 2: each body settled within its settleTicks (${json((r.fluids ?? []).map((x) => [x.body, x.settledAt, bound.get(x.body)]))})`);
     const c1 = {};
-    for (const b of d.bodies) c1[b.id] = await censusOf(ctx, b, before);
+    for (const b of d.bodies) c1[b.id] = await censusOf(ctx, b, before, d.bodies);
     out.census = Object.fromEntries(Object.entries(c1).map(([k, v]) => [k, { ok: v.ok, sources: v.sources, flowing: v.flowing, mismatch: v.mismatch, outside: v.outside, ticks: v.ticks }]));
     check(Object.values(c1).every((c) => c.ok && c.ticks === 0), `item 2: every body's census equals its prediction exactly (sources, flowing levels), 0 fluid outside its cells, spill and joins, no fluid tick scheduled (${json(Object.entries(c1).map(([k, v]) => [k, v.sources, v.flowing, v.mismatch.length, v.outsideCount]))})`);
     // the stand: 2 minutes at default rules (random ticks, fire, spawns): the census unchanged
     await sleep(120_000);
     const c2 = {};
-    for (const b of d.bodies) c2[b.id] = await censusOf(ctx, b, before);
+    for (const b of d.bodies) c2[b.id] = await censusOf(ctx, b, before, d.bodies);
     out.stand = Object.fromEntries(Object.entries(c2).map(([k, v]) => [k, { ok: v.ok, mismatch: v.mismatch, outside: v.outside }]));
     check(Object.values(c2).every((c) => c.ok), `item 2: a 2-minute stand at default rules adds nothing (${json(Object.entries(c2).map(([k, v]) => [k, v.mismatch.length, v.outsideCount]))})`, out.stand);
     // item 6: one shell cell of each body opened (a player's pickaxe); after a settle bound the water reaches only its declared and
@@ -201,8 +203,11 @@ export async function ingame(ctx) {
     await sleep(Math.max(...d.bodies.map((b) => b.settleTicks)) * 50 * 2 + 3000);
     const c3 = {};
     for (const b of d.bodies) {
-      const c = await censusOf(ctx, b, before);
-      const allowed = new Set([...b.cells, ...b.spill, ...b.watch, ...b.joins].map(k3));
+      const c = await censusOf(ctx, b, before, d.bodies);
+      // every body was breached at once: each one's reach is its own cells, spill and watch plus its siblings' (a spout over its basin)
+      const mine = new Set([...b.cells, ...b.spill, ...b.watch].map(k3));
+      const linked = d.bodies.filter((o) => o === b || (o.fluid === b.fluid && [...o.cells, ...o.predicted].some((c) => mine.has(k3(c)))));
+      const allowed = new Set(linked.flatMap((o) => [...o.cells, ...o.spill, ...o.watch, ...o.joins, ...o.predicted]).map(k3));
       const kind = b.fluid === 'lava' ? 'minecraft:lava' : 'minecraft:water';
       const beyond = [...c.fluids].filter(([k, s]) => s.startsWith(kind) && !allowed.has(k) && !before.has(k));
       c3[b.id] = { opened: opened[b.id], beyond: beyond.slice(0, 12), n: beyond.length };
@@ -215,7 +220,7 @@ export async function ingame(ctx) {
     let extra = 0, newSources = 0;
     const left = [];
     for (const b of d.bodies) {
-      const c = await censusOf(ctx, b, before);
+      const c = await censusOf(ctx, b, before, d.bodies);
       for (const [k, s] of c.fluids) if (!before.has(k) && s !== 'minecraft:ice') { extra++; if (!/level=[1-9]/.test(s)) newSources++; if (left.length < 12) left.push([k, s]); }
     }
     out.breachUndo.extra = extra;
@@ -341,7 +346,7 @@ export async function crash(ctx) {
   let fl = st.view.ext?.['architect_mc:fluids'] ?? [];
   out.fl1 = { state: st.view.state, fluids: fl };
   check(st.view.state === 'PLACED' && fl.length === 4 && fl.every((x) => x.state === 'settled'), `item 7 (FL1, after the shells, before any source): settle at start completes the realise: ${st.view.state}, every body settled (${json(fl.map((x) => [x.body, x.state]))})`);
-  for (const b of d.bodies) { const c = await censusOf(ctx, b); check(c.outsideCount === 0 && c.mismatch.length === 0, `item 7 (FL1): body ${b.id}: the census equals the prediction, 0 fluid outside its declared cells (${c.mismatch.length}, ${c.outsideCount})`); }
+  for (const b of d.bodies) { const c = await censusOf(ctx, b, null, d.bodies); check(c.outsideCount === 0 && c.mismatch.length === 0, `item 7 (FL1): body ${b.id}: the census equals the prediction, 0 fluid outside its declared cells (${c.mismatch.length}, ${c.outsideCount})`); }
   // FL3 during removal: drained (step 2), before the solids (step 3): the removal finishes after the restart, exact
   await crashAt(ctx, world, 'FL3', async () => { await L.call('dev.region.remove', { region, requester: OWNER }, 600_000); });
   const rm = await removeWait(ctx, region).catch((e) => ({ state: `error ${e.message}` }));
@@ -362,7 +367,7 @@ export async function crash(ctx) {
   out.fl2 = { state: st.view.state, fluids: fl };
   check(st.view.state === 'PLACED' && fl.every((x) => x.state === 'settled'), `item 7 (FL2, mid-stage: written, settling): settle at start resumes the census and completes: ${st.view.state} (${json(fl.map((x) => [x.body, x.state]))})`);
   let outside = 0;
-  for (const b of d2.bodies) outside += (await censusOf(ctx, b)).outsideCount;
+  for (const b of d2.bodies) outside += (await censusOf(ctx, b, null, d2.bodies)).outsideCount;
   check(outside === 0, `item 7 (FL2): 0 fluid outside the declared cells (${outside})`);
   const rm2 = await removeWait(ctx, region2);
   await sleep(3000);
