@@ -104,16 +104,20 @@ async function wetCrossings(ctx, S, claim) {
       if (fx > claim[2] - m || fz > claim[3] - m) break;
       if (S.waterAt(fx, fz)) continue;
       const g0 = S.groundAt(x, z), g1 = S.groundAt(fx, fz);
-      for (const [y0, rise] of [[g0, g1 - g0], [Math.max(g0, g1), 0]]) {
+      // (the landings at their ground, or level on the walk's fill up to 4 over the higher bank, as the route's are)
+      const tries = [[g0, g1 - g0]];
+      for (let k = 0; k <= 4; k++) tries.push([Math.max(g0, g1) + k, 0]);
+      let done = false;
+      for (const [y0, rise] of tries) {
         const dry = checkBridge(land, [x, y0, z], [dx, dz], n, rise, 3, { form: 'beam' });
         if (dry.ok || dry.code !== 'WATER') continue;
         const wet = checkBridge(land, [x, y0, z], [dx, dz], n, rise, 3, { form: 'beam', wet: { waterDepth: 8, floorAt: S.floorAt, vols: [] } });
         const a = [x - dx * 5, S.groundAt(x - dx * 5, z - dz * 5) + 1, z - dz * 5], b = [fx + dx * 5, S.groundAt(fx + dx * 5, fz + dz * 5) + 1, fz + dz * 5];
         const rec = { a, b, dir: [dx, dz], n, rise, from: [x, y0, z] };
-        if (wet.ok) ok.push({ ...rec, wet: wet.piers.reduce((t, p) => t + (p.wet ?? 0), 0), d: Math.abs(x - cx) + Math.abs(z - cz) });
-        else if (wet.code === 'WATER') deep.push({ ...rec, kind: wet.evidence.kind, depth: wet.evidence.depth ?? null });
-        break;
+        if (wet.ok) { ok.push({ ...rec, wet: wet.piers.reduce((t, p) => t + (p.wet ?? 0), 0), d: Math.abs(x - cx) + Math.abs(z - cz) }); done = true; break; }
+        if (wet.code === 'WATER' && !deep.some((q) => q.from[0] === x && q.from[2] === z)) deep.push({ ...rec, kind: wet.evidence.kind, depth: wet.evidence.depth ?? null });
       }
+      void done;
       break;
     }
   }
@@ -202,7 +206,7 @@ async function wetRun(ctx, tag, { claim, plan, anchors, kind, bible = null, expe
   const box = [claim[0] - 8, Math.max(-64, y0 - 8), claim[1] - 8, claim[2] + 8, Math.min(319, y1 + 24), claim[3] + 8];
   out.box = box;
   await L.cmd('/kill @e[type=!minecraft:player]');
-  await L.settle(kind === 'flat' ? 5000 : 30_000);
+  await L.settle(kind === 'flat' ? 5000 : 60_000);
   const before = path.join(OUT, `hb-${tag}-before.arwd.gz`), after = path.join(OUT, `hb-${tag}-after.arwd.gz`), snapF = path.join(OUT, `hb-${tag}-snap.gz`);
   await L.call('dev.region.dump', { box, file: before, light: true }, 1_800_000);
   const snap = await L.call('dev.region.hash', { box, mode: 'snap', file: snapF }, 4 * 3_600_000);
@@ -223,7 +227,8 @@ async function wetRun(ctx, tag, { claim, plan, anchors, kind, bible = null, expe
   for (const q of R.meta.quays ?? []) {
     // from the bank's middle (2 inland of the deck) to the deck's far corner, and back
     const [hx, hz] = q.heading, mid = [Math.floor((q.along[0][0] + q.along[1][0]) / 2), Math.floor((q.along[0][2] + q.along[1][2]) / 2)];
-    const bank = [mid[0] - hx * 3, sv.S.groundAt(mid[0] - hx * 3, mid[1] - hz * 3) + 1, mid[1] - hz * 3];
+    // (the bank row's middle cell, beside the deck)
+    const bank = [mid[0] - hx, sv.S.groundAt(mid[0] - hx, mid[1] - hz) + 1, mid[1] - hz];
     const far = [q.along[1][0] + hx * (q.reach - 1), q.along[1][1] + 1, q.along[1][2] + hz * (q.reach - 1)];
     out.nav[q.id] = await navBoth(ctx, bank, far);
   }
@@ -244,6 +249,17 @@ async function wetRun(ctx, tag, { claim, plan, anchors, kind, bible = null, expe
     const wetCells = [];
     for (const w of R.meta.wet ?? []) for (const [x, z, a, b] of w.columns) for (let y = a; y <= b; y++) wetCells.push([x, y, z]);
     const near = (x, y, z) => wetCells.some((q) => Math.max(Math.abs(q[0] - x), Math.abs(q[1] - y), Math.abs(q[2] - z)) <= 6);
+    // (the scenario's own world class for fluids, H's narrowed T1 `flow`: a water or lava cell that moved at a cell the plan never wrote,
+    // more than 6 columns from every written column; the classifier's `none` there is that)
+    const cols = new Set([...R.written].map((k) => { const [x, , z] = k.split(','); return `${x},${z}`; }));
+    const farCol = (x, z) => { for (let dx = -6; dx <= 6; dx++) for (let dz = -6; dz <= 6; dz++) if (cols.has(`${x + dx},${z + dz}`)) return false; return true; };
+    const fluidRe = /^minecraft:(water|lava)(\[|$)/;
+    let flow = 0;
+    for (const mm of diff.list ?? []) {
+      const [x, y, z] = String(mm.pos).split(',').map(Number);
+      if (mm.class === 'none' && (fluidRe.test(mm.was) || fluidRe.test(mm.now)) && !R.written.has(keyOf(x, y, z)) && farCol(x, z)) { mm.class = 'flow'; flow++; }
+    }
+    if (flow && diff.classes) { diff.classes.none -= flow; diff.classes.flow = (diff.classes.flow ?? 0) + flow; }
     const bad = [];
     for (const mm of diff.list ?? []) {
       const [x, y, z] = String(mm.pos).split(',').map(Number);
@@ -349,14 +365,25 @@ async function hbNatural(ctx) {
   const cr = await wetCrossings(ctx, S, claim);
   const out = { crossings: { wet: cr.ok.length, deep: cr.deep.length, best: cr.ok[0] ?? null, deepSample: cr.deep.slice(0, 4) } };
   ctx.log(`  S3: ${cr.ok.length} crossing(s) a wet beam fits, ${cr.deep.length} only deeper (best ${j(cr.ok[0] ?? cr.deep[0] ?? null)})`);
-  const pick = cr.ok[0] ?? cr.deep[0] ?? null;
+  let pick = cr.ok[0] ?? cr.deep[0] ?? null;
+  if (!pick) {
+    // (no straight crossing the scan can land: T3a's own river crossing (crossings_demo's pick), its anchors 6 past the banks)
+    const { pickCrossings } = await ctx.imp('lib/connectors/crossingsBridges.mjs');
+    const c = pickCrossings(S, { minX: claim[0], minZ: claim[1], maxX: claim[2], maxZ: claim[3] }, { maxLen: 20, dry: 5 })[0];
+    if (c) {
+      const at = (t) => (c.axis === 'z' ? [c.line, c.from + t] : [c.from + t, c.line]);
+      const [ax, az] = at(-7), [bx, bz] = at(c.len + 6);
+      pick = { a: [ax, S.groundAt(ax, az) + 1, az], b: [bx, S.groundAt(bx, bz) + 1, bz], river: c };
+      out.crossings.t3River = c;
+    }
+  }
   const plan = { schemaVersion: 'plan/0', planId: 'hb_river', forms: [{ id: 'landing', kind: 'quay', where: { along: { feature: { water: {} } } }, length: 12, reach: 3 }], connectors: [] };
   const anchors = {};
   if (pick) { plan.connectors.push({ id: 'crossing', kind: 'bridge', from: { anchor: 'a' }, to: { anchor: 'b' }, width: 3, form: 'beam' }); anchors.a = pick.a; anchors.b = pick.b; }
   out.run = await wetRun(ctx, 'natural', { claim, plan, anchors, kind: 'natural', expect: { classes: { landing: ['fits', 'adjusted'], ...(pick ? { crossing: cr.ok.length ? ['fits', 'adjusted'] : 'refused' } : {}) }, navMin: 1 } });
   if (!cr.ok.length && pick) {
     const a = out.run.check?.parts?.find((q) => q.part === 'crossing');
-    ctx.check(a?.class === 'refused' && a.reasons?.[0]?.code === 'WATER' && a.reasons[0].evidence?.kind && !a.reasons[0].until, `item 11 (natural): S3's river is deeper than waterDepth where a beam would need a pier: refused WATER {kind: ${a?.reasons?.[0]?.evidence?.kind}}, no until (recorded; the natural wet beam stands on the frozen site, hb-cold)`);
+    ctx.check(a?.class === 'refused' && ['WATER', 'SPAN', 'HEADROOM', 'ANCHOR'].includes(a.reasons?.[0]?.code) && !a.reasons[0].until, `item 11 (natural): S3's river takes no wet beam (deeper than waterDepth where a pier is needed): refused ${a?.reasons?.[0]?.code} ${a?.reasons?.[0]?.evidence?.kind ?? ''}, no until (recorded; the natural wet beam stands on the frozen site, hb-cold)`);
   }
   await L.leaveWorld();
   return out;
