@@ -225,11 +225,11 @@ async function wetRun(ctx, tag, { claim, plan, anchors, kind, bible = null, expe
   out.nav = {};
   for (const q of R.meta.bridges ?? []) out.nav[q.id] = await navBoth(ctx, [q.from[0], q.from[1] + 1, q.from[2]], [q.to[0], q.to[1] + 1, q.to[2]]);
   for (const q of R.meta.quays ?? []) {
-    // from the bank's middle (2 inland of the deck) to the deck's far corner, and back
+    // from the bank's middle to the quay's step down to the water (its exit, on the water's edge), and back
     const [hx, hz] = q.heading, mid = [Math.floor((q.along[0][0] + q.along[1][0]) / 2), Math.floor((q.along[0][2] + q.along[1][2]) / 2)];
     // (the bank row's middle cell, beside the deck)
     const bank = [mid[0] - hx, sv.S.groundAt(mid[0] - hx, mid[1] - hz) + 1, mid[1] - hz];
-    const far = [q.along[1][0] + hx * (q.reach - 1), q.along[1][1] + 1, q.along[1][2] + hz * (q.reach - 1)];
+    const far = [q.steps[0][0], q.steps[0][1] + 1, q.steps[0][2]];
     out.nav[q.id] = await navBoth(ctx, bank, far);
   }
   check(Object.keys(out.nav).length >= (expect.navMin ?? 1) && Object.values(out.nav).every((v) => v.there && v.back), `item 9 (${tag}, the hard bar): vanilla dev.nav.villager across every wet beam and onto every quay, both ways (${j(Object.fromEntries(Object.entries(out.nav).map(([k, v]) => [k, [v.there, v.back]])))})`);
