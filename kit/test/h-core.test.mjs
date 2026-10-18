@@ -167,3 +167,19 @@ test('a body checked without a frozen volume is a finding, never a pass (§9)', 
   const v = synthVolume({ minX: 0, minY: 60, minZ: 0, maxX: 1, maxY: 66, maxZ: 1 }, SURVEY, CLAIM);
   assert.deepEqual([v.decoded.version, fluidAt(v.decoded, 0, 64, 0), v.decoded.classes[4], v.decoded.classes[5]], [3, 0, VC.SOIL, VC.AIR]);
 });
+
+test('ARVX version 3, cross-language: the mod\'s fixture (ArvxFluidsTest) decodes to its sha, classes, blocks and fluid codes', () => {
+  const dir = path.join(path.dirname(new URL(import.meta.url).pathname), '..', '..', 'mod', 'src', 'test', 'resources', 'arvx');
+  const exp = JSON.parse(fs.readFileSync(path.join(dir, 'fluids.json'), 'utf8'));
+  const v = decodeArvx(fs.readFileSync(path.join(dir, 'fluids.bin')));
+  assert.equal(v.sha, exp.sha);
+  assert.equal(v.version, 3);
+  const CODES = ['none', 'water_source', 'water_flowing', 'water_falling', 'waterlogged', 'lava_source', 'lava_flowing'];
+  for (const [x, y, z, cls, block, fluid] of exp.cells) {
+    const c = v.classes[((x - v.box.minX) * v.depth + (z - v.box.minZ)) * v.height + (y - v.box.minY)];
+    assert.equal(['AIR', 'ROCK', 'SOIL', 'LOOSE', 'ICE', 'SNOW', 'WATER', 'LAVA', 'LOG', 'LEAVES', 'PLANT', 'OWNED', 'PLAYER', 'BLOCK_ENTITY', 'MISSING'][c], cls, `${x},${y},${z}`);
+    const f = fluidAt(v, x, y, z);
+    assert.equal(f === null ? null : CODES[f], fluid, `${x},${y},${z} fluid`);
+    void block;
+  }
+});

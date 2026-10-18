@@ -582,6 +582,11 @@ public final class Groups {
 		if (r.nextCheck > tick) {
 			return;
 		}
+		// (6c H §4.1) a region's fluid bodies drain first and settle one bound before the group's undo is planned (the solids, shells
+		// included, after: no source ever stands against a removed shell); the phase is saved, so a stop between resumes the wait
+		if (r.undo == null && r.stage == null && !dev.larattalabs.architect.region.RegionFluids.removalGate(server, r.group)) {
+			return;
+		}
 		if (r.undo == null) {
 			plan(server, r);
 			return;

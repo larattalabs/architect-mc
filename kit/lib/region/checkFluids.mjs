@@ -15,9 +15,11 @@ import { kindOf } from '../fluids/world.mjs';
 
 export { kindOf } from '../fluids/world.mjs';
 
-/** (6c H, M20) The fire reach of an exposed lava cell (assumed, §1.4: 26.3's LavaFluid.randomTick lights air up to 2 steps up, each
- * step one cell sideways, beside a flammable block, or the air over a flammable block beside the lava): a flammable block within 3
- * sideways (Chebyshev), from 1 below to 3 above. Gate item 13's probe measures it; the constant follows the probe. */
+/** (6c H, M20) The fire reach of an exposed lava cell, from 26.3's LavaFluid.randomTick (read in its bytecode): nextInt(3) steps, each
+ * one up and at most one aside, light an air cell beside a flammable block (so the fire is at most 2 up and 2 aside, the block it lights
+ * at most 3 aside and 0..3 up); with no step, three tries one aside at the lava's level light the air over a flammable block there. So a
+ * flammable block within 3 sideways (Chebyshev), up to 3 above; 1 below is kept as a margin (vanilla lights nothing under the lava's
+ * level). Gate item 13's probe confirms it in game (the posts the lava lit itself; fire's own spread is recorded apart). */
 export const FIRE_REACH = Object.freeze({ side: 3, below: 1, above: 3 });
 
 const k3 = (x, y, z) => `${x},${y},${z}`;

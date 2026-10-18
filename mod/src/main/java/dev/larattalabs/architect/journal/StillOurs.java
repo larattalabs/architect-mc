@@ -53,8 +53,30 @@ public final class StillOurs {
 		return false;
 	}
 
+	/**
+	 * (6c H §4.3) A cell an entry wrote as a water source or an ice cap is still the entry's in any water state (any level), as ice or
+	 * frosted ice, or as air (it froze, thawed, flowed, or a bucket took it); one written as a lava source in any lava state or as air.
+	 * Nothing else changes: a player's block in a pond is not the entry's.
+	 */
+	public static boolean fluidHolds(BlockState now, BlockState after) {
+		var a = after.getBlock();
+		var n = now.getBlock();
+		boolean waterOrIce = n == net.minecraft.world.level.block.Blocks.WATER || n == net.minecraft.world.level.block.Blocks.ICE
+			|| n == net.minecraft.world.level.block.Blocks.FROSTED_ICE || now.isAir();
+		if (a == net.minecraft.world.level.block.Blocks.WATER && after.getFluidState().isSource() || a == net.minecraft.world.level.block.Blocks.ICE) {
+			return waterOrIce;
+		}
+		if (a == net.minecraft.world.level.block.Blocks.LAVA && after.getFluidState().isSource()) {
+			return n == net.minecraft.world.level.block.Blocks.LAVA || now.isAir();
+		}
+		return false;
+	}
+
 	/** Whether {@code now} (with its block entity data {@code nowNbt}, null without one) still holds {@code after}. */
 	public static boolean holds(BlockState now, @Nullable CompoundTag nowNbt, BlockState after, @Nullable CompoundTag afterNbt) {
+		if (fluidHolds(now, after)) {
+			return true; // (6c H §4.3)
+		}
 		if (after.isAir() && (now.getBlock() == net.minecraft.world.level.block.Blocks.WATER || now.getBlock() == net.minecraft.world.level.block.Blocks.LAVA)) {
 			// phase 6a: water or lava that flowed into air an entry cleared is the entry's doing, not a player's: still ours
 			return true;

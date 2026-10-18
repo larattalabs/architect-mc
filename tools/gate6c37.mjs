@@ -55,7 +55,7 @@ function sh(cmdline, opts = {}) {
 
 steps.unit = async () => {
   const out = {};
-  const k = sh('node --test kit/test/orientation-c37.test.mjs kit/test/plan-p0.test.mjs kit/test/plan-ops.test.mjs kit/test/scenario-goldens.test.mjs kit/test/village.test.mjs');
+  const k = sh('node --test kit/test/orientation-c37.test.mjs kit/test/plan-p0.test.mjs kit/test/plan-p0-valid.test.mjs kit/test/plan-p0-det-1.test.mjs kit/test/plan-p0-det-2.test.mjs kit/test/plan-p0-det-3.test.mjs kit/test/plan-p0-asks.test.mjs kit/test/plan-ops.test.mjs kit/test/scenario-goldens.test.mjs kit/test/village.test.mjs kit/test/village-layout-1.test.mjs kit/test/village-layout-2.test.mjs kit/test/village-layout-3.test.mjs kit/test/village-layout-4.test.mjs');
   fs.writeFileSync(path.join(OUT, 'unit-kit.log'), k.out);
   const pass = Number(/^ℹ pass (\d+)/m.exec(k.out)?.[1] ?? 0), fail = Number(/^ℹ fail (\d+)/m.exec(k.out)?.[1] ?? 1);
   out.kit = { pass, fail };

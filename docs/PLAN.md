@@ -606,9 +606,9 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 - **Done (housekeeping 2):** pt-nomod takes the launch file from its run worktree (GATE6B_RUN), building it there with `gradlew headlessLaunch` when missing. ~~pt-nomod reads the source checkout's `mod/build/headless-launch*.json`.~~ It fails whenever that checkout hasn't built
   headless; make it build or locate the launch file in its own run worktree.
 - ~~A literal `${OUT }/gate7a-k1b/` directory committed in 1f946e2f~~: already removed (K1b's verifier fix); nothing tracked on main.
-- **More headless:** w-ingame (about 13 min on the client), t1-ingame and the sch/y/y2/mp-ingame steps use no client-only hooks.
+- **Done (housekeeping 2):** A/B at c2b094ea: only t1-ingame matched its client checks and moved (`host: server`); mp, sch and y2 use client-only hooks or shots, and w and y differ by host (GATES.md "Tried and kept on the client"). ~~More headless:~~ w-ingame (about 13 min on the client), t1-ingame and the sch/y/y2/mp-ingame steps use no client-only hooks.
   A/B them with `--host server` and move the ones that match.
-- **Split the slow kit test files.** plan-p0 (187 s) and one village test (138 s) set the kit suite's wall time.
+- **Done (housekeeping 2):** plan-p0 split into plan-p0 + -valid + -det-1..3 + -asks (helpers in plan-p0-shared.mjs), the 500 claims into village-layout-1..4 (125 each); every driver lists the new files; kit suite 214/267 s -> 139/145 s (A/B/A/B, same box). ~~Split the slow kit test files.~~ plan-p0 (187 s) and one village test (138 s) set the kit suite's wall time.
 
 ## Queued from the T3 batch (integration, 2026-10-18)
 
@@ -622,7 +622,7 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   cells of the entry (d3f36c95, a08669ff), which would remove the sand by design rather than by gravity. Decide whether a
   gravity block on a rewritten support should be kept when the new support is solid, and add a probe: one sand cell on one
   rewritten cell, re-read after the realise, with the journal's entries for that column.
-- **Thin margin on T3b's cap fixture.** t3b-natural's "past the cap" case puts the corridor at 4,290,489 cells against the
+- **Done (housekeeping 2):** the ends moved apart diagonally too (1000 along, 40 across; the claim is at 1024 columns in x), so the corridor is ~1.6x the cap; t3b-natural asserts at least 1.25x and the same size on a second check. ~~Thin margin on T3b's cap fixture.~~ t3b-natural's "past the cap" case puts the corridor at 4,290,489 cells against the
   4,000,000-cell cap (7% over). A change to the corridor box (approach, dilation, the y span) could drop it under the cap and turn
   the expected `incomplete VOLUME` into a fit without any cap bug. Widen the ends (or assert the computed size is at least, say,
   1.5x the cap) the next time the driver is touched.
@@ -635,3 +635,10 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 - **Done (housekeeping 2):** a history timeout counts only samples of the step's current definition (its chain entry and driver files, hashed at each sample's head through git); kit/test/gate-history.test.mjs. ~~History timeouts for young steps.~~ History put t3a-ingame's effective timeout at 10 min, so the T3 integration ran with
   `--no-history-timeouts`. Use the configured `timeoutMin` until a step has enough samples *from its current definition*
   (e.g. reset a step's history when its driver or chain entry changes), or raise the floor for in-game steps.
+
+## Queued from housekeeping 2 (coordinator, 2026-10-18)
+
+- **w-ingame's s1_floating_islands golden fails on both hosts** (sha 572271bd vs 3e5bd5b7), and its survey differs by host
+  (5906 vs 5907 frozen-water columns). Confirm on main whether this is pre-existing, then re-pin or fix.
+- **y-ingame:** the client fails `store` with NOT_ALLOWED (instant placements need permission level 2); headless misses one
+  target in the feed order. Investigate both before moving it to headless.
