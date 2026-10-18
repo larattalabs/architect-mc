@@ -13431,7 +13431,7 @@ foundation only four files changed on both sides. Resolutions, both sides' seman
 | Checks at `integrate/t3` | kit `node --test test/*.test.mjs` 494/494; sidecar `npm run check` 744/744 (43 files, with the bundle; one run under parallel load met the known window-timing flake in regions.test.ts and passed alone); mod `./gradlew build --offline` 685 tests, 0 failed; api-compat as item 15. In game (headless, ports 8912-8917, 3 shards, head 910a69ee): `artifacts/gate-runs-T3int/20261018-020959-change` **8 PASS**: t3a-ingame 23/0 (golden matched, E-flat 0 over 74,886 cells, the channel bridge removed exactly), t3b-ingame 32/0 (two tunnels through the two-plan flow, the postern E-flat 0), k1a-ingame 19/0, k1b-ingame 17/0, t3a-unit 7/0, t3b-unit 5/0, k1a-unit 8/0, k1b-unit 6/0. $0.00. |
 | Queued (PLAN "Queued from the T3 batch") | The sand cell that vanishes on a tile-rewritten support (T3b; K1b likely met a relative); the cap fixture's thin margin (4,290,489 cells against the 4M cap); a street whose bridge fallback also fails still says `WATER (until T3)`. |
 
-## Phase 6c slice H: contained fluids (DRAFT for Steward review)
+## Phase 6c slice H: contained fluids (FROZEN 2026-10-18, Steward reviewed)
 
 Still water that Architect writes, contains, and undoes exactly. This covers ponds, fountains, waterfalls and moats, plus solid
 structures standing in natural water: bridge piers, harbour walls and quays. Every `until: H` that K1 and T3 left behind is
@@ -14289,6 +14289,25 @@ parallel, released as one batch (as K1 and T3). H-c follows in the same batch if
   the next toolbox batch. They are Noah's toolbox items, and no Steward part needs them.
 - **N-H-7. The split.** Proposed: H-core first, then H-a and H-b in parallel, released as one batch. The alternative is serial,
   H-b before H-a.
+
+### Steward's review (2026-10-18, at b1863046): binding, and it overrides the sections above where they differ
+
+- **S-H-2. The farm pond is explicit and off by default.** `farmPond: true` on a lot or zone gives a 3x3 pond within 2 of the
+  lot, outside its box. Plain plans never gain the two-plan check or the settle wait. Working/automated farm hydration (a source
+  per 9x9) is a different block, later.
+- **S-H-3.** Agreed: `channel.moat` now, `channel.course` reserved for HY. Roads cross moats on T3's bridge fallback and land
+  at the wall's gate.
+- **S-H-4.** Wet writes are a fallback only. Byte identity wins over a better route.
+- **S-H-5.** Agreed: `feature.water` is survey-only, and a plan's own pond is `feature.part`.
+- **S-H-6.**
+  - No new region state.
+  - The realise report gains `fluids: [{part, state: "settled" | "drained", reason, at}]` per body, so a drained body says
+    where it leaked.
+  - The RC check before release is confirmed.
+- **S-H-7.** The fall is built now. The hollow behind it is never dropped silently: the recorded hollow stays a separate
+  pending part (`form.hidden_room`, until 7b) when it's written as one. When it's written inside the waterfall's own members, the
+  waterfall answers `adjusted` with a `deviation` naming the hollow.
+- **S-H-8.** Enough, with the per-body `fluids` report. Unknown codes pass through.
 
 ### Coordinator decisions (2026-10-18, on Noah's behalf; Noah can overrule at the look step)
 
