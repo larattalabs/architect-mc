@@ -155,7 +155,8 @@
     "quick": ["unit-mod", "unit-kit", "unit-sidecar", "sim-jobs", "sim-sets", "sim-massing", "apijars", "4e-megalite"],
     "regress": ["unit-mod", "unit-kit", "unit-sidecar", "sim-jobs", "sim-sets", "sim-massing", "apijars", "4e-megalite", "4e-orders", "4e-crash", "4e-throughput", "4d-all", "5b-chains", "5b-village", "6a-megaB-fast"],
     "engine": ["unit-mod", "unit-kit", "unit-sidecar", "sim-jobs", "sim-sets", "sim-massing", "apijars", "4e-megalite", "4e-orders", "4e-crash", "4e-throughput", "4d-all", "5b-chains", "5b-village", "6a-megaA", "6a-megaB", "6a-crash", "6a-eflat", "6a-forest", "6a-inv3", "6a-staged", "6a-heap"],
-    "6ch-a": ["ha-unit", "ha-ingame", "ha-natural", "ha-cold"]
+    "6ch-a": ["ha-unit", "ha-ingame", "ha-natural", "ha-cold"],
+    "6ch-a-look": ["ha-look"]
   },
   "slots": { "$comment": "Machine-wide gate-run slots (docs/GATES.md): at most max runs at once; --slots N overrides.", "max": 3 },
   "shards": {
