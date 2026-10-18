@@ -91,8 +91,14 @@ public final class RegionFluids {
 	 * settle bound, as a forced chunk (level 31), whoever is near: a census never judges a cell it cannot see. Not persisted: a restart
 	 * takes it again from the saved phase.
 	 */
-	static final TicketType TICKET = net.minecraft.core.Registry.register(net.minecraft.core.registries.BuiltInRegistries.TICKET_TYPE, Architect.id(
-		"region_fluids"), new TicketType(0L, TicketType.FLAG_LOADING | TicketType.FLAG_SIMULATION));
+	static final class Ticket {
+		/** Registered at mod init (RegionsMod), in its own holder so the record's other code loads without the registry. */
+		static final TicketType TICKET = net.minecraft.core.Registry.register(net.minecraft.core.registries.BuiltInRegistries.TICKET_TYPE, Architect.id(
+			"region_fluids"), new TicketType(0L, TicketType.FLAG_LOADING | TicketType.FLAG_SIMULATION));
+
+		private Ticket() {
+		}
+	}
 	/** The forced chunk's ticket radius (ChunkMap.FORCED_TICKET_LEVEL 31 = 33 - 2). */
 	static final int TICKET_RADIUS = 2;
 
@@ -189,7 +195,7 @@ public final class RegionFluids {
 		boolean redrained;
 		/** Loaded in phase writing (a stop before the stage was written): the gate checks the bodies again before the tiles (§3.5). */
 		boolean recheck;
-		/** The chunks this record holds a {@link #TICKET} on, and their level. */
+		/** The chunks this record holds a {@link Ticket#TICKET} on, and their level. */
 		final LongOpenHashSet ticketed = new LongOpenHashSet();
 		@Nullable ServerLevel ticketLevel;
 
@@ -1134,12 +1140,12 @@ public final class RegionFluids {
 		}
 	}
 
-	/** Takes ({@code want}) or releases the record's {@link #TICKET} on every chunk of its bodies' watch sets. */
+	/** Takes ({@code want}) or releases the record's {@link Ticket#TICKET} on every chunk of its bodies' watch sets. */
 	static void hold(@Nullable ServerLevel level, Regional st, boolean want) {
 		if (!want) {
 			if (st.ticketLevel != null) {
 				for (long k : st.ticketed) {
-					st.ticketLevel.getChunkSource().removeTicketWithRadius(TICKET, ChunkPos.unpack(k), TICKET_RADIUS);
+					st.ticketLevel.getChunkSource().removeTicketWithRadius(Ticket.TICKET, ChunkPos.unpack(k), TICKET_RADIUS);
 				}
 			}
 			st.ticketed.clear();
@@ -1155,7 +1161,7 @@ public final class RegionFluids {
 			}
 		}
 		for (long k : st.ticketed) {
-			level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(k), TICKET_RADIUS);
+			level.getChunkSource().addTicketWithRadius(Ticket.TICKET, ChunkPos.unpack(k), TICKET_RADIUS);
 		}
 		st.ticketLevel = level;
 	}
