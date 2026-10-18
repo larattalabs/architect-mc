@@ -218,7 +218,7 @@ export function emitBridges(K) {
         else if (ge?.segments?.[rec.seg]) ge.segments[rec.seg].crossing = cr;
       }
       // ((6c H-b, §10) each wet pier set's columns, over the frozen volume it was planned on: the approval guards)
-      for (const rec of recs) if (rec.wet?.volume) (K.record.guards ??= []).push({ part: p.id, body: rec.wet.record, kind: 'wet', fluids: true, volume: rec.wet.volume, runs: (K.r.meta.wet ?? []).find((w) => w.id === rec.wet.record)?.columns ?? [] });
+      for (const rec of recs) if (rec.wet?.volume) (K.record.guards ??= []).push({ part: p.id, body: rec.wet.record, kind: 'wet', fluids: true, volume: rec.wet.volume, runs: ((K.r.meta.wet ?? []).find((w) => w.id === rec.wet.record)?.columns ?? []).flat() });
       const bom = { ...((K.record.bom ??= {})[p.id] ?? {}) };
       for (const r of recs) for (const [item, nn] of Object.entries(r.bom ?? {})) bom[item] = (bom[item] ?? 0) + nn;
       K.record.bom[p.id] = Object.fromEntries(Object.entries(bom).sort(([u], [v]) => (u < v ? -1 : u > v ? 1 : 0)));

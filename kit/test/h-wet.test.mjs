@@ -179,7 +179,7 @@ test('v47: a beam on wet piers over a 28-wide river; piers 2 into the bed, no ai
   void world;
   // the guards: the wet record's columns over the frozen volume it was planned on
   const g = guardsOf(r);
-  assert.ok(g.length === 1 && g[0].fluids && g[0].volume?.sha && g[0].runs.length === rec.wet.columns.length, JSON.stringify(g));
+  assert.ok(g.length === 1 && g[0].fluids && g[0].volume?.sha && g[0].runs.length === 4 * rec.wet.columns.length, JSON.stringify(g));
 });
 
 test('v48: a harbour wall: the ring crosses the lake\'s corner; wet sections full height over the surface, to 2 into the bed; no gate in them; closure clean', async () => {

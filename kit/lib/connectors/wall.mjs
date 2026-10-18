@@ -395,7 +395,7 @@ export function planWalls(K) {
         const asked = askWet(K.r, cols);
         const rec = noteWet(K.r, { id: `${p.id}_wet`.slice(0, 48), part: p.id, kind: 'wall', columns: wetRuns(cols), volume: asked.ref });
         if (!asked.volume) { K.ans(p, { class: 'incomplete', notes, reasons: [{ code: 'VOLUME', message: 'the water under the harbour wall\'s wet sections was not read: prepare (or check with load: "generate"), then check again', evidence: { box: [asked.box.minX, asked.box.minY, asked.box.minZ, asked.box.maxX, asked.box.maxY, asked.box.maxZ], columns: cols.length } }] }); continue; }
-        (K.record.guards ??= []).push({ part: p.id, body: rec.id, kind: 'wet', fluids: true, volume: rec.volume, runs: rec.columns });
+        (K.record.guards ??= []).push({ part: p.id, body: rec.id, kind: 'wet', fluids: true, volume: rec.volume, runs: rec.columns.flat() });
         wetInfo = { cols, pos, at: new Map(cols.map((q) => [key(q[0], q[1]), q])), waterDepth: wetW.waterDepth, record: rec.id };
         notes.push(`a harbour wall: ${pos.size} position(s) stand in natural water (the wet fallback, waterDepth ${wetW.waterDepth})`);
       }
