@@ -538,10 +538,11 @@ const survival = [{
       const cellsBefore = await L.call('dev.box.hash', { min: [rb[0], rb[1], rb[2]], max: [rb[3], rb[4], rb[5]], cells: true }, 300_000);
       const { bomOf } = await ctx.imp('lib/connectors/bom.mjs');
       const siteCells = await L.call('dev.site.cells', { site }).catch(() => null);
-      const targets = siteCells?.cells ?? null;
+      // (dev.site.cells: {"x,y,z": block id} of every queued cell; dev.box.hash cells: "x,y,z state[ be=nbt]")
+      const targets = siteCells && typeof siteCells === 'object' && Object.keys(siteCells).length ? siteCells : null;
       const standing = [];
-      const now = new Map((cellsBefore.cells ?? []).map((l) => { const sp = l.indexOf(' '); return [l.slice(0, sp), l.slice(sp + 1)]; }));
-      for (const [pos, block] of Object.entries(targets ?? {})) { const got = now.get(pos.replaceAll(',', ' ')) ?? now.get(pos); if (got && got.replace(/\[.*$/, '') === String(block).replace(/\[.*$/, '')) standing.push(got); }
+      const now = new Map((cellsBefore.cells ?? []).map((l) => { const sp = l.indexOf(' '); return [l.slice(0, sp), l.slice(sp + 1).split(' ')[0]]; }));
+      for (const [pos, block] of Object.entries(targets ?? {})) { const got = now.get(pos); if (got && got.replace(/\[.*$/, '') === String(block).replace(/\[.*$/, '')) standing.push(got); }
       const dec = await L.call('dev.site.deconstruct', { site }, 120_000);
       o.deconstruct = { removed: dec.removed, refund: dec.tally?.refund ?? null };
       const expect = targets ? bomOf(standing) : bill;
