@@ -521,6 +521,9 @@ const survival = [{
       o.verdict = { ok: v.ok, construction: v.construction, bomFull: v.bomFull, bomExact: v.bomExact, restoreBox: v.restoreBox, refusals: v.refusals };
       const want = id === 'voc_shrine' ? ['minecraft:beacon', 'minecraft:iron_block'] : ['minecraft:copper_block', 'minecraft:cut_copper', 'minecraft:copper_bulb'];
       check(v.ok && want.every((w) => (v.bomFull?.[w] ?? 0) > 0), `item 11 (${id}): bomFull lists ${want.join(', ')} (${j(sortObj(v.bomFull))})`, o.verdict);
+      // the restore box's cells before the site (the blocks standing after it are the ones that changed)
+      const rb0 = box6(v.restoreBox);
+      const cells0 = await L.call('dev.box.hash', { min: [rb0[0], rb0[1], rb0[2]], max: [rb0[3], rb0[4], rb0[5]], cells: true }, 300_000);
       const placed = await result(await api(`place ${id} ${x} ${y} ${z} CONSTRUCTION owned actor 0`));
       o.place = placed;
       const site = placed?.siteId;
@@ -558,15 +561,17 @@ const survival = [{
       const cellsBefore = await L.call('dev.box.hash', { min: [rb[0], rb[1], rb[2]], max: [rb[3], rb[4], rb[5]], cells: true }, 300_000);
       const { bomOf } = await ctx.imp('lib/connectors/bom.mjs');
       const siteCells = await L.call('dev.site.cells', { site }).catch(() => null);
-      // (dev.site.cells: {"x,y,z": block id} of every queued cell; dev.box.hash cells: "x,y,z state[ be=nbt]")
-      const targets = siteCells && typeof siteCells === 'object' && Object.keys(siteCells).length ? siteCells : null;
+      // the blocks standing: every cell of the restore box that changed since before the site (dev.box.hash cells: "x,y,z state[ be=nbt]")
+      const cellMap = (h) => new Map((h.cells ?? []).map((l) => { const sp = l.indexOf(' '); return [l.slice(0, sp), l.slice(sp + 1).split(' ')[0]]; }));
+      const was = cellMap(cells0), now = cellMap(cellsBefore);
       const standing = [];
-      const now = new Map((cellsBefore.cells ?? []).map((l) => { const sp = l.indexOf(' '); return [l.slice(0, sp), l.slice(sp + 1).split(' ')[0]]; }));
-      for (const [pos, block] of Object.entries(targets ?? {})) { const got = now.get(pos); if (got && got.replace(/\[.*$/, '') === String(block).replace(/\[.*$/, '')) standing.push(got); }
+      for (const [pos, st] of now) if (was.get(pos) !== st && !/^minecraft:(air|cave_air)$/.test(st.replace(/\[.*$/, ''))) standing.push(st);
+      const targets = siteCells && typeof siteCells === 'object' ? Object.keys(siteCells).length : 0;
+      void targets;
       const dec = await L.call('dev.site.deconstruct', { site }, 120_000);
       o.deconstruct = { removed: dec.removed, refund: dec.tally?.refund ?? null };
-      const expect = targets ? bomOf(standing) : bill;
-      check(dec.removed && j(sortObj(dec.tally?.refund ?? {})) === j(sortObj(expect)), `item 11 (${id}): deconstructed under the exact rules, the refund equals the items of the blocks standing (${Object.values(expect).reduce((p, q) => p + q, 0)} items${targets ? `, ${standing.length} standing cells` : ', the fed bill'})`, { refund: dec.tally?.refund, expect });
+      const expect = bomOf(standing);
+      check(dec.removed && canon(dec.tally?.refund ?? {}) === canon(expect) && canon(expect) === canon(bill), `item 11 (${id}): deconstructed under the exact rules, the refund equals the items of the ${standing.length} blocks standing (${Object.values(expect).reduce((p, q) => p + q, 0)} items, the fed bill)`, { refund: dec.tally?.refund, expect, bill });
       // the instant reference at the same spot
       await L.fresh(`G6B VOCb SurvRef ${k}`, FLAT);
       await L.setRules('exact');
