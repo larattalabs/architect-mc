@@ -135,7 +135,7 @@ steps.unit = async () => {
   check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   out.java = await javaTests(['*ApiHTest*', '*RegionFluidsTest*', '*RegionFluidsHYTest*', '*PlanChecksHTest*', '*StillOursFluidsTest*', '*ArvxFluidsTest*'], 15);
   check(out.java.ok, `items 4, 5, 8, 19 (Java): the course members, the write order, the upstream closure, the guard reader, versions, kinds and features: ${out.java.tests} tests, ${out.java.failures} failures`);
-  const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6chy'], { cwd: root, encoding: 'utf8', timeout: 900_000 });
+  const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6chy'], { cwd: root, encoding: 'utf8', timeout: 900_000, env: { ...process.env, PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
   out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').slice(-8) };
   check(ac.status === 0, `item 19: api-compat --gate6chy clean against the 0.37.0, 0.36.1 and 0.36.0 apitest jars and the 0.37.0 jar's 1.34.0 surface`, out.apicompat.tail);
   out.halves = await halves('unit');
