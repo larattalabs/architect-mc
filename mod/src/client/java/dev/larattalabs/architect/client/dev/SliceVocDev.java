@@ -188,8 +188,10 @@ public final class SliceVocDev {
 				// sponge: a sponge at the head of a 1-wide trench of n water sources along +x (the reach); sponge_cap: a pool of
 				// 11 x 11 x 2 sources (242) beside the sponge (the count cap)
 				boolean cap = kind.equals("sponge_cap");
+				// sponge: the sponge at the head of a 1-wide trench of n water sources along +x (the reach); sponge_cap: the sponge in the
+				// middle of an 11 x 7 x 11 pool of sources in a glass shell (more cells within its reach than it can take: the cap)
 				if (setup) {
-					clear(level, at, cap ? 14 : n + 2, 2, 3);
+					clear(level, at, cap ? 7 : n + 2, cap ? 5 : 2, cap ? 5 : 3);
 					if (!cap) {
 						for (int x = 1; x <= n; x++) {
 							for (BlockPos q : new BlockPos[] { at.offset(x, 0, -1), at.offset(x, 0, 1), at.offset(x, -1, 0) }) {
@@ -198,31 +200,17 @@ public final class SliceVocDev {
 							set(level, at.offset(x, 0, 0), Blocks.WATER.defaultBlockState(), 2);
 						}
 						set(level, at.offset(n + 1, 0, 0), Blocks.GLASS.defaultBlockState(), 2);
+						set(level, at.below(), Blocks.GLASS.defaultBlockState(), 2);
 					} else {
-						for (int x = 1; x <= 11; x++) {
-							for (int z = -5; z <= 5; z++) {
-								set(level, at.offset(x, -2, z), Blocks.GLASS.defaultBlockState(), 2);
-								for (int y = -1; y <= 0; y++) {
-									set(level, at.offset(x, y, z), Blocks.WATER.defaultBlockState(), 2);
-								}
-							}
-						}
-						for (int x = 0; x <= 12; x++) {
-							for (int y = -1; y <= 0; y++) {
-								set(level, at.offset(x, y, -6), Blocks.GLASS.defaultBlockState(), 2);
-								set(level, at.offset(x, y, 6), Blocks.GLASS.defaultBlockState(), 2);
-							}
-						}
-						for (int z = -6; z <= 6; z++) {
-							for (int y = -1; y <= 0; y++) {
-								set(level, at.offset(12, y, z), Blocks.GLASS.defaultBlockState(), 2);
-								if (z != 0 || y != 0) {
-									set(level, at.offset(0, y, z), Blocks.GLASS.defaultBlockState(), 2);
+						for (int x = -6; x <= 6; x++) {
+							for (int z = -6; z <= 6; z++) {
+								for (int y = -4; y <= 4; y++) {
+									boolean shell = Math.abs(x) == 6 || Math.abs(z) == 6 || Math.abs(y) == 4;
+									set(level, at.offset(x, y, z), (shell ? Blocks.GLASS : Blocks.WATER).defaultBlockState(), 2);
 								}
 							}
 						}
 					}
-					set(level, at.below(), Blocks.GLASS.defaultBlockState(), 2);
 					set(level, at, Blocks.SPONGE.defaultBlockState(), 3);
 				}
 				watch.add(at);
@@ -231,10 +219,12 @@ public final class SliceVocDev {
 						watch.add(at.offset(x, 0, 0));
 					}
 				} else {
-					for (int x = 1; x <= 11; x++) {
+					for (int x = -5; x <= 5; x++) {
 						for (int z = -5; z <= 5; z++) {
-							for (int y = -1; y <= 0; y++) {
-								watch.add(at.offset(x, y, z));
+							for (int y = -3; y <= 3; y++) {
+								if (x != 0 || y != 0 || z != 0) {
+									watch.add(at.offset(x, y, z));
+								}
 							}
 						}
 					}

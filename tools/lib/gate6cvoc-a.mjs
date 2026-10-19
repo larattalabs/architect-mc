@@ -222,8 +222,10 @@ export async function compareRegistry(dump, KIT) {
   for (const [id, o] of Object.entries(dump.blocks)) {
     const k = B.BLOCKS[id];
     if (!k) { d(id, 'missing in the kit', 'present', null); continue; }
-    if (JSON.stringify(o.props) !== JSON.stringify(k.props)) d(id, 'property domains', o.props, k.props);
-    if (JSON.stringify(o.defaults) !== JSON.stringify(k.defaults)) d(id, 'default state', o.defaults, k.defaults);
+    // property names in any order (the report's and the state definition's orders differ for chests); values in vanilla's order
+    const sorted = (m) => JSON.stringify(Object.keys(m).sort().map((x) => [x, m[x]]));
+    if (sorted(o.props) !== sorted(k.props)) d(id, 'property domains', o.props, k.props);
+    if (sorted(o.defaults) !== sorted(k.defaults)) d(id, 'default state', o.defaults, k.defaults);
     // light per state, from the table's own `L` (emissionOf counts minecraft:light as 0 on purpose): every lit state the game lists
     // gives the table's level, and the table has as many lit states
     const lvl = (props) => (!k.L ? 0 : typeof k.L === 'number' ? k.L : k.L.v[k.L.by.map((p) => props[p] ?? k.defaults[p]).join(',')] ?? 0);
@@ -316,7 +318,7 @@ const probe = [{
     const cap = await R('sponge_cap', at);
     const drained = cap.states.slice(1).filter((s) => s !== 'minecraft:water[level=0]').length;
     out.spongeCap = drained;
-    check(cap.states[0] === 'minecraft:wet_sponge' && drained === (row('sponge').reach.max ?? drained), `item 10 (sponge cap): beside a pool of 242 sources the sponge drains ${drained} (hazards.json max: ${row('sponge').reach.max ?? 'none'})`);
+    check(cap.states[0] === 'minecraft:wet_sponge' && drained === row('sponge').reach.max, `item 10 (sponge cap): a sponge inside an 11 x 7 x 11 pool drains ${drained} (hazards.json max: ${row('sponge').reach.max ?? 'none'})`);
     // magma and soul sand under water: their bubble columns
     for (const [i, k, drag] of [[3, 'magma', 'true'], [4, 'soul_sand', 'false']]) {
       at = AT(i); await near(at);
@@ -327,11 +329,13 @@ const probe = [{
     }
     // fire, soul fire and lava: one post per case, every case at once, then 120 s (lava's ignition is a random tick: random_tick_speed 300)
     await L.cmd('/gamerule random_tick_speed 300');
-    const cases = FIRE_POSTS.map(([kind, d, expect], j) => ({ kind, d, expect, at: AT(6 + j) }));
-    for (const c of cases) { await near(c.at); await P(c.kind, c.at, { d: c.d }); }
-    await L.cmd(`/tp @s ${AT(6)[0] + 150} 140 ${AT(6)[2] + 64}`);
-    await L.settle(120_000);
-    for (const c of cases) { await near(c.at); const r = await R(c.kind, c.at, { d: c.d }); c.post = r.states[1]; c.caught = r.states[1] !== 'minecraft:oak_planks'; }
+    // a compact grid (16 apart) around the bot, inside the simulation distance and the fire spread radius
+    const F0 = [0, 100, 400];
+    const cases = FIRE_POSTS.map(([kind, d, expect], j) => ({ kind, d, expect, at: [F0[0] + 16 * (j % 4), F0[1], F0[2] + 16 * Math.floor(j / 4)] }));
+    await near([F0[0] + 24, F0[1], F0[2] + 16]);
+    for (const c of cases) await P(c.kind, c.at, { d: c.d });
+    await L.settle(150_000);
+    for (const c of cases) { const r = await R(c.kind, c.at, { d: c.d }); c.post = r.states[1]; c.caught = r.states[1] !== 'minecraft:oak_planks'; }
     out.fire = cases.map(({ kind, d, expect, caught, post }) => ({ kind, d, expect, caught, post }));
     const reachOf = (kind) => {
       const cs = cases.filter((c) => c.kind === kind && c.caught);

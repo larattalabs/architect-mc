@@ -15,10 +15,10 @@
    "kind": "sponge",
    "block": "minecraft:sponge",
    "beside": "water",
-   "reach": { "taxicab": 7 },
+   "reach": { "taxicab": 6, "max": 64 },
    "becomes": "minecraft:wet_sponge",
    "rules": ["M27:convert", "hazard"],
-   "why": "vanilla SpongeBlock: a dry sponge beside water drains the water within its reach and turns wet (the reach is assumed until the probe measures it)"
+   "why": "vanilla SpongeBlock: a dry sponge beside water drains the water within 6 steps through the water, at most 64 cells, and turns wet (the draft assumed 7; voc-probe measured 6 and the cap)"
   },
   {
    "kind": "magma",
