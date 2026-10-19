@@ -10,9 +10,11 @@ import { createHash } from 'node:crypto';
 import { D8, HYDRO_DEFAULTS, channelPaths, chebyshev, flood, hydrologyPass, ilog2 } from '../lib/region/passes/hydrology.mjs';
 import { PASSES, PASS_NAMES } from '../lib/region/passes/index.mjs';
 import { districtCandidates, WET_TAG } from '../lib/region/passes/districts.mjs';
-import { FLAG_FROZEN, FLAG_WATER, decodeColumns, makeColumns } from '../lib/region/pack.mjs';
+import { FLAG_FROZEN, FLAG_WATER, decodeColumns, makeColumns, unpack } from '../lib/region/pack.mjs';
 import { synthSurvey } from '../lib/region/synth.mjs';
 import { planRegion } from '../lib/region/plan.mjs';
+import { scatter } from '../lib/region/scatterPlan.mjs';
+import { evalTile } from '../lib/realise.mjs';
 import { isCoursePart } from '../lib/plan/compile.mjs';
 import { codeOnly } from './region-lint.test.mjs';
 import { ROOT, KIT, checkPlanLocal, flatSurvey, stewardAnchors } from './plan-helpers.mjs';
@@ -365,4 +367,44 @@ test('plan_v0: the pass runs only with a course, race or ditch part', async () =
   const b = await checkPlanLocal(plain, { survey: s.bytes, claim: s.claim, anchors });
   assert.ok(!(b.res.meta.passes ?? []).some((p) => p.name === 'hydrology'));
   assert.ok(!b.res.ir.blobs?.field_flow && !b.res.ir.blobs?.field_wet);
+});
+
+test('wiring (§5): a material rule and a scatter density on `wet` work in a plan that runs the pass, and fail as today without it', async () => {
+  // a 64 x 64 claim, a lake along the east edge (x >= 56); a plane at y 100 painted mud where wet >= 170, else stone
+  const W = 64, claim = { minX: 0, minZ: 0, maxX: W - 1, maxZ: W - 1, minY: -64, maxY: 319 };
+  const c = grid(W, W, () => 64, { water: (i) => i >= 56 });
+  const rule = { rule: [{ when: { field: 'wet', gte: 170 }, mat: 'minecraft:mud' }], default: 'minecraft:stone' };
+  const prog = (withPass) => ({ id: 'hy_wire', passes: withPass ? ['hydrology'] : [], default: (ctx) => {
+    const r = ctx.region(); r.stages(['main']); r.anchor('entrance', [8, 65, 8]); r.anchor('spawn', [9, 65, 8]);
+    if (withPass) r.pass('hydrology');
+    r.part('plane', { stage: 'main' }).fill({ kind: 'box', min: [0, 100, 0], max: [W - 1, 100, W - 1] }, rule);
+    scatter(r, 'reeds', { grid: 6, jitter: 1, density: { field: 'wet', scale: [40, 200] }, items: [{ w: 1, item: 'fern_patch' }] }, { stage: 'main' });
+    return r;
+  } });
+  const res = await planRegion({ program: prog(true), survey: c, claim, seed: '1' });
+  assert.ok(res.ir.requires.includes('fields'));
+  const blobs = {};
+  for (const [k, v] of res.blobs) blobs[k] = v;
+  const win = makeColumns(-8, -8, 80, 80, 1);
+  for (let k = 0; k < 80 * 80; k++) { win.ground[k] = 64; win.height[k] = 64; win.floor[k] = 64; }
+  const cells = new Map(unpack(evalTile(res.ir, '0,0', win, { blobs, stage: 'main', set: 'terrain' }).payload).cells.filter((q) => q.y === 100).map((q) => [`${q.x},${q.z}`, q.state]));
+  const wet = hydrologyPass(c, [], {}).fields.wet.values;
+  let mud = 0, n = 0;
+  for (let z = 0; z < W; z++) for (let x = 0; x < W; x++) {
+    const want = wet[x + z * W] >= 170 ? 'minecraft:mud' : 'minecraft:stone';
+    if (cells.has(`${x},${z}`)) { n++; assert.equal(cells.get(`${x},${z}`), want, `${x},${z}`); if (want === 'minecraft:mud') mud++; }
+  }
+  assert.ok(n >= W * W / 2, `${n} plane cells checked`);
+  assert.ok(mud > 0 && cells.get('0,10') === 'minecraft:stone', 'mud by the lake, stone far from it');
+  // without the pass: the names the IR doesn't hold fail as today
+  await assert.rejects(planRegion({ program: prog(false), survey: c, claim, seed: '1' }), /wet/);
+});
+
+test('r.pass(\'hydrology\', {_ran}) is the check\'s own: a program cannot register made-up fields through it', async () => {
+  const claim = { minX: 0, minZ: 0, maxX: 31, maxZ: 31, minY: -64, maxY: 319 };
+  const c = grid(32, 32, () => 64);
+  const fake = { out: { fields: { flow: { type: 'u8', minX: 0, minZ: 0, width: 32, depth: 32, res: 1, values: new Uint8Array(1024).fill(255) }, wet: { type: 'u8', minX: 0, minZ: 0, width: 32, depth: 32, res: 1, values: new Uint8Array(1024).fill(255) } }, data: { resolution: 1 } }, ms: 0 };
+  const res = await planRegion({ program: { id: 'hy_ran', passes: ['hydrology'], default: (ctx) => { const r = ctx.region(); r.stages(['main']); r.anchor('entrance', [8, 65, 8]); r.anchor('spawn', [9, 65, 8]); r.pass('hydrology', { _ran: fake }); return r; } }, survey: c, claim, seed: '1' });
+  const flow = res.blobs.get(res.ir.blobs.field_flow.sha);
+  assert.ok([...flow].some((v) => v !== 255), 'the pass ran on the survey, not the given output');
 });

@@ -224,7 +224,7 @@ export class Region {
     if (!declared.includes(name)) throw new Error(`PASS_UNDECLARED: the program calls pass '${name}' but does not declare it (export const passes = ['${name}'])`);
     if (name === 'route') return this._route(intent);
     if (name === 'districts') return this._districts(intent);
-    if (name === 'hydrology') return this._hydrology(intent);
+    if (name === 'hydrology') { const { _ran, ...it } = intent ?? {}; return this._hydrology(it); } // (`_ran` is the plan check's own)
     const it = { ...intent };
     const firstLot = (it.around ?? []).find((a) => a && Array.isArray(a.at) && Array.isArray(a.size));
     const stage = it.stage ?? (firstLot ? this.parts.find((p) => p.id === firstLot.part)?.stage : undefined);
