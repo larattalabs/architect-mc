@@ -954,6 +954,8 @@ export function planCourse(C, p, { block = 'channel.course', via = null, race = 
       // why: a valley past fill (an aqueduct), a cut too deep, a wall, else unreachable
       if (rr.fail === 'level' || rr.fail === 'blocked') {
         const deep = route(G, cur, g, { ...ro, fill: 64, maxNodes: 200000 });
+        // ((S-T3-4's way, as tunnel.under) the answer names the shape it needs: channel.aqueduct, reserved until 7c)
+        if (!deep.fail) p.block = 'channel.aqueduct';
         if (!deep.fail) return refuse('UNSUPPORTED', `the course crosses low ground deeper than its fill (${spec.fill}): it needs an aqueduct (channel.aqueduct, reserved until 7c)`, { kind: 'fill', block: 'channel.aqueduct', until: '7c' }, { until: '7c', block: 'channel.aqueduct' });
         const cutAny = route(G, cur, g, { ...ro, cut: 64, maxNodes: 200000 });
         if (!cutAny.fail) return refuse('UNREACHABLE', `the course would cut deeper than ${spec.cut} under the ground to reach its end`, { kind: 'cut', limit: spec.cut });

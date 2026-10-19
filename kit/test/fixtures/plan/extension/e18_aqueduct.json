@@ -1,0 +1,59 @@
+{
+ "about": "(6c HY-b, \u00a77.2, N-HY-5) a canal between two plateaus 8 over a valley across the whole claim: past fill (2), it is the reserved shape channel.aqueduct (until 7c), answered by the compiler only (hy/r03 is the same plan)",
+ "terrain": {
+  "W": 240,
+  "D": 160,
+  "x0": 1000,
+  "z0": 2000,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1000,
+    "x1": 1099,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 72
+   },
+   {
+    "x0": 1140,
+    "x1": 1239,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 72
+   }
+  ]
+ },
+ "anchors": {
+  "a": [
+   1030,
+   72,
+   2080
+  ],
+  "b": [
+   1210,
+   72,
+   2080
+  ]
+ },
+ "expect": {
+  "part": "canal",
+  "block": "channel.aqueduct"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_r03",
+  "connectors": [
+   {
+    "id": "canal",
+    "kind": "channel",
+    "look": "built",
+    "from": {
+     "anchor": "a"
+    },
+    "to": {
+     "anchor": "b"
+    }
+   }
+  ]
+ }
+}
