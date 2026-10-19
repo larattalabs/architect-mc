@@ -1,5 +1,5 @@
 {
- "about": "(6c HY-b, \u00a714 item 18 (c), recorded) the census probe on riffles: one brook per riffle length 2, 4 and 6 and per 1, 2 and 3 drops, side by side, each off its own terrace",
+ "about": "(6c HY-b, \u00a714 item 18 (c), recorded) the census probe on riffles: one brook per riffle length 2, 4 and 6 and per 1, 2 and 3 drops, side by side, each off its own terrace: riffles of 2 and 4 (split in two: a plan whose bodies need more than 16 frozen volumes is refused by the sidecar's helper, its message schema)",
  "terrain": {
   "W": 240,
   "D": 160,
@@ -255,48 +255,6 @@
     },
     "to": {
      "anchor": "b5"
-    }
-   },
-   {
-    "id": "r6d1",
-    "kind": "channel",
-    "flow": "riffles",
-    "params": {
-     "riffle": 6
-    },
-    "from": {
-     "anchor": "a6"
-    },
-    "to": {
-     "anchor": "b6"
-    }
-   },
-   {
-    "id": "r6d2",
-    "kind": "channel",
-    "flow": "riffles",
-    "params": {
-     "riffle": 6
-    },
-    "from": {
-     "anchor": "a7"
-    },
-    "to": {
-     "anchor": "b7"
-    }
-   },
-   {
-    "id": "r6d3",
-    "kind": "channel",
-    "flow": "riffles",
-    "params": {
-     "riffle": 6
-    },
-    "from": {
-     "anchor": "a8"
-    },
-    "to": {
-     "anchor": "b8"
     }
    }
   ]

@@ -181,7 +181,7 @@ export async function realiseFixture(ctx, tag, fx, o = {}) {
   for (const b of r.bodies) { const c = await core.censusOf(ctx, b, before, r.bodies); cs[b.id] = { ok: c.ok, sources: c.sources, flowing: c.flowing, mismatch: c.mismatch, outside: c.outside, ticks: c.ticks }; }
   out.census = cs;
   check(Object.values(cs).every((c) => c.ok), `item 9 (${tag}): every body's census equals its prediction (sources, lips, columns, films), 0 fluid outside its cells, spill and joins (${json(Object.entries(cs).map(([k, v]) => [k, v.sources, v.flowing, v.mismatch.length, v.outside.length]))})`, cs);
-  if (o.after) out.after = await o.after(r, { W, T, box, before, ck });
+  if (o.after) out.after = await o.after(r, { W, T, box, before, ck: { ...ck, plan: [...(wp.plan.connectors ?? [])] }, anchors: wp.anchors });
   if (o.noUndo) { await core.removeWait(ctx, r.region).catch(() => null); await L.leaveWorld(); return out; }
   const rm = await core.removeWait(ctx, r.region);
   await sleep(3000);
@@ -236,26 +236,32 @@ async function navBoth(ctx, a, b, wet = null) {
 }
 
 /** Item 10 on a realised fixture: over every bridge on a course and round every terminal pool, both ways; no path cell in a fluid. */
-async function villagersNav(ctx, tag, r, W, T, ck) {
+async function villagersNav(ctx, tag, r, W, T, ck, anchors = null) {
   const { check, json } = ctx;
   const wet = new Set(r.bodies.flatMap((b) => [...b.cells, ...b.spill]).map(k3));
   const out = {};
   // the bridges the plan's routes took over a course (the answer's legs)
-  for (const a of ck.check.parts) for (const leg of a.geometry?.legs ?? []) for (const q of leg.bridges ?? []) {
+  for (const a of ck.check.parts) for (const q of [...(a.geometry?.bridges ?? []), ...(a.geometry?.legs ?? []).flatMap((l) => l.bridges ?? [])]) {
     if (q.crossing?.over !== 'water') continue;
     const from = [q.from[0] - q.dir[0] * 2, q.from[1] + 1, q.from[2] - q.dir[1] * 2], to = [q.to[0] + q.dir[0] * 2, q.to[1] + 1, q.to[2] + q.dir[1] * 2];
     out[`bridge ${a.part} ${q.from.join(',')}`] = await navBoth(ctx, from, to, wet);
   }
-  // round each terminal pool (the last reach of a course ending in one): a bank 4 west of it to one 4 east of it, at the ground
-  const rows = (ck.check.parts ?? []).filter((a) => a.geometry?.ends?.some?.((e) => e.end === 'to' && e.kind === 'pool'));
-  for (const a of rows) {
+  // round each terminal pool (a course whose `to` is a dry anchor): from a bank 5 to one side of the pool to one 5 to the other, across
+  // the course's arrival, so the walk goes round the pool's far end
+  for (const a of ck.check.parts) {
+    const part = (ck.plan ?? []).find?.((q) => q.id === a.part);
+    const anchor = part?.to?.anchor !== undefined ? anchors?.[part.to.anchor] : null;
+    if (!anchor || !a.geometry?.ends?.some?.((e) => e.end === 'to' && e.kind === 'pool')) continue;
     const b = r.bodies.filter((q) => q.part === a.part).at(-1);
     if (!b) continue;
-    const xs = b.cells.map((c) => c[0]), zs = b.cells.map((c) => c[2]);
-    const zc = Math.round((Math.min(...zs) + Math.max(...zs)) / 2);
-    const w = [Math.min(...xs) - 4, 0, zc], e = [Math.max(...xs) + 4, 0, zc];
-    w[1] = groundAt(T, W, w[0], w[2]) + 1; e[1] = groundAt(T, W, e[0], e[2]) + 1;
-    out[`pool ${b.id}`] = await navBoth(ctx, w, e, wet);
+    // the pool's centre: the reach's surface cell nearest the anchor; the arrival: where its other cells lie
+    const surf = b.cells.filter((c) => c[1] === b.level);
+    const c0 = surf.reduce((m, c) => (!m || Math.abs(c[0] - anchor[0]) + Math.abs(c[2] - anchor[2]) < Math.abs(m[0] - anchor[0]) + Math.abs(m[2] - anchor[2]) ? c : m), null);
+    const far = surf.filter((c) => Math.max(Math.abs(c[0] - c0[0]), Math.abs(c[2] - c0[2])) > 3);
+    const ax = far.length ? Math.abs(far.reduce((t, c) => t + c[0] - c0[0], 0)) >= Math.abs(far.reduce((t, c) => t + c[2] - c0[2], 0)) : true;
+    const p1 = ax ? [c0[0], 0, c0[2] - 5] : [c0[0] - 5, 0, c0[2]], p2 = ax ? [c0[0], 0, c0[2] + 5] : [c0[0] + 5, 0, c0[2]];
+    p1[1] = groundAt(T, W, p1[0], p1[2]) + 1; p2[1] = groundAt(T, W, p2[0], p2[2]) + 1;
+    out[`pool ${b.id}`] = await navBoth(ctx, p1, p2, wet);
   }
   const all = Object.values(out);
   check(all.length > 0 && all.every((v) => v.there && v.back && !v.inWater.length), `item 10 (${tag}, the hard bar): vanilla dev.nav.villager both ways over every bridge on a course and round every terminal pool, no path cell in a fluid (${json(Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [v.there, v.back, v.inWater.length]])))})`, out);
@@ -434,7 +440,7 @@ export const items = {
         const S3 = JSON.parse(fs.readFileSync(path.join(ctx.root, 'scenarios', 's3_monastery.json'), 'utf8')).fixture.claim;
         const out = {};
         // round 1 (default rules): the census and the villagers round the course's pools; round 2 (exact rules): E-normal
-        try { out.live = await realiseFixture(ctx, 'natural', fx, { base: S3_BASE, site: S3, rules: 'default', noUndo: true, after: async (r, w) => villagersNav(ctx, 'natural', r, w.W, null, w.ck) }); } catch (e) { ctx.check(false, `natural: ${String(e.message ?? e).slice(0, 300)}`); try { await ctx.L.leaveWorld(); } catch { /* left */ } }
+        try { out.live = await realiseFixture(ctx, 'natural', fx, { base: S3_BASE, site: S3, rules: 'default', noUndo: true, after: async (r, w) => villagersNav(ctx, 'natural', r, w.W, null, w.ck, w.anchors) }); } catch (e) { ctx.check(false, `natural: ${String(e.message ?? e).slice(0, 300)}`); try { await ctx.L.leaveWorld(); } catch { /* left */ } }
         try { out.exact = await realiseFixture(ctx, 'natural-exact', fx, { base: S3_BASE, site: S3, rules: 'exact', normal: true }); } catch (e) { ctx.check(false, `natural exact: ${String(e.message ?? e).slice(0, 300)}`); try { await ctx.L.leaveWorld(); } catch { /* left */ } }
         return out;
       },
@@ -476,7 +482,7 @@ export const items = {
         const only = (process.env.HYB_ONLY ?? '').split(',').filter(Boolean);
         if (only.length && !only.includes('probe')) return { skipped: true };
         const out = {};
-        for (const [tag, rel] of [['p01', 'hy/p01_riffle_probe.json'], ['p02', 'hy/p02_long_riffle.json']]) {
+        for (const [tag, rel] of [['p01', 'hy/p01_riffle_probe.json'], ['p01b', 'hy/p01b_riffle_probe.json'], ['p02', 'hy/p02_long_riffle.json']]) {
           try {
             const res = await realiseFixture(ctx, `probe-${tag}`, fixture(ctx, rel), { rules: 'exact', noUndo: true, quiet: true });
             out[tag] = Object.fromEntries(Object.entries(res.census ?? {}).map(([k, v]) => [k, { ok: v.ok, flowing: v.flowing, mismatch: v.mismatch.length, outside: v.outside.length }]));
@@ -493,7 +499,7 @@ export const items = {
         if (only.length && !only.includes('item10')) return { skipped: true };
         const out = {};
         for (const [tag, rel] of [['v57b', 'hy/v57b_course_bridged.json'], ['v50', 'valid/v50_stream.json']]) {
-          try { out[tag] = await realiseFixture(ctx, `nav-${tag}`, fixture(ctx, rel), { rules: 'default', noUndo: true, after: async (r, w) => villagersNav(ctx, tag, r, w.W, w.T, w.ck) }); } catch (e) { ctx.check(false, `item 10 (${tag}): ${String(e.message ?? e).slice(0, 300)}`); try { await ctx.L.leaveWorld(); } catch { /* left */ } }
+          try { out[tag] = await realiseFixture(ctx, `nav-${tag}`, fixture(ctx, rel), { rules: 'default', noUndo: true, after: async (r, w) => villagersNav(ctx, tag, r, w.W, w.T, w.ck, w.anchors) }); } catch (e) { ctx.check(false, `item 10 (${tag}): ${String(e.message ?? e).slice(0, 300)}`); try { await ctx.L.leaveWorld(); } catch { /* left */ } }
         }
         try { out.swept = await realiseFixture(ctx, 'swept', fixture(ctx, 'valid/v60_falls_riffle.json'), { rules: 'default', noUndo: true, after: async (r) => sweptStand(ctx, r) }); } catch (e) { ctx.check(false, `item 10 (swept): ${String(e.message ?? e).slice(0, 300)}`); try { await ctx.L.leaveWorld(); } catch { /* left */ } }
         return out;
