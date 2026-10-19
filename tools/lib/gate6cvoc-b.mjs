@@ -29,6 +29,8 @@ const LOOK_BIBLES = ['g6cvoc_modern', 'g6cvoc_grotto', 'g6cvoc_forge', 'g6cvoc_c
 const j = (o) => JSON.stringify(o ?? null).replaceAll(' ', '');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const sortObj = (o) => Object.fromEntries(Object.entries(o ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+/** A canonical form (keys sorted at every depth): an artifact's JSON is canonical, a kit object keeps its build order. */
+const canon = (o) => JSON.stringify(o, (_k, v) => (v && typeof v === 'object' && !Array.isArray(v) ? sortObj(v) : v));
 
 function nodeTest(root, files, timeout = 3_600_000) {
   const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
@@ -239,7 +241,7 @@ async function realiseRun(ctx, tag, { claim, plan, bible = null, rarityWant = un
   if (rarityWant !== undefined) {
     const { validateRarity } = await ctx.imp('lib/vocab/rarity.mjs');
     const filled = validateRarity(rarityWant).rarity;
-    check(j(planBible?.rarity) === j(rarityWant) && meta.vocab?.opted === true && j(meta.vocab.rarity) === j(filled),
+    check(canon(planBible?.rarity) === canon(rarityWant) && meta.vocab?.opted === true && canon(meta.vocab.rarity) === canon(filled),
       `${tag}: the bible's rarity reached the plan through the sidecar (the plan dir's bible.json carries it; the kit's ctx.rarity, recorded as meta.vocab: opted, ${j(meta.vocab?.rarity)})`, { planBible: planBible?.rarity, vocab: meta.vocab?.rarity });
   }
   const art = (await L.call('dev.region.artifact', { sha: c.check.artifactSha, body: true })).artifact;
@@ -274,7 +276,7 @@ async function realiseRun(ctx, tag, { claim, plan, bible = null, rarityWant = un
   const repR = checkRegion({ ir, meta, world, prefix: false, blobs, rules: RULES });
   const fl = (rep) => rep.findings.map((f) => `${f.rule}|${f.severity}|${f.part ?? '-'}|${f.count}`).sort();
   out.rules = { virtual: fl(repV), realised: fl(repR), m26v: repV.metrics.M26, m26r: repR.metrics.M26 };
-  check(j(out.rules.virtual) === j(out.rules.realised) && j(repV.metrics.M26) === j(repR.metrics.M26), `${tag}: M20, M26 and M27 recomputed on the realised world equal the plan's (${out.rules.virtual.join(', ') || 'no findings'}; M26 ${repR.metrics.M26.cells} cells, shares ${j(repR.metrics.M26.shares)}, over ${repR.metrics.M26.over.length})`, out.rules);
+  check(j(out.rules.virtual) === j(out.rules.realised) && canon(repV.metrics.M26) === canon(repR.metrics.M26), `${tag}: M20, M26 and M27 recomputed on the realised world equal the plan's (${out.rules.virtual.join(', ') || 'no findings'}; M26 ${repR.metrics.M26.cells} cells, shares ${j(repR.metrics.M26.shares)}, over ${repR.metrics.M26.over.length})`, out.rules);
   // ---- cost.bom and cost.rarity per part against the realised cells of the IR parts it owns
   const { bomOf } = await ctx.imp('lib/connectors/bom.mjs');
   const { measureRarity } = await ctx.imp('lib/vocab/budget.mjs');
@@ -299,8 +301,8 @@ async function realiseRun(ctx, tag, { claim, plan, bible = null, rarityWant = un
       if (n) hist[n] = (hist[n] ?? 0) + 1;
     });
     const o = { cells: states.length };
-    if (a.cost.bom) { o.bom = bomOf(states.filter((s) => !/^minecraft:(air|cave_air)$/.test(s.replace(/\[.*$/, '')))); o.bomEqual = j(sortObj(o.bom)) === j(sortObj(a.cost.bom)); }
-    if (a.cost.rarity) { const m = measureRarity(hist, style, 'region'); o.rarityEqual = j(m) === j(a.cost.rarity); o.rarity = m; }
+    if (a.cost.bom) { o.bom = bomOf(states.filter((s) => !/^minecraft:(air|cave_air)$/.test(s.replace(/\[.*$/, '')))); o.bomEqual = canon(o.bom) === canon(a.cost.bom); }
+    if (a.cost.rarity) { const m = measureRarity(hist, style, 'region'); o.rarityEqual = canon(m) === canon(a.cost.rarity); o.rarity = m; }
     out.costs[a.part] = o;
     if (a.cost.bom) check(o.bomEqual, `${tag}: ${a.part}'s cost.bom equals the items of its realised cells (${Object.values(a.cost.bom).reduce((p, q) => p + q, 0)} items)`, { want: a.cost.bom, got: o.bom });
     if (a.cost.rarity) check(o.rarityEqual, `${tag}: ${a.part}'s cost.rarity equals the counts of its realised cells (${a.cost.rarity.cells} cells, uncommon ${a.cost.rarity.uncommon}, rare ${a.cost.rarity.rare}, precious ${a.cost.rarity.precious})`, { want: a.cost.rarity, got: o.rarity });
