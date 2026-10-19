@@ -642,3 +642,21 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   (5906 vs 5907 frozen-water columns). Confirm on main whether this is pre-existing, then re-pin or fix.
 - **y-ingame:** the client fails `store` with NOT_ALLOWED (instant placements need permission level 2); headless misses one
   target in the feed order. Investigate both before moving it to headless.
+
+## Queued from H-core (builder, 2026-10-18)
+
+- **Recorded (item 14 b, T1's falling water):** relief_demo's committed inputs re-planned give FLUID_STATE 0, and no op names
+  water or lava. The level-8 cells T1 saw came from vanilla flow into cells the plan cleared beside the stream. The `flow` class
+  (scenarios.mjs `flowOf`) is now narrowed to unwritten cells more than 6 columns from any written column, or deep.
+- **Recorded (item 14 a, under water):** a brush never takes a water column (brush.mjs), so no stroke rewrites a support under
+  natural water: the sand stays, the undo is exact. The dry case is `tile-gravity`'s (housekeeping 2); H-core's impact rule runs it.
+  TileCheck's gravity rule runs before the new under-water dependent rule, so a kept gravity block never becomes water.
+- **Recorded (item 13):** M20's reach {side 3, below 1, above 3} follows 26.3's LavaFluid.randomTick (fire at most 2 up and 2
+  aside; the block it lights one more; "below 1" is a margin). The probe counts only the posts the lava lit itself and keeps
+  fire's own post-to-post spread apart; the gate's base turns fire off (`fire_spread_radius_around_player 0`), so the probe sets it
+  to -1 for its two minutes.
+- **A halt without a save loses an earlier stage's world writes while the journal keeps them PLACED** (H-core's FL1 without
+  `+save`: the ground stage's pits and shells were gone after the restart). The fluids stage now re-checks every body after such a
+  stop (cells open, shells and joins hold) and answers uncontained rather than writing into a lost shell. The general case (any
+  stage's PLACED entries over chunks the halt did not save) is 6a's crash model ("journal wins" holds only with a save): decide
+  whether settle at start should compare a stage's last entries with the world and re-apply them.
