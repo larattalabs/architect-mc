@@ -1,5 +1,5 @@
 {
-  "about": "(6c VOC-b) a flat village styled by g6cvoc_modern (scenarios/bibles; the fixture's `style`): white and light-grey concrete, black glass, its plaza a glazed-terracotta MP pattern (patterns.path), lots bound to the voc_tower and voc_copper_hall library entries (kit/test/fixtures/vocab/voc-designs.mjs). M26 with the bible: 0 findings; its _unsafe.overRare twin (a gold-block plaza pattern): 1",
+  "about": "(6c VOC-b) a flat village styled by g6cvoc_modern (scenarios/bibles; the fixture's `style`): white and light-grey concrete, black glass, its plaza a glazed-terracotta MP pattern (patterns.path), lots bound to the voc_tower, voc_copper_hall and voc_tent (four wool colours) library entries (kit/test/fixtures/vocab/voc-designs.mjs). M26 with the bible: 0 findings; its _unsafe.overRare twin (a gold-block plaza pattern): 1",
   "on": "flat",
   "style": "g6cvoc_modern",
   "covers": [
@@ -50,6 +50,15 @@
                   13
                 ],
                 "entry": "voc_copper_hall"
+              },
+              {
+                "id": "w1",
+                "type": "house",
+                "size": [
+                  9,
+                  11
+                ],
+                "entry": "voc_tent"
               }
             ]
           }
