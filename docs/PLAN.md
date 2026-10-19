@@ -678,3 +678,12 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   stop (cells open, shells and joins hold) and answers uncontained rather than writing into a lost shell. The general case (any
   stage's PLACED entries over chunks the halt did not save) is 6a's crash model ("journal wins" holds only with a save): decide
   whether settle at start should compare a stage's last entries with the world and re-apply them.
+
+## Queued from the H RCs (coordinator, 2026-10-19)
+
+- **No in-game step realises an approved plan with a farm pond.** Two farm-pond bugs (lots typed `farm` without `villager`,
+  nested guard runs) reached Steward's RC check because our steps only checked such plans. Add a `realiseApproved` round
+  for v49 and Steward's hamlet (type-implied farm lot) to ha-ingame, and generally: every H body kind should go through
+  realiseApproved at least once in game.
+- **Guard reader robustness:** `PlanChecks.guardDiff` throws Gson's "Array must have size 1" on a malformed `runs`. Validate the
+  shape and answer a clear error instead.
