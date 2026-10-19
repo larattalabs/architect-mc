@@ -54,9 +54,9 @@
 //                     phase 6c slice T3 (over v0.35.0): the unchanged 0.35.0, 0.34.0 and 0.33.0 apitest jars (API 1.32.0, 1.31.0, 1.30.0) and
 //                     the 0.35.0 mod jar's 1.32.0 surface (artifacts/gate6c-t3/v0350, v0340, v0330, each with its tag's tools/).
 //   node tools/api-compat.mjs --gate6ch [--artifacts <dir>] [classesDir]
-//                     phase 6c slice H (over v0.36.0): the unchanged 0.36.0, 0.35.0 and 0.34.0 apitest jars (API 1.33.0, 1.32.0, 1.31.0) and
-//                     the 0.36.0 mod jar's 1.33.0 surface (artifacts/gate6c-h/v0360, artifacts/gate6c-t3/v0350 and v0340, each with its
-//                     tag's tools/).
+//                     phase 6c slice H (the H batch, over v0.36.1): the unchanged 0.36.1, 0.36.0 and 0.35.0 apitest jars (API 1.33.0,
+//                     1.33.0, 1.32.0) and the 0.36.1 mod jar's 1.33.0 surface (artifacts/gate6c-h/v0361 and v0360, artifacts/gate6c-t3/v0350,
+//                     each built from its tag, with its tag's tools/).
 //   node tools/api-compat.mjs --gate7ak1 [--artifacts <dir>] [classesDir]
 //                     phase 7a slice K1 (over v0.32.0): the unchanged 0.32.0, 0.31.1 and 0.31.0 apitest jars (API 1.29.0, 1.28.0, 1.28.0) and
 //                     the 0.32.0 mod jar's 1.29.0 surface (artifacts/gate7a-k1/v0320, v0311, v0310, each built from its tag with its tools/).
@@ -138,7 +138,7 @@ if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a' || proces
   }
   if (!dir) {
     const local = path.join(root, 'artifacts');
-    dir = ch ? (fs.existsSync(path.join(local, 'gate6c-h', 'v0360')) && fs.existsSync(path.join(local, 'gate6c-t3', 'v0350')) && fs.existsSync(path.join(local, 'gate6c-t3', 'v0340')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts'))
+    dir = ch ? (fs.existsSync(path.join(local, 'gate6c-h', 'v0361')) && fs.existsSync(path.join(local, 'gate6c-h', 'v0360')) && fs.existsSync(path.join(local, 'gate6c-t3', 'v0350')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts'))
       : t3 ? (fs.existsSync(path.join(local, 'gate6c-t3', 'v0350')) && fs.existsSync(path.join(local, 'gate6c-t3', 'v0340')) && fs.existsSync(path.join(local, 'gate6c-t3', 'v0330')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts'))
       : k1 ? (fs.existsSync(path.join(local, 'gate7a-k1', 'v0320')) && fs.existsSync(path.join(local, 'gate7a-k1', 'v0311')) && fs.existsSync(path.join(local, 'gate7a-k1', 'v0310')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts'))
       : cs2 ? (fs.existsSync(path.join(local, 'gate6c-s2', 'v0300')) && fs.existsSync(path.join(local, 'gate6c-s2', 'v0290')) && fs.existsSync(path.join(local, 'gate6c-s2', 'v0280')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts'))
@@ -152,11 +152,11 @@ if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a' || proces
       : cf2 ? (fs.existsSync(path.join(local, 'gate6c-f2', 'v0220')) && fs.existsSync(path.join(local, 'gate6c-sch', 'v0200')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts')) : (ct1 || csch) ? (fs.existsSync(path.join(local, 'gate6c-sch', 'v0200')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts')) : fs.existsSync(path.join(local, (f1 || cmp) ? 'gate6c-f1' : (cw || cy2) ? 'gate6c-w' : cx ? 'gate6c-x' : c0a ? 'gate6c0a' : 'gate6b', (f1 || cmp) ? 'v0180' : (cw || cy2) ? 'v0170' : cx ? 'v0160' : c0a ? 'v0120' : 'v0110')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts');
   }
   // (6c 0a) the unchanged 0.12.0, 0.11.0 and 0.10.0 apitest jars (API 1.9.0, 1.8.0, 1.7.0) and the 0.12.0 mod jar's 1.9.0 surface
-  const checks = ch ? [ // (6c H, over v0.36.0) 0.36.0 (built from its tag here), 0.35.0 and 0.34.0 (T3's), each with its tag's tools/
+  const checks = ch ? [ // (6c H, the batch over v0.36.1) 0.36.1 and 0.36.0 (built from their tags here), 0.35.0 (T3's), each with its tag's tools/
+    ['0.36.1 apitest (API 1.33.0)', [path.join(dir, 'gate6c-h', 'v0361', 'architect_apitest-0.36.1.jar')]],
     ['0.36.0 apitest (API 1.33.0)', [path.join(dir, 'gate6c-h', 'v0360', 'architect_apitest-0.36.0.jar')]],
     ['0.35.0 apitest (API 1.32.0)', [path.join(dir, 'gate6c-t3', 'v0350', 'architect_apitest-0.35.0.jar')]],
-    ['0.34.0 apitest (API 1.31.0)', [path.join(dir, 'gate6c-t3', 'v0340', 'architect_apitest-0.34.0.jar')]],
-    ['1.33.0 surface', ['--surface', path.join(dir, 'gate6c-h', 'v0360', 'architect_mc-0.36.0.jar')]],
+    ['1.33.0 surface (0.36.1)', ['--surface', path.join(dir, 'gate6c-h', 'v0361', 'architect_mc-0.36.1.jar')]],
   ] : t3 ? [ // (6c T3, over v0.35.0) 0.35.0, 0.34.0 and 0.33.0, each built from its tag (with its tag's tools/)
     ['0.35.0 apitest (API 1.32.0)', [path.join(dir, 'gate6c-t3', 'v0350', 'architect_apitest-0.35.0.jar')]],
     ['0.34.0 apitest (API 1.31.0)', [path.join(dir, 'gate6c-t3', 'v0340', 'architect_apitest-0.34.0.jar')]],

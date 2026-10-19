@@ -144,7 +144,7 @@ steps.unit = async () => {
   check(out.java.ok, `items 3, 5, 10, 18 (Java): the features and kinds, ARVX version 3's fluid layer (the cross-language fixture), still ours for fluids, the fluids stage's census and settle, the plan check's H trigger and the fluid guards: ${out.java.tests} tests, ${out.java.failures} failures`);
   const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6ch'], { cwd: root, encoding: 'utf8', timeout: 900_000 });
   out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').slice(-8) };
-  check(ac.status === 0, `item 18: api-compat --gate6ch clean against the 0.36.0, 0.35.0 and 0.34.0 apitest jars and the 1.33.0 surface`, out.apicompat.tail);
+  check(ac.status === 0, `item 18: api-compat --gate6ch clean against the 0.36.1, 0.36.0 and 0.35.0 apitest jars and the 0.36.1 jar's 1.33.0 surface`, out.apicompat.tail);
   out.halves = await halves('unit');
   spendZero();
   return out;
