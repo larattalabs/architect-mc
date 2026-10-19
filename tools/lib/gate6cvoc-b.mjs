@@ -510,11 +510,13 @@ const survival = [{
       const site = placed?.siteId;
       if (!site) { check(false, `item 11 (${id}): no construction site (${j(placed)})`); continue; }
       const sites = await api('sites');
-      const s = (sites.all ?? sites.sites ?? []).find((q) => q.id === site) ?? {};
-      o.site = s;
+      const s = (sites.all ?? []).find((q) => q.id === site) ?? {};
+      const st0 = await L.call('dev.site.state', { site });
+      o.site = { restoreBox: s.restoreBox, crate: st0.crate, bom: st0.bom, bomTotal: st0.bomTotal };
       const rb = box6(s.restoreBox ?? v.restoreBox);
-      const crate = String(s.crate ?? '').split(',').map(Number);
-      if (crate.length !== 3 || crate.some((n) => !Number.isFinite(n))) { check(false, `item 11 (${id}): the site's crate is not known (${j(s)})`); continue; }
+      const crate = [st0.crate?.x, st0.crate?.y, st0.crate?.z];
+      if (crate.some((n) => !Number.isFinite(n))) { check(false, `item 11 (${id}): the site's crate is not known (${j(st0.crate)})`); continue; }
+      check(canon(st0.bom) === canon(v.bomFull), `item 11 (${id}): the placed site's bill equals the check's bomFull (${st0.bomTotal} items)`, { site: st0.bom, bomFull: v.bomFull });
       // a hopper chain into the crate, fed exactly the bill (no equivalents)
       const free = (px, py, pz) => !(px >= rb[0] && px <= rb[3] && py >= rb[1] && py <= rb[4] && pz >= rb[2] && pz <= rb[5]);
       const feeds = [];
@@ -522,17 +524,19 @@ const survival = [{
       if (free(cx, cy + 1, cz) && free(cx, cy + 2, cz)) feeds.push({ hopper: [cx, cy + 1, cz], facing: 'down', chest: [cx, cy + 2, cz] });
       for (const [dx, dz, f] of [[1, 0, 'west'], [-1, 0, 'east'], [0, 1, 'north'], [0, -1, 'south']]) if (free(cx + dx, cy, cz + dz) && free(cx + dx, cy + 1, cz + dz)) feeds.push({ hopper: [cx + dx, cy, cz + dz], facing: f, chest: [cx + dx, cy + 1, cz + dz] });
       for (const f of feeds) { await L.cmd(`/setblock ${f.hopper.join(' ')} minecraft:hopper[facing=${f.facing}]`); await L.cmd(`/setblock ${f.chest.join(' ')} minecraft:chest`); }
-      const bill = v.bomFull ?? {};
+      const bill = st0.bom ?? v.bomFull ?? {};
       const stacks = [];
       for (const [item, n] of Object.entries(bill)) { let left = n; const max = /_door$|sign$/.test(item) ? 16 : /bed$|banner$/.test(item) ? 1 : 64; while (left > 0) { const q = Math.min(max, left); stacks.push([item, q]); left -= q; } }
       const per = Math.max(1, Math.ceil(stacks.length / Math.max(1, feeds.length)));
       for (const [i, [item, n]] of stacks.entries()) await L.cmd(`/item replace block ${feeds[Math.floor(i / per)].chest.join(' ')} container.${i % per} with ${item} ${n}`);
       o.feeds = { hoppers: feeds.length, stacks: stacks.length, items: Object.values(bill).reduce((p, q) => p + q, 0) };
+      await L.cmd('/tick sprint 24000');
       const end = Date.now() + 25 * 60_000;
       let state = null;
-      while (Date.now() < end) { state = await L.call('dev.site.state', { site }); if (/BUILT|DONE|FINISHED/i.test(String(state.state)) || (state.queue === 0 && state.built > 0)) break; await sleep(5000); }
-      o.state = { state: state?.state, built: state?.built, queue: state?.queue };
-      check(/BUILT|DONE|FINISHED/i.test(String(state?.state)) || state?.queue === 0, `item 11 (${id}): the site built from a hopper chain fed exactly its bomFull (${o.feeds.items} items in ${o.feeds.stacks} stacks; ${state?.state}, ${state?.built} built)`, o.state);
+      while (Date.now() < end) { state = await L.call('dev.site.state', { site }); if (state.state === 'built') break; await sleep(3000); }
+      await L.cmd('/tick sprint stop');
+      o.state = { state: state?.state, built: state?.built, queue: state?.queue, percent: state?.percent };
+      check(state?.state === 'built', `item 11 (${id}): the site built from a hopper chain fed exactly its bill (${o.feeds.items} items in ${o.feeds.stacks} stacks, no equivalents; ${state?.state}, ${state?.built}/${state?.queue} cells)`, o.state);
       o.survivalHash = (await hash(rb)).sha256;
       // deconstructed under the exact rules: the refund equals the items of the blocks standing
       const cellsBefore = await L.call('dev.box.hash', { min: [rb[0], rb[1], rb[2]], max: [rb[3], rb[4], rb[5]], cells: true }, 300_000);
