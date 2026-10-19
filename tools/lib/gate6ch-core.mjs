@@ -325,6 +325,32 @@ export async function ingame(ctx) {
     check(c2.sources === 0 && [...c2.fluids.values()].every((s) => !s.startsWith('minecraft:water')), `item 3: 0 fluid written for the uncontained pond (${c2.fluids.size} fluid cells in its watch box)`);
     await L.leaveWorld();
   }
+  // ---- (E) the H batch's removal review (§4.1, §4.2): a player's water source in the pond's watch set after the realise is kept by the
+  // removal (the drain takes only the body's own cells, spill, watch, predicted flow and recorded escapes), and fluid ticking for ever in
+  // a watch set (a river's current, here dev.fluid.tick every 0.5 s) holds the removal at most 2 x the settle bound after the drain
+  {
+    await freshFlat(ctx, 'G6B H Keep', 'exact');
+    const d = await planDemo(ctx, {});
+    const pond = d.bodies.find((b) => b.id === 'pond');
+    const r = await realiseWait(ctx, d.p.planId);
+    check(r.view.state === 'PLACED' && (r.fluids ?? []).every((x) => x.state === 'settled'), `removal review: h_core_demo PLACED, settled (${r.view.state})`);
+    const rim = [...pond.shell].sort((a, b) => b[0] - a[0] || b[1] - a[1] || a[2] - b[2])[0];
+    const src = [rim[0] + 2, rim[1] + 1, rim[2]]; // in the watch set (the shell grown by 2), over the bank
+    await L.cmd(`/setblock ${src[0]} ${src[1]} ${src[2]} minecraft:water`);
+    await sleep(5000);
+    const bound = Math.max(...d.bodies.map((b) => b.settleTicks));
+    let ticking = true;
+    const ticker = (async () => { while (ticking) { await L.call('dev.fluid.tick', { cells: [src], delay: 20 }, 10_000).catch(() => null); await sleep(500); } })();
+    let rm;
+    try { rm = await removeWait(ctx, r.region); } finally { ticking = false; await ticker; }
+    const st = await L.call('dev.fluid.state', { region: r.region }, 10_000).catch((e) => ({ error: String(e.message ?? e) }));
+    const c = await L.call('dev.fluid.census', { box: [src[0] - 1, src[1] - 1, src[2] - 1, src[0] + 1, src[1] + 1, src[2] + 1] }, 60_000);
+    const at = c.fluids.find(([x, y, z]) => x === src[0] && y === src[1] && z === src[2]);
+    out.keep = { src, bound, state: rm.state, seconds: rm.seconds, note: st, kept: at?.[3] ?? null };
+    check(rm.state === 'REMOVED' && /2 x the settle bound/.test(st.removalNote ?? ''), `removal review (defect 1): fluid ticking in the watch set for ever, the removal ends REMOVED in ${rm.seconds} s (the cap: 2 x ${bound} ticks after the drain), its note in the record (${json(st)})`);
+    check(!!at && /^minecraft:water/.test(at[3]) && !/level=[1-9]/.test(at[3]), `removal review (defect 2): the player's water source at ${json(src)} in the pond's watch set is kept by the removal (${json(at ?? null)})`);
+    await L.leaveWorld();
+  }
   log(`  ingame: ${json(Object.keys(out))}`);
   return out;
 }

@@ -65,13 +65,21 @@ public final class SliceHDev {
 				o.addProperty("deaths", deaths);
 				return CompletableFuture.completedFuture(o);
 			});
-		DevBridge.register("dev.fluid.state", 10_000, "{region} - (6c H) the region's fluids record: {phase, forcedAt, removal?, until?, bodies: [{id, "
+		DevBridge.register("dev.fluid.state", 10_000, "{region} - (6c H) the region's fluids record: {phase, forcedAt, removal?, until?, removalNote?, bodies: [{id, "
 			+ "state, reason, cells, spill, watch, settleTicks, settledAt, captured}]}", (req, mc) -> {
 				String id = req.get("region").getAsString();
 				return ServerTasks.callOnServer(s -> {
 					RegionsImpl.Live l = RegionsImpl.live(id);
 					if (l == null) {
-						throw new DevBridge.DevException("no live region " + id);
+						// (the H batch) a removed region: the note its capped removal left, if any
+						String note = RegionFluids.removalNoteOf(id);
+						if (note == null) {
+							throw new DevBridge.DevException("no live region " + id);
+						}
+						JsonObject o = new JsonObject();
+						o.addProperty("removed", true);
+						o.addProperty("removalNote", note);
+						return o;
 					}
 					return RegionFluids.stateJson(l);
 				});

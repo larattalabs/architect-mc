@@ -74,4 +74,39 @@ class RegionFluidsTest {
 		assertArrayEquals(new long[] {BlockPos.asLong(5, 10, -3), BlockPos.asLong(5, 11, -3), BlockPos.asLong(5, 12, -3)}, RegionFluids.runs(o.get("r")));
 		assertEquals(0, RegionFluids.runs(null).length);
 	}
+
+	/** (the H batch, review defect 1) The removal's wait after the drain is capped at 2 x the settle bound: a river never holds it. */
+	@Test
+	void removalWaitIsCapped() {
+		long drainedAt = 1000;
+		int bound = 35;
+		long until = drainedAt + bound;
+		assertEquals(RegionFluids.RemovalWait.WAIT, RegionFluids.removalWait(drainedAt + 10, until, bound, false), "inside the bound");
+		assertEquals(RegionFluids.RemovalWait.DONE, RegionFluids.removalWait(until, until, bound, false), "nothing ticking after the bound");
+		// a natural flowing source in the watch set: ticking for ever
+		for (long t = until; t < until + bound; t++) {
+			assertEquals(RegionFluids.RemovalWait.WAIT, RegionFluids.removalWait(t, until, bound, true), "still ticking, under the cap: " + t);
+		}
+		assertEquals(RegionFluids.RemovalWait.CAPPED, RegionFluids.removalWait(drainedAt + 2L * bound, until, bound, true), "2 x the bound after the drain");
+		assertEquals(RegionFluids.RemovalWait.CAPPED, RegionFluids.removalWait(drainedAt + 100_000, until, bound, true));
+		assertEquals(RegionFluids.RemovalWait.DONE, RegionFluids.removalWait(drainedAt + 100_000, until, bound, false));
+	}
+
+	/**
+	 * (the H batch, review defect 2, §4.2) A drain's stray pass takes only the body's predicted cells and the cells recorded as escaped from
+	 * it, never the rest of the watch set (a player's water added after the realise stays).
+	 */
+	@Test
+	void straysAreOnlyPredictedAndRecordedEscapes() {
+		RegionFluids.Body b = RegionFluids.bodiesOf(JsonParser.parseString(IR).getAsJsonObject()).get(0);
+		RegionFluids.BodyState bs = new RegionFluids.BodyState();
+		long esc = BlockPos.asLong(-2, 63, 1), player = BlockPos.asLong(-2, 63, -1);
+		assertTrue(b.watchSet().contains(esc) && b.watchSet().contains(player));
+		assertArrayEquals(new long[] {BlockPos.asLong(3, 64, 0)}, RegionFluids.strayCandidates(b, bs), "the predicted flow only");
+		bs.escapedCells.add(esc);
+		long[] c = RegionFluids.strayCandidates(b, bs);
+		assertEquals(2, c.length);
+		assertTrue(java.util.Arrays.stream(c).anyMatch(x -> x == esc));
+		assertFalse(java.util.Arrays.stream(c).anyMatch(x -> x == player), "an unrecorded cell of the watch set is kept");
+	}
 }

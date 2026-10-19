@@ -75,6 +75,43 @@ public final class RegionFluids {
 	public static final String STAGE = "fluids";
 	/** RegionView ext key (Architect's): the per-body report. */
 	public static final String EXT = "architect_mc:fluids";
+	/**
+	 * (the H batch) RegionView ext key: {@code {state: "capped", note, ticks}} when the removal's settle wait hit its cap (2 x the settle
+	 * bound after the drain) and the solids were restored with fluid still ticking in a watch set (a river's flow, say). Absent otherwise.
+	 */
+	public static final String EXT_REMOVAL = "architect_mc:fluidsRemoval";
+	/** (the H batch) The capped removals' notes by region id, kept after the record is forgotten (DevBridge {@code dev.fluid.state}); at most 64. */
+	private static final Map<String, String> REMOVAL_NOTES = java.util.Collections.synchronizedMap(new LinkedHashMap<>() {
+		@Override
+		protected boolean removeEldestEntry(Map.Entry<String, String> e) {
+			return size() > 64;
+		}
+	});
+
+	/** The note a capped removal left for a region (its record may be gone), else null. */
+	public static @Nullable String removalNoteOf(String regionId) {
+		return REMOVAL_NOTES.get(regionId);
+	}
+
+	/** The removal's settle wait (§4.1): wait, done (nothing ticking after the bound), or capped (still ticking at 2 x the bound). */
+	enum RemovalWait {
+		WAIT, DONE, CAPPED
+	}
+
+	/**
+	 * (the H batch) The removal's wait after the drain, pure: {@code until} is the drain's time + the bound. Before it, wait; then done when
+	 * no fluid ticks in any watch set; still ticking at {@code until + bound} (2 x the bound after the drain), capped: a natural flowing
+	 * source in a watch set never stops ticking, and must not hold the removal forever.
+	 */
+	static RemovalWait removalWait(long now, long until, int bound, boolean ticking) {
+		if (now < until) {
+			return RemovalWait.WAIT;
+		}
+		if (!ticking) {
+			return RemovalWait.DONE;
+		}
+		return now >= until + Math.max(0, bound) ? RemovalWait.CAPPED : RemovalWait.WAIT;
+	}
 	/** At most this many cells are named in a body's report. */
 	static final int NAMED = 16;
 	/** The watch set: the body's cells, shell, spill and watched cells grown by this much (Chebyshev). */
@@ -173,6 +210,11 @@ public final class RegionFluids {
 		boolean uncontained;
 		/** Before the write: the cells', ice cap's, spill's and watched cells' states. */
 		final Long2ObjectOpenHashMap<String> before = new Long2ObjectOpenHashMap<>();
+		/**
+		 * (the H batch, §4.2) Every cell the census recorded as escaped from this body (all of them, not the 16 named): with the body's
+		 * own predicted cells, the only cells outside its cells, spill and watch that a drain may take. Saved.
+		 */
+		final LongOpenHashSet escapedCells = new LongOpenHashSet();
 
 		boolean ended() {
 			return "settled".equals(state) || "drained".equals(state);
@@ -190,6 +232,8 @@ public final class RegionFluids {
 		/** The removal: null (not started), drained (waiting for the settle bound until {@link #until}), done. */
 		@Nullable String removal;
 		long until = -1;
+		/** (the H batch) The removal went on without its settle (fluid still ticking 2 x the bound after the drain): why, else null. */
+		@Nullable String removalNote;
 		long lastCensus;
 		/** This session drained already (a removal resumed after a stop drains again first). */
 		boolean redrained;
@@ -727,6 +771,11 @@ public final class RegionFluids {
 
 	/** §3.4: the escape guard: drain the body now, report it drained with the cells. */
 	static void escape(ServerLevel level, RegionsImpl.Live l, Regional st, Body b, BodyState bs, String why, List<long[]> at) {
+		if ("escaped".equals(why)) {
+			for (long[] c : at) {
+				bs.escapedCells.add(BlockPos.asLong((int) c[0], (int) c[1], (int) c[2]));
+			}
+		}
 		int n = drain(level, st, b, bs, true, st.othersOf(b));
 		bs.state = "drained";
 		bs.escaped = "escaped".equals(why);
@@ -739,8 +788,10 @@ public final class RegionFluids {
 
 	/**
 	 * §4: a body back to its before states: its sources and ice cap (where they still hold a fluid or ice), the spill and watched cells
-	 * that hold a fluid they did not hold before; with {@code strays}, any other cell of the watch set holding the body's fluid where none
-	 * was before (an escape) goes to air. Writes skip updates (nothing flows). Returns the cells written.
+	 * whose state is not their before state (the full state, a flowing level included); with {@code strays}, the body's predicted cells and
+	 * the cells the census recorded as escaped from it ({@link BodyState#escapedCells}) holding its fluid where none was before go back to
+	 * air (or a record). Any other fluid in the watch set is kept: a player's or another system's water added after the realise (§4.2).
+	 * Writes skip updates (nothing flows). Returns the cells written.
 	 */
 	static int drain(ServerLevel level, Regional st, Body b, BodyState bs, boolean strays) {
 		return drain(level, st, b, bs, strays, new LongOpenHashSet());
@@ -775,8 +826,8 @@ public final class RegionFluids {
 				}
 				String before = bs.before.get(p);
 				BlockState was = before == null ? Blocks.AIR.defaultBlockState() : parse(before);
-				if (!was.getFluidState().isEmpty() && was.getFluidState().getType().isSame(f.getType())) {
-					continue; // it held that fluid before (a natural cell): not the body's doing
+				if (now == was) {
+					continue; // as it was before (a natural cell, its level included): not the body's doing
 				}
 				dev.larattalabs.architect.placed.Placed.set(level, bp, was, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
 				n++;
@@ -784,7 +835,7 @@ public final class RegionFluids {
 		}
 		if (strays) {
 			LongOpenHashSet own = new LongOpenHashSet(b.cells);
-			for (long p : b.watchSet()) {
+			for (long p : strayCandidates(b, bs)) {
 				if (own.contains(p) || st.fluidBefore.containsKey(p) || others.contains(p)) {
 					continue;
 				}
@@ -801,6 +852,18 @@ public final class RegionFluids {
 			}
 		}
 		return n;
+	}
+
+	/**
+	 * (the H batch, §4.2) The cells a drain's stray pass may take: the body's predicted cells (its own flow) and the cells recorded as
+	 * escaped from it, sorted. Never the rest of the watch set (a player's water stays).
+	 */
+	static long[] strayCandidates(Body b, BodyState bs) {
+		LongOpenHashSet c = new LongOpenHashSet(bs.escapedCells);
+		c.addAll(b.predicted.keySet());
+		long[] out = c.toLongArray();
+		java.util.Arrays.sort(out);
+		return out;
 	}
 
 	/** The before state any body of the region recorded for a cell (null: none did). */
@@ -888,13 +951,31 @@ public final class RegionFluids {
 			}
 		}
 		hold(level, st, true);
-		if (level.getGameTime() < st.until) {
+		int bound = st.bodies.stream().mapToInt(b -> b.settleTicks).max().orElse(0);
+		long now = level.getGameTime();
+		boolean ticking = false;
+		if (now >= st.until) {
+			for (Body b : st.bodies) {
+				if (census(level, b, st.fluidBefore).ticking()) {
+					ticking = true;
+					break;
+				}
+			}
+		}
+		RemovalWait w = removalWait(now, st.until, bound, ticking);
+		if (w == RemovalWait.WAIT) {
 			return false;
 		}
-		for (Body b : st.bodies) {
-			if (census(level, b, st.fluidBefore).ticking()) {
-				return false;
-			}
+		if (w == RemovalWait.CAPPED) {
+			st.removalNote = "fluid still ticking in a body's watch set " + (2L * bound) + " ticks after the drain (2 x the settle bound, " + bound
+				+ "): flowing water not the region's (a river, a player's) keeps it ticking; the solids are restored without waiting further";
+			JsonObject note = new JsonObject();
+			note.addProperty("state", "capped");
+			note.addProperty("note", st.removalNote);
+			note.addProperty("ticks", 2L * bound);
+			l.rec().ext.add(EXT_REMOVAL, note);
+			REMOVAL_NOTES.put(l.rec().id, st.removalNote);
+			Architect.LOGGER.warn("Region {}: removal: {}", l.rec().id, st.removalNote);
 		}
 		st.removal = "done";
 		hold(level, st, false);
@@ -954,6 +1035,9 @@ public final class RegionFluids {
 		if (st.removal != null) {
 			o.addProperty("removal", st.removal);
 			o.addProperty("until", st.until);
+			if (st.removalNote != null) {
+				o.addProperty("removalNote", st.removalNote);
+			}
 		}
 		JsonArray bodies = new JsonArray();
 		for (Body b : st.bodies) {
@@ -988,6 +1072,9 @@ public final class RegionFluids {
 			o.addProperty("removal", st.removal);
 		}
 		o.addProperty("until", st.until);
+		if (st.removalNote != null) {
+			o.addProperty("removalNote", st.removalNote);
+		}
 		JsonObject bodies = new JsonObject();
 		for (var e : st.states.entrySet()) {
 			BodyState bs = e.getValue();
@@ -1009,6 +1096,17 @@ public final class RegionFluids {
 				b.addProperty("uncontained", true);
 			}
 			b.add("before", packStates(bs.before));
+			if (!bs.escapedCells.isEmpty()) {
+				JsonArray esc = new JsonArray();
+				long[] ks = bs.escapedCells.toLongArray();
+				java.util.Arrays.sort(ks);
+				for (long p : ks) {
+					esc.add(BlockPos.getX(p));
+					esc.add(BlockPos.getY(p));
+					esc.add(BlockPos.getZ(p));
+				}
+				b.add("escapedCells", esc);
+			}
 			bodies.add(e.getKey(), b);
 		}
 		o.add("bodies", bodies);
@@ -1031,6 +1129,7 @@ public final class RegionFluids {
 			st.forcedAt = o.has("forcedAt") ? o.get("forcedAt").getAsLong() : -1;
 			st.removal = o.get("removal") instanceof JsonElement r && r.isJsonPrimitive() ? r.getAsString() : null;
 			st.until = o.has("until") ? o.get("until").getAsLong() : -1;
+			st.removalNote = o.get("removalNote") instanceof JsonElement rn && rn.isJsonPrimitive() ? rn.getAsString() : null;
 			if (o.get("bodies") instanceof JsonObject bodies) {
 				for (var e : bodies.entrySet()) {
 					BodyState bs = st.states.get(e.getKey());
@@ -1052,6 +1151,11 @@ public final class RegionFluids {
 					bs.escaped = b.has("escaped") && b.get("escaped").getAsBoolean();
 					bs.uncontained = b.has("uncontained") && b.get("uncontained").getAsBoolean();
 					unpackStates(b.get("before"), bs.before);
+					if (b.get("escapedCells") instanceof JsonArray esc) {
+						for (int i = 0; i + 2 < esc.size(); i += 3) {
+							bs.escapedCells.add(BlockPos.asLong(esc.get(i).getAsInt(), esc.get(i + 1).getAsInt(), esc.get(i + 2).getAsInt()));
+						}
+					}
 				}
 			}
 			unpackStates(o.get("fluidBefore"), st.fluidBefore);
