@@ -9,7 +9,8 @@ import { pathToFileURL } from 'node:url';
  * Item 11's named exceptions (the H batch's integration): T3a's r06 and r07 now fit on wet piers (H-b's wet fallback, §8), so they
  * may differ from origin/main; every other fixture must not.
  */
-export const UNCHANGED_EXCEPTIONS = Object.freeze(['t3a/r06_water_arch.json', 't3a/r07_water_rope.json']);
+// ((6c HY) h/r08_course (a course: HY-b's v51) and extension/e15 (channel.course left the reserved list) by name, though this loop reads neither dir)
+export const UNCHANGED_EXCEPTIONS = Object.freeze(['t3a/r06_water_arch.json', 't3a/r07_water_rope.json', 'h/r08_course.json', 'extension/e15_every_reserved_a.json']);
 /** Fixtures the comparison skips by name: refused/k1a_r01 runs the two-plan harness (its `volume`; H-b re-answers it WATER deep). */
 export const UNCHANGED_SKIPPED = Object.freeze(['refused/k1a_r01_wall_water.json']);
 

@@ -309,7 +309,9 @@ public final class RegionFluids {
 
 		/**
 		 * The cells the region's other standing bodies plan (their sources, ice and predicted flow): a fountain's spout stands in its basin,
-		 * so one body's census and drain leave them to their own body (never an escape, never drained for another body).
+		 * so one body's census and drain leave them to their own body (never an escape, never drained for another body). (6c HY) In an
+		 * ordered region a body not yet written is not standing: a head written before the reach it falls into (the dependency order
+		 * broken) floods that reach's empty basin, and the census names it as escaped.
 		 */
 		LongOpenHashSet othersOf(Body b) {
 			LongOpenHashSet out = new LongOpenHashSet();
@@ -317,6 +319,9 @@ public final class RegionFluids {
 				BodyState os = states.get(o.id);
 				if (o == b || os != null && "drained".equals(os.state)) {
 					continue;
+				}
+				if (ordered && os != null && "pending".equals(os.state)) {
+					continue; // (6c HY) an ordered region's body not yet written stands nowhere: fluid in its cells escaped from this one
 				}
 				for (long p : o.cells) {
 					out.add(p);

@@ -86,7 +86,8 @@ function wallsOn(C, f) {
 /** Place the part: the first offset of its ring range whose ring is dry, clear and inside the claim. */
 export function resolve(C, p) {
   const env = C.env, part = p.part;
-  if (channelForm(part) !== 'moat') return { klass: 'refused', reasons: [{ code: 'NO_FEATURE', message: 'a moat rings a feature (where.around); a channel along a line is a course (hooks.mjs dispatches it to course.mjs)', evidence: { form: channelForm(part) } }] };
+  // ((6c HY) hooks.mjs dispatches a course, race or ditch to its own generator: a moat never sees one)
+  if (channelForm(part) !== 'moat') return { klass: 'refused', reasons: [{ code: 'UNREACHABLE', message: 'a channel along a line or a lot is a course, race or ditch (fluids/course.mjs), not a moat', evidence: { form: channelForm(part) } }] };
   const sp = moatSpec(part);
   if (sp.fluid === 'lava') {
     const frag = { ...part, params: Object.fromEntries(Object.entries(part.params ?? {}).filter(([k]) => k !== 'fluid')) };

@@ -278,8 +278,8 @@ export async function ingame(ctx) {
     out.breach.beyond = beyond.slice(0, 12);
     out.breach.n = beyond.length;
     // the weir's breach connects nothing: the lake's cells still sources at their level, r1's still its own (no flowing cell between)
-    const lake = [...before].filter(([, s]) => s === 'minecraft:water').map(([k]) => k);
-    const lakeOk = lake.every((k) => nowF.get(k) === 'minecraft:water');
+    const lake = [...before].filter(([, s]) => /^minecraft:water(\[level=0\])?$/.test(s)).map(([k]) => k);
+    const lakeOk = lake.length > 0 && lake.every((k) => nowF.get(k) === before.get(k));
     check(bank && weir && lining && beyond.length === 0 && lakeOk, `item 7: a single breach of a reach's bank ${json(bank)}, a weir cell ${json(weir)} and a lining cell ${json(lining)} reaches nothing past the bodies' cells, spill, watched breach reach and joins (${beyond.length}); the weir's breach connects nothing (the lake's ${lake.length} sources unchanged: ${lakeOk})`, out.breach);
     const rm = await removeWait(ctx, r.region);
     const st = await strayFluid(ctx, r.bodies, before);
@@ -301,7 +301,9 @@ export async function ingame(ctx) {
       const r1 = r.bodies.find((b) => b.id === 'stream_r1'), r2 = r.bodies.find((b) => b.id === 'stream_r2');
       const bank = r2.shell.filter(([x, y, z]) => y === r2.level && !r2.cells.some((q) => q[0] === x && q[2] === z)).sort((a, b) => a[0] - b[0] || a[2] - b[2])[0];
       const lining = r1.lining.find(([x]) => x > Math.max(...r1.cells.map((q) => q[0])));
-      for (const c of [bank, lining]) await L.cmd(`/setblock ${c[0]} ${c[1]} ${c[2]} minecraft:air`);
+      const minX = Math.min(...r1.cells.map((q) => q[0]));
+      const weir = r1.lining.filter(([x, y]) => x === minX - 2 && y === r1.level).sort((a, b) => a[2] - b[2])[1];
+      for (const c of [bank, lining, weir]) await L.cmd(`/setblock ${c[0]} ${c[1]} ${c[2]} minecraft:air`);
       await sleep(Math.max(...r.bodies.map((b) => b.settleTicks)) * 50 * 2 + 3000);
     }
     const rm = await removeWait(ctx, r.region);
@@ -325,8 +327,9 @@ export async function ingame(ctx) {
     out.negativeLining = { state: r.view?.state, feed: ff, hole, rows: (r.fluids ?? []).map((x) => [x.body, x.state, x.reason]) };
     check(r.view?.state === 'PARTIAL' && ff?.state === 'drained' && /^escaped/.test(ff.reason ?? '') && (ff.at ?? []).some((c) => c[0] === hole[0] && c[1] === hole[1] && c[2] === hole[2]), `item 3 (negative control, _unsafe.noLiningCell): the feed's spillway floor left unwritten leaks in game: the census names ${json(hole)} within a settle bound, the guard drains the feed, PARTIAL (${json(out.negativeLining.rows)})`);
     await L.leaveWorld();
-    await freshCourse(ctx, 'G6B HY Order', 'exact');
+    const wo = await freshCourse(ctx, 'G6B HY Order', 'exact');
     const ck2 = await checkCourse(ctx, 'order', { variant: 'wrong_order' });
+    const beforeO = await fluidsIn(ctx, boxOf(wo.g));
     const ord = (ck2.c.check?.parts ?? []).length;
     void ord;
     const r2 = await realiseApproved(ctx, ck2.artifactSha);
@@ -334,14 +337,16 @@ export async function ingame(ctx) {
     const head = rows.find((x) => x.body === 'stream_r1');
     out.negativeOrder = { state: r2.view?.state, order: r2.fstate?.order, rows: rows.map((x) => [x.body, x.state, x.reason]) };
     check(r2.view?.state === 'PARTIAL' && head?.state === 'drained' && /^escaped/.test(head.reason ?? '') && (r2.fstate?.order ?? [])[0] === 'stream_r1', `item 3 (negative control, _unsafe.wrongOrder): the head written first (${json(r2.fstate?.order)}): its fall pours into r2's empty basin, the guard drains it (${json(head)}), PARTIAL (${json(out.negativeOrder.rows)})`);
-    const st = await strayFluid(ctx, r2.bodies.filter((b) => rows.find((x) => x.body === b.id)?.state === 'drained'), new Map());
+    await sleep(Math.max(...r2.bodies.map((b) => b.settleTicks)) * 50 + 2000);
+    const st = await strayFluid(ctx, r2.bodies.filter((b) => rows.find((x) => x.body === b.id)?.state === 'drained'), beforeO);
     check(st.n === 0, `item 3 (wrong order): 0 water left in the drained bodies' watch boxes (${st.n})`, st.left);
     await L.leaveWorld();
   }
   // ---- (D) item 4: the escape guard's upstream closure (predict_short on the middle reach), and a protected area over a weir cell
   {
-    await freshCourse(ctx, 'G6B HY Escape', 'exact');
+    const w0 = await freshCourse(ctx, 'G6B HY Escape', 'exact');
     const ck = await checkCourse(ctx, 'escape', { variant: 'predict_short' });
+    const before0 = await fluidsIn(ctx, boxOf(w0.g));
     const r = await realiseApproved(ctx, ck.artifactSha);
     const rows = Object.fromEntries((r.fluids ?? []).map((x) => [x.body, x]));
     out.escape = { state: r.view?.state, rows: r.fluids };
@@ -351,7 +356,7 @@ export async function ingame(ctx) {
     await sleep(Math.max(...r.bodies.map((b) => b.settleTicks)) * 50 + 2000);
     const drained = r.bodies.filter((b) => b.id !== 'stream_r3');
     const r3 = r.bodies.find((b) => b.id === 'stream_r3');
-    const st = await strayFluid(ctx, drained, new Map(r3.cells.map((c) => [k3(c), 'r3'])));
+    const st = await strayFluid(ctx, drained, new Map([...before0, ...r3.cells.map((c) => [k3(c), 'r3']), ...r3.predicted.map((c) => [k3(c), 'r3'])]));
     out.escape.after = st;
     check(st.n === 0, `item 4: after a settle bound, 0 fluid in the drained bodies' watch sets (r3's own sources aside: ${st.n})`, st.left);
     await L.leaveWorld();
@@ -389,6 +394,21 @@ export async function ingame(ctx) {
     out.capped = { state: rm.state, seconds: rm.seconds, note: fs2, mismatches: df.mismatches, sample: df.sample };
     check(rm.state === 'REMOVED' && /2 x the settle bound/.test(fs2.removalNote ?? ''), `item 6: fluid ticking in a watch set for the whole removal: it reaches the cap (2 x ${bound} ticks) and ends REMOVED in ${rm.seconds} s (${json(fs2.removalNote ?? fs2)})`);
     check(df.mismatches === 0, `item 6: the capped removal is judged too: E-flat ${df.mismatches} after it`, df.sample);
+    await L.leaveWorld();
+  }
+  // ---- (G) §10, S-HY-6: realiseApproved re-samples each reach's guard: a block set in r2's guard buffer after the check answers
+  // ARTIFACT_STALE naming that reach (its body and part), and nothing is written
+  {
+    const w = await freshCourse(ctx, 'G6B HY Stale', 'exact');
+    const ck = await checkCourse(ctx, 'stale');
+    const demo = w.demo;
+    const o = demo.hyCoreOrigin({ minX: CLAIM[0], minZ: CLAIM[1], maxX: CLAIM[2], maxZ: CLAIM[3] });
+    const cell = [o[0] + 17, w.g + 3, o[1] - 4];
+    await L.cmd(`/setblock ${cell.join(' ')} minecraft:cobblestone`);
+    const rr = await L.call('dev.region.realiseApproved', { sha: ck.artifactSha }, 300_000);
+    const why = JSON.stringify(rr.refused ?? null);
+    out.stale = { cell, refused: rr.refused ?? null, region: rr.region ?? null };
+    check(!!rr.refused && /ARTIFACT_STALE/.test(why) && /stream_r2/.test(why) && !/stream_r1|stream_r3|w_feed/.test(why), `§10 (S-HY-6): a block set in r2's guard buffer ${json(cell)} after the check: realiseApproved answers ARTIFACT_STALE naming the reach (${why.slice(0, 300)})`);
     await L.leaveWorld();
   }
   // ---- (F) item 18 (b), recorded: fall damage landing in 1-deep and 2-deep water from 3 to 8 high (villagers dropped over /fill pools)
@@ -460,6 +480,7 @@ export async function crash(ctx) {
     const ck = await checkCourse(ctx, `crash-${tag}`);
     const box = boxOf(g);
     const file = await snap(ctx, box, `hy-crash-${tag}`);
+    const before = await fluidsIn(ctx, box); // (the natural lake beside the head)
     let region = null;
     if (during === 'realise') {
       await crashAt(ctx, world, point, async () => { region = (await L.call('dev.region.realiseApproved', { sha: ck.artifactSha }, 300_000)).region; });
@@ -470,7 +491,7 @@ export async function crash(ctx) {
       out[tag] = { state: st.view.state, fluids: fl.map((x) => [x.body, x.state, x.reason ?? null]), writtenAt: (r.fstate.bodies ?? []).map((b) => [b.id, b.writtenAt]) };
       check(st.view.state === 'PLACED' && fl.length === 4 && fl.every((x) => x.state === 'settled'), `item 8 (${point}${tag === 'fl4' ? ', between reaches: downstream written, upstream not' : ', after the shells and lining, before any source'}): settle at start completes the realise: ${st.view.state} (${json(out[tag].fluids)})`);
       let outside = 0, mism = 0;
-      for (const b of r.bodies) { const c = await censusOf(ctx, b, null, r.bodies); outside += c.outsideCount; mism += c.mismatch.length; }
+      for (const b of r.bodies) { const c = await censusOf(ctx, b, before, r.bodies); outside += c.outsideCount; mism += c.mismatch.length; }
       out[tag].outside = outside;
       check(outside === 0 && mism === 0, `item 8 (${point}): every census equals its prediction, 0 fluid outside the declared cells (${mism}, ${outside})`);
       const rm = await removeWait(ctx, region);
