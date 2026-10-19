@@ -339,6 +339,8 @@ export function courseGeometry(S, path, routeLevels, spec, ends, o) {
       }
     }
   }
+  // (the row before a tail's lip: 1 deep, whichever index (a turn's) holds its columns)
+  if (lipTail) { const R = reaches[reaches.length - 1]; for (const [x, z] of colsOf(nR - 1)) { const c = R.cols.get(k2(x, z)); if (c) c.depth = 1; } }
   // (the spring and the pool may widen a column's ground: a reach stands at most 1 over its lowest bank, else it is raised)
   for (const R of reaches) {
     for (const { x, z, depth } of R.cols.values()) for (let y = R.level - depth + 1; y <= R.level; y++) R.cells.push([x, y, z]);
@@ -443,8 +445,20 @@ export function courseGeometry(S, path, routeLevels, spec, ends, o) {
     const shSet = new Set(sh.map((c) => k3(...c)));
     for (const [x, y, z] of sh) {
       const g = S.groundAt(x, z);
-      if (y <= g) continue;
       if (y > R.level) continue; // (the rim over a side wall: the bank's top course)
+      if (y <= g) {
+        // a side wall in its own ground but with lower ground right outside it (a bank 1 thick over a dip, a river's edge): a second
+        // course of fill outside it, so its single breach meets fill, not air
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const q = [x + dx, y, z + dz], kk = k3(...q);
+          if (own.has(kk) || shSet.has(kk) || water.has(kk) || stepCells.has(kk) || openTop.has(k2(q[0], q[2])) || !own.has(k3(x - dx, y, z - dz))) continue;
+          const gq = S.groundAt(q[0], q[2]);
+          if (gq >= y) continue;
+          R.raised = true;
+          for (let yy = gq + 1; yy <= y; yy++) banks.set(k3(q[0], yy, q[2]), [q[0], yy, q[2]]);
+        }
+        continue;
+      }
       R.raised = true;
       for (let yy = g + 1; yy < y; yy++) if (!shSet.has(k3(x, yy, z)) && !own.has(k3(x, yy, z))) banks.set(k3(x, yy, z), [x, yy, z]);
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
