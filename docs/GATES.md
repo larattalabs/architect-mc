@@ -302,8 +302,10 @@ Try one with `--host server --only <step>`, then mark it.
   base stamp's recipe names its host (`tools/lib/basestamp.mjs` `gateHost`), so a base the other host made is moved aside and
   rebuilt. The frozen site's count (item 6, recorded) varies from run to run on one host too (5904 on both hosts on
   2026-10-19), as do the S2/S3 survey shas (recorded, not judged). It stays on the client.
-- y-ingame: headless fails `store`'s feed order (5 of 6 targets); on the client `store` fails NOT_ALLOWED (the INSTANT twins
-  need permission level 2). Neither matches, so it stays.
+- y-ingame: both failures were the harness's (housekeeping 3). On the client, NOT_ALLOWED came from a survival base the headless
+  server had made in the same run dir (its mark now records the host; the other host rebuilds it). Headless, the host opened the
+  survival world with its creative launch spec, so the dedicated server's default game type was creative and AUTO placed the
+  batch road INSTANT; the host now opens an existing world in its own level.dat game mode (`server-host.mjs` `levelMode`).
 
 ### Headless against client (same commit, 3 rounds each, interleaved, other slices' runs on the box)
 
