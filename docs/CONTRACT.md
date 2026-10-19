@@ -9882,7 +9882,7 @@ Branch `slice/D2` (worktree `../architect-mc-D2`, from `slice/D1`; origin/main v
 | API | No new member: `RegionView.ext` carries the corridor (Architect's key). Features `boundaryDistricts`, `outposts` (sidecar `region.boundary`). |
 | Gate | **PASS** (slice tier; gate-verifier PASS at b93f84e3). Steps `d-unit`, `d-ingame`, `d2-ingame` (`tools/gate6cd.mjs outpost boundary`, headless), `6cd-scenario-districts`, impact rule "6c D districts ... (slices D1, D2)". The full slice run `gate-runs-D2/20261014-021954-slice` (cca04f31, 3 shards): 53 PASS, 2 FAIL: d-unit item 8 (districts_demo's IR differed from the golden only by its recorded kitVersion 0.28.0 -> 0.29.0) and d2-ingame (one unclassified cell at the biome edge under the loose classes); both fixed and re-run. **Three gate-script rules** (`tools/gate6cd.mjs`): (1) **kitVersion-only golden**: item 8 matches when every tile sha equals the golden's and the plan's IR with the golden's recorded kitVersion substituted hashes to the golden's IR sha (main's 826e66f, taken at the merge; stricter than the scenarios' row, which compares tiles only); (2) **replay stability**: a reload's re-plan is stable on the same IR sha, or only when the live survey moved, on the first plan's own inputs re-planned offline giving its IR sha (`tools/lib/d2-replay.mjs`; unit test on a perturbed second survey in `kit/test/districts-d2.test.mjs`; not needed in the runs below, every round planned the same IR); (3) **narrowed world classes** (`flow`, `decay`, `live` only at unwritten cells away from the district: far > 6 columns from written columns and route cells, or deep > 8 below ground and nearby written cells; `d7` leaves at any unwritten cell; see In game). The earlier verifier's run `gate-runs-D2-verify/20261014-051108-slice` (cdec127c, the loose classes) PASSed 17/0; its outpost (flat, hash-judged) stands, its natural exactness was superseded. Narrowed: `gate-runs-D2-fix/20261014-051925-slice` (b93f84e3) d-unit 12/0, d2-ingame 17/0; the verifier's own re-run `gate-runs-D2-verify2/20261014-053318-slice` (b93f84e3, 8902-8903) d2-ingame 17/0: quay 417 mismatches (flow far 389, deep 18), crest 393 (flow far 387), oasis 311 (flow far 282, deep 8, decay d7 2); unclassified 0 and the undo's own 0 (cap 0) every round; no `live` or `decay` within 6 columns of a written cell, the within-6 cells all `flow:deep` (cave air filled by water below the district). After merging origin/main (v0.31.0, S2): `gate-runs-D2-fix/20261014-054710-slice` (d5196bd) d-unit 12/0 (item 8 with the golden's kit 0.28.0: eb9aba67018b = golden), d-ingame 19/0, d2-ingame 17/0 (quay 407, crest 383, oasis 292 mismatches, unclassified 0, undo's own 0). Kit 398/398, sidecar 744/744, mod build and tests clean after the merge. Outposts: E-flat 0 (hash) over the claim with the corridor (453 cells). Verifier notes (non-blocking): `deep` is judged against the lowest written y within 6 columns, so deep writes shrink it (the conservative way); realise-felled logs are not in the virtual world, but a mis-restored log shows as log -> air, which no class matches. Timing bars recorded, not judged. $0.00. |
 
-## Phase 6c slice VOC: the full block vocabulary and rarity budgets (DRAFT for Steward review)
+## Phase 6c slice VOC: the full block vocabulary and rarity budgets (DRAFT; SUPERSEDED 2026-10-19 by "Phase 6c slice VOC: the full block vocabulary and rarity budgets" at the end)
 
 API 1.26.0, mod 0.29.0 (wave 4). PLAN toolbox "Full block vocabulary" and "Survival".
 
@@ -14450,3 +14450,559 @@ apitest jars and the 0.36.1 surface. 0.36.1 was built from its tag into `artifac
 - The jar bundles the sidecar and kit (`architect-sidecar/BUNDLE.json` modVersion 0.37.0). Every bundled kit file matches the tree.
 
 Not merged, not tagged.
+
+## Phase 6c slice VOC: the full block vocabulary and rarity budgets (DRAFT for Steward review)
+
+Every block of Minecraft 26.3 classified from the game's own data and checked against the live registry, with budgets that cap
+rare and expensive blocks, and checker rules that catch vocabulary misuse. **This section supersedes the wave-4 draft "Phase 6c
+slice VOC: the full block vocabulary and rarity budgets" above.** That draft predates plan/0 and its catalogue, bible format 2's
+`connectors` (K1) and `fluids` (H) members, K1/T3/H's style roles, H's M20 and M25, and C26's `cost.bom` in plan answers. It was
+frozen with the batch on 2026-10-11 but never built. Its binding answers carry over (§0, "Binding answers carried over").
+
+PLAN toolbox "Full block vocabulary" and "Survival"; SETTLEMENTS §11 (M17-M20); the batch table's VOC row; P0 §1 (`rules[]`
+reserved until RC, "rule checks (RC, after VOC)"); K1 §6, T3 §7 and H §11 (bible format-2 style members); C26 (`bomFull`); H as
+built (`fs`, `fl`, M20, M25). API: the next free minor at merge (placeholder **1.35.0** over v0.37.0), mod 0.38.0, kit 0.36.0,
+**catalogue 7's entries unchanged**. HY is drafted in parallel; whichever merges second takes the next minor.
+
+- **Branch:** `slice/VOC` (or `voc/core`, `slice/VOC-a` and `slice/VOC-b`, §13), worktree `../architect-mc-VOC`. **Spend:** $0.
+  No Claude call; sim and stub only.
+- **Scope:**
+  - **The vocabulary (VOC-a):** a generated classification of every 26.3 block (family, colour, tier, survival class, drift,
+    fitting, block entity), produced by one generator from the game's jar, with committed rule tables for what the data can't
+    say (raw-material tiers, survival overrides, role fitness, fluid interactions); one source for the creative-only list and the
+    block-to-item costs; a headless gate step that diffs the table against the live registry.
+  - **Budgets and rules (VOC-b):** bible format 2's optional `rarity` member and `BibleRequest`'s budget field (S-VOC-1); rarity
+    in metrics, answers and BOMs; the building rules `rarity`, `coherence`, `state` and `hazard`; the region rules M26 (rarity) and
+    M27 (vocabulary misuse), and M20 widened.
+- **Not in scope:**
+  - **`rule.*` stays reserved until RC.** `rule.palette` included: VOC builds the selectors (family, colour, tier, block set) that
+    RC's palette rule will measure with, but no plan rule is supported here (S-VOC-2 asks whether to pull it forward);
+  - **journal and undo changes:** copper weathering and other random-tick drift are classified and reported (M27:drift), not
+    undone differently (§10, queued);
+  - **new blocks in generators:** no program, form, connector or role default picks a different block. A plan or design uses new
+    vocabulary only through its bible (roles, patterns, `rarity.allow`) or its own blueprint;
+  - **palette() and the hand-kept families** (`STONE_FAMILIES`, `WOODS`) are frozen, so every existing palette re-skins
+    identically (§2.3);
+  - the bible job's prompt (N-VOC-1, still open: a paid check); bible format 3 and `settlement.roleShares` (7c);
+  - survival for regions (RS) and Hardcore (phase 3 rules hold).
+- **Depends on** (all on main): MP (patterns name blocks), W (`sp`, M5, fixtures), H (`fs`, `fl`, M20's reach, M25, the
+  `fluids` member), K1 and T3 (`connectors` slots, `cost.bom`), P0 (answers, artifact), C26 (`bomFull`), Y (stockpile).
+
+### 0. Facts (v0.37.0)
+
+**The block table already holds the whole registry.**
+- `kit/lib/blocks.mjs` is generated by `kit/tools/gen-blocks.mjs` from 26.3's data report (`reports/blocks.json`) and
+  `kit/tools/BlockDump.java` run against the server classes. It holds **1,286 blocks** with full property domains (35,723
+  states) and default states, and per block: collision, Java family, optics, light per state (`L`, 109 emit), light dampening,
+  redstone conductivity, `g` (23 gravity blocks), `sp` (spawnable, W), `fs` and `fl` (H; 400 flammable), the item when it
+  differs, the voxel class, and every block tag resolved (MP).
+- **Waterloggable** is the `waterlogged` property (505 blocks); no separate flag is needed.
+- So "the full vocabulary" adds **no block and no state**. What it adds is classification and checks.
+
+**What isn't classified, or is hand-kept.**
+- **Families are hand lists.** `STONE_FAMILIES` (19 families) and `WOODS` (13 woods) in `kit/lib/kit.mjs` cover 404 blocks. The
+  other 882 have no family: copper (117 blocks), concrete (64, slabs and stairs included in 26.3), wool and carpet (66),
+  terracotta and glazed terracotta (33), stained glass (35), coral (40), candles (34), banners (32), Nether and End blocks,
+  amethyst, sculk, ores, and 26.3's new stones, **cinnabar (13 blocks) and sulfur (15)**.
+- These lists are order-sensitive: `palette()` takes `stoneTrim` from the first kin member after the stone, and the building
+  checker's `paletteFamilies` warns only on wood and stone families. A concrete or copper block outside the palette is never
+  flagged.
+- **No colour, rarity, survival or drift data** exists per block.
+
+**The creative-only list and the costs live in three places, synced by hand** (PLAN phase 3, "carried forward"):
+- `SURVIVAL_CREATIVE_ONLY` in `kit/lib/check.mjs` (35 blocks);
+- `creativeOnly` (35) and `costs` (28) in `mod/src/main/resources/data/architect_mc/survival_items.json`, read by
+  `survival/SurvivalItems.java`;
+- `COSTS` in `kit/lib/connectors/bom.mjs`, held equal to `costs` by a test.
+- `itemsOf` (bom.mjs) prices a creative-only block at nothing, so a plan answer's `cost.bom` silently omits it.
+- `equivalents.json` is already generated (`tools/gen-equivalents.mjs`, with `--check`): the pattern VOC follows.
+
+**Bibles and budgets.**
+- Format 2's `restraint` caps accents (`accentShareMax` 0.04-0.20, default 0.12); the checker's `accentShare` counts shell cells
+  without glass, panes, doors, trapdoors and light sources. There is **no rarity member**.
+- `BibleRequest` (1.10.0 shape) has no budget field. Steward asked to keep one (S-VOC-1).
+- The bible validator returns errors only. Stored bibles live in players' worlds, so a new validation **error** would invalidate
+  them.
+
+**Checker rules today.**
+- **Buildings** (`check.mjs` `NEW_RULES`): floating, reachability, enclosure, profile, `paletteFamilies`, `survival` (a warning
+  naming creative-only blocks), parts, massingEntrance, attach, facing; `restraint` warnings when a bible is given.
+- **Regions** (`region/check.mjs` `RULES`): M1-M14, M22-M24, M17, M20, M25. Errors: M1, M13, M14, M20, M25. M20 runs only for
+  lava bodies (H). The report is informational; refusals come from the generators (H's M25:keep at plan time).
+- **The sidecar acts on building warnings.** The design brief says "check: OK is required; fix the warnings too", the polish
+  prompt allows no more warnings of any rule than the base, and critique rounds read `check.json`'s warnings. **A new building
+  warning therefore changes paid design behaviour.** VOC's budget findings are kept out of `warnings` unless the bible opts in
+  (§4.1).
+
+**Plans and Steward's asks.**
+- Catalogue 7: `rule.palette`, `rule.shape`, `rule.variety`, `rule.density`, `rule.height_cap` and `rule.stacked_floors` are
+  reserved `until: RC`; `rule.suspended` until 7b. `rule.palette`'s draft def is `{family, share: [a, b], exempt: [terrain |
+  support]}`, plus `scope`.
+- **Steward's recorded plans** (`kit/test/fixtures/plan/asks/`, steward-mc 8703dbd) hold **7 `rule.palette` parts**:
+  `one_block/copper_only` (required, family `copper`, share [1, 1]), `mage_exiles/shared_stone_base` (family `stone`),
+  `hidden_village/mossy_palette` (family `moss_stone_spruce_oak`), `rival_families/family_colours` (family
+  `family_colours`), `desert_jungle_wall/two_faced_palette`, `row_houses/plain_palette` and `old_new_town/two_styles`
+  (required) in prose only. Steward's ARCHITECT-ASKS counted 8 from an earlier recording; `answer.waits` is the oracle, and it
+  names these 7.
+- Asks that need vocabulary, not rules: copper at every oxidation stage (`one_block`), purpur and end rods (`end_city_ruins`),
+  blackstone and nether brick (`nether_outpost`, `crater_mine`), prismarine, sea lanterns and copper (`underwater_domes`), wool
+  tents in several colours (`nomad_camp`, `war_camp`), family colours and banners (`rival_families`), gold, black, quartz and sea
+  lanterns (`old_new_town`'s art deco), a "beacon-like" lantern tower (`winter_festival`).
+
+**Drift: blocks that change on their own.**
+- `StillOurs.holds` requires the same block (volatile properties aside). So a cell the journal wrote as `copper_block` that
+  later weathers to `exposed_copper` reads "not ours", and an undo keeps it, leaving a remnant. The same holds for
+  `persistent=false` leaves that decay (M18, regions), farmland without water, and coral without water (M19).
+- 26.3's random ticks drive this; nothing in the kit records which blocks random-tick.
+
+**Survival.** Regions are INSTANT only (RS is a draft, unbuilt). Buildings in survival build from the stockpile with C26's
+`bomFull`; a design with a creative-only block is refused `CREATIVE_ONLY_BLOCK` at placement (`Sites`, `Builder`). N-H-1 prices a
+lava source at one lava bucket.
+
+**Gate facts.**
+- `kit/lib/blocks.mjs` and `kit/tools/classify.mjs` are in W's impact paths (`tools/gate-chains.json`), so VOC's slice tier
+  pulls in `w-unit` and `w-ingame`. `w-ingame` fails on main (PLAN "Queued from housekeeping 2": the s1_floating_islands
+  golden); it is a known, pre-existing failure here.
+- A KIT_VERSION bump moves every IR's `kitVersion`. `links_demo` and `links_demo_flat` are still at kit 0.34.0 (PLAN, queued);
+  `crossings_demo_flat` and the H goldens are at 0.35.0.
+- **Not known:** whether 26.3's newest blocks (poplar, cinnabar, sulfur and their kin) need a feature flag in a default world.
+  BlockDump doesn't record required features. The registry step records it (§8, item 2).
+
+### 1. What VOC adds per block (generated)
+
+`kit/tools/gen-vocab.mjs` (new; `node kit/tools/gen-vocab.mjs [--reuse] [--check]`) extends gen-blocks: it runs the same report and
+BlockDump, then reads the jar's built-in data pack (recipes, loot tables, tags) and writes every derived file (§3). `--check`
+exits 1 when any file on disk differs. New fields in `blocks.mjs` (all additive; a block without one has the stated default):
+
+| Field | Meaning | Source |
+|---|---|---|
+| `fam` | **family**: the material a block is cut, shaped, dyed, waxed or weathered from (`copper`, `concrete`, `terracotta`, `glazed_terracotta`, `wool`, `stained_glass`, `cinnabar`, `stone`, `oak`, ...) | generated (§2.1) |
+| `col` | dye colour, one of the 16, or absent | the registry name's dye prefix, checked against the `#wool`, `#terracotta`, `#beds`, `#banners`, `#candles` tags |
+| `t` | **tier**: `common` (absent), `uncommon`, `rare` or `precious` | the cheapest recipe path's raw inputs over the committed raw-tier table (§2.2) |
+| `sv` | **survival class**: `craft`, `drop`, `silk`, `loot`, `cost` (another item, §3) or `none` (creative-only) | recipes, loot tables and the committed overrides (§2.4) |
+| `rt` | random-ticks in its default state (so it may change on its own) | BlockDump: `isRandomlyTicking` |
+| `wx` | the next weathering stage and the waxed form (`{next, waxed}`) | BlockDump: `WeatheringCopper`'s and `HoneycombItem`'s maps |
+| `be` | has a block entity | BlockDump |
+| `ft` | **fitting**: functional, not material (doors, trapdoors, glass and panes, light sources, beds, signs, banners, buttons, plates, rails, redstone parts, plants, flower pots, heads, candles) | the Java family and tags; the same set `accentShare` already excludes, widened |
+| `ff` | the feature flags the block needs (absent: none) | BlockDump: `requiredFeatures` |
+
+- Every field is written by the generator. No row of `blocks.mjs` is edited by hand (the header says so today).
+- `info(name)` returns them; new helpers `familyOf`, `colourOf`, `tierOf`, `survivalOf`, `isFitting`, `drifts` sit beside
+  `isGravity` and `isFlammable` (§13's frozen interface).
+- **Not added:** a role per block. Which roles a block can fill is a rule over these facts (§2.3), not data.
+
+### 2. The committed rule tables (`kit/vocab/`)
+
+The data can't say what is rare, what survival can reach by trade or structure loot, or which role a block suits. Four small
+tables say it. Each row carries a `why`, and the gate holds them complete (§8, item 1).
+
+**2.1 Families (generated, no table).** A family is a connected component over four relations read from the jar:
+- stonecutter recipes (stone, stone bricks, chiseled stone bricks);
+- shape recipes from one input (X to X_stairs, X_slab, X_wall, X_fence; planks to their stairs and slabs; logs to planks and wood);
+- weathering and waxing (copper's chains);
+- the dye colour stripped from the name (`red_concrete` and `blue_concrete` are both `concrete`).
+
+Smelting is excluded, so cobblestone and stone stay apart, as `STONE_FAMILIES` keeps them. A two-input recipe joins its output to
+its material input when the other input is a **modifier** (a moss block or vine for the mossy kin, honeycomb for waxing), listed in `kit/vocab/modifiers.json` with a
+`why`. The hand families still hold members these relations can't
+join: smelted ones (`cracked_*`, `smooth_stone`, `smooth_sandstone`, `smooth_quartz`, `smooth_basalt`) and `gilded_blackstone`,
+which no recipe makes. Those splits are listed, not forced (item 3). A family is named by its
+lexically smallest full-cube member's stem, unless one of the 19 + 13 hand names already covers it (stable names for `stone`,
+`deepslate`, `oak`, ...).
+
+**2.2 Raw-material tiers (`kit/vocab/tiers.json`).** Rows are keyed by item or by tag, about 60:
+- **precious:** diamond, emerald, netherite scrap and ingot, nether star, heart of the sea, dragon egg, echo shard, heavy core;
+- **rare:** gold ingot, amethyst shard, prismarine shard and crystals, shulker shell, ghast tear, blaze rod, ender pearl, crying
+  obsidian, sponge, the End's blocks (`end_stone`, `purpur`, `chorus` family), the deep dark's (the `sculk` family), quartz;
+- **uncommon:** every dye (so every coloured block), obsidian, iron ingot, the Nether's common blocks (netherrack, blackstone,
+  basalt, soul sand and soil, nether bricks, crimson and warped wood, glowstone), mud, packed and blue ice, copper ingot;
+- **common:** everything else: the Overworld's stone, wood, dirt, sand, clay and plain glass. A white-dyed block is uncommon,
+  like any dyed block.
+
+A block's tier is the highest tier among the raw inputs of its cheapest recipe path (fewest raw items, ties by name); a block no
+recipe makes takes its own item's row, else its family's, else its tags'. Waxing (honeycomb) doesn't raise a tier. A beacon is
+precious (a nether star), a sea lantern rare (prismarine crystals), a red concrete uncommon (a dye), a cut copper stair
+uncommon. **The table is a taste call (N-VOC-3).**
+
+**2.3 Role fitness (`kit/vocab/roles.json`).** One predicate per role over the generated facts. It never changes which block a
+generator writes; it only reports.
+
+| Roles | Fit when | Why |
+|---|---|---|
+| `wall`, `wall_alt`, `trim`, `floor`, `frame`, `foundation`, `structure` | a full collision cube, not `g`, not a fitting | a gravity or partial block in a load role falls or leaks light |
+| `roof` | not `g`; stairs and slab variants (palette() already demands them) | |
+| `path` | a floor (`isFloor`), not `g` | W's finding: gravel paths leave gravity blocks over gaps |
+| `light` | `L` > 0 in its default or a lit state | (the bible frame test already catches a dark light) |
+| `glass` | optics `C`, full or pane | |
+| `rail` | thin collision (fence, wall, pane, bars), or height 1.5 | M8's barrier |
+| `rock`, `surface`, `subsurface`, `rubble` | a natural voxel class (ROCK, SOIL, LOOSE, SNOW, ICE) | terrain ops write them |
+| every role | `sv` not `none` | a creative-only role can't build in survival |
+
+K1, T3 and H's slots resolve to roles, so they take their role's predicate. H's own rule (a shell block is `fs` and not `g`) stays
+H's and stays an error.
+
+**2.4 Survival overrides (`kit/vocab/survival.json`).** The generated class is a lower bound: a block whose item no recipe makes and
+no loot table yields is `none`. Overrides correct it, each with a `why` and its evidence:
+- **obtainable by gameplay the data doesn't show:** trades and bartering where they are code, not data; mining a block that
+  only worldgen places (a bell, a dragon egg);
+- **unobtainable although it drops itself:** `player_head`, whose only source is a charged creeper kill of a player; `petrified_oak_slab`.
+
+`creativeOnly` = every block whose final class is `none`. **The bar:** it equals today's 35, plus any 26.3 additions, each listed
+in "as built" with its evidence. A removal from the list needs evidence and Steward's notice: it changes what survival refuses.
+
+**2.5 Fluid interactions (`kit/vocab/hazards.json`).** Vanilla conversions that change a block beside a fluid. Each row is probed
+in game (§8, item 10); a row the probe contradicts is corrected before the rule ships.
+
+| Block | Beside | Becomes | Rule |
+|---|---|---|---|
+| `#concrete_powder` | water (face) | the colour's concrete | M27:convert, building `hazard` |
+| `sponge` | water within 7 (taxicab; assumed, probed) | `wet_sponge`, the water removed | M27:convert, building `hazard` |
+| `magma_block` | water directly above | a downward bubble column | M27:convert |
+| `soul_sand` | water directly above | an upward bubble column | M27:convert |
+| `#fire`, `lava` | a flammable within M20's reach | fire | M20 |
+
+### 3. One source for survival data
+
+`gen-vocab.mjs` writes every copy from the same data, as `gen-equivalents.mjs` does:
+- `kit/lib/vocab/survival.mjs`: `CREATIVE_ONLY` and `COSTS`. `check.mjs` and `connectors/bom.mjs` import them; their literal
+  lists are deleted.
+- `mod/src/main/resources/data/architect_mc/survival_items.json`: `creativeOnly` and `costs`, the shape `SurvivalItems.java`
+  reads today. The mod is unchanged.
+- **The drift test** (`kit/test/vocab.test.mjs`) runs `gen-vocab.mjs --check` against `kit/vocab/edges.json`, committed so CI
+  needs no jar, and fails when any copy differs. **`edges.json` holds only the derived edges** the generator uses, per block:
+  its family links, its tier path's raw items, its survival evidence (`craft`, `drop`, `loot` with one source named). It never
+  holds Mojang's recipes or loot tables themselves (AGENTS: jars are never copied in; N-F2-1 kept vanilla-derived lists out of
+  the repo). Whether even these edges may be committed is N-VOC-7; if not, CI checks the generated files' shape and the full
+  regeneration runs only where a jar is present (the gate's `voc-unit`).
+- `costs` stays curated: the block-to-item special cases (a grass block costs dirt, a water cauldron a cauldron) are rows of
+  `kit/vocab/survival.json`, now in the generated output.
+
+### 4. Rarity budgets
+
+**4.1 The bible member** (format 2, additive; format 3 stays 7c):
+
+```
+rarity?: {
+  uncommonShareMax?: 0..0.5,        // default 0.10 (N-VOC-2)
+  rareShareMax?: 0..0.25,           // default 0.02 (N-VOC-2)
+  preciousMax?: 0..64,              // precious cells per building; default 0 (N-VOC-4)
+  preciousRegionMax?: 0..256,       // precious cells per region; default 0
+  families?: {family: shareMax},    // a per-family cap (old draft's `groups`)
+  colours?: [dye],                  // the colours this style uses; free when absent
+  coloursMax?: 1..16,               // default 3
+  rareFamiliesMax?: 1..8,           // default 2
+  allow?: [block | #tag]            // counted as the style's own (below)
+}
+```
+
+- `validateBible` checks it when present (an error in `rarity` is a bible error: only a bible that opts in can meet it). A
+  format-1 bible, or a format-2 bible without `rarity`, validates exactly as today.
+- **The style's own blocks are exempt from the shares.** The blocks the bible's roles name, its patterns' mats, and `allow` are
+  the theme: a purpur bible's purpur is not "rare" within that bible. Precious cells are counted everywhere, roles included.
+- **Shares** are over a design's non-air cells, or a region's non-terrain written cells (`set` other than `terrain`), fittings
+  included. A precious count is cells.
+
+**4.2 Where the budgets apply, and how.**
+- **Per building:** the design check measures its blueprint against its style bible's `rarity` (the lot's `style`, or the
+  group's bible).
+- **Per region:** the region checker measures each IR against the plan's bible (P0 compiles one bible per check). A per-part
+  budget is RC's `rule.palette {tier, count}` (S-VOC-2).
+- **Opt-in for warnings** (this keeps paid design runs unchanged, §0):
+  - with a bible that carries `rarity`, budget overruns are building **warnings** (`rarity: ...`, `coherence: ...`), which the
+    design agent then fixes, as it fixes `restraint`;
+  - without one, the same numbers are measured at the defaults into `metrics.rarity` (with `over: [...]`) and never put in
+    `warnings`. Steward sees them; the design agent doesn't.
+  - The critique's blueprint summary reads `metrics` (`critique.ts`), so the sidecar leaves `rarity` and `drift` out of it unless
+    the bible opts in. The design agent's own build command (`kit/build.mjs` without `--json`) prints only warnings and errors,
+    never metrics; with `--json` (the sidecar's pristine-kit check) the two members are present and the sidecar drops them the
+    same way before any prompt.
+
+**4.3 `BibleRequest`'s budget field** (S-VOC-1).
+- A trailing `@Nullable JsonObject rarity`, the 1.10.0 constructor kept, and `withRarity(JsonObject)`.
+- The sidecar validates it with the member's schema (bad: refused `FIELD_LIMIT` with the path, before the round trip) and **code
+  copies it** into the made bible's `rarity`. The prompt is unchanged (N-VOC-1).
+- A stub bible (C4) copies it too, so Steward's $0 gates see it.
+
+**4.4 How budgets show.**
+- **Designs:** `metrics.rarity = {cells, uncommon, rare, precious, shares: {uncommon, rare}, preciousBlocks: {block: n}, colours,
+  rareFamilies, over: []}` in the kit's metrics, which the sidecar already passes through (`DesignView` metrics).
+- **Plan answers:** `cost.rarity` of the same shape, per part. It is **present only when the plan's bible carries `rarity`, or
+  the part writes a precious block that isn't the style's own** (§4.1's exemption). Uncommon blocks alone never add it: §2.2
+  makes iron uncommon, so lanterns (palette's default `light`, W's lamp heads), chains (K1's default rope) and V's cauldrons
+  would otherwise move almost every committed answer. So a plan without an opted-in bible or a precious block answers byte for
+  byte as before.
+- **Creative-only in answers:** `cost.creativeOnly: {block: n}`, present only when the part writes one (today `cost.bom` drops
+  them silently). Regions stay INSTANT; this is information for Steward's Supplied cards.
+- **BOMs:** `cost.bom`, `Verdict.bom` and `bomFull` keep their shape and items. A precious block costs its own item (a beacon is
+  one `beacon`), as C26 does.
+
+**4.5 Survival.**
+- Survival placement still refuses a creative-only block with `CREATIVE_ONLY_BLOCK`, now from the generated list (§3).
+- Budgets are not survival rules. A precious block in survival is paid for item by item through the stockpile; the budget keeps
+  it out of designs that didn't ask for it.
+- RS reads `sv` and `t` when it is built. VOC changes nothing in RS's draft.
+
+### 5. Rule checks
+
+**5.1 Buildings** (`check.mjs`; rule names as the existing warnings).
+
+| Rule | Catches | Severity |
+|---|---|---|
+| `rarity` | a tier share over the budget; a family over `families`; precious cells over `preciousMax` | warning with an opted-in bible; else `metrics.rarity.over` |
+| `coherence` | more than `coloursMax` dye colours, a colour outside `colours`, more than `rareFamiliesMax` rare families | as `rarity` |
+| `state` | a `waterlogged=true` cell not under water (it makes a source and floods); half of a two-part block without its pair (a door, a bed, a tall plant: it pops) | **error** |
+| `state:drift` | a block that random-ticks into another block (`rt`): unwaxed copper, farmland, `persistent=false` leaves | `metrics.drift` (count per block), never a warning |
+| `hazard` | a fire source (`fire`, `soul_fire`, `lava`) within M20's reach of a flammable cell of the design; concrete powder face-adjacent to the design's water; a sponge within 7 of it | **error** |
+| `survival` | (unchanged text) a creative-only block | warning, as today, from the generated list |
+
+- **The errors** (`state`, `hazard`) are defects that change the world wrongly at placement. They fail the design round, so a
+  paid design that has one is repaired. The gate shows no committed example or fixture has one (item 5).
+- `paletteFamilies` is **unchanged**: its families stay the hand-kept ones (§6).
+
+**5.2 Regions** (`region/check.mjs`; `RULES` gains `M26` and `M27`).
+
+| Rule | Catches | Severity | Plan answer |
+|---|---|---|---|
+| **M26** rarity | §4's shares, precious counts per region (`preciousRegionMax`), colours and rare families, over non-terrain written cells | warning; **only with a bible that carries `rarity`, or for precious cells** (the shares at their defaults would flag the lanterns and chains of existing plans) | none (`cost.rarity` carries the numbers) |
+| **M27:state** | a written `waterlogged=true` cell that is not inside an H body's cells or natural water (the frozen volume or survey), or a pair half alone | **error** | the writing part `refused VOCAB` |
+| **M27:convert** | a §2.5 block written within its reach of a plan body, a plan wet write's water, or natural water | **error** | the writing part `refused VOCAB` |
+| **M27:role** | a role or slot resolved to a block that fails its §2.3 predicate, used by this IR | warning | none |
+| **M27:drift** | written cells that random-tick into another block (copper, farmland, non-persistent leaves outside M18's reach) | warning | none |
+| **M27:creative** | a written creative-only block | warning | `cost.creativeOnly` |
+| **M20** (widened) | (a) any `fire`, `soul_fire` or lava cell the IR writes, not only lava bodies; (b) **natural** lava (survey LAVA or the volume's lava) within reach of a plan-written flammable | (a) **error**, as H; (b) warning | (a) the writing part `refused FIRE` (H's code); (b) none |
+
+- **Why (b) is a warning:** existing plans may already write a fence near a lava lake, and making it an error would refuse plans
+  that fit today. The gate lists every committed plan it fires on.
+- **`VOCAB`** is appended to `$defs/reason.code` (additive), with `evidence: {rule, block, cells (up to 16), role?, fitRole?}`.
+  `fitRole` names the first role of the slot's chain that passes §2.3. There is no `wouldFit`: the fix is in the bible, and plan/0
+  has no member that re-points one role.
+- **Where they run:** M27 on every IR, M26 as its row says, M20 (b) wherever the survey or a volume has lava. **New in VOC:** the
+  plan compile runs M27's state and convert checks and M20 (a) over each part's emitted cells after step 3 (emit), and turns an
+  error into that part's refusal. H made its M25:keep refusals inside its generators (`place.mjs`), before emit; no slice has run
+  checker rules inside compile before. Its plan-time cost is recorded (item 13).
+
+### 6. Byte identity
+
+A plan or design plans and checks exactly as on v0.37.0 unless it opts into new vocabulary. How:
+- **No generator changes a block choice.** Roles, defaults, chains and patterns resolve as today. New fields are read only by new
+  rules and new cost members.
+- **The hand-kept families and palette() are frozen.** `STONE_FAMILIES` and `WOODS` keep their order and members; generated
+  `fam` sits beside them. A test holds every built-in palette and scenario bible's `palette()` output byte-identical, and
+  compares the two family sets (item 3).
+- **IRs:** identical except `kitVersion` (0.36.0). The goldens re-cut for that alone (cells and tile shas unchanged):
+  `crossings_demo_flat`, the H goldens (`water_demo_flat*`), `links_demo` and `links_demo_flat` (already queued), and any other
+  golden carrying a kitVersion. The ops goldens (P0) re-evaluate unchanged.
+- **Answers:** identical for every part of a plan whose bible has no `rarity` and that writes no precious and no creative-only
+  block. Others gain only `cost.rarity` or `cost.creativeOnly`; the gate lists them by fixture (expected: none).
+- **Building checks:** `errors` and `warnings` identical on every kit example, massing and fixture design. `metrics` gains
+  `rarity` and `drift` only.
+- **Bibles:** every stored and built-in bible validates as before. Role fitness reaches a bible only as a new `warnings` array in
+  `validateBible`'s result, never `errors`.
+- **Steward's 59 recorded plans** answer byte for byte as on v0.37.0. The 7 palette parts stay `unsupported {rule.palette,
+  until: RC}`; the gap table doesn't move.
+- **The catalogue:** `catalogueVersion` 7 and every entry unchanged (no flip, no note). Its header's `api` and `kitVersion` move
+  with the versions, as at every release.
+
+### 7. API, versions and wire shapes
+
+- **Versions:** `VERSION` the next free minor (placeholder 1.35.0), mod 0.38.0, `PLAN_API` and the catalogue's `api` with it
+  (the catalogue's entries and `catalogueVersion` 7 unchanged; its header's `api` and `kitVersion` move). `KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` 0.36.0.
+- **Records:** `BibleRequest` gains trailing `@Nullable JsonObject rarity` (§4.3), old constructors kept. No other record or
+  method changes.
+- **Reason:** no Java `Reason` is added. `VOCAB` is a plan reason code (plan.json), which Steward's parser passes through as an
+  unknown code until it knows it (S-K1-7).
+- **Features:** `vocabulary` and `rarityBudgets`; the sidecar's `bible.rarity`.
+- **Wire shapes (additive):** a bible's `rarity`; design `metrics.rarity` and `metrics.drift`; part answers' `cost.rarity` and
+  `cost.creativeOnly` (present only as §4.4 says); the region report's M26 and M27 findings; `validateBible`'s `warnings`.
+- **DevBridge** (dev only): `dev.vocab.registry` (the live registry dump, §8 item 2), `dev.vocab.tick {cells, n}` (random ticks
+  at named cells: the drift probe) and `dev.vocab.probe {kind}` (the §2.5 rows).
+- **api-compat:** clean against the 0.37.0, 0.36.1 and 0.36.0 apitest jars.
+
+### 8. Gate (slice tier, $0)
+
+**Fixtures.**
+- **Bibles** (`scenarios/bibles/`): `g6cvoc_modern` (white and light-grey concrete, black stained glass, `rarity.colours` [white,
+  light_gray, black], `preciousMax` 1), `g6cvoc_grotto` (amethyst trim, calcite, tuff, `rarity.allow` [amethyst_block, amethyst_cluster], `rareShareMax` 0.06),
+  `g6cvoc_forge` (W's `g6cw_infernal` with `rarity`: blackstone, nether brick, magma accents), and `g6cvoc_copper` (cut copper
+  roof, copper bulbs, unwaxed walls). Each validates; each has a twin without `rarity`.
+- **Designs:** every kit example and massing; four VOC designs (`voc_tower`: concrete and glass; `voc_shrine`: one beacon on an
+  iron base, in `g6cvoc_modern`; `voc_tent`: four wool colours; `voc_copper_hall`) and their broken twins.
+- **Plans:** `valid/v50_voc_village` (a plan/0 flat village styled by `g6cvoc_modern`, its plaza a glazed-terracotta MP
+  pattern, lots bound to `voc_tower` and `voc_copper_hall` entries) and `v51_voc_forge` (a flat village and a fountain in
+  `g6cvoc_forge`), and `v50n` (item 9's natural twin); refusals in `fixtures/plan/voc/`: `r01` VOCAB state (a pattern naming a waterlogged slab in air), `r02` VOCAB
+  convert (a concrete-powder path role beside a moat), `r03` FIRE (a pattern with fire beside planks).
+- **Broken variants:** `_unsafe.waterloggedAir`, `_unsafe.halfDoor`, `_unsafe.powderByMoat`, `_unsafe.spongeByPond`,
+  `_unsafe.fireByPlanks`, `_unsafe.overRare`, `_unsafe.fiveColours`, `_unsafe.diamondFloor`, `_unsafe.gravelPathRole`,
+  `_unsafe.natLavaFence`.
+
+**Evidence:** `artifacts/gate6c-voc/`, driver `tools/gate6cvoc.mjs`. `spend.json` $0.00. Every in-game step is headless (`host:
+server`) except the survival site step (the p3 client) and the look.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Generated data | every one of the 1,286 blocks has `fam`, `t`, `sv` (and `col`, `rt`, `wx`, `be`, `ft`, `ff` where they apply); 0 unclassified; every `tiers.json`, `roles.json`, `survival.json` and `hazards.json` row has a `why`, and every override its evidence; `gen-vocab.mjs --check` clean twice; the same bytes on macOS and Linux |
+| 2 | **The registry step** (`voc-registry`, headless) | `dev.vocab.registry` on the gate's server: every `minecraft:` block's id, property domains, default state, light per state, `isRandomlyTicking`, item, falling class, `fs`, `fl` and required features equal `blocks.mjs`, **0 differences**; blocks of other namespaces (Architect's crate, lab-ui's) listed, not judged; the server's enabled feature set recorded, and every `ff` block's flag enabled in the gate world (else listed); the digests of the server's loaded `minecraft:` tags, recipes and loot tables (the vanilla data pack only; Architect's own
+crate block and any recipe or loot of its own excluded) equal those `gen-vocab.mjs` recorded. **Negative control:** a doctored copy (one property value removed, one `rt` flipped) is reported naming both |
+| 3 | Families | every `STONE_FAMILIES` and `WOODS` family inside one generated family, **or each split listed with its recipe evidence** (smelted members, `gilded_blackstone`); every built-in and scenario bible's `palette()` output byte-identical to v0.37.0 |
+| 4 | One source | the drift test passes; `check.mjs` and `bom.mjs` hold no literal list; `creativeOnly` = the 35 plus the listed additions; in survival (the p3 client, phase 3's step): a design with `bedrock` refused `CREATIVE_ONLY_BLOCK` exactly as before, and one with an added block refused the same way |
+| 5 | Byte identity | §6, every clause: the 59 asks' answers identical; every committed `valid/`, K1, T3 and H fixture re-plans identical but `kitVersion`, except the parts listed for `cost.rarity`/`cost.creativeOnly`; every kit example's check `errors` and `warnings` identical; the catalogue golden's entries and `catalogueVersion` unchanged (its header's `api` and `kitVersion` only); the named goldens re-cut for `kitVersion` only (cells and tile shas equal) |
+| 6 | Rules catch (kit) | each broken variant caught by its rule with its cells; `_unsafe.natLavaFence` a warning; `r01`-`r03` refused with their codes and evidence; M26 on `v50` with `g6cvoc_modern` 0 findings and on its `_unsafe.overRare` twin 1; the opted-in bibles' designs warn, their no-`rarity` twins don't (`metrics.rarity.over` instead) |
+| 7 | Bibles and the request | format-2 bibles with and without `rarity` validate; a bad `rarity` is a bible error naming the path; every built-in bible: 0 errors, role warnings listed; `BibleRequest.rarity` through the **stub** sidecar becomes the bible's `rarity` byte for byte; a malformed one refused `FIELD_LIMIT` before the round trip |
+| 8 | **New vocabulary in game** (`voc-ingame`, headless, flat, exact rules) | `v50` and `v51` through `Regions.checkPlan` (READY) and **`realiseApproved`**, the bible's `rarity` reaching `ctx` through the sidecar: the realised world equals the virtual world over every written cell; M26, M27 and M20 recomputed on the realised world equal the plan's; each part's `cost.bom` equals the items of its realised cells, and `cost.rarity` their counts; `Regions.remove` E-flat 0. The same with the bible made by `BibleRequest` + `rarity` through the stub sidecar (§4.3's path in game) |
+| 9 | Natural (`voc-natural`, headless) | `v50n`, a natural twin (route_demo's hall pad zone on S3's pinned site, as P0's natural round, styled by `g6cvoc_modern` with the glazed-terracotta pattern on its pad and a `voc_copper_hall` entry): realiseApproved then remove under the exact rules: E-normal 0 unclassified, nothing within 6 of a non-common written cell but T3's bridge classes. **Drift probe** (default rules, separate): `dev.vocab.tick` on the copper hall's unwaxed cells until each weathers once; the count is recorded with what an undo would keep (the queued §10 item's evidence) |
+| 10 | Probes (`voc-probe`, headless, default rules) | each `hazards.json` row: concrete powder beside water turns to concrete, a sponge drains water within 7, magma and soul sand under water make their bubble columns, fire spreads to a flammable at M20's reach and not past it. A row the probe contradicts fails the item until the table is corrected |
+| 11 | Survival site (p3 client) | `voc_shrine` and `voc_copper_hall`: `bomFull` lists `beacon` and the copper items; fed exactly (hoppers, no equivalents) each builds identical to an instant placement; deconstructed under the exact rules, the refund equals the items of the blocks standing |
+| 12 | Determinism | 3 checks of each fixture identical (answers, artifact shas); `gen-vocab.mjs` twice identical |
+| 13 | Timing (recorded) | `gen-vocab.mjs` wall time; M26/M27 time on mega_bench A; the compile-time M27/M20 pass per plan on the `valid/` set |
+| 14 | API, spend | api-compat clean; apijars; $0.00 |
+| 15 | Look (camera, client; recorded) | the four VOC bibles on `v50`'s village and the four designs: Noah's call (N-VOC-5) |
+
+**Every new path, realised in game before any RC** (the H RC lesson):
+
+| Path | Step |
+|---|---|
+| A bible's `rarity` from bible.json through the sidecar into the plan's `ctx` | item 8 (`v50`) |
+| `BibleRequest.rarity` through the stub sidecar into a bible, then a plan | item 8 |
+| A part's `cost.rarity` and `cost.creativeOnly` in an approved artifact | item 8 |
+| New vocabulary (concrete, glazed terracotta, copper, wool colours, a beacon) realised and removed | items 8, 9, 11 |
+| The generated creative-only list read by survival placement | item 4 |
+| A VOCAB or widened-FIRE refusal reaching an answer | item 6 (plan only: a refused part writes nothing) |
+
+No new artifact member is read by Java, so no new guard reader is needed (the `guardDiff` lesson doesn't apply).
+
+**Tier:** slice: the units, apijars and api-compat; the impact map's steps for `kit/lib/blocks.mjs` and `classify.mjs` (W's
+`w-unit`, `w-ingame`: known failing on main), `survival/**` (4d-all), the phase 3 survival step; VOC's own `voc-unit`,
+`voc-registry`, `voc-ingame`, `voc-natural`, `voc-probe`, `voc-survival` and `6cvoc-look`. The gate-verifier reviews the diff and
+the evidence and **re-runs items 4 and 11** (survival accounting, GATES policy 3). **No Steward RC check before release**
+(policy 4): VOC changes no removal, stop or accounting behaviour. If item 4 adds blocks to `creativeOnly`, Steward is told
+before release, since survival then refuses them.
+
+### 9. Steward's recorded parts (predicted, not run)
+
+| Plan / part | v0.37.0 | VOC | Why |
+|---|---|---|---|
+| the 7 `rule.palette` parts | `unsupported {rule.palette, until: RC}` | unchanged | rules stay RC's (S-VOC-2) |
+| every other part | as recorded | unchanged | no generator changes a block choice (§6) |
+
+The builder also records, for RC, each palette part's family resolved against VOC's families (`copper` and `stone` resolve;
+`moss_stone_spruce_oak` and `family_colours` don't, and the prose-only four have none) in `fixtures/plan/voc/asks-families.txt`.
+
+### 10. Queued, not built here
+
+- **Weathering in the journal and the site refund.** Undo keeps a cell that weathered (copper), decayed, or dried, because
+  `StillOurs.holds` needs the same block. The fix is a generated equivalence (the `wx` chain) in `StillOurs` and in the site
+  removal's "still there" test. It changes removal and survival accounting, so it is its own slice with verifier re-runs and
+  Steward's RC check. Item 9's probe records how many cells it would keep.
+- **`palette()` over generated families** (cinnabar or concrete as a palette's stone, its trim from the generated family). It moves
+  every palette that uses them, so it needs a re-skin decision.
+- **A vocabulary call for Steward** (families, tiers, colours), if S-VOC-6 asks for one.
+
+### 11. Build order, the split and the shared interface
+
+1. **VOC-a, the vocabulary (one owner):**
+   - archive the previous apitest jar;
+   - BlockDump additions (`rt`, `wx`, `be`, `ff`) and the data-pack scan (recipes, loot tables);
+   - `gen-vocab.mjs`, the four tables and `modifiers.json`, the generated fields and helpers, `kit/vocab/edges.json`;
+   - the one source (§3) and its drift test;
+   - `dev.vocab.registry`, `dev.vocab.probe`, `dev.vocab.tick`;
+   - gate items 1-5 and 10.
+2. **VOC-b, budgets and rules:**
+   - bible `rarity` (bible.mjs, the sidecar, `kit/tools/region.mjs`, `ctx`), `BibleRequest.rarity`;
+   - `metrics.rarity` and `drift`, the building rules, M26, M27, M20 widened, `VOCAB`, `cost.rarity` and `cost.creativeOnly`;
+   - the fixture bibles, designs and plans; gate items 6-9, 11 and 15.
+3. **Shared:** items 12-14, the asks table, and one batch test: `v50` READY with its answers' `cost.rarity` equal to M26's numbers.
+
+**The shared interface** (frozen at the end of VOC-a's first round, before VOC-b starts):
+- the field names and value sets of §1 (`fam`, `col`, `t`, `sv`, `rt`, `wx`, `be`, `ft`, `ff`);
+- the helpers' signatures (`familyOf`, `colourOf`, `tierOf`, `survivalOf`, `isFitting`, `drifts`) and `kit/lib/vocab/survival.mjs`'s
+  exports;
+- the shapes of `roles.json` and `hazards.json`;
+- the `rarity` member's schema and its defaults;
+- the gate driver's step names.
+
+VOC-b can start against a stub vocab (every block `common`, `sv: craft`) and switch when the interface freezes.
+
+**Size:**
+- **VOC-a:** about 1.5 days. The data scan, the tables and the registry step are the work; the only Java is DevBridge and
+  versions.
+- **VOC-b:** about 1.5 days. It is kit and sidecar work, plus one record field.
+- **Recommendation:** VOC-a's first round, then VOC-b in parallel against the frozen interface, released as one batch (as K1, T3
+  and H). About 2.5 days elapsed in parallel, 3 serial. With HY in the same batch, VOC adds no removal behaviour, so it doesn't
+  widen HY's RC check.
+- **If S-VOC-2 pulls `rule.palette` forward,** it becomes VOC-c (about 1 day): catalogue 8 (archive 7 as `catalogue-h.json` and
+  re-point the T3-to-H diff check), the strict def, measured answers, lots measured from bound entries, and a `realiseApproved`
+  refusal for a required rule a bound entry breaks. That touches `realiseApproved` in Java, so VOC-c takes Steward's RC check
+  (GATES policy 4) and should follow VOC-a and VOC-b rather than delay them.
+
+### Binding answers carried over (from the batch review of the old draft, 2026-10-11)
+
+- **N-VOC-2 (Noah):** the drafted default budgets are accepted: rare blocks at most 2% of a design's cells, uncommon (coloured)
+  blocks at most 10%. They are §4.1's defaults. **Refined here, for Steward to confirm (S-VOC-3):** the style's own blocks are
+  exempt from the shares, and a precious tier with a count cap is added.
+- **S-VOC-1 (Steward):** default budgets are enough for now. **Keep the budget field on the bible request**; Steward passes
+  budgets when a card's style asks for a rare palette. Built as §4.3.
+- **The batch's scope decision:** M26 (region rarity) is accepted as a new rule beyond SETTLEMENTS §11. M27 is new in this draft
+  (S-VOC-4).
+- **Spend:** $0, as the batch decided. N-VOC-1's paid check comes back as its own decision when it's needed.
+- **N-VOC-1 was never answered.** It stays open with its default (the bible job's prompt unchanged; budgets from code and the
+  request).
+- **Constraints from earlier slices that VOC keeps:** S-K1-3 (lenient params, unread keys listed), S-K1-7 (unknown reason codes
+  pass through), N-H-1 (a lava source costs a lava bucket), P0's "a shipped op's semantics never change".
+
+### Open questions for Steward
+
+- **S-VOC-2. Rules stay RC's.** VOC builds the selectors and families that RC's `rule.palette` will measure with, but leaves
+  every `rule.*` reserved, so your 7 palette parts keep answering `unsupported {rule.palette, until: RC}`. Pulling it forward is
+  VOC-c (§11): measured answers, lots measured from bound entries, and `realiseApproved` refusing a required rule that a bound
+  entry breaks (with your RC check). Your ARCHITECT-ASKS ranks `rule.palette` third most wanted. Do you want VOC-c in this
+  batch, or RC as planned?
+- **S-VOC-3. What a budget counts.** The blocks a bible's roles, patterns and `allow` name are the style's own and exempt from
+  the shares, so a purpur or blackstone bible doesn't fail its own budget. Precious blocks are counted everywhere, by cells, with
+  a default cap of 0 unless the bible or request allows some. Does that match how your cards will ask ("a sculk temple")?
+- **S-VOC-4. The new findings.** M26 and M27 are region checker findings; only M27's state and convert errors and M20's
+  plan-written fire refuse a part (`VOCAB`, `FIRE`), and none is predicted to fire on your recorded plans (§9 is predicted, not run). Building budget warnings appear
+  only with a bible that carries `rarity`; otherwise they're in `metrics.rarity.over`. Is that the split you want shown on cards?
+- **S-VOC-5. The budget field.** `BibleRequest` gains `@Nullable JsonObject rarity`, copied into the bible by code (no prompt
+  change), with the member's schema and defaults (§4.1). Is a JSON object right, or do you want a typed record?
+- **S-VOC-6. New shapes.** `cost.rarity` and `cost.creativeOnly` on part answers (present only when non-empty or opted in),
+  `metrics.rarity` and `metrics.drift` on designs, the plan code `VOCAB`, and `validateBible`'s `warnings`. Enough for your card
+  and history? Do you need a call that lists families, tiers and colours for your plan writer before RC?
+
+### Open questions for Noah
+
+- **N-VOC-3. What counts as rare.** Proposed: §2.2's table. Precious: diamond, emerald, netherite, nether star, heart of the sea,
+  dragon egg, echo shard, heavy core. Rare: gold, amethyst, prismarine, shulker, the End's and the deep dark's blocks, crying
+  obsidian, quartz, sponge. Uncommon: every dyed block, obsidian, iron, the Nether's common blocks, copper. Everything else
+  common.
+- **N-VOC-4. Precious blocks by default.** Proposed: none unless the bible or Steward's request allows them (`preciousMax` 0).
+  The alternative is a small allowance per building (say 2), so a landmark can have a beacon without asking.
+- **N-VOC-5. The look.** Proposed: the four VOC bibles (a white-concrete modern, an amethyst grotto, a Nether forge, a copper
+  hall) on one village and four buildings, in the look step. Your call there, as N-H-2 was.
+- **N-VOC-6. The design agent's docs.** Proposed: add a short section to `kit/README.md` explaining the new errors (`state`,
+  `hazard`) and the opt-in budget warnings, without encouraging rare blocks. The alternative is no doc change until a paid
+  check (N-VOC-1's concern).
+- **N-VOC-7. Vanilla-derived data in the repo.** Proposed: commit `kit/vocab/edges.json`, the derived per-block edges (family
+  links, a tier's raw items, one survival source), so CI checks the generated files without a jar, as `blocks.mjs` already
+  carries per-block facts and tags. Never Mojang's recipes or loot tables themselves. The alternative (as N-F2-1 chose for
+  stamps) is no committed edges: CI checks shape only, and the full regeneration runs where a jar is present.
+- **N-VOC-8. The split.** Proposed: VOC-a's first round, then VOC-b in parallel, one batch. The alternative is serial, about
+  half a day longer.
+
+### Coordinator decisions (2026-10-19, on Noah's behalf; Noah can overrule at the look step)
+
+- **N-VOC-1:** the bible job's prompt is unchanged (the default). `rarity` reaches the bible by code (S-VOC-1).
+- **N-VOC-3, tiers:** the proposed table as drafted (precious, rare, uncommon), every row with its `why`.
+- **N-VOC-4:** no precious blocks unless a bible or design allows them (cap 0 by default).
+- **N-VOC-5, the look:** four VOC bibles on one village and four buildings, judged at the look step.
+- **N-VOC-6:** a short `kit/README.md` note for the design agent on the new errors and the opt-in warnings.
+- **N-VOC-7:** commit only the derived per-block edges (`kit/vocab/edges.json`), never Mojang's recipes or loot tables.
+- **N-VOC-8:** VOC-a's first round freezes the shared interface; VOC-b then runs in parallel; one batched release. VOC-c only if
+  Steward wants it (S-VOC-2), after VOC-a and VOC-b.
+
+### Deferred
+
+- Every `rule.*` kind (RC), unless S-VOC-2 pulls `rule.palette` forward as VOC-c.
+- Weathering and drift in undo and refunds; `palette()` over generated families (§10).
+- Teaching the bible job to choose budgets (N-VOC-1, a paid check).
+- Block entity contents (banner patterns, sign text, pot sherds) as vocabulary.
+- Bible format 3's `settlement.roleShares` (7c). Palette suggestions from a chest (phase 3's optional item).
