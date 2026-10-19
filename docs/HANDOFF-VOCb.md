@@ -57,5 +57,6 @@ and the coordinator decisions win). Placeholders: API 1.35.0, mod 0.38.0, kit 0.
 
 ## Left
 
-- [ ] re-run voc-ingame, voc-natural, voc-survival, 6cvoc-look on the fixed driver; the look's gallery (artifact)
+- [x] the look's gallery: https://claude.ai/artifact/1LivzSh3AWrvQwEKemei5j (run `artifacts/gate-runs-VOCb2/20261019-215638-slice`, 6cvoc-look PASS 17/0)
+- [ ] re-run voc-ingame, voc-natural, voc-survival on the fixed driver (run 2, in progress)
 - [ ] slice gate run (3 shards, ~2h20m), the verifier, "VOC-b as built" (draft ready), retire this file, push
