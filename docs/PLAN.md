@@ -681,7 +681,7 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 
 ## Queued from the H RCs (coordinator, 2026-10-19)
 
-- **No in-game step realises an approved plan with a farm pond.** Two farm-pond bugs (lots typed `farm` without `villager`,
+- **Done (housekeeping 3):** ha-ingame's new item `ha-farm` (tools/lib/gate6ch-a.mjs) runs v49 and Steward's hamlet (now `kit/test/fixtures/plan/h/farm_hamlet.json`, read by h-batch.test.mjs too) through Regions.checkPlan and realiseApproved on fresh flat worlds at exact rules: PLACED after the bodies settle, each farm pond's census equal to its prediction, M25/M20/M17 0, Regions.remove E-flat 0 (`artifacts/gate-runs-hk3/20261019-200831-change`: v49 2 ponds, 351 written, 433 restored; hamlet 1 pond, 281 written, 369 restored). The other body kinds already went through realiseApproved with an exact undo: pond, pool, lava pit, fountain, waterfall and moat in ha-exact (water_demo, E-flat 0), quay, wet-pier beam and harbour wall in hb-flat (h-ingame). ~~**No in-game step realises an approved plan with a farm pond.**~~ Two farm-pond bugs (lots typed `farm` without `villager`,
   nested guard runs) reached Steward's RC check because our steps only checked such plans. Add a `realiseApproved` round
   for v49 and Steward's hamlet (type-implied farm lot) to ha-ingame, and generally: every H body kind should go through
   realiseApproved at least once in game.

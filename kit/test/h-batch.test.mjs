@@ -111,8 +111,8 @@ test('a quay with no bank, in a second plan holding another part\'s fluid volume
 // Steward's RC check (0.37.0-rc1): its farm hamlet (a template zone with farmPond: true and lots whose villager use is implied by
 // their type, not given) placed no pond and said nothing. The farm lot is found by its implied villager use now, and a zone that
 // asks for a farm pond with no farm lot says so in its answer.
-const HAMLET = { schemaVersion: 'plan/0', planId: 'farm_hamlet', zones: [{ id: 'town', kind: 'standard', required: true, farmPond: true,
-  program: { template: 'flat_village', params: { lots: [{ id: 'farm_1', type: 'farm', role: 'farm', size: [13, 14] }, { id: 'cottage_1', type: 'cottage', role: 'cottage', size: [13, 14] }] } } }] };
+// (fixtures/plan/h/farm_hamlet.json: shared with ha-ingame's in-game round, tools/lib/gate6ch-a.mjs ha-farm)
+const HAMLET = JSON.parse(fs.readFileSync(path.join(FIX, 'h', 'farm_hamlet.json'), 'utf8')).plan;
 
 test('Steward\'s farm hamlet: a farm lot whose villager use is implied by its type gets its farm pond', async () => {
   const s = flatSurvey();
