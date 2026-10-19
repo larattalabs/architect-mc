@@ -175,7 +175,13 @@ export async function realiseFixture(ctx, tag, fx, o = {}) {
   const r = await core.realiseApproved(ctx, sha);
   if (r.refused) { check(false, `item 9 (${tag}): realiseApproved refused (${json(r.refused)})`); await L.leaveWorld(); return out; }
   const fl = r.fluids;
-  out.realise = { region: r.region, state: r.view.state, rows: fl.map((x) => [x.part, x.body, x.state, x.reason ?? null]) };
+  out.realise = { region: r.region, state: r.view.state, rows: fl.map((x) => [x.part, x.body, x.state, x.reason ?? null]), at: fl.filter((x) => x.state !== 'settled').map((x) => ({ body: x.body, at: x.at, ...x })), fstate: r.fstate };
+  // (a body drained in game: its prediction around the cells it names, for the record)
+  for (const x of fl.filter((q) => q.state !== 'settled' && Array.isArray(q.at))) {
+    const b = r.bodies.find((q) => q.id === x.body);
+    const near = (c) => x.at.some((a) => Math.max(Math.abs(a[0] - c[0]), Math.abs(a[1] - c[1]), Math.abs(a[2] - c[2])) <= 2);
+    ctx.log(`  ${x.body} drained (${x.reason}): at ${json(x.at)}; predicted near ${json((b?.predicted ?? []).filter(near))}; lining near ${json((b?.lining ?? []).filter(near))}`);
+  }
   check(r.view.state === 'PLACED' && fl.length === r.bodies.length && fl.every((x) => x.state === 'settled'), `item 9 (${tag}): realised from the approved artifact, PLACED with every body settled, one row per body (${r.view.state}; ${json(out.realise.rows)})`);
   const cs = {};
   for (const b of r.bodies) { const c = await core.censusOf(ctx, b, before, r.bodies); cs[b.id] = { ok: c.ok, sources: c.sources, flowing: c.flowing, mismatch: c.mismatch, outside: c.outside, ticks: c.ticks }; }
