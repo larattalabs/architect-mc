@@ -14,7 +14,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { blueprintSummary, CRITIC_SYSTEM, criticPrompt, dimsFor, readVerdict, revisionPrompt, SLICES_MAX_CHARS, simVerdict, verdictSchema, type CriticContext } from './critic.js';
+import { bibleOptsIn, blueprintSummary, CRITIC_SYSTEM, promptMetrics, criticPrompt, dimsFor, readVerdict, revisionPrompt, SLICES_MAX_CHARS, simVerdict, verdictSchema, type CriticContext } from './critic.js';
 import { copyPartsAlong, isFinalDesign, KIT, refreshKit, runNode, type CheckResult, type Sidecar as SidecarJson } from './designs.js';
 import { addCost, zeroCost } from './jobs/cost.js';
 import { criticHash } from './critichash.js';
@@ -263,7 +263,7 @@ export class Critiques {
     const src = path.join(r.scratch, KIT, 'designs', `${r.bp}.mjs`);
     if (fs.existsSync(src)) fs.copyFileSync(src, path.join(dir, `${r.bp}.mjs`));
     for (const p of r.previews) fs.copyFileSync(p, path.join(dir, 'previews', path.basename(p)));
-    fs.writeFileSync(path.join(dir, 'check.json'), JSON.stringify({ warnings: r.res.warnings, metrics: r.res.metrics ?? null, conformance: r.res.conformance ?? null }, null, 2));
+    fs.writeFileSync(path.join(dir, 'check.json'), JSON.stringify({ warnings: r.res.warnings, metrics: promptMetrics(r.res.metrics ?? null, bibleOptsIn(r.scratch)), conformance: r.res.conformance ?? null }, null, 2));
     rounds.push({ n, verdict: null, overall: null, scores: {}, issues: [], resolved: [], ship: false, cost: round2(cost), ms, kept: true });
     rounds.sort((a, b) => a.n - b.n);
     delete cw.reviseStart;
@@ -699,7 +699,7 @@ export class Critiques {
     if (!r.stdout.trim() && args.includes('--restraint')) r = await runNode(path.join(scratch, KIT, 'check.mjs'), [nbt, json, '--json'], scratch, 120_000);
     const line = r.stdout.trim().split('\n').reverse().find((l) => l.startsWith('{'));
     const parsed = line ? (readJsonText(line) as { warnings?: string[]; metrics?: unknown; conformance?: unknown } | undefined) : undefined;
-    fs.writeFileSync(path.join(round, 'check.json'), JSON.stringify({ warnings: parsed?.warnings ?? [], metrics: parsed?.metrics ?? null, conformance: null }, null, 2));
+    fs.writeFileSync(path.join(round, 'check.json'), JSON.stringify({ warnings: parsed?.warnings ?? [], metrics: promptMetrics((parsed?.metrics ?? null) as Record<string, unknown> | null, bibleOptsIn(scratch)), conformance: null }, null, 2));
     const w = ((sc.store.data.work ??= {})[id] ??= { bp: entryId, round: 0 });
     const cw: CritiqueWork = { spec, pending: 'critic', round: 0, revisions: 0, startedAt: sc.now(), round0: zeroCost(), critic: zeroCost(), criticFailures: 0, reviseTurns: 0, bp: entryId, baseId: entryId, entry: entryId };
     w.critique = cw;

@@ -203,6 +203,8 @@ export class BibleIndex {
       restraint: restraintOf(j),
       ...(this.archived(id) ? { archived: true } : {}),
       ...(j.critique && typeof j.critique === 'object' ? { critique: j.critique } : {}),
+      // (6c VOC) the rarity budget as stored
+      ...(j.rarity && typeof j.rarity === 'object' && !Array.isArray(j.rarity) ? { rarity: j.rarity as Record<string, unknown> } : {}),
     };
     const r = BibleInfoSchema.safeParse(info);
     return r.success ? r.data : undefined;
@@ -535,7 +537,7 @@ export class Bibles {
     if (!vs.length) throw new ClientError(this.sc.bibleIndex.isBuiltin(id) ? `${id} is a built-in bible: request a new bible with seedPreset "${id}" instead` : `no bible "${id}"`);
     if (this.active().some((j) => j.bibleId === id)) throw new ClientError(`bible ${id} is being made or revised already`);
     const info = this.sc.bibleIndex.get(id)!;
-    const req: BibleJob['request'] = { prompt: info.prompt ?? info.name, name: info.name, notes, ...(model ? { model } : {}), ...(budgetUsd !== undefined ? { budgetUsd } : {}), ...(info.owner ? { owner: info.owner } : {}), ...(info.scope === 'settlement' ? { scope: 'settlement' as const } : {}), ...(critique ? { critique } : {}) };
+    const req: BibleJob['request'] = { prompt: info.prompt ?? info.name, name: info.name, notes, ...(model ? { model } : {}), ...(budgetUsd !== undefined ? { budgetUsd } : {}), ...(info.owner ? { owner: info.owner } : {}), ...(info.scope === 'settlement' ? { scope: 'settlement' as const } : {}), ...(critique ? { critique } : {}), ...(info.rarity ? { rarity: structuredClone(info.rarity) } : {}) };
     const j = this.create('revise', id, vs[vs.length - 1]! + 1, req);
     this.sc.log.info(`bible job ${j.id}: revise ${id} -> v${j.version}`);
     return j;
@@ -744,6 +746,8 @@ export class Bibles {
           ...(j.request.owner ? { owner: j.request.owner } : {}),
           ...(j.request.ext ? { ext: j.request.ext } : {}),
           ...(j.request.seedPreset ? { seedPreset: j.request.seedPreset } : {}),
+          // (6c VOC, S-VOC-1, N-VOC-1) the request's rarity budget, copied by code (the prompt never sees it; the sim's bible job too)
+          ...(j.request.rarity ? { rarity: structuredClone(j.request.rarity) } : {}),
           createdAt: this.sc.now(),
         };
         w.prose = r.prose;

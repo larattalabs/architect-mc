@@ -808,6 +808,12 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     else if (p.verdict === 'unsupported') ans(p, { class: 'unsupported', reasons: [{ code: 'UNSUPPORTED', message: p.reason.message, block: p.block, until: p.reason.until ?? undefined, path: p.reason.path }].map(clean) });
   }
   const byId = V.byId;
+  // (6c VOC, §5.2) the compile pass's refusals (the second plan): a part whose emitted cells broke M27:state, M27:convert or M20 (a) on
+  // the first plan is refused before it resolves, so it writes nothing (kit/lib/region/plan.mjs)
+  for (const [id, why] of Object.entries(ctx.vocabRefuse ?? {}).sort(([a], [b]) => (a < b ? -1 : 1))) {
+    const p = byId.get(id);
+    if (p && !answers.has(id)) ans(p, { class: 'refused', reasons: [why] });
+  }
   const order = V.order.map((id) => byId.get(id));
   const zonesAccepted = []; // {id, rect}
   const formsAccepted = []; // footprint rects of the forms placed so far

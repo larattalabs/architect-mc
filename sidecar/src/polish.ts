@@ -21,7 +21,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { blueprintSummary, CRITIC_SYSTEM, criticPrompt, dimsFor, readVerdict, SLICES_MAX_CHARS, verdictSchema, type CriticContext } from './critic.js';
+import { bibleOptsIn, blueprintSummary, CRITIC_SYSTEM, promptMetrics, criticPrompt, dimsFor, readVerdict, SLICES_MAX_CHARS, verdictSchema, type CriticContext } from './critic.js';
 import { criticHash } from './critichash.js';
 import { checkDesign, isFinalDesign, KIT, refreshKit, renderPreviews, runNode, type CheckResult } from './designs.js';
 import { ClientError } from './errors.js';
@@ -516,7 +516,7 @@ export class Polishes {
     const r = await runNode(path.join(this.sc.config.kitDir, 'check.mjs'), args, scratch, 120_000);
     const j = lastJsonLine(r.stdout) as { warnings?: string[]; metrics?: Record<string, unknown> } | undefined;
     const out = { warnings: j?.warnings ?? [], ...(j?.metrics ? { metrics: j.metrics } : {}) };
-    fs.writeFileSync(path.join(dir, 'check.json'), JSON.stringify({ warnings: out.warnings, metrics: out.metrics ?? null }, null, 2));
+    fs.writeFileSync(path.join(dir, 'check.json'), JSON.stringify({ warnings: out.warnings, metrics: promptMetrics(out.metrics ?? null, bibleOptsIn(scratch)) }, null, 2));
     return out;
   }
 
@@ -932,7 +932,7 @@ export class Polishes {
     const restraint = fs.existsSync(path.join(scratch, 'bible', 'bible.json')) ? ['--restraint', path.join('bible', 'bible.json')] : [];
     const res: CheckResult = await checkDesign(sc.config.kitDir, scratch, w.bp, { ...(type ? { type } : {}), ...(profAt >= 0 ? { profile: args[profAt + 1]!.split(',') } : {}) }, 120_000, [...extra, ...restraint]);
     if (!res.ok) return { kind: 'check_failed', text: `${res.problem ?? 'the check failed'}${turnError ? ` (the turn ended: ${truncate(turnError, 120)})` : ''}` };
-    fs.writeFileSync(path.join(scratch, 'check', 'check.json'), JSON.stringify({ warnings: res.warnings, metrics: res.metrics ?? null }, null, 2));
+    fs.writeFileSync(path.join(scratch, 'check', 'check.json'), JSON.stringify({ warnings: res.warnings, metrics: promptMetrics(res.metrics ?? null, bibleOptsIn(scratch)) }, null, 2));
     const byRule = warningsByRule(res.warnings);
     const worse = Object.entries(byRule).filter(([k, n]) => n > (base.warnings[k] ?? 0));
     const parts = res.sidecar?.parts && typeof res.sidecar.parts === 'object' ? Object.keys(res.sidecar.parts as object) : [];

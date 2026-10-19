@@ -20,7 +20,7 @@ import type { JobDriver } from './jobs/driver.js';
 import { JobRunner } from './jobs/runner.js';
 import { SimJobDriver } from './jobs/sim.js';
 import { Pool } from './pool.js';
-import { FEATURES, KitPalettes, type BibleRef, type ImportSchem, type ClientMessage, type Cost, type PaletteInfo, type Design, type DesignRequest, type Group, type Massing, type Outbound, type PaletteSpec, type ParamValues, type Protocol, type Status, type Variant, type GroupItem } from './protocol.js';
+import { FEATURES, KitPalettes, type BibleRef, type BibleRequest, type ImportSchem, type ClientMessage, type Cost, type PaletteInfo, type Design, type DesignRequest, type Group, type Massing, type Outbound, type PaletteSpec, type ParamValues, type Protocol, type Status, type Variant, type GroupItem } from './protocol.js';
 import { DesignScheduler, designKey } from './scheduler.js';
 import { addCost } from './jobs/cost.js';
 import { readSecrets, updateSecrets, type Secrets } from './secrets.js';
@@ -76,6 +76,7 @@ const DURABLE_COMMANDS: ReadonlySet<ClientMessage['type']> = new Set<ClientMessa
 export { ClientError, RefusedError } from './errors.js';
 import { ClientError, RefusedError } from './errors.js';
 import { checkSystemRefs } from './jobs/systemrefs.js';
+import { checkRarity } from './rarity.js';
 import { frameProblem, prepareVersionOf, writeVersionContext } from './versionof.js';
 
 /**
@@ -539,22 +540,16 @@ export class Sidecar {
         if (msg.group) this.bibleIndex.resolve(msg.group.bible);
         return this.simLabel({ ...(msg.group ? this.estimates.group(msg.group, this.estimateCtx()) : this.estimates.design(msg.request!, this.estimateCtx())) });
       case 'bible.request': {
-        const key = msg.request.opKey;
-        const prior = key ? this.opKeys.check('bible', msg.request.owner, key, msg.request as Record<string, unknown>) : undefined;
-        const pj = prior ? this.bibles.get(prior) : undefined;
-        if (pj) {
-          this.log.info(`bible job ${pj.id}: adopted by opKey ${key} (${pj.status})`);
-          return { jobId: pj.id, bibleId: pj.bibleId, version: pj.version, adopted: true };
-        }
-        const j = this.bibles.request(msg.request);
-        if (key) this.opKeys.record('bible', msg.request.owner, key, msg.request as Record<string, unknown>, j.id);
-        return { jobId: j.id, bibleId: j.bibleId, version: j.version, adopted: false };
+        // (6c VOC) a malformed rarity budget is refused FIELD_LIMIT before any job (rarity.ts)
+        if (msg.request.rarity !== undefined) return checkRarity(this.config.kitDir, msg.request.rarity).then(() => this.bibleRequest(msg.request));
+        return this.bibleRequest(msg.request);
       }
       case 'bible.revise': {
         const j = this.bibles.revise(msg.id, msg.notes, msg.model, msg.budgetUsd, msg.critique);
         return { jobId: j.id, bibleId: j.bibleId, version: j.version };
       }
       case 'bible.estimate':
+        if (msg.request?.rarity !== undefined) return checkRarity(this.config.kitDir, msg.request.rarity).then(() => this.simLabel({ ...this.estimates.bible(msg.request ?? {}, this.estimateCtx()) }));
         return this.simLabel({ ...this.estimates.bible(msg.request ?? {}, this.estimateCtx()) });
       case 'bible.cancel': {
         // (6c 0a) the ack carries the job, cancelled (Bibles.cancelJob)
@@ -938,6 +933,20 @@ export class Sidecar {
       ...(r.fromMassing ? { fromMassing: { id: r.fromMassing, version: r.massingVersion ?? 1 } } : {}),
       ...(this.critiques.entrySummary(d) ? { critique: this.critiques.entrySummary(d) } : {}),
     };
+  }
+
+  /** bible.request (after its rarity check): an opKey's earlier job, else a new job. */
+  private bibleRequest(req: BibleRequest): { jobId: string; bibleId: string; version: number; adopted: boolean } {
+    const key = req.opKey;
+    const prior = key ? this.opKeys.check('bible', req.owner, key, req as Record<string, unknown>) : undefined;
+    const pj = prior ? this.bibles.get(prior) : undefined;
+    if (pj) {
+      this.log.info(`bible job ${pj.id}: adopted by opKey ${key} (${pj.status})`);
+      return { jobId: pj.id, bibleId: pj.bibleId, version: pj.version, adopted: true };
+    }
+    const j = this.bibles.request(req);
+    if (key) this.opKeys.record('bible', req.owner, key, req as Record<string, unknown>, j.id);
+    return { jobId: j.id, bibleId: j.bibleId, version: j.version, adopted: false };
   }
 
   // ---- (4c) the check and the install every designer shares -------------------------------------

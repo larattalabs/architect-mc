@@ -307,6 +307,9 @@ export function opBounds(op, blobs, bytesOf = null) {
  * @param {object} [o.patterns] (6c MP) the bible's role patterns {role: pattern} (lib/pattern.mjs; mats are roles or block states)
  * @param {object} [o.connectors] (7a K1) the bible's connectors member {wall?, gate?, rope_bridge?} (role names; lib/connectors/style.mjs)
  * @param {object} [o.fluids] (6c H) the bible's fluids member {bed?, rim?, coping?, spout?, quay?, mooring?} (role names; lib/fluids/place.mjs)
+ * @param {object} [o.rarity] (6c VOC) the bible's rarity member (lib/vocab/rarity.mjs): ctx.rarity (its defaults filled in) and the plan
+ *   meta's `vocab` (the style's own blocks, the resolved roles; the region checker's M26 and M27 read it)
+ * @param {object} [o.vocabRefuse] (6c VOC) plan parts refused before they emit ({part: reason}): the compile pass's second plan
  * @param {string} [o.kitVersion] / [o.node] recorded in the IR (defaults: KIT_VERSION, this Node's major)
  * @returns {Promise<{ir, irJson, irSha, notes: string[], stats}>}
  */
@@ -330,6 +333,7 @@ export async function planRegion(o) {
   const raw = asColumns(o.survey);
   const { columns: survey, missing } = fillMissing(raw);
   let roles;
+  let vocabStyle = null;
   const notes = [];
   if (missing) notes.push(`survey: ${missing} of ${survey.width * survey.depth} columns missing (filled from their neighbours)`);
 
@@ -359,6 +363,9 @@ export async function planRegion(o) {
     // (6c H) the bible's fluids member (role names per slot: bed, rim, coping, spout, quay, mooring; lib/fluids/place.mjs)
     const fe = fluidsError(o.fluids ?? undefined, roles);
     if (fe) throw new Error(fe);
+    // (6c VOC) the bible's style: its rarity budget (when it carries one) and its own blocks (roles, pattern mats, allow)
+    const { styleOf } = await import('../vocab/budget.mjs');
+    vocabStyle = styleOf({ roles: o.roles ?? {}, patterns: o.patterns ?? undefined, rarity: o.rarity ?? undefined });
     passes = declaredPasses(mod);
     const params = resolveValues(mod.params ?? {}, o.params ?? {});
     const seed = o.seed === undefined || o.seed === null || o.seed === 'default' ? defaultSeed(id, params, claim) : toDecimal64(...fromDecimal64(o.seed));
@@ -366,6 +373,10 @@ export async function planRegion(o) {
     Object.assign(ctx, {
       claim: Object.freeze({ ...claim }), survey: surveyApi(survey, claim, { keepOut, onKeepOut }), roles, patterns, connectors, seed, params: Object.freeze({ ...params }),
       fluidsGiven: o.fluids ? Object.freeze({ ...o.fluids }) : null,
+      // (6c VOC) the bible's rarity budget (defaults filled in), or null when the bible carries none; the plan compile's VOCAB/FIRE
+      // refusals of the second plan ({part: reason})
+      rarity: vocabStyle.opted ? Object.freeze({ ...vocabStyle.rarity }) : null,
+      vocabRefuse: o.vocabRefuse ? Object.freeze({ ...o.vocabRefuse }) : null,
       kitVersion: o.kitVersion ?? KIT_VERSION, rng: (label) => makeRng(seed, String(label)),
       volumes: o.volumes ?? [],
       // (6c F2) the local stamp library (lib/region/stamps.mjs stampLibrary: a dir or an id -> bytes map; local-only, N-F2-1)
@@ -500,5 +511,36 @@ export async function planRegion(o) {
   stats.requires = ir.requires ?? [];
   stats.passes = r.passRuns.map((x) => ({ ...x }));
   const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}), ...(r.meta.forms ? { forms: r.meta.forms } : {}), ...(r.passRuns.length ? { passes: r.passRuns.map((x) => ({ ...x })) } : {}), ...(r.meta.relief ? { relief: r.meta.relief } : {}), ...(r.meta.scatter ? { scatter: r.meta.scatter } : {}), ...(r.meta.stamps ? { stamps: r.meta.stamps } : {}), ...(r.meta.scatterDemo ? { scatterDemo: r.meta.scatterDemo } : {}), ...(r.meta.route ? { route: r.meta.route } : {}), ...(r.meta.planCheck ? { planCheck: r.meta.planCheck } : {}), ...(r.meta.villageZones ? { villageZones: r.meta.villageZones } : {}), ...(r.meta.districts ? { districts: r.meta.districts } : {}), ...(r.meta.outpost ? { outpost: r.meta.outpost } : {}), ...(r.meta.walls ? { walls: r.meta.walls } : {}), ...(r.meta.ropes ? { ropes: r.meta.ropes } : {}), ...(r.meta.bridges ? { bridges: r.meta.bridges } : {}), ...(r.meta.tunnels ? { tunnels: r.meta.tunnels } : {}), ...(r.meta.waters ? { waters: r.meta.waters } : {}), ...(r.meta.quays ? { quays: r.meta.quays } : {}), ...(r.meta.wet ? { wet: r.meta.wet } : {}), ...(r.meta.wetAsked ? { wetAsked: true } : {}) };
+  // (6c VOC) the style the region checker measures with (M26, M27:role): the roles the bible names (resolved) and the style's own blocks
+  meta.vocab = { roles: Object.fromEntries(Object.keys(o.roles ?? {}).filter((k) => roles[k]).sort().map((k) => [k, roles[k]])), own: [...vocabStyle.own].sort(), opted: vocabStyle.opted, ...(vocabStyle.opted ? { rarity: vocabStyle.rarity } : {}) };
+  // (6c VOC, §5.2 "New in VOC") a plan check: M27's state and convert and M20 (a) over each part's emitted cells (the virtual world of
+  // this IR); a part with an error is refused (VOCAB, FIRE) and the plan planned again with it refused, so it writes nothing. Only when
+  // the IR names a state that could make one (VOCAB_ERROR_STATES); the time is recorded (item 13)
+  if (r.meta.planCheck && !r.meta.planCheck.malformed) {
+    const { COST_STATES, VOCAB_ERROR_STATES, vocabCells, vocabRefusals, vocabScan } = await import('./checkVocab.mjs');
+    const t = performance.now();
+    let v = null;
+    const errs = VOCAB_ERROR_STATES.test(irJson);
+    // (the answers' cost.rarity and cost.creativeOnly, finish.mjs: only with an opted-in bible or a precious or creative-only block)
+    const cost = vocabStyle.opted || COST_STATES.test(irJson);
+    if (errs || cost) {
+      const { buildVirtual } = await import('./vworld.mjs');
+      const irObj = JSON.parse(irJson);
+      const built = buildVirtual({ ir: irObj, survey, filled: survey, blobs: (sha) => sideBytes.get(sha), volumes: (o.volumes ?? []).map((x) => x.decoded ?? x) });
+      const scan = vocabScan({ ir: irObj, vw: built.vw, meta, lava: false });
+      // (a part asked `architect_mc:unsafe` is a broken variant the checker must catch: never refused here)
+      const plan = ctx.__params?.plan ?? {};
+      const unsafe = new Set(['zones', 'forms', 'connectors', 'links'].flatMap((k) => (Array.isArray(plan[k]) ? plan[k] : [])).filter((q) => q?.ext?.['architect_mc:unsafe']).map((q) => q.id));
+      if (errs) v = vocabRefusals({ ir: irObj, vw: built.vw, meta, partOf: r.meta.planCheck.partOf ?? {}, roles, scan, skip: unsafe });
+      if (cost) meta.planCheck.vocabCells = vocabCells(irObj, scan);
+    }
+    meta.planCheck.vocab = { ms: Math.round(performance.now() - t), scanned: !!v, found: v?.found ?? [], refused: Object.keys(o.vocabRefuse ?? {}).sort(), pass: (o._vocabPass ?? 0) + 1 };
+    const fresh = v ? Object.fromEntries(Object.entries(v.refuse).filter(([id]) => !(o.vocabRefuse ?? {})[id])) : {};
+    if (Object.keys(fresh).length && (o._vocabPass ?? 0) < 3) {
+      const again = await planRegion({ ...o, vocabRefuse: { ...(o.vocabRefuse ?? {}), ...fresh }, _vocabPass: (o._vocabPass ?? 0) + 1 });
+      again.meta.planCheck.vocab.first = meta.planCheck.vocab;
+      return again;
+    }
+  }
   return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes };
 }

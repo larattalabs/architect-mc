@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -622,6 +622,10 @@ export const BibleRequest = z.object({
   seedPreset: z.string().regex(/^[a-z0-9_]{1,32}$/).optional().describe('start from a built-in bible (the palette presets)'),
   opKey: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/).optional().describe('(6c 0a) the caller\'s operation key (see design.group)'),
   critique: z.object({ mode: z.enum(['off', 'report']), model: ModelId.optional() }).optional().describe('(5a) report: the bible job ends with one critic call on sheet.png, stored in bible.json critique'),
+  rarity: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe("(6c VOC, S-VOC-1) the style's rarity budget (kit/lib/vocab/rarity.mjs; FIELD_LIMIT when malformed), copied by code into the made bible's `rarity`"),
 });
 export type BibleRequest = z.infer<typeof BibleRequest>;
 
@@ -649,6 +653,7 @@ export const BibleInfo = z.object({
     .describe('(5a) the effective restraint (a format-1 bible: the defaults, hero motifs = its first 3 motifs)'),
   archived: z.boolean().optional().describe('(5a) hidden from the pickers (bible.archive); its entries are unaffected'),
   critique: z.record(z.string(), z.unknown()).optional().describe('(5a) the sheet critique (overall, scores, issues), when the bible job had one'),
+  rarity: z.record(z.string(), z.unknown()).optional().describe("(6c VOC) the bible's rarity budget as stored (format 2), when it carries one"),
 });
 export type BibleInfo = z.infer<typeof BibleInfo>;
 

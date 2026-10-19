@@ -184,6 +184,7 @@ public final class DevServer implements ModInitializer {
 		dev.larattalabs.architect.devserver.gen.SliceT3Dev.init(); // 6c T3a: dev.t3.boat
 		dev.larattalabs.architect.devserver.gen.SliceHDev.init(); // 6c H: dev.fluid.*, dev.entity.damage
 		dev.larattalabs.architect.devserver.gen.SliceVocDev.init(); // 6c VOC: dev.vocab.*
+		dev.larattalabs.architect.devserver.gen.SliceVocbDev.init(); // 6c VOC-b: dev.vocab.bibleRequest, dev.vocab.bibleJob
 		dev.larattalabs.architect.devserver.gen.StockpileDev.init();
 		ServerSidecar.init();
 		ServerLifecycleEvents.SERVER_STARTING.register(s -> {
