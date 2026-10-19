@@ -316,7 +316,8 @@ const probe = [{
     at = AT(2); await near(at);
     await P('sponge_cap', at);
     const cap = await R('sponge_cap', at);
-    const drained = cap.states.slice(1).filter((s) => s !== 'minecraft:water[level=0]').length;
+    // read in the next call: a drained cell is air (water flowing back into it is not a source either, so count only air)
+    const drained = cap.states.slice(1).filter((s) => s === 'minecraft:air').length;
     out.spongeCap = drained;
     check(cap.states[0] === 'minecraft:wet_sponge' && drained === row('sponge').reach.max, `item 10 (sponge cap): a sponge inside an 11 x 7 x 11 pool drains ${drained} (hazards.json max: ${row('sponge').reach.max ?? 'none'})`);
     // magma and soul sand under water: their bubble columns
@@ -333,8 +334,10 @@ const probe = [{
     const F0 = [0, 100, 400];
     const cases = FIRE_POSTS.map(([kind, d, expect], j) => ({ kind, d, expect, at: [F0[0] + 16 * (j % 4), F0[1], F0[2] + 16 * Math.floor(j / 4)] }));
     await near([F0[0] + 24, F0[1], F0[2] + 16]);
+    // fire ticks only near a player who is not a spectator (26.3's fire_spread_radius_around_player): the bot plays in creative
+    await L.cmd('/gamemode creative');
     for (const c of cases) await P(c.kind, c.at, { d: c.d });
-    await L.settle(150_000);
+    await L.settle(240_000);
     for (const c of cases) { const r = await R(c.kind, c.at, { d: c.d }); c.post = r.states[1]; c.caught = r.states[1] !== 'minecraft:oak_planks'; }
     out.fire = cases.map(({ kind, d, expect, caught, post }) => ({ kind, d, expect, caught, post }));
     const reachOf = (kind) => {
