@@ -434,7 +434,7 @@ const natural = [{
     const bad = (diff.list ?? []).filter((m) => { const [x, y, z] = String(m.pos).split(',').map(Number); return near(x, y, z) && !BRIDGE.has(m.class); });
     out.remove = { removed: rm.removed, mismatches: diff.mismatches, classes: diff.classes ?? null, nearNonCommon: bad.slice(0, 20) };
     fs.writeFileSync(path.join(ctx.OUT, 'vocb-v50n-remove.json'), `${JSON.stringify({ ...out.remove, list: diff.list ?? [] }, null, 1)}\n`);
-    check(rm.removed && (diff.classes?.none ?? (diff.mismatches ? 1 : 0)) === 0 && bad.length === 0, `item 9: Regions.remove under the exact rules: E-normal ${diff.mismatches} mismatches, 0 unclassified (${j(diff.classes ?? {})}), ${bad.length} within 6 of a non-common written cell outside T3's bridge classes`, bad.slice(0, 8));
+    check(rm.removed && (diff.classes ? diff.classes.none ?? 0 : diff.mismatches) === 0 && bad.length === 0, `item 9: Regions.remove under the exact rules: E-normal ${diff.mismatches} mismatches, 0 unclassified (${j(diff.classes ?? {})}), ${bad.length} within 6 of a non-common written cell outside T3's bridge classes`, bad.slice(0, 8));
     // ---- the drift probe (default rules, separate): the copper hall's unwaxed cells, ticked until each weathers once
     await L.cmd('/gamerule random_tick_speed 3');
     const c2 = await checkIn(ctx, 'v50n-drift', { plan: { ...fx.plan, planId: 'voc_v50n_drift' }, claim, anchors, bible: 'g6cvoc_modern' });
