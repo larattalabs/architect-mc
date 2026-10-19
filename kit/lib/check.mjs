@@ -23,7 +23,7 @@ import { BUILDING_TYPES, CORE_ROLES, DEFAULT_PROFILE, fullBlockOf, PORT_KINDS, T
 import { checkConformance } from './massing.mjs';
 import { CREATIVE_ONLY } from './vocab/survival.mjs';
 // (6c VOC-b) the `state` and `hazard` errors, `metrics.rarity` and `metrics.drift`, and the opt-in `rarity`/`coherence` warnings
-import { FIRE_REACH_TABLE, HAZARD, driftsWhere, hazardKindOf, isLogName, isPairOf, isWaterlogged, measureRarity, pairOffset, rarityWarnings, styleOf, waterReachOffsets } from './vocab/budget.mjs';
+import { HAZARD, driftsWhere, fireReachOf, hazardKindOf, isLogName, isPairOf, isWaterlogged, measureRarity, pairOffset, rarityWarnings, styleOf, waterReachOffsets } from './vocab/budget.mjs';
 
 const DIRS6 = [['east', 1, 0, 0], ['west', -1, 0, 0], ['up', 0, 1, 0], ['down', 0, -1, 0], ['south', 0, 0, 1], ['north', 0, 0, -1]];
 const OPP = { east: 'west', west: 'east', up: 'down', down: 'up', south: 'north', north: 'south' };
@@ -1178,22 +1178,22 @@ export function vocabErrors(g) {
       halves.set(c.name, l);
     }
     const hk = hazardKindOf(c.name);
-    if (hk === 'fire' || hk === 'lava') fires.push([x, y, z, c.name]);
+    if (hk === 'fire' || hk === 'soul_fire' || hk === 'lava') fires.push([x, y, z, c.name, hk]);
     else if (hk === 'concrete_powder' || hk === 'sponge') powder.set(k, hk);
     if (isWaterCell(c) || isWaterlogged(c)) water.push([x, y, z]);
   }
   if (logged.length) out.push(`state: ${logged.length} waterlogged cell(s) not under water (each makes a water source and floods): ${vSample(logged)}`);
   for (const [n, l] of [...halves].sort(([a], [b]) => (a < b ? -1 : 1))) out.push(`state: ${l.length} ${short(n)} half(s) without the other half (it pops off when placed): ${vSample(l)}`);
-  // fire: a flammable cell within the fire reach (hazards.json's fire row, M20's)
-  const R = FIRE_REACH_TABLE;
+  // fire: a flammable cell within the fire reach (hazards.json's row for the source: fire, soul fire, lava; M20's)
   const burn = new Set();
-  for (const [x, y, z, n] of fires) {
+  for (const [x, y, z, n, hk] of fires) {
+    const R = fireReachOf(hk);
     for (let dx = -R.side; dx <= R.side; dx++) for (let dz = -R.side; dz <= R.side; dz++) for (let dy = -R.below; dy <= R.above; dy++) {
       const q = g.at(x + dx, y + dy, z + dz);
       if (q && BLOCKS[q.name]?.fl) burn.add(`${short(n)}>${fmt(x + dx, y + dy, z + dz)}`);
     }
   }
-  if (burn.size) out.push(`hazard: ${burn.size} flammable cell(s) within the fire reach of fire or lava (${R.side} sideways, ${R.below} below to ${R.above} above): it burns: ${vSample([...burn].sort())}`);
+  if (burn.size) out.push(`hazard: ${burn.size} flammable cell(s) within the fire reach of fire or lava (kit/vocab/hazards.json): it burns: ${vSample([...burn].sort())}`);
   // concrete powder and sponges by the design's water
   const wetSet = new Set(water.map(([x, y, z]) => fmt(x, y, z)));
   const byKind = new Map();

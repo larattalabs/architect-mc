@@ -155,14 +155,17 @@ export const isWaterlogged = (state) => (state.props ?? {}).waterlogged === 'tru
 export const HAZARD = Object.freeze(Object.fromEntries(HAZARDS.rows.map((r) => [r.kind, r])));
 /** The fire reach (hazards.json's `fire` row; M20's FIRE_REACH). */
 export const FIRE_REACH_TABLE = Object.freeze({ ...HAZARD.fire.reach.fire });
-/** The hazard kind of a block (concrete_powder, sponge, magma, soul_sand), or null; fire and lava are `fire` and `lava`. */
+/** A fire source's reach by its hazards.json row (`fire`, `soul_fire`, `lava`; the `fire` row when a kind has none): {side, below, above}. */
+export const fireReachOf = (kind) => Object.freeze({ ...(HAZARD[kind]?.reach?.fire ?? HAZARD.fire.reach.fire) });
+/** The hazard kind of a block (concrete_powder, sponge, magma, soul_sand), or null; fire sources are `fire`, `soul_fire` and `lava`. */
 export function hazardKindOf(name) {
   const n = base(name);
   if (/_concrete_powder$/.test(n)) return 'concrete_powder';
   if (n === 'minecraft:sponge') return 'sponge';
   if (n === 'minecraft:magma_block') return 'magma';
   if (n === 'minecraft:soul_sand') return 'soul_sand';
-  if (n === 'minecraft:fire' || n === 'minecraft:soul_fire') return 'fire';
+  if (n === 'minecraft:fire') return 'fire';
+  if (n === 'minecraft:soul_fire') return 'soul_fire';
   if (n === 'minecraft:lava') return 'lava';
   return null;
 }

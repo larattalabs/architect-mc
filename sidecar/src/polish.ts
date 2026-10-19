@@ -21,8 +21,9 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { bibleOptsIn, blueprintSummary, CRITIC_SYSTEM, promptMetrics, criticPrompt, dimsFor, readVerdict, SLICES_MAX_CHARS, verdictSchema, type CriticContext } from './critic.js';
+import { blueprintSummary, CRITIC_SYSTEM, criticPrompt, dimsFor, readVerdict, SLICES_MAX_CHARS, verdictSchema, type CriticContext } from './critic.js';
 import { criticHash } from './critichash.js';
+import { bibleOptsIn, promptMetrics } from './rarity.js';
 import { checkDesign, isFinalDesign, KIT, refreshKit, renderPreviews, runNode, type CheckResult } from './designs.js';
 import { ClientError } from './errors.js';
 import { isFinalJob } from './jobs/book.js';

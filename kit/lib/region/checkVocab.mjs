@@ -11,7 +11,7 @@ import { F_WRITTEN, parseState } from './vworld.mjs';
 import { BLOCKS } from '../blocks.mjs';
 import { drifts, fitsRole, tierOf } from '../vocab.mjs';
 import { CREATIVE_ONLY } from '../vocab/survival.mjs';
-import { FIRE_REACH_TABLE, HAZARD, driftsWhere, hazardKindOf, isLogName, isPairOf, measureRarity, pairOffset, waterReachOffsets } from '../vocab/budget.mjs';
+import { HAZARD, driftsWhere, fireReachOf, hazardKindOf, isLogName, isPairOf, measureRarity, pairOffset, waterReachOffsets } from '../vocab/budget.mjs';
 import { bodiesOf } from './checkFluids.mjs';
 import { FLAG_LAVA } from './pack.mjs';
 
@@ -84,10 +84,11 @@ export function vocabScan({ ir, vw, meta = null, lava = null }) {
     e.n++;
     if (e.cells.length < MAX_SAMPLE) e.cells.push(cell);
   };
-  const R = FIRE_REACH_TABLE;
+  const RL = fireReachOf('lava');
   let lavaPossible = lava;
   vw.eachWritten((x, y, z, idx, f, pi) => {
-    if (idx < 0 || P.air[idx]) return;
+    // (a realised world's lot children have no IR part: the library entries' cells, not the plan's)
+    if (idx < 0 || pi < 0 || P.air[idx]) return;
     const c = F[idx] ?? factsOf(P)[idx];
     out.written.add(c.name);
     if (c.measured) {
@@ -112,7 +113,8 @@ export function vocabScan({ ir, vw, meta = null, lava = null }) {
     }
     // ---- M20 (a): a written fire, soul fire, or exposed lava cell with a flammable block within the fire reach
     // (an H lava body's cells are H's own M20, checkFluids.mjs: not counted twice)
-    if (c.hazard === 'fire' || (c.hazard === 'lava' && !bodyCells.has(k3(x, y, z)) && D6.some(([dx, dy, dz]) => P.air[vw.get(x + dx, y + dy, z + dz)]))) {
+    if (c.hazard === 'fire' || c.hazard === 'soul_fire' || (c.hazard === 'lava' && !bodyCells.has(k3(x, y, z)) && D6.some(([dx, dy, dz]) => P.air[vw.get(x + dx, y + dy, z + dz)]))) {
+      const R = fireReachOf(c.hazard);
       let hit = null;
       for (let dx = -R.side; dx <= R.side && !hit; dx++) for (let dz = -R.side; dz <= R.side && !hit; dz++) for (let dy = -R.below; dy <= R.above; dy++) {
         if (P.flammable[vw.get(x + dx, y + dy, z + dz)]) { hit = [x + dx, y + dy, z + dz]; break; }
@@ -124,7 +126,7 @@ export function vocabScan({ ir, vw, meta = null, lava = null }) {
       if (lavaPossible === null) lavaPossible = surveyLava(vw);
       if (lavaPossible) {
         let hit = false;
-        for (let dx = -R.side; dx <= R.side && !hit; dx++) for (let dz = -R.side; dz <= R.side && !hit; dz++) for (let dy = -R.above; dy <= R.below; dy++) {
+        for (let dx = -RL.side; dx <= RL.side && !hit; dx++) for (let dz = -RL.side; dz <= RL.side && !hit; dz++) for (let dy = -RL.above; dy <= RL.below; dy++) {
           if ((vw.flags(x + dx, y + dy, z + dz) & F_WRITTEN) === 0 && natLava(x + dx, y + dy, z + dz)) { hit = true; break; }
         }
         if (hit) push(out.natLava, pi, c.name, [x, y, z]);
@@ -176,7 +178,7 @@ export function vocabRules({ ir, vw, meta, want, findings, metrics, finding, lav
     for (const e of list(s.creative)) findings.push(finding('M27:creative', part(e.pi), stage(e.pi), e.n, e.cells, `${e.n} ${e.block} cell(s): creative-only (survival can't build it)`));
   }
   if (want.has('M20')) {
-    for (const e of list(s.fire)) findings.push(finding('M20', part(e.pi), stage(e.pi), e.n, e.cells, `${e.n} written ${e.block} cell(s) with a flammable block within the fire reach (${FIRE_REACH_TABLE.side} sideways, ${FIRE_REACH_TABLE.below} below to ${FIRE_REACH_TABLE.above} above)`));
+    for (const e of list(s.fire)) findings.push(finding('M20', part(e.pi), stage(e.pi), e.n, e.cells, `${e.n} written ${e.block} cell(s) with a flammable block within the fire reach (kit/vocab/hazards.json)`));
     for (const e of list(s.natLava)) findings.push(finding('M20:natural', part(e.pi), stage(e.pi), e.n, e.cells, `${e.n} plan-written flammable ${e.block} cell(s) within the fire reach of natural lava`));
   }
   // ---- M26: over the non-terrain written cells, per region (the plan's style); only opted in, or for precious cells

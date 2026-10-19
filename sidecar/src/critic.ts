@@ -5,8 +5,6 @@
 // The critic is a structured job (a fresh query per round, no session), with fixed renders as image blocks, the
 // blueprint summary (JSON), layered ASCII slices, the brief, the style bible and, from round 1 on, the previous round's
 // issues. It never sees the designer's transcript or the source. The sidecar, not the model, decides "ship".
-import fs from 'node:fs';
-import path from 'node:path';
 import type { CritiqueIssue, CritiqueRound, DesignRequest } from './protocol.js';
 import { BUILDING_TYPES } from './protocol.js';
 import { truncate } from './util/text.js';
@@ -246,29 +244,6 @@ export function revisionPrompt(bp: string, round: CritiqueRound, n: number, max:
 
 export const REVISION_RESTART_PROMPT =
   'The sidecar restarted while you were revising this design after the critique. Re-check where you were (kit/designs/, the critique in critique/), finish the revision, build and check it until the check is OK, then end with a one-line summary.';
-
-/**
- * (6c VOC) Does the design's bible opt in to rarity budgets (its `bible/bible.json` in the scratch carries `rarity`)? Without it the kit's
- * `metrics.rarity` and `metrics.drift` are Steward's to see (the design view) and never reach a prompt or a file the design agent reads
- * (docs/CONTRACT.md "Phase 6c slice VOC" §4.2): paid design behaviour is unchanged.
- */
-export function bibleOptsIn(scratch: string): boolean {
-  try {
-    const j = JSON.parse(fs.readFileSync(path.join(scratch, 'bible', 'bible.json'), 'utf8')) as { rarity?: unknown };
-    return j !== null && typeof j === 'object' && j.rarity !== undefined && j.rarity !== null;
-  } catch {
-    return false;
-  }
-}
-
-/** (6c VOC) The kit metrics a prompt or an agent-readable check.json may carry: without `rarity` and `drift` unless the bible opts in. */
-export function promptMetrics<T extends Record<string, unknown> | null | undefined>(m: T, optIn: boolean): T {
-  if (!m || optIn) return m;
-  const { rarity: _r, drift: _d, ...rest } = m as Record<string, unknown>;
-  void _r;
-  void _d;
-  return rest as T;
-}
 
 /**
  * The blueprint summary for the critic (JSON, at most 4000 chars): type and profile, size and maxSize, front, the

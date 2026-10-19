@@ -14,10 +14,11 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { bibleOptsIn, blueprintSummary, CRITIC_SYSTEM, promptMetrics, criticPrompt, dimsFor, readVerdict, revisionPrompt, SLICES_MAX_CHARS, simVerdict, verdictSchema, type CriticContext } from './critic.js';
+import { blueprintSummary, CRITIC_SYSTEM, criticPrompt, dimsFor, readVerdict, revisionPrompt, SLICES_MAX_CHARS, simVerdict, verdictSchema, type CriticContext } from './critic.js';
 import { copyPartsAlong, isFinalDesign, KIT, refreshKit, runNode, type CheckResult, type Sidecar as SidecarJson } from './designs.js';
 import { addCost, zeroCost } from './jobs/cost.js';
 import { criticHash } from './critichash.js';
+import { bibleOptsIn, promptMetrics } from './rarity.js';
 import { isFinalJob } from './jobs/book.js';
 import { CRITIQUE_VIEWS, DesignRequest as DesignRequestSchema, type Cost, type CritiqueRecord, type CritiqueRound, type CritiqueSpec, type Design, type DesignRequest, type EndReason, type Job } from './protocol.js';
 import type { Sidecar } from './sidecar.js';

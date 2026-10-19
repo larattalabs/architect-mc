@@ -1,0 +1,11 @@
+# (6c VOC-b, CONTRACT VOC §9) Steward's 7 rule.palette parts (fixtures/plan/asks, answer.plan.rules), each one's family resolved against
+# the generated vocabulary families (kit/lib/blocks.mjs fam; kit/lib/vocab.mjs familyOf), recorded for RC. Every part still answers
+# unsupported {rule.palette, until: RC} (S-VOC-2). Columns: plan | part | required | family asked | resolves | members
+
+desert_jungle_wall | two_faced_palette | optional | (prose only) | - | -
+hidden_village | mossy_palette | optional | moss_stone_spruce_oak | no | -
+mage_exiles | shared_stone_base | optional | stone | yes | 23
+old_new_town | two_styles | required | (prose only) | - | -
+one_block | copper_only | required | copper | yes | 120
+rival_families | family_colours | optional | family_colours | no | -
+row_houses | plain_palette | optional | (prose only) | - | -

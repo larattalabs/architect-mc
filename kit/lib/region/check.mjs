@@ -438,7 +438,7 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   // ---- (6c VOC-b) M26, M27 and M20 widened, on every IR (checkVocab.mjs): natural lava is looked for only where the survey or a frozen
   // volume holds some
   if (want.has('M26') || want.has('M27') || want.has('M20')) time('M27', () => {
-    const vols = [...irVolumes(ir, volumes, blobs).values()];
+    const vols = [...(volumes ?? []), ...irVolumes(ir, volumes, blobs).values()];
     const lava = world ? null : (vols.some((v) => (v.counts?.LAVA ?? 0) > 0) ? true : null);
     vocabRules({ ir, vw, meta, want, findings, metrics, finding, lava });
   });

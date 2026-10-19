@@ -29,3 +29,27 @@ export async function checkRarity(kitDir: string, rarity: unknown): Promise<void
   const r = v(rarity, 'rarity');
   if (r.errors.length) throw new RefusedError('FIELD_LIMIT', 'rarity', r.errors.slice(0, 4).join('; '));
 }
+
+/**
+ * Does the design's bible opt in to rarity budgets (its `bible/bible.json` in the scratch carries `rarity`)? Without it the kit's
+ * `metrics.rarity` and `metrics.drift` are Steward's to see (the design view) and never reach a prompt or a file the design agent reads
+ * (docs/CONTRACT.md "Phase 6c slice VOC" §4.2): paid design behaviour is unchanged. (Here, not in critic.ts: critic.ts is the critic's
+ * provenance, hashed into every entry version.)
+ */
+export function bibleOptsIn(scratch: string): boolean {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(scratch, 'bible', 'bible.json'), 'utf8')) as { rarity?: unknown };
+    return j !== null && typeof j === 'object' && j.rarity !== undefined && j.rarity !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** The kit metrics a prompt or an agent-readable check.json may carry: without `rarity` and `drift` unless the bible opts in. */
+export function promptMetrics<T extends Record<string, unknown> | null | undefined>(m: T, optIn: boolean): T {
+  if (!m || optIn) return m;
+  const { rarity: _r, drift: _d, ...rest } = m as Record<string, unknown>;
+  void _r;
+  void _d;
+  return rest as T;
+}
