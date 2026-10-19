@@ -268,10 +268,13 @@ export function emitWaterfall(r, o) {
     if (s.lip === 'sculpt') {
       if (L - 1 >= g + 1) cols.push(x, z, g + 1, L - 1, 0);
       if (!pool) cols.push(x, z, L, L, 0);
-      // the outer course of the rim (the shell's own rim is the inner one)
-      if (l === -2 || l === w + 1 || rr === -(P + 1)) cols.push(x, z, L + 1, L + 1, 1);
+      // the outer course of the rim (the shell's own rim is the inner one), and the inner course's two back corners (no shell cell: the
+      // rim would show two gaps there)
+      if (l === -2 || l === w + 1 || rr === -(P + 1) || (rr === -P && (l === -1 || l === w))) cols.push(x, z, L + 1, L + 1, 1);
     } else if (!pool && (l === -2 || l === w + 1 || rr === -(P + 1))) {
-      cols.push(x, z, L, L + 1, l === -2 || l === w + 1 || rr === -(P + 1) ? 1 : 0);
+      cols.push(x, z, L, L + 1, 1);
+    } else if (rr === -P && (l === -1 || l === w)) {
+      cols.push(x, z, L, L, 0, x, z, L + 1, L + 1, 1);
     }
   }
   works.columns({ abs: 0 }, { abs: 0 }, cols, [rock, coping], { cond: 3 });

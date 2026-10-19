@@ -539,7 +539,15 @@ async function haLook(ctx) {
       const at = [(Math.min(...xs) + Math.max(...xs)) / 2 + 0.5, (Math.min(...ys) + Math.max(...ys)) / 2, (Math.min(...zs) + Math.max(...zs)) / 2 + 0.5];
       const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs));
       const d = k === 'w_moat' ? span * 0.6 : Math.max(10, span * 1.1);
-      out.shots.push({ bible: tag, body: k, ...(await shot(`${tag}_${k}`, [at[0] + d * 0.55, Math.max(...ys) + d * 0.6, at[2] + d * 0.85], at)) });
+      // (a body with a curtain or a spout: the camera on its spill's side, looking back at it)
+      const sp = bs.flatMap((b) => b.spill);
+      let dir = [0.55, 0.85];
+      if (sp.length && k !== 'w_fountain') {
+        const sx = sp.reduce((t, c) => t + c[0], 0) / sp.length - at[0], sz = sp.reduce((t, c) => t + c[2], 0) / sp.length - at[2];
+        const n = Math.hypot(sx, sz) || 1;
+        dir = [sx / n + 0.35, sz / n + 0.35];
+      }
+      out.shots.push({ bible: tag, body: k, ...(await shot(`${tag}_${k}`, [at[0] + d * dir[0], Math.max(...ys) + d * 0.5, at[2] + d * dir[1]], at)) });
     }
     for (const q of run.R.meta.bridges ?? []) {
       const mid = [(q.from[0] + q.to[0]) / 2 + 0.5, q.from[1] + 1, (q.from[2] + q.to[2]) / 2 + 0.5];
