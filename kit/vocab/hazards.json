@@ -1,6 +1,6 @@
 {
  "format": 1,
- "note": "Fluid interactions (docs/CONTRACT.md Phase 6c slice VOC §2.5): vanilla conversions that change a block beside a fluid. Each row is probed in game (gate item 10, voc-probe, dev.vocab.probe {kind}); a row the probe contradicts is corrected here before the rule ships. `reach`: face (a face-adjacent cell), above (the cell directly above), taxicab n (cells within n steps through the fluid), or fire {side, below, above} (the reach M20 checks). `block`: a block, a #tag or a name ending in * (kit/lib/vocab.mjs hazardBlocks). `becomes`: the block that results ({col} the source's colour).",
+ "note": "Fluid interactions (docs/CONTRACT.md Phase 6c slice VOC §2.5): vanilla conversions that change a block beside a fluid. Each row is probed in game (gate item 10, voc-probe, dev.vocab.probe {kind}); a row the probe contradicts is corrected here before the rule ships. `reach`: face (a face-adjacent cell), above (the cell directly above), taxicab n (cells within n steps through the fluid), or fire {side, below, above} (the reach M20 checks for that source). `block`: a block, a #tag or a name ending in * (kit/lib/vocab.mjs hazardBlocks). `becomes`: the block that results ({col} the source's colour).",
  "rows": [
   {
    "kind": "concrete_powder",
@@ -40,12 +40,21 @@
   },
   {
    "kind": "fire",
-   "block": "#minecraft:fire",
+   "block": "minecraft:fire",
    "beside": "flammable",
-   "reach": { "fire": { "side": 3, "below": 1, "above": 3 } },
+   "reach": { "fire": { "side": 2, "below": 2, "above": 5 } },
    "becomes": "minecraft:fire",
    "rules": ["M20"],
-   "why": "fire spreads to a flammable block within its reach (M20's reach, H's FIRE_REACH; the probe measures fire's own)"
+   "why": "vanilla FireBlock.tick: an air cell within 1 aside and -1..+4 up catches fire beside a flammable block, so fire reaches a flammable block 2 aside, 2 below and 5 above (voc-probe measured it; the draft gave M20's lava reach, 3 aside, 1 below, 3 above)"
+  },
+  {
+   "kind": "soul_fire",
+   "block": "minecraft:soul_fire",
+   "beside": "flammable",
+   "reach": { "fire": { "side": 0, "below": 0, "above": 0 } },
+   "becomes": "minecraft:soul_fire",
+   "rules": ["M20"],
+   "why": "vanilla SoulFireBlock never spreads (voc-probe: a flammable block beside it stays); a written soul fire is still M20 (a)'s error, as any written fire is"
   },
   {
    "kind": "lava",

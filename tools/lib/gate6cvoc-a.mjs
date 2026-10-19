@@ -282,10 +282,17 @@ const registry = [{
 
 const AT = (i) => [64 * (i % 6), 100, 64 * Math.floor(i / 6)];
 /** The fire posts: [kind, d, expect caught] (fire's reach from FireBlock.tick: air within 1 aside and -1..+4 up gets fire next to a flammable). */
+/**
+ * The fire posts: [kind, d, axis, expect caught], each post floating alone. Fire (FireBlock.tick): an air cell within 1 aside and
+ * -1..+4 up catches next to a flammable block, so a block 2 aside, 2 below or 5 above it burns. Soul fire spreads nothing. Lava
+ * (LavaFluid.randomTick): one or two steps up, each at most one aside, light air next to a flammable block, so a block 3 aside at +2
+ * or 3 above burns (H's FIRE_REACH, M20).
+ */
 const FIRE_POSTS = [
-  ['fire', [2, 0, 0], true], ['fire', [3, 0, 0], false], ['fire', [1, 4, 0], true], ['fire', [1, 5, 0], false], ['fire', [1, -2, 0], true], ['fire', [1, -3, 0], false],
-  ['soul_fire', [1, 0, 0], false], ['soul_fire', [2, 0, 0], false],
-  ['lava', [3, 0, 0], true], ['lava', [4, 0, 0], false], ['lava', [1, 3, 0], true], ['lava', [1, 4, 0], false],
+  ['fire', [2, 0, 0], 'side', true], ['fire', [3, 0, 0], 'side', false], ['fire', [1, 5, 0], 'above', true], ['fire', [1, 6, 0], 'above', false],
+  ['fire', [1, -2, 0], 'below', true], ['fire', [1, -3, 0], 'below', false],
+  ['soul_fire', [1, 0, 0], 'side', false], ['soul_fire', [1, 1, 0], 'above', false],
+  ['lava', [3, 2, 0], 'side', true], ['lava', [4, 2, 0], 'side', false], ['lava', [2, 3, 0], 'above', true], ['lava', [2, 4, 0], 'above', false],
 ];
 
 const probe = [{
@@ -306,17 +313,15 @@ const probe = [{
     check(cp.states[0] === 'minecraft:white_concrete' && cp.states[1] === 'minecraft:white_concrete_powder' && row('concrete_powder').reach.face === 1, `item 10 (concrete_powder): powder face-adjacent to water becomes ${cp.states[0]}; powder 2 from it stays ${cp.states[1]} (hazards.json: face)`, cp);
     // the sponge's reach: a trench of 9 sources; read in the next call (before the water flows back: 5 ticks a step)
     at = AT(1); await near(at);
-    const sp = await P('sponge', at, { n: 9 });
-    const spr = await R('sponge', at, { n: 9 });
+    const spr = await L.call('dev.vocab.probe', { kind: 'sponge', at, phase: 'both', n: 9 }, 60_000);
+    const sp = spr;
     const trench = spr.states.slice(1);
     const reach = trench.findIndex((s) => s === 'minecraft:water[level=0]');
     out.sponge = { setup: sp.states, read: spr.states, reach };
-    check(spr.states[0] === 'minecraft:wet_sponge' && reach === row('sponge').reach.taxicab, `item 10 (sponge): a dry sponge at the head of a trench of 9 sources turns ${spr.states[0]} and drains the first ${reach} (hazards.json reach: taxicab ${row('sponge').reach.taxicab})`, trench);
+    check(spr.states[0] === 'minecraft:wet_sponge' && reach === row('sponge').reach.taxicab, `item 10 (sponge): a dry sponge at the head of a trench of 9 sources turns (read in the same tick) ${spr.states[0]} and drains the first ${reach} (hazards.json reach: taxicab ${row('sponge').reach.taxicab})`, trench);
     // the sponge's count cap: a 242-source pool beside it
     at = AT(2); await near(at);
-    await P('sponge_cap', at);
-    const cap = await R('sponge_cap', at);
-    // read in the next call: a drained cell is air (water flowing back into it is not a source either, so count only air)
+    const cap = await L.call('dev.vocab.probe', { kind: 'sponge_cap', at, phase: 'both' }, 60_000);
     const drained = cap.states.slice(1).filter((s) => s === 'minecraft:air').length;
     out.spongeCap = drained;
     check(cap.states[0] === 'minecraft:wet_sponge' && drained === row('sponge').reach.max, `item 10 (sponge cap): a sponge inside an 11 x 7 x 11 pool drains ${drained} (hazards.json max: ${row('sponge').reach.max ?? 'none'})`);
@@ -328,11 +333,11 @@ const probe = [{
       out[k] = m.states;
       check(m.states[1] === `minecraft:bubble_column[drag=${drag}]` && row(k).becomes === `minecraft:bubble_column[drag=${drag}]`, `item 10 (${k}): water directly above becomes ${m.states[1]} (hazards.json: ${row(k).becomes})`, m.states);
     }
-    // fire, soul fire and lava: one post per case, every case at once, then 120 s (lava's ignition is a random tick: random_tick_speed 300)
-    await L.cmd('/gamerule random_tick_speed 300');
+    // fire, soul fire and lava: one post per case, every case at once, then 240 s (lava's ignition is a random tick: random_tick_speed 3000)
+    await L.cmd('/gamerule random_tick_speed 3000');
     // a compact grid (16 apart) around the bot, inside the simulation distance and the fire spread radius
     const F0 = [0, 100, 400];
-    const cases = FIRE_POSTS.map(([kind, d, expect], j) => ({ kind, d, expect, at: [F0[0] + 16 * (j % 4), F0[1], F0[2] + 16 * Math.floor(j / 4)] }));
+    const cases = FIRE_POSTS.map(([kind, d, axis, expect], j) => ({ kind, d, axis, expect, at: [F0[0] + 16 * (j % 4), F0[1], F0[2] + 16 * Math.floor(j / 4)] }));
     await near([F0[0] + 24, F0[1], F0[2] + 16]);
     // fire ticks only near a player who is not a spectator (26.3's fire_spread_radius_around_player): the bot plays in creative
     await L.cmd('/gamemode creative');
@@ -342,13 +347,16 @@ const probe = [{
     out.fire = cases.map(({ kind, d, expect, caught, post }) => ({ kind, d, expect, caught, post }));
     const reachOf = (kind) => {
       const cs = cases.filter((c) => c.kind === kind && c.caught);
-      return { side: Math.max(0, ...cs.filter((c) => c.d[1] === 0).map((c) => Math.abs(c.d[0]))), above: Math.max(0, ...cs.filter((c) => c.d[1] > 0).map((c) => c.d[1])), below: Math.max(0, ...cs.filter((c) => c.d[1] < 0).map((c) => -c.d[1])) };
+      const m = (axis, f) => Math.max(0, ...cs.filter((c) => c.axis === axis).map(f));
+      return { side: m('side', (c) => Math.abs(c.d[0])), below: m('below', (c) => -c.d[1]), above: m('above', (c) => c.d[1]) };
     };
     for (const k of ['fire', 'soul_fire', 'lava']) {
       const mine = cases.filter((c) => c.kind === k);
       const r = reachOf(k);
-      const want = k === 'soul_fire' ? (row('fire').reachSoul ?? null) : row(k).reach.fire;
-      check(mine.every((c) => c.caught === c.expect) && (k === 'soul_fire' ? JSON.stringify(r) === JSON.stringify(want) : r.side === want.side && r.above === want.above && (k === 'lava' || r.below === want.below)), `item 10 (${k}): the posts ${mine.map((c) => `${json(c.d)}:${c.caught ? 'lit' : 'not'}`).join(' ')}; measured reach ${json(r)} (hazards.json: ${json(want)})`, mine);
+      const want = row(k).reach.fire;
+      // lava's `below` is H's margin (vanilla lights nothing under the lava's level): not probed
+      const same = r.side === want.side && r.above === want.above && (k === 'lava' || r.below === want.below);
+      check(mine.every((c) => c.caught === c.expect) && same, `item 10 (${k}): the posts ${mine.map((c) => `${json(c.d)}:${c.caught ? 'lit' : 'not'}`).join(' ')}; measured reach ${json(r)} (hazards.json: ${json(want)})`, mine);
     }
     return out;
   },

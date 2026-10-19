@@ -95,13 +95,15 @@ public final class SliceVocDev {
 				});
 			});
 		DevBridge.register("dev.vocab.probe", 30_000, "{kind: concrete_powder|sponge|sponge_cap|magma|soul_sand|fire|soul_fire|lava, at: [x,y,z], "
-			+ "phase: setup|read, d?: [dx,dy,dz] (fire, soul_fire, lava: where the flammable post is), n?: 8 (sponge: the trench length)} - "
+			+ "phase: setup|read|both, d?: [dx,dy,dz] (fire, soul_fire, lava: where the flammable post is), n?: 8 (sponge: the trench length)} - "
 			+ "(6c VOC) the kit/vocab/hazards.json rows in game: setup builds the case at `at` (a clear area, its own blocks only) and returns the "
 			+ "cells it watches; read returns their states now -> {watch: [[x,y,z]], states: [state]}", (req, mc) -> {
 				String kind = req.get("kind").getAsString();
 				JsonArray a = req.getAsJsonArray("at");
 				BlockPos at = new BlockPos(a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt());
-				boolean setup = !req.has("phase") || "setup".equals(req.get("phase").getAsString());
+				String phase = req.has("phase") ? req.get("phase").getAsString() : "setup";
+				// both: setup and read in one server task (the same tick: a sponge's drain before any water flows back)
+				boolean setup = !"read".equals(phase);
 				int[] d = { 0, 0, 0 };
 				if (req.has("d")) {
 					JsonArray q = req.getAsJsonArray("d");
@@ -247,7 +249,7 @@ public final class SliceVocDev {
 			}
 			case "fire", "soul_fire", "lava" -> {
 				// a fire source on netherrack (fire, which then never burns out), on soul soil (soul_fire), or a lava source in a netherrack
-				// basin, and one oak-planks post at `d` from it on a stone column (nothing else flammable near): does the post catch?
+				// basin, and one oak-planks post at `d` from it, floating (nothing else flammable near): does the post catch?
 				BlockPos post = at.offset(d[0], d[1], d[2]);
 				watch.add(at);
 				watch.add(post);
@@ -261,9 +263,6 @@ public final class SliceVocDev {
 					} else {
 						set(level, at.below(), (kind.equals("fire") ? Blocks.NETHERRACK : Blocks.SOUL_SOIL).defaultBlockState(), 2);
 						set(level, at, (kind.equals("fire") ? Blocks.FIRE : Blocks.SOUL_FIRE).defaultBlockState(), 3);
-					}
-					for (int y = at.getY() - 4; y < post.getY(); y++) {
-						set(level, new BlockPos(post.getX(), y, post.getZ()), Blocks.STONE.defaultBlockState(), 2);
 					}
 					set(level, post, Blocks.OAK_PLANKS.defaultBlockState(), 3);
 				}
