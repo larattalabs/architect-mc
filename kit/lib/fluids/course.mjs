@@ -355,7 +355,7 @@ export function courseGeometry(S, path, routeLevels, spec, ends, o) {
       const y = st.levels[i - st.i0] - (o.frozen ? 1 : 0);
       for (const [x, z] of colsOf(i).filter((c) => !owner.has(k2(...c)))) { cells.push([x, y, z]); openTop.set(k2(x, z), Math.max(openTop.get(k2(x, z)) ?? -Infinity, y)); }
     }
-    steps.push({ kind: st.kind, from: up.id, to: lo.id, drop: st.drop, cells, seg: st.seg, frozen: !!o.frozen });
+    steps.push({ kind: st.kind, from: up.id, to: lo.id, drop: st.drop, cells, seg: st.seg, frozen: !!o.frozen, dir: DIRS[dirs[st.i1].dout] });
     for (const c of cells) stepCells.set(k3(...c), steps.length - 1);
     // the upper reach's outlets: its step's cells beside its own; the lower one's: every cell of the step (its rim over a spillway's lip)
     up.outlets.push(...cells);
@@ -373,7 +373,9 @@ export function courseGeometry(S, path, routeLevels, spec, ends, o) {
     const cells = [];
     for (let i = nR; i < n; i++) cells.push(...(neckTail ? [[path[i][0], y, path[i][1]]] : lanesAt(path[i][0], path[i][1], DIRS[dirs[i].dout], offs).map(([x, z]) => [x, y, z])));
     const lastCells = cells.slice(neckTail ? cells.length - 1 : cells.length - offs.length);
-    steps.push({ kind: 'fall', from: last.id, to: lp.into ?? null, drop: last.level - lp.landY, cells, seg: 1, frozen: !!o.frozen, tail: ends.tail.kind });
+    steps.push({ kind: 'fall', from: last.id, to: lp.into ?? null, drop: last.level - lp.landY, cells, seg: 1, frozen: !!o.frozen, tail: ends.tail.kind, dir: DIRS[dirs[n - 1].dout] });
+    // (the body it falls into: everything over its surface is open; its shell is its own)
+    for (const [x, z] of lp.open ?? []) if (!openTop.has(k2(x, z))) openTop.set(k2(x, z), lp.landY);
     for (const c of cells) { stepCells.set(k3(...c), steps.length - 1); openTop.set(k2(c[0], c[2]), Math.max(openTop.get(k2(c[0], c[2])) ?? -Infinity, c[1])); }
     last.outlets.push(...cells);
     const landing = lastCells.map(([x, , z]) => [x + DIRS[dirs[n - 1].dout][0], lp.landY, z + DIRS[dirs[n - 1].dout][1]]);
@@ -447,6 +449,27 @@ export function courseGeometry(S, path, routeLevels, spec, ends, o) {
         const q = [x + dx, y, z + dz], kk = k3(...q);
         if (own.has(kk) || shSet.has(kk) || water.has(kk) || stepCells.has(kk) || openTop.has(k2(q[0], q[2]))) continue;
         for (let yy = S.groundAt(q[0], q[2]) + 1; yy <= y + 1; yy++) banks.set(k3(q[0], yy, q[2]), [q[0], yy, q[2]]);
+      }
+    }
+  }
+  // a raised lip (over a dip, or over a body's rim or apron): every lining cell over the ground stands on fill to the ground, and a lining
+  // cell beside the lip has a second course outside it, so the single breach of any one lining cell lets no water out
+  const stepOf = (c) => stepCells.has(k3(...c));
+  const allShell = shells;
+  const free = (x, y, z) => { const kk = k3(x, y, z); return !water.has(kk) && !stepCells.has(kk) && !allShell.has(kk) && !isOpen(x, y, z) && !(lipSolid.has(kk)); };
+  const lipSolid = new Set([...(ends.tail?.lip?.solid ?? []), ...(ends.tail?.lip?.foreign ?? [])].map((c) => k3(...c)));
+  for (const R of reaches) for (const [x, y, z] of R.lining) {
+    if (y <= S.groundAt(x, z)) continue;
+    for (let yy = S.groundAt(x, z) + 1; yy < y; yy++) if (free(x, yy, z) && !R.lining.some((q) => q[0] === x && q[1] === yy && q[2] === z)) banks.set(k3(x, yy, z), [x, yy, z]);
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      // (outward: away from the step cell beside it; and the cell past it along the flow, where a breach would fall)
+      if (!stepOf([x - dx, y, z - dz])) continue;
+      const st = steps[stepCells.get(k3(x - dx, y, z - dz))];
+      const fwd = st?.dir ?? null;
+      const qs = [[x + dx, y, z + dz], ...(fwd ? [[x + fwd[0], y, z + fwd[1]], [x + dx + fwd[0], y, z + dz + fwd[1]]] : [])];
+      for (const q of qs) {
+        if (!free(...q)) continue;
+        for (let yy = S.groundAt(q[0], q[2]) + 1; yy <= y; yy++) if (free(q[0], yy, q[2])) banks.set(k3(q[0], yy, q[2]), [q[0], yy, q[2]]);
       }
     }
   }
@@ -929,7 +952,9 @@ export function planCourse(C, p, { block = 'channel.course', via = null, race = 
   if (tail.kind === 'rim') {
     const s = edgeSites(tail.B).find((q) => q.ox === full.path[n - 1][0] && q.oz === full.path[n - 1][1] && (q.d + 2) % 4 === dEnd);
     // X's rim under the lip (its shell; the course writes nothing there), the landing X's surface cell
-    tail.lip = { landY: s.level, into: s.body, solid: [[s.ox, s.level + 1, s.oz]] };
+    // (X's cells and shell, as its generator writes them less its outlets: the course writes none of them)
+    const xCells = tail.B.surface.flatMap(([x, z]) => { const d = tail.B.depth.get(k2(x, z)) ?? 1, lv = tail.B.levels ? tail.B.levels.get(k2(x, z)) : tail.B.level, o2 = []; for (let y = lv - d + 1; y <= lv; y++) o2.push([x, y, z]); return o2; });
+    tail.lip = { landY: s.level, into: s.body, solid: [[s.ox, s.level + 1, s.oz]], open: tail.B.surface, foreign: shellOf(xCells) };
     let ll = 1;
     if (tail.B.raised) for (let t = 1; t <= 2 && n - 1 - t > 0; t++) if (full.path[n - 1 - t][0] === s.ox + t * DIRS[s.d][0] && full.path[n - 1 - t][1] === s.oz + t * DIRS[s.d][1]) ll = t + 1; else break;
     tail.lipLen = ll;
@@ -1015,6 +1040,7 @@ export function emit(K, p, res) {
     const vk = volumeKeep(r, VC, classAt);
     for (const b of out.bodies) {
       const hit = reachMeetsKeep(r, env, b, { volClass: vk });
+      if (hit && process.env.DBG) console.log('LEAKDBG', b.id, JSON.stringify({ path: geo.path.slice(-6), steps: geo.steps.map((q) => q.cells), lining: b.lining, banks: geo.banks.slice(0, 30), watch: b.watch.filter((c) => c[0] >= 1107).slice(0, 30) }));
       if (hit) throw leakRefusal(b, hit);
       shellCheck(r, b);
     }
