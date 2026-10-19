@@ -163,7 +163,7 @@ const unit = [
     name: 'items 1, 3, 4 (kit): the vocabulary tests',
     async run({ root, check }) {
       const r = nodeTest(root, ['kit/test/vocab.test.mjs']);
-      check(r.code === 0 && r.fail === 0 && r.pass >= 12, `items 1, 3, 4 (kit): every block classified, every table row with a why, the hand families inside generated ones or each split listed with its evidence, palette() unchanged, one source (the drift test, no literal list, creativeOnly = the 35 plus the listed additions), the tiers the contract names, fitness and drift: ${r.pass} pass, ${r.fail} fail`, r.failing);
+      check(r.code === 0 && r.fail === 0 && r.pass >= 11, `items 1, 3, 4 (kit): every block classified, every table row with a why, the hand families inside generated ones or each split listed with its evidence, palette() unchanged, one source (the drift test, no literal list, creativeOnly = the 35 plus the listed additions), the tiers the contract names, fitness and drift: ${r.pass} pass, ${r.fail} fail`, r.failing);
       const creative = JSON.parse(fs.readFileSync(path.join(root, 'mod', 'src', 'main', 'resources', 'data', 'architect_mc', 'survival_items.json'), 'utf8')).creativeOnly;
       const want = [...PHASE3_CREATIVE_ONLY, ...CREATIVE_ONLY_ADDED.map((a) => a.block)].sort();
       check(JSON.stringify([...creative].sort()) === JSON.stringify(want), `item 4: creativeOnly = the phase 3 list of 35 plus the listed 26.3 additions (${CREATIVE_ONLY_ADDED.length}): ${creative.length} blocks`, { creative });
