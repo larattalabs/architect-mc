@@ -1,0 +1,59 @@
+{
+ "about": "(6c HY-b, \u00a714 natural, N-HY-1: S3's pinned claim as a site only, S3's scenario unchanged) a spring on the slope above the river falling by pools into it (a fall join), and a weir head on the pond high on the slope to the north feeding a level canal (S3's river runs between cliffs: no bank of it holds a level canal within cut 6, so the canal leaves the pond)",
+ "on": "s3",
+ "anchors": {
+  "spring": [
+   3665,
+   75,
+   -882
+  ],
+  "canal_end": [
+   3658,
+   148,
+   -1012
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "brook",
+  "class": "fits"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_n01",
+  "connectors": [
+   {
+    "id": "brook",
+    "kind": "channel",
+    "from": {
+     "anchor": "spring"
+    },
+    "to": {
+     "feature": {
+      "water": {
+       "pick": "nearest",
+       "to": "spring"
+      }
+     }
+    }
+   },
+   {
+    "id": "leat",
+    "kind": "channel",
+    "look": "built",
+    "flow": "level",
+    "from": {
+     "feature": {
+      "water": {
+       "pick": "nearest",
+       "to": "canal_end"
+      }
+     }
+    },
+    "to": {
+     "anchor": "canal_end"
+    }
+   }
+  ]
+ }
+}

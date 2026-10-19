@@ -325,7 +325,9 @@ export function courseGeometry(S, path, routeLevels, spec, ends, o) {
         const d = DIRS[dirs[i].dout], [px, pz] = perp(d);
         const o2 = noise < 0 ? offs[0] - 1 : offs[offs.length - 1] + 1;
         const c = [path[i][0] + px * o2, path[i][1] + pz * o2];
-        if (S.groundAt(c[0], c[1]) - 1 >= R.level) cols = [...cols, c];
+        // (the wider lane and its bank where the router could have gone: never toward a lot, a build, water or the claim's edge)
+        const bank = [c[0] + px * Math.sign(o2), c[1] + pz * Math.sign(o2)];
+        if (S.groundAt(c[0], c[1]) - 1 >= R.level && (!o.okCol || (o.okCol(...c) && o.okCol(...bank)))) cols = [...cols, c];
       }
       if (i === 0 && ends.head?.kind === 'spring') { cols = squareAround(path[0], COURSE.spring, cols); depth = Math.max(2, depth); }
       if (i === nR - 1 && ends.tail?.kind === 'pool') { cols = squareAround(path[i], COURSE.pool, cols); depth = Math.max(2, depth); }
@@ -535,15 +537,36 @@ export function layCourse(r, geo, o) {
   const M = courseMaterials(r.ctx, o.look);
   const stage = o.stage;
   const notes = [];
-  // the carve (IF_NATURAL air from each column's floor up to its top)
+  // what stands there before the course (the first differing block of each chain): read before its own carve and banks are written
+  const all = geo.reaches.flatMap((R) => [...R.cells, ...R.lining, ...R.weir]);
+  const xs = all.map((c) => c[0]), ys = all.map((c) => c[1]), zs = all.map((c) => c[2]);
+  const natural = naturalOf(r, { minX: Math.min(...xs) - 1, maxX: Math.max(...xs) + 1, minZ: Math.min(...zs) - 1, maxZ: Math.max(...zs) + 1 }, Math.min(...ys) - 2, Math.max(...ys) + 3);
+  const shellRole0 = shellRoleOf(M, natural, S);
+  const unsafe = o.unsafe ?? {};
+  const shellRole = (x, y, z, w) => (unsafe.sandLining && w === 'lining' && unsafe.sandLining[0] === x && unsafe.sandLining[1] === y && unsafe.sandLining[2] === z ? 'minecraft:sand' : shellRole0(x, y, z, w));
+  // the exits: notches in the rim, never beside a step, a weir or a landing, never under another reach's shell
+  const near = new Set();
+  for (const st of geo.steps) for (const [x, , z] of st.cells) for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) near.add(k2(x + dx, z + dz));
+  for (const R of geo.reaches) for (const [x, , z] of R.weir) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) near.add(k2(x + dx, z + dz));
+  for (const R of geo.reaches) for (const q of R.planJoins) for (const [x, , z] of q.cells) for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) near.add(k2(x + dx, z + dz));
+  const every = COURSE[o.look].notch;
+  for (const R of geo.reaches) R.exits = o.exits === false ? [] : exitNotches(R.cells, R.level, { every, max: 64, skip: (x, y, z) => near.has(k2(x, z)) });
+  // every cell the course's shells, linings and weirs hold (no carve or shaft cuts one)
+  const held = new Map();
+  for (const R of geo.reaches) for (const c of [...shellOf(R.cells, { open: [...R.outlets, ...R.exits] }), ...R.lining, ...R.weir]) { const kk = k2(c[0], c[2]); const l = held.get(kk) ?? []; l.push(c[1]); held.set(kk, l); }
+  for (const R of geo.reaches) R.exits = R.exits.filter(([x, y, z]) => !(held.get(k2(x, z)) ?? []).some((hy) => hy > y));
+  // the carve (IF_NATURAL air from each column's floor up to its top), split round held cells
   const carve = [];
   const seen = new Set();
-  for (const [x, z, y0, y1] of geo.carve) {
-    const t = y1 ?? Math.max(y0, S.topAt(x, z));
+  const runs = [...geo.carve.map(([x, z, y0, y1]) => [x, z, y0, y1 ?? Math.max(y0, S.topAt(x, z))]), ...geo.reaches.flatMap((R) => R.exits.map(([x, y, z]) => [x, z, y, Math.max(y, S.topAt(x, z))]))];
+  for (const [x, z, y0, t] of runs) {
     const kk = `${x},${z},${y0}`;
     if (seen.has(kk) || t < y0) continue;
     seen.add(kk);
-    carve.push(x, z, y0, t, 0);
+    const hs = (held.get(k2(x, z)) ?? []).filter((hy) => hy >= y0 && hy <= t).sort((a, b) => a - b);
+    let a = y0;
+    for (const hy of hs) { if (hy - 1 >= a) carve.push(x, z, a, hy - 1, 0); a = hy + 1; }
+    if (t >= a) carve.push(x, z, a, t, 0);
   }
   if (carve.length) { const cp = r.part(`${o.id}_carve`.slice(0, 48), { stage }); cp.columns({ abs: 0 }, { abs: 0 }, carve, [null], { cond: 0 }); (r.meta.parts[cp.id] ??= {}).kind = 'carve'; }
   if (geo.banks.length) {
@@ -554,35 +577,20 @@ export function layCourse(r, geo, o) {
     (r.meta.parts[bp.id] ??= {}).kind = 'add';
     notes.push(`raised banks: ${geo.banks.length} cell(s) of fill (the reach stands over a dip of at most ${o.fill ?? COURSE.fill})`);
   }
-  // what stands there before the shells (the first differing block of each chain)
-  const all = geo.reaches.flatMap((R) => [...R.cells, ...R.lining, ...R.weir]);
-  const xs = all.map((c) => c[0]), ys = all.map((c) => c[1]), zs = all.map((c) => c[2]);
-  const natural = naturalOf(r, { minX: Math.min(...xs) - 1, maxX: Math.max(...xs) + 1, minZ: Math.min(...zs) - 1, maxZ: Math.max(...zs) + 1 }, Math.min(...ys) - 2, Math.max(...ys) + 3);
-  const shellRole = shellRoleOf(M, natural, S);
-  // the exits: notches in the rim, never beside a step, a weir or a landing
-  const near = new Set();
-  for (const st of geo.steps) for (const [x, , z] of st.cells) for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) near.add(k2(x + dx, z + dz));
-  for (const R of geo.reaches) for (const [x, , z] of R.weir) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) near.add(k2(x + dx, z + dz));
-  for (const R of geo.reaches) for (const q of R.planJoins) for (const [x, , z] of q.cells) for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) near.add(k2(x + dx, z + dz));
-  const every = COURSE[o.look].notch;
   const bodies = [];
-  const ex = r.part(`${o.id}_exits`.slice(0, 48), { stage });
-  const exCols = [];
   for (const R of [...geo.reaches].reverse()) {
-    const exits = o.exits === false ? [] : exitNotches(R.cells, R.level, { every, max: 64, skip: (x, y, z) => near.has(k2(x, z)) });
-    for (const [x, y, z] of exits) { const t = S.topAt(x, z); if (t >= y) exCols.push(x, z, y, t, 0); }
+    const exits = R.exits;
     const overflow = R.overflow ?? [];
     const rec = r.fluidBody(R.cells, {
       id: R.id, part: o.part ?? null, kind: o.kind ?? 'course', stage, level: R.level, shellRole, outlets: [...R.outlets, ...exits],
       lining: R.lining, weir: R.weir, joins: [...R.joins, ...R.planJoins], solid: R.solid, ice: R.ice.length ? R.ice : null,
       ...(R.grate?.length ? { grate: R.grate } : {}), ...(overflow.length ? { overflow } : {}), ...(R.raised ? { raised: true } : {}),
-      ...(o.unsafe?.[R.k] ? { _unsafe: o.unsafe[R.k] } : {}),
+      ...(unsafe[R.k] ? { _unsafe: unsafe[R.k] } : {}),
     });
     rec.shellStates = shellStatesOf(rec, shellRole);
     for (const c of rec.lining) rec.shellStates.push(shellRole(c[0], c[1], c[2], R.weir.some((w) => w[0] === c[0] && w[1] === c[1] && w[2] === c[2]) ? 'weir' : 'lining'));
     bodies.unshift(rec);
   }
-  if (exCols.length) { ex.columns({ abs: 0 }, { abs: 0 }, exCols, [null], { cond: 0 }); (r.meta.parts[ex.id] ??= {}).kind = 'carve'; }
   return { bodies, notes };
 }
 
@@ -737,12 +745,15 @@ function naturalWater(C, f, toward) {
   if (!F.body) return { error: { code: 'NO_FEATURE', message: 'feature.water names no surveyed water', evidence: { feature: f } } };
   const env = C.env, cols = env.cols, r = cols.resolution;
   const cells = new Set();
-  let level = -Infinity;
+  // (the water's level: its columns' most common surface, the lower on a tie: a river's edges and falls stand higher than its surface)
+  const count = new Map();
   for (const k of F.body.cells) {
     const i = k % cols.width, j = (k - i) / cols.width;
     for (let a = 0; a < r; a++) for (let b = 0; b < r; b++) cells.add(k2(cols.minX + i * r + a, cols.minZ + j * r + b));
-    level = Math.max(level, cols.ground[k]);
+    count.set(cols.ground[k], (count.get(cols.ground[k]) ?? 0) + 1);
   }
+  let level = null;
+  for (const [g, n] of [...count].sort((a, b) => a[0] - b[0])) if (level === null || n > count.get(level)) level = g;
   return { body: F.body, level, cells, rect: F.rect };
 }
 
@@ -800,8 +811,12 @@ export function planCourse(C, p, { block = 'channel.course', via = null, race = 
   // the ends' points (for the uphill rule and the router's heuristic)
   const ptOf = (e) => (e.anchor !== undefined ? env.anchors.get(e.anchor) ?? null : null);
   const toPt = ptOf(part.to), fromPt = ptOf(part.from);
-  const lf = endLevel(C, part.from, toPt), lt = endLevel(C, part.to, fromPt);
-  if (lf !== null && lt !== null && lf < lt) {
+  // (the ends' levels: a water's surface, a plan body's level, a dry end's ground - 1; a course cuts down to a dry `to` by up to `cut`)
+  const lf0 = endLevel(C, part.from, toPt), lt0 = endLevel(C, part.to, fromPt);
+  const dryTo = part.to.feature?.water === undefined && !(part.to.part !== undefined && planBodyOf(C, part.to.part));
+  const dryFrom = part.from.feature?.water === undefined && !(part.from.part !== undefined && planBodyOf(C, part.from.part));
+  const lf = lf0 === null ? null : dryFrom ? lf0 - 1 : lf0, lt = lt0 === null ? null : dryTo ? lt0 - 1 : lt0;
+  if (lf !== null && lt !== null && lf < lt - (dryTo && !dryFrom ? spec.cut : 0)) {
     // never swapped silently: the swapped part as the wouldFit, re-checked alone
     const frag = { ...part, from: part.to, to: part.from };
     const again = planCourse(C, { ...p, part: frag }, { block, via, race, adjust });
@@ -970,7 +985,7 @@ export function planCourse(C, p, { block = 'channel.course', via = null, race = 
   if (adjust) { const a = adjust(full); if (a?.refused) return refuse(a.refused.code, a.refused.message, a.refused.evidence ?? {}, a.refused.extra ?? {}); }
   const frozen = surfaceFreezesAlong(C.ctx, full.path, full.levels);
   const rng = C.ctx.rng ? C.ctx.rng(`course:${p.id}`) : null;
-  const geo = courseGeometry(env.S, full.path, full.levels, spec, { head, tail }, { id: p.id, rng, frozen });
+  const geo = courseGeometry(env.S, full.path, full.levels, spec, { head, tail }, { id: p.id, rng, frozen, okCol: (x, z) => x >= G.box.minX && x <= G.box.maxX && z >= G.box.minZ && z <= G.box.maxZ && G.ok(x, z) });
   if (geo.refused) return refuse(geo.refused.code, geo.refused.message, geo.refused.evidence ?? {});
   // the head's overflow from X: X's side shell cell at its level opened, its spillway's lining X's own (less the head's shell)
   if (head.kind === 'overflow') {
@@ -1046,7 +1061,7 @@ export function emit(K, p, res) {
     const vk = volumeKeep(r, VC, classAt);
     for (const b of out.bodies) {
       const hit = reachMeetsKeep(r, env, b, { volClass: vk });
-      if (hit && process.env.DBG) console.log('LEAKDBG', b.id, JSON.stringify({ path: geo.path.slice(-6), steps: geo.steps.map((q) => q.cells), lining: b.lining, banks: geo.banks.slice(0, 30), watch: b.watch.filter((c) => c[0] >= 1107).slice(0, 30) }));
+      if (hit && process.env.DBG) console.log('LEAKDBG', b.id, JSON.stringify({ path: geo.path.slice(-6), steps: geo.steps.map((q) => q.cells), lining: b.lining, banks: geo.banks.slice(0, 30), watch: b.watch.filter((c) => c[0] >= 1166 && c[0] <= 1168 && c[2] >= 2077 && c[2] <= 2083).slice(0, 30), shell: b.shell.filter((c) => c[0] >= 1166 && c[0] <= 1168 && c[2] >= 2077 && c[2] <= 2083), lin: b.lining.filter((c) => c[0] >= 1166 && c[0] <= 1168) }));
       if (hit) throw leakRefusal(b, hit);
       shellCheck(r, b);
     }

@@ -152,7 +152,8 @@ export async function realiseFixture(ctx, tag, fx, o = {}) {
   for (const b of r.bodies) { const c = await core.censusOf(ctx, b, before, r.bodies); cs[b.id] = { ok: c.ok, sources: c.sources, flowing: c.flowing, mismatch: c.mismatch, outside: c.outside, ticks: c.ticks }; }
   out.census = cs;
   check(Object.values(cs).every((c) => c.ok), `item 9 (${tag}): every body's census equals its prediction (sources, lips, columns, films), 0 fluid outside its cells, spill and joins (${json(Object.entries(cs).map(([k, v]) => [k, v.sources, v.flowing, v.mismatch.length, v.outside.length]))})`, cs);
-  if (o.after) out.after = await o.after(r, { W, box, before });
+  if (o.after) out.after = await o.after(r, { W, T, box, before, ck });
+  if (o.noUndo) { await core.removeWait(ctx, r.region).catch(() => null); await L.leaveWorld(); return out; }
   const rm = await core.removeWait(ctx, r.region);
   await sleep(3000);
   const df = await core.diff(ctx, box, file);
@@ -162,13 +163,121 @@ export async function realiseFixture(ctx, tag, fx, o = {}) {
   return out;
 }
 
-/** The fixtures item 9 realises in game (HY-c's water gate is its own item). */
+/** The fixtures item 9 realises in game (HY-c's water gate is its own item): every HY kind (§14 item 9's list). */
 export const ITEM9 = Object.freeze([
-  ['v50', 'valid/v50_stream.json'],
+  ['v50', 'valid/v50_stream.json'], // a spring stream to a terminal pool (pools and falls)
+  ['v51', 'valid/v51_canal.json'], // a level canal (built)
+  ['v52', 'valid/v52_weir_head.json'], // a weir head (the asks lake)
+  ['v53', 'valid/v53_fall_join.json'], // a fall join into a lake
+  ['v54', 'valid/v54_race.json'], // a race (a wheel fall by its mill lot)
+  ['v55', 'valid/v55_ditch.json'], // a ditch fed by a course
+  ['v56', 'valid/v56_fountain_fed.json'], // a fountain fed by a course, a pond overflowing into a course
+  ['v57', 'hy/v57_moat_fed.json'], // a moat fed by a course (its road bridged over the moat)
+  ['v57b', 'hy/v57b_course_bridged.json'], // a stream crossed by a bridged road
+  ['v59', 'valid/v59_riffles.json'], // a riffle
+  ['steward', 'hy/s01_steward_farm.json'], // a Steward-shaped plan: a farm zone, a race to its mill lot, ditches along its farm
 ]);
+
+/** A kit terrain's ground at a world column (flatSurvey's bands, later bands win), in world y. */
+function groundAt(T, W, x, z) {
+  const kx = x - W.dx, kz = z - W.dz;
+  let g = T.y;
+  for (const b of T.bands) if (kx >= b.x0 && kx <= b.x1 && kz >= b.z0 && kz <= b.z1) g = b.water ? b.y + b.water : b.y;
+  return g + W.off;
+}
+
+/** Vanilla's villager both ways between two feet cells; with `cells`, every path cell (none may be in a fluid of `wet`). */
+async function navBoth(ctx, a, b, wet = null) {
+  const ab = await ctx.L.call('dev.nav.villager', { from: a, to: b, range: 256, cells: true }, 120_000);
+  const ba = await ctx.L.call('dev.nav.villager', { from: b, to: a, range: 256, cells: true }, 120_000);
+  const inWater = wet ? [...(ab.cells ?? []), ...(ba.cells ?? [])].filter((c) => wet.has(k3(c))) : [];
+  return { there: !!ab.canReach, back: !!ba.canReach, inWater: inWater.slice(0, 4), n: (ab.cells ?? []).length };
+}
+
+/** Item 10 on a realised fixture: over every bridge on a course and round every terminal pool, both ways; no path cell in a fluid. */
+async function villagersNav(ctx, tag, r, W, T, ck) {
+  const { check, json } = ctx;
+  const wet = new Set(r.bodies.flatMap((b) => [...b.cells, ...b.spill]).map(k3));
+  const out = {};
+  // the bridges the plan's routes took over a course (the answer's legs)
+  for (const a of ck.check.parts) for (const leg of a.geometry?.legs ?? []) for (const q of leg.bridges ?? []) {
+    if (q.crossing?.over !== 'water') continue;
+    const from = [q.from[0] - q.dir[0] * 2, q.from[1] + 1, q.from[2] - q.dir[1] * 2], to = [q.to[0] + q.dir[0] * 2, q.to[1] + 1, q.to[2] + q.dir[1] * 2];
+    out[`bridge ${a.part} ${q.from.join(',')}`] = await navBoth(ctx, from, to, wet);
+  }
+  // round each terminal pool (the last reach of a course ending in one): a bank 4 west of it to one 4 east of it, at the ground
+  const rows = (ck.check.parts ?? []).filter((a) => a.geometry?.ends?.some?.((e) => e.end === 'to' && e.kind === 'pool'));
+  for (const a of rows) {
+    const b = r.bodies.filter((q) => q.part === a.part).at(-1);
+    if (!b) continue;
+    const xs = b.cells.map((c) => c[0]), zs = b.cells.map((c) => c[2]);
+    const zc = Math.round((Math.min(...zs) + Math.max(...zs)) / 2);
+    const w = [Math.min(...xs) - 4, 0, zc], e = [Math.max(...xs) + 4, 0, zc];
+    w[1] = groundAt(T, W, w[0], w[2]) + 1; e[1] = groundAt(T, W, e[0], e[2]) + 1;
+    out[`pool ${b.id}`] = await navBoth(ctx, w, e, wet);
+  }
+  const all = Object.values(out);
+  check(all.length > 0 && all.every((v) => v.there && v.back && !v.inWater.length), `item 10 (${tag}, the hard bar): vanilla dev.nav.villager both ways over every bridge on a course and round every terminal pool, no path cell in a fluid (${json(Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [v.there, v.back, v.inWater.length]])))})`, out);
+  return out;
+}
+
+/** Item 10's swept stand: 4 villagers dropped into the spring head (above two falls and a riffle), 4 by each reach, 2 minutes at default rules. */
+async function sweptStand(ctx, r) {
+  const { L, check, json } = ctx;
+  await L.setRules('default');
+  await L.cmd('/gamerule spawn_monsters false');
+  await L.cmd('/kill @e[type=!minecraft:player]');
+  const since = Date.now();
+  const head = r.bodies[0];
+  const surf = (b) => b.cells.filter((c) => c[1] === b.level);
+  const placed = [];
+  for (const c of surf(head).slice(0, 4)) { await L.cmd(`/summon minecraft:villager ${c[0] + 0.5} ${c[1] + 1} ${c[2] + 0.5} {Tags:["hyb_stand"],PersistenceRequired:1b}`); placed.push({ swim: true, at: c }); }
+  const { shellOf } = await ctx.imp('lib/fluids/body.mjs');
+  for (const b of r.bodies) {
+    const sh = new Set(b.shell.map(k3));
+    const rim = shellOf(b.cells).filter((c) => c[1] === b.level + 1 && sh.has(k3(c)));
+    const step = Math.max(1, Math.floor(rim.length / 4));
+    for (const c of rim.filter((_, i) => i % step === 0).slice(0, 4)) { await L.cmd(`/summon minecraft:villager ${c[0] + 0.5} ${c[1] + 1} ${c[2] + 0.5} {Tags:["hyb_stand"],PersistenceRequired:1b}`); placed.push({ swim: false, at: c }); }
+  }
+  await L.settle(120_000);
+  const drown = await L.call('dev.entity.damage', { since, type: 'drown' }, 60_000).catch((e) => ({ error: String(e.message ?? e) }));
+  const fall = await L.call('dev.entity.damage', { since, type: 'fall' }, 60_000).catch((e) => ({ error: String(e.message ?? e) }));
+  const alive = await L.cmd('/execute if entity @e[type=minecraft:villager,tag=hyb_stand]');
+  const n = Number((/(\d+)/.exec(String(alive.messages?.join(' ') ?? '')) ?? [0, 0])[1]);
+  // a path from the surface of every reach (where a swept swimmer ends up) to an exit of it (its rim notches)
+  const swims = {};
+  for (const b of r.bodies) {
+    const sh = new Set(b.shell.map(k3));
+    const s0 = surf(b);
+    const p = s0[s0.length >> 1];
+    const exits = shellOf(b.cells).filter((c) => c[1] === b.level + 1 && !sh.has(k3(c))).sort((a, c) => (Math.abs(a[0] - p[0]) + Math.abs(a[2] - p[2])) - (Math.abs(c[0] - p[0]) + Math.abs(c[2] - p[2])));
+    let ok = false;
+    for (const e of exits.slice(0, 4)) if ((await L.call('dev.nav.villager', { from: p, to: e, range: 64 }, 120_000)).canReach === true) { ok = true; break; }
+    swims[b.id] = exits.length ? ok : 'no exit';
+  }
+  const out = { placed: placed.length, alive: n, drown: drown.damage ?? drown.events?.length ?? null, fall: fall.damage ?? fall.events?.length ?? null, deaths: drown.deaths ?? null, swims };
+  const deaths = Array.isArray(out.deaths) ? out.deaths.length : out.deaths;
+  check(!drown.error && !fall.error && out.drown === 0 && out.fall === 0 && !deaths && n === placed.length && Object.values(swims).every((v) => v === true), `item 10 (the swept stand): ${placed.length} villagers (4 dropped into the spring head above two falls and a riffle, 4 by each reach), 2 minutes at default rules: drowning ${out.drown}, fall damage ${out.fall}, deaths ${deaths ?? 0}, ${n} alive; a nav path from each reach's surface to an exit (${json(swims)})`, out);
+  await L.cmd('/kill @e[type=minecraft:villager,tag=hyb_stand]');
+  await L.setRules('exact');
+  return out;
+}
 
 export const items = {
   ingame: [
+    {
+      name: 'item 10: villagers over the bridges and round the pools; the swept stand',
+      async run(ctx) {
+        const only = (process.env.HYB_ONLY ?? '').split(',').filter(Boolean);
+        if (only.length && !only.includes('item10')) return { skipped: true };
+        const out = {};
+        for (const [tag, rel] of [['v57b', 'hy/v57b_course_bridged.json'], ['v50', 'valid/v50_stream.json']]) {
+          try { out[tag] = await realiseFixture(ctx, `nav-${tag}`, fixture(ctx, rel), { rules: 'default', noUndo: true, after: async (r, w) => villagersNav(ctx, tag, r, w.W, w.T, w.ck) }); } catch (e) { ctx.check(false, `item 10 (${tag}): ${String(e.message ?? e).slice(0, 300)}`); try { await ctx.L.leaveWorld(); } catch { /* left */ } }
+        }
+        try { out.swept = await realiseFixture(ctx, 'swept', fixture(ctx, 'valid/v60_falls_riffle.json'), { rules: 'default', noUndo: true, after: async (r) => sweptStand(ctx, r) }); } catch (e) { ctx.check(false, `item 10 (swept): ${String(e.message ?? e).slice(0, 300)}`); try { await ctx.L.leaveWorld(); } catch { /* left */ } }
+        return out;
+      },
+    },
     {
       name: 'item 9: every new kind through Regions.checkPlan and realiseApproved',
       async run(ctx) {
