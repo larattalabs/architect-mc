@@ -79,6 +79,8 @@ export async function buildTerrain(ctx, T, at = null) {
     // a natural site: everything over its lowest ground in the claim and 8 round it cleared to air first (trees, snow, hills), the floor filled
     const c = W.claim;
     await fillBox(L, [c[0] - 8, ground + 1, c[1] - 8, c[2] + 8, Math.min(319, ground + 60), c[3] + 8], 'minecraft:air');
+    // (and the site's own top under it made ground: a frozen site's ice and the water under it are no ground to build on)
+    await fillBox(L, [c[0] - 8, ground - 6, c[1] - 8, c[2] + 8, ground, c[3] + 8], 'minecraft:dirt');
   }
   const g = (y) => y + W.off;
   const base = [cx0 - 8, W.ground + 1, cz0 - 8, cx1 + 8, g(T.y), cz1 + 8];
