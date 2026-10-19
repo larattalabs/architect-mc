@@ -1,5 +1,5 @@
 {
- "about": "(6c HY-b, \u00a714 natural, N-HY-1: S3's pinned claim as a site only, S3's scenario unchanged) a spring on the slope above the river falling by pools into it (a fall join), and a weir head on the pond high on the slope to the north feeding a level canal (S3's river runs between cliffs: no bank of it holds a level canal within cut 6, so the canal leaves the pond)",
+ "about": "(6c HY-b, \u00a714 natural, N-HY-1: S3's pinned claim as a site only, S3's scenario unchanged) a spring on the slope above the river falling by pools into it (a fall join), and a weir head on the pond on the north-west slope (the higher pond to the north freezes: its ice is no bank a weir may stand on) feeding a level canal (S3's river runs between cliffs: no bank of it holds a level canal within cut 6, so the canal leaves the pond)",
  "on": "s3",
  "anchors": {
   "spring": [
@@ -8,9 +8,9 @@
    -882
   ],
   "canal_end": [
-   3658,
-   148,
-   -1012
+   3614,
+   110,
+   -1027
   ]
  },
  "volume": {},
