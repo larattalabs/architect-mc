@@ -4,8 +4,8 @@
 // helpers, tools/lib/gate6chy-core.mjs: planCheck through Regions.checkPlan, realiseApproved, census, snapshots, removal).
 //
 // HY-c's items (the water gate, wall.water_gate, §8.3): hy_gate_demo (kit/regions/hy_gate_demo.mjs: a walled yard, a still reach laid
-// across the wall's south side by kit/lib/fluids/handgate.mjs) on a flat world raised by 5 layers (the reach is sunk 2 deep: superflat's
-// bedrock is 3 under its grass), every realise through Regions.checkPlan and realiseApproved with the approval artifact:
+// across the wall's south side by kit/lib/fluids/handgate.mjs) on the flat base (raised by 5 layers if it is a superflat 3 over bedrock:
+// the reach is sunk 2 deep), every realise through Regions.checkPlan and realiseApproved with the approval artifact:
 //   unit    kit/test/hy-c.test.mjs (the crossing, the grate, the lintel, closure, gates.max, sealed walls, the broken variants caught,
 //           the wire shapes, determinism), K1a's wall tests and the K1 batch test
 //   ingame  item 14 and item 9's water-gate row, under the exact rules: READY, PLACED, the reach settled; the grate censused as
@@ -19,12 +19,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const k2 = (x, z) => `${x},${z}`;
 /** hy_gate_demo's claim on the flat world (128 x 112), clear of HY-core's (9300..9395, 9000..9063). */
 export const CLAIM = [9500, 9000, 9627, 9111];
-/** The flat world's ground raised from -61 to -56 (dirt, grass on top) over the claim and 8 round it. */
+/** Layers a superflat ground is raised by (dirt, grass on top) over the claim and 8 round it. */
 const RAISE = 5;
 const LOOK_BIBLES = [null, 'g7ak1_infernal', 'g7ak1_coastal'];
 
@@ -38,15 +39,19 @@ async function freshGate(ctx, name, rules = 'exact') {
   await L.fresh(name, core.FLAT);
   if (rules === 'exact') await L.setRules('exact');
   else { await L.cmd('/weather clear'); await L.cmd('/time set 6000'); }
-  await L.tp((CLAIM[0] + CLAIM[2]) / 2, 40, (CLAIM[1] + CLAIM[3]) / 2);
-  const g0 = -61;
-  for (let x = CLAIM[0] - 8; x <= CLAIM[2] + 8; x += 32) for (let z = CLAIM[1] - 8; z <= CLAIM[3] + 8; z += 32) {
-    const x1 = Math.min(CLAIM[2] + 8, x + 31), z1 = Math.min(CLAIM[3] + 8, z + 31);
-    await L.cmd(`/fill ${x} ${g0} ${z} ${x1} ${g0 + RAISE - 1} ${z1} minecraft:dirt`);
-    await L.cmd(`/fill ${x} ${g0 + RAISE} ${z} ${x1} ${g0 + RAISE} ${z1} minecraft:grass_block`);
+  // the ground from the survey (HY-core's groundOf); a superflat ground (3 over bedrock) is raised by RAISE layers first, so a reach 2
+  // deep and its floor stand in dirt
+  let g = await core.groundOf(ctx, CLAIM);
+  if (g < -55) {
+    for (let x = CLAIM[0] - 8; x <= CLAIM[2] + 8; x += 32) for (let z = CLAIM[1] - 8; z <= CLAIM[3] + 8; z += 32) {
+      const x1 = Math.min(CLAIM[2] + 8, x + 31), z1 = Math.min(CLAIM[3] + 8, z + 31);
+      await L.cmd(`/fill ${x} ${g} ${z} ${x1} ${g + RAISE - 1} ${z1} minecraft:dirt`);
+      await L.cmd(`/fill ${x} ${g + RAISE} ${z} ${x1} ${g + RAISE} ${z1} minecraft:grass_block`);
+    }
+    await L.settle(2000);
+    g = await core.groundOf(ctx, CLAIM);
   }
-  await L.settle(2000);
-  return g0 + RAISE;
+  return g;
 }
 
 /** hy_gate_demo's plan through Regions.checkPlan (the two-plan flow). */
@@ -57,6 +62,18 @@ async function checkGate(ctx, tag, params = {}, extra = {}) {
   const c = await L.call('dev.region.checkPlan', { plan, claim: CLAIM, owner: core.OWNER, anchors, load: 'generate', ...extra }, 900_000);
   fs.writeFileSync(path.join(OUT, `hyc-${tag}-check.json`), `${JSON.stringify(c, null, 1)}\n`);
   return c;
+}
+
+/** The approval artifact the sidecar saved for a check: the plan dir's artifact.json whose bytes hash to `sha`, or null. */
+function findArtifact(L, sha) {
+  const dir = path.join(L.SIDECAR_DATA, 'regions', 'plans');
+  for (const d of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
+    const f = path.join(dir, d, 'artifact.json');
+    if (!fs.existsSync(f)) continue;
+    const b = fs.readFileSync(f);
+    if (createHash('sha256').update(b).digest('hex') === sha) return JSON.parse(b.toString('utf8'));
+  }
+  return null;
 }
 
 const boxOf = (g) => [CLAIM[0] - 8, g - 8, CLAIM[1] - 8, CLAIM[2] + 8, g + 40, CLAIM[3] + 8];
@@ -100,13 +117,12 @@ async function pushStand(ctx, G, tag) {
   const m = G.along === 'z' ? `0.0d,0.0d,${(0.35 * out).toFixed(2)}d` : `${(0.35 * out).toFixed(2)}d,0.0d,0.0d`;
   const t0 = Date.now();
   while (Date.now() - t0 < 20_000) { await L.cmd(`/execute as @e[tag=hyc_push] run data merge entity @s {Motion:[${m}]}`); await sleep(150); }
-  const ids = (await L.cmd('/execute as @e[tag=hyc_push] run data get entity @s id')).messages ?? [];
   const pos = (await L.cmd('/execute as @e[tag=hyc_push] run data get entity @s Pos')).messages ?? [];
   const mobs = pos.map((p, i) => {
     const v = (/\[([^\]]*)\]/.exec(p)?.[1] ?? '').split(',').map((s) => Number.parseFloat(s));
     const a = G.along === 'z' ? v[2] : v[0];
     const beyond = out > 0 ? a > G.hi + 1 : a < G.lo;
-    return { id: (/"([^"]+)"/.exec(ids[i] ?? '')?.[1]) ?? ids[i], pos: v, beyond };
+    return { pos: v.map((q) => Math.round(q * 100) / 100), beyond };
   });
   await L.cmd('/kill @e[tag=hyc_push]');
   await L.cmd('/time set 6000');
@@ -152,6 +168,11 @@ async function gateIngame(ctx) {
     const wallA = (c.check?.parts ?? []).find((a) => a.part === 'castle');
     out.check = { overall: c.check?.overall ?? null, parts, volumePass: c.volumePass ?? null, crossing: wallA?.geometry?.crossing ?? null, waterGates: wallA?.geometry?.waterGates ?? null };
     check(c.check?.overall === 'READY' && parts.every(([, k]) => k === 'fits'), `item 9 (water gate): hy_gate_demo through Regions.checkPlan's two-plan flow: ${out.check.overall} (${json(parts)}; volumes ${json(c.volumePass ?? null)})`);
+    // (§10) the reach's approval guard: per body, flat runs (H RC3)
+    const art = c.check?.artifactSha ? findArtifact(L, c.check.artifactSha) : null;
+    const guards = (art?.guards ?? []).filter((q) => q.body === 'race_r1');
+    out.check.guards = guards.map((q) => ({ part: q.part, body: q.body, kind: q.kind, runs: q.runs?.length }));
+    check(guards.length === 1 && guards[0].kind === 'body' && guards[0].fluids === true && Array.isArray(guards[0].runs) && guards[0].runs.every(Number.isInteger), `item 9 (water gate): the reach's guard is per body and flat ({part, body, kind: body, fluids, volume, runs}: ${json(out.check.guards)})`);
     check(json(wallA?.geometry?.crossing) === json({ type: 'wall', over: 'course', gate: 'water', course: 'race' }), `item 14: the wall's answer carries crossing ${json(wallA?.geometry?.crossing ?? null)}`);
     const box = boxOf(g);
     const file = await core.snap(ctx, box, 'hyc-gate');
@@ -179,7 +200,7 @@ async function gateIngame(ctx) {
     check(Object.values(out.nav).every((v) => !v.error && v.throughGrate === 0), `item 14: vanilla dev.nav.villager from the reach's inside to its outside (bank and water) never paths through the grate or under the lintel (${json(out.nav)})`);
     // the push stand
     out.push = await pushStand(ctx, G, 'grate');
-    check(out.push.alive >= 3 && out.push.beyond === 0, `item 14: the push stand: ${out.push.alive} of ${out.push.summoned} mobs (zombies, villagers, a spider) pushed at the grate from inside for 20 s, ${out.push.beyond} beyond it (${json(out.push.mobs.map((q) => [q.id, q.beyond]))})`);
+    check(out.push.alive >= 3 && out.push.beyond === 0, `item 14: the push stand: ${out.push.alive} of ${out.push.summoned} mobs (zombies, villagers, a spider) pushed at the grate from inside for 20 s, ${out.push.beyond} beyond it (${json(out.push.mobs.map((q) => q.pos))})`);
     const rm = await core.removeWait(ctx, r.region);
     await sleep(3000);
     const df = await core.diff(ctx, box, file);
@@ -248,7 +269,7 @@ async function gateLook(ctx) {
     const P = (a, lat, dy) => (G.along === 'z' ? [cx + lat, y + dy, cz + a * out1] : [cx + a * out1, y + dy, cz + lat]);
     for (const [name, eye, at] of [
       ['outside', P(14, 6, 5), P(0, 0, 0)],
-      ['low', P(6, 2, 0.5), P(0, 0, -0.5)],
+      ['low', P(3, 0, 0.6), P(0, 0, -0.6)],
       ['inside', P(-12, -5, 6), P(0, 0, 1)],
       ['high', P(30, 18, 26), P(-6, 0, 0)],
     ]) out.shots.push({ bible: tag, ...(await shot(ctx, `${tag}_${name}`, eye, at)) });
