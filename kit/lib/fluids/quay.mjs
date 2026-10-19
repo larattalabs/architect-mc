@@ -160,13 +160,18 @@ function findQuay(C, bodies, aim, len, reach, vols, whys) {
         if (!w || !okXZ(dx, dz) || !inBody.has(w.k) || (w.flags & (FLAG_LAVA | FLAG_MISSING))) return null;
         if (surface === null) surface = w.ground;
         if (w.ground !== surface) { whys.add('level'); return null; }
-        const col = wetColumn(vols, dx, dz, w.ground, w.floor, { waterDepth: QUAY.waterDepth });
-        if (!col.ok) { whys.add(col.why); return null; }
-        deck.push({ x: dx, z: dz, u, t, bed: col.bed, surface: w.ground, depth: col.depth });
+        deck.push({ x: dx, z: dz, u, t, floor: w.floor, surface: w.ground });
       }
     }
     // the bank within one step of the deck's walk surface (its top block at surface + 1)
     if (bank.some(([, , g]) => g < surface || g > surface + 2)) { whys.add('bank'); return null; }
+    // ((the H batch) the water read last, after the survey-only tests: a candidate with no bank never answers `unread` (in a second plan
+    // holding another part's fluid volumes, an unread column would else turn a quay with no room into incomplete VOLUME for ever)
+    for (let i = 0; i < deck.length; i++) {
+      const q = deck[i], col = wetColumn(vols, q.x, q.z, q.surface, q.floor, { waterDepth: QUAY.waterDepth });
+      if (!col.ok) { whys.add(col.why); return null; }
+      deck[i] = { x: q.x, z: q.z, u: q.u, t: q.t, bed: col.bed, surface: q.surface, depth: col.depth };
+    }
     const xs = [...bank, ...deck.map((q) => [q.x, q.z])].map((q) => q[0]), zs = [...bank, ...deck.map((q) => [q.x, q.z])].map((q) => q[1]);
     const rect = [Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)];
     if (meets(rect, taken, 1)) { whys.add('taken'); return null; }
