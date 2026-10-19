@@ -327,7 +327,7 @@ export async function ingame(ctx) {
   }
   // ---- (E) the H batch's removal review (§4.1, §4.2): a player's water source in the pond's watch set after the realise is kept by the
   // removal (the drain takes only the body's own cells, spill, watch, predicted flow and recorded escapes), and fluid ticking for ever in
-  // a watch set (a river's current, here dev.fluid.tick every 0.5 s) holds the removal at most 2 x the settle bound after the drain
+  // a watch set (a river's current, here fluid ticks scheduled ahead on the shell every 10 ticks) holds the removal at most 2 x the settle bound after the drain
   {
     await freshFlat(ctx, 'G6B H Keep', 'exact');
     const d = await planDemo(ctx, {});
@@ -339,10 +339,11 @@ export async function ingame(ctx) {
     await L.cmd(`/setblock ${src[0]} ${src[1]} ${src[2]} minecraft:water`);
     await sleep(5000);
     const bound = Math.max(...d.bodies.map((b) => b.settleTicks));
-    let ticking = true;
-    const ticker = (async () => { while (ticking) { await L.call('dev.fluid.tick', { cells: [src], delay: 20 }, 10_000).catch(() => null); await sleep(500); } })();
-    let rm;
-    try { rm = await removeWait(ctx, r.region); } finally { ticking = false; await ticker; }
+    // fluid ticks scheduled ahead over the removal's whole window (the DevBridge serves dev.region.remove until the removal ends, so a
+    // loop could not schedule them during it): one per shell cell (all in the watch set), every 10 ticks, past 4 x the bound + 10 s
+    const horizon = 4 * bound + 200, cells = pond.shell.slice(0, Math.ceil(horizon / 10));
+    for (let i = 0; i < cells.length; i++) await L.call('dev.fluid.tick', { cells: [cells[i]], delay: 10 * (i + 1) }, 10_000);
+    const rm = await removeWait(ctx, r.region);
     const st = await L.call('dev.fluid.state', { region: r.region }, 10_000).catch((e) => ({ error: String(e.message ?? e) }));
     const c = await L.call('dev.fluid.census', { box: [src[0] - 1, src[1] - 1, src[2] - 1, src[0] + 1, src[1] + 1, src[2] + 1] }, 60_000);
     const at = c.fluids.find(([x, y, z]) => x === src[0] && y === src[1] && z === src[2]);
