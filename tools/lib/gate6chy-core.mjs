@@ -301,7 +301,9 @@ export async function ingame(ctx) {
       const r1 = r.bodies.find((b) => b.id === 'stream_r1'), r2 = r.bodies.find((b) => b.id === 'stream_r2');
       const bank = r2.shell.filter(([x, y, z]) => y === r2.level && !r2.cells.some((q) => q[0] === x && q[2] === z)).sort((a, b) => a[0] - b[0] || a[2] - b[2])[0];
       const lining = r1.lining.find(([x]) => x > Math.max(...r1.cells.map((q) => q[0])));
-      for (const c of [bank, lining]) await L.cmd(`/setblock ${c[0]} ${c[1]} ${c[2]} minecraft:air`);
+      const minX = Math.min(...r1.cells.map((q) => q[0]));
+      const weir = r1.lining.filter(([x, y]) => x === minX - 2 && y === r1.level).sort((a, b) => a[2] - b[2])[1];
+      for (const c of [bank, lining, weir]) await L.cmd(`/setblock ${c[0]} ${c[1]} ${c[2]} minecraft:air`);
       await sleep(Math.max(...r.bodies.map((b) => b.settleTicks)) * 50 * 2 + 3000);
     }
     const rm = await removeWait(ctx, r.region);
