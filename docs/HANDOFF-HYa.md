@@ -11,4 +11,6 @@ Branch `slice/HY-a`, worktree `../architect-mc-HYa`, from main 23fb4921. Pure ki
 5. Tests `kit/test/hy-a.test.mjs`; byte identity driver against origin/main; timing recorded.
 
 ## State
-- [ ] 1 [ ] 2 [ ] 3 [ ] 4 [ ] 5; verifier; "HY-a as built"; push.
+- [x] 1-5 built; kit suite 566/0; unchanged 191 of 193 identical (r08, e15 excepted); timing recorded; "HY-a as built" written.
+- [ ] gate-verifier; retire this file; push.
+- plan_v0.mjs must stay unedited (its sha is every IR's programSha): compile registers the pass via r._hydrology.
