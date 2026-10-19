@@ -56,8 +56,8 @@ export function worldSpec(raw) {
 }
 
 /**
- * (housekeeping 3) An existing world's game mode from its level.dat (Data.GameType 1: creative, else survival; Data.hardcore 1:
- * hardcore), or null when there is no world (a new one takes the spec's) or it can't be read.
+ * (housekeeping 3) An existing world's game mode from its level.dat (Data.GameType 1: creative, else survival; hardcore 1 in
+ * Data.difficulty_settings, or Data itself: hardcore), or null when there is no world (a new one takes the spec's) or it can't be read.
  */
 export function levelMode(worldDir) {
   const f = path.join(worldDir, 'level.dat');
@@ -66,7 +66,8 @@ export function levelMode(worldDir) {
     const raw = fs.readFileSync(f);
     const b = raw[0] === 0x1f && raw[1] === 0x8b ? zlib.gunzipSync(raw) : raw;
     const d = plainNbt(decodeNbt(b)).Data ?? {};
-    if (Number(d.hardcore ?? 0) === 1) return 'hardcore';
+    // (26.3 keeps the flag in difficulty_settings; older level.dat files at the top of Data)
+    if (Number(d.difficulty_settings?.hardcore ?? d.hardcore ?? 0) === 1) return 'hardcore';
     return Number(d.GameType ?? 0) === 1 ? 'creative' : 'survival';
   } catch {
     return null;

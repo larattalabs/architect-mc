@@ -260,7 +260,7 @@ steps.base = async () => {
   const host = (await import('./lib/basestamp.mjs')).gateHost();
   let made = null;
   try { made = JSON.parse(fs.readFileSync(mark, 'utf8')); } catch { made = null; }
-  if (!made || (made.host ?? 'client') !== host) {
+  if (made?.host !== host) {
     await leaveWorld();
     fs.rmSync(path.join(SAVES, SURV), { recursive: true, force: true });
     await openWorld(SURV, { mode: 'survival', preset: 'flat', seed: '2026101100', cheats: true });
@@ -448,15 +448,9 @@ steps.store = async () => {
   const g = await api(`sgroup ${b.group}`);
   check(!g?.crate, `store: the batch's group has no shared crate (sharedCrate ignored; ${json(g?.crate)})`);
   const st0 = await pstate();
-  // (housekeeping 3) a target that needs nothing more (the batch's 40-cell path road over grass) can finish during the settle and
-  // leave the feed order before it is read: headless ticks never lag, so there r1 was BUILT and gone (5 of 6 in the order). Such a
-  // target must be BUILT now; the order is judged over the targets still in it
-  // (BUILT as waitBuilt reads it: the API's site list; dev.site.state answers an infra road 'placing' or 'placed')
-  const gone = {}, all0 = await sites();
-  for (const [k, id] of Object.entries(ids)) if (!st0.feedOrder.includes(id)) gone[k] = all0.find((x) => x.id === id)?.state ?? null;
-  check(Object.values(gone).every((x) => x === 'BUILT'), `store: all six targets are in the feed order, or already BUILT and so out of it (${json(st0.feedOrder)}; out of it: ${json(gone)})`);
-  const batchOrder = ['h1', 'h2', 'h3', 'r1'].filter((k) => !(k in gone)).map((k) => st0.feedOrder.indexOf(ids[k]));
-  check(batchOrder.length >= 3 && batchOrder.every((v, i) => i === 0 || batchOrder[i - 1] < v), `store: the default order is the batch's item order (${json(st0.feedOrder)}; BUILT already: ${json(Object.keys(gone))})`);
+  check(Object.values(ids).every((id) => st0.feedOrder.includes(id)), `store: all six targets are in the feed order (${json(st0.feedOrder)})`);
+  check(st0.feedOrder.indexOf(ids.h1) < st0.feedOrder.indexOf(ids.h2) && st0.feedOrder.indexOf(ids.h2) < st0.feedOrder.indexOf(ids.h3)
+    && st0.feedOrder.indexOf(ids.h3) < st0.feedOrder.indexOf(ids.r1), `store: the default order is the batch's item order (${json(st0.feedOrder)})`);
   out.bom = st0.outstanding;
   // feed the whole bill in waves (chunks of 40 per item), a checkpoint after every wave and while building
   await feedAll(cons, `stockpile:${OWNER}`, { chunk: 40, onWave: async (w) => { await cons.point(`wave ${w}`); } });
