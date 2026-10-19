@@ -127,7 +127,8 @@ steps.unit = async () => {
   out.diff = dk.text;
   const lines = (t) => t.split('\n');
   check(dk.code === 0 && lines(dk.text).includes('reserved -> supported: connector.bridge, connector.tunnel') && lines(dk.text).includes('added: bridge.arch (supported), bridge.beam (supported), connector.drawbridge (reserved), connector.tube (reserved), tunnel.through (supported), tunnel.under (reserved)') && /limits changed: connector\.auto/.test(dk.text), `item 10: tools/plan-catalogue-diff.mjs K1 -> T3 (the archived catalogues 5 and 6) lists the two flips, the six added ids and auto's moves`, lines(dk.text));
-  const dh = diff('kit/test/fixtures/plan/catalogue-t3.json', 'kit/schemas/plan-catalogue.golden.json');
+  // ((6c HY) catalogue 7 is archived as catalogue-h.json: the golden is catalogue 8 now)
+  const dh = diff('kit/test/fixtures/plan/catalogue-t3.json', 'kit/test/fixtures/plan/catalogue-h.json');
   out.diffH = dh.text;
   check(dh.code === 0 && lines(dh.text)[0] === 'catalogue 6 (API 1.33.0) -> 7 (API 1.34.0)' && lines(dh.text).includes('reserved -> supported: connector.channel, form.pond, form.waterfall') && lines(dh.text).includes('added: channel.course (reserved), channel.moat (supported), form.fountain (supported), form.quay (supported)') && lines(dh.text).includes('retired: none') && lines(dh.text).includes('REMOVED (never allowed): none'), `item 10 (after H): T3 -> H (catalogue-t3.json -> the golden, catalogue 7) lists exactly the three flips (connector.channel, form.pond, form.waterfall) and the four added ids (channel.course reserved; channel.moat, form.fountain, form.quay supported), nothing retired or removed`, lines(dh.text));
   // item 15: api-compat against the unchanged 0.35.0, 0.34.0 and 0.33.0 jars (the mod's classes must be built)

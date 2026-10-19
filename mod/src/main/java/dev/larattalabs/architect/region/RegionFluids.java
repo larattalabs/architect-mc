@@ -1353,6 +1353,10 @@ public final class RegionFluids {
 		}
 		o.addProperty("phase", st.phase);
 		o.addProperty("forcedAt", st.forcedAt);
+		o.addProperty("ordered", st.ordered); // (6c HY)
+		JsonArray order = new JsonArray();
+		st.order.forEach(b -> order.add(b.id));
+		o.add("order", order);
 		if (st.removal != null) {
 			o.addProperty("removal", st.removal);
 			o.addProperty("until", st.until);
@@ -1375,6 +1379,8 @@ public final class RegionFluids {
 			x.addProperty("settleTicks", b.settleTicks);
 			x.addProperty("settledAt", bs.settledAt);
 			x.addProperty("captured", bs.before.size());
+			x.addProperty("writtenAt", bs.writtenAt); // (6c HY) an ordered region's write time per body (-1: the stage's forced tick, or never)
+			x.addProperty("held", bs.held);
 			bodies.add(x);
 		}
 		o.add("bodies", bodies);
