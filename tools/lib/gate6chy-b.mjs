@@ -31,17 +31,19 @@ export function terrainOf(fx) {
 }
 
 /** The world placement of a terrain: {claim: [x0, z0, x1, z1], dx, dz, off (kit y + off = world y), minY, maxY}. */
-export function worldOf(T) {
+export function worldOf(T, ground = WORLD.ground) {
   let lo = T.y, hi = T.y;
   for (const b of T.bands) { lo = Math.min(lo, b.y); hi = Math.max(hi, b.water ? b.y + b.water : b.y); }
   // (the lowest floor stands one over the flat world's grass, so every band is built over it)
-  const off = WORLD.ground + 1 - lo;
+  const off = ground + 1 - lo;
   const dx = WORLD.X0 - T.x0, dz = WORLD.Z0 - T.z0;
-  return { claim: [WORLD.X0, WORLD.Z0, WORLD.X0 + T.W - 1, WORLD.Z0 + T.D - 1], dx, dz, off, minY: lo + off, maxY: hi + off };
+  return { claim: [WORLD.X0, WORLD.Z0, WORLD.X0 + T.W - 1, WORLD.Z0 + T.D - 1], dx, dz, off, minY: lo + off, maxY: hi + off, ground };
 }
 
 /** /fill a box in slabs of at most 32768 blocks. */
 async function fillBox(L, [x0, y0, z0, x1, y1, z1], block) {
+  if (y1 < y0) return;
+  if (block === 'minecraft:water' || block === 'minecraft:air') { /* (sources and air: placed as given) */ }
   if (y1 < y0) return;
   const per = (y1 - y0 + 1) * (z1 - z0 + 1);
   const step = Math.max(1, Math.floor(32768 / per));
@@ -50,27 +52,38 @@ async function fillBox(L, [x0, y0, z0, x1, y1, z1], block) {
     for (let z = z0; z <= z1; z += zs) await fillBox(L, [x0, y0, z, x1, y1, Math.min(z1, z + zs - 1)], block);
     return;
   }
-  for (let x = x0; x <= x1; x += step) await L.cmd(`/fill ${x} ${y0} ${z0} ${Math.min(x1, x + step - 1)} ${y1} ${z1} ${block}`);
+  for (let x = x0; x <= x1; x += step) {
+    const r = await L.cmd(`/fill ${x} ${y0} ${z0} ${Math.min(x1, x + step - 1)} ${y1} ${z1} ${block}`);
+    const msg = JSON.stringify(r?.messages ?? r ?? '');
+    if (/not loaded|too many|cannot|Unknown|error/i.test(msg)) throw new Error(`/fill ${x} ${y0} ${z0}: ${msg.slice(0, 200)}`);
+  }
 }
 
 /** Build a terrain over the flat base (the claim and 8 round it): dirt to the ground, grass on top; each band as flatSurvey reads it. */
 export async function buildTerrain(ctx, T) {
-  const L = ctx.L, W = worldOf(T);
-  const [cx0, cz0, cx1, cz1] = W.claim;
-  const g = (y) => y + W.off;
-  await L.tp((cx0 + cx1) / 2, g(T.y) + 40, (cz0 + cz1) / 2);
+  const L = ctx.L;
+  const w0 = worldOf(T);
+  const [cx0, cz0, cx1, cz1] = w0.claim;
+  // (every chunk of the claim and 8 round it loaded while it is built: /forceload, at most 256 chunks a call)
+  await L.tp((cx0 + cx1) / 2, 120, (cz0 + cz1) / 2);
+  for (let x = (cx0 - 8) >> 4; x <= (cx1 + 8) >> 4; x += 12) for (let z = (cz0 - 8) >> 4; z <= (cz1 + 8) >> 4; z += 12) {
+    await L.cmd(`/forceload add ${x * 16} ${z * 16} ${Math.min((cx1 + 8) >> 4, x + 11) * 16 + 15} ${Math.min((cz1 + 8) >> 4, z + 11) * 16 + 15}`);
+  }
   await L.call('dev.waitChunks', { timeoutMs: 120_000 }, 150_000).catch(() => {});
-  // (load the claim's chunks: the bot walks over it in steps)
-  for (let x = cx0; x <= cx1 + 64; x += 96) for (let z = cz0; z <= cz1 + 64; z += 96) { await L.tp(x, g(T.y) + 40, z); await L.call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => {}); }
-  const base = [cx0 - 8, WORLD.ground + 1, cz0 - 8, cx1 + 8, g(T.y), cz1 + 8];
-  if (g(T.y) > WORLD.ground + 1) await fillBox(L, [base[0], base[1], base[2], base[3], g(T.y) - 1, base[5]], 'minecraft:dirt');
+  await L.settle(3000);
+  // (the flat base's own ground, surveyed: every band is built over it)
+  const ground = await ctx.core.groundOf(ctx, w0.claim);
+  const W = worldOf(T, ground);
+  const g = (y) => y + W.off;
+  const base = [cx0 - 8, W.ground + 1, cz0 - 8, cx1 + 8, g(T.y), cz1 + 8];
+  if (g(T.y) > W.ground + 1) await fillBox(L, [base[0], base[1], base[2], base[3], g(T.y) - 1, base[5]], 'minecraft:dirt');
   await fillBox(L, [base[0], g(T.y), base[2], base[3], g(T.y), base[5]], 'minecraft:grass_block');
   for (const b of T.bands) {
     const bx0 = Math.max(T.x0, b.x0) + W.dx, bx1 = Math.min(T.x0 + T.W - 1, b.x1) + W.dx, bz0 = Math.max(T.z0, b.z0) + W.dz, bz1 = Math.min(T.z0 + T.D - 1, b.z1) + W.dz;
     const top = Math.max(g(T.y), g(b.water ? b.y + b.water : b.y)) + 1;
     // clear the column over the band's floor to the old top, then the floor, then the water or the grass
     await fillBox(L, [bx0, g(b.y), bz0, bx1, top, bz1], 'minecraft:air');
-    if (g(b.y) - 1 >= WORLD.ground + 1) await fillBox(L, [bx0, WORLD.ground + 1, bz0, bx1, g(b.y) - 1, bz1], 'minecraft:dirt');
+    if (g(b.y) - 1 >= W.ground + 1) await fillBox(L, [bx0, W.ground + 1, bz0, bx1, g(b.y) - 1, bz1], 'minecraft:dirt');
     if (b.water) {
       await fillBox(L, [bx0, g(b.y), bz0, bx1, g(b.y), bz1], 'minecraft:sand');
       await fillBox(L, [bx0, g(b.y) + 1, bz0, bx1, g(b.y + b.water), bz1], 'minecraft:water');

@@ -265,6 +265,28 @@ export function passInput(K) {
       q.top = Math.max(q.top, y); q.level = Math.min(q.level, b.level);
       shell.set(k, q);
     }
+    // ((6c HY, §8.1) a course's spill (lips, falls, riffles) is water to the routes and its lining shell, so no route walks in it or
+    // lands a bridge on it; a course's end within 4 of the claim's edge reaches the edge (a course from edge to edge seals the claim,
+    // as a closed moat does). Only for courses: an H plan's input is as before)
+    if (b.kind === 'course' || b.kind === 'ditch') {
+      for (const [x, y, z] of b.spill) { const k = k2(x, z); if (!water.has(k)) water.set(k, Math.min(y, b.level)); }
+      for (const [x, y, z] of b.lining ?? []) {
+        const k = k2(x, z);
+        if (water.has(k)) continue;
+        const q = shell.get(k) ?? { top: S.groundAt(x, z), level: b.level };
+        q.top = Math.max(q.top, y); q.level = Math.min(q.level, b.level);
+        shell.set(k, q);
+      }
+      const c = K.env.claim;
+      for (const [x, , z] of b.cells) {
+        const run = [];
+        if (x - c.minX <= 4) for (let a = c.minX; a < x; a++) run.push([a, z]);
+        if (c.maxX - x <= 4) for (let a = x + 1; a <= c.maxX; a++) run.push([a, z]);
+        if (z - c.minZ <= 4) for (let a = c.minZ; a < z; a++) run.push([x, a]);
+        if (c.maxZ - z <= 4) for (let a = z + 1; a <= c.maxZ; a++) run.push([x, a]);
+        for (const [a, d] of run) { const k = k2(a, d); if (!water.has(k) && !shell.has(k)) shell.set(k, { top: S.groundAt(a, d), level: b.level }); }
+      }
+    }
     if (b.raised) {
       const xs = [...b.cells, ...b.shell].map((c) => c[0]), zs = [...b.cells, ...b.shell].map((c) => c[2]);
       hard.push([Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)]);

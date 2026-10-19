@@ -846,7 +846,9 @@ export function planCourse(C, p, { block = 'channel.course', via = null, race = 
       const hx = s.ox + dx, hz = s.oz + dz;
       if (!G.ok(hx, hz) || !G.ok(s.ox, s.oz)) continue;
       const g = env.S.groundAt(hx, hz);
-      starts.push({ x: hx, z: hz, d: s.d, level: Math.min(s.level - 1, g - 1), site: s });
+      // (the head's shell at the outlet's column stays clear of X's side walls under the outlet: X's depth there)
+      const dX = B.depth.get(k2(s.x, s.z)) ?? 1;
+      starts.push({ x: hx, z: hz, d: s.d, level: Math.min(dX <= 1 ? s.level - 1 : s.level - dX - 1, g - 1), site: s });
     }
     if (!starts.length) return refuse('NO_ROOM', `${F.part} has no straight edge clear of the plan for an overflow`, { kind: 'overflow', part: F.part });
   } else {
