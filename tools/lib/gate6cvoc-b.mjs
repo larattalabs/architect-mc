@@ -24,6 +24,8 @@ import { pathToFileURL } from 'node:url';
 const OWNER = 'test:vocb';
 const FLAT = 'G6B Flat Base';
 const FLAT_CLAIM = [7000, 7000, 7239, 7159];
+/** The flat base world's ground (its surface blocks at y 64; a building stands from 65). */
+const FLAT_Y = 64;
 const S3_SEED = '2026100906';
 const LOOK_BIBLES = ['g6cvoc_modern', 'g6cvoc_grotto', 'g6cvoc_forge', 'g6cvoc_copper'];
 const j = (o) => JSON.stringify(o ?? null).replaceAll(' ', '');
@@ -509,7 +511,7 @@ const survival = [{
     };
     const box6 = (s) => String(s).replace(/[^-0-9,]/g, ' ').trim().split(/[\s,]+/).map(Number);
     const hash = async (b) => L.call('dev.box.hash', { min: [b[0], b[1], b[2]], max: [b[3], b[4], b[5]] }, 300_000);
-    const at = [7100, -60, 7100];
+    const at = [7100, FLAT_Y + 1, 7100];
     for (const [k, id] of ['voc_shrine', 'voc_copper_hall'].entries()) {
       const o = {};
       out[id] = o;
@@ -517,7 +519,7 @@ const survival = [{
       await L.fresh(`G6B VOCb Surv ${k}`, FLAT);
       await L.setRules('exact');
       await L.call('dev.survival.set', { on: true });
-      await L.tp(x + 4, -40, z + 4);
+      await L.tp(x + 4, FLAT_Y + 20, z + 4);
       const v = await api(`check ${id} ${x} ${y} ${z} CONSTRUCTION owned actor`);
       o.verdict = { ok: v.ok, construction: v.construction, bomFull: v.bomFull, bomExact: v.bomExact, restoreBox: v.restoreBox, refusals: v.refusals };
       const want = id === 'voc_shrine' ? ['minecraft:beacon', 'minecraft:iron_block'] : ['minecraft:copper_block', 'minecraft:cut_copper', 'minecraft:copper_bulb'];
@@ -576,7 +578,7 @@ const survival = [{
       // the instant reference at the same spot
       await L.fresh(`G6B VOCb SurvRef ${k}`, FLAT);
       await L.setRules('exact');
-      await L.tp(x + 4, -40, z + 4);
+      await L.tp(x + 4, FLAT_Y + 20, z + 4);
       const ref = await result(await api(`place ${id} ${x} ${y} ${z} INSTANT unowned noactor 0 force`));
       o.instant = { placed: ref?.placed, hash: (await hash(rb)).sha256 };
       check(ref?.placed && o.instant.hash === o.survivalHash, `item 11 (${id}): the built site is identical to an instant placement over its restore box (block entities included): ${o.survivalHash.slice(0, 12)} vs ${o.instant.hash.slice(0, 12)}`);
@@ -622,7 +624,7 @@ const look = [{
       void geo;
       const [x0, z0, x1, z1] = rect;
       const mx = (x0 + x1) >> 1, mz = (z0 + z1) >> 1;
-      const gy = -60;
+      const gy = FLAT_Y;
       out.shots.push(await shot(ctx, `${bible}_village`, [mx - 30, gy + 34, z1 + 34], [mx, gy + 2, mz]));
       out.shots.push(await shot(ctx, `${bible}_square`, [mx + 10, gy + 12, mz + 16], [mx, gy + 1, mz]));
     }
@@ -632,12 +634,12 @@ const look = [{
     const api = async (args) => { const r = await L.cmd(`/apitest ${args}`); const line = (r.messages ?? []).find((m) => m.startsWith('{')); return line ? JSON.parse(line) : null; };
     for (const [i, id] of ids.entries()) {
       const x = 7100 + 18 * i, z = 7100;
-      await L.tp(x, -40, z);
-      await api(`place ${id} ${x} -60 ${z} INSTANT unowned noactor 0 force`);
+      await L.tp(x, FLAT_Y + 20, z);
+      await api(`place ${id} ${x} ${FLAT_Y + 1} ${z} INSTANT unowned noactor 0 force`);
       await sleep(3000);
-      out.shots.push(await shot(ctx, `design_${id}`, [x + 5, -50, z + 22], [x + 4, -56, z + 3]));
+      out.shots.push(await shot(ctx, `design_${id}`, [x + 12, FLAT_Y + 12, z + 22], [x + 4, FLAT_Y + 4, z + 4]));
     }
-    out.shots.push(await shot(ctx, 'designs_row', [7100 + 27, -38, 7100 + 40], [7100 + 27, -57, 7100 + 4]));
+    out.shots.push(await shot(ctx, 'designs_row', [7100 + 27, FLAT_Y + 26, 7100 + 46], [7100 + 27, FLAT_Y + 3, 7100 + 4]));
     fs.writeFileSync(path.join(ctx.OUT, 'look-vocb', 'shots.json'), `${JSON.stringify(out, null, 1)}\n`);
     check(true, `item 15 (recorded, not judged: Noah's call, N-VOC-5): ${out.shots.length} screenshots in look-vocb/ (the four bibles on v50's village, the four designs)`, out.shots.map((s) => s.name));
     return out;
