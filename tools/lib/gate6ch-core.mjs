@@ -351,6 +351,25 @@ export async function ingame(ctx) {
     check(!!at && /^minecraft:water/.test(at[3]) && !/level=[1-9]/.test(at[3]), `removal review (defect 2): the player's water source at ${json(src)} in the pond's watch set is kept by the removal (${json(at ?? null)})`);
     await L.leaveWorld();
   }
+  // ---- (F) the H batch: the farm pond end to end in game. v49's plan (its only H is `farmPond: true`) through Regions.checkPlan: the
+  // two-plan flow runs on the farm pond alone (PlanChecks.hasH), samples the ponds' volumes with their fluid layer, and the second plan
+  // places both ponds
+  {
+    await freshFlat(ctx, 'G6B H FarmPond', 'exact');
+    const fx = JSON.parse(fs.readFileSync(path.join(ctx.root, 'kit', 'test', 'fixtures', 'plan', 'valid', 'v49_farm_pond.json'), 'utf8'));
+    const claim = [9200, 9000, 9439, 9159];
+    const cx = (claim[0] + claim[2]) >> 1, cz = (claim[1] + claim[3]) >> 1;
+    const anchors = { stone: [cx, 65, cz], player: [cx - 24, 65, cz - 24], stockpile: [cx + 12, 65, cz + 12], street_w: [claim[0] + 8, 65, cz], street_e: [claim[2] - 8, 65, cz] };
+    await L.tp(cx, 120, cz);
+    const c = await L.call('dev.region.checkPlan', { plan: fx.plan, claim, owner: OWNER, anchors, load: 'generate' }, 900_000);
+    fs.writeFileSync(path.join(ctx.OUT, 'h-farmpond-check.json'), `${JSON.stringify(c, null, 1)}\n`);
+    const farms = (c.check?.parts ?? []).find((a) => a.part === 'farms');
+    const vp = c.volumePass ?? null;
+    out.farmPond = { overall: c.check?.overall ?? null, volumePass: vp, farms: farms ? { class: farms.class, notes: (farms.notes ?? []).filter((n) => /farmPond/.test(n)) } : null };
+    check(vp && vp.asked >= 2 && !vp.why && c.check?.overall === 'READY', `farm pond in game: v49 through Regions.checkPlan ran the two-plan flow on farmPond alone (${json(vp)}): ${c.check?.overall}`);
+    check(farms?.class === 'fits' && (farms.notes ?? []).filter((n) => /farmPond: f\d gets a 3x3 pond/.test(n)).length === 2, `farm pond in game: both farm lots get their pond in the second plan (${json(out.farmPond.farms)})`);
+    await L.leaveWorld();
+  }
   log(`  ingame: ${json(Object.keys(out))}`);
   return out;
 }
