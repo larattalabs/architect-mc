@@ -297,7 +297,7 @@ export function courseGeometry(S, path, routeLevels, spec, ends, o) {
   // the levels never rise, and stand at most `fill` over the ground - 1 the router allowed
   for (let i = 1; i < nR; i++) pcols[i].level = Math.min(pcols[i].level, pcols[i - 1].level);
   if (process.env.DBG) console.log("PROF", JSON.stringify(path.map((c, i) => [...c, pcols[i]?.top, pcols[i]?.level])));
-  const prof = profileOf(pcols, { minReach: PROFILE.minReach, drop: spec.drop, flow: o.frozen && spec.flow === 'riffles' ? 'pools' : spec.flow, riffle: spec.riffle, cut: spec.cut, minDrop: o.minDrop ?? 1 });
+  const prof = profileOf(pcols, { minReach: PROFILE.minReach, drop: spec.drop, ...(spec.riffleCells ? { riffleCells: spec.riffleCells } : {}), flow: o.frozen && spec.flow === 'riffles' ? 'pools' : spec.flow, riffle: spec.riffle, cut: spec.cut, minDrop: o.minDrop ?? 1 });
   if (prof.refused) return prof;
   // (a frozen course: a spillway's submerged outlet would join two reaches at one level; its upper reach takes the lower level)
   if (o.frozen) {
@@ -805,6 +805,8 @@ export function planCourse(C, p, { block = 'channel.course', via = null, race = 
   const env = C.env, part = p.part;
   const spec = courseSpec(part, block);
   const notes = [...spec.notes];
+  // (the gate's probe (c), ext 'architect_mc:unsafe' {longRiffle: true}: a riffle past its 16-cell cap, recorded, never a plan's)
+  if (part.ext?.['architect_mc:unsafe']?.longRiffle === true) { spec.riffleCells = 32; notes.push('architect_mc:unsafe longRiffle: a riffle past its cap (the gate\'s probe (c))'); }
   const offs = laneOffsets(spec.width);
   const refuse = (code, message, evidence = {}, extra = {}) => ({ klass: code === 'UNSUPPORTED' ? 'unsupported' : 'refused', notes, reasons: [{ code, message, evidence, ...(extra.until ? { until: extra.until, block: extra.block } : {}) }], ...(extra.wouldFit ? { wouldFit: extra.wouldFit } : {}) });
   if (part.fluid === 'lava' || part.params?.fluid === 'lava') return refuse('FIRE', 'lava is allowed only in a lined pit (form.pond, R22): a course holds water', { kind: 'lava' });

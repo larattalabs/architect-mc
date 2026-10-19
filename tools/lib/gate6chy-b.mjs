@@ -127,7 +127,9 @@ export function fixture(ctx, rel) {
  * `o.after(r)`: more checks while it stands (villagers, a breach). Returns the evidence.
  */
 export async function realiseFixture(ctx, tag, fx, o = {}) {
-  const { L, check, json, core } = ctx;
+  const { L, json, core } = ctx;
+  // (`quiet`: a recorded probe: its checks are logged as recorded, never failed)
+  const check = o.quiet ? (ok, m, d) => ctx.check(true, `(recorded${ok ? '' : ', not as predicted'}) ${m}`, d) : ctx.check;
   const out = { tag };
   await L.fresh(`G6B HYb ${tag}`, o.base ?? core.FLAT);
   await L.setRules(o.rules ?? 'exact');
@@ -154,7 +156,7 @@ export async function realiseFixture(ctx, tag, fx, o = {}) {
     W.minY = y0; W.maxY = y1; W.S = S;
   }
   const wp = await worldPlan(ctx, fx, W);
-  const ck = await L.call('dev.region.checkPlan', { plan: wp.plan, claim: W.claim, owner: core.OWNER, anchors: wp.anchors, load: 'generate' }, 1_800_000);
+  const ck = await L.call('dev.region.checkPlan', { plan: wp.plan, claim: W.claim, owner: core.OWNER, anchors: wp.anchors, load: 'generate', ...(o.bible ? { bible: o.bible } : {}) }, 1_800_000);
   fs.writeFileSync(path.join(ctx.OUT, `hyb-${tag}-check.json`), `${JSON.stringify(ck, null, 1)}\n`);
   const parts = (ck.check?.parts ?? []).map((a) => [a.part, a.class, a.reasons?.[0]?.code ?? null]);
   out.check = { overall: ck.check?.overall ?? null, parts, refused: ck.refused ?? null };
@@ -302,10 +304,128 @@ async function sweptStand(ctx, r) {
   return out;
 }
 
+/**
+ * Item 11 (§13): the 59 asks through the two-plan flow on the asks claim with the kit at `kitDir`: the gap table text (the classes, the
+ * unsupported blocks, every part's class), the malformed count and the answers naming until HY.
+ */
+export async function asksGap(kitDir) {
+  const H = await import(pathToFileURL(path.join(kitDir, 'test', 'plan-helpers.mjs')).href);
+  const dir = path.join(kitDir, 'test', 'fixtures', 'plan', 'asks');
+  const s = H.asksSurvey();
+  const tally = {}, gaps = {}, classes = [];
+  let malformed = 0, untilHY = 0;
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) {
+    const plan = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')).answer.plan;
+    const r = await H.checkPlanVolumes(plan, { survey: s.bytes, claim: s.claim, anchors: H.stewardAnchors(s.claim), volume: {} });
+    for (const a of r.check.parts) {
+      tally[a.class] = (tally[a.class] ?? 0) + 1;
+      if (a.class === 'malformed') malformed++;
+      if (/"until":"HY[a-z]*"/i.test(JSON.stringify(a))) untilHY++;
+      if (a.class === 'unsupported') gaps[a.block] = (gaps[a.block] ?? 0) + 1;
+      classes.push(`${f.replace('.json', '')}/${a.part} ${a.block} ${a.class}${a.reasons?.[0]?.code ? ` ${a.reasons[0].code}` : ''}${a.reasons?.[0]?.until ? ` until ${a.reasons[0].until}` : ''}`);
+    }
+  }
+  const rows = Object.entries(gaps).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  const text = `${[`# 59 asks: ${Object.entries(tally).sort().map(([k, v]) => `${k} ${v}`).join(', ')}`, '# gap table (unsupported parts per block id):', ...rows.map(([k, v]) => `  ${k.padEnd(24)} ${v}`), '# every part:', ...classes].join('\n')}\n`;
+  return { text, malformed, untilHY, course: gaps['channel.course'] ?? 0 };
+}
+
 /** The S3 claim (scenarios/s3_monastery.json, N-HY-1: a site only) and the frozen site (2026101102) of the gate. */
 const S3_BASE = 'G6B Seed Base', FROZEN_SEED = '2026101102';
 
+/** The look's bibles (H-a's three): the default, infernal, coastal. */
+const LOOK_BIBLES = [null, 'g7ak1_infernal', 'g7ak1_coastal'];
+/** The look's fixtures: every kind in the default bible; the stream and the canal in the other two (their materials are the bible's). */
+const LOOK = Object.freeze([
+  ['stream', 'valid/v60_falls_riffle.json', true], ['canal', 'valid/v51_canal.json', true], ['weir', 'valid/v52_weir_head.json', false],
+  ['race', 'valid/v54_race.json', false], ['ditch', 'valid/v55_ditch.json', false], ['fountain', 'valid/v56_fountain_fed.json', false],
+]);
+
+/** Item 20 (the look, client, recorded): camera shots of each course: an overview, each step (falls, riffles), its weir, its ends. */
+async function lookShots(ctx, tag, r) {
+  const { L, OUT, log } = ctx;
+  const dir = path.join(OUT, 'hyb-look');
+  fs.mkdirSync(dir, { recursive: true });
+  await L.cmd('/time set 6000');
+  const shots = [];
+  const shot = async (name, eye, at, what) => {
+    await L.call('dev.camera', { x: eye[0], y: eye[1], z: eye[2], lookAt: { x: at[0], y: at[1], z: at[2] }, mode: 'spectator', fov: 70 }, 60_000);
+    await L.call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => null);
+    await L.settle(2000);
+    const q = await L.call('dev.screenshot', { name: `hyb_${name}`, frames: 10, chunkTimeoutMs: 60_000 }, 180_000);
+    const file = path.join(dir, `${name}.png`);
+    fs.copyFileSync(q.path, file);
+    log(`  shot ${name}`);
+    shots.push({ name, what, eye, at, file: path.relative(OUT, file) });
+  };
+  const box = (cells) => { const xs = cells.map((c) => c[0]), ys = cells.map((c) => c[1]), zs = cells.map((c) => c[2]); return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys), z0: Math.min(...zs), z1: Math.max(...zs) }; };
+  // per part: an overview from the south-east, high
+  const parts = [...new Set(r.bodies.map((b) => b.part))];
+  for (const part of parts) {
+    const bs = r.bodies.filter((b) => b.part === part);
+    const B = box(bs.flatMap((b) => [...b.cells, ...b.shell]));
+    const at = [(B.x0 + B.x1) / 2, B.y1, (B.z0 + B.z1) / 2];
+    const span = Math.max(B.x1 - B.x0, B.z1 - B.z0, 12);
+    await shot(`${tag}_${part}`, [at[0] + span * 0.35, B.y1 + span * 0.45, at[2] + span * 0.55], at, `${part}: the whole`);
+    // each step (a body's spill: a lip, a fall's column, a riffle), from beside it
+    let k = 0;
+    for (const b of bs) {
+      if (!b.spill.length || k >= 3) continue;
+      const S = box(b.spill);
+      const sa = [(S.x0 + S.x1) / 2 + 0.5, (S.y0 + S.y1) / 2, (S.z0 + S.z1) / 2 + 0.5];
+      const along = S.x1 - S.x0 >= S.z1 - S.z0;
+      await shot(`${tag}_${part}_step${++k}`, along ? [sa[0] + 3, S.y1 + 5, sa[2] + 10] : [sa[0] + 10, S.y1 + 5, sa[2] + 3], sa, `${part}: ${b.id}'s step (its lip, fall or riffle)`);
+    }
+    // a weir (a lining course facing natural water)
+    const weirB = bs.find((b) => b.lining.length && b.joins.length === 0 && b.planJoins.length === 0 && !b.spill.length);
+    if (weirB) { const Wb = box(weirB.lining); const wa = [(Wb.x0 + Wb.x1) / 2 + 0.5, Wb.y1, (Wb.z0 + Wb.z1) / 2 + 0.5]; await shot(`${tag}_${part}_weir`, [wa[0] - 8, Wb.y1 + 6, wa[2] + 8], wa, `${part}: the weir head`); }
+  }
+  return shots;
+}
+
 export const items = {
+  look: [
+    {
+      name: 'item 20: the look (client, recorded): a stream, a canal, falls, a riffle, a weir head, a race and its wheel fall, a ditch by a farm, a fountain fed by a course, in three bibles',
+      async run(ctx) {
+        const { L } = ctx;
+        for (const id of LOOK_BIBLES) if (id) {
+          const dst = path.join(L.GAME_DIR, 'architect', 'bibles', id, 'versions', '1');
+          fs.mkdirSync(dst, { recursive: true });
+          fs.copyFileSync(path.join(ctx.root, 'scenarios', 'bibles', `${id}.json`), path.join(dst, 'bible.json'));
+        }
+        const all = [];
+        for (const bible of LOOK_BIBLES) for (const [name, rel, every] of LOOK) {
+          if (bible && !every) continue;
+          const tag = `${bible ? bible.replace(/^g7ak1_/, '') : 'default'}_${name}`;
+          try {
+            const res = await realiseFixture(ctx, `look-${tag}`, fixture(ctx, rel), { rules: 'exact', bible, noUndo: true, after: async (r) => lookShots(ctx, tag, r) });
+            for (const q of res.after ?? []) all.push({ bible: bible ?? 'default', kind: name, ...q });
+          } catch (e) { ctx.log(`  look ${tag}: ${String(e.message ?? e).slice(0, 200)}`); try { await L.leaveWorld(); } catch { /* left */ } }
+          await L.call('dev.release', {}).catch(() => null);
+        }
+        fs.writeFileSync(path.join(ctx.OUT, 'hyb-look', 'look.json'), `${JSON.stringify(all, null, 2)}\n`);
+        ctx.check(all.length >= 20, `item 20 (the look, recorded not judged): ${all.length} camera shot(s) in ${LOOK_BIBLES.length} bibles (${path.join(ctx.OUT, 'hyb-look')})`);
+        return { shots: all.length };
+      },
+    },
+  ],
+  unit: [
+    {
+      name: 'item 11: the 59 recorded asks (§13): as on v0.37.0, 0 malformed, no until HY, channel.course 0',
+      async run(ctx) {
+        const after = await asksGap(ctx.KIT);
+        const F = path.join(ctx.KIT, 'test', 'fixtures', 'plan', 'hy');
+        const before = fs.readFileSync(path.join(F, 'asks-gap-before.txt'), 'utf8'), committed = fs.readFileSync(path.join(F, 'asks-gap-after.txt'), 'utf8');
+        fs.writeFileSync(path.join(ctx.OUT, 'hyb-asks-gap.txt'), after.text);
+        const lines = (t) => new Map(t.split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/')).map((l) => [l.split(' ')[0], l]));
+        const lb = lines(before), la = lines(after.text);
+        const moved = [...la].filter(([k, v]) => lb.get(k) !== v).map(([k]) => k);
+        ctx.check(after.text === committed && after.malformed === 0 && after.untilHY === 0 && after.course === 0 && moved.length === 0, `item 11: the 59 asks' gap table equals fixtures/plan/hy/asks-gap-after.txt and the before table (v0.37.0's): ${after.malformed} malformed, ${after.untilHY} answers naming until HY, channel.course ${after.course}, ${moved.length} part(s) moved class${moved.length ? ` (${moved.join(', ')})` : ''}`);
+        return { moved, malformed: after.malformed, untilHY: after.untilHY };
+      },
+    },
+  ],
   natural: [
     {
       name: 'natural (S3): a spring falling by pools into the river, a weir head feeding a level canal: census, villagers, E-normal undo',
@@ -350,6 +470,22 @@ export const items = {
     },
   ],
   ingame: [
+    {
+      name: 'item 18 (c), recorded: the census against the prediction on riffles of 2, 4 and 6 per drop and 1 to 3 drops, and one long run past the cap',
+      async run(ctx) {
+        const only = (process.env.HYB_ONLY ?? '').split(',').filter(Boolean);
+        if (only.length && !only.includes('probe')) return { skipped: true };
+        const out = {};
+        for (const [tag, rel] of [['p01', 'hy/p01_riffle_probe.json'], ['p02', 'hy/p02_long_riffle.json']]) {
+          try {
+            const res = await realiseFixture(ctx, `probe-${tag}`, fixture(ctx, rel), { rules: 'exact', noUndo: true, quiet: true });
+            out[tag] = Object.fromEntries(Object.entries(res.census ?? {}).map(([k, v]) => [k, { ok: v.ok, flowing: v.flowing, mismatch: v.mismatch.length, outside: v.outside.length }]));
+          } catch (e) { out[tag] = { error: String(e.message ?? e).slice(0, 300) }; try { await ctx.L.leaveWorld(); } catch { /* left */ } }
+        }
+        ctx.check(true, `item 18 (c) (recorded): the census on riffles, per body: ${ctx.json(out)}`);
+        return out;
+      },
+    },
     {
       name: 'item 10: villagers over the bridges and round the pools; the swept stand',
       async run(ctx) {

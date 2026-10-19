@@ -30,7 +30,7 @@ function runsOf(levels) {
 /** The profile of a path (see the header). */
 export function profileOf(cols, opts = {}) {
   const minReach = opts.minReach ?? PROFILE.minReach, maxDrop = opts.drop ?? PROFILE.drop, cutMax = opts.cut ?? PROFILE.cut;
-  const flow = opts.flow ?? 'pools', seg0 = opts.riffle ?? PROFILE.riffle;
+  const flow = opts.flow ?? 'pools', seg0 = opts.riffle ?? PROFILE.riffle, rCells = opts.riffleCells ?? PROFILE.riffleCells;
   const n = cols.length;
   if (!n) return { refused: { code: 'UNREACHABLE', message: 'the course has no cells', evidence: { kind: 'length' } } };
   const levels = cols.map((c) => c.level);
@@ -98,7 +98,7 @@ export function profileOf(cols, opts = {}) {
     const len = up.i1 - up.i0 + 1;
     // a riffle: D segments of `seg` cells (the last one spills 1 into the lower reach), at most 3 drops and 16 cells, the path straight
     if (flow === 'riffles' && D <= PROFILE.riffleDrops + 1) {
-      const seg = Math.max(2, Math.min(seg0, Math.floor(PROFILE.riffleCells / D)));
+      const seg = Math.max(2, Math.min(seg0, Math.floor(rCells / D)));
       const cells = D * seg;
       const i0 = up.i1 - cells + 1;
       let ok = len - cells >= minReach - 1 && i0 > up.i0;

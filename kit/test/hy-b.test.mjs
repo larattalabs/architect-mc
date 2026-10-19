@@ -107,3 +107,19 @@ test('item 12: no answer carries until HY; the pending placeholder is gone once 
   assert.equal(fs.existsSync(path.join(FIX, 'hy-pending-b.json')), false);
   assert.equal(fs.existsSync(path.join(FIX, 'h', 'r08_course.json')), false, 'r08 is valid/v51_canal now');
 });
+
+test('hydro_demo (r.course over sculpted terraces): a brook through two falls and two riffles and a built canal, M25-clean, the same IR twice', async () => {
+  const { planTwice } = await import('./h-helpers.mjs');
+  const { flatSurvey } = await import('./plan-helpers.mjs');
+  const demo = await import('../regions/hydro_demo.mjs');
+  const src = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'regions', 'hydro_demo.mjs'), 'utf8');
+  const sv = flatSurvey();
+  const plan = () => planTwice({ program: demo, programSource: src, params: {}, survey: sv.bytes, seed: '7', claim: sv.claim, node: 'test' });
+  const [a, b] = [await plan(), await plan()];
+  assert.equal(a.irJson, b.irJson, 'the same IR');
+  const brook = a.meta.courses.find((c) => c.id === 'brook');
+  assert.deepEqual(brook.steps.map((s) => s.kind), ['fall', 'fall', 'riffle', 'riffle']);
+  assert.equal(a.meta.courses.find((c) => c.id === 'canal').look, 'built');
+  const rep = checkRegion({ ir: a.ir, survey: sv.bytes, blobs: a.blobs, volumes: a.volumes.map((v) => v.decoded), meta: a.meta });
+  assert.deepEqual((rep.findings ?? []).filter((x) => /^M25/.test(x.rule)).map((x) => [x.rule, x.part, x.message]), []);
+});
