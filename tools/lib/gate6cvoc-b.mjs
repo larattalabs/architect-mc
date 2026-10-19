@@ -220,7 +220,7 @@ async function realisedVsVirtual(ctx, pdir, vw, ir, after, before) {
  * artifact's cost members, realiseApproved, the realised world against the virtual one, M20/M26/M27 recomputed on it, cost.bom and
  * cost.rarity against the realised cells, Regions.remove and the box against its snapshot. Returns the evidence.
  */
-async function realiseRun(ctx, tag, { claim, plan, bible = null, rarityWant = undefined, remove = 'E-flat', rules = 'exact', expectReady = true, keep = false }) {
+async function realiseRun(ctx, tag, { claim, plan, bible = null, rarityWant = undefined, remove = 'E-flat', rules = 'exact', expectReady = true, keep = false, expectEmpty = false }) {
   const { L, OUT, check } = ctx;
   const out = { tag, claim };
   await L.setRules(rules);
@@ -273,7 +273,8 @@ async function realiseRun(ctx, tag, { claim, plan, bible = null, rarityWant = un
   const { vw } = V.buildVirtual({ ir, survey, blobs });
   const before = await V.decodeArwd(fs.readFileSync(beforeF)), after = await V.decodeArwd(fs.readFileSync(afterF));
   out.virtual = await realisedVsVirtual(ctx, pdir, vw, ir, after, before);
-  check(out.virtual.written > 0 && out.virtual.differ === 0, `${tag}: the realised world equals the virtual world over every written cell outside the lots (${out.virtual.written} cells; ${out.virtual.kept} kept by their op's condition, ${out.virtual.road} on 4e ground roads; ${out.virtual.differ} unclassified)`, out.virtual.first);
+  if (expectEmpty) check(out.virtual.written === 0 && out.realise.cells === 0, `${tag}: the refused part wrote nothing (the plan's only part: ${out.virtual.written} planned cells, ${out.realise.cells} written)`);
+  else check(out.virtual.written > 0 && out.virtual.differ === 0, `${tag}: the realised world equals the virtual world over every written cell outside the lots (${out.virtual.written} cells; ${out.virtual.kept} kept by their op's condition, ${out.virtual.road} on 4e ground roads; ${out.virtual.differ} unclassified)`, out.virtual.first);
   const RULES = ['M20', 'M26', 'M27'];
   const repV = checkRegion({ ir, survey, blobs, meta, prefix: false, rules: RULES });
   const world = V.dumpWorld(before, after, ir.claim, { virtual: vw, lots: ir.lots });
@@ -388,7 +389,7 @@ const ingame = [{
       fs.mkdirSync(path.join(L.GAME_DIR, 'architect', 'bibles', id, 'versions', '1'), { recursive: true });
       fs.writeFileSync(path.join(L.GAME_DIR, 'architect', 'bibles', id, 'versions', '1', 'bible.json'), `${JSON.stringify({ ...fx.styleJson, name: `G6C-VOC ${f.slice(0, 3)}` }, null, 1)}\n`);
       await L.fresh(`G6B VOCb ${f.slice(0, 3)}`, FLAT);
-      const r = await realiseRun(ctx, f.slice(0, 3), { claim: FLAT_CLAIM, plan: fx.plan, bible: id, expectReady: false });
+      const r = await realiseRun(ctx, f.slice(0, 3), { claim: FLAT_CLAIM, plan: fx.plan, bible: id, expectReady: false, expectEmpty: true });
       const a = (r.check.parts ?? []).find((p) => p.part === fx.expect.part);
       out.refusals[f] = { overall: r.check.overall, answer: a ?? null, realise: r.realise ?? null };
       check(a?.class === 'refused' && a.reasons?.[0]?.code === fx.expect.code && a.reasons[0].evidence?.rule === fx.expect.rule && (a.reasons[0].evidence?.cells ?? []).length > 0,
