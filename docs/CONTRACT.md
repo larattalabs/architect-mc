@@ -9641,7 +9641,7 @@ waterfall cell, and a lava pit with a stone rim; its flat variant (the program s
 - The hydrology pass and channels (HY). Flowing rivers and waterfalls beyond declared cells (SETTLEMENTS §21). M16 flood
   behaviour (7a). Bubble-column lifts (7a).
 
-## Phase 6c slice HY: hydrology and channels (DRAFT for Steward review)
+## Phase 6c slice HY: hydrology and channels (DRAFT; SUPERSEDED 2026-10-19 by "Phase 6c slice HY: hydrology and channels" at the end)
 
 API 1.24.0, mod 0.27.0 (wave 4). SETTLEMENTS §4.2.
 
@@ -15006,3 +15006,744 @@ VOC-b can start against a stub vocab (every block `common`, `sv: craft`) and swi
 - Teaching the bible job to choose budgets (N-VOC-1, a paid check).
 - Block entity contents (banner patterns, sign text, pot sherds) as vocabulary.
 - Bible format 3's `settlement.roleShares` (7c). Palette suggestions from a chest (phase 3's optional item).
+
+## Phase 6c slice HY: hydrology and channels (DRAFT for Steward review)
+
+Water that follows the land: streams, canals, mill races and irrigation ditches, each a `channel.course` (or one of its two
+siblings) that steps down the terrain from a head to a tail, plus the `hydrology` pass and its `flow` and `wet` fields. Where
+H stops and HY starts is H §7.4's line, which binds: **H owns water at one level, HY owns water that follows the land.**
+**This section supersedes the wave-4 draft "Phase 6c slice HY: hydrology and channels" above.** That draft predates plan/0, the
+catalogue, P0's answer classes, K1/T3's special-move table and all of H. What still holds from it is kept here: the pass
+(priority flood, D8, accumulation, `flow` and `wet`), channels cut into level reaches with declared falls between them, the
+`minReach` merge and avoidance of lots and keep-out. Its N-HY-1 answer binds (§0, "Binding answers carried over").
+
+SETTLEMENTS §4.2 ("designed water, contained"), §11, §21 (flowing rivers deferred); PLAN toolbox "Fluids"; H as built (H-core,
+H-a, H-b and "H batch as integrated"), T1, T2, T3, K1, P0, D1. API: the next free minor at merge (placeholder 1.35.0 over
+v0.37.0), mod 0.38.0, kit 0.36.0, catalogue "next" (8 if HY merges before VOC; the coordinator sets the number, §6).
+
+- **Branch:** `slice/HY` (or `hy/core`, `slice/HYa`, `slice/HYb`, `slice/HYc`, §15), worktree `../architect-mc-HY`. **Spend:** $0.
+  No Claude call; sim and stub only.
+- **Scope:**
+  - **HY-core, flowing courses on H's model** (§1-§4): a course as a chain of H bodies with flowing spill between them; joins into
+    plan bodies; registered overflows; the weir; downstream-first writes and upstream-closure drains; multi-body parts; M25 and
+    the census extended to courses; the two-plan trigger and guards; catalogue next; codes and the gate.
+  - **HY-a, the hydrology pass** (§5): priority flood, D8, accumulation, the `flow` and `wet` fields, `data.courses` for
+    `channelAt`, and the fields wired into material rules, masks and scatter (which already read fields by name).
+  - **HY-b, courses** (§7): the course router and profile; streams and canals (`channel.course`), mill races (`channel.race`),
+    irrigation ditches (`channel.ditch`); ends at springs, terminal pools, natural water (weir head, fall join) and plan bodies
+    (ponds, fountains, moats, other courses); crossings by T3's bridge fallback; the tunnel buffer.
+  - **HY-c, water gates** (§8.3): a course through a K1 wall under a lintel, behind a grate.
+- **Not in scope:**
+  - written flowing states, and flowing rivers (SETTLEMENTS §21): lint `FLUID_STATE` stays (§1.1);
+  - regenerating or adopting vanilla rivers and springs; a course never takes natural water into a body (§1.5);
+  - **working farms**: farmland hydrated for yield is a later block (S-H-1, S-H-2, Noah 2026-10-11), and a region never writes
+    in a lot box (K5). HY's ditches run outside lot boxes and hydrate nothing inside them (§7.6);
+  - lava courses (N-H-3: no lava channels);
+  - **mechanisms:** locks, sluice gates, water wheels that turn; aqueducts on arches (`channel.aqueduct`, reserved, §6);
+    culverts and fords (§8.1); M16 flood behaviour beyond the single breach (7a);
+  - building HY's parts in survival (RS);
+  - S3: **N-HY-1 binds**, S3 v1 has no stream. HY moves no S3 scenario, golden or program. The gate uses S3's pinned claim
+    only as a natural site, as H did.
+- **Depends on** (all on main): H (`r.fluidBody`, `sim.mjs`, M25, the fluids stage, census, escape guard, drain-first removal,
+  ARVX v3, the two-plan flow and guards, `env.planWater`, `sealedByPlanWater`, the moat and its berm); T1 (passes, fields,
+  `base`); T2 and T3 (the route pass, the bridge fallback, `fluidBuffer`); K1 (walls, closure, gates, `line.mjs`); P0;
+  D1 (districts' `wet` tag).
+
+### 0. Facts (v0.37.0)
+
+**What H left for HY**
+- `channel.course` is reserved `until: HY` (catalogue 7). A `from`/`to` channel answers `unsupported {channel.course, until: HY}`
+  (R21; `kit/lib/fluids/moat.mjs:86`; fixture `h/r08_course`, a canal from `street_w` to `street_e` on a flat claim).
+  `extension/e15_*` lists it among the reserved; `h-foundation.test.mjs` asserts it (lines 39-40, 68).
+- `connector.channel`'s def already carries `from`, `via` (at most 8) and `to` as `$defs/endpoint` (`part` with `port`,
+  `anchor`, `feature`, `region`, `build`), `width` 1..7 and `depth` 1..4. Its limits say `forms: ["moat"]`.
+- `kit/lib/region/passes/index.mjs` names `hydrology` as HY's; D1's `prefer` tag `wet` is computed from surveyed water
+  ("HY's `wet` field when present").
+
+**H's fluid model, as built** (the foundation HY extends; nothing below changes for an H-only plan)
+- **Bodies:** sources only, at or under one surface `level`; a written shell (ALWAYS_OURS, `fs`, never `g`, the part's own); an
+  open top; `outlets` (cells with no shell: today only the exit notches over the surface); `joins` only into **natural**
+  sources at least 2 deep from the frozen volume; `spill` computed by `sim.mjs`, never written.
+- **The flow:** `simulate(world, bodies, {breach})`: the conservative reach (every direction, 7 for water) for every safety
+  rule; `predicted` (vanilla's FlowingFluid replayed with the drop preference and levels) for the census only. Other bodies'
+  cells are their fluid's sources, so a flow meeting another body stops there.
+- **The stage:** `fluids` last, bodies in plan order, the live check (shells hold, joins are sources, cells open), one forced
+  tick, a census every 5 ticks over the watch set (cells, shell, spill, watch, grown by 2); settled when no fluid tick is
+  scheduled and every source and predicted level holds; the escape guard drains a body whose fluid leaves its cells, spill and
+  joins (outside every other standing body's cells and prediction); `2 x settleTicks` without settling drains as `unsettled`.
+  A ticket holds the chunks. PARTIAL when any body drained. The ext `architect_mc:fluids` reports per body (S-H-6).
+- **Removal:** drain first (reverse plan order; befores in `fluids.json`), a settle bound with no fluid tick, capped at
+  2 x the bound (`architect_mc:fluidsRemoval {state: capped}`), then the solids. A player's water outside a body's cells,
+  spill and `watch` is kept.
+- **Plan check:** `PlanChecks.H_KINDS` = pond, fountain, waterfall, quay, channel (so a `channel.course` already triggers the
+  two-plan flow); guards `{part, body, kind: body | wet, fluids: true, volume, runs}`, flat (H RC3).
+- **Routes:** plan water reaches the route pass as FLAG_WATER plus `env.planWater` (1 water, 2 shell, 3 lava); an edge across a
+  closed moat fails ROUTE_WATER at once (`sealedByPlanWater`) and takes T3's bridge fallback, clearance 1 (N-H-5).
+- **Walls:** the plan's own water stays `WATER` for walls (H-b): a wall never stands in plan water.
+- **Tunnels:** a bore keeps `fluidBuffer` 2 from water, lava or ice (T3b).
+- **Readings that bind HY too:** a shell block must differ from the cell it replaces, or the realise skips the write and the
+  shell is unowned (H-a: a bed is clay in dirt, dirt in stone); vanilla's villager path can't climb a bank 2 over water, hence
+  rim notches; the mod's natural terrain holds no ice (`LEAK {kind: unwritable}`); the frozen site's water freezes between a
+  check and a realise under default rules (H-a: check and realise there under the exact rules).
+
+**T1's fields, as built:** `r.pass(name, intent) -> {fields, ops, data}`; fields are side blobs; material rules (`material.mjs`,
+`{field, gte, lt}`), masks (`mask.mjs`) and scatter density (`scatter.mjs`, `{field, scale}`) read a field by name and refuse a
+name the IR doesn't hold. A program declares the passes it calls; `plan_v0` declares none of `hydrology` today.
+
+**Steward's recorded plans** (`fixtures/plan/asks/`, steward-mc 8703dbd): **no recorded part is a course, race or ditch.**
+- Water-shaped parts are H's (the hidden village's waterfall, the redstone gate's moat) and answer as on v0.37.0.
+- Water in lot briefs stays the lots' own: the farm village's "windmill and bakery ... by water if any", the boom town's "stamp
+  mill and sluice", the hermit's garden water source, the cat sanctuary's fish pond, the swamp's ladders to the water.
+- Natural rivers named by zones (`rival_families` "no bridge", `old_new_town` "by the river") are `feature.water`, unchanged.
+- The asks claim has a lake (bed 60, ground 64) and a stream, synthesized as sources in kit CI (H §10).
+
+**Vanilla 26.3** (each **assumed** line is probed in §14):
+- A non-source water cell spreads at most 7 over a floor and falls without limit as level 8; landing, it spreads 7 again.
+- **Assumed:** only source water freezes (`Biome.shouldFreeze` tests the fluid type `Fluids.WATER`, the source, not
+  `FLOWING_WATER`). So falls and riffles in a freezing biome stay open; pools freeze. Probe (a).
+- **Assumed:** landing in water of any depth cancels fall damage. Probe (b).
+- Waterloggable blocks hold a source (`waterlogged=true`) and refuse flowing water (H §0).
+- A source between two sources over a solid converts flowing water (`waterSourceConversion`); M25:convert catches it.
+
+### 1. The course model
+
+**1.1 A course is a chain of H bodies, and its flowing water is spill.** No new fluid model:
+- **Reaches** are level H bodies (`r.fluidBody`): a trough of sources at one surface `level`, sunk 1 under the lower bank, lined.
+- **Steps** join reach *k* to reach *k+1* one or more cells lower. A step's flowing water is reach *k*'s **spill**: an outlet in
+  its shell, a lip run on the step's lining, a falling column, and the landing in reach *k+1*'s sources. It is computed by
+  `sim.mjs`, predicted with levels, censused, watched and drained exactly as H's waterfall curtain is.
+- **Lint `FLUID_STATE` stays.** "Flowing water is allowed" means flowing cells that the plan predicts, censuses and drains. It
+  never means a written flowing state.
+- Each reach is its own body, with its own shell, guard, census, settle bound and report row (§3.4).
+
+**1.2 Steps.** Three kinds, chosen per drop by the profile (§7.2):
+- **Fall:** a drop of 2 up to `drop` (default 6, limit 8). The lip run is 1 cell, then a falling column into reach *k+1*, whose
+  first 3 rows along the flow are at least 2 deep (H's basin rule).
+- **Spillway:** a drop of exactly 1: the lip run flows one cell and drops 1 into reach *k+1*.
+- **Riffle (opt-in, `flow: "riffles"`, capped):** visible current over a stepped bed. The bed drops 1 every `riffle` cells
+  (2..6, default 4), at most 3 drops and 16 cells per riffle, then a reach again. Fed by the full width of reach *k*'s last row,
+  so every lane flows straight (each lane's nearest drop is ahead, so the drop preference never turns it sideways). Its water
+  is at most 1 deep and its banks 1 over the bed. The cap keeps each predicted chain short, which is what keeps the census
+  exact (probe (c) measures it before the cap may grow).
+
+**1.3 Containment by construction, extended to spill.**
+- The **lining** of a step is every face neighbour of its predicted spill cells that is not a body cell, spill cell or join,
+  written by the course's own part in its stage, `fs` and not `g`, like a shell. It is passed to `r.fluidBody` as the new
+  `lining` option and checked by `M25:shell` as shell.
+- A falling column's sides stand in air, as H's curtain does: falling water does not spread until it lands.
+- `M25:leak` then holds a course to its cells, spill and joins exactly as it holds a pond.
+
+**1.4 Joins into plan bodies (new).** H joins a spill only into natural sources. HY adds plan bodies:
+- A step's spill may land in **another body of the same plan** (the next reach, or a pond, a fountain basin, a moat or another
+  course's reach named as an end, §7.4). The landing cells are that body's sources, so the flow stops there (sim already treats
+  other bodies as sources) and that body's census already excludes the upstream body's predicted cells (H-core).
+- `joins` gains plan-body cells (`joins: [{body, cells}]`; a natural join stays a cell list). The landing body must be the same
+  fluid and stand when the spill arrives (§3.1).
+
+**1.5 Overflows (new): a plan body that feeds a course.** A course `from: {part: X}` (a pond, a fountain basin, a moat, or
+another course's reach) registers an **overflow** on X while the plan resolves (step 2), before X emits (step 3):
+- one or more side shell cells of X at X's surface level become outlets; X's spill then runs over the course's lining and falls
+  at least 1 into the course's head reach;
+- X's generator re-plans nothing else: its shell, notches, guard and breach rules are recomputed with the outlet;
+- only parts whose generator accepts `overflow` (pond, fountain, moat, and the course itself) can feed; any other `from: {part}`
+  is a dry end (a spring, §7.4).
+
+**1.6 The weir, and why a course never opens into natural water.** Natural water never joins a body as still water. Such a
+join would make the river part of the body, which the census can't hold and the drain can't restore.
+- **A head at natural water** (`from: {feature: {water}}`) is a **weir head**: the head reach's surface at the natural water's
+  level, separated from it by a **weir** 2 cells thick (the course's own shell, its crest at the surface, a line of the bible's
+  `fluids.weir` across the water). **A weir stands only on site-solid bank cells** (frozen volume), never in natural water: a
+  bank too thin for 2 cells answers `NO_ROOM` with a `wouldFit` set back from the water. Nothing flows across a weir: both sides are sources at one level. The single breach of one
+  weir cell leaves the other cell standing, so the two never connect.
+- **A tail at natural water** (`to: {feature: {water}}`) is a **fall join** (H's join, a drop of at least 1 into natural sources
+  at least 2 deep). Where the course reaches the water's level with no drop left, the tail is a weir too.
+- Natural water at a weir or join must be sources in the frozen volume, with **no flowing or falling natural water within the
+  body's watch box**, else `WATER {kind: flowing}`. A settle then needs no capped removal beside a live river (H's cap stays
+  the backstop).
+
+**1.7 Ice.** Ice caps stay H's rule (N-H-4): every open surface cell of a reach in a biome that freezes there is written as ice.
+- A capped reach can't feed a step from its surface. In a freezing biome every outlet is **submerged**: the outlet cell is one
+  under the surface, under a lining crest, so the cap stays whole and the step is fed from under it.
+- Falls, spillways and riffles stay open on probe (a)'s assumption. If the probe shows flowing water freezing, a course with
+  any step in a freezing biome answers `WATER {kind: freezes}` with a `wouldFit` of one level (a capped canal), and the probe's
+  finding is recorded.
+- `ice: false` on a course follows H §1.3 (open only where a planned light keeps it open).
+
+**1.8 Lava.** None. `fluid: lava` on a channel is `refused FIRE`, `evidence.kind: "lava"` (R22, unchanged).
+
+### 2. Containment: M25 for courses
+
+M25 runs as in H, per body, over the frozen volumes. Changes, all additive:
+- **`M25:shell`** covers the lining (§1.3) and the weir (2 thick wherever a body faces natural water at its level).
+- **`M25:leak`** counts plan-body joins as declared (§1.4).
+- **`M25:trap` and `M25:exit` cover spill cells too.** A mob swept along a lip run or a riffle must reach a surface cell within
+  4 and an exit within 8 of where it ends up. A falling column's landing counts as the reach below it.
+- **`M25:convert`** runs over every spill cell, riffles included. The profile keeps a riffle's last row from having two sources
+  beside it (the next reach's first row is as wide as the riffle).
+- **`M25:keep`** as in H, over cells, shell, lining, spill and breach reach. A course keeps 1 off lot boxes grown by 1, builds,
+  protected areas, keep-out, other regions and the claim's ring.
+- **The single breach** (H §2.5) for every shell, lining and weir cell at or under its surface. Sunk reaches pass trivially;
+  raised reaches (on fill, §7.2) and overflow-fed heads must pass explicitly. The generators thicken banks until they do.
+- **New sub-finding `M25:order`:** a body's spill lands in a plan body that is not written before it (§3.1), or a join cycle.
+
+### 3. Realise, settle and ticks
+
+**3.1 Write order: downstream first.** The fluids stage writes bodies in **dependency order**: a body after every plan body its
+spill lands in (ties: plan order). A course's lowest reach is written first, so every fall lands in standing water. An
+overflowing pond is written after the course it feeds. The order is computed by the kit, carried in the IR (`after`), and
+checked by `M25:order`.
+
+**3.2 Ticks, settle and census:** H's (§3.2-§3.3) per body, unchanged. A body's predicted cells include its step's lip, column
+and landing film; the census compares their levels exactly. `settleTicks` follows the step's longest predicted path; the profile
+keeps it short (a riffle at most 16 cells, a fall at most 8).
+
+**3.3 The escape guard, upstream closure.** When the guard drains body *k* (escaped, unsettled or uncontained), it drains in the
+same tick **every body whose spill lands in *k*, transitively**, upstream first. Otherwise reach *k-1*'s fall would pour into
+*k*'s emptied cells. The report names each body with `reason: "upstream of <k>"`. Downstream bodies stand: still sources need
+nothing upstream.
+
+**3.4 Multi-body parts.** A course is one part with N bodies (`<part>_r<k>`, `k` from the head; an overflow's own body keeps
+its part's id).
+- The realise report's `fluids` rows are per body (S-H-6's shape), each with `part` and `body`.
+- Guards are per body, flat (H RC3), each `{part, body, kind: body, fluids: true, volume, runs}`.
+- `siteplan.waters` gets one row per body and a `courses` row per part (§12).
+- A course is `PLACED` when all its bodies are settled. It is `drained` (in the part's answer to `fluids`) when any is.
+
+**3.5 Crash.** H §3.5 per body. A crash between reaches leaves the downstream reaches written and settled and the upstream ones
+not: a valid partial state, since every written body's spill lands in written water. Settle at start resumes the stage in the
+same order or undoes it.
+
+### 4. Exact undo
+
+**4.1 Order.** Removal drains bodies in the **exact reverse of the write order**: the head reach first, then down the course,
+each with H's drain (sources and ice to their befores, spill and watched cells holding a fluid they didn't hold back to theirs).
+An overflowing pond is drained before the course it feeds. Then one settle bound with no fluid tick in any watch set (capped as
+in H), then the solids: lining, weirs, shells and banks.
+
+**4.2 Watched cells:** H's. A course's spill and breach reach are journaled in `fluids.json` before any write. A player's water
+outside a body's cells, spill and `watch` is kept (H integration, defect 2).
+
+**4.3 "Still ours":** H's `fluidHolds`, unchanged. A grate cell (§8.3) is a body cell: its `waterlogged` is volatile, so
+`iron_bars[waterlogged=false]` still holds it.
+
+**4.4 Exactness: what is measured.**
+- **When:** H §4.5's: after `Regions.remove`, a settle bound and no fluid tick, under the exact rules (random ticks 0,
+  `doFireTick` false, no spawns; scheduled fluid ticks run).
+- **E-flat:** 0, fluid cells compared by state (levels included).
+- **E-normal:**
+  - 0 unclassified.
+  - **No classified mismatch of any class within 6 cells (3D) of any body cell, shell, lining, weir, spill, watched cell, grate
+    or lintel.** That is H's and T3's tunnel rule.
+  - At weirs and natural fall joins, the bridge rule: the mod's `growth` and `grazed` (kelp, seagrass, grass spread) are
+    admitted at **unwritten** cells only. `gravity` never is.
+- **HY adds no world class.** The scenario classes keep D2's narrowing (unwritten cells, more than 6 columns from written
+  columns, or `deep`), and T1's `flow` keeps H's narrowing. No class may hide a course's undo error. Verifiers rejected loose
+  classes repeatedly, so a mismatch HY can't explain is a defect, not a new class.
+- **The capped path is judged too.** A removal whose wait hits H's cap (`fluidsRemoval {state: capped}`) is judged for E-normal
+  exactness like any other (§14 item 6). The cap must not be a place where exactness goes unmeasured.
+
+### 5. The `hydrology` pass and its fields (HY-a)
+
+`kit/lib/region/passes/hydrology.mjs`, registered in `passes/index.mjs`. Pure: `(survey, volumes, intent) -> {fields, ops: [],
+data}`. It writes no cell; HY-b's courses write.
+
+```js
+const h = r.pass('hydrology', { wetFalloff: 12, channelAt: 400, minReach: 6 });
+// -> fields.flow (u8: log2 accumulation), fields.wet (u8), data.courses: [{cells: [[x, z]], accumulation: [..]}] (only with channelAt)
+```
+
+- **Filling:** priority flood over the survey's integer ground heights with a min-heap keyed (height, index), seeded from the
+  claim's edge and every surveyed water column (FROZEN counts as water, W). Flats drain deterministically.
+- **D8:** to the lowest of the 8 neighbours of the filled surface, ties by direction index (N, NE, E, SE, S, SW, W, NW).
+- **Accumulation:** in index order of a topological sort of the filled surface; each column contributes 1.
+- **`flow`:** `min(255, 16 * floor(log2(accumulation)))`. **`wet`:** `min(255, 12 * floor(log2(accumulation)) + 20 *
+  max(0, wetFalloff - d))`, where `d` is the Chebyshev distance to surveyed or plan water (a plan's own bodies when the pass runs
+  after them). Integer, fixed constants.
+- **`channelAt`:** columns with accumulation at least `channelAt` form a graph. `data.courses` lists its paths from each source
+  to the claim edge or water, merged where shorter than `minReach`. A bundled program lays a course along a path with
+  `r.course(data.courses[i], {...})` (§7). The pass itself never writes water.
+- **Who runs it:** a program that declares `hydrology`, and `plan_v0` **only when the plan has a course, race or ditch part**.
+  Every other plan's IR is byte-identical. D1's `wet` prefer tag reads the `wet` field only when the pass is declared, else it
+  keeps reading surveyed water as today.
+- **Wiring:** nothing new. Material rules, masks and scatter density already read a field by name. A bible's
+  `{when: {field: "wet", gte: 170}, mat: "minecraft:mud"}` and a scatter `density: {field: "wet", scale: [..]}` start working in
+  a plan that runs the pass. In a plan that doesn't, they fail as today (a name the IR doesn't hold).
+- **Plan time** (recorded): the pass on the 1024 x 1024 synthetic survey, median of 3. The old draft's 30 s is a target, not a
+  slice bar (GATES policy 1).
+
+### 6. Catalogue next (8 unless VOC merges first)
+
+| Id | Before (7) | HY | limits / note |
+|---|---|---|---|
+| `channel.course` | reserved (HY) | **supported**, schemaVersion 1 | `{width: [1, 5], depth: [1, 3], length: [4, 512], drop: [1, 8], riffle: [2, 6], cut: [0, 6], fill: [0, 2], flows: ["level", "pools", "riffles"], looks: ["natural", "built"]}` |
+| `channel.race` | (new) | supported | a course with a lot in `via`: a fall beside the lot (§7.5) |
+| `channel.ditch` | (new) | supported | `{width: [1, 1], depth: [1, 1], length: [3, 64]}`; `where.along` a lot or zone (§7.6) |
+| `wall.water_gate` | (new) | supported | a course under a wall behind a grate (§8.3); counts against `gates` |
+| `channel.aqueduct` | (new) | reserved, `until: 7c` | a course carried over low ground on piers or arches; what a course needing more than `fill` answers (§7.2) |
+| `connector.channel` | supported | `limits.forms` `["moat", "course", "race", "ditch"]` | note: "HY: courses, races and ditches" |
+| `form.pond`, `form.fountain`, `channel.moat` | supported | note gains "may feed a course (overflow) or receive one (a fall over the rim)" | |
+| `connector.wall` | supported | note gains "a course crosses under a water gate (HY)" | |
+| `connector.tube` | reserved (UW) | unchanged | |
+
+- **No new reason codes.** New `evidence.kind`s:
+  - `WATER`: `join` (a plan-body end with less than the drop it needs, §7.4), `flowing` (natural flowing water at a weir or
+    join, §1.6), plus H's `level` and `freezes`;
+  - `UNREACHABLE`: `uphill` (an end or via the course can't reach going down), `cut` (deeper than `cut`), `length`, `wall` (a sealed wall
+    in the way). A valley past `fill` is not `UNREACHABLE`: it answers `unsupported {channel.aqueduct, until: 7c}` (§7.2);
+  - `NO_FEATURE`: a race whose `via` names no lot, or a ditch with no lot or zone.
+- **Archive and diff:** catalogue 7's golden is archived as `fixtures/plan/catalogue-h.json`. The diff from it is exactly the one
+  flip, the four new ids, `connector.channel`'s `limitsChanged`, and five note changes (`connector.channel`, `form.pond`,
+  `form.fountain`, `channel.moat`, `connector.wall`; `diffCatalogues` folds a note into a flip only, so these count on their own). If VOC merges first, its entries are
+  in both sides of the diff and the number moves up by one. The coordinator sets the number and `sinceApi`.
+
+### 7. Courses (kit, plan time, deterministic; HY-b)
+
+`kit/lib/fluids/{course,profile,race,ditch}.mjs`. Integer cells, ties by (x, z), no random numbers except `ctx.rng(label)`.
+
+**7.1 The plan shape** (strict def, additive to `connector.channel`; R24 below):
+
+```
+connector.channel (course form): {id, kind: "channel", required?, label?, notes?, ext?, style?, tolerance?,
+    from, via?[], to,                                   // endpoints (part/port, anchor, feature.water, region, build)
+    width?: 1..5, depth?: 1..3,                          // the reaches; default natural 2 x 2, built 3 x 2
+    look?: "natural" | "built",                          // stream (default) or canal
+    flow?: "level" | "pools" | "riffles",                // default "pools"
+    drop?: 1..8, params?}                                // the highest single fall (default 6)
+connector.channel (ditch form): {id, kind: "channel", ..., where: {along: {feature: {part}, sides?: [..]}}, params?}
+```
+- **R24 (courses):** a `from`/`to` channel is a course; with a lot (`{part: <lot>}`) in `via` it is a race (`channel.race`).
+  A channel with `where.along` is a ditch (`channel.ditch`). `where.around` stays a moat. Exactly one path form (R21 widened).
+  `params` read leniently: `width`, `depth`, `drop`, `look` and `flow` when no first-class member says otherwise; `mill`,
+  `wheel`, `sluice`, `lock`, `material` noted, never read.
+- `from` must stand at least as high as `to`. Otherwise `refused UNREACHABLE {kind: uphill}`, with `wouldFit` the part with
+  `from` and `to` swapped (re-checked alone). A course's direction means something (a weir head, an overflow), so it is never
+  swapped silently.
+
+**7.2 The router and the profile.**
+- **The router:** a least-cost search over the survey grid (resolution 1) from `from` through each `via` to `to`, whose state
+  carries the water level. A move keeps the level or lowers it, never raises it.
+  - **Cost, in the pass's units** (a straight cell 10): turn 4; cut `6 x` cells of trench deeper than the sunk 1; fill `12 x` per
+    raised cell; minus `min(6, flow / 32)` along the `flow` field when the pass ran, so a stream follows the valley.
+  - **Limits:** at most `cut` (6) and `fill` (2); at most `length` (512); never through a lot box +1, a build, a protected area,
+    keep-out, another region, natural water (except its ends) or another body (except its ends).
+  - **Built canals:** turns cost 12, so they run straight.
+- **When the router fails:** a valley it can't cross within `fill` answers `unsupported {block: channel.aqueduct, until: 7c}`, the
+  shape it needs (as `tunnel.under`). Anything else answers `refused UNREACHABLE` with the kind.
+- **The profile:** along the path, the level is the running minimum of (ground - 1). It is cut into reaches of at least
+  `minReach` (4) cells, merged where shorter. Each drop between reaches becomes a step (§1.2): a fall for drops of 2 to `drop`,
+  several falls with a reach of at least 3 between them for more, a spillway for 1, or a riffle under `flow: "riffles"` where its
+  cap allows.
+- **`flow: "level"`** (a canal) is one reach. Ends at different levels answer `WATER {kind: level}` with a `pools` `wouldFit`.
+- **Fill:** a reach over a dip of at most `fill` stands on raised banks 2 thick at the top, widening 1 a row down. It is a raised
+  body, so it must pass the single breach.
+
+**7.3 The cross-section and the look** (bible `fluids` roles, §11):
+- **natural (a stream):** bed in `fluids.bed`, banks in `fluids.rim` (the bank's surface, moss where grass), width varying by at
+  most 1 by `ctx.rng` noise at reach scale. **A riffle and a spillway keep their upstream reach's last-row width;** width noise
+  applies to reaches only (§1.2's straight lanes, `M25:convert`). Notches every 6 (H-a's exits) on alternating banks, and a riffle's banks are exits
+  all along.
+- **built (a canal):** `structure` lining, `trim` coping 1 high, straight runs, notches every 12 as steps cut into the coping.
+- **Every lining cell differs from what it replaces** (H-a's reading), taking the first differing block of its chain.
+
+**7.4 Ends.** Each end is exactly one of these:
+
+| End | `from` | `to` |
+|---|---|---|
+| **Dry** (`anchor`, `region`, `build`, a part that isn't water) | a **spring**: a 3 x 3 head reach 2 deep (`params.spring` size), sunk | a **terminal pool**: a sunk pond body at least 3 x 3 |
+| **Natural** (`feature.water`, the survey only, S-H-5) | a **weir head** (§1.6) | a **fall join** (§1.6), or a weir tail with no drop left |
+| **A plan body** (`{part: X}`: a pond, fountain, moat, or a course or ditch) | X **overflows** into the head (§1.5), a drop of at least 1 | the course **falls over X's rim** into X: a drop of at least 2 from the last reach to X's level, X unchanged |
+
+- A plan-body end with less drop answers `WATER {kind: join}`, with `wouldFit` a terminal pool beside X (re-checked alone).
+- A course `to` a fountain is a **fountain fed from a course**; one `from` a fountain is a stream leaving it. Either way the
+  fountain's own body is H's.
+- A course `to` a moat **feeds the moat**, and a course `from` a moat drains it. A course never crosses a moat or pond. It joins
+  them or goes round.
+- **Branches:** a course `from: {part: <course>}` takes an overflow from that course's nearest reach. That is how a ditch network
+  or a second stream leaves a first one.
+
+**7.5 Mill races (`channel.race`).** A course whose `via` names a lot (`{part: <lot>, port?}`).
+- The router passes the lot's side (the port's, else the side facing `to`) and places one fall of at least 3 within 4 of the
+  lot's box, outside its box + 1 (K5, M25:keep). That fall is the wheel fall.
+- The answer gains `serves: {lot, side, fall: {at, drop}}`, and the lot design gets a note naming the side and the fall, so its
+  design can face a wheel there.
+- **The wheel itself is not HY's:** it belongs to the lot design (inside its box), or to a later prop. A region never writes
+  in a lot box, and nothing turns (mechanisms).
+- No fall fits by the lot: `refused NO_ROOM` with `wouldFit` the plain course.
+
+**7.6 Irrigation ditches (`channel.ditch`).** A level ditch 1 wide and 1 deep along the sides of a lot or zone
+(`where.along {feature: {part}, sides}`, default the two long sides):
+- It runs outside the box, its water 3 from the box (its shell 2 clear, M25:keep), and its ends are capped with shell.
+- It is an H body (one level), so it stands alone (fed by nothing) or receives a course (`to: {part: <ditch>}`, a fall of at
+  least 2 into it) or a branch.
+- **It hydrates nothing in the lot** (vanilla hydrates farmland within 4; the box's own farmland is the lot design's). Its
+  answer says so in a note. Working farms are the later block (S-H-2).
+
+**7.7 Compile order.** Courses resolve in step 2 **after lots, zones and H's forms** (they read lot boxes and X's geometry, and
+register overflows before X emits), and **before routes**, so streets see the water. Wall rings are searched before forms (as
+the moat does), so a course knows where it meets a wall (§8.3). Each course emits under a checkpoint. A rollback drops its
+overflow registrations too (compile.mjs `checkpoint`/`rollback` gain `overflows`).
+
+### 8. Crossings and composition
+
+**8.1 Routes cross on bridges.**
+- A street, road or path meeting a course fails `ROUTE_WATER` and takes T3's bridge fallback, at clearance 1 over plan water
+  (N-H-5), its piers dry (plan water is never wet-pier water, H-b).
+- A course from claim edge to claim edge seals the claim as a closed moat does (`sealedByPlanWater`). Every edge across it is
+  bridged.
+- **Routes never walk in water** (H §8.5), riffles and spillways included.
+- **No culverts or fords in HY** (deferred; S-HY-3 asks). A culvert would be a new special move, and its water a ceiling for
+  `M25:trap`.
+- A bridge never lands on a lining or weir cell, and its deck never spans a fall's column at less than clearance 1 over the lip.
+
+**8.2 Tunnels.** A bore keeps T3's `fluidBuffer` 2 from every body cell, lining, weir and spill cell, as it keeps from natural
+water. A course never runs underground.
+
+**8.3 Water gates through walls (HY-c, `wall.water_gate`).** Where a course must cross a K1 wall's line or ring:
+- **Where:** the router forces a still reach across the wall line, at least 2 cells each side, at most 3 wide. A wall never
+  crosses a step.
+- **The gate:** the wall stands across the course on a **lintel** at the reach's open top (its footing on the banks). Under it,
+  every cell of the reach in the wall's thickness is a **grate**: `iron_bars[waterlogged=true]`, written by the course's body
+  in the fluids stage as a body cell holding a source. Still water passes through; flowing water and mobs don't.
+- **Rules:**
+  - `M2:wall` closure counts the grate as wall. A water gate counts against the wall's `gates.max`, and a sealed wall
+    (S-K1-1) refuses it: `UNREACHABLE {kind: wall}`.
+  - `M25:trap` holds, since the wall is at most 3 thick and a surface cell is within 4.
+  - The water gate is no walk gate, so routes still cross by gates or bridges.
+- **Answers and plan:** the wall's answer gains `crossing {type: "wall", over: "course", gate: "water", course: <id>}`. Meta
+  `walls[].waterGates`.
+- **Files:** `line.mjs` and `wall.mjs` take the course's crossing cells as given (they don't search round them), K1a's gate
+  logic counts them, and `fluids/course.mjs` writes the grate. This is the only HY code in K1's files.
+- **The grate is the one waterlogged state HY writes.** It is a body cell, never a wet write. Lint `FLUID_STATE` is unchanged
+  (it refuses water and lava `level` states, not `waterlogged`).
+- Without HY-c, a course meeting a wall answers `UNREACHABLE {kind: wall}`.
+
+**8.4 Villagers and water.**
+- Routes never walk in water. Rails and guards follow M8, where water at least 2 deep counts as a guard, else a rail. A riffle's
+  bank is a 1-cell drop, under M8's threshold.
+- `M25:trap` and `M25:exit` over spill (§2) make a swept mob survivable. Falls land in reaches at least 2 deep, and probe (b)
+  measures fall damage on landing.
+- **A water gate is never a route,** so no villager path runs under a lintel.
+
+### 9. Checker guarantees (virtual world, then the realised world in the gate)
+
+| Guarantee | Rule | On |
+|---|---|---|
+| Every reached cell is a body's, its spill's or a declared join's (natural or plan body); nothing converts; no lava | `M25:leak`, `M25:convert`, `M25:mix` | every body |
+| Shells, lining, weirs: written, `fs`, not `g`, the part's own, 2 thick at a weir | `M25:shell` (extended) | courses |
+| A single breach of any shell, lining or weir cell reaches nothing kept | `M25:keep` | courses |
+| Spill lands only in water written before it; no join cycle | `M25:order` (new) | courses, overflows |
+| No trap and an exit within 8, from spill as well as surface | `M25:trap`, `M25:exit` (extended) | courses |
+| No written flowing state | lint `FLUID_STATE` | every IR |
+| Wall closure with grates; gates within `gates.max` | `M2:wall` | water gates |
+| Villagers round or over every course, never in it | `M2:villager` | villager edges |
+| No write in a lot box or into an OWNED, PLAYER or BLOCK_ENTITY cell | M1 (error) | all |
+
+M25 reads the virtual world over the frozen volumes. A body, lining or weir without one is a finding (`M25:shell "no volume"`),
+never a pass.
+
+### 10. Volumes in the plan check, and the guards
+
+- **The trigger:** `PlanChecks.H_KINDS` already holds `channel`, so every course, race and ditch takes the two-plan flow.
+  `load` (S-T3-6) is unchanged.
+- **Volumes are asked per body, not per course.** Each reach's box is grown by 2 (by 9 for a raised reach or an overflow head),
+  with its steps' spill and lining, and each weir's and join's columns from the bed - 3 to the surface + 1. A diagonal course
+  never asks its bounding box, so T3b's caps (4,000,000 per part, 16,000,000 per plan) bound only what it touches. Past them,
+  the part answers `incomplete VOLUME`.
+- **Guards:** per body, flat runs (H RC3), with a unit test that every guard of a course, race, ditch, overflow and water gate
+  is flat. `realiseApproved` re-samples them as in H, so a drained river, a new flow by a weir, or a player's pond in the
+  course's way answers `ARTIFACT_STALE` naming the part and body.
+- **The asks harness** (`checkPlanVolumes`) synthesizes the asks claim's lake and stream as sources, so a natural end there
+  answers `fits` in kit CI.
+- **The guard reader:** PLAN's queued "`PlanChecks.guardDiff` throws on malformed runs" is fixed in HY-core, which adds many
+  guards: a malformed `runs` answers a clear `ARTIFACT_STALE {reason: "guard shape"}`, not Gson's exception.
+
+### 11. Style from the bible (format 2, additive)
+
+`fluids` gains three role names (H §11's member): `{ ..., lining?, weir?, grate? }`. Defaults keep every existing bible valid:
+- **lining:** `bed` for natural, `structure` for built;
+- **weir:** `foundation`, then `structure`;
+- **grate:** the block `minecraft:iron_bars` (a fixed block, not a role, since it must be waterloggable and refuse mobs).
+
+### 12. Survival, API and wire shapes
+
+- **Survival:** INSTANT only (N-K1-3). `cost.bom`: water free (N-H-1), lining, weirs and grates priced (C26's table, iron bars
+  as `iron_bars`). RS builds it later.
+- **API** (additive; no new records or methods):
+  - **Versions:** `VERSION` placeholder 1.35.0, mod 0.38.0, `KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` 0.36.0.
+  - **Features:** `hydrologyPass` (`region.hydrology`), `regionCourses` (`region.courses`), `waterGates`.
+  - **IR:** the `fluid` op gains optional `after` (body ids written before it), `joins` as `[{body, cells}]` for plan bodies,
+    `lining` (runs) and `grate` (runs). An op holding any of them carries `requires: ['courses']`, so 0.37.0 refuses it
+    `PLAN_STALE` rather than writing a course out of order. An H-only IR is byte-identical.
+  - **Behaviour:** H's, per body (§3). A drained reach also drains its upstream closure.
+  - **DevBridge** (dev only): `dev.entity.damage` gains fall damage. `dev.fluid.census` and `dev.fluid.tick` are reused.
+  - **api-compat:** clean against the 0.37.0, 0.36.1 and 0.36.0 apitest jars.
+- **Wire shapes** (additive):
+  - `siteplan/1` `waters[].kind` gains `course`, `race`, `ditch`, and a new `courses: [{id, part, kind: course | race | ditch,
+    look, flow, bodies: [ids], steps: [{kind: fall | spillway | riffle, from, to, drop}], ends: [{end: from | to, kind: spring |
+    pool | weir | join | overflow | rim, ref}], serves?, waterGates?}]`.
+  - Graph edges bridged over a course carry T3's `crossing` with `over: "water"`, `course: <id>`.
+  - Walls gain `crossing {type: "wall", over: "course", gate: "water", course}`.
+  - The realise report's `fluids` rows are per body, with `part` and `body` (§3.4).
+
+### 13. Steward's recorded parts: expected answers as recorded (the asks claim)
+
+Predicted from the design, not run. The builder runs them and commits the before and after gap tables (`fixtures/plan/hy/`).
+
+| Plan / part | Expected | Why |
+|---|---|---|
+| every recorded part | as on v0.37.0 | no recorded part is a course, race or ditch (§0) |
+| redstone_gate / moat | `fits` as `channel.moat`, unchanged | H's |
+| hidden_village / waterfall_curtain | `adjusted`, unchanged | H's |
+| farm_village / windmill_bakery, boom_town / mill_1 ("stamp mill and sluice"), lone_hermit's garden source | lots, unchanged | lot briefs. A race serving such a lot is something Steward's plan writer may write after HY (S-HY-2). It is not inferred. |
+| rival_families / estates (a river, "no bridge") | unchanged | natural water, `feature.water` |
+
+**Bar (item 10):** 0 `malformed`; no recorded part changes class; the gap table's `channel.course` row stays 0 (none recorded);
+no answer carries `until: HY`.
+
+### 14. Gate (slice tier plus the engine tag, $0)
+
+**Fixtures.**
+- **Plan fixtures**, under P0's harness:
+  - `valid/`:
+    - `v50_stream` (a spring down a synthetic slope, pools and falls, a terminal pool);
+    - `v51_canal` (a level canal between two anchors on a flat claim: `h/r08_course` re-answered);
+    - `v52_weir_head` (from the asks lake, a weir head, falls to a terminal pool);
+    - `v53_fall_join` (from a spring into the asks lake);
+    - `v54_race` (a race past a mill lot, a 4-high wheel fall);
+    - `v55_ditch` (ditches along a farm lot, fed by a course);
+    - `v56_fountain_fed` (a course falling into a fountain's basin, and one leaving a pond by its overflow);
+    - `v57_moat_fed` (a stream feeding v45's moat, the road bridged over both);
+    - `v58_water_gate` (a stream through v30's walled village);
+    - `v59_riffles`.
+  - Refusal fixtures in `fixtures/plan/hy/`:
+    - `UNREACHABLE` with kind `uphill` (with the swapped `wouldFit`), `cut`, `wall` (a sealed wall);
+    - `unsupported {channel.aqueduct, until: 7c}`: a valley past `fill`;
+    - `WATER` with kind `join`, `level` (a level canal between two levels), `flowing` (a weir by a volume's flowing cells),
+      `freezes` (under probe (a)'s outcome);
+    - `LEAK` (a raised reach whose breach reaches a lot);
+    - `NO_FEATURE` (a race with no lot), `NO_ROOM` (no wheel fall), `VOLUME` (a body past the cap).
+- **`hydro_demo`** (bundled, `catalogue = false`), in three variants:
+  - **flat:** E-flat. A sculpted slope (T1's `base`, stage `ground`) carries a spring, pools, spillways, a 5-high fall, a
+    riffle and a terminal pool. Beside it: a fixture lake (an H body, so E-flat covers it) with a weir head and a fall join; a
+    fountain feeding a course; a race past a lot; ditches along a farm lot; a water gate through a small walled yard; and a road
+    bridged over the stream. A bible rule `{field: wet}` lays mud near the water.
+  - **natural:** S3's pinned claim, as a site only (N-HY-1: S3's scenario doesn't move). A spring on the slope falls by pools
+    into the river (a fall join), and a weir head on the river feeds a level canal.
+  - **cold:** the frozen site 2026101102. A capped course with submerged outlets and a fall (probe (a)), and an unlit uncapped
+    twin.
+- The builder pins any new site in `scenarios/sites/`.
+
+**Evidence:** `artifacts/gate6c-hy/`, driver `tools/gate6chy.mjs`. `spend.json` $0.00. Every in-game step runs headless
+(`host: server`) except the look step.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Fields (unit) | every filled cell drains to the claim edge or surveyed water; 0 cycles; hand cases match (a bowl, a flat, a saddle, ties); `flow` and `wet` blob shas over 3 plans, macOS and Linux CI; `wet` within 4 of water at least 3x its mean over 16 away (recorded) |
+| 2 | Containment, plan | M25 0 on every valid fixture and `hydro_demo`; each broken variant caught by its rule (below) |
+| 3 | Containment, world, with negative controls | after the realise and settle: every body's census equals `predicted` exactly (sources, every lip, column, landing film and riffle cell at its level), 0 fluid outside its cells, spill and joins, settled within `settleTicks`; a 2-minute stand at default rules adds nothing; **negative controls:** `_unsafe.noLiningCell` (a riffle's bank cell left unwritten: the census names the leak within a settle bound), `_unsafe.wrongOrder` (the head written first: the escape guard fires on the head and drains it, PARTIAL) |
+| 4 | Escape guard, upstream closure, live check | `_unsafe.predictShort` on a middle reach: it and every reach upstream drain in one tick, `reason: upstream of`, downstream reaches stand, 0 fluid in the drained watch sets after a settle bound; a protected area added over a weir cell before the realise: that body (and its upstream closure) is not written, PARTIAL naming it |
+| 5 | Exact undo | its own realise under the exact rules (as H item 5): E-flat 0 by state; natural and cold E-normal 0 unclassified, no classified mismatch within 6 of any body, shell, lining, weir, spill, watched cell, grate or lintel (growth and grazed at unwritten cells only at weirs and joins), 0 gravity mismatches within 6; the river's sources and the frozen river's ice and water restored exactly; journal and `fluids.json` cells recorded per part |
+| 6 | The capped removal, judged | h-ingame (E)'s method (fluid ticks held on a shell for the whole removal), on a course: the removal reaches the cap and REMOVED, and **E-flat 0 after it** (the cap is measured, not exempt) |
+| 7 | Overflow (single breach) | after settle, `/setblock` air at one bank cell of a raised reach, one weir cell, one lining cell of a riffle: after a settle bound the water reaches no lot, build, protected area or keep-out cell; the weir's breach connects nothing; then `Regions.remove`: 0 fluid cells the snapshot didn't hold, 0 new sources (exactness: item 5's rules rerun with the same breach) |
+| 8 | Crash | 6a's crash harness with HY's kill points: after the shells and lining, before the fluids stage; **between reaches** (downstream written, upstream not); during removal between draining the head and draining the tail; between the drain and the solids. Settle at start completes or undoes; 0 fluid outside declared cells; undo exact as item 5 |
+| 9 | **Every new kind through `realiseApproved`** (the H RC lesson) | in game, through `Regions.checkPlan` (the two-plan flow) and `realiseApproved` with the approval artifact, never `checkPlan` alone: a spring stream to a terminal pool, a weir head, a fall join, a level canal, a race, a ditch fed by a course, a fountain fed by a course, a pond overflowing into a course, a moat fed by a course, a stream crossed by a bridged road, a water gate, and a riffle; plus one Steward-shaped plan (a farm zone with a race to its mill lot and ditches along its farm, written as Steward's plan writer would). Each READY, then PLACED with every body settled, then removed exactly. A guard of each kind is flat |
+| 10 | Villagers (hard bar) | vanilla `dev.nav.villager` both ways over every bridge on a course and round every terminal pool: 100%, no path cell in a fluid, none under a lintel; **the swept stand:** 4 villagers dropped into a spring head above two falls and a riffle, 4 by each reach, 2 minutes at default rules: 0 drowning and 0 fall damage (`dev.entity.damage`), 0 deaths, a nav path from every swimmer to an exit |
+| 11 | Recorded plans | §13's bar on the 59 asks in kit CI |
+| 12 | P0 answers and byte identity | every HY `valid/` fixture `fits` (or `adjusted` as expected); each refusal answers its code and evidence with `wouldFit`s re-checked alone; **every committed fixture without an HY part re-plans byte-identical** (answers and IR, but its kitVersion), H's included, except by name: `h/r08_course` (now `v51`) and `extension/e15_*` (the reserved list); a word-bounded search for `until` naming `HY` (`until: 'HY'`, `"until":"HY"`) over kit/ and the catalogue golden finds nothing but the archived catalogues |
+| 13 | Catalogue | the golden equals catalogue next; the diff against `catalogue-h.json` is exactly §6's |
+| 14 | Water gate | `M2:wall` closure 0 with the grate; vanilla nav finds no path for a villager, zombie or spider through the grate; the grate cells census as sources; the wall's lintel and the grate restored exactly by item 5 |
+| 15 | Determinism | 3 checks of each fixture: identical answers and artifact shas; tile shas 1 = 4 workers; goldens `hydro_demo_flat*`; macOS and Linux CI |
+| 16 | Unchanged | S1, S2, S3, S7, mega_bench, relief_demo, route_demo, forms_demo, scatter_demo, districts_demo, links_demo, crossings_demo and water_demo tile goldens (S3's by N-HY-1) |
+| 17 | Timing (recorded) | the pass on the 1024 x 1024 synthetic (median of 3); the router; the breach sweep over a course's lining (thousands of cells); the second plan with per-body volumes; settle ticks per body; own CPU of the fluids stage; `fluidTickShare` |
+| 18 | Probes (recorded) | (a) the cold site's capped course and its unlit uncapped twin after 2 minutes at random ticks 300: which cells froze (sources only, or flowing too); decides §1.7; (b) fall damage landing in 1-deep and 2-deep water from 3 to 8 high; (c) the census against `predicted` on riffles of 2 to 6 per drop and 1 to 3 drops, and one long run past the cap (recorded, not shipped) |
+| 19 | API, spend | api-compat clean; apijars; $0.00 |
+| 20 | Look (camera, client; recorded) | a stream (natural), a canal (built), a fall, a riffle, a weir head, a race and its wheel fall, ditches by a farm, a fountain fed by a course, a water gate, in three bibles: Noah's call (N-HY-2, N-HY-3) |
+
+**Broken variants** (each caught by its rule):
+- `_unsafe.noLiningCell` and `_unsafe.sandLining` (`M25:shell`, `M25:leak`);
+- `_unsafe.thinWeir` (a 1-thick weir: `M25:shell`; its breach `M25:keep`);
+- `_unsafe.wrongOrder` (`M25:order`);
+- `_unsafe.riffleCorner` (`M25:convert`);
+- `_unsafe.joinFlowing` (`WATER flowing` at plan time);
+- `_unsafe.longRiffle` (past the cap: `M25:model` or the census, recorded);
+- `_unsafe.lintelLow` (`M25:trap`);
+- `_unsafe.flowingState` (lint `FLUID_STATE`).
+
+**Tier:** slice, plus the engine tag (`region/**`, `journal/**`, the fluids stage, `PlanChecks`):
+- the units, apijars and api-compat;
+- the impact map's steps for those paths;
+- H's steps (`h-unit`, `h-ingame`, `h-crash`, `h-natural`, `h-cold`, `ha-ingame`), since HY changes the stage's order, the drain
+  and the guards;
+- K1a's for `line.mjs`/`wall.mjs` (HY-c) and T3a's for the bridge fallback;
+- HY's own: `hy-unit`, `hy-ingame`, `hy-natural`, `hy-cold`, `hy-crash`, `6chy-look`.
+
+The gate-verifier reviews the diff and the evidence, and **re-runs items 4, 5, 6, 7 and 8** (escape and upstream drain, undo,
+capped removal, breach undo, crash: GATES policy 3). **Steward's RC check comes before release** (GATES policy 4): HY changes
+the fluids stage's order, adds the upstream drain (more bodies drained per failure), and multiplies `fluids` rows per part. H's
+RC found two bugs that only `realiseApproved` showed, hence item 9.
+
+### 15. Build order, the split and the shared interface
+
+1. **HY-core (one owner, the only Java):**
+   - **Archives and plan:** archive the previous apitest jar and catalogue 7 (`catalogue-h.json`); defs (course form, ditch
+     form, R24); catalogue next with every entry (generators as stubs answering `refused UNREACHABLE {until: HYb | HYc}`, never
+     a throwing placeholder). H's tests and fixtures that move, by name: `h-foundation.test.mjs` (lines 39-40 and 68: `channel.course`
+     supported), `h/r08_course` (now `fits`, renamed `valid/v51_canal`), `extension/e15_*` (the reserved list), `moat.mjs:86`'s
+     answer (a from/to channel dispatches to the course), and the `UNCHANGED_EXCEPTIONS` lists in H's drivers (`gate6ch-core.mjs`,
+     `ha-unchanged`, `hb-unchanged`) gaining r08 and e15.
+   - **Kit:** `r.fluidBody`'s `lining`, plan-body `joins`, `overflow` registration, `after`; `sim.mjs` and M25's extensions
+     (§2), `M25:order`; the `fluid` op members and `requires: ['courses']`; `kit/regions/hy_core_demo.mjs` (a hand-built
+     three-reach course with a fall, a spillway and a weir) and its broken variants.
+   - **Java:** dependency write order; the upstream-closure drain; reverse-order removal; per-body report rows with `part`;
+     the guard reader's validation; crash kill points between reaches.
+   - **Gate:** items 2-8, 12 (partial) and 18 (a, b) on `hy_core_demo`.
+2. **HY-a, the pass (pure kit, parallel from day 0):** `passes/hydrology.mjs`, `plan_v0`'s conditional declaration, D1's tag
+   rule, `data.courses`; items 1 and 17 (the pass). It shares nothing with HY-core but `data.courses`' shape.
+3. **HY-b, courses:** the router and profile, `course`, `race` and `ditch` generators, the region primitive `r.course(path, opts)`
+   (a `channelAt` path or a polyline laid as a course), ends (spring, terminal pool, weir, fall
+   join, plan bodies with overflows registered on H-a's pond, fountain and moat), riffles, crossings (the fallback with plan
+   water), the tunnel buffer, bible roles, siteplan `courses`, `hydro_demo`; items 9-13, 15-16, 18 (c), 20.
+4. **HY-c, water gates:** the router's forced still reach at a wall, `line.mjs`/`wall.mjs` taking the crossing, the grate, the
+   lintel, closure, `gates.max`; item 14, and item 9's water-gate row.
+5. **Shared:** item 19, the asks tables, and a batch test: one plan with a spring stream through a walled village (a water
+   gate), bridged by its road, falling into the moat, a race to a mill lot and ditches along a farm lot, READY through the
+   two-plan flow, `checkRegion` clean, three checks identical.
+
+**The shared interface** (frozen at the end of HY-core's round 1, before HY-b and HY-c start, as H's was):
+- the `fluid` op's new members and `requires`;
+- `r.fluidBody`'s `lining`, `joins: [{body, cells}]` and `overflow`;
+- the overflow registration hook and its place in compile.mjs (step 2, before step 3's emit);
+- `simulate(...)`'s new findings (`M25:order`) and the spill-aware trap and exit;
+- the body id rule `<part>_r<k>`;
+- the course's crossing record that HY-c's wall reads;
+- `data.courses`' shape and `r.course`'s signature;
+- siteplan `courses`;
+- the gate driver's step names.
+
+HY-b and HY-c own disjoint files beyond that: `fluids/{course,profile,race,ditch}.mjs` against `line.mjs`, `wall.mjs` and
+`fluids/gate.mjs`. They meet in `compile.mjs`'s connector section and `check.mjs`'s dispatch, as H-a and H-b did. HY-b also
+edits H-a's pond, fountain and moat to accept `overflow`; that is additive and owned by HY-b alone.
+
+**Size:**
+- **HY-core:** about 2 days. The write order, the upstream drain and the per-body report are small in Java; most of the time
+  is the gate's crash, breach and exactness rounds.
+- **HY-a:** about 1 day.
+- **HY-b:** about 2.5 days, the largest: the router and profile, five end kinds, and the realiseApproved rounds for each kind.
+- **HY-c:** about 0.5-1 day.
+
+**Recommendation:** HY-core and HY-a start together. HY-b and HY-c start on HY-core's frozen interface (end of round 1, about
+half a day in). Release as one batch with Steward's RC check, as H. Elapsed about 3.5-4 days in parallel, 6 serial.
+- **If serial:** HY-core, HY-a, then HY-b. HY-c last, or deferred (a course meeting a wall answers `UNREACHABLE {kind: wall}`
+  meanwhile).
+- **If smaller is wanted:** HY-b without riffles and races (pools and falls only; races keep `NO_ROOM` until a later toolbox
+  batch) saves about half a day.
+
+### Binding answers carried over
+
+- **N-HY-1 (Noah, 2026-10-11):** S3 v1 has no stream. S3 doesn't depend on HY; a stream can come with 7b's v2. HY moves nothing
+  in S3 (§14 item 16).
+- **S-H-1, S-H-2 (Noah via Steward, Steward 2026-10-18):** decorative farms get a pond only when asked (`farmPond: true`);
+  working farms (a source per 9x9, every farmland hydrated) are a later block. HY's ditches don't claim that (§7.6).
+- **S-H-3:** `channel.moat` is H's and `channel.course` HY's. Roads cross on T3's bridge fallback.
+- **S-H-4:** wet writes are a fallback only, and byte identity wins over a better route. HY keeps every plan without an HY part
+  byte-identical (§5, §14 item 12).
+- **S-H-5:** `feature.water` reads the survey only. A course's natural ends are natural water; a plan's own body is
+  `{part}`.
+- **S-H-6:** the per-body `fluids` report, no new region state; RC check before release.
+- **N-H-1:** water is free in survival. **N-H-3:** no lava courses. **N-H-4:** ice caps in freezing biomes. **N-H-5:**
+  clearance 1 over plan water.
+- **From K1 and T3:** S-K1-1 (sealed walls), S-K1-3 (lenient params, unread keys in notes), S-K1-6 (a pending part newly refused
+  is a repair, never a build stop), S-K1-7 (unknown codes and kinds pass through), S-T3-4 (the shape a part needs answers
+  `unsupported`, as `channel.aqueduct` does here), S-T3-6 (`load`, `ARTIFACT_STALE`).
+
+### Open questions for Steward
+
+- **S-HY-1. The course shape.** A `channel` with `from`/`via`/`to`, `look: natural | built` and `flow: level | pools |
+  riffles`:
+  - its ends are a spring, a terminal pool, natural water (a weir head or a fall join) or a plan body (an overflow, or a fall
+    over its rim);
+  - `from` must be the higher end, and an uphill course is refused with the swapped `wouldFit`, never swapped silently.
+
+  Is that what your plan writer will write for "a stream", "a canal" and "a brook down to the river"? Should `look` be inferred
+  from the zone's style instead?
+- **S-HY-2. Races and ditches as their own ids.**
+  - `channel.race` is a course with a lot in `via`. It lays a wheel fall beside the lot and tells the lot which side; the
+    wheel is the lot's.
+  - `channel.ditch` is a level 1 x 1 ditch along a lot's sides. It hydrates nothing in the lot (K5, S-H-2).
+
+  Separate ids, or params on one `channel.course`? Will your plan writer add a race to a mill lot or ditches to a farm lot by
+  itself, or only when the player asks?
+- **S-HY-3. Crossings are bridges.** Every street, road or path crossing a course gets a T3 footbridge (clearance 1). There are
+  no culverts or fords in HY. A stream through a village may then bring several small bridges. Fine, or do you want flat
+  culverts (a new route move, a later slice)?
+- **S-HY-4. Water gates.** Where a course meets a wall, the wall stands on a lintel over it and a waterlogged iron grate fills
+  the water under it.
+  - Closure holds, and it counts against `gates.max`.
+  - A sealed wall refuses it.
+  - Without HY-c, a course meeting a wall answers `UNREACHABLE {kind: wall}`.
+
+  Do you want it in this batch?
+- **S-HY-5. Diversions are weirs.** A course never opens into a river. A head at natural water is a weir head: a stone line 2
+  thick at the surface between the river and the course's first pool. A tail is a fall into the river, or a weir where there's
+  no drop. A natural flowing edge near a weir refuses `WATER flowing`. Is a visible weir acceptable where the player imagines a
+  stream leaving the river?
+- **S-HY-6. Realise behaviour.** H's rules apply per reach:
+  - a course has one `fluids` row per reach (`part` plus `body`);
+  - a failing reach drains every reach upstream of it, each with `reason: "upstream of <body>"`;
+  - `ARTIFACT_STALE` names the reach whose guard changed.
+
+  **The upstream drain crosses parts:** a pond, fountain or moat that overflows into a course is upstream of it, so when a reach
+  of that course fails, the pond (a part you asked for separately) is drained too and reported `drained`, `reason: "upstream
+  of <body>"`. Acceptable, or should a feeding body stand and the course's head be refused instead? Enough for your card and
+  history, or should rows aggregate per part? HY takes your RC check before release.
+- **S-HY-7. New ids, kinds and shapes.**
+  - **Ids:** `channel.race`, `channel.ditch`, `wall.water_gate`, and `channel.aqueduct` (reserved until 7c: the answer for a
+    valley too deep to fill).
+  - **Evidence kinds:** `WATER` `join` and `flowing`; `UNREACHABLE` `uphill`, `cut`, `length` and `wall`. There are no
+    new codes.
+  - **Wire shapes:** `siteplan.courses`; the edge `crossing.course`; the wall's `crossing {over: course, gate: water}`; `serves`
+    on a race.
+
+  Enough?
+
+### Open questions for Noah
+
+Taste and product calls only, each with a proposed default.
+- **N-HY-2. How streams and canals look.** Proposed:
+  - **streams:** 2 wide and 2 deep in pools, a clay and mud bed, mossy grass banks, falls of up to 6;
+  - **canals:** 3 wide in `structure` with a `trim` coping, straight, with spillways as weirs;
+  - **weirs:** in `foundation`;
+  - **grates:** iron bars.
+
+  The look step shows them in three bibles.
+- **N-HY-3. Visible current.** Proposed: streams default to pools and falls (`flow: "pools"`), and riffles (shallow running
+  water over a stepped bed) are opt-in until probe (c) shows the census holds on them. The alternative is riffles on by default
+  for natural streams, which looks livelier but is the least-proven part of the model.
+- **N-HY-4. Springs.** Proposed: a course that starts on dry ground starts at a small spring pool (3 x 3), since water is free
+  and infinite (N-H-1). The alternative refuses a course without a water source at its head (`NO_FEATURE`).
+- **N-HY-5. Aqueducts.** Proposed: reserved until 7c (with grand works). A course over a valley deeper than 2 answers
+  `unsupported {channel.aqueduct}` and is offered later. The alternative is a small aqueduct in HY on T3's bridge row (piers and
+  a lined deck), about a day more.
+- **N-HY-6. The split.** Proposed: HY-core and HY-a together, then HY-b and HY-c in parallel, one batch with Steward's RC. The
+  alternative is serial, with HY-c deferred.
+
+### Coordinator decisions (2026-10-19, on Noah's behalf; Noah can overrule at the look step)
+
+- **N-HY-2, the look:** as proposed.
+  - Streams 2 x 2 with a clay and mud bed and mossy banks, falls up to 6.
+  - Canals 3 wide in `structure` with a `trim` coping.
+  - Weirs in `foundation`; iron-bar grates.
+- **N-HY-3:** riffles are opt-in (pools and falls by default) until the census probe passes.
+- **N-HY-4:** a course starting on dry ground starts at a 3 x 3 spring pool.
+- **N-HY-5:** `channel.aqueduct` stays reserved until 7c.
+- **N-HY-6, the split:** HY-core and HY-a start together. HY-b and HY-c start once HY-core's interface is frozen. One batched
+  release, after Steward's RC check. If Steward doesn't want water gates (S-HY-4), HY-c is deferred.
+
+### Deferred
+
+- Written flowing states and flowing rivers (SETTLEMENTS §21); riffles longer than the cap (after probe (c)).
+- Culverts and fords; aqueducts (`channel.aqueduct`, 7c); locks, sluice gates and turning wheels (mechanism).
+- Working farms with hydrated farmland (S-H-2's later block); water inside lot boxes (lot designs, 7b).
+- Adopting or regenerating natural rivers, springs or waterfalls.
+- Lava courses (N-H-3).
+- Building HY's parts in survival (RS).
