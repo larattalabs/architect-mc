@@ -73,6 +73,7 @@ public final class ApiRules {
 					case "region.tunnels" -> "tunnelConnectors"; // 6c T3: plan/0's connector.tunnel (with planCheckVolumes, below)
 					case "region.fluids" -> "regionFluids"; // 6c H: fluid bodies (ponds, fountains, waterfalls, moats), the fluids stage (with fluidVolumes, below)
 					case "region.wet" -> "wetWrites"; // 6c H: wet piers, harbour walls and quays (the wet fallback)
+					case "vocab" -> "vocabulary"; // 6c VOC: the block vocabulary (the systemRef vocab/1, generated families, tiers, survival classes)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

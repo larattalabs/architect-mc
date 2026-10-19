@@ -16,6 +16,17 @@
 //   fl         (6c H) flammable: lava lights it (ignitedByLava) or fire's ignite odds are over 0
 //   i          the block's item when it differs ('' = none: air, fluids, wall torches map to the torch, ...)
 // Properties are written `name=v1|*v2` with the default starred.
+// (6c VOC) The vocabulary (docs/CONTRACT.md "Phase 6c slice VOC" §1; the `v(...)` lines below the blocks, written by
+// kit/tools/gen-vocab.mjs from kit/vocab/edges.json and the tables in kit/vocab/; the helpers are in kit/lib/vocab.mjs):
+//   fam        family: the material a block is cut, shaped, dyed, waxed or weathered from ('copper', 'concrete', 'oak', 'stone', ...)
+//   col        dye colour (one of the 16) of a dyed block
+//   t          tier when not common: 'uncommon' | 'rare' | 'precious' (the cheapest recipe's raw items over kit/vocab/tiers.json)
+//   sv         survival class: 'craft' | 'drop' | 'silk' | 'loot' | 'cost' (placed with another item) | 'none' (creative only)
+//   rt         random-ticks in its default state (it may change on its own)
+//   wx         the next weathering stage and the waxed form: { next?, waxed? }
+//   be         has a block entity
+//   ft         a fitting: functional, not material (doors, glass, lights that are not cubes, beds, signs, plants, redstone parts)
+//   ff         the feature flags it needs beyond vanilla
 
 const T = {};
 function b(name, collision, family, spec, extra) {
@@ -32,6 +43,12 @@ function b(name, collision, family, spec, extra) {
 }
 
 /*@@DATA@@*/
+
+function v(name, extra) {
+  Object.assign(T[`minecraft:${name}`], extra);
+}
+
+/*@@VOCAB@@*/
 
 export const BLOCKS = T;
 

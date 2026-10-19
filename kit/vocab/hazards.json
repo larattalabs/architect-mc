@@ -1,0 +1,60 @@
+{
+ "format": 1,
+ "note": "Fluid interactions (docs/CONTRACT.md Phase 6c slice VOC §2.5): vanilla conversions that change a block beside a fluid. Each row is probed in game (gate item 10, voc-probe, dev.vocab.probe {kind}); a row the probe contradicts is corrected here before the rule ships. `reach`: face (a face-adjacent cell), above (the cell directly above), taxicab n (cells within n steps through the fluid), or fire {side, below, above} (the reach M20 checks). `block`: a block, a #tag or a name ending in * (kit/lib/vocab.mjs hazardBlocks). `becomes`: the block that results ({col} the source's colour).",
+ "rows": [
+  {
+   "kind": "concrete_powder",
+   "block": "minecraft:*_concrete_powder",
+   "beside": "water",
+   "reach": { "face": 1 },
+   "becomes": "minecraft:{col}_concrete",
+   "rules": ["M27:convert", "hazard"],
+   "why": "vanilla ConcretePowderBlock: powder touching water on any face sets into concrete at once"
+  },
+  {
+   "kind": "sponge",
+   "block": "minecraft:sponge",
+   "beside": "water",
+   "reach": { "taxicab": 7 },
+   "becomes": "minecraft:wet_sponge",
+   "rules": ["M27:convert", "hazard"],
+   "why": "vanilla SpongeBlock: a dry sponge beside water drains the water within its reach and turns wet (the reach is assumed until the probe measures it)"
+  },
+  {
+   "kind": "magma",
+   "block": "minecraft:magma_block",
+   "beside": "water",
+   "reach": { "above": 1 },
+   "becomes": "minecraft:bubble_column[drag=true]",
+   "rules": ["M27:convert"],
+   "why": "vanilla MagmaBlock: water directly above becomes a downward bubble column"
+  },
+  {
+   "kind": "soul_sand",
+   "block": "minecraft:soul_sand",
+   "beside": "water",
+   "reach": { "above": 1 },
+   "becomes": "minecraft:bubble_column[drag=false]",
+   "rules": ["M27:convert"],
+   "why": "vanilla SoulSandBlock: water directly above becomes an upward bubble column"
+  },
+  {
+   "kind": "fire",
+   "block": "#minecraft:fire",
+   "beside": "flammable",
+   "reach": { "fire": { "side": 3, "below": 1, "above": 3 } },
+   "becomes": "minecraft:fire",
+   "rules": ["M20"],
+   "why": "fire spreads to a flammable block within its reach (M20's reach, H's FIRE_REACH; the probe measures fire's own)"
+  },
+  {
+   "kind": "lava",
+   "block": "minecraft:lava",
+   "beside": "flammable",
+   "reach": { "fire": { "side": 3, "below": 1, "above": 3 } },
+   "becomes": "minecraft:fire",
+   "rules": ["M20"],
+   "why": "lava lights a flammable block within M20's reach (H's FIRE_REACH, from LavaFluid.randomTick; H's h-probe measured it)"
+  }
+ ]
+}

@@ -2,23 +2,12 @@
 // Steward can show what a wall or a bridge costs), by C26's block-to-item rules (mod survival/SurvivalItems.java): a block costs its
 // item, except the upper half of a two-part block (doors) and a bed's head (the pair is charged once), a double slab (2 slabs), the
 // wall variants of torches, signs, banners, heads and coral fans (their standing item), the obtainability map's special cases
-// (COSTS: a copy of mod/src/main/resources/data/architect_mc/survival_items.json `costs`, held equal by a test) and blocks with
+// (COSTS: survival_items.json `costs`, generated with it from kit/lib/vocab/survival.mjs) and blocks with
 // no item (air, fluids: nothing). Regions stay INSTANT-only (N-K1-3): this is a report, not a charge.
-import { SURVIVAL_CREATIVE_ONLY } from '../check.mjs';
+import { CREATIVE_ONLY, COSTS } from '../vocab/survival.mjs';
 
-/** survival_items.json `costs` (block -> item, or [] for no item). */
-export const COSTS = Object.freeze({
-  'minecraft:dirt_path': 'minecraft:dirt', 'minecraft:farmland': 'minecraft:dirt', 'minecraft:grass_block': 'minecraft:dirt',
-  'minecraft:attached_melon_stem': 'minecraft:melon_seeds', 'minecraft:attached_pumpkin_stem': 'minecraft:pumpkin_seeds',
-  'minecraft:melon_stem': 'minecraft:melon_seeds', 'minecraft:pumpkin_stem': 'minecraft:pumpkin_seeds',
-  'minecraft:cave_vines_plant': 'minecraft:glow_berries', 'minecraft:cave_vines': 'minecraft:glow_berries', 'minecraft:kelp_plant': 'minecraft:kelp',
-  'minecraft:twisting_vines_plant': 'minecraft:twisting_vines', 'minecraft:weeping_vines_plant': 'minecraft:weeping_vines',
-  'minecraft:big_dripleaf_stem': 'minecraft:big_dripleaf', 'minecraft:bamboo_sapling': 'minecraft:bamboo', 'minecraft:tall_seagrass': 'minecraft:seagrass',
-  'minecraft:water_cauldron': 'minecraft:cauldron', 'minecraft:lava_cauldron': 'minecraft:cauldron', 'minecraft:powder_snow_cauldron': 'minecraft:cauldron',
-  'minecraft:redstone_wire': 'minecraft:redstone', 'minecraft:tripwire': 'minecraft:string',
-  'minecraft:fire': [], 'minecraft:soul_fire': [], 'minecraft:water': [], 'minecraft:lava': [], 'minecraft:bubble_column': [], 'minecraft:moving_piston': [],
-  'minecraft:piston_head': [], 'minecraft:frosted_ice': [],
-});
+// (6c VOC) survival_items.json `costs` and the creative-only list come from one source, kit/lib/vocab/survival.mjs (gen-vocab.mjs)
+export { COSTS };
 const NONE = new Set(['minecraft:air', 'minecraft:cave_air', 'minecraft:void_air']);
 
 /** One cell's items: `[[item, n]]` (empty when it costs nothing). `state`: `name` or `name[k=v,...]`. */
@@ -26,7 +15,7 @@ export function itemsOf(state) {
   const m = /^([a-z0-9_:]+)(?:\[([^\]]*)\])?$/.exec(String(state));
   if (!m) return [];
   const name = m[1].includes(':') ? m[1] : `minecraft:${m[1]}`;
-  if (NONE.has(name) || SURVIVAL_CREATIVE_ONLY.has(name)) return [];
+  if (NONE.has(name) || CREATIVE_ONLY.has(name)) return [];
   const props = Object.fromEntries((m[2] ?? '').split(',').filter(Boolean).map((kv) => kv.split('=')));
   if (props.half === 'upper' || props.part === 'head') return [];
   const c = COSTS[name];

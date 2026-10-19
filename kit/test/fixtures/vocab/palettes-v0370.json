@@ -1,0 +1,25 @@
+{
+ "note": "palette() of every built-in palette and of every built-in and scenario bible at v0.37.0 (sha256 of JSON.stringify), the base of slice VOC (kit/test/vocab.test.mjs holds the current kit equal: CONTRACT VOC §6, gate item 3)",
+ "base": "23fb4921",
+ "palettes": {
+  "preset:birch": "274ea91f87c25330bece35a735c22ea77f4cb33928885c6447c51a7dadbd6b8f",
+  "preset:brick": "4c643c7b3ce832508532f10bca1afdab912804ce9822892f733aa1d5a3426947",
+  "preset:cherry": "8b94d54e6c417793ccd34731359673aa863cf451881fd704c943755d0bd1343a",
+  "preset:crimson": "633770ef27b55d8de1fc5da8a638474e9661bd4195b5ad83b5cd1db45079c822",
+  "preset:dark": "34574593719dd7af8c0ca2c4271a107ed4e6317401c390eb5de6dfbcaa29ba3e",
+  "preset:desert": "5aefd18dcb5c73432c53c4c50fb72d61c8481a8a6b2390662f9c1a45512b5269",
+  "preset:fortress": "65ee4704eaae694c3481378f438544b1290024955a7d2f37026334c9c09d304e",
+  "preset:mangrove": "38715ac0462bb419e87de2e3a9c689b75932fb0a238c994be2ef29366d92f1c1",
+  "preset:oak": "eb81289e5e72d6840ff2be7eb0d25291dcd21aa5f68dcf3c19bd2421f927dc50",
+  "preset:rustic": "4f466c0321d5feaf51f3ec14dc687be58fae399ad937b16e57177a6ecc7d4125",
+  "scenarios/bibles/g6c_s2_outpost.json": "6466b238dd31c0230b59c0719cd52a07335f4ddb3fed1d1f381f1cf152f698e1",
+  "scenarios/bibles/g6cv_village.json": "f4dfe888e080b48e9099b22ba58b2de17e0698f5b9456f7efbe234b5a20abd6e",
+  "scenarios/bibles/g6cw_coastal.json": "f4dfe888e080b48e9099b22ba58b2de17e0698f5b9456f7efbe234b5a20abd6e",
+  "scenarios/bibles/g6cw_infernal.json": "f4dfe888e080b48e9099b22ba58b2de17e0698f5b9456f7efbe234b5a20abd6e",
+  "scenarios/bibles/g6cw_path_oak_planks.json": "f4dfe888e080b48e9099b22ba58b2de17e0698f5b9456f7efbe234b5a20abd6e",
+  "scenarios/bibles/g6cw_path_packed_mud.json": "f4dfe888e080b48e9099b22ba58b2de17e0698f5b9456f7efbe234b5a20abd6e",
+  "scenarios/bibles/g6cw_path_stone_bricks.json": "f4dfe888e080b48e9099b22ba58b2de17e0698f5b9456f7efbe234b5a20abd6e",
+  "scenarios/bibles/g7ak1_coastal.json": "b29f5902976e98fe1aec516588a6b8f4255e225b3977cdb6133c08e6950f18ed",
+  "scenarios/bibles/g7ak1_infernal.json": "b29f5902976e98fe1aec516588a6b8f4255e225b3977cdb6133c08e6950f18ed"
+ }
+}

@@ -1,0 +1,8270 @@
+{
+ "vocab": 1,
+ "mc": "26.3",
+ "generator": "kit/tools/gen-vocab.mjs (docs/CONTRACT.md \"Phase 6c slice VOC\")",
+ "fields": {
+  "fam": "family: the material a block is cut, shaped, dyed, waxed or weathered from (a family name)",
+  "col": "dye colour, one of the 16 (absent: none)",
+  "t": "tier: uncommon, rare, precious (absent: common); the highest tier among the raw items of its cheapest recipe",
+  "sv": "survival class: craft, drop, silk, loot, cost, none (craft: a recipe makes it; drop: mining drops it; silk: only with silk touch; loot: chests, mobs or trades; cost: placed with another item; none: creative only)",
+  "ft": "fitting (1): functional, not material (doors, glass, lights that are not cubes, beds, signs, plants, redstone parts...)"
+ },
+ "tiers": [
+  "common",
+  "uncommon",
+  "rare",
+  "precious"
+ ],
+ "survivalClasses": [
+  "craft",
+  "drop",
+  "silk",
+  "loot",
+  "cost",
+  "none"
+ ],
+ "colours": [
+  "white",
+  "orange",
+  "magenta",
+  "light_blue",
+  "yellow",
+  "lime",
+  "pink",
+  "gray",
+  "light_gray",
+  "cyan",
+  "purple",
+  "blue",
+  "brown",
+  "green",
+  "red",
+  "black"
+ ],
+ "blocks": {
+  "acacia_button": {
+   "fam": "acacia",
+   "sv": "craft",
+   "ft": 1
+  },
+  "acacia_door": {
+   "fam": "acacia",
+   "sv": "craft",
+   "ft": 1
+  },
+  "acacia_fence": {
+   "fam": "acacia",
+   "sv": "craft"
+  },
+  "acacia_fence_gate": {
+   "fam": "acacia",
+   "sv": "craft",
+   "ft": 1
+  },
+  "acacia_hanging_sign": {
+   "fam": "acacia",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "acacia_leaves": {
+   "fam": "acacia_leaves",
+   "sv": "drop"
+  },
+  "acacia_log": {
+   "fam": "acacia",
+   "sv": "drop"
+  },
+  "acacia_planks": {
+   "fam": "acacia",
+   "sv": "craft"
+  },
+  "acacia_pressure_plate": {
+   "fam": "acacia",
+   "sv": "craft",
+   "ft": 1
+  },
+  "acacia_sapling": {
+   "fam": "acacia_sapling",
+   "sv": "drop",
+   "ft": 1
+  },
+  "acacia_shelf": {
+   "fam": "acacia",
+   "sv": "craft",
+   "ft": 1
+  },
+  "acacia_sign": {
+   "fam": "acacia",
+   "sv": "craft",
+   "ft": 1
+  },
+  "acacia_slab": {
+   "fam": "acacia",
+   "sv": "craft"
+  },
+  "acacia_stairs": {
+   "fam": "acacia",
+   "sv": "craft"
+  },
+  "acacia_trapdoor": {
+   "fam": "acacia",
+   "sv": "craft",
+   "ft": 1
+  },
+  "acacia_wall_hanging_sign": {
+   "fam": "acacia",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "acacia_wall_sign": {
+   "fam": "acacia",
+   "sv": "craft",
+   "ft": 1
+  },
+  "acacia_wood": {
+   "fam": "acacia",
+   "sv": "craft"
+  },
+  "activator_rail": {
+   "fam": "activator_rail",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "air": {
+   "fam": "air",
+   "sv": "cost"
+  },
+  "allium": {
+   "fam": "allium",
+   "sv": "drop",
+   "ft": 1
+  },
+  "amethyst_block": {
+   "fam": "amethyst",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "amethyst_cluster": {
+   "fam": "amethyst_cluster",
+   "t": "rare",
+   "sv": "silk",
+   "ft": 1
+  },
+  "ancient_debris": {
+   "fam": "ancient_debris",
+   "t": "precious",
+   "sv": "drop"
+  },
+  "andesite": {
+   "fam": "andesite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "andesite_slab": {
+   "fam": "andesite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "andesite_stairs": {
+   "fam": "andesite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "andesite_wall": {
+   "fam": "andesite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "anvil": {
+   "fam": "anvil",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "attached_melon_stem": {
+   "fam": "attached_melon_stem",
+   "sv": "cost",
+   "ft": 1
+  },
+  "attached_pumpkin_stem": {
+   "fam": "attached_pumpkin_stem",
+   "sv": "cost",
+   "ft": 1
+  },
+  "azalea": {
+   "fam": "azalea",
+   "sv": "drop",
+   "ft": 1
+  },
+  "azalea_leaves": {
+   "fam": "azalea_leaves",
+   "sv": "drop"
+  },
+  "azure_bluet": {
+   "fam": "azure_bluet",
+   "sv": "drop",
+   "ft": 1
+  },
+  "bamboo": {
+   "fam": "bamboo",
+   "sv": "drop",
+   "ft": 1
+  },
+  "bamboo_block": {
+   "fam": "bamboo",
+   "sv": "craft"
+  },
+  "bamboo_button": {
+   "fam": "bamboo",
+   "sv": "craft",
+   "ft": 1
+  },
+  "bamboo_door": {
+   "fam": "bamboo",
+   "sv": "craft",
+   "ft": 1
+  },
+  "bamboo_fence": {
+   "fam": "bamboo",
+   "sv": "craft"
+  },
+  "bamboo_fence_gate": {
+   "fam": "bamboo",
+   "sv": "craft",
+   "ft": 1
+  },
+  "bamboo_hanging_sign": {
+   "fam": "bamboo",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "bamboo_mosaic": {
+   "fam": "bamboo",
+   "sv": "craft"
+  },
+  "bamboo_mosaic_slab": {
+   "fam": "bamboo",
+   "sv": "craft"
+  },
+  "bamboo_mosaic_stairs": {
+   "fam": "bamboo",
+   "sv": "craft"
+  },
+  "bamboo_planks": {
+   "fam": "bamboo",
+   "sv": "craft"
+  },
+  "bamboo_pressure_plate": {
+   "fam": "bamboo",
+   "sv": "craft",
+   "ft": 1
+  },
+  "bamboo_sapling": {
+   "fam": "bamboo_sapling",
+   "sv": "cost",
+   "ft": 1
+  },
+  "bamboo_shelf": {
+   "fam": "bamboo",
+   "sv": "craft",
+   "ft": 1
+  },
+  "bamboo_sign": {
+   "fam": "bamboo",
+   "sv": "craft",
+   "ft": 1
+  },
+  "bamboo_slab": {
+   "fam": "bamboo",
+   "sv": "craft"
+  },
+  "bamboo_stairs": {
+   "fam": "bamboo",
+   "sv": "craft"
+  },
+  "bamboo_trapdoor": {
+   "fam": "bamboo",
+   "sv": "craft",
+   "ft": 1
+  },
+  "bamboo_wall_hanging_sign": {
+   "fam": "bamboo",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "bamboo_wall_sign": {
+   "fam": "bamboo",
+   "sv": "craft",
+   "ft": 1
+  },
+  "barrel": {
+   "fam": "barrel",
+   "sv": "craft",
+   "ft": 1
+  },
+  "barrier": {
+   "fam": "barrier",
+   "sv": "none"
+  },
+  "basalt": {
+   "fam": "basalt",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "beacon": {
+   "fam": "beacon",
+   "t": "precious",
+   "sv": "craft",
+   "ft": 1
+  },
+  "bedrock": {
+   "fam": "bedrock",
+   "sv": "none"
+  },
+  "bee_nest": {
+   "fam": "bee_nest",
+   "sv": "silk",
+   "ft": 1
+  },
+  "beehive": {
+   "fam": "beehive",
+   "sv": "craft",
+   "ft": 1
+  },
+  "beetroots": {
+   "fam": "beetroots",
+   "sv": "drop",
+   "ft": 1
+  },
+  "bell": {
+   "fam": "bell",
+   "sv": "drop",
+   "ft": 1
+  },
+  "big_dripleaf": {
+   "fam": "big_dripleaf",
+   "sv": "drop"
+  },
+  "big_dripleaf_stem": {
+   "fam": "big_dripleaf",
+   "sv": "cost"
+  },
+  "birch_button": {
+   "fam": "birch",
+   "sv": "craft",
+   "ft": 1
+  },
+  "birch_door": {
+   "fam": "birch",
+   "sv": "craft",
+   "ft": 1
+  },
+  "birch_fence": {
+   "fam": "birch",
+   "sv": "craft"
+  },
+  "birch_fence_gate": {
+   "fam": "birch",
+   "sv": "craft",
+   "ft": 1
+  },
+  "birch_hanging_sign": {
+   "fam": "birch",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "birch_leaves": {
+   "fam": "birch_leaves",
+   "sv": "drop"
+  },
+  "birch_log": {
+   "fam": "birch",
+   "sv": "drop"
+  },
+  "birch_planks": {
+   "fam": "birch",
+   "sv": "craft"
+  },
+  "birch_pressure_plate": {
+   "fam": "birch",
+   "sv": "craft",
+   "ft": 1
+  },
+  "birch_sapling": {
+   "fam": "birch_sapling",
+   "sv": "drop",
+   "ft": 1
+  },
+  "birch_shelf": {
+   "fam": "birch",
+   "sv": "craft",
+   "ft": 1
+  },
+  "birch_sign": {
+   "fam": "birch",
+   "sv": "craft",
+   "ft": 1
+  },
+  "birch_slab": {
+   "fam": "birch",
+   "sv": "craft"
+  },
+  "birch_stairs": {
+   "fam": "birch",
+   "sv": "craft"
+  },
+  "birch_trapdoor": {
+   "fam": "birch",
+   "sv": "craft",
+   "ft": 1
+  },
+  "birch_wall_hanging_sign": {
+   "fam": "birch",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "birch_wall_sign": {
+   "fam": "birch",
+   "sv": "craft",
+   "ft": 1
+  },
+  "birch_wood": {
+   "fam": "birch",
+   "sv": "craft"
+  },
+  "black_banner": {
+   "fam": "wool",
+   "col": "black",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "black_bed": {
+   "fam": "bed",
+   "col": "black",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "black_candle": {
+   "fam": "candle",
+   "col": "black",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "black_candle_cake": {
+   "fam": "candle_cake",
+   "col": "black",
+   "sv": "cost",
+   "ft": 1
+  },
+  "black_carpet": {
+   "fam": "wool",
+   "col": "black",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "black_concrete": {
+   "fam": "concrete",
+   "col": "black",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "black_concrete_powder": {
+   "fam": "concrete_powder",
+   "col": "black",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "black_concrete_slab": {
+   "fam": "concrete",
+   "col": "black",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "black_concrete_stairs": {
+   "fam": "concrete",
+   "col": "black",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "black_glazed_terracotta": {
+   "fam": "glazed_terracotta",
+   "col": "black",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "black_shulker_box": {
+   "fam": "shulker_box",
+   "col": "black",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "black_stained_glass": {
+   "fam": "stained_glass",
+   "col": "black",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "black_stained_glass_pane": {
+   "fam": "stained_glass",
+   "col": "black",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "black_terracotta": {
+   "fam": "terracotta",
+   "col": "black",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "black_wall_banner": {
+   "fam": "wool",
+   "col": "black",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "black_wool": {
+   "fam": "wool",
+   "col": "black",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "black_wool_slab": {
+   "fam": "wool",
+   "col": "black",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "black_wool_stairs": {
+   "fam": "wool",
+   "col": "black",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "blackstone": {
+   "fam": "blackstone",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "blackstone_slab": {
+   "fam": "blackstone",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "blackstone_stairs": {
+   "fam": "blackstone",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "blackstone_wall": {
+   "fam": "blackstone",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "blast_furnace": {
+   "fam": "blast_furnace",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "blue_banner": {
+   "fam": "wool",
+   "col": "blue",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "blue_bed": {
+   "fam": "bed",
+   "col": "blue",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "blue_candle": {
+   "fam": "candle",
+   "col": "blue",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "blue_candle_cake": {
+   "fam": "candle_cake",
+   "col": "blue",
+   "sv": "cost",
+   "ft": 1
+  },
+  "blue_carpet": {
+   "fam": "wool",
+   "col": "blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "blue_concrete": {
+   "fam": "concrete",
+   "col": "blue",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "blue_concrete_powder": {
+   "fam": "concrete_powder",
+   "col": "blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "blue_concrete_slab": {
+   "fam": "concrete",
+   "col": "blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "blue_concrete_stairs": {
+   "fam": "concrete",
+   "col": "blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "blue_glazed_terracotta": {
+   "fam": "glazed_terracotta",
+   "col": "blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "blue_ice": {
+   "fam": "ice",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "blue_orchid": {
+   "fam": "blue_orchid",
+   "sv": "drop",
+   "ft": 1
+  },
+  "blue_shulker_box": {
+   "fam": "shulker_box",
+   "col": "blue",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "blue_stained_glass": {
+   "fam": "stained_glass",
+   "col": "blue",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "blue_stained_glass_pane": {
+   "fam": "stained_glass",
+   "col": "blue",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "blue_terracotta": {
+   "fam": "terracotta",
+   "col": "blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "blue_wall_banner": {
+   "fam": "wool",
+   "col": "blue",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "blue_wool": {
+   "fam": "wool",
+   "col": "blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "blue_wool_slab": {
+   "fam": "wool",
+   "col": "blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "blue_wool_stairs": {
+   "fam": "wool",
+   "col": "blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "bone_block": {
+   "fam": "bone",
+   "sv": "craft"
+  },
+  "bookshelf": {
+   "fam": "bookshelf",
+   "sv": "craft"
+  },
+  "brain_coral": {
+   "fam": "brain_coral",
+   "sv": "silk",
+   "ft": 1
+  },
+  "brain_coral_block": {
+   "fam": "brain_coral_block",
+   "sv": "silk"
+  },
+  "brain_coral_fan": {
+   "fam": "brain_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "brain_coral_wall_fan": {
+   "fam": "brain_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "brewing_stand": {
+   "fam": "brewing_stand",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "brick_slab": {
+   "fam": "bricks",
+   "sv": "craft"
+  },
+  "brick_stairs": {
+   "fam": "bricks",
+   "sv": "craft"
+  },
+  "brick_wall": {
+   "fam": "bricks",
+   "sv": "craft"
+  },
+  "bricks": {
+   "fam": "bricks",
+   "sv": "craft"
+  },
+  "brown_banner": {
+   "fam": "wool",
+   "col": "brown",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "brown_bed": {
+   "fam": "bed",
+   "col": "brown",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "brown_candle": {
+   "fam": "candle",
+   "col": "brown",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "brown_candle_cake": {
+   "fam": "candle_cake",
+   "col": "brown",
+   "sv": "cost",
+   "ft": 1
+  },
+  "brown_carpet": {
+   "fam": "wool",
+   "col": "brown",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "brown_concrete": {
+   "fam": "concrete",
+   "col": "brown",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "brown_concrete_powder": {
+   "fam": "concrete_powder",
+   "col": "brown",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "brown_concrete_slab": {
+   "fam": "concrete",
+   "col": "brown",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "brown_concrete_stairs": {
+   "fam": "concrete",
+   "col": "brown",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "brown_glazed_terracotta": {
+   "fam": "glazed_terracotta",
+   "col": "brown",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "brown_mushroom": {
+   "fam": "brown_mushroom",
+   "sv": "drop",
+   "ft": 1
+  },
+  "brown_mushroom_block": {
+   "fam": "brown_mushroom_block",
+   "sv": "silk"
+  },
+  "brown_shulker_box": {
+   "fam": "shulker_box",
+   "col": "brown",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "brown_stained_glass": {
+   "fam": "stained_glass",
+   "col": "brown",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "brown_stained_glass_pane": {
+   "fam": "stained_glass",
+   "col": "brown",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "brown_terracotta": {
+   "fam": "terracotta",
+   "col": "brown",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "brown_wall_banner": {
+   "fam": "wool",
+   "col": "brown",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "brown_wool": {
+   "fam": "wool",
+   "col": "brown",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "brown_wool_slab": {
+   "fam": "wool",
+   "col": "brown",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "brown_wool_stairs": {
+   "fam": "wool",
+   "col": "brown",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "bubble_column": {
+   "fam": "bubble_column",
+   "sv": "cost"
+  },
+  "bubble_coral": {
+   "fam": "bubble_coral",
+   "sv": "silk",
+   "ft": 1
+  },
+  "bubble_coral_block": {
+   "fam": "bubble_coral_block",
+   "sv": "silk"
+  },
+  "bubble_coral_fan": {
+   "fam": "bubble_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "bubble_coral_wall_fan": {
+   "fam": "bubble_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "budding_amethyst": {
+   "fam": "budding_amethyst",
+   "sv": "none"
+  },
+  "bush": {
+   "fam": "bush",
+   "sv": "drop",
+   "ft": 1
+  },
+  "cactus": {
+   "fam": "cactus",
+   "sv": "drop",
+   "ft": 1
+  },
+  "cactus_flower": {
+   "fam": "cactus_flower",
+   "sv": "drop",
+   "ft": 1
+  },
+  "cake": {
+   "fam": "cake",
+   "sv": "craft",
+   "ft": 1
+  },
+  "calcite": {
+   "fam": "calcite",
+   "sv": "drop"
+  },
+  "calibrated_sculk_sensor": {
+   "fam": "calibrated_sculk_sensor",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "campfire": {
+   "fam": "campfire",
+   "sv": "craft",
+   "ft": 1
+  },
+  "candle": {
+   "fam": "candle",
+   "sv": "craft",
+   "ft": 1
+  },
+  "candle_cake": {
+   "fam": "candle_cake",
+   "sv": "cost",
+   "ft": 1
+  },
+  "carrots": {
+   "fam": "carrots",
+   "sv": "drop",
+   "ft": 1
+  },
+  "cartography_table": {
+   "fam": "cartography_table",
+   "sv": "craft"
+  },
+  "carved_pumpkin": {
+   "fam": "carved_pumpkin",
+   "sv": "drop"
+  },
+  "cauldron": {
+   "fam": "iron",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "cave_air": {
+   "fam": "cave_air",
+   "sv": "cost"
+  },
+  "cave_vines": {
+   "fam": "cave_vines",
+   "sv": "cost",
+   "ft": 1
+  },
+  "cave_vines_plant": {
+   "fam": "cave_vines_plant",
+   "sv": "cost",
+   "ft": 1
+  },
+  "chain_command_block": {
+   "fam": "chain_command",
+   "sv": "none",
+   "ft": 1
+  },
+  "cherry_button": {
+   "fam": "cherry",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cherry_door": {
+   "fam": "cherry",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cherry_fence": {
+   "fam": "cherry",
+   "sv": "craft"
+  },
+  "cherry_fence_gate": {
+   "fam": "cherry",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cherry_hanging_sign": {
+   "fam": "cherry",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cherry_leaves": {
+   "fam": "cherry_leaves",
+   "sv": "drop"
+  },
+  "cherry_log": {
+   "fam": "cherry",
+   "sv": "drop"
+  },
+  "cherry_planks": {
+   "fam": "cherry",
+   "sv": "craft"
+  },
+  "cherry_pressure_plate": {
+   "fam": "cherry",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cherry_sapling": {
+   "fam": "cherry_sapling",
+   "sv": "drop",
+   "ft": 1
+  },
+  "cherry_shelf": {
+   "fam": "cherry",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cherry_sign": {
+   "fam": "cherry",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cherry_slab": {
+   "fam": "cherry",
+   "sv": "craft"
+  },
+  "cherry_stairs": {
+   "fam": "cherry",
+   "sv": "craft"
+  },
+  "cherry_trapdoor": {
+   "fam": "cherry",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cherry_wall_hanging_sign": {
+   "fam": "cherry",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cherry_wall_sign": {
+   "fam": "cherry",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cherry_wood": {
+   "fam": "cherry",
+   "sv": "craft"
+  },
+  "chest": {
+   "fam": "chest",
+   "sv": "craft",
+   "ft": 1
+  },
+  "chipped_anvil": {
+   "fam": "chipped_anvil",
+   "sv": "drop"
+  },
+  "chiseled_bookshelf": {
+   "fam": "chiseled_bookshelf",
+   "sv": "craft",
+   "ft": 1
+  },
+  "chiseled_cinnabar": {
+   "fam": "cinnabar",
+   "sv": "craft"
+  },
+  "chiseled_copper": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "chiseled_deepslate": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "chiseled_nether_bricks": {
+   "fam": "nether_bricks",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "chiseled_polished_blackstone": {
+   "fam": "blackstone",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "chiseled_quartz_block": {
+   "fam": "quartz",
+   "sv": "craft"
+  },
+  "chiseled_red_sandstone": {
+   "fam": "red_sandstone",
+   "sv": "craft"
+  },
+  "chiseled_resin_bricks": {
+   "fam": "resin",
+   "sv": "craft"
+  },
+  "chiseled_sandstone": {
+   "fam": "sandstone",
+   "sv": "craft"
+  },
+  "chiseled_stone_bricks": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "chiseled_sulfur": {
+   "fam": "sulfur",
+   "sv": "craft"
+  },
+  "chiseled_tuff": {
+   "fam": "tuff",
+   "sv": "craft"
+  },
+  "chiseled_tuff_bricks": {
+   "fam": "tuff",
+   "sv": "craft"
+  },
+  "chorus_flower": {
+   "fam": "chorus_flower",
+   "t": "rare",
+   "sv": "drop"
+  },
+  "chorus_plant": {
+   "fam": "chorus_plant",
+   "sv": "none"
+  },
+  "cinnabar": {
+   "fam": "cinnabar",
+   "sv": "drop"
+  },
+  "cinnabar_brick_slab": {
+   "fam": "cinnabar",
+   "sv": "craft"
+  },
+  "cinnabar_brick_stairs": {
+   "fam": "cinnabar",
+   "sv": "craft"
+  },
+  "cinnabar_brick_wall": {
+   "fam": "cinnabar",
+   "sv": "craft"
+  },
+  "cinnabar_bricks": {
+   "fam": "cinnabar",
+   "sv": "craft"
+  },
+  "cinnabar_slab": {
+   "fam": "cinnabar",
+   "sv": "craft"
+  },
+  "cinnabar_stairs": {
+   "fam": "cinnabar",
+   "sv": "craft"
+  },
+  "cinnabar_wall": {
+   "fam": "cinnabar",
+   "sv": "craft"
+  },
+  "clay": {
+   "fam": "clay",
+   "sv": "craft"
+  },
+  "closed_eyeblossom": {
+   "fam": "closed_eyeblossom",
+   "sv": "drop",
+   "ft": 1
+  },
+  "coal_block": {
+   "fam": "coal",
+   "sv": "craft"
+  },
+  "coal_ore": {
+   "fam": "coal_ore",
+   "sv": "silk"
+  },
+  "coarse_dirt": {
+   "fam": "coarse_dirt",
+   "sv": "craft"
+  },
+  "cobbled_deepslate": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "cobbled_deepslate_slab": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "cobbled_deepslate_stairs": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "cobbled_deepslate_wall": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "cobblestone": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "cobblestone_slab": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "cobblestone_stairs": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "cobblestone_wall": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "cobweb": {
+   "fam": "cobweb",
+   "sv": "drop"
+  },
+  "cocoa": {
+   "fam": "cocoa",
+   "sv": "drop",
+   "ft": 1
+  },
+  "command_block": {
+   "fam": "command",
+   "sv": "none",
+   "ft": 1
+  },
+  "comparator": {
+   "fam": "comparator",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "composter": {
+   "fam": "composter",
+   "sv": "craft"
+  },
+  "conduit": {
+   "fam": "conduit",
+   "t": "precious",
+   "sv": "craft",
+   "ft": 1
+  },
+  "copper_bars": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "copper_block": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "copper_bulb": {
+   "fam": "copper",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "copper_chain": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "copper_chest": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "copper_door": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "copper_golem_statue": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "copper_grate": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "copper_lantern": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "copper_ore": {
+   "fam": "copper_ore",
+   "t": "uncommon",
+   "sv": "silk"
+  },
+  "copper_torch": {
+   "fam": "copper_torch",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "copper_trapdoor": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "copper_wall_torch": {
+   "fam": "copper_torch",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cornflower": {
+   "fam": "cornflower",
+   "sv": "drop",
+   "ft": 1
+  },
+  "cracked_deepslate_bricks": {
+   "fam": "deepslate_bricks",
+   "sv": "craft"
+  },
+  "cracked_deepslate_tiles": {
+   "fam": "deepslate_tiles",
+   "sv": "craft"
+  },
+  "cracked_nether_bricks": {
+   "fam": "cracked_nether_bricks",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "cracked_polished_blackstone_bricks": {
+   "fam": "blackstone_bricks",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "cracked_stone_bricks": {
+   "fam": "stone_bricks",
+   "sv": "craft"
+  },
+  "crafter": {
+   "fam": "crafter",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "crafting_table": {
+   "fam": "crafting_table",
+   "sv": "craft"
+  },
+  "creaking_heart": {
+   "fam": "creaking_heart",
+   "sv": "craft",
+   "ft": 1
+  },
+  "creeper_head": {
+   "fam": "creeper_head",
+   "sv": "drop",
+   "ft": 1
+  },
+  "creeper_wall_head": {
+   "fam": "creeper_head",
+   "sv": "drop",
+   "ft": 1
+  },
+  "crimson_button": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "crimson_door": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "crimson_fence": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "crimson_fence_gate": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "crimson_fungus": {
+   "fam": "crimson_fungus",
+   "sv": "drop",
+   "ft": 1
+  },
+  "crimson_hanging_sign": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "crimson_hyphae": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "crimson_nylium": {
+   "fam": "crimson_nylium",
+   "t": "uncommon",
+   "sv": "silk"
+  },
+  "crimson_planks": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "crimson_pressure_plate": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "crimson_roots": {
+   "fam": "crimson_roots",
+   "sv": "drop",
+   "ft": 1
+  },
+  "crimson_shelf": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "crimson_sign": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "crimson_slab": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "crimson_stairs": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "crimson_stem": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "crimson_trapdoor": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "crimson_wall_hanging_sign": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "crimson_wall_sign": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "crying_obsidian": {
+   "fam": "crying_obsidian",
+   "t": "rare",
+   "sv": "drop"
+  },
+  "cut_copper": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "cut_copper_slab": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "cut_copper_stairs": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "cut_red_sandstone": {
+   "fam": "red_sandstone",
+   "sv": "craft"
+  },
+  "cut_red_sandstone_slab": {
+   "fam": "red_sandstone",
+   "sv": "craft"
+  },
+  "cut_sandstone": {
+   "fam": "sandstone",
+   "sv": "craft"
+  },
+  "cut_sandstone_slab": {
+   "fam": "sandstone",
+   "sv": "craft"
+  },
+  "cyan_banner": {
+   "fam": "wool",
+   "col": "cyan",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cyan_bed": {
+   "fam": "bed",
+   "col": "cyan",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cyan_candle": {
+   "fam": "candle",
+   "col": "cyan",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cyan_candle_cake": {
+   "fam": "candle_cake",
+   "col": "cyan",
+   "sv": "cost",
+   "ft": 1
+  },
+  "cyan_carpet": {
+   "fam": "wool",
+   "col": "cyan",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "cyan_concrete": {
+   "fam": "concrete",
+   "col": "cyan",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "cyan_concrete_powder": {
+   "fam": "concrete_powder",
+   "col": "cyan",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "cyan_concrete_slab": {
+   "fam": "concrete",
+   "col": "cyan",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "cyan_concrete_stairs": {
+   "fam": "concrete",
+   "col": "cyan",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "cyan_glazed_terracotta": {
+   "fam": "glazed_terracotta",
+   "col": "cyan",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "cyan_shulker_box": {
+   "fam": "shulker_box",
+   "col": "cyan",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cyan_stained_glass": {
+   "fam": "stained_glass",
+   "col": "cyan",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cyan_stained_glass_pane": {
+   "fam": "stained_glass",
+   "col": "cyan",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cyan_terracotta": {
+   "fam": "terracotta",
+   "col": "cyan",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "cyan_wall_banner": {
+   "fam": "wool",
+   "col": "cyan",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "cyan_wool": {
+   "fam": "wool",
+   "col": "cyan",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "cyan_wool_slab": {
+   "fam": "wool",
+   "col": "cyan",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "cyan_wool_stairs": {
+   "fam": "wool",
+   "col": "cyan",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "damaged_anvil": {
+   "fam": "damaged_anvil",
+   "sv": "drop"
+  },
+  "dandelion": {
+   "fam": "dandelion",
+   "sv": "drop",
+   "ft": 1
+  },
+  "dark_oak_button": {
+   "fam": "dark_oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "dark_oak_door": {
+   "fam": "dark_oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "dark_oak_fence": {
+   "fam": "dark_oak",
+   "sv": "craft"
+  },
+  "dark_oak_fence_gate": {
+   "fam": "dark_oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "dark_oak_hanging_sign": {
+   "fam": "dark_oak",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "dark_oak_leaves": {
+   "fam": "dark_oak_leaves",
+   "sv": "drop"
+  },
+  "dark_oak_log": {
+   "fam": "dark_oak",
+   "sv": "drop"
+  },
+  "dark_oak_planks": {
+   "fam": "dark_oak",
+   "sv": "craft"
+  },
+  "dark_oak_pressure_plate": {
+   "fam": "dark_oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "dark_oak_sapling": {
+   "fam": "dark_oak_sapling",
+   "sv": "drop",
+   "ft": 1
+  },
+  "dark_oak_shelf": {
+   "fam": "dark_oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "dark_oak_sign": {
+   "fam": "dark_oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "dark_oak_slab": {
+   "fam": "dark_oak",
+   "sv": "craft"
+  },
+  "dark_oak_stairs": {
+   "fam": "dark_oak",
+   "sv": "craft"
+  },
+  "dark_oak_trapdoor": {
+   "fam": "dark_oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "dark_oak_wall_hanging_sign": {
+   "fam": "dark_oak",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "dark_oak_wall_sign": {
+   "fam": "dark_oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "dark_oak_wood": {
+   "fam": "dark_oak",
+   "sv": "craft"
+  },
+  "dark_prismarine": {
+   "fam": "dark_prismarine",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "dark_prismarine_slab": {
+   "fam": "dark_prismarine",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "dark_prismarine_stairs": {
+   "fam": "dark_prismarine",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "daylight_detector": {
+   "fam": "daylight_detector",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "dead_brain_coral": {
+   "fam": "dead_brain_coral",
+   "sv": "silk",
+   "ft": 1
+  },
+  "dead_brain_coral_block": {
+   "fam": "dead_brain_coral_block",
+   "sv": "drop"
+  },
+  "dead_brain_coral_fan": {
+   "fam": "dead_brain_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "dead_brain_coral_wall_fan": {
+   "fam": "dead_brain_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "dead_bubble_coral": {
+   "fam": "dead_bubble_coral",
+   "sv": "silk",
+   "ft": 1
+  },
+  "dead_bubble_coral_block": {
+   "fam": "dead_bubble_coral_block",
+   "sv": "drop"
+  },
+  "dead_bubble_coral_fan": {
+   "fam": "dead_bubble_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "dead_bubble_coral_wall_fan": {
+   "fam": "dead_bubble_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "dead_bush": {
+   "fam": "dead_bush",
+   "sv": "drop",
+   "ft": 1
+  },
+  "dead_fire_coral": {
+   "fam": "dead_fire_coral",
+   "sv": "silk",
+   "ft": 1
+  },
+  "dead_fire_coral_block": {
+   "fam": "dead_fire_coral_block",
+   "sv": "drop"
+  },
+  "dead_fire_coral_fan": {
+   "fam": "dead_fire_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "dead_fire_coral_wall_fan": {
+   "fam": "dead_fire_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "dead_horn_coral": {
+   "fam": "dead_horn_coral",
+   "sv": "silk",
+   "ft": 1
+  },
+  "dead_horn_coral_block": {
+   "fam": "dead_horn_coral_block",
+   "sv": "drop"
+  },
+  "dead_horn_coral_fan": {
+   "fam": "dead_horn_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "dead_horn_coral_wall_fan": {
+   "fam": "dead_horn_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "dead_tube_coral": {
+   "fam": "dead_tube_coral",
+   "sv": "silk",
+   "ft": 1
+  },
+  "dead_tube_coral_block": {
+   "fam": "dead_tube_coral_block",
+   "sv": "drop"
+  },
+  "dead_tube_coral_fan": {
+   "fam": "dead_tube_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "dead_tube_coral_wall_fan": {
+   "fam": "dead_tube_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "decorated_pot": {
+   "fam": "decorated_pot",
+   "sv": "craft",
+   "ft": 1
+  },
+  "deepslate": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "deepslate_brick_slab": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "deepslate_brick_stairs": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "deepslate_brick_wall": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "deepslate_bricks": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "deepslate_coal_ore": {
+   "fam": "deepslate_coal_ore",
+   "sv": "silk"
+  },
+  "deepslate_copper_ore": {
+   "fam": "deepslate_copper_ore",
+   "t": "uncommon",
+   "sv": "silk"
+  },
+  "deepslate_diamond_ore": {
+   "fam": "deepslate_diamond_ore",
+   "t": "precious",
+   "sv": "silk"
+  },
+  "deepslate_emerald_ore": {
+   "fam": "deepslate_emerald_ore",
+   "t": "precious",
+   "sv": "silk"
+  },
+  "deepslate_gold_ore": {
+   "fam": "deepslate_gold_ore",
+   "t": "rare",
+   "sv": "silk"
+  },
+  "deepslate_iron_ore": {
+   "fam": "deepslate_iron_ore",
+   "t": "uncommon",
+   "sv": "silk"
+  },
+  "deepslate_lapis_ore": {
+   "fam": "deepslate_lapis_ore",
+   "sv": "silk"
+  },
+  "deepslate_redstone_ore": {
+   "fam": "deepslate_redstone_ore",
+   "sv": "silk"
+  },
+  "deepslate_tile_slab": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "deepslate_tile_stairs": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "deepslate_tile_wall": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "deepslate_tiles": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "detector_rail": {
+   "fam": "detector_rail",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "diamond_block": {
+   "fam": "diamond",
+   "t": "precious",
+   "sv": "craft"
+  },
+  "diamond_ore": {
+   "fam": "diamond_ore",
+   "t": "precious",
+   "sv": "silk"
+  },
+  "diorite": {
+   "fam": "diorite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "diorite_slab": {
+   "fam": "diorite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "diorite_stairs": {
+   "fam": "diorite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "diorite_wall": {
+   "fam": "diorite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "dirt": {
+   "fam": "dirt",
+   "sv": "drop"
+  },
+  "dirt_path": {
+   "fam": "dirt_path",
+   "sv": "cost"
+  },
+  "dispenser": {
+   "fam": "dispenser",
+   "sv": "craft",
+   "ft": 1
+  },
+  "dragon_egg": {
+   "fam": "dragon_egg",
+   "t": "precious",
+   "sv": "drop",
+   "ft": 1
+  },
+  "dragon_head": {
+   "fam": "dragon_head",
+   "sv": "drop",
+   "ft": 1
+  },
+  "dragon_wall_head": {
+   "fam": "dragon_head",
+   "sv": "drop",
+   "ft": 1
+  },
+  "dried_ghast": {
+   "fam": "dried_ghast",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "dried_kelp_block": {
+   "fam": "dried_kelp",
+   "sv": "craft"
+  },
+  "dripstone_block": {
+   "fam": "dripstone",
+   "sv": "craft"
+  },
+  "dropper": {
+   "fam": "dropper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "emerald_block": {
+   "fam": "emerald",
+   "t": "precious",
+   "sv": "craft"
+  },
+  "emerald_ore": {
+   "fam": "emerald_ore",
+   "t": "precious",
+   "sv": "silk"
+  },
+  "enchanting_table": {
+   "fam": "enchanting_table",
+   "t": "precious",
+   "sv": "craft",
+   "ft": 1
+  },
+  "end_gateway": {
+   "fam": "end_gateway",
+   "sv": "none",
+   "ft": 1
+  },
+  "end_portal": {
+   "fam": "end_portal",
+   "sv": "none",
+   "ft": 1
+  },
+  "end_portal_frame": {
+   "fam": "end_portal_frame",
+   "sv": "none",
+   "ft": 1
+  },
+  "end_rod": {
+   "fam": "end_rod",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "end_stone": {
+   "fam": "end_stone",
+   "t": "rare",
+   "sv": "drop"
+  },
+  "end_stone_brick_slab": {
+   "fam": "end_stone",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "end_stone_brick_stairs": {
+   "fam": "end_stone",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "end_stone_brick_wall": {
+   "fam": "end_stone",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "end_stone_bricks": {
+   "fam": "end_stone",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "ender_chest": {
+   "fam": "ender_chest",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "exposed_chiseled_copper": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "exposed_copper": {
+   "fam": "copper",
+   "sv": "drop"
+  },
+  "exposed_copper_bars": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "exposed_copper_bulb": {
+   "fam": "copper",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "exposed_copper_chain": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "exposed_copper_chest": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "exposed_copper_door": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "exposed_copper_golem_statue": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "exposed_copper_grate": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "exposed_copper_lantern": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "exposed_copper_trapdoor": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "exposed_cut_copper": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "exposed_cut_copper_slab": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "exposed_cut_copper_stairs": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "exposed_lightning_rod": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "farmland": {
+   "fam": "farmland",
+   "sv": "cost"
+  },
+  "fern": {
+   "fam": "fern",
+   "sv": "drop",
+   "ft": 1
+  },
+  "fire": {
+   "fam": "fire",
+   "sv": "cost",
+   "ft": 1
+  },
+  "fire_coral": {
+   "fam": "fire_coral",
+   "sv": "silk",
+   "ft": 1
+  },
+  "fire_coral_block": {
+   "fam": "fire_coral_block",
+   "sv": "silk"
+  },
+  "fire_coral_fan": {
+   "fam": "fire_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "fire_coral_wall_fan": {
+   "fam": "fire_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "firefly_bush": {
+   "fam": "firefly_bush",
+   "sv": "drop",
+   "ft": 1
+  },
+  "fletching_table": {
+   "fam": "fletching_table",
+   "sv": "craft"
+  },
+  "flower_pot": {
+   "fam": "flower_pot",
+   "sv": "craft",
+   "ft": 1
+  },
+  "flowering_azalea": {
+   "fam": "flowering_azalea",
+   "sv": "drop",
+   "ft": 1
+  },
+  "flowering_azalea_leaves": {
+   "fam": "flowering_azalea_leaves",
+   "sv": "drop"
+  },
+  "frogspawn": {
+   "fam": "frogspawn",
+   "sv": "none",
+   "ft": 1
+  },
+  "frosted_ice": {
+   "fam": "frosted_ice",
+   "sv": "cost"
+  },
+  "furnace": {
+   "fam": "furnace",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "gilded_blackstone": {
+   "fam": "gilded_blackstone",
+   "t": "rare",
+   "sv": "drop"
+  },
+  "glass": {
+   "fam": "glass",
+   "sv": "craft",
+   "ft": 1
+  },
+  "glass_pane": {
+   "fam": "glass",
+   "sv": "craft",
+   "ft": 1
+  },
+  "glow_lichen": {
+   "fam": "glow_lichen",
+   "sv": "drop",
+   "ft": 1
+  },
+  "glowstone": {
+   "fam": "glowstone",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "gold_block": {
+   "fam": "gold",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "gold_ore": {
+   "fam": "gold_ore",
+   "t": "rare",
+   "sv": "silk"
+  },
+  "golden_dandelion": {
+   "fam": "golden_dandelion",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "granite": {
+   "fam": "granite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "granite_slab": {
+   "fam": "granite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "granite_stairs": {
+   "fam": "granite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "granite_wall": {
+   "fam": "granite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "grass_block": {
+   "fam": "grass",
+   "sv": "cost"
+  },
+  "gravel": {
+   "fam": "gravel",
+   "sv": "drop"
+  },
+  "gray_banner": {
+   "fam": "wool",
+   "col": "gray",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "gray_bed": {
+   "fam": "bed",
+   "col": "gray",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "gray_candle": {
+   "fam": "candle",
+   "col": "gray",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "gray_candle_cake": {
+   "fam": "candle_cake",
+   "col": "gray",
+   "sv": "cost",
+   "ft": 1
+  },
+  "gray_carpet": {
+   "fam": "wool",
+   "col": "gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "gray_concrete": {
+   "fam": "concrete",
+   "col": "gray",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "gray_concrete_powder": {
+   "fam": "concrete_powder",
+   "col": "gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "gray_concrete_slab": {
+   "fam": "concrete",
+   "col": "gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "gray_concrete_stairs": {
+   "fam": "concrete",
+   "col": "gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "gray_glazed_terracotta": {
+   "fam": "glazed_terracotta",
+   "col": "gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "gray_shulker_box": {
+   "fam": "shulker_box",
+   "col": "gray",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "gray_stained_glass": {
+   "fam": "stained_glass",
+   "col": "gray",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "gray_stained_glass_pane": {
+   "fam": "stained_glass",
+   "col": "gray",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "gray_terracotta": {
+   "fam": "terracotta",
+   "col": "gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "gray_wall_banner": {
+   "fam": "wool",
+   "col": "gray",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "gray_wool": {
+   "fam": "wool",
+   "col": "gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "gray_wool_slab": {
+   "fam": "wool",
+   "col": "gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "gray_wool_stairs": {
+   "fam": "wool",
+   "col": "gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "green_banner": {
+   "fam": "wool",
+   "col": "green",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "green_bed": {
+   "fam": "bed",
+   "col": "green",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "green_candle": {
+   "fam": "candle",
+   "col": "green",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "green_candle_cake": {
+   "fam": "candle_cake",
+   "col": "green",
+   "sv": "cost",
+   "ft": 1
+  },
+  "green_carpet": {
+   "fam": "wool",
+   "col": "green",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "green_concrete": {
+   "fam": "concrete",
+   "col": "green",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "green_concrete_powder": {
+   "fam": "concrete_powder",
+   "col": "green",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "green_concrete_slab": {
+   "fam": "concrete",
+   "col": "green",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "green_concrete_stairs": {
+   "fam": "concrete",
+   "col": "green",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "green_glazed_terracotta": {
+   "fam": "glazed_terracotta",
+   "col": "green",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "green_shulker_box": {
+   "fam": "shulker_box",
+   "col": "green",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "green_stained_glass": {
+   "fam": "stained_glass",
+   "col": "green",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "green_stained_glass_pane": {
+   "fam": "stained_glass",
+   "col": "green",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "green_terracotta": {
+   "fam": "terracotta",
+   "col": "green",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "green_wall_banner": {
+   "fam": "wool",
+   "col": "green",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "green_wool": {
+   "fam": "wool",
+   "col": "green",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "green_wool_slab": {
+   "fam": "wool",
+   "col": "green",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "green_wool_stairs": {
+   "fam": "wool",
+   "col": "green",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "grindstone": {
+   "fam": "grindstone",
+   "sv": "craft",
+   "ft": 1
+  },
+  "hanging_roots": {
+   "fam": "hanging_roots",
+   "sv": "drop",
+   "ft": 1
+  },
+  "hay_block": {
+   "fam": "hay",
+   "sv": "craft"
+  },
+  "heavy_core": {
+   "fam": "heavy_core",
+   "t": "precious",
+   "sv": "drop"
+  },
+  "heavy_weighted_pressure_plate": {
+   "fam": "iron",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "honey_block": {
+   "fam": "honey",
+   "sv": "craft"
+  },
+  "honeycomb_block": {
+   "fam": "honeycomb",
+   "sv": "craft"
+  },
+  "hopper": {
+   "fam": "hopper",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "horn_coral": {
+   "fam": "horn_coral",
+   "sv": "silk",
+   "ft": 1
+  },
+  "horn_coral_block": {
+   "fam": "horn_coral_block",
+   "sv": "silk"
+  },
+  "horn_coral_fan": {
+   "fam": "horn_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "horn_coral_wall_fan": {
+   "fam": "horn_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "ice": {
+   "fam": "ice",
+   "sv": "silk"
+  },
+  "infested_chiseled_stone_bricks": {
+   "fam": "infested_chiseled_stone_bricks",
+   "sv": "none"
+  },
+  "infested_cobblestone": {
+   "fam": "infested_cobblestone",
+   "sv": "none"
+  },
+  "infested_cracked_stone_bricks": {
+   "fam": "infested_cracked_stone_bricks",
+   "sv": "none"
+  },
+  "infested_deepslate": {
+   "fam": "infested_deepslate",
+   "sv": "none"
+  },
+  "infested_mossy_stone_bricks": {
+   "fam": "infested_mossy_stone_bricks",
+   "sv": "none"
+  },
+  "infested_stone": {
+   "fam": "infested_stone",
+   "sv": "none"
+  },
+  "infested_stone_bricks": {
+   "fam": "infested_stone_bricks",
+   "sv": "none"
+  },
+  "iron_bars": {
+   "fam": "iron",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "iron_block": {
+   "fam": "iron",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "iron_chain": {
+   "fam": "iron_chain",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "iron_door": {
+   "fam": "iron",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "iron_ore": {
+   "fam": "iron_ore",
+   "t": "uncommon",
+   "sv": "silk"
+  },
+  "iron_trapdoor": {
+   "fam": "iron",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "jack_o_lantern": {
+   "fam": "jack_o_lantern",
+   "sv": "craft"
+  },
+  "jigsaw": {
+   "fam": "jigsaw",
+   "sv": "none",
+   "ft": 1
+  },
+  "jukebox": {
+   "fam": "jukebox",
+   "t": "precious",
+   "sv": "craft",
+   "ft": 1
+  },
+  "jungle_button": {
+   "fam": "jungle",
+   "sv": "craft",
+   "ft": 1
+  },
+  "jungle_door": {
+   "fam": "jungle",
+   "sv": "craft",
+   "ft": 1
+  },
+  "jungle_fence": {
+   "fam": "jungle",
+   "sv": "craft"
+  },
+  "jungle_fence_gate": {
+   "fam": "jungle",
+   "sv": "craft",
+   "ft": 1
+  },
+  "jungle_hanging_sign": {
+   "fam": "jungle",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "jungle_leaves": {
+   "fam": "jungle_leaves",
+   "sv": "drop"
+  },
+  "jungle_log": {
+   "fam": "jungle",
+   "sv": "drop"
+  },
+  "jungle_planks": {
+   "fam": "jungle",
+   "sv": "craft"
+  },
+  "jungle_pressure_plate": {
+   "fam": "jungle",
+   "sv": "craft",
+   "ft": 1
+  },
+  "jungle_sapling": {
+   "fam": "jungle_sapling",
+   "sv": "drop",
+   "ft": 1
+  },
+  "jungle_shelf": {
+   "fam": "jungle",
+   "sv": "craft",
+   "ft": 1
+  },
+  "jungle_sign": {
+   "fam": "jungle",
+   "sv": "craft",
+   "ft": 1
+  },
+  "jungle_slab": {
+   "fam": "jungle",
+   "sv": "craft"
+  },
+  "jungle_stairs": {
+   "fam": "jungle",
+   "sv": "craft"
+  },
+  "jungle_trapdoor": {
+   "fam": "jungle",
+   "sv": "craft",
+   "ft": 1
+  },
+  "jungle_wall_hanging_sign": {
+   "fam": "jungle",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "jungle_wall_sign": {
+   "fam": "jungle",
+   "sv": "craft",
+   "ft": 1
+  },
+  "jungle_wood": {
+   "fam": "jungle",
+   "sv": "craft"
+  },
+  "kelp": {
+   "fam": "kelp",
+   "sv": "drop",
+   "ft": 1
+  },
+  "kelp_plant": {
+   "fam": "kelp_plant",
+   "sv": "cost",
+   "ft": 1
+  },
+  "ladder": {
+   "fam": "ladder",
+   "sv": "craft",
+   "ft": 1
+  },
+  "lantern": {
+   "fam": "lantern",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "lapis_block": {
+   "fam": "lapis",
+   "sv": "craft"
+  },
+  "lapis_ore": {
+   "fam": "lapis_ore",
+   "sv": "silk"
+  },
+  "large_amethyst_bud": {
+   "fam": "large_amethyst_bud",
+   "t": "rare",
+   "sv": "silk",
+   "ft": 1
+  },
+  "large_fern": {
+   "fam": "large_fern",
+   "sv": "loot",
+   "ft": 1
+  },
+  "lava": {
+   "fam": "lava",
+   "sv": "cost",
+   "ft": 1
+  },
+  "lava_cauldron": {
+   "fam": "iron",
+   "t": "uncommon",
+   "sv": "cost",
+   "ft": 1
+  },
+  "leaf_litter": {
+   "fam": "leaf_litter",
+   "sv": "craft",
+   "ft": 1
+  },
+  "lectern": {
+   "fam": "lectern",
+   "sv": "craft",
+   "ft": 1
+  },
+  "lever": {
+   "fam": "stone",
+   "sv": "craft",
+   "ft": 1
+  },
+  "light": {
+   "fam": "light",
+   "sv": "none"
+  },
+  "light_blue_banner": {
+   "fam": "wool",
+   "col": "light_blue",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "light_blue_bed": {
+   "fam": "bed",
+   "col": "light_blue",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "light_blue_candle": {
+   "fam": "candle",
+   "col": "light_blue",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "light_blue_candle_cake": {
+   "fam": "candle_cake",
+   "col": "light_blue",
+   "sv": "cost",
+   "ft": 1
+  },
+  "light_blue_carpet": {
+   "fam": "wool",
+   "col": "light_blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_blue_concrete": {
+   "fam": "concrete",
+   "col": "light_blue",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "light_blue_concrete_powder": {
+   "fam": "concrete_powder",
+   "col": "light_blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_blue_concrete_slab": {
+   "fam": "concrete",
+   "col": "light_blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_blue_concrete_stairs": {
+   "fam": "concrete",
+   "col": "light_blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_blue_glazed_terracotta": {
+   "fam": "glazed_terracotta",
+   "col": "light_blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_blue_shulker_box": {
+   "fam": "shulker_box",
+   "col": "light_blue",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "light_blue_stained_glass": {
+   "fam": "stained_glass",
+   "col": "light_blue",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "light_blue_stained_glass_pane": {
+   "fam": "stained_glass",
+   "col": "light_blue",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "light_blue_terracotta": {
+   "fam": "terracotta",
+   "col": "light_blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_blue_wall_banner": {
+   "fam": "wool",
+   "col": "light_blue",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "light_blue_wool": {
+   "fam": "wool",
+   "col": "light_blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_blue_wool_slab": {
+   "fam": "wool",
+   "col": "light_blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_blue_wool_stairs": {
+   "fam": "wool",
+   "col": "light_blue",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_gray_banner": {
+   "fam": "wool",
+   "col": "light_gray",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "light_gray_bed": {
+   "fam": "bed",
+   "col": "light_gray",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "light_gray_candle": {
+   "fam": "candle",
+   "col": "light_gray",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "light_gray_candle_cake": {
+   "fam": "candle_cake",
+   "col": "light_gray",
+   "sv": "cost",
+   "ft": 1
+  },
+  "light_gray_carpet": {
+   "fam": "wool",
+   "col": "light_gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_gray_concrete": {
+   "fam": "concrete",
+   "col": "light_gray",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "light_gray_concrete_powder": {
+   "fam": "concrete_powder",
+   "col": "light_gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_gray_concrete_slab": {
+   "fam": "concrete",
+   "col": "light_gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_gray_concrete_stairs": {
+   "fam": "concrete",
+   "col": "light_gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_gray_glazed_terracotta": {
+   "fam": "glazed_terracotta",
+   "col": "light_gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_gray_shulker_box": {
+   "fam": "shulker_box",
+   "col": "light_gray",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "light_gray_stained_glass": {
+   "fam": "stained_glass",
+   "col": "light_gray",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "light_gray_stained_glass_pane": {
+   "fam": "stained_glass",
+   "col": "light_gray",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "light_gray_terracotta": {
+   "fam": "terracotta",
+   "col": "light_gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_gray_wall_banner": {
+   "fam": "wool",
+   "col": "light_gray",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "light_gray_wool": {
+   "fam": "wool",
+   "col": "light_gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_gray_wool_slab": {
+   "fam": "wool",
+   "col": "light_gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_gray_wool_stairs": {
+   "fam": "wool",
+   "col": "light_gray",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "light_weighted_pressure_plate": {
+   "fam": "gold",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "lightning_rod": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "lilac": {
+   "fam": "lilac",
+   "sv": "drop",
+   "ft": 1
+  },
+  "lily_of_the_valley": {
+   "fam": "lily_of_the_valley",
+   "sv": "drop",
+   "ft": 1
+  },
+  "lily_pad": {
+   "fam": "lily_pad",
+   "sv": "drop",
+   "ft": 1
+  },
+  "lime_banner": {
+   "fam": "wool",
+   "col": "lime",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "lime_bed": {
+   "fam": "bed",
+   "col": "lime",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "lime_candle": {
+   "fam": "candle",
+   "col": "lime",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "lime_candle_cake": {
+   "fam": "candle_cake",
+   "col": "lime",
+   "sv": "cost",
+   "ft": 1
+  },
+  "lime_carpet": {
+   "fam": "wool",
+   "col": "lime",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "lime_concrete": {
+   "fam": "concrete",
+   "col": "lime",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "lime_concrete_powder": {
+   "fam": "concrete_powder",
+   "col": "lime",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "lime_concrete_slab": {
+   "fam": "concrete",
+   "col": "lime",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "lime_concrete_stairs": {
+   "fam": "concrete",
+   "col": "lime",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "lime_glazed_terracotta": {
+   "fam": "glazed_terracotta",
+   "col": "lime",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "lime_shulker_box": {
+   "fam": "shulker_box",
+   "col": "lime",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "lime_stained_glass": {
+   "fam": "stained_glass",
+   "col": "lime",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "lime_stained_glass_pane": {
+   "fam": "stained_glass",
+   "col": "lime",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "lime_terracotta": {
+   "fam": "terracotta",
+   "col": "lime",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "lime_wall_banner": {
+   "fam": "wool",
+   "col": "lime",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "lime_wool": {
+   "fam": "wool",
+   "col": "lime",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "lime_wool_slab": {
+   "fam": "wool",
+   "col": "lime",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "lime_wool_stairs": {
+   "fam": "wool",
+   "col": "lime",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "lodestone": {
+   "fam": "lodestone",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "loom": {
+   "fam": "loom",
+   "sv": "craft"
+  },
+  "magenta_banner": {
+   "fam": "wool",
+   "col": "magenta",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "magenta_bed": {
+   "fam": "bed",
+   "col": "magenta",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "magenta_candle": {
+   "fam": "candle",
+   "col": "magenta",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "magenta_candle_cake": {
+   "fam": "candle_cake",
+   "col": "magenta",
+   "sv": "cost",
+   "ft": 1
+  },
+  "magenta_carpet": {
+   "fam": "wool",
+   "col": "magenta",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "magenta_concrete": {
+   "fam": "concrete",
+   "col": "magenta",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "magenta_concrete_powder": {
+   "fam": "concrete_powder",
+   "col": "magenta",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "magenta_concrete_slab": {
+   "fam": "concrete",
+   "col": "magenta",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "magenta_concrete_stairs": {
+   "fam": "concrete",
+   "col": "magenta",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "magenta_glazed_terracotta": {
+   "fam": "glazed_terracotta",
+   "col": "magenta",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "magenta_shulker_box": {
+   "fam": "shulker_box",
+   "col": "magenta",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "magenta_stained_glass": {
+   "fam": "stained_glass",
+   "col": "magenta",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "magenta_stained_glass_pane": {
+   "fam": "stained_glass",
+   "col": "magenta",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "magenta_terracotta": {
+   "fam": "terracotta",
+   "col": "magenta",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "magenta_wall_banner": {
+   "fam": "wool",
+   "col": "magenta",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "magenta_wool": {
+   "fam": "wool",
+   "col": "magenta",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "magenta_wool_slab": {
+   "fam": "wool",
+   "col": "magenta",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "magenta_wool_stairs": {
+   "fam": "wool",
+   "col": "magenta",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "magma_block": {
+   "fam": "magma",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "mangrove_button": {
+   "fam": "mangrove",
+   "sv": "craft",
+   "ft": 1
+  },
+  "mangrove_door": {
+   "fam": "mangrove",
+   "sv": "craft",
+   "ft": 1
+  },
+  "mangrove_fence": {
+   "fam": "mangrove",
+   "sv": "craft"
+  },
+  "mangrove_fence_gate": {
+   "fam": "mangrove",
+   "sv": "craft",
+   "ft": 1
+  },
+  "mangrove_hanging_sign": {
+   "fam": "mangrove",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "mangrove_leaves": {
+   "fam": "mangrove_leaves",
+   "sv": "drop"
+  },
+  "mangrove_log": {
+   "fam": "mangrove",
+   "sv": "drop"
+  },
+  "mangrove_planks": {
+   "fam": "mangrove",
+   "sv": "craft"
+  },
+  "mangrove_pressure_plate": {
+   "fam": "mangrove",
+   "sv": "craft",
+   "ft": 1
+  },
+  "mangrove_propagule": {
+   "fam": "mangrove_propagule",
+   "sv": "drop",
+   "ft": 1
+  },
+  "mangrove_roots": {
+   "fam": "mangrove_roots",
+   "sv": "drop"
+  },
+  "mangrove_shelf": {
+   "fam": "mangrove",
+   "sv": "craft",
+   "ft": 1
+  },
+  "mangrove_sign": {
+   "fam": "mangrove",
+   "sv": "craft",
+   "ft": 1
+  },
+  "mangrove_slab": {
+   "fam": "mangrove",
+   "sv": "craft"
+  },
+  "mangrove_stairs": {
+   "fam": "mangrove",
+   "sv": "craft"
+  },
+  "mangrove_trapdoor": {
+   "fam": "mangrove",
+   "sv": "craft",
+   "ft": 1
+  },
+  "mangrove_wall_hanging_sign": {
+   "fam": "mangrove",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "mangrove_wall_sign": {
+   "fam": "mangrove",
+   "sv": "craft",
+   "ft": 1
+  },
+  "mangrove_wood": {
+   "fam": "mangrove",
+   "sv": "craft"
+  },
+  "medium_amethyst_bud": {
+   "fam": "medium_amethyst_bud",
+   "t": "rare",
+   "sv": "silk",
+   "ft": 1
+  },
+  "melon": {
+   "fam": "melon",
+   "sv": "craft"
+  },
+  "melon_stem": {
+   "fam": "melon_stem",
+   "sv": "cost",
+   "ft": 1
+  },
+  "moss_block": {
+   "fam": "moss",
+   "sv": "drop"
+  },
+  "moss_carpet": {
+   "fam": "moss_carpet",
+   "sv": "craft"
+  },
+  "mossy_cobblestone": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "mossy_cobblestone_slab": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "mossy_cobblestone_stairs": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "mossy_cobblestone_wall": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "mossy_stone_brick_slab": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "mossy_stone_brick_stairs": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "mossy_stone_brick_wall": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "mossy_stone_bricks": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "moving_piston": {
+   "fam": "moving_piston",
+   "sv": "cost",
+   "ft": 1
+  },
+  "mud": {
+   "fam": "mud_2",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "mud_brick_slab": {
+   "fam": "mud",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "mud_brick_stairs": {
+   "fam": "mud",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "mud_brick_wall": {
+   "fam": "mud",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "mud_bricks": {
+   "fam": "mud",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "muddy_mangrove_roots": {
+   "fam": "muddy_mangrove_roots",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "mushroom_stem": {
+   "fam": "mushroom_stem",
+   "sv": "silk"
+  },
+  "mycelium": {
+   "fam": "mycelium",
+   "sv": "silk"
+  },
+  "nether_brick_fence": {
+   "fam": "nether_brick_fence",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "nether_brick_slab": {
+   "fam": "nether_bricks",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "nether_brick_stairs": {
+   "fam": "nether_bricks",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "nether_brick_wall": {
+   "fam": "nether_bricks",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "nether_bricks": {
+   "fam": "nether_bricks",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "nether_gold_ore": {
+   "fam": "nether_gold_ore",
+   "t": "rare",
+   "sv": "silk"
+  },
+  "nether_portal": {
+   "fam": "nether_portal",
+   "sv": "none",
+   "ft": 1
+  },
+  "nether_quartz_ore": {
+   "fam": "nether_quartz_ore",
+   "t": "rare",
+   "sv": "silk"
+  },
+  "nether_sprouts": {
+   "fam": "nether_sprouts",
+   "sv": "drop",
+   "ft": 1
+  },
+  "nether_wart": {
+   "fam": "nether_wart",
+   "t": "uncommon",
+   "sv": "drop",
+   "ft": 1
+  },
+  "nether_wart_block": {
+   "fam": "nether_wart",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "netherite_block": {
+   "fam": "netherite",
+   "t": "precious",
+   "sv": "craft"
+  },
+  "netherrack": {
+   "fam": "netherrack",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "note_block": {
+   "fam": "note",
+   "sv": "craft",
+   "ft": 1
+  },
+  "oak_button": {
+   "fam": "oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "oak_door": {
+   "fam": "oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "oak_fence": {
+   "fam": "oak",
+   "sv": "craft"
+  },
+  "oak_fence_gate": {
+   "fam": "oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "oak_hanging_sign": {
+   "fam": "oak",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "oak_leaves": {
+   "fam": "oak_leaves",
+   "sv": "drop"
+  },
+  "oak_log": {
+   "fam": "oak",
+   "sv": "drop"
+  },
+  "oak_planks": {
+   "fam": "oak",
+   "sv": "craft"
+  },
+  "oak_pressure_plate": {
+   "fam": "oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "oak_sapling": {
+   "fam": "oak_sapling",
+   "sv": "drop",
+   "ft": 1
+  },
+  "oak_shelf": {
+   "fam": "oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "oak_sign": {
+   "fam": "oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "oak_slab": {
+   "fam": "oak",
+   "sv": "craft"
+  },
+  "oak_stairs": {
+   "fam": "oak",
+   "sv": "craft"
+  },
+  "oak_trapdoor": {
+   "fam": "oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "oak_wall_hanging_sign": {
+   "fam": "oak",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "oak_wall_sign": {
+   "fam": "oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "oak_wood": {
+   "fam": "oak",
+   "sv": "craft"
+  },
+  "observer": {
+   "fam": "observer",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "obsidian": {
+   "fam": "obsidian",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "ochre_froglight": {
+   "fam": "ochre_froglight",
+   "sv": "drop"
+  },
+  "open_eyeblossom": {
+   "fam": "open_eyeblossom",
+   "sv": "drop",
+   "ft": 1
+  },
+  "orange_banner": {
+   "fam": "wool",
+   "col": "orange",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "orange_bed": {
+   "fam": "bed",
+   "col": "orange",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "orange_candle": {
+   "fam": "candle",
+   "col": "orange",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "orange_candle_cake": {
+   "fam": "candle_cake",
+   "col": "orange",
+   "sv": "cost",
+   "ft": 1
+  },
+  "orange_carpet": {
+   "fam": "wool",
+   "col": "orange",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "orange_concrete": {
+   "fam": "concrete",
+   "col": "orange",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "orange_concrete_powder": {
+   "fam": "concrete_powder",
+   "col": "orange",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "orange_concrete_slab": {
+   "fam": "concrete",
+   "col": "orange",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "orange_concrete_stairs": {
+   "fam": "concrete",
+   "col": "orange",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "orange_glazed_terracotta": {
+   "fam": "glazed_terracotta",
+   "col": "orange",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "orange_poplar_leaves": {
+   "fam": "orange_poplar_leaves",
+   "sv": "drop"
+  },
+  "orange_shulker_box": {
+   "fam": "shulker_box",
+   "col": "orange",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "orange_stained_glass": {
+   "fam": "stained_glass",
+   "col": "orange",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "orange_stained_glass_pane": {
+   "fam": "stained_glass",
+   "col": "orange",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "orange_terracotta": {
+   "fam": "terracotta",
+   "col": "orange",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "orange_tulip": {
+   "fam": "orange_tulip",
+   "sv": "drop",
+   "ft": 1
+  },
+  "orange_wall_banner": {
+   "fam": "wool",
+   "col": "orange",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "orange_wool": {
+   "fam": "wool",
+   "col": "orange",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "orange_wool_slab": {
+   "fam": "wool",
+   "col": "orange",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "orange_wool_stairs": {
+   "fam": "wool",
+   "col": "orange",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "oxeye_daisy": {
+   "fam": "oxeye_daisy",
+   "sv": "drop",
+   "ft": 1
+  },
+  "oxidized_chiseled_copper": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "oxidized_copper": {
+   "fam": "copper",
+   "sv": "drop"
+  },
+  "oxidized_copper_bars": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "oxidized_copper_bulb": {
+   "fam": "copper",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "oxidized_copper_chain": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "oxidized_copper_chest": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "oxidized_copper_door": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "oxidized_copper_golem_statue": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "oxidized_copper_grate": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "oxidized_copper_lantern": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "oxidized_copper_trapdoor": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "oxidized_cut_copper": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "oxidized_cut_copper_slab": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "oxidized_cut_copper_stairs": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "oxidized_lightning_rod": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "packed_ice": {
+   "fam": "ice",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "packed_mud": {
+   "fam": "mud",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "pale_hanging_moss": {
+   "fam": "pale_hanging_moss",
+   "sv": "drop",
+   "ft": 1
+  },
+  "pale_moss_block": {
+   "fam": "pale_moss",
+   "sv": "drop"
+  },
+  "pale_moss_carpet": {
+   "fam": "pale_moss",
+   "sv": "craft"
+  },
+  "pale_oak_button": {
+   "fam": "pale_oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pale_oak_door": {
+   "fam": "pale_oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pale_oak_fence": {
+   "fam": "pale_oak",
+   "sv": "craft"
+  },
+  "pale_oak_fence_gate": {
+   "fam": "pale_oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pale_oak_hanging_sign": {
+   "fam": "pale_oak",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pale_oak_leaves": {
+   "fam": "pale_oak_leaves",
+   "sv": "drop"
+  },
+  "pale_oak_log": {
+   "fam": "pale_oak",
+   "sv": "drop"
+  },
+  "pale_oak_planks": {
+   "fam": "pale_oak",
+   "sv": "craft"
+  },
+  "pale_oak_pressure_plate": {
+   "fam": "pale_oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pale_oak_sapling": {
+   "fam": "pale_oak_sapling",
+   "sv": "drop",
+   "ft": 1
+  },
+  "pale_oak_shelf": {
+   "fam": "pale_oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pale_oak_sign": {
+   "fam": "pale_oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pale_oak_slab": {
+   "fam": "pale_oak",
+   "sv": "craft"
+  },
+  "pale_oak_stairs": {
+   "fam": "pale_oak",
+   "sv": "craft"
+  },
+  "pale_oak_trapdoor": {
+   "fam": "pale_oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pale_oak_wall_hanging_sign": {
+   "fam": "pale_oak",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pale_oak_wall_sign": {
+   "fam": "pale_oak",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pale_oak_wood": {
+   "fam": "pale_oak",
+   "sv": "craft"
+  },
+  "pearlescent_froglight": {
+   "fam": "pearlescent_froglight",
+   "sv": "drop"
+  },
+  "peony": {
+   "fam": "peony",
+   "sv": "drop",
+   "ft": 1
+  },
+  "petrified_oak_slab": {
+   "fam": "petrified_oak_slab",
+   "sv": "none"
+  },
+  "piglin_head": {
+   "fam": "piglin_head",
+   "sv": "drop",
+   "ft": 1
+  },
+  "piglin_wall_head": {
+   "fam": "piglin_head",
+   "sv": "drop",
+   "ft": 1
+  },
+  "pink_banner": {
+   "fam": "wool",
+   "col": "pink",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pink_bed": {
+   "fam": "bed",
+   "col": "pink",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pink_candle": {
+   "fam": "candle",
+   "col": "pink",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pink_candle_cake": {
+   "fam": "candle_cake",
+   "col": "pink",
+   "sv": "cost",
+   "ft": 1
+  },
+  "pink_carpet": {
+   "fam": "wool",
+   "col": "pink",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "pink_concrete": {
+   "fam": "concrete",
+   "col": "pink",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "pink_concrete_powder": {
+   "fam": "concrete_powder",
+   "col": "pink",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "pink_concrete_slab": {
+   "fam": "concrete",
+   "col": "pink",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "pink_concrete_stairs": {
+   "fam": "concrete",
+   "col": "pink",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "pink_glazed_terracotta": {
+   "fam": "glazed_terracotta",
+   "col": "pink",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "pink_petals": {
+   "fam": "pink_petals",
+   "sv": "drop",
+   "ft": 1
+  },
+  "pink_shulker_box": {
+   "fam": "shulker_box",
+   "col": "pink",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pink_stained_glass": {
+   "fam": "stained_glass",
+   "col": "pink",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pink_stained_glass_pane": {
+   "fam": "stained_glass",
+   "col": "pink",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pink_terracotta": {
+   "fam": "terracotta",
+   "col": "pink",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "pink_tulip": {
+   "fam": "pink_tulip",
+   "sv": "drop",
+   "ft": 1
+  },
+  "pink_wall_banner": {
+   "fam": "wool",
+   "col": "pink",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "pink_wool": {
+   "fam": "wool",
+   "col": "pink",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "pink_wool_slab": {
+   "fam": "wool",
+   "col": "pink",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "pink_wool_stairs": {
+   "fam": "wool",
+   "col": "pink",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "piston": {
+   "fam": "piston",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "piston_head": {
+   "fam": "piston_head",
+   "sv": "cost",
+   "ft": 1
+  },
+  "pitcher_crop": {
+   "fam": "pitcher_crop",
+   "sv": "drop",
+   "ft": 1
+  },
+  "pitcher_plant": {
+   "fam": "pitcher_plant",
+   "sv": "drop",
+   "ft": 1
+  },
+  "player_head": {
+   "fam": "player_head",
+   "sv": "none",
+   "ft": 1
+  },
+  "player_wall_head": {
+   "fam": "player_head",
+   "sv": "none",
+   "ft": 1
+  },
+  "podzol": {
+   "fam": "podzol",
+   "sv": "silk"
+  },
+  "pointed_dripstone": {
+   "fam": "dripstone",
+   "sv": "drop"
+  },
+  "polished_andesite": {
+   "fam": "andesite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "polished_andesite_slab": {
+   "fam": "andesite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "polished_andesite_stairs": {
+   "fam": "andesite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "polished_basalt": {
+   "fam": "basalt",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "polished_blackstone": {
+   "fam": "blackstone",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "polished_blackstone_brick_slab": {
+   "fam": "blackstone",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "polished_blackstone_brick_stairs": {
+   "fam": "blackstone",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "polished_blackstone_brick_wall": {
+   "fam": "blackstone",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "polished_blackstone_bricks": {
+   "fam": "blackstone",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "polished_blackstone_button": {
+   "fam": "blackstone",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "polished_blackstone_pressure_plate": {
+   "fam": "blackstone",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "polished_blackstone_slab": {
+   "fam": "blackstone",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "polished_blackstone_stairs": {
+   "fam": "blackstone",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "polished_blackstone_wall": {
+   "fam": "blackstone",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "polished_cinnabar": {
+   "fam": "cinnabar",
+   "sv": "craft"
+  },
+  "polished_cinnabar_slab": {
+   "fam": "cinnabar",
+   "sv": "craft"
+  },
+  "polished_cinnabar_stairs": {
+   "fam": "cinnabar",
+   "sv": "craft"
+  },
+  "polished_cinnabar_wall": {
+   "fam": "cinnabar",
+   "sv": "craft"
+  },
+  "polished_deepslate": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "polished_deepslate_slab": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "polished_deepslate_stairs": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "polished_deepslate_wall": {
+   "fam": "deepslate",
+   "sv": "craft"
+  },
+  "polished_diorite": {
+   "fam": "diorite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "polished_diorite_slab": {
+   "fam": "diorite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "polished_diorite_stairs": {
+   "fam": "diorite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "polished_granite": {
+   "fam": "granite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "polished_granite_slab": {
+   "fam": "granite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "polished_granite_stairs": {
+   "fam": "granite",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "polished_sulfur": {
+   "fam": "sulfur",
+   "sv": "craft"
+  },
+  "polished_sulfur_slab": {
+   "fam": "sulfur",
+   "sv": "craft"
+  },
+  "polished_sulfur_stairs": {
+   "fam": "sulfur",
+   "sv": "craft"
+  },
+  "polished_sulfur_wall": {
+   "fam": "sulfur",
+   "sv": "craft"
+  },
+  "polished_tuff": {
+   "fam": "tuff",
+   "sv": "craft"
+  },
+  "polished_tuff_slab": {
+   "fam": "tuff",
+   "sv": "craft"
+  },
+  "polished_tuff_stairs": {
+   "fam": "tuff",
+   "sv": "craft"
+  },
+  "polished_tuff_wall": {
+   "fam": "tuff",
+   "sv": "craft"
+  },
+  "poplar_button": {
+   "fam": "poplar",
+   "sv": "craft",
+   "ft": 1
+  },
+  "poplar_door": {
+   "fam": "poplar",
+   "sv": "craft",
+   "ft": 1
+  },
+  "poplar_fence": {
+   "fam": "poplar",
+   "sv": "craft"
+  },
+  "poplar_fence_gate": {
+   "fam": "poplar",
+   "sv": "craft",
+   "ft": 1
+  },
+  "poplar_hanging_sign": {
+   "fam": "poplar",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "poplar_log": {
+   "fam": "poplar",
+   "sv": "drop"
+  },
+  "poplar_planks": {
+   "fam": "poplar",
+   "sv": "craft"
+  },
+  "poplar_pressure_plate": {
+   "fam": "poplar",
+   "sv": "craft",
+   "ft": 1
+  },
+  "poplar_sapling": {
+   "fam": "poplar_sapling",
+   "sv": "drop",
+   "ft": 1
+  },
+  "poplar_shelf": {
+   "fam": "poplar",
+   "sv": "craft",
+   "ft": 1
+  },
+  "poplar_sign": {
+   "fam": "poplar",
+   "sv": "craft",
+   "ft": 1
+  },
+  "poplar_slab": {
+   "fam": "poplar",
+   "sv": "craft"
+  },
+  "poplar_stairs": {
+   "fam": "poplar",
+   "sv": "craft"
+  },
+  "poplar_trapdoor": {
+   "fam": "poplar",
+   "sv": "craft",
+   "ft": 1
+  },
+  "poplar_wall_hanging_sign": {
+   "fam": "poplar",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "poplar_wall_sign": {
+   "fam": "poplar",
+   "sv": "craft",
+   "ft": 1
+  },
+  "poplar_wood": {
+   "fam": "poplar",
+   "sv": "craft"
+  },
+  "poppy": {
+   "fam": "poppy",
+   "sv": "drop",
+   "ft": 1
+  },
+  "potatoes": {
+   "fam": "potatoes",
+   "sv": "drop",
+   "ft": 1
+  },
+  "potent_sulfur": {
+   "fam": "sulfur",
+   "sv": "craft",
+   "ft": 1
+  },
+  "potted_acacia_sapling": {
+   "fam": "potted_acacia_sapling",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_allium": {
+   "fam": "potted_allium",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_azalea_bush": {
+   "fam": "potted_azalea_bush",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_azure_bluet": {
+   "fam": "potted_azure_bluet",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_bamboo": {
+   "fam": "potted_bamboo",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_birch_sapling": {
+   "fam": "potted_birch_sapling",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_blue_orchid": {
+   "fam": "potted_blue_orchid",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_brown_mushroom": {
+   "fam": "potted_brown_mushroom",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_cactus": {
+   "fam": "potted_cactus",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_cherry_sapling": {
+   "fam": "potted_cherry_sapling",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_closed_eyeblossom": {
+   "fam": "potted_closed_eyeblossom",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_cornflower": {
+   "fam": "potted_cornflower",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_crimson_fungus": {
+   "fam": "potted_crimson_fungus",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_crimson_roots": {
+   "fam": "potted_crimson_roots",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_dandelion": {
+   "fam": "potted_dandelion",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_dark_oak_sapling": {
+   "fam": "potted_dark_oak_sapling",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_dead_bush": {
+   "fam": "potted_dead_bush",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_fern": {
+   "fam": "potted_fern",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_flowering_azalea_bush": {
+   "fam": "potted_flowering_azalea_bush",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_golden_dandelion": {
+   "fam": "potted_golden_dandelion",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_jungle_sapling": {
+   "fam": "potted_jungle_sapling",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_lily_of_the_valley": {
+   "fam": "potted_lily_of_the_valley",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_mangrove_propagule": {
+   "fam": "potted_mangrove_propagule",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_oak_sapling": {
+   "fam": "potted_oak_sapling",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_open_eyeblossom": {
+   "fam": "potted_open_eyeblossom",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_orange_tulip": {
+   "fam": "potted_orange_tulip",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_oxeye_daisy": {
+   "fam": "potted_oxeye_daisy",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_pale_oak_sapling": {
+   "fam": "potted_pale_oak_sapling",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_pink_tulip": {
+   "fam": "potted_pink_tulip",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_poplar_sapling": {
+   "fam": "potted_poplar_sapling",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_poppy": {
+   "fam": "potted_poppy",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_red_mushroom": {
+   "fam": "potted_red_mushroom",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_red_tulip": {
+   "fam": "potted_red_tulip",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_spruce_sapling": {
+   "fam": "potted_spruce_sapling",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_torchflower": {
+   "fam": "potted_torchflower",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_warped_fungus": {
+   "fam": "potted_warped_fungus",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_warped_roots": {
+   "fam": "potted_warped_roots",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_white_tulip": {
+   "fam": "potted_white_tulip",
+   "sv": "cost",
+   "ft": 1
+  },
+  "potted_wither_rose": {
+   "fam": "potted_wither_rose",
+   "sv": "cost",
+   "ft": 1
+  },
+  "powder_snow": {
+   "fam": "powder_snow",
+   "sv": "drop"
+  },
+  "powder_snow_cauldron": {
+   "fam": "iron",
+   "t": "uncommon",
+   "sv": "cost"
+  },
+  "powered_rail": {
+   "fam": "powered_rail",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "prismarine": {
+   "fam": "prismarine",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "prismarine_brick_slab": {
+   "fam": "prismarine_bricks",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "prismarine_brick_stairs": {
+   "fam": "prismarine_bricks",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "prismarine_bricks": {
+   "fam": "prismarine_bricks",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "prismarine_slab": {
+   "fam": "prismarine",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "prismarine_stairs": {
+   "fam": "prismarine",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "prismarine_wall": {
+   "fam": "prismarine",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "pumpkin": {
+   "fam": "pumpkin",
+   "sv": "drop"
+  },
+  "pumpkin_stem": {
+   "fam": "pumpkin_stem",
+   "sv": "cost",
+   "ft": 1
+  },
+  "purple_banner": {
+   "fam": "wool",
+   "col": "purple",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "purple_bed": {
+   "fam": "bed",
+   "col": "purple",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "purple_candle": {
+   "fam": "candle",
+   "col": "purple",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "purple_candle_cake": {
+   "fam": "candle_cake",
+   "col": "purple",
+   "sv": "cost",
+   "ft": 1
+  },
+  "purple_carpet": {
+   "fam": "wool",
+   "col": "purple",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "purple_concrete": {
+   "fam": "concrete",
+   "col": "purple",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "purple_concrete_powder": {
+   "fam": "concrete_powder",
+   "col": "purple",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "purple_concrete_slab": {
+   "fam": "concrete",
+   "col": "purple",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "purple_concrete_stairs": {
+   "fam": "concrete",
+   "col": "purple",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "purple_glazed_terracotta": {
+   "fam": "glazed_terracotta",
+   "col": "purple",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "purple_shulker_box": {
+   "fam": "shulker_box",
+   "col": "purple",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "purple_stained_glass": {
+   "fam": "stained_glass",
+   "col": "purple",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "purple_stained_glass_pane": {
+   "fam": "stained_glass",
+   "col": "purple",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "purple_terracotta": {
+   "fam": "terracotta",
+   "col": "purple",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "purple_wall_banner": {
+   "fam": "wool",
+   "col": "purple",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "purple_wool": {
+   "fam": "wool",
+   "col": "purple",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "purple_wool_slab": {
+   "fam": "wool",
+   "col": "purple",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "purple_wool_stairs": {
+   "fam": "wool",
+   "col": "purple",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "purpur_block": {
+   "fam": "purpur",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "purpur_pillar": {
+   "fam": "purpur",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "purpur_slab": {
+   "fam": "purpur",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "purpur_stairs": {
+   "fam": "purpur",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "quartz_block": {
+   "fam": "quartz",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "quartz_bricks": {
+   "fam": "quartz",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "quartz_pillar": {
+   "fam": "quartz",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "quartz_slab": {
+   "fam": "quartz",
+   "sv": "craft"
+  },
+  "quartz_stairs": {
+   "fam": "quartz",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "rail": {
+   "fam": "iron",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "raw_copper_block": {
+   "fam": "raw_copper",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "raw_gold_block": {
+   "fam": "raw_gold",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "raw_iron_block": {
+   "fam": "raw_iron",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "red_banner": {
+   "fam": "wool",
+   "col": "red",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "red_bed": {
+   "fam": "bed",
+   "col": "red",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "red_candle": {
+   "fam": "candle",
+   "col": "red",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "red_candle_cake": {
+   "fam": "candle_cake",
+   "col": "red",
+   "sv": "cost",
+   "ft": 1
+  },
+  "red_carpet": {
+   "fam": "wool",
+   "col": "red",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "red_concrete": {
+   "fam": "concrete",
+   "col": "red",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "red_concrete_powder": {
+   "fam": "concrete_powder",
+   "col": "red",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "red_concrete_slab": {
+   "fam": "concrete",
+   "col": "red",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "red_concrete_stairs": {
+   "fam": "concrete",
+   "col": "red",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "red_glazed_terracotta": {
+   "fam": "glazed_terracotta",
+   "col": "red",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "red_mushroom": {
+   "fam": "red_mushroom",
+   "sv": "drop",
+   "ft": 1
+  },
+  "red_mushroom_block": {
+   "fam": "red_mushroom_block",
+   "sv": "silk"
+  },
+  "red_nether_brick_slab": {
+   "fam": "red_nether_bricks",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "red_nether_brick_stairs": {
+   "fam": "red_nether_bricks",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "red_nether_brick_wall": {
+   "fam": "red_nether_bricks",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "red_nether_bricks": {
+   "fam": "red_nether_bricks",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "red_poplar_leaves": {
+   "fam": "red_poplar_leaves",
+   "sv": "drop"
+  },
+  "red_sand": {
+   "fam": "red_sandstone",
+   "sv": "drop"
+  },
+  "red_sandstone": {
+   "fam": "red_sandstone",
+   "sv": "craft"
+  },
+  "red_sandstone_slab": {
+   "fam": "red_sandstone",
+   "sv": "craft"
+  },
+  "red_sandstone_stairs": {
+   "fam": "red_sandstone",
+   "sv": "craft"
+  },
+  "red_sandstone_wall": {
+   "fam": "red_sandstone",
+   "sv": "craft"
+  },
+  "red_shrub": {
+   "fam": "red_shrub",
+   "sv": "drop",
+   "ft": 1
+  },
+  "red_shulker_box": {
+   "fam": "shulker_box",
+   "col": "red",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "red_stained_glass": {
+   "fam": "stained_glass",
+   "col": "red",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "red_stained_glass_pane": {
+   "fam": "stained_glass",
+   "col": "red",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "red_terracotta": {
+   "fam": "terracotta",
+   "col": "red",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "red_tulip": {
+   "fam": "red_tulip",
+   "sv": "drop",
+   "ft": 1
+  },
+  "red_wall_banner": {
+   "fam": "wool",
+   "col": "red",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "red_wool": {
+   "fam": "wool",
+   "col": "red",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "red_wool_slab": {
+   "fam": "wool",
+   "col": "red",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "red_wool_stairs": {
+   "fam": "wool",
+   "col": "red",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "redstone_block": {
+   "fam": "redstone",
+   "sv": "craft"
+  },
+  "redstone_lamp": {
+   "fam": "redstone_lamp",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "redstone_ore": {
+   "fam": "redstone_ore",
+   "sv": "silk"
+  },
+  "redstone_torch": {
+   "fam": "redstone",
+   "sv": "craft",
+   "ft": 1
+  },
+  "redstone_wall_torch": {
+   "fam": "redstone",
+   "sv": "craft",
+   "ft": 1
+  },
+  "redstone_wire": {
+   "fam": "redstone",
+   "sv": "cost",
+   "ft": 1
+  },
+  "reinforced_deepslate": {
+   "fam": "reinforced_deepslate",
+   "sv": "none"
+  },
+  "repeater": {
+   "fam": "repeater",
+   "sv": "craft",
+   "ft": 1
+  },
+  "repeating_command_block": {
+   "fam": "repeating_command",
+   "sv": "none",
+   "ft": 1
+  },
+  "resin_block": {
+   "fam": "resin_block",
+   "sv": "craft"
+  },
+  "resin_brick_slab": {
+   "fam": "resin",
+   "sv": "craft"
+  },
+  "resin_brick_stairs": {
+   "fam": "resin",
+   "sv": "craft"
+  },
+  "resin_brick_wall": {
+   "fam": "resin",
+   "sv": "craft"
+  },
+  "resin_bricks": {
+   "fam": "resin",
+   "sv": "craft"
+  },
+  "resin_clump": {
+   "fam": "resin_block",
+   "sv": "craft",
+   "ft": 1
+  },
+  "respawn_anchor": {
+   "fam": "respawn_anchor",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "rooted_dirt": {
+   "fam": "rooted_dirt",
+   "sv": "drop"
+  },
+  "rose_bush": {
+   "fam": "rose_bush",
+   "sv": "drop",
+   "ft": 1
+  },
+  "sand": {
+   "fam": "sandstone",
+   "sv": "drop"
+  },
+  "sandstone": {
+   "fam": "sandstone",
+   "sv": "craft"
+  },
+  "sandstone_slab": {
+   "fam": "sandstone",
+   "sv": "craft"
+  },
+  "sandstone_stairs": {
+   "fam": "sandstone",
+   "sv": "craft"
+  },
+  "sandstone_wall": {
+   "fam": "sandstone",
+   "sv": "craft"
+  },
+  "scaffolding": {
+   "fam": "scaffolding",
+   "sv": "craft",
+   "ft": 1
+  },
+  "sculk": {
+   "fam": "sculk",
+   "t": "rare",
+   "sv": "silk"
+  },
+  "sculk_catalyst": {
+   "fam": "sculk_catalyst",
+   "t": "rare",
+   "sv": "silk",
+   "ft": 1
+  },
+  "sculk_sensor": {
+   "fam": "sculk_sensor",
+   "t": "rare",
+   "sv": "silk",
+   "ft": 1
+  },
+  "sculk_shrieker": {
+   "fam": "sculk_shrieker",
+   "t": "rare",
+   "sv": "silk",
+   "ft": 1
+  },
+  "sculk_vein": {
+   "fam": "sculk_vein",
+   "t": "rare",
+   "sv": "silk",
+   "ft": 1
+  },
+  "sea_lantern": {
+   "fam": "sea_lantern",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "sea_pickle": {
+   "fam": "sea_pickle",
+   "sv": "drop",
+   "ft": 1
+  },
+  "seagrass": {
+   "fam": "seagrass",
+   "sv": "drop",
+   "ft": 1
+  },
+  "shelf_mushroom": {
+   "fam": "shelf_mushroom",
+   "sv": "drop",
+   "ft": 1
+  },
+  "short_dry_grass": {
+   "fam": "short_dry_grass",
+   "sv": "drop",
+   "ft": 1
+  },
+  "short_grass": {
+   "fam": "short_grass",
+   "sv": "drop",
+   "ft": 1
+  },
+  "shroomlight": {
+   "fam": "shroomlight",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "shulker_box": {
+   "fam": "shulker_box",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "skeleton_skull": {
+   "fam": "skeleton_skull",
+   "sv": "drop",
+   "ft": 1
+  },
+  "skeleton_wall_skull": {
+   "fam": "skeleton_skull",
+   "sv": "drop",
+   "ft": 1
+  },
+  "slime_block": {
+   "fam": "slime",
+   "sv": "craft"
+  },
+  "small_amethyst_bud": {
+   "fam": "small_amethyst_bud",
+   "t": "rare",
+   "sv": "silk",
+   "ft": 1
+  },
+  "small_dripleaf": {
+   "fam": "small_dripleaf",
+   "sv": "drop",
+   "ft": 1
+  },
+  "smithing_table": {
+   "fam": "smithing_table",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "smoker": {
+   "fam": "smoker",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "smooth_basalt": {
+   "fam": "smooth_basalt",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "smooth_quartz": {
+   "fam": "smooth_quartz",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "smooth_quartz_slab": {
+   "fam": "smooth_quartz",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "smooth_quartz_stairs": {
+   "fam": "smooth_quartz",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "smooth_red_sandstone": {
+   "fam": "smooth_red_sandstone",
+   "sv": "craft"
+  },
+  "smooth_red_sandstone_slab": {
+   "fam": "smooth_red_sandstone",
+   "sv": "craft"
+  },
+  "smooth_red_sandstone_stairs": {
+   "fam": "smooth_red_sandstone",
+   "sv": "craft"
+  },
+  "smooth_sandstone": {
+   "fam": "smooth_sandstone",
+   "sv": "craft"
+  },
+  "smooth_sandstone_slab": {
+   "fam": "smooth_sandstone",
+   "sv": "craft"
+  },
+  "smooth_sandstone_stairs": {
+   "fam": "smooth_sandstone",
+   "sv": "craft"
+  },
+  "smooth_stone": {
+   "fam": "smooth_stone",
+   "sv": "craft"
+  },
+  "smooth_stone_slab": {
+   "fam": "smooth_stone",
+   "sv": "craft"
+  },
+  "sniffer_egg": {
+   "fam": "sniffer_egg",
+   "sv": "drop"
+  },
+  "snow": {
+   "fam": "snow",
+   "sv": "craft"
+  },
+  "snow_block": {
+   "fam": "snow",
+   "sv": "craft"
+  },
+  "soul_campfire": {
+   "fam": "soul_campfire",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "soul_fire": {
+   "fam": "soul_fire",
+   "sv": "cost",
+   "ft": 1
+  },
+  "soul_lantern": {
+   "fam": "soul_lantern",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "soul_sand": {
+   "fam": "soul_sand",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "soul_soil": {
+   "fam": "soul_soil",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "soul_torch": {
+   "fam": "soul_torch",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "soul_wall_torch": {
+   "fam": "soul_torch",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "spawner": {
+   "fam": "spawner",
+   "sv": "none",
+   "ft": 1
+  },
+  "sponge": {
+   "fam": "sponge",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "spore_blossom": {
+   "fam": "spore_blossom",
+   "sv": "drop",
+   "ft": 1
+  },
+  "spruce_button": {
+   "fam": "spruce",
+   "sv": "craft",
+   "ft": 1
+  },
+  "spruce_door": {
+   "fam": "spruce",
+   "sv": "craft",
+   "ft": 1
+  },
+  "spruce_fence": {
+   "fam": "spruce",
+   "sv": "craft"
+  },
+  "spruce_fence_gate": {
+   "fam": "spruce",
+   "sv": "craft",
+   "ft": 1
+  },
+  "spruce_hanging_sign": {
+   "fam": "spruce",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "spruce_leaves": {
+   "fam": "spruce_leaves",
+   "sv": "drop"
+  },
+  "spruce_log": {
+   "fam": "spruce",
+   "sv": "drop"
+  },
+  "spruce_planks": {
+   "fam": "spruce",
+   "sv": "craft"
+  },
+  "spruce_pressure_plate": {
+   "fam": "spruce",
+   "sv": "craft",
+   "ft": 1
+  },
+  "spruce_sapling": {
+   "fam": "spruce_sapling",
+   "sv": "drop",
+   "ft": 1
+  },
+  "spruce_shelf": {
+   "fam": "spruce",
+   "sv": "craft",
+   "ft": 1
+  },
+  "spruce_sign": {
+   "fam": "spruce",
+   "sv": "craft",
+   "ft": 1
+  },
+  "spruce_slab": {
+   "fam": "spruce",
+   "sv": "craft"
+  },
+  "spruce_stairs": {
+   "fam": "spruce",
+   "sv": "craft"
+  },
+  "spruce_trapdoor": {
+   "fam": "spruce",
+   "sv": "craft",
+   "ft": 1
+  },
+  "spruce_wall_hanging_sign": {
+   "fam": "spruce",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "spruce_wall_sign": {
+   "fam": "spruce",
+   "sv": "craft",
+   "ft": 1
+  },
+  "spruce_wood": {
+   "fam": "spruce",
+   "sv": "craft"
+  },
+  "sticky_piston": {
+   "fam": "sticky_piston",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "stone": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "stone_brick_slab": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "stone_brick_stairs": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "stone_brick_wall": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "stone_bricks": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "stone_button": {
+   "fam": "stone",
+   "sv": "craft",
+   "ft": 1
+  },
+  "stone_pressure_plate": {
+   "fam": "stone",
+   "sv": "craft",
+   "ft": 1
+  },
+  "stone_slab": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "stone_stairs": {
+   "fam": "stone",
+   "sv": "craft"
+  },
+  "stonecutter": {
+   "fam": "stonecutter",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "straw_bed": {
+   "fam": "hay",
+   "sv": "craft",
+   "ft": 1
+  },
+  "stripped_acacia_log": {
+   "fam": "acacia",
+   "sv": "drop"
+  },
+  "stripped_acacia_wood": {
+   "fam": "acacia",
+   "sv": "craft"
+  },
+  "stripped_bamboo_block": {
+   "fam": "bamboo",
+   "sv": "drop"
+  },
+  "stripped_birch_log": {
+   "fam": "birch",
+   "sv": "drop"
+  },
+  "stripped_birch_wood": {
+   "fam": "birch",
+   "sv": "craft"
+  },
+  "stripped_cherry_log": {
+   "fam": "cherry",
+   "sv": "drop"
+  },
+  "stripped_cherry_wood": {
+   "fam": "cherry",
+   "sv": "craft"
+  },
+  "stripped_crimson_hyphae": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "stripped_crimson_stem": {
+   "fam": "crimson",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "stripped_dark_oak_log": {
+   "fam": "dark_oak",
+   "sv": "drop"
+  },
+  "stripped_dark_oak_wood": {
+   "fam": "dark_oak",
+   "sv": "craft"
+  },
+  "stripped_jungle_log": {
+   "fam": "jungle",
+   "sv": "drop"
+  },
+  "stripped_jungle_wood": {
+   "fam": "jungle",
+   "sv": "craft"
+  },
+  "stripped_mangrove_log": {
+   "fam": "mangrove",
+   "sv": "drop"
+  },
+  "stripped_mangrove_wood": {
+   "fam": "mangrove",
+   "sv": "craft"
+  },
+  "stripped_oak_log": {
+   "fam": "oak",
+   "sv": "drop"
+  },
+  "stripped_oak_wood": {
+   "fam": "oak",
+   "sv": "craft"
+  },
+  "stripped_pale_oak_log": {
+   "fam": "pale_oak",
+   "sv": "drop"
+  },
+  "stripped_pale_oak_wood": {
+   "fam": "pale_oak",
+   "sv": "craft"
+  },
+  "stripped_poplar_log": {
+   "fam": "poplar",
+   "sv": "drop"
+  },
+  "stripped_poplar_wood": {
+   "fam": "poplar",
+   "sv": "craft"
+  },
+  "stripped_spruce_log": {
+   "fam": "spruce",
+   "sv": "drop"
+  },
+  "stripped_spruce_wood": {
+   "fam": "spruce",
+   "sv": "craft"
+  },
+  "stripped_warped_hyphae": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "stripped_warped_stem": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "structure_block": {
+   "fam": "structure",
+   "sv": "none",
+   "ft": 1
+  },
+  "structure_void": {
+   "fam": "structure_void",
+   "sv": "none"
+  },
+  "sugar_cane": {
+   "fam": "sugar_cane",
+   "sv": "drop",
+   "ft": 1
+  },
+  "sulfur": {
+   "fam": "sulfur",
+   "sv": "craft"
+  },
+  "sulfur_brick_slab": {
+   "fam": "sulfur",
+   "sv": "craft"
+  },
+  "sulfur_brick_stairs": {
+   "fam": "sulfur",
+   "sv": "craft"
+  },
+  "sulfur_brick_wall": {
+   "fam": "sulfur",
+   "sv": "craft"
+  },
+  "sulfur_bricks": {
+   "fam": "sulfur",
+   "sv": "craft"
+  },
+  "sulfur_slab": {
+   "fam": "sulfur",
+   "sv": "craft"
+  },
+  "sulfur_spike": {
+   "fam": "sulfur",
+   "sv": "drop"
+  },
+  "sulfur_stairs": {
+   "fam": "sulfur",
+   "sv": "craft"
+  },
+  "sulfur_wall": {
+   "fam": "sulfur",
+   "sv": "craft"
+  },
+  "sunflower": {
+   "fam": "sunflower",
+   "sv": "drop",
+   "ft": 1
+  },
+  "suspicious_gravel": {
+   "fam": "suspicious_gravel",
+   "sv": "none",
+   "ft": 1
+  },
+  "suspicious_sand": {
+   "fam": "suspicious_sand",
+   "sv": "none",
+   "ft": 1
+  },
+  "sweet_berry_bush": {
+   "fam": "sweet_berry_bush",
+   "sv": "drop",
+   "ft": 1
+  },
+  "tall_dry_grass": {
+   "fam": "tall_dry_grass",
+   "sv": "drop",
+   "ft": 1
+  },
+  "tall_grass": {
+   "fam": "tall_grass",
+   "sv": "loot",
+   "ft": 1
+  },
+  "tall_seagrass": {
+   "fam": "tall_seagrass",
+   "sv": "cost",
+   "ft": 1
+  },
+  "target": {
+   "fam": "target",
+   "sv": "craft",
+   "ft": 1
+  },
+  "terracotta": {
+   "fam": "terracotta",
+   "sv": "craft"
+  },
+  "test_block": {
+   "fam": "test",
+   "sv": "none",
+   "ft": 1
+  },
+  "test_instance_block": {
+   "fam": "test_instance",
+   "sv": "none",
+   "ft": 1
+  },
+  "tinted_glass": {
+   "fam": "tinted_glass",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "tnt": {
+   "fam": "tnt",
+   "sv": "craft",
+   "ft": 1
+  },
+  "torch": {
+   "fam": "torch",
+   "sv": "craft",
+   "ft": 1
+  },
+  "torchflower": {
+   "fam": "torchflower",
+   "sv": "drop",
+   "ft": 1
+  },
+  "torchflower_crop": {
+   "fam": "torchflower_crop",
+   "sv": "drop",
+   "ft": 1
+  },
+  "trapped_chest": {
+   "fam": "trapped_chest",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "trial_spawner": {
+   "fam": "trial_spawner",
+   "sv": "none",
+   "ft": 1
+  },
+  "tripwire": {
+   "fam": "tripwire",
+   "sv": "cost",
+   "ft": 1
+  },
+  "tripwire_hook": {
+   "fam": "tripwire_hook",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "tube_coral": {
+   "fam": "tube_coral",
+   "sv": "silk",
+   "ft": 1
+  },
+  "tube_coral_block": {
+   "fam": "tube_coral_block",
+   "sv": "silk"
+  },
+  "tube_coral_fan": {
+   "fam": "tube_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "tube_coral_wall_fan": {
+   "fam": "tube_coral_fan",
+   "sv": "silk",
+   "ft": 1
+  },
+  "tuff": {
+   "fam": "tuff",
+   "sv": "drop"
+  },
+  "tuff_brick_slab": {
+   "fam": "tuff",
+   "sv": "craft"
+  },
+  "tuff_brick_stairs": {
+   "fam": "tuff",
+   "sv": "craft"
+  },
+  "tuff_brick_wall": {
+   "fam": "tuff",
+   "sv": "craft"
+  },
+  "tuff_bricks": {
+   "fam": "tuff",
+   "sv": "craft"
+  },
+  "tuff_slab": {
+   "fam": "tuff",
+   "sv": "craft"
+  },
+  "tuff_stairs": {
+   "fam": "tuff",
+   "sv": "craft"
+  },
+  "tuff_wall": {
+   "fam": "tuff",
+   "sv": "craft"
+  },
+  "turtle_egg": {
+   "fam": "turtle_egg",
+   "sv": "silk",
+   "ft": 1
+  },
+  "twisting_vines": {
+   "fam": "twisting_vines",
+   "sv": "drop",
+   "ft": 1
+  },
+  "twisting_vines_plant": {
+   "fam": "twisting_vines_plant",
+   "sv": "cost",
+   "ft": 1
+  },
+  "vault": {
+   "fam": "vault",
+   "sv": "none",
+   "ft": 1
+  },
+  "verdant_froglight": {
+   "fam": "verdant_froglight",
+   "sv": "drop"
+  },
+  "vine": {
+   "fam": "vine",
+   "sv": "drop",
+   "ft": 1
+  },
+  "void_air": {
+   "fam": "void_air",
+   "sv": "cost"
+  },
+  "wall_torch": {
+   "fam": "torch",
+   "sv": "craft",
+   "ft": 1
+  },
+  "warped_button": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "warped_door": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "warped_fence": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "warped_fence_gate": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "warped_fungus": {
+   "fam": "warped_fungus",
+   "sv": "drop",
+   "ft": 1
+  },
+  "warped_hanging_sign": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "warped_hyphae": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "warped_nylium": {
+   "fam": "warped_nylium",
+   "t": "uncommon",
+   "sv": "silk"
+  },
+  "warped_planks": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "warped_pressure_plate": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "warped_roots": {
+   "fam": "warped_roots",
+   "sv": "drop",
+   "ft": 1
+  },
+  "warped_shelf": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "warped_sign": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "warped_slab": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "warped_stairs": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "warped_stem": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "warped_trapdoor": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "warped_wall_hanging_sign": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "warped_wall_sign": {
+   "fam": "warped",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "warped_wart_block": {
+   "fam": "warped_wart",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "water": {
+   "fam": "water",
+   "sv": "cost"
+  },
+  "water_cauldron": {
+   "fam": "iron",
+   "t": "uncommon",
+   "sv": "cost"
+  },
+  "waxed_chiseled_copper": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "waxed_copper_bars": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_copper_block": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "waxed_copper_bulb": {
+   "fam": "copper",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "waxed_copper_chain": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_copper_chest": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_copper_door": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_copper_golem_statue": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_copper_grate": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "waxed_copper_lantern": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_copper_trapdoor": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_cut_copper": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "waxed_cut_copper_slab": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "waxed_cut_copper_stairs": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "waxed_exposed_chiseled_copper": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_exposed_copper": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_exposed_copper_bars": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_exposed_copper_bulb": {
+   "fam": "copper",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "waxed_exposed_copper_chain": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_exposed_copper_chest": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_exposed_copper_door": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_exposed_copper_golem_statue": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_exposed_copper_grate": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_exposed_copper_lantern": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_exposed_copper_trapdoor": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_exposed_cut_copper": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_exposed_cut_copper_slab": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_exposed_cut_copper_stairs": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_exposed_lightning_rod": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_lightning_rod": {
+   "fam": "copper",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_oxidized_chiseled_copper": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_oxidized_copper": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_oxidized_copper_bars": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_oxidized_copper_bulb": {
+   "fam": "copper",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "waxed_oxidized_copper_chain": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_oxidized_copper_chest": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_oxidized_copper_door": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_oxidized_copper_golem_statue": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_oxidized_copper_grate": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_oxidized_copper_lantern": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_oxidized_copper_trapdoor": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_oxidized_cut_copper": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_oxidized_cut_copper_slab": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_oxidized_cut_copper_stairs": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_oxidized_lightning_rod": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_weathered_chiseled_copper": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_weathered_copper": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_weathered_copper_bars": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_weathered_copper_bulb": {
+   "fam": "copper",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "waxed_weathered_copper_chain": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_weathered_copper_chest": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_weathered_copper_door": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_weathered_copper_golem_statue": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_weathered_copper_grate": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_weathered_copper_lantern": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_weathered_copper_trapdoor": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "waxed_weathered_cut_copper": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_weathered_cut_copper_slab": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_weathered_cut_copper_stairs": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "waxed_weathered_lightning_rod": {
+   "fam": "copper",
+   "sv": "craft",
+   "ft": 1
+  },
+  "weathered_chiseled_copper": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "weathered_copper": {
+   "fam": "copper",
+   "sv": "drop"
+  },
+  "weathered_copper_bars": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "weathered_copper_bulb": {
+   "fam": "copper",
+   "t": "rare",
+   "sv": "craft"
+  },
+  "weathered_copper_chain": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "weathered_copper_chest": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "weathered_copper_door": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "weathered_copper_golem_statue": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "weathered_copper_grate": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "weathered_copper_lantern": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "weathered_copper_trapdoor": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "weathered_cut_copper": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "weathered_cut_copper_slab": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "weathered_cut_copper_stairs": {
+   "fam": "copper",
+   "sv": "craft"
+  },
+  "weathered_lightning_rod": {
+   "fam": "copper",
+   "sv": "drop",
+   "ft": 1
+  },
+  "weeping_vines": {
+   "fam": "weeping_vines",
+   "sv": "drop",
+   "ft": 1
+  },
+  "weeping_vines_plant": {
+   "fam": "weeping_vines_plant",
+   "sv": "cost",
+   "ft": 1
+  },
+  "wet_sponge": {
+   "fam": "wet_sponge",
+   "t": "rare",
+   "sv": "drop"
+  },
+  "wheat": {
+   "fam": "wheat",
+   "sv": "drop",
+   "ft": 1
+  },
+  "white_banner": {
+   "fam": "wool",
+   "col": "white",
+   "sv": "craft",
+   "ft": 1
+  },
+  "white_bed": {
+   "fam": "bed",
+   "col": "white",
+   "sv": "craft",
+   "ft": 1
+  },
+  "white_candle": {
+   "fam": "candle",
+   "col": "white",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "white_candle_cake": {
+   "fam": "candle_cake",
+   "col": "white",
+   "sv": "cost",
+   "ft": 1
+  },
+  "white_carpet": {
+   "fam": "wool",
+   "col": "white",
+   "sv": "craft"
+  },
+  "white_concrete": {
+   "fam": "concrete",
+   "col": "white",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "white_concrete_powder": {
+   "fam": "concrete_powder",
+   "col": "white",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "white_concrete_slab": {
+   "fam": "concrete",
+   "col": "white",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "white_concrete_stairs": {
+   "fam": "concrete",
+   "col": "white",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "white_glazed_terracotta": {
+   "fam": "glazed_terracotta",
+   "col": "white",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "white_shulker_box": {
+   "fam": "shulker_box",
+   "col": "white",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "white_stained_glass": {
+   "fam": "stained_glass",
+   "col": "white",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "white_stained_glass_pane": {
+   "fam": "stained_glass",
+   "col": "white",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "white_terracotta": {
+   "fam": "terracotta",
+   "col": "white",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "white_tulip": {
+   "fam": "white_tulip",
+   "sv": "drop",
+   "ft": 1
+  },
+  "white_wall_banner": {
+   "fam": "wool",
+   "col": "white",
+   "sv": "craft",
+   "ft": 1
+  },
+  "white_wool": {
+   "fam": "wool",
+   "col": "white",
+   "sv": "craft"
+  },
+  "white_wool_slab": {
+   "fam": "wool",
+   "col": "white",
+   "sv": "craft"
+  },
+  "white_wool_stairs": {
+   "fam": "wool",
+   "col": "white",
+   "sv": "craft"
+  },
+  "wildflowers": {
+   "fam": "wildflowers",
+   "sv": "drop",
+   "ft": 1
+  },
+  "wither_rose": {
+   "fam": "wither_rose",
+   "sv": "drop",
+   "ft": 1
+  },
+  "wither_skeleton_skull": {
+   "fam": "wither_skeleton_skull",
+   "sv": "drop",
+   "ft": 1
+  },
+  "wither_skeleton_wall_skull": {
+   "fam": "wither_skeleton_skull",
+   "sv": "drop",
+   "ft": 1
+  },
+  "yellow_banner": {
+   "fam": "wool",
+   "col": "yellow",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "yellow_bed": {
+   "fam": "bed",
+   "col": "yellow",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "yellow_candle": {
+   "fam": "candle",
+   "col": "yellow",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "yellow_candle_cake": {
+   "fam": "candle_cake",
+   "col": "yellow",
+   "sv": "cost",
+   "ft": 1
+  },
+  "yellow_carpet": {
+   "fam": "wool",
+   "col": "yellow",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "yellow_concrete": {
+   "fam": "concrete",
+   "col": "yellow",
+   "t": "uncommon",
+   "sv": "drop"
+  },
+  "yellow_concrete_powder": {
+   "fam": "concrete_powder",
+   "col": "yellow",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "yellow_concrete_slab": {
+   "fam": "concrete",
+   "col": "yellow",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "yellow_concrete_stairs": {
+   "fam": "concrete",
+   "col": "yellow",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "yellow_glazed_terracotta": {
+   "fam": "glazed_terracotta",
+   "col": "yellow",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "yellow_poplar_leaves": {
+   "fam": "yellow_poplar_leaves",
+   "sv": "drop"
+  },
+  "yellow_shulker_box": {
+   "fam": "shulker_box",
+   "col": "yellow",
+   "t": "rare",
+   "sv": "craft",
+   "ft": 1
+  },
+  "yellow_stained_glass": {
+   "fam": "stained_glass",
+   "col": "yellow",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "yellow_stained_glass_pane": {
+   "fam": "stained_glass",
+   "col": "yellow",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "yellow_terracotta": {
+   "fam": "terracotta",
+   "col": "yellow",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "yellow_wall_banner": {
+   "fam": "wool",
+   "col": "yellow",
+   "t": "uncommon",
+   "sv": "craft",
+   "ft": 1
+  },
+  "yellow_wool": {
+   "fam": "wool",
+   "col": "yellow",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "yellow_wool_slab": {
+   "fam": "wool",
+   "col": "yellow",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "yellow_wool_stairs": {
+   "fam": "wool",
+   "col": "yellow",
+   "t": "uncommon",
+   "sv": "craft"
+  },
+  "zombie_head": {
+   "fam": "zombie_head",
+   "sv": "drop",
+   "ft": 1
+  },
+  "zombie_wall_head": {
+   "fam": "zombie_head",
+   "sv": "drop",
+   "ft": 1
+  }
+ },
+ "compact": {
+  "note": "families: members of every family with more than one (any other block is a family of its own, named by its id); tiers: whole families, else blocks (the rest is common); dyed: the families whose members are dyed (a member's colour is its id's dye prefix); survival: the blocks not simply crafted or mined (silk: silk touch only; loot: chests, mobs, trades; cost: placed with another item; none: creative only)",
+  "families": {
+   "acacia": [
+    "acacia_button",
+    "acacia_door",
+    "acacia_fence",
+    "acacia_fence_gate",
+    "acacia_hanging_sign",
+    "acacia_log",
+    "acacia_planks",
+    "acacia_pressure_plate",
+    "acacia_shelf",
+    "acacia_sign",
+    "acacia_slab",
+    "acacia_stairs",
+    "acacia_trapdoor",
+    "acacia_wall_hanging_sign",
+    "acacia_wall_sign",
+    "acacia_wood",
+    "stripped_acacia_log",
+    "stripped_acacia_wood"
+   ],
+   "andesite": [
+    "andesite",
+    "andesite_slab",
+    "andesite_stairs",
+    "andesite_wall",
+    "polished_andesite",
+    "polished_andesite_slab",
+    "polished_andesite_stairs"
+   ],
+   "bamboo": [
+    "bamboo",
+    "bamboo_block",
+    "bamboo_button",
+    "bamboo_door",
+    "bamboo_fence",
+    "bamboo_fence_gate",
+    "bamboo_hanging_sign",
+    "bamboo_mosaic",
+    "bamboo_mosaic_slab",
+    "bamboo_mosaic_stairs",
+    "bamboo_planks",
+    "bamboo_pressure_plate",
+    "bamboo_shelf",
+    "bamboo_sign",
+    "bamboo_slab",
+    "bamboo_stairs",
+    "bamboo_trapdoor",
+    "bamboo_wall_hanging_sign",
+    "bamboo_wall_sign",
+    "stripped_bamboo_block"
+   ],
+   "basalt": [
+    "basalt",
+    "polished_basalt"
+   ],
+   "bed": [
+    "black_bed",
+    "blue_bed",
+    "brown_bed",
+    "cyan_bed",
+    "gray_bed",
+    "green_bed",
+    "light_blue_bed",
+    "light_gray_bed",
+    "lime_bed",
+    "magenta_bed",
+    "orange_bed",
+    "pink_bed",
+    "purple_bed",
+    "red_bed",
+    "white_bed",
+    "yellow_bed"
+   ],
+   "big_dripleaf": [
+    "big_dripleaf",
+    "big_dripleaf_stem"
+   ],
+   "birch": [
+    "birch_button",
+    "birch_door",
+    "birch_fence",
+    "birch_fence_gate",
+    "birch_hanging_sign",
+    "birch_log",
+    "birch_planks",
+    "birch_pressure_plate",
+    "birch_shelf",
+    "birch_sign",
+    "birch_slab",
+    "birch_stairs",
+    "birch_trapdoor",
+    "birch_wall_hanging_sign",
+    "birch_wall_sign",
+    "birch_wood",
+    "stripped_birch_log",
+    "stripped_birch_wood"
+   ],
+   "blackstone": [
+    "blackstone",
+    "blackstone_slab",
+    "blackstone_stairs",
+    "blackstone_wall",
+    "chiseled_polished_blackstone",
+    "polished_blackstone",
+    "polished_blackstone_brick_slab",
+    "polished_blackstone_brick_stairs",
+    "polished_blackstone_brick_wall",
+    "polished_blackstone_bricks",
+    "polished_blackstone_button",
+    "polished_blackstone_pressure_plate",
+    "polished_blackstone_slab",
+    "polished_blackstone_stairs",
+    "polished_blackstone_wall"
+   ],
+   "brain_coral_fan": [
+    "brain_coral_fan",
+    "brain_coral_wall_fan"
+   ],
+   "bricks": [
+    "brick_slab",
+    "brick_stairs",
+    "brick_wall",
+    "bricks"
+   ],
+   "bubble_coral_fan": [
+    "bubble_coral_fan",
+    "bubble_coral_wall_fan"
+   ],
+   "candle": [
+    "black_candle",
+    "blue_candle",
+    "brown_candle",
+    "candle",
+    "cyan_candle",
+    "gray_candle",
+    "green_candle",
+    "light_blue_candle",
+    "light_gray_candle",
+    "lime_candle",
+    "magenta_candle",
+    "orange_candle",
+    "pink_candle",
+    "purple_candle",
+    "red_candle",
+    "white_candle",
+    "yellow_candle"
+   ],
+   "candle_cake": [
+    "black_candle_cake",
+    "blue_candle_cake",
+    "brown_candle_cake",
+    "candle_cake",
+    "cyan_candle_cake",
+    "gray_candle_cake",
+    "green_candle_cake",
+    "light_blue_candle_cake",
+    "light_gray_candle_cake",
+    "lime_candle_cake",
+    "magenta_candle_cake",
+    "orange_candle_cake",
+    "pink_candle_cake",
+    "purple_candle_cake",
+    "red_candle_cake",
+    "white_candle_cake",
+    "yellow_candle_cake"
+   ],
+   "cherry": [
+    "cherry_button",
+    "cherry_door",
+    "cherry_fence",
+    "cherry_fence_gate",
+    "cherry_hanging_sign",
+    "cherry_log",
+    "cherry_planks",
+    "cherry_pressure_plate",
+    "cherry_shelf",
+    "cherry_sign",
+    "cherry_slab",
+    "cherry_stairs",
+    "cherry_trapdoor",
+    "cherry_wall_hanging_sign",
+    "cherry_wall_sign",
+    "cherry_wood",
+    "stripped_cherry_log",
+    "stripped_cherry_wood"
+   ],
+   "cinnabar": [
+    "chiseled_cinnabar",
+    "cinnabar",
+    "cinnabar_brick_slab",
+    "cinnabar_brick_stairs",
+    "cinnabar_brick_wall",
+    "cinnabar_bricks",
+    "cinnabar_slab",
+    "cinnabar_stairs",
+    "cinnabar_wall",
+    "polished_cinnabar",
+    "polished_cinnabar_slab",
+    "polished_cinnabar_stairs",
+    "polished_cinnabar_wall"
+   ],
+   "concrete": [
+    "black_concrete",
+    "black_concrete_slab",
+    "black_concrete_stairs",
+    "blue_concrete",
+    "blue_concrete_slab",
+    "blue_concrete_stairs",
+    "brown_concrete",
+    "brown_concrete_slab",
+    "brown_concrete_stairs",
+    "cyan_concrete",
+    "cyan_concrete_slab",
+    "cyan_concrete_stairs",
+    "gray_concrete",
+    "gray_concrete_slab",
+    "gray_concrete_stairs",
+    "green_concrete",
+    "green_concrete_slab",
+    "green_concrete_stairs",
+    "light_blue_concrete",
+    "light_blue_concrete_slab",
+    "light_blue_concrete_stairs",
+    "light_gray_concrete",
+    "light_gray_concrete_slab",
+    "light_gray_concrete_stairs",
+    "lime_concrete",
+    "lime_concrete_slab",
+    "lime_concrete_stairs",
+    "magenta_concrete",
+    "magenta_concrete_slab",
+    "magenta_concrete_stairs",
+    "orange_concrete",
+    "orange_concrete_slab",
+    "orange_concrete_stairs",
+    "pink_concrete",
+    "pink_concrete_slab",
+    "pink_concrete_stairs",
+    "purple_concrete",
+    "purple_concrete_slab",
+    "purple_concrete_stairs",
+    "red_concrete",
+    "red_concrete_slab",
+    "red_concrete_stairs",
+    "white_concrete",
+    "white_concrete_slab",
+    "white_concrete_stairs",
+    "yellow_concrete",
+    "yellow_concrete_slab",
+    "yellow_concrete_stairs"
+   ],
+   "concrete_powder": [
+    "black_concrete_powder",
+    "blue_concrete_powder",
+    "brown_concrete_powder",
+    "cyan_concrete_powder",
+    "gray_concrete_powder",
+    "green_concrete_powder",
+    "light_blue_concrete_powder",
+    "light_gray_concrete_powder",
+    "lime_concrete_powder",
+    "magenta_concrete_powder",
+    "orange_concrete_powder",
+    "pink_concrete_powder",
+    "purple_concrete_powder",
+    "red_concrete_powder",
+    "white_concrete_powder",
+    "yellow_concrete_powder"
+   ],
+   "copper": [
+    "chiseled_copper",
+    "copper_bars",
+    "copper_block",
+    "copper_bulb",
+    "copper_chain",
+    "copper_chest",
+    "copper_door",
+    "copper_golem_statue",
+    "copper_grate",
+    "copper_lantern",
+    "copper_trapdoor",
+    "cut_copper",
+    "cut_copper_slab",
+    "cut_copper_stairs",
+    "exposed_chiseled_copper",
+    "exposed_copper",
+    "exposed_copper_bars",
+    "exposed_copper_bulb",
+    "exposed_copper_chain",
+    "exposed_copper_chest",
+    "exposed_copper_door",
+    "exposed_copper_golem_statue",
+    "exposed_copper_grate",
+    "exposed_copper_lantern",
+    "exposed_copper_trapdoor",
+    "exposed_cut_copper",
+    "exposed_cut_copper_slab",
+    "exposed_cut_copper_stairs",
+    "exposed_lightning_rod",
+    "lightning_rod",
+    "oxidized_chiseled_copper",
+    "oxidized_copper",
+    "oxidized_copper_bars",
+    "oxidized_copper_bulb",
+    "oxidized_copper_chain",
+    "oxidized_copper_chest",
+    "oxidized_copper_door",
+    "oxidized_copper_golem_statue",
+    "oxidized_copper_grate",
+    "oxidized_copper_lantern",
+    "oxidized_copper_trapdoor",
+    "oxidized_cut_copper",
+    "oxidized_cut_copper_slab",
+    "oxidized_cut_copper_stairs",
+    "oxidized_lightning_rod",
+    "waxed_chiseled_copper",
+    "waxed_copper_bars",
+    "waxed_copper_block",
+    "waxed_copper_bulb",
+    "waxed_copper_chain",
+    "waxed_copper_chest",
+    "waxed_copper_door",
+    "waxed_copper_golem_statue",
+    "waxed_copper_grate",
+    "waxed_copper_lantern",
+    "waxed_copper_trapdoor",
+    "waxed_cut_copper",
+    "waxed_cut_copper_slab",
+    "waxed_cut_copper_stairs",
+    "waxed_exposed_chiseled_copper",
+    "waxed_exposed_copper",
+    "waxed_exposed_copper_bars",
+    "waxed_exposed_copper_bulb",
+    "waxed_exposed_copper_chain",
+    "waxed_exposed_copper_chest",
+    "waxed_exposed_copper_door",
+    "waxed_exposed_copper_golem_statue",
+    "waxed_exposed_copper_grate",
+    "waxed_exposed_copper_lantern",
+    "waxed_exposed_copper_trapdoor",
+    "waxed_exposed_cut_copper",
+    "waxed_exposed_cut_copper_slab",
+    "waxed_exposed_cut_copper_stairs",
+    "waxed_exposed_lightning_rod",
+    "waxed_lightning_rod",
+    "waxed_oxidized_chiseled_copper",
+    "waxed_oxidized_copper",
+    "waxed_oxidized_copper_bars",
+    "waxed_oxidized_copper_bulb",
+    "waxed_oxidized_copper_chain",
+    "waxed_oxidized_copper_chest",
+    "waxed_oxidized_copper_door",
+    "waxed_oxidized_copper_golem_statue",
+    "waxed_oxidized_copper_grate",
+    "waxed_oxidized_copper_lantern",
+    "waxed_oxidized_copper_trapdoor",
+    "waxed_oxidized_cut_copper",
+    "waxed_oxidized_cut_copper_slab",
+    "waxed_oxidized_cut_copper_stairs",
+    "waxed_oxidized_lightning_rod",
+    "waxed_weathered_chiseled_copper",
+    "waxed_weathered_copper",
+    "waxed_weathered_copper_bars",
+    "waxed_weathered_copper_bulb",
+    "waxed_weathered_copper_chain",
+    "waxed_weathered_copper_chest",
+    "waxed_weathered_copper_door",
+    "waxed_weathered_copper_golem_statue",
+    "waxed_weathered_copper_grate",
+    "waxed_weathered_copper_lantern",
+    "waxed_weathered_copper_trapdoor",
+    "waxed_weathered_cut_copper",
+    "waxed_weathered_cut_copper_slab",
+    "waxed_weathered_cut_copper_stairs",
+    "waxed_weathered_lightning_rod",
+    "weathered_chiseled_copper",
+    "weathered_copper",
+    "weathered_copper_bars",
+    "weathered_copper_bulb",
+    "weathered_copper_chain",
+    "weathered_copper_chest",
+    "weathered_copper_door",
+    "weathered_copper_golem_statue",
+    "weathered_copper_grate",
+    "weathered_copper_lantern",
+    "weathered_copper_trapdoor",
+    "weathered_cut_copper",
+    "weathered_cut_copper_slab",
+    "weathered_cut_copper_stairs",
+    "weathered_lightning_rod"
+   ],
+   "copper_torch": [
+    "copper_torch",
+    "copper_wall_torch"
+   ],
+   "creeper_head": [
+    "creeper_head",
+    "creeper_wall_head"
+   ],
+   "crimson": [
+    "crimson_button",
+    "crimson_door",
+    "crimson_fence",
+    "crimson_fence_gate",
+    "crimson_hanging_sign",
+    "crimson_hyphae",
+    "crimson_planks",
+    "crimson_pressure_plate",
+    "crimson_shelf",
+    "crimson_sign",
+    "crimson_slab",
+    "crimson_stairs",
+    "crimson_stem",
+    "crimson_trapdoor",
+    "crimson_wall_hanging_sign",
+    "crimson_wall_sign",
+    "stripped_crimson_hyphae",
+    "stripped_crimson_stem"
+   ],
+   "dark_oak": [
+    "dark_oak_button",
+    "dark_oak_door",
+    "dark_oak_fence",
+    "dark_oak_fence_gate",
+    "dark_oak_hanging_sign",
+    "dark_oak_log",
+    "dark_oak_planks",
+    "dark_oak_pressure_plate",
+    "dark_oak_shelf",
+    "dark_oak_sign",
+    "dark_oak_slab",
+    "dark_oak_stairs",
+    "dark_oak_trapdoor",
+    "dark_oak_wall_hanging_sign",
+    "dark_oak_wall_sign",
+    "dark_oak_wood",
+    "stripped_dark_oak_log",
+    "stripped_dark_oak_wood"
+   ],
+   "dark_prismarine": [
+    "dark_prismarine",
+    "dark_prismarine_slab",
+    "dark_prismarine_stairs"
+   ],
+   "dead_brain_coral_fan": [
+    "dead_brain_coral_fan",
+    "dead_brain_coral_wall_fan"
+   ],
+   "dead_bubble_coral_fan": [
+    "dead_bubble_coral_fan",
+    "dead_bubble_coral_wall_fan"
+   ],
+   "dead_fire_coral_fan": [
+    "dead_fire_coral_fan",
+    "dead_fire_coral_wall_fan"
+   ],
+   "dead_horn_coral_fan": [
+    "dead_horn_coral_fan",
+    "dead_horn_coral_wall_fan"
+   ],
+   "dead_tube_coral_fan": [
+    "dead_tube_coral_fan",
+    "dead_tube_coral_wall_fan"
+   ],
+   "deepslate": [
+    "chiseled_deepslate",
+    "cobbled_deepslate",
+    "cobbled_deepslate_slab",
+    "cobbled_deepslate_stairs",
+    "cobbled_deepslate_wall",
+    "deepslate",
+    "deepslate_brick_slab",
+    "deepslate_brick_stairs",
+    "deepslate_brick_wall",
+    "deepslate_bricks",
+    "deepslate_tile_slab",
+    "deepslate_tile_stairs",
+    "deepslate_tile_wall",
+    "deepslate_tiles",
+    "polished_deepslate",
+    "polished_deepslate_slab",
+    "polished_deepslate_stairs",
+    "polished_deepslate_wall"
+   ],
+   "diorite": [
+    "diorite",
+    "diorite_slab",
+    "diorite_stairs",
+    "diorite_wall",
+    "polished_diorite",
+    "polished_diorite_slab",
+    "polished_diorite_stairs"
+   ],
+   "dragon_head": [
+    "dragon_head",
+    "dragon_wall_head"
+   ],
+   "dripstone": [
+    "dripstone_block",
+    "pointed_dripstone"
+   ],
+   "end_stone": [
+    "end_stone",
+    "end_stone_brick_slab",
+    "end_stone_brick_stairs",
+    "end_stone_brick_wall",
+    "end_stone_bricks"
+   ],
+   "fire_coral_fan": [
+    "fire_coral_fan",
+    "fire_coral_wall_fan"
+   ],
+   "glass": [
+    "glass",
+    "glass_pane"
+   ],
+   "glazed_terracotta": [
+    "black_glazed_terracotta",
+    "blue_glazed_terracotta",
+    "brown_glazed_terracotta",
+    "cyan_glazed_terracotta",
+    "gray_glazed_terracotta",
+    "green_glazed_terracotta",
+    "light_blue_glazed_terracotta",
+    "light_gray_glazed_terracotta",
+    "lime_glazed_terracotta",
+    "magenta_glazed_terracotta",
+    "orange_glazed_terracotta",
+    "pink_glazed_terracotta",
+    "purple_glazed_terracotta",
+    "red_glazed_terracotta",
+    "white_glazed_terracotta",
+    "yellow_glazed_terracotta"
+   ],
+   "gold": [
+    "gold_block",
+    "light_weighted_pressure_plate"
+   ],
+   "granite": [
+    "granite",
+    "granite_slab",
+    "granite_stairs",
+    "granite_wall",
+    "polished_granite",
+    "polished_granite_slab",
+    "polished_granite_stairs"
+   ],
+   "hay": [
+    "hay_block",
+    "straw_bed"
+   ],
+   "horn_coral_fan": [
+    "horn_coral_fan",
+    "horn_coral_wall_fan"
+   ],
+   "ice": [
+    "blue_ice",
+    "ice",
+    "packed_ice"
+   ],
+   "iron": [
+    "cauldron",
+    "heavy_weighted_pressure_plate",
+    "iron_bars",
+    "iron_block",
+    "iron_door",
+    "iron_trapdoor",
+    "lava_cauldron",
+    "powder_snow_cauldron",
+    "rail",
+    "water_cauldron"
+   ],
+   "jungle": [
+    "jungle_button",
+    "jungle_door",
+    "jungle_fence",
+    "jungle_fence_gate",
+    "jungle_hanging_sign",
+    "jungle_log",
+    "jungle_planks",
+    "jungle_pressure_plate",
+    "jungle_shelf",
+    "jungle_sign",
+    "jungle_slab",
+    "jungle_stairs",
+    "jungle_trapdoor",
+    "jungle_wall_hanging_sign",
+    "jungle_wall_sign",
+    "jungle_wood",
+    "stripped_jungle_log",
+    "stripped_jungle_wood"
+   ],
+   "mangrove": [
+    "mangrove_button",
+    "mangrove_door",
+    "mangrove_fence",
+    "mangrove_fence_gate",
+    "mangrove_hanging_sign",
+    "mangrove_log",
+    "mangrove_planks",
+    "mangrove_pressure_plate",
+    "mangrove_shelf",
+    "mangrove_sign",
+    "mangrove_slab",
+    "mangrove_stairs",
+    "mangrove_trapdoor",
+    "mangrove_wall_hanging_sign",
+    "mangrove_wall_sign",
+    "mangrove_wood",
+    "stripped_mangrove_log",
+    "stripped_mangrove_wood"
+   ],
+   "mud": [
+    "mud_brick_slab",
+    "mud_brick_stairs",
+    "mud_brick_wall",
+    "mud_bricks",
+    "packed_mud"
+   ],
+   "nether_bricks": [
+    "chiseled_nether_bricks",
+    "nether_brick_slab",
+    "nether_brick_stairs",
+    "nether_brick_wall",
+    "nether_bricks"
+   ],
+   "nether_wart": [
+    "nether_wart",
+    "nether_wart_block"
+   ],
+   "oak": [
+    "oak_button",
+    "oak_door",
+    "oak_fence",
+    "oak_fence_gate",
+    "oak_hanging_sign",
+    "oak_log",
+    "oak_planks",
+    "oak_pressure_plate",
+    "oak_shelf",
+    "oak_sign",
+    "oak_slab",
+    "oak_stairs",
+    "oak_trapdoor",
+    "oak_wall_hanging_sign",
+    "oak_wall_sign",
+    "oak_wood",
+    "stripped_oak_log",
+    "stripped_oak_wood"
+   ],
+   "pale_moss": [
+    "pale_moss_block",
+    "pale_moss_carpet"
+   ],
+   "pale_oak": [
+    "pale_oak_button",
+    "pale_oak_door",
+    "pale_oak_fence",
+    "pale_oak_fence_gate",
+    "pale_oak_hanging_sign",
+    "pale_oak_log",
+    "pale_oak_planks",
+    "pale_oak_pressure_plate",
+    "pale_oak_shelf",
+    "pale_oak_sign",
+    "pale_oak_slab",
+    "pale_oak_stairs",
+    "pale_oak_trapdoor",
+    "pale_oak_wall_hanging_sign",
+    "pale_oak_wall_sign",
+    "pale_oak_wood",
+    "stripped_pale_oak_log",
+    "stripped_pale_oak_wood"
+   ],
+   "piglin_head": [
+    "piglin_head",
+    "piglin_wall_head"
+   ],
+   "player_head": [
+    "player_head",
+    "player_wall_head"
+   ],
+   "poplar": [
+    "poplar_button",
+    "poplar_door",
+    "poplar_fence",
+    "poplar_fence_gate",
+    "poplar_hanging_sign",
+    "poplar_log",
+    "poplar_planks",
+    "poplar_pressure_plate",
+    "poplar_shelf",
+    "poplar_sign",
+    "poplar_slab",
+    "poplar_stairs",
+    "poplar_trapdoor",
+    "poplar_wall_hanging_sign",
+    "poplar_wall_sign",
+    "poplar_wood",
+    "stripped_poplar_log",
+    "stripped_poplar_wood"
+   ],
+   "prismarine": [
+    "prismarine",
+    "prismarine_slab",
+    "prismarine_stairs",
+    "prismarine_wall"
+   ],
+   "prismarine_bricks": [
+    "prismarine_brick_slab",
+    "prismarine_brick_stairs",
+    "prismarine_bricks"
+   ],
+   "purpur": [
+    "purpur_block",
+    "purpur_pillar",
+    "purpur_slab",
+    "purpur_stairs"
+   ],
+   "quartz": [
+    "chiseled_quartz_block",
+    "quartz_block",
+    "quartz_bricks",
+    "quartz_pillar",
+    "quartz_slab",
+    "quartz_stairs"
+   ],
+   "red_nether_bricks": [
+    "red_nether_brick_slab",
+    "red_nether_brick_stairs",
+    "red_nether_brick_wall",
+    "red_nether_bricks"
+   ],
+   "red_sandstone": [
+    "chiseled_red_sandstone",
+    "cut_red_sandstone",
+    "cut_red_sandstone_slab",
+    "red_sand",
+    "red_sandstone",
+    "red_sandstone_slab",
+    "red_sandstone_stairs",
+    "red_sandstone_wall"
+   ],
+   "redstone": [
+    "redstone_block",
+    "redstone_torch",
+    "redstone_wall_torch",
+    "redstone_wire"
+   ],
+   "resin": [
+    "chiseled_resin_bricks",
+    "resin_brick_slab",
+    "resin_brick_stairs",
+    "resin_brick_wall",
+    "resin_bricks"
+   ],
+   "resin_block": [
+    "resin_block",
+    "resin_clump"
+   ],
+   "sandstone": [
+    "chiseled_sandstone",
+    "cut_sandstone",
+    "cut_sandstone_slab",
+    "sand",
+    "sandstone",
+    "sandstone_slab",
+    "sandstone_stairs",
+    "sandstone_wall"
+   ],
+   "shulker_box": [
+    "black_shulker_box",
+    "blue_shulker_box",
+    "brown_shulker_box",
+    "cyan_shulker_box",
+    "gray_shulker_box",
+    "green_shulker_box",
+    "light_blue_shulker_box",
+    "light_gray_shulker_box",
+    "lime_shulker_box",
+    "magenta_shulker_box",
+    "orange_shulker_box",
+    "pink_shulker_box",
+    "purple_shulker_box",
+    "red_shulker_box",
+    "shulker_box",
+    "white_shulker_box",
+    "yellow_shulker_box"
+   ],
+   "skeleton_skull": [
+    "skeleton_skull",
+    "skeleton_wall_skull"
+   ],
+   "smooth_quartz": [
+    "smooth_quartz",
+    "smooth_quartz_slab",
+    "smooth_quartz_stairs"
+   ],
+   "smooth_red_sandstone": [
+    "smooth_red_sandstone",
+    "smooth_red_sandstone_slab",
+    "smooth_red_sandstone_stairs"
+   ],
+   "smooth_sandstone": [
+    "smooth_sandstone",
+    "smooth_sandstone_slab",
+    "smooth_sandstone_stairs"
+   ],
+   "smooth_stone": [
+    "smooth_stone",
+    "smooth_stone_slab"
+   ],
+   "snow": [
+    "snow",
+    "snow_block"
+   ],
+   "soul_torch": [
+    "soul_torch",
+    "soul_wall_torch"
+   ],
+   "spruce": [
+    "spruce_button",
+    "spruce_door",
+    "spruce_fence",
+    "spruce_fence_gate",
+    "spruce_hanging_sign",
+    "spruce_log",
+    "spruce_planks",
+    "spruce_pressure_plate",
+    "spruce_shelf",
+    "spruce_sign",
+    "spruce_slab",
+    "spruce_stairs",
+    "spruce_trapdoor",
+    "spruce_wall_hanging_sign",
+    "spruce_wall_sign",
+    "spruce_wood",
+    "stripped_spruce_log",
+    "stripped_spruce_wood"
+   ],
+   "stained_glass": [
+    "black_stained_glass",
+    "black_stained_glass_pane",
+    "blue_stained_glass",
+    "blue_stained_glass_pane",
+    "brown_stained_glass",
+    "brown_stained_glass_pane",
+    "cyan_stained_glass",
+    "cyan_stained_glass_pane",
+    "gray_stained_glass",
+    "gray_stained_glass_pane",
+    "green_stained_glass",
+    "green_stained_glass_pane",
+    "light_blue_stained_glass",
+    "light_blue_stained_glass_pane",
+    "light_gray_stained_glass",
+    "light_gray_stained_glass_pane",
+    "lime_stained_glass",
+    "lime_stained_glass_pane",
+    "magenta_stained_glass",
+    "magenta_stained_glass_pane",
+    "orange_stained_glass",
+    "orange_stained_glass_pane",
+    "pink_stained_glass",
+    "pink_stained_glass_pane",
+    "purple_stained_glass",
+    "purple_stained_glass_pane",
+    "red_stained_glass",
+    "red_stained_glass_pane",
+    "white_stained_glass",
+    "white_stained_glass_pane",
+    "yellow_stained_glass",
+    "yellow_stained_glass_pane"
+   ],
+   "stone": [
+    "chiseled_stone_bricks",
+    "cobblestone",
+    "cobblestone_slab",
+    "cobblestone_stairs",
+    "cobblestone_wall",
+    "lever",
+    "mossy_cobblestone",
+    "mossy_cobblestone_slab",
+    "mossy_cobblestone_stairs",
+    "mossy_cobblestone_wall",
+    "mossy_stone_brick_slab",
+    "mossy_stone_brick_stairs",
+    "mossy_stone_brick_wall",
+    "mossy_stone_bricks",
+    "stone",
+    "stone_brick_slab",
+    "stone_brick_stairs",
+    "stone_brick_wall",
+    "stone_bricks",
+    "stone_button",
+    "stone_pressure_plate",
+    "stone_slab",
+    "stone_stairs"
+   ],
+   "sulfur": [
+    "chiseled_sulfur",
+    "polished_sulfur",
+    "polished_sulfur_slab",
+    "polished_sulfur_stairs",
+    "polished_sulfur_wall",
+    "potent_sulfur",
+    "sulfur",
+    "sulfur_brick_slab",
+    "sulfur_brick_stairs",
+    "sulfur_brick_wall",
+    "sulfur_bricks",
+    "sulfur_slab",
+    "sulfur_spike",
+    "sulfur_stairs",
+    "sulfur_wall"
+   ],
+   "terracotta": [
+    "black_terracotta",
+    "blue_terracotta",
+    "brown_terracotta",
+    "cyan_terracotta",
+    "gray_terracotta",
+    "green_terracotta",
+    "light_blue_terracotta",
+    "light_gray_terracotta",
+    "lime_terracotta",
+    "magenta_terracotta",
+    "orange_terracotta",
+    "pink_terracotta",
+    "purple_terracotta",
+    "red_terracotta",
+    "terracotta",
+    "white_terracotta",
+    "yellow_terracotta"
+   ],
+   "torch": [
+    "torch",
+    "wall_torch"
+   ],
+   "tube_coral_fan": [
+    "tube_coral_fan",
+    "tube_coral_wall_fan"
+   ],
+   "tuff": [
+    "chiseled_tuff",
+    "chiseled_tuff_bricks",
+    "polished_tuff",
+    "polished_tuff_slab",
+    "polished_tuff_stairs",
+    "polished_tuff_wall",
+    "tuff",
+    "tuff_brick_slab",
+    "tuff_brick_stairs",
+    "tuff_brick_wall",
+    "tuff_bricks",
+    "tuff_slab",
+    "tuff_stairs",
+    "tuff_wall"
+   ],
+   "warped": [
+    "stripped_warped_hyphae",
+    "stripped_warped_stem",
+    "warped_button",
+    "warped_door",
+    "warped_fence",
+    "warped_fence_gate",
+    "warped_hanging_sign",
+    "warped_hyphae",
+    "warped_planks",
+    "warped_pressure_plate",
+    "warped_shelf",
+    "warped_sign",
+    "warped_slab",
+    "warped_stairs",
+    "warped_stem",
+    "warped_trapdoor",
+    "warped_wall_hanging_sign",
+    "warped_wall_sign"
+   ],
+   "wither_skeleton_skull": [
+    "wither_skeleton_skull",
+    "wither_skeleton_wall_skull"
+   ],
+   "wool": [
+    "black_banner",
+    "black_carpet",
+    "black_wall_banner",
+    "black_wool",
+    "black_wool_slab",
+    "black_wool_stairs",
+    "blue_banner",
+    "blue_carpet",
+    "blue_wall_banner",
+    "blue_wool",
+    "blue_wool_slab",
+    "blue_wool_stairs",
+    "brown_banner",
+    "brown_carpet",
+    "brown_wall_banner",
+    "brown_wool",
+    "brown_wool_slab",
+    "brown_wool_stairs",
+    "cyan_banner",
+    "cyan_carpet",
+    "cyan_wall_banner",
+    "cyan_wool",
+    "cyan_wool_slab",
+    "cyan_wool_stairs",
+    "gray_banner",
+    "gray_carpet",
+    "gray_wall_banner",
+    "gray_wool",
+    "gray_wool_slab",
+    "gray_wool_stairs",
+    "green_banner",
+    "green_carpet",
+    "green_wall_banner",
+    "green_wool",
+    "green_wool_slab",
+    "green_wool_stairs",
+    "light_blue_banner",
+    "light_blue_carpet",
+    "light_blue_wall_banner",
+    "light_blue_wool",
+    "light_blue_wool_slab",
+    "light_blue_wool_stairs",
+    "light_gray_banner",
+    "light_gray_carpet",
+    "light_gray_wall_banner",
+    "light_gray_wool",
+    "light_gray_wool_slab",
+    "light_gray_wool_stairs",
+    "lime_banner",
+    "lime_carpet",
+    "lime_wall_banner",
+    "lime_wool",
+    "lime_wool_slab",
+    "lime_wool_stairs",
+    "magenta_banner",
+    "magenta_carpet",
+    "magenta_wall_banner",
+    "magenta_wool",
+    "magenta_wool_slab",
+    "magenta_wool_stairs",
+    "orange_banner",
+    "orange_carpet",
+    "orange_wall_banner",
+    "orange_wool",
+    "orange_wool_slab",
+    "orange_wool_stairs",
+    "pink_banner",
+    "pink_carpet",
+    "pink_wall_banner",
+    "pink_wool",
+    "pink_wool_slab",
+    "pink_wool_stairs",
+    "purple_banner",
+    "purple_carpet",
+    "purple_wall_banner",
+    "purple_wool",
+    "purple_wool_slab",
+    "purple_wool_stairs",
+    "red_banner",
+    "red_carpet",
+    "red_wall_banner",
+    "red_wool",
+    "red_wool_slab",
+    "red_wool_stairs",
+    "white_banner",
+    "white_carpet",
+    "white_wall_banner",
+    "white_wool",
+    "white_wool_slab",
+    "white_wool_stairs",
+    "yellow_banner",
+    "yellow_carpet",
+    "yellow_wall_banner",
+    "yellow_wool",
+    "yellow_wool_slab",
+    "yellow_wool_stairs"
+   ],
+   "zombie_head": [
+    "zombie_head",
+    "zombie_wall_head"
+   ]
+  },
+  "tiers": {
+   "uncommon": {
+    "families": [
+     "basalt",
+     "blackstone",
+     "concrete",
+     "concrete_powder",
+     "copper_torch",
+     "crimson",
+     "glazed_terracotta",
+     "iron",
+     "mud",
+     "nether_bricks",
+     "nether_wart",
+     "red_nether_bricks",
+     "soul_torch",
+     "stained_glass",
+     "warped"
+    ],
+    "blocks": [
+     "acacia_hanging_sign",
+     "acacia_wall_hanging_sign",
+     "activator_rail",
+     "anvil",
+     "bamboo_hanging_sign",
+     "bamboo_wall_hanging_sign",
+     "black_bed",
+     "blue_bed",
+     "brown_bed",
+     "cyan_bed",
+     "gray_bed",
+     "green_bed",
+     "light_blue_bed",
+     "light_gray_bed",
+     "lime_bed",
+     "magenta_bed",
+     "orange_bed",
+     "pink_bed",
+     "purple_bed",
+     "red_bed",
+     "yellow_bed",
+     "birch_hanging_sign",
+     "birch_wall_hanging_sign",
+     "cracked_polished_blackstone_bricks",
+     "blast_furnace",
+     "black_candle",
+     "blue_candle",
+     "brown_candle",
+     "cyan_candle",
+     "gray_candle",
+     "green_candle",
+     "light_blue_candle",
+     "light_gray_candle",
+     "lime_candle",
+     "magenta_candle",
+     "orange_candle",
+     "pink_candle",
+     "purple_candle",
+     "red_candle",
+     "white_candle",
+     "yellow_candle",
+     "cherry_hanging_sign",
+     "cherry_wall_hanging_sign",
+     "chiseled_copper",
+     "copper_bars",
+     "copper_block",
+     "copper_chain",
+     "copper_chest",
+     "copper_door",
+     "copper_grate",
+     "copper_lantern",
+     "copper_trapdoor",
+     "cut_copper",
+     "cut_copper_slab",
+     "cut_copper_stairs",
+     "lightning_rod",
+     "waxed_chiseled_copper",
+     "waxed_copper_bars",
+     "waxed_copper_block",
+     "waxed_copper_chain",
+     "waxed_copper_chest",
+     "waxed_copper_door",
+     "waxed_copper_grate",
+     "waxed_copper_lantern",
+     "waxed_copper_trapdoor",
+     "waxed_cut_copper",
+     "waxed_cut_copper_slab",
+     "waxed_cut_copper_stairs",
+     "waxed_lightning_rod",
+     "copper_ore",
+     "cracked_nether_bricks",
+     "crafter",
+     "crimson_nylium",
+     "dark_oak_hanging_sign",
+     "dark_oak_wall_hanging_sign",
+     "deepslate_copper_ore",
+     "deepslate_iron_ore",
+     "detector_rail",
+     "furnace",
+     "glowstone",
+     "hopper",
+     "blue_ice",
+     "packed_ice",
+     "iron_chain",
+     "iron_ore",
+     "jungle_hanging_sign",
+     "jungle_wall_hanging_sign",
+     "lantern",
+     "lodestone",
+     "magma_block",
+     "mangrove_hanging_sign",
+     "mangrove_wall_hanging_sign",
+     "mud",
+     "muddy_mangrove_roots",
+     "nether_brick_fence",
+     "netherrack",
+     "oak_hanging_sign",
+     "oak_wall_hanging_sign",
+     "obsidian",
+     "pale_oak_hanging_sign",
+     "pale_oak_wall_hanging_sign",
+     "piston",
+     "poplar_hanging_sign",
+     "poplar_wall_hanging_sign",
+     "raw_copper_block",
+     "raw_iron_block",
+     "redstone_lamp",
+     "shroomlight",
+     "smithing_table",
+     "smoker",
+     "smooth_basalt",
+     "soul_campfire",
+     "soul_lantern",
+     "soul_sand",
+     "soul_soil",
+     "spruce_hanging_sign",
+     "spruce_wall_hanging_sign",
+     "sticky_piston",
+     "stonecutter",
+     "black_terracotta",
+     "blue_terracotta",
+     "brown_terracotta",
+     "cyan_terracotta",
+     "gray_terracotta",
+     "green_terracotta",
+     "light_blue_terracotta",
+     "light_gray_terracotta",
+     "lime_terracotta",
+     "magenta_terracotta",
+     "orange_terracotta",
+     "pink_terracotta",
+     "purple_terracotta",
+     "red_terracotta",
+     "white_terracotta",
+     "yellow_terracotta",
+     "trapped_chest",
+     "tripwire_hook",
+     "warped_nylium",
+     "warped_wart_block",
+     "black_banner",
+     "black_carpet",
+     "black_wall_banner",
+     "black_wool",
+     "black_wool_slab",
+     "black_wool_stairs",
+     "blue_banner",
+     "blue_carpet",
+     "blue_wall_banner",
+     "blue_wool",
+     "blue_wool_slab",
+     "blue_wool_stairs",
+     "brown_banner",
+     "brown_carpet",
+     "brown_wall_banner",
+     "brown_wool",
+     "brown_wool_slab",
+     "brown_wool_stairs",
+     "cyan_banner",
+     "cyan_carpet",
+     "cyan_wall_banner",
+     "cyan_wool",
+     "cyan_wool_slab",
+     "cyan_wool_stairs",
+     "gray_banner",
+     "gray_carpet",
+     "gray_wall_banner",
+     "gray_wool",
+     "gray_wool_slab",
+     "gray_wool_stairs",
+     "green_banner",
+     "green_carpet",
+     "green_wall_banner",
+     "green_wool",
+     "green_wool_slab",
+     "green_wool_stairs",
+     "light_blue_banner",
+     "light_blue_carpet",
+     "light_blue_wall_banner",
+     "light_blue_wool",
+     "light_blue_wool_slab",
+     "light_blue_wool_stairs",
+     "light_gray_banner",
+     "light_gray_carpet",
+     "light_gray_wall_banner",
+     "light_gray_wool",
+     "light_gray_wool_slab",
+     "light_gray_wool_stairs",
+     "lime_banner",
+     "lime_carpet",
+     "lime_wall_banner",
+     "lime_wool",
+     "lime_wool_slab",
+     "lime_wool_stairs",
+     "magenta_banner",
+     "magenta_carpet",
+     "magenta_wall_banner",
+     "magenta_wool",
+     "magenta_wool_slab",
+     "magenta_wool_stairs",
+     "orange_banner",
+     "orange_carpet",
+     "orange_wall_banner",
+     "orange_wool",
+     "orange_wool_slab",
+     "orange_wool_stairs",
+     "pink_banner",
+     "pink_carpet",
+     "pink_wall_banner",
+     "pink_wool",
+     "pink_wool_slab",
+     "pink_wool_stairs",
+     "purple_banner",
+     "purple_carpet",
+     "purple_wall_banner",
+     "purple_wool",
+     "purple_wool_slab",
+     "purple_wool_stairs",
+     "red_banner",
+     "red_carpet",
+     "red_wall_banner",
+     "red_wool",
+     "red_wool_slab",
+     "red_wool_stairs",
+     "yellow_banner",
+     "yellow_carpet",
+     "yellow_wall_banner",
+     "yellow_wool",
+     "yellow_wool_slab",
+     "yellow_wool_stairs"
+    ]
+   },
+   "rare": {
+    "families": [
+     "andesite",
+     "dark_prismarine",
+     "diorite",
+     "end_stone",
+     "gold",
+     "granite",
+     "prismarine",
+     "prismarine_bricks",
+     "purpur",
+     "shulker_box",
+     "smooth_quartz"
+    ],
+    "blocks": [
+     "amethyst_block",
+     "amethyst_cluster",
+     "brewing_stand",
+     "calibrated_sculk_sensor",
+     "chorus_flower",
+     "comparator",
+     "copper_bulb",
+     "exposed_copper_bulb",
+     "oxidized_copper_bulb",
+     "waxed_copper_bulb",
+     "waxed_exposed_copper_bulb",
+     "waxed_oxidized_copper_bulb",
+     "waxed_weathered_copper_bulb",
+     "weathered_copper_bulb",
+     "crying_obsidian",
+     "daylight_detector",
+     "deepslate_gold_ore",
+     "dried_ghast",
+     "end_rod",
+     "ender_chest",
+     "gilded_blackstone",
+     "gold_ore",
+     "golden_dandelion",
+     "large_amethyst_bud",
+     "medium_amethyst_bud",
+     "nether_gold_ore",
+     "nether_quartz_ore",
+     "observer",
+     "powered_rail",
+     "quartz_block",
+     "quartz_bricks",
+     "quartz_pillar",
+     "quartz_stairs",
+     "raw_gold_block",
+     "respawn_anchor",
+     "sculk",
+     "sculk_catalyst",
+     "sculk_sensor",
+     "sculk_shrieker",
+     "sculk_vein",
+     "sea_lantern",
+     "small_amethyst_bud",
+     "sponge",
+     "tinted_glass",
+     "wet_sponge"
+    ]
+   },
+   "precious": {
+    "families": [],
+    "blocks": [
+     "ancient_debris",
+     "beacon",
+     "conduit",
+     "deepslate_diamond_ore",
+     "deepslate_emerald_ore",
+     "diamond_block",
+     "diamond_ore",
+     "dragon_egg",
+     "emerald_block",
+     "emerald_ore",
+     "enchanting_table",
+     "heavy_core",
+     "jukebox",
+     "netherite_block"
+    ]
+   }
+  },
+  "dyed": [
+   "bed",
+   "candle",
+   "candle_cake",
+   "concrete",
+   "concrete_powder",
+   "glazed_terracotta",
+   "shulker_box",
+   "stained_glass",
+   "terracotta",
+   "wool"
+  ],
+  "survival": {
+   "silk": [
+    "amethyst_cluster",
+    "bee_nest",
+    "brain_coral",
+    "brain_coral_block",
+    "brain_coral_fan",
+    "brain_coral_wall_fan",
+    "brown_mushroom_block",
+    "bubble_coral",
+    "bubble_coral_block",
+    "bubble_coral_fan",
+    "bubble_coral_wall_fan",
+    "coal_ore",
+    "copper_ore",
+    "crimson_nylium",
+    "dead_brain_coral",
+    "dead_brain_coral_fan",
+    "dead_brain_coral_wall_fan",
+    "dead_bubble_coral",
+    "dead_bubble_coral_fan",
+    "dead_bubble_coral_wall_fan",
+    "dead_fire_coral",
+    "dead_fire_coral_fan",
+    "dead_fire_coral_wall_fan",
+    "dead_horn_coral",
+    "dead_horn_coral_fan",
+    "dead_horn_coral_wall_fan",
+    "dead_tube_coral",
+    "dead_tube_coral_fan",
+    "dead_tube_coral_wall_fan",
+    "deepslate_coal_ore",
+    "deepslate_copper_ore",
+    "deepslate_diamond_ore",
+    "deepslate_emerald_ore",
+    "deepslate_gold_ore",
+    "deepslate_iron_ore",
+    "deepslate_lapis_ore",
+    "deepslate_redstone_ore",
+    "diamond_ore",
+    "emerald_ore",
+    "fire_coral",
+    "fire_coral_block",
+    "fire_coral_fan",
+    "fire_coral_wall_fan",
+    "gold_ore",
+    "horn_coral",
+    "horn_coral_block",
+    "horn_coral_fan",
+    "horn_coral_wall_fan",
+    "ice",
+    "iron_ore",
+    "lapis_ore",
+    "large_amethyst_bud",
+    "medium_amethyst_bud",
+    "mushroom_stem",
+    "mycelium",
+    "nether_gold_ore",
+    "nether_quartz_ore",
+    "podzol",
+    "red_mushroom_block",
+    "redstone_ore",
+    "sculk",
+    "sculk_catalyst",
+    "sculk_sensor",
+    "sculk_shrieker",
+    "sculk_vein",
+    "small_amethyst_bud",
+    "tube_coral",
+    "tube_coral_block",
+    "tube_coral_fan",
+    "tube_coral_wall_fan",
+    "turtle_egg",
+    "warped_nylium"
+   ],
+   "loot": [
+    "large_fern",
+    "tall_grass"
+   ],
+   "cost": [
+    "air",
+    "attached_melon_stem",
+    "attached_pumpkin_stem",
+    "bamboo_sapling",
+    "big_dripleaf_stem",
+    "black_candle_cake",
+    "blue_candle_cake",
+    "brown_candle_cake",
+    "bubble_column",
+    "candle_cake",
+    "cave_air",
+    "cave_vines",
+    "cave_vines_plant",
+    "cyan_candle_cake",
+    "dirt_path",
+    "farmland",
+    "fire",
+    "frosted_ice",
+    "grass_block",
+    "gray_candle_cake",
+    "green_candle_cake",
+    "kelp_plant",
+    "lava",
+    "lava_cauldron",
+    "light_blue_candle_cake",
+    "light_gray_candle_cake",
+    "lime_candle_cake",
+    "magenta_candle_cake",
+    "melon_stem",
+    "moving_piston",
+    "orange_candle_cake",
+    "pink_candle_cake",
+    "piston_head",
+    "potted_acacia_sapling",
+    "potted_allium",
+    "potted_azalea_bush",
+    "potted_azure_bluet",
+    "potted_bamboo",
+    "potted_birch_sapling",
+    "potted_blue_orchid",
+    "potted_brown_mushroom",
+    "potted_cactus",
+    "potted_cherry_sapling",
+    "potted_closed_eyeblossom",
+    "potted_cornflower",
+    "potted_crimson_fungus",
+    "potted_crimson_roots",
+    "potted_dandelion",
+    "potted_dark_oak_sapling",
+    "potted_dead_bush",
+    "potted_fern",
+    "potted_flowering_azalea_bush",
+    "potted_golden_dandelion",
+    "potted_jungle_sapling",
+    "potted_lily_of_the_valley",
+    "potted_mangrove_propagule",
+    "potted_oak_sapling",
+    "potted_open_eyeblossom",
+    "potted_orange_tulip",
+    "potted_oxeye_daisy",
+    "potted_pale_oak_sapling",
+    "potted_pink_tulip",
+    "potted_poplar_sapling",
+    "potted_poppy",
+    "potted_red_mushroom",
+    "potted_red_tulip",
+    "potted_spruce_sapling",
+    "potted_torchflower",
+    "potted_warped_fungus",
+    "potted_warped_roots",
+    "potted_white_tulip",
+    "potted_wither_rose",
+    "powder_snow_cauldron",
+    "pumpkin_stem",
+    "purple_candle_cake",
+    "red_candle_cake",
+    "redstone_wire",
+    "soul_fire",
+    "tall_seagrass",
+    "tripwire",
+    "twisting_vines_plant",
+    "void_air",
+    "water",
+    "water_cauldron",
+    "weeping_vines_plant",
+    "white_candle_cake",
+    "yellow_candle_cake"
+   ],
+   "none": [
+    "barrier",
+    "bedrock",
+    "budding_amethyst",
+    "chain_command_block",
+    "chorus_plant",
+    "command_block",
+    "end_gateway",
+    "end_portal",
+    "end_portal_frame",
+    "frogspawn",
+    "infested_chiseled_stone_bricks",
+    "infested_cobblestone",
+    "infested_cracked_stone_bricks",
+    "infested_deepslate",
+    "infested_mossy_stone_bricks",
+    "infested_stone",
+    "infested_stone_bricks",
+    "jigsaw",
+    "light",
+    "nether_portal",
+    "petrified_oak_slab",
+    "player_head",
+    "player_wall_head",
+    "reinforced_deepslate",
+    "repeating_command_block",
+    "spawner",
+    "structure_block",
+    "structure_void",
+    "suspicious_gravel",
+    "suspicious_sand",
+    "test_block",
+    "test_instance_block",
+    "trial_spawner",
+    "vault"
+   ]
+  }
+ }
+}

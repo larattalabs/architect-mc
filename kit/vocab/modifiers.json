@@ -1,0 +1,26 @@
+{
+ "format": 1,
+ "note": "Recipe modifiers (docs/CONTRACT.md Phase 6c slice VOC §2.1): a recipe whose ingredients are one material plus modifiers joins its output to that material's family. A modifier never joins anything itself. Every row says why.",
+ "rows": [
+  {
+   "item": "minecraft:honeycomb",
+   "why": "waxing: a waxed copper block is the copper block plus honeycomb, still copper"
+  },
+  {
+   "item": "minecraft:iron_chain",
+   "why": "a hanging sign's two chains: the sign is cut from its stripped log, so it is that wood"
+  },
+  {
+   "item": "minecraft:moss_block",
+   "why": "the mossy kin: mossy cobblestone and mossy stone bricks are the stone plus moss"
+  },
+  {
+   "item": "minecraft:stick",
+   "why": "the frame of a fence, fence gate, sign, rail or lever: a fence is its planks plus sticks, so it is that wood (sticks alone, as in a ladder, join nothing)"
+  },
+  {
+   "item": "minecraft:vine",
+   "why": "the mossy kin: mossy cobblestone and mossy stone bricks are the stone plus a vine"
+  }
+ ]
+}
