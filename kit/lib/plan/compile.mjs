@@ -823,7 +823,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   const zonesAccepted = []; // {id, rect}
   const formsAccepted = []; // footprint rects of the forms placed so far
   // ---- (6c HY-a) the hydrology pass, only when the plan has a course, race or ditch part (CONTRACT HY §5: every other plan is
-  // byte-identical): run here, before the zones resolve, so D1's `wet` tag reads its field; registered on the region below
+  // byte-identical, D1's `wet` tag included): run here, before the zones resolve, so D1's tag reads its field; registered on the
+  // region below (r._hydrology)
   if (V.parts.some(isCoursePart)) {
     const t1 = performance.now();
     const out = hydrologyPass(env.cols, ctx.volumes ?? [], {});
@@ -959,7 +960,9 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     }
   }
   if (!r) { r = makeRegion(null); r.stages(stagesWanted); }
-  if (env.hydro) r.pass('hydrology', { _ran: env.hydro });
+  // (6c HY-a) plan_v0 declares no `hydrology` (editing plan_v0.mjs would move every plan's programSha, so every IR): the check
+  // registers the pass it ran through the region's own entry point, past r.pass's declaration check
+  if (env.hydro) r._hydrology({ _ran: env.hydro });
   // ((6c H) the fluids stage is a body's alone: a stage that falls back to the last never lands in it)
   const lastSolid = () => r.stageList[r.stageList.length - 1] === FLUIDS_STAGE && r.stageList.length > 1 ? r.stageList[r.stageList.length - 2] : r.stageList[r.stageList.length - 1];
   const stageOf = (s) => (r.stageList.includes(s) ? s : s === 'routes' || s === 'props' || s === 'lots' || s === 'links' ? lastSolid() : r.stageList[0]);

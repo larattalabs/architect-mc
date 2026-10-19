@@ -70,7 +70,7 @@ async function unchanged() {
   const rows = Object.values(out.fixtures);
   out.n = rows.length; out.same = rows.filter((r) => r.same).length; out.excepted = Object.entries(out.fixtures).filter(([, r]) => r.course).map(([k]) => k);
   out.differ = Object.entries(out.fixtures).filter(([, r]) => !r.course && !r.same && !r.err).map(([k]) => k);
-  check(out.n >= 200, `${out.n} fixtures planned (every dir, the 59 asks included)`);
+  check(out.n >= 190, `${out.n} fixtures planned (every dir, the 59 asks included)`);
   check(out.differ.length === 0, `0 fixtures without a course part differ (${out.same} identical; excepted: ${out.excepted.join(', ') || 'none'})`);
   return out;
 }

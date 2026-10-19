@@ -25,9 +25,7 @@ export const id = 'plan_v0';
 export const description = 'A geometric plan (plan/0) compiled to one region: zones, relief, terraces, spikes and routes (6c P0).';
 /** Not in Regions.design's pick: plans come through Regions.checkPlan. */
 export const catalogue = false;
-// (6c HY-a) `hydrology` is declared so the check may call it; compile.mjs runs it only when the plan has a course, race or ditch
-// part (CONTRACT HY §5), so every other plan is byte-identical and D1's `wet` tag reads surveyed water there as before
-export const passes = ['relief', 'route', 'districts', 'hydrology'];
+export const passes = ['relief', 'route', 'districts'];
 
 const J = (maxChars) => ({ type: 'json', default: null, ...(maxChars ? { maxChars } : {}) });
 export const params = {
