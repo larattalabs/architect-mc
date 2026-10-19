@@ -645,7 +645,7 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 
 ## Queued from the H batch integration (coordinator, 2026-10-19)
 
-- **links_demo and links_demo_flat goldens are at kit 0.34.0.** crossings_demo_flat was re-cut for 0.35.0 (only the IR's
+- **Done (housekeeping 3):** both re-cut for kit 0.35.0: only the IR's kitVersion moves. Verified: `kit/tools/region.mjs plan` over each golden's committed survey, params, seed and claim writes an ir.json byte-identical to the golden with only `kitVersion` bumped (and links_demo's one blob identical); every tile sha and the cell counts unchanged, 1 worker = 4 (links_demo 151,293 cells, 16 tiles, irSha 0088689a; links_demo_flat 38,383 cells, 6 tiles, irSha 81f39293). ~~**links_demo and links_demo_flat goldens are at kit 0.34.0.**~~ crossings_demo_flat was re-cut for 0.35.0 (only the IR's
   kitVersion moved). k1b-ingame compares links_demo_flat's IR sha, so re-cut it the same way (bump `kitVersion` in its `ir.json`,
   recompute `tileShas`, confirm tiles and cells unchanged) before the release tier.
 - **The even-width lateral rule elsewhere.** The H batch put a bridge deck's extra column on the route's side (bridgeGeom `latOn`:
