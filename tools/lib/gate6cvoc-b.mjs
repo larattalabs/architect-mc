@@ -565,7 +565,15 @@ const survival = [{
       const { bomOf } = await ctx.imp('lib/connectors/bom.mjs');
       const siteCells = await L.call('dev.site.cells', { site }).catch(() => null);
       // the blocks standing: every cell of the restore box that changed since before the site (dev.box.hash cells: "x,y,z state[ be=nbt]")
-      const cellMap = (h) => new Map((h.cells ?? []).map((l) => { const sp = l.indexOf(' '); return [l.slice(0, sp), l.slice(sp + 1).split(' ')[0]]; }));
+      // (the hash's state is the block state's NBT, {Name:"minecraft:x",Properties:{k:"v",...}}: as "minecraft:x[k=v,...]")
+      const asState = (nbt) => {
+        const n = /Name:"([^"]+)"/.exec(nbt)?.[1];
+        if (!n) return nbt;
+        const pm = /Properties:\{([^}]*)\}/.exec(nbt)?.[1];
+        const props = pm ? pm.split(',').map((kv) => kv.replace(/"/g, '').replace(':', '=')).sort() : [];
+        return props.length ? `${n}[${props.join(',')}]` : n;
+      };
+      const cellMap = (h) => new Map((h.cells ?? []).map((l) => { const sp = l.indexOf(' '); return [l.slice(0, sp), asState(l.slice(sp + 1).split(' be=')[0])]; }));
       const was = cellMap(cells0), now = cellMap(cellsBefore);
       const standing = [];
       for (const [pos, st] of now) if (was.get(pos) !== st && !/^minecraft:(air|cave_air)$/.test(st.replace(/\[.*$/, ''))) standing.push(st);
