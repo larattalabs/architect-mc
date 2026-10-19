@@ -207,6 +207,8 @@ export class Region {
     this.passRuns = [];
     this.blendLots = [];
     this.reliefLots = new Set();
+    // (6c HY-a) the hydrology pass's fields ({flow, wet}: {type, minX, minZ, width, depth, res, values}) once it ran; D1 reads `wet`
+    this.hydrology = null;
   }
 
   /**
@@ -222,6 +224,7 @@ export class Region {
     if (!declared.includes(name)) throw new Error(`PASS_UNDECLARED: the program calls pass '${name}' but does not declare it (export const passes = ['${name}'])`);
     if (name === 'route') return this._route(intent);
     if (name === 'districts') return this._districts(intent);
+    if (name === 'hydrology') return this._hydrology(intent);
     const it = { ...intent };
     const firstLot = (it.around ?? []).find((a) => a && Array.isArray(a.at) && Array.isArray(a.size));
     const stage = it.stage ?? (firstLot ? this.parts.find((p) => p.id === firstLot.part)?.stage : undefined);
@@ -245,6 +248,30 @@ export class Region {
     for (const a of it.around ?? []) if (a && typeof a.id === 'string' && Array.isArray(a.at)) this.reliefLots.add(a.id);
     this.passRuns.push({ name, ms, heapMb });
     this.note(`pass ${name}: ${(ms / 1000).toFixed(1)} s, ${heapMb} MB${out.data?.resolution > 1 ? ` (coarse: resolution ${out.data.resolution})` : ''}`);
+    return res;
+  }
+
+  /**
+   * (6c HY-a) The `hydrology` pass (r.pass('hydrology', {wetFalloff, channelAt, minReach, planWater = true}); passes/hydrology.mjs):
+   * the `flow` and `wet` fields (side blobs) and `data` (with `courses` when `channelAt` is given). The plan's own water bodies
+   * written so far (r.fluidBody) count as water for `wet` unless `planWater: false`. The fields' values stay on the region
+   * (`this.hydrology`): D1's `wet` tag reads them. Returns `{fields: {flow, wet}, ops: 0, data: {...the pass's data, ms}}`.
+   */
+  _hydrology(intent = {}) {
+    if (this.hydrology) throw new Error('pass hydrology: the region runs it once');
+    const { planWater = true, _ran = null, ...it } = intent ?? {};
+    const water = [];
+    if (planWater) for (const b of this._fluidBodies ?? []) if (b.fluid === 'water') for (const q of b.cells) water.push([q[0], q[2]]);
+    const t0 = performance.now();
+    // (`_ran`: {out, ms}, the pass already run on this survey by the plan check, compile.mjs, before the region existed)
+    const out = _ran ? _ran.out : PASSES.hydrology(this.survey.columns, this.ctx.volumes ?? [], { ...it, ...(water.length ? { water } : {}) });
+    const ms = _ran ? _ran.ms : Math.round(performance.now() - t0);
+    const heapMb = Math.round(process.resourceUsage().maxRSS / 1024);
+    const res = { fields: {}, ops: 0, data: { ...out.data, ms } };
+    for (const [fn, f] of Object.entries(out.fields)) res.fields[fn] = this.field(fn, f);
+    this.hydrology = { flow: out.fields.flow, wet: out.fields.wet };
+    this.passRuns.push({ name: 'hydrology', ms, heapMb });
+    this.note(`pass hydrology: ${(ms / 1000).toFixed(1)} s, ${heapMb} MB${out.data.resolution > 1 ? ` (coarse: resolution ${out.data.resolution})` : ''}${out.data.courses ? `; ${out.data.courses.length} channel path(s)` : ''}`);
     return res;
   }
 

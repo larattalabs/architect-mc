@@ -20,6 +20,7 @@ import { validateLots } from '../params.mjs';
 import { PRESETS as ICE_PRESETS } from '../forms/iceSpike.mjs';
 import { PRESETS as ROCK_PRESETS } from '../forms/rockSpire.mjs';
 import { KIT_VERSION } from '../region/plan.mjs';
+import { hydrologyPass } from '../region/passes/hydrology.mjs';
 import { CATALOGUE_VERSION } from './schema.mjs';
 import { keptBuilds, pickBuild, buildEndpoint, buildKeepOut } from '../region/builds.mjs';
 import { besidePorts, emitDistricts, parseDistricts, placeDistricts } from '../region/districtsEmit.mjs';
@@ -640,7 +641,7 @@ export function resolveDistrictsZone(env, p, taken) {
   const notes = [];
   if (p.part.where || p.part.size) notes.push('a districts zone is placed over the claim: its where and size are not read in v0');
   const blocked = [...env.hard.map(rectArr), ...taken.map((q) => rectArr(grow(q, 1)))];
-  const placement = placeDistricts({ S: env.S, claim: env.claim, keepOut: env.keepOut.map(rectArr), blocked, ds });
+  const placement = placeDistricts({ S: env.S, claim: env.claim, keepOut: env.keepOut.map(rectArr), blocked, ds, wet: env.hydro?.out.fields.wet ?? null });
   const placed = ds.filter((d) => placement.pick.has(d.id));
   if (!placed.length) return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `no district has a candidate area (${placement.unplaced.map((u) => `${u.id}: ${u.reason}`).join(', ')})`, evidence: { unplaced: placement.unplaced } }] };
   const unplacedLots = ds.filter((d) => !placement.pick.has(d.id)).reduce((a, d) => a + d.specs.length, 0) + placed.reduce((a, d) => a + placement.pick.get(d.id).L.unplaced.length, 0);
@@ -705,7 +706,7 @@ export function resolveOutpostZone(env, p, taken) {
   let ds;
   try { ds = parseDistricts([{ id, size, lots, outpost: { gap } }], 'zone'); } catch (e) { return { klass: 'malformed', reasons: [{ code: 'SCHEMA', path: `${p.path}.program`, message: e.message }] }; }
   const blocked = [...env.hard.map(rectArr), ...taken.map((q) => rectArr(grow(q, 1)))];
-  const placement = placeDistricts({ S: env.S, claim: env.claim, keepOut: env.keepOut.map(rectArr), blocked, ds, farFrom: taken.map(rectArr) });
+  const placement = placeDistricts({ S: env.S, claim: env.claim, keepOut: env.keepOut.map(rectArr), blocked, ds, farFrom: taken.map(rectArr), wet: env.hydro?.out.fields.wet ?? null });
   if (!placement.pick.has(id)) return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `no candidate area at least ${gap} from the zones placed before it`, evidence: { unplaced: placement.unplaced } }] };
   const c = placement.pick.get(id);
   const unplacedLots = c.L.unplaced.length;
@@ -754,6 +755,16 @@ const addedSince = (r, c) => ({ parts: r.parts.slice(c.parts).map((p) => p.id), 
   paths: Object.keys(r.meta.paths).filter((k) => !(c.pathIds ?? []).includes(k)), nodes: r.graph.nodes.slice(c.nodes ?? 0).map((n) => n.id), edges: r.graph.edges.slice(c.edges ?? 0).map((e) => e.id) });
 
 // ------------------------------------------------------------------ the check
+
+/**
+ * (6c HY-a) Whether a validated plan part is a course, race or ditch (CONTRACT HY §7.1, R24): a channel with `from`, `to` or `via`
+ * (a course; a race when `via` names a lot), or with `where.along` (a ditch). `where.around` is H's moat.
+ */
+export function isCoursePart(p) {
+  if (p.family !== 'connector' || p.kind !== 'channel' || !p.part) return false;
+  const c = p.part;
+  return c.from !== undefined || c.to !== undefined || c.via !== undefined || (c.where !== undefined && c.where !== null && c.where.along !== undefined);
+}
 
 /**
  * Run the check inside plan_v0. Returns `{region, record}`: the region (made by `makeRegion`, or by a whole-claim template) and the
@@ -811,6 +822,13 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   const order = V.order.map((id) => byId.get(id));
   const zonesAccepted = []; // {id, rect}
   const formsAccepted = []; // footprint rects of the forms placed so far
+  // ---- (6c HY-a) the hydrology pass, only when the plan has a course, race or ditch part (CONTRACT HY §5: every other plan is
+  // byte-identical): run here, before the zones resolve, so D1's `wet` tag reads its field; registered on the region below
+  if (V.parts.some(isCoursePart)) {
+    const t1 = performance.now();
+    const out = hydrologyPass(env.cols, ctx.volumes ?? [], {});
+    env.hydro = { out, ms: Math.round(performance.now() - t1) };
+  }
   // ---- 2. resolve zones and forms in order; connectors after
   const reliefOf = new Map(); // zone id -> relief form ids naming it
   for (const p of order) {
@@ -941,6 +959,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     }
   }
   if (!r) { r = makeRegion(null); r.stages(stagesWanted); }
+  if (env.hydro) r.pass('hydrology', { _ran: env.hydro });
   // ((6c H) the fluids stage is a body's alone: a stage that falls back to the last never lands in it)
   const lastSolid = () => r.stageList[r.stageList.length - 1] === FLUIDS_STAGE && r.stageList.length > 1 ? r.stageList[r.stageList.length - 2] : r.stageList[r.stageList.length - 1];
   const stageOf = (s) => (r.stageList.includes(s) ? s : s === 'routes' || s === 'props' || s === 'lots' || s === 'links' ? lastSolid() : r.stageList[0]);

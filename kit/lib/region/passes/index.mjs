@@ -4,7 +4,8 @@
 import { reliefPass } from './relief.mjs';
 import { routePass } from './route.mjs';
 import { districtsPass } from './districts.mjs';
+import { hydrologyPass } from './hydrology.mjs';
 
-/** name -> the pass function. (6c T2) `route`; (6c D1) `districts` (the pure half; r.pass emits through districtsEmit.mjs); HY adds `hydrology`. */
-export const PASSES = Object.freeze({ relief: reliefPass, route: routePass, districts: districtsPass });
+/** name -> the pass function. (6c T2) `route`; (6c D1) `districts` (the pure half; r.pass emits through districtsEmit.mjs); (6c HY-a) `hydrology`. */
+export const PASSES = Object.freeze({ relief: reliefPass, route: routePass, districts: districtsPass, hydrology: hydrologyPass });
 export const PASS_NAMES = Object.freeze(Object.keys(PASSES));
