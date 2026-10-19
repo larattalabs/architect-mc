@@ -1,0 +1,71 @@
+{
+ "about": "(H-b \u00a78.2, \u00a714) K1a's lake-ring refusal re-answered: a wall ring [4, 6] round a zone beside the asks lake crosses the lake's corner, a harbour wall (wet sections full height over the surface, solid to 2 into the bed; no gate in them)",
+ "covers": [
+  "connector.wall"
+ ],
+ "on": "asks",
+ "volume": {},
+ "plan": {
+  "schemaVersion": "plan/0",
+  "zones": [
+   {
+    "id": "town",
+    "program": {
+     "lots": [
+      {
+       "id": "h1",
+       "type": "house",
+       "size": [
+        9,
+        9
+       ]
+      },
+      {
+       "id": "h2",
+       "type": "cottage",
+       "size": [
+        9,
+        9
+       ]
+      },
+      {
+       "id": "h3",
+       "type": "house",
+       "size": [
+        9,
+        9
+       ]
+      }
+     ]
+    },
+    "where": {
+     "near": {
+      "feature": {
+       "water": {
+        "body": "lake"
+       }
+      },
+      "within": 2
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "w",
+    "kind": "wall",
+    "where": {
+     "around": {
+      "feature": {
+       "part": "town"
+      },
+      "ring": [
+       4,
+       6
+      ]
+     }
+    }
+   }
+  ]
+ }
+}

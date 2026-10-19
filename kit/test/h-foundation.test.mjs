@@ -87,7 +87,7 @@ test('the schema: the H defs, waterDepth, farmPond, R21\'s path form, an odd bas
   assert.equal(one({ connectors: [{ id: 'w', kind: 'wall', where: { inside: { claim: true } }, waterDepth: 9 }] }).verdict, 'malformed');
 });
 
-test('the compiler\'s H hooks: the foundation\'s parts answer refused (until Ha, Hb) and add no fluids stage; the wet fallback offers nothing', async () => {
+test('the compiler\'s H hooks: the H parts no longer answer the foundation\'s refusal (until Ha, Hb); a quay alone adds no fluids stage; the wet fallback offers nothing on a leg that failed nothing', async () => {
   const sv = flatSurvey();
   const o = { survey: sv.bytes, claim: sv.claim, anchors: stewardAnchors(sv.claim) };
   const plan = { schemaVersion: 'plan/0', zones: [], connectors: [{ id: 'moat', kind: 'channel', where: { around: { feature: { water: {} } } } }], forms: [{ id: 'pond', kind: 'pond', where: { near: { anchor: 'claim_center' } } }, { id: 'fall', kind: 'waterfall' }, { id: 'jet', kind: 'fountain' }, { id: 'quay', kind: 'quay' }], rules: [] };
@@ -95,11 +95,10 @@ test('the compiler\'s H hooks: the foundation\'s parts answer refused (until Ha,
   const by = Object.fromEntries(r.check.parts.map((a) => [a.part, a]));
   // (H-a built the water bodies: none of them answers the foundation's refusal any more; kit/test/h-a.test.mjs tests them)
   for (const id of ['moat', 'pond', 'fall', 'jet']) assert.ok(!(by[id].reasons?.[0]?.code === 'UNREACHABLE' && by[id].reasons?.[0]?.until === 'Ha'), id);
-  for (const [id, until] of [['quay', 'Hb']]) {
-    assert.equal(by[id].class, 'refused', id);
-    assert.equal(by[id].reasons[0].code, 'UNREACHABLE', id);
-    assert.equal(by[id].reasons[0].until, until, id);
-  }
+  // ((6c H-b) the quay is built: on this dry claim it answers NO_FEATURE (no natural water), never malformed)
+  assert.deepEqual([by.quay.class, by.quay.reasons[0].code], ['refused', 'NO_FEATURE']);
+  // (the H batch: no part answers the foundation's refusal, `until: Ha` or `Hb`)
+  for (const a of r.check.parts) assert.ok(!(a.reasons ?? []).some((x) => x.code === 'UNREACHABLE' && /^H[ab]$/.test(x.until ?? '')), a.part);
   const rq = await checkPlanLocal({ ...plan, connectors: [], forms: [plan.forms[3]] }, o);
   assert.ok(!rq.res.ir.stages.includes(FLUIDS_STAGE), 'no body fits: no fluids stage');
   assert.equal(wetBridgeFallback({}, {}, {}, 'ROUTE_WATER'), null);

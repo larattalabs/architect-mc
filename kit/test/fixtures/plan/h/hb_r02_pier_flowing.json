@@ -1,0 +1,68 @@
+{
+ "about": "(H-b \u00a714) WATER flowing: v47's river, its frozen volume reading the water as flowing (a current): no wet pier stands in it: refused WATER {kind: flowing}, no until",
+ "terrain": {
+  "W": 160,
+  "D": 112,
+  "x0": 1000,
+  "z0": 2000,
+  "bands": [
+   {
+    "x0": 1000,
+    "z0": 2040,
+    "x1": 1159,
+    "z1": 2067,
+    "y": 52,
+    "water": 6
+   }
+  ]
+ },
+ "anchors": {
+  "a": [
+   1080,
+   65,
+   2026
+  ],
+  "b": [
+   1080,
+   65,
+   2082
+  ]
+ },
+ "volume": {
+  "edits": [
+   {
+    "box": [
+     1000,
+     53,
+     2040,
+     1159,
+     58,
+     2067
+    ],
+    "class": "WATER",
+    "fluid": "water_flowing"
+   }
+  ]
+ },
+ "expect": {
+  "part": "crossing",
+  "code": "WATER",
+  "kind": "flowing"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "connectors": [
+   {
+    "id": "crossing",
+    "kind": "bridge",
+    "from": {
+     "anchor": "a"
+    },
+    "to": {
+     "anchor": "b"
+    },
+    "width": 3
+   }
+  ]
+ }
+}

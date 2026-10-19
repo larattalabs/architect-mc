@@ -561,7 +561,8 @@ export function routePass(survey, volumes, intent) {
     for (const [x, z, top, level] of it.fluids.shell ?? []) { const k = cellAt(x, z); if (k < 0) continue; flags[k] |= FLAG_WATER; G0[k] = level ?? top - 1; planWater[k] = 2; topFix.set(k, top); }
     for (const [x, z] of it.fluids.lava ?? []) { const k = cellAt(x, z); if (k >= 0) { flags[k] |= FLAG_LAVA; planWater[k] = 3; } }
   }
-  const env = { W, D, r, minX: c.minX, minZ: c.minZ, flags, G: G0, ...(planWater ? { planWater } : {}) };
+  // ((6c H-b) the survey's floor too: the bed under water, for the bridge row's wet piers)
+  const env = { W, D, r, minX: c.minX, minZ: c.minZ, flags, G: G0, F: c.floor, ...(planWater ? { planWater } : {}) };
   const masks = baseMasks(env, it, { keepOut: !_unsafe.noKeepOut });
   // (7a K1) the special moves' pass-level states (a row whose init returns null is off) and their blocked cells (the walls)
   const special = SPECIAL_MOVES.map((m) => ({ m, st: m.init(env, it) })).filter((x) => x.st);

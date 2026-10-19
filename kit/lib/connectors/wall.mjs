@@ -9,6 +9,12 @@
 //   emitWalls(K)        step 5, the links stage: every wall and its gates, each wall under a checkpoint
 // A wall is sealed (no gate at all, S-K1-1) when its gates are 0, or when it is written closed: true and neither a gate part nor a
 // recorded member names a gate (params gates, gate, gate_lot, gateLots: Steward's recorded plans name their gates that way).
+// (6c H-b, §8.2) Harbour walls: a wall whose ring fails on water (OB.WATER), or whose line finds no clear leg on a claim with water, is
+// searched once more over the wet grid (wetWallFallback: natural water up to waterDepth, default 6, clear at 3 a cell; the plan's own
+// water stays an obstacle). Its wet sections stand full height over the water's surface, solid through the water to a footing 2 into
+// the bed (bed - 1), in a block that may stand under water (full, non-waterloggable, no gravity); no gate stands in a wet section. The
+// water under them is read from a frozen volume (the first plan asks it: incomplete VOLUME), recorded (meta.wet, kind wall) and
+// guarded; the answer's geometry gains `wet: [{from, to, depth}]` and `crossing {type: wall, over: water, depth}`.
 import { readParams } from './params.mjs';
 import { MARGIN, OB, lineCells, lineLeg, obstacleGrid, placeRing, ringCells } from './line.mjs';
 import { doorOf, shapeOf } from './style.mjs';
@@ -19,6 +25,7 @@ import { fixtureCells } from '../region/fixtures.mjs';
 import { lampFixture } from '../region/props.mjs';
 import { besidePorts } from '../region/districtsEmit.mjs';
 import { COND } from '../region/program.mjs';
+import { askWet, noteWet, underwaterBlock, underwaterOk, wetKind, wetRuns, wetWallFallback } from '../fluids/wet.mjs';
 
 /** The kinds this module compiles. */
 export const WALL_KINDS = Object.freeze(['wall', 'gate']);
@@ -89,7 +96,7 @@ function standMap(K, walk) {
  * (K1-target) a standing region of the owner the wall rings: its lots stay hard, its roads, paths and ways are walk cells (crossings
  * that get gates) at the surveyed ground.
  */
-function gridOf(K, { allowZones = [], walkStanding = null } = {}) {
+function gridOf(K, { allowZones = [], walkStanding = null, wet = null } = {}) {
   const env = K.env, r = K.r;
   const zoneRects = [];
   for (const p of K.order) {
@@ -105,7 +112,9 @@ function gridOf(K, { allowZones = [], walkStanding = null } = {}) {
   const overlap = [...zoneRects, ...lots, ...forms, ...env.regions.map((a) => grow(a.rect, 1)), ...env.buildRects.map((a) => grow(a.rect, 1)), ...standingHard.map(rect)];
   const walkCells = [...K.walk];
   if (st) for (const q of st.keep) for (let z = q[1]; z <= q[3]; z++) for (let x = q[0]; x <= q[2]; x++) walkCells.push([x, z, env.S.groundAt(x, z)]);
-  return obstacleGrid({ claim: env.claim, cols: env.cols, rects: { [OB.PROTECTED]: protectedR, [OB.OVERLAP]: overlap }, walkCells, keepOut: [...protectedR, ...env.regions.map((a) => a.rect), ...env.buildRects.map((a) => a.rect)], kept: r._keptColumns() });
+  // ((H-b) the wet grid: the plan's own water (its bodies' cells and shells) stays an obstacle)
+  const wetO = wet ? { wet: { ...wet, plan: (r._fluidBodies ?? []).flatMap((b) => [...b.cells, ...b.shell].map((c) => [c[0], c[2]])) } } : {};
+  return obstacleGrid({ claim: env.claim, cols: env.cols, rects: { [OB.PROTECTED]: protectedR, [OB.OVERLAP]: overlap }, walkCells, keepOut: [...protectedR, ...env.regions.map((a) => a.rect), ...env.buildRects.map((a) => a.rect)], kept: r._keptColumns(), ...wetO });
 }
 
 // ------------------------------------------------------------------ step 2: wall lines
@@ -166,7 +175,7 @@ function settingsOf(K, p) {
 const blockerText = (b) => Object.entries(b).map(([k, v]) => `${k.toLowerCase().replace(/_/g, ' ')} ${v}`).join(', ');
 
 /** Plan one wall's line: {positions, cells, ends, closed, I?, devs, notes, joined, crossings, G} or {error: reason}. */
-function lineOf(K, p, st) {
+function lineOf(K, p, st, wet = null) {
   const w = p.part, t = st.thickness;
   const notes = [], devs = [];
   if (st.form === 'around') {
@@ -175,7 +184,7 @@ function lineOf(K, p, st) {
     const [r0, r1] = Array.isArray(w.where.around.ring) ? w.where.around.ring : WALL_DEFAULTS.ring;
     const order = [];
     for (let d = r0; d <= r1; d++) order.push(d);
-    const G = gridOf(K, { walkStanding: tg.standing?.id ?? null });
+    const G = gridOf(K, { walkStanding: tg.standing?.id ?? null, wet });
     const pl = placeRing(G, tg.rect, order, t);
     if (!pl.ok) return { error: { code: pl.code, message: `no clear ring round ${tg.what} at offsets ${r0}..${r1} on its ${pl.side} side (${blockerText(pl.blockers)})`, evidence: { side: pl.side, ring: [r0, r1], blockers: pl.blockers, target: arr(tg.rect) } } };
     return { ...ringOf(K, pl, t, st, notes), devs, notes, target: tg, G };
@@ -195,7 +204,7 @@ function lineOf(K, p, st) {
       for (let d = -(t - 1); d <= WALL_DEFAULTS.edgeStep; d++) order.push(d);
       what = `zone ${inside.part}`;
     }
-    const G = gridOf(K, { allowZones: inside.part ? [inside.part] : [] });
+    const G = gridOf(K, { allowZones: inside.part ? [inside.part] : [], wet });
     const pl = placeRing(G, R, order, t);
     if (!pl.ok) return { error: { code: pl.code, message: `no clear ring on the edge of ${what} (${pl.side} side: ${blockerText(pl.blockers)})`, evidence: { side: pl.side, blockers: pl.blockers, edge: arr(R) } } };
     // a side that stepped off the edge: its cells (a move deviation)
@@ -208,7 +217,7 @@ function lineOf(K, p, st) {
   const joinedLots = ends.filter((e) => e.part !== undefined && K.lotZone.has(e.part)).map((e) => e.part);
   const lotOf = (id) => K.r.lots.find((l) => l.id === id);
   const allowZones = [...new Set(joinedLots.map((l) => K.lotZone.get(l)))];
-  const G = gridOf(K, { allowZones });
+  const G = gridOf(K, { allowZones, wet });
   const apron = new Set();
   for (const id of joinedLots) {
     const l = lotOf(id);
@@ -314,6 +323,8 @@ function makeGate(W, { a, b, y, h, auto, kind, part = null, door = 'none', frame
 /** Whether positions [a - 1, b + 1] are one straight run (the jambs included) clear of the wall's other gates and its ends. */
 function runFree(W, a, b) {
   if (a - 1 < 0 || b + 1 >= W.positions.length) return false;
+  // ((H-b) no gate in a wet section: a gate needs a walk crossing)
+  if (W.wetPos) for (let i = a - 1; i <= b + 1; i++) if (W.wetPos.has(i)) return false;
   const ax = W.positions[a].axis;
   if (ax === 3) return false;
   for (let i = a - 1; i <= b + 1; i++) {
@@ -355,12 +366,43 @@ export function planWalls(K) {
     const dep = K.depState(p);
     if (dep) { K.ans(p, dep); continue; }
     const st = settingsOf(K, p);
-    const L = lineOf(K, p, st);
+    let L = lineOf(K, p, st);
     const notes = [...st.P.notes];
+    // ((6c H-b, §8.2) a ring that fails on water, or a line with no clear leg on a claim with water: once more over the wet grid)
+    let wetW = null;
+    if (L.error && (L.error.code === 'WATER' || (st.form === 'line' && K.env.water?.bodies?.length))) {
+      const wf = wetWallFallback(K, p.part ? p : { part: p }, { code: 'WATER' });
+      const L2 = wf ? lineOf(K, p, st, { waterDepth: wf.waterDepth, vols: wf.vols }) : null;
+      if (L2 && !L2.error) { L = L2; wetW = wf; }
+      else if (L2 && L.error.code === 'WATER') {
+        // still WATER: why (the deepest, flowing or lava water the wet grid refused)
+        const whys = [...(L2.G?.wetWhy?.values() ?? [])];
+        const kind = whys.length ? wetKind(whys) : 'deep';
+        // (the second plan, over water it did not read: incomplete VOLUME)
+        if (kind === 'unread') { K.ans(p, { class: 'incomplete', notes, reasons: [{ code: 'VOLUME', message: 'the water a harbour wall would stand in was not read: prepare (or check with load: "generate"), then check again', evidence: { ...(L.error.evidence ?? {}), kind } }] }); continue; }
+        L = { error: { ...L.error, message: `${L.error.message}; no harbour wall either (${kind === 'deep' ? `water deeper than waterDepth ${wf.waterDepth}` : `${kind === 'lava' ? 'lava' : 'flowing water'}`})`, evidence: { ...(L.error.evidence ?? {}), kind, waterDepth: wf.waterDepth } } };
+      }
+    }
     if (L.error) { K.ans(p, { class: 'refused', reasons: [L.error], notes }); continue; }
+    // ((H-b) the wet sections: their columns read from the frozen volume (asked: the first plan answers incomplete VOLUME), recorded
+    // and guarded)
+    let wetInfo = null;
+    if (wetW) {
+      const cols = [];
+      const pos = new Set();
+      for (const c of L.cells) { const w = L.G.wetAt(L.G.at(c.x, c.z)); if (w) { cols.push([c.x, c.z, w.bed, w.surface]); pos.add(c.pos); } }
+      if (cols.length) {
+        const asked = askWet(K.r, cols);
+        const rec = noteWet(K.r, { id: `${p.id}_wet`.slice(0, 48), part: p.id, kind: 'wall', columns: wetRuns(cols), volume: asked.ref });
+        if (!asked.volume) { K.ans(p, { class: 'incomplete', notes, reasons: [{ code: 'VOLUME', message: 'the water under the harbour wall\'s wet sections was not read: prepare (or check with load: "generate"), then check again', evidence: { box: [asked.box.minX, asked.box.minY, asked.box.minZ, asked.box.maxX, asked.box.maxY, asked.box.maxZ], columns: cols.length } }] }); continue; }
+        (K.record.guards ??= []).push({ part: p.id, body: rec.id, kind: 'wet', fluids: true, volume: rec.volume, runs: rec.columns.flat() });
+        wetInfo = { cols, pos, at: new Map(cols.map((q) => [key(q[0], q[1]), q])), waterDepth: wetW.waterDepth, record: rec.id };
+        notes.push(`a harbour wall: ${pos.size} position(s) stand in natural water (the wet fallback, waterDepth ${wetW.waterDepth})`);
+      }
+    }
     notes.push(...L.notes);
     if (st.sealed) notes.push(st.gatesMax === 0 && (p.part.gates === 0 || st.P.read.gatesMin === 0) ? 'sealed: gates 0 (no gate; routes go round it or refuse)' : 'sealed: closed with no gate part (no gate; routes go round it or refuse)');
-    const W = { id: p.id, p, st, form: st.form, positions: L.positions, cells: L.cells, ends: L.ends ?? [], closed: L.closed, I: L.I ?? null, target: L.target ?? null, joined: L.joined ?? [], gates: [], devs: L.devs, notes, opened: 0, G: L.G };
+    const W = { id: p.id, p, st, form: st.form, positions: L.positions, cells: L.cells, ends: L.ends ?? [], closed: L.closed, I: L.I ?? null, target: L.target ?? null, joined: L.joined ?? [], gates: [], devs: L.devs, notes, opened: 0, G: L.G, ...(wetInfo ? { wet: wetInfo, wetPos: wetInfo.pos } : {}) };
     W.cellAt = new Map(W.cells.map((c) => [key(c.x, c.z), c]));
     // the networks' crossings: open gates (auto), at the network's own surface
     for (const c of L.crossings ?? []) {
@@ -614,6 +656,11 @@ function emitWall(K, W) {
   const capWall = shapeOf(cap, 'wall'), capSlab = shapeOf(cap, 'slab');
   const slabState = (b) => `${b}[type=bottom,waterlogged=false]`;
   const foundation = roles.foundation, surface = roles.path;
+  // ((H-b) a wet section's block under the water's surface: the body where it may stand there, else foundation, else stone bricks)
+  const wetBody = W.wet ? (underwaterOk(body) ? body : underwaterBlock([foundation, roles.structure, 'minecraft:stone_bricks'])) : null;
+  const wetAt = (x, z) => W.wet?.at.get(key(x, z)) ?? null;
+  const footAt = (x, z) => { const w = wetAt(x, z); return w ? w[2] - 1 : S.groundAt(x, z) - 2; };
+  const bodyAt = (x, y, z) => { const w = wetAt(x, z); return w && y <= w[3] ? wetBody : body; };
   // ---- the top per position: the standable surface within 2 of its cells (either side) plus height; a gate's lintel and a course
   // over it
   const n = W.positions.length;
@@ -654,7 +701,7 @@ function emitWall(K, W) {
     if (gapRun && c.pos >= gapRun[0] && c.pos <= gapRun[1]) continue;
     const g = opening.get(key(c.x, c.z));
     if (!g && walkSet.has(key(c.x, c.z))) continue; // never on a walk cell (a network's crossing is a gate)
-    const foot = S.groundAt(c.x, c.z) - 2;
+    const foot = footAt(c.x, c.z);
     const top = T[c.pos];
     if (g && unsafe.noGates) {
       // (the broken variant: the walk left under a filled opening)
@@ -676,7 +723,7 @@ function emitWall(K, W) {
     } else {
       // a jamb (beside an opening, in its run): the frame role up to the lintel
       const jg = W.gates.find((q) => c.pos === q.a - 1 || c.pos === q.b + 1);
-      for (let y = foot; y < top; y++) put(c.x, y, c.z, jg && y > jg.y && y <= jg.y + jg.h + 1 ? frame : body);
+      for (let y = foot; y < top; y++) put(c.x, y, c.z, jg && y > jg.y && y <= jg.y + jg.h + 1 ? frame : bodyAt(c.x, y, c.z));
       if (posEnd.has(c.pos)) { put(c.x, top, c.z, body); capCells.set(key(c.x, c.z), { y: top + 1, merlon: true }); continue; }
     }
     capCells.set(key(c.x, c.z), { y: top, merlon: !st.crenels || (c.depth === t - 1 && (c.pos & 1) === 0) });
@@ -685,7 +732,7 @@ function emitWall(K, W) {
   for (const [x, z] of stubCells(W)) {
     const c = W.cellAt.get(key(x, z));
     const top = (c ? T[c.pos] : Math.max(...T)) + 3;
-    for (let y = S.groundAt(x, z) - 2; y < top; y++) put(x, y, z, body);
+    for (let y = footAt(x, z); y < top; y++) put(x, y, z, bodyAt(x, y, z));
     capCells.set(key(x, z), { y: top, merlon: true });
   }
   // the cap course: wall blocks (merlons, or every cell without crenels), bottom slabs between; a cap with neither: its full block
@@ -783,6 +830,26 @@ function emitWall(K, W) {
   };
   const record = { id: W.id, form: W.form, closed: W.closed, sealed: st.sealed, line, cells: W.cells.length, top: [Math.min(...T), Math.max(...T)], gates: gatesOut.map(({ cells, ...g }) => { void cells; return g; }) };
   const geometry = { form: W.form, line, closed: W.closed, height: st.height, thickness: t, cells: W.cells.length, top: [Math.min(...T), Math.max(...T)], gates: gatesOut.map((g) => ({ id: g.id, at: g.at, width: g.width, door: g.door, auto: g.auto, kind: g.kind })), ...(W.I ? { ring: arr(W.I) } : {}), ...(W.joined.length ? { joined: W.joined } : {}), ...(st.sealed ? { sealed: true } : {}) };
+  // ((H-b) a harbour wall: its wet sections (runs of positions in natural water: from, to at the surface, the deepest water) and its
+  // crossing of the water)
+  if (W.wet) {
+    const runs = [];
+    let cur = null;
+    for (let i = 0; i < n; i++) {
+      const ws = cellsOfPos[i].map((c) => wetAt(c.x, c.z)).filter(Boolean);
+      if (!ws.length) { if (cur) { runs.push(cur); cur = null; } continue; }
+      const q = W.positions[i], d = Math.max(...ws.map((w) => w[3] - w[2])), s = Math.max(...ws.map((w) => w[3]));
+      if (!cur) cur = { from: [q.x, s, q.z], to: [q.x, s, q.z], depth: d, first: i };
+      else { cur.to = [q.x, s, q.z]; cur.depth = Math.max(cur.depth, d); }
+    }
+    if (cur) runs.push(cur);
+    // (a closed ring's run through position 0 joins its last)
+    if (W.closed && runs.length > 1 && runs[0].first === 0 && cellsOfPos[n - 1].some((c) => wetAt(c.x, c.z))) { const last = runs.pop(); runs[0] = { from: last.from, to: runs[0].to, depth: Math.max(last.depth, runs[0].depth), first: last.first }; }
+    geometry.wet = runs.map(({ from, to, depth }) => ({ from, to, depth }));
+    geometry.crossing = { type: 'wall', over: 'water', depth: Math.max(...runs.map((q) => q.depth)) };
+    meta.wet = { record: W.wet.record, columns: W.wet.cols.map((q) => [...q]), waterDepth: W.wet.waterDepth };
+    record.wet = geometry.wet;
+  }
   return { meta, record, geometry, bom: bomOf(states), gateBom };
 }
 

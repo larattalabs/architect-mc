@@ -2,6 +2,12 @@
 // wall.edge takes (each side its smallest clear offset, corners joined), and wall.line's legs (an A* over 4-connected cells with a
 // wall profile: no grade limit, no stairs, width = thickness, cost 1 a cell, 4 a turn, 40 a walk-network crossing). Integer cells,
 // ties by (x, z); pure and deterministic.
+// (6c H-b, §8.2) The wet grid (obstacleGrid's `wet` {waterDepth, vols, plan}: the wet fallback only): natural water columns at most
+// waterDepth deep, sources to the bed (wetColumn), are clear and marked `wet` (G.wet, G.wetAt(k) -> {bed, surface, depth}); deeper,
+// flowing or lava columns stay WATER (G.wetWhy names why); the plan's own water (`plan`: [[x, z]]) stays WATER. A ring's side takes its
+// first dry clear offset, else its first clear one; a line's step costs 3 on a wet cell (dry 1).
+
+import { wetColumn } from '../fluids/wet.mjs';
 
 /** Obstacle classes, in the order a refusal names them. */
 export const OB = Object.freeze({ CLEAR: 0, OUT_OF_CLAIM: 1, PROTECTED: 2, WATER: 3, KEEP_OUT: 4, OVERLAP: 5 });
@@ -18,24 +24,40 @@ export const LINE_COST = Object.freeze({ step: 1, turn: 4, crossing: 40 });
 export const H4 = Object.freeze([[1, 0], [0, 1], [-1, 0], [0, -1]]);
 
 const FLAG_WATER = 1, FLAG_TREE = 4, FLAG_LAVA = 8;
+/** (H-b) A wet wall cell's step cost (§8.2: 3 a cell, dry 1). */
+export const WET_STEP = 3;
 
 /**
  * The grid of a claim: `{x0, z0, W, D, ob: Uint8Array (OB class per cell), walk: Uint8Array (1: a walk cell of an existing network),
  * walkY: Int16Array, at(x, z) -> index | -1}`. `rects`: `{[class]: [{minX, minZ, maxX, maxZ}]}`; `cols`: the survey columns;
  * `walkCells`: [[x, z, y]] the existing networks' walk cells; `keepOut`: rects whose trees within TREE_REACH are obstacles.
  */
-export function obstacleGrid({ claim, cols, rects = {}, walkCells = [], keepOut = [], kept = [] }) {
+export function obstacleGrid({ claim, cols, rects = {}, walkCells = [], keepOut = [], kept = [], wet = null }) {
   const x0 = claim.minX, z0 = claim.minZ, W = claim.maxX - claim.minX + 1, D = claim.maxZ - claim.minZ + 1, n = W * D;
   const ob = new Uint8Array(n), walk = new Uint8Array(n), walkY = new Int16Array(n).fill(-32768);
   const at = (x, z) => (x < x0 || z < z0 || x >= x0 + W || z >= z0 + D ? -1 : (x - x0) + (z - z0) * W);
   const set = (k, c) => { if (k >= 0 && (ob[k] === 0 || c < ob[k])) ob[k] = c; };
   const r = cols.resolution, sx = (x) => Math.floor((x - cols.minX + Math.floor(r / 2)) / r), sz = (z) => Math.floor((z - cols.minZ + Math.floor(r / 2)) / r);
-  const flagAt = (x, z) => { const i = Math.max(0, Math.min(cols.width - 1, sx(x))), j = Math.max(0, Math.min(cols.depth - 1, sz(z))); return cols.flags[i + j * cols.width]; };
+  const colAt = (x, z) => Math.max(0, Math.min(cols.width - 1, sx(x))) + Math.max(0, Math.min(cols.depth - 1, sz(z))) * cols.width;
+  const flagAt = (x, z) => cols.flags[colAt(x, z)];
+  // ((H-b) the wet grid: natural water a wet section may stand in)
+  const wetM = wet ? new Uint8Array(n) : null, wetInfo = wet ? new Map() : null, wetWhy = wet ? new Map() : null;
+  const planWater = wet ? new Set((wet.plan ?? []).map(([x, z]) => `${x},${z}`)) : null;
   for (let z = z0; z < z0 + D; z++) for (let x = x0; x < x0 + W; x++) {
     const k = at(x, z);
     if (x < x0 + MARGIN || z < z0 + MARGIN || x > x0 + W - 1 - MARGIN || z > z0 + D - 1 - MARGIN) set(k, OB.OUT_OF_CLAIM);
-    if (flagAt(x, z) & (FLAG_WATER | FLAG_LAVA)) set(k, OB.WATER);
+    const f = flagAt(x, z);
+    if (wet && (f & FLAG_WATER) && !(f & FLAG_LAVA) && !planWater.has(`${x},${z}`)) {
+      const c = colAt(x, z), w = wetColumn(wet.vols ?? [], x, z, cols.ground[c], cols.floor[c], { waterDepth: wet.waterDepth });
+      if (w.ok) { wetM[k] = 1; wetInfo.set(k, { bed: w.bed, surface: cols.ground[c], depth: w.depth }); continue; }
+      wetWhy.set(k, w.why);
+      set(k, OB.WATER);
+      continue;
+    }
+    if (wet && (f & FLAG_LAVA)) wetWhy.set(k, 'lava');
+    if (f & (FLAG_WATER | FLAG_LAVA)) set(k, OB.WATER);
   }
+  if (wet) for (const key of planWater) { const [x, z] = key.split(',').map(Number); set(at(x, z), OB.WATER); }
   for (const [c, list] of Object.entries(rects)) for (const q of list) {
     for (let z = Math.max(z0, q.minZ); z <= Math.min(z0 + D - 1, q.maxZ); z++) for (let x = Math.max(x0, q.minX); x <= Math.min(x0 + W - 1, q.maxX); x++) set(at(x, z), Number(c));
   }
@@ -47,7 +69,7 @@ export function obstacleGrid({ claim, cols, rects = {}, walkCells = [], keepOut 
     }
   }
   for (const [x, z, y] of walkCells) { const k = at(x, z); if (k >= 0) { walk[k] = 1; if (y > walkY[k]) walkY[k] = y; } }
-  return { x0, z0, W, D, ob, walk, walkY, at };
+  return { x0, z0, W, D, ob, walk, walkY, at, ...(wet ? { wet: wetM, wetAt: (k) => (wetM[k] && !ob[k] ? wetInfo.get(k) : null), wetWhy } : {}) };
 }
 
 // ------------------------------------------------------------------ rings (wall.around, wall.edge)
@@ -82,13 +104,14 @@ function sideClear(G, I, side, t) {
   const straightLo = horiz ? I.minX + 1 : I.minZ + 1, straightHi = horiz ? I.maxX - 1 : I.maxZ - 1;
   const cell = (u, d) => (horiz ? G.at(u, d) : G.at(d, u));
   const crossings = [];
-  let run = null;
+  let run = null, wet = 0;
   for (let u = alongLo; u <= alongHi; u++) {
     let walks = 0;
     for (let d = depthRange[0]; d <= depthRange[1]; d++) {
       const k = cell(u, d);
       if (k < 0) { blockers[OB.OUT_OF_CLAIM] = (blockers[OB.OUT_OF_CLAIM] ?? 0) + 1; ok = false; continue; }
       if (G.ob[k]) { blockers[G.ob[k]] = (blockers[G.ob[k]] ?? 0) + 1; ok = false; }
+      else if (G.wet?.[k]) wet++;
       if (G.walk[k]) walks++;
     }
     if (walks && (walks !== t || u < straightLo || u > straightHi)) { blockers[OB.OVERLAP] = (blockers[OB.OVERLAP] ?? 0) + 1; ok = false; }
@@ -97,7 +120,7 @@ function sideClear(G, I, side, t) {
   if (run) crossings.push(run);
   // a crossing needs a jamb on each side inside the straight run
   for (const c of crossings) if (c.from - 1 < straightLo || c.to + 1 > straightHi) { blockers[OB.OVERLAP] = (blockers[OB.OVERLAP] ?? 0) + 1; ok = false; }
-  return { ok, blockers, crossings: crossings.map((c) => ({ side, ...c })) };
+  return { ok, blockers, crossings: crossings.map((c) => ({ side, ...c })), ...(G.wet ? { wet } : {}) };
 }
 
 /**
@@ -113,6 +136,17 @@ export function placeRing(G, R, order, t) {
     let changed = false;
     for (const side of SIDES) {
       let i = idx[side];
+      // ((H-b) the wet grid: a side keeps its first dry clear offset; only a side with none takes a wet one)
+      if (G.wet) {
+        let j = i;
+        for (; j < order.length; j++) {
+          const I = innerRect(R, { ...o(), [side]: order[j] });
+          if (I.maxX - I.minX < 2 || I.maxZ - I.minZ < 2) continue;
+          const c = sideClear(G, I, side, t);
+          if (c.ok && !c.wet) break;
+        }
+        if (j < order.length) { if (j !== idx[side]) { idx[side] = j; changed = true; } continue; }
+      }
       for (; i < order.length; i++) {
         const I = innerRect(R, { ...o(), [side]: order[i] });
         if (I.maxX - I.minX < 2 || I.maxZ - I.minZ < 2) continue;
@@ -235,7 +269,8 @@ export function lineLeg(G, a, b, t, { free = null, startH = null, goalH = null, 
       if (ni < 0 || nj < 0 || ni >= W || nj >= D) continue;
       const nk = ni + nj * W;
       if (clearAt(nk, h2)) {
-        const ns = nk * 4 + h2, ng = gv + LINE_COST.step + turn;
+        // ((H-b) the wet grid: a step onto a wet cell costs 3)
+        const ns = nk * 4 + h2, ng = gv + (G.wet && lanes(nk, h2).some((x) => x >= 0 && G.wet[x]) ? WET_STEP : LINE_COST.step) + turn;
         if (ng < (g.get(ns) ?? Infinity)) { g.set(ns, ng); par.set(ns, s); how.set(ns, null); heap.push(ng + hd(nk), ng, ns, tieOf(ns)); }
         continue;
       }

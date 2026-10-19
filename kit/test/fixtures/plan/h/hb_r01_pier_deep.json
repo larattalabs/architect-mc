@@ -1,0 +1,53 @@
+{
+ "about": "(H-b \u00a714) WATER deep: a bridge over a 28-wide river 20 deep (a pier in 20 of water; waterDepth 8): refused WATER {kind: deep}, no until",
+ "terrain": {
+  "W": 160,
+  "D": 112,
+  "x0": 1000,
+  "z0": 2000,
+  "bands": [
+   {
+    "x0": 1000,
+    "z0": 2040,
+    "x1": 1159,
+    "z1": 2067,
+    "y": 38,
+    "water": 20
+   }
+  ]
+ },
+ "anchors": {
+  "a": [
+   1080,
+   65,
+   2026
+  ],
+  "b": [
+   1080,
+   65,
+   2082
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "crossing",
+  "code": "WATER",
+  "kind": "deep"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "connectors": [
+   {
+    "id": "crossing",
+    "kind": "bridge",
+    "from": {
+     "anchor": "a"
+    },
+    "to": {
+     "anchor": "b"
+    },
+    "width": 3
+   }
+  ]
+ }
+}

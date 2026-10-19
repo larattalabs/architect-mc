@@ -1,0 +1,52 @@
+{
+ "about": "(H-b \u00a78.4) the street fallback with wet piers: a road whose every route crosses a 28-wide river (T3's fallback finds no dry pier site): crossed on a beam on wet piers, adjusted with T3's `crossing` deviation",
+ "terrain": {
+  "W": 48,
+  "D": 112,
+  "x0": 1000,
+  "z0": 2000,
+  "bands": [
+   {
+    "x0": 1000,
+    "z0": 2040,
+    "x1": 1047,
+    "z1": 2067,
+    "y": 52,
+    "water": 6
+   }
+  ]
+ },
+ "anchors": {
+  "a": [
+   1024,
+   65,
+   2020
+  ],
+  "b": [
+   1024,
+   65,
+   2090
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "r",
+  "class": "adjusted",
+  "wet": true
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "connectors": [
+   {
+    "id": "r",
+    "kind": "road",
+    "from": {
+     "anchor": "a"
+    },
+    "to": {
+     "anchor": "b"
+    }
+   }
+  ]
+ }
+}

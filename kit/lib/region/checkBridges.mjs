@@ -13,6 +13,9 @@
 // Also under M10:bridge: the landings' anchors 2 deep in solid ground (under the walk's fill when the landing stands on it), an arch's
 // abutments, the newel posts. Per bridge `metrics.bridges.per` records the counts (cells, wrong, missing, maxStep, railed, headroom,
 // piersOk, bodyOk, anchorsOk/anchors, postsOk, wet, under). Warnings, as M10. Called by checkRegion (check.mjs); leaves `vw` as it found it.
+// (6c H-b, §8.1) A bridge with wet piers (the record's `wet.columns` [[x, z, bed, surface]]): those columns' cells written in water are
+// M25:wet's to judge (checkFluids.mjs), not counted here; a wet pier stands 2 into the bed (its footing replaced the bed's top 2 cells,
+// sand or gravel included) on solid, non-fluid ground (bearing is M3's); the clearance is judged over the water columns between piers.
 import { profile, y2Of, rightOf } from '../connectors/ropeGeom.mjs';
 import { BRIDGE, sagFor, piersFor } from '../connectors/bridgeGeom.mjs';
 import { F_WRITTEN } from './vworld.mjs';
@@ -42,6 +45,9 @@ export function bridgeRules({ ir, vw, bridges, want, findings, metrics, finding 
       return null;
     };
     const row = { path: pid, form, n, rise, width: hi - lo + 1, cells: 0, wrong: 0, missing: 0, maxStep: 0, railed: 0, headroom: 0, piers: (m.piers ?? []).length, piersOk: 0, bodyOk: true, wet: 0, under: null };
+    // ((H-b) the wet piers' columns)
+    const wetCol = new Set((m.wet?.columns ?? []).map((q) => `${q[0]},${q[1]}`));
+    if (m.wet) row.wetPier = { columns: wetCol.size, cells: m.wet.cells };
     const wrong = [], missing = [];
     for (let v = lo; v <= hi; v++) {
       let prev = null;
@@ -76,7 +82,8 @@ export function bridgeRules({ ir, vw, bridges, want, findings, metrics, finding 
         // 2 deep: the pier's bottom 2 cells stood in the pre-region ground (solid there), and solid ground under the pier
         const base0 = vw.base(x, py0, z), base1 = vw.base(x, py0 + 1, z), under = vw.get(x, py0 - 1, z);
         if (!P.solid[base0] || !P.solid[base1] || P.fluid[base0] || P.fluid[base1]) ok = false;
-        if (!P.solid[under] || P.gravity[under] || P.fluid[under]) ok = false;
+        // ((H-b) a wet pier's footing: on solid, non-fluid ground; a sand or gravel bed under it is M3's bearing)
+        if (!P.solid[under] || (P.gravity[under] && !wetCol.has(`${x},${z}`)) || P.fluid[under]) ok = false;
         if (wetBase(x, py0, z) || wetBase(x, py1, z)) ok = false;
         byPier.set(i, (byPier.get(i) ?? true) && ok);
       }
@@ -111,15 +118,16 @@ export function bridgeRules({ ir, vw, bridges, want, findings, metrics, finding 
     const b = m.box;
     if (b && pi >= 0) for (let x = b.minX; x <= b.maxX; x++) for (let z = b.minZ; z <= b.maxZ; z++) for (let y = b.minY; y <= b.maxY; y++) {
       if (!(vw.flags(x, y, z) & F_WRITTEN) || vw.partAt(x, y, z) !== pi) continue;
-      if (wetBase(x, y, z)) wetCells.push([x, y, z]);
+      if (wetBase(x, y, z) && !wetCol.has(`${x},${z}`)) wetCells.push([x, y, z]);
     }
     row.wet = wetCells.length;
-    if (wetCells.length) push('M10:bridge', m, wetCells.length, wetCells.slice(0, 8), `bridge ${pid}: ${wetCells.length} cell(s) written in water, lava or ice (writes in water wait for H)`);
+    if (wetCells.length) push('M10:bridge', m, wetCells.length, wetCells.slice(0, 8), `bridge ${pid}: ${wetCells.length} cell(s) written in water, lava or ice (outside its wet piers)`);
     // the clearance over water: per water column under the span, the clear cells between the water's surface (its top fluid or ice
     // cell in the pre-region world) and the bridge's lowest solid cell over it
     const wetCols = [];
     for (let i = 1; i <= n; i++) {
       const x = x0 + dx * i, z = z0 + dz * i;
+      if (wetCol.has(`${x},${z}`)) continue;
       let top = null;
       for (let y = Math.min(y0, y0 + rise) + 2; y >= yLo - 40; y--) { if (wetBase(x, y, z)) { top = y; break; } if (P.solid[vw.base(x, y, z)]) break; }
       if (top === null) continue;

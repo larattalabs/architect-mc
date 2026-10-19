@@ -24,7 +24,12 @@
 //   down to the ground, ending 2 deep in it (the ground block and the one under it replaced, which must be site-solid: ROCK or SOIL
 //   in the pre-region classes, or written by the plan); at most 24 tall. The fewest piers, evenly spaced (one spacing, one offset),
 //   ties by the lowest total height, then the smallest offset, then the smallest spacing. No pier on water, a tree or a blocked
-//   column: a dry run longer than 8 with no pier site is WATER (until H).
+//   column: a dry run longer than 8 with no pier site is WATER (kind 'water': a pier is needed in water).
+// - (6c H-b, §8.1) Wet piers (`opts.wet` {waterDepth, floorAt, vols}: the wet fallback only): a pier site over natural water stands
+//   there when every cell from the surface down to the bed is a water source, ice over water or a water plant (the frozen volume's
+//   fluid layer where it covers the column, else the survey's floor) and the water is at most waterDepth deep; the pier runs from the
+//   deck down through the water to a footing replacing the bed's top 2 cells (bed - 1 .. the deck's underside). A wet site weighs 10 a
+//   wet cell more (dry sites win). Failing that, WATER with kind deep, flowing or lava (never `until`).
 // - Arch: 4 <= n <= 24; intrados yi(i) = ys + floor(4 R i (n + 1 - i) / (n + 1)^2), R = max(2, floor(n / 4)); ys the highest
 //   springing that keeps one solid course under the deck's lowest cell at every column (the crown binds); the ring and spandrels
 //   solid from the intrados to the deck in the arch role. Abutments: the landings' ground, site-solid (or written) from 2 under the
@@ -36,6 +41,7 @@ import { voxelClassOf, isGravity } from '../blocks.mjs';
 import { bomOf } from './bom.mjs';
 import { fixtureFor } from '../region/fixtures.mjs';
 import { profile, sagOf, deckY, isSlab, rightOf, lateral, SITE_SOLID } from './ropeGeom.mjs';
+import { WET, askWet, fluidVolumes, noteWet, underwaterBlock, underwaterOk, wetColumn, wetKind, wetRuns } from '../fluids/wet.mjs';
 
 /** The limits (catalogue 6: `connector.bridge`), costs in T2's units (a straight walk cell is 10). */
 export const BRIDGE = Object.freeze({
@@ -45,6 +51,8 @@ export const BRIDGE = Object.freeze({
   gapDepth: 4, narrowMax: 7, narrowDrop: 2,
   // the move's cost: 320 + 30 per deck cell + 40 per pier (rope's 300 + 30 n plus 20, so where both fit, auto keeps K1's rope)
   cost: 320, costPer: 30, costPier: 40,
+  // (6c H-b) a wet pier cell's extra cost (§8.1)
+  costWet: WET.costPierCell,
   // the diagnosis scans this far for a span that would land (a span outside the limits answers SPAN)
   diagMax: 64,
 });
@@ -183,13 +191,28 @@ export function checkBridge(land, a, dir, n, rise, width, opts = {}) {
   let piers = [];
   if (form === 'beam') {
     const every = opts.every ?? BRIDGE.pierEvery, depth = opts.depth ?? 2;
-    // each deck index's pier site: dry, not a tree, not blocked, 2 deep in site-solid, at most pierDepth tall
+    const wet = opts.wet ?? null;
+    // each deck index's pier site: dry, not a tree, not blocked, 2 deep in site-solid, at most pierDepth tall; (H-b) with `wet`, a
+    // natural water column too (a source to the bed, at most waterDepth deep: the pier's footing replaces the bed's top 2 cells)
     const site = [null];
     let waterRun = 0, worstRun = 0;
     for (let i = 1; i <= n; i++) {
       let s = { ok: true, height: 0, cols: [] };
       for (let v = lo - 1; v <= hi + 1 && s.ok; v++) {
         const [x, z] = col(i, v), g = land.groundAt(x, z);
+        if (land.waterAt(x, z) && wet) {
+          if (land.blocked(x, z)) { s = { ok: false, why: 'blocked', at: [x, z] }; break; }
+          let w = wetColumn(wet.vols ?? [], x, z, g, wet.floorAt(x, z), { waterDepth: wet.waterDepth });
+          // (the broken variant flowingPier: a pier stands in flowing water anyway; M25:wet must catch it)
+          if (!w.ok && w.why === 'flowing' && wet.unsafeFlowing) w = { ok: true, bed: wet.floorAt(x, z) };
+          if (!w.ok) { s = w.why === 'blocked' ? { ok: false, why: 'blocked', at: [x, z] } : { ok: false, water: true, why: w.why, at: [x, z], depth: w.depth }; break; }
+          const y0 = w.bed - 1, h = lowest[i] - 1 - y0 + 1;
+          if (h > BRIDGE.pierDepth) { s = { ok: false, why: 'depth', at: [x, z], depth: h }; break; }
+          s.height += h;
+          s.wet = (s.wet ?? 0) + (g - w.bed);
+          s.cols.push({ x, z, y0, y1: lowest[i] - 1, wet: g - w.bed, bed: w.bed, surface: g });
+          continue;
+        }
         if (land.waterAt(x, z)) { s = { ok: false, water: true, at: [x, z] }; break; }
         if (land.topAt(x, z) > g || land.blocked(x, z)) { s = { ok: false, why: land.blocked(x, z) ? 'blocked' : 'tree', at: [x, z] }; break; }
         for (let d = 0; d < depth; d++) if (!solidAt(x, g - d, z)) { s = { ok: false, why: 'class', at: [x, g - d, z], class: land.classAt(x, g - d, z) }; break; }
@@ -214,10 +237,12 @@ export function checkBridge(land, a, dir, n, rise, width, opts = {}) {
       const first = set[0], last = n + 1 - set[set.length - 1], sp = set.length > 1 ? set[1] - set[0] : 0;
       return [h, Math.max(first, last, sp), Math.abs(first - last), first, sp];
     };
+    // (H-b) a wet site weighs as it costs (10 a wet cell over the pier's 1 a cell of height): dry sites win
+    const weight = (i) => site[i].height + (site[i].wet ? BRIDGE.costWet * site[i].wet : 0);
     for (let k = kMin; k <= Math.min(n, kMin + 2) && !best; k++) {
       for (const set of pierSets(n, k, every)) {
         if (!set.every((i) => site[i].ok)) continue;
-        const key = keyOf(set, set.reduce((t, i) => t + site[i].height, 0));
+        const key = keyOf(set, set.reduce((t, i) => t + weight(i), 0));
         if (!best || cmpKeys(key, best.key) < 0) best = { set, key };
       }
     }
@@ -232,22 +257,29 @@ export function checkBridge(land, a, dir, n, rise, width, opts = {}) {
       if (!stuck) best = { set, greedy: true };
     }
     if (!best) {
-      // why: a stretch of more than `every` deck cells with no usable site, holding water, is a pier needed in water (until H)
+      // why: a stretch of more than `every` deck cells with no usable site, holding water, is a pier needed in water (the dry search;
+      // H-b's wet fallback searches again with wet piers: then deep, flowing or lava)
       let prev = 0, wetGap = null;
+      const whys = [];
       for (let i = 1; i <= n + 1; i++) {
         if (i <= n && !site[i].ok) continue;
         if (i - prev > every) {
           const water = [];
-          for (let t = prev + 1; t < i; t++) if (site[t].water) water.push(col(t, 0));
+          for (let t = prev + 1; t < i; t++) if (site[t].water) { water.push(col(t, 0)); if (site[t].why) whys.push(site[t].why); }
           if (water.length && !wetGap) wetGap = { from: prev, to: i, water: water.length, sample: water.slice(0, 6) };
         }
         prev = i;
       }
-      if (wetGap) return fail('WATER', { kind: 'water', pierNeeded: true, run: wetGap, message: `a pier is needed in water (deck cells ${wetGap.from + 1}..${wetGap.to - 1}): writes in water wait for H` }, { until: 'H' });
+      if (wetGap && !wet) return fail('WATER', { kind: 'water', pierNeeded: true, run: wetGap, message: `a pier is needed in water (deck cells ${wetGap.from + 1}..${wetGap.to - 1})` });
+      if (wetGap) {
+        const kind = wetKind(whys);
+        const deepest = Math.max(0, ...site.slice(1).filter((q) => q && q.why === 'deep').map((q) => q.depth ?? 0));
+        return fail('WATER', { kind, pierNeeded: true, run: wetGap, waterDepth: wet.waterDepth, ...(kind === 'deep' ? { depth: deepest } : {}), message: kind === 'deep' ? `a pier is needed in water ${deepest} deep, past waterDepth ${wet.waterDepth} (deck cells ${wetGap.from + 1}..${wetGap.to - 1})` : kind === 'unread' ? `a pier is needed in water the plan has not read (deck cells ${wetGap.from + 1}..${wetGap.to - 1})` : `a pier is needed in ${kind === 'lava' ? 'lava' : 'flowing water'} (deck cells ${wetGap.from + 1}..${wetGap.to - 1}): a wet pier stands only in still natural water` });
+      }
       const why = site.slice(1).filter((s) => !s.ok);
       return fail('ANCHOR', { piers: 'no pier set', found: why.slice(0, 12).map((s) => ({ at: s.at, why: s.why ?? 'water', ...(s.class ? { class: s.class } : {}), ...(s.depth ? { depth: s.depth } : {}) })), ...(why.some((s) => s.depth) ? { depth: Math.max(...why.filter((s) => s.depth).map((s) => s.depth)) } : {}) });
     }
-    piers = best.set.map((i) => ({ i, cols: site[i].cols, height: Math.max(...site[i].cols.map((c) => c.y1 - c.y0 + 1)) }));
+    piers = best.set.map((i) => ({ i, cols: site[i].cols, height: Math.max(...site[i].cols.map((c) => c.y1 - c.y0 + 1)), ...(site[i].wet ? { wet: site[i].wet } : {}) }));
     void worstRun;
   }
   let depth = 0;
@@ -357,7 +389,8 @@ export function bridgeSpan(r, a, b, opts = {}) {
   const land = opts.land ?? null;
   if (!c) {
     if (!land) throw new Error(`${what}: no land to check the span against (opts.land or opts.check)`);
-    c = checkBridge(land, [a[0], a[1], a[2]], dir, n, rise, width, { form: opts.form ?? 'auto', clearance: opts.clearance ?? BRIDGE.clearance, ...(u.every ? { every: u.every } : {}), ...(u.depth ? { depth: u.depth } : {}) });
+    const wetO = opts.wet ? { wet: { waterDepth: opts.wet.waterDepth ?? WET.bridgeDepth, floorAt: opts.wet.floorAt ?? r.survey.floorAt, vols: fluidVolumes(r.ctx?.volumes) } } : {};
+    c = checkBridge(land, [a[0], a[1], a[2]], dir, n, rise, width, { form: opts.form ?? 'auto', clearance: opts.clearance ?? BRIDGE.clearance, ...(u.every ? { every: u.every } : {}), ...(u.depth ? { depth: u.depth } : {}), ...wetO });
   }
   if (!c.ok && !(u.pierInWater && c.code === 'WATER')) throw new Error(`${c.code}: ${what}: ${JSON.stringify(c.evidence).slice(0, 300)}`);
   const role = (name) => (Object.prototype.hasOwnProperty.call(r.roles, name) ? name : null);
@@ -382,21 +415,54 @@ export function bridgeSpan(r, a, b, opts = {}) {
     for (let v = lo - 1; v <= hi + 1; v++) { const x = a[0] + dx * mid + rx * v, z = a[2] + dz * mid + rz * v; cols.push({ x, z, y0: (opts.floorAt ? opts.floorAt(x, z) : land.groundAt(x, z) - 4) - 1, y1: c.lowest[mid] - 1 }); }
     c.piers = [{ i: mid, cols, height: c.lowest[mid] - cols[0].y0 }];
   }
-  const g = bridgeCells(c, [a[0], a[1], a[2]], dir, n, rise, width, { lampEvery, noRails: !!u.noRails, noPiers: !!u.noPiers, noLamps });
   const part = opts.part ?? 'links';
+  const id = opts.id ?? `${part}_bridge_${(r.meta.bridges?.length ?? 0) + 1}`;
+  // (6c H-b, §8.1, §10) wet piers: the frozen volume over the span's water (every water column under the deck, its width and rails),
+  // asked; each wet pier column re-read from it (a source to the bed: its footing 2 into the real bed); recorded for M25:wet, the
+  // guards and the mod. The first plan has no volume yet: VOLUME (the two-plan flow plans again with it)
+  const wetCols = c.form === 'beam' && !u.noPiers ? (c.piers ?? []).flatMap((q) => q.cols.filter((x) => x.wet !== undefined)) : [];
+  let wetRec = null;
+  if (wetCols.length) {
+    const S = r.survey, { lo, hi } = lateral(width), [rx, rz] = rightOf(dir), foot = new Map();
+    for (let i = 1; i <= n; i++) for (let v = lo - 1; v <= hi + 1; v++) {
+      const x = a[0] + dx * i + rx * v, z = a[2] + dz * i + rz * v;
+      if (S.waterAt(x, z)) foot.set(`${x},${z}`, [x, z, S.floorAt(x, z), S.groundAt(x, z)]);
+    }
+    for (const q of wetCols) { const f = foot.get(`${q.x},${q.z}`); foot.set(`${q.x},${q.z}`, [q.x, q.z, Math.min(q.bed, f ? f[2] : q.bed), Math.max(q.surface, f ? f[3] : q.surface)]); }
+    const asked = askWet(r, [...foot.values()].sort((p, q) => p[0] - q[0] || p[1] - q[1]));
+    const runs = wetRuns(wetCols.map((q) => [q.x, q.z, q.bed, q.surface]));
+    wetRec = noteWet(r, { id: `${id}_wet`, part, kind: 'pier', columns: runs, volume: asked.ref });
+    if (!asked.volume) throw new Error(`VOLUME: ${what}: the water under its wet piers is not read yet (asked: the two-plan flow plans again with it)`);
+    for (const q of wetCols) {
+      if (u.flowingPier) continue;
+      const w = wetColumn([asked.volume], q.x, q.z, q.surface, q.bed, { waterDepth: opts.wet?.waterDepth ?? c.waterDepth ?? 16 });
+      if (!w.ok) throw new Error(`WATER: ${what}: the pier column at ${q.x},${q.z} stands in ${w.why === 'deep' ? `water ${w.depth} deep` : w.why} (the frozen volume)`);
+      if (w.bed !== q.bed) { q.wet = q.surface - w.bed; q.bed = w.bed; q.y0 = w.bed - 1; }
+    }
+  }
+  const g = bridgeCells(c, [a[0], a[1], a[2]], dir, n, rise, width, { lampEvery, noRails: !!u.noRails, noPiers: !!u.noPiers, noLamps });
   const p = r.parts.find((q) => q.id === part) ?? r.part(part, { stage: opts.stage, set: 'path' });
   (r.meta.parts[p.id] ??= {}).kind ??= 'path';
   const slabState = `${dc.slab}[type=bottom,waterlogged=false]`;
   const railState = joinedAlong(railBlock, dir);
   const mats = [dc.block, slabState, railState, pierBlock, archBlock, fx.light];
   const M = { block: 0, slab: 1, hanger: 0, rail: 2, pier: 3, arch: 4, lamp: 5 };
+  // (H-b) a wet pier's block: the pier role where it may stand under water (§1.2: full, non-waterloggable, no gravity), else the
+  // first of structure, foundation, stone bricks that may (appended, so a dry bridge's materials are unchanged)
+  const wetKeys = new Set(wetCols.map((q) => `${q.x},${q.z}`));
+  if (wetCols.length) {
+    const role = (x) => (Object.prototype.hasOwnProperty.call(r.roles, x) ? r.material(x, `${what} wet pier`) : null);
+    // (the broken variant waterloggedWet: a waterlogged state under the surface; M25:wet must catch it)
+    mats.push(u.waterloggedWet ? `${dc.slab}[type=double,waterlogged=true]` : underwaterOk(pierBlock) ? pierBlock : underwaterBlock([role('structure'), role('foundation'), 'minecraft:stone_bricks']));
+    M.wetPier = mats.length - 1;
+  }
   const clr = [];
   for (const [x, y, z] of g.clear) clr.push(x, z, y, y, 0);
   if (clr.length) p.columns({ abs: 0 }, { abs: 0 }, clr, [null]);
   const walkCols = [], solidCols = [];
   for (const [x, y, z, kind, walk] of g.deck) (walk && kind !== 'hanger' ? walkCols : solidCols).push(x, z, y, y, M[kind]);
   for (const [x, y, z] of g.rails) solidCols.push(x, z, y, y, M.rail);
-  for (const [x, y0, y1, z] of g.piers) solidCols.push(x, z, y0, y1, M.pier);
+  for (const [x, y0, y1, z] of g.piers) solidCols.push(x, z, y0, y1, wetKeys.has(`${x},${z}`) ? M.wetPier : M.pier);
   for (const [x, y0, y1, z] of g.body) solidCols.push(x, z, y0, y1, M.arch);
   for (const q of g.posts) solidCols.push(q.x, q.z, q.y0, q.y1, M.pier);
   for (const [x, y, z] of g.lamps) solidCols.push(x, z, y, y, M.lamp);
@@ -405,11 +471,10 @@ export function bridgeSpan(r, a, b, opts = {}) {
   const states = [];
   for (const cols of [solidCols, walkCols]) for (let t = 0; t < cols.length; t += 5) for (let y = cols[t + 2]; y <= cols[t + 3]; y++) states.push(mats[cols[t + 4]]);
   const bom = bomOf(states);
-  const id = opts.id ?? `${p.id}_bridge_${(r.meta.bridges?.length ?? 0) + 1}`;
   const xs = [], ys = [], zs = [];
   for (const cols of [solidCols, walkCols]) for (let t = 0; t < cols.length; t += 5) { xs.push(cols[t]); zs.push(cols[t + 1]); ys.push(cols[t + 2], cols[t + 3]); }
   const box = { minX: Math.min(...xs), minY: Math.min(...ys), minZ: Math.min(...zs), maxX: Math.max(...xs), maxY: Math.max(...ys) + 1, maxZ: Math.max(...zs) };
-  const centre = c.form === 'beam' ? c.piers.map((q) => { const m = q.cols[Math.floor(q.cols.length / 2)]; return { i: q.i, x: m.x, z: m.z, y0: m.y0, y1: m.y1, height: q.height }; }) : [];
+  const centre = c.form === 'beam' ? c.piers.map((q) => { const m = q.cols[Math.floor(q.cols.length / 2)]; return { i: q.i, x: m.x, z: m.z, y0: m.y0, y1: m.y1, height: q.height, ...(q.wet ? { wet: q.cols.reduce((t, x) => t + (x.wet ?? 0), 0) } : {}) }; }) : [];
   const rec = {
     id, kind: 'bridge', part: p.id, box, stage: p.stage, form: c.form, width, n, rise, from: [a[0], a[1], a[2]], to: [b[0], b[1], b[2]], dir, lo: g.lo, hi: g.hi,
     deck: dc.block, slab: slabState, rail: railState, pier: pierBlock, arch: archBlock, light: noLamps ? null : fx.light, lampEvery, y2: c.ys,
@@ -422,6 +487,8 @@ export function bridgeSpan(r, a, b, opts = {}) {
     posts: g.posts.map((q) => ({ ...q })), lamps: g.lamps.map((q) => [q[0], q[1], q[2]]), bom,
     ...(opts.edge ? { edge: opts.edge } : {}), ...(opts.lands ? { lands: opts.lands } : {}), ...(opts.movers ? { movers: [...opts.movers] } : {}),
     ...(Object.keys(u).length ? { _unsafe: { ...u } } : {}),
+    // (H-b) the wet piers: their columns (bed - 3 .. surface + 1, as the wet record), the cells written in water, the volume read
+    ...(wetRec ? { wet: { record: wetRec.id, cells: wetCols.reduce((t, q) => t + q.wet, 0), columns: wetCols.map((q) => [q.x, q.z, q.bed, q.surface]), volume: wetRec.volume } } : {}),
   };
   (r.meta.bridges ??= []).push(rec);
   return rec;
@@ -442,7 +509,7 @@ export function emitRouteBridges(r, { only = null, stage, part = 'links', prefix
     (e.segments ?? []).forEach((g, si) => {
       if (g.kind !== 'bridge') return;
       const a = e.path[g.from], b = e.path[g.to];
-      const rec = bridgeSpan(r, a, b, { ...style, width: g.width ?? e.width, form: g.form, clearance: g.clearance, stage, part, land, ...(g.check ? { check: g.check } : {}), id: `${prefix}${e.id}_${si}`.slice(0, 48), movers: e.movers, edge: e.id,
+      const rec = bridgeSpan(r, a, b, { ...style, width: g.width ?? e.width, form: g.form, clearance: g.clearance, stage, part, land, ...(g.check ? { check: g.check } : {}), ...(g.wet ? { wet: { waterDepth: g.wet.waterDepth } } : {}), id: `${prefix}${e.id}_${si}`.slice(0, 48), movers: e.movers, edge: e.id,
         ...(lands ? { lands: lands(e, si) ?? undefined } : {}), ...(_unsafe ? { _unsafe } : {}) });
       out.push({ edge: e.id, seg: si, ...rec });
     });

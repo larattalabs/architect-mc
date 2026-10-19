@@ -12,8 +12,8 @@
 //   bridgeFallback(K, l) -> {} | null      S-T3-2: a street, road or path leg whose every route crosses water is searched once more with
 //                                          spans ['bridge'] (no once; t3.bridge.diagnose so a failure names a bridge code)
 //   bridgePassInput(K) -> object | null    the pass-level `bridge` input ({volumes}: the caller's frozen volumes, K1b's anchor path)
-//   bridgeFailAnswer(K, l, m) -> answer    a leg the pass could not span: its typed refusal (WATER until H; NO_GAP and WATER get
-//                                          wouldFits in emitBridges)
+//   bridgeFailAnswer(K, l, m) -> answer    a leg the pass could not span: its typed refusal (WATER with its kind, after H-b's wet
+//                                          fallback: deep, flowing or lava; NO_GAP and WATER get wouldFits in emitBridges)
 //   bridgeAnswer(K, p, legs) -> extra      geometry.bridges (n, rise, form, piers, landings, crossing {type: bridge, form, over, depth,
 //                                          clearance, span, lands?}), notes; a street's fallback bridges make it adjusted with a
 //                                          `crossing` deviation
@@ -122,7 +122,7 @@ const MESSAGES = {
   TOO_STEEP: 'the landings differ by more than max(1, n / 8) (the deck\'s rise limit)',
   HEADROOM: 'the deck meets the land, or the clearance over the water can\'t be met',
   ANCHOR: 'no site-solid (rock or soil) 2 deep under a landing, an abutment or a pier, or a pier over 24 tall',
-  WATER: 'a pier is needed in water: writes in water wait for H',
+  WATER: 'a pier is needed in water the wet fallback can\'t stand one in (deeper than waterDepth, flowing water, or lava)',
   UNREACHABLE: 'a span crosses the gap but its far side does not reach the end',
 };
 
@@ -132,6 +132,8 @@ export function bridgeFailAnswer(K, l, m) {
   const st = stateOf(K);
   const o = st.parts.get(l.conn.id);
   if (why.code === 'NO_GAP' || why.code === 'WATER' || (why.code === 'SPAN' && o?.form === 'arch')) st.would.push({ id: l.conn.id, code: why.code, leg: l.k, evidence: why.evidence });
+  // ((6c H-b) the wet fallback's second plan found its crossing only over water it did not read: incomplete VOLUME)
+  if (why.code === 'WATER' && why.evidence?.kind === 'unread') return { class: 'incomplete', ...(o?.notes?.length ? { notes: o.notes } : {}), reasons: [{ code: 'VOLUME', message: `leg ${l.k + 1}: the water under the crossing's wet piers was not read: prepare (or check with load: "generate"), then check again`, evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, ...(why.evidence ?? {}) } }] };
   const reason = { code: why.code, message: `leg ${l.k + 1}: ${MESSAGES[why.code] ?? why.code}`, ...(why.until ? { until: why.until } : {}), evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, ...(why.evidence ?? {}) } };
   return { class: 'refused', ...(o?.notes?.length ? { notes: o.notes } : {}), reasons: [reason] };
 }
@@ -148,13 +150,18 @@ export function bridgeAnswer(K, p, legs) {
   for (const { leg, meta } of legs) for (const g of meta?.segments ?? []) {
     if (g.kind !== 'bridge') continue;
     if (leg?.fallback) fallback = true;
-    bridges.push({ n: g.n, rise: g.rise, dir: [...g.dir], form: g.form, piers: g.piers, width: g.width, from: [...meta.path[g.from]], to: [...meta.path[g.to]], crossing: crossingOf(g) });
+    // ((6c H-b) a span with wet piers: their cells, and each wet pier's index and cells: piers[].wet)
+    const wet = g.wet ? { wet: { cells: g.wet.cells, waterDepth: g.wet.waterDepth, piers: (g.check?.piers ?? []).filter((q) => q.wet).map((q) => ({ i: q.i, wet: q.wet })) } } : {};
+    bridges.push({ n: g.n, rise: g.rise, dir: [...g.dir], form: g.form, piers: g.piers, width: g.width, from: [...meta.path[g.from]], to: [...meta.path[g.to]], crossing: crossingOf(g), ...wet });
   }
   const notes = [...(BRIDGE_KINDS.includes(p.kind) ? o?.notes ?? [] : [])];
   if (BRIDGE_KINDS.includes(p.kind) && o?.clearanceGiven && bridges.length && bridges.every((b) => b.crossing.over !== 'water')) notes.push('clearance not read: the span is dry (R20)');
   if (p.kind === 'auto' && !bridges.length) return null;
   if (!bridges.length && !BRIDGE_KINDS.includes(p.kind)) return null;
   const out = { geometry: { bridges } };
+  // ((6c H-b) a crossing on wet piers says so)
+  const wetN = bridges.reduce((t, b) => t + (b.wet?.cells ?? 0), 0);
+  if (wetN) notes.push(`wet piers: ${wetN} cell(s) stand in natural water (the wet fallback: no dry crossing fit)`);
   if (notes.length) out.notes = notes;
   // S-T3-2: a street, road or path that took the fallback is adjusted: it gained bridges it did not ask for
   if (fallback && FALLBACK_KINDS.includes(p.kind)) {
@@ -210,13 +217,17 @@ export function emitBridges(K) {
         if (ge && BRIDGE_KINDS.includes(p.kind)) { ge.type = 'bridge'; ge.crossing = cr; }
         else if (ge?.segments?.[rec.seg]) ge.segments[rec.seg].crossing = cr;
       }
+      // ((6c H-b, §10) each wet pier set's columns, over the frozen volume it was planned on: the approval guards)
+      for (const rec of recs) if (rec.wet?.volume) (K.record.guards ??= []).push({ part: p.id, body: rec.wet.record, kind: 'wet', fluids: true, volume: rec.wet.volume, runs: ((K.r.meta.wet ?? []).find((w) => w.id === rec.wet.record)?.columns ?? []).flat() });
       const bom = { ...((K.record.bom ??= {})[p.id] ?? {}) };
       for (const r of recs) for (const [item, nn] of Object.entries(r.bom ?? {})) bom[item] = (bom[item] ?? 0) + nn;
       K.record.bom[p.id] = Object.fromEntries(Object.entries(bom).sort(([u], [v]) => (u < v ? -1 : u > v ? 1 : 0)));
     } catch (e) {
       K.rollback(cp);
       const code = (/^([A-Z_]+):/.exec(e.message) ?? [])[1];
-      K.ans(p, { class: 'refused', reasons: [{ code: ['NO_GAP', 'SPAN', 'TOO_STEEP', 'HEADROOM', 'ANCHOR', 'WATER'].includes(code) ? code : 'UNREACHABLE', message: `the bridge span could not be written: ${e.message}`, evidence: { edge: x.meta.id } }] });
+      // ((6c H-b) wet piers over water not read yet: incomplete VOLUME, the volume asked; the two-plan flow plans again with it)
+      if (code === 'VOLUME') K.ans(p, { class: 'incomplete', reasons: [{ code: 'VOLUME', message: `the water under the bridge's wet piers was not read: ${e.message.replace(/^VOLUME: /, '')}; prepare (or check with load: "generate"), then check again`, evidence: { edge: x.meta.id } }] });
+      else K.ans(p, { class: 'refused', reasons: [{ code: ['NO_GAP', 'SPAN', 'TOO_STEEP', 'HEADROOM', 'ANCHOR', 'WATER'].includes(code) ? code : 'UNREACHABLE', message: `the bridge span could not be written: ${e.message}`, evidence: { edge: x.meta.id } }] });
     }
   }
   wouldFits(K);
@@ -242,7 +253,7 @@ function fragmentOf(part, kind, extra = {}, drop = []) {
 }
 
 /**
- * The repairs (§3, §9, S-T3-3): a bridge refused WATER (a pier in water, until H) gets the arch when its span fits, else a rope_bridge of
+ * The repairs (§3, §9, S-T3-3): a bridge refused WATER (a pier in water the wet fallback can't stand: deep, flowing or lava) gets the arch when its span fits, else a rope_bridge of
  * the same ends when that fits alone; an arch refused SPAN gets the beam, else a rope; NO_GAP gets a plain `path` when one routes. Each is a dry run of the route pass (rolled back);
  * the first that routes is the part's `wouldFit` (its fragment, the legs' geometry, the cost).
  */

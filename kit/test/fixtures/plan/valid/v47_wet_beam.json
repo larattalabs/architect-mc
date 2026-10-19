@@ -1,0 +1,52 @@
+{
+ "about": "(H-b \u00a78.1, \u00a714) a 28-wide synthetic river 6 deep: wider than any arch, no dry pier site: a beam on wet piers (footing 2 into the bed, waterDepth 8), 3 wide (a villager road)",
+ "covers": [
+  "connector.bridge",
+  "bridge.beam"
+ ],
+ "terrain": {
+  "W": 160,
+  "D": 112,
+  "x0": 1000,
+  "z0": 2000,
+  "bands": [
+   {
+    "x0": 1000,
+    "z0": 2040,
+    "x1": 1159,
+    "z1": 2067,
+    "y": 52,
+    "water": 6
+   }
+  ]
+ },
+ "anchors": {
+  "a": [
+   1080,
+   65,
+   2026
+  ],
+  "b": [
+   1080,
+   65,
+   2082
+  ]
+ },
+ "volume": {},
+ "plan": {
+  "schemaVersion": "plan/0",
+  "connectors": [
+   {
+    "id": "crossing",
+    "kind": "bridge",
+    "from": {
+     "anchor": "a"
+    },
+    "to": {
+     "anchor": "b"
+    },
+    "width": 3
+   }
+  ]
+ }
+}
