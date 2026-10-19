@@ -361,7 +361,8 @@ export function fluidBody(r, cellsIn, opts = {}) {
   // (6c HY) a plan join's landing cells hold that body's fluid (the flow stops there, as on any other body's water)
   const landing = new Set(planJoins.flatMap((j) => j.cells.map((c) => k3(...c))));
   const world = { at: (x, y, z) => (stop.has(k3(x, y, z)) ? 'stop' : landing.has(k3(x, y, z)) ? fluid : lw.at(x, y, z)), solid: (x, y, z) => stop.has(k3(x, y, z)) || lw.solid(x, y, z) };
-  const sim = simulate(world, [{ id, part, fluid, level, cells, shell }], { breach });
+  // ((6c HY) the single breach covers the lining and the weir too: its reach is watched as the shell's is)
+  const sim = simulate(world, [{ id, part, fluid, level, cells, shell: lining.length ? [...shell, ...lining] : shell }], { breach });
   const b = sim.bodies[0];
   let spill = b.spill;
   let predicted = b.predicted;
@@ -372,7 +373,10 @@ export function fluidBody(r, cellsIn, opts = {}) {
     predicted = predicted.filter((p) => !(p[0] === drop[0] && p[1] === drop[1] && p[2] === drop[2]));
   }
   const spillSet = new Set(spill.map((c) => k3(...c)));
-  const watch = (b.breach ?? []).filter((c) => !spillSet.has(k3(...c)));
+  let watch = (b.breach ?? []).filter((c) => !spillSet.has(k3(...c)));
+  // ((6c HY) every lining and weir cell is watched too: one a breach opens from the far side (the river into a weir's outer course) is
+  // the body's to restore, as a breached shell cell is (H §4.3's reading))
+  if (lining.length) { const seen = new Set(watch.map((c) => k3(...c))); watch = [...watch, ...lining.filter((c) => !seen.has(k3(...c)) && !spillSet.has(k3(...c)))]; }
   // the body, in the fluids stage: sources (and the ice cap) through the evaluator; the rest is the mod's
   const fp = r.part(id, { stage: FLUIDS_STAGE });
   const op = {
