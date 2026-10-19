@@ -344,6 +344,8 @@ export class Region {
       ...(it.walls ? { walls: it.walls } : {}), ...(it.rope ? { rope: it.rope } : {}),
       // (6c T3) the bridge and tunnel moves' pass-level inputs
       ...(it.bridge ? { bridge: it.bridge } : {}), ...(it.tunnel ? { tunnel: it.tunnel } : {}),
+      // (6c H) the plan's own water (lib/fluids/moat.mjs passInput), only when the plan has a body
+      ...(it.fluids ? { fluids: it.fluids } : {}),
     });
     const ms = Math.round(performance.now() - t0);
     const heapMb = Math.round(process.resourceUsage().maxRSS / 1024);

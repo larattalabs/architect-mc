@@ -38,7 +38,7 @@ import { emitTunnels, tunnelAnswer, tunnelAutoLeg, tunnelFailAnswer, tunnelLeg, 
 /** (6c T3) The connector kinds that get the `links` stage and the K context: K1's and T3's. */
 export const LINK_KINDS = Object.freeze([...K1_KINDS, ...T3_KINDS]);
 // (6c H) water bodies and wet structures: the generators behind one dispatcher (lib/fluids/hooks.mjs), the stage name from a leaf
-import { fluidAnswer, fluidEmit, fluidPassInput, fluidResolve, fluidStageWanted, isHPart, wetBridgeFallback } from '../fluids/hooks.mjs';
+import { asksFarmPond, fluidAnswer, fluidEmit, fluidFallbackClearance, fluidFarmPonds, fluidPassInput, fluidResolve, fluidStageWanted, isHPart, wetBridgeFallback } from '../fluids/hooks.mjs';
 import { FLUIDS_STAGE } from '../fluids/kinds.mjs';
 
 /** §7's caps (each a request may only lower). */
@@ -730,7 +730,10 @@ function checkpoint(r) {
 function rollback(r, c) {
   r.parts.length = c.parts; r.partIds = c.partIds; r.lots.length = c.lots; r.lotIds = c.lotIds; r.roads.length = c.roads; r.roadIds = c.roadIds;
   r.paths.length = c.paths; r.graph.nodes.length = c.nodes; r.graph.edges.length = c.edges; r.graphIds = c.graphIds; r.forms.length = c.forms; r.opCount = c.opCount;
-  r.notes.length = c.notes; r.passRuns.length = c.passRuns; r.blendLots.length = c.blend; r.reliefLots = c.relief; r.fields = c.fields; r.sideBlobs = c.sideBlobs;
+  // ((6c H-a) a frozen volume read under the checkpoint stays read: r.volumesUsed keeps it, so its side blob stays with it (else the IR
+  // would name a volume blob it does not hold, and a retry asking the same box would plan without the volume))
+  const volBlobs = Object.fromEntries(Object.values(r.volumesUsed ?? {}).map((u) => [u.blob, r.sideBlobs[u.blob]]).filter(([, b]) => b));
+  r.notes.length = c.notes; r.passRuns.length = c.passRuns; r.blendLots.length = c.blend; r.reliefLots = c.relief; r.fields = c.fields; r.sideBlobs = { ...c.sideBlobs, ...volBlobs };
   const m = JSON.parse(c.meta);
   r.meta.paths = m.paths; r.meta.lots = m.lots; r.meta.parts = m.parts;
   for (const k of ['route', 'gravity', 'forms', 'village', 'villageZones', 'walls', 'ropes', 'bridges', 'tunnels']) { if (m[k] === null) delete r.meta[k]; else r.meta[k] = m[k]; }
@@ -1101,6 +1104,13 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   // walls are planned then: the plan has none)
   const ensureK = () => (K ??= makeK());
 
+  // ---- (6c H, H-a) the farm ponds (farmPond: true on a lot or zone, S-H-2): after the zones, before the routes; their notes on the
+  // zones' answers. A plan whose zones ask for none makes no K context here (as before)
+  if (asksFarmPond(order)) {
+    const fp = fluidFarmPonds(ensureK());
+    for (const [zid, ns] of fp.notes) { const a = answers.get(zid); if (a) a.notes = [...(a.notes ?? []), ...ns]; }
+    for (const q of fp.ponds) if (q.body.volume && q.body.guardRuns) (K.record.guards ??= []).push({ part: q.zone, body: q.body.id, kind: 'body', fluids: true, volume: q.body.volume, runs: q.body.guardRuns });
+  }
   // ---- (6c H) step 3 for H parts: water bodies, moats and quays, before the routes (the route pass sees their water), each under a
   // checkpoint; a generator refuses by throwing 'CODE: message'
   for (const p of order) {
@@ -1116,7 +1126,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     } catch (e) {
       rollback(r, cp);
       const m = /^([A-Z_]{3,20}): /.exec(String(e.message));
-      ans(p, { class: 'refused', reasons: [{ code: m ? m[1] : 'NO_ROOM', message: String(e.message) }] });
+      // ((H-a) a generator's refusal may carry its evidence and a wouldFit on the error)
+      ans(p, { class: 'refused', reasons: [{ code: m ? m[1] : 'NO_ROOM', message: String(e.message), ...(e.evidence ? { evidence: e.evidence } : {}) }], ...(e.wouldFit ? { wouldFit: e.wouldFit } : {}) });
       geom.delete(p.id);
     }
   }
@@ -1230,6 +1241,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         // ((6c T3, S-T3-2) a street, road or path leg whose every route crosses water is searched once more with bridges)
         if (why === 'ROUTE_WATER' && FALLBACK_KINDS.includes(l.conn.kind) && !l.fallback) {
           const fb = bridgeFallback(ensureK(), l);
+          // ((6c H, N-H-5) over the plan's own water only, the fallback's bridge keeps clearance 1)
+          if (fb) { const cl = fluidFallbackClearance(K, l); if (cl !== null) fb.t3.bridge.clearance = cl; }
           if (fb) { l.k1 = { ...(l.k1 ?? {}), ...fb }; l.fallback = true; retry.add(l.conn.id); continue; }
         }
         // ((6c H, §8, S-H-4) a leg still failing on water after T3's fallback, or a bridge leg failing on water, is searched once more

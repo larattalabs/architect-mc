@@ -888,6 +888,26 @@ function villageRules({ ir, vw, village, want, findings, metrics, partStage }) {
     if (want.has('M24') && (l.water === null || l.water > 2)) findings.push(finding('M24', 'pads', partStage.get('pads') ?? null, 1, [l.entrance], `farm ${id}: its lot is ${l.water} from surveyed water (at most 2)`));
   }
   metrics.M24 = { farms: m24, waterInClaim: !!village.waterAny, note: village.waterAny ? null : 'no surface water in the claim: water null, the design brings its own' };
+  // (6c H, §7.5) M24 counts plan-written, unfrozen water too (a farm pond): each farm's distance (Chebyshev, columns) from its box to the
+  // nearest water column of the plan's bodies, outside their ice caps (only when the plan has such water: otherwise as before)
+  const planW = [];
+  for (const p of ir.parts) for (const o of p.ops ?? []) {
+    if (o.op !== 'fluid' || o.fluid !== 'water') continue;
+    const iced = new Set((o.ice ?? []).map((q) => `${q[0]},${q[1]}`));
+    for (const q of o.cells ?? []) if (!iced.has(`${q[0]},${q[1]}`)) planW.push([q[0], q[1]]);
+  }
+  if (planW.length) {
+    const pw = {};
+    for (const [id, l] of Object.entries(lots)) {
+      if (l.villager !== 'farm') continue;
+      const b = (ir.lots ?? []).find((q) => q.id === id)?.box;
+      if (!b) continue;
+      let d = Infinity;
+      for (const [x, z] of planW) d = Math.min(d, Math.max(Math.max(0, b.minX - x, x - b.maxX), Math.max(0, b.minZ - z, z - b.maxZ)));
+      pw[id] = d;
+    }
+    metrics.M24.planWater = pw;
+  }
   // M1: a village part writing into a lot box
   if (want.has('M1')) {
     const byPart = new Map();

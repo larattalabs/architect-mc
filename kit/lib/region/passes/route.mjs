@@ -472,6 +472,24 @@ function baseMasks(env, intent, { water = true, keepOut = true } = {}) {
   return { hard, guard, tree };
 }
 
+/** (6c H) Whether the plan's own water (its columns and shells) separates two cells: a 4-connected flood from `a` that never reaches `b`. */
+export function sealedByPlanWater(pw, W, D, a, b) {
+  if (pw[a] || pw[b]) return false;
+  const seen = new Uint8Array(W * D);
+  const q = [a];
+  seen[a] = 1;
+  for (let h = 0; h < q.length; h++) {
+    const k = q[h];
+    if (k === b) return false;
+    const i = k % W, j = (k - i) / W;
+    if (i > 0 && !seen[k - 1] && !pw[k - 1]) { seen[k - 1] = 1; q.push(k - 1); }
+    if (i < W - 1 && !seen[k + 1] && !pw[k + 1]) { seen[k + 1] = 1; q.push(k + 1); }
+    if (j > 0 && !seen[k - W] && !pw[k - W]) { seen[k - W] = 1; q.push(k - W); }
+    if (j < D - 1 && !seen[k + W] && !pw[k + W]) { seen[k + W] = 1; q.push(k + W); }
+  }
+  return true;
+}
+
 /**
  * Where a path crosses or overlaps itself: path indices `j` whose footprint square shares a column with that of an index `i` more than
  * 2 * width + 2 cells before it (a switchback's legs sit side by side, never on each other; a landing's cells are near in index).
@@ -510,7 +528,8 @@ export function selfClash(P, width) {
  */
 export function routePass(survey, volumes, intent) {
   const c = survey;
-  const it = intent ?? {};
+  // (6c H) the plan's own water (`intent.fluids`, lib/fluids/moat.mjs passInput: every body's columns): a raised body's footprint is hard
+  const it = intent?.fluids ? { ...intent, hard: [...(intent.hard ?? []), ...(intent.fluids.hard ?? [])] } : intent ?? {};
   const { edges = [], maxGrade = 0.25, hairpinLanding = 3, stairs = true, maxCut = 4, maxFill = 4, base = null, _unsafe = {} } = it;
   if (!Array.isArray(edges) || !edges.length) throw new Error('route: `edges` must list the edges to route');
   if (!(typeof maxGrade === 'number' && maxGrade > 0 && maxGrade <= 1)) throw new Error('route: maxGrade must be in (0, 1]');
@@ -525,14 +544,29 @@ export function routePass(survey, volumes, intent) {
       if (bi >= 0 && bj >= 0 && bi < base.width && bj < base.depth) G0[i + j * W] += base.values[bi + bj * base.width];
     }
   }
-  const env = { W, D, r, minX: c.minX, minZ: c.minZ, flags: c.flags, G: G0 };
+  // (6c H) `intent.fluids`: the plan's own water is water to every move (the walks keep off it as off natural water; the bridge row
+  // spans it, its piers never on it): its columns and its shells' carry FLAG_WATER (lava FLAG_LAVA) in the pass's own copy of the
+  // flags, their ground the body's surface (so a deck's clearance is measured from it); a shell column's real top (its rim, or the
+  // bank over it) is the bridge row's head room there. Absent, the pass reads the survey's flags as before (byte for byte).
   const cellAt = (x, z) => {
     const i = Math.floor((x - c.minX) / r), j = Math.floor((z - c.minZ) / r);
     return i < 0 || j < 0 || i >= W || j >= D ? -1 : i + j * W;
   };
+  let flags = c.flags, planWater = null, topFix = null;
+  if (it.fluids) {
+    flags = Uint8Array.from(c.flags);
+    planWater = new Uint8Array(n);
+    topFix = new Map();
+    for (const [x, z, level] of it.fluids.water ?? []) { const k = cellAt(x, z); if (k < 0) continue; flags[k] |= FLAG_WATER; G0[k] = level; planWater[k] = 1; }
+    for (const [x, z, top, level] of it.fluids.shell ?? []) { const k = cellAt(x, z); if (k < 0) continue; flags[k] |= FLAG_WATER; G0[k] = level ?? top - 1; planWater[k] = 2; topFix.set(k, top); }
+    for (const [x, z] of it.fluids.lava ?? []) { const k = cellAt(x, z); if (k >= 0) { flags[k] |= FLAG_LAVA; planWater[k] = 3; } }
+  }
+  const env = { W, D, r, minX: c.minX, minZ: c.minZ, flags, G: G0, ...(planWater ? { planWater } : {}) };
   const masks = baseMasks(env, it, { keepOut: !_unsafe.noKeepOut });
   // (7a K1) the special moves' pass-level states (a row whose init returns null is off) and their blocked cells (the walls)
   const special = SPECIAL_MOVES.map((m) => ({ m, st: m.init(env, it) })).filter((x) => x.st);
+  // (6c H) a shell column of plan water: the bridge row's head room there is the shell's real top (its rim, or the bank over it)
+  if (topFix) for (const x of special) if (x.m.name === 'bridge' && x.st.top) for (const [k, t] of topFix) if (t > x.st.top[k]) x.st.top[k] = t;
   let specialBlocks = null;
   for (const x of special) { const b = x.m.blocks(x.st); if (b) { specialBlocks ??= new Uint8Array(n); for (let k = 0; k < n; k++) specialBlocks[k] |= b[k]; } }
   const builtY = new Int16Array(n).fill(NONE); // an earlier edge's footprint: its surface (or tread) y
@@ -591,6 +625,13 @@ export function routePass(survey, volumes, intent) {
     const needFlag = sp.some((x) => x.m.needsFlag(x.st, e));
     const pruned = sp.map((x) => x.m.prune?.(x.st, ends[0].at, ends[1].at) ?? null).find((v) => v);
     if (pruned) { edgeOut.failed = 'NO_ROUTE'; edgeOut.note = pruned; continue; }
+    // (6c H) the plan's own water between the ends (a closed moat round one of them): no walk crosses it, so an edge that may not
+    // span water fails at once as ROUTE_WATER (the street fallback bridges it) instead of spending the node budget on the claim
+    if (planWater && !sp.some((x) => x.m.crossesWater) && sealedByPlanWater(planWater, W, D, ends[0].k, ends[1].k)) {
+      edgeOut.failed = 'ROUTE_WATER';
+      edgeOut.note = "the plan's own water lies between the ends (a closed ring round one of them): every route crosses water";
+      continue;
+    }
     const build = (water) => {
       const mk = water ? masks : baseMasks(env, it, { water: false, keepOut: !_unsafe.noKeepOut });
       const hardW = dilate(mk.hard, W, D, Rt), guardW = dilate(mk.guard, W, D, Rw), treeW = dilate(mk.tree, W, D, Rt), earlyW = dilate(earlier, W, D, Rt);
@@ -608,7 +649,7 @@ export function routePass(survey, volumes, intent) {
           // never into keep-out or water
           const x = c.minX + i * r, z = c.minZ + j * r;
           if (!_unsafe.noKeepOut && (it.keepOut ?? []).some((b) => x >= b[0] && x <= b[2] && z >= b[1] && z <= b[3])) continue;
-          if (c.flags[k] & (FLAG_WATER | FLAG_LAVA)) continue;
+          if (env.flags[k] & (FLAG_WATER | FLAG_LAVA)) continue;
           blockedW[k] = 0;
         }
       }

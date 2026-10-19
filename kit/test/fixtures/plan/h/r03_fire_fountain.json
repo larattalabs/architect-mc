@@ -1,0 +1,23 @@
+{
+  "about": "(6c H-a, R22) lava asked on a fountain (params.fluid): refused FIRE (lava only in a lined pit), the water fountain as its wouldFit",
+  "on": "flat",
+  "volume": {},
+  "expect": {
+    "part": "fount",
+    "code": "FIRE",
+    "wouldFit": "fountain"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "ha_r03",
+    "forms": [
+      {
+        "id": "fount",
+        "kind": "fountain",
+        "params": {
+          "fluid": "lava"
+        }
+      }
+    ]
+  }
+}

@@ -110,7 +110,9 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
   // plan's seed and keep-out, as scatterPlan's draft), and its virtual world reads the volumes the plan used (the kept natural cells are there, not air); a draft without side blobs
   // (S7, route_demo) stays as it was
   let volumes = [];
-  if (!_format1 && ir.blobs && Object.values(ir.blobs).some((b) => b && b.sha !== undefined)) { // (`_format1`: the broken variant)
+  // ((6c H) a draft holding a fluid body's op (a farm pond, a wet well) is a format-2 IR as well)
+  const fluidOp = ir.parts.some((p) => (p.ops ?? []).some((o) => o.op === 'fluid'));
+  if (!_format1 && ((ir.blobs && Object.values(ir.blobs).some((b) => b && b.sha !== undefined)) || fluidOp)) { // (`_format1`: the broken variant)
     ir.format = 2;
     ir.requires = walkKinds(ir);
     ir.seed = r.ctx.seed; // (the plan's seed: a scatter op places as it will, so its boulders' tops are lit)

@@ -93,12 +93,15 @@ test('the compiler\'s H hooks: the foundation\'s parts answer refused (until Ha,
   const plan = { schemaVersion: 'plan/0', zones: [], connectors: [{ id: 'moat', kind: 'channel', where: { around: { feature: { water: {} } } } }], forms: [{ id: 'pond', kind: 'pond', where: { near: { anchor: 'claim_center' } } }, { id: 'fall', kind: 'waterfall' }, { id: 'jet', kind: 'fountain' }, { id: 'quay', kind: 'quay' }], rules: [] };
   const r = await checkPlanLocal(plan, o);
   const by = Object.fromEntries(r.check.parts.map((a) => [a.part, a]));
-  for (const [id, until] of [['moat', 'Ha'], ['pond', 'Ha'], ['fall', 'Ha'], ['jet', 'Ha'], ['quay', 'Hb']]) {
+  // (H-a built the water bodies: none of them answers the foundation's refusal any more; kit/test/h-a.test.mjs tests them)
+  for (const id of ['moat', 'pond', 'fall', 'jet']) assert.ok(!(by[id].reasons?.[0]?.code === 'UNREACHABLE' && by[id].reasons?.[0]?.until === 'Ha'), id);
+  for (const [id, until] of [['quay', 'Hb']]) {
     assert.equal(by[id].class, 'refused', id);
     assert.equal(by[id].reasons[0].code, 'UNREACHABLE', id);
     assert.equal(by[id].reasons[0].until, until, id);
   }
-  assert.ok(!r.res.ir.stages.includes(FLUIDS_STAGE), 'no body fits: no fluids stage');
+  const rq = await checkPlanLocal({ ...plan, connectors: [], forms: [plan.forms[3]] }, o);
+  assert.ok(!rq.res.ir.stages.includes(FLUIDS_STAGE), 'no body fits: no fluids stage');
   assert.equal(wetBridgeFallback({}, {}, {}, 'ROUTE_WATER'), null);
   assert.equal(wetWallFallback({}, {}, {}), null);
   assert.equal(fluidStageWanted({ order: [], okClass: () => true }), false);

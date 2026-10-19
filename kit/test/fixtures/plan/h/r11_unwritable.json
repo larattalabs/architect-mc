@@ -1,0 +1,7 @@
+{
+  "about": "(6c H-a, §1.1) a pond on ground the realise never replaces (packed ice at the surface, read from the frozen volume): its shell can't be written, so the body can't be closed: refused LEAK {kind: unwritable} naming the cells",
+  "on": "flat",
+  "volume": { "edits": [{ "box": [1099, 64, 2059, 1139, 64, 2099], "class": "ICE", "block": "minecraft:packed_ice" }] },
+  "expect": { "part": "pond", "code": "LEAK", "kind": "unwritable" },
+  "plan": { "schemaVersion": "plan/0", "planId": "ha_r11", "forms": [{ "id": "pond", "kind": "pond", "where": { "near": { "anchor": "stone", "within": 12 } }, "tolerance": { "move": { "max": 0, "hard": true } } }] }
+}

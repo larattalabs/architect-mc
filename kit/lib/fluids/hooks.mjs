@@ -48,6 +48,24 @@ export function fluidPassInput(K) {
   return moat.passInput(K);
 }
 
+/**
+ * (H-a, additive) Compile step 3, after the zones: each farm lot's pond (S-H-1/S-H-2: farmPond: true on a lot or zone, a dry claim).
+ * Returns {ponds, notes: Map(zone id -> [note])}. Only called when a zone of the plan writes farmPond (else the plan is as before).
+ */
+export function fluidFarmPonds(K) {
+  return pond.emitFarmPonds(K);
+}
+
+/** (H-a, additive) Whether a plan's zones ask for farm ponds (a cheap test: compile.mjs makes the K context only then). */
+export function asksFarmPond(order) {
+  return order.some((p) => p.family === 'zone' && /"farmPond":true/.test(JSON.stringify(p.part)));
+}
+
+/** (H-a, additive) N-H-5: the clearance a street fallback's bridge keeps over the plan's own water (1), or null (T3's default). */
+export function fluidFallbackClearance(K, l) {
+  return moat.planWaterClearance(K, l);
+}
+
 /** Whether any part of the plan is H's (its compile runs the H steps). */
 export function hasHParts(order) {
   return order.some(isHPart);

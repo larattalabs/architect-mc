@@ -27,13 +27,15 @@ export function propCells(kind, r, at, o = {}) {
     out.push([x, 1, z, 'minecraft:grass_block'], [x, 2, z, o.flower ?? 'minecraft:poppy']);
     for (const [d, [dx, dz]] of Object.entries(CARDINALS)) out.push([x + dx, 1, z + dz, `minecraft:oak_trapdoor[facing=${d},half=bottom,open=true,powered=false,waterlogged=false]`]);
   } else if (kind === 'well') {
-    // a 3x3 ring (structure) around a dry water cauldron, fence posts on the ring's corners, a slab roof (dry: no fluid in V)
+    // a 3x3 ring (structure) around a dry water cauldron, fence posts on the ring's corners, a slab roof (dry: no fluid in V; (6c H)
+    // o.water: no cauldron, the shaft open over a source 1 under the ring)
     const ring = r.material('structure', 'well ring');
     const slab = variant(ring.replace(/\[.*$/, ''), 'slab') ?? 'minecraft:oak_slab';
     const roof = `${slab}[type=bottom,waterlogged=false]`;
     for (let dx = 0; dx < 3; dx++) for (let dz = 0; dz < 3; dz++) {
       const cx = x + dx, cz = z + dz;
-      if (dx === 1 && dz === 1) out.push([cx, 1, cz, 'minecraft:water_cauldron[level=3]']);
+      // ((6c H) a wet well, o.water: the shaft stays open over the source the well's body writes 1 under the ring: pond.mjs wetWell)
+      if (dx === 1 && dz === 1) { if (!o.water) out.push([cx, 1, cz, 'minecraft:water_cauldron[level=3]']); }
       else out.push([cx, 1, cz, ring]);
       if ((dx === 0 || dx === 2) && (dz === 0 || dz === 2)) out.push([cx, 2, cz, r.material('rail', 'well post')], [cx, 3, cz, r.material('rail', 'well post')]);
       out.push([cx, 4, cz, roof]);
@@ -50,7 +52,7 @@ export function propCells(kind, r, at, o = {}) {
  * inside the space and meets no reserved column (the bell area, the golem space, the square lots' lanes, the street's entries,
  * another prop) and no keep-out. Returns `{props: [{kind, id, cells, foot}], noWalk: Set<"x,z">}`.
  */
-export function planProps(r, { o, sh, res, lots, laneWidth = 2, lamps = 'street', bell = false, keepOut = [], rng }) {
+export function planProps(r, { o, sh, res, lots, laneWidth = 2, lamps = 'street', bell = false, keepOut = [], rng, wellWater = false }) {
   const reserved = new Set();
   const key = (x, z) => `${x},${z}`;
   for (const [x, z] of res.area) reserved.add(key(x, z));
@@ -110,7 +112,7 @@ export function planProps(r, { o, sh, res, lots, laneWidth = 2, lamps = 'street'
   };
   if (bell) scan('bell', [[sh.cu, cv - 3], [sh.cu, cv + 3], [sh.cu - 3, cv], [sh.cu + 3, cv]], { facing: o === 'ew' ? 'north' : 'west' }, 1);
   if (sh.kind === 'square') {
-    scan('well', [[u0, v0], [u0, v1 - 2], [u1 - 2, v0], [u1 - 2, v1 - 2]], {}, 1, 3);
+    scan('well', [[u0, v0], [u0, v1 - 2], [u1 - 2, v0], [u1 - 2, v1 - 2]], wellWater ? { water: true } : {}, 1, 3);
   }
   if (sh.kind === 'square') {
     // benches on the -v and +v edges, facing the square: a stairs block's tall back is on its `facing` side, the edge behind it

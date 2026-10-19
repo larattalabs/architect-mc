@@ -50,6 +50,7 @@ async function plan(argv) {
   let roles = {};
   let patterns = {};
   let connectors = null;
+  let fluids = null;
   if (opts.bible) {
     const b = readJson(opts.bible, '--bible');
     if (!b || typeof b.roles !== 'object') throw new Usage('--bible must be {id?, version?, roles: {role: blockState}, patterns?}');
@@ -58,6 +59,8 @@ async function plan(argv) {
     if (b.patterns && typeof b.patterns === 'object') patterns = { ...b.patterns };
     // (7a K1) the bible's connectors member (role names per wall, gate and rope bridge slot)
     if (b.connectors && typeof b.connectors === 'object' && !Array.isArray(b.connectors)) connectors = b.connectors;
+    // (6c H) the bible's fluids member (role names per slot: bed, rim, coping, spout, quay, mooring)
+    if (b.fluids && typeof b.fluids === 'object' && !Array.isArray(b.fluids)) fluids = b.fluids;
   }
   if (opts.roles) roles = { ...roles, ...readJson(opts.roles, '--roles') };
   if (opts.seed !== undefined && !/^\d{1,20}$/.test(opts.seed)) throw new Usage('--seed must be a u64 decimal');
@@ -90,7 +93,7 @@ async function plan(argv) {
     if (!/^[0-9a-f]{64}$/.test(key)) return null;
     try { return JSON.parse(fs.readFileSync(path.join(opts['plan-cache'], `${key}.json`), 'utf8')); } catch { return null; }
   } : null;
-  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(biomes ? { biomes } : {}) });
+  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(biomes ? { biomes } : {}) });
   if (opts['blobs-out'] && res.blobs.size) {
     fs.mkdirSync(opts['blobs-out'], { recursive: true });
     for (const [sha, bytes] of res.blobs) fs.writeFileSync(path.join(opts['blobs-out'], `${sha}.bin`), bytes);

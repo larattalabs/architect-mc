@@ -22,6 +22,7 @@ import { maskTerms } from '../mask.mjs';
 import { PASS_NAMES } from './passes/index.mjs';
 import { connectorRoles, connectorsError } from '../connectors/style.mjs';
 import { lintFluidState } from '../fluids/body.mjs';
+import { fluidsError } from '../fluids/place.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
 export const KIT_VERSION = '0.35.0';
@@ -305,6 +306,7 @@ export function opBounds(op, blobs, bytesOf = null) {
  * @param {object} [o.roles] extra / bible roles {role: blockState}
  * @param {object} [o.patterns] (6c MP) the bible's role patterns {role: pattern} (lib/pattern.mjs; mats are roles or block states)
  * @param {object} [o.connectors] (7a K1) the bible's connectors member {wall?, gate?, rope_bridge?} (role names; lib/connectors/style.mjs)
+ * @param {object} [o.fluids] (6c H) the bible's fluids member {bed?, rim?, coping?, spout?, quay?, mooring?} (role names; lib/fluids/place.mjs)
  * @param {string} [o.kitVersion] / [o.node] recorded in the IR (defaults: KIT_VERSION, this Node's major)
  * @returns {Promise<{ir, irJson, irSha, notes: string[], stats}>}
  */
@@ -354,12 +356,16 @@ export async function planRegion(o) {
     const ce = connectorsError(o.connectors ?? undefined, roles);
     if (ce) throw new Error(ce);
     const connectors = Object.freeze(connectorRoles(roles, o.connectors ?? null));
+    // (6c H) the bible's fluids member (role names per slot: bed, rim, coping, spout, quay, mooring; lib/fluids/place.mjs)
+    const fe = fluidsError(o.fluids ?? undefined, roles);
+    if (fe) throw new Error(fe);
     passes = declaredPasses(mod);
     const params = resolveValues(mod.params ?? {}, o.params ?? {});
     const seed = o.seed === undefined || o.seed === null || o.seed === 'default' ? defaultSeed(id, params, claim) : toDecimal64(...fromDecimal64(o.seed));
     const onKeepOut = () => { keepOutRead = true; };
     Object.assign(ctx, {
       claim: Object.freeze({ ...claim }), survey: surveyApi(survey, claim, { keepOut, onKeepOut }), roles, patterns, connectors, seed, params: Object.freeze({ ...params }),
+      fluidsGiven: o.fluids ? Object.freeze({ ...o.fluids }) : null,
       kitVersion: o.kitVersion ?? KIT_VERSION, rng: (label) => makeRng(seed, String(label)),
       volumes: o.volumes ?? [],
       // (6c F2) the local stamp library (lib/region/stamps.mjs stampLibrary: a dir or an id -> bytes map; local-only, N-F2-1)

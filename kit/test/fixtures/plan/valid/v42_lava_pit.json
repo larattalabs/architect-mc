@@ -1,0 +1,35 @@
+{
+  "about": "(6c H-a, §1.4, N-H-3) a lined lava pit (3x3, 2 deep) near the claim's centre, a tree 12 east of the stone outside M20's reach (the site keeps 7 off a trunk); one lava bucket per source in cost.bom",
+  "on": "flat",
+  "volume": {},
+  "covers": [
+    "form.pond"
+  ],
+  "terrain": {
+    "trees": [
+      [
+        1131,
+        2079,
+        6
+      ]
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "ha_v42",
+    "forms": [
+      {
+        "id": "pit",
+        "kind": "pond",
+        "fluid": "lava",
+        "depth": 2,
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 20
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "about": "(6c H-a, §7.2) a fountain (basin 5, spout 3) near the claim's centre: a raised basin with a trim coping and a spout whose four sides fall into it",
+  "on": "flat",
+  "volume": {},
+  "covers": [
+    "form.fountain"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "ha_v43",
+    "forms": [
+      {
+        "id": "fount",
+        "kind": "fountain",
+        "basin": 5,
+        "spout": 3,
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 16
+          }
+        }
+      }
+    ]
+  }
+}
