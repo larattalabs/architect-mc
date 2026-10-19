@@ -14988,6 +14988,17 @@ VOC-b can start against a stub vocab (every block `common`, `sv: craft`) and swi
 - **N-VOC-8. The split.** Proposed: VOC-a's first round, then VOC-b in parallel, one batch. The alternative is serial, about
   half a day longer.
 
+### Coordinator decisions (2026-10-19, on Noah's behalf; Noah can overrule at the look step)
+
+- **N-VOC-1:** the bible job's prompt is unchanged (the default). `rarity` reaches the bible by code (S-VOC-1).
+- **N-VOC-3, tiers:** the proposed table as drafted (precious, rare, uncommon), every row with its `why`.
+- **N-VOC-4:** no precious blocks unless a bible or design allows them (cap 0 by default).
+- **N-VOC-5, the look:** four VOC bibles on one village and four buildings, judged at the look step.
+- **N-VOC-6:** a short `kit/README.md` note for the design agent on the new errors and the opt-in warnings.
+- **N-VOC-7:** commit only the derived per-block edges (`kit/vocab/edges.json`), never Mojang's recipes or loot tables.
+- **N-VOC-8:** VOC-a's first round freezes the shared interface; VOC-b then runs in parallel; one batched release. VOC-c only if
+  Steward wants it (S-VOC-2), after VOC-a and VOC-b.
+
 ### Deferred
 
 - Every `rule.*` kind (RC), unless S-VOC-2 pulls `rule.palette` forward as VOC-c.
