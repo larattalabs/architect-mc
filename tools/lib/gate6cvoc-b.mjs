@@ -257,8 +257,12 @@ async function realiseRun(ctx, tag, { claim, plan, bible = null, rarityWant = un
   const rr = await L.call('dev.region.realiseApproved', { sha: c.check.artifactSha }, 300_000);
   if (rr.refused) { check(false, `${tag}: realiseApproved refused (${j(rr.refused)})`); return out; }
   const st = await L.waitRegion(rr.region, 3 * 3_600_000, async (s) => { if (s.view?.waiting?.reason === 'OCCUPIED' || s.waiting?.OCCUPIED) await L.cmd('/kill @e[type=!minecraft:player]'); });
-  out.realise = { region: rr.region, state: st.view.state, cells: st.record?.cellsWritten ?? st.view.cellsWritten, irSha: st.view.irSha };
-  check(st.view.state === 'PLACED' && st.view.irSha === art.body.region.irSha, `${tag}: realiseApproved PLACED from the approved artifact (irSha equal; ${out.realise.cells} cells written; lots ${j(Object.fromEntries((art.body.lots ?? []).map((l) => [l.id, l.entry])))})`);
+  out.realise = { region: rr.region, state: st.view.state, cells: st.record?.cellsWritten ?? st.view.cellsWritten, irSha: st.view.irSha, items: st.items ?? null };
+  // (a plan whose lots have no library entry ends PARTIAL: every tile and road placed, the lots left as their pads)
+  const noEntries = (art.body.lots ?? []).length > 0 && (art.body.lots ?? []).every((l) => !l.entry);
+  const allPlaced = Object.entries(st.items ?? {}).every(([k]) => /:PLACED$/.test(k));
+  const placed = st.view.state === 'PLACED' || (st.view.state === 'PARTIAL' && noEntries && allPlaced);
+  check(placed && st.view.irSha === art.body.region.irSha, `${tag}: realiseApproved ${st.view.state} from the approved artifact (irSha equal; ${out.realise.cells} cells written; items ${j(st.items)}; lots ${j(Object.fromEntries((art.body.lots ?? []).map((l) => [l.id, l.entry ?? null])))}${st.view.state === 'PARTIAL' ? ': PARTIAL is a plan whose lots have no entry, every item placed' : ''})`);
   await L.settle(4000);
   await L.call('dev.region.dump', { box, file: afterF, light: false }, 1_800_000);
   // ---- the realised world against the virtual one; the rules recomputed on it
