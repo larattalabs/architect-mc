@@ -187,7 +187,7 @@ const unit = [
       const sc = spawnSync('npx', ['vitest', 'run', 'test/system-refs.test.ts', 'test/jobs.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
       out.sidecar = { code: sc.status, tail: `${sc.stdout}${sc.stderr}`.split('\n').filter((l) => /Tests|passed|failed/.test(l)).slice(-3) };
       check(sc.status === 0, `S-VOC-6 (sidecar): the systemRef vocab/1 and vocab/1#compact from the kit's generated document; the feature vocab: ${out.sidecar.tail.join(' ')}`, out.sidecar);
-      const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6cvoc'], { cwd: root, encoding: 'utf8', timeout: 900_000 });
+      const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6cvoc'], { cwd: root, encoding: 'utf8', timeout: 900_000, env: { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
       out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').slice(-8) };
       check(ac.status === 0, 'item 14: api-compat --gate6cvoc clean against the 0.37.0, 0.36.1 and 0.36.0 apitest jars and the 0.37.0 jar\'s 1.34.0 surface', out.apicompat.tail);
       return out;
@@ -195,5 +195,209 @@ const unit = [
   },
 ];
 
-export const items = { unit };
+
+// ------------------------------------------------------------------ in game: shared
+
+/** A fresh copy of the flat base world, the bot a spectator over (x, z), the given rules. */
+async function flatWorld(L, name, x, z, rules) {
+  await L.fresh(name, 'G6B Flat Base');
+  await L.tp(x + 0.5, 110, z + 0.5);
+  for (const r of rules) await L.cmd(`/gamerule ${r}`);
+  await L.cmd('/weather clear');
+  await L.cmd('/time set 6000');
+}
+
+/** Item 2's comparison: the live registry dump against the kit's block table and the generator's digests -> the differences. */
+export async function compareRegistry(dump, KIT) {
+  const B = await import(pathToFileURL(path.join(KIT, 'lib', 'blocks.mjs')).href);
+  const edges = JSON.parse(fs.readFileSync(path.join(KIT, 'vocab', 'edges.json'), 'utf8'));
+  const diff = [];
+  const d = (id, what, live, kit) => diff.push({ block: id, what, live, kit });
+  const parse = (s) => {
+    const m = /^([a-z0-9_:]+)(?:\[([^\]]*)\])?$/.exec(s);
+    return { name: m[1], props: Object.fromEntries((m[2] ?? '').split(',').filter(Boolean).map((kv) => kv.split('='))) };
+  };
+  const kitIds = Object.keys(B.BLOCKS).filter((k) => k.startsWith('minecraft:'));
+  for (const id of kitIds) if (!dump.blocks[id]) d(id, 'missing in game', null, 'present');
+  for (const [id, o] of Object.entries(dump.blocks)) {
+    const k = B.BLOCKS[id];
+    if (!k) { d(id, 'missing in the kit', 'present', null); continue; }
+    if (JSON.stringify(o.props) !== JSON.stringify(k.props)) d(id, 'property domains', o.props, k.props);
+    if (JSON.stringify(o.defaults) !== JSON.stringify(k.defaults)) d(id, 'default state', o.defaults, k.defaults);
+    // light per state, from the table's own `L` (emissionOf counts minecraft:light as 0 on purpose): every lit state the game lists
+    // gives the table's level, and the table has as many lit states
+    const lvl = (props) => (!k.L ? 0 : typeof k.L === 'number' ? k.L : k.L.v[k.L.by.map((p) => props[p] ?? k.defaults[p]).join(',')] ?? 0);
+    let kitLit = 0;
+    const names = Object.keys(k.props);
+    const walk = (i, props) => {
+      if (i === names.length) { if (lvl(props) > 0) kitLit++; return; }
+      for (const v of k.props[names[i]]) walk(i + 1, { ...props, [names[i]]: v });
+    };
+    walk(0, {});
+    for (const [s, l] of o.light) { const kv = lvl(parse(s).props); if (kv !== l) d(id, `light ${s}`, l, kv); }
+    if (o.light.length !== kitLit) d(id, 'lit states', o.light.length, kitLit);
+    if (o.rt !== !!k.rt) d(id, 'random ticking', o.rt, !!k.rt);
+    const item = B.itemOf(id) || 'minecraft:air';
+    if (o.item !== item) d(id, 'item', o.item, item);
+    if (o.g !== B.isGravity(id)) d(id, 'falling', o.g, B.isGravity(id));
+    if (o.fs !== B.isFluidStopping(id)) d(id, 'fluid-stopping', o.fs, B.isFluidStopping(id));
+    if (o.fl !== B.isFlammable(id)) d(id, 'flammable', o.fl, B.isFlammable(id));
+    if (JSON.stringify(o.ff) !== JSON.stringify(k.ff ?? [])) d(id, 'required features', o.ff, k.ff ?? []);
+  }
+  const dig = [];
+  for (const kk of ['recipe', 'loot_table', 'tags/block', 'tags/item', 'blockTagsResolved']) if (dump.digests?.[kk]?.sha256 !== edges.digests[kk].sha256) dig.push({ kind: kk, live: dump.digests?.[kk], gen: edges.digests[kk] });
+  for (const kk of ['recipes', 'lootTables']) if (dump.loaded?.[kk]?.sha256 !== edges.digests.loaded[kk].sha256) dig.push({ kind: `loaded ${kk}`, live: dump.loaded?.[kk], gen: edges.digests.loaded[kk] });
+  const ffNeeded = [...new Set(kitIds.flatMap((id) => B.BLOCKS[id].ff ?? []))];
+  return { diff, digests: dig, other: dump.other, features: dump.features, ffMissing: ffNeeded.filter((f) => !dump.features.includes(f)), blocks: Object.keys(dump.blocks).length };
+}
+
+// ------------------------------------------------------------------ registry (voc-registry): item 2
+
+const registry = [{
+  name: 'item 2: the registry step',
+  async run({ L, KIT, check, json, OUT }) {
+    await flatWorld(L, 'G6B VOC Registry', 0, 0, []);
+    const r = await L.call('dev.vocab.registry', {}, 300_000);
+    const dump = JSON.parse(fs.readFileSync(r.file, 'utf8'));
+    fs.copyFileSync(r.file, path.join(OUT, 'vocab-registry.json'));
+    const c = await compareRegistry(dump, KIT);
+    check(c.blocks === 1286 && c.diff.length === 0, `item 2: dev.vocab.registry: ${c.blocks} minecraft: blocks; ids, property domains, default states, light per state, random ticking, items, falling, fluid-stopping, flammable and required features equal kit/lib/blocks.mjs: ${c.diff.length} difference(s)`, c.diff.slice(0, 20));
+    check(true, `item 2 (listed, not judged): other namespaces ${json(c.other)}; the enabled features ${json(c.features)}`);
+    check(c.ffMissing.length === 0, `item 2: every ff block's feature flag enabled in the gate world (${c.ffMissing.length} missing; no 26.3 block needs one)`, c.ffMissing);
+    check(c.digests.length === 0, `item 2: the vanilla pack's recipe, loot_table, tags/block and tags/item bytes, the resolved block tags and the loaded recipe and loot table ids equal what gen-vocab.mjs recorded (${json(Object.fromEntries(['recipe', 'loot_table', 'tags/block', 'tags/item'].map((k) => [k, dump.digests[k].files])))} files)`, c.digests);
+    // the negative control: a doctored copy (one property value removed, one rt flipped) is reported naming both
+    const bad = JSON.parse(JSON.stringify(dump));
+    bad.blocks['minecraft:oak_stairs'].props.facing = bad.blocks['minecraft:oak_stairs'].props.facing.slice(0, -1);
+    bad.blocks['minecraft:stone'].rt = !bad.blocks['minecraft:stone'].rt;
+    const n = await compareRegistry(bad, KIT);
+    const named = n.diff.map((x) => `${x.block} ${x.what}`);
+    check(named.includes('minecraft:oak_stairs property domains') && named.includes('minecraft:stone random ticking') && n.diff.length === 2, `item 2 (negative control): a doctored dump (oak_stairs' facing missing a value, stone's rt flipped) is reported naming both: ${json(named)}`);
+    return { file: r.file, sha256: r.sha256, compare: c, control: named };
+  },
+}];
+
+// ------------------------------------------------------------------ probe (voc-probe): item 10
+
+const AT = (i) => [64 * (i % 6), 100, 64 * Math.floor(i / 6)];
+/** The fire posts: [kind, d, expect caught] (fire's reach from FireBlock.tick: air within 1 aside and -1..+4 up gets fire next to a flammable). */
+const FIRE_POSTS = [
+  ['fire', [2, 0, 0], true], ['fire', [3, 0, 0], false], ['fire', [1, 4, 0], true], ['fire', [1, 5, 0], false], ['fire', [1, -2, 0], true], ['fire', [1, -3, 0], false],
+  ['soul_fire', [1, 0, 0], false], ['soul_fire', [2, 0, 0], false],
+  ['lava', [3, 0, 0], true], ['lava', [4, 0, 0], false], ['lava', [1, 3, 0], true], ['lava', [1, 4, 0], false],
+];
+
+const probe = [{
+  name: 'item 10: the hazards.json rows in game',
+  async run({ L, KIT, check, json }) {
+    const out = {};
+    const H = JSON.parse(fs.readFileSync(path.join(KIT, 'vocab', 'hazards.json'), 'utf8'));
+    const row = (k) => H.rows.find((r) => r.kind === k);
+    await flatWorld(L, 'G6B VOC Probe', 160, 64, ['random_tick_speed 3', 'fire_spread_radius_around_player 128', 'advance_weather false', 'mob_griefing false']);
+    const P = (kind, at, extra = {}) => L.call('dev.vocab.probe', { kind, at, phase: 'setup', ...extra }, 60_000);
+    const R = (kind, at, extra = {}) => L.call('dev.vocab.probe', { kind, at, phase: 'read', ...extra }, 60_000);
+    const near = async (at) => { await L.cmd(`/tp @s ${at[0] + 0.5} ${at[1] + 12} ${at[2] + 0.5}`); await L.call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => {}); };
+    // concrete powder: the powder beside the water sets; the one 2 away doesn't
+    let at = AT(0); await near(at);
+    await P('concrete_powder', at); await L.settle(1500);
+    const cp = await R('concrete_powder', at);
+    out.concrete = cp.states;
+    check(cp.states[0] === 'minecraft:white_concrete' && cp.states[1] === 'minecraft:white_concrete_powder' && row('concrete_powder').reach.face === 1, `item 10 (concrete_powder): powder face-adjacent to water becomes ${cp.states[0]}; powder 2 from it stays ${cp.states[1]} (hazards.json: face)`, cp);
+    // the sponge's reach: a trench of 9 sources; read in the next call (before the water flows back: 5 ticks a step)
+    at = AT(1); await near(at);
+    const sp = await P('sponge', at, { n: 9 });
+    const spr = await R('sponge', at, { n: 9 });
+    const trench = spr.states.slice(1);
+    const reach = trench.findIndex((s) => s === 'minecraft:water[level=0]');
+    out.sponge = { setup: sp.states, read: spr.states, reach };
+    check(spr.states[0] === 'minecraft:wet_sponge' && reach === row('sponge').reach.taxicab, `item 10 (sponge): a dry sponge at the head of a trench of 9 sources turns ${spr.states[0]} and drains the first ${reach} (hazards.json reach: taxicab ${row('sponge').reach.taxicab})`, trench);
+    // the sponge's count cap: a 242-source pool beside it
+    at = AT(2); await near(at);
+    await P('sponge_cap', at);
+    const cap = await R('sponge_cap', at);
+    const drained = cap.states.slice(1).filter((s) => s !== 'minecraft:water[level=0]').length;
+    out.spongeCap = drained;
+    check(cap.states[0] === 'minecraft:wet_sponge' && drained === (row('sponge').reach.max ?? drained), `item 10 (sponge cap): beside a pool of 242 sources the sponge drains ${drained} (hazards.json max: ${row('sponge').reach.max ?? 'none'})`);
+    // magma and soul sand under water: their bubble columns
+    for (const [i, k, drag] of [[3, 'magma', 'true'], [4, 'soul_sand', 'false']]) {
+      at = AT(i); await near(at);
+      await P(k, at); await L.settle(3000);
+      const m = await R(k, at);
+      out[k] = m.states;
+      check(m.states[1] === `minecraft:bubble_column[drag=${drag}]` && row(k).becomes === `minecraft:bubble_column[drag=${drag}]`, `item 10 (${k}): water directly above becomes ${m.states[1]} (hazards.json: ${row(k).becomes})`, m.states);
+    }
+    // fire, soul fire and lava: one post per case, every case at once, then 120 s (lava's ignition is a random tick: random_tick_speed 300)
+    await L.cmd('/gamerule random_tick_speed 300');
+    const cases = FIRE_POSTS.map(([kind, d, expect], j) => ({ kind, d, expect, at: AT(6 + j) }));
+    for (const c of cases) { await near(c.at); await P(c.kind, c.at, { d: c.d }); }
+    await L.cmd(`/tp @s ${AT(6)[0] + 150} 140 ${AT(6)[2] + 64}`);
+    await L.settle(120_000);
+    for (const c of cases) { await near(c.at); const r = await R(c.kind, c.at, { d: c.d }); c.post = r.states[1]; c.caught = r.states[1] !== 'minecraft:oak_planks'; }
+    out.fire = cases.map(({ kind, d, expect, caught, post }) => ({ kind, d, expect, caught, post }));
+    const reachOf = (kind) => {
+      const cs = cases.filter((c) => c.kind === kind && c.caught);
+      return { side: Math.max(0, ...cs.filter((c) => c.d[1] === 0).map((c) => Math.abs(c.d[0]))), above: Math.max(0, ...cs.filter((c) => c.d[1] > 0).map((c) => c.d[1])), below: Math.max(0, ...cs.filter((c) => c.d[1] < 0).map((c) => -c.d[1])) };
+    };
+    for (const k of ['fire', 'soul_fire', 'lava']) {
+      const mine = cases.filter((c) => c.kind === k);
+      const r = reachOf(k);
+      const want = k === 'soul_fire' ? (row('fire').reachSoul ?? null) : row(k).reach.fire;
+      check(mine.every((c) => c.caught === c.expect) && (k === 'soul_fire' ? JSON.stringify(r) === JSON.stringify(want) : r.side === want.side && r.above === want.above && (k === 'lava' || r.below === want.below)), `item 10 (${k}): the posts ${mine.map((c) => `${json(c.d)}:${c.caught ? 'lit' : 'not'}`).join(' ')}; measured reach ${json(r)} (hazards.json: ${json(want)})`, mine);
+    }
+    return out;
+  },
+}];
+
+// ------------------------------------------------------------------ survival (voc-survival): item 4 in game
+
+/** Item 4's fixtures: a small hut with one cell of `block` on its roof (bedrock; reinforced_deepslate, another generated member; none). */
+async function writeFixtures(KIT, lib) {
+  const K = await import(pathToFileURL(path.join(KIT, 'lib', 'kit.mjs')).href);
+  const W = await import(pathToFileURL(path.join(KIT, 'lib', 'write.mjs')).href);
+  const out = {};
+  for (const [id, block] of [['voc_bedrock', 'minecraft:bedrock'], ['voc_reinforced', 'minecraft:reinforced_deepslate'], ['voc_plain', 'minecraft:stone_bricks']]) {
+    const bp = new K.Blueprint({ id, name: id, description: 'VOC gate item 4 fixture', type: 'custom', size: [5, 6, 5], groundY: 1, front: 'south', palette: K.PALETTES.rustic, profile: ['no_floating'] });
+    bp.part('main', () => {
+      bp.floor(0, 0, 4, 4, 0, 'minecraft:stone_bricks');
+      bp.walls(0, 0, 4, 3, 1, 3, { block: 'minecraft:stone_bricks' });
+      bp.floor(0, 0, 4, 3, 4, 'minecraft:stone_bricks');
+      bp.lantern(2, 3, 2, true);
+      bp.carve([2, 1, 3, 2, 2, 3]);
+      bp.door(2, 1, 3, 'south');
+      bp.spot('entrance', 2, 4, 180);
+      bp.spot('spawn', 2, 4, 180);
+    });
+    bp.part('cap', () => bp.set(2, 5, 2, block));
+    W.writeBlueprint(bp, path.join(lib, id));
+    out[id] = block;
+  }
+  return out;
+}
+
+const survival = [{
+  name: 'item 4 in game: the generated creative-only list read by survival placement',
+  async run({ L, KIT, check, json }) {
+    const fx = await writeFixtures(KIT, L.LIBRARY);
+    await flatWorld(L, 'G6B VOC Survival', 300, 300, []);
+    await L.call('dev.survival.set', { on: true });
+    const api = async (args) => {
+      const r = await L.cmd(`/apitest ${args}`);
+      const line = (r.messages ?? []).find((m) => m.startsWith('{') || m.startsWith('['));
+      if (line === undefined) throw new Error(`/apitest ${args}: no JSON answer: ${JSON.stringify(r).slice(0, 300)}`);
+      return JSON.parse(line);
+    };
+    const out = {};
+    for (const [i, id] of Object.keys(fx).entries()) {
+      const v = await api(`check ${id} ${300 + 12 * i} -60 300 CONSTRUCTION owned noactor`);
+      out[id] = { ok: v.ok, construction: v.construction, refusals: v.refusals };
+    }
+    const reasons = (id) => (out[id].refusals ?? []).map((r) => r.reason ?? r.code ?? r);
+    const creative = (id) => (out[id].refusals ?? []).find((r) => (r.reason ?? r.code) === 'CREATIVE_ONLY_BLOCK');
+    check(!!creative('voc_bedrock') && /bedrock/.test(creative('voc_bedrock').message ?? ''), `item 4: in survival a design with bedrock is refused CREATIVE_ONLY_BLOCK as before (${json(creative('voc_bedrock')?.message)})`, out.voc_bedrock);
+    check(!!creative('voc_reinforced') && /reinforced_deepslate/.test(creative('voc_reinforced').message ?? ''), `item 4: one with reinforced_deepslate (another member of the generated list; there are no 26.3 additions) refused the same way (${json(creative('voc_reinforced')?.message)})`, out.voc_reinforced);
+    check(!creative('voc_plain'), `item 4: the same hut without them is not refused CREATIVE_ONLY_BLOCK (${json(reasons('voc_plain'))})`, out.voc_plain);
+    return out;
+  },
+}];
+
+export const items = { unit, registry, probe, survival };
 void sleep;
