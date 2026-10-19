@@ -296,19 +296,29 @@ async function realiseRun(ctx, tag, { claim, plan, bible = null, rarityWant = un
     if (!a.cost) continue;
     const mine = new Set(Object.entries(pc.partOf).filter(([, o]) => o === a.part || (o && o.startsWith('routes:') && o.slice(7).split(',').includes(a.part))).map(([k]) => k));
     const idx = new Set(ir.parts.map((p, i) => (mine.has(p.id) ? i : -1)).filter((i) => i >= 0));
-    const states = [], hist = {};
-    vw.eachWritten((x, y, z, _i, _f, pi) => {
+    const states = [], vstates = [], hist = {};
+    vw.eachWritten((x, y, z, vi, _f, pi) => {
       if (!idx.has(pi)) return;
       const got = after.palette[after.cells[after.at(x, y, z)]];
       states.push(got);
+      vstates.push(vw.pal.states[vi]);
       const n = measured(got);
       if (n) hist[n] = (hist[n] ?? 0) + 1;
     });
     const o = { cells: states.length };
-    if (a.cost.bom) { o.bom = bomOf(states.filter((s) => !/^minecraft:(air|cave_air)$/.test(s.replace(/\[.*$/, '')))); o.bomEqual = canon(o.bom) === canon(a.cost.bom); }
+    const notAir = (q) => !/^minecraft:(air|cave_air)$/.test(q.replace(/\[.*$/, ''));
+    if (a.cost.bom) {
+      // the items standing in the part's cells, realised against planned (judged); cost.bom is K1's/H's bill of what the part emits, so
+      // a cell a later part overwrites (a gate's cut, a lamp on a coping) counts there and not here: listed, not judged
+      o.bom = bomOf(states.filter(notAir));
+      o.bomPlanned = bomOf(vstates.filter(notAir));
+      o.bomEqual = canon(o.bom) === canon(o.bomPlanned);
+      const keys = [...new Set([...Object.keys(a.cost.bom), ...Object.keys(o.bom)])].sort();
+      o.costBomDiff = Object.fromEntries(keys.filter((k) => (a.cost.bom[k] ?? 0) !== (o.bom[k] ?? 0)).map((k) => [k, { costBom: a.cost.bom[k] ?? 0, standing: o.bom[k] ?? 0 }]));
+    }
     if (a.cost.rarity) { const m = measureRarity(hist, style, 'region'); o.rarityEqual = canon(m) === canon(a.cost.rarity); o.rarity = m; }
     out.costs[a.part] = o;
-    if (a.cost.bom) check(o.bomEqual, `${tag}: ${a.part}'s cost.bom equals the items of its realised cells (${Object.values(a.cost.bom).reduce((p, q) => p + q, 0)} items)`, { want: a.cost.bom, got: o.bom });
+    if (a.cost.bom) check(o.bomEqual, `${tag}: ${a.part}: the items of its realised cells equal its planned cells' (${Object.values(o.bom).reduce((p, q) => p + q, 0)} items standing; cost.bom ${Object.values(a.cost.bom).reduce((p, q) => p + q, 0)}, differing where a later part overwrites its cells: ${j(o.costBomDiff)})`, { standing: o.bom, planned: o.bomPlanned, costBom: a.cost.bom });
     if (a.cost.rarity) check(o.rarityEqual, `${tag}: ${a.part}'s cost.rarity equals the counts of its realised cells (${a.cost.rarity.cells} cells, uncommon ${a.cost.rarity.uncommon}, rare ${a.cost.rarity.rare}, precious ${a.cost.rarity.precious})`, { want: a.cost.rarity, got: o.rarity });
   }
   out.snapF = snapF;
@@ -359,13 +369,13 @@ const ingame = [{
     check(bad.code === 'FIELD_LIMIT' && /rarity/.test(`${bad.detail} ${bad.refused}`), `BibleRequest with a malformed rarity: refused FIELD_LIMIT before any job (${bad.code} ${bad.detail}: ${String(bad.refused).slice(0, 160)})`, bad);
     const req = await L.call('dev.vocab.bibleRequest', { prompt: 'VOC-b gate: a white concrete town', name: 'Vocb Modern', scope: 'settlement', rarity: v50.styleJson.rarity }, 120_000);
     out.request = req;
-    check(!req.refused && j(req.wire?.rarity) === j(v50.styleJson.rarity), `BibleRequest.rarity on the wire (Wire4b): ${j(req.wire?.rarity)}${req.refused ? `; refused ${req.refused}` : ''}`);
+    check(!req.refused && canon(req.wire?.rarity) === canon(v50.styleJson.rarity), `BibleRequest.rarity on the wire (Wire4b): ${j(req.wire?.rarity)}${req.refused ? `; refused ${req.refused}` : ''}`);
     let job = req;
     for (let i = 0; i < 120 && req.jobId && !['DONE', 'FAILED', 'CANCELLED'].includes(job.status); i++) { await sleep(2000); job = await L.call('dev.vocab.bibleJob', { jobId: req.jobId }); }
     out.job = { status: job.status, error: job.error ?? null, bibleId: job.bibleId };
     const bf = path.join(L.GAME_DIR, 'architect', 'bibles', job.bibleId ?? 'none', 'bible.json');
     const made = fs.existsSync(bf) ? JSON.parse(fs.readFileSync(bf, 'utf8')) : null;
-    check(job.status === 'DONE' && j(made?.rarity) === j(v50.styleJson.rarity), `the stub sidecar's bible job copied BibleRequest.rarity into ${job.bibleId}'s bible.json byte for byte (${job.status}; ${j(made?.rarity)})`, { made: made?.rarity });
+    check(job.status === 'DONE' && canon(made?.rarity) === canon(v50.styleJson.rarity) && canon(made?.rarity) === canon(req.wire?.rarity), `the stub sidecar's bible job copied BibleRequest.rarity into ${job.bibleId}'s bible.json byte for byte (${job.status}; ${j(made?.rarity)})`, { made: made?.rarity });
     if (made) {
       await L.fresh('G6B VOCb v50r', FLAT);
       out.v50r = await realiseRun(ctx, 'v50r', { claim: FLAT_CLAIM, plan: { ...v50.plan, planId: 'voc_v50r' }, bible: job.bibleId, rarityWant: v50.styleJson.rarity });
