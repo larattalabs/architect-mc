@@ -975,12 +975,63 @@ public final class PlanChecks {
 		}
 		Path vols = level.getServer().getWorldPath(LevelResource.ROOT).resolve(dev.larattalabs.architect.region.volume.VolumeSurvey.STANDALONE_DIR);
 		CompletableFuture<@Nullable String> chain = CompletableFuture.completedFuture(null);
+		int gi = 0;
 		for (JsonElement ge : guards) {
+			String bad = guardMalformed(gi++, ge);
+			if (bad != null) {
+				// (housekeeping 3) a malformed guard answers by name before any survey, never a Gson exception from deep in the diff
+				final String why = bad;
+				chain = chain.thenApply(prev -> prev != null ? prev : why);
+				continue;
+			}
 			JsonObject g = ge.getAsJsonObject();
 			chain = chain.thenCompose(prev -> prev != null ? CompletableFuture.completedFuture(prev) : RegionsImpl.onServer(level.getServer(), () -> guardDiff(level,
 				vols, g)).thenCompose(f -> f));
 		}
 		return chain;
+	}
+
+	/**
+	 * (housekeeping 3) A guard's shape before it is read: an object with {@code volume: {sha: string, box: [6 integers]}} and {@code runs}
+	 * a flat array of integers, a whole number of {@code [x, z, y0, y1]} quads. Null when it holds, else the ARTIFACT_STALE message naming
+	 * the guard (its body and part, or its index) and what is wrong, so a nested or truncated {@code runs} never surfaces as Gson's "Array
+	 * must have size 1".
+	 */
+	static @Nullable String guardMalformed(int index, JsonElement ge) {
+		if (!(ge instanceof JsonObject g)) {
+			return "guard " + index + ": the artifact's guard is malformed (not an object): check the plan again";
+		}
+		boolean fluids = g.get("fluids") instanceof JsonElement fe && fe.isJsonPrimitive() && fe.getAsJsonPrimitive().isBoolean() && fe.getAsBoolean();
+		String name = fluids ? RegionsImpl.str(g, "kind", "body") + " " + RegionsImpl.str(g, "body", "?") + " of " + RegionsImpl.str(g, "part", "?")
+			: RegionsImpl.str(g, "part", "?");
+		String why = null;
+		if (!(g.get("volume") instanceof JsonObject v)) {
+			why = "no volume";
+		} else if (!(v.get("sha") instanceof JsonElement sh && sh.isJsonPrimitive() && sh.getAsJsonPrimitive().isString() && !sh.getAsString().isEmpty())) {
+			why = "its volume has no sha";
+		} else if (!(v.get("box") instanceof JsonArray bx) || bx.size() != 6 || !allInts(bx)) {
+			why = "its volume's box is not 6 integers";
+		} else if (!(g.get("runs") instanceof JsonArray runs)) {
+			why = "no runs";
+		} else if (!allInts(runs)) {
+			why = "runs must be a flat array of integers [x, z, y0, y1, ...]";
+		} else if (runs.size() % 4 != 0) {
+			why = "runs has " + runs.size() + " integers, not a whole number of [x, z, y0, y1] quads";
+		}
+		return why == null ? null : "guard " + index + " (" + name + "): the artifact's guard is malformed (" + why + "): check the plan again";
+	}
+
+	private static boolean allInts(JsonArray a) {
+		for (JsonElement e : a) {
+			if (!(e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber())) {
+				return false;
+			}
+			double d = e.getAsDouble();
+			if (d != Math.rint(d) || d < Integer.MIN_VALUE || d > Integer.MAX_VALUE) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private static CompletableFuture<@Nullable String> guardDiff(ServerLevel level, Path vols, JsonObject g) {

@@ -685,5 +685,5 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   nested guard runs) reached Steward's RC check because our steps only checked such plans. Add a `realiseApproved` round
   for v49 and Steward's hamlet (type-implied farm lot) to ha-ingame, and generally: every H body kind should go through
   realiseApproved at least once in game.
-- **Guard reader robustness:** `PlanChecks.guardDiff` throws Gson's "Array must have size 1" on a malformed `runs`. Validate the
+- **Done (housekeeping 3, mod 0.37.1 placeholder):** `PlanChecks.guardMalformed` checks every guard before any survey (an object; `volume.sha` a string, `volume.box` 6 integers; `runs` a flat integer array, a whole number of quads) and answers ARTIFACT_STALE "guard N (<body> of <part>): the artifact's guard is malformed (...): check the plan again"; `PlanChecksHTest.malformedGuards`. ~~**Guard reader robustness:**~~ `PlanChecks.guardDiff` throws Gson's "Array must have size 1" on a malformed `runs`. Validate the
   shape and answer a clear error instead.

@@ -70,4 +70,28 @@ class PlanChecksHTest {
 		assertEquals(Arvx.VERSION_FLUIDS, VolumeSurvey.encode(new int[] {0, 0, 0, 0, 0, 0}, new byte[1], Map.of(), new boolean[1], new int[1], List.of(Arvx.AIR),
 			new byte[1]).raw()[4]);
 	}
+
+	/** (housekeeping 3) a malformed guard is answered by name, never Gson's "Array must have size 1". */
+	@Test
+	void malformedGuards() {
+		String vol = "\"volume\":{\"sha\":\"abc\",\"box\":[0,0,0,1,1,1]}";
+		assertNull(PlanChecks.guardMalformed(0, j("{\"part\":\"t\"," + vol + ",\"runs\":[0,0,0,2,1,1,0,1]}")));
+		assertNull(PlanChecks.guardMalformed(0, j("{\"part\":\"t\"," + vol + ",\"runs\":[]}")));
+		// H RC3's shape: the farm pond's runs nested per column
+		String m = PlanChecks.guardMalformed(2, j("{\"fluids\":true,\"kind\":\"farmPond\",\"body\":\"fp1\",\"part\":\"farm_1\"," + vol
+			+ ",\"runs\":[[0,0,0,2],[1,1,0,1]]}"));
+		assertTrue(m != null && m.startsWith("guard 2 (farmPond fp1 of farm_1): the artifact's guard is malformed (runs must be a flat array"), m);
+		m = PlanChecks.guardMalformed(0, j("{\"part\":\"bore\"," + vol + ",\"runs\":[0,0,0,2,1]}"));
+		assertTrue(m != null && m.contains("guard 0 (bore)") && m.contains("runs has 5 integers"), m);
+		m = PlanChecks.guardMalformed(0, j("{\"part\":\"bore\"," + vol + ",\"runs\":[0,0,0.5,2]}"));
+		assertTrue(m != null && m.contains("flat array of integers"), m);
+		m = PlanChecks.guardMalformed(0, j("{\"part\":\"bore\"," + vol + "}"));
+		assertTrue(m != null && m.contains("(no runs)"), m);
+		m = PlanChecks.guardMalformed(0, j("{\"part\":\"bore\",\"volume\":{\"sha\":\"abc\",\"box\":[0,0,0]},\"runs\":[]}"));
+		assertTrue(m != null && m.contains("box is not 6 integers"), m);
+		m = PlanChecks.guardMalformed(0, j("{\"part\":\"bore\",\"runs\":[]}"));
+		assertTrue(m != null && m.contains("(no volume)"), m);
+		m = PlanChecks.guardMalformed(4, JsonParser.parseString("[1,2]"));
+		assertTrue(m != null && m.startsWith("guard 4: the artifact's guard is malformed (not an object)"), m);
+	}
 }
