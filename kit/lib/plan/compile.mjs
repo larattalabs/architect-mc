@@ -1119,7 +1119,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   if (asksFarmPond(order)) {
     const fp = fluidFarmPonds(ensureK());
     for (const [zid, ns] of fp.notes) { const a = answers.get(zid); if (a) a.notes = [...(a.notes ?? []), ...ns]; }
-    for (const q of fp.ponds) if (q.body.volume && q.body.guardRuns) (K.record.guards ??= []).push({ part: q.zone, body: q.body.id, kind: 'body', fluids: true, volume: q.body.volume, runs: q.body.guardRuns });
+    for (const q of fp.ponds) if (q.body.volume && q.body.guardRuns) (K.record.guards ??= []).push({ part: q.zone, body: q.body.id, kind: 'body', fluids: true, volume: q.body.volume, runs: q.body.guardRuns.flat() });
   }
   // ---- (6c H) step 3 for H parts: water bodies, moats and quays, before the routes (the route pass sees their water), each under a
   // checkpoint; a generator refuses by throwing 'CODE: message'

@@ -131,3 +131,17 @@ test('a zone asking farmPond with no farm lot says so (never silent)', async () 
   const notes = JSON.stringify(r.check.parts?.find((p) => p.part === 'town')?.notes ?? r.check);
   assert.match(notes, /farmPond: no farm lot/);
 });
+
+// RC2: the farm pond's guard carried its runs nested ([[x, z, y0, y1], ...]); realiseApproved reads a flat [x, z, y0, y1, ...] and
+// threw "Array must have size 1, but has size 4". Every guard of every H plan is flat numbers, in fours.
+test('every guard\'s runs are flat [x, z, y0, y1, ...] (realiseApproved reads them so)', async () => {
+  const s = flatSurvey();
+  for (const plan of [HAMLET, JSON.parse(fs.readFileSync(path.join(FIX, 'valid', 'v49_farm_pond.json'), 'utf8')).plan]) {
+    const r = await checkPlanVolumes(plan, { survey: s.bytes, claim: s.claim, anchors: stewardAnchors(s.claim), volume: {} });
+    const guards = r.artifact?.guards ?? [];
+    assert.ok(guards.length > 0, 'the farm pond is guarded');
+    for (const g of guards) {
+      assert.ok(Array.isArray(g.runs) && g.runs.length % 4 === 0 && g.runs.every((v) => Number.isInteger(v)), `${g.body ?? g.part}: runs not flat`);
+    }
+  }
+});
