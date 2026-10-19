@@ -14596,7 +14596,8 @@ another course's reach) registers an **overflow** on X while the plan resolves (
 join would make the river part of the body, which the census can't hold and the drain can't restore.
 - **A head at natural water** (`from: {feature: {water}}`) is a **weir head**: the head reach's surface at the natural water's
   level, separated from it by a **weir** 2 cells thick (the course's own shell, its crest at the surface, a line of the bible's
-  `fluids.weir` across the water). Nothing flows across a weir: both sides are sources at one level. The single breach of one
+  `fluids.weir` across the water). **A weir stands only on site-solid bank cells** (frozen volume), never in natural water: a
+  bank too thin for 2 cells answers `NO_ROOM` with a `wouldFit` set back from the water. Nothing flows across a weir: both sides are sources at one level. The single breach of one
   weir cell leaves the other cell standing, so the two never connect.
 - **A tail at natural water** (`to: {feature: {water}}`) is a **fall join** (H's join, a drop of at least 1 into natural sources
   at least 2 deep). Where the course reaches the water's level with no drop left, the tail is a weir too.
@@ -14735,7 +14736,8 @@ const h = r.pass('hydrology', { wetFalloff: 12, channelAt: 400, minReach: 6 });
     in the way). A valley past `fill` is not `UNREACHABLE`: it answers `unsupported {channel.aqueduct, until: 7c}` (§7.2);
   - `NO_FEATURE`: a race whose `via` names no lot, or a ditch with no lot or zone.
 - **Archive and diff:** catalogue 7's golden is archived as `fixtures/plan/catalogue-h.json`. The diff from it is exactly the one
-  flip, the four new ids, `connector.channel`'s `limitsChanged`, and the four note changes. If VOC merges first, its entries are
+  flip, the four new ids, `connector.channel`'s `limitsChanged`, and five note changes (`connector.channel`, `form.pond`,
+  `form.fountain`, `channel.moat`, `connector.wall`; `diffCatalogues` folds a note into a flip only, so these count on their own). If VOC merges first, its entries are
   in both sides of the diff and the number moves up by one. The coordinator sets the number and `sinceApi`.
 
 ### 7. Courses (kit, plan time, deterministic; HY-b)
@@ -14781,7 +14783,8 @@ connector.channel (ditch form): {id, kind: "channel", ..., where: {along: {featu
 
 **7.3 The cross-section and the look** (bible `fluids` roles, §11):
 - **natural (a stream):** bed in `fluids.bed`, banks in `fluids.rim` (the bank's surface, moss where grass), width varying by at
-  most 1 by `ctx.rng` noise at reach scale. Notches every 6 (H-a's exits) on alternating banks, and a riffle's banks are exits
+  most 1 by `ctx.rng` noise at reach scale. **A riffle and a spillway keep their upstream reach's last-row width;** width noise
+  applies to reaches only (§1.2's straight lanes, `M25:convert`). Notches every 6 (H-a's exits) on alternating banks, and a riffle's banks are exits
   all along.
 - **built (a canal):** `structure` lining, `trim` coping 1 high, straight runs, notches every 12 as steps cut into the coping.
 - **Every lining cell differs from what it replaces** (H-a's reading), taking the first differing block of its chain.
@@ -15028,7 +15031,10 @@ RC found two bugs that only `realiseApproved` showed, hence item 9.
 1. **HY-core (one owner, the only Java):**
    - **Archives and plan:** archive the previous apitest jar and catalogue 7 (`catalogue-h.json`); defs (course form, ditch
      form, R24); catalogue next with every entry (generators as stubs answering `refused UNREACHABLE {until: HYb | HYc}`, never
-     a throwing placeholder).
+     a throwing placeholder). H's tests and fixtures that move, by name: `h-foundation.test.mjs` (lines 39-40 and 68: `channel.course`
+     supported), `h/r08_course` (now `fits`, renamed `valid/v51_canal`), `extension/e15_*` (the reserved list), `moat.mjs:86`'s
+     answer (a from/to channel dispatches to the course), and the `UNCHANGED_EXCEPTIONS` lists in H's drivers (`gate6ch-core.mjs`,
+     `ha-unchanged`, `hb-unchanged`) gaining r08 and e15.
    - **Kit:** `r.fluidBody`'s `lining`, plan-body `joins`, `overflow` registration, `after`; `sim.mjs` and M25's extensions
      (§2), `M25:order`; the `fluid` op members and `requires: ['courses']`; `kit/regions/hy_core_demo.mjs` (a hand-built
      three-reach course with a fall, a spillway and a weir) and its broken variants.
@@ -15037,7 +15043,8 @@ RC found two bugs that only `realiseApproved` showed, hence item 9.
    - **Gate:** items 2-8, 12 (partial) and 18 (a, b) on `hy_core_demo`.
 2. **HY-a, the pass (pure kit, parallel from day 0):** `passes/hydrology.mjs`, `plan_v0`'s conditional declaration, D1's tag
    rule, `data.courses`; items 1 and 17 (the pass). It shares nothing with HY-core but `data.courses`' shape.
-3. **HY-b, courses:** the router and profile, `course`, `race` and `ditch` generators, ends (spring, terminal pool, weir, fall
+3. **HY-b, courses:** the router and profile, `course`, `race` and `ditch` generators, the region primitive `r.course(path, opts)`
+   (a `channelAt` path or a polyline laid as a course), ends (spring, terminal pool, weir, fall
    join, plan bodies with overflows registered on H-a's pond, fountain and moat), riffles, crossings (the fallback with plan
    water), the tunnel buffer, bible roles, siteplan `courses`, `hydro_demo`; items 9-13, 15-16, 18 (c), 20.
 4. **HY-c, water gates:** the router's forced still reach at a wall, `line.mjs`/`wall.mjs` taking the crossing, the grate, the
@@ -15053,7 +15060,7 @@ RC found two bugs that only `realiseApproved` showed, hence item 9.
 - `simulate(...)`'s new findings (`M25:order`) and the spill-aware trap and exit;
 - the body id rule `<part>_r<k>`;
 - the course's crossing record that HY-c's wall reads;
-- `data.courses`' shape;
+- `data.courses`' shape and `r.course`'s signature;
 - siteplan `courses`;
 - the gate driver's step names.
 
@@ -15129,7 +15136,10 @@ half a day in). Release as one batch with Steward's RC check, as H. Elapsed abou
   - a failing reach drains every reach upstream of it, each with `reason: "upstream of <body>"`;
   - `ARTIFACT_STALE` names the reach whose guard changed.
 
-  Enough for your card and history, or should rows aggregate per part? HY takes your RC check before release.
+  **The upstream drain crosses parts:** a pond, fountain or moat that overflows into a course is upstream of it, so when a reach
+  of that course fails, the pond (a part you asked for separately) is drained too and reported `drained`, `reason: "upstream
+  of <body>"`. Acceptable, or should a feeding body stand and the course's head be refused instead? Enough for your card and
+  history, or should rows aggregate per part? HY takes your RC check before release.
 - **S-HY-7. New ids, kinds and shapes.**
   - **Ids:** `channel.race`, `channel.ditch`, `wall.water_gate`, and `channel.aqueduct` (reserved until 7c: the answer for a
     valley too deep to fill).
