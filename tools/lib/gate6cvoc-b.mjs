@@ -463,7 +463,9 @@ const natural = [{
     const rm2 = await L.call('dev.region.remove', { region: rr2.region, requester: OWNER }, 4 * 3_600_000);
     await L.settle(10_000);
     const diff2 = await L.call('dev.region.hash', { box, mode: 'diff', file: snapF }, 4 * 3_600_000);
-    const kept = (diff2.list ?? []).filter((m) => /copper/.test(String(m.now))).length;
+    // (what the undo kept: the cells inside the hall's lot box that differ from the snapshot; the diff classes them `growth`)
+    const inHall = (diff2.list ?? []).filter((m) => { const [x, y, z] = String(m.pos).split(',').map(Number); return x >= b2[0] && x <= b2[3] && y >= b2[1] && y <= b2[4] && z >= b2[2] && z <= b2[5]; });
+    const kept = inHall.length || (diff2.classes?.growth ?? 0);
     out.drift = { cells: cells.length, weathered: weathered.size, rounds: 'n 50 per call', removed: rm2.removed, kept, mismatches: diff2.mismatches, classes: diff2.classes ?? null };
     check(true, `item 9 (drift probe, recorded): ${weathered.size} of ${cells.length} unwaxed copper cells of the hall weathered under dev.vocab.tick; after Regions.remove an undo kept ${kept} weathered cell(s) standing (StillOurs needs the same block: the queued §10 item's evidence; ${diff2.mismatches} mismatches ${j(diff2.classes ?? {})})`, out.drift);
     return out;
