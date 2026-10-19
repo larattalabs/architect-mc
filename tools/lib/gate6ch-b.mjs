@@ -6,8 +6,8 @@
 //   unit     hb-kit         the kit's H-b tests (h-wet: wetColumn, the wet piers, v46-v48 and the hb_ fixtures through the two-plan
 //                           flow, the broken variants, determinism, no `until` H in kit/), T3a's and K1a's plan tests (r06/r07 re-answered,
 //                           r06b and k1a_r01 WATER deep)
-//            hb-unchanged   item 11: every committed valid/, K1 and T3 fixture without an H part plans as on origin/main but exactly the
-//                           named re-answers (t3a/r06_water_arch, t3a/r07_water_rope, refused/k1a_r01_wall_water)
+//            (hb-unchanged retired in housekeeping 3: it required r06 and r07 to differ from origin/main, which they no longer do with
+//            H on main; H-core's item 11, gate6ch-core.mjs unchanged() with its named exceptions, runs the same comparison in h-unit)
 //            hb-asks        §13: no recorded part of the 59 asks takes a wet fallback, and none answers WATER with `until`
 //   ingame   hb-flat        items 5, 8, 9 on a flat world (headless, exact rules): a lake made with /fill (natural water to the survey),
 //                           a beam on wet piers across it, a quay on its shore and a harbour wall (the claim's edge ring through the
@@ -32,7 +32,6 @@ const OWNER = 'test:hb';
 const FLAT = 'G6B Flat Base', BASE = 'G6B Seed Base', FROZEN_SEED = '2026101102';
 const FLAT0 = [6400, 6600]; // the flat claim's corner (96 x 128; the lake south of its centre, so the claim's spawn stands dry)
 const FROZEN_CLAIM = [4168, 1480, 4279, 1591];
-const EXPECTED_CHANGES = ['refused/k1a_r01_wall_water.json', 't3a/r06_water_arch.json', 't3a/r07_water_rope.json'];
 const LOOK_BIBLES = [null, 'g7ak1_infernal', 'g7ak1_coastal'];
 const j = (o) => JSON.stringify(o).replaceAll(' ', '');
 
@@ -49,16 +48,6 @@ async function hbKit(ctx) {
   const r = nodeTest(ctx.root, ['kit/test/h-wet.test.mjs', 'kit/test/plan-t3a.test.mjs', 'kit/test/bridge-t3a.test.mjs', 'kit/test/plan-k1a.test.mjs']);
   ctx.check(r.code === 0 && r.fail === 0 && r.pass >= 30, `items 1, 8, 11 (kit, H-b): wetColumn, the wet piers, v46 quay, v47 wet beam, v48 harbour wall and the hb_ fixtures through the two-plan flow, the checker clean on each, the broken variants caught (M25:wet), determinism, no until H in kit/; T3a's and K1a's plan tests (r06/r07 fit on wet piers, r06b and k1a_r01 WATER deep): ${r.pass} pass, ${r.fail} fail`, r.failing);
   return r;
-}
-
-async function hbUnchanged(ctx) {
-  const { unchanged } = await import('./gate6ch-core.mjs');
-  const u = await unchanged(ctx.root);
-  const differ = [...u.excepted, ...u.differ.map(([k]) => k)].sort(); // (the core's named exceptions, then any other)
-  // (k1a_r01 now carries a `volume` (the two-plan harness): the core's comparison skips it; r06 and r07 must be among the differing)
-  const named = ['t3a/r06_water_arch.json', 't3a/r07_water_rope.json'];
-  ctx.check(u.n >= 40 && differ.every((k) => EXPECTED_CHANGES.includes(k)) && named.every((k) => differ.includes(k)), `item 11 (H-b): ${u.same} of ${u.n} committed valid/, K1 and T3 fixtures without an H part plan as on origin/main ${u.mainHead.slice(0, 10)}; the ones that differ are only the named re-answers (${differ.join(', ') || 'none'}; named: ${EXPECTED_CHANGES.join(', ')})`, u.differ);
-  return { same: u.same, n: u.n, differ };
 }
 
 async function hbAsks(ctx) {
@@ -490,7 +479,7 @@ async function hbLook(ctx) {
 }
 
 export const items = {
-  unit: [{ name: 'hb-kit', run: hbKit }, { name: 'hb-unchanged', run: hbUnchanged }, { name: 'hb-asks', run: hbAsks }],
+  unit: [{ name: 'hb-kit', run: hbKit }, { name: 'hb-asks', run: hbAsks }],
   ingame: [{ name: 'hb-flat', run: hbFlat }],
   crash: [],
   probe: [],
