@@ -296,7 +296,6 @@ export function courseGeometry(S, path, routeLevels, spec, ends, o) {
   }
   // the levels never rise, and stand at most `fill` over the ground - 1 the router allowed
   for (let i = 1; i < nR; i++) pcols[i].level = Math.min(pcols[i].level, pcols[i - 1].level);
-  if (process.env.DBG) console.log("PROF", JSON.stringify(path.map((c, i) => [...c, pcols[i]?.top, pcols[i]?.level])));
   const prof = profileOf(pcols, { minReach: PROFILE.minReach, drop: spec.drop, ...(spec.riffleCells ? { riffleCells: spec.riffleCells } : {}), flow: o.frozen && spec.flow === 'riffles' ? 'pools' : spec.flow, riffle: spec.riffle, cut: spec.cut, minDrop: o.minDrop ?? 1 });
   if (prof.refused) return prof;
   // (a frozen course: a spillway's submerged outlet would join two reaches at one level; its upper reach takes the lower level)
@@ -1083,7 +1082,6 @@ export function emit(K, p, res) {
     const vk = volumeKeep(r, VC, classAt);
     for (const b of out.bodies) {
       const hit = reachMeetsKeep(r, env, b, { volClass: vk });
-      if (hit && process.env.DBG) console.log('LEAKDBG', b.id, JSON.stringify({ path: geo.path.slice(-6), steps: geo.steps.map((q) => q.cells), lining: b.lining, banks: geo.banks.slice(0, 30), watch: b.watch.filter((c) => c[0] >= 1166 && c[0] <= 1168 && c[2] >= 2077 && c[2] <= 2083).slice(0, 30), shell: b.shell.filter((c) => c[0] >= 1166 && c[0] <= 1168 && c[2] >= 2077 && c[2] <= 2083), lin: b.lining.filter((c) => c[0] >= 1166 && c[0] <= 1168) }));
       if (hit) throw leakRefusal(b, hit);
       shellCheck(r, b);
     }
