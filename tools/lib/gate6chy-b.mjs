@@ -174,7 +174,11 @@ export async function realiseFixture(ctx, tag, fx, o = {}) {
   if (o.rules !== 'exact' && o.rules) { await L.cmd('/kill @e[type=!minecraft:player]'); }
   const file = await core.snap(ctx, box, `hyb-${tag}`);
   const before = new Map((await L.call('dev.fluid.census', { box }, 900_000)).fluids.map(([x, y, z, s]) => [`${x},${y},${z}`, s]));
+  // (development: HYB_BYPASS names fixtures realised with the containment check off, so a body that would drain stands for the census)
+  const bypass = (process.env.HYB_BYPASS ?? '').split(',').includes(tag);
+  if (bypass) await L.call('dev.fluid.bypass', { on: true }, 10_000);
   const r = await core.realiseApproved(ctx, sha);
+  if (bypass) await L.call('dev.fluid.bypass', { on: false }, 10_000);
   if (r.refused) { check(false, `item 9 (${tag}): realiseApproved refused (${json(r.refused)})`); await L.leaveWorld(); return out; }
   const fl = r.fluids;
   out.realise = { region: r.region, state: r.view.state, rows: fl.map((x) => [x.part, x.body, x.state, x.reason ?? null]), at: fl.filter((x) => x.state !== 'settled').map((x) => ({ body: x.body, at: x.at, ...x })), fstate: r.fstate };
@@ -188,6 +192,7 @@ export async function realiseFixture(ctx, tag, fx, o = {}) {
   const cs = {};
   for (const b of r.bodies) { const c = await core.censusOf(ctx, b, before, r.bodies); cs[b.id] = { ok: c.ok, sources: c.sources, flowing: c.flowing, mismatch: c.mismatch, outside: c.outside, ticks: c.ticks }; }
   out.census = cs;
+  for (const [k, v] of Object.entries(cs)) if (!v.ok) ctx.log(`  census ${k}: mismatch ${json(v.mismatch)} outside ${json(v.outside)}`);
   check(Object.values(cs).every((c) => c.ok), `item 9 (${tag}): every body's census equals its prediction (sources, lips, columns, films), 0 fluid outside its cells, spill and joins (${json(Object.entries(cs).map(([k, v]) => [k, v.sources, v.flowing, v.mismatch.length, v.outside.length]))})`, cs);
   if (o.after) out.after = await o.after(r, { W, T, box, before, ck: { ...ck, plan: [...(wp.plan.connectors ?? [])] }, anchors: wp.anchors });
   if (o.noUndo) { await core.removeWait(ctx, r.region).catch(() => null); await L.leaveWorld(); return out; }
