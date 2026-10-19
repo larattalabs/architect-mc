@@ -260,7 +260,9 @@ async function villagersNav(ctx, tag, r, W, T, ck, anchors = null) {
     const part = (ck.plan ?? []).find?.((q) => q.id === a.part);
     const anchor = part?.to?.anchor !== undefined ? anchors?.[part.to.anchor] : null;
     if (!anchor || !a.geometry?.ends?.some?.((e) => e.end === 'to' && e.kind === 'pool')) continue;
-    const b = r.bodies.filter((q) => q.part === a.part).at(-1);
+    // the pool: the reach holding the surface cell nearest the anchor (the IR lists a course's reaches downstream first)
+    const dist = (c) => Math.abs(c[0] - anchor[0]) + Math.abs(c[2] - anchor[2]);
+    const b = r.bodies.filter((q) => q.part === a.part).reduce((m, q) => { const d = Math.min(...q.cells.map(dist)); return !m || d < m.d ? { q, d } : m; }, null)?.q;
     if (!b) continue;
     // the pool's centre: the reach's surface cell nearest the anchor; the arrival: where its other cells lie
     const surf = b.cells.filter((c) => c[1] === b.level);
