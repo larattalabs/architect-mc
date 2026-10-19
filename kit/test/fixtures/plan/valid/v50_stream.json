@@ -1,0 +1,8 @@
+{
+  "about": "(6c HY-b, §14) a spring down a synthetic slope (two terraces, 8 and 4 over the plain): pools and falls, a terminal pool",
+  "terrain": { "W": 240, "D": 160, "x0": 1000, "z0": 2000, "y": 64, "bands": [{ "x0": 1000, "x1": 1059, "z0": 2000, "z1": 2159, "y": 72 }, { "x0": 1060, "x1": 1100, "z0": 2000, "z1": 2159, "y": 68 }] },
+  "anchors": { "spring": [1020, 72, 2080], "pool": [1200, 64, 2082] },
+  "volume": {},
+  "covers": ["connector.channel", "channel.course"],
+  "plan": { "schemaVersion": "plan/0", "planId": "hyb_v50", "connectors": [{ "id": "brook", "kind": "channel", "label": "a brook from a spring down the slope", "from": { "anchor": "spring" }, "to": { "anchor": "pool" } }] }
+}

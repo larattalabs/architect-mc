@@ -58,6 +58,8 @@ async function run(name) {
   }
   if (!['stop', 'start'].includes(name)) L.write(`${name}.json`, { step: name, seconds: (Date.now() - t0) / 1000, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), load1: os.loadavg()[0], error, results: { ...results }, data });
 }
+/** (HY-b, development only) GATE6CHY_SKIP_CORE=1 runs only the halves' items of an in-game step; a gate run never sets it. */
+const SKIP_CORE = !!process.env.GATE6CHY_SKIP_CORE;
 const ensure = async () => { if (!state.dev) await connect(); };
 function spendZero() {
   fs.mkdirSync(OUT, { recursive: true });
@@ -145,11 +147,11 @@ steps.unit = async () => {
 
 steps.ingame = async () => {
   await ensure();
-  return { core: await CORE.ingame(ctx), halves: await halves('ingame') };
+  return { core: SKIP_CORE ? 'skipped (GATE6CHY_SKIP_CORE)' : await CORE.ingame(ctx), halves: await halves('ingame') };
 };
 steps.crash = async () => {
   await ensure();
-  return { core: await CORE.crash(ctx), halves: await halves('crash') };
+  return { core: SKIP_CORE ? 'skipped (GATE6CHY_SKIP_CORE)' : await CORE.crash(ctx), halves: await halves('crash') };
 };
 steps.natural = async () => {
   await ensure();
@@ -157,7 +159,7 @@ steps.natural = async () => {
 };
 steps.cold = async () => {
   await ensure();
-  return { core: await CORE.cold(ctx), halves: await halves('cold') };
+  return { core: SKIP_CORE ? 'skipped (GATE6CHY_SKIP_CORE)' : await CORE.cold(ctx), halves: await halves('cold') };
 };
 steps.look = async () => {
   await ensure();
