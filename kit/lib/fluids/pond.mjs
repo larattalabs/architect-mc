@@ -23,6 +23,7 @@ import { FLAG_TREE, FLAG_WATER, FLAG_LAVA } from '../region/pack.mjs';
 import { VC, blockAt, classAt } from '../region/volume.mjs';
 import { isFlammable } from '../blocks.mjs';
 import { localWorld } from './body.mjs';
+import { inferVillager } from '../params.mjs';
 import { F_WRITTEN } from '../region/vworld.mjs';
 import {
   PRESET_SIZES, arrRect, bodiesMark, bodiesRollback, bodyBom, centre, flagsAt, fluidRolesOf, gap, grow, intIn, inside, linesBody, locatorOf,
@@ -401,8 +402,12 @@ export function farmPondZones(order, okClass) {
   for (const p of order) {
     if (p.family !== 'zone' || !okClass(p.id)) continue;
     const z = p.part;
-    const lots = (z.program?.lots ?? z.program?.params?.lots ?? []).filter((l) => l?.villager === 'farm' && (l.farmPond === true || (z.farmPond === true && l.farmPond !== false)));
+    // a lot's villager use as flat_village resolves it: the caller's own value, else the one its type implies (params.mjs)
+    const all = z.program?.lots ?? z.program?.params?.lots ?? [];
+    const asked = (l) => l && (l.farmPond === true || (z.farmPond === true && l.farmPond !== false));
+    const lots = all.filter((l) => asked(l) && (l.villager ?? inferVillager(l.type)) === 'farm');
     if (lots.length) out.push({ zone: p, lots: lots.map((l) => l.id) });
+    else if (z.farmPond === true || all.some((l) => l?.farmPond === true)) out.push({ zone: p, lots: [], noFarm: true });
   }
   return out;
 }
@@ -411,7 +416,7 @@ export function farmPondZones(order, okClass) {
 export function stageWanted(C) {
   if (!C.order.some((p) => p.family === 'zone' && /"farmPond":true/.test(JSON.stringify(p.part)))) return false;
   if (waterInClaim(C.env)) return false;
-  return farmPondZones(C.order, C.okClass).length > 0;
+  return farmPondZones(C.order, C.okClass).some((z) => !z.noFarm);
 }
 
 /**
@@ -421,9 +426,13 @@ export function stageWanted(C) {
  */
 export function emitFarmPonds(K) {
   const out = { ponds: [], notes: new Map() };
-  const zones = farmPondZones(K.order, K.okClass);
-  if (!zones.length) return out;
+  const asked = farmPondZones(K.order, K.okClass);
+  if (!asked.length) return out;
   const note = (z, s) => { const l = out.notes.get(z) ?? []; l.push(s); out.notes.set(z, l); };
+  // never silent: a zone that asked for a farm pond but has no farm lot says so
+  for (const z of asked) if (z.noFarm) note(z.zone.id, "farmPond: no farm lot in this zone (a lot whose villager use is 'farm', given or implied by its type), so no farm pond is added");
+  const zones = asked.filter((z) => !z.noFarm);
+  if (!zones.length) return out;
   if (waterInClaim(K.env)) {
     for (const z of zones) note(z.zone.id, 'farmPond: the claim has surface water, so no farm pond is added (S-H-1: dry claims only)');
     return out;
