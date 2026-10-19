@@ -15171,6 +15171,18 @@ Taste and product calls only, each with a proposed default.
 - **N-HY-6. The split.** Proposed: HY-core and HY-a together, then HY-b and HY-c in parallel, one batch with Steward's RC. The
   alternative is serial, with HY-c deferred.
 
+### Coordinator decisions (2026-10-19, on Noah's behalf; Noah can overrule at the look step)
+
+- **N-HY-2, the look:** as proposed.
+  - Streams 2 x 2 with a clay and mud bed and mossy banks, falls up to 6.
+  - Canals 3 wide in `structure` with a `trim` coping.
+  - Weirs in `foundation`; iron-bar grates.
+- **N-HY-3:** riffles are opt-in (pools and falls by default) until the census probe passes.
+- **N-HY-4:** a course starting on dry ground starts at a 3 x 3 spring pool.
+- **N-HY-5:** `channel.aqueduct` stays reserved until 7c.
+- **N-HY-6, the split:** HY-core and HY-a start together. HY-b and HY-c start once HY-core's interface is frozen. One batched
+  release, after Steward's RC check. If Steward doesn't want water gates (S-HY-4), HY-c is deferred.
+
 ### Deferred
 
 - Written flowing states and flowing rivers (SETTLEMENTS §21); riffles longer than the cap (after probe (c)).
