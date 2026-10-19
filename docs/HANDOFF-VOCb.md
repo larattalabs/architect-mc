@@ -38,9 +38,24 @@ and the coordinator decisions win). Placeholders: API 1.35.0, mod 0.38.0, kit 0.
   shell or deck, a rim keeps paths off the water's faces).
 - `_unsafe.overRare` (region) is v50 under a budget of 0 (a bible's own blocks are exempt, so rare blocks can't come from its roles).
 
+## Pre-existing on voc/core (VOC-a's, fixed on VOC-a's local branch, not yet pushed)
+
+- voc-unit "items 1, 3, 4 (kit)": its bar wants 12 kit VOC tests, vocab.test.mjs has 11 (VOC-a's c6ea7fac).
+- voc-unit item 14: `tools/api-compat.mjs --gate6cvoc` isn't on voc/core (VOC-a's 023e19cb).
+- kit h-foundation "catalogue 7" (`sinceApi` 1.34.0 vs 1.35.0; VOC-a's c8d445c5).
+
+## Findings so far (gate run `artifacts/gate-runs-VOCb/20261019-212938-slice`)
+
+- In game: v50/v50c/v51/v50r realise and remove E-flat 0; the realised world equals the virtual one; M20/M26/M27 equal on it; the
+  bible's rarity reaches meta.vocab; cost.creativeOnly in an approved artifact (v50c: 6 light blocks); r01 VOCAB and r03 FIRE in game;
+  FIELD_LIMIT in game. v51's lots have no entries, so its region ends PARTIAL with every item placed.
+- cost.bom (K1's wall, H's fountain) is the bill of what a part emits; cells a later part overwrites (the wall's gate cut, 11 nether
+  bricks; the fountain's coping) stand under the other part. Item 8's bom bar compares the standing items realised against planned.
+- Drift probe (S3): 157 of 157 unwaxed copper cells of the hall weathered under dev.vocab.tick; after Regions.remove the diff classes
+  157 cells `growth` (the undo keeps them): the queued §10 item's evidence.
+- E-normal on S3: 1 mismatch, a bee nest's live NBT (`live`), 0 unclassified.
+
 ## Left
 
-- [ ] tools/lib/gate6cvoc-b.mjs: unit (items 6, 7, 13 timing), ingame (item 8), natural (item 9), survival (item 11), look (item 15)
-- [ ] "6c VOC" impact rule: voc-ingame, voc-natural, 6cvoc-look in its slice list; my paths
-- [ ] DEVBRIDGE.md: dev.vocab.bibleRequest, dev.vocab.bibleJob
-- [ ] slice gate run, the gallery artifact, the verifier, "VOC-b as built", retire this file, push
+- [ ] re-run voc-ingame, voc-natural, voc-survival, 6cvoc-look on the fixed driver; the look's gallery (artifact)
+- [ ] slice gate run (3 shards, ~2h20m), the verifier, "VOC-b as built" (draft ready), retire this file, push
