@@ -348,6 +348,11 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-19 (6c slice VOC-b):** new (`SliceVocbDev`, generated headless too) `dev.vocab.bibleRequest {prompt, name?, owner?, scope?,
+  seedPreset?, rarity?: {...}, opKey?}` (Bibles.request with `BibleRequest.Rarity`, the typed record built from the JSON -> `{jobId, bibleId,
+  version, status, step, request, wire}` (`wire`: Wire4b's request JSON) or `{wire, refused, code?, detail?}`: a malformed budget is refused
+  `FIELD_LIMIT` with detail `rarity` before any job) and `dev.vocab.bibleJob {jobId}` (Bibles.job -> `{jobId, bibleId, version, status,
+  step, error?, request}` or `{missing}`).
 - **2026-10-19 (the H batch):** `dev.fluid.state {region}` gains `removalNote` (a removal whose settle wait hit its cap, 2 x the settle
   bound after the drain); for a removed region it answers `{removed: true, removalNote}` when its removal was capped (else "no live
   region", as before). A region's view ext carries `architect_mc:fluidsRemoval {state: capped, note, ticks}` in that case.
