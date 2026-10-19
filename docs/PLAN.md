@@ -653,7 +653,7 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   even-width rope bridge or bore running +z or -x stands one column off its walk too. Check them with a width-2 fixture.
 - **Done (housekeeping 3):** retired. hb-unchanged ran H-core's `unchanged()` again and additionally required r06/r07 to differ; with H on main they plan the same (checked: 58 same, 0 differ but item 3's named v33/v34). H-core's item 11 (h-unit) and ha-unchanged already judge "only the named exceptions may differ" from `UNCHANGED_EXCEPTIONS`. ~~**hb-unchanged after the merge.**~~ H-b's item 11 still requires t3a/r06 and r07 to differ from origin/main. Once H is on main they
   won't, so relax it to "only the named exceptions may differ", as H-core's `unchanged()` (`UNCHANGED_EXCEPTIONS`) already does.
-- **apijars over v0.36.1.** `gate6a.mjs` apijars still runs the 0.36.0, 0.35.0 and 0.34.0 jars; api-compat `--gate6ch` now uses
+- **Done (housekeeping 3):** apijars runs the 0.37.0, 0.36.1 and 0.36.0 jars (API 1.34.0, 1.33.0, 1.33.0), each with its tag's `tools/apitest.mjs` and its own world (G6A Jar0370/0361/0360); v0.37.0 built from its tag (aac5f588, sidecar bundled) into `artifacts/gate6c-h/v0370` beside the H batch's v0361 and H-core's v0360. ~~**apijars over v0.36.1.**~~ `gate6a.mjs` apijars still runs the 0.36.0, 0.35.0 and 0.34.0 jars; api-compat `--gate6ch` now uses
   0.36.1 (built from its tag into `artifacts/gate6c-h/v0361`). Add 0.36.1 to apijars (with its base world) at the release tier.
 - **6ct1-scenario-relief's falling water** (H-b's slice run): 2 unclassified falling-water cells far from any H part under the
   narrowed `flow` class. Re-check at the release tier; widen the class or record the cells.
