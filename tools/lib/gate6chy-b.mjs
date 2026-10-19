@@ -60,9 +60,10 @@ async function fillBox(L, [x0, y0, z0, x1, y1, z1], block) {
 }
 
 /** Build a terrain over the flat base (the claim and 8 round it): dirt to the ground, grass on top; each band as flatSurvey reads it. */
-export async function buildTerrain(ctx, T) {
+export async function buildTerrain(ctx, T, at = null) {
   const L = ctx.L;
-  const w0 = worldOf(T);
+  // (`at`: the terrain stands where its own coordinates say, on a natural site: it is cleared over the claim first)
+  const w0 = at ? { ...worldOf(T), claim: [T.x0, T.z0, T.x0 + T.W - 1, T.z0 + T.D - 1], dx: 0, dz: 0 } : worldOf(T);
   const [cx0, cz0, cx1, cz1] = w0.claim;
   // (every chunk of the claim and 8 round it loaded while it is built: /forceload, at most 256 chunks a call)
   await L.tp((cx0 + cx1) / 2, 120, (cz0 + cz1) / 2);
@@ -73,7 +74,12 @@ export async function buildTerrain(ctx, T) {
   await L.settle(3000);
   // (the flat base's own ground, surveyed: every band is built over it)
   const ground = await ctx.core.groundOf(ctx, w0.claim);
-  const W = worldOf(T, ground);
+  const W = at ? { ...worldOf(T, ground), claim: w0.claim, dx: 0, dz: 0 } : worldOf(T, ground);
+  if (at) {
+    // a natural site: everything over its lowest ground in the claim and 8 round it cleared to air first (trees, snow, hills), the floor filled
+    const c = W.claim;
+    await fillBox(L, [c[0] - 8, ground + 1, c[1] - 8, c[2] + 8, Math.min(319, ground + 60), c[3] + 8], 'minecraft:air');
+  }
   const g = (y) => y + W.off;
   const base = [cx0 - 8, W.ground + 1, cz0 - 8, cx1 + 8, g(T.y), cz1 + 8];
   if (g(T.y) > W.ground + 1) await fillBox(L, [base[0], base[1], base[2], base[3], g(T.y) - 1, base[5]], 'minecraft:dirt');
@@ -123,10 +129,30 @@ export function fixture(ctx, rel) {
 export async function realiseFixture(ctx, tag, fx, o = {}) {
   const { L, check, json, core } = ctx;
   const out = { tag };
-  await L.fresh(`G6B HYb ${tag}`, core.FLAT);
+  await L.fresh(`G6B HYb ${tag}`, o.base ?? core.FLAT);
   await L.setRules(o.rules ?? 'exact');
-  const T = terrainOf(fx);
-  const W = await buildTerrain(ctx, T);
+  await L.cmd('/weather clear');
+  // the site: a terrain built over the flat base (or over a natural site's own ground, `o.at` its corner), or a natural claim as it is
+  let T = null, W;
+  if (o.site) {
+    const c = o.site;
+    await L.tp((c[0] + c[2]) / 2, 200, (c[1] + c[3]) / 2);
+    await L.call('dev.waitChunks', { timeoutMs: 120_000 }, 180_000).catch(() => null);
+    W = { claim: c, dx: 0, dz: 0, off: 0 };
+  } else {
+    T = terrainOf(fx);
+    W = await buildTerrain(ctx, T, o.at ?? null);
+  }
+  // the box's heights from the site's own survey (the floor under water, the highest ground)
+  {
+    const sv = path.join(ctx.OUT, `hyb-${tag}-survey.bin`);
+    await L.call('dev.region.survey', { claim: W.claim, surveyLoad: 'bounded:256', file: sv }, 600_000);
+    const { surveyApi } = await ctx.imp('lib/region/survey.mjs');
+    const S = surveyApi(fs.readFileSync(sv), { minX: W.claim[0], minZ: W.claim[1], maxX: W.claim[2], maxZ: W.claim[3], minY: -64, maxY: 319 });
+    let y0 = 320, y1 = -64;
+    for (let x = W.claim[0]; x <= W.claim[2]; x += 2) for (let z = W.claim[1]; z <= W.claim[3]; z += 2) { y0 = Math.min(y0, S.floorAt(x, z)); y1 = Math.max(y1, S.groundAt(x, z)); }
+    W.minY = y0; W.maxY = y1; W.S = S;
+  }
   const wp = await worldPlan(ctx, fx, W);
   const ck = await L.call('dev.region.checkPlan', { plan: wp.plan, claim: W.claim, owner: core.OWNER, anchors: wp.anchors, load: 'generate' }, 1_800_000);
   fs.writeFileSync(path.join(ctx.OUT, `hyb-${tag}-check.json`), `${JSON.stringify(ck, null, 1)}\n`);
@@ -140,7 +166,8 @@ export async function realiseFixture(ctx, tag, fx, o = {}) {
   const guards = guardsIn(art).filter((g) => g && g.fluids === true);
   out.guards = { n: guards.length, kinds: [...new Set(guards.map((g) => g.kind))] };
   check(guards.length > 0 && guards.every((g) => typeof g.part === 'string' && typeof g.body === 'string' && Array.isArray(g.runs) && g.runs.every((v) => typeof v === 'number')), `item 9 (${tag}): every body's guard is flat ({part, body, kind, fluids, volume, runs: numbers}, H RC3): ${guards.length} guard(s)`, guards.slice(0, 2));
-  const box = [W.claim[0] - 8, W.minY - 6, W.claim[1] - 8, W.claim[2] + 8, W.maxY + 20, W.claim[3] + 8];
+  const box = [W.claim[0] - 8, Math.max(-64, W.minY - 8), W.claim[1] - 8, W.claim[2] + 8, Math.min(319, W.maxY + 20), W.claim[3] + 8];
+  if (o.rules !== 'exact' && o.rules) { await L.cmd('/kill @e[type=!minecraft:player]'); }
   const file = await core.snap(ctx, box, `hyb-${tag}`);
   const before = new Map((await L.call('dev.fluid.census', { box }, 900_000)).fluids.map(([x, y, z, s]) => [`${x},${y},${z}`, s]));
   const r = await core.realiseApproved(ctx, sha);
@@ -156,9 +183,20 @@ export async function realiseFixture(ctx, tag, fx, o = {}) {
   if (o.noUndo) { await core.removeWait(ctx, r.region).catch(() => null); await L.leaveWorld(); return out; }
   const rm = await core.removeWait(ctx, r.region);
   await sleep(3000);
-  const df = await core.diff(ctx, box, file);
-  out.undo = { state: rm.state, seconds: rm.seconds, mismatches: df.mismatches, classes: df.classes, sample: df.sample };
-  check(rm.state === 'REMOVED' && df.mismatches === 0, `item 9 (${tag}): Regions.remove (head first, a settle bound, the solids) restores the box exactly under the exact rules: E-flat ${df.mismatches} (${rm.seconds} s)`, df.sample);
+  if (o.normal) {
+    // E-normal (§4.4): 0 unclassified, no classified mismatch within 6 of any body, shell, lining, weir, spill or watched cell, 0 gravity
+    const df = await ctx.L.call('dev.region.hash', { box, mode: 'diff', file }, 4 * 3_600_000);
+    const cells = r.bodies.flatMap((b) => [...b.cells, ...b.shell, ...b.lining, ...b.spill, ...b.watch]);
+    const near = (x, y, z) => cells.some((q) => Math.max(Math.abs(q[0] - x), Math.abs(q[1] - y), Math.abs(q[2] - z)) <= 6);
+    const list = df.list ?? [];
+    const bad = list.filter((mm) => { const [x, y, z] = String(mm.pos).split(',').map(Number); return near(x, y, z); });
+    out.undo = { state: rm.state, seconds: rm.seconds, mismatches: df.mismatches, classes: df.classes, near: bad.slice(0, 12), sample: list.slice(0, 12) };
+    check(rm.state === 'REMOVED' && (df.classes?.none ?? 0) === 0 && (df.classes?.gravity ?? 0) === 0 && bad.length === 0, `item 5 (${tag}): Regions.remove under the exact rules, E-normal: ${df.mismatches} mismatch(es) ${json(df.classes ?? {})}, 0 unclassified, 0 gravity, ${bad.length} within 6 of a body, shell, lining, weir, spill or watched cell (${rm.seconds} s)`, out.undo);
+  } else {
+    const df = await core.diff(ctx, box, file);
+    out.undo = { state: rm.state, seconds: rm.seconds, mismatches: df.mismatches, classes: df.classes, sample: df.sample };
+    check(rm.state === 'REMOVED' && df.mismatches === 0, `item 9 (${tag}): Regions.remove (head first, a settle bound, the solids) restores the box exactly under the exact rules: E-flat ${df.mismatches} (${rm.seconds} s)`, df.sample);
+  }
   await L.leaveWorld();
   return out;
 }
@@ -180,6 +218,7 @@ export const ITEM9 = Object.freeze([
 
 /** A kit terrain's ground at a world column (flatSurvey's bands, later bands win), in world y. */
 function groundAt(T, W, x, z) {
+  if (W.S) return W.S.groundAt(x, z);
   const kx = x - W.dx, kz = z - W.dz;
   let g = T.y;
   for (const b of T.bands) if (kx >= b.x0 && kx <= b.x1 && kz >= b.z0 && kz <= b.z1) g = b.water ? b.y + b.water : b.y;
@@ -263,7 +302,53 @@ async function sweptStand(ctx, r) {
   return out;
 }
 
+/** The S3 claim (scenarios/s3_monastery.json, N-HY-1: a site only) and the frozen site (2026101102) of the gate. */
+const S3_BASE = 'G6B Seed Base', FROZEN_SEED = '2026101102';
+
 export const items = {
+  natural: [
+    {
+      name: 'natural (S3): a spring falling by pools into the river, a weir head feeding a level canal: census, villagers, E-normal undo',
+      async run(ctx) {
+        const fx = fixture(ctx, 'hy/n01_s3_natural.json');
+        const S3 = JSON.parse(fs.readFileSync(path.join(ctx.root, 'scenarios', 's3_monastery.json'), 'utf8')).fixture.claim;
+        const out = {};
+        // round 1 (default rules): the census and the villagers round the course's pools; round 2 (exact rules): E-normal
+        try { out.live = await realiseFixture(ctx, 'natural', fx, { base: S3_BASE, site: S3, rules: 'default', noUndo: true, after: async (r, w) => villagersNav(ctx, 'natural', r, w.W, null, w.ck) }); } catch (e) { ctx.check(false, `natural: ${String(e.message ?? e).slice(0, 300)}`); try { await ctx.L.leaveWorld(); } catch { /* left */ } }
+        try { out.exact = await realiseFixture(ctx, 'natural-exact', fx, { base: S3_BASE, site: S3, rules: 'exact', normal: true }); } catch (e) { ctx.check(false, `natural exact: ${String(e.message ?? e).slice(0, 300)}`); try { await ctx.L.leaveWorld(); } catch { /* left */ } }
+        return out;
+      },
+    },
+  ],
+  cold: [
+    {
+      name: 'cold (2026101102): a capped brook with a submerged outlet and a fall, its unlit uncapped twin (recorded); census; E-normal undo',
+      async run(ctx) {
+        const { L, check, json } = ctx;
+        const fx = fixture(ctx, 'hy/c01_cold.json');
+        const base = await L.seedBase(FROZEN_SEED);
+        const out = {};
+        try {
+          out.live = await realiseFixture(ctx, 'cold', fx, { base, at: true, rules: 'exact', noUndo: true, after: async (r) => {
+            // the probe, recorded (§1.7, probe (a)): 2 minutes at random ticks 300; which cells froze, on the capped brook and the twin
+            const cells = r.bodies.flatMap((b) => [...b.cells.map((c) => [b.id, 'source', c]), ...b.predicted.map((q) => [b.id, q[3] >= 8 ? 'falling' : 'flowing', q.slice(0, 3)])]);
+            const box = ctx.core.boxAround(r.bodies.flatMap((b) => [...b.cells, ...b.spill]), 1);
+            const at0 = new Map((await L.call('dev.fluid.census', { box }, 600_000)).fluids.map(([x, y, z, s]) => [`${x},${y},${z}`, s]));
+            await L.cmd('/gamerule random_tick_speed 300');
+            await sleep(120_000);
+            await L.cmd('/gamerule random_tick_speed 0');
+            const at1 = new Map((await L.call('dev.fluid.census', { box }, 600_000)).fluids.map(([x, y, z, s]) => [`${x},${y},${z}`, s]));
+            const froze = {};
+            for (const [id, kind, c] of cells) { const k = k3(c); if (at0.get(k) !== 'minecraft:ice' && at1.get(k) === 'minecraft:ice') { const f = (froze[`${id.startsWith('twin') ? 'twin' : 'brook'} ${kind}`] ??= { n: 0 }); f.n++; } }
+            check(true, `probe (a) on the course (recorded): after 2 minutes at random ticks 300, cells that froze: ${json(froze)} (the brook's caps hold; §1.7's reading: sources only)`);
+            return { froze };
+          } });
+        } catch (e) { check(false, `cold: ${String(e.message ?? e).slice(0, 300)}`); try { await L.leaveWorld(); } catch { /* left */ } }
+        try { out.exact = await realiseFixture(ctx, 'cold-exact', fx, { base, at: true, rules: 'exact', normal: true }); } catch (e) { check(false, `cold exact: ${String(e.message ?? e).slice(0, 300)}`); try { await L.leaveWorld(); } catch { /* left */ } }
+        return out;
+      },
+    },
+  ],
   ingame: [
     {
       name: 'item 10: villagers over the bridges and round the pools; the swept stand',

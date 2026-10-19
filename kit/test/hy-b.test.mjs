@@ -83,7 +83,7 @@ test('item 12: every HY refusal fixture answers its code and evidence kind; a wo
 });
 
 test('item 2: every HY valid fixture fits, its plan M25-clean in the checker, one siteplan courses row per course part', async () => {
-  const hy = [...read('valid').filter((f) => /^v5[0-9]_/.test(f.name)), ...HY.filter((f) => /^v5/.test(f.name))];
+  const hy = [...read('valid').filter((f) => /^v[56][0-9]_/.test(f.name)), ...HY.filter((f) => ['fits', 'adjusted'].includes(f.expect?.class))];
   assert.ok(hy.length >= 6, hy.map((f) => f.name).join(', '));
   for (const f of hy) {
     const r = await run(f);

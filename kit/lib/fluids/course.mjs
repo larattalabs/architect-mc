@@ -533,7 +533,7 @@ function shellRoleOf(M, natural, S) {
  * steps, notes}.
  */
 export function layCourse(r, geo, o) {
-  const S = r.ctx.survey;
+  const S = o.survey ?? r.ctx.survey;
   const M = courseMaterials(r.ctx, o.look);
   const stage = o.stage;
   const notes = [];
@@ -605,7 +605,8 @@ export function course(r, pathIn, opts = {}) {
     if (!Array.isArray(pts) || pts.length < 2) throw refusal('UNREACHABLE', 'r.course: a path of at least 2 cells', { kind: 'length' });
     const path = fourConnected(pts);
     const spec = { ...courseSpec({ look: opts.look, flow: opts.flow, width: opts.width, depth: opts.depth, drop: opts.drop }), riffle: opts.riffle ?? COURSE.riffle, cut: opts.cut ?? COURSE.cut, fill: opts.fill ?? COURSE.fill };
-    const S = r.ctx.survey;
+    // (opts.survey: a program that sculpted its own ground first gives the course that ground: {groundAt, topAt})
+    const S = opts.survey ?? r.ctx.survey;
     const offs = laneOffsets(spec.width);
     const dirs = dirsOf(path);
     // the levels: the running minimum of the lanes' and banks' ground - 1 (a head at `from.level` when given: a weir head)
@@ -626,7 +627,7 @@ export function course(r, pathIn, opts = {}) {
     if (opts.ice) for (const R of geo.reaches) R.ice = iceOf(r.ctx, R, geo, opts.ice === 'all');
     const m = bodiesMark(r);
     try {
-      const out = layCourse(r, geo, { id, part: opts.part ?? null, look: spec.look, stage: opts.stage ?? r.stageList[0], unsafe: opts._unsafe ?? null, exits: opts.exits });
+      const out = layCourse(r, geo, { id, part: opts.part ?? null, look: spec.look, stage: opts.stage ?? r.stageList[0], unsafe: opts._unsafe ?? null, exits: opts.exits, survey: S });
       rec.bodies = out.bodies;
     } catch (e) { bodiesRollback(r, m); throw e; }
     rec.steps = geo.steps.map((s) => ({ kind: s.kind, from: s.from, to: s.to, drop: s.drop }));
@@ -1043,7 +1044,10 @@ export function emit(K, p, res) {
     branchOverflows(K, p, geo);
     // (HY-c) the water gates: a crossing's grate cells are the reach's own cells written behind iron bars
     for (const x of crossingsOf(K)) if (x.course === p.id) { const R = geo.reaches.find((q) => q.id === x.body); if (R) R.grate = [...(R.grate ?? []), ...(x.grate ?? [])]; }
-    if (res.frozen) for (const R of geo.reaches) R.ice = iceOf(K.ctx, R, geo, false);
+    // (the gate's uncapped twin, ext 'architect_mc:unsafe' {noCap: true}: a frozen course left open, its outlets still submerged: the
+    // freezing probe, dev only, never a plan's)
+    const noCap = p.part.ext?.['architect_mc:unsafe']?.noCap === true;
+    if (res.frozen && !noCap) for (const R of geo.reaches) R.ice = iceOf(K.ctx, R, geo, false);
     // (§8.3) a wall standing on the course's columns: a water gate (HY-c's crossing), else UNREACHABLE wall
     if (K.walls?.length) {
       const cols = new Set();
