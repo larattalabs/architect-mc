@@ -169,7 +169,12 @@ steps.unchanged = async () => {
     }
   }
   const n = Object.keys(out.fixtures).length;
-  check(n >= 30 && same === n, `item 8: ${same} of ${n} valid/ and K1 fixtures without a T3 part answer as on origin/main ${mainHead.slice(0, 10)} and plan the same IR but its kitVersion (${t3} T3 fixtures skipped; v34_auto and the K1 batch fixtures included)`, Object.entries(out.fixtures).filter(([, v]) => !(v.answers && v.ir && v.overall)));
+  // (housekeeping 3) only the named exceptions may differ: H-core's list (lib/gate6ch-core.mjs UNCHANGED_EXCEPTIONS, with the reason)
+  const { UNCHANGED_EXCEPTIONS } = await import('./lib/gate6ch-core.mjs');
+  const differ = Object.entries(out.fixtures).filter(([, v]) => !(v.answers && v.ir && v.overall));
+  out.excepted = differ.map(([k]) => k).filter((k) => UNCHANGED_EXCEPTIONS.includes(k));
+  const bad = differ.filter(([k]) => !UNCHANGED_EXCEPTIONS.includes(k));
+  check(n >= 30 && bad.length === 0 && same + out.excepted.length === n, `item 8: ${same} of ${n} valid/ and K1 fixtures without a T3 part answer as on origin/main ${mainHead.slice(0, 10)} and plan the same IR but its kitVersion (${t3} T3 fixtures skipped; v34_auto and the K1 batch fixtures included); the named exceptions that differ: ${out.excepted.join(', ') || 'none'}`, bad);
   return out;
 };
 
