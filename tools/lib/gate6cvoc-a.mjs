@@ -333,8 +333,8 @@ const probe = [{
       out[k] = m.states;
       check(m.states[1] === `minecraft:bubble_column[drag=${drag}]` && row(k).becomes === `minecraft:bubble_column[drag=${drag}]`, `item 10 (${k}): water directly above becomes ${m.states[1]} (hazards.json: ${row(k).becomes})`, m.states);
     }
-    // fire, soul fire and lava: one post per case, every case at once, then 240 s (lava's ignition is a random tick: random_tick_speed 3000)
-    await L.cmd('/gamerule random_tick_speed 3000');
+    // fire, soul fire and lava: one post per case, every case at once, then 6,000 game ticks (lava's ignition is a random tick: random_tick_speed 1000)
+    await L.cmd('/gamerule random_tick_speed 1000');
     // a compact grid (16 apart) around the bot, inside the simulation distance and the fire spread radius
     const F0 = [0, 100, 400];
     const cases = FIRE_POSTS.map(([kind, d, axis, expect], j) => ({ kind, d, axis, expect, at: [F0[0] + 16 * (j % 4), F0[1], F0[2] + 16 * Math.floor(j / 4)] }));
@@ -342,9 +342,20 @@ const probe = [{
     // fire ticks only near a player who is not a spectator (26.3's fire_spread_radius_around_player): the bot plays in creative
     await L.cmd('/gamemode creative');
     for (const c of cases) await P(c.kind, c.at, { d: c.d });
-    await L.settle(240_000);
-    for (const c of cases) { const r = await R(c.kind, c.at, { d: c.d }); c.post = r.states[1]; c.caught = r.states[1] !== 'minecraft:oak_planks'; }
-    out.fire = cases.map(({ kind, d, expect, caught, post }) => ({ kind, d, expect, caught, post }));
+    // wait in game ticks, not wall time (a loaded box falls behind): 6,000 ticks, or every post the reach says catches has caught;
+    // at most 20 minutes of wall time
+    const gt = async () => Number(/(\d+)/.exec((await L.cmd('/time query gametime')).messages?.join(' ') ?? '')?.[1] ?? 0);
+    const t0 = await gt();
+    const w0 = Date.now();
+    let ticks = 0;
+    for (;;) {
+      await L.settle(20_000);
+      for (const c of cases) { const r = await R(c.kind, c.at, { d: c.d }); c.post = r.states[1]; c.source = r.states[0]; c.caught = r.states[1] !== 'minecraft:oak_planks'; }
+      ticks = (await gt()) - t0;
+      if (ticks >= 6000 || Date.now() - w0 > 1_200_000) break;
+    }
+    out.fireTicks = ticks;
+    out.fire = cases.map(({ kind, d, expect, caught, post, source }) => ({ kind, d, expect, caught, post, source }));
     const reachOf = (kind) => {
       const cs = cases.filter((c) => c.kind === kind && c.caught);
       const m = (axis, f) => Math.max(0, ...cs.filter((c) => c.axis === axis).map(f));
@@ -356,7 +367,7 @@ const probe = [{
       const want = row(k).reach.fire;
       // lava's `below` is H's margin (vanilla lights nothing under the lava's level): not probed
       const same = r.side === want.side && r.above === want.above && (k === 'lava' || r.below === want.below);
-      check(mine.every((c) => c.caught === c.expect) && same, `item 10 (${k}): the posts ${mine.map((c) => `${json(c.d)}:${c.caught ? 'lit' : 'not'}`).join(' ')}; measured reach ${json(r)} (hazards.json: ${json(want)})`, mine);
+      check(mine.every((c) => c.caught === c.expect) && same, `item 10 (${k}, ${out.fireTicks} game ticks): the posts ${mine.map((c) => `${json(c.d)}:${c.caught ? 'lit' : 'not'}`).join(' ')}; measured reach ${json(r)} (hazards.json: ${json(want)})`, mine);
     }
     return out;
   },
