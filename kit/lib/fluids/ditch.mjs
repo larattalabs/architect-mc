@@ -16,15 +16,25 @@ import { VC, classAt } from '../region/volume.mjs';
 
 export const acceptsOverflow = true;
 /** The ditch: its water `gap` from the box (the shell gap - 1 clear of it), at most `cut` cells of trench past the sunk 1, length limits. */
-export const DITCH = Object.freeze({ gap: 3, cut: 2, length: [3, 64] });
+export const DITCH = Object.freeze({ gap: 4, cut: 2, length: [3, 64] });
 const SIDES = ['n', 'e', 's', 'w'];
 const k2 = (x, z) => `${x},${z}`;
 
 /** The sides of a box a ditch runs along: the asked ones, else the two long sides (n and s when the box is wider than deep). */
-export function ditchSides(rect, sides) {
+export function ditchSides(rect, sides, front = null) {
   if (Array.isArray(sides) && sides.length) return SIDES.filter((s) => sides.includes(s));
   const w = rect.maxX - rect.minX + 1, d = rect.maxZ - rect.minZ + 1;
-  return w >= d ? ['n', 's'] : ['w', 'e'];
+  // (never across a lot's front, where its lane and entrance are)
+  const f = { north: 'n', east: 'e', south: 's', west: 'w' }[front] ?? null;
+  const long = (w >= d ? ['n', 's'] : ['w', 'e']).filter((s) => s !== f);
+  return long;
+}
+
+/** A lot's front (north | east | south | west) from its zone's layout, or null. */
+function lotFront(C, lotId) {
+  const zid = C.V?.lotZone?.get?.(lotId);
+  const l = zid ? C.res?.get?.(zid)?.layout?.lots?.find((q) => q.spec?.id === lotId) : null;
+  return l?.lot?.front ?? l?.front ?? null;
 }
 
 /** The ditch's columns along `sides` of `rect` (its water `gap` outside), each side's run capped at the length limit. */
@@ -57,7 +67,7 @@ export function resolve(C, p) {
   const isLot = !byId && C.V?.lotZone?.has?.(f.part);
   if (!isLot && byId?.family !== 'zone') return { klass: 'refused', notes, reasons: [{ code: 'NO_FEATURE', message: `${f.part} is no lot or zone (a ditch runs along a lot or a zone)`, evidence: { feature: f } }] };
   const rect = F.rect;
-  const sides = ditchSides(rect, al.sides);
+  const sides = ditchSides(rect, al.sides, isLot ? lotFront(C, f.part) : null);
   const { cols, runs } = ditchColumns(rect, sides);
   for (const p2 of part.params ? Object.keys(part.params).sort() : []) notes.push(`params.${p2} not read (a ditch is 1 x 1, level)`);
   if (part.width !== undefined && part.width !== 1) notes.push(`width ${part.width}: a ditch is 1 wide (read as 1)`);

@@ -23,18 +23,23 @@ function sideFacing(rect, t) {
   return Math.abs(dx) >= Math.abs(dz) ? (dx >= 0 ? 'e' : 'w') : (dz >= 0 ? 's' : 'n');
 }
 
-/** The via goal along a lot's side: the band RACE.band outside the box on that side, the flow along it. */
-function sideGoal(rect, side, offs) {
-  // (the band's centre line: the lane nearest the box RACE.band from it)
+/**
+ * The via goals along a lot's side: the band RACE.band outside the box on that side (its lane nearest the box at RACE.band), entered at
+ * the end nearer `from` and left at the other, the flow along it: [enter, leave] goals and the band's cells.
+ */
+function sideGoals(rect, side, offs, from) {
   const b = side === 'n' || side === 'w' ? RACE.band + offs[offs.length - 1] : RACE.band - offs[0];
-  const along = side === 'n' || side === 's' ? [0, 2] : [1, 3];
-  const inBand = (x, z) => (side === 'n' ? z === rect.minZ - b && x >= rect.minX && x <= rect.maxX
-    : side === 's' ? z === rect.maxZ + b && x >= rect.minX && x <= rect.maxX
-      : side === 'w' ? x === rect.minX - b && z >= rect.minZ && z <= rect.maxZ : x === rect.maxX + b && z >= rect.minZ && z <= rect.maxZ);
-  const box = side === 'n' ? { minX: rect.minX, maxX: rect.maxX, minZ: rect.minZ - b, maxZ: rect.minZ - b } : side === 's' ? { minX: rect.minX, maxX: rect.maxX, minZ: rect.maxZ + b, maxZ: rect.maxZ + b }
-    : side === 'w' ? { minX: rect.minX - b, maxX: rect.minX - b, minZ: rect.minZ, maxZ: rect.maxZ } : { minX: rect.maxX + b, maxX: rect.maxX + b, minZ: rect.minZ, maxZ: rect.maxZ };
-  // (two cells into the band, so the lip has a straight run before and after it)
-  return { box, col: inBand, test: (x, z, d) => inBand(x, z) && along.includes(d) && inBand(x - DIRS[d][0], z - DIRS[d][1]) && inBand(x - 2 * DIRS[d][0], z - 2 * DIRS[d][1]) };
+  const ns = side === 'n' || side === 's';
+  const line = ns ? (side === 'n' ? rect.minZ - b : rect.maxZ + b) : (side === 'w' ? rect.minX - b : rect.maxX + b);
+  const lo = (ns ? rect.minX : rect.minZ) - 1, hi = (ns ? rect.maxX : rect.maxZ) + 1;
+  const cell = (t) => (ns ? [t, line] : [line, t]);
+  const fromT = from ? (ns ? from[0] : from[1]) : lo;
+  const [t0, t1] = Math.abs(fromT - lo) <= Math.abs(fromT - hi) ? [lo, hi] : [hi, lo];
+  const dAlong = ns ? (t1 > t0 ? 0 : 2) : (t1 > t0 ? 1 : 3);
+  const at = (t, dir) => { const [x0, z0] = cell(t); return { box: { minX: x0, maxX: x0, minZ: z0, maxZ: z0 }, col: (x, z) => x === x0 && z === z0, test: (x, z, d) => x === x0 && z === z0 && (dir < 0 || d === dir) }; };
+  const inBand = (x, z) => (ns ? z === line && x >= Math.min(t0, t1) && x <= Math.max(t0, t1) : x === line && z >= Math.min(t0, t1) && z <= Math.max(t0, t1));
+  // (the second leg keeps to the band: the course runs straight along the lot's side)
+  return { goals: [at(t0, -1), { ...at(t1, dAlong), corridor: (x, z) => inBand(x, z) }], inBand };
 }
 
 /** Place the part: the course through the lot's side, a wheel fall of at least 3 beside it. */
@@ -50,17 +55,22 @@ export function resolve(C, p) {
   const rect = g.rect;
   const toPt = part.to?.anchor !== undefined ? C.env.anchors.get(part.to.anchor) : null;
   const side = ['n', 'e', 's', 'w'].includes(v.port) ? v.port : sideFacing(rect, toPt ?? centre(C.env.claim));
-  const goal = sideGoal(rect, side, laneOffsets(courseSpec(part, 'channel.race').width));
-  let serves = null;
-  const adjust = (full) => {
-    // the wheel fall's lip: the path's first index in the band past two straight cells (the via goal's index)
-    const j = full.path.findIndex(([x, z], i) => i >= 2 && goal.col(x, z) && goal.col(...full.path[i - 1]) && goal.col(...full.path[i - 2]));
-    if (j < 0) return { refused: { code: 'NO_ROOM', message: `the race does not pass ${v.part}'s ${side} side`, evidence: { lot: v.part, side } } };
-    for (let i = j + 1; i < full.levels.length; i++) full.levels[i] = Math.min(full.levels[i], full.levels[j] - RACE.drop);
-    serves = { lot: v.part, side, j };
-    return null;
-  };
-  const res = planCourse(C, { ...p, part: { ...part, via: undefined } }, { block: 'channel.race', via: [goal], race: true, adjust });
+  const fromPt = part.from?.anchor !== undefined ? C.env.anchors.get(part.from.anchor) : null;
+  const sg = sideGoals(rect, side, laneOffsets(courseSpec(part, 'channel.race').width), fromPt);
+  // the wheel fall's lip: an index of the course's run along the band, the middle first, then outwards (the first whose profile fits)
+  let res = null;
+  for (let t = 0; t < 7; t++) {
+    const adjust = (full) => {
+      const idx = full.path.map((c, i) => (sg.inBand(c[0], c[1]) ? i : -1)).filter((i) => i >= 0);
+      if (idx.length < 4) return { refused: { code: 'NO_ROOM', message: `the race does not pass ${v.part}'s ${side} side`, evidence: { lot: v.part, side } } };
+      const m = idx.length >> 1, off = t === 0 ? 0 : (t % 2 ? 1 : -1) * ((t + 1) >> 1);
+      const j = idx[Math.max(1, Math.min(idx.length - 2, m + off))];
+      for (let i = j + 1; i < full.levels.length; i++) full.levels[i] = Math.min(full.levels[i], full.levels[j] - RACE.drop);
+      return null;
+    };
+    res = planCourse(C, { ...p, part: { ...part, via: undefined } }, { block: 'channel.race', via: sg.goals, race: true, adjust });
+    if (res.klass === 'fits' || res.klass === 'adjusted' || res.reasons?.[0]?.evidence?.kind !== 'cut') break;
+  }
   if (!(res.klass === 'fits' || res.klass === 'adjusted')) return res;
   // the wheel fall: a fall of at least 3 whose lip is within 4 of the box, outside it grown by 1
   const fall = res.geo.steps.find((s) => s.kind === 'fall' && s.drop >= RACE.drop && s.cells.every(([x, , z]) => cheb(x, z, rect) >= 2) && s.cells.some(([x, , z]) => cheb(x, z, rect) <= RACE.band));
@@ -71,7 +81,6 @@ export function resolve(C, p) {
   }
   const mid = fall.cells[fall.cells.length >> 1];
   res.race = { serves: { lot: v.part, side, fall: { at: mid, drop: fall.drop } }, note: `serves ${v.part}: a wheel fall of ${fall.drop} on its ${side} side at ${mid.join(' ')} (the wheel is the lot design's, inside its box; nothing turns)` };
-  void serves;
   return res;
 }
 

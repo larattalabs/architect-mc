@@ -216,6 +216,13 @@ export function route(G, starts, goal, o) {
     for (let nd = 0; nd < 4; nd++) {
       if (nd === (d + 2) % 4) continue;
       const nx = x + DIRS[nd][0], nz = z + DIRS[nd][1];
+      if (goal.corridor && !goal.corridor(nx, nz)) continue;
+      // (a lip's column over a plan body's rim: the level carries onto it, nothing of the course stands there but the lip)
+      if (goal.lip && goal.lip(nx, nz)) {
+        const nk = key(nx, nz, nd, l), ng = g + 10;
+        if (!(gs.has(nk) && gs.get(nk) <= ng)) { gs.set(nk, ng); gr.set(nk, G.ground(nx, nz)); par.set(nk, k); heap.push((ng + h(nx, nz)) * KS + nk); }
+        continue;
+      }
       const q = lanesOk(nx, nz, nd);
       if (!q) continue;
       const opts = [Math.min(l, q.gB - 1)];
@@ -260,7 +267,9 @@ export function courseGeometry(S, path, routeLevels, spec, ends, o) {
   const neckHead = ends.head?.kind === 'overflow', neckTail = ends.tail?.kind === 'rim';
   const lipTail = ends.tail?.kind === 'rim' || ends.tail?.kind === 'join';
   // the last index is the tail's lip (a fall over a rim or into natural water): not part of any reach
-  const nR = lipTail ? n - 1 : n;
+  // (a rim fall over a raised body's apron: a lip run of 2, the apron column then the rim column)
+  const lipLen = lipTail ? Math.max(1, Math.min(3, ends.tail?.lipLen ?? 1)) : 0;
+  const nR = n - lipLen;
   const colsOf = (i) => {
     const o2 = (neckHead && i === 0) || (neckTail && i === nR - 1) ? [0] : offs;
     const set = new Map();
@@ -287,6 +296,7 @@ export function courseGeometry(S, path, routeLevels, spec, ends, o) {
   }
   // the levels never rise, and stand at most `fill` over the ground - 1 the router allowed
   for (let i = 1; i < nR; i++) pcols[i].level = Math.min(pcols[i].level, pcols[i - 1].level);
+  if (process.env.DBG) console.log("PROF", JSON.stringify(path.map((c, i) => [...c, pcols[i]?.top, pcols[i]?.level])));
   const prof = profileOf(pcols, { minReach: PROFILE.minReach, drop: spec.drop, flow: o.frozen && spec.flow === 'riffles' ? 'pools' : spec.flow, riffle: spec.riffle, cut: spec.cut, minDrop: o.minDrop ?? 1 });
   if (prof.refused) return prof;
   // (a frozen course: a spillway's submerged outlet would join two reaches at one level; its upper reach takes the lower level)
@@ -360,11 +370,13 @@ export function courseGeometry(S, path, routeLevels, spec, ends, o) {
     const last = reaches[reaches.length - 1];
     if (!lp || last.level - lp.landY < 1) return { refused: { code: 'WATER', message: `the course's tail stands ${lp ? last.level - lp.landY : '?'} over the water it ends in (a fall needs ${ends.tail.kind === 'rim' ? 2 : 1})`, evidence: { kind: 'join' } } };
     const y = last.level - (o.frozen ? 1 : 0);
-    const cells = colsOf(n - 1).length && neckTail ? [[path[n - 1][0], y, path[n - 1][1]]] : lanesAt(path[n - 1][0], path[n - 1][1], DIRS[dirs[n - 1].dout], offs).map(([x, z]) => [x, y, z]);
+    const cells = [];
+    for (let i = nR; i < n; i++) cells.push(...(neckTail ? [[path[i][0], y, path[i][1]]] : lanesAt(path[i][0], path[i][1], DIRS[dirs[i].dout], offs).map(([x, z]) => [x, y, z])));
+    const lastCells = cells.slice(neckTail ? cells.length - 1 : cells.length - offs.length);
     steps.push({ kind: 'fall', from: last.id, to: lp.into ?? null, drop: last.level - lp.landY, cells, seg: 1, frozen: !!o.frozen, tail: ends.tail.kind });
     for (const c of cells) { stepCells.set(k3(...c), steps.length - 1); openTop.set(k2(c[0], c[2]), Math.max(openTop.get(k2(c[0], c[2])) ?? -Infinity, c[1])); }
     last.outlets.push(...cells);
-    const landing = cells.map(([x, , z]) => [x + DIRS[dirs[n - 1].dout][0], lp.landY, z + DIRS[dirs[n - 1].dout][1]]);
+    const landing = lastCells.map(([x, , z]) => [x + DIRS[dirs[n - 1].dout][0], lp.landY, z + DIRS[dirs[n - 1].dout][1]]);
     // (the water it lands in: everything over its surface is the fall's open column)
     for (const [x, , z] of landing) openTop.set(k2(x, z), lp.landY);
     if (lp.into) last.planJoins.push({ body: lp.into, cells: landing });
@@ -769,6 +781,13 @@ export function planCourse(C, p, { block = 'channel.course', via = null, race = 
     const wf = again.klass === 'fits' || again.klass === 'adjusted' ? [{ part: p.id, fragment: frag, geometry: { rect: rectArr(again.rect), reaches: again.geo.reaches.length }, cost: { cells: again.geo.reaches.reduce((a, R) => a + R.cells.length, 0) } }] : undefined;
     return refuse('UNREACHABLE', `from stands at ${lf}, lower than to at ${lt}: a course runs downhill from its head (never swapped silently; the swapped course is the wouldFit)`, { kind: 'uphill', from: lf, to: lt }, { wouldFit: wf });
   }
+  // (§7.2) a level canal joins two ends at one level: ends 2 or more apart answer WATER level, the pools course the wouldFit
+  if (spec.flow === 'level' && lf !== null && lt !== null && lf - lt >= 2) {
+    const frag = { ...part, flow: 'pools' };
+    const again = planCourse(C, { ...p, part: frag }, { block, via, race, adjust });
+    const wf = again.klass === 'fits' || again.klass === 'adjusted' ? [{ part: p.id, fragment: frag, geometry: { rect: rectArr(again.rect), reaches: again.geo.reaches.length }, cost: { cells: again.geo.reaches.reduce((a, R) => a + R.cells.length, 0) } }] : undefined;
+    return refuse('WATER', `a level canal joins ends at one level: from stands at ${lf}, to at ${lt} (flow: pools steps down between them; it is the wouldFit)`, { kind: 'level', from: lf, to: lt }, { wouldFit: wf });
+  }
   const ends = new Set([part.from.part, part.to.part, ...(part.via ?? []).map((v) => v.part)].filter(Boolean));
   const G = routerWorld(C, p, ends);
   const turn = COURSE[spec.look].turn;
@@ -840,15 +859,15 @@ export function planCourse(C, p, { block = 'channel.course', via = null, race = 
     tail.kind = 'rim'; tail.ref = T.part; tail.B = B;
     const sites = edgeSites(B);
     const at = new Map(sites.map((s) => [k2(s.ox, s.oz), s]));
+    // (a raised body, a fountain: its apron, the column outside its rim, may carry the lip too)
+    // (and the cell past it: a raised body keeps a cell of level ground round its site)
+    const apron = new Set(B.raised ? sites.flatMap((s) => [1, 2].map((t) => k2(s.ox + t * DIRS[s.d][0], s.oz + t * DIRS[s.d][1]))).filter((kk) => !at.has(kk)) : []);
     const bb = sites.length ? { minX: Math.min(...sites.map((s) => s.ox)), maxX: Math.max(...sites.map((s) => s.ox)), minZ: Math.min(...sites.map((s) => s.oz)), maxZ: Math.max(...sites.map((s) => s.oz)) } : env.claim;
     // the lip stands on X's rim column (the path's last index), the flow into X, the tail's level at least 2 over X's
     goal = {
-      box: bb, col: (x, z) => at.has(k2(x, z)),
+      box: bb, col: (x, z) => at.has(k2(x, z)), lip: (x, z) => at.has(k2(x, z)) || apron.has(k2(x, z)),
       test: (x, z, d, l) => { const s = at.get(k2(x, z)); return !!s && (s.d + 2) % 4 === d && l >= s.level + 2; },
     };
-    // (the lip's column is X's rim: the router may stand there)
-    const ok0 = G.ok;
-    G.ok = (x, z) => at.has(k2(x, z)) || ok0(x, z);
   } else {
     const pt = endPoint(C, T, fromPt ?? (starts[0] ? [starts[0].x, starts[0].z] : null));
     if (pt.error) return refuse(pt.error.code, pt.error.message, pt.error.evidence ?? {});
@@ -856,7 +875,15 @@ export function planCourse(C, p, { block = 'channel.course', via = null, race = 
     goal = { box: { minX: pt.at[0], maxX: pt.at[0], minZ: pt.at[1], maxZ: pt.at[1] }, col: (x, z) => x === pt.at[0] && z === pt.at[1], test: (x, z) => x === pt.at[0] && z === pt.at[1] };
   }
   // ---- the router, leg by leg (through each via; a race's via is its lot, handled by race.mjs as a waypoint)
-  const legs = [...(via ?? [])];
+  // (a course's own via: each a point the course passes (an anchor, or beside a part, a build or a region); a race's is its lot's side)
+  const ownVia = [];
+  if (!via) for (const v of part.via ?? []) {
+    if (v.feature !== undefined) return refuse('UNREACHABLE', 'a course passes no water on its way (via names a feature): end it there instead', { kind: 'blocked', via: v });
+    const pt = endPoint(C, v, toPt);
+    if (pt.error) return refuse(pt.error.code, pt.error.message, pt.error.evidence ?? {});
+    ownVia.push({ box: { minX: pt.at[0], maxX: pt.at[0], minZ: pt.at[1], maxZ: pt.at[1] }, col: (x, z) => x === pt.at[0] && z === pt.at[1], test: (x, z) => x === pt.at[0] && z === pt.at[1] });
+  }
+  const legs = [...(via ?? ownVia)];
   let cur = starts;
   const full = { path: [], levels: [] };
   for (let li = 0; li <= legs.length; li++) {
@@ -903,6 +930,9 @@ export function planCourse(C, p, { block = 'channel.course', via = null, race = 
     const s = edgeSites(tail.B).find((q) => q.ox === full.path[n - 1][0] && q.oz === full.path[n - 1][1] && (q.d + 2) % 4 === dEnd);
     // X's rim under the lip (its shell; the course writes nothing there), the landing X's surface cell
     tail.lip = { landY: s.level, into: s.body, solid: [[s.ox, s.level + 1, s.oz]] };
+    let ll = 1;
+    if (tail.B.raised) for (let t = 1; t <= 2 && n - 1 - t > 0; t++) if (full.path[n - 1 - t][0] === s.ox + t * DIRS[s.d][0] && full.path[n - 1 - t][1] === s.oz + t * DIRS[s.d][1]) ll = t + 1; else break;
+    tail.lipLen = ll;
     tail.site = s;
   }
   // (a race: the wheel fall forced beside its lot)
@@ -968,6 +998,18 @@ export function emit(K, p, res) {
     // (HY-c) the water gates: a crossing's grate cells are the reach's own cells written behind iron bars
     for (const x of crossingsOf(K)) if (x.course === p.id) { const R = geo.reaches.find((q) => q.id === x.body); if (R) R.grate = [...(R.grate ?? []), ...(x.grate ?? [])]; }
     if (res.frozen) for (const R of geo.reaches) R.ice = iceOf(K.ctx, R, geo, false);
+    // (§8.3) a wall standing on the course's columns: a water gate (HY-c's crossing), else UNREACHABLE wall
+    if (K.walls?.length) {
+      const cols = new Set();
+      for (const R of geo.reaches) for (const { x, z } of R.cols.values()) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) cols.add(k2(x + dx, z + dz));
+      for (const st of geo.steps) for (const [x, , z] of st.cells) cols.add(k2(x, z));
+      const crossed = new Set(crossingsOf(K).filter((x) => x.course === p.id).map((x) => x.wall));
+      for (const W of K.walls) {
+        if (crossed.has(W.id)) continue;
+        const c = W.cells.find((q) => cols.has(k2(q.x, q.z)));
+        if (c) throw refusal('UNREACHABLE', `wall ${W.id} stands across the course at ${c.x} ${c.z} (a course crosses a wall only under a water gate)`, { kind: 'wall', wall: W.id, at: [c.x, c.z] });
+      }
+    }
     const unsafe = p.part.ext?.['architect_mc:unsafe']?.course ?? null;
     const out = layCourse(r, geo, { id: p.id, part: p.id, look: res.spec.look, stage: K.stageOf('forms'), unsafe, fill: res.spec.fill });
     const vk = volumeKeep(r, VC, classAt);
