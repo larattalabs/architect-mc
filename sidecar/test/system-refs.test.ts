@@ -96,8 +96,9 @@ describe('systemRefs: expansion from the kit', () => {
   it('the compact plan/0 is much shorter than the full one a caller sent (about 45 KB)', async () => {
     const compact = await expandSystemRefs(KIT, ['plan/0#compact']);
     // (6c T3) the bound grew from 60,000 with catalogue 6 (the bridge and tunnel defs, R18-R20, six ids): the structured jobs' system
-    // cap (120,000) is the real limit; this keeps the compact form well under it
-    expect(compact.length).toBeLessThan(66_000);
+    // cap (120,000) is the real limit; this keeps the compact form well under it. (6c H) 66,000 -> 76,000 with catalogue 7 (the pond,
+    // fountain, waterfall, quay and channel defs, waterDepth, farmPond, R21-R23, four ids)
+    expect(compact.length).toBeLessThan(76_000);
   });
 });
 

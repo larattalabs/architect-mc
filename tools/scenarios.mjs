@@ -446,6 +446,7 @@ async function runScenario(id) {
 /** The metrics of a run directory (also `scenarios.mjs metrics <runDir>` to recompute after a kit fix). */
 async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, flat, lotStates = null }) {
   const { decodeArwd, dumpWorld, buildVirtual, F_WRITTEN } = await import('../kit/lib/region/vworld.mjs');
+  const { sampleIndex: sampleIndexOf } = await import('../kit/lib/region/survey.mjs');
   const { checkRegion } = await import('../kit/lib/region/check.mjs');
   const M = await import('./lib/scenario-metrics.mjs');
   const raw = path.join(out, 'raw');
@@ -533,9 +534,24 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   // (6c T1) the world's flowing water: an unclassified mismatch where the snapshot held flowing (non-source) water and the world now
   // holds air is a stream that moved between the snapshot and the write (SETTLEMENTS §4.2: flowing water is outside E-normal), classed
   // `flow` (a world class); the plan never places flowing water
+  // (6c H §4.5) narrowed to D2's rule, so no class can hide a fluid undo error: only at a cell the plan never writes, more than 6 columns
+  // from every written column (`far`), or more than 8 below the surveyed ground and every written cell within 6 columns (`deep`)
+  let writtenCols = null;
+  const awayFromWrites = (x, y, z) => {
+    if (!writtenCols) {
+      writtenCols = new Map();
+      vw.eachWritten((wx, wy, wz) => { const k = `${wx},${wz}`; writtenCols.set(k, Math.min(writtenCols.get(k) ?? Infinity, wy)); });
+    }
+    let near = Infinity, nearest = Infinity;
+    for (let dx = -6; dx <= 6; dx++) for (let dz = -6; dz <= 6; dz++) { const lo = writtenCols.get(`${x + dx},${z + dz}`); if (lo !== undefined) { near = Math.min(near, lo); nearest = 0; } }
+    if (nearest === Infinity) return true; // far
+    const g = vw.survey ? vw.survey.ground[sampleIndexOf(vw.survey, x, z)] : Infinity;
+    return y < g - 8 && y < near - 8; // deep
+  };
   const flowOf = (e) => {
     if (!e || flat || !(isT1(sc) || isT2(sc) || isD(sc) || isS2(sc)) || !(e.classes?.none > 0)) return e;
-    const moved = (e.list ?? []).filter((m) => m.class === 'none' && /^minecraft:water\[level=[1-9]/.test(m.was) && /^minecraft:(air|cave_air)$/.test(m.now));
+    const moved = (e.list ?? []).filter((m) => m.class === 'none' && /^minecraft:water\[level=[1-9]/.test(m.was) && /^minecraft:(air|cave_air)$/.test(m.now)
+      && !(vw.flags(...m.pos.split(',').map(Number)) & F_WRITTEN) && awayFromWrites(...m.pos.split(',').map(Number)));
     if (!moved.length) return e;
     const classes = { ...e.classes, none: e.classes.none - moved.length, flow: (e.classes.flow ?? 0) + moved.length };
     return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'flow' } : m)) };

@@ -1,6 +1,8 @@
 // Dumps the per-block facts that the data generator's blocks.json report does not carry: the block's Java class
 // chain (its family), the default state's collision boxes, light emission per state, light dampening, shape-based
-// light occlusion, redstone conductivity and the block's item. Run by kit/tools/gen-blocks.mjs with the Java 25
+// light occlusion, redstone conductivity and the block's item; (6c H) whether vanilla's FlowingFluid.canHoldFluid refuses the
+// default state for flowing water and for flowing lava (fluid-stopping), and its fire facts (ignitedByLava; FireBlock's ignite and burn
+// odds). Run by kit/tools/gen-blocks.mjs with the Java 25
 // source launcher against the unobfuscated 26.3 server jar + its bundled libraries:
 //   java -cp "<server-26.3.jar>:<libraries/**.jar>" BlockDump.java <out.json>
 import java.io.FileWriter;
@@ -30,11 +32,35 @@ public class BlockDump {
     return "{" + String.join(",", out) + "}";
   }
 
+  /**
+   * (6c H) FlowingFluid.canHoldSpecificFluid(BlockGetter, BlockPos, BlockState, Fluid) by reflection (private static): null when absent.
+   * 26.3's canHoldFluid is canHoldAnyFluid (a LiquidBlockContainer, or the block tag washed_away_by_fluids, which this dump can't read:
+   * no data packs) and canHoldSpecificFluid (a container's canPlaceLiquid, else true): the generator joins them with the jar's tags.
+   */
+  static java.lang.reflect.Method canHold() {
+    for (java.lang.reflect.Method m : net.minecraft.world.level.material.FlowingFluid.class.getDeclaredMethods()) {
+      Class<?>[] p = m.getParameterTypes();
+      if (m.getName().equals("canHoldSpecificFluid") && p.length == 4 && java.lang.reflect.Modifier.isStatic(m.getModifiers())) { m.setAccessible(true); return m; }
+    }
+    return null;
+  }
+
+  /** (6c H) FireBlock's ignite or burn odds of a state by reflection (private): -1 when absent. */
+  static int odds(String name, BlockState s) {
+    try {
+      java.lang.reflect.Method m = net.minecraft.world.level.block.FireBlock.class.getDeclaredMethod(name, BlockState.class);
+      m.setAccessible(true);
+      return (Integer) m.invoke(net.minecraft.world.level.block.Blocks.FIRE, s);
+    } catch (Throwable t) { return -1; }
+  }
+
   public static void main(String[] args) throws Exception {
     SharedConstants.tryDetectVersion();
     Bootstrap.bootStrap();
     var g = EmptyBlockGetter.INSTANCE;
     var pos = BlockPos.ZERO;
+    java.lang.reflect.Method hold = canHold();
+    if (hold == null) throw new IllegalStateException("FlowingFluid.canHoldSpecificFluid not found");
     try (Writer w = new FileWriter(args[0])) {
       w.write("{\n");
       boolean first = true;
@@ -59,11 +85,21 @@ public class BlockDump {
         boolean be = d.hasBlockEntity();
         boolean spawn;
         try { spawn = d.isValidSpawn(g, pos, net.minecraft.world.entity.EntityTypes.ZOMBIE); } catch (Throwable t) { spawn = false; }
+        // (6c H) a LiquidBlockContainer, and whether it takes flowing water and flowing lava (canHoldSpecificFluid; a block it can't decide
+        // takes them: conservative, so it is no fluid-stopping block)
+        boolean container = b instanceof net.minecraft.world.level.block.LiquidBlockContainer;
+        boolean holdsW, holdsL;
+        try {
+          holdsW = (Boolean) hold.invoke(null, g, pos, d, net.minecraft.world.level.material.Fluids.FLOWING_WATER);
+          holdsL = (Boolean) hold.invoke(null, g, pos, d, net.minecraft.world.level.material.Fluids.FLOWING_LAVA);
+        } catch (Throwable t) { holdsW = true; holdsL = true; }
+        boolean lavaLights = d.ignitedByLava();
+        int ignite = odds("getIgniteOdds", d), burn = odds("getBurnOdds", d);
         if (!first) w.write(",\n");
         first = false;
         w.write(q(id) + ":{\"cls\":[" + String.join(",", chain) + "],\"collision\":[" + boxes + "],\"emit\":[" + String.join(",", emit) + "]"
           + ",\"dampening\":" + d.getLightDampening() + ",\"shapeOcclusion\":" + d.useShapeForLightOcclusion()
-          + ",\"solidRender\":" + d.isSolidRender() + ",\"conductor\":" + conductor + ",\"item\":" + q(item) + ",\"replaceable\":" + replaceable + ",\"be\":" + be + ",\"spawn\":" + spawn + "}");
+          + ",\"solidRender\":" + d.isSolidRender() + ",\"conductor\":" + conductor + ",\"item\":" + q(item) + ",\"replaceable\":" + replaceable + ",\"be\":" + be + ",\"spawn\":" + spawn + ",\"container\":" + container + ",\"holdsFlowingWater\":" + holdsW + ",\"holdsFlowingLava\":" + holdsL + ",\"lavaLights\":" + lavaLights + ",\"ignite\":" + ignite + ",\"burn\":" + burn + "}");
       }
       w.write("\n}\n");
     }

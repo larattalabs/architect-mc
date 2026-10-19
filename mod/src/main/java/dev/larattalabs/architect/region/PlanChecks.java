@@ -370,6 +370,55 @@ public final class PlanChecks {
 		return false;
 	}
 
+	/** (6c H §10) The kinds whose parts ask fluid volumes in a check: the bodies (pond, fountain, waterfall, the moat channel) and the quay. */
+	static final java.util.Set<String> H_KINDS = java.util.Set.of("pond", "fountain", "waterfall", "quay", "channel");
+
+	/**
+	 * (6c H §10) Whether a plan has an H part: a form or connector of an {@link #H_KINDS} kind, or a zone or lot with {@code farmPond: true}
+	 * (S-H-2). With a tunnel part (T3b) or a wet fallback ({@link #wetAsked}) it is what makes a check plan twice.
+	 */
+	static boolean hasH(JsonObject plan) {
+		for (String fam : new String[] {"forms", "connectors"}) {
+			if (plan.get(fam) instanceof JsonArray a) {
+				for (JsonElement e : a) {
+					if (e instanceof JsonObject p && p.get("kind") instanceof JsonElement k && k.isJsonPrimitive() && H_KINDS.contains(k.getAsString())) {
+						return true;
+					}
+				}
+			}
+		}
+		return farmPond(plan.get("zones"));
+	}
+
+	/**
+	 * (6c H, S-H-2) A farm pond is an opt-in body with no part of its own: {@code farmPond: true} on a zone, or on a lot at any depth under
+	 * the zones (a zone's program lots, a district's lots).
+	 */
+	static boolean farmPond(@Nullable JsonElement e) {
+		if (e instanceof JsonObject o) {
+			if (o.get("farmPond") instanceof JsonElement f && f.isJsonPrimitive() && f.getAsJsonPrimitive().isBoolean() && f.getAsBoolean()) {
+				return true;
+			}
+			for (var en : o.entrySet()) {
+				if (farmPond(en.getValue())) {
+					return true;
+				}
+			}
+		} else if (e instanceof JsonArray a) {
+			for (JsonElement x : a) {
+				if (farmPond(x)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/** (6c H §10) Whether the first plan took the wet fallback somewhere (its check's {@code wetAsked}: the kit's meta.wet records, a pier, a harbour wall or a quay in water). */
+	static boolean wetAsked(JsonObject planned) {
+		return planned.get("planCheck") instanceof JsonObject k && k.get("wetAsked") instanceof JsonElement w && w.isJsonPrimitive() && w.getAsBoolean();
+	}
+
 	/**
 	 * (6c T3 §6) The check's two-plan flow: a plan with a tunnel part whose first plan asked for volumes (the tunnels' corridors) has
 	 * them sampled ({@link RegionsImpl#volumesFor}, under the check's {@code load}) and is planned again with them; the answers come
@@ -382,7 +431,7 @@ public final class PlanChecks {
 		String blobId, String surveySha, byte[] survey, @Nullable LoadPolicy load, long t0, Object[] first) {
 		JsonObject planned = (JsonObject) first[0];
 		JsonArray need = planned.get("needVolumes") instanceof JsonArray a ? a : new JsonArray();
-		if (need.isEmpty() || !hasTunnel(r.plan())) {
+		if (need.isEmpty() || !(hasTunnel(r.plan()) || hasH(r.plan()) || wetAsked(planned))) {
 			lastVolumePass = null;
 			return CompletableFuture.completedFuture(first);
 		}
@@ -407,7 +456,7 @@ public final class PlanChecks {
 				vp.addProperty("read", 0);
 				vp.addProperty("why", why);
 				lastVolumePass = vp;
-				checkNote(planned, "the tunnels asked for " + need.size() + " volume" + (need.size() == 1 ? "" : "s") + " (" + nCells + " cells) that could not be read ("
+				checkNote(planned, (hasTunnel(r.plan()) ? "the tunnels" : "the plan's water") + " asked for " + need.size() + " volume" + (need.size() == 1 ? "" : "s") + " (" + nCells + " cells) that could not be read ("
 					+ why + "): prepare (or check with load: \"generate\"), then check again");
 				Architect.LOGGER.info("Plan check: volume pass not read ({}), {} boxes, {} cells", why, need.size(), nCells);
 				return CompletableFuture.completedFuture(first);
@@ -935,7 +984,11 @@ public final class PlanChecks {
 	}
 
 	private static CompletableFuture<@Nullable String> guardDiff(ServerLevel level, Path vols, JsonObject g) {
-		String part = RegionsImpl.str(g, "part", "?");
+		// (6c H §10) a fluid guard (a body's shell, buffer and joins, or a wet column) names its body, compares the fluid layer too, and is
+		// sampled again with it (ARVX version 3)
+		boolean fluids = g.get("fluids") instanceof JsonElement fe && fe.isJsonPrimitive() && fe.getAsBoolean();
+		String part = fluids ? RegionsImpl.str(g, "kind", "body") + " " + RegionsImpl.str(g, "body", "?") + " of " + RegionsImpl.str(g, "part", "?")
+			: RegionsImpl.str(g, "part", "?");
 		JsonObject v = g.getAsJsonObject("volume");
 		String sha = RegionsImpl.str(v, "sha");
 		JsonArray bx = v.getAsJsonArray("box");
@@ -946,18 +999,18 @@ public final class PlanChecks {
 			before = dev.larattalabs.architect.region.volume.Arvx.decode(dev.larattalabs.architect.region.volume.Arvx.gunzip(Files.readAllBytes(vols.resolve(sha
 				+ ".bin"))));
 		} catch (IOException | RuntimeException e) {
-			return CompletableFuture.completedFuture("tunnel " + part + ": the frozen volume " + sha.substring(0, Math.min(12, sha.length()))
+			return CompletableFuture.completedFuture((fluids ? "" : "tunnel ") + part + ": the frozen volume " + sha.substring(0, Math.min(12, sha.length()))
 				+ " it was checked against is gone (" + e.getMessage() + "): check again");
 		}
 		int chunks = ((bb.maxX() >> 4) - (bb.minX() >> 4) + 1) * ((bb.maxZ() >> 4) - (bb.minZ() >> 4) + 1);
-		return dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, bb, LoadPolicy.GENERATED_ONLY(chunks + 8), null).thenApply(res -> {
+		return dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, bb, LoadPolicy.GENERATED_ONLY(chunks + 8), null, fluids, fluids).thenApply(res -> {
 			dev.larattalabs.architect.region.volume.Arvx.Decoded now;
 			try {
 				now = dev.larattalabs.architect.region.volume.Arvx.decode(dev.larattalabs.architect.region.volume.Arvx.gunzip(res.gz()));
 			} catch (IOException e) {
 				throw new java.io.UncheckedIOException(e);
 			}
-			return rockDiff(part, before, now, g.getAsJsonArray("runs"));
+			return fluids ? waterDiff(part, before, now, g.getAsJsonArray("runs")) : rockDiff(part, before, now, g.getAsJsonArray("runs"));
 		});
 	}
 
@@ -991,6 +1044,47 @@ public final class PlanChecks {
 		}
 		return n == 0 ? null : "tunnel " + part + ": the rock it was checked against changed since the check, " + n + " cell" + (n == 1 ? "" : "s") + ": " + String
 			.join("; ", named);
+	}
+
+	/**
+	 * (6c H §10) A fluid guard's cells before and now: the classes (PLANT as AIR, MISSING not judged) and the fluid layer (a version-3
+	 * volume's codes; a volume without it compares classes only). Null when equal, else "body <id> of <part>: the water it was checked
+	 * against changed since the check, N cells: (x, y, z) BEFORE->NOW" (a player's pond, a drained lake, a new flow), at most
+	 * {@link #ROCK_CELLS_NAMED} named.
+	 */
+	static @Nullable String waterDiff(String part, dev.larattalabs.architect.region.volume.Arvx.Decoded before, dev.larattalabs.architect.region.volume.Arvx.Decoded now,
+		JsonArray runs) {
+		int[] b = before.box();
+		var classes = dev.larattalabs.architect.api.VoxelClass.values();
+		var codes = dev.larattalabs.architect.region.volume.Arvx.FLUID_CODES;
+		int air = dev.larattalabs.architect.api.VoxelClass.AIR.ordinal(), plant = dev.larattalabs.architect.api.VoxelClass.PLANT.ordinal();
+		int missing = dev.larattalabs.architect.api.VoxelClass.MISSING.ordinal();
+		int n = 0;
+		List<String> named = new ArrayList<>();
+		for (int i = 0; i + 3 < runs.size(); i += 4) {
+			int x = runs.get(i).getAsInt(), z = runs.get(i + 1).getAsInt(), y0 = runs.get(i + 2).getAsInt(), y1 = runs.get(i + 3).getAsInt();
+			for (int y = y0; y <= y1; y++) {
+				if (x < b[0] || x > b[3] || y < b[1] || y > b[4] || z < b[2] || z > b[5]) {
+					continue;
+				}
+				int was = before.classAt(x, y, z), is = now.classAt(x, y, z);
+				if (is == missing || was == missing) {
+					continue;
+				}
+				int w = was == plant ? air : was, k = is == plant ? air : is;
+				int fw = before.fluidAt(x, y, z), fk = now.fluidAt(x, y, z);
+				boolean fluidChanged = fw >= 0 && fk >= 0 && fw != fk;
+				if (w != k || fluidChanged) {
+					n++;
+					if (named.size() < ROCK_CELLS_NAMED) {
+						named.add("(" + x + ", " + y + ", " + z + ") " + classes[was] + (fw > 0 ? "/" + codes.get(fw) : "") + "->" + classes[is] + (fk > 0 ? "/" + codes
+							.get(fk) : ""));
+					}
+				}
+			}
+		}
+		return n == 0 ? null : part + ": the water it was checked against changed since the check, " + n + " cell" + (n == 1 ? "" : "s") + ": " + String.join(
+			"; ", named);
 	}
 
 	/**

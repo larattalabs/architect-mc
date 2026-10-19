@@ -84,6 +84,13 @@ export function memoryCache() {
  * `{box, bytes, sha, decoded}` (the shape ctx.volumes holds).
  */
 export async function fixtureVolume(box, spec, survey, claim) {
+  // (6c H) a box asked with fluids (`box.fluids`): the synthetic volume of h-helpers.mjs (version 3: the survey's water columns as water
+  // sources from the floor up to the ground, block ids and the fluid layer), with the spec's edits
+  if (box.fluids) {
+    const { synthVolume } = await import('./h-helpers.mjs');
+    const b = { minX: box.minX, minY: box.minY, minZ: box.minZ, maxX: box.maxX, maxY: box.maxY, maxZ: box.maxZ };
+    return synthVolume(b, survey, claim, { fluids: true, edits: spec?.edits ?? [] });
+  }
   const { encodeArvx, decodeArvx, VC } = await import('../lib/region/volume.mjs');
   const { surveyApi } = await import('../lib/region/survey.mjs');
   const S = surveyApi(survey, claim);
@@ -118,7 +125,10 @@ export async function checkPlanVolumes(plan, { volume = {}, ...o } = {}) {
   const first = await checkPlanLocal(plan, o);
   const need = first.res.needVolumes ?? [];
   const hasTunnel = (plan.connectors ?? []).some((p) => p?.kind === 'tunnel');
-  if (!need.length || !hasTunnel || volume.missing) return { ...first, volumes: o.volumes ?? [], first, asked: need };
+  // (6c H, §10) the trigger widened: a body part (pond, fountain, waterfall, moat), a quay, or a part that took the wet fallback (meta.wet)
+  const hasH = [...(plan.forms ?? []), ...(plan.connectors ?? [])].some((p) => ['pond', 'fountain', 'waterfall', 'quay', 'channel'].includes(p?.kind)) || (first.res.meta?.wet ?? []).length > 0
+    || /"farmPond":true/.test(JSON.stringify(plan.zones ?? []));
+  if (!need.length || !(hasTunnel || hasH) || volume.missing) return { ...first, volumes: o.volumes ?? [], first, asked: need };
   const vols = [...(o.volumes ?? [])];
   for (const b of need) if (!vols.some((v) => v.box.minX === b.minX && v.box.minY === b.minY && v.box.minZ === b.minZ && v.box.maxX === b.maxX && v.box.maxY === b.maxY && v.box.maxZ === b.maxZ)) vols.push(await fixtureVolume(b, volume, o.survey, o.claim));
   const second = await checkPlanLocal(plan, { ...o, volumes: vols });

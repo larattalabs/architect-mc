@@ -37,6 +37,9 @@ import { bridgeAnswer, bridgeAutoLeg, bridgeFailAnswer, bridgeFallback, bridgeLe
 import { emitTunnels, tunnelAnswer, tunnelAutoLeg, tunnelFailAnswer, tunnelLeg, tunnelPassInput, tunnelResolve } from '../connectors/tunnel.mjs';
 /** (6c T3) The connector kinds that get the `links` stage and the K context: K1's and T3's. */
 export const LINK_KINDS = Object.freeze([...K1_KINDS, ...T3_KINDS]);
+// (6c H) water bodies and wet structures: the generators behind one dispatcher (lib/fluids/hooks.mjs), the stage name from a leaf
+import { fluidAnswer, fluidEmit, fluidPassInput, fluidResolve, fluidStageWanted, isHPart, wetBridgeFallback } from '../fluids/hooks.mjs';
+import { FLUIDS_STAGE } from '../fluids/kinds.mjs';
 
 /** §7's caps (each a request may only lower). */
 export const BUDGET_DEFAULTS = Object.freeze({ maxNodes: 2_000_000, maxEdges: 128, maxCells: 20_000_000, maxMs: 120_000, maxHeapMb: 2048 });
@@ -799,10 +802,22 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   const reliefOf = new Map(); // zone id -> relief form ids naming it
   for (const p of order) {
     if (answers.has(p.id)) continue;
-    if (p.family === 'connector') continue;
+    if (p.family === 'connector' && !isHPart(p)) continue;
     const dep = depState(p);
     if (dep) { ans(p, dep); continue; }
     if (timeUp()) { ans(p, budgetHit('maxMs')); continue; }
+    if (isHPart(p)) {
+      // (6c H) a water body or a wet structure (a moat too, so the route pass sees its water): its generator places it (lib/fluids)
+      const C = { env, ctx, plan: P.plan, V, byId, geom, geomOf, res, answers, okClass, tolOf, judge, notes, order, taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted] };
+      const f = fluidResolve(C, p);
+      res.set(p.id, f);
+      if (f.klass === 'fits' || f.klass === 'adjusted') {
+        if (f.rect) geom.set(p.id, { rect: f.rect });
+        for (const fp of f.footprints ?? []) formsAccepted.push(arrRect(fp));
+      }
+      ans(p, { class: f.klass, reasons: f.reasons, deviations: f.deviations, wouldFit: f.wouldFit, notes: f.notes });
+      continue;
+    }
     if (p.family === 'zone' && (p.part.where?.along || p.kind === 'outpost') && !Array.isArray(p.part.program?.districts)) {
       // (D2) a zone along a boundary (locator.along: a shore, a biome edge, a ridge), or an outpost: one district, never cached
       const taken = [...zonesAccepted.map((o) => o.rect), ...formsAccepted];
@@ -886,7 +901,9 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   // (7a K1) a plan with a wall, gate, rope bridge or auto connector to compile gets the `links` stage after `routes` (none
   // otherwise: every plan without K1 parts keeps its stages, so its IR); (6c T3) so does one with a bridge or tunnel
   const k1Parts = order.filter((p) => p.family === 'connector' && LINK_KINDS.includes(p.kind) && !answers.has(p.id));
-  const stagesWanted = k1Parts.length ? ['ground', 'street', 'forms', 'routes', 'links', 'lots', 'props'] : ['ground', 'street', 'forms', 'routes', 'lots', 'props'];
+  // (6c H, §3.1) a plan with a body gets the `fluids` stage last (none otherwise: its stage list, so its IR, is unchanged)
+  const fluidsWanted = fluidStageWanted({ env, ctx, plan: P.plan, V, byId, order, answers, okClass });
+  const stagesWanted = [...(k1Parts.length ? ['ground', 'street', 'forms', 'routes', 'links', 'lots', 'props'] : ['ground', 'street', 'forms', 'routes', 'lots', 'props']), ...(fluidsWanted ? [FLUIDS_STAGE] : [])];
   const whole = order.find((p) => p.family === 'zone' && res.get(p.id)?.whole && okClass(p.id));
   let r;
   const partOf = {}; // region part / lot / road id -> plan part id
@@ -911,7 +928,9 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     }
   }
   if (!r) { r = makeRegion(null); r.stages(stagesWanted); }
-  const stageOf = (s) => (r.stageList.includes(s) ? s : s === 'routes' || s === 'props' || s === 'lots' || s === 'links' ? r.stageList[r.stageList.length - 1] : r.stageList[0]);
+  // ((6c H) the fluids stage is a body's alone: a stage that falls back to the last never lands in it)
+  const lastSolid = () => r.stageList[r.stageList.length - 1] === FLUIDS_STAGE && r.stageList.length > 1 ? r.stageList[r.stageList.length - 2] : r.stageList[r.stageList.length - 1];
+  const stageOf = (s) => (r.stageList.includes(s) ? s : s === 'routes' || s === 'props' || s === 'lots' || s === 'links' ? lastSolid() : r.stageList[0]);
   const zoneEmit = new Map(); // zone id -> {L, lots, prefix}
   let villages = 0, laneCells = [], reserved = new Set();
   const outposts = [];
@@ -1034,7 +1053,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   }
   // terrace and spikes
   for (const p of order) {
-    if (p.family !== 'form' || p.kind === 'relief' || !okClass(p.id)) continue;
+    if (p.family !== 'form' || p.kind === 'relief' || isHPart(p) || !okClass(p.id)) continue;
     const f = res.get(p.id);
     const cp = checkpoint(r);
     const id = `f_${p.id}`.slice(0, 44);
@@ -1081,6 +1100,26 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   // (6c T3, S-T3-2) the street fallback needs the context in a plan without K1 or T3 parts too: made when a leg first falls back (no
   // walls are planned then: the plan has none)
   const ensureK = () => (K ??= makeK());
+
+  // ---- (6c H) step 3 for H parts: water bodies, moats and quays, before the routes (the route pass sees their water), each under a
+  // checkpoint; a generator refuses by throwing 'CODE: message'
+  for (const p of order) {
+    if (!isHPart(p) || !okClass(p.id)) continue;
+    const cp = checkpoint(r);
+    const bodies0 = (r._fluidBodies ?? []).length, wet0 = (r.meta.wet ?? []).length;
+    try {
+      fluidEmit(ensureK(), p, res.get(p.id));
+      mark(p.id, addedSince(r, cp));
+      // (§10) the approval guards: each body's shell, buffer and joins, each wet column, over the frozen volume it was planned on
+      for (const b of (r._fluidBodies ?? []).slice(bodies0)) if (b.volume && b.guardRuns) (K.record.guards ??= []).push({ part: p.id, body: b.id, kind: 'body', fluids: true, volume: b.volume, runs: b.guardRuns.flat() });
+      for (const w of (r.meta.wet ?? []).slice(wet0)) if (w.volume && w.columns) (K.record.guards ??= []).push({ part: p.id, body: w.id, kind: 'wet', fluids: true, volume: w.volume, runs: w.columns.flat() });
+    } catch (e) {
+      rollback(r, cp);
+      const m = /^([A-Z_]{3,20}): /.exec(String(e.message));
+      ans(p, { class: 'refused', reasons: [{ code: m ? m[1] : 'NO_ROOM', message: String(e.message) }] });
+      geom.delete(p.id);
+    }
+  }
 
   // ---- 4. connectors: legs, one route pass per grade limit (a dry run, then only the connectors whose every leg routed)
   // ((7a K1) a wall or gate is answered by its own steps; a rope_bridge or auto connector routes here with its leg options)
@@ -1139,7 +1178,9 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         // (7a K1) the walls (the gate move) and the rope move's inputs, only when the plan has them (else T2's pass, byte for byte);
         // (6c T3) the bridge and tunnel moves' pass-level inputs, likewise
         const walls = K ? wallsPassInput(K) : null, rope = K ? ropePassInput(K) : null, bridge = K ? bridgePassInput(K) : null, tunnel = K ? tunnelPassInput(K) : null;
-        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length || rope?.hard?.length ? { hard: [...env.standingHard, ...(rope?.hard ?? [])] } : {}), ...(rope?.base ? { base: rope.base } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}), ...(bridge ? { bridge } : {}), ...(tunnel ? { tunnel } : {}) });
+        // (6c H) the plan's own water (a moat: the routes keep 1 off it), only when the plan has some
+        const fluids = K ? fluidPassInput(K) : null;
+        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length || rope?.hard?.length ? { hard: [...env.standingHard, ...(rope?.hard ?? [])] } : {}), ...(rope?.base ? { base: rope.base } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}), ...(bridge ? { bridge } : {}), ...(tunnel ? { tunnel } : {}), ...(fluids ? { fluids } : {}) });
       } catch (e) {
         rollback(r, cp);
         for (const l of group) if (!answers.has(l.conn.id)) ans(l.conn, { class: 'refused', reasons: [{ code: /KEEP_OUT/.test(e.message) ? 'KEEP_OUT' : 'UNREACHABLE', message: e.message }] });
@@ -1190,6 +1231,12 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         if (why === 'ROUTE_WATER' && FALLBACK_KINDS.includes(l.conn.kind) && !l.fallback) {
           const fb = bridgeFallback(ensureK(), l);
           if (fb) { l.k1 = { ...(l.k1 ?? {}), ...fb }; l.fallback = true; retry.add(l.conn.id); continue; }
+        }
+        // ((6c H, §8, S-H-4) a leg still failing on water after T3's fallback, or a bridge leg failing on water, is searched once more
+        // with wet piers: only then, so a plan without such a failure is byte for byte as before)
+        if ((why === 'ROUTE_WATER' || why === 'BRIDGE') && !l.wet) {
+          const wf = wetBridgeFallback(ensureK(), l, m, why);
+          if (wf) { l.k1 = { ...(l.k1 ?? {}), ...wf }; l.wet = true; retry.add(l.conn.id); continue; }
         }
         // ((6c T3) a bridge or tunnel leg the route pass could not span or bore answers its typed reason)
         if ((why === 'BRIDGE' || why === 'TUNNEL') && K) { ans(l.conn, why === 'BRIDGE' ? bridgeFailAnswer(K, l, m) : tunnelFailAnswer(K, l, m)); continue; }
@@ -1276,6 +1323,11 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       const entries = new Map(zoneLots(p.part).map((l) => [l.id, l.lot?.entry ?? null]));
       const pend = styleOf(P.plan, p.part)?.pending !== undefined;
       a.provisional = pend || lots.some((l) => !entries.get(l.id));
+    } else if (isHPart(p)) {
+      // (6c H) a water body's, a moat's or a quay's own fields (its generator's), else its rect
+      const x = K ? fluidAnswer(K, p, res.get(p.id)) : null;
+      if (x) Object.assign(a, x);
+      else if (geom.get(p.id)?.rect) a.geometry = { rect: rectArr(geom.get(p.id).rect) };
     } else if (p.family === 'form' && geom.get(p.id)?.rect) a.geometry = { rect: rectArr(geom.get(p.id).rect), ...(res.get(p.id)?.sites ? { sites: res.get(p.id).sites } : {}) };
     else if (p.family === 'form' && p.kind === 'relief') a.geometry = { around: res.get(p.id).zones };
   }

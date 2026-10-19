@@ -1,0 +1,4 @@
+{
+  "about": "(6c H) H-core's placeholder for P0 item 9's coverage: the water-body ids whose valid/ fixtures (v41 pond, v42 lava pit, v43 fountain, v44 waterfall, v45 moat, v49 farm pond) land with slice H-a. H-a deletes this file when they do.",
+  "ids": ["form.pond", "form.fountain", "form.waterfall", "connector.channel", "channel.moat"]
+}

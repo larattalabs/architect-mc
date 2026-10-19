@@ -1,15 +1,11 @@
 {
- "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; second half)",
+ "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; second half) (H: form.pond and form.waterfall left it when they shipped)",
  "on": "s7",
  "expect": {
   "all": [
    {
     "part": "f_brush",
     "block": "form.brush"
-   },
-   {
-    "part": "f_pond",
-    "block": "form.pond"
    },
    {
     "part": "f_scatter",
@@ -30,10 +26,6 @@
    {
     "part": "f_hollow_mountain",
     "block": "form.hollow_mountain"
-   },
-   {
-    "part": "f_waterfall",
-    "block": "form.waterfall"
    },
    {
     "part": "f_seabed_site",
@@ -90,15 +82,6 @@
     }
    },
    {
-    "id": "f_pond",
-    "kind": "pond",
-    "where": {
-     "near": {
-      "anchor": "stone"
-     }
-    }
-   },
-   {
     "id": "f_scatter",
     "kind": "scatter",
     "where": {
@@ -137,15 +120,6 @@
    {
     "id": "f_hollow_mountain",
     "kind": "hollow_mountain",
-    "where": {
-     "near": {
-      "anchor": "stone"
-     }
-    }
-   },
-   {
-    "id": "f_waterfall",
-    "kind": "waterfall",
     "where": {
      "near": {
       "anchor": "stone"

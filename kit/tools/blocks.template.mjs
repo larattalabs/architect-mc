@@ -12,6 +12,8 @@
 //   d          light dampening when between 1 and 14 (leaves, water: -1 extra per step)
 //   h          top of the collision box when not 1 (carpet 0.0625, slab 0.5, chest 0.875, ...)
 //   g          a falling block (its class extends FallingBlock)
+//   fs         (6c H) fluid-stopping: vanilla's FlowingFluid.canHoldFluid refuses its default state for flowing water and flowing lava
+//   fl         (6c H) flammable: lava lights it (ignitedByLava) or fire's ignite odds are over 0
 //   i          the block's item when it differs ('' = none: air, fluids, wall torches map to the torch, ...)
 // Properties are written `name=v1|*v2` with the default starred.
 
@@ -236,6 +238,11 @@ export function supportOf(state) {
 /** (6c W) A falling block (its class extends FallingBlock: sand, gravel, concrete powder, anvils, the dragon egg). */
 export const isGravity = (name) => !!T[qualify(String(name).replace(/\[.*$/, ''))]?.g;
 export const isSpawnable = (name) => !!T[qualify(String(name).replace(/\[.*$/, ''))]?.sp;
+/** (6c H) Fluid-stopping: vanilla's FlowingFluid.canHoldFluid refuses the block's default state for flowing water and flowing lava
+ * (full solid blocks, doors, signs, ladders, waterloggable blocks). A block not in the table is not (conservative). */
+export const isFluidStopping = (name) => !!T[qualify(String(name).replace(/\[.*$/, ''))]?.fs;
+/** (6c H) Flammable: lava lights it (ignitedByLava) or fire's ignite odds are over 0 (M20's fire reach). */
+export const isFlammable = (name) => !!T[qualify(String(name).replace(/\[.*$/, ''))]?.fl;
 
 /** (6b) The block's voxel class for natural blocks (kit/voxel_classes.json), 'AIR' for air, else 'PLAYER'. */
 export function voxelClassOf(name) {

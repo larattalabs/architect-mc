@@ -144,6 +144,10 @@ export function sitePlan({ ir, meta, planId = null, irSha = null, vw = null }) {
   // tunnels (portals: the first and last bore cells' floor; length: floor cells; carved: cells cleared), from the plan meta (§8)
   if (Array.isArray(meta?.bridges) && meta.bridges.length) out.bridges = meta.bridges.map((b) => ({ id: b.id, part: b.part, form: b.form, span: b.n, piers: (b.piers ?? []).map((q) => [q.x, q.z]), landings: [[...b.from], [...b.to]] }));
   if (Array.isArray(meta?.tunnels) && meta.tunnels.length) out.tunnels = meta.tunnels.map((t) => ({ id: t.id, part: t.part, portals: (t.portals ?? []).map((q) => [...q]), length: t.length, carved: t.carved ?? 0 }));
+  // (6c H) the plan's fluid bodies (r.fluidBody's records: counts of sources, declared spill and ice) and quays (H-b's records), from
+  // the plan meta (§12)
+  if (Array.isArray(meta?.waters) && meta.waters.length) out.waters = meta.waters.map((w) => ({ id: w.id, part: w.part ?? w.id, kind: w.kind, fluid: w.fluid, level: w.level, cells: w.cells, spill: w.spill, ice: w.ice }));
+  if (Array.isArray(meta?.quays) && meta.quays.length) out.quays = meta.quays.map((q) => ({ id: q.id, part: q.part, along: q.along.map((c) => [...c]), length: q.length, reach: q.reach, wetCells: q.wetCells }));
   return out;
 }
 

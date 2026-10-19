@@ -42,6 +42,12 @@
       "piers": { "type": "array", "items": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer" } } }, "landings": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/xyz" } } } } },
     "tunnels": { "type": "array", "description": "(6c T3) the plan's tunnels: the portals (the first and last bore cells' floor), the length (floor cells) and the cells carved", "items": { "type": "object", "required": ["id", "part", "portals", "length", "carved"], "additionalProperties": false, "properties": {
       "id": { "type": "string" }, "part": { "type": "string" }, "portals": { "type": "array", "items": { "$ref": "#/$defs/xyz" } }, "length": { "type": "integer", "minimum": 1 }, "carved": { "type": "integer", "minimum": 0 } } } },
+    "waters": { "type": "array", "description": "(6c H) the plan's fluid bodies: kind, fluid, surface level, the counts of source cells, declared spill cells and ice-capped cells", "items": { "type": "object", "required": ["id", "part", "kind", "fluid", "level", "cells", "spill", "ice"], "additionalProperties": false, "properties": {
+      "id": { "type": "string" }, "part": { "type": "string" }, "kind": { "enum": ["pond", "fountain", "waterfall", "moat", "farm_pond", "well"] }, "fluid": { "enum": ["water", "lava"] }, "level": { "type": "integer" },
+      "cells": { "type": "integer", "minimum": 1 }, "spill": { "type": "integer", "minimum": 0 }, "ice": { "type": "integer", "minimum": 0 } } } },
+    "quays": { "type": "array", "description": "(6c H) the plan's quays: the deck's first and last cells along the shore, its length and reach, and the cells written in natural water", "items": { "type": "object", "required": ["id", "part", "along", "length", "reach", "wetCells"], "additionalProperties": false, "properties": {
+      "id": { "type": "string" }, "part": { "type": "string" }, "along": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/xyz" } }, "length": { "type": "integer", "minimum": 1 },
+      "reach": { "type": "integer", "minimum": 1 }, "wetCells": { "type": "integer", "minimum": 0 } } } },
     "unplaced": { "type": "array", "items": { "type": "object", "required": ["id", "reason"], "additionalProperties": false, "properties": {
       "id": { "type": "string" }, "reason": { "type": "string" } } } },
     "props": { "type": "array", "items": { "type": "object", "required": ["kind", "id", "at"], "additionalProperties": false, "properties": {

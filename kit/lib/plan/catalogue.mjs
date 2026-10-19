@@ -6,7 +6,7 @@ import { PLAN_SCHEMA, SCHEMA_VERSION } from './schema.mjs';
 import { KIT_VERSION } from '../region/plan.mjs';
 
 /** The Java API this kit's catalogue belongs to (a placeholder the coordinator sets at merge; a mod test holds it to ArchitectApi.VERSION). */
-export const PLAN_API = '1.33.0';
+export const PLAN_API = '1.34.0';
 
 /** The catalogue as checks return it. */
 export function planCatalogue({ api = PLAN_API, kitVersion = KIT_VERSION } = {}) {
@@ -37,7 +37,8 @@ export function diffCatalogues(a, b, { pending = [] } = {}) {
     if (o.schemaVersion !== e.schemaVersion) out.schemaVersionBumps.push({ id, from: o.schemaVersion, to: e.schemaVersion });
     if ((o.until ?? null) !== (e.until ?? null) && e.state === 'reserved') out.untilChanged.push({ id, from: o.until ?? null, to: e.until ?? null });
     // (7a K1) a note added, changed or dropped (K1 adds locator.around's "on a wall: wall.around")
-    if ((o.note ?? null) !== (e.note ?? null)) out.notesChanged.push({ id, from: o.note ?? null, to: e.note ?? null });
+    // (6c H) a note that arrives with a flip (connector.channel's) comes with the flip, as a flip's new limits do
+    if ((o.note ?? null) !== (e.note ?? null) && !(o.state === 'reserved' && e.state === 'supported' && (o.note ?? null) === null)) out.notesChanged.push({ id, from: o.note ?? null, to: e.note ?? null });
     // (6c T3) an entry's limits changed in the same state (T3 grows connector.auto's moves); a flip's new limits come with the flip
     if (o.state === e.state && JSON.stringify(o.limits ?? null) !== JSON.stringify(e.limits ?? null)) out.limitsChanged.push({ id, from: o.limits ?? null, to: e.limits ?? null });
   }

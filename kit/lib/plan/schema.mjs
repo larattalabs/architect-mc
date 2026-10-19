@@ -1,5 +1,5 @@
 // (6c P0) The plan validator (docs/CONTRACT.md "Phase 6c slice P0" §1, kit/schemas/plan.json `plan/0`, its x-rules R1-R14; K1 adds R15-R17;
-// T3 R18-R20: the drawbridge block here, the rest in the compiler).
+// T3 R18-R20: the drawbridge block here, the rest in the compiler; H R21's path form and channel.course here, R22-R23 in the compiler).
 // The schema subset (lib/specschema.mjs), then dispatch on each part's kind against the capability catalogue, then the x-rules
 // the subset can't say: unique ids, references, the dependency graph (acyclic, topological order with ties by id), the
 // extension envelope's bounds, ext, ranges, anchors. Pure and deterministic; no survey (the resolver, resolve.mjs, places things).
@@ -129,6 +129,14 @@ export function wallForm(part) {
   return forms.length === 1 ? forms[0] : null;
 }
 
+/** (6c H, R21) A channel's path form: moat (where.around) or course (from, via, to); null when it has none or two. */
+export function channelForm(part) {
+  const forms = [];
+  if (part.from !== undefined || part.to !== undefined || part.via !== undefined) forms.push('course');
+  if (part.where) forms.push('moat');
+  return forms.length === 1 ? forms[0] : null;
+}
+
 /** The first reserved block a supported part names (program, layout, locator, feature, target, endpoint, sketch), or null. */
 function nestedUnsupported(family, part) {
   const stateOk = (id) => entryOf(id)?.state === 'supported';
@@ -185,6 +193,13 @@ function nestedUnsupported(family, part) {
       // (K1-target) around {region}: the owner's standing region is the wall's own target (feature.region stays reserved elsewhere)
       if (w?.around && w.around.feature?.region === undefined) { const r1 = featureCheck(w.around.feature, '$.where.around.feature'); if (r1) return r1; }
       if (w?.along) { const r1 = featureCheck(w.along.feature, '$.where.along.feature'); if (r1) return r1; }
+    }
+    // (6c H, R21) a channel's path form is a block id of its own (channel.moat, channel.course); a reserved one answers for the part
+    if (part.kind === 'channel') {
+      const form = channelForm(part);
+      const r0 = form ? reserved(`channel.${form}`, form === 'course' ? '$.from' : '$.where.around') : null;
+      if (r0) return r0;
+      if (part.where?.around) { const r1 = featureCheck(part.where.around.feature, '$.where.around.feature'); if (r1) return r1; }
     }
     for (const [k, e] of [['from', part.from], ...(part.via ?? []).map((v, i) => [`via[${i}]`, v]), ['to', part.to], ...(part.at ? [['at', part.at]] : [])]) {
       const r0 = endpointCheck(e, `$.${k}`);
@@ -305,6 +320,14 @@ function kindError(family, kind, part) {
     if (wallForm(part) === 'line' && (part.from === undefined || part.to === undefined)) return { path: part.from === undefined ? '$.from' : '$.to', message: 'a wall on a line names both from and to (R15)' };
     if (part.gates !== null && typeof part.gates === 'object' && Number.isInteger(part.gates.min) && Number.isInteger(part.gates.max) && part.gates.min > part.gates.max) return { path: '$.gates', message: `gates {min: ${part.gates.min}, max: ${part.gates.max}}: min over max (R8)` };
   }
+  // (6c H, R21) a channel has exactly one path form (where.around: channel.moat; from/via/to: channel.course)
+  if (family === 'connector' && kind === 'channel') {
+    if (!channelForm(part)) return { path: '$', message: 'a channel has exactly one path form: where.around (channel.moat) or from/to with via (channel.course) (R21)' };
+    if (channelForm(part) === 'course' && (part.from === undefined || part.to === undefined)) return { path: part.from === undefined ? '$.from' : '$.to', message: 'a channel on a line names both from and to (R21)' };
+  }
+  // (6c H) a fountain's basin is odd (3, 5, 7, 9); a lava pond is 1..2 deep
+  if (family === 'form' && kind === 'fountain' && Number.isInteger(part.basin) && part.basin % 2 === 0) return { path: '$.basin', message: `${part.basin}: a fountain's basin side is odd (3, 5, 7 or 9)` };
+  if (family === 'form' && kind === 'pond' && part.fluid === 'lava' && Number.isInteger(part.depth) && part.depth > 2) return { path: '$.depth', message: `${part.depth}: a lava pit is 1..2 deep (R22)` };
   // (6c T3) a bridge's span and a tunnel's length: min over max (R8)
   if (family === 'connector' && kind === 'tunnel' && part.length && Number.isInteger(part.length.min) && Number.isInteger(part.length.max) && part.length.min > part.length.max) return { path: '$.length', message: `length {min: ${part.length.min}, max: ${part.length.max}}: min over max (R8)` };
   if (family === 'connector' && (kind === 'rope_bridge' || kind === 'auto' || kind === 'bridge') && part.span && Number.isInteger(part.span.min) && Number.isInteger(part.span.max) && part.span.min > part.span.max) return { path: '$.span', message: `span {min: ${part.span.min}, max: ${part.span.max}}: min over max (R8)` };

@@ -16,14 +16,14 @@ import { VOXEL_CLASSES, blockAt as volumeBlockAt, classAt as volumeClassAt, deco
 import { compileScatter, compileStamp, scatterTileCells, stampTileCells } from './region/scatter.mjs';
 
 export const AIR = 'minecraft:air';
-export const OP_KINDS = ['shape', 'columns', 'voxels', 'relief', 'scatter', 'stamp'];
+export const OP_KINDS = ['shape', 'columns', 'voxels', 'relief', 'scatter', 'stamp', 'fluid'];
 export const SETS = ['terrain', 'path'];
 /** (6b) The IR formats this evaluator reads (kit/REGIONS.md "IR format 2"). */
 export const IR_FORMATS = Object.freeze([1, 2]);
 /** (6b) Every format-2 kind an IR's `requires` may name; any of them makes the IR format 2. */
 export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:array', 'shape:capsuleChain', 'shape:ellipsoid',
   'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'road:lamp', 'voxels',
-  'mask', 'pattern', 'relief', 'scatter', 'stamp', 'volume:blocks']);
+  'mask', 'pattern', 'relief', 'scatter', 'stamp', 'volume:blocks', 'fluid', 'volume:fluids']);
 // (6c W) 'road:lamp': a 4e road's `lamp` (the bible's lamp fixture for its lanterns; kit/lib/region/fixtures.mjs roadLamp). A mod
 // before 0.18.0 would lay its own fence and lantern, so the plan needs it (PLAN_STALE there).
 // (6c MP) `mask` (an op's mask) and `pattern` (a pattern anywhere a material goes) from kit 0.19.0
@@ -31,6 +31,9 @@ export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'ma
 // (6c F2) 'scatter' and 'stamp': the `scatter` and `stamp` ops (kit/REGIONS.md "Kit 0.22.0"; lib/region/scatter.mjs).
 // (6c B) 'volume:blocks': a frozen volume with block ids (ARVX version 2, `volumes[name].blocks`), read by a mask's `block` term; a
 // kit before 0.23.0 can't decode it, so the plan needs the kind (PLAN_STALE there).
+// (6c H) 'fluid': a fluid body (kit/lib/fluids/body.mjs): its sources and ice cap are evaluated here, the rest (shell, spill, watched
+// cells, the settle) is the mod's `fluids` stage; a mod or kit before 0.35.0 refuses the plan PLAN_STALE. 'volume:fluids': a frozen volume
+// with the fluid layer (ARVX version 3, `volumes[name].fluids`), which a kit before 0.35.0 can't decode.
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS
@@ -48,7 +51,7 @@ export const MEMBERS_FORMAT2 = ['anchors', 'blobs', 'blockTags', 'budget', 'clai
 // members from kit 0.16.0, in format 1 and 2; the evaluator ignores them. An older kit refuses such a plan PLAN_STALE by the
 // kitVersion bump.
 /** (6b) The running kit's version (kept equal to lib/region/plan.mjs KIT_VERSION by a test). */
-export const EVAL_KIT_VERSION = '0.34.0';
+export const EVAL_KIT_VERSION = '0.35.0';
 
 /** Compare two semver strings (major.minor.patch, numeric): -1, 0, 1. */
 export function semverCompare(a, b) {
@@ -92,11 +95,13 @@ export function walkKinds(ir) {
     if (o.op === 'relief') { k.add('relief'); if (o.fill && typeof o.fill === 'object' && o.fill.rule) k.add('material:rule'); } // (6c T1)
     if (o.op === 'scatter') k.add('scatter'); // (6c F2)
     if (o.op === 'stamp') k.add('stamp');
+    if (o.op === 'fluid') k.add('fluid'); // (6c H)
   }
   if (ir.blobs && Object.values(ir.blobs).some((b) => b && b.sha !== undefined)) k.add('blobs:side');
   if (ir.fields && Object.keys(ir.fields).length) k.add('fields');
   if (ir.volumes && Object.keys(ir.volumes).length) k.add('volumes');
   if (ir.volumes && Object.values(ir.volumes).some((v) => v && v.blocks === true)) k.add('volume:blocks'); // (6c B)
+  if (ir.volumes && Object.values(ir.volumes).some((v) => v && v.fluids === true)) k.add('volume:fluids'); // (6c H)
   if (Array.isArray(ir.forms) && ir.forms.length) k.add('forms');
   if ((ir.roads ?? []).some((r) => r.lamp)) k.add('road:lamp');
   return [...k].sort();
@@ -328,6 +333,29 @@ export function compileIR(ir, opts = {}) {
         const reliefs = o.op === 'scatter' ? ops.filter((q) => q.kind === 3 && (ir.stages ?? []).indexOf(parts[q.part].stage) <= si) : [];
         if (o.op === 'scatter') ops.push({ ...base, mask: null, ...compileScatter(o, where, sctx), reliefs, classIdx });
         else ops.push({ ...base, ...compileStamp(o, where, sctx) });
+      } else if (o.op === 'fluid') {
+        // (6c H) a fluid body: its sources (and its ice cap, written after them, so ice wins its cells) copied by position like voxels
+        if (!f2) throw new Error(`${where}: a fluid op needs format 2`);
+        if (o.mask !== undefined) throw new Error(`${where}: a fluid op takes no mask`);
+        if (o.fluid !== 'water' && o.fluid !== 'lava') throw new Error(`${where}: fluid must be water or lava`);
+        if (o.ice !== undefined && o.ice.length && o.fluid !== 'water') throw new Error(`${where}: only water is capped with ice`);
+        const src = mat(typeof o.state === 'string' ? o.state : `minecraft:${o.fluid}`), ice = mat('minecraft:ice');
+        const lists = new Map();
+        let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+        for (const [runs, m] of [[o.cells, src], [o.ice ?? [], ice]]) {
+          if (!Array.isArray(runs)) throw new Error(`${where}: fluid cells must be column runs [[x, z, y0, y1], ...]`);
+          for (const q of runs) {
+            if (!Array.isArray(q) || q.length !== 4 || !q.every(Number.isInteger) || q[2] > q[3]) throw new Error(`${where}: a fluid run must be [x, z, y0, y1] integers, y0 <= y1`);
+            const key = colKey(q[0], q[1]);
+            let l = lists.get(key);
+            if (!l) { l = []; lists.set(key, l); }
+            for (let y = q[2]; y <= q[3]; y++) l.push(y, m);
+            if (q[0] < minX) minX = q[0]; if (q[0] > maxX) maxX = q[0]; if (q[1] < minZ) minZ = q[1]; if (q[1] > maxZ) maxZ = q[1];
+          }
+        }
+        const idx = new Map();
+        for (const [key, l] of lists) idx.set(key, Int32Array.from(l));
+        ops.push({ ...base, kind: 2, colIndex: idx, minX, maxX, minZ, maxZ });
       } else throw new Error(`IR: unknown op '${o.op}' (supported: ${OP_KINDS.join(', ')})`);
     }
   }

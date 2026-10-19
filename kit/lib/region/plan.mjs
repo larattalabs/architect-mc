@@ -21,9 +21,10 @@ import { mapPatternMats, patternError } from '../pattern.mjs';
 import { maskTerms } from '../mask.mjs';
 import { PASS_NAMES } from './passes/index.mjs';
 import { connectorRoles, connectorsError } from '../connectors/style.mjs';
+import { lintFluidState } from '../fluids/body.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.34.0';
+export const KIT_VERSION = '0.35.0';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -269,6 +270,12 @@ export function opBounds(op, blobs, bytesOf = null) {
     if (!bytesOf) throw new Error(`${op.op} op: its blobs have no bytes here`);
     return op.op === 'scatter' ? scatterBounds(op, bytesOf) : stampBounds(op, bytesOf);
   }
+  // (6c H) a fluid body: its sources' and ice's runs (the mod's members, shell to watch, are no cells of the op)
+  if (op.op === 'fluid') {
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const q of [...(op.cells ?? []), ...(op.ice ?? [])]) { minX = Math.min(minX, q[0]); maxX = Math.max(maxX, q[0]); minZ = Math.min(minZ, q[1]); maxZ = Math.max(maxZ, q[1]); minY = Math.min(minY, q[2]); maxY = Math.max(maxY, q[3]); }
+    return { minX, maxX, minZ, maxZ, minY, maxY };
+  }
   if (op.op === 'voxels') {
     if (!bytesOf) throw new Error(`voxels op: blob '${op.blob}' has no bytes here`);
     const [sx, sy, sz] = voxelsSize(bytesOf(op.blob));
@@ -433,6 +440,9 @@ export async function planRegion(o) {
   if (r.meta.corridor) ir.corridor = r.meta.corridor;
   const kinds = walkKinds(ir);
   if (kinds.length) { ir.format = 2; ir.requires = kinds; }
+  // (6c H, §1.1) lint FLUID_STATE: no op carries a flowing water or lava state (sources only)
+  const flowing = lintFluidState(ir);
+  if (flowing.length) throw new Error(`FLUID_STATE: ${flowing.length} op(s) write a flowing fluid state (sources only): ${flowing.slice(0, 4).map((f) => `part ${f.part} op ${f.op} ${f.state}`).join('; ')}`);
   const evalBlobs = (sha) => sideBytes.get(sha);
 
   // ---- the exact budget: every tile of every change-set over the survey
@@ -483,6 +493,6 @@ export async function planRegion(o) {
   stats.irFormat = ir.format;
   stats.requires = ir.requires ?? [];
   stats.passes = r.passRuns.map((x) => ({ ...x }));
-  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}), ...(r.meta.forms ? { forms: r.meta.forms } : {}), ...(r.passRuns.length ? { passes: r.passRuns.map((x) => ({ ...x })) } : {}), ...(r.meta.relief ? { relief: r.meta.relief } : {}), ...(r.meta.scatter ? { scatter: r.meta.scatter } : {}), ...(r.meta.stamps ? { stamps: r.meta.stamps } : {}), ...(r.meta.scatterDemo ? { scatterDemo: r.meta.scatterDemo } : {}), ...(r.meta.route ? { route: r.meta.route } : {}), ...(r.meta.planCheck ? { planCheck: r.meta.planCheck } : {}), ...(r.meta.villageZones ? { villageZones: r.meta.villageZones } : {}), ...(r.meta.districts ? { districts: r.meta.districts } : {}), ...(r.meta.outpost ? { outpost: r.meta.outpost } : {}), ...(r.meta.walls ? { walls: r.meta.walls } : {}), ...(r.meta.ropes ? { ropes: r.meta.ropes } : {}), ...(r.meta.bridges ? { bridges: r.meta.bridges } : {}), ...(r.meta.tunnels ? { tunnels: r.meta.tunnels } : {}) };
+  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}), ...(r.meta.forms ? { forms: r.meta.forms } : {}), ...(r.passRuns.length ? { passes: r.passRuns.map((x) => ({ ...x })) } : {}), ...(r.meta.relief ? { relief: r.meta.relief } : {}), ...(r.meta.scatter ? { scatter: r.meta.scatter } : {}), ...(r.meta.stamps ? { stamps: r.meta.stamps } : {}), ...(r.meta.scatterDemo ? { scatterDemo: r.meta.scatterDemo } : {}), ...(r.meta.route ? { route: r.meta.route } : {}), ...(r.meta.planCheck ? { planCheck: r.meta.planCheck } : {}), ...(r.meta.villageZones ? { villageZones: r.meta.villageZones } : {}), ...(r.meta.districts ? { districts: r.meta.districts } : {}), ...(r.meta.outpost ? { outpost: r.meta.outpost } : {}), ...(r.meta.walls ? { walls: r.meta.walls } : {}), ...(r.meta.ropes ? { ropes: r.meta.ropes } : {}), ...(r.meta.bridges ? { bridges: r.meta.bridges } : {}), ...(r.meta.tunnels ? { tunnels: r.meta.tunnels } : {}), ...(r.meta.waters ? { waters: r.meta.waters } : {}), ...(r.meta.quays ? { quays: r.meta.quays } : {}), ...(r.meta.wet ? { wet: r.meta.wet } : {}) };
   return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes };
 }

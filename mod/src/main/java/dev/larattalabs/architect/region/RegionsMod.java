@@ -11,6 +11,7 @@ public final class RegionsMod {
 		// ticket types register during mod init (before the registries freeze)
 		dev.larattalabs.architect.Architect.LOGGER.debug("region tickets {} {}", RegionSurvey.TICKET, Prepare.TICKET);
 		dev.larattalabs.architect.Architect.LOGGER.debug("region hash ticket {}", RegionHash.TICKET);
+		dev.larattalabs.architect.Architect.LOGGER.debug("region fluids ticket {}", RegionFluids.Ticket.TICKET); // 6c H
 		GenCounter.init();
 		RegionsImpl.init();
 		RegionCommands.init(); // phase 6b: /architect region ... (N7: commands, no Terrain tab)

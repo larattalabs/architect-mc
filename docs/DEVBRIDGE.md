@@ -348,6 +348,16 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-18 (6c slice H-core):** new (`SliceHDev`, generated headless too): `dev.fluid.census {box: [x0,y0,z0,x1,y1,z1]}` (every fluid
+  or ice cell of the box with its state, and every scheduled fluid tick there -> `{fluids: [[x,y,z,state]], ticks: [[x,y,z]]}`);
+  `dev.fluid.tick {cells, fluid?: water|lava, delay?: 1}` (one scheduled fluid tick at each cell); `dev.entity.damage {since: epoch ms,
+  type?: drown|lava|...}` (living entities' damage and deaths since then, from a ring of the last 2,000 events -> `{events, damage,
+  deaths}`); `dev.fluid.state {region}` (the region's fluids record: phase, removal, per body state, reason, settle); TEST
+  `dev.fluid.bypass {on}` (the fluids stage's containment check is not run: gate item 2's negative control) and
+  `dev.fluid.beforeGate {protect?: [x0,z0,x1,z1], owner?, setblock?: [[x,y,z,state]]}` (once, at the next fluids gate, right before its
+  check). `dev.journal.killAt` takes FL1 (the fluids gate checked, no source written), FL2 (the sources written and ticked, settling)
+  and FL3 (a removal's drain done, before the solids), each also with `+save`. A region's view ext carries `architect_mc:fluids`.
+
 - **2026-10-17 (6c slice T3a):** new (`SliceT3Dev`, generated headless too) `dev.t3.boat {at: [x,y,z] (a settled boat within 4), dir:
   [dx,dz], distance, step?: 0.1}`: the player rides the boat nearest `at`, which moves `distance` along `dir` by vanilla's
   `Entity.move(MoverType.SELF, ...)` in `step` steps, the rider positioned after each -> `{moved, blocked, blockedAt?, inWall (steps with

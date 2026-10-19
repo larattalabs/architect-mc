@@ -14,12 +14,15 @@ import { ropeRules } from './checkRopes.mjs';
 // (6c T3) bridges (M10:bridge, T3a) and tunnels (M3:tunnel, M4:tunnel, T3b)
 import { bridgeRules } from './checkBridges.mjs';
 import { tunnelRules } from './checkTunnels.mjs';
+// (6c H) the fluid rules: M25 containment per body and wet write, M20 fire for lava bodies (checkFluids.mjs, H-core)
+import { fluidRules } from './checkFluids.mjs';
 
 
-export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17'];
+export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17', 'M20', 'M25'];
 /** (6c V) The parts a flat village's components emit (the M1 lot-box rule applies to them only). */
 const VILLAGE_PARTS = /^(square|green|verges|lanes|props_[a-z]+)$/;
-const ERRORS = new Set(['M1', 'M13', 'M14']);
+// (6c H) M25 (containment) and M20 (fire, run for lava bodies only) are errors
+const ERRORS = new Set(['M1', 'M13', 'M14', 'M20', 'M25']);
 // (finding() keeps at most 20 sample positions)
 const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
@@ -422,6 +425,10 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   // (6c T3) bridges (checkBridges.mjs, T3a) and tunnels (checkTunnels.mjs, T3b), each only when the plan meta records some
   if (Array.isArray(meta?.bridges) && meta.bridges.length) time('M10', () => bridgeRules({ ir, vw, bridges: meta.bridges, meta, want, findings, metrics, partStage, finding }));
   if (Array.isArray(meta?.tunnels) && meta.tunnels.length) time('M3', () => tunnelRules({ ir, vw, tunnels: meta.tunnels, meta, want, findings, metrics, partStage, finding }));
+  // (6c H) fluid bodies (the IR's fluid ops) and wet writes (meta.wet): only when the plan has either
+  if ((want.has('M25') || want.has('M20')) && (ir.parts.some((p) => (p.ops ?? []).some((o) => o.op === 'fluid')) || (Array.isArray(meta?.wet) && meta.wet.length))) {
+    time('M25', () => fluidRules({ ir, vw, meta, vols: irVolumes(ir, volumes, blobs), want, findings, metrics, partStage, finding }));
+  }
 
   // ---- M3 support
   if (want.has('M3')) time('M3', () => {

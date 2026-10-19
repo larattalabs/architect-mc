@@ -161,6 +161,13 @@ export function generate(report, dump, template, tags = {}) {
     if (c.item !== id) extra.push(`i: '${c.item === 'minecraft:air' ? '' : bare(c.item)}'`);
     // (6c W) a falling block: its class extends FallingBlock (sand, gravel, concrete powder, anvils, ...)
     if ((d.cls ?? []).includes('FallingBlock')) extra.push('g: 1');
+    // (6c H) fluid-stopping (vanilla's canHoldFluid refuses flowing water and flowing lava) and flammable (lava lights it, or fire's
+    // ignite odds are over 0): M25's shell and M20's fire reach
+    // 26.3's FlowingFluid.canHoldFluid = canHoldAnyFluid (a LiquidBlockContainer, or the tag washed_away_by_fluids) and
+    // canHoldSpecificFluid (a container's canPlaceLiquid for the flowing fluid, else true); fluid-stopping refuses both flowing fluids
+    const holdsAny = !!d.container || (tags?.['minecraft:washed_away_by_fluids'] ?? []).includes(id);
+    if (d.container !== undefined && !(holdsAny && d.holdsFlowingWater) && !(holdsAny && d.holdsFlowingLava)) extra.push('fs: 1');
+    if (d.lavaLights || (d.ignite ?? 0) > 0) extra.push('fl: 1');
     lines.push(`b('${bare(id)}', '${c.collision}', '${c.family}', '${encodeProps(c.props, c.defaults)}', { ${extra.join(', ')} });`);
   }
   const marker = '/*@@DATA@@*/';

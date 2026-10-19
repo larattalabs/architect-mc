@@ -288,7 +288,7 @@ test('format-2 compile errors: unknown op, shape, rule, member; inline blobs; mi
   const box = { kind: 'box', min: [1, 70, 1], max: [2, 71, 2] };
   const base = () => ir2([{ op: 'shape', shape: box, material: 'minecraft:stone', cond: 0, walk: false }]);
   const a = base(); a.parts[0].ops[0].op = 'brush'; // (6c F1) voxels, (6c T1) relief and (6c F2) scatter and stamp are built; brush is not an op
-  assert.throws(() => compileIR(a), /IR: unknown op 'brush' \(supported: shape, columns, voxels, relief, scatter, stamp\)/);
+  assert.throws(() => compileIR(a), /IR: unknown op 'brush' \(supported: shape, columns, voxels, relief, scatter, stamp, fluid\)/);
   const b = base(); b.parts[0].ops[0].shape = { kind: 'union', of: [box, { kind: 'blob3d' }] };
   assert.throws(() => compileIR(b), /IR: unknown shape 'blob3d' \(supported: /);
   const c = base(); c.parts[0].ops[0].material = { rule: { rule: [{ when: { wetness: 3 }, mat: 'minecraft:mud' }] } }; c.requires = ['material:rule'];

@@ -17,10 +17,10 @@ import { T3_KINDS, FALLBACK_KINDS } from '../lib/connectors/t3kinds.mjs';
 const FIX = path.join(ROOT, 'kit', 'test', 'fixtures', 'plan');
 
 test('catalogue 6: the golden, and the K1 -> T3 diff is exactly the two flips, auto\'s moves and the six added ids', () => {
-  const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
-  assert.deepEqual(planCatalogue(), golden);
+  // (6c H) catalogue 6 is archived as fixtures/plan/catalogue-t3.json (H's golden is catalogue 7: h-foundation.test.mjs)
+  const golden = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-t3.json'), 'utf8'));
   assert.equal(golden.catalogueVersion, 6);
-  assert.equal(golden.api, PLAN_API);
+  assert.equal(golden.api, '1.33.0');
   const k1 = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-k1.json'), 'utf8'));
   assert.equal(k1.catalogueVersion, 5);
   const pending = [{ part: 'drawbridge', block: 'connector.bridge' }, { part: 'tunnel_cellar', block: 'connector.tunnel' }, { part: 'lift', block: 'connector.lift' }];
@@ -38,10 +38,11 @@ test('catalogue 6: the golden, and the K1 -> T3 diff is exactly the two flips, a
   assert.deepEqual(e['connector.tunnel'].limits, { length: [4, 64], width: [1, 5], height: [2, 5], cover: 2, fluidBuffer: 2, approach: 32 });
   for (const [id, until] of [['tunnel.under', '7b'], ['connector.tube', 'UW'], ['connector.drawbridge', 'mechanism']]) assert.equal(e[id].until, until, id);
   // the new and flipped entries carry the branch's API placeholder (a real semver; the merge restamps it)
-  for (const id of ['connector.bridge', 'connector.tunnel', 'connector.auto', 'bridge.beam', 'bridge.arch', 'tunnel.through', 'tunnel.under', 'connector.tube', 'connector.drawbridge']) assert.equal(e[id].sinceApi, PLAN_API, id);
-  // the reason codes NO_COVER and VOLUME are appended (additive output)
+  for (const id of ['connector.bridge', 'connector.tunnel', 'connector.auto', 'bridge.beam', 'bridge.arch', 'tunnel.through', 'tunnel.under', 'connector.tube', 'connector.drawbridge']) assert.equal(e[id].sinceApi, '1.33.0', id);
+  // the reason codes NO_COVER and VOLUME are appended (additive output; H appends LEAK and FIRE after them)
   const codes = PLAN_SCHEMA.$defs.reason.properties.code.enum;
-  assert.deepEqual(codes.slice(-7), ['NO_GAP', 'SPAN', 'ANCHOR', 'HEADROOM', 'MOVER', 'NO_COVER', 'VOLUME']);
+  assert.deepEqual(codes.slice(codes.indexOf('NO_GAP'), codes.indexOf('VOLUME') + 1), ['NO_GAP', 'SPAN', 'ANCHOR', 'HEADROOM', 'MOVER', 'NO_COVER', 'VOLUME']);
+  void planCatalogue; void PLAN_API;
 });
 
 test('the special-move table: gate, rope, then bridge (7) and tunnel (8), each off without an edge that asks', () => {

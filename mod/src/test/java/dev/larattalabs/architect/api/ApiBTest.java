@@ -82,6 +82,7 @@ class ApiBTest {
 	void brushesFeatureAndKind() {
 		assertTrue(ApiRules.features(2, List.of("region.plan", "region.tiles", "region.brush")).contains("brushes"));
 		assertTrue(!ApiRules.features(2, List.of("region.plan", "region.tiles")).contains("brushes"));
-		assertEquals("volume:blocks", IrStale.KINDS_FORMAT2.get(IrStale.KINDS_FORMAT2.size() - 1), "appended (rebase point)");
+		// appended (rebase point); (6c H) fluid and volume:fluids are appended after it
+		assertEquals(List.of("volume:blocks", "fluid", "volume:fluids"), IrStale.KINDS_FORMAT2.subList(IrStale.KINDS_FORMAT2.indexOf("volume:blocks"), IrStale.KINDS_FORMAT2.size()), "appended (rebase point)");
 	}
 }
