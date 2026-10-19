@@ -330,7 +330,9 @@ function breachReach(world, own, fluid, others, body, shell) {
     const at = bodyWorld(world, own, fluid, others, opened);
     if (noSpill && D6.every(([dx, dy, dz]) => { const w = at(x + dx, y + dy, z + dz); return w !== 'open' && w !== `flowing_${fluid}`; })) {
       for (const k of base.amt.keys()) out.add(k);
-      out.add(opened);
+      // ((6c HY-b) the opened cell takes the fluid only from a body cell beside it: a course's weir course or lining behind its shell is
+      // reached by nothing, as the full reach finds; an H body's shell is always beside its cells, so H's result is unchanged)
+      if (D6.some(([dx, dy, dz]) => own.has(k3(x + dx, y + dy, z + dz)))) out.add(opened);
       continue;
     }
     // the opened cell is reached from a body cell beside it: start the flow from the sources as before

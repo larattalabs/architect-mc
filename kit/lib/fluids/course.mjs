@@ -368,7 +368,12 @@ export function courseGeometry(S, path, routeLevels, spec, ends, o) {
     // (the water it lands in: everything over its surface is the fall's open column)
     for (const [x, , z] of landing) openTop.set(k2(x, z), lp.landY);
     if (lp.into) last.planJoins.push({ body: lp.into, cells: landing });
-    else last.joins.push(...landing);
+    else {
+      // (a natural join: the landing and the water beside it across the flow, where a breached lip's side would fall: all its sources)
+      const d = DIRS[dirs[n - 1].dout];
+      const wide = lanesAt(path[n - 1][0] + d[0], path[n - 1][1] + d[1], d, [offs[0] - 1, ...offs, offs[offs.length - 1] + 1]).filter(([x, z]) => !lp.water || lp.water.has(k2(x, z)));
+      last.joins.push(...wide.map(([x, z]) => [x, lp.landY, z]));
+    }
     last.solid.push(...(lp.solid ?? []));
   }
   // the weir (a head or tail at natural water): one course of `weir` lining beyond the shell, on the bank, the reach's full face
@@ -614,7 +619,10 @@ export function planBodyOf(C, X) {
     const cols = outline(res.water, shape);
     const level = Math.min(...rimColumns(cols).map(([x, z]) => S.groundAt(x, z))) - 1;
     const depth = new Map(cols.map((c) => [k2(c.x, c.z), Math.min(res.spec.depth, c.ring)]));
-    return { kind: 'pond', id: X, bodyId: bodyId(X), level, surface: cols.map((c) => [c.x, c.z]), depth, every: 6, bodies: [bodyId(X)] };
+    // (the pond's exits: emitPond's notches, never an outlet or under a lip)
+    const cells = cols.flatMap((c) => { const d = Math.min(res.spec.depth, c.ring), o2 = []; for (let y = level - d + 1; y <= level; y++) o2.push([c.x, y, c.z]); return o2; });
+    const notches = new Set(exitNotches(cells, level, { every: 6 }).map(([x, , z]) => k2(x, z)));
+    return { kind: 'pond', id: X, bodyId: bodyId(X), level, surface: cols.map((c) => [c.x, c.z]), depth, notches, bodies: [bodyId(X)] };
   }
   if (q.kind === 'fountain' && res.rect) {
     const [cx, cz] = centre(res.rect);
@@ -629,7 +637,9 @@ export function planBodyOf(C, X) {
   if (q.kind === 'channel' && res.T && Number.isInteger(res.ring)) {
     const { water, all } = ringColumns(res.T, res.ring, res.spec.width, res.omit);
     const level = Math.min(...all.map(([x, z]) => S.groundAt(x, z))) - 1;
-    return { kind: 'moat', id: X, bodyId: bodyId(X), level, surface: water, depth: new Map(water.map((c) => [k2(...c), res.spec.depth])), every: 12, bodies: [bodyId(X)] };
+    const cells = water.flatMap(([x, z]) => { const o2 = []; for (let y = level - res.spec.depth + 1; y <= level; y++) o2.push([x, y, z]); return o2; });
+    const notches = new Set(exitNotches(cells, level, { every: 12, max: 256 }).map(([x, , z]) => k2(x, z)));
+    return { kind: 'moat', id: X, bodyId: bodyId(X), level, surface: water, depth: new Map(water.map((c) => [k2(...c), res.spec.depth])), notches, bodies: [bodyId(X)] };
   }
   if (res.geo && res.course) {
     // another course (a branch leaves it, or a course falls into one): its reaches' surfaces
@@ -708,11 +718,11 @@ function routerWorld(C, p, ends) {
   for (const [zid, rr] of C.res ?? []) {
     const q = C.byId.get(zid);
     if (!q || !C.okClass(zid)) continue;
-    for (const l of rr?.layout?.lots ?? []) blocked.push(grow({ minX: l.rect[0], minZ: l.rect[1], maxX: l.rect[2], maxZ: l.rect[3] }, 3));
+    for (const l of rr?.layout?.lots ?? []) blocked.push(grow({ minX: l.rect[0], minZ: l.rect[1], maxX: l.rect[2], maxZ: l.rect[3] }, 2));
     // the forms and H bodies placed before it (their footprints), but its own ends
     if ((q.family === 'form' || (q.kind === 'channel' && q.id !== p.id)) && !ends.has(zid)) for (const fp of rr?.footprints ?? []) blocked.push({ minX: fp[0], minZ: fp[1], maxX: fp[2], maxZ: fp[3] });
   }
-  for (const lid of C.V?.lotZone?.keys?.() ?? []) { const g = C.geomOf(lid); if (g?.rect) blocked.push(grow(g.rect, 3)); }
+  for (const lid of C.V?.lotZone?.keys?.() ?? []) { const g = C.geomOf(lid); if (g?.rect) blocked.push(grow(g.rect, 2)); }
   const flow = env.hydro?.out?.fields?.flow ?? null;
   const ok = (x, z) => {
     if (flagsAt(env, x, z) & (FLAG_WATER | FLAG_LAVA)) return false;
@@ -740,7 +750,7 @@ function endLevel(C, e, toward) {
  * Place a course (step 2): its ends, the router (from, through each via, to), the profile and the geometry; register the overflow on the
  * plan body it leaves. Returns H's res with {geo, course: true, spec, ends: [...], overflow?, serves?}.
  */
-export function planCourse(C, p, { block = 'channel.course', via = null, race = null } = {}) {
+export function planCourse(C, p, { block = 'channel.course', via = null, race = null, adjust = null } = {}) {
   const env = C.env, part = p.part;
   const spec = courseSpec(part, block);
   const notes = [...spec.notes];
@@ -755,7 +765,7 @@ export function planCourse(C, p, { block = 'channel.course', via = null, race = 
   if (lf !== null && lt !== null && lf < lt) {
     // never swapped silently: the swapped part as the wouldFit, re-checked alone
     const frag = { ...part, from: part.to, to: part.from };
-    const again = planCourse(C, { ...p, part: frag }, { block, via, race });
+    const again = planCourse(C, { ...p, part: frag }, { block, via, race, adjust });
     const wf = again.klass === 'fits' || again.klass === 'adjusted' ? [{ part: p.id, fragment: frag, geometry: { rect: rectArr(again.rect), reaches: again.geo.reaches.length }, cost: { cells: again.geo.reaches.reduce((a, R) => a + R.cells.length, 0) } }] : undefined;
     return refuse('UNREACHABLE', `from stands at ${lf}, lower than to at ${lt}: a course runs downhill from its head (never swapped silently; the swapped course is the wouldFit)`, { kind: 'uphill', from: lf, to: lt }, { wouldFit: wf });
   }
@@ -885,7 +895,7 @@ export function planCourse(C, p, { block = 'channel.course', via = null, race = 
     const fallJoin = lanesAt(x + dx, z + dz, DIRS[dEnd], offs).every(([a, b]) => tail.W.cells.has(k2(a, b)));
     if (fallJoin) {
       // the path's last index (the bank beside the water) is the lip; the landing the water's sources
-      tail.lip = { landY: tail.W.level, into: null, solid: [] };
+      tail.lip = { landY: tail.W.level, into: null, solid: [], water: tail.W.cells };
       tail.kind = 'join';
     } else { tail.kind = 'weir'; }
   }
@@ -895,6 +905,8 @@ export function planCourse(C, p, { block = 'channel.course', via = null, race = 
     tail.lip = { landY: s.level, into: s.body, solid: [[s.ox, s.level + 1, s.oz]] };
     tail.site = s;
   }
+  // (a race: the wheel fall forced beside its lot)
+  if (adjust) { const a = adjust(full); if (a?.refused) return refuse(a.refused.code, a.refused.message, a.refused.evidence ?? {}, a.refused.extra ?? {}); }
   const frozen = surfaceFreezesAlong(C.ctx, full.path, full.levels);
   const rng = C.ctx.rng ? C.ctx.rng(`course:${p.id}`) : null;
   const geo = courseGeometry(env.S, full.path, full.levels, spec, { head, tail }, { id: p.id, rng, frozen });

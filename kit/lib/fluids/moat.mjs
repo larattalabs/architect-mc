@@ -27,7 +27,10 @@ import { channelForm } from '../plan/schema.mjs';
 import { bodiesMark, bodiesRollback, centre, featureOf, fluidRolesOf, grow, inside, intIn, linesBody, meets, protectedMet, reachMeetsKeep, readParams, rectArr,
   rectSurvey, shellBlock, takenRects, volumeAnswer, volumeKeep, MARGIN, flagsAt, refusal, leakRefusal, exitNotches } from './place.mjs';
 import { shellCheck, bodyAnswer, bodyId, iceFor, naturalOf, shellStatesOf } from './pond.mjs';
+import { overflowsOn } from './hooks.mjs';
 
+/** (6c HY, §1.5) A moat may feed a course (an overflow) or receive one (a fall over its rim). */
+export const acceptsOverflow = true;
 export const MOAT = Object.freeze({ width: 5, depth: 3, ring: [6, 12], berm: 5 });
 const cheb = (x, z, T) => Math.max(Math.max(0, T.minX - x, x - T.maxX), Math.max(0, T.minZ - z, z - T.maxZ));
 
@@ -83,7 +86,7 @@ function wallsOn(C, f) {
 /** Place the part: the first offset of its ring range whose ring is dry, clear and inside the claim. */
 export function resolve(C, p) {
   const env = C.env, part = p.part;
-  if (channelForm(part) !== 'moat') return { klass: 'unsupported', reasons: [{ code: 'UNSUPPORTED', message: 'a channel along a line is channel.course, reserved until HY', block: 'channel.course', until: 'HY' }] };
+  if (channelForm(part) !== 'moat') return { klass: 'refused', reasons: [{ code: 'NO_FEATURE', message: 'a moat rings a feature (where.around); a channel along a line is a course (hooks.mjs dispatches it to course.mjs)', evidence: { form: channelForm(part) } }] };
   const sp = moatSpec(part);
   if (sp.fluid === 'lava') {
     const frag = { ...part, params: Object.fromEntries(Object.entries(part.params ?? {}).filter(([k]) => k !== 'fluid')) };
@@ -186,7 +189,9 @@ export function emitMoat(r, o) {
   const ec = [];
   for (const [x, y, z] of exits) { const t = S.topAt(x, z); if (t >= y) ec.push(x, z, y, t, 0); }
   if (ec.length) { const ex = r.part(`${o.id}_exits`.slice(0, 48), { stage: o.stage }); ex.columns({ abs: 0 }, { abs: 0 }, ec, [null], { cond: 0 }); (r.meta.parts[ex.id] ??= {}).kind = 'carve'; }
-  const rec = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: 'moat', stage: o.stage, level, shellRole, ice: o.ice ?? null, outlets: exits });
+  // ((6c HY, §1.5) a course leaving the moat: its overflows, only when there are any)
+  const ov = Array.isArray(o.overflow) && o.overflow.length ? { overflow: o.overflow, raised: true } : {};
+  const rec = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: 'moat', stage: o.stage, level, shellRole, ice: o.ice ?? null, outlets: exits, ...ov });
   rec.shellStates = shellStatesOf(rec, shellRole);
   return Object.assign(rec, { ring: o.ring, columns: water.length });
 }
@@ -211,7 +216,7 @@ export function emit(K, p, res) {
     if (vcells > VOLUME_CAP) { res.capped = { cells: vcells }; return; }
     const dec = iceFor(K.ctx, water.map(([x, z]) => [x, level, z]), p.part.ice);
     if (dec.refuse) throw refusal(dec.refuse.code, dec.refuse.message, dec.refuse.evidence);
-    const rec = emitMoat(r, { id: bodyId(p.id), part: p.id, T: res.T, ring: res.ring, width: sp.width, depth: sp.depth, omit: res.omit, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice: dec.ice });
+    const rec = emitMoat(r, { id: bodyId(p.id), part: p.id, T: res.T, ring: res.ring, width: sp.width, depth: sp.depth, omit: res.omit, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice: dec.ice, overflow: overflowsOn(K, p.id) });
     const hit = reachMeetsKeep(r, env, rec, { volClass: volumeKeep(r, VC, classAt) });
     if (hit) throw leakRefusal(rec, hit);
     shellCheck(r, rec);

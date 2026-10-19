@@ -19,8 +19,11 @@ import { VC, classAt } from '../region/volume.mjs';
 import { bodiesMark, bodiesRollback, centre, fluidRolesOf, grow, intIn, linesBody, locatorOf, locatorRefusal, protectedMet, reachMeetsKeep, readParams, rectArr,
   rectOf, rectSurvey, scanRects, shellBlock, sketchPoint, spawnAvoid, takenRects, volumeAnswer, volumeKeep, refusal, leakRefusal } from './place.mjs';
 import { shellCheck, bodyAnswer, bodyId, iceFor, naturalOf, shellStatesOf } from './pond.mjs';
+import { overflowsOn } from './hooks.mjs';
 
 const k3 = (x, y, z) => `${x},${y},${z}`;
+/** (6c HY, §1.5) A fountain may feed a course (an overflow from its basin) or receive one (a fall over its coping). */
+export const acceptsOverflow = true;
 export const FOUNTAIN = Object.freeze({ basin: 5, spout: 2, maxRough: 1 });
 
 /** The fountain's members (first-class, then params leniently: basin, spout, fluid for R22). */
@@ -114,7 +117,9 @@ export function emitFountain(r, o) {
   // the exits: a notch in the coping on two opposite sides (both courses when it is 2 thick): a swimmer steps onto the side ring and
   // down to the ground
   const exits = [[cx, wy + 1, cz - h - 1], [cx, wy + 1, cz + h + 1]];
-  const basin = r.fluidBody(basinCells, { id: o.id, part: o.part ?? null, kind: 'fountain', stage: o.stage, level: wy, shellRole, solid: pillar, ice: o.ice ?? null, outlets: exits });
+  // ((6c HY, §1.5) a course leaving the fountain: its overflows, only when there are any)
+  const ov = Array.isArray(o.overflow) && o.overflow.length ? { overflow: o.overflow, raised: true } : {};
+  const basin = r.fluidBody(basinCells, { id: o.id, part: o.part ?? null, kind: 'fountain', stage: o.stage, level: wy, shellRole, solid: pillar, ice: o.ice ?? null, outlets: exits, ...ov });
   const basinSet = new Set(basinCells.map((c) => k3(...c)));
   const outlets = [[cx + 1, top, cz], [cx - 1, top, cz], [cx, top, cz + 1], [cx, top, cz - 1]];
   const spout = r.fluidBody([[cx, top, cz]], { id: `${o.id}_spout`.slice(0, 48), part: o.part ?? null, kind: 'fountain', stage: o.stage, level: top, outlets, shellRole: spoutB, solid: pillar,
@@ -149,7 +154,7 @@ export function emit(K, p, res) {
     const m = bodiesMark(r);
     const cp = K.checkpoint();
     try {
-      const out = emitFountain(r, { id: bodyId(p.id), part: p.id, rect: res.rect, basin: sp.basin, spout: sp.spout, thick, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice });
+      const out = emitFountain(r, { id: bodyId(p.id), part: p.id, rect: res.rect, basin: sp.basin, spout: sp.spout, thick, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice, overflow: overflowsOn(K, p.id) });
       for (const rec of [out.basin, out.spout]) {
         const hit = reachMeetsKeep(r, env, rec, { volClass: vk });
         if (hit) throw leakRefusal(rec, hit);
