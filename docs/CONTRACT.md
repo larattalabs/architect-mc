@@ -14382,3 +14382,71 @@ parallel, released as one batch (as K1 and T3). H-c follows in the same batch if
 | Gate items (`tools/lib/gate6ch-b.mjs`, alone: `tools/gate6chb.mjs`) | unit: hb-kit, hb-unchanged, hb-asks. ingame hb-flat (headless, exact rules): a /fill lake 28 wide and 5 deep on the flat world, a beam on wet piers across it, a 12 x 3 quay, the claim's edge wall through it as a harbour wall, through Regions.checkPlan's two-plan flow and realiseApproved: the wet writes re-read (535 cells that held water: 0 air, 0 water, 0 waterlogged), M25:wet 0, piers 4/4, M10 and M3 0, the quay solid with its step, M5/M6/M8 0, the wall's closure and its top 5 over the surface, vanilla villagers across the beam and onto the quay both ways, E-flat 0 after Regions.remove. natural hb-natural (S3, exact rules): a 6 x 3 quay on the lake, villagers both ways, E-normal 0 unclassified, 0 gravity, nothing within 6 of a wet write but growth or grazed at unwritten cells; T3a's river crossing under a forced beam answers HEADROOM (no `until`). cold hb-cold (2026101102, exact rules): a 9 x 3 quay through the ice (27 ice cells replaced), villagers both ways, E-normal 0 mismatches (the ice and water restored); the frozen river under a beam answers WATER deep (35) from the frozen volume. look hb-look: the scene in three bibles. |
 | Deviations and findings | **No natural wet beam.** §13/§14 expected a beam on wet piers in S3's river; S3's river is 20-32 deep where a beam needs a pier and the frozen site's river 25-38, so both answer WATER deep (the frozen survey's floor under ice reads shallower than the volume's: the second plan's volume decides). The wet piers are shown on the flat world's /fill lake (natural water to the survey); natural water carries quays on S3 and through the frozen site's ice. **T3a's width-2 landing on fill** (pre-existing): a width-2 bridge landing on the walk's fill gets M10:bridge warnings (r06's terrain, the dry arch too); not H-b's. **For H-core:** `gate6ch-core.mjs unchanged()` needs t3a/r06 and r07 as named exceptions (H-b's hb-unchanged checks them); `checkpoint`/`rollback` don't save meta.wet, meta.quays or `_fluidBodies` (H-b records wet only where intended, and asks volumes outside checkpoints); t3a-unit's item 10 diffs catalogue-k1 against the current golden, which catalogue 7 moved (not H-b's). |
 | Gate | Change runs `artifacts/gate-runs-Hb/20261018-224755-change` (h-ingame 32/0 with H-core's items, h-natural 11/0) and `…-230009-change` (h-cold 12/0); look `…-230259-change` (6ch-look 3/0), gallery https://claude.ai/artifact/UKsZ2AFT3Xogm8eFeu9X7f. Slice tier `artifacts/gate-runs-Hb/20261018-230739-slice` (3 shards, ports 8924-8929, head f308f429, 1h23m): 45 PASS, 4 FAIL, none in H-b's diff: h-unit (H-core's `unchanged()` has no named exceptions for t3a/r06 and r07; H-b's hb-kit, hb-asks pass, and hb-unchanged after its subset fix: re-run `20261019-003212-change`, H-b's three items 3/0, the core's item 11 the one FAIL), t3a-unit item 10 (catalogue-k1 diffed against the current golden, moved by catalogue 7), t3a-ingame item 12 (the crossings_demo_flat golden is recorded at kit 0.34.0; crossings_demo flat plans the same IR sha on origin/h/core and slice/H-b), 6ct1-scenario-relief (2 unclassified falling-water cells far from any H-b part: T1's falling-water anomaly under H's narrowed flow class). h-ingame 32/0, h-crash, h-probe, t3a-natural, t3a-frozen, t3a-probe, k1a-* , p0-*, d-*, the scenarios and the units all PASS (unit-mod 700/0, unit-kit 528/0, unit-sidecar 744). gate-verifier **PASS** at 832b9dea: its own headless re-run `artifacts/gate-runs-Hb-verify/20261019-004224-change` (h-ingame, h-natural, h-cold 3/3: E-flat 0 with fluid cells by state; the wet re-reads 535, 35 and 54 cells with 0 air, water or waterlogged; vanilla villagers across the wet beam and onto every quay both ways; E-normal 0 unclassified, 0 gravity, nothing near a wet write but growth or grazed), no code defect in review, the four slice FAILs judged outside H-b's diff, the no-natural-wet-beam deviation judged acceptable (a data limit; Steward to record it). HANDOFF-Hb retired. Spend $0.00. |
+
+### H batch as integrated (H-core + H-a + H-b as v0.37.0: API 1.34.0, mod 0.37.0, kit 0.35.0, catalogue 7; branch `integrate/h`, recorded 2026-10-19)
+
+`slice/H-core` (5f286cf6), `slice/H-a` (31626ac8) and `slice/H-b` (f688b0e1) were merged `--no-ff` over v0.36.1 (3c9e4537), in
+that order. Both halves had merged H-core up to 550eba89; H-core's last three commits (the PLAN findings, the structural farmPond
+trigger and its as-built draft) came in with it. Every conflict kept both sides, and no test was dropped. No H-a or H-b stub,
+`h-pending-*.json` or throwing placeholder survives: `kit/lib/fluids/*` are the halves' real modules, and `UNREACHABLE {until: Ha |
+Hb}` appears nowhere. h-foundation now checks that no part answers it.
+
+| Where | Resolution |
+|---|---|
+| `passes/route.mjs` `env` | One line holds both: H-a's `planWater` and H-b's `F: c.floor`, after H-a's plan-water flags. H-b's earlier `env` line was dropped because it duplicated it. |
+| `h-foundation.test.mjs` | Both expectations. H-a: no water body answers the foundation's refusal. H-b: on the dry claim the quay answers `NO_FEATURE`. The batch adds that no part answers `UNREACHABLE` with `until` Ha or Hb. |
+| `h-a.test.mjs` | Its fixture filter `^v4[1-9]_` also picked up H-b's v46-v48. It now reads only H-a's own fixtures (`^v4[1-59]_`); H-b's are h-wet's. |
+| CONTRACT | All three as-built sections, now with the real numbers. H-core's Gate row is filled in, and HANDOFF-Hcore is retired. |
+| compile.mjs, gate drivers | Merged cleanly. Their semantic fixes are in the table below. |
+
+**Integration fixes (the items the slices reported, and the H-core verifier's review):**
+
+| Item | Fix |
+|---|---|
+| Item 11's byte identity | `gate6ch-core.mjs` has `UNCHANGED_EXCEPTIONS` (t3a/r06, r07: they now fit on wet piers) and `UNCHANGED_SKIPPED` (refused/k1a_r01: the two-plan harness). `unchanged()` returns `ok` and `excepted`, and a farmPond plan counts as H. H-a's `ha-unchanged` and H-b's `hb-unchanged` read the same lists. Result: 56 of 58 identical to origin/main, the 2 named exceptions differ, 0 others. |
+| t3a-unit item 10 | Runs K1 -> T3 on the archived catalogues (`catalogue-k1.json` -> `catalogue-t3.json`). T3 -> H (`catalogue-t3.json` -> the golden) checks the exact lines: the three flips (`connector.channel`, `form.pond`, `form.waterfall`); the four added ids (`channel.course` reserved; `channel.moat`, `form.fountain`, `form.quay` supported); nothing retired or removed. |
+| `crossings_demo_flat` golden | Re-cut for kit 0.35.0. Only `kitVersion` in `ir.json` moved: the 75,225 cells and every tile sha are unchanged, and irSha is now 8ee910be. t3a-ingame's item 12 matched it in game. |
+| **compile.mjs `checkpoint`/`rollback`** (a real bug) | The checkpoint now records the lengths of `_fluidBodies`, `meta.waters`, `meta.quays` and `meta.wet`, and a rollback truncates them back, or drops a list the checkpoint lacked. A part that rolls back no longer leaves a wet record, water, quay or body behind. H-b's workaround depended on the leaked record to drive finish.mjs's `wetAsked`. It is replaced by `meta.wetAsked`, which `askWet` sets when it asks for a volume it doesn't hold. A rollback never restores it, plan.mjs writes it to the meta, and finish.mjs reads either. Test: h-wet "a part that wrote a wet record rolls back" (v47, hb_v01). The first plan has no wet record, `wetAsked` is set, its M25 is clean and the second plan is READY. At H-b's head the rolled-back record had leaked (meta.wet 1). |
+| **T3's even-width landing** (H-a and H-b both hit it) | The bridge generator was wrong. bridgeGeom laid an even deck's extra column along `rightOf(dir)`, while the route's footprint (`footprintOf`) puts it on +x / +z. So a width-2 or width-4 deck running +z or -x stood one column off the walk that lands it: one landing column sat on no fill (M10:bridge support and step). `latOn(width, dir)` flips the offsets in those directions; odd widths are unchanged. Fixture `t3a/w01_even_width.json` and a plan-t3a test cover both directions on both axes at widths 2 and 4: M10/M3 clean, anchors all ok. r06 (width 2) is now clean too. |
+| **The farm pond end to end** | H-a's farm ponds ask for their volumes through `r.fluidBody` (`emitPond`). Kit test h-batch: v49, whose only H is `farmPond: true`, asks 2 volumes with the fluid layer, and the second plan reads both (`given`), each guarded. In game, h-ingame (F) sends v49 through `Regions.checkPlan`. `PlanChecks.hasH` ran the two-plan flow on farmPond alone (asked 2, read 2): READY, and both lots get their pond. |
+| **A quay with no room in a second plan** (found by the batch test) | When another part's fluid volumes were held, a quay with no bank answered `incomplete VOLUME` (`unread`) instead of NO_ROOM, and that plan could never complete. quay.mjs now reads the water after its survey-only tests (bank, level). v46's IR is unchanged. |
+| Defect 1, `removalGate`'s unbounded wait | Capped at 2 x the settle bound after the drain (`removalWait`, pure and unit-tested). Past the cap the solids are restored, and the note goes to fluids.json, the log and the region ext `architect_mc:fluidsRemoval {state: capped, note, ticks}`; the API is unchanged. In game, h-ingame (E) keeps fluid ticks scheduled in the watch set for the whole removal: REMOVED in 4.8 s, with the note. |
+| Defect 2, the stray drain | The drain's stray pass now takes only the body's predicted cells and the cells the census recorded as escaped from it. `BodyState.escapedCells` holds all of them (not just the 16 named) and is saved in fluids.json, so a resumed removal re-drains exactly those. A player's or another system's water in the watch set is kept (§4.2). Unit test, plus h-ingame (E): a player's source in the pond's watch set survives the removal. Items 3 and 6 still hold: 0 fluid after the escape drain, and the breach undo has 0 extra cells and is E-flat 0. |
+| Defect 3, a spill cell's level | Spill and watched cells are compared by full state (`now == was`), so a natural flowing cell's level is restored. |
+| Defect 4, §4.3's shell rule | Recorded as a deviation in H-core's Readings row. |
+| `until: 'H'` | None remain live. h-wet's search excludes only `fixtures/plan/catalogue-*.json`; a repo-wide search of kit, tools, mod/src and sidecar/src finds none. |
+| Note: v47's IR | Since H-a's rollback keeps a read volume's side blob, the wet beam's IR names the volume it read (`vol_1`). This comes from the merge, not from a fix. |
+
+**Versions:** `ArchitectApi.VERSION` 1.34.0, `mod_version` 0.37.0, `PLAN_API` 1.34.0, `KIT_VERSION` = `EVAL_KIT_VERSION` =
+`IrStale.KIT_VERSION` 0.35.0, `catalogueVersion` 7, and sinceApi 1.34.0 on the H entries (the semver check passes). The golden
+equals `planCatalogue()` byte for byte. api-compat `--gate6ch` now runs over v0.36.1, against the 0.36.1, 0.36.0 and 0.35.0
+apitest jars and the 0.36.1 surface. 0.36.1 was built from its tag into `artifacts/gate6c-h/v0361`.
+
+**New tests:**
+- `kit/test/h-batch.test.mjs` (4):
+  - **The batch plan.** A pond, a moat round a walled town crossed by the road's arch, a beam on wet piers over a 28-wide river, a quay, and a farm zone with `farmPond`. It is READY, everything fits or is adjusted, there is no error, and M25, M20, M10 and M3 are clean. A second check gives the same answers, IR and artifact. The claim has a river, so S-H-1 (dry claims only) leaves out the farm pond and the zone says so.
+  - **The dry batch.** The farm pond with a pond and the moat-and-road: READY, clean and deterministic.
+  - The farm pond end to end.
+  - The quay's NO_ROOM.
+- The plan-t3a even-width test.
+- The h-wet rollback test.
+- RegionFluidsTest `removalWaitIsCapped` and `straysAreOnlyPredictedAndRecordedEscapes`.
+
+**Checks at `integrate/h`:**
+- kit `node --test test/*.test.mjs`: 544/544.
+- sidecar `npm test`: 744/744 (43 files).
+- mod `./gradlew build --offline`: 702 tests, 0 failed.
+- api-compat `--gate6ch`: 4 of 4 clean.
+
+**In game** (`node tools/gate-run.mjs change`, 3 shards, ports 8912-8917):
+- Run `artifacts/gate-runs-Hint/20261019-013147-change` at 0592be4c:
+  - h-unit 13/0, t3a-unit 8/0, ha-ingame 11/0, ha-cold 6/0, h-natural 19/0, h-cold 18/0, h-crash 11/0, t3a-ingame 23/0, t3b-ingame 32/0, k1a-ingame 19/0.
+  - h-ingame 47/1. The one FAIL was the new removal-review case's harness: a tick loop the DevBridge could not serve during `dev.region.remove`.
+- Re-run `…/20261019-020148-change` at 60836347 (the harness fix only): h-ingame 48/0.
+- Between the two heads, kit, mod and sidecar are identical.
+
+**The RC for Steward (GATES policy 4):**
+- `artifacts/rc/architect-mc-0.37.0-rc1.jar` (sha256 `7748637f7e1179fc88e02ec5afeecf9d32d3acedb32605af59ca90358bec6895`), with `-sources.jar` and `.sha256` beside it, following the 0.14.0 RC.
+- The jar bundles the sidecar and kit (`architect-sidecar/BUNDLE.json` modVersion 0.37.0). Every bundled kit file matches the tree.
+
+Not merged, not tagged.
