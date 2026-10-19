@@ -348,6 +348,10 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-19 (the H batch):** `dev.fluid.state {region}` gains `removalNote` (a removal whose settle wait hit its cap, 2 x the settle
+  bound after the drain); for a removed region it answers `{removed: true, removalNote}` when its removal was capped (else "no live
+  region", as before). A region's view ext carries `architect_mc:fluidsRemoval {state: capped, note, ticks}` in that case.
+
 - **2026-10-18 (6c slice H-core):** new (`SliceHDev`, generated headless too): `dev.fluid.census {box: [x0,y0,z0,x1,y1,z1]}` (every fluid
   or ice cell of the box with its state, and every scheduled fluid tick there -> `{fluids: [[x,y,z,state]], ticks: [[x,y,z]]}`);
   `dev.fluid.tick {cells, fluid?: water|lava, delay?: 1}` (one scheduled fluid tick at each cell); `dev.entity.damage {since: epoch ms,

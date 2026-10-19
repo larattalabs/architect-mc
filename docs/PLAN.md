@@ -643,6 +643,24 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 - **y-ingame:** the client fails `store` with NOT_ALLOWED (instant placements need permission level 2); headless misses one
   target in the feed order. Investigate both before moving it to headless.
 
+## Queued from the H batch integration (coordinator, 2026-10-19)
+
+- **links_demo and links_demo_flat goldens are at kit 0.34.0.** crossings_demo_flat was re-cut for 0.35.0 (only the IR's
+  kitVersion moved). k1b-ingame compares links_demo_flat's IR sha, so re-cut it the same way (bump `kitVersion` in its `ir.json`,
+  recompute `tileShas`, confirm tiles and cells unchanged) before the release tier.
+- **The even-width lateral rule elsewhere.** The H batch put a bridge deck's extra column on the route's side (bridgeGeom `latOn`:
+  the route's `footprintOf` takes +x / +z). `ropeGeom.mjs` and `tunnelGeom.mjs` still use `lateral(width)` along `rightOf(dir)`, so an
+  even-width rope bridge or bore running +z or -x stands one column off its walk too. Check them with a width-2 fixture.
+- **hb-unchanged after the merge.** H-b's item 11 still requires t3a/r06 and r07 to differ from origin/main. Once H is on main they
+  won't, so relax it to "only the named exceptions may differ", as H-core's `unchanged()` (`UNCHANGED_EXCEPTIONS`) already does.
+- **apijars over v0.36.1.** `gate6a.mjs` apijars still runs the 0.36.0, 0.35.0 and 0.34.0 jars; api-compat `--gate6ch` now uses
+  0.36.1 (built from its tag into `artifacts/gate6c-h/v0361`). Add 0.36.1 to apijars (with its base world) at the release tier.
+- **6ct1-scenario-relief's falling water** (H-b's slice run): 2 unclassified falling-water cells far from any H part under the
+  narrowed `flow` class. Re-check at the release tier; widen the class or record the cells.
+- **The breach runoff past `watch`.** The removal's drain now takes only the body's cells, spill, watch, predicted flow and the
+  census's recorded escapes (a player's water stays, §4.2). If a single breach's runoff ever reaches past the watch set, widen
+  sim.mjs's watch reach instead of the drain.
+
 ## Queued from H-core (builder, 2026-10-18)
 
 - **Recorded (item 14 b, T1's falling water):** relief_demo's committed inputs re-planned give FLUID_STATE 0, and no op names
