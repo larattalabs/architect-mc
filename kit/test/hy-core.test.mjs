@@ -142,6 +142,13 @@ test('hy_core_demo through the two-plan flow: the reaches, the feed, downstream 
   assert.equal(again.irSha, p.irSha, 'deterministic');
 });
 
+test('item 12: no `until: HY` anywhere in kit/ but the archived catalogues', () => {
+  const hits = [];
+  const walk = (d) => { for (const f of fs.readdirSync(d, { withFileTypes: true })) { const q = path.join(d, f.name); if (f.isDirectory()) { if (f.name !== 'node_modules') walk(q); } else if (/\.(m?js|json)$/.test(f.name) && !/fixtures\/plan\/catalogue-[a-z0-9]+\.json$/.test(q)) { const t = fs.readFileSync(q, 'utf8'); if (/until: ?'HY'|"until": ?"HY"|until: ?"HY"/.test(t) && !q.endsWith('hy-core.test.mjs')) hits.push(q); } } };
+  walk(path.join(ROOT, 'kit'));
+  assert.deepEqual(hits, []);
+});
+
 test('the broken variants (§14): each caught by its rule, naming its cells; flowing_state refused by the lint', async () => {
   const want = { predict_short: ['M25:leak'], no_lining_cell: ['M25:shell', 'M25:leak'], sand_lining: ['M25:shell'], thin_weir: ['M25:shell', 'M25:keep'], wrong_order: ['M25:order'] };
   for (const [variant, rules] of Object.entries(want)) {
