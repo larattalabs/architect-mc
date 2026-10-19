@@ -638,7 +638,7 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 
 ## Queued from housekeeping 2 (coordinator, 2026-10-18)
 
-- **w-ingame's s1_floating_islands golden fails on both hosts** (sha 572271bd vs 3e5bd5b7), and its survey differs by host
+- **Done (housekeeping 3): not code, not re-pinned.** Pre-existing and state-dependent: the same head fails and passes (PT-verify vs PT-bisect2 at 95e3cd5c, 2026-10-13); at aac5f588+ a fresh client run dir passes (sha = golden, `artifacts/gate-runs-hk3/20261019-195353-change`), a fresh headless one fails (572271bd, `gate-runs-hk3-exp/20261019-195821-change`), and a client run in that same dir passed once its bases were rebuilt (`gate-runs-hk3-exp/20261019-200831-change`). The cause is a base world made by the headless server (PT's level.dat finding), which the base stamp didn't tell apart: its recipe now carries the host (`basestamp.mjs` `gateHost`), so a base made by the other host is quarantined and rebuilt. The 5904-5907 frozen count (item 6) varies per run on one host; it is recorded only. No bisect was needed. ~~**w-ingame's s1_floating_islands golden fails on both hosts**~~ (sha 572271bd vs 3e5bd5b7), and its survey differs by host
   (5906 vs 5907 frozen-water columns). Confirm on main whether this is pre-existing, then re-pin or fix.
 - **y-ingame:** the client fails `store` with NOT_ALLOWED (instant placements need permission level 2); headless misses one
   target in the feed order. Investigate both before moving it to headless.
