@@ -120,10 +120,16 @@ steps.unit = async () => {
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 13: S1, S7, S2, mega_bench, relief_demo, route_demo, forms_demo, scatter_demo, districts_demo and links_demo tile goldens (and crossings_demo's); T2's routes (its water test unchanged); the lint: ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   out.kit = nodeTest(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
-  // item 10: the catalogue diff tool, K1 -> T3
-  const d = spawnSync(process.execPath, ['tools/plan-catalogue-diff.mjs', 'kit/test/fixtures/plan/catalogue-k1.json', 'kit/schemas/plan-catalogue.golden.json'], { cwd: root, encoding: 'utf8' });
-  out.diff = `${d.stdout}${d.stderr}`.trim();
-  check(d.status === 0 && /reserved -> supported: connector\.bridge, connector\.tunnel/.test(out.diff) && /limits changed: connector\.auto/.test(out.diff), `item 10: tools/plan-catalogue-diff.mjs K1 -> T3 lists the two flips, the six added ids and auto's moves`, out.diff.split('\n'));
+  // item 10: the catalogue diff tool, K1 -> T3, on the archived catalogues ((6c H) catalogue 6 is archived as catalogue-t3.json: the
+  // golden is catalogue 7 now), and T3 -> H against the golden (the exact flips and added ids)
+  const diff = (from, to) => { const d = spawnSync(process.execPath, ['tools/plan-catalogue-diff.mjs', from, to], { cwd: root, encoding: 'utf8' }); return { code: d.status, text: `${d.stdout}${d.stderr}`.trim() }; };
+  const dk = diff('kit/test/fixtures/plan/catalogue-k1.json', 'kit/test/fixtures/plan/catalogue-t3.json');
+  out.diff = dk.text;
+  const lines = (t) => t.split('\n');
+  check(dk.code === 0 && lines(dk.text).includes('reserved -> supported: connector.bridge, connector.tunnel') && lines(dk.text).includes('added: bridge.arch (supported), bridge.beam (supported), connector.drawbridge (reserved), connector.tube (reserved), tunnel.through (supported), tunnel.under (reserved)') && /limits changed: connector\.auto/.test(dk.text), `item 10: tools/plan-catalogue-diff.mjs K1 -> T3 (the archived catalogues 5 and 6) lists the two flips, the six added ids and auto's moves`, lines(dk.text));
+  const dh = diff('kit/test/fixtures/plan/catalogue-t3.json', 'kit/schemas/plan-catalogue.golden.json');
+  out.diffH = dh.text;
+  check(dh.code === 0 && lines(dh.text)[0] === 'catalogue 6 (API 1.33.0) -> 7 (API 1.34.0)' && lines(dh.text).includes('reserved -> supported: connector.channel, form.pond, form.waterfall') && lines(dh.text).includes('added: channel.course (reserved), channel.moat (supported), form.fountain (supported), form.quay (supported)') && lines(dh.text).includes('retired: none') && lines(dh.text).includes('REMOVED (never allowed): none'), `item 10 (after H): T3 -> H (catalogue-t3.json -> the golden, catalogue 7) lists exactly the three flips (connector.channel, form.pond, form.waterfall) and the four added ids (channel.course reserved; channel.moat, form.fountain, form.quay supported), nothing retired or removed`, lines(dh.text));
   // item 15: api-compat against the unchanged 0.35.0, 0.34.0 and 0.33.0 jars (the mod's classes must be built)
   const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6ct3'], { cwd: root, encoding: 'utf8' });
   out.apicompat = `${ac.stdout}${ac.stderr}`.trim().split('\n').slice(-6);

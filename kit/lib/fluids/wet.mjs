@@ -103,6 +103,9 @@ export function volumeRef(r, box) {
 export function askWet(r, cols) {
   const box = wetBox(cols);
   const volume = r.needVolume(box, { fluids: true });
+  // (the H batch) the ask outlives a rollback of the part (compile.mjs restores meta.wet, never meta.wetAsked): the game's check plans
+  // twice for it (finish.mjs's wetAsked)
+  if (!volume) r.meta.wetAsked = true;
   return { volume, ref: volume ? volumeRef(r, box) : null, box };
 }
 

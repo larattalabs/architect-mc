@@ -26,7 +26,8 @@ const part = (r, id) => r.check.parts.find((a) => a.part === id);
 const H_RULES = /^(M25|M20|M17)/;
 
 test('items 1, 11: the valid water bodies fit through the two-plan flow; M25, M20 and M17 clean over their frozen volumes', async () => {
-  const fx = read('valid', /^v4[1-9]_/);
+  // (the H batch: v46-v48 are H-b's wet structures, tested in h-wet.test.mjs; H-a's water bodies are these)
+  const fx = read('valid', /^v4[1-59]_/);
   assert.deepEqual(fx.map((f) => f.name.slice(0, 3)), ['v41', 'v42', 'v43', 'v44', 'v45', 'v49']);
   for (const f of fx) {
     const r = await run(f);

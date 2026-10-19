@@ -182,6 +182,29 @@ test('v47: a beam on wet piers over a 28-wide river; piers 2 into the bed, no ai
   assert.ok(g.length === 1 && g[0].fluids && g[0].volume?.sha && g[0].runs.length === 4 * rec.wet.columns.length, JSON.stringify(g));
 });
 
+test('a part that wrote a wet record rolls back (the H batch): no wet record, body or water left behind; the volume\'s ask survives (wetAsked)', async () => {
+  // v47's first plan: the beam's span writes its wet record, asks the water's volume it does not hold and throws VOLUME under its
+  // checkpoint; the rollback restores meta.wet (and meta.waters, meta.quays, the bodies), never meta.wetAsked
+  for (const f of [['valid', 'v47_wet_beam.json'], ['h', 'hb_v01_street_wet.json']]) {
+    const fx = readJ(...f);
+    const r = await run(fx);
+    const m1 = r.first.res.meta;
+    assert.equal(r.first.check.parts[0].class, 'incomplete', f[1]);
+    assert.equal(m1.wet, undefined, `${f[1]}: the rolled-back span leaves no wet record`);
+    assert.equal(m1.waters, undefined, f[1]);
+    assert.equal(m1.quays, undefined, f[1]);
+    assert.equal(m1.wetAsked, true, `${f[1]}: the ask outlives the rollback`);
+    assert.equal(r.first.check.wetAsked, true, `${f[1]}: the game's check plans twice (PlanChecks.wetAsked)`);
+    assert.ok(r.asked.some((b) => b.fluids === true), `${f[1]}: the volume asked with its fluid layer`);
+    // the M25:wet the first plan's IR would be checked with sees no record for columns that were never written
+    const rep1 = checkRegion({ ir: r.first.res.ir, survey: r.survey.bytes, blobs: (sha) => r.first.res.blobs.get(sha) ?? null, meta: m1, volumes: [], prefix: false });
+    assert.deepEqual(rep1.findings.filter((x) => /^M25/.test(x.rule)), [], f[1]);
+    // the second plan, with the volume: the record stands, once, and the plan is READY
+    assert.equal(r.check.overall, 'READY', f[1]);
+    assert.equal(r.res.meta.wet.length, 1, f[1]);
+  }
+});
+
 test('v48: a harbour wall: the ring crosses the lake\'s corner; wet sections full height over the surface, to 2 into the bed; no gate in them; closure clean', async () => {
   const fx = readJ('valid', 'v48_harbour_wall.json');
   const r = await run(fx);

@@ -53,6 +53,7 @@ async function haKit(ctx) {
 
 /** Item 11's byte identity (H-core's unchanged() over a main worktree of H-a's own: ../architect-mc-Ha-main). */
 async function haUnchanged(ctx) {
+  const { UNCHANGED_EXCEPTIONS, UNCHANGED_SKIPPED } = await import('./gate6ch-core.mjs');
   const { createHash } = await import('node:crypto');
   const { execFileSync } = await import('node:child_process');
   const { pathToFileURL } = await import('node:url');
@@ -72,6 +73,7 @@ async function haUnchanged(ctx) {
     const fixDir = path.join(root, 'kit', 'test', 'fixtures', 'plan', dir);
     if (!fs.existsSync(fixDir)) continue;
     for (const f of fs.readdirSync(fixDir).filter((x) => x.endsWith('.json')).sort()) {
+      if (UNCHANGED_SKIPPED.includes(`${dir}/${f}`)) { skipped++; continue; }
       const fx = JSON.parse(fs.readFileSync(path.join(fixDir, f), 'utf8'));
       if (!fx.plan) continue;
       const parts = [...(fx.plan.forms ?? []), ...(fx.plan.connectors ?? [])];
@@ -88,8 +90,10 @@ async function haUnchanged(ctx) {
     }
   }
   out.same = same; out.n = Object.keys(out.fixtures).length; out.skipped = skipped;
-  const differ = Object.entries(out.fixtures).filter(([, v]) => !(v.answers && v.ir && v.overall)).map(([k]) => k);
-  ctx.check(out.n >= 40 && out.same === out.n, `item 11 (H-a): ${same} of ${out.n} committed valid/, K1 and T3 fixtures without an H part answer as on origin/main ${mainHead.slice(0, 10)} and plan the same IR but its kitVersion (${skipped} H fixtures skipped)`, differ);
+  // (the H batch: H-core's named exceptions, T3a's r06 and r07 fitting on H-b's wet piers, may differ; refused/k1a_r01 is skipped)
+  const all = Object.entries(out.fixtures).filter(([, v]) => !(v.answers && v.ir && v.overall)).map(([k]) => k);
+  const excepted = all.filter((k) => UNCHANGED_EXCEPTIONS.includes(k)), differ = all.filter((k) => !UNCHANGED_EXCEPTIONS.includes(k));
+  ctx.check(out.n >= 40 && differ.length === 0 && out.same + excepted.length === out.n, `item 11 (H-a): ${same} of ${out.n} committed valid/, K1 and T3 fixtures without an H part answer as on origin/main ${mainHead.slice(0, 10)} and plan the same IR but its kitVersion; named exceptions differing: ${excepted.join(', ') || 'none'} (${skipped} H fixtures skipped)`, differ);
   return { same, n: out.n, differ };
 }
 

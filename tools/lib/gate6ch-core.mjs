@@ -6,8 +6,17 @@ import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 /**
+ * Item 11's named exceptions (the H batch's integration): T3a's r06 and r07 now fit on wet piers (H-b's wet fallback, §8), so they
+ * may differ from origin/main; every other fixture must not.
+ */
+export const UNCHANGED_EXCEPTIONS = Object.freeze(['t3a/r06_water_arch.json', 't3a/r07_water_rope.json']);
+/** Fixtures the comparison skips by name: refused/k1a_r01 runs the two-plan harness (its `volume`; H-b re-answers it WATER deep). */
+export const UNCHANGED_SKIPPED = Object.freeze(['refused/k1a_r01_wall_water.json']);
+
+/**
  * Item 11's byte identity: every committed valid/, K1 and T3 fixture without an H part answers as on origin/main and plans the same IR
- * but its kitVersion (the main checkout's kit in a detached worktree beside this one).
+ * but its kitVersion (the main checkout's kit in a detached worktree beside this one). `ok`: n >= 40 and only the named exceptions
+ * differ (`excepted`: those that do).
  */
 export async function unchanged(root) {
   const { createHash } = await import('node:crypto');
@@ -26,11 +35,12 @@ export async function unchanged(root) {
     const fixDir = path.join(root, 'kit', 'test', 'fixtures', 'plan', dir);
     if (!fs.existsSync(fixDir)) continue;
     for (const f of fs.readdirSync(fixDir).filter((x) => x.endsWith('.json')).sort()) {
+      if (UNCHANGED_SKIPPED.includes(`${dir}/${f}`)) { skipped++; continue; }
       const fx = JSON.parse(fs.readFileSync(path.join(fixDir, f), 'utf8'));
       if (!fx.plan) continue;
       const parts = [...(fx.plan.forms ?? []), ...(fx.plan.connectors ?? [])];
       // (an H part, a fixture H added, or one H re-answers by name: §14 item 11's list)
-      if (parts.some((c) => H_KINDS.includes(c.kind)) || !fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', dir, f))) { skipped++; continue; }
+      if (parts.some((c) => H_KINDS.includes(c.kind)) || /"farmPond":true/.test(JSON.stringify(fx.plan)) || !fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', dir, f))) { skipped++; continue; }
       if (fx.volume) continue; // (a frozen volume built by its own test)
       const sv = (h) => (fx.terrain ? h.flatSurvey(fx.terrain) : fx.on === 'asks' ? h.asksSurvey() : fx.on === 'flat' ? h.flatSurvey() : fx.on ? h.goldenSurvey(fx.on) : h.flatSurvey());
       const runOn = async (h) => { const s = sv(h); return h.checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...h.stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}) }); };
@@ -44,7 +54,10 @@ export async function unchanged(root) {
     }
   }
   out.same = same; out.n = Object.keys(out.fixtures).length; out.skipped = skipped;
-  out.differ = Object.entries(out.fixtures).filter(([, v]) => !(v.answers && v.ir && v.overall)).map(([k, v]) => [k, v]);
+  const differing = Object.entries(out.fixtures).filter(([, v]) => !(v.answers && v.ir && v.overall));
+  out.excepted = differing.map(([k]) => k).filter((k) => UNCHANGED_EXCEPTIONS.includes(k));
+  out.differ = differing.filter(([k]) => !UNCHANGED_EXCEPTIONS.includes(k)).map(([k, v]) => [k, v]);
+  out.ok = out.n >= 40 && out.differ.length === 0 && out.same + out.excepted.length === out.n;
   return out;
 }
 

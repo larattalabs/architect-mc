@@ -128,7 +128,7 @@ export async function checkPlanVolumes(plan, { volume = {}, ...o } = {}) {
   const need = first.res.needVolumes ?? [];
   const hasTunnel = (plan.connectors ?? []).some((p) => p?.kind === 'tunnel');
   // (6c H, §10) the trigger widened: a body part (pond, fountain, waterfall, moat), a quay, or a part that took the wet fallback (meta.wet)
-  const hasH = [...(plan.forms ?? []), ...(plan.connectors ?? [])].some((p) => ['pond', 'fountain', 'waterfall', 'quay', 'channel'].includes(p?.kind)) || (first.res.meta?.wet ?? []).length > 0
+  const hasH = [...(plan.forms ?? []), ...(plan.connectors ?? [])].some((p) => ['pond', 'fountain', 'waterfall', 'quay', 'channel'].includes(p?.kind)) || (first.res.meta?.wet ?? []).length > 0 || first.check?.wetAsked === true
     || /"farmPond":true/.test(JSON.stringify(plan.zones ?? []));
   if (!need.length || !(hasTunnel || hasH) || volume.missing) return { ...first, volumes: o.volumes ?? [], first, asked: need };
   const vols = [...(o.volumes ?? [])];

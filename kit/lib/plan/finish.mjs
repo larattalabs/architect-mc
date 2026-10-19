@@ -158,8 +158,9 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
     };
     artifactSha = sha256Hex(canonicalJson(artifact));
   }
-  // (6c H §10) a part took the wet fallback (the plan meta's wet records): the game's check plans twice for its water columns
-  const check = { ...base, overall, parts: answers, cost, catalogue, preview, artifactSha, notes, ...((res.meta?.wet ?? []).length ? { wetAsked: true } : {}) };
+  // (6c H §10) a part took the wet fallback (the plan meta's wet records, or a wet write that asked a volume and rolled back:
+  // meta.wetAsked): the game's check plans twice for its water columns
+  const check = { ...base, overall, parts: answers, cost, catalogue, preview, artifactSha, notes, ...((res.meta?.wet ?? []).length || res.meta?.wetAsked ? { wetAsked: true } : {}) };
   return { check, artifact, artifactSha, classMap: classMap.png, cacheOut: pc.hit || overall === 'INCOMPLETE' ? cacheOnlyAnswered(pc.cacheOut, answers) : pc.cacheOut };
 }
 

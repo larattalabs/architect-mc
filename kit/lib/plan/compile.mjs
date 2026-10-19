@@ -725,7 +725,15 @@ function checkpoint(r) {
     pathIds: Object.keys(r.meta.paths), nodeIds: r.graph.nodes.length, edgeIds: r.graph.edges.length,
     meta: JSON.stringify({ paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, route: r.meta.route ?? null, gravity: r.meta.gravity ?? null, forms: r.meta.forms ?? null, village: r.meta.village ?? null, villageZones: r.meta.villageZones ?? null, walls: r.meta.walls ?? null, ropes: r.meta.ropes ?? null, bridges: r.meta.bridges ?? null, tunnels: r.meta.tunnels ?? null }),
     anchors: { ...r.anchors },
+    // ((6c H) the fluid records, by length (their objects are referenced elsewhere: the bodies by the moat's pass input, the wet records
+    // by their guards): a part that rolls back leaves no body, water, quay or wet record behind (null: the key was absent)
+    fluid: { bodies: r._fluidBodies?.length ?? null, waters: r.meta.waters?.length ?? null, quays: r.meta.quays?.length ?? null, wet: r.meta.wet?.length ?? null },
   };
+}
+/** (6c H) Truncate a record list to its checkpointed length, or drop it where the checkpoint had none. */
+function restoreList(o, k, n) {
+  if (n === null) delete o[k];
+  else if (Array.isArray(o[k])) o[k].length = n;
 }
 function rollback(r, c) {
   r.parts.length = c.parts; r.partIds = c.partIds; r.lots.length = c.lots; r.lotIds = c.lotIds; r.roads.length = c.roads; r.roadIds = c.roadIds;
@@ -738,6 +746,8 @@ function rollback(r, c) {
   r.meta.paths = m.paths; r.meta.lots = m.lots; r.meta.parts = m.parts;
   for (const k of ['route', 'gravity', 'forms', 'village', 'villageZones', 'walls', 'ropes', 'bridges', 'tunnels']) { if (m[k] === null) delete r.meta[k]; else r.meta[k] = m[k]; }
   r.anchors = c.anchors;
+  // ((6c H) meta.wetAsked is not restored: a wet write that asked a volume it did not hold keeps the two-plan flow's ask (finish.mjs))
+  if (c.fluid) { restoreList(r, '_fluidBodies', c.fluid.bodies); for (const k of ['waters', 'quays', 'wet']) restoreList(r.meta, k, c.fluid[k]); }
 }
 /** The region parts (and lots) added since a checkpoint. */
 const addedSince = (r, c) => ({ parts: r.parts.slice(c.parts).map((p) => p.id), lots: r.lots.slice(c.lots).map((l) => l.id), roads: r.roads.slice(c.roads).map((x) => x.id),
