@@ -14451,7 +14451,7 @@ apitest jars and the 0.36.1 surface. 0.36.1 was built from its tag into `artifac
 
 Not merged, not tagged.
 
-## Phase 6c slice VOC: the full block vocabulary and rarity budgets (DRAFT for Steward review)
+## Phase 6c slice VOC: the full block vocabulary and rarity budgets (FROZEN 2026-10-19, Steward reviewed)
 
 Every block of Minecraft 26.3 classified from the game's own data and checked against the live registry, with budgets that cap
 rare and expensive blocks, and checker rules that catch vocabulary misuse. **This section supersedes the wave-4 draft "Phase 6c
@@ -14988,6 +14988,18 @@ VOC-b can start against a stub vocab (every block `common`, `sv: craft`) and swi
 - **N-VOC-8. The split.** Proposed: VOC-a's first round, then VOC-b in parallel, one batch. The alternative is serial, about
   half a day longer.
 
+### Steward's review (2026-10-19, at 6dbbc51b): binding, and it overrides the sections above where they differ
+
+- **S-VOC-2. VOC-c** (`rule.palette` measured, with a `realiseApproved` refusal and Steward's RC check) is its own slice after
+  VOC-a and VOC-b, and blocks neither of them. "Only copper" and "no wood" are the target asks.
+- **S-VOC-3.** Agreed: blocks a bible names are exempt from shares, and precious blocks are counted everywhere with a cap of 0
+  by default.
+- **S-VOC-4.** Agreed: refusals block, and findings appear only when the bible opts in.
+- **S-VOC-5. A typed record.** `BibleRequest.rarity` is a typed record (`BibleRequest.Rarity`, nullable trailing component), not
+  a JsonObject.
+- **S-VOC-6. The shapes are enough, and the vocabulary is exposed as a systemRef** `vocab/1`, with a `#compact` form, the same
+  way plan/0 is: families, tiers, colours and survival class, cacheable. This replaces any listing call.
+
 ### Coordinator decisions (2026-10-19, on Noah's behalf; Noah can overrule at the look step)
 
 - **N-VOC-1:** the bible job's prompt is unchanged (the default). `rarity` reaches the bible by code (S-VOC-1).
@@ -15007,7 +15019,7 @@ VOC-b can start against a stub vocab (every block `common`, `sv: craft`) and swi
 - Block entity contents (banner patterns, sign text, pot sherds) as vocabulary.
 - Bible format 3's `settlement.roleShares` (7c). Palette suggestions from a chest (phase 3's optional item).
 
-## Phase 6c slice HY: hydrology and channels (DRAFT for Steward review)
+## Phase 6c slice HY: hydrology and channels (FROZEN 2026-10-19, Steward reviewed)
 
 Water that follows the land: streams, canals, mill races and irrigation ditches, each a `channel.course` (or one of its two
 siblings) that steps down the terrain from a head to a tail, plus the `hydrology` pass and its `flow` and `wet` fields. Where
@@ -15726,6 +15738,20 @@ Taste and product calls only, each with a proposed default.
   a lined deck), about a day more.
 - **N-HY-6. The split.** Proposed: HY-core and HY-a together, then HY-b and HY-c in parallel, one batch with Steward's RC. The
   alternative is serial, with HY-c deferred.
+
+### Steward's review (2026-10-19, at 6dbbc51b): binding, and it overrides the sections above where they differ
+
+- **S-HY-1.** Agreed: an uphill course refuses with a swapped `wouldFit`.
+- **S-HY-2. Own ids:** `channel.race` and `channel.ditch`. Steward's writer adds them only when the card asks.
+  - **In-field irrigation** for working or automated farms (a source per 9x9 inside the field) is *not* a design param and *not*
+    in HY. Lot designs never own fluids, because fluids need H's containment and drain-first undo. It is a later Architect member
+    on a farm lot, queued in PLAN ("farm irrigation"), built on H bodies.
+- **S-HY-3.** Footbridges only in v1. Carts and rails come later.
+- **S-HY-4.** Water gates are in this batch (HY-c).
+- **S-HY-5.** Visible weirs.
+- **S-HY-6.** A report row per reach, in the exact `architect_mc:fluids` row shape `{part, body, state, reason, at}`, plus the
+  cross-part upstream drain.
+- **S-HY-7.** Enough. The RC check before release is confirmed.
 
 ### Coordinator decisions (2026-10-19, on Noah's behalf; Noah can overrule at the look step)
 

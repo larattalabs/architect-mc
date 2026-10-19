@@ -687,3 +687,12 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   realiseApproved at least once in game.
 - **Guard reader robustness:** `PlanChecks.guardDiff` throws Gson's "Array must have size 1" on a malformed `runs`. Validate the
   shape and answer a clear error instead.
+
+## Queued (coordinator, 2026-10-19)
+
+- **Farm irrigation (Steward S-HY-2, Noah's working/automated farms):** a source per 9x9 inside a farm lot's field, as H bodies
+  (contained, drain-first undo), set by an Architect member on the farm lot (for example `irrigate: true`). Lot designs never
+  own fluids. A small slice after HY.
+- **VOC-c (S-VOC-2):** `rule.palette` measured, with a `realiseApproved` refusal and Steward's RC check, after VOC-a and VOC-b.
+- **Copper weathering and undo** (VOC §10): `StillOurs` needs the same block, so oxidized copper is left behind by undo and
+  removal. It is on main today. Its own slice, with verifier re-runs and Steward's pre-release check.
