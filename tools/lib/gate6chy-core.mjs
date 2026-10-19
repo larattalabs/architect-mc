@@ -396,6 +396,21 @@ export async function ingame(ctx) {
     check(df.mismatches === 0, `item 6: the capped removal is judged too: E-flat ${df.mismatches} after it`, df.sample);
     await L.leaveWorld();
   }
+  // ---- (G) §10, S-HY-6: realiseApproved re-samples each reach's guard: a block set in r2's guard buffer after the check answers
+  // ARTIFACT_STALE naming that reach (its body and part), and nothing is written
+  {
+    const w = await freshCourse(ctx, 'G6B HY Stale', 'exact');
+    const ck = await checkCourse(ctx, 'stale');
+    const demo = w.demo;
+    const o = demo.hyCoreOrigin({ minX: CLAIM[0], minZ: CLAIM[1], maxX: CLAIM[2], maxZ: CLAIM[3] });
+    const cell = [o[0] + 17, w.g + 3, o[1] - 4];
+    await L.cmd(`/setblock ${cell.join(' ')} minecraft:cobblestone`);
+    const rr = await L.call('dev.region.realiseApproved', { sha: ck.artifactSha }, 300_000);
+    const why = JSON.stringify(rr.refused ?? null);
+    out.stale = { cell, refused: rr.refused ?? null, region: rr.region ?? null };
+    check(!!rr.refused && /ARTIFACT_STALE/.test(why) && /stream_r2/.test(why) && !/stream_r1|stream_r3|w_feed/.test(why), `§10 (S-HY-6): a block set in r2's guard buffer ${json(cell)} after the check: realiseApproved answers ARTIFACT_STALE naming the reach (${why.slice(0, 300)})`);
+    await L.leaveWorld();
+  }
   // ---- (F) item 18 (b), recorded: fall damage landing in 1-deep and 2-deep water from 3 to 8 high (villagers dropped over /fill pools)
   {
     await L.fresh('G6B HY Falls', FLAT);
