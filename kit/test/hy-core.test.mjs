@@ -104,7 +104,7 @@ test('the overflow hook: registered on a part that accepts it, read by its gener
   assert.deepEqual(order.map((p) => p.id), ['other', 'stream'], 'the feeder emits after the course it feeds');
   assert.deepEqual(emitOrder(parts, []), parts, 'no overflow: plan order');
   assert.equal(dropOverflows(C.overflows, 'other'), 1);
-  assert.equal(C.overflows.length, 0);
+  assert.equal(C.overflows.length, 1, '(HY-b) the pond\'s overflow to the stream stays');
   const K = {};
   registerCrossing(K, { course: 'stream', body: 'stream_r2', wall: 'w', cells: [[1, 2]], level: 64, lintel: 65, grate: [[1, 64, 2]] });
   assert.equal(crossingsOf(K).length, 1);
