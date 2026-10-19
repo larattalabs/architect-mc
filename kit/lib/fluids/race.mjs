@@ -68,10 +68,22 @@ export function resolve(C, p) {
       for (let i = j + 1; i < full.levels.length; i++) full.levels[i] = Math.min(full.levels[i], full.levels[j] - RACE.drop);
       return null;
     };
-    res = planCourse(C, { ...p, part: { ...part, via: undefined } }, { block: 'channel.race', via: sg.goals, race: true, adjust });
+    res = planCourse(C, { ...p, part: { ...part, via: undefined } }, { block: 'channel.race', via: sg.goals, race: { lot: v.part }, adjust });
     if (res.klass === 'fits' || res.klass === 'adjusted' || res.reasons?.[0]?.evidence?.kind !== 'cut') break;
   }
-  if (!(res.klass === 'fits' || res.klass === 'adjusted')) return res;
+  const plainWf = () => {
+    const alone = planCourse(C, { ...p, part: plain });
+    return alone.klass === 'fits' || alone.klass === 'adjusted' ? [{ part: p.id, fragment: plain, geometry: { rect: rectArr(alone.rect), reaches: alone.geo.reaches.length }, cost: { cells: alone.geo.reaches.reduce((a, R) => a + R.cells.length, 0) } }] : undefined;
+  };
+  if (!(res.klass === 'fits' || res.klass === 'adjusted')) {
+    // (the race's own failures by the lot, and a route that can't pass its side: no wheel fall fits there)
+    const kind = res.reasons?.[0]?.evidence?.kind;
+    if (res.reasons?.[0]?.code === 'UNREACHABLE' && ['blocked', 'cut', 'length'].includes(kind) || res.reasons?.[0]?.code === 'NO_ROOM') {
+      const wf = plainWf();
+      return { klass: 'refused', notes: res.notes, reasons: [{ code: 'NO_ROOM', message: `no wheel fall of at least ${RACE.drop} fits by ${v.part}'s ${side} side (${res.reasons[0].message})`, evidence: { lot: v.part, side, why: kind ?? res.reasons[0].code } }], ...(wf ? { wouldFit: wf } : {}) };
+    }
+    return res;
+  }
   // the wheel fall: a fall of at least 3 whose lip is within 4 of the box, outside it grown by 1
   const fall = res.geo.steps.find((s) => s.kind === 'fall' && s.drop >= RACE.drop && s.cells.every(([x, , z]) => cheb(x, z, rect) >= 2) && s.cells.some(([x, , z]) => cheb(x, z, rect) <= RACE.band));
   if (!fall) {

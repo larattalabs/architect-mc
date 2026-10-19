@@ -1,0 +1,46 @@
+{
+ "about": "(\u00a77.6) a ditch along a pond (no lot or zone): refused NO_FEATURE",
+ "on": "flat",
+ "anchors": {
+  "pz": [
+   1120,
+   64,
+   2080
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "ditch",
+  "class": "refused",
+  "code": "NO_FEATURE"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_r09",
+  "forms": [
+   {
+    "id": "pond",
+    "kind": "pond",
+    "where": {
+     "near": {
+      "anchor": "pz",
+      "within": 2
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "ditch",
+    "kind": "channel",
+    "where": {
+     "along": {
+      "feature": {
+       "part": "pond"
+      }
+     }
+    }
+   }
+  ]
+ }
+}

@@ -1,0 +1,34 @@
+{
+ "about": "(6c HY-b, \u00a71.6, \u00a714) a leat from the asks lake: a weir head at the lake's level (a visible weir 2 thick on the bank), then down to a terminal pool",
+ "on": "asks",
+ "anchors": {
+  "mill": [
+   200,
+   64,
+   254
+  ]
+ },
+ "volume": {},
+ "covers": [
+  "connector.channel",
+  "channel.course"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_v52",
+  "connectors": [
+   {
+    "id": "leat",
+    "kind": "channel",
+    "from": {
+     "feature": {
+      "water": {}
+     }
+    },
+    "to": {
+     "anchor": "mill"
+    }
+   }
+  ]
+ }
+}

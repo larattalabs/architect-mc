@@ -359,7 +359,7 @@ test('plan_v0: the pass runs only with a course, race or ditch part', async () =
   assert.ok(!isCoursePart({ family: 'connector', kind: 'street', part: { from: { anchor: 'a' }, to: { anchor: 'b' } } }));
   const s = flatSurvey();
   const anchors = stewardAnchors(s.claim);
-  const course = JSON.parse(fs.readFileSync(path.join(KIT, 'test', 'fixtures', 'plan', 'h', 'r08_course.json'), 'utf8')).plan;
+  const course = JSON.parse(fs.readFileSync(path.join(KIT, 'test', 'fixtures', 'plan', 'valid', 'v51_canal.json'), 'utf8')).plan;
   const a = await checkPlanLocal(course, { survey: s.bytes, claim: s.claim, anchors });
   assert.deepEqual((a.res.meta.passes ?? []).map((p) => p.name), ['hydrology']);
   assert.ok(a.res.ir.blobs.field_flow && a.res.ir.blobs.field_wet);

@@ -1,0 +1,90 @@
+{
+ "about": "(6c HY-b, \u00a77.6, \u00a714) a ditch along a farm lot (its long side that is not its front), fed by a course falling over its rim from the terrace beside it; it hydrates nothing in the lot",
+ "terrain": {
+  "W": 240,
+  "D": 160,
+  "x0": 1000,
+  "z0": 2000,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1000,
+    "x1": 1104,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 68
+   }
+  ]
+ },
+ "anchors": {
+  "head": [
+   1020,
+   68,
+   2080
+  ],
+  "farms": [
+   1120,
+   64,
+   2080
+  ]
+ },
+ "volume": {},
+ "covers": [
+  "connector.channel",
+  "channel.ditch",
+  "channel.course"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_v55",
+  "zones": [
+   {
+    "id": "farmz",
+    "program": {
+     "template": "flat_village",
+     "params": {
+      "lots": [
+       {
+        "id": "farm1",
+        "type": "farm",
+        "size": [
+         11,
+         9
+        ]
+       }
+      ]
+     }
+    },
+    "where": {
+     "near": {
+      "anchor": "farms",
+      "within": 4
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "ditch",
+    "kind": "channel",
+    "where": {
+     "along": {
+      "feature": {
+       "part": "farm1"
+      }
+     }
+    }
+   },
+   {
+    "id": "feeder",
+    "kind": "channel",
+    "from": {
+     "anchor": "head"
+    },
+    "to": {
+     "part": "ditch"
+    }
+   }
+  ]
+ }
+}

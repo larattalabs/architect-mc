@@ -713,7 +713,10 @@ function edgeSites(B) {
 /** An endpoint's column (anchor, part, region, build) for a dry end, or a point near the feature on the side facing `toward`. */
 function endPoint(C, e, toward) {
   const env = C.env;
-  if (e.anchor !== undefined) { const a = env.anchors.get(e.anchor); return a ? { at: [a[0], a[1]] } : { error: { code: 'NO_FEATURE', message: `no anchor ${e.anchor}` } }; }
+  // (an anchor in the claim's margin, as Steward's street ends and claim_n..claim_w are: drawn in so the course's banks stay inside it)
+  const m = MARGIN + 4, c = env.claim;
+  const clamp = (x, z) => [Math.max(c.minX + m, Math.min(c.maxX - m, x)), Math.max(c.minZ + m, Math.min(c.maxZ - m, z))];
+  if (e.anchor !== undefined) { const a = env.anchors.get(e.anchor); return a ? { at: clamp(a[0], a[1]) } : { error: { code: 'NO_FEATURE', message: `no anchor ${e.anchor}` } }; }
   let rect = null;
   if (e.part !== undefined) rect = C.geomOf(e.part)?.rect ?? null;
   else if (e.build !== undefined) rect = env.buildRects.find((b) => b.id === e.build)?.rect ?? null;
@@ -744,7 +747,7 @@ function naturalWater(C, f, toward) {
 }
 
 /** The router's world for a plan: the claim inside its margin, the columns a course may not take, the flow field. */
-function routerWorld(C, p, ends) {
+function routerWorld(C, p, ends, nearLot = null) {
   const env = C.env, S = env.S;
   const box = grow(env.claim, -MARGIN - 1);
   const blocked = [];
@@ -753,11 +756,12 @@ function routerWorld(C, p, ends) {
   for (const [zid, rr] of C.res ?? []) {
     const q = C.byId.get(zid);
     if (!q || !C.okClass(zid)) continue;
-    for (const l of rr?.layout?.lots ?? []) blocked.push(grow({ minX: l.rect[0], minZ: l.rect[1], maxX: l.rect[2], maxZ: l.rect[3] }, 2));
+    // (a race's own lot keeps 2, so its band 4 from the box is free; every other lot 3: a course's single breach stays clear of it)
+    for (const l of rr?.layout?.lots ?? []) blocked.push(grow({ minX: l.rect[0], minZ: l.rect[1], maxX: l.rect[2], maxZ: l.rect[3] }, l.spec?.id === nearLot ? 2 : 3));
     // the forms and H bodies placed before it (their footprints), but its own ends
     if ((q.family === 'form' || (q.kind === 'channel' && q.id !== p.id)) && !ends.has(zid)) for (const fp of rr?.footprints ?? []) blocked.push({ minX: fp[0], minZ: fp[1], maxX: fp[2], maxZ: fp[3] });
   }
-  for (const lid of C.V?.lotZone?.keys?.() ?? []) { const g = C.geomOf(lid); if (g?.rect) blocked.push(grow(g.rect, 2)); }
+  for (const lid of C.V?.lotZone?.keys?.() ?? []) { const g = C.geomOf(lid); if (g?.rect) blocked.push(grow(g.rect, lid === nearLot ? 2 : 3)); }
   const flow = env.hydro?.out?.fields?.flow ?? null;
   const ok = (x, z) => {
     if (flagsAt(env, x, z) & (FLAG_WATER | FLAG_LAVA)) return false;
@@ -812,7 +816,7 @@ export function planCourse(C, p, { block = 'channel.course', via = null, race = 
     return refuse('WATER', `a level canal joins ends at one level: from stands at ${lf}, to at ${lt} (flow: pools steps down between them; it is the wouldFit)`, { kind: 'level', from: lf, to: lt }, { wouldFit: wf });
   }
   const ends = new Set([part.from.part, part.to.part, ...(part.via ?? []).map((v) => v.part)].filter(Boolean));
-  const G = routerWorld(C, p, ends);
+  const G = routerWorld(C, p, ends, race?.lot ?? null);
   const turn = COURSE[spec.look].turn;
   const ro = { offs, turn, cut: spec.cut, fill: spec.fill, maxNodes: COURSE.maxNodes, length: COURSE.limits.length[1] };
   // ---- the head

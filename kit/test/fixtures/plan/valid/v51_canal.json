@@ -1,0 +1,27 @@
+{
+ "about": "(6c HY-b, \u00a714; h/r08_course re-answered) a level canal between two anchors on a flat claim: one built reach (structure lining, a trim coping)",
+ "on": "flat",
+ "volume": {},
+ "covers": [
+  "connector.channel",
+  "channel.course"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_v51",
+  "connectors": [
+   {
+    "id": "canal",
+    "kind": "channel",
+    "look": "built",
+    "flow": "level",
+    "from": {
+     "anchor": "street_w"
+    },
+    "to": {
+     "anchor": "street_e"
+    }
+   }
+  ]
+ }
+}

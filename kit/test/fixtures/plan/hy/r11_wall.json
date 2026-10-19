@@ -1,0 +1,79 @@
+{
+ "about": "(\u00a78.3) a spring in v30's walled village running out to the claim's south edge: it meets the wall (no water gate in this build: HY-c's): refused UNREACHABLE wall",
+ "on": "s7",
+ "volume": {},
+ "expect": {
+  "part": "brook",
+  "class": "refused",
+  "code": "UNREACHABLE",
+  "kind": "wall"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_r11",
+  "zones": [
+   {
+    "id": "town",
+    "program": {
+     "template": "flat_village",
+     "params": {
+      "lots": [
+       {
+        "id": "h1",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "h2",
+        "type": "cottage",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "h3",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       }
+      ]
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "town_wall",
+    "kind": "wall",
+    "where": {
+     "around": {
+      "feature": {
+       "part": "town"
+      },
+      "ring": [
+       4,
+       8
+      ]
+     }
+    },
+    "height": 6
+   },
+   {
+    "id": "brook",
+    "kind": "channel",
+    "from": {
+     "anchor": "claim_center"
+    },
+    "to": {
+     "anchor": "claim_s"
+    }
+   }
+  ]
+ }
+}
