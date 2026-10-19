@@ -387,7 +387,31 @@ public final class PlanChecks {
 				}
 			}
 		}
-		return plan.get("zones") instanceof JsonArray z && z.toString().contains("\"farmPond\":true");
+		return farmPond(plan.get("zones"));
+	}
+
+	/**
+	 * (6c H, S-H-2) A farm pond is an opt-in body with no part of its own: {@code farmPond: true} on a zone, or on a lot at any depth under
+	 * the zones (a zone's program lots, a district's lots).
+	 */
+	static boolean farmPond(@Nullable JsonElement e) {
+		if (e instanceof JsonObject o) {
+			if (o.get("farmPond") instanceof JsonElement f && f.isJsonPrimitive() && f.getAsJsonPrimitive().isBoolean() && f.getAsBoolean()) {
+				return true;
+			}
+			for (var en : o.entrySet()) {
+				if (farmPond(en.getValue())) {
+					return true;
+				}
+			}
+		} else if (e instanceof JsonArray a) {
+			for (JsonElement x : a) {
+				if (farmPond(x)) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/** (6c H §10) Whether the first plan took the wet fallback somewhere (its check's {@code wetAsked}: the kit's meta.wet records, a pier, a harbour wall or a quay in water). */

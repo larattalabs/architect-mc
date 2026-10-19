@@ -35,6 +35,10 @@ class PlanChecksHTest {
 		assertTrue(PlanChecks.hasH(j("{\"zones\":[{\"id\":\"z\",\"program\":{\"lots\":[{\"id\":\"a\",\"farmPond\":true}]}}]}")));
 		assertFalse(PlanChecks.hasH(j("{\"forms\":[{\"id\":\"t\",\"kind\":\"terrace\"}],\"connectors\":[{\"id\":\"r\",\"kind\":\"road\"},{\"id\":\"b\",\"kind\":\"bridge\"}]}")));
 		assertFalse(PlanChecks.hasH(j("{\"zones\":[{\"id\":\"z\",\"farmPond\":false,\"program\":{}}]}")));
+		// (S-H-2) a farm pond has no part of its own: a lot of a district, and JSON however spaced
+		assertTrue(PlanChecks.hasH(j("{\"zones\":[{\"id\":\"z\",\"program\":{\"districts\":[{\"id\":\"d\",\"lots\":[{\"id\":\"a\",\"farmPond\":true}]}]}}]}")));
+		assertTrue(PlanChecks.hasH(j("{ \"zones\" : [ { \"id\" : \"z\", \"farmPond\" : true } ] }")));
+		assertFalse(PlanChecks.hasH(j("{\"zones\":[{\"id\":\"z\",\"notes\":\"farmPond\\\":true\"}]}")), "a string is no farm pond");
 		assertFalse(PlanChecks.hasH(j("{}")));
 		assertTrue(PlanChecks.wetAsked(j("{\"planCheck\":{\"wetAsked\":true}}")));
 		assertFalse(PlanChecks.wetAsked(j("{\"planCheck\":{}}")));
