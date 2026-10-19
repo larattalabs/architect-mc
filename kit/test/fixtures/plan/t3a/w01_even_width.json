@@ -1,0 +1,8 @@
+{
+  "about": "(the H batch: T3's even-width landing) a 16-wide river 3 deep crossed by a width-2 arch whose landings stand on the walk's raised fill. Before the fix the deck took its extra column on the other side of the walk (bridgeGeom lateral along rightOf(dir), the route's footprint on +x / +z), so one landing column stood on no fill: M10:bridge (support, step). plan-t3a.test.mjs runs it both ways, at widths 2 and 4, and turned 90 degrees",
+  "expect": { "part": "b", "class": "fits", "form": "arch" },
+  "plan": { "schemaVersion": "plan/0", "connectors": [{ "id": "b", "kind": "bridge", "from": { "anchor": "a" }, "to": { "anchor": "b" }, "width": 2, "form": "arch" }] },
+  "on": null,
+  "terrain": { "W": 160, "D": 96, "x0": 1000, "z0": 2000, "bands": [{ "x0": 1000, "z0": 2036, "x1": 1159, "z1": 2051, "y": 60, "water": 3 }] },
+  "anchors": { "a": [1080, 65, 2024], "b": [1080, 65, 2064] }
+}

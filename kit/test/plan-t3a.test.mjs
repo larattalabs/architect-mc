@@ -222,3 +222,27 @@ test('determinism: 3 checks of v35, v36, v39 and each refusal fixture give ident
     assert.equal(runs[2].res.irSha, runs[0].res.irSha, `${f.name}: IR 3`);
   }
 });
+
+test('(the H batch) an even-width bridge lands on the walk\'s raised fill in every direction (fixtures/plan/t3a/w01): M10:bridge and M3 clean, the landing columns on fill', async () => {
+  const fx = read('t3a', /^w01_/)[0];
+  const rot = { W: 96, D: 160, x0: 1000, z0: 2000, bands: [{ x0: 1036, z0: 2000, x1: 1051, z1: 2159, y: 60, water: 3 }] };
+  const cases = [];
+  for (const width of [2, 4]) {
+    cases.push({ tag: `+z w${width}`, terrain: fx.terrain, anchors: fx.anchors, width });
+    cases.push({ tag: `-z w${width}`, terrain: fx.terrain, anchors: { a: fx.anchors.b, b: fx.anchors.a }, width });
+    cases.push({ tag: `+x w${width}`, terrain: rot, anchors: { a: [1024, 65, 2080], b: [1064, 65, 2080] }, width });
+    cases.push({ tag: `-x w${width}`, terrain: rot, anchors: { a: [1064, 65, 2080], b: [1024, 65, 2080] }, width });
+  }
+  for (const c of cases) {
+    const s = flatSurvey(c.terrain);
+    const plan = { ...fx.plan, connectors: [{ ...fx.plan.connectors[0], width: c.width }] };
+    const r = await checkPlanVolumes(plan, { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...c.anchors } });
+    const a = part(r, 'b');
+    assert.equal(a.class, 'fits', `${c.tag}: ${JSON.stringify(a.reasons)}`);
+    assert.equal(a.geometry.bridges[0].width, c.width, c.tag);
+    const rep = checkRegion({ ir: r.res.ir, survey: s.bytes, blobs: (sha) => r.res.blobs.get(sha) ?? null, meta: r.res.meta, volumes: (r.volumes ?? []).map((v) => v.decoded), prefix: false });
+    assert.deepEqual(rep.findings.filter((x) => /^M10|^M3/.test(x.rule)).map((x) => `${x.rule} ${x.message}`), [], c.tag);
+    const per = rep.metrics.bridges.per[0];
+    assert.ok(per.ok && per.anchorsOk === per.anchors && per.maxStep <= 1, `${c.tag}: ${JSON.stringify(per)}`);
+  }
+});

@@ -92,6 +92,17 @@ export const piersFor = (n, every = BRIDGE.pierEvery) => Math.max(0, Math.floor(
  * broken variants' pier spacing and pier depth). Returns {ok, form, code?, evidence?, until?, ys, lowest, piers, springing, intrados,
  * over, depth, under} (auto: the arch when it holds, else the beam; failing both, the beam's failure with the arch's in evidence.arch).
  */
+/**
+ * (the H batch) The deck's lateral offsets along rightOf(dir), on the route's side: the route's footprint (passes/route.mjs footprintOf)
+ * puts an even width's extra column on +x or +z whichever way the path runs, so the deck does too (where rightOf(dir) points to -x or -z
+ * the offsets flip). An odd width is symmetric, so unchanged. Before, a width-2 deck running +z or -x stood one column off the walk
+ * that lands it: its landing column on no fill (M10:bridge, support and step).
+ */
+export function latOn(width, dir) {
+  const { lo, hi } = lateral(width), [rx, rz] = rightOf(dir);
+  return rx + rz < 0 ? { lo: -hi, hi: -lo } : { lo, hi };
+}
+
 export function checkBridge(land, a, dir, n, rise, width, opts = {}) {
   const form = opts.form ?? 'auto';
   if (form === 'auto') {
@@ -101,7 +112,7 @@ export function checkBridge(land, a, dir, n, rise, width, opts = {}) {
     if (beam.ok || !arch) return beam;
     return { ...beam, evidence: { ...(beam.evidence ?? {}), arch: { code: arch.code, ...(arch.evidence?.under ? { under: arch.evidence.under } : {}) } } };
   }
-  const [x0, y0, z0] = a, [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo, hi } = lateral(width);
+  const [x0, y0, z0] = a, [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo, hi } = latOn(width, dir);
   const clearance = opts.clearance ?? BRIDGE.clearance;
   const sMin = Math.max(BRIDGE.spanMin, opts.span?.min ?? BRIDGE.spanMin), sMax = Math.min(BRIDGE.spanMax, opts.span?.max ?? BRIDGE.spanMax);
   const fail = (code, evidence, extra = {}) => ({ ok: false, form, code, evidence: { span: n, form, ...evidence }, ...extra });
@@ -318,7 +329,7 @@ export function railOf(block) {
  * (checkBridge), the near landing `a`, `dir`, `n`, `rise`, `width`, the lamp spacing.
  */
 export function bridgeCells(c, a, dir, n, rise, width, { lampEvery = 12, noRails = false, noPiers = false, noLamps = false } = {}) {
-  const [x0, y0, z0] = a, [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo, hi } = lateral(width);
+  const [x0, y0, z0] = a, [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo, hi } = latOn(width, dir);
   const deck = [], rails = [], piers = [], body = [], posts = [], lamps = [], clear = [], cells = [];
   for (let i = 1; i <= n; i++) {
     const y2 = c.ys[i], y = deckY(y2), slab = isSlab(y2);
@@ -411,7 +422,7 @@ export function bridgeSpan(r, a, b, opts = {}) {
   if (u.pierInWater && c.code === 'WATER') {
     Object.assign(c, { ok: true, form: 'beam', ys: profile(n, a[1], rise, 0) });
     c.lowest = [0, ...c.ys.slice(1).map(lowestOf)];
-    const mid = Math.max(1, Math.floor((n + 1) / 2)), { lo, hi } = lateral(width), [rx, rz] = rightOf(dir), cols = [];
+    const mid = Math.max(1, Math.floor((n + 1) / 2)), { lo, hi } = latOn(width, dir), [rx, rz] = rightOf(dir), cols = [];
     for (let v = lo - 1; v <= hi + 1; v++) { const x = a[0] + dx * mid + rx * v, z = a[2] + dz * mid + rz * v; cols.push({ x, z, y0: (opts.floorAt ? opts.floorAt(x, z) : land.groundAt(x, z) - 4) - 1, y1: c.lowest[mid] - 1 }); }
     c.piers = [{ i: mid, cols, height: c.lowest[mid] - cols[0].y0 }];
   }
@@ -423,7 +434,7 @@ export function bridgeSpan(r, a, b, opts = {}) {
   const wetCols = c.form === 'beam' && !u.noPiers ? (c.piers ?? []).flatMap((q) => q.cols.filter((x) => x.wet !== undefined)) : [];
   let wetRec = null;
   if (wetCols.length) {
-    const S = r.survey, { lo, hi } = lateral(width), [rx, rz] = rightOf(dir), foot = new Map();
+    const S = r.survey, { lo, hi } = latOn(width, dir), [rx, rz] = rightOf(dir), foot = new Map();
     for (let i = 1; i <= n; i++) for (let v = lo - 1; v <= hi + 1; v++) {
       const x = a[0] + dx * i + rx * v, z = a[2] + dz * i + rz * v;
       if (S.waterAt(x, z)) foot.set(`${x},${z}`, [x, z, S.floorAt(x, z), S.groundAt(x, z)]);
