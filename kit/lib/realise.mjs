@@ -23,7 +23,7 @@ export const IR_FORMATS = Object.freeze([1, 2]);
 /** (6b) Every format-2 kind an IR's `requires` may name; any of them makes the IR format 2. */
 export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:array', 'shape:capsuleChain', 'shape:ellipsoid',
   'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'road:lamp', 'voxels',
-  'mask', 'pattern', 'relief', 'scatter', 'stamp', 'volume:blocks', 'fluid', 'volume:fluids']);
+  'mask', 'pattern', 'relief', 'scatter', 'stamp', 'volume:blocks', 'fluid', 'volume:fluids', 'courses']);
 // (6c W) 'road:lamp': a 4e road's `lamp` (the bible's lamp fixture for its lanterns; kit/lib/region/fixtures.mjs roadLamp). A mod
 // before 0.18.0 would lay its own fence and lantern, so the plan needs it (PLAN_STALE there).
 // (6c MP) `mask` (an op's mask) and `pattern` (a pattern anywhere a material goes) from kit 0.19.0
@@ -34,6 +34,9 @@ export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'ma
 // (6c H) 'fluid': a fluid body (kit/lib/fluids/body.mjs): its sources and ice cap are evaluated here, the rest (shell, spill, watched
 // cells, the settle) is the mod's `fluids` stage; a mod or kit before 0.35.0 refuses the plan PLAN_STALE. 'volume:fluids': a frozen volume
 // with the fluid layer (ARVX version 3, `volumes[name].fluids`), which a kit before 0.35.0 can't decode.
+// (6c HY) 'courses': a fluid op with a course's members (after, lining or grate non-empty, or a join into a plan body: kit/lib/fluids/
+// body.mjs isCourseOp): a mod or kit before HY would write the course out of order (no `after`), so it refuses the plan PLAN_STALE. The
+// evaluator writes a `grate` cell as iron_bars[waterlogged=true] over its source.
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS
@@ -52,7 +55,7 @@ export const MEMBERS_FORMAT2 = ['anchors', 'biomes', 'blobs', 'blockTags', 'budg
 // members from kit 0.16.0, in format 1 and 2; the evaluator ignores them. An older kit refuses such a plan PLAN_STALE by the
 // kitVersion bump.
 /** (6b) The running kit's version (kept equal to lib/region/plan.mjs KIT_VERSION by a test). */
-export const EVAL_KIT_VERSION = '0.35.0';
+export const EVAL_KIT_VERSION = '0.37.0';
 
 /** Compare two semver strings (major.minor.patch, numeric): -1, 0, 1. */
 export function semverCompare(a, b) {
@@ -97,6 +100,8 @@ export function walkKinds(ir) {
     if (o.op === 'scatter') k.add('scatter'); // (6c F2)
     if (o.op === 'stamp') k.add('stamp');
     if (o.op === 'fluid') k.add('fluid'); // (6c H)
+    // (6c HY) a course's fluid op (body.mjs isCourseOp, inlined: this module may not import body.mjs)
+    if (o.op === 'fluid' && (['after', 'lining', 'grate'].some((m) => Array.isArray(o[m]) && o[m].length > 0) || (Array.isArray(o.joins) && o.joins.some((j) => j && !Array.isArray(j))))) k.add('courses');
   }
   if (ir.blobs && Object.values(ir.blobs).some((b) => b && b.sha !== undefined)) k.add('blobs:side');
   if (ir.fields && Object.keys(ir.fields).length) k.add('fields');
@@ -341,9 +346,12 @@ export function compileIR(ir, opts = {}) {
         if (o.fluid !== 'water' && o.fluid !== 'lava') throw new Error(`${where}: fluid must be water or lava`);
         if (o.ice !== undefined && o.ice.length && o.fluid !== 'water') throw new Error(`${where}: only water is capped with ice`);
         const src = mat(typeof o.state === 'string' ? o.state : `minecraft:${o.fluid}`), ice = mat('minecraft:ice');
+        if (o.grate !== undefined && o.grate.length && o.fluid !== 'water') throw new Error(`${where}: only water stands behind a grate`);
+        // ((6c HY) a grate cell, written after its source, so the grate wins the cell: iron bars holding the source)
+        const grate = o.grate !== undefined && o.grate.length ? mat('minecraft:iron_bars[waterlogged=true]') : null;
         const lists = new Map();
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-        for (const [runs, m] of [[o.cells, src], [o.ice ?? [], ice]]) {
+        for (const [runs, m] of [[o.cells, src], [o.ice ?? [], ice], ...(grate !== null ? [[o.grate, grate]] : [])]) {
           if (!Array.isArray(runs)) throw new Error(`${where}: fluid cells must be column runs [[x, z, y0, y1], ...]`);
           for (const q of runs) {
             if (!Array.isArray(q) || q.length !== 4 || !q.every(Number.isInteger) || q[2] > q[3]) throw new Error(`${where}: a fluid run must be [x, z, y0, y1] integers, y0 <= y1`);

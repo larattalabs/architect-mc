@@ -200,7 +200,7 @@ test('item 9: the catalogue golden; every supported entry has a valid/ fixture t
   // which only the compiler answers: T3b's fixtures cover it)
   const reservedPending = new Set();
   // (6c H) and h-pending-a.json (H-a's water bodies) and h-pending-b.json (H-b's quay)
-  for (const f of ['k1-pending-a.json', 'k1-pending-b.json', 't3-pending-a.json', 't3-pending-b.json', 'h-pending-a.json', 'h-pending-b.json']) if (fs.existsSync(path.join(FIX, f))) {
+  for (const f of ['k1-pending-a.json', 'k1-pending-b.json', 't3-pending-a.json', 't3-pending-b.json', 'h-pending-a.json', 'h-pending-b.json', 'hy-pending-b.json', 'hy-pending-c.json']) if (fs.existsSync(path.join(FIX, f))) {
     const j = JSON.parse(fs.readFileSync(path.join(FIX, f), 'utf8'));
     for (const id of j.ids) covered.add(id);
     for (const id of j.reserved ?? []) reservedPending.add(id);

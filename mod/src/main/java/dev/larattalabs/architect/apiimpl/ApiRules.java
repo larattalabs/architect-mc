@@ -73,6 +73,9 @@ public final class ApiRules {
 					case "region.tunnels" -> "tunnelConnectors"; // 6c T3: plan/0's connector.tunnel (with planCheckVolumes, below)
 					case "region.fluids" -> "regionFluids"; // 6c H: fluid bodies (ponds, fountains, waterfalls, moats), the fluids stage (with fluidVolumes, below)
 					case "region.wet" -> "wetWrites"; // 6c H: wet piers, harbour walls and quays (the wet fallback)
+					case "region.hydrology" -> "hydrologyPass"; // 6c HY: the hydrology pass (flow and wet fields, data.courses)
+					case "region.courses" -> "regionCourses"; // 6c HY: courses, mill races and ditches (channel.course, .race, .ditch)
+					case "region.waterGates" -> "waterGates"; // 6c HY: a course under a wall behind a grate (wall.water_gate)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

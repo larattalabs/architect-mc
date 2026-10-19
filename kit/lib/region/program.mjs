@@ -166,6 +166,10 @@ export function region(ctx) {
 export function _bindFluidBody(fn) {
   _bindFluidBody.fn = fn;
 }
+/** (6c HY) Bind r.course's implementation (kit/lib/fluids/course.mjs does, when it loads; the same hoisted binding as r.fluidBody). */
+export function _bindCourse(fn) {
+  _bindCourse.fn = fn;
+}
 
 export class Region {
   constructor(ctx) {
@@ -493,6 +497,17 @@ export class Region {
   fluidBody(cells, opts = {}) {
     if (!_bindFluidBody.fn) throw new Error('fluidBody: the fluid body primitive is not loaded (kit/lib/fluids/body.mjs)');
     return _bindFluidBody.fn(this, cells, opts);
+  }
+
+  /**
+   * (6c HY) A course (lib/fluids/course.mjs `course`, CONTRACT HY §5, §7): water laid along `path` (a hydrology pass's data.courses[i],
+   * `{cells: [[x, z]], accumulation?}`, or a polyline `[[x, z], ...]`) as a chain of level reaches (r.fluidBody, ids `<id>_r<k>` from the
+   * head) joined by falls and spillways. opts: {id, part, look, flow, width, depth, drop, riffle, cut, fill, stage, from, to}. Returns the
+   * course record `{id, part, bodies, steps, ends, refused}` (refused: null, or the reason nothing was laid; never a throw).
+   */
+  course(path, opts = {}) {
+    if (!_bindCourse.fn) return { id: opts.id ?? null, part: opts.part ?? null, bodies: [], steps: [], ends: [], refused: { code: 'UNREACHABLE', message: 'r.course: the course primitive is not loaded (kit/lib/fluids/course.mjs)', until: 'HYb' } };
+    return _bindCourse.fn(this, path, opts);
   }
 
   /** (6c V) A graph node (SETTLEMENTS §8.1): `{id, kind: lot|plaza|junction, ref, at, ports}`; ids unique. */

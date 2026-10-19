@@ -13,6 +13,17 @@
 //
 // `watch` is the single breach's reach (§2.5) outside the cells and the spill: journaled with the spill as watched cells (§4.2). The
 // realise evaluates `cells` as sources and `ice` (surface cells capped, §1.3) as ice; every other member is the mod's.
+//
+// (6c HY, "Phase 6c slice HY" §1, §3, §12) A course is a chain of bodies (reaches, ids `<part>_r<k>` from the head: reachId) whose
+// steps' flowing water is spill. The op gains, each only when non-empty (an H body's op is byte for byte as before):
+//   after    [body id, ...]: the plan bodies written before this one (every body its spill lands in, §3.1); the mod writes in that
+//            dependency order (ties: plan order), drains a body's upstream closure with it (§3.3) and removes in the exact reverse
+//   joins    a natural join stays a column run [x, z, y0, y1]; a join into another body of the plan is {body, cells: runs} (§1.4): the
+//            landing cells are that body's sources, so the flow stops there
+//   lining   runs: the containment beyond the shell: a step's lining (the face neighbours of its lip run and riffle cells), a weir's
+//            second course, an overflow's spillway; written by the body's own part in its shell's stage, fs and not g (M25:shell)
+//   grate    runs: body cells written iron_bars[waterlogged=true] (HY-c's water gate: still water passes, mobs don't)
+// Any of them makes the IR require `courses` (a mod or kit before HY refuses it PLAN_STALE rather than write a course out of order).
 import { simulate, settleBound } from './sim.mjs';
 import { FLUIDS, FLUIDS_STAGE } from './kinds.mjs';
 import { kindOf } from './world.mjs';
@@ -25,6 +36,34 @@ export const FLUID_OP = 'fluid';
 /** The block states a body writes (canonical: the default state of each block, a source). */
 export const SOURCE_STATE = Object.freeze({ water: 'minecraft:water', lava: 'minecraft:lava' });
 export const ICE_STATE = 'minecraft:ice';
+/** (6c HY) The grate's state: a body cell holding a source behind iron bars (§8.3; a fixed block, not a role). */
+export const GRATE_STATE = 'minecraft:iron_bars[waterlogged=true]';
+/** (6c HY) The IR kind a course's fluid op needs (realise.mjs KINDS_FORMAT2, IrStale.KINDS_FORMAT2). */
+export const COURSES_KIND = 'courses';
+/** (6c HY) The op members that make a fluid op a course's (any of them non-empty: the IR requires `courses`). */
+export const COURSE_MEMBERS = Object.freeze(['after', 'lining', 'grate']);
+
+/** (6c HY, §3.4) A course's reach body id: `<part>_r<k>`, k from 1 at the head (the part id rule, at most 48 characters). */
+export function reachId(part, k) {
+  if (!Number.isInteger(k) || k < 1) throw new Error(`reachId: k must be an integer from 1 (got ${k})`);
+  const suffix = `_r${k}`;
+  return `${String(part).slice(0, 48 - suffix.length)}${suffix}`;
+}
+
+/** (6c HY) Whether a fluid op is a course's: after, lining or grate non-empty, or a join into a plan body. */
+export function isCourseOp(o) {
+  return !!o && o.op === 'fluid' && (COURSE_MEMBERS.some((k) => Array.isArray(o[k]) && o[k].length > 0) || (Array.isArray(o.joins) && o.joins.some((j) => j && !Array.isArray(j))));
+}
+
+/** (6c HY) A fluid op's joins split: {natural: runs, plan: [{body, cells: runs}]} (a natural join is a run; a plan join an object). */
+export function splitJoins(joins) {
+  const natural = [], plan = [];
+  for (const j of joins ?? []) {
+    if (Array.isArray(j)) natural.push(j);
+    else if (j && typeof j === 'object') plan.push({ body: j.body, cells: j.cells ?? [] });
+  }
+  return { natural, plan };
+}
 /** The write condition of a body's sources and ice: only into air (the basin its shell's stage carved) or a fluid. */
 export const BODY_COND = 2;
 /** A body's cell count limit (a moat round a large feature is a few thousand cells). */
@@ -213,7 +252,17 @@ function cellsOf(list, what, claim) {
  *   fluid-stopping, for the flow), world: (x, y, z) -> kind | null (a generator's knowledge of the world), breach = true,
  *   _unsafe: {noShellCell: true | [x, y, z] (that shell cell is left unwritten, still declared), predictShort: true (the spill declared
  *   one cell short), flowingState: true (a source written as a flowing state: lint FLUID_STATE)}}.
- * Returns the body record: {id, part, kind, fluid, level, cells, shell, spill, joins, watch, ice, predicted, settleTicks, path}.
+ * (6c HY, additive) opts also take: lining: [[x, y, z]] (containment beyond the shell, written by this body's part with
+ *   shellRole(x, y, z, 'lining'); the flow stops there), weir: [[x, y, z]] (a weir's cells beyond the shell: lining written with
+ *   shellRole(..., 'weir')), joins entries {body, cells: [[x, y, z]]} (a join into another body of the plan: its landing cells hold
+ *   that body's fluid for the flow, and the body goes into `after`), after: [body id] (more bodies written before this one), grate:
+ *   [[x, y, z]] (body cells written as GRATE_STATE), overflow: [{cells: [[x, y, z]] (side shell cells at the surface opened as
+ *   outlets), lining: [[x, y, z]] (the spillway's lining, this body's own), into: {body, cells} (the course reach it falls into)}]
+ *   (hooks.mjs overflowsOn(K, part): a course registered them on this part), raised: true (the volume grows 9: an overflow head),
+ *   _unsafe.noLiningCell: true | [x, y, z] (that lining cell left unwritten, still declared), _unsafe.after: [ids] (the op's `after`
+ *   as given, the dependency order broken: M25:order; in game the head is written first).
+ * Returns the body record: {id, part, kind, fluid, level, cells, shell, spill, joins, watch, ice, predicted, settleTicks, path} (HY:
+ * plus lining, after, planJoins, grate).
  */
 export function fluidBody(r, cellsIn, opts = {}) {
   const { id, part = null, kind = 'pond', fluid = 'water', shellRole = 'structure', breach = true, _unsafe = null } = opts;
@@ -228,22 +277,48 @@ export function fluidBody(r, cellsIn, opts = {}) {
   const level = opts.level ?? Math.max(...cells.map((c) => c[1]));
   if (!isInt(level)) throw new Error(`fluidBody ${id}: level must be an integer`);
   if (cells.some((c) => c[1] > level)) throw new Error(`fluidBody ${id}: a cell stands over the surface level ${level} (sources only, at or under it)`);
-  const outlets = cellsOf(opts.outlets ?? [], 'outlets', claim);
-  const joins = cellsOf(opts.joins ?? [], 'joins', claim);
+  // (6c HY) an overflow opens side shell cells as outlets, adds its spillway's lining and its join into the course's head
+  const overflow = Array.isArray(opts.overflow) ? opts.overflow : [];
+  const outlets = cellsOf([...(opts.outlets ?? []), ...overflow.flatMap((o) => o.cells ?? [])], 'outlets', claim);
+  const joinsIn = [...(opts.joins ?? []), ...overflow.map((o) => o.into).filter(Boolean)];
+  const joins = cellsOf(joinsIn.filter((j) => Array.isArray(j)), 'joins', claim);
+  const planJoins = [];
+  for (const j of joinsIn.filter((q) => q && !Array.isArray(q))) {
+    if (typeof j.body !== 'string' || !j.body || j.body === id) throw new Error(`fluidBody ${id}: a plan join names another body of the plan ({body, cells})`);
+    const jc = cellsOf(j.cells ?? [], `joins (${j.body})`, claim);
+    const prev = planJoins.find((q) => q.body === j.body);
+    if (prev) { const seen = new Set(prev.cells.map((c) => k3(...c))); for (const c of jc) if (!seen.has(k3(...c))) prev.cells.push(c); prev.cells.sort((a, b) => a[1] - b[1] || a[0] - b[0] || a[2] - b[2]); } else planJoins.push({ body: j.body, cells: jc });
+  }
+  const after = [];
+  for (const b of [...planJoins.map((j) => j.body), ...(opts.after ?? [])]) if (typeof b === 'string' && b !== id && !after.includes(b)) after.push(b);
   const solid = cellsOf(opts.solid ?? [], 'solid', null);
   const shell = shellOf(cells, { open: outlets });
+  const shellSet0 = new Set(shell.map((c) => k3(...c)));
+  const weir = cellsOf(opts.weir ?? [], 'weir', claim).filter((c) => !shellSet0.has(k3(...c)));
+  const weirSet = new Set(weir.map((c) => k3(...c)));
+  const lining = cellsOf([...(opts.lining ?? []), ...overflow.flatMap((o) => o.lining ?? []), ...weir], 'lining', claim).filter((c) => !shellSet0.has(k3(...c)));
+  const grate = cellsOf(opts.grate ?? [], 'grate', claim);
   const own = new Set(cells.map((c) => k3(...c)));
   // the ice cap: surface cells (the top of their column of the body) written as ice right after the sources
   let ice = [];
   if (opts.ice === true) ice = cells.filter(([x, y, z]) => y === level && !own.has(k3(x, y + 1, z)));
   else if (Array.isArray(opts.ice)) ice = cellsOf(opts.ice, 'ice', claim).filter((c) => own.has(k3(...c)));
   if (ice.length && fluid !== 'water') throw new Error(`fluidBody ${id}: only water is capped with ice`);
+  for (const g of grate) if (!own.has(k3(...g))) throw new Error(`fluidBody ${id}: grate cell ${g.join(', ')} is not a cell of the body`);
+  if (grate.length && fluid !== 'water') throw new Error(`fluidBody ${id}: only water stands behind a grate`);
   // the shell first (the flow reads the plan's own world, the shell included)
   let shellWritten = shell;
   if (_unsafe?.noShellCell) {
     const skip = Array.isArray(_unsafe.noShellCell) ? k3(..._unsafe.noShellCell) : k3(...(shell.find((c) => c[1] === level) ?? shell[0]));
     shellWritten = shell.filter((c) => k3(...c) !== skip);
   }
+  // (6c HY) the lining, written with the shell by the body's own part (an _unsafe variant leaves one cell out, still declared)
+  let liningWritten = lining;
+  if (_unsafe?.noLiningCell && lining.length) {
+    const skip = Array.isArray(_unsafe.noLiningCell) ? k3(..._unsafe.noLiningCell) : k3(...lining[0]);
+    liningWritten = lining.filter((c) => k3(...c) !== skip);
+  }
+  const liningSet = new Set(lining.map((c) => k3(...c)));
   if (shellRole !== null) {
     const sp = opts.shellPart ?? r.part(`${id}_shell`.slice(0, 48), { stage: opts.stage ?? r.stageList[0] });
     // floor: a body cell over it; side: a body cell beside it (or under it); rim: only diagonally under it (the wall's course over the surface)
@@ -251,8 +326,9 @@ export function fluidBody(r, cellsIn, opts = {}) {
     const mats = [];
     const matIdx = new Map();
     const cols = [];
-    for (const [x, y, z] of shellWritten) {
-      const m = typeof shellRole === 'function' ? shellRole(x, y, z, where(x, y, z)) : shellRole;
+    for (const [x, y, z] of [...shellWritten, ...liningWritten]) {
+      const at = liningSet.has(k3(x, y, z)) ? (weirSet.has(k3(x, y, z)) ? 'weir' : 'lining') : where(x, y, z);
+      const m = typeof shellRole === 'function' ? shellRole(x, y, z, at) : shellRole;
       const mk = JSON.stringify(m);
       let mi = matIdx.get(mk);
       if (mi === undefined) { mi = mats.length; mats.push(m); matIdx.set(mk, mi); }
@@ -263,11 +339,11 @@ export function fluidBody(r, cellsIn, opts = {}) {
   // the flow over the body's own world (sim.mjs): the spill, vanilla's steady state, the settle bound, the breach reach. The declared
   // shell (not what an _unsafe variant left out) and `solid` stop the flow: the body is planned as intended, the checker judges it as
   // written
-  const box = boxOf([...cells, ...shell]);
+  const box = boxOf([...cells, ...shell, ...lining]);
   // the frozen volume (§10): the body's box grown by 2, by 9 under a raised body (its single breach falls to the ground), with the fluid
   // layer; null on the first plan (the two-plan flow plans again with it); not asked past the per-part cap (the compiler answers
   // incomplete VOLUME)
-  const raised = isRaised(r.ctx.survey, cells, own);
+  const raised = isRaised(r.ctx.survey, cells, own) || opts.raised === true;
   const grow = raised ? 9 : 2;
   const vbox = { minX: box.minX - grow, minY: box.minY - grow, minZ: box.minZ - grow, maxX: box.maxX + grow, maxY: box.maxY + grow, maxZ: box.maxZ + grow };
   const vcells = (vbox.maxX - vbox.minX + 1) * (vbox.maxY - vbox.minY + 1) * (vbox.maxZ - vbox.minZ + 1);
@@ -281,8 +357,10 @@ export function fluidBody(r, cellsIn, opts = {}) {
     }
   }
   const lw = localWorld(r, box, { world: opts.world ?? null });
-  const stop = new Set([...shell, ...solid].map((c) => k3(...c)));
-  const world = { at: (x, y, z) => (stop.has(k3(x, y, z)) ? 'stop' : lw.at(x, y, z)), solid: (x, y, z) => stop.has(k3(x, y, z)) || lw.solid(x, y, z) };
+  const stop = new Set([...shell, ...solid, ...lining].map((c) => k3(...c)));
+  // (6c HY) a plan join's landing cells hold that body's fluid (the flow stops there, as on any other body's water)
+  const landing = new Set(planJoins.flatMap((j) => j.cells.map((c) => k3(...c))));
+  const world = { at: (x, y, z) => (stop.has(k3(x, y, z)) ? 'stop' : landing.has(k3(x, y, z)) ? fluid : lw.at(x, y, z)), solid: (x, y, z) => stop.has(k3(x, y, z)) || lw.solid(x, y, z) };
   const sim = simulate(world, [{ id, part, fluid, level, cells, shell }], { breach });
   const b = sim.bodies[0];
   let spill = b.spill;
@@ -303,11 +381,21 @@ export function fluidBody(r, cellsIn, opts = {}) {
     predicted, settleTicks: settleBound(fluid, b.path),
   };
   if (_unsafe?.flowingState) op.state = `${SOURCE_STATE[fluid]}[level=1]`; // (the broken variant: lint FLUID_STATE)
+  // (6c HY) the course members, each only when non-empty (an H body's op is unchanged)
+  const opAfter = Array.isArray(_unsafe?.after) ? _unsafe.after.filter((b) => typeof b === 'string') : after;
+  if (planJoins.length) op.joins = [...op.joins, ...planJoins.map((j) => ({ body: j.body, cells: toRuns(j.cells) }))];
+  if (opAfter.length) op.after = opAfter;
+  if (lining.length) op.lining = toRuns(lining);
+  if (grate.length) op.grate = toRuns(grate);
   fp._push(op);
   // the approval guard (§10): the shell and its buffer (the cells within 2 behind it), the joins, as per-column y runs; realiseApproved
   // re-samples them and compares classes and the fluid layer (ARTIFACT_STALE when they changed)
-  const guardRuns = volume ? toRuns(bufferOf(cells, shell, [...spill, ...joins], 2).concat(shell, joins)) : null;
-  const rec = { id, part, kind, fluid, level, cells, shell, spill, joins, watch, ice, predicted, settleTicks: op.settleTicks, path: b.path, findings: sim.findings, raised, volume, volumeState, volumeCells: vcells, guardRuns };
+  // ((6c HY) the lining stands with the shell; a plan join's landing cells are another body's, never this one's buffer)
+  const wall = lining.length ? [...shell, ...lining] : shell;
+  const skip = planJoins.length ? [...spill, ...joins, ...planJoins.flatMap((j) => j.cells)] : [...spill, ...joins];
+  const guardRuns = volume ? toRuns(bufferOf(cells, wall, skip, 2).concat(wall, joins)) : null;
+  const rec = { id, part, kind, fluid, level, cells, shell, spill, joins, watch, ice, predicted, settleTicks: op.settleTicks, path: b.path, findings: sim.findings, raised, volume, volumeState, volumeCells: vcells, guardRuns,
+    lining, after: opAfter, planJoins, grate };
   (r.meta.waters ??= []).push({ id, part, kind, fluid, level, cells: cells.length, spill: spill.length, ice: ice.length, settleTicks: op.settleTicks, shell: shell.length, watch: watch.length, raised, volume: volumeState });
   (r._fluidBodies ??= []).push(rec);
   return rec;

@@ -70,6 +70,21 @@ import org.jspecify.annotations.Nullable;
  * </ul>
  * The report: the region's ext {@code architect_mc:fluids}, {@code [{part, body, state: "settled" | "drained", reason, at, sources,
  * spill, settledAt}]} per body that ended (Steward's S-H-6 shape plus extras).
+ * <p>
+ * (6c HY, "Phase 6c slice HY" §3, §4) A course is a chain of bodies (reaches {@code <part>_r<k>}) whose ops carry {@code after} (the plan
+ * bodies a body's spill lands in), plan joins ({@code joins} entries {@code {body, cells}}), {@code lining} and {@code grate}. A region
+ * holding any such op is <b>ordered</b>:
+ * <ul>
+ * <li><b>Write order</b> ({@link #writeOrder}): downstream first, each body after every body in its {@code after} (ties: plan order). The
+ * stage's tiles still write every source (journaled, so the cells are the region's); before any forced tick, every body not yet due is
+ * cleared back to its before states, and each body is written again and forced once every body it lands in has settled, so every fall
+ * lands in standing water. Kill point {@code FL4} between two of those writes.</li>
+ * <li><b>The upstream closure</b> ({@link #upstreamOf}): when a body drains (escaped, unsettled, or not written at the gate: uncontained),
+ * every body whose spill lands in it, transitively, drains in the same tick, upstream first, reported {@code drained} with
+ * {@code reason: "upstream of <body>"} (one not yet written is never written). Downstream bodies stand.</li>
+ * <li><b>The removal</b> drains in the exact reverse of the write order (the head first), kill point {@code FL5} after the first body.</li>
+ * </ul>
+ * An H-only region has none of these members: its bodies are written by the tiles and forced together, in plan order, as before.
  */
 public final class RegionFluids {
 	public static final String STAGE = "fluids";
@@ -157,6 +172,19 @@ public final class RegionFluids {
 		final Long2IntOpenHashMap predicted = new Long2IntOpenHashMap();
 		int settleTicks;
 		@Nullable LongOpenHashSet watchSet;
+		/** (6c HY) The plan bodies written before this one (its spill lands in them), in the op's order. */
+		List<String> after = List.of();
+		/** (6c HY) Joins into other bodies of the plan: their landing cells (that body's sources). */
+		List<PlanJoin> planJoins = List.of();
+		/** (6c HY) Containment beyond the shell (a step's lining, a weir's second course): checked at the gate as the shell is. */
+		long[] lining = new long[0];
+		/** (6c HY) Body cells written as {@link #GRATE} (a water gate's grate). */
+		long[] grate = new long[0];
+
+		/** (6c HY) Whether the op is a course's (any course member): its region writes in dependency order. */
+		boolean course() {
+			return !after.isEmpty() || !planJoins.isEmpty() || lining.length > 0 || grate.length > 0;
+		}
 
 		Fluid source() {
 			return lava ? Fluids.LAVA : Fluids.WATER;
@@ -165,7 +193,7 @@ public final class RegionFluids {
 		LongOpenHashSet watchSet() {
 			if (watchSet == null) {
 				LongOpenHashSet base = new LongOpenHashSet();
-				for (long[] a : new long[][] {cells, shell, spill, watch}) {
+				for (long[] a : new long[][] {cells, shell, spill, watch, lining}) {
 					for (long p : a) {
 						base.add(p);
 					}
@@ -197,6 +225,13 @@ public final class RegionFluids {
 		}
 	}
 
+	/** (6c HY) A join into another body of the plan: that body's id and the landing cells. */
+	record PlanJoin(String body, long[] cells) {
+	}
+
+	/** (6c HY) A water gate's grate: iron bars holding the body's source (§8.3). */
+	static final String GRATE = "minecraft:iron_bars[waterlogged=true]";
+
 	/** A body's progress, saved. */
 	static final class BodyState {
 		String state = "pending"; // pending | written | settled | drained
@@ -208,6 +243,10 @@ public final class RegionFluids {
 		boolean escaped;
 		/** Not written: the check refused it (at the gate, or again after a stop); its tiles leave its cells. */
 		boolean uncontained;
+		/** (6c HY) Not written: a body it lands in failed (the upstream closure) before it was written. */
+		boolean held;
+		/** (6c HY) When an ordered region wrote and forced this body (game time), else -1 (the region's forcedAt). */
+		long writtenAt = -1;
 		/** Before the write: the cells', ice cap's, spill's and watched cells' states. */
 		final Long2ObjectOpenHashMap<String> before = new Long2ObjectOpenHashMap<>();
 		/**
@@ -243,11 +282,29 @@ public final class RegionFluids {
 		final LongOpenHashSet ticketed = new LongOpenHashSet();
 		@Nullable ServerLevel ticketLevel;
 
+		/** (6c HY) A body of a course in the region: write in dependency order (the class doc). */
+		final boolean ordered;
+		/** (6c HY) The write order (H: plan order). */
+		final List<Body> order;
+		/** (6c HY) This session cleared the bodies not yet due (after a stop, again: idempotent). */
+		boolean cleared;
+
 		Regional(List<Body> bodies) {
 			this.bodies = bodies;
 			for (Body b : bodies) {
 				states.put(b.id, new BodyState());
 			}
+			this.ordered = bodies.stream().anyMatch(Body::course);
+			this.order = writeOrder(bodies);
+		}
+
+		@Nullable Body body(String id) {
+			for (Body b : bodies) {
+				if (b.id.equals(id)) {
+					return b;
+				}
+			}
+			return null;
 		}
 
 		/**
@@ -300,8 +357,20 @@ public final class RegionFluids {
 				b.ice = runs(o.get("ice"));
 				b.shell = runs(o.get("shell"));
 				b.spill = runs(o.get("spill"));
-				b.joins = runs(o.get("joins"));
+				joins(o.get("joins"), b);
 				b.watch = runs(o.get("watch"));
+				// (6c HY) the course members
+				b.lining = runs(o.get("lining"));
+				b.grate = runs(o.get("grate"));
+				if (o.get("after") instanceof JsonArray af) {
+					List<String> ids = new ArrayList<>();
+					for (JsonElement e : af) {
+						if (e.isJsonPrimitive() && !ids.contains(e.getAsString())) {
+							ids.add(e.getAsString());
+						}
+					}
+					b.after = List.copyOf(ids);
+				}
 				if (o.get("predicted") instanceof JsonArray pr) {
 					for (JsonElement q : pr) {
 						JsonArray c = q.getAsJsonArray();
@@ -310,6 +379,88 @@ public final class RegionFluids {
 				}
 				b.settleTicks = o.has("settleTicks") ? o.get("settleTicks").getAsInt() : 100;
 				out.add(b);
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * (6c HY) A fluid op's joins: a column run [x, z, y0, y1] is a natural join ({@link Body#joins}); an object {@code {body, cells:
+	 * runs}} a join into another body of the plan ({@link Body#planJoins}).
+	 */
+	static void joins(@Nullable JsonElement e, Body b) {
+		if (!(e instanceof JsonArray a)) {
+			b.joins = new long[0];
+			return;
+		}
+		JsonArray natural = new JsonArray();
+		List<PlanJoin> plan = new ArrayList<>();
+		for (JsonElement j : a) {
+			if (j instanceof JsonObject jo) {
+				plan.add(new PlanJoin(RegionsImpl.str(jo, "body", ""), runs(jo.get("cells"))));
+			} else {
+				natural.add(j);
+			}
+		}
+		b.joins = runs(natural);
+		b.planJoins = List.copyOf(plan);
+	}
+
+	/**
+	 * (6c HY, §3.1) The write order: each body after every body of the region in its {@code after}, ties in plan order (the IR's op
+	 * order); an unknown id is ignored, and a cycle leaves the rest in plan order (M25:order refuses both at the check). With no
+	 * {@code after} anywhere, plan order.
+	 */
+	static List<Body> writeOrder(List<Body> bodies) {
+		java.util.Set<String> known = new java.util.HashSet<>();
+		for (Body b : bodies) {
+			known.add(b.id);
+		}
+		List<Body> out = new ArrayList<>();
+		java.util.Set<String> done = new java.util.HashSet<>();
+		while (out.size() < bodies.size()) {
+			Body pick = null;
+			for (Body b : bodies) {
+				if (!done.contains(b.id) && b.after.stream().allMatch(a -> done.contains(a) || !known.contains(a))) {
+					pick = b;
+					break;
+				}
+			}
+			if (pick == null) {
+				for (Body b : bodies) {
+					if (!done.contains(b.id)) {
+						pick = b;
+						break;
+					}
+				}
+			}
+			done.add(pick.id);
+			out.add(pick);
+		}
+		return out;
+	}
+
+	/**
+	 * (6c HY, §3.3) The upstream closure of body {@code k}: every body whose {@code after} names it, transitively (a reach above it, a pond
+	 * that overflows into it), upstream first (the reverse of the write order).
+	 */
+	static List<Body> upstreamOf(Regional st, Body k) {
+		java.util.Set<String> in = new java.util.HashSet<>();
+		java.util.ArrayDeque<String> q = new java.util.ArrayDeque<>();
+		q.add(k.id);
+		while (!q.isEmpty()) {
+			String id = q.poll();
+			for (Body b : st.bodies) {
+				if (!b.id.equals(k.id) && !in.contains(b.id) && b.after.contains(id)) {
+					in.add(b.id);
+					q.add(b.id);
+				}
+			}
+		}
+		List<Body> out = new ArrayList<>();
+		for (int i = st.order.size() - 1; i >= 0; i--) {
+			if (in.contains(st.order.get(i).id)) {
+				out.add(st.order.get(i));
 			}
 		}
 		return out;
@@ -417,6 +568,17 @@ public final class RegionFluids {
 				bs.reason = "uncontained: " + bad.size() + "+ shell or join cell(s) do not hold what the body was checked against";
 				bs.at.addAll(bad.subList(0, Math.min(NAMED, bad.size())));
 				Architect.LOGGER.info("Region {}: fluid body {} is not written ({}): {}", l.rec().id, body.id, bs.reason, cells(bs.at));
+			}
+		}
+		// (6c HY, §3.3) a body not written holds back its upstream closure (none in an H-only region)
+		for (Body body : st.bodies) {
+			if (st.states.get(body.id).uncontained) {
+				holdUpstream(l, st, body);
+			}
+		}
+		for (Body body : st.bodies) {
+			BodyState bs = st.states.get(body.id);
+			if (!"pending".equals(bs.state)) {
 				continue;
 			}
 			for (long[] a : new long[][] {body.cells, body.ice, body.spill, body.watch}) {
@@ -438,6 +600,24 @@ public final class RegionFluids {
 		Architect.LOGGER.info("Region {}: fluids stage checked ({} bod{}, {} not written)", l.rec().id, st.bodies.size(), st.bodies.size() == 1 ? "y" : "ies", st
 			.states.values().stream().filter(x -> "drained".equals(x.state)).count());
 		return true;
+	}
+
+	/**
+	 * (6c HY, §3.3) Every body upstream of {@code k} that is still pending is never written: drained, held, {@code reason: "upstream of
+	 * <k>"} (its tiles leave its cells when the gate has not run them yet; cells they wrote already are cleared by the drain).
+	 */
+	static void holdUpstream(RegionsImpl.Live l, Regional st, Body k) {
+		for (Body u : upstreamOf(st, k)) {
+			BodyState us = st.states.get(u.id);
+			if (!"pending".equals(us.state)) {
+				continue;
+			}
+			us.state = "drained";
+			us.held = true;
+			us.reason = "upstream of " + k.id;
+			us.at.clear();
+			Architect.LOGGER.info("Region {}: fluid body {} is not written (upstream of {})", l.rec().id, u.id, k.id);
+		}
 	}
 
 	/**
@@ -467,6 +647,14 @@ public final class RegionFluids {
 			bs.at.clear();
 			bs.at.addAll(bad.subList(0, Math.min(NAMED, bad.size())));
 			Architect.LOGGER.warn("Region {}: fluid body {} is not written ({}): {}", l.rec().id, body.id, bs.reason, cells(bs.at));
+			// (6c HY) its upstream closure: pending bodies are held, their tile-written cells (if any) cleared
+			for (Body u : upstreamOf(st, body)) {
+				BodyState us = st.states.get(u.id);
+				if ("pending".equals(us.state) && !us.before.isEmpty()) {
+					drain(level, st, u, us, false, st.othersOf(u));
+				}
+			}
+			holdUpstream(l, st, body);
 			changed = true;
 		}
 		if (changed) {
@@ -485,7 +673,8 @@ public final class RegionFluids {
 		List<long[]> bad = new ArrayList<>();
 		String dim = l.rec().dimension;
 		var areas = dev.larattalabs.architect.site.Protected.of(dim, l.rec().owner);
-		for (long p : body.shell) {
+		long[] wall = body.lining.length == 0 ? body.shell : java.util.stream.LongStream.concat(java.util.Arrays.stream(body.shell), java.util.Arrays.stream(body.lining)).toArray();
+		for (long p : wall) {
 			BlockPos bp = BlockPos.of(p);
 			BlockState now = level.getBlockState(bp);
 			boolean ok;
@@ -515,10 +704,11 @@ public final class RegionFluids {
 		}
 		// the body's own cells are open (dug in an earlier stage, or already its fluid): a cell that is not (lost with unsaved chunks, or
 		// filled since) is not what the body was checked against
+		LongOpenHashSet grate = new LongOpenHashSet(body.grate);
 		for (long[] a : new long[][] {body.cells, body.ice}) {
 			for (long p : a) {
 				BlockState now = level.getBlockState(BlockPos.of(p));
-				if (!(now.isAir() || now.is(Blocks.WATER) || now.is(Blocks.LAVA) || now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE))) {
+				if (!(now.isAir() || now.is(Blocks.WATER) || now.is(Blocks.LAVA) || now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE) || grate.contains(p) && now.is(Blocks.IRON_BARS))) {
 					bad.add(new long[] {BlockPos.getX(p), BlockPos.getY(p), BlockPos.getZ(p)});
 				}
 			}
@@ -555,7 +745,7 @@ public final class RegionFluids {
 		LongOpenHashSet drop = new LongOpenHashSet();
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
-			if ("drained".equals(bs.state) && (bs.uncontained || bs.before.isEmpty())) { // not contained: never written
+			if ("drained".equals(bs.state) && (bs.uncontained || bs.held || bs.before.isEmpty())) { // not contained (or held, HY): never written
 				for (long p : b.cells) {
 					drop.add(p);
 				}
@@ -618,9 +808,13 @@ public final class RegionFluids {
 			}
 			hold(level, st, "writing".equals(st.phase) || "settling".equals(st.phase));
 			if ("writing".equals(st.phase) && stageWritten(l)) {
-				force(level, l, st);
+				if (st.ordered) {
+					writeWaves(level, l, st); // (6c HY) one wave of bodies whose landings have settled
+				} else {
+					force(level, l, st);
+				}
 			}
-			if ("settling".equals(st.phase) && level.getGameTime() - st.lastCensus >= CENSUS_EVERY) {
+			if (("settling".equals(st.phase) || st.ordered && "writing".equals(st.phase) && st.forcedAt >= 0) && level.getGameTime() - st.lastCensus >= CENSUS_EVERY) {
 				st.lastCensus = level.getGameTime();
 				settle(level, l, st);
 			}
@@ -668,6 +862,110 @@ public final class RegionFluids {
 		save(l, st);
 		WorldJournal.kill("FL2"); // the sources written and ticked, settling
 		Architect.LOGGER.info("Region {}: fluids written; {} forced fluid tick(s), settling", l.rec().id, n);
+	}
+
+	/**
+	 * (6c HY, §3.1) An ordered region's writer, once the stage's tiles are placed, each tick: every pending body whose landings (its
+	 * {@code after}, those before it in the write order) have all settled is written again (its sources, ice cap and grate, where the cell is
+	 * open) and forced, as {@link #force} forces an H region's; every other pending body is first cleared back to its before states (the
+	 * tiles wrote it with the others; nothing flowed, no tick was forced). FL4 between two waves, FL2 once the last is written.
+	 */
+	static void writeWaves(ServerLevel level, RegionsImpl.Live l, Regional st) {
+		long now = level.getGameTime();
+		if (st.forcedAt < 0) {
+			st.forcedAt = now;
+		}
+		java.util.Map<String, Integer> pos = new java.util.HashMap<>();
+		for (int i = 0; i < st.order.size(); i++) {
+			pos.put(st.order.get(i).id, i);
+		}
+		List<Body> due = new ArrayList<>();
+		List<Body> waiting = new ArrayList<>();
+		for (Body b : st.order) {
+			BodyState bs = st.states.get(b.id);
+			if (!"pending".equals(bs.state)) {
+				continue;
+			}
+			boolean ready = true;
+			for (String a : b.after) {
+				BodyState as = st.states.get(a);
+				Integer ai = pos.get(a);
+				if (as != null && ai != null && ai < pos.get(b.id) && !"settled".equals(as.state)) {
+					ready = false;
+				}
+			}
+			(ready ? due : waiting).add(b);
+		}
+		if (!st.cleared) {
+			st.cleared = true;
+			int n = 0;
+			for (Body b : waiting) {
+				BodyState bs = st.states.get(b.id);
+				if (!bs.before.isEmpty()) {
+					n += drain(level, st, b, bs, false, st.othersOf(b));
+				}
+			}
+			if (n > 0) {
+				Architect.LOGGER.info("Region {}: {} body cell(s) written by the stage's tiles cleared until their bodies are due", l.rec().id, n);
+			}
+		}
+		int forced = 0;
+		for (Body b : due) {
+			BodyState bs = st.states.get(b.id);
+			writeBody(level, b);
+			forced += forceBody(level, b);
+			bs.state = "written";
+			bs.writtenAt = now;
+			bs.sources = b.cells.length;
+			bs.spill = b.spill.length;
+		}
+		if (due.isEmpty()) {
+			return;
+		}
+		boolean more = st.states.values().stream().anyMatch(x -> "pending".equals(x.state));
+		if (!more) {
+			st.phase = "settling";
+		}
+		save(l, st);
+		Architect.LOGGER.info("Region {}: fluids wave {}: {} forced fluid tick(s){}", l.rec().id, due.stream().map(b -> b.id).toList(), forced, more ? "" : "; every body written, settling");
+		WorldJournal.kill(more ? "FL4" : "FL2"); // (6c HY) between two reaches: the downstream written, the upstream not
+	}
+
+	/** (6c HY) A body's sources, ice cap and grate written where the cell is open (air, a fluid, ice; a grate cell's bars), no update. */
+	static void writeBody(ServerLevel level, Body b) {
+		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
+		LongOpenHashSet ice = new LongOpenHashSet(b.ice);
+		BlockState src = (b.lava ? Blocks.LAVA : Blocks.WATER).defaultBlockState();
+		BlockState bars = parse(GRATE);
+		for (long p : b.cells) {
+			BlockPos bp = BlockPos.of(p);
+			BlockState now = level.getBlockState(bp);
+			BlockState to = ice.contains(p) ? Blocks.ICE.defaultBlockState() : grate.contains(p) ? bars : src;
+			boolean open = now.isAir() || !now.getFluidState().isEmpty() || now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE) || grate.contains(p) && now.is(Blocks.IRON_BARS);
+			if (open && now != to) {
+				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+			}
+		}
+	}
+
+	/** One fluid tick on every source of a body and every face neighbour that is no body cell (§3.2); the ticks scheduled. */
+	static int forceBody(ServerLevel level, Body b) {
+		int n = 0;
+		LongOpenHashSet own = new LongOpenHashSet(b.cells);
+		Fluid f = b.source();
+		for (long p : b.cells) {
+			BlockPos bp = BlockPos.of(p);
+			level.scheduleTick(bp, f, 1);
+			n++;
+			for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+				BlockPos q = bp.relative(d);
+				if (!own.contains(q.asLong())) {
+					level.scheduleTick(q, f, 1);
+					n++;
+				}
+			}
+		}
+		return n;
 	}
 
 	/** A body's census now (§3.3): what differs from the prediction, and where fluid escaped. */
@@ -746,15 +1044,16 @@ public final class RegionFluids {
 				continue;
 			}
 			Census c = census(level, b, st.fluidBefore, st.othersOf(b));
+			long t0 = bs.writtenAt >= 0 ? bs.writtenAt : st.forcedAt;
 			if (!c.escaped().isEmpty()) {
 				escape(level, l, st, b, bs, "escaped", c.escaped());
 				changed = true;
 			} else if (!c.ticking() && c.mismatch().isEmpty()) {
 				bs.state = "settled";
-				bs.settledAt = now - st.forcedAt;
+				bs.settledAt = now - t0;
 				changed = true;
 				Architect.LOGGER.info("Region {}: fluid body {} settled in {} ticks (bound {})", l.rec().id, b.id, bs.settledAt, b.settleTicks);
-			} else if (now - st.forcedAt > 2L * b.settleTicks) {
+			} else if (now - t0 > 2L * b.settleTicks) {
 				escape(level, l, st, b, bs, "unsettled", c.mismatch());
 				changed = true;
 			}
@@ -771,6 +1070,21 @@ public final class RegionFluids {
 
 	/** §3.4: the escape guard: drain the body now, report it drained with the cells. */
 	static void escape(ServerLevel level, RegionsImpl.Live l, Regional st, Body b, BodyState bs, String why, List<long[]> at) {
+		// (6c HY, §3.3) the upstream closure first, in the same tick, upstream first: a reach above would pour into this one's emptied cells
+		for (Body u : upstreamOf(st, b)) {
+			BodyState us = st.states.get(u.id);
+			if ("drained".equals(us.state)) {
+				continue;
+			}
+			int un = us.before.isEmpty() ? 0 : drain(level, st, u, us, !"pending".equals(us.state), st.othersOf(u));
+			if ("pending".equals(us.state)) {
+				us.held = true;
+			}
+			us.state = "drained";
+			us.reason = "upstream of " + b.id;
+			us.at.clear();
+			Architect.LOGGER.warn("Region {}: fluid body {} drained (upstream of {}; {} cell(s) restored)", l.rec().id, u.id, b.id, un);
+		}
 		if ("escaped".equals(why)) {
 			for (long[] c : at) {
 				bs.escapedCells.add(BlockPos.asLong((int) c[0], (int) c[1], (int) c[2]));
@@ -801,11 +1115,13 @@ public final class RegionFluids {
 	static int drain(ServerLevel level, Regional st, Body b, BodyState bs, boolean strays, LongOpenHashSet others) {
 		int n = 0;
 		Fluid src = b.source();
+		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
 		for (long[] a : new long[][] {b.ice, b.cells}) {
 			for (long p : a) {
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = level.getBlockState(bp);
-				if (now.getFluidState().isEmpty() && !now.is(Blocks.ICE) && !now.is(Blocks.FROSTED_ICE)) {
+				// ((6c HY) a grate cell goes back too, whether its bars still hold the water or not)
+				if (now.getFluidState().isEmpty() && !now.is(Blocks.ICE) && !now.is(Blocks.FROSTED_ICE) && !(grate.contains(p) && now.is(Blocks.IRON_BARS))) {
 					continue;
 				}
 				String before = bs.before.get(p);
@@ -918,13 +1234,18 @@ public final class RegionFluids {
 		}
 		if (st.removal == null) {
 			int n = 0;
-			for (int i = st.bodies.size() - 1; i >= 0; i--) {
-				Body b = st.bodies.get(i);
+			// (6c HY, §4.1) the exact reverse of the write order (an H region: reverse plan order), the head first
+			int drained = 0;
+			for (int i = st.order.size() - 1; i >= 0; i--) {
+				Body b = st.order.get(i);
 				BodyState bs = st.states.get(b.id);
 				if (bs.before.isEmpty()) {
 					continue; // never written (not checked, or not contained): nothing of it stands
 				}
 				n += drain(level, st, b, bs, true);
+				if (++drained == 1 && st.ordered && i > 0) {
+					WorldJournal.kill("FL5"); // (6c HY) the head drained, the rest of the course not yet
+				}
 			}
 			int bound = st.bodies.stream().mapToInt(b -> b.settleTicks).max().orElse(0);
 			st.removal = "drained";
@@ -939,8 +1260,8 @@ public final class RegionFluids {
 			// (§3.5) a removal resumed after a stop: the drain again (idempotent: what the stop lost of it, unsaved chunks, is written now)
 			st.redrained = true;
 			int n = 0;
-			for (int i = st.bodies.size() - 1; i >= 0; i--) {
-				Body b = st.bodies.get(i);
+			for (int i = st.order.size() - 1; i >= 0; i--) {
+				Body b = st.order.get(i);
 				BodyState bs = st.states.get(b.id);
 				if (!bs.before.isEmpty()) {
 					n += drain(level, st, b, bs, true);
@@ -1095,6 +1416,12 @@ public final class RegionFluids {
 			if (bs.uncontained) {
 				b.addProperty("uncontained", true);
 			}
+			if (bs.held) {
+				b.addProperty("held", true);
+			}
+			if (bs.writtenAt >= 0) {
+				b.addProperty("writtenAt", bs.writtenAt);
+			}
 			b.add("before", packStates(bs.before));
 			if (!bs.escapedCells.isEmpty()) {
 				JsonArray esc = new JsonArray();
@@ -1150,6 +1477,8 @@ public final class RegionFluids {
 					bs.spill = b.has("spill") ? b.get("spill").getAsInt() : 0;
 					bs.escaped = b.has("escaped") && b.get("escaped").getAsBoolean();
 					bs.uncontained = b.has("uncontained") && b.get("uncontained").getAsBoolean();
+					bs.held = b.has("held") && b.get("held").getAsBoolean();
+					bs.writtenAt = b.has("writtenAt") ? b.get("writtenAt").getAsLong() : -1;
 					unpackStates(b.get("before"), bs.before);
 					if (b.get("escapedCells") instanceof JsonArray esc) {
 						for (int i = 0; i + 2 < esc.size(); i += 3) {
