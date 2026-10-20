@@ -1,5 +1,5 @@
 {
-  "about": "(6c KC \u00a710 items 5) v61_kc_village: a walled village with a fountain and a pond outside its moat, a moat round its wall, a brook from its centre out under a water gate into the moat, and a road bridged over the moat: READY, M25:clear 0 (hard and watch; the water gate's lintel and frame the only exempt cells), in game. Its roads cross the moat on the street fallback's bridges (adjusted), so it lives in kc/ with its expectations, as H's v45b and HY's v57 do (valid/ wants every part fits).",
+  "about": "(6c KC \u00a710 items 5) v61_kc_village: a walled village with a fountain and a pond outside its moat, a moat round its wall, a brook from its centre out under a water gate into the moat, and a road bridged over the moat: READY, M25:clear 0 (hard and watch; the water gate's lintel and frame the only exempt cells), in game. Its roads cross the moat on the street fallback's bridges (adjusted), so it lives in kc/ with its expectations, as H's v45b and HY's v57 do (valid/ wants every part fits). (The 2x2 pit at the claim's north-west corner, in its margin, puts 6 courses of dirt under the plain in game, so the pond's shell stands in dirt, not on the flat world's bedrock.)",
   "terrain": {
     "W": 240,
     "D": 200,
@@ -7,6 +7,13 @@
     "z0": 2000,
     "y": 64,
     "bands": [
+      {
+        "x0": 1000,
+        "x1": 1001,
+        "z0": 2000,
+        "z1": 2001,
+        "y": 58
+      },
       {
         "x0": 1080,
         "x1": 1155,
