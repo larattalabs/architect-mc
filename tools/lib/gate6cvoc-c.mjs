@@ -271,8 +271,12 @@ const ingame = [{
     for (const id of ['g6cvocc_copper', 'g6cvocc_spruce']) installBible(ctx, id, JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 'bibles', `${id}.json`), 'utf8')));
     const { measureLot, unmeasuredBlocks } = await ctx.imp('lib/plan/palette.mjs');
     const { resolvePalette } = await ctx.imp('lib/vocab/groups.mjs');
-    await L.setRules('exact');
+    // a fresh flat world per run, exact rules (no random ticks, mobs or fire), the bot over the claim
+    const freshFlat = async (name) => { await L.fresh(name, FLAT); await L.setRules('exact'); await L.tp((CLAIM[0] + CLAIM[2]) >> 1, 200, (CLAIM[1] + CLAIM[3]) >> 1); };
 
+    // ---- v64: "only copper", the bound lot measured at check time from the mod's lotBlocks; realiseApproved PLACED; the pre-check
+    const v64 = fixture(root, 'valid', 'v64_vocc_copper.json');
+    await freshFlat('G6B VOCc v64');
     // ---- item 6: the mod's histogram of each entry equals the kit's (the blueprint the gate installed)
     out.hist = {};
     for (const id of Object.keys(kitHist)) {
@@ -281,10 +285,6 @@ const ingame = [{
       check(j(h.blocks) === j(kitHist[id]), `item 6: ${id}: the mod's block histogram of the entry (what lotBlocks and the realise measure) equals the kit's (${Object.values(kitHist[id]).reduce((a, b) => a + b, 0)} blocks: ${j(kitHist[id])})`, { mod: h.blocks, kit: kitHist[id] });
     }
 
-    // ---- v64: "only copper", the bound lot measured at check time from the mod's lotBlocks; realiseApproved PLACED; the pre-check
-    const v64 = fixture(root, 'valid', 'v64_vocc_copper.json');
-    await L.fresh('G6B VOCc v64', FLAT);
-    await L.tp((CLAIM[0] + CLAIM[2]) >> 1, 200, (CLAIM[1] + CLAIM[3]) >> 1);
     const k64 = await checkIn(ctx, 'v64', { plan: v64.plan, claim: CLAIM, bible: 'g6cvocc_copper' });
     const a64 = (k64.c.check?.parts ?? []).find((a) => a.part === 'copper_only');
     out.v64 = { overall: k64.c.check?.overall, answer: a64, refused: k64.c.refused ?? null };
@@ -298,10 +298,10 @@ const ingame = [{
       const pre = await L.call('dev.vocc.checkPalette', { sha: k64.c.check.artifactSha });
       out.v64pre = pre;
       const pr = pre.rules?.[0];
-      check(pre.ok === true && pr?.fits && pr.lots?.hall?.cells === kitLot.cells && pr.lots.hall.familyCells === kitLot.family && pr.cells === row64.partsCells + kitLot.cells, `S-VOCc-2 (the pre-check, v64): Regions.checkPalette ok, copper_only fits; the mod's lot count equals the kit's at check time (item 6: ${pr?.lots?.hall?.familyCells}/${pr?.lots?.hall?.cells}), ${pr?.cells} cells in all`, pre);
+      check(pre.paletteOk === true && pr?.fits && pr.lots?.hall?.cells === kitLot.cells && pr.lots.hall.familyCells === kitLot.family && pr.cells === row64.partsCells + kitLot.cells, `S-VOCc-2 (the pre-check, v64): Regions.checkPalette ok, copper_only fits; the mod's lot count equals the kit's at check time (item 6: ${pr?.lots?.hall?.familyCells}/${pr?.lots?.hall?.cells}), ${pr?.cells} cells in all`, pre);
       const preOak = await L.call('dev.vocc.checkPalette', { sha: k64.c.check.artifactSha, lotEntries: { hall: 'vocc_oak_cabin' } });
       out.v64preOak = preOak;
-      check(preOak.ok === false && preOak.rules?.[0]?.worstLot === 'hall' && !preOak.rules[0].fits, `S-VOCc-2 (the pre-check): with the hall re-bound to vocc_oak_cabin, checkPalette answers not ok, worst lot hall (${preOak.rules?.[0]?.familyCells}/${preOak.rules?.[0]?.cells}, share ${preOak.rules?.[0]?.measured}): Steward re-binds one lot before any realise`, preOak);
+      check(preOak.paletteOk === false && preOak.rules?.[0]?.worstLot === 'hall' && !preOak.rules[0].fits, `S-VOCc-2 (the pre-check): with the hall re-bound to vocc_oak_cabin, checkPalette answers not ok, worst lot hall (${preOak.rules?.[0]?.familyCells}/${preOak.rules?.[0]?.cells}, share ${preOak.rules?.[0]?.measured}): Steward re-binds one lot before any realise`, preOak);
       const s = await snap(ctx, 'v64', k64.c, CLAIM);
       const rr = await realise(ctx, k64.c.check.artifactSha);
       out.v64realise = { ...rr, record: undefined };
@@ -329,7 +329,7 @@ const ingame = [{
           const ver = inst.version ?? 2;
           const cd = await L.call('dev.vocc.delta', { site: hallSite, version: ver, owner: OWNER });
           out.deltaCheck = cd;
-          check(cd.ok === false && (cd.refusals ?? []).some((x) => x.reason === 'PALETTE' && /copper_only/.test(x.message)), `S-VOCc-3: a delta of the hall to its oak version ${ver} (a versionOf): Sites.checkDelta refuses PALETTE for the required copper_only (${(cd.refusals ?? []).map((x) => `${x.reason}: ${String(x.message).slice(0, 120)}`).join('; ')})`, cd);
+          check(cd.verdictOk === false && (cd.refusals ?? []).some((x) => x.reason === 'PALETTE' && /copper_only/.test(x.message)), `S-VOCc-3: a delta of the hall to its oak version ${ver} (a versionOf): Sites.checkDelta refuses PALETTE for the required copper_only (${(cd.refusals ?? []).map((x) => `${x.reason}: ${String(x.message).slice(0, 120)}`).join('; ')})`, cd);
           const ad = await L.call('dev.vocc.delta', { site: hallSite, version: ver, owner: OWNER, apply: true }, 120_000);
           out.deltaApply = ad;
           check(ad.applied === false && ad.written === 0 && (ad.refusals ?? []).some((x) => x.reason === 'PALETTE'), `S-VOCc-3: Sites.applyDelta to it refuses PALETTE and writes nothing (applied ${ad.applied}, written ${ad.written})`, ad);
@@ -343,8 +343,7 @@ const ingame = [{
 
     // ---- r03: a required rule over a provisional lot: READY (pending); realiseApproved with the oak entry refuses PALETTE, nothing written; then the copper entry: PLACED
     const r03 = fixture(root, 'vocc', 'r03_entry.json');
-    await L.fresh('G6B VOCc r03', FLAT);
-    await L.tp((CLAIM[0] + CLAIM[2]) >> 1, 200, (CLAIM[1] + CLAIM[3]) >> 1);
+    await freshFlat('G6B VOCc r03');
     const k03 = await checkIn(ctx, 'r03', { plan: r03.plan, claim: CLAIM, bible: 'g6cvocc_copper' });
     const a03 = (k03.c.check?.parts ?? []).find((a) => a.part === 'copper_only');
     out.r03 = { overall: k03.c.check?.overall, answer: a03 };
@@ -375,8 +374,7 @@ const ingame = [{
     // ---- v65: "no wood" re-planned (adjusted); realiseApproved with its lots bound to the copper cabin (no wood): PLACED; the realised
     // world holds no wood block in the plan's written cells; a non-required rule's ext row; and an oak lot never refuses it
     const v65 = fixture(root, 'valid', 'v65_vocc_nowood.json');
-    await L.fresh('G6B VOCc v65', FLAT);
-    await L.tp((CLAIM[0] + CLAIM[2]) >> 1, 200, (CLAIM[1] + CLAIM[3]) >> 1);
+    await freshFlat('G6B VOCc v65');
     const k65 = await checkIn(ctx, 'v65', { plan: v65.plan, claim: CLAIM, bible: 'g6cvocc_spruce' });
     const a65 = (k65.c.check?.parts ?? []).find((a) => a.part === 'no_wood');
     out.v65 = { overall: k65.c.check?.overall, answer: a65 };
@@ -388,7 +386,7 @@ const ingame = [{
       const lots = Object.fromEntries((k65.art?.body?.lots ?? []).map((l) => [l.id, 'vocc_oak_cabin']));
       const pre = await L.call('dev.vocc.checkPalette', { sha: k65.c.check.artifactSha, lotEntries: lots });
       out.v65preOak = pre;
-      check(pre.ok === true && pre.rules?.[0]?.fits === false && pre.rules[0].required === false, `item 5 (v65): the pre-check with every lot bound to the oak cabin: the non-required no_wood measures ${pre.rules?.[0]?.measured} (outside [0, 0]) but the check is ok: a non-required rule never refuses`, pre);
+      check(pre.paletteOk === true && pre.rules?.[0]?.fits === false && pre.rules[0].required === false, `item 5 (v65): the pre-check with every lot bound to the oak cabin: the non-required no_wood measures ${pre.rules?.[0]?.measured} (outside [0, 0]) but the check is ok: a non-required rule never refuses`, pre);
       const rr = await realise(ctx, k65.c.check.artifactSha, Object.fromEntries(Object.keys(lots).map((l) => [l, 'vocc_copper_cabin'])));
       out.v65realise = { ...rr, record: undefined };
       check(rr.state === 'PLACED', `item 5 (v65): realiseApproved with its lots bound to the copper cabin: PLACED (${rr.state ?? `refused ${rr.reason}: ${rr.refused}`})`, out.v65realise);

@@ -26,7 +26,7 @@ public final class SliceVoccDev {
 
 	static JsonObject checkJson(PaletteCheck c) {
 		JsonObject o = new JsonObject();
-		o.addProperty("ok", c.ok());
+		o.addProperty("paletteOk", c.ok()); // (not "ok": the bridge's own reply member)
 		JsonArray rules = new JsonArray();
 		for (PaletteCheck.Rule r : c.rules()) {
 			JsonObject x = new JsonObject();
@@ -73,7 +73,7 @@ public final class SliceVoccDev {
 
 	public static void init() {
 		DevBridge.register("dev.vocc.checkPalette", 30_000, "{sha, lotEntries?: {lot: entry}} - (6c VOC-c) Regions.checkPalette: the artifact's palette rules "
-			+ "measured with these lot entries over its own -> {ok, rules: [{rule, required, family, share, cells, familyCells, measured, fits, worstLot, "
+			+ "measured with these lot entries over its own -> {paletteOk, rules: [{rule, required, family, share, cells, familyCells, measured, fits, worstLot, "
 			+ "lots: {lot: {entry, cells, familyCells}}, pendingLots}]} or {missing}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String sha = f.nonBlank("sha");
@@ -122,7 +122,7 @@ public final class SliceVoccDev {
 				});
 			});
 		DevBridge.register("dev.vocc.delta", 120_000, "{site, version?: 0 (the head), owner?, apply?: false} - (6c VOC-c) Sites.checkDelta (or applyDelta "
-			+ "with apply) through the API, so a region lot's delta is judged against its palette rules -> {ok, refusals: [{reason, message}], notes} "
+			+ "with apply) through the API, so a region lot's delta is judged against its palette rules -> {verdictOk, refusals: [{reason, message}], notes} "
 			+ "or {applied, refusals, notes}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String site = f.nonBlank("site");
@@ -134,7 +134,7 @@ public final class SliceVoccDev {
 					return ServerTasks.callOnServer(s -> {
 						var verdict = ArchitectApi.get().sites(s).checkDelta(r);
 						JsonObject o = new JsonObject();
-						o.addProperty("ok", verdict.ok());
+						o.addProperty("verdictOk", verdict.ok()); // (not "ok": the bridge's own reply member)
 						o.add("refusals", refusalsJson(verdict.refusals()));
 						JsonArray n = new JsonArray();
 						verdict.notes().forEach(n::add);
