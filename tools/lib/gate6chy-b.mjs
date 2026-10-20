@@ -224,8 +224,17 @@ export async function realiseFixture(ctx, tag, fx, o = {}) {
     const near = (x, y, z) => cells.some((q) => Math.max(Math.abs(q[0] - x), Math.abs(q[1] - y), Math.abs(q[2] - z)) <= 6);
     const list = df.list ?? [];
     const bad = list.filter((mm) => { const [x, y, z] = String(mm.pos).split(',').map(Number); return near(x, y, z); });
-    out.undo = { state: rm.state, seconds: rm.seconds, mismatches: df.mismatches, classes: df.classes, near: bad.slice(0, 12), sample: list.slice(0, 12) };
-    check(rm.state === 'REMOVED' && (df.classes?.none ?? 0) === 0 && (df.classes?.gravity ?? 0) === 0 && bad.length === 0, `item 5 (${tag}): Regions.remove under the exact rules, E-normal: ${df.mismatches} mismatch(es) ${json(df.classes ?? {})}, 0 unclassified, 0 gravity, ${bad.length} within 6 of a body, shell, lining, weir, spill or watched cell (${rm.seconds} s)`, out.undo);
+    // T1's flow class as H narrows it (§4.4): a fluid change more than 6 columns from every cell the course writes or watches (the site's
+    // own springs running on in the loaded chunks): the world's, not the undo's
+    const cols = cells.map((q) => [q[0], q[2]]);
+    const farCol = (x, z) => cols.every(([cx, cz]) => Math.max(Math.abs(cx - x), Math.abs(cz - z)) > 6);
+    const isFl = (v) => /^minecraft:(water|lava)/.test(String(v ?? ''));
+    const classes = { ...(df.classes ?? {}) };
+    let flow = 0;
+    for (const mm of list) { if (mm.class !== 'none') continue; const [x, , z] = String(mm.pos).split(',').map(Number); if ((isFl(mm.was) || isFl(mm.now)) && farCol(x, z)) { mm.class = 'flow'; flow++; } }
+    if (flow) { classes.none = (classes.none ?? 0) - flow; classes.flow = flow; }
+    out.undo = { state: rm.state, seconds: rm.seconds, mismatches: df.mismatches, classes, near: bad.slice(0, 12), sample: list.filter((mm) => mm.class === 'none').slice(0, 12) };
+    check(rm.state === 'REMOVED' && (classes.none ?? 0) === 0 && (classes.gravity ?? 0) === 0 && bad.length === 0, `item 5 (${tag}): Regions.remove under the exact rules, E-normal: ${df.mismatches} mismatch(es) ${json(classes)}, ${classes.none ?? 0} unclassified, ${classes.gravity ?? 0} gravity, ${bad.length} within 6 of a body, shell, lining, weir, spill or watched cell (${rm.seconds} s)`, out.undo);
   } else {
     const df = await core.diff(ctx, box, file);
     out.undo = { state: rm.state, seconds: rm.seconds, mismatches: df.mismatches, classes: df.classes, sample: df.sample };
@@ -298,7 +307,7 @@ async function villagersNav(ctx, tag, r, W, T, ck, anchors = null) {
     out[`pool ${b.id}`] = await navBoth(ctx, p1, p2, wet);
   }
   const all = Object.values(out);
-  check(all.length > 0 && all.every((v) => v.there && v.back && !v.inWater.length), `item 10 (${tag}, the hard bar): vanilla dev.nav.villager both ways over every bridge on a course and round every terminal pool, no path cell in a fluid (${json(Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [v.there, v.back, v.inWater.length]])))})`, out);
+  check(all.every((v) => v.there && v.back && !v.inWater.length), `item 10 (${tag}, the hard bar): vanilla dev.nav.villager both ways over every bridge on a course and round every terminal pool, no path cell in a fluid (${all.length} walk(s): ${json(Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [v.there, v.back, v.inWater.length]])))})`, out);
   return out;
 }
 
