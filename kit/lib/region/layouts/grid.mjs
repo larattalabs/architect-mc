@@ -14,7 +14,7 @@ const GRIDS = Object.freeze([[1, 1], [3, 1], [1, 3], [3, 3], [5, 3], [3, 5], [5,
 /**
  * One grid about c: `{L}` or `{fail}`. `axis` 'ew' | 'ns' (the avenues' run), `k` lots per block row, `[bu, bv]` blocks.
  */
-export function gridAt(F0, { c, specs, shared, axis, k, bu, bv }) {
+export function gridAt(F0, { c, specs, shared, axis, k, bu, bv, rowDeep = null }) {
   const F = F0.clone();
   const W = (u, v) => (axis === 'ew' ? [u, v] : [v, u]);
   const rest = specs.filter((s) => true);
@@ -24,13 +24,17 @@ export function gridAt(F0, { c, specs, shared, axis, k, bu, bv }) {
   const gap = FL_RULES.lotGap;
   const blockLen = Math.max(wMax, k * wMed + (k - 1) * gap);
   const Sc = blockLen + 2 * FL_RULES.setback - 1; // cross streets' spacing: the block's lots 3 from each cross street's centre
-  const Sa = 2 * D + 2 * FL_RULES.setback + gap + 1; // avenues' spacing: two rows back to back, 3 from each avenue's centre
-  const U = bu * Sc, V = bv * Sa;
+  // avenues' spacing per block row: two rows back to back, 3 from each avenue's centre; `rowDeep[a]` the deepest lot of row a (§3.3:
+  // "the deepest lot of the block"), else the deepest of all; the plaza row as deep as the plaza needs (as the others)
+  const SaOf = (a) => 2 * (rowDeep?.[a] ?? D) + 2 * FL_RULES.setback + gap + 1;
+  const vs = [0];
+  for (let a = 0; a < bv; a++) vs.push(vs[a] + SaOf(a));
+  const U = bu * Sc, V = vs[bv];
   const [cu, cv] = axis === 'ew' ? c : [c[1], c[0]];
   const u0 = cu - (U >> 1), v0 = cv - (V >> 1);
   const avenues = [], cross = [];
   for (let a = 0; a <= bv; a++) {
-    const v = v0 + a * Sa;
+    const v = v0 + vs[a];
     const cells = [];
     for (let u = u0; u <= u0 + U; u++) cells.push(W(u, v));
     avenues.push({ name: `a${a + 1}`, cells, closed: false, v });
@@ -54,7 +58,7 @@ export function gridAt(F0, { c, specs, shared, axis, k, bu, bv }) {
   const pb = bu % 2 === 1 && bv % 2 === 1 ? [bu >> 1, bv >> 1] : null;
   if (pb && shared.kind !== 'none') {
     const pu0 = u0 + pb[0] * Sc + FL_RULES.setback, pu1 = u0 + (pb[0] + 1) * Sc - FL_RULES.setback;
-    const pv0 = v0 + pb[1] * Sa + FL_RULES.setback, pv1 = v0 + (pb[1] + 1) * Sa - FL_RULES.setback;
+    const pv0 = v0 + vs[pb[1]] + FL_RULES.setback, pv1 = v0 + vs[pb[1] + 1] - FL_RULES.setback;
     const [x0, z0] = W(pu0, pv0), [x1, z1] = W(pu1, pv1);
     const rect = [Math.min(x0, x1), Math.min(z0, z1), Math.max(x0, x1), Math.max(z0, z1)];
     if (shared.kind === 'square') {
@@ -86,7 +90,7 @@ export function gridAt(F0, { c, specs, shared, axis, k, bu, bv }) {
   // the street junctions where avenues and cross streets meet
   const crossings = [];
   for (const a of avenues) for (const b of cross) { const at = W(b.u, a.v); crossings.push({ x: at[0], z: at[1], streets: [a.name, b.name] }); }
-  const L = { kind: 'grid', orientation: axis, streets, lots: placed.lots, unplaced: placed.unplaced, hub, spokes: [], F, centre: c, crossings, blocks: [bu, bv], k, blockLen, rect: null };
+  const L = { kind: 'grid', orientation: axis, streets, lots: placed.lots, unplaced: placed.unplaced, hub, spokes: [], F, centre: c, crossings, blocks: [bu, bv], k, blockLen, rect: null, avenueV: avenues.map((st) => st.v), rowDeep: Array.from({ length: bv }, (_, a) => rowDeep?.[a] ?? D) };
   L.rect = boundsOf(F, streets, placed.lots, hub);
   return { L };
 }
@@ -128,6 +132,20 @@ export function gridSearch(F, { c, specs, shared, orientation = 'auto' }) {
     if (!best || g.L.unplaced.length < best.unplaced.length) best = g.L;
     if (!g.L.unplaced.length) break;
   }
-  if (best) best.notes = [`grid: ${best.blocks[0]} x ${best.blocks[1]} blocks, ${best.k} lots a block row, avenues ${axis === 'ew' ? 'east-west' : 'north-south'}`];
+  // (§3.3) each block row as deep as the deepest lot it holds: the best grid laid again with its rows sized from its own lots (the plaza row
+  // keeps the uniform depth); kept when it places as many lots
+  if (best && best.blocks[1] > 1) {
+    const vOf = (l) => (axis === 'ew' ? (l.rect[1] + l.rect[3]) / 2 : (l.rect[0] + l.rect[2]) / 2);
+    const rowOf = (l) => { const v = vOf(l); for (let a = 0; a < best.avenueV.length - 1; a++) if (v > best.avenueV[a] && v < best.avenueV[a + 1]) return a; return -1; };
+    const rowDeep = Array.from({ length: best.blocks[1] }, () => 0);
+    for (const l of best.lots) { const a = rowOf(l); if (a >= 0) rowDeep[a] = Math.max(rowDeep[a], l.spec.size[1]); }
+    const plazaRow = best.blocks[1] % 2 === 1 ? best.blocks[1] >> 1 : -1;
+    const sized = rowDeep.map((d, a) => (a === plazaRow && shared.kind !== 'none' ? best.rowDeep[a] : Math.max(9, d || 9)));
+    if (sized.some((d, a) => d < best.rowDeep[a])) {
+      const g = gridAt(F, { c, specs, shared, axis, k: best.k, bu: best.blocks[0], bv: best.blocks[1], rowDeep: sized });
+      if (!g.fail && g.L.unplaced.length <= best.unplaced.length) best = g.L;
+    }
+  }
+  if (best) best.notes = [`grid: ${best.blocks[0]} x ${best.blocks[1]} blocks, ${best.k} lots a block row, avenues ${axis === 'ew' ? 'east-west' : 'north-south'}, block rows ${best.rowDeep.join('/')} deep`];
   return { best, fails, axis };
 }

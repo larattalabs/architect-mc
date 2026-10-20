@@ -31,7 +31,7 @@
 //       claim     13  a pre-PT log cabin claimed: a build, kept by a stroke; released: cleared by the next stroke; a torch on natural
 //                     ground beside a lowered column stays (player_build.support)
 //       plan      14  in game: the live builds through the kit's helpers: near {build kind house}, adjacent {to {build}}, endpoint
-//                     {build, port door}: the road ends on the apron; around: locator.around reserved
+//                     {build, port door}: the road ends on the apron; around: locator.around (supported since 6c FL: the ring round the build answers)
 //       cost      15  (recorded) bytes per tracked block and per section on disk and in heap; the hook's added ns; the classifier's
 //                     own CPU per tick max (budget 1 ms)
 //       apitest   16  through the public API: /apitest apipt, ptbuilds, ptat, ptbox, ptplace

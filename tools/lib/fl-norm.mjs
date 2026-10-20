@@ -17,3 +17,24 @@ export function normIrJson(json) {
   }
   return JSON.stringify(ir);
 }
+
+/**
+ * A committed asks report (KC's `ask/part block class` lines, HY's gap table, VOC-c's per-ask blocks) without what FL moves by name: the
+ * five free asks' lines (VOC-c's whole block for each), the gap table's free-layout rows and the tally line. The earlier slices' asks
+ * items compare their tables through it.
+ */
+export function flAsksFilter(text) {
+  const asks = FL_MOVED_ASKS.map((f) => f.replace(/\.json$/, ''));
+  const out = [];
+  let inBlock = false;
+  for (const l of String(text).split('\n')) {
+    if (/^# 59 asks/.test(l)) continue;
+    if (/^\s+(layout\.(ring|grid|organic|spiral)|locator\.around|sketch\.outline)\s+\d+$/.test(l)) continue;
+    const head = /^([a-z0-9_]+)(\/| )/.exec(l);
+    if (head && !l.startsWith(' ')) inBlock = asks.includes(head[1]) && head[2] === ' ';
+    if (head && asks.includes(head[1])) continue;
+    if (inBlock && l.startsWith('  ')) continue;
+    out.push(l);
+  }
+  return out.join('\n');
+}

@@ -24,6 +24,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { flAsksFilter } from './lib/fl-norm.mjs'; // (6c FL) FL's five free asks left to FL's own item 8
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-KC-run');
@@ -112,8 +113,9 @@ steps.unit = async () => {
   fs.writeFileSync(path.join(OUT, 'kc-asks-after.md'), after.text);
   // ((the CU/IRR/VOC-c batch) rule.palette is supported: its 7 parts' lines and the tally they move are VOC-c's (its item 3,
   // fixtures/plan/vocc/asks-*.txt), compared without them, as HY-b's asks item does)
-  const vocc = (t) => t.split('\n').filter((l) => !/rule\.palette/.test(l) && !/^# 59 asks:/.test(l)).join('\n');
-  const lines = (t) => new Map(t.split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/') && !/rule\.palette/.test(l)).map((l) => [l.split(' ')[0], l]));
+  // ((6c FL) and FL's five free asks and the gap table's free-layout rows (tools/lib/fl-norm.mjs flAsksFilter: FL's own item 8 judges them))
+  const vocc = (t) => flAsksFilter(t.split('\n').filter((l) => !/rule\.palette/.test(l) && !/^# 59 asks:/.test(l)).join('\n'));
+  const lines = (t) => new Map(flAsksFilter(t).split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/') && !/rule\.palette/.test(l)).map((l) => [l.split(' ')[0], l]));
   const lb = lines(before.text), la = lines(after.text);
   const moved = [...la].filter(([k, v]) => lb.get(k) !== v).map(([k]) => k);
   out.asks = { moved, malformedBefore: before.malformed, malformedAfter: after.malformed, parts: la.size };

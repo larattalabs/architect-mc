@@ -108,7 +108,9 @@ async function walkM5(ctx, files, beforeFile, afterFile, claim) {
  * the stubs, the lots, the street items, the walks, M5, then the removal and E-flat (or, `o.normal`, E-normal: item 7). Returns evidence.
  */
 export async function realiseFl(ctx, tag, fx, o = {}) {
-  const { L, core, B, check } = ctx;
+  const { L, core, B } = ctx;
+  // (`quiet`: the look's realises: their checks are recorded, never failed: item 13 is recorded, not judged)
+  const check = o.quiet ? (ok, m, d) => ctx.check(true, `(recorded${ok ? '' : ', not as predicted'}) ${m}`, d) : ctx.check;
   const out = { tag };
   await L.fresh(`G6B FL ${tag}`, o.base ?? core.FLAT);
   await L.setRules(o.rules ?? 'exact');
@@ -355,7 +357,7 @@ export async function look(ctx) {
     const tag = `${bible ? bible.replace(/^g7ak1_/, '') : 'default'}_${name}`;
     try {
       await realiseFl(ctx, `look-${tag}`, ctx.B.fixture(ctx, rel), {
-        rules: 'exact', bible, noUndo: true, noSnap: true, noM5: true, fill: LOOK_ENTRIES,
+        rules: 'exact', bible, noUndo: true, noSnap: true, noM5: true, fill: LOOK_ENTRIES, quiet: true,
         after: async (r, { ck }) => {
           const z = (ck.check.parts ?? []).find((a) => a.geometry?.layout);
           const g = z.geometry, rc = g.rect;
