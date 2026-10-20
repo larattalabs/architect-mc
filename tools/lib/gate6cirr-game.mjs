@@ -452,6 +452,13 @@ export async function ingame(ctx) {
     await L.leaveWorld();
   }
   // ---- v63 (a 40 x 40 farm), Steward's hamlet (type-implied, bound in its plan), a district lot: every new path in game
+  // ((development, IRR_ONLY=h0 or h0p only: H's farm hamlet without irrigate, with the field entry bound and as a pad: a control)
+  for (const [tag, rel, entries] of [['h0', 'h/farm_hamlet.json', { farm_1: 'g6c_irr_field' }], ['h0p', 'h/farm_hamlet.json', {}]]) {
+    if (!only.includes(tag)) continue;
+    const o = await realiseIrr(ctx, tag, fx(rel), { entries, fields: F });
+    if (o.r) out[tag] = await removeRegion(ctx, o, `(control ${tag}) farm_hamlet without irrigate`, { judged: false });
+    await L.leaveWorld();
+  }
   for (const [tag, rel, entries] of [['v63', 'valid/v63_irr_large.json', { big: 'g6c_irr_field_40x40' }], ['s01', 'irr/s01_hamlet.json', {}], ['d01', 'irr/d01_district.json', { field_1: 'g6c_irr_field_13x11' }]]) {
     if (!want(tag)) continue;
     const o = await realiseIrr(ctx, tag, fx(rel), { entries, fields: F });
