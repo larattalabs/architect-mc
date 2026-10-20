@@ -1,0 +1,109 @@
+{
+ "about": "(6c HY, \u00a78.3, \u00a714 items 9 and 14) v30's walled village (the ring [4, 8], height 6, the road's auto gate and the west gate) plus a brook from the claim's centre out to its south edge: the brook's reach crosses the ring under a water gate (the wall on a lintel over the still reach, a waterlogged iron grate in the wall's thickness; no walk gate). It replaces hy-pending-c.json.",
+ "on": "s7",
+ "volume": {},
+ "covers": [
+  "connector.channel",
+  "channel.course",
+  "wall.water_gate",
+  "connector.wall",
+  "wall.around"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hy_v58",
+  "zones": [
+   {
+    "id": "town",
+    "program": {
+     "template": "flat_village",
+     "params": {
+      "lots": [
+       {
+        "id": "h1",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "h2",
+        "type": "cottage",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "h3",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       }
+      ]
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "town_wall",
+    "kind": "wall",
+    "where": {
+     "around": {
+      "feature": {
+       "part": "town"
+      },
+      "ring": [
+       4,
+       8
+      ]
+     }
+    },
+    "height": 6
+   },
+   {
+    "id": "in",
+    "kind": "road",
+    "from": {
+     "anchor": "claim_e"
+    },
+    "to": {
+     "part": "town"
+    }
+   },
+   {
+    "id": "west_gate",
+    "kind": "gate",
+    "at": {
+     "anchor": "claim_w"
+    },
+    "door": "door"
+   },
+   {
+    "id": "west_path",
+    "kind": "path",
+    "from": {
+     "anchor": "claim_w"
+    },
+    "to": {
+     "part": "town"
+    }
+   },
+   {
+    "id": "brook",
+    "kind": "channel",
+    "label": "a brook from the village's centre out through the ring wall under a water gate",
+    "from": {
+     "anchor": "claim_center"
+    },
+    "to": {
+     "anchor": "claim_s"
+    }
+   }
+  ]
+ }
+}

@@ -365,6 +365,8 @@ export function bodyBom(bodies) {
     for (const s of b.shellStates ?? []) states.push(s);
     if (b.fluid === 'lava') for (let i = 0; i < b.cells.length; i++) states.push('minecraft:lava_bucket');
     for (let i = 0; i < (b.ice?.length ?? 0); i++) states.push('minecraft:ice');
+    // ((6c HY) a water gate's grate: one iron bars block a cell; H bodies have none)
+    for (let i = 0; i < (b.grate?.length ?? 0); i++) states.push('minecraft:iron_bars');
   }
   return bomOf(states);
 }

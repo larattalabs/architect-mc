@@ -1,12 +1,13 @@
 {
- "about": "(\u00a78.3) a spring in v30's walled village running out to the claim's south edge: it meets the wall (no water gate in this build: HY-c's): refused UNREACHABLE wall",
+ "about": "(\u00a78.3) a spring in v30's walled village running out to the claim's south edge through a sealed ring (gates 0, S-K1-1): a sealed wall refuses a water gate, so the brook is refused UNREACHABLE wall (why sealed). The same brook through v30's open ring is valid/v58_water_gate.",
  "on": "s7",
  "volume": {},
  "expect": {
   "part": "brook",
   "class": "refused",
   "code": "UNREACHABLE",
-  "kind": "wall"
+  "kind": "wall",
+  "why": "sealed"
  },
  "plan": {
   "schemaVersion": "plan/0",
@@ -62,7 +63,8 @@
       ]
      }
     },
-    "height": 6
+    "height": 6,
+    "gates": 0
    },
    {
     "id": "brook",

@@ -43,6 +43,7 @@ import { bodyAnswer, bodyId, naturalOf, shellCheck, outline, rimColumns, shellSt
 import { ringColumns } from './moat.mjs';
 import { registerOverflow, overflowsOn, crossingsOf, channelBlockOf } from './hooks.mjs';
 import { localWorld } from './body.mjs';
+import { waterGate } from './gate.mjs';
 
 export const acceptsOverflow = true;
 
@@ -562,6 +563,7 @@ export function layCourse(r, geo, o) {
   for (const st of geo.steps) for (const [x, , z] of st.cells) for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) near.add(k2(x + dx, z + dz));
   for (const R of geo.reaches) for (const [x, , z] of R.weir) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) near.add(k2(x + dx, z + dz));
   for (const R of geo.reaches) for (const q of R.planJoins) for (const [x, , z] of q.cells) for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) near.add(k2(x + dx, z + dz));
+  for (const kk of o.noNotch ?? []) near.add(kk);
   const every = COURSE[o.look].notch;
   for (const R of geo.reaches) R.exits = o.exits === false ? [] : exitNotches(R.cells, R.level, { every, max: 64, skip: (x, y, z) => near.has(k2(x, z)) });
   // every cell the course's shells, linings and weirs hold (no carve or shaft cuts one)
@@ -1063,8 +1065,19 @@ export function emit(K, p, res) {
   const m = bodiesMark(r);
   try {
     branchOverflows(K, p, geo);
-    // (HY-c) the water gates: a crossing's grate cells are the reach's own cells written behind iron bars
-    for (const x of crossingsOf(K)) if (x.course === p.id) { const R = geo.reaches.find((q) => q.id === x.body); if (R) R.grate = [...(R.grate ?? []), ...(x.grate ?? [])]; }
+    // (HY-c, joined at the batch) the water gates (§8.3): each reach meeting a planned wall registers its crossing (gate.mjs waterGate:
+    // the wall's checks, the still reach, no step within 2 of it; it throws UNREACHABLE {kind: wall, why} to refuse the course) and takes
+    // the grate, the reach's own cells in the wall's thickness, written behind iron bars. No exit notch is cut within 2 of a crossing.
+    const noNotch = new Set();
+    for (const R of geo.reaches) {
+      R.grate = [];
+      const wg = waterGate(K, { course: p.id, body: R.id, cells: R.cells, level: R.level, outlets: R.outlets, lining: [...R.lining, ...R.weir] });
+      if (wg.grate.length) R.grate.push(...wg.grate);
+      for (const x of wg.crossings) {
+        const [nx, nz] = x.normal ?? [0, 0];
+        for (const [cx, cz] of x.cells) for (let k = -3; k <= 3; k++) for (let s = -1; s <= 1; s++) noNotch.add(k2(cx + nx * k + nz * s, cz + nz * k + nx * s));
+      }
+    }
     // (the gate's uncapped twin, ext 'architect_mc:unsafe' {noCap: true}: a frozen course left open, its outlets still submerged: the
     // freezing probe, dev only, never a plan's)
     const noCap = p.part.ext?.['architect_mc:unsafe']?.noCap === true;
@@ -1082,7 +1095,7 @@ export function emit(K, p, res) {
       }
     }
     const unsafe = p.part.ext?.['architect_mc:unsafe']?.course ?? null;
-    const out = layCourse(r, geo, { id: p.id, part: p.id, look: res.spec.look, stage: K.stageOf('forms'), unsafe, fill: res.spec.fill });
+    const out = layCourse(r, geo, { id: p.id, part: p.id, look: res.spec.look, stage: K.stageOf('forms'), unsafe, fill: res.spec.fill, noNotch });
     const vk = volumeKeep(r, VC, classAt);
     for (const b of out.bodies) {
       const hit = reachMeetsKeep(r, env, b, { volClass: vk });
@@ -1092,11 +1105,12 @@ export function emit(K, p, res) {
     // (§1.6) the head's or the tail's reach beside natural water
     if (res.ends.head.kind === 'weir') flowingCheck(r, out.bodies[0]);
     if (['weir', 'join'].includes(res.ends.tail.kind)) flowingCheck(r, out.bodies[out.bodies.length - 1]);
-    res.emitted = { bodies: out.bodies, notes: out.notes };
+    const gates = crossingsOf(K).filter((x) => x.course === p.id);
+    res.emitted = { bodies: out.bodies, notes: out.notes, waterGates: gates.map((x) => ({ wall: x.wall, cells: x.cells.length, lintel: x.lintel, grate: x.grate.length })) };
     const kind = res.race ? 'race' : 'course';
     (r.meta.courses ??= []).push({ id: p.id, part: p.id, kind, look: res.spec.look, flow: res.spec.flow, bodies: out.bodies.map((b) => b.id),
       steps: geo.steps.map((s) => ({ kind: s.kind, from: s.from, to: s.to ?? (res.ends.tail.kind === 'join' ? 'water' : null), drop: s.drop })),
-      ends: endsRow(res), ...(res.race ? { serves: res.race.serves } : {}) });
+      ends: endsRow(res), ...(res.race ? { serves: res.race.serves } : {}), ...(gates.length ? { waterGates: [...new Set(gates.map((x) => x.wall))] } : {}) });
   } catch (e) {
     bodiesRollback(r, m);
     if (r.meta.courses) { r.meta.courses = r.meta.courses.filter((c) => c.part !== p.id); if (!r.meta.courses.length) delete r.meta.courses; }
@@ -1131,7 +1145,7 @@ export function answer(K, p, res) {
   const geo = res.geo;
   const extra = { block: res.spec.block, look: res.spec.look, flow: res.spec.flow, width: res.spec.width, depth: res.spec.depth,
     steps: geo.steps.map((s) => ({ kind: s.kind, from: s.from, to: s.to, drop: s.drop })), ends: endsRow(res), length: geo.path.length,
-    ...(res.race ? { serves: res.race.serves } : {}) };
+    ...(res.race ? { serves: res.race.serves } : {}), ...(e.waterGates?.length ? { waterGates: e.waterGates } : {}) };
   const notes = [...(res.notes ?? []), ...e.notes];
   if (res.race) notes.push(res.race.note);
   return bodyAnswer(K, p, e.bodies, { rect: res.rect, notes, extra });
