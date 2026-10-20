@@ -57,17 +57,18 @@ export async function installFields(ctx) {
   return out;
 }
 
-/** After a world is open: the library reloaded and each entry's v2 installed (once per world: the library is the game's). */
+/** After a world is open: the library reloaded (the entries are v1, wheat: installFields writes them fresh each step). */
 export async function loadFields(ctx, F) {
-  const { L } = ctx;
-  await L.cmd('/architect reload');
-  await L.settle(2000);
-  for (const [id, f] of Object.entries(F)) {
-    const v = await L.call('dev.entry.versions', { entry: id }, 30_000).catch(() => null);
-    if ((v?.head ?? v?.version ?? 1) >= 2) continue;
-    const r = await L.call('dev.entry.installVersion', { entry: id, dir: f.v2dir, summary: 'v2: carrots (the versionOf stand-in)' }, 60_000);
-    f.v2 = r.version;
-  }
+  void F;
+  await ctx.L.cmd('/architect reload');
+  await ctx.L.settle(2000);
+}
+
+/** An entry's v2 (carrots, the versionOf stand-in) installed now, once: the library is the game's, so later realises place v2. */
+export async function installV2(ctx, F, id) {
+  const r = await ctx.L.call('dev.entry.installVersion', { entry: id, dir: F[id].v2dir, summary: 'v2: carrots (the versionOf stand-in)' }, 60_000);
+  F[id].v2 = r.version;
+  return r.version;
 }
 
 /**
@@ -76,7 +77,8 @@ export async function loadFields(ctx, F) {
  */
 export async function expectedDropped(ctx, bp, artLot) {
   const { templateToFrame } = await ctx.imp('lib/reserved.mjs');
-  const want = new Set(runsCells(artLot.irrigation.lotCells).map(([u, v, y]) => `${u},${y},${v}`));
+  // (lotCells: runs [u, v, y0, y1] in the lot's frame; runsCells gives [u, y, v])
+  const want = new Set(runsCells(artLot.irrigation.lotCells).map(([u, y, v]) => `${u},${y},${v}`));
   const t = { size: [bp.size.x, bp.size.y, bp.size.z], groundY: bp.groundY, front: bp.front };
   const r = { front: artLot.front, size: artLot.irrigation.frame };
   let n = 0;
@@ -180,6 +182,16 @@ function lotCellsOf(irLot, bodies) {
   return { own, sources, sides, beds, over };
 }
 
+/** The block an IR's columns op writes at a cell (the last op of the last part that writes it), or null. */
+function bedBlock(ir, [x, y, z]) {
+  let found = null;
+  for (const p of ir.parts) for (const o of p.ops ?? []) {
+    if (o.op !== 'columns') continue;
+    for (let i = 0; i + 4 < o.cols.length; i += 5) if (o.cols[i] === x && o.cols[i + 1] === z && o.cols[i + 2] <= y && y <= o.cols[i + 3]) found = o.materials[o.cols[i + 4]];
+  }
+  return typeof found === 'string' ? found.replace(/\[.*$/, '') : null;
+}
+
 /** The field's farmland cells (the lot's field at floorY, the irrigation cells aside). */
 function fieldCells(irLot) {
   const [x0, z0, x1, z1] = irLot.irrigation.field;
@@ -209,7 +221,9 @@ async function placedChecks(ctx, tag, o, F, entries) {
     const want = entry && aLot ? await expectedDropped(ctx, F[entry.replace(/@\d+$/, '')].bp, aLot) : null;
     const L = lotCellsOf(irLot, r.bodies);
     const sideFarm = await countBlock(ctx, L.sides, 'minecraft:farmland');
-    const bedOk = L.beds.length - (await countBlock(ctx, L.beds, 'minecraft:dirt')) - (await countBlock(ctx, L.beds, 'minecraft:grass_block'));
+    // the bed: the block the IR's shell op writes there (the bible's bed, differing from the pad's top), standing
+    let bedOk = 0;
+    for (const c of L.beds) if (await isBlock(ctx, c, bedBlock(r.ir, c) ?? 'minecraft:air')) bedOk++;
     const overAir = await countBlock(ctx, L.over, 'minecraft:air');
     out.lots[irLot.id] = { entry, site: site.siteId, dropped: reported, expected: want, sides: [sideFarm, L.sides.length], beds: [bedOk, L.beds.length], over: [overAir, L.over.length], artifact: !!aLot?.irrigation };
     check(!!aLot?.irrigation && aLot.irrigation.sources === L.own.length, `item 2 (${tag}, ${irLot.id}): the artifact's lots[].irrigation (S-IRR-2): ${aLot?.irrigation?.sources} source(s), its cells in the world and in the lot's frame`);
@@ -226,8 +240,11 @@ async function liveChecks(ctx, o) {
   const f1 = r.ir.lots.find((l) => l.id === 'f1');
   const field = fieldCells(f1);
   await L.setRules('default');
-  await L.cmd('/gamerule spawn_monsters false');
+  // (default rules: run6b's setRules('default') leaves the exact set's gamerules; these are vanilla's defaults, hostile mobs off)
+  for (const g of ['random_tick_speed 3', 'mob_griefing true', 'advance_time true', 'spawn_mobs true', 'spawn_monsters false']) await L.cmd(`/gamerule ${g}`);
   await L.cmd('/time set 1000');
+  // (random ticks only reach chunks within the simulation distance of a player: the bot stands over the field)
+  await L.tp(field[0][0], field[0][1] + 6, field[0][2]);
   // the control: the same 11 x 8 farmland (with wheat) outside the claim, no water within 4
   const cx = o.W.claim[2] + 20, cz = o.W.claim[1] + 10, cy = f1.floorY;
   await L.cmd(`/fill ${cx} ${cy - 1} ${cz} ${cx + 10} ${cy - 1} ${cz + 7} minecraft:dirt`);
@@ -315,7 +332,8 @@ async function versionOf(ctx, o, F) {
   const sites = await lotSites(ctx, r.view);
   const f1 = r.ir.lots.find((l) => l.id === 'f1');
   const C = lotCellsOf(f1, r.bodies);
-  const d = await L.call('dev.site.delta.apply', { site: sites.f1.siteId, version: 2, owner: ctx.core.OWNER, force: true }, 300_000);
+  const v2 = await installV2(ctx, F, 'g6c_irr_field_13x11');
+  const d = await L.call('dev.site.delta.apply', { site: sites.f1.siteId, version: v2, owner: ctx.core.OWNER, force: true }, 300_000);
   await L.settle(5000);
   const sideFarm = await countBlock(ctx, C.sides, 'minecraft:farmland');
   const overAir = await countBlock(ctx, C.over, 'minecraft:air');
@@ -458,7 +476,7 @@ export async function probe(ctx) {
   const { L, check, core } = ctx;
   await L.fresh('G6B IRR probe', core.FLAT);
   await L.setRules('default');
-  await L.cmd('/gamerule spawn_monsters false');
+  for (const r of ['random_tick_speed 3', 'advance_time true', 'spawn_monsters false']) await L.cmd(`/gamerule ${r}`);
   const g = await core.groundOf(ctx, [9800, 9000, 9900, 9100]);
   const y = g + 1;
   const out = {};

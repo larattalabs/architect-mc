@@ -2399,13 +2399,14 @@ public final class Sites {
 		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
 		int total = 0;
 		int match = 0;
+		java.util.function.LongPredicate mask = LotMask.of(b.ext()); // (6c IRR) the region's irrigation cells were never this site's
 		for (int i = 0; i < m.count(); i++) {
 			BlockState want = grid.states()[i];
 			if (want.isAir()) {
 				continue;
 			}
 			p.set(b.box().minX() + m.x(i), b.box().minY() + m.y(i), b.box().minZ() + m.z(i));
-			if (ownedByOther(b.dimension(), p.asLong(), b.id())) {
+			if (mask != null && mask.test(p.asLong()) || ownedByOther(b.dimension(), p.asLong(), b.id())) {
 				continue;
 			}
 			total++;
