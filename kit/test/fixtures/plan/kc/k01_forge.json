@@ -1,0 +1,99 @@
+{
+  "about": "(6c KC \u00a710) k01_forge: v51's plan as VOC committed it (the forge wall ring [4, 8] round the forge zone, the fountain beside it). On main the ring ran through the fountain's last basin row (5 water and 5 rim cells, 24 of its apron's watch cells) and the plan was READY. Every ring of the band now meets the fountain's footprint (basin, coping and apron, reserved at resolve): the wall is refused OVERLAP {kind: body}, the fountain unchanged, and the wouldFit ring [4, 17] (re-checked alone) is valid/v51_voc_forge's plan.",
+  "on": "flat",
+  "style": "g6cvoc_forge",
+  "volume": {},
+  "expect": {
+    "part": "forge_wall",
+    "class": "refused",
+    "code": "OVERLAP",
+    "kind": "body",
+    "bodyPart": "fount",
+    "wouldFitRing": [
+      4,
+      17
+    ],
+    "unchanged": [
+      "fount",
+      "forge"
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "kc_k01",
+    "zones": [
+      {
+        "id": "forge",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "f1",
+                "type": "smithy",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "f2",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "f3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        },
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 24
+          }
+        }
+      }
+    ],
+    "forms": [
+      {
+        "id": "fount",
+        "kind": "fountain",
+        "basin": 5,
+        "spout": 3,
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 40
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "forge_wall",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "forge"
+            },
+            "ring": [
+              4,
+              8
+            ]
+          }
+        },
+        "height": 4
+      }
+    ]
+  }
+}

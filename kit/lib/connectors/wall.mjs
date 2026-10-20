@@ -406,7 +406,10 @@ export function planWalls(K) {
     const dep = K.depState(p);
     if (dep) { K.ans(p, dep); continue; }
     const st = settingsOf(K, p);
-    let L = lineOf(K, p, st);
+    // ((6c KC) the broken variant `wallThroughBody` (ext architect_mc:unsafe): the old wall grid, the bodies' footprints left out; M25:clear
+    // catches it)
+    const blind = p.part.ext?.['architect_mc:unsafe']?.wallThroughBody === true;
+    let L = blind ? lineOf(K, p, st, null, false) : lineOf(K, p, st);
     const notes = [...st.P.notes];
     // ((6c H-b, §8.2) a ring that fails on water, or a line with no clear leg on a claim with water: once more over the wet grid)
     let wetW = null;
@@ -424,7 +427,7 @@ export function planWalls(K) {
       }
     }
     // ((6c KC, §4) a wall no line or ring of which avoids the plan's bodies: OVERLAP {kind: body}, with the ring widened as its wouldFit)
-    if (L.error && K.keep?.length) { const bb = bodyBlame(K, p, st); if (bb) { K.ans(p, { class: 'refused', reasons: [bb.reason], notes, ...(bb.wouldFit ? { wouldFit: bb.wouldFit } : {}) }); continue; } }
+    if (L.error && K.keep?.length && !blind) { const bb = bodyBlame(K, p, st); if (bb) { K.ans(p, { class: 'refused', reasons: [bb.reason], notes, ...(bb.wouldFit ? { wouldFit: bb.wouldFit } : {}) }); continue; } }
     if (L.error) { K.ans(p, { class: 'refused', reasons: [L.error], notes }); continue; }
     // ((H-b) the wet sections: their columns read from the frozen volume (asked: the first plan answers incomplete VOLUME), recorded
     // and guarded)
@@ -667,6 +670,19 @@ function wallState(block, c) {
 
 const FACING = { '1,0': 'east', '-1,0': 'west', '0,1': 'south', '0,-1': 'north' };
 
+/**
+ * (6c KC) The broken variant `slabInWatch` (the wall part's ext architect_mc:unsafe): one slab, a non-shell-grade block, written by the
+ * wall into the first watch cell of the plan's first registered body; M25:clear's watch clause catches it.
+ */
+function unsafeSlab(K, W) {
+  if (W.p.part.ext?.['architect_mc:unsafe']?.slabInWatch !== true) return;
+  const rec = (K.keep ?? []).find((q) => q.kind === 'body' && q.watch.size);
+  if (!rec) return;
+  const [x, y, z] = [...rec.watch].sort()[0].split(',').map(Number);
+  const part = K.r.part(`${W.id}_unsafe_slab`.slice(0, 48), { stage: K.stageOf('links') });
+  part.columns({ abs: 0 }, { abs: 0 }, [x, z, y, y, 0], ['minecraft:stone_slab[type=bottom]'], { cond: 3 });
+}
+
 export function emitWalls(K) {
   if (!K.walls?.length) return;
   K.record.walls = [];
@@ -680,6 +696,7 @@ export function emitWalls(K) {
     const cp = K.checkpoint();
     try {
       const out = emitWall(K, W);
+      unsafeSlab(K, W);
       K.mark(W.id, K.addedSince(cp));
       metaWalls.push(out.meta);
       K.r.meta.walls = [...metaWalls];

@@ -1,0 +1,75 @@
+{
+  "about": "(6c KC \u00a710, the harbour trap) k03_harbour_trap: a wall line whose straight leg crosses a pond, on a claim with natural water (a lake in its east): the pond's footprint is OB.BODY, never OB.WATER, so the wall never takes the harbour fallback over plan water; its line goes round the pond (a body's cells are its own), M25:clear 0, no wet section.",
+  "terrain": {
+    "W": 240,
+    "D": 160,
+    "x0": 1000,
+    "z0": 2000,
+    "y": 64,
+    "bands": [
+      {
+        "x0": 1200,
+        "z0": 2010,
+        "x1": 1230,
+        "z1": 2150,
+        "y": 60,
+        "water": 4
+      }
+    ]
+  },
+  "volume": {},
+  "anchors": {
+    "kc_pool": [
+      1120,
+      65,
+      2120
+    ],
+    "kc_a": [
+      1060,
+      65,
+      2120
+    ],
+    "kc_b": [
+      1180,
+      65,
+      2120
+    ]
+  },
+  "expect": {
+    "part": "divide",
+    "class": [
+      "fits",
+      "adjusted"
+    ],
+    "noWet": true,
+    "clear": 0
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "kc_k03",
+    "forms": [
+      {
+        "id": "pool",
+        "kind": "pond",
+        "where": {
+          "near": {
+            "anchor": "kc_pool",
+            "within": 2
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "divide",
+        "kind": "wall",
+        "from": {
+          "anchor": "kc_a"
+        },
+        "to": {
+          "anchor": "kc_b"
+        }
+      }
+    ]
+  }
+}

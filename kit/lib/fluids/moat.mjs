@@ -268,6 +268,16 @@ export function passInput(K) {
     // ((6c HY, §8.1) a course's spill (lips, falls, riffles) is water to the routes and its lining shell, so no route walks in it or
     // lands a bridge on it; a course's end within 8 of the claim's edge reaches the edge (a course from edge to edge seals the claim,
     // as a closed moat does). Only for courses: an H plan's input is as before)
+    // ((6c KC, §4) any other body's spill (a spout's fall, a curtain) is shell to the routes, as a course's lining is: no route writes in it)
+    if (b.kind !== 'course' && b.kind !== 'ditch') {
+      for (const [x, y, z] of b.spill ?? []) {
+        const k = k2(x, z);
+        if (water.has(k) || lava.has(k)) continue;
+        const q = shell.get(k) ?? { top: S.groundAt(x, z), level: b.level };
+        q.top = Math.max(q.top, y); q.level = Math.min(q.level, b.level);
+        shell.set(k, q);
+      }
+    }
     if (b.kind === 'course' || b.kind === 'ditch') {
       for (const [x, y, z] of b.spill) { const k = k2(x, z); if (!water.has(k)) water.set(k, Math.min(y, b.level)); }
       for (const [x, y, z] of b.lining ?? []) {

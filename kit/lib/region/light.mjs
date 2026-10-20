@@ -16,6 +16,7 @@
 //      that would cut a walk node off the entrance is dropped and the cover is run again without it.
 // Emits part `props_apron` (stage `props`, natural cells only: a plant on the post's cell is replaced), each lot's lamp positions on its ext (`architect_mc:village`.lamps),
 // meta.village.apronLamps (per-lot counts, before / after), the lamps as props (kind `apron_lamp`) and a plan note.
+import { keptBy } from '../fluids/keep.mjs';
 import { draftIR } from './plan.mjs';
 import { buildVirtual, F_WALK, F_WRITTEN } from './vworld.mjs';
 import { nodeReached, walkGraph, walkNodes } from './check.mjs';
@@ -153,6 +154,8 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
   const entrances = new Set(ir.lots.map((l) => { const e = r.meta.lots[l.id]?.entrance; return e ? `${e[0]},${e[2]}` : ''; }));
   // ((6c HY) a course's flowing water (its lips, falls and riffles: spill the plan never writes, so the draft holds air there) is no
   // place for a lamp; only a course's or ditch's bodies, so every other plan's lamps stand as before)
+  const keep = Array.isArray(r._keep) ? r._keep.filter((q) => q.kind === 'body') : [];
+  let keptSkipped = 0;
   const spillCols = new Set((r._fluidBodies ?? []).filter((b) => b.kind === 'course' || b.kind === 'ditch').flatMap((b) => b.spill.map((c) => `${c[0]},${c[2]}`)));
   const colOk = (x, z) => vw.inClaim(x, z) && !inBox(x, z) && !lanes.has(`${x},${z}`) && !reserved.has(`${x},${z}`) && !kept(x, z) && !entrances.has(`${x},${z}`) && !spillCols.has(`${x},${z}`);
   const standY = (x, z, h) => {
@@ -203,6 +206,8 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
         const fc = fixtureCells(fixture, [c.x, y, c.z], { arm });
         // every footprint column free (the gibbet's arm column: off walk cells, lanes and boxes), every cell in air
         if (!fc.foot.every(([x, z]) => colOk(x, z)) || !fc.cells.every(([x, yy, z]) => P.air[vw.get(x, yy, z)] && !(vw.flags(x, yy - 1, z) & F_WALK))) continue;
+        // ((6c KC, §4) never a fixture cell on a body's hard set or in its watch: the lamp is skipped (M5 still judges the lighting))
+        if (keep.length && fc.cells.some(([x, yy, z]) => keptBy(keep, x, yy, z))) { keptSkipped++; continue; }
         if (_drop && _drop.has(`${c.x},${c.z}`)) break;
         cands.push({ ...c, y, arm, cells: fc.cells, lightAt: fc.lightAt, foot: fc.foot });
         break;
@@ -278,5 +283,5 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
   }
   const counts = Object.fromEntries(Object.entries(perLot).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
   r.note(`apron lamps (${fixture.kind}, light ${fixture.level}): ${Object.entries(counts).map(([k, n]) => `${k} ${n}`).join(', ')}; dark ${(100 * before.share).toFixed(1)}% -> ${(100 * after.share).toFixed(2)}% of ${targets.length} walk cells at plan time${capped ? ` (capped at ${maxPerLot} per lot: not covered)` : ''}`);
-  return { lamps, perLot: counts, before, after, targets: targets.length, capped, fixture: { kind: fixture.kind, level: fixture.level } };
+  return { lamps, perLot: counts, before, after, targets: targets.length, capped, fixture: { kind: fixture.kind, level: fixture.level }, ...(keptSkipped ? { keptSkipped } : {}) };
 }

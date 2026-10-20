@@ -96,7 +96,7 @@ export function corridorBox(from, to, { approach = TUNNEL.approach, width = TUNN
  * where one covers the cell, else the 2.5D estimate (soil to 3 under the ground, rock below, water down a water column); `known`
  * says whether the class came from a volume or from the plan's own writes (a tunnel needs every cell it reads known: else VOLUME).
  */
-export function tunnelLand(S, { volumes = [], base = null, blocked = () => null, routeLow = () => null, wallAt = () => null, classOfVolume, written: writtenBoxes = [] } = {}) {
+export function tunnelLand(S, { volumes = [], base = null, blocked = () => null, routeLow = () => null, wallAt = () => null, classOfVolume, written: writtenBoxes = [], kept = null } = {}) {
   // (a program's own earlier writes by class: [{box: [x0, y0, z0, x1, y1, z1], class}], e.g. crossings_demo's sand band in its raised
   // ridge; a written cell no box names is ROCK)
   const wb = (writtenBoxes ?? []).filter((q) => q && Array.isArray(q.box));
@@ -137,7 +137,9 @@ export function tunnelLand(S, { volumes = [], base = null, blocked = () => null,
   // but a tree, whose crown it does not measure)
   const overTop = (x, y, z) => !S.missingAt(x, z) && !(S.treeAt && S.treeAt(x, z)) && y > groundAt(x, z);
   const known = (x, y, z) => raised(x, y, z) || (baseAt(x, z) < 0 && y > surveyGround(x, z) + baseAt(x, z) && y <= surveyGround(x, z)) || fromVolume(x, y, z) !== null || overTop(x, y, z);
-  return { groundAt, classAt, known, written, blocked, routeLow, wallAt, missingAt: (x, z) => S.missingAt(x, z) };
+  // ((6c KC, §4) the plan's bodies' hard cells ([[x, y, z]]): the fluid buffer counts them as it counts water)
+  const keptSet = Array.isArray(kept) && kept.length ? new Set(kept.map(([x, y, z]) => key(x, y, z))) : null;
+  return { groundAt, classAt, known, written, blocked, routeLow, wallAt, missingAt: (x, z) => S.missingAt(x, z), ...(keptSet ? { kept: (x, y, z) => keptSet.has(key(x, y, z)) } : {}) };
 }
 
 /**
@@ -332,6 +334,7 @@ export function tunnelGeom(land, a, dir, L, rise, opts = {}) {
   for (const [x, y, z] of B.values()) {
     const c = cls(x, y, z);
     if (FLUID_CLASSES.includes(c)) fluids.push({ at: [x, y, z], class: c });
+    else if (land.kept?.(x, y, z)) fluids.push({ at: [x, y, z], class: 'BODY' }); // ((6c KC) a plan body's cell: within the buffer too)
   }
   if (fluids.length) {
     fluids.sort((p, q) => p.at[1] - q.at[1] || p.at[0] - q.at[0] || p.at[2] - q.at[2]);

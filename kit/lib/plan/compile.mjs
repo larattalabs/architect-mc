@@ -1005,6 +1005,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   const stageOf = (s) => (r.stageList.includes(s) ? s : s === 'routes' || s === 'props' || s === 'lots' || s === 'links' ? lastSolid() : r.stageList[0]);
   const zoneEmit = new Map(); // zone id -> {L, lots, prefix}
   let villages = 0, laneCells = [], reserved = new Set();
+  const propsPlanned = [];
   const outposts = [];
   // (D1) a districts zone (D2: a following zone, an outpost zone): its layouts, then its own routes (a spanning tree plus loops, a
   // following street, an outpost's road), lamps once at the end
@@ -1069,6 +1070,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         planProps: ({ o, sh, res: rs, lots }) => (props = planProps(r, { o, sh, res: rs, lots, laneWidth: 2, lamps: p.part.program.params?.lamps ?? 'street', bell: !!p.part.program.params?.bell, keepOut: ctx.keepOut ?? [], rng: ctx.rng(`props:${p.id}`) })),
       });
       emitProps(r, props, { stage: stageOf('props'), prefix });
+      for (const q of props?.props ?? []) propsPlanned.push(q); // ((6c KC) the farm ponds keep clear of them)
       for (const k of props?.noWalk ?? []) reserved.add(k);
       for (const [x, zz] of [...L.res.area, ...L.res.golem]) reserved.add(`${x},${zz}`);
       laneCells.push(...Object.values(L.laneCells).flat());
@@ -1165,7 +1167,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   const makeK = () => ({
     env, ctx, r, plan: P.plan, V, order, byId, k1Parts, geom, res, zoneEmit, lotZone, answers, ans, depState, okClass, timeUp, stageOf, notes, partOf, tolOf, judge,
     checkpoint: () => checkpoint(r), rollback: (c) => rollback(r, c), addedSince: (c) => addedSince(r, c), mark, endpointNode: (e, other, conn, where) => endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where),
-    record: {}, routed: [], overflows, keep,
+    record: {}, routed: [], overflows, keep, props: propsPlanned,
   });
   let K = k1Parts.length ? makeK() : null;
   if (K) planWalls(K);
@@ -1385,9 +1387,20 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     const cp = checkpoint(r);
     try {
       const cover = lightCover(r, { fixture: lampFixture(r), stage: stageOf('props'), keepOut: ctx.keepOut ?? [], reserved, laneCells });
-      if (r.meta.village) r.meta.village.apronLamps = { fixture: cover.fixture, perLot: cover.perLot, before: cover.before, after: cover.after, capped: cover.capped };
+      if (r.meta.village) r.meta.village.apronLamps = { fixture: cover.fixture, perLot: cover.perLot, before: cover.before, after: cover.after, capped: cover.capped, ...(cover.keptSkipped ? { keptSkipped: cover.keptSkipped } : {}) };
       for (const x of r.parts.slice(cp.parts)) partOf[x.id] = '__lamps__';
     } catch (e) { rollback(r, cp); notes.push(`apron lamps: ${e.message}`); }
+  }
+  // ((6c KC) the broken variant `lampOnRim` (an H part's ext architect_mc:unsafe): a lantern written by the lamps over the first shell cell
+  // of the part's first body (its rim); M25:clear's hard clause catches it)
+  for (const p of order) {
+    if (!isHPart(p) || !okClass(p.id) || p.part.ext?.['architect_mc:unsafe']?.lampOnRim !== true) continue;
+    const b = (r._fluidBodies ?? []).find((q) => q.part === p.id);
+    if (!b?.shell?.length) continue;
+    const top = b.shell.reduce((a, c) => (c[1] > a[1] || (c[1] === a[1] && (c[0] < a[0] || (c[0] === a[0] && c[2] < a[2]))) ? c : a), b.shell[0]);
+    const lp = r.part(`props_unsafe_rim_lamp`, { stage: stageOf('props') });
+    lp.columns({ abs: 0 }, { abs: 0 }, [top[0], top[2], top[1], top[1], 0], ['minecraft:lantern'], { cond: 3 });
+    partOf[lp.id] = '__lamps__';
   }
   if (!r.anchors.entrance) stubAnchors(r, env);
 

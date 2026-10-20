@@ -25,6 +25,7 @@ import { isFlammable } from '../blocks.mjs';
 import { localWorld } from './body.mjs';
 import { inferVillager } from '../params.mjs';
 import { overflowsOn } from './hooks.mjs';
+import { keptColumn } from './keep.mjs';
 import { F_WRITTEN } from '../region/vworld.mjs';
 import {
   PRESET_SIZES, arrRect, bodiesMark, bodiesRollback, bodyBom, centre, flagsAt, fluidRolesOf, gap, grow, intIn, inside, linesBody, locatorOf,
@@ -325,7 +326,8 @@ export function emit(K, p, res) {
       if (dec.refuse) throw refusal(dec.refuse.code, dec.refuse.message, dec.refuse.evidence);
       ice = dec.ice; notes.push(...dec.notes);
     }
-    const rec = emitPond(r, { id: bodyId(p.id), part: p.id, kind: 'pond', rect: res.water, shape, depth: sp.depth, edge: sp.edge, fluid: sp.fluid, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice, overflow: overflowsOn(K, p.id) });
+    // ((6c KC) the broken variant `ownerUnknown` (ext architect_mc:unsafe): a body op with no part; M25:clear and M25:shell name it)
+    const rec = emitPond(r, { id: bodyId(p.id), part: p.part.ext?.['architect_mc:unsafe']?.ownerUnknown === true ? null : p.id, kind: 'pond', rect: res.water, shape, depth: sp.depth, edge: sp.edge, fluid: sp.fluid, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice, overflow: overflowsOn(K, p.id) });
     leakCheck(r, env, rec);
     if (sp.fluid === 'lava') mixCheck(r, rec);
     res.emitted = { bodies: [rec], notes };
@@ -504,6 +506,11 @@ function farmSite(K, a, own) {
   const lw = localWorld(K.r, box);
   for (let x = g.minX; x <= g.maxX; x++) for (let z = g.minZ; z <= g.maxZ; z++) for (let y = box.minY; y <= box.maxY; y++) if (lw.vw.flags(x, y, z) & F_WRITTEN) return `the plan already writes ${x} ${y} ${z}`;
   for (const l of K.r.lots) if (l !== own && meets(grow(a, 3), { minX: l.box.minX, minZ: l.box.minZ, maxX: l.box.maxX, maxZ: l.box.maxZ })) return `lot ${l.id}'s box`;
+  // ((6c KC, §4) a farm pond is sited after the walls are planned (emitted later, in the links stage) and after the zones' props: it keeps
+  // clear of their planned cells, and of every body's footprint registered before it)
+  for (const W of K.walls ?? []) { const c = W.cells.find((q) => q.x >= g.minX && q.x <= g.maxX && q.z >= g.minZ && q.z <= g.maxZ); if (c) return `wall ${W.id} is planned at ${c.x} ${c.z}`; }
+  for (const q of K.props ?? []) for (const c of q.cells ?? []) if (c[0] >= g.minX && c[0] <= g.maxX && c[2] >= g.minZ && c[2] <= g.maxZ) return `prop ${q.id ?? q.kind} is planned at ${c[0]} ${c[1]} ${c[2]}`;
+  for (let x = g.minX; x <= g.maxX; x++) for (let z = g.minZ; z <= g.maxZ; z++) { const k = keptColumn(K.keep, x, z); if (k) return `body ${k.body ?? k.part}'s footprint at ${x} ${z}`; }
   return true;
 }
 

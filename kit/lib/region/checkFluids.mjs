@@ -120,13 +120,21 @@ function courseRules({ bodies, sim, world, findings, finding }) {
 export const CLEAR_SETS = Object.freeze(['cells', 'ice', 'shell', 'lining', 'grate', 'spill']);
 
 /**
- * (6c KC, §5, S-KC-2) The cells exempt from `M25:clear`'s watch clause, by name: key `x,y,z` -> {body, wall, why}. One kind only:
- * a registered water gate's lintel and frame (HY-c): the cells of its wall over the crossing's columns, from the lintel up, in the
- * reach's watch set (meta walls[].waterGates). Nothing in a hard set is ever exempt.
+ * (6c KC, §5, S-KC-2) The cells exempt from `M25:clear`'s watch clause, by name. One kind only: a registered water gate's lintel and
+ * frame (HY-c, meta walls[].waterGates): the cells its wall writes over the crossing's columns (the lintel) and the columns beside them
+ * (the frame: the crossing's box grown by 1), from the lintel up, in the watch set of a reach of the crossing's course (the crossing reach,
+ * or the reach above it whose breach reaches the frame). Nothing in a hard set is ever exempt. Returns [{wall, course, bodies, cols, lintel}].
  */
 export function clearExempt(meta) {
   const out = [];
-  for (const w of meta?.walls ?? []) for (const g of w.waterGates ?? []) out.push({ wall: w.part ?? w.id, body: g.body, cols: new Set((g.cells ?? []).map(([x, z]) => `${x},${z}`)), lintel: g.lintel });
+  const bodiesOf = new Map((meta?.courses ?? []).map((c) => [c.id, new Set(c.bodies ?? [])]));
+  for (const w of meta?.walls ?? []) for (const g of w.waterGates ?? []) {
+    const xs = (g.cells ?? []).map((c) => c[0]), zs = (g.cells ?? []).map((c) => c[1]);
+    if (!xs.length) continue;
+    const cols = new Set();
+    for (let x = Math.min(...xs) - 1; x <= Math.max(...xs) + 1; x++) for (let z = Math.min(...zs) - 1; z <= Math.max(...zs) + 1; z++) cols.add(`${x},${z}`);
+    out.push({ wall: w.part ?? w.id, course: g.course, bodies: bodiesOf.get(g.course) ?? new Set([g.body]), cols, lintel: g.lintel });
+  }
   return out;
 }
 
@@ -217,7 +225,7 @@ export function clearScan({ ir, vw, meta, bodies = bodiesOf(ir) }) {
       const wid = pi >= 0 ? ir.parts[pi]?.id ?? null : null;
       const o = own(wid);
       if (o.own) continue;
-      const ex = exempt.find((e) => e.body === b.id && e.cols.has(`${x},${z}`) && y >= e.lintel && (partOf ? partOf[wid] === e.wall : true));
+      const ex = exempt.find((e) => e.bodies.has(b.id) && e.cols.has(`${x},${z}`) && y >= e.lintel && (partOf ? partOf[wid] === e.wall : String(wid).startsWith(`w_${e.wall}`) || wid === e.wall));
       if (ex) { counts.exempt++; continue; }
       hit('watch', c, wid, o.why, o.writerPart);
       counts.watch++;

@@ -550,18 +550,27 @@ export async function planRegion(o) {
   // broken variant the checker must catch) and a writer the plan does not map are never refused here: the region check's M25:clear
   // names them.
   if (r.meta.planCheck && !r.meta.planCheck.malformed && irJson.includes('"op":"fluid"')) {
-    const { clearScan } = await import('./checkFluids.mjs');
+    const { clearScan, bodiesOf } = await import('./checkFluids.mjs');
     const { buildVirtual } = await import('./vworld.mjs');
     const irObj = JSON.parse(irJson);
     const built = buildVirtual({ ir: irObj, survey, filled: survey, blobs: (sha) => sideBytes.get(sha), volumes: (o.volumes ?? []).map((x) => x.decoded ?? x) });
     const sc = clearScan({ ir: irObj, vw: built.vw, meta });
     const plan = ctx.__params?.plan ?? {};
-    const unsafe = new Set(['zones', 'forms', 'connectors', 'links'].flatMap((k) => (Array.isArray(plan[k]) ? plan[k] : [])).filter((q) => q?.ext?.['architect_mc:unsafe']).map((q) => q.id));
+    const planParts = ['zones', 'forms', 'connectors', 'links'].flatMap((k) => (Array.isArray(plan[k]) ? plan[k] : [])).filter((q) => q && typeof q.id === 'string');
+    const unsafe = new Set(planParts.filter((q) => q.ext?.['architect_mc:unsafe']).map((q) => q.id));
+    const ids = new Set(planParts.map((q) => q.id));
     const fresh = {};
-    for (const q of sc.findings) {
+    // (the order rule, §3: a course is routed and emitted after the walls, so a wall's cell in a course's sets refuses the course)
+    const courses = new Set(bodiesOf(irObj).filter((b) => b.course).map((b) => b.id));
+    const walls = new Set((Array.isArray(plan.connectors) ? plan.connectors : []).filter((q) => q && (q.kind === 'wall' || q.kind === 'gate')).map((q) => q.id));
+    for (const q0 of sc.findings) {
+      const later = courses.has(q0.body) && walls.has(q0.writerPart) && q0.part;
+      const q = later ? { ...q0, writerPart: q0.part, part: q0.writerPart, body: q0.body, wall: q0.writerPart } : q0;
       const w = q.writerPart;
-      if (!w || w === q.part || unsafe.has(w) || (o.clearRefuse ?? {})[w] || fresh[w]) continue;
-      fresh[w] = { code: 'OVERLAP', message: `it writes ${q.count} cell(s) of ${q.set === 'watch' ? 'the watched reach' : `the ${q.set}`} of body ${q.body}${q.part ? ` (part ${q.part})` : ''}, placed before it: a body's cells are its own (M25:clear)`, evidence: { kind: 'body', body: q.body, part: q.part, set: q.set, cells: q.cells.slice(0, 16) } };
+      if (!w || w === q.part || !ids.has(w) || unsafe.has(w) || (o.clearRefuse ?? {})[w] || fresh[w]) continue;
+      fresh[w] = q.wall
+        ? { code: 'UNREACHABLE', message: `wall ${q.wall}, planned before it, stands in ${q.count} cell(s) of its reach ${q.body}'s ${q.set === 'watch' ? 'watched reach' : q.set} (a course crosses a wall only under a water gate)`, evidence: { kind: 'wall', wall: q.wall, why: 'clear', body: q.body, set: q.set, cells: q.cells.slice(0, 16) } }
+        : { code: 'OVERLAP', message: `it writes ${q.count} cell(s) of ${q.set === 'watch' ? 'the watched reach' : `the ${q.set}`} of body ${q.body}${q.part ? ` (part ${q.part})` : ''}, placed before it: a body's cells are its own (M25:clear)`, evidence: { kind: 'body', body: q.body, part: q.part, set: q.set, cells: q.cells.slice(0, 16) } };
     }
     if (Object.keys(fresh).length && (o._clearPass ?? 0) < 3) {
       const again = await planRegion({ ...o, clearRefuse: { ...(o.clearRefuse ?? {}), ...fresh }, _clearPass: (o._clearPass ?? 0) + 1 });

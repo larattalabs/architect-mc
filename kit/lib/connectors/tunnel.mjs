@@ -148,6 +148,13 @@ function corridors(K) {
  * The route pass's pass-level tunnel input, or null: the frozen volumes (decoded) every tunnel row reads, the explicit tunnels'
  * corridors asked first (§6). Only for a plan with a tunnel part, or an auto part where the plan holds volumes.
  */
+/** (6c KC) The plan's bodies' hard cells (keep.mjs records), [[x, y, z]]. */
+function keptHard(K) {
+  const out = [];
+  for (const q of K.keep ?? []) if (q.kind === 'body') for (const k of q.hard.keys()) out.push(k.split(',').map(Number));
+  return out;
+}
+
 export function tunnelPassInput(K) {
   const st = stateOf(K);
   if (st.input !== undefined) return st.input;
@@ -166,7 +173,9 @@ export function tunnelPassInput(K) {
   const rect = (a) => [a.minX, a.minZ, a.maxX, a.maxZ];
   const classes = [...K.env.protectedAreas.map((a) => ({ rect: rect(a.rect), class: 'PROTECTED_AREA', id: a.id })), ...K.env.regions.map((a) => ({ rect: rect(a.rect), class: 'REGION', id: a.id })),
     ...K.env.buildRects.map((a) => ({ rect: rect(a.rect), class: 'BUILD', id: a.id }))];
-  st.input = { volumes: vols, parts, ...(classes.length ? { classes } : {}) };
+  // ((6c KC, §4) the plan's bodies' hard cells, only when it has some: the bores' fluid buffer counts them)
+  const kept = keptHard(K);
+  st.input = { volumes: vols, parts, ...(classes.length ? { classes } : {}), ...(kept.length ? { kept } : {}) };
   return st.input;
 }
 
@@ -219,6 +228,7 @@ function emitLand(K) {
     volumes: tunnelPassInput(K)?.volumes ?? [], classOfVolume,
     blocked: (x, z) => { const q = rects.find((a) => x >= a.r.minX && x <= a.r.maxX && z >= a.r.minZ && z <= a.r.maxZ); return q ? { class: q.c, id: q.id } : null; },
     wallAt: (x, z) => { const W = wallCells.get(`${x},${z}`); return W ? { id: W.id, footing: S.groundAt(x, z) - 2, sealed: (W.st?.gatesMax ?? 16) === 0 } : null; },
+    kept: keptHard(K),
   });
   return st.land;
 }

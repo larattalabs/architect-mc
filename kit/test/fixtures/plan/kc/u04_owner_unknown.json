@@ -1,0 +1,36 @@
+{
+  "about": "(6c KC \u00a710, broken variant) u04_owner_unknown: v41's pond with ext architect_mc:unsafe {ownerUnknown: true}: its body op carries no part, so neither M25:shell nor M25:clear can tell its own writes from another part's: both answer 'owner unknown' (a finding, never a pass).",
+  "on": "flat",
+  "volume": {},
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "kc_u04",
+    "forms": [
+      {
+        "id": "pond",
+        "kind": "pond",
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 16
+          }
+        },
+        "size": {
+          "w": 11,
+          "d": 9
+        },
+        "depth": 3,
+        "ext": {
+          "architect_mc:unsafe": {
+            "ownerUnknown": true
+          }
+        }
+      }
+    ]
+  },
+  "expect": {
+    "clearRule": true,
+    "why": "owner unknown",
+    "shellOwnerUnknown": true
+  }
+}

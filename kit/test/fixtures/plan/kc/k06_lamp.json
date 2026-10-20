@@ -1,0 +1,77 @@
+{
+  "about": "(6c KC \u00a710) k06_lamp: a fountain just south of a village's lots, its apron (the single breach's reach over the ground) under the lots' outer lamp candidates: a candidate whose fixture would stand in a body's hard or watch cells is skipped (meta village.apronLamps.keptSkipped), the next candidate lights the apron instead; M25:clear 0 and M5 judged as before.",
+  "on": "flat",
+  "volume": {},
+  "anchors": {
+    "kc_fount": [
+      1106,
+      65,
+      2104
+    ]
+  },
+  "expect": {
+    "overall": "READY",
+    "clear": 0,
+    "keptSkipped": true
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "kc_k06",
+    "zones": [
+      {
+        "id": "forge",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "f1",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "f2",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "f3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        },
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 24
+          }
+        }
+      }
+    ],
+    "forms": [
+      {
+        "id": "fount",
+        "kind": "fountain",
+        "basin": 5,
+        "spout": 2,
+        "where": {
+          "near": {
+            "anchor": "kc_fount",
+            "within": 3
+          }
+        }
+      }
+    ]
+  }
+}
