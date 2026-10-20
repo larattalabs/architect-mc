@@ -3,6 +3,7 @@ package dev.larattalabs.architect.site;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.larattalabs.architect.Architect;
+import dev.larattalabs.architect.journal.Copper;
 import dev.larattalabs.architect.journal.WorldJournal;
 import dev.larattalabs.architect.placement.Anchor;
 import dev.larattalabs.architect.placement.Anchors;
@@ -282,9 +283,9 @@ public final class Builder {
 			}
 		}
 
-		/** Whether the world at a swap cell still holds the old version's block (the swap has not happened). */
+		/** Whether the world at a swap cell still holds the old version's block (the swap has not happened; 6c CU: at any copper stage). */
 		boolean holdsOld(BlockState now, int i) {
-			return old != null && swap.get(i) && old[i] != null && now.is(old[i].getBlock()) && !matches(now, i);
+			return old != null && swap.get(i) && old[i] != null && Copper.is(now, old[i].getBlock()) && !matches(now, i);
 		}
 
 		int size() {
@@ -400,13 +401,24 @@ public final class Builder {
 			return Math.max(0, unbuilt.getOrDefault(item, 0));
 		}
 
-		/** The world holds what this cell gets (by block: a door the player opened is still built). */
+		/**
+		 * The world holds what this cell gets (by block: a door the player opened is still built). (6c CU §3) A copper block at another
+		 * weathering stage of the target's chain, waxed or scraped, is the target's block: built, never re-queued or charged again.
+		 */
 		boolean matches(BlockState now, int i) {
 			if (swap.get(i) && old != null && old[i] != null && old[i].is(target[i].getBlock())) {
 				// a swap that keeps the block (a re-oriented stair, another slab type): built when the state is the target's
 				return dev.larattalabs.architect.journal.StillOurs.holds(now, null, target[i], null);
 			}
-			return now.is(target[i].getBlock());
+			return Copper.is(now, target[i].getBlock());
+		}
+
+		/**
+		 * (6c CU §4, S-CU-2) What a built cell gives back: its plan's cost while it stands as the plan's block, else (another stage of its
+		 * copper chain, waxed or scraped) the items of the block standing: the refund pays what is there.
+		 */
+		List<SurvivalItems.Cost> refundCost(BlockState now, int i) {
+			return now.is(target[i].getBlock()) ? cost.get(i) : Cells.cost(now);
 		}
 
 		/** Derives {@link #built} from the world for every queued cell in a loaded chunk. Returns cells that changed. */
@@ -1833,9 +1845,10 @@ public final class Builder {
 							int qi = r == null ? -1 : r.queuePos(m);
 							// displaced: the covering site's before is this site's block and the world no longer holds it there (a block
 							// the covering site kept stays in the world; it drops once, with the covering site's removal)
-							if (qi >= 0 && !free.get(qi) && WorldJournal.state(over).is(r.target[qi].getBlock()) && !level.getBlockState(m).is(r.target[qi]
+							BlockState was0 = WorldJournal.state(over);
+							if (qi >= 0 && !free.get(qi) && Copper.is(was0, r.target[qi].getBlock()) && !Copper.is(level.getBlockState(m), r.target[qi]
 								.getBlock())) {
-								tally.add(Refunds.Outcome.REFUND, r.cost.get(qi));
+								tally.add(Refunds.Outcome.REFUND, r.refundCost(was0, qi)); // (6c CU) the block that stood there
 							}
 							continue;
 						}
@@ -1849,13 +1862,15 @@ public final class Builder {
 					BlockState was = k < before.size() ? before.states[k] : Blocks.AIR.defaultBlockState();
 					int qi = r == null ? -1 : r.queuePos(m);
 					boolean asPlaced = qi >= 0 && r.matches(now, qi);
-					Refunds.Outcome o = Refunds.classify(qi >= 0, asPlaced, qi >= 0 && free.get(qi), now.isAir(), was.is(now.getBlock()),
+					// (6c CU) the snapshot's block at any copper stage is still the snapshot's (an adopted copper roof that weathered)
+					boolean asSnapshot = Copper.is(now, was.getBlock());
+					Refunds.Outcome o = Refunds.classify(qi >= 0, asPlaced, qi >= 0 && free.get(qi), now.isAir(), asSnapshot,
 						Refunds.natural(Cells.blockId(was), Cells.blockId(now)));
-					if (only != null && o == Refunds.Outcome.REFUND && was.is(now.getBlock())) {
+					if (only != null && o == Refunds.Outcome.REFUND && asSnapshot) {
 						o = Refunds.Outcome.NONE; // (6c PT2) the undo writes the same block back: it stays, so no refund
 					}
 					if (o == Refunds.Outcome.REFUND) {
-						tally.add(o, r.cost.get(qi));
+						tally.add(o, r.refundCost(now, qi)); // (6c CU, S-CU-2) the block standing
 						if (TRACE_REFUNDS) {
 							Architect.LOGGER.info("refund-trace deconstruct {} {} target {} now {} cost {}", s.id(), m.toShortString(), r.target[qi], now, r.cost.get(qi));
 						}
@@ -2186,7 +2201,9 @@ public final class Builder {
 				continue;
 			}
 			if (r.built.get(i)) {
-				r.cost.get(i).forEach(c -> out.merge(c.item(), c.count(), Integer::sum));
+				// (6c CU) what the cell would refund: the block standing (its last known state where its chunk is not loaded)
+				BlockState now = stateIfLoaded(level, r.pos(i));
+				(now == null ? r.cost.get(i) : r.refundCost(now, i)).forEach(c -> out.merge(c.item(), c.count(), Integer::sum));
 			} else if (r.old != null && r.swap.get(i) && r.old[i] != null && r.holdsOld(level.getBlockState(r.pos(i)), i)) {
 				Cells.cost(r.old[i]).forEach(c -> out.merge(c.item(), c.count(), Integer::sum));
 			}

@@ -587,6 +587,12 @@ public final class Groups {
 		if (r.undo == null && r.stage == null && !dev.larattalabs.architect.region.RegionFluids.removalGate(server, r.group)) {
 			return;
 		}
+		if (r.undo == null && r.stage != null) {
+			// (6c IRR, S-IRR-4) a stage undo that takes an irrigated farm lot takes its sources first (idempotent)
+			for (String sid : r.sites) {
+				Sites.drainIrrigation(server, Sites.get(sid));
+			}
+		}
 		if (r.undo == null) {
 			plan(server, r);
 			return;

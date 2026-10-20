@@ -25,7 +25,7 @@ public final class ApiRules {
 		"compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites",
 		"stackQuery", "entryVersions", "blueprintDelta", "deltaApply", "siteRevert", "deltaPreview", "regionPrepare", "generatedOnly", "cellConditions",
 		"chunkBound", "surveyVolume", "regionNudge", "regionOpKeys", "lotExt", "frozenWater", "siteWaiting", "fullBom", "stockpile",
-		"schematics", "targetPause", "removalLeavesFeed", "builds", "adopt", "planCatalogueView");
+		"schematics", "targetPause", "removalLeavesFeed", "builds", "adopt", "planCatalogueView", "weatheringOurs");
 
 	private ApiRules() {
 	}
@@ -78,6 +78,8 @@ public final class ApiRules {
 					case "region.hydrology" -> "hydrologyPass"; // 6c HY: the hydrology pass (flow and wet fields, data.courses)
 					case "region.courses" -> "regionCourses"; // 6c HY: courses, mill races and ditches (channel.course, .race, .ditch)
 					case "region.waterGates" -> "waterGates"; // 6c HY: a course under a wall behind a grate (wall.water_gate)
+					case "region.irrigation" -> "farmIrrigation"; // 6c IRR: a farm lot's irrigate (its sources, lots[].irrigation, the lot mask)
+					case "reserved" -> "designReserved"; // 6c IRR: DesignRequest.reserved, kept by the design job and its checker
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

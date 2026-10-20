@@ -1,7 +1,7 @@
 {
  "catalogueVersion": 8,
- "api": "1.36.0",
- "kitVersion": "0.37.1",
+  "api": "1.38.0",
+  "kitVersion": "0.39.0",
  "schemaVersion": "plan/0",
  "entries": [
   {

@@ -129,6 +129,8 @@ final class TemplateWriter {
 	int phase = SET;
 	int cursor;
 	final BitSet placed = new BitSet();
+	/** (6c IRR) Positions never written (a lot site's {@link LotMask}): the cursor still passes them. Null: none (every other use). */
+	java.util.function.@org.jspecify.annotations.Nullable LongPredicate skip;
 	int minX = Integer.MAX_VALUE;
 	int minY = Integer.MAX_VALUE;
 	int minZ = Integer.MAX_VALUE;
@@ -279,6 +281,9 @@ final class TemplateWriter {
 	private void set(ServerLevel level, int i) {
 		// an immutable position: a block entity created by setBlock keeps it
 		BlockPos p = new BlockPos(px + cells.off[i * 3], py + cells.off[i * 3 + 1], pz + cells.off[i * 3 + 2]);
+		if (skip != null && skip.test(p.asLong())) {
+			return; // (6c IRR) the region's irrigation cell: the lot's design drops it
+		}
 		BlockState state = cells.states[i];
 		CompoundTag nbt = cells.nbt[i];
 		if (nbt != null) {

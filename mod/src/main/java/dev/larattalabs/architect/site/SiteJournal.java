@@ -314,8 +314,9 @@ public final class SiteJournal {
 		String id = s.newId();
 		long now = System.currentTimeMillis();
 		JournalStore.Txn t = s.begin().label("P3:" + siteId);
+		// ((6c IRR) a lot site's irrigation cells are never its own: left out of its BOX entry, LotMask)
 		t.create(JournalStore.Meta.header(id, kind, siteId, group, dim, Policy.BOX, layer, Status.PLACING, now), WorldJournal.sections(before, null,
-			layer, null), new JournalNbt.Head(meta, ring));
+			layer, LotMask.ofRecord(meta)), new JournalNbt.Head(meta, ring));
 		String leaves = null;
 		if (!held.isEmpty() || cut.length > 0) {
 			leaves = s.newId();
@@ -388,7 +389,8 @@ public final class SiteJournal {
 			}
 		}
 		List<SectionCells> secs = new ArrayList<>();
-		for (SectionCells sc : WorldJournal.sections(p.before, null, m.layer(), null)) {
+		Site rs = Sites.get(p.site);
+		for (SectionCells sc : WorldJournal.sections(p.before, null, m.layer(), rs == null ? null : LotMask.of(rs.ext()))) {
 			if (keys.contains(sc.key)) {
 				secs.add(dev.larattalabs.architect.placed.Placed.annotate(level, sc)); // (6c PT) the records as they are now, with the befores
 			}

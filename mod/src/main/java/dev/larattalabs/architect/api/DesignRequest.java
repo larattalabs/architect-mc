@@ -32,12 +32,16 @@ import org.jspecify.annotations.Nullable;
  * @param critique (since 1.6.0, a helper with {@code "critique"}) critique this design: {@link CritiqueMode#REPORT} (one critic
  *     call) or {@link CritiqueMode#LOOP} (revise on the verdict, install the best round); null or OFF = none (the default).
  *     On a massing request it critiques the massing itself (its own rubric: silhouette, brief, site fit; maxRevisions default 1)
+ * @param reserved (since 1.38.0, a helper with {@code "reserved"}; 6c IRR, S-IRR-2) cells of the lot the design must leave as given
+ *     (an irrigated farm's sources, their beds and farmland sides and the air over each: the plan-check artifact's
+ *     {@code lots[].irrigation.lotCells}), in the lot's frame ({@link Reserved}); the design job leaves them and its checker refuses a
+ *     design writing one; null = none. The realise drops any block there anyway
  */
 public record DesignRequest(String type, String style, @Nullable String materials, List<String> features, BlockSize maxSize, @Nullable String name,
 	@Nullable String notes, @Nullable String remix, @Nullable String owner, JsonObject ext, @Nullable String model, @Nullable Double budgetUsd,
 	@Nullable String bible, @Nullable String group, List<String> profile, @Nullable Integer bibleVersion, boolean massing, @Nullable String fromMassing,
 	@Nullable Integer massingVersion, @Nullable JsonElement context, @Nullable CritiqueSpec critique, @Nullable String versionOf,
-	@Nullable String versionOfSite) {
+	@Nullable String versionOfSite, @Nullable Reserved reserved) {
 	/** The most characters of a context (text, or JSON as text). */
 	public static final int MAX_CONTEXT = 4000;
 
@@ -51,6 +55,62 @@ public record DesignRequest(String type, String style, @Nullable String material
 		if (critique != null && !critique.on()) {
 			critique = null;
 		}
+	}
+
+	/**
+	 * (Since 1.38.0; 6c IRR, S-IRR-2) A lot's reserved cells, in the lot's frame: the lot seen with its front to the south, {@code x}
+	 * across it (0 at its left seen from the street), {@code z} from its back ({@code depth - 1} is the front row), {@code y} from its
+	 * floor (0 is the field's level). {@code front} is the lot's real front (north, east, south or west): a design narrower than the
+	 * lot is centred across it as the realise centres it, which rounds the other way for a north or east front. The artifact's
+	 * {@code lots[].irrigation} carries the same cells ({@code lotCells}, column runs) and the lot's {@code front}.
+	 *
+	 * @param width the lot across, in the frame
+	 * @param depth the lot from back to front, in the frame
+	 * @param cells at most {@link #MAX_RESERVED}
+	 */
+	public record Reserved(String front, int width, int depth, List<net.minecraft.core.BlockPos> cells) {
+		public Reserved {
+			cells = cells == null ? List.of() : List.copyOf(cells);
+		}
+
+		/** The wire form: {@code {front, size: [width, depth], cells: [[x, y, z], ...]}}. */
+		public JsonObject wire() {
+			JsonObject o = new JsonObject();
+			o.addProperty("front", front);
+			com.google.gson.JsonArray size = new com.google.gson.JsonArray();
+			size.add(width);
+			size.add(depth);
+			o.add("size", size);
+			com.google.gson.JsonArray a = new com.google.gson.JsonArray();
+			for (var c : cells) {
+				com.google.gson.JsonArray q = new com.google.gson.JsonArray();
+				q.add(c.getX());
+				q.add(c.getY());
+				q.add(c.getZ());
+				a.add(q);
+			}
+			o.add("cells", a);
+			return o;
+		}
+	}
+
+	/** The most reserved cells a request carries. */
+	public static final int MAX_RESERVED = Limits.RESERVED_CELLS_MAX;
+
+	/** The 1.11.0 constructor (no reserved). */
+	public DesignRequest(String type, String style, @Nullable String materials, List<String> features, BlockSize maxSize, @Nullable String name,
+		@Nullable String notes, @Nullable String remix, @Nullable String owner, JsonObject ext, @Nullable String model, @Nullable Double budgetUsd,
+		@Nullable String bible, @Nullable String group, List<String> profile, @Nullable Integer bibleVersion, boolean massing, @Nullable String fromMassing,
+		@Nullable Integer massingVersion, @Nullable JsonElement context, @Nullable CritiqueSpec critique, @Nullable String versionOf,
+		@Nullable String versionOfSite) {
+		this(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile, bibleVersion, massing,
+			fromMassing, massingVersion, context, critique, versionOf, versionOfSite, null);
+	}
+
+	/** A copy whose design leaves {@code r}'s cells of the lot as given (null = none). Since 1.38.0. */
+	public DesignRequest withReserved(@Nullable Reserved r) {
+		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, r);
 	}
 
 	/** The 1.6.0 constructor (no versionOf). */
@@ -68,7 +128,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	 */
 	public DesignRequest versionOf(String entryId, @Nullable String siteId) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, context, critique, entryId, siteId);
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, entryId, siteId, reserved);
 	}
 
 	/** The 1.3.0 constructor (no critique). */
@@ -98,19 +158,19 @@ public record DesignRequest(String type, String style, @Nullable String material
 	/** A copy with an open type's profile. Since 1.2.0. */
 	public DesignRequest withProfile(List<String> rules) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, rules,
-			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite);
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved);
 	}
 
 	/** A copy designed with a style bible (null version = its latest). Since 1.2.0. */
 	public DesignRequest withBible(@Nullable String bibleId, @Nullable Integer version) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bibleId, group, profile,
-			version, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite);
+			version, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved);
 	}
 
 	/** A copy that is (true) or is not (false) a massing job. Since 1.3.0. */
 	public DesignRequest massing(boolean on) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, on, on ? null : fromMassing, on ? null : massingVersion, context, critique, versionOf, versionOfSite);
+			bibleVersion, on, on ? null : fromMassing, on ? null : massingVersion, context, critique, versionOf, versionOfSite, reserved);
 	}
 
 	/** A copy that is the detail pass of the massing's latest version. Since 1.3.0. */
@@ -121,7 +181,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	/** A copy that is the detail pass of one massing version (null = its latest). Since 1.3.0. */
 	public DesignRequest fromMassing(@Nullable String massingId, @Nullable Integer version) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massingId == null && massing, massingId, massingId == null ? null : version, context, critique, versionOf, versionOfSite);
+			bibleVersion, massingId == null && massing, massingId, massingId == null ? null : version, context, critique, versionOf, versionOfSite, reserved);
 	}
 
 	/** A copy with a context text (null or blank = none). Since 1.3.0. */
@@ -132,12 +192,12 @@ public record DesignRequest(String type, String style, @Nullable String material
 	/** A copy with a context: a JSON object, or text as a {@link JsonPrimitive} (null = none). Since 1.3.0. */
 	public DesignRequest withContext(@Nullable JsonElement ctx) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, ctx, critique, versionOf, versionOfSite);
+			bibleVersion, massing, fromMassing, massingVersion, ctx, critique, versionOf, versionOfSite, reserved);
 	}
 
 	/** A copy critiqued as {@code spec} (null or OFF = none). Since 1.6.0. */
 	public DesignRequest critique(@Nullable CritiqueSpec spec) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, context, spec, versionOf, versionOfSite);
+			bibleVersion, massing, fromMassing, massingVersion, context, spec, versionOf, versionOfSite, reserved);
 	}
 }

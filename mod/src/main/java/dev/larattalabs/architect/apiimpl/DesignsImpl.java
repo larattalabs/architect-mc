@@ -206,6 +206,10 @@ final class DesignsImpl implements Designs {
 				}
 				o.add("versionOf", v);
 			}
+			// (6c IRR, S-IRR-2) the lot's reserved cells (only when set: every other request is sent as before)
+			if (r.reserved() != null) {
+				o.add("reserved", r.reserved().wire());
+			}
 		}
 		return o;
 	}
@@ -222,7 +226,19 @@ final class DesignsImpl implements Designs {
 			return "designing with a bible needs a helper with bibles (phase 4b)";
 		}
 		String why = refusal4c(r, b.protocol(), b.sidecarFeatures());
+		why = why != null ? why : refusalReserved(r, b.protocol(), b.sidecarFeatures());
 		return why != null ? why : refusal5a(r.critique(), b.protocol(), b.sidecarFeatures());
+	}
+
+	/** (6c IRR) Why reserved cells can't be sent (null: they can, or there are none): a helper before IRR would ignore them. Pure. */
+	static @Nullable String refusalReserved(DesignRequest r, int protocol, java.util.Set<String> features) {
+		if (r.reserved() == null) {
+			return null;
+		}
+		if (protocol < 2 || !features.contains("reserved")) {
+			return "reserved cells need a helper that keeps a lot's reserved cells (slice IRR); this one does not have it";
+		}
+		return null;
 	}
 
 	/** Why a critique can't be sent (null: it can, or it is off). Pure. */

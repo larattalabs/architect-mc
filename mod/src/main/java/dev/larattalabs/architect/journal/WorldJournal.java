@@ -395,10 +395,42 @@ public final class WorldJournal {
 		BlockState now = level.getBlockState(p);
 		BlockState want = state(after);
 		if (now.getBlock() != want.getBlock() && !(want.isAir() && !now.getFluidState().isEmpty()) && !(StillOurs.spread(now) && StillOurs.spread(want))
-			&& !StillOurs.fluidHolds(now, want)) {
-			return false; // (a fluid in cleared air goes to StillOurs, phase 6a)
+			&& !StillOurs.fluidHolds(now, want) && !Copper.sameBlock(now.getBlock(), want.getBlock())) {
+			return false; // (a fluid in cleared air goes to StillOurs, phase 6a; another copper stage too, 6c CU)
 		}
 		return StillOurs.holds(now, now.hasBlockEntity() ? beNbt(level, p) : null, want, after.nbt());
+	}
+
+	/**
+	 * (6c CU §2.3, S-CU-1) Whether {@code now} holds {@code after} only through an equivalence slice CU added (another stage of a copper
+	 * chain, waxed or scraped; farmland and dirt), not as the same block. Such a cell is the player's when PT records it as
+	 * player-placed: Architect's own writes clear a cell's record, so a record there was placed after our write ({@link #playersOver}).
+	 */
+	public static boolean cuEquivalent(BlockState now, BlockState after) {
+		if (now.getBlock() == after.getBlock()) {
+			return false;
+		}
+		var f = net.minecraft.world.level.block.Blocks.FARMLAND;
+		var d = net.minecraft.world.level.block.Blocks.DIRT;
+		return Copper.sameBlock(now.getBlock(), after.getBlock()) || now.is(f) && after.is(d) || now.is(d) && after.is(f);
+	}
+
+	/**
+	 * (6c CU §2.3, S-CU-1: a player record wins) Whether the cell at {@code pos}, holding {@code after} only through CU's equivalence
+	 * ({@link #cuEquivalent}), is a block a player placed there (PT records it): the player's, not ours. A player who mined our copper
+	 * and placed their own oxidized block keeps it; one who waxed or scraped ours in place placed nothing, so it stays ours. The same
+	 * block as {@code after} is judged as before CU (no PT lookup).
+	 */
+	public static boolean playersOver(Level level, long pos, BlockState now, BlockState after) {
+		return cuEquivalent(now, after) && dev.larattalabs.architect.placed.Placed.record(level, BlockPos.of(pos)) != null;
+	}
+
+	/** {@link #holds} with a player's record first ({@link #playersOver}): what an undo asks of the world. */
+	public static boolean holdsOurs(Level level, long pos, Value after) {
+		if (!holds(level, pos, after)) {
+			return false;
+		}
+		return !playersOver(level, pos, level.getBlockState(BlockPos.of(pos)), state(after));
 	}
 
 	/** Whether a recorded value {@code v} still holds {@code after} ({@link StillOurs}). */
@@ -528,7 +560,7 @@ public final class WorldJournal {
 			}
 			this.undo = new HashSet<>(ids);
 			this.next = sections.iterator();
-			this.planner = new Sections.Planner(ids, group, at, (pos, after) -> holds(level, pos, after), WorldJournal::same);
+			this.planner = new Sections.Planner(ids, group, at, (pos, after) -> holdsOurs(level, pos, after), WorldJournal::same);
 		}
 
 		private java.util.concurrent.@Nullable CompletableFuture<Void> warm;

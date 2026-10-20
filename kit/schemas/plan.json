@@ -383,6 +383,7 @@
         "brief": { "type": "string", "pattern": "^[\\s\\S]{0,500}$" },
         "entry": { "type": "string", "pattern": "^[A-Za-z0-9_.:/-]{1,100}(@[0-9]{1,6})?$", "description": "A library entry (id or id@version) already designed for this lot; absent: the building is provisional (a cost range) until Steward binds one." },
         "farmPond": { "type": "boolean", "description": "(H, S-H-2) A farm lot's small pond: a 3x3, 1-deep sunk water body within 2 of the lot, outside its restore box, removed with the region; only on a claim with no surface water (never added in a freezing biome). Off by default." },
+        "irrigate": { "type": "boolean", "description": "(IRR, S-IRR-1) A working farm's irrigation: one open 1x1 water source in every 9x9 of the farm lot's field (the lot less a 1-column border and its front row), each flush with the field, its four sides farmland, so every field column is within 4 of water. The sources are the region's, inside the lot's box; the lot's design leaves them (the artifact's lots[].irrigation). Set it only for a working or automated farm the card asks for; a homely farm keeps farmPond. false on a lot overrides its zone. Only on a farm lot (villager farm, given or implied by its type); never in a freezing biome. Off by default." },
         "ext": { "$ref": "#/$defs/ext" }
       }
     },
@@ -438,6 +439,7 @@
         "id": { "$ref": "#/$defs/id" },
         "kind": { "const": "standard" },
         "farmPond": { "type": "boolean", "description": "(H, S-H-2) Every farm lot of the zone gets a farm pond (as a lot's farmPond). Off by default." },
+        "irrigate": { "type": "boolean", "description": "(IRR, S-IRR-1) Every farm lot of the zone is irrigated (as a lot's irrigate; its own false wins). Off by default." },
         "required": { "type": "boolean" },
         "label": { "$ref": "#/$defs/label" },
         "notes": { "$ref": "#/$defs/text500" },

@@ -1,7 +1,8 @@
 // Blueprint checker: validates a structure template + its sidecar against docs/CONTRACT.md "Checker profiles".
 //   checkFiles(nbtPath, jsonPath, opts) / checkBlueprint(bp, opts) / checkStructure(sidecar, structure, opts)
 //     -> { ok, errors: string[], warnings: string[] }
-//   opts: { max?: {x,y,z}, type?: string, imported?: boolean, profile?: string[]|'massing', massing?: <massing sidecar> }
+//   opts: { max?: {x,y,z}, type?: string, imported?: boolean, profile?: string[]|'massing', massing?: <massing sidecar>, reserved?: (6c IRR)
+//     {front, size: [w, d], cells: [[u, y, v]]} (lib/reserved.mjs: the lot's cells the design must leave) }
 // The `massing` profile (phase 4c) applies to a sidecar with `massing: true` (or when opts.profile is 'massing'): the
 // structure, palette, sidecar, anchor and size rules, no floating, parts, and the entrance reaching into the building; no
 // door, light, interior or type-geometry rules. opts.massing (a massing's sidecar) adds massing conformance
@@ -22,6 +23,7 @@ import {
 import { BUILDING_TYPES, CORE_ROLES, DEFAULT_PROFILE, fullBlockOf, PORT_KINDS, TYPE_RE, isPresetType, parseProfile, resolvePalette, stoneFamilyOf, woodFamilyOf } from './kit.mjs';
 import { checkConformance } from './massing.mjs';
 import { CREATIVE_ONLY } from './vocab/survival.mjs';
+import { reservedHits } from './reserved.mjs';
 // (6c VOC-b) the `state` and `hazard` errors, `metrics.rarity` and `metrics.drift`, and the opt-in `rarity`/`coherence` warnings
 import { HAZARD, driftsWhere, fireReachOf, hazardKindOf, isLogName, isPairOf, isWaterlogged, measureRarity, pairOffset, rarityWarnings, styleOf, waterReachOffsets } from './vocab/budget.mjs';
 
@@ -297,6 +299,12 @@ export function checkStructure(sidecar, structure, opts = {}) {
   if (opts.max) {
     const over = ['x', 'y', 'z'].filter((a, i) => size[i] > opts.max[a]);
     if (over.length) err(`size ${size.join('x')} exceeds the limit ${opts.max.x}x${opts.max.y}x${opts.max.z} (${over.join(', ')})`);
+  }
+  // ---- (6c IRR, S-IRR-2) reserved cells (--reserved): the lot's cells the design leaves as given, placed as the realise places it
+  if (opts.reserved) {
+    const blocks = [...cells].map(([k, st]) => [...k.split(',').map(Number), st.name]);
+    const hits = reservedHits(blocks, { size, groundY: sidecar.groundY, front: sidecar.front }, opts.reserved);
+    if (hits.length) err(`reserved: the design writes ${hits.length} of the lot's reserved cell(s) (an irrigated field's water, its bed, its farmland sides and the air over each source: leave them air): ${hits.slice(0, 4).map((h) => `${h.block} at ${h.template.join(',')} (the lot's ${h.at.join(',')})`).join('; ')}`);
   }
 
   // ---- sidecar basics

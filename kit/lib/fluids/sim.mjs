@@ -11,7 +11,7 @@
 //   world.at(x, y, z) -> 'stop' | 'open' | 'water' | 'lava' (a natural or earlier source of that fluid) | 'flowing_water' |
 //            'flowing_lava' (a natural flowing cell); a body's own cells are its sources whatever the world says there. Optional:
 //            world.solid(x, y, z) -> bool (a full face under a cell, for source conversion; default: at() === 'stop'),
-//            world.keep(x, y, z) -> reason | null (M25:keep), world.shell(x, y, z, body) -> reason | null (M25:shell),
+//            world.keep(x, y, z, body) -> reason | null (M25:keep; (6c IRR) the body judged, for its own lot's exemption), world.shell(x, y, z, body) -> reason | null (M25:shell),
 //            world.surface(x, y, z) -> bool (sky above: no ceiling over the cell, for M25:trap), world.exit(x, y, z) -> bool (a bank
 //            cell a villager can stand on, for M25:exit).
 //   bodies: [{id, part?, fluid, level, cells: [[x, y, z]], shell?: [[x, y, z]], spill?: [[x, y, z]], joins?: [[x, y, z]], spillLands?:
@@ -427,7 +427,7 @@ export function simulate(world, bodies, { breach = false } = {}) {
           const kk = k3(x, y, z);
           if (seen.has(kk)) continue;
           seen.add(kk);
-          const w = world.keep(x, y, z);
+          const w = world.keep(x, y, z, b); // ((6c IRR) the body too: an irrigation source's own lot)
           if (w) { bad.push([x, y, z]); why.set(w, (why.get(w) ?? 0) + 1); }
         }
       }

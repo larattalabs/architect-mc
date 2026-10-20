@@ -719,10 +719,13 @@ public final class SiteDeltas {
 
 			@Override
 			public boolean holds(long pos, Value after) {
-				return WorldJournal.same(now.apply(pos), after);
+				Value v = now.apply(pos);
+				// (6c CU, S-CU-1) a player's own block over our cell, holding it only through CU's equivalence, is the player's edit
+				return WorldJournal.same(v, after) && !WorldJournal.playersOver(level, pos, WorldJournal.state(v), WorldJournal.state(after));
 			}
 		};
-		DeltaPlanner.Outcome o = DeltaPlanner.outcome(set.delta(), pb.snapBox(), stacks, nowW, r.edits());
+		// ((6c IRR) a lot site's irrigation cells stay the region's: no write, no growth there)
+		DeltaPlanner.Outcome o = DeltaPlanner.outcome(set.delta(), pb.snapBox(), stacks, nowW, r.edits(), LotMask.of(b.ext()));
 		// 6c 0c (C17): every cell the delta writes against the owner's protected areas (force doesn't override it)
 		dev.larattalabs.architect.api.ProtectedArea prot = Protected.hitCells(b.dimension(), r.owner(), o.write().keySet());
 		if (prot != null) {

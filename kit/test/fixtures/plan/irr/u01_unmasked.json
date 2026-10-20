@@ -1,0 +1,42 @@
+{
+  "about": "(6c IRR, §9, broken) _unsafe.irrUnmasked 'plan': a part of the zone stands in for the lot's design writing over a source's side (as an unmasked lot item would): M25:clear at plan time, the plan not READY. (With true, the plan is as v62's but its IR lot says unmasked: the mod places the lot's entry over the side, and the live check refuses the source: PARTIAL.)",
+  "on": "flat",
+  "volume": {},
+  "covers": [],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "irr_u01",
+    "zones": [
+      {
+        "id": "farms",
+        "irrigate": true,
+        "ext": {
+          "architect_mc:unsafe": {
+            "irrUnmasked": "plan"
+          }
+        },
+        "program": {
+          "lots": [
+            {
+              "id": "f1",
+              "type": "farm",
+              "size": [
+                13,
+                11
+              ],
+              "villager": "farm"
+            },
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

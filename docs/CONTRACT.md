@@ -16485,6 +16485,82 @@ One owner, about **1-1.5 days**: the canonical form, `holds` and the wrappers (0
 
 - **N-CU-1:** as proposed. Leaves, saplings and snow stay "not ours" after they drift.
 
+### CU as built (2026-10-20, `slice/CU`; placeholders API 1.37.0, mod 0.40.0; kit version unchanged, PLAN_API follows the API)
+
+**Item 1, measured first** (at c25c11cc, before any change to still ours; the lists kept as `vocb-v50n-drift-remove.json` and
+`cu-measure-list.json` under `artifacts/gate-runs-CU/20261020-054332-change/`):
+- VOC's drift probe: 157/157 unwaxed hall cells weathered; after `Regions.remove` 147 cells differed from the snapshot and **none was
+  inside the hall's lot box** (a BOX entry, restored exactly). 124 grass_block->dirt, 5 dirt->grass and 8 amethyst buds (`growth`),
+  9 water or lava flowed into air (`none`), 1 bee nest (`live`). The probe printed `inHall.length || growth`, so with 0 in the box it
+  printed the growth count: the "134-138 copper cells" were never copper. The probe now prints the box and the growth apart, and PLAN's
+  queue entry is corrected.
+- cu_demo (copper as CELL tiles): 55 copper cells, the 28 unwaxed ones ticked to oxidized; after `Regions.remove` kept 29 (the 28 plus
+  the door's upper half), E-flat 29. That was the real exposure. After the fix the same probe answers kept 0, E-flat 0.
+- voc-natural's first check (E-normal under the exact rules) failed at c25c11cc too: 10 mismatches, 9 water/lava flowing into air
+  (`none`) and 1 live. That is main's, not CU's.
+
+**What was built.**
+- `journal/Copper`: `canonical(Block)` (`HoneycombItem.WAX_OFF_BY_BLOCK`, then `WeatheringCopper.getFirst`), `inChain`, `sameBlock`,
+  `is(state, block)`. Vanilla's maps only; `CopperTest` pins all 60 `wx` rows and their 60 waxed twins (120 blocks, 15 forms) against
+  `kit/lib/blocks.mjs`, both ways.
+- `StillOurs.holds`: the same form at any stage, waxed or not, holds; shape properties still compare (`facing`, `half`, `type`,
+  `axis`, a door's half), volatile ones stay volatile, the block entity and the empty-container rule as before. Farmland joins the
+  `spread` set (S-CU-3). `holds` stays pure.
+- `WorldJournal.holds`'s pre-filter lets a copper pair through. **A player record first (S-CU-1):** no undo caller consulted PT
+  before CU (the undo's world was `WorldJournal.holds` itself), so CU adds `WorldJournal.holdsOurs` for the undo planner and the same
+  test in `SiteDeltas`' delta world: a cell that holds only through CU's equivalence (another copper stage; farmland and dirt) and that
+  PT records as player-placed is the player's. Architect's writes clear a cell's record, so a record there was placed after our
+  write. The same block as written is judged exactly as before CU (no PT lookup), and so is 6a's grass/dirt spread.
+- `Builder.Run.matches` (rescan's `built`, finish, the builder's "already there", deconstruct's `asPlaced`, `RoadBuilder.refundOf`
+  through it) and `holdsOld` compare through `Copper.is`; the deconstruct's `asSnapshot` and PT2's "the undo writes the same block
+  back" too, and the layered-cover refund. `Sites.evidence`'s block test and the pin match likewise.
+- **The refund pays the block standing (S-CU-2):** `Run.refundCost(now, i)` is the plan's cost while the cell stands as the plan's
+  block, else `Cells.cost(now)`. Used by the deconstruct's REFUND, the cover refund, both `RoadBuilder` refund loops and the
+  stockpile audit's `paidStanding` (so the audit's per-item numbers follow the copper as it weathers). Delta refunds already paid
+  the standing block (`Cells.cost(old)`), so with still ours fixed a delta over weathered cells refunds them as they stand.
+- API 1.37.0 (placeholder): `"weatheringOurs"` in `ApiRules.JAVA_FEATURES` (pinned in `ApiRulesTest`; `ApiCuTest`); mod 0.40.0.
+- `dev.copper.use` (`SliceCuDev`, generated headless too); `kit/regions/cu_demo.mjs` (catalogue false); `tools/gate6ccu.mjs`
+  (unit, measure, ingame, survival); chain steps cu-unit, cu-measure, cu-ingame, cu-survival; `api-compat --gate6ccu`.
+
+**Decisions made while building.**
+- `Builder.Run.matches` is copper only: farmland dried to dirt in a survival build that waits is still re-queued, as grass dying to
+  dirt is today. S-CU-3 is about still ours (undo, removal, deltas).
+- A delta that changes a cell only within one copper form (`copper_block` -> `waxed_copper_block`) counts as built at once; the world
+  keeps the stage it has.
+- The kit's `M27:drift` warning text over copper ("an undo keeps a changed cell") is stale after CU. The kit is unchanged by contract,
+  so it stays for a kit slice.
+- Item 4's blocker leg passes on main too: an INSTANT or construction site's pin lists its block entities, so `journalOwn` never
+  decides for a pinned site. It is kept as a regression check; the pre-fix control shows it.
+
+**Gate evidence** (headless, $0). Pre-fix control: today's driver at c25c11cc (`gate-runs-CU-pre/20261020-055911-change`) fails
+items 3 (kept 36, E-flat 36), 6 (kept 29), 7 (refused), 8a (95/260 built: weathered cells re-queued), 8b and 8c.
+After the fix, at af49ae7b (main with HY merged, v0.39.0), the slice tier `artifacts/gate-runs-CU/20261020-064234-slice`: **57 PASS,
+1 FAIL** in 1h59m (3 shards, ports 8960-8965).
+- cu-unit 3/0 (CopperTest 8 tests, the regression units, ApiCuTest; api-compat --gate6ccu over 0.39.0/0.38.0/0.37.1 and the 0.39.0
+  surface, all clean). cu-measure (item 1 after the fix): kept 0, E-flat 0. cu-ingame 9/0: item 3 E-flat 0, kept 0 over 55 copper
+  cells in 15 forms (every unwaxed cell to oxidized, then waxed and scraped); item 6 kept 1 at the player's cell, PT's record kept;
+  item 5 (recorded): 9 farmland->dirt restored, the sapling's tree, the decayed leaves and the melted snow left as §5 says; item 4
+  no blockers, the box back. cu-survival 10/0: 8a 164 copper cells weathered while the build waited, still 259/260 built, outstanding
+  only the held rod, charged the bill once; item 7 and 8c the delta over weathered cells not refused, its 4 cells refunded as they
+  stood; 8b 0 copper dropped, the stockpile credited the standing blocks' items, charged minus refunded equal per item to the 170
+  named cells' steps.
+- apijars 6/0 (0.39.0, 0.38.0, 0.37.1: 46 ok each); y-ingame, c29-ingame, pt-ingame, pt2-survival, voc-survival, h-ingame, hy-*,
+  6a-eflat, 4e-crash, 4e-orders, 4d-all, 5b-village and the rest pass. Timing recorded, not judged: pt-ingame's classifier CPU 1.01 ms
+  against its 1 ms budget.
+- **voc-natural FAIL, pre-existing:** E-normal 8 under the exact rules (5 water cells at 3758-3760, y 37-39, z -924 flowing into
+  air, and 3 bee nests). The same 5 water cells failed it at c25c11cc, before any CU change. Its drift probe now reads 0 cells in the
+  hall's box, 142 growth outside.
+- **Verifier: PASS** (gate-verifier, at dae9e175): diff and evidence reviewed; items 3, 4, 6, 7 and 8 re-run by the verifier
+  (`artifacts/gate-runs-CU-verify/20261020-084314-change`: cu-ingame 9/0, cu-survival 10/0). No blocking findings. Non-blocking,
+  recorded for a later slice: `Sites.journalOwn`, `Sites.foreignBlockEntities` and PT2's adopted-site edit count use plain
+  `WorldJournal.holds`, so a player-placed weathered copper block entity there could count as ours; the delta path's player-record
+  check has no in-game item of its own (item 6 covers the undo path); item 8b's per-cell steps are derived from the plan and the
+  standing states, not tracked separately.
+- **After merging main's relief fix (edf879f4, FluidRearm)** at d6dc819a (`artifacts/gate-runs-CU/20261020-084734-change`):
+  unit-mod 722/0, cu-unit, cu-ingame and cu-survival PASS; voc-natural fails on the same pre-existing cells (water at
+  3758-3760,37-38,-924 and lava at 3787-3789,-2, both in the c25c11cc list).
+- **$0.00**, sim and stub only.
+
 
 ## Phase 6c slice IRR: farm irrigation (FROZEN 2026-10-20, Steward reviewed)
 
@@ -16702,6 +16778,28 @@ member (0.25 day); items 2-7, mostly the undo paths (1 day). No split: the mask 
 
 - **N-IRR-1:** `irrigate: true`, mirroring `farmPond`. A pattern string can be added later; `true` keeps its meaning.
 - **N-IRR-2:** open 1x1 sources, the vanilla farm look.
+
+### Phase 6c slice IRR as built (branch `slice/IRR` over main v0.39.1 plus `slice/CU`; placeholders API 1.38.0, mod 0.41.0, kit 0.39.0, catalogue unchanged; recorded 2026-10-20)
+
+| Area | As built |
+|---|---|
+| The member (§1) | `irrigate` on `$defs.lot` and `zone.standard` in `kit/schemas/plan.json` (descriptions carry S-IRR-1: working farms only) and `validateLots`' allowlist (`params.mjs`). Detection (`kit/lib/fluids/irrigate.mjs` `irrigateZones`) is structural, never a regex over the JSON: a zone's `program.lots`, its template's `params.lots` and its districts' `lots`; a lot asks with its own `true`, or its zone's `true` unless it says `false`; a farm is `villager` given, else implied by its type. Notes: `irrigate: <lot> is not a farm lot` (only for a lot that asked itself), `irrigate: no farm lot in this zone`, `... was not placed`, `...'s field is too small`, `the biome freezes the sources`. Java: `PlanChecks.hasH` gains `irrigate` (any depth, districts and template lots included; a string never), so the plan takes the two-plan flow. Unlike the farm pond, a wet claim still gets its sources. |
+| The field and the grid (§2) | The lot's frame (`lotFrame`: front to the south, u across from the left seen from the street, v from the back). Field = u 1..W-2, v 1..D-3 (the border and the front row off). Per axis `n = ceil(L / 9)` segments `floor(i L / n)`, a source at each segment's centre, a tie to the low end of the frame (the back, the left). Unit: 20 x 20 field sizes 3..62 x 4 fronts (1600 lots), every field column within 4 (Chebyshev), every source's four sides in its field. v49's f1 (13 x 11): 2 x 1; f2 (11 x 11): 1; 40 x 40: 5 x 5; Steward's hamlet's 13 x 14 farm: 2 x 2 (the contract's "1-2" was an estimate). |
+| The body (§3) | `<lot>_irr_<i>_<j>` (kind `irrigation`, a `siteplan` waters kind already allowed by name), part = the zone, via `r.fluidBody` with two additive options (`body.mjs`; an H body's op unchanged): `rim: false` (the shell is the bed and the four sides only; the cell over a side is the design's crop) and `raised: false` (the pad and the field are the ground round it). Sides `farmland[moisture=7]`, the bed the bible's `fluids.bed` chain `[bed, clay, mud]`, the first differing from the pad's top in the plan's own world. **Shell stage `street`, not `ground`:** a shell write (ALWAYS_OURS) passes only natural cells and the region's earlier stages, so a bed written in `ground` over the pads' top (the same stage) was skipped (M25:shell "not written"). The order the contract needs holds: tiles (the shells), then the lot item, then the fluids stage. One frozen volume per lot: the box's footprint grown by 1, `floorY - 3` to `floorY + 2` (a body's own box grown by 2 must fit inside a shared volume; the bed is at `floorY - 1`). Registered with KC's registry at emit; guard runs flat. |
+| The field model (decision) | At plan time a lot's field is not in the plan's world (its design is placed later, masked). The flow, the single breach and the checker read the field's floorY cells (the irrigation cells aside) as the design's farmland (fluid-stopping), as the brief and `reserved` ask of the design; the checker's exit treats feet over the field as exits. So a breach's reach is its broken cell, inside its lot. **Limit, measured:** a lot left as a bare pad (no entry) holds air there: one broken side ran 73 cells, 8 past the box (recorded in irr-ingame); the drain takes the flow back (below), so nothing is left. |
+| M25:keep (§4) | `checkFluids.mjs` (`irFields`, `kit/lib/fluids/irrfield.mjs`): an irrigation body's own lot box is exempt (K5's one exception), and any cell of its reach or a face neighbour outside the box is `M25:keep` ("outside its lot (irrigation)"); every other lot, keep-out, build, protected area and the claim ring stay kept. `sim.mjs` passes the body to `world.keep` (additive). M1's lot-box rule reads village parts only, so it never met irrigation's parts. |
+| The lot record (§4, S-IRR-2) | IR and artifact `lots[].irrigation {sources, bodies, field: [x0, z0, x1, z1], cells (world column runs [x, z, y0, y1]), frame: [width, depth], lotCells (the same cells in the lot's frame as runs [u, v, y0, y1], y from the floor)}`; the artifact's through `meta.planCheck.irrigation` (finish.mjs), only on an irrigated lot. **The irrigation cells include the bed** (`floorY - 1`): a field entry with `groundY` 1 writes its row 0 there (the gate's does), and an unmasked bed would end its source `uncontained`. |
+| The mask (§4) | `site/LotMask.java`: the realise puts `architect_mc:irrigation {cells}` on the lot item's ext (`RegionsImpl.lotItem`, from the IR; none for `unmasked`). `TemplateWriter.skip` drops the template's blocks there (the cursor unchanged), `PlaceJob` skips them in the foundation, clear, approach and plant phases; `SiteJournal.begin` and `retake` leave them out of the BOX entry (`WorldJournal.sections`' unused `skip`), so removal, undo, rollback, PT2's adopt, Steward's claim and release and later overlap checks never see them; `DeltaPlanner.outcome(..., excluded)` (SiteDeltas) writes no delta there and takes no growth; `Sites.standing` skips them. `architect_mc:irrigationDropped` on the site's ext (the entry's non-air blocks on the mask, fitted as the realise fits it). `PlanChecks.lotProblem` subtracts them from the entry's count. Not `LotFitting` itself: it stays pure geometry. |
+| Lot removal (S-IRR-4) | `RegionFluids.drainLot`, called before anything is restored by `Sites.removeDetailed` (also its placing rollback and every site of a cascade), `Sites.removeLarge` and a stage undo (`Groups`): the lot's bodies (by the IR's `irrigation.bodies`) drained exactly (H's drain with others' cells left), state `drained`, reason `lot removed: <lot>`, `lotRemoved` saved (the fluids filter never writes them again; `anyDrained` ignores them, so the region stays PLACED), reported; kill point `FL6`. The shells stay the region's until the region is removed. |
+| The breach (S-IRR-3) | A drain with strays (the region's removal, a lot's removal) follows the water connected to an irrigation body's cells, shell and watch, within its lot's box grown by 8 and 12 under to 1 over its floor, and puts each cell back to the region's record or air (`sweepBreach`); counted in the row's `breach`. Water there before the realise and another body's cells stay. |
+| `DesignRequest.reserved` (S-IRR-2) | A typed nullable trailing component `DesignRequest.Reserved(front, width, depth, List<BlockPos> cells)` in the lot's frame plus its real front (a design narrower than the lot is centred as LotFitting centres it, which rounds the other way for a north or east front); the 1.11.0 constructor kept, `withReserved`, every copy keeps it; sent only when set, refused by a helper without `reserved`; `FieldLimits` (front, size, at most `Limits.RESERVED_CELLS_MAX` 65536). Sidecar: the zod `Reserved`, one brief line (the cells listed when at most 64), `--reserved` on the build command and in the checker's args; kit `build.mjs --reserved` and `check.mjs opts.reserved` (`kit/lib/reserved.mjs`: the template placed as the realise places it; a non-air block on a reserved cell is an error); the sim's stand-in honours it with `--leave-reserved` (the copied example's blocks there dropped before the check). The kit's frame and the mod's LotFitting agree on an 8-row placement table (smaller, rotated designs, every front), asserted on both sides. |
+| Survival, API (§7) | The zone's `cost.bom` gains each source's bed and four sides (farmland priced as dirt by the vocab's map; water free). API 1.38.0: `"farmIrrigation"` (a helper's `region.irrigation`) and `"designReserved"` (its `reserved`), not `region.fluids` (an H helper's kit has no `irrigate`); `DesignRequest.reserved`; `Limits.RESERVED_CELLS_MAX`. mod 0.41.0, kit 0.39.0 (`KIT_VERSION`, `EVAL_KIT_VERSION`, `IrStale.KIT_VERSION`, the catalogue golden), catalogue unchanged. No new IR kind: a mod before IRR places the lot over the sides and its live check refuses the sources (the `unmasked` variant's PARTIAL shows it). |
+| Broken variants | Zone `ext.architect_mc:unsafe`: `irrUnmasked` (`true`: the IR lot says `unmasked`, the mod skips the mask; `'plan'`: also a part of no plan part writes one side: M25:clear), `irrNoBed` (the first bed air: M25:shell, M25:leak), `irrBreachOut` (the first source on the field's edge row by the border: M25:keep outside its lot). Fixtures `irr/u01`, `u01b` (in game), `u02`, `u03`. |
+| Byte identity (§8) | Every committed plan fixture without `irrigate` (245, the 59 asks among them) planned here and on the merge base through the two-plan flow: all byte-identical (answers, overall, IR with kitVersion normalised, first plan), no exception (`tools/lib/gate6cirr-kit.mjs`). |
+| Pre-existing, found here | (1) With a lot entry bound on Steward's farm hamlet, a road's lantern post can stand on the lane's dirt_path at the entrance and turn it to dirt, which the removal leaves (dirt_path and dirt are not interchangeable in StillOurs): seen once on main's own farm_hamlet with the entry (control h0, E-flat 1), then not again; s01 is judged against that control. (2) voc-natural (E-normal 9 'none' cells), as on CU's and KC's slices. (3) 4d-all's natural village: a bee in a box blocks the group removal, and once one lot's hash differed; both passed on re-run. (4) kc-unit after KC merged: its named exception is on the base now (the gate accepts that), and irrigation's u01 is an M25:clear variant. |
+| Gate (headless, $0) | Driver `tools/gate6cirr.mjs` (`irr-unit`, `irr-ingame`, `irr-crash`, `irr-look`; chains `6cirr`, `6cirr-look`; impact rule "6c IRR farm irrigation"), `tools/lib/gate6cirr-game.mjs`, `gate6cirr-kit.mjs`; the field entry `kit/test/fixtures/designs/g6c_irr_field.mjs` (farmland, wheat, a fence, a composter; v2 carrots for the versionOf), built into the run's library at each size. **Chain 6cirr PASS** (`artifacts/gate-runs-IRR/20261020-125524-6cirr`): irr-unit 250/0 (item 1 kit 9/0 and the mod's ApiIrrTest 4, LotMaskTest 3, PlanChecksHTest 3; item 8 245/245; item 10 api-compat --gate6cirr 4/4); irr-ingame: item 2 on v62, v63 (25 sources, one volume), Steward's hamlet (typed farm, no villager, bound in its plan, plus its farm pond) and a district lot: READY through checkPlan's two-plan flow, PLACED by realiseApproved with the bound entry, every source settled and census-exact, irrigationDropped equal to the kit's own fit (14, 7, 175, 28, 14), the mask held (every side farmland, every bed, the cell over each source air); item 3: every field cell moisture 7 at default rules (65/78 at 2 minutes, 78/78 at 240 s: one random tick each), the control dry 0/88, wheat on 78/78 field cells and over the sides; item 7: 3 farmers 5 minutes, 0 drowning, 0 in a source, nav round every source both ways, harvest recorded; item 4: a broken side on f2: 1 new fluid cell, 0 outside the lot; on a bare pad 73 cells, 8 outside the box, and the removal E-flat 0 (the breach sweep); item 5: (c) versionOf to v2 applied (86 written), the mask held, sources census-exact; (d) 0 of 21 irrigation cells in the lot sites' entries; (b) f2's site removed alone: drained, 0 water, rows 'lot removed', region PLACED, the sides standing; (e) and (a) Regions.remove E-flat 0; the unmasked variant PARTIAL, every source uncontained, then E-flat 0; item 9 (recorded) vanilla's reach: the 9x9 centre 80/80, the 11x11 86/120. irr-crash: FL1+save, FL2+save complete the realise (every source settled, census-exact), FL6+save (the lot removal's drain saved, the removal asked again finishes, 0 water), each then E-flat 0. **Slice tier** `artifacts/gate-runs-IRR/20261020-133341-slice` (3 shards, 8912-8917, 95 steps, 2h54m): 90 PASS, among them irr-unit, irr-ingame, irr-crash, h-unit, h-ingame, ha-ingame, hy-unit, hy-ingame, hy-crash, kc-ingame, cu-*, pt2-ingame, unit-mod 729/0, unit-kit, unit-sidecar, apijars; 5 FAIL: mp-ingame (the builder committed during the run: "the runs are of this head"), kc-unit and 4d-all and 6b-volume (above; re-run PASS: `20261020-162839-slice`, `20261020-164856-slice`), voc-natural (pre-existing). Timing recorded: pt-ingame's classifier 1.11 ms against 1 ms. Spend $0.00. |
+| The look | `artifacts/gate-runs-IRR/20261020-132544-6cirr-look` (a client, after 5 minutes at default rules): both farms, each field, a source up close. Gallery for Noah: https://claude.ai/artifact/6sWvhGKWw3XECVaWvrw3Me |
+| Verifier | gate-verifier **PASS** at 3670d60f (HEAD differs only in a gate regex and docs): its own run `artifacts/gate-runs-IRR-verify/20261020-163837-6cirr` (8916-8917): irr-ingame 62/0 and irr-crash 6/0 (breach, every undo path, the lot removed alone, FL1/FL2/FL6), and the builder's runs reviewed (the five slice failures explained, the re-runs passing). **Non-blocking, recorded for a later slice:** (1) `SiteJournal.retake` reads the mask from the site record, which a new placement has not written yet; latent (a Placing is always built without a tracker, so retake returns early), safer carried on the Placing. (2) `sweepBreach` spares water recorded before the realise only in the watch sets: a breach's flow that joins a pond or a player's water within the lot box + 8 would take it too (no breach, nothing taken; not in the gate). (3) A removal that fails after the drain (a journal commit failure in `removeDetailed`, a stage undo's plan ending `Removed(false)`) leaves the lot standing with its sources drained (`lotRemoved`); blockers and players are checked before the drain. (4) Stage undo, the placing rollback, the cascade and `removeLarge` hooks are checked in code, not driven in game. (5) Item 3 judged when every cell has had its random tick (240 s), not at 2 minutes (recorded). HANDOFF-IRR.md retired. |
 
 
 ## Phase 6c slice VOC-c: `rule.palette` measured (FROZEN 2026-10-20, Steward reviewed)
