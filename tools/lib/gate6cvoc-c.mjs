@@ -172,12 +172,12 @@ const unit = [
     name: 'items 7, 9 (sidecar, Java, API): vocab/1 in both forms and the append-only ref list, lotBlocks on the wire; PaletteRulesTest, the HY version pins; api-compat --gate6cvocc',
     async run({ root, check }) {
       const out = {};
-      const sc = spawnSync('npx', ['vitest', 'run', 'test/systemrefs.test.ts', 'test/jobs.test.ts', 'test/vocc.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
+      const sc = spawnSync('npx', ['vitest', 'run', 'test/system-refs.test.ts', 'test/jobs.test.ts', 'test/vocc.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
       out.sidecar = { code: sc.status, tail: `${sc.stdout}${sc.stderr}`.split('\n').filter((l) => /Tests|passed|failed|×/.test(l)).slice(-4) };
       check(sc.status === 0, `items 7 (sidecar): the systemRef list append-only, vocab/1's groups and compact.palette in both forms, the feature plan.rules, a check's lotBlocks to the plan CLI's --lot-blocks: ${out.sidecar.tail.join(' ')}`, out.sidecar);
       out.java = await javaTests(root, ['*PaletteRulesTest*', '*RegionFluidsHYTest*', '*ApiVocTest*', '*ApiHTest*'], 10);
       check(out.java.ok, `Java: PaletteRules' measure (the pre-check, the refusal, the ext rows, a non-required rule never refuses), PALETTE appended, checkPalette a default method, RegionRefused's detail, the feature rulePalette: ${out.java.tests} tests, ${out.java.failures} failures`, out.java);
-      const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6cvocc'], { cwd: root, encoding: 'utf8', timeout: 1_800_000 });
+      const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6cvocc'], { cwd: root, encoding: 'utf8', timeout: 1_800_000, env: { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
       out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').slice(-8) };
       check(ac.status === 0, 'item 9: api-compat --gate6cvocc clean against the 0.39.0, 0.38.0 and 0.37.1 apitest jars and the 0.39.0 jar\'s 1.36.0 surface', out.apicompat.tail);
       return out;
