@@ -824,7 +824,9 @@ export function evalTile(ir, key, heights, opts = {}) {
                 else ground = -Infinity;
               }
               const free = freeCell(kind, S.opFree[opi] === 1, S.opFluid[opi] === 1, yBase + s * 16 + (p >> 8), ground, wet);
-              const cls = free ? (S.hold[g] && !S.padPart[o.part] ? CLASS_HELD : 0) : CLASS_PAID;
+              // a fluid op's cells are never held: the fluids gate writes them in its waves (a target writing a reach's sources after the gate
+              // cleared the reaches not yet due would let them flow early)
+              const cls = free ? (S.hold[g] && !S.padPart[o.part] && S.opFluid[opi] !== 1 ? CLASS_HELD : 0) : CLASS_PAID;
               const st = (svStats[g] ??= { free: 0, held: 0, paid: 0, bom: new Map(), charged: new Map(), creativeOnly: new Map() });
               if (cls === CLASS_PAID) { st.paid++; for (const [it, c] of S.itemsAt(m)) st.bom.set(it, (st.bom.get(it) ?? 0) + c); }
               else if (cls === CLASS_HELD) st.held++;
