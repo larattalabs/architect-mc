@@ -911,6 +911,17 @@ public final class Groups {
 		r.restoredCells = u.work().plan().stats().values().stream().mapToInt(Journal.Stats::restored).sum();
 		r.keptCells = u.work().plan().stats().values().stream().mapToInt(Journal.Stats::changed).sum();
 		r.commit = u.commit();
+		String k = dev.larattalabs.architect.journal.WorldJournal.armed();
+		if (k != null && k.startsWith("R2q")) {
+			// TEST (dev.journal.killAt R2q): the commit durable, the halt before the queue file below is saved (the journal's writer and
+			// the queue's saver are separate threads, so either can reach the disk first)
+			try {
+				r.commit.join();
+			} catch (RuntimeException e) {
+				// the halt below either way
+			}
+			dev.larattalabs.architect.journal.WorldJournal.kill("R2q");
+		}
 		Placement.save(server, false);
 	}
 

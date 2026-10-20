@@ -885,6 +885,7 @@ public final class WorldJournal {
 			j.addProperty("entry", l.meta().id());
 			j.addProperty("kind", l.meta().kind());
 			j.addProperty("site", l.meta().site());
+			j.addProperty("group", l.meta().group());
 			j.addProperty("policy", l.meta().policy().name());
 			j.addProperty("status", l.meta().status().name());
 			j.addProperty("layer", l.cell().layer());
