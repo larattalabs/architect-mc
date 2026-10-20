@@ -541,6 +541,9 @@ export async function probe(ctx) {
   const out = {};
   const plots = [['c9', 9800, 9000, 9, 'centre', 0], ['c11', 9820, 9000, 11, 'centre', 0], ['corner', 9840, 9000, 9, 'corner', 0], ['over', 9860, 9000, 9, 'centre', 1], ['under', 9880, 9000, 9, 'centre', -1]];
   for (const [tag, x0, z0, n, at, dy] of plots) {
+    // (a stone ring round the plot at its level and under it: the water stays a single source, nothing flows off the plot)
+    await L.cmd(`/fill ${x0 - 1} ${y - 2} ${z0 - 1} ${x0 + n} ${y + 1} ${z0 + n} minecraft:stone`);
+    await L.cmd(`/fill ${x0} ${y + 1} ${z0} ${x0 + n - 1} ${y + 1} ${z0 + n - 1} minecraft:air`);
     await L.cmd(`/fill ${x0} ${y - 1} ${z0} ${x0 + n - 1} ${y - 1} ${z0 + n - 1} minecraft:dirt`);
     await L.cmd(`/fill ${x0} ${y} ${z0} ${x0 + n - 1} ${y} ${z0 + n - 1} minecraft:farmland[moisture=0]`);
     const wx = at === 'corner' ? x0 : x0 + (n >> 1), wz = at === 'corner' ? z0 : z0 + (n >> 1);
