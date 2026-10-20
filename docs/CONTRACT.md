@@ -19886,7 +19886,8 @@ default CompletableFuture<RemoveResult> undoRevision(String regionId, int toRevi
 - **Its own lots go with it:** an added lot's site, with every delta Steward applied to it, is removed as part of the revision's undo
   (the cascade covers only the revision's own lots). A covering site that isn't the revision's refuses `COVERED`, naming it.
 - **Refusals:** an in-flight region `OVERLAP_BUSY`; a `toRevision` not below the top, or a revision already undone, `NOT_ALLOWED`;
-  in survival as §8.
+  a revision that added a graph node a standing beside region's `join_external` targets, `NOT_ALLOWED {why: joined, region}` (its
+  join would point at a node that is gone; remove that region first); in survival as §8.
 - The region's state after: its standing state over the effective IR; `RegionView.revision` is the new top.
 
 #### 6.2 Why it is exact
@@ -20301,6 +20302,8 @@ A following district's street is a route on its boundary line. Its growth:
 - **Parts:** `rv<n>_pads`, `rv<n>_lanes`, `rv<n>_props` and, for an extension, `rv<n>_verges` and `rv<n>_street` (for a district:
   `rv<n>_<d>_pads` and so on), in `rv<n>:` stages after the parent's.
 - **Lots:** the caller's ids, unique across the region (M14).
+- **Joined nodes (an RV §6.1 refusal):** a revision that added a node a beside region's `join_external` now targets can't be undone while that
+  region stands: `undoRevision` refuses `NOT_ALLOWED {why: joined, region}`. The town's removal is unaffected (D3's `dangling`).
 - **Roads:** `<roadId>_g<n>`.
 - **Graph:**
   - frontage: a new junction `<roadId>_g<n>_j<k>` on the street at each lane's foot, splitting no standing edge: the junction is
@@ -20370,7 +20373,7 @@ About **4.5-5.5 days** of work, **3 elapsed**:
 | 4 | Town extension | `gr_town` grown by 6 lots (`prefer: extend`): one extension from the extendable end, its road joined to the standing road, flagged; the new end terminal; walkable as item 3 |
 | 5 | Steward's district, two buildings | `gr_beside`: building 3 then building 4, each a growth under Steward's opKeys (`dgrow:<district>:<k>`), each realised; `undoRevision` of building 4 then 3 (verifier re-runs): the world before each, cell for cell; the district's join and the town untouched (hash) |
 | 6 | plan/0 | `v8x_6d_gr_zone` through `checkPlan` (zone `fits standing`, 2 added lots `fits`) then `realiseApproved`, with one stale retry under a second key across a restart |
-| 7 | Later districts | after item 4: a D3 district beside `gr_town` joins the extension's new end (`besidePorts` on the effective IR). The district's hold cells sit over the growth's cells in the contact columns, so `undoRevision` of the growth refuses `COVERED` naming the district, and nothing is written. Once the district is removed, the undo succeeds: the world before the growth |
+| 7 | Later districts | after item 4: a D3 district beside `gr_town` joins the extension's new end (`besidePorts` on the effective IR). `undoRevision` of the growth then refuses `NOT_ALLOWED {why: joined, region}` (RV §6.1), and nothing is written (hash); if the district's hold cells sit over growth cells, `COVERED` is named too. Once the district is removed, the undo succeeds: the world before the growth |
 | 8 | Removal (verifier re-runs) | `gr_town` with two growths and a beside district: D3's removal orders, then `Regions.remove` of the town with both growths standing: E-flat 0 over the claim against the world before the town |
 | 9 | KC and held | a growth whose cheapest slot is beside the farm pond: the lot keeps clear (0 cells in its hard or watch set); the Steward addition and the PT build never written; a growth with every slot held answers `NO_ROOM {kind: held}` with nothing planned |
 | 10 | Along district | `gr_along` grown by 3 lots: frontage first, then the boundary extension; the mask grown; walkable from every lot to the district's street end |
@@ -20384,8 +20387,9 @@ About **4.5-5.5 days** of work, **3 elapsed**:
 
 The verifier reviews the diff and **re-runs items 5, 7 and 8**. **Steward's RC check** follows (S-GR-7).
 
-Item 7's expected answer, plainly: a growth's extension end that a later district joins is held by that district's hold cells, so the
-growth can't be undone while the district stands (`COVERED`, naming it). Removing the town still works (D3's town-first order).
+Item 7's expected answer, plainly: a growth whose new end (or frontage junction) a later district joined can't be undone while that
+district stands (`NOT_ALLOWED joined`, naming it), since its join would be left pointing at a node that is gone. Removing the town
+still works (D3's town-first order, `dangling`).
 
 ### Steward's recorded asks: expected answers
 
@@ -20406,7 +20410,7 @@ growth can't be undone while the district stands (`COVERED`, naming it). Removin
 - **S-GR-4. Rings and spirals.** FL rings, spirals and organic layouts grow only on free frontage of their straight runs; they never
   extend (`NO_ROOM {kind: layout}`). Default: yes.
 - **S-GR-5. A joined end.** A district's own join end, and a town end a district joined, are never extended; and a growth whose new end a
-  later district joined can't be undone while that district stands (`COVERED`). Fine for your undo order? Default: yes.
+  later district joined can't be undone while that district stands (`NOT_ALLOWED joined`). Fine for your undo order? Default: yes.
 - **S-GR-6. A dry growth check.** Do you want a `checkGrow` (D3's dry-check style: nothing kept) before offering "build here", or is
   `planRevision` (which keeps a plan) enough once plans can be discarded (PLAN's queued `discardPlan`)? Default: no dry check in GR;
   `planRevision` plus `discardPlan` when it ships.
