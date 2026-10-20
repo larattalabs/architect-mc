@@ -41,5 +41,8 @@ and pond overflows, moat, water gate, riffle) must still go through it in HY-b's
 
 ## State
 
-- Round 1 committed and pushed (`hy/core`). Kit suite 575/0 with hy-core.test.mjs (7), RegionFluidsHYTest 5/0, api-compat --gate6chy clean.
-- Next: the in-game items (hy-ingame, hy-crash, hy-cold) on the new runner, then the slice tier, the gate-verifier, "HY-core as built".
+- In game: hy-ingame 26/0, hy-crash 10/0, hy-cold 1/0. Slice tier: everything in HY's diff passes. Remaining non-passes: 6ct1-scenario-relief, T1's falling-water anomaly, which also fails on VOC-b and H-b. sim-jobs passed when run alone.
+- CONTRACT "HY-core as built" has every row but the Verifier row.
+- **Left:** a gate-verifier is running. It reviews origin/main...HEAD and re-runs hy-ingame and hy-crash on ports 8918-8921, with output in `artifacts/gate-runs-HYcore-verify/`. Once it reports, either:
+  - on PASS: add the Verifier row, delete this HANDOFF, push, and report ready to merge;
+  - on FAIL: fix the defects it names.
