@@ -19522,7 +19522,7 @@ the effective IR that RV defines (§RV 4). The coordinator decides which lands f
 
 | Slice | What | API / versions (placeholders after D3's 1.42.0; the coordinator renumbers) | Steward check | Size |
 |---|---|---|---|---|
-| **RV** | Region revisions, the core: a revision IR (the standing IR plus added, changed and removed parts), the tile delta against the frozen heights and the journal, revision entries in the region's group, LIFO `undoRevision`, the effective IR every consumer reads, and the plan/0 path (`revision.parentArtifact`, per-part answers, the revision artifact, `realiseApproved`) | API **1.43.0**, mod **0.46.0**, kit **0.44.0**, catalogue **12** | **RC check before release** (GATES policy 4: it changes what a region's removal undoes, which Steward's give-up and history read); the verifier re-runs the undo, removal and crash items | 6-7 days of work, 3.5-4 elapsed in two lanes (RV-a kit, RV-b mod) |
+| **RV** | Region revisions, the core: a revision IR (the standing IR plus added, changed and removed parts), the tile delta against the frozen heights and the journal, revision entries in the region's group, LIFO `undoRevision`, the effective IR every consumer reads, and the plan/0 path (`revision.parentArtifact`, per-part answers, the revision artifact, `realiseApproved`) | API **1.43.0**, mod **0.46.0**, kit **0.44.0**, catalogue **12** | **RC check before release** (GATES policy 4: it changes what a region's removal undoes, which Steward's give-up and history read); the verifier re-runs the undo, removal and crash items | 6.5-7.5 days of work, 3.5-4 elapsed in three lanes (RV-a kit, RV-b mod core, RV-c mod readers) |
 | **GR** | Growing a standing region (D-S2): new lots on free frontage of the standing streets, then a street extended from an extendable end, for V towns, plain districts, outposts and along districts; `growDistrict`; `architect_mc:land` v 2 | API **1.44.0**, mod **0.47.0**, kit **0.45.0**, catalogue **13** | **RC** (with RV's, one RC if they ship together): Steward's district growth and undo of each building | 4.5-5.5 days of work, 3 elapsed (GR-a streets, GR-b along districts) |
 | **FS** | Updates follow the source: `Library.followers`, `Designs.follow` / `followAll` re-apply each COPY's recipe to the source's new version ($0), then the existing `outdated` and `applyDelta` per lot | API **1.45.0**, mod **0.48.0**, kit unchanged, catalogue unchanged | none before release (existing delta paths; GATES policy 4); Steward checks after | 2-2.5 days, one builder |
 | **LC** | Land change: `Regions.landCheck` (what changed in a standing region, by part and lot, the player's cells apart) and "replan the stages not yet placed" for a region held `DRIFTED` | API **1.46.0**, mod **0.49.0**, kit unchanged, catalogue unchanged | none before release (a report and an opt-in call); Steward checks after | 2.5-3 days, one builder |
@@ -19537,7 +19537,7 @@ the effective IR that RV defines (§RV 4). The coordinator decides which lands f
 
 **Build order and parallelism** (at most 3 gate runs on the machine at once, GATES policy 6):
 1. **Day 0: RV-a, RV-b and FS start together.** FS shares no module with RV (sidecar `variants.ts`, `versions.ts`, `Library`/`Designs`
-   in Java). RV-a (kit) and RV-b (mod and sidecar) freeze **RV's shared interface** at the end of their first day (§RV 13).
+   in Java). RV-a (kit) and RV-b (mod core) freeze **RV's shared interface** at the end of their first day (§RV 13); RV-c starts on it.
 2. **GR-a starts on RV's frozen interface** (day 1-2). It is pure kit until its in-game items, so it takes no gate slot until RV
    has merged into its branch. GR-b (along districts) follows GR-a's street-extension interface.
 3. **Gate slots:** RV's slice tier and FS's slice tier first; GR's after RV merges. LC and AD later (one slot each).
@@ -19567,10 +19567,10 @@ the effective IR that RV defines (§RV 4). The coordinator decides which lands f
 - **Fixture numbers:** the plan fixtures are named `v8x_6d_*` here; the coordinator numbers them after D3's.
 - **Kit bump:** re-cut the kitVersion-carrying goldens by `kit/tools/region.mjs plan` over their committed inputs, as KC did.
 
-**Totals:** about 18-21.5 days of work; about 9-10 elapsed with RV's two lanes and FS in parallel, then GR, then LC and AD, plus
+**Totals:** about 18.5-22 days of work; about 9-10 elapsed with RV's two lanes and FS in parallel, then GR, then LC and AD, plus
 Steward's RC rounds.
 
-**The questions, in one place:** S-RV-1..10, S-GR-1..7, S-FS-1..4, S-LC-1..3, S-AD-1..4 (Steward); N-GR-1, N-GR-2, N-FS-1,
+**The questions, in one place:** S-RV-1..11, S-GR-1..7, S-FS-1..4, S-LC-1..4, S-AD-1..4 (Steward); N-GR-1, N-GR-2, N-FS-1,
 N-LC-1 (Noah, taste or product, each with a default). They are listed at the end of each slice.
 
 ## Phase 6d slice RV: region revisions, the core (DRAFT for Steward review)
@@ -19815,6 +19815,9 @@ revision `k`, else `ir.json`. A cap of **64 revisions** per region (`REGION_LIMI
 - A revision realises through the region's own batch: its stages are appended to the region's group (`g<N>`) as new StageRecs, and
   `Batches.queueRegion` takes them as it takes a region's stages. The region goes `PLACING` while a revision writes, and back to its
   standing state (`PLACED` or `PARTIAL`) when the revision ends.
+- **While a revision writes, the region is `PLACING`** (its view's `revision` names which). So in that window D3 beside plans and
+  realises, C38 offers and a second revision refuse `OVERLAP_BUSY`, as for any in-flight region, and Steward's town-state readers see
+  `PLACING` until the revision ends (S-RV-10).
 - **Which regions can be revised:** `PLACED`, `PARTIAL`, and `FAILED` with cells standing (D3's rule). `PREPARING`, `PLACING` and
   `REMOVING` refuse `OVERLAP_BUSY` naming the state. `PLANNED`, `PREPARED` and `REMOVED` refuse `NOT_ALLOWED`.
 - **One revision at a time:** a revision planned while another is `PLANNED` and unrealised is allowed (it names its parent); realising
@@ -19884,7 +19887,10 @@ default CompletableFuture<RemoveResult> undoRevision(String regionId, int toRevi
 - **LIFO only:** there is no way to undo a middle revision alone (5b D5). A revision `UNDONE` is never re-done; re-planning it makes a
   new revision with a new `n`.
 - **Its own lots go with it:** an added lot's site, with every delta Steward applied to it, is removed as part of the revision's undo
-  (the cascade covers only the revision's own lots). A covering site that isn't the revision's refuses `COVERED`, naming it.
+  (the cascade covers only the revision's own lots). If another site covers one of those lots' cells (a Steward site layered on a
+  revision lot), that lot's removal refuses `COVERED` as `Sites.remove` does today, naming it, and the undo writes nothing.
+- **Cells of the revision's tiles under someone else's later site** don't refuse: the journal hands the revision's `before` down to
+  that site's cell and the world isn't written there (§6.2, §6.3 rows 6-7). This is the journal's rule, unchanged.
 - **Refusals:** an in-flight region `OVERLAP_BUSY`; a `toRevision` not below the top, or a revision already undone, `NOT_ALLOWED`;
   a revision that added a graph node a standing beside region's `join_external` targets, `NOT_ALLOWED {why: joined, region}` (its
   join would point at a node that is gone; remove that region first); in survival as §8.
@@ -19957,7 +19963,11 @@ own or a revision's) is checked **as a revision of that region**:
 
 #### 9.2 Per-part answers
 
-Parts are matched to the parent artifact's `$.parts[].part` ids (plan/0 R: "a revision that keeps a part keeps its id"):
+Parts are matched against the parent artifact's own `plan` member (the plan as checked and approved), and only against parts the
+parent **built**: a part in the parent's `dropped` list, or one answered `unsupported` or `blocked` there, was never built, so the same
+id in a revision is checked as an added part (`revision.add`). That is C38's waiting part, now asked as a revision. Matching uses the
+artifact's plan, never Steward's kept copy (Steward rewrites lot ext and `required` at Start, so its copy differs). Ids follow plan/0's
+rule ("a revision that keeps a part keeps its id"):
 
 | Part in the revision plan | Answer | Catalogue |
 |---|---|---|
@@ -20043,14 +20053,16 @@ record RevisionView(int n, String planId, String irSha, String state, long creat
 
 ### 13. Size, split and the shared interface
 
-About **6-7 days** of work, **3.5-4 elapsed**, in two lanes with a frozen interface at the end of day 1:
+About **6.5-7.5 days** of work, **3.5-4 elapsed**, in three lanes with a frozen interface at the end of day 1 (RV-b owns it with RV-a):
 - **RV-a, kit (2.5-3 days):** `revise.mjs` (`reviseIR`, the seed, `dirty`, `keptCells`), `kit/regions/revise.mjs`, `M29:revision` and
   the broken variants, the plan/0 compiler's revision mode (§9.1-9.3: matching, answers, `removed`, the catalogue entries), the
   revision artifact; items 1, 2, 17.
-- **RV-b, mod and sidecar (3.5-4 days):** the revision record and files, the effective IR and its readers (§4.3), the tile delta
-  (§3.2-3.4) with the held, covered, depth and kept tests, the queue and stages, §4.4's lot reconcile, `undoRevision`, crash points,
-  survival, `realiseApproved`'s revision branch, the API and api-compat; the driver `tools/gate6drv.mjs`.
-- **Shared:** items 3-16, then Steward's RC.
+- **RV-b, the mod core (2.5 days):** the revision record and files, the tile delta (§3.2-3.4) with the held, covered, depth and kept
+  tests, the entries, the queue and stages, `undoRevision`, crash points, `Regions.planRevision`, the API and api-compat; the driver
+  `tools/gate6drv.mjs`; items 6-11.
+- **RV-c, the mod's readers (1.5-2 days, on RV-b's interface):** the effective IR in every reader (§4.3), `realiseApproved`'s revision
+  branch and the artifact checks (§9.4-9.5), §4.4's lot reconcile, survival (§8); items 3-5, 12-15.
+- **Shared:** items 16-18, then Steward's RC.
 
 **The shared interface** (frozen at the end of day 1):
 - the revision IR member (§2.1) and the `rv<n>_` / `rv<n>:` naming;
@@ -20119,6 +20131,8 @@ The verifier reviews the diff and **re-runs items 7, 8 and 10**. **Steward's RC 
   folded into the base after some count (it then goes only with the whole region)? Default: no fold.
 - **S-RV-3. Stale parents.** A revision planned on a parent that has since been revised answers `NEEDS_REPAIR parent_moved` with the
   current artifact (plan/0), and `ARTIFACT_STALE parent_moved` at realise. Fine for your re-check? Default: yes.
+- **S-RV-11. The base of a revision.** Write a revision from the parent artifact's `plan` member (returned by `Regions.artifact`), not
+  from your kept plan, since parts are matched against it; parts dropped at Start come back as added parts. Fine? Default: yes.
 - **S-RV-4. The `removed` answer.** A new answer class for a part a revision drops (with the cells it frees). Or `fits` with
   `removed: true`, so your reader needs no new class? Default: the new class `removed`.
 - **S-RV-5. Writing under a standing lot (the pad delta under a cover).** Deferred: a revision under a built lot refuses `COVERED`
@@ -20135,7 +20149,8 @@ The verifier reviews the diff and **re-runs items 7, 8 and 10**. **Steward's RC 
   then go with the town's removal and join its undo history. Default: no change (own region), revisit after RV ships.
 - **S-RV-10. The RC.** RV changes what `Regions.remove` undoes. Will you run on the RC: a revision through `checkPlan` and
   `realiseApproved` on a Steward-built V town, `undoRevision`, the town removed with a revision standing, a lot removed alone and its
-  `RegionView.lots` state, and (with GR) a district grown by two buildings undone one at a time? Default: yes.
+  `RegionView.lots` state, the town reading `PLACING` while a revision writes (and back after), and (with GR) a district grown by two
+  buildings undone one at a time? Default: yes.
 
 ### Deferred
 
@@ -20375,7 +20390,7 @@ About **4.5-5.5 days** of work, **3 elapsed**:
 | 4 | Town extension | `gr_town` grown by 6 lots (`prefer: extend`): one extension from the extendable end, its road joined to the standing road, flagged; the new end terminal; walkable as item 3 |
 | 5 | Steward's district, two buildings | `gr_beside`: building 3 then building 4, each a growth under Steward's opKeys (`dgrow:<district>:<k>`), each realised; `undoRevision` of building 4 then 3 (verifier re-runs): the world before each, cell for cell; the district's join and the town untouched (hash) |
 | 6 | plan/0 | `v8x_6d_gr_zone` through `checkPlan` (zone `fits standing`, 2 added lots `fits`) then `realiseApproved`, with one stale retry under a second key across a restart |
-| 7 | Later districts | after item 4: a D3 district beside `gr_town` joins the extension's new end (`besidePorts` on the effective IR). `undoRevision` of the growth then refuses `NOT_ALLOWED {why: joined, region}` (RV §6.1), and nothing is written (hash); if the district's hold cells sit over growth cells, `COVERED` is named too. Once the district is removed, the undo succeeds: the world before the growth |
+| 7 | Later districts | after item 4: a D3 district beside `gr_town` joins the extension's new end (`besidePorts` on the effective IR). `undoRevision` of the growth then refuses `NOT_ALLOWED {why: joined, region}` (RV §6.1), and nothing is written (hash). Once the district is removed, the undo succeeds: the world before the growth |
 | 8 | Removal (verifier re-runs) | `gr_town` with two growths and a beside district: D3's removal orders, then `Regions.remove` of the town with both growths standing: E-flat 0 over the claim against the world before the town |
 | 9 | KC and held | a growth whose cheapest slot is beside the farm pond: the lot keeps clear (0 cells in its hard or watch set); the Steward addition and the PT build never written; a growth with every slot held answers `NO_ROOM {kind: held}` with nothing planned |
 | 10 | Along district | `gr_along` grown by 3 lots: frontage first, then the boundary extension; the mask grown; walkable from every lot to the district's street end |
@@ -20620,7 +20635,9 @@ default CompletableFuture<RegionPlan> replanStages(String regionId, @Nullable St
 
 - **When:** the region is `PLACING`, waiting `DRIFTED` at a stage gate (no tile of that stage or later written), or `PARTIAL` with
   stages never started.
-- **What runs:** the region's program again with the same params and seed, over the claim, with:
+- **What runs:** the region's program again with its **recorded** params and seed (the ones its plan ran with, kept in the sidecar's
+  plan directory; for plan_v0 regions that includes the `regions`, `builds`, `protected.areas` and `standing` inputs as they were),
+  over the claim, with the new land and the held set passed as separate inputs:
   - the frozen heights where they exist (placed tiles' windows), and a fresh resolution-1 survey elsewhere (loaded chunks);
   - `ctx.routePrefer` from the effective IR's route and road cells (T2's hysteresis), so routes stay where they were where the land
     allows;
@@ -20664,6 +20681,10 @@ default CompletableFuture<RegionPlan> replanStages(String regionId, @Nullable St
 - **S-LC-2. Approving a replan.** A replanned region from an approved artifact gets a new artifact, and its changed stages wait for
   `realiseApproved` of it. Or should a replan whose changed parts are only terrain under no lot continue without a new approval?
   Default: a new approval.
+- **S-LC-4. How often a replan is accepted.** Predicted low for layout-searched programs (V's street search and plan_v0's zone search
+  read the whole survey, so new land near any placed part can move it), higher for terrain-only stages. The builder records the rate
+  on item 3's fixture and on 20 synthetic drifts. Is a mostly-refusing replan still worth shipping, or should LC ship the report only?
+  Default: ship both; the refusal names the parts, which is useful by itself.
 - **S-LC-3. Incremental passes.** SETTLEMENTS §14's dirty-tile passes (fields re-run over changed tiles with old values as boundaries)
   are not in LC: the stage replan re-runs the program whole and accepts only if placed parts are unchanged. Is that enough for your
   phase 3? Default: yes, until a measured case needs more.
