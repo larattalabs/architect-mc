@@ -1,0 +1,42 @@
+{
+  "about": "(6c IRR, §9, broken, in game) _unsafe.irrUnmasked true: the plan is READY (as v62's f1) but its IR lot says unmasked, so the mod places the lot's design over the sources' sides; the live check at the fluids stage refuses every source (uncontained): PARTIAL",
+  "on": "flat",
+  "volume": {},
+  "covers": [],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "irr_u01b",
+    "zones": [
+      {
+        "id": "farms",
+        "irrigate": true,
+        "ext": {
+          "architect_mc:unsafe": {
+            "irrUnmasked": true
+          }
+        },
+        "program": {
+          "lots": [
+            {
+              "id": "f1",
+              "type": "farm",
+              "size": [
+                13,
+                11
+              ],
+              "villager": "farm"
+            },
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

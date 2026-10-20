@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -122,6 +122,14 @@ export const MASSING_ID = /^[a-z0-9_]{1,64}$/;
 export const MassingId = z.string().regex(MASSING_ID, 'massing ids are [a-z0-9_]{1,64}');
 /** (4c) group / design context: text up to 4000 chars, or JSON (at most 4000 chars as JSON) */
 export const MAX_CONTEXT = 4000;
+/** (6c IRR, S-IRR-2) a lot's reserved cells (kit/lib/reserved.mjs): in the lot's frame (its front to the south), the lot's real front for the centring */
+export const Reserved = z.object({
+  front: z.enum(['north', 'east', 'south', 'west']),
+  size: z.tuple([z.number().int().min(1).max(256), z.number().int().min(1).max(256)]),
+  cells: z.array(z.tuple([z.number().int(), z.number().int(), z.number().int()])).max(65536),
+});
+export type Reserved = z.infer<typeof Reserved>;
+
 export const Context = z.union([
   z.string().trim().min(1).max(MAX_CONTEXT),
   z.record(z.string(), z.unknown()).refine((v) => JSON.stringify(v).length <= MAX_CONTEXT, `context JSON is longer than ${MAX_CONTEXT} chars`),
@@ -300,6 +308,7 @@ export const DesignRequest = DesignRequestBase.extend({
     })
     .optional()
     .describe('(0b, C13) design the next version of this entry (notes = the change request); the site files come with it as blobs'),
+  reserved: Reserved.optional().describe("(6c IRR, S-IRR-2) the lot's cells the design must leave as given (an irrigated farm's water and its edges): the brief names them, the checker refuses a design writing one (kit build.mjs --reserved)"),
 }).superRefine(noDuplicateFeatures).superRefine((r, ctx) => {
   if (r.massing && r.fromMassing) ctx.addIssue({ code: 'custom', path: ['fromMassing'], message: 'a request is a massing or the detail of one, not both' });
   if (r.massingVersion !== undefined && !r.fromMassing) ctx.addIssue({ code: 'custom', path: ['massingVersion'], message: 'massingVersion needs fromMassing' });
@@ -1154,6 +1163,11 @@ export const RegionPlanMsg = z.object({
     })
     .optional()
     .describe("(6c D2) the claim's biome grid: one biome per 4x4 columns at the surface (the game's own storage, C28), -1 unknown; a program reads it as ctx.biomes"),
+  lotBlocks: z
+    .record(z.string().regex(/^[a-z][a-z0-9_]{0,47}$/), z.record(z.string().regex(/^[a-z0-9_.-]{1,64}:[a-z0-9_./-]{1,128}$/), z.number().int().min(1).max(1 << 24)))
+    .refine((o) => Object.keys(o).length <= 256 && Object.values(o).every((h) => Object.keys(h).length <= 4096), 'at most 256 lots of at most 4096 blocks')
+    .optional()
+    .describe("(6c VOC-c) a plan check with a rule.palette: each bound lot's block histogram (lot id -> {block id: count}), the non-air blocks of its named entry's template, read by the mod; a palette rule measures the lot from it"),
   planCache: z.string().min(1).max(256).optional().describe('(6c P0) a plan check: the owner whose per-part cache the kit reads (<data>/regions/plancache/<sha(owner)>/; 24 h or 256 checks per owner), and region.planned carries planCheck'),
   previewViews: z.array(z.enum(['top', 'section', 'iso', 'siteplan'])).min(1).max(4).optional().describe('(6c P0) the previews to render after the check (default all four; a plan check renders siteplan only: images on request)'),
   timeoutMs: z.number().int().min(1).max(600_000).optional().describe("(6c P0) at most this plan time (a check's maxMs plus its grace; never more than the program's budget)"),

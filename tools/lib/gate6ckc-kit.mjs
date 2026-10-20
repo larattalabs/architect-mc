@@ -16,6 +16,10 @@ const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 /** §8's named exceptions: fixture -> why it moves (the body and the writer that met it). */
 export const EXCEPT = Object.freeze({
   'valid/v51_voc_forge.json': 'forge_wall (connector.wall) wrote 5 water, 5 rim and 24 watch cells of w_fount (form.fountain): now refused OVERLAP {kind: body}, wouldFit ring [4, 17]',
+  // ((the CU/IRR/VOC-c batch) VOC-c's named exceptions: rule.palette supported; its own item 4 judges them. e05 is not one here: VOC-c
+  // rewrote the fixture itself, so the base and this head plan the same file alike)
+  ...Object.fromEntries(['asks/desert_jungle_wall.json', 'asks/hidden_village.json', 'asks/mage_exiles.json', 'asks/old_new_town.json', 'asks/one_block.json',
+    'asks/rival_families.json', 'asks/row_houses.json', 'extension/e16_every_reserved_b.json'].map((n) => [n, 'VOC-c: rule.palette supported (its palette rule answered, not unsupported)'])),
 });
 
 /** Every fixture file with a plan under `root`: [[dir/file, fixture]]. */
@@ -92,7 +96,7 @@ export async function unchanged(root, { check, log = console.log, only = null } 
         const cols = fillMissing(asColumns(s.bytes)).columns;
         const { vw } = buildVirtual({ ir, survey: cols, filled: cols, blobs: (sha) => r.res.blobs.get(sha) ?? null, volumes: r.volumes.map((v) => v.decoded ?? v) });
         const sc = clearScan({ ir, vw, meta: r.res.meta });
-        const broken = /^kc\/u\d/.test(name);
+        const broken = /^kc\/u\d/.test(name) || /^irr\/u01_/.test(name); // ((6c IRR) irrigation's M25:clear variant, u01, too)
         (out.headCensus ??= {})[name] = sc.counts;
         if (broken) check(sc.counts.hard + sc.counts.watch > 0, `${name} (a broken variant): M25:clear catches it on this head (${JSON.stringify(sc.counts)})`);
         else check(sc.counts.hard + sc.counts.watch === 0, `${name}: M25:clear 0 on this head (${JSON.stringify(sc.counts)})`);
@@ -102,7 +106,9 @@ export async function unchanged(root, { check, log = console.log, only = null } 
     const ex = EXCEPT[name] ?? null;
     out.fixtures[name] = { existsOld, same, ...(ex ? { excepted: ex } : {}), ...(err ? { err } : {}), ...(census ? { census } : {}), ...(a && b && !same ? { head: a, base: b } : {}) };
     if (!existsOld) { log(`note ${name}: new on this branch`); continue; }
-    if (ex) { check(!same, `${name}: excepted by name (${ex}): ${same ? 'UNCHANGED (the exception did not move)' : 'differs, as named'}`); continue; }
+    // ((6c IRR) after KC merged, the base holds the named fixture as repaired: identical then, the exception already on the base)
+    const onBase = existsOld && fs.readFileSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name), 'utf8') === fs.readFileSync(path.join(root, 'kit', 'test', 'fixtures', 'plan', name), 'utf8') && execFileSync('git', ['-C', mainDir, 'log', '-1', '--format=%H', '--', 'kit/lib/fluids/keep.mjs']).toString().trim() !== '';
+    if (ex) { check(!same || onBase, `${name}: excepted by name (${ex}): ${same ? (onBase ? 'identical: the base already has KC (the exception merged)' : 'UNCHANGED (the exception did not move)') : 'differs, as named'}`); continue; }
     check(same || (!a && !b), `${name}: ${same ? 'byte-identical (answers, overall, IR, first plan)' : !a && !b ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, base: b })}`}`);
   }
   const rows = Object.entries(out.fixtures).filter(([, r]) => r.existsOld);

@@ -618,7 +618,32 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		boolean instant = instantDelta(r.actor());
 		dev.larattalabs.architect.site.SiteDeltas.Check c = dev.larattalabs.architect.placed.Placed.withConsent(consentOf(r.consent()), () -> instant ? dev.larattalabs.architect.site
 			.SiteDeltas.check(level, deltaRequest(r)) : Builder.checkConstructionDelta(level, deltaRequest(r)));
-		return Views.deltaVerdict(c, List.of(), instant);
+		return withPalette(Views.deltaVerdict(c, List.of(), instant), r.siteId(), r.toVersion());
+	}
+
+	/**
+	 * (6c VOC-c, S-VOCc-3) A delta of a region's lot judged against the region's palette rules: a required rule the new version breaks is
+	 * a PALETTE refusal (the verdict is not ok), a rule that is not required a note; a site that is not such a lot is unchanged.
+	 */
+	dev.larattalabs.architect.api.DeltaVerdict withPalette(dev.larattalabs.architect.api.DeltaVerdict v, String siteId, int toVersion) {
+		dev.larattalabs.architect.region.PaletteRules.DeltaJudge j = dev.larattalabs.architect.region.PaletteRules.delta(server, siteId, toVersion);
+		if (j == null || (j.refusal() == null && j.notes().isEmpty())) {
+			return v;
+		}
+		List<Refusal> refusals = new ArrayList<>(v.refusals());
+		if (j.refusal() != null) {
+			refusals.add(new Refusal(Reason.PALETTE, j.refusal()));
+		}
+		List<String> notes = new ArrayList<>(v.notes());
+		notes.addAll(j.notes());
+		return new dev.larattalabs.architect.api.DeltaVerdict(v.ok() && j.refusal() == null, refusals, v.added(), v.removed(), v.changed(), v.parts(), v.kept(),
+			v.overlaps(), v.bom(), v.refund(), v.box(), v.mode(), notes, v.capturedChanged(), v.capturedTotal());
+	}
+
+	/** (6c VOC-c, S-VOCc-3) The PALETTE refusal a delta (or a revert's forward delta) of a region's lot meets, or null. */
+	@Nullable Refusal paletteRefusal(String siteId, int toVersion) {
+		dev.larattalabs.architect.region.PaletteRules.DeltaJudge j = dev.larattalabs.architect.region.PaletteRules.delta(server, siteId, toVersion);
+		return j == null || j.refusal() == null ? null : new Refusal(Reason.PALETTE, j.refusal());
 	}
 
 	@Override
@@ -629,6 +654,10 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			if (level == null) {
 				return CompletableFuture.completedFuture(Views.deltaFailed(r.siteId(), new Refusal(Reason.OTHER, b == null ? "No site " + r.siteId() : r.siteId()
 					+ "'s dimension is not loaded")));
+			}
+			Refusal pal = paletteRefusal(r.siteId(), r.toVersion());
+			if (pal != null) {
+				return CompletableFuture.completedFuture(Views.deltaFailed(r.siteId(), pal));
 			}
 			try {
 				return dev.larattalabs.architect.placed.Placed.withConsentE(consentOf(r.consent()), () -> {
@@ -658,6 +687,10 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			if (level == null) {
 				return CompletableFuture.completedFuture(Views.deltaFailed(siteId, new Refusal(Reason.OTHER, b == null ? "No site " + siteId : siteId
 					+ "'s dimension is not loaded")));
+			}
+			Refusal pal = paletteRefusal(siteId, toVersion);
+			if (pal != null) {
+				return CompletableFuture.completedFuture(Views.deltaFailed(siteId, pal));
 			}
 			try {
 				if (instantDelta(actor)) {

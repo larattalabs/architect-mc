@@ -175,6 +175,16 @@ public interface Regions {
 	}
 
 	/**
+	 * (VOC-c) The pre-check of an approved plan's palette rules with these lot entries ({@code lot -> id} or {@code id@version}, over the
+	 * artifact's own): the measure {@link #realiseApproved} refuses {@link Reason#PALETTE} on, so a caller can re-bind or redesign one lot
+	 * before the realise. Changes nothing. Empty for an unknown or removed artifact; an artifact with no palette rule over lots answers ok
+	 * with no rules. Server thread. Since 1.37.0.
+	 */
+	default Optional<PaletteCheck> checkPalette(String artifactSha, java.util.Map<String, String> lotEntries) {
+		throw new UnsupportedOperationException("Regions.checkPalette needs Architect API 1.37.0");
+	}
+
+	/**
 	 * (6c P0) Realises an approved artifact ({@link ApprovedRealise}): no artifact with that sha (or a removed one) refuses
 	 * {@link Reason#ARTIFACT_UNAPPROVED}; the claim is surveyed again at the artifact's resolution and the protection fingerprint
 	 * recomputed: any changed column inside the plan's tiles, a changed protected area or region, or a provisional lot's entry past

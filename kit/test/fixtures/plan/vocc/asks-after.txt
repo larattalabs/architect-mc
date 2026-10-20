@@ -1,0 +1,192 @@
+# 59 asks (adjusted 12, blocked 2, fits 62, refused 26, unsupported 30); 0 malformed
+arcology REQUIRED_BLOCKED
+  tower_city zone.standard fits
+  unused_placeholder zone.standard refused NO_ROOM
+  stacked_floors rule.stacked_floors unsupported UNSUPPORTED
+around_my_house READY
+  village zone.standard fits
+around_my_tree REQUIRED_BLOCKED
+  grove layout.ring unsupported UNSUPPORTED
+boom_town READY
+  boomtown zone.standard fits
+border_fort READY
+  fort zone.standard fits
+  pass_road connector.road fits
+  fort_wall connector.wall adjusted
+  fort_relief form.relief fits
+camp_to_city READY
+  camp_city zone.standard fits
+  city_wall connector.wall adjusted
+castle_city READY
+  castle zone.standard adjusted
+  curtain_wall connector.wall adjusted
+cat_sanctuary READY
+  sanctuary zone.standard adjusted
+cliff_monks READY
+  monastery zone.standard fits
+  sea_stair connector.path fits
+  ledge_path connector.path fits
+conquered_town READY
+  village zone.standard fits
+crater_mine REQUIRED_BLOCKED
+  mine_zone zone.standard fits
+  crater form.crater unsupported UNSUPPORTED
+  crater_relief form.relief fits
+desert_jungle_wall NEEDS_REPAIR
+  town zone.standard fits
+  great_wall connector.wall fits
+  two_faced_palette rule.palette refused NO_FEATURE
+dwarven_hold REQUIRED_BLOCKED
+  hold zone.standard fits
+  mountain_hollow form.hollow_mountain unsupported UNSUPPORTED
+end_city_ruins NEEDS_REPAIR
+  city zone.standard fits
+  dwelling_bridges connector.bridge refused NO_GAP
+  central_terrace form.terrace fits
+falls_to_ruin READY
+  hold zone.standard fits
+farm_village READY
+  hamlet zone.standard fits
+fishing_village READY
+  village zone.standard fits
+grid_city REQUIRED_BLOCKED
+  grid_city layout.grid unsupported UNSUPPORTED
+harbour READY
+  harbour zone.standard fits
+harvest_hamlet READY
+  hamlet zone.standard fits
+hidden_village NEEDS_REPAIR
+  hollow zone.standard adjusted
+  cave_ladders connector.ladder unsupported UNSUPPORTED
+  waterfall_curtain form.waterfall adjusted
+  mossy_palette rule.palette refused NO_FEATURE
+ice_village READY
+  village zone.standard adjusted
+lone_hermit READY
+  hermitage zone.standard fits
+looks_old READY
+  hold zone.standard fits
+mage_exiles NEEDS_REPAIR
+  enclave zone.standard fits
+  shared_stone_base rule.palette refused TOLERANCE measured 17/51
+market_town READY
+  town zone.standard fits
+metropolis READY
+  capital zone.standard adjusted
+  city_wall connector.wall fits
+mining_town REQUIRED_BLOCKED
+  mining_town zone.standard fits
+  street_1 connector.street fits
+  rail_1 connector.rail unsupported UNSUPPORTED
+mushroom_town READY
+  hamlet zone.standard fits
+nether_outpost READY
+  outpost zone.standard fits
+no_right_angles REQUIRED_BLOCKED
+  town zone.standard fits
+  no_right_angles rule.shape unsupported UNSUPPORTED
+no_two_alike REQUIRED_BLOCKED
+  village zone.standard fits
+  no_two_alike rule.variety unsupported UNSUPPORTED
+nomad_camp REQUIRED_BLOCKED
+  camp layout.ring unsupported UNSUPPORTED
+old_new_town REQUIRED_BLOCKED
+  town zone.standard fits
+  hill_street connector.street fits
+  quarter_stair connector.stair unsupported UNSUPPORTED
+  two_styles rule.palette refused NO_FEATURE
+one_block REQUIRED_BLOCKED
+  reach zone.standard fits
+  gentle_terraces form.terrace refused OVERLAP
+  copper_only rule.palette refused TOLERANCE measured 0/51
+organic_hamlet REQUIRED_BLOCKED
+  hamlet layout.organic unsupported UNSUPPORTED
+pirate_cove READY
+  cove zone.standard fits
+redstone_gate REQUIRED_BLOCKED
+  fortress zone.standard adjusted
+  moat connector.channel fits
+  curtain_wall connector.wall adjusted
+  main_gate connector.gate refused NO_ROOM
+  drawbridge connector.drawbridge unsupported UNSUPPORTED
+ring_city REQUIRED_BLOCKED
+  ring_town layout.ring unsupported UNSUPPORTED
+  crater_lake form.crater unsupported UNSUPPORTED
+rival_families REQUIRED_BLOCKED
+  estates zone.standard refused NO_FEATURE
+  family_colours rule.palette refused NO_FEATURE
+  mirrored_banks rule.shape unsupported UNSUPPORTED
+row_houses REQUIRED_BLOCKED
+  row zone.standard fits
+  identical_houses rule.variety unsupported UNSUPPORTED
+  plain_palette rule.palette refused NO_FEATURE
+ruined_empire READY
+  survivors_camp zone.standard fits
+secret_tunnels REQUIRED_BLOCKED
+  cove zone.standard fits
+  tunnel_cellar tunnel.under unsupported UNSUPPORTED
+  tunnel_dock tunnel.under unsupported UNSUPPORTED
+  tunnel_hatch tunnel.under unsupported UNSUPPORTED
+ship_town REQUIRED_BLOCKED
+  ship_deck zone.standard fits
+  ship_hull form.ship_hull unsupported UNSUPPORTED
+  ship_masts form.mast unsupported UNSUPPORTED
+sky_monastery REQUIRED_BLOCKED
+  cloister zone.standard fits
+  long_stair connector.stair unsupported UNSUPPORTED
+  sky_island form.floating_island unsupported UNSUPPORTED
+sorting_warehouse READY
+  trading_post zone.standard fits
+spiral_town REQUIRED_BLOCKED
+  hill_town zone.standard fits
+  spiral_road connector.street refused UNREACHABLE
+  hill_relief form.relief blocked DEPENDENCY
+  spiral_shape rule.shape unsupported UNSUPPORTED
+survival_village READY
+  village zone.standard fits
+swamp_stilts NEEDS_REPAIR
+  hollow zone.standard fits
+  rope_bridges connector.rope_bridge refused NO_GAP
+terraced_hill NEEDS_REPAIR
+  town zone.standard fits
+  switchback_street connector.street fits
+  terraces form.terrace refused OVERLAP
+trade_hub READY
+  market_town zone.standard fits
+treetop_village REQUIRED_BLOCKED
+  canopy zone.standard fits
+  bridge_cabin_1 connector.rope_bridge refused NO_GAP
+  bridge_cabin_2 connector.rope_bridge refused NO_GAP
+  bridge_cabin_3 connector.rope_bridge refused NO_GAP
+  bridge_cabin_4 connector.rope_bridge refused NO_GAP
+  bridge_tavern connector.rope_bridge refused NO_GAP
+  bridge_tower connector.rope_bridge refused NO_GAP
+  bridge_barn connector.rope_bridge refused NO_GAP
+  bridge_cottage connector.rope_bridge refused NO_GAP
+  bridge_shop connector.rope_bridge refused NO_GAP
+  storehouse_lift connector.lift unsupported UNSUPPORTED
+twin_villages READY
+  villages zone.standard fits
+  village_road connector.road fits
+two_districts NEEDS_REPAIR
+  town zone.standard fits
+  craftsmen_district program.districts unsupported UNSUPPORTED
+underwater_domes REQUIRED_BLOCKED
+  colony zone.standard refused NO_FEATURE
+  glass_tunnels connector.tunnel blocked DEPENDENCY
+  sea_floor form.seabed_site unsupported UNSUPPORTED
+upside_down REQUIRED_BLOCKED
+  village zone.standard fits
+  main_street connector.street fits
+  chain_bridges connector.rope_bridge refused NO_GAP
+  winch_lift connector.lift unsupported UNSUPPORTED
+  hang_from_ceiling rule.suspended unsupported UNSUPPORTED
+walled_town READY
+  town zone.standard fits
+  town_wall connector.wall adjusted
+war_camp READY
+  camp zone.standard fits
+  camp_palisade connector.wall fits
+  camp_relief form.relief fits
+winter_festival READY
+  town zone.standard fits

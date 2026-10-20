@@ -9,6 +9,11 @@ public class RegionRefused extends ArchitectRefused {
 		super(reason, message);
 	}
 
+	/** (VOC-c) With a detail ({@link ArchitectRefused#detail()}: PALETTE's rule id). Since 1.37.0. */
+	public RegionRefused(Reason reason, String message, String detail) {
+		super(reason, message, detail);
+	}
+
 	@Override
 	public Reason reason() {
 		return super.reason();

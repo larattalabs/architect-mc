@@ -1,0 +1,36 @@
+{
+  "about": "(6c IRR, §1) irrigate: true on a house lot: the zone's note 'irrigate: h1 is not a farm lot', nothing written, the plan as without it",
+  "on": "flat",
+  "volume": {},
+  "covers": [],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "irr_r01",
+    "zones": [
+      {
+        "id": "homes",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ],
+              "irrigate": true
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

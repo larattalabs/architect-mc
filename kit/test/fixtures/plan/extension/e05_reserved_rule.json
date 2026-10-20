@@ -1,24 +1,18 @@
 {
-  "about": "a reserved rule in its draft shape",
+  "about": "a reserved rule in its draft shape ((6c VOC-c) rule.palette is supported now, so the reserved rule is rule.shape's draft; the old {family: stone, share: [0.6, 1], exempt: [terrain]} palette rule is measured in kit/test/vocc.test.mjs)",
   "on": "s7",
   "expect": {
-    "part": "stone_only",
-    "block": "rule.palette"
+    "part": "round_only",
+    "block": "rule.shape"
   },
   "plan": {
     "schemaVersion": "plan/0",
     "rules": [
       {
-        "id": "stone_only",
-        "kind": "palette",
-        "family": "stone",
-        "share": [
-          0.6,
-          1
-        ],
-        "exempt": [
-          "terrain"
-        ]
+        "id": "round_only",
+        "kind": "shape",
+        "shape": "round",
+        "level": "outline"
       }
     ]
   }

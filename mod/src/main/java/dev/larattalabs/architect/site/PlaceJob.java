@@ -246,6 +246,7 @@ final class PlaceJob implements Placement.Job {
 		}
 		StructureTemplate t = e.template();
 		writer = new TemplateWriter(TemplateWriter.cells(level, t, Sites.placeSettings(Rotation.values()[turns])), placePos, Sites.FLAGS);
+		writer.skip = mask(); // (6c IRR) a lot site's irrigation cells: dropped
 		return writer;
 	}
 
@@ -570,6 +571,9 @@ final class PlaceJob implements Placement.Job {
 					return 0;
 				}
 				BlockPos half = BlockPos.of(plants[cursor++]);
+				if (mask() != null && mask().test(half.asLong())) {
+					return 1; // (6c IRR) never a plant half on an irrigation cell
+				}
 				BlockState outside = level.getBlockState(half);
 				BlockPos inside = half.getY() < snapBox.minY() ? half.above() : half.below();
 				if (!level.getBlockState(inside).is(outside.getBlock())) {
@@ -591,6 +595,19 @@ final class PlaceJob implements Placement.Job {
 		return b;
 	}
 
+	/** (6c IRR) The site's {@link LotMask} (read from its record once, also after a load), or null. */
+	private java.util.function.@Nullable LongPredicate mask() {
+		if (!maskRead) {
+			Site s = Sites.get(siteId);
+			maskOf = s == null ? null : LotMask.of(s.ext());
+			maskRead = true;
+		}
+		return maskOf;
+	}
+
+	private transient java.util.function.@Nullable LongPredicate maskOf;
+	private transient boolean maskRead;
+
 	/** Writes the next cell of {@code xyz} (x, y, z triples), or moves to the next phase. */
 	private int cells(ServerLevel level, int[] xyz, BlockState state) {
 		if (cursor * 3 >= xyz.length) {
@@ -598,6 +615,10 @@ final class PlaceJob implements Placement.Job {
 			return 0;
 		}
 		int i = cursor * 3;
+		if (mask() != null && mask().test(dev.larattalabs.architect.journal.Journal.pos(xyz[i], xyz[i + 1], xyz[i + 2]))) {
+			cursor++;
+			return 1; // (6c IRR) the region's irrigation cell: never the lot site's foundation, clear or approach
+		}
 		dev.larattalabs.architect.placed.Placed.set(level, new BlockPos.MutableBlockPos(xyz[i], xyz[i + 1], xyz[i + 2]), state, Sites.FLAGS);
 		cursor++;
 		return 1;

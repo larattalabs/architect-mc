@@ -110,11 +110,14 @@ steps.unit = async () => {
   const cb = fs.readFileSync(path.join(F, 'asks-before.md'), 'utf8'), ca = fs.readFileSync(path.join(F, 'asks-after.md'), 'utf8');
   fs.writeFileSync(path.join(OUT, 'kc-asks-before.md'), before.text);
   fs.writeFileSync(path.join(OUT, 'kc-asks-after.md'), after.text);
-  const lines = (t) => new Map(t.split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/')).map((l) => [l.split(' ')[0], l]));
+  // ((the CU/IRR/VOC-c batch) rule.palette is supported: its 7 parts' lines and the tally they move are VOC-c's (its item 3,
+  // fixtures/plan/vocc/asks-*.txt), compared without them, as HY-b's asks item does)
+  const vocc = (t) => t.split('\n').filter((l) => !/rule\.palette/.test(l) && !/^# 59 asks:/.test(l)).join('\n');
+  const lines = (t) => new Map(t.split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/') && !/rule\.palette/.test(l)).map((l) => [l.split(' ')[0], l]));
   const lb = lines(before.text), la = lines(after.text);
   const moved = [...la].filter(([k, v]) => lb.get(k) !== v).map(([k]) => k);
   out.asks = { moved, malformedBefore: before.malformed, malformedAfter: after.malformed, parts: la.size };
-  check(before.text === cb && after.text === ca && after.malformed === 0 && moved.length === 0 && la.size > 0, `item 3: the 59 asks on the merge base and on this head equal fixtures/plan/kc/asks-before.md and asks-after.md: ${after.malformed} malformed, ${moved.length} part(s) moved class of ${la.size}${moved.length ? ` (${moved.join(', ')})` : ''}`);
+  check(vocc(before.text) === vocc(cb) && vocc(after.text) === vocc(ca) && after.malformed === 0 && moved.length === 0 && la.size > 0, `item 3: the 59 asks on the merge base and on this head equal fixtures/plan/kc/asks-before.md and asks-after.md: ${after.malformed} malformed, ${moved.length} part(s) moved class of ${la.size}${moved.length ? ` (${moved.join(', ')})` : ''}`);
   // item 7
   const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6ckc'], { cwd: root, encoding: 'utf8', timeout: 900_000, env: { ...process.env, PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
   out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').filter((l) => /^(ok|FAIL)/.test(l)) };

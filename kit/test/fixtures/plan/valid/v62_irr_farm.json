@@ -1,0 +1,55 @@
+{
+  "about": "(6c IRR, §9) v49's two farms on a dry flat claim with irrigate: true on their zone (and farmPond, as v49): f1 (13 x 11) gets 2 x 1 sources, f2 (11 x 11) 1, each flush with its field; the farm ponds stand outside the boxes, independent",
+  "on": "flat",
+  "volume": {},
+  "covers": [],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "irr_v62",
+    "zones": [
+      {
+        "id": "farms",
+        "farmPond": true,
+        "irrigate": true,
+        "program": {
+          "lots": [
+            {
+              "id": "f1",
+              "type": "farm",
+              "size": [
+                13,
+                11
+              ],
+              "villager": "farm"
+            },
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "f2",
+              "type": "farm",
+              "size": [
+                11,
+                11
+              ],
+              "villager": "farm"
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

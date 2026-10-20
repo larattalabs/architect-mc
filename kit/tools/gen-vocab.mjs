@@ -115,6 +115,8 @@ export async function generateAll(base, edges, tables) {
   const D = await import('./vocab-derive.mjs');
   const B = await importText(base);
   const K = await import('../lib/kit.mjs');
+  // (6c VOC-c) the family groups vocab/1 lists
+  const G = await import('../lib/vocab/groups.mjs');
   const r = D.deriveVocab({ blocks: B.BLOCKS, tagBlocks: B.tagBlocks, edges, tables, hand: { STONE_FAMILIES: K.STONE_FAMILIES, WOODS: K.WOODS, woodFamilyOf: K.woodFamilyOf }, emissionOf: B.emissionOf });
   if (!base.includes(MARK)) throw new Error('blocks.mjs base has no vocabulary marker');
   const files = {
@@ -122,7 +124,7 @@ export async function generateAll(base, edges, tables) {
     [OUT.blocks]: base.replace(`${MARK}\n`, () => `${D.vocabSection(r.fields)}\n`),
     [OUT.survival]: D.survivalModule(r.creativeOnly, r.costs),
     [OUT.survivalItems]: D.survivalItemsJson(r.creativeOnly, r.costs, tables.survival.mod),
-    [OUT.doc]: `${JSON.stringify(D.vocabDoc(r.fields), null, 1)}\n`,
+    [OUT.doc]: `${JSON.stringify(D.vocabDoc(r.fields, { groups: G.GROUPS }), null, 1)}\n`,
   };
   return { files, report: { ...r.report, creativeOnly: r.creativeOnly.length + tables.survival.mod.length } };
 }

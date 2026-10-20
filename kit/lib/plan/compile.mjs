@@ -39,9 +39,11 @@ import { emitTunnels, tunnelAnswer, tunnelAutoLeg, tunnelFailAnswer, tunnelLeg, 
 /** (6c T3) The connector kinds that get the `links` stage and the K context: K1's and T3's. */
 export const LINK_KINDS = Object.freeze([...K1_KINDS, ...T3_KINDS]);
 // (6c H) water bodies and wet structures: the generators behind one dispatcher (lib/fluids/hooks.mjs), the stage name from a leaf
-import { asksFarmPond, dropOverflows, emitOrder, fluidAnswer, fluidEmit, fluidFallbackClearance, fluidFarmPonds, fluidFootprint, fluidPassInput, fluidResolve, fluidStageWanted, isHPart, wetBridgeFallback } from '../fluids/hooks.mjs';
+import { asksFarmPond, asksIrrigate, dropOverflows, emitOrder, fluidAnswer, fluidEmit, fluidFallbackClearance, fluidFarmPonds, fluidFootprint, fluidIrrigation, fluidPassInput, fluidResolve, fluidStageWanted, isHPart, wetBridgeFallback } from '../fluids/hooks.mjs';
 import { registerBody, release as releaseKeep, reserve, spanOf } from '../fluids/keep.mjs';
 import { FLUIDS_STAGE } from '../fluids/kinds.mjs';
+// (6c VOC-c) rule.palette's lenient read (the measure runs after the IR: kit/lib/region/plan.mjs)
+import { readPaletteRule } from './palette.mjs';
 
 /** §7's caps (each a request may only lower). */
 export const BUDGET_DEFAULTS = Object.freeze({ maxNodes: 2_000_000, maxEdges: 128, maxCells: 20_000_000, maxMs: 120_000, maxHeapMb: 2048 });
@@ -835,6 +837,14 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     else if (p.verdict === 'unsupported') ans(p, { class: 'unsupported', reasons: [{ code: 'UNSUPPORTED', message: p.reason.message, block: p.block, until: p.reason.until ?? undefined, path: p.reason.path }].map(clean) });
   }
   const byId = V.byId;
+  // (6c VOC-c) a palette rule is measured on the plan's output (kit/lib/region/plan.mjs, after the IR: kit/lib/plan/palette.mjs); here it
+  // holds its place in the answers and its lenient read is recorded (only in a plan that has one: every other record is unchanged)
+  const paletteRules = [];
+  for (const p of V.parts) {
+    if (p.verdict !== 'compile' || p.block !== 'rule.palette' || answers.has(p.id)) continue;
+    paletteRules.push({ part: p.id, required: p.required, scope: Array.isArray(p.part.scope) ? [...p.part.scope] : null, read: readPaletteRule(p.part) });
+    ans(p, { class: 'fits', notes: ['measured after the plan (VOC-c)'] });
+  }
   // (6c VOC, §5.2) the compile pass's refusals (the second plan): a part whose emitted cells broke M27:state, M27:convert or M20 (a) on
   // the first plan is refused before it resolves, so it writes nothing (kit/lib/region/plan.mjs)
   for (const [id, why] of Object.entries(ctx.vocabRefuse ?? {}).sort(([a], [b]) => (a < b ? -1 : 1))) {
@@ -1183,6 +1193,16 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     for (const q of fp.ponds) if (q.body.volume && q.body.guardRuns) (K.record.guards ??= []).push({ part: q.zone, body: q.body.id, kind: 'body', fluids: true, volume: q.body.volume, runs: q.body.guardRuns.flat() });
     for (const q of fp.ponds) registerBody(keep, q.body, q.zone);
   }
+  // ---- (6c IRR) the farm lots' irrigation (irrigate: true on a lot or zone, S-IRR-1): after the farm ponds, before the H parts; each
+  // source an H body inside its lot's box (the narrow K5 exception), registered with KC's registry, its guard over the lot's one volume
+  const irrigationByLot = new Map();
+  if (asksIrrigate(order)) {
+    const ir = fluidIrrigation(ensureK());
+    for (const q of ir.lots) irrigationByLot.set(q.def, r.lots.find((l) => l.id === q.lot)?.irrigation ?? null);
+    for (const [zid, ns] of ir.notes) { const a = answers.get(zid); if (a) a.notes = [...(a.notes ?? []), ...ns]; }
+    for (const q of ir.lots) for (const b of q.bodies) if (b.volume && b.guardRuns) (K.record.guards ??= []).push({ part: q.zone, body: b.id, kind: 'body', fluids: true, volume: b.volume, runs: b.guardRuns.flat() });
+    for (const q of ir.lots) for (const b of q.bodies) registerBody(keep, b, q.zone);
+  }
   // ---- (6c H) step 3 for H parts: water bodies, moats and quays, before the routes (the route pass sees their water), each under a
   // checkpoint; a generator refuses by throwing 'CODE: message'
   // ((6c HY, §7.7) a part an overflow feeds emits after the course that registered it: emitOrder, plan order when there is none; a
@@ -1442,6 +1462,9 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     styles: Object.fromEntries(V.parts.filter((p) => p.family === 'zone' || p.family === 'connector').map((p) => [p.id, styleOf(P.plan, p.part) ?? null])),
     cacheOut: hit ? {} : env.cacheOut, protectedRects: env.protectedAreas.map((a) => rectArr(a.rect)),
     ...(K ? { links: K.record } : {}),
+    // ((6c IRR) the irrigated lots' cells by the plan's lot id: the artifact's lots[].irrigation (only when a lot is irrigated)
+    ...(irrigationByLot.size ? { irrigation: Object.fromEntries(irrigationByLot) } : {}),
+    ...(paletteRules.length ? { palette: paletteRules } : {}),
     anchors: Object.fromEntries([...env.anchors.entries()].map(([k, v]) => [k, [v[0], env.S.groundAt(v[0], v[1]) + 1, v[1]]])),
   } };
 }

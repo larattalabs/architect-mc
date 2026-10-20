@@ -1,0 +1,103 @@
+{
+ "about": "(6c VOC-c, \u00a79) \"no wood\": a flat village with a wall, a west gate with a door and a path, in the spruce bible g6cvocc_spruce, under rule.palette {family: wood, share: [0, 0]} (the group wood). The first plan writes spruce and oak (the plank paths and street, the spruce fences, the gate's door, the benches' and planters' oak); the compile plans again with the group excluded and each wood block falls to the next block of VOC-c's material chain (planks to the bible's structure, stone bricks; stairs, slabs and fences to its stairs, slab and wall; doors and trapdoors to iron's): the rule answers adjusted with the swaps as deviations, every other part fits. Its lots have no entry: pending, measured at realiseApproved",
+ "on": "flat",
+ "volume": {},
+ "style": "g6cvocc_spruce",
+ "adjusted": [
+  "no_wood"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "vocc_v65",
+  "zones": [
+   {
+    "id": "village",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 24
+     }
+    },
+    "program": {
+     "template": "flat_village",
+     "params": {
+      "lots": [
+       {
+        "id": "h1",
+        "type": "house",
+        "size": [
+         9,
+         11
+        ]
+       },
+       {
+        "id": "h2",
+        "type": "house",
+        "size": [
+         9,
+         11
+        ]
+       },
+       {
+        "id": "h3",
+        "type": "house",
+        "size": [
+         9,
+         11
+        ]
+       }
+      ]
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "village_wall",
+    "kind": "wall",
+    "where": {
+     "around": {
+      "feature": {
+       "part": "village"
+      },
+      "ring": [
+       4,
+       8
+      ]
+     }
+    },
+    "height": 4
+   },
+   {
+    "id": "west_gate",
+    "kind": "gate",
+    "at": {
+     "anchor": "claim_w"
+    },
+    "door": "door"
+   },
+   {
+    "id": "west_path",
+    "kind": "path",
+    "from": {
+     "anchor": "claim_w"
+    },
+    "to": {
+     "part": "village"
+    }
+   }
+  ],
+  "rules": [
+   {
+    "id": "no_wood",
+    "kind": "palette",
+    "family": "wood",
+    "share": [
+     0,
+     0
+    ],
+    "label": "No wood"
+   }
+  ]
+ }
+}

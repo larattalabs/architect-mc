@@ -1,0 +1,26 @@
+{
+ "name": "G6C-VOCc all copper",
+ "format": 2,
+ "scope": "settlement",
+ "prompt": "VOC-c: a copper-only reach (rule.palette {family: copper}): every role a copper block, lamps of copper lanterns on copper bars",
+ "roles": {
+  "wall": "minecraft:copper_block",
+  "wall_alt": "minecraft:cut_copper",
+  "trim": "minecraft:waxed_cut_copper",
+  "roof": "minecraft:cut_copper",
+  "floor": "minecraft:cut_copper",
+  "frame": "minecraft:chiseled_copper",
+  "accent": "minecraft:copper_bulb",
+  "light": "minecraft:copper_lantern",
+  "glass": "minecraft:copper_grate",
+  "foundation": "minecraft:cut_copper",
+  "path": "minecraft:cut_copper",
+  "rail": "minecraft:copper_bars",
+  "structure": "minecraft:copper_block",
+  "rock": "minecraft:stone",
+  "surface": "minecraft:grass_block",
+  "subsurface": "minecraft:dirt",
+  "rubble": "minecraft:cut_copper"
+ },
+ "fluids": { "rim": "structure", "coping": "trim", "spout": "structure", "bed": "foundation" }
+}

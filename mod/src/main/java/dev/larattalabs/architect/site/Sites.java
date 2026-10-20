@@ -1391,6 +1391,7 @@ public final class Sites {
 		if (b.placing()) {
 			// Remove during placing cancels the job and restores the box (phase 4d): it was never placed
 			Placement.abort(server, id, "removed while it was being placed");
+			drainIrrigation(level, b); // (6c IRR, S-IRR-4) a farm lot's sources leave with it, drained first
 			return rollbackNow(level, b);
 		}
 		// the sites covering it (phase 4e)
@@ -1430,6 +1431,10 @@ public final class Sites {
 			}
 		}
 		tr.mark("checks");
+		// (6c IRR, S-IRR-4) an irrigated farm lot's sources leave with it: drained first and exactly, before anything is restored
+		for (Site x : all) {
+			drainIrrigation(level, x);
+		}
 		// a construction site deconstructs: refunds for paid cells still standing, against the stacks before the undo (rule 7)
 		Map<String, Builder.Deconstruction> decs = new LinkedHashMap<>();
 		for (Site x : all) {
@@ -1535,6 +1540,7 @@ public final class Sites {
 				throw new SiteException(blockersMessage(id, blockers));
 			}
 		}
+		drainIrrigation(level, b); // (6c IRR, S-IRR-4) the lot's sources first
 		RestoreJob job = new RestoreJob(id, RestoreJob.REMOVE, null, null);
 		java.util.concurrent.CompletableFuture<Removed> f = new java.util.concurrent.CompletableFuture<>();
 		job.futures.add(f);
@@ -1951,6 +1957,26 @@ public final class Sites {
 		}
 		int turns = Math.max(0, BlueprintTransform.ROTATIONS.indexOf(from.rotation()));
 		return move(level, id, new BlockPos(from.x(), from.y(), from.z()), Rotation.values()[turns], force);
+	}
+
+	/**
+	 * (6c IRR, S-IRR-4) Before a region's irrigated lot site is removed or undone: its lot's irrigation sources are drained first and
+	 * exactly ({@link dev.larattalabs.architect.region.RegionFluids#drainLot}); the masked cells stay the region's. A site with no
+	 * {@link LotMask} (every other site) is untouched. Server thread; idempotent.
+	 */
+	public static void drainIrrigation(ServerLevel level, @Nullable Site b) {
+		if (b == null || !(b.ext().get(LotMask.EXT) instanceof com.google.gson.JsonObject) || !(b.ext().get("architect_mc:lot") instanceof com.google.gson.JsonElement lot)) {
+			return;
+		}
+		dev.larattalabs.architect.region.RegionFluids.drainLot(level, b.group(), lot.getAsString());
+	}
+
+	/** {@link #drainIrrigation} with the site's own level (a stage undo). */
+	public static void drainIrrigation(MinecraftServer server, @Nullable Site b) {
+		ServerLevel level = b == null ? null : levelOf(server, b);
+		if (level != null) {
+			drainIrrigation(level, b);
+		}
 	}
 
 	public static @Nullable ServerLevel levelOf(MinecraftServer server, Site b) {
@@ -2373,18 +2399,19 @@ public final class Sites {
 		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
 		int total = 0;
 		int match = 0;
+		java.util.function.LongPredicate mask = LotMask.of(b.ext()); // (6c IRR) the region's irrigation cells were never this site's
 		for (int i = 0; i < m.count(); i++) {
 			BlockState want = grid.states()[i];
 			if (want.isAir()) {
 				continue;
 			}
 			p.set(b.box().minX() + m.x(i), b.box().minY() + m.y(i), b.box().minZ() + m.z(i));
-			if (ownedByOther(b.dimension(), p.asLong(), b.id())) {
+			if (mask != null && mask.test(p.asLong()) || ownedByOther(b.dimension(), p.asLong(), b.id())) {
 				continue;
 			}
 			total++;
-			// by block, not state: players open doors
-			if (level.getBlockState(p).is(want.getBlock())) {
+			// by block, not state: players open doors (6c CU: and copper weathers)
+			if (dev.larattalabs.architect.journal.Copper.is(level.getBlockState(p), want.getBlock())) {
 				match++;
 			}
 		}
@@ -2479,9 +2506,10 @@ public final class Sites {
 					}
 					total++;
 					BlockState now = level.getBlockState(p.set(BlockPos.getX(pos), BlockPos.getY(pos), BlockPos.getZ(pos)));
-					if (now.is(before.getBlock())) {
+					// (6c CU §3) by block, a copper block at any stage of its chain counting as the stage recorded
+					if (dev.larattalabs.architect.journal.Copper.is(now, before.getBlock())) {
 						holdBefore++;
-					} else if (now.is(after.getBlock())) {
+					} else if (dev.larattalabs.architect.journal.Copper.is(now, after.getBlock())) {
 						holdAfter++;
 					}
 				}

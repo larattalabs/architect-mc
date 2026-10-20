@@ -81,6 +81,7 @@ function constantOf(p: string): string | null {
     [/\.views$/, 'CRITIQUE_VIEWS_MAX'],
     [/\.extraCriteria$/, 'EXTRA_CRITERIA_MAX'],
     [/\.extraCriteria\[\]$/, 'EXTRA_CRITERION_MAX'],
+    [/^DesignRequest\.reserved\.cells$/, 'RESERVED_CELLS_MAX'],
   ];
   for (const [re, c] of rules) if (re.test(p)) return c;
   return 'UNMAPPED';

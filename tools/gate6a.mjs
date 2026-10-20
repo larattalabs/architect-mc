@@ -743,9 +743,9 @@ steps.heap = async () => {
 
 steps.apijars = async () => {
   const runs = [
-    // (6c KC, the patch over v0.39.0) the unchanged 0.39.0, 0.38.0 and 0.37.1 jars (API 1.36.0, 1.35.0, 1.34.0), each with its tag's
-    // tools/apitest.mjs, each built from its tag (0.39.0 in artifacts/gate6c-kc/, 0.38.0 HY's in artifacts/gate6c-hy/, 0.37.1 VOC's)
-    { api: '1.36.0', key: '0390', dir: path.join(MAIN, 'artifacts', 'gate6c-kc', 'v0390'), jar: 'architect_apitest-0.39.0.jar', world: 'G6A Jar0390' },
+    // (6c CU, over v0.39.0: main's latest three releases) the unchanged 0.39.0, 0.38.0 and 0.37.1 jars (API 1.36.0, 1.35.0, 1.34.0), each
+    // with its tag's tools/apitest.mjs, each built from its tag (0.39.0 in artifacts/gate6c-cu/, 0.38.0 HY's in gate6c-hy/, 0.37.1 VOC's)
+    { api: '1.36.0', key: '0390', dir: path.join(MAIN, 'artifacts', 'gate6c-cu', 'v0390'), jar: 'architect_apitest-0.39.0.jar', world: 'G6A Jar0390' },
     { api: '1.35.0', key: '0380', dir: path.join(MAIN, 'artifacts', 'gate6c-hy', 'v0380'), jar: 'architect_apitest-0.38.0.jar', world: 'G6A Jar0380' },
     { api: '1.34.0', key: '0371', dir: path.join(MAIN, 'artifacts', 'gate6c-voc', 'v0371'), jar: 'architect_apitest-0.37.1.jar', world: 'G6A Jar0371' },
   ];

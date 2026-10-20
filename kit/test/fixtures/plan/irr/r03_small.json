@@ -1,0 +1,36 @@
+{
+  "about": "(6c IRR, §2) a 5 x 5 farm lot asking irrigate: its field is 3 x 2 (a side under 3): the note 'irrigate: f1's field is too small', nothing written",
+  "on": "flat",
+  "volume": {},
+  "covers": [],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "irr_r03",
+    "zones": [
+      {
+        "id": "farms",
+        "program": {
+          "lots": [
+            {
+              "id": "f1",
+              "type": "farm",
+              "size": [
+                5,
+                5
+              ],
+              "irrigate": true
+            },
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -87,6 +87,11 @@ package dev.larattalabs.architect.api;
  * (the message names the site; {@link Sites#adoptedSite}), {@code tracking_off} (the world rule {@code architect.playerTracking}),
  * {@code adopted} ({@link Sites#releaseBuild} of an adopted build: remove the site first), {@code placed_elsewhere} (an
  * adopted entry is the player's house, not a template: it is never placed or checked anywhere).</li>
+ * <li>{@code PALETTE} (VOC-c, 1.37.0): {@link Regions#realiseApproved} (or a delta, {@link Sites#checkDelta}/{@link Sites#applyDelta}):
+ * a required {@code rule.palette} of the approved plan measures outside its share with the lots bound now (the artifact's parts'
+ * counts plus each bound lot's entry). The message names the rule, the family, the share, the measured share, the cells and the worst
+ * lot with its entry; {@link ArchitectRefused#detail()} is the rule id. Nothing was written: bind another entry to the lot (or drop
+ * {@code required}). {@link Regions#checkPalette} answers the same measure before any realise.</li>
  * </ul>
  * New values are only ever appended.
  */
@@ -107,5 +112,7 @@ public enum Reason {
 	// PT (6c slice PT, C32)
 	PLAYER_BUILD,
 	// PT2 (6c slice PT2)
-	ADOPT_REFUSED
+	ADOPT_REFUSED,
+	// 1.37.0 (6c slice VOC-c; the CU/IRR/VOC-c batch, v0.40.0)
+	PALETTE
 }

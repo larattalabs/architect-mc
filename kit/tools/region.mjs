@@ -41,7 +41,7 @@ const readJson = (f, what) => {
 };
 
 async function plan(argv) {
-  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1, 'plan-cache': 1, beside: 1, biomes: 1 });
+  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1, 'plan-cache': 1, beside: 1, biomes: 1, 'lot-blocks': 1 });
   if (pos.length !== 1) throw new Usage('plan <program.mjs> --survey s.bin --claim minX,minZ,maxX,maxZ[,minY,maxY] [...]');
   if (!opts.survey || !opts.claim) throw new Usage('plan needs --survey and --claim');
   const params = opts.params ? readJson(opts.params, '--params') : {};
@@ -89,6 +89,8 @@ async function plan(argv) {
   const beside = opts.beside ? readJson(opts.beside, '--beside') : null;
   // (6c D2) the plan's biome grid (a file: {minX, minZ, res: 4, width, depth, palette, ids})
   const biomes = opts.biomes ? readJson(opts.biomes, '--biomes') : null;
+  // (6c VOC-c) the bound lots' block histograms (a file: {lot: {block: n}}; the mod's, for a plan with a palette rule)
+  const lotBlocks = opts['lot-blocks'] ? readJson(opts['lot-blocks'], '--lot-blocks') : null;
   // (6c F2) the local stamp library (<dir>/<feature>/<seed>.bin; local-only, N-F2-1)
   if (opts.stamps && !fs.existsSync(opts.stamps)) throw new Usage(`--stamps: no dir ${opts.stamps}`);
   // (6c P0) the plan check's cache: <dir>/<key>.json, read only (the sidecar keeps it per owner)
@@ -96,7 +98,7 @@ async function plan(argv) {
     if (!/^[0-9a-f]{64}$/.test(key)) return null;
     try { return JSON.parse(fs.readFileSync(path.join(opts['plan-cache'], `${key}.json`), 'utf8')); } catch { return null; }
   } : null;
-  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(biomes ? { biomes } : {}) });
+  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(biomes ? { biomes } : {}), ...(lotBlocks ? { lotBlocks } : {}) });
   if (opts['blobs-out'] && res.blobs.size) {
     fs.mkdirSync(opts['blobs-out'], { recursive: true });
     for (const [sha, bytes] of res.blobs) fs.writeFileSync(path.join(opts['blobs-out'], `${sha}.bin`), bytes);

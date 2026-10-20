@@ -138,6 +138,24 @@ public final class DeltaPlanner {
 	 * {@code mode}, covered cells, growth, guards.
 	 */
 	public static Outcome outcome(Map<Long, Value> delta, Anchors.Bounds snapB, Stacks st, Now now, Edits mode) {
+		return outcome(delta, snapB, st, now, mode, null);
+	}
+
+	/**
+	 * {@link #outcome}, with {@code excluded} (6c IRR: a lot site's irrigation cells, its LotMask): never written, never shaped, never
+	 * growth (the region owns them; the site's BOX entry never holds them). Null: none.
+	 */
+	public static Outcome outcome(Map<Long, Value> delta, Anchors.Bounds snapB, Stacks st, Now now, Edits mode,
+		java.util.function.@org.jspecify.annotations.Nullable LongPredicate excluded) {
+		if (excluded != null) {
+			Map<Long, Value> d = new LinkedHashMap<>();
+			for (var e : delta.entrySet()) {
+				if (!excluded.test(e.getKey())) {
+					d.put(e.getKey(), e.getValue());
+				}
+			}
+			delta = d;
+		}
 		Map<Long, Value> write = new LinkedHashMap<>();
 		List<Kept> kept = new ArrayList<>();
 		List<Kept> edited = new ArrayList<>();
@@ -182,7 +200,7 @@ public final class DeltaPlanner {
 				long q = Journal.pos(x + f[0], y + f[1], z + f[2]);
 				// the site's own neighbours that are still its own (a kept cell or another player edit is never captured: the
 				// entry's after there would make the player's block "ours" for the next delta)
-				if (!write.containsKey(q) && !keptPos.contains(q) && st.siteHas(q) && st.holder(q) == Holder.SITE) {
+				if (!write.containsKey(q) && !keptPos.contains(q) && (excluded == null || !excluded.test(q)) && st.siteHas(q) && st.holder(q) == Holder.SITE) {
 					Value after = st.siteAfter(q);
 					if (after == null || now.holds(q, after)) {
 						shape.add(q);
@@ -195,6 +213,9 @@ public final class DeltaPlanner {
 			for (int z = snapB.minZ(); z <= snapB.maxZ(); z++) {
 				for (int x = snapB.minX(); x <= snapB.maxX(); x++) {
 					long p = Journal.pos(x, y, z);
+					if (excluded != null && excluded.test(p)) {
+						continue;
+					}
 					if (!st.siteHas(p)) {
 						growth.add(p);
 						if (!write.containsKey(p) && st.holder(p) == Holder.OTHER) {

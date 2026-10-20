@@ -120,7 +120,7 @@ export function runCells(runs) {
  * cell (the open top stays air) and the declared outlets `open` (where flow leaves the body: a fountain spout's sides, a waterfall's
  * lip). Sorted (y, x, z). `level` is accepted for the record; the rim follows each surface cell's own height.
  */
-export function shellOf(cells, { open = [] } = {}) {
+export function shellOf(cells, { open = [], rim = true } = {}) {
   const own = new Set(cells.map((c) => k3(...c)));
   const outlets = new Set(open.map((c) => k3(...c)));
   const top = new Set();
@@ -129,7 +129,7 @@ export function shellOf(cells, { open = [] } = {}) {
   const add = (k) => { if (!own.has(k) && !outlets.has(k) && !top.has(k)) { out.add(k); return true; } return false; };
   for (const [x, y, z] of cells) {
     for (const [dx, dy, dz] of N6) add(k3(x + dx, y + dy, z + dz));
-    if (own.has(k3(x, y + 1, z))) continue;
+    if (!rim || own.has(k3(x, y + 1, z))) continue;
     for (const [dx, dz] of N4) {
       const side = k3(x + dx, y, z + dz);
       if (own.has(side) || outlets.has(side)) continue;
@@ -294,7 +294,8 @@ export function fluidBody(r, cellsIn, opts = {}) {
   const after = [];
   for (const b of [...planJoins.map((j) => j.body), ...(opts.after ?? [])]) if (typeof b === 'string' && b !== id && !after.includes(b)) after.push(b);
   const solid = cellsOf(opts.solid ?? [], 'solid', null);
-  const shell = shellOf(cells, { open: outlets });
+  // ((6c IRR) opts.rim false: a source flush with its ground has no rim over its sides; absent: as before)
+  const shell = shellOf(cells, { open: outlets, rim: opts.rim !== false });
   const shellSet0 = new Set(shell.map((c) => k3(...c)));
   const weir = cellsOf(opts.weir ?? [], 'weir', claim).filter((c) => !shellSet0.has(k3(...c)));
   const weirSet = new Set(weir.map((c) => k3(...c)));
@@ -345,7 +346,9 @@ export function fluidBody(r, cellsIn, opts = {}) {
   // the frozen volume (§10): the body's box grown by 2, by 9 under a raised body (its single breach falls to the ground), with the fluid
   // layer; null on the first plan (the two-plan flow plans again with it); not asked past the per-part cap (the compiler answers
   // incomplete VOLUME)
-  const raised = isRaised(r.ctx.survey, cells, own) || opts.raised === true;
+  // ((6c IRR) opts.raised false: the generator knows the ground round the body (an irrigation source in its lot's pad and field), so the
+  // pre-plan survey's ground is not read; absent: as before)
+  const raised = opts.raised === false ? false : isRaised(r.ctx.survey, cells, own) || opts.raised === true;
   const grow = raised ? 9 : 2;
   let vbox = { minX: box.minX - grow, minY: box.minY - grow, minZ: box.minZ - grow, maxX: box.maxX + grow, maxY: box.maxY + grow, maxZ: box.maxZ + grow };
   // ((6c HY, the batch) opts.volumeBox: a box shared by several bodies (a course's reaches: one frozen volume per course, so a plan of

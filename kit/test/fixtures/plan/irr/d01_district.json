@@ -1,0 +1,45 @@
+{
+  "about": "(6c IRR, §1) a district farm lot (program.districts[].lots) asking irrigate, typed field with no villager member (type-implied): kit and Java both read district lots (PlanChecks.hasH), so the plan takes the two-plan flow and the lot gets its sources",
+  "on": "flat",
+  "volume": {},
+  "covers": [],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "irr_d01",
+    "zones": [
+      {
+        "id": "vale",
+        "program": {
+          "districts": [
+            {
+              "id": "east",
+              "size": {
+                "w": 64,
+                "d": 48
+              },
+              "lots": [
+                {
+                  "id": "field_1",
+                  "type": "field",
+                  "size": [
+                    13,
+                    11
+                  ],
+                  "irrigate": true
+                },
+                {
+                  "id": "home_1",
+                  "type": "house",
+                  "size": [
+                    9,
+                    9
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

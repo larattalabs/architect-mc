@@ -956,7 +956,9 @@ export class Sidecar {
     const p = this.massings.checkPlan(d, { maxSize: d.request.maxSize, type: d.request.type, profile: d.request.profile });
     // (5a) a design with a bible is checked against its restraint (kit warnings `restraint: ...`)
     const restraint = d.request.bible && !d.request.massing && this.kitHas('--restraint') ? ['--restraint', path.join('bible', 'bible.json')] : [];
-    return { limits: p.limits, extra: [...extra, ...p.extra, ...restraint] };
+    // (6c IRR, S-IRR-2) the lot's reserved cells: the checker refuses a design writing one (a kit without the flag: refused at the request)
+    const reserved = d.request.reserved && !d.request.massing && this.kitHas('--reserved') ? ['--reserved', JSON.stringify(d.request.reserved)] : [];
+    return { limits: p.limits, extra: [...extra, ...p.extra, ...restraint, ...reserved] };
   }
 
   private kitFlags: string | undefined;

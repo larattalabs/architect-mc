@@ -1,0 +1,37 @@
+{
+  "about": "(6c IRR, §9) one 40 x 40 farm lot asking irrigate on a dry flat claim: its field (38 x 37) gets 5 x 5 sources, one frozen volume for the lot shared by their guards",
+  "on": "flat",
+  "volume": {},
+  "covers": [],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "irr_v63",
+    "zones": [
+      {
+        "id": "estate",
+        "program": {
+          "lots": [
+            {
+              "id": "big",
+              "type": "farm",
+              "size": [
+                40,
+                40
+              ],
+              "irrigate": true
+            },
+            {
+              "id": "barn_1",
+              "type": "barn",
+              "size": [
+                9,
+                9
+              ],
+              "irrigate": false
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

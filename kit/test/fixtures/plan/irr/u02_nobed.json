@@ -1,0 +1,42 @@
+{
+  "about": "(6c IRR, §9, broken) _unsafe.irrNoBed: the first source's bed left unwritten (still declared): M25:shell",
+  "on": "flat",
+  "volume": {},
+  "covers": [],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "irr_u02",
+    "zones": [
+      {
+        "id": "farms",
+        "irrigate": true,
+        "ext": {
+          "architect_mc:unsafe": {
+            "irrNoBed": true
+          }
+        },
+        "program": {
+          "lots": [
+            {
+              "id": "f1",
+              "type": "farm",
+              "size": [
+                13,
+                11
+              ],
+              "villager": "farm"
+            },
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

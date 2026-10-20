@@ -293,6 +293,18 @@ export function bibleSection(b: NonNullable<BriefOptions['bible']>, bp: string):
   ];
 }
 
+/**
+ * (6c IRR, S-IRR-2) The brief's lines for a lot's reserved cells: one line (not tuned against the eval briefs), plus the cells when
+ * there are few enough to list; none without them.
+ */
+export function reservedLines(r: DesignRequest['reserved']): string[] {
+  if (!r || !r.cells.length) return [];
+  const list = r.cells.length <= 64 ? ` They are (x across from the lot's left, y from its floor, z from its back): ${r.cells.map((c) => `[${c.join(',')}]`).join(' ')}.` : '';
+  return [
+    `- reserved: ${r.cells.length} cells of the ${r.size[0]} x ${r.size[1]} lot are water and its edge: keep them, leave them air (the build command's \`--reserved\` checks it, placed as the mod places the design: its front to the lot's front, centred across it, its front on the lot's front row, its groundY row on the floor); farmland around them is hydrated.${list}`,
+  ];
+}
+
 /** BRIEF.md for a request: what the design agent reads first. */
 export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions): string {
   if (req.massing) return massingBrief(req, bp, opts);
@@ -318,6 +330,7 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     `- features: ${req.features.length ? req.features.map(featureLine).join('; ') : 'none requested'}`,
     `- maximum size (the whole template, including roof overhangs, porch, chimney and garden): x <= ${m.x}, y <= ${m.y}, z <= ${m.z}. Use the space well, but never exceed it.`,
     plot,
+    ...reservedLines(req.reserved),
     req.name ? `- name: "${req.name}" (the sidecar's \`name\`)` : '- name: pick a short, fitting display name for the sidecar\'s `name`',
     '- description: one sentence for the sidecar\'s `description`; tags: a few words (style, size) for `tags`.',
     req.notes ? `- notes from the player: ${req.notes}` : '',
@@ -354,7 +367,7 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     '- **Materials come from the palette**: the default export gets `palette` (default: the preset or `palette({ wood, stone, roof, accent })` that fits the request). Read every wood and stone from it (`p.planks`, `p.log`, `p.strippedLog`, `p.stairs`, `p.slab`, `p.fence`, `p.door`, `p.trapdoor`, `p.accentLog`, `p.accentStairs`, `p.stone`, `p.stoneStairs`, `p.stoneSlab`, `p.stoneWall`, `p.stoneTrim`, `p.roofStairs`, `p.roofSlab`, `p.roofBlock`, `p.plaster`), never a hard-coded wood or stone id, so a palette swap re-skins the whole building; the checker warns otherwise. Decor (chests, barrels, beds, lanterns, glass, carpets, iron) is free. Check a second preset too (`--palette cherry`, `--palette fortress`).',
     "- **Name the parts**: wrap every major mass in `bp.part('<name>', () => { ... })` (e.g. `main`, `roof`, `porch`, `tower`, `wing_east`, `chimney`, `furnishings`): at least 2 parts, and at most 20% of the cells outside any part (the checker warns otherwise). Names are stable ids (later edits diff by them): lower_snake_case, unique. Declare consts outside the part closures if several parts use them. Design coordinates are stable too: to grow toward -x, -y or -z, raise `origin`; never move existing coordinates.",
     `- Build it semantically with the kit helpers in \`kit/lib/kit.mjs\` (walls with openings, floors, doors, roofs with overhang, stairs and ladders, windows, chimney, porch, lighting, \`anchor()\`), not as a dump of raw coordinates. ${ex.length ? `Start by reading the closest example${ex.length > 1 ? 's' : ''}: ${ex.map((e) => `\`kit/designs/${e}.mjs\``).join(', ')} (each is parametric and palette-driven: see how its \`params\` shape the code).` : 'Look at the examples in `kit/designs/`.'}`,
-    `- Build and check: \`node kit/build.mjs ${bp} --max ${m.x},${m.y},${m.z} --type ${req.type}${!isPreset(req.type) ? ` --profile ${(req.profile ?? DEFAULT_PROFILE).join(',')}` : ''}${massingArg}\` (writes kit/out/${bp}.nbt and the sidecar, then runs the checker; add \`--palette <preset>\` / \`--values <json>\` for the variants). "check: OK" is required with the defaults; fix the warnings too.`,
+    `- Build and check: \`node kit/build.mjs ${bp} --max ${m.x},${m.y},${m.z} --type ${req.type}${!isPreset(req.type) ? ` --profile ${(req.profile ?? DEFAULT_PROFILE).join(',')}` : ''}${massingArg}${req.reserved ? ` --reserved '${JSON.stringify(req.reserved)}'` : ''}\` (writes kit/out/${bp}.nbt and the sidecar, then runs the checker; add \`--palette <preset>\` / \`--values <json>\` for the variants). "check: OK" is required with the defaults; fix the warnings too.`,
     opts.renderer
       ? `- Look at it: \`node kit/render.mjs kit/out/${bp}.nbt --out previews\` writes ${bp}.preview-iso.png / -top.png / -front.png into previews/; Read the PNGs and fix what looks wrong (holes, floating blocks, a missing roof, the entrance not on the front, dark rooms, a flat or boxy look). Iterate until it looks like a ${req.type} a player would be proud of.`
       : '- There is no renderer in this kit: check the layout by reasoning about the code and the checker output.',

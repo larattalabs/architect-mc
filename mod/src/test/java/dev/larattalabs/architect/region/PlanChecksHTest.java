@@ -40,6 +40,12 @@ class PlanChecksHTest {
 		assertTrue(PlanChecks.hasH(j("{ \"zones\" : [ { \"id\" : \"z\", \"farmPond\" : true } ] }")));
 		assertFalse(PlanChecks.hasH(j("{\"zones\":[{\"id\":\"z\",\"notes\":\"farmPond\\\":true\"}]}")), "a string is no farm pond");
 		assertFalse(PlanChecks.hasH(j("{}")));
+		// (6c IRR, §7) irrigate asks its sources' volumes the same way: a zone, a lot at any depth (a district's lots too); a string never
+		assertTrue(PlanChecks.hasH(j("{\"zones\":[{\"id\":\"z\",\"irrigate\":true,\"program\":{}}]}")));
+		assertTrue(PlanChecks.hasH(j("{\"zones\":[{\"id\":\"z\",\"program\":{\"template\":\"flat_village\",\"params\":{\"lots\":[{\"id\":\"a\",\"irrigate\":true}]}}}]}")));
+		assertTrue(PlanChecks.hasH(j("{\"zones\":[{\"id\":\"z\",\"program\":{\"districts\":[{\"id\":\"d\",\"lots\":[{\"id\":\"a\",\"irrigate\":true}]}]}}]}")));
+		assertFalse(PlanChecks.hasH(j("{\"zones\":[{\"id\":\"z\",\"irrigate\":false,\"program\":{}}]}")));
+		assertFalse(PlanChecks.hasH(j("{\"zones\":[{\"id\":\"z\",\"notes\":\"irrigate\\\":true\"}]}")), "a string is no irrigate");
 		assertTrue(PlanChecks.wetAsked(j("{\"planCheck\":{\"wetAsked\":true}}")));
 		assertFalse(PlanChecks.wetAsked(j("{\"planCheck\":{}}")));
 		assertFalse(PlanChecks.wetAsked(j("{}")));

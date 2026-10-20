@@ -1,0 +1,100 @@
+{
+ "about": "(6c VOC-c, \u00a79) the lenient read: v64's rule written as Steward writes it, family, share and exempt in params (and a gradient, noted not read): the same answer as v64's top-level rule (fits, the same measure), with a note for the gradient (the CU/IRR/VOC-c batch: the wall's ring widened from [4, 8] to [4, 17], as KC repaired v51, so the wall keeps clear of the fountain's basin, rim and apron: KC, main v0.39.1, refuses the [4, 8] ring OVERLAP {kind: body})",
+ "on": "flat",
+ "volume": {},
+ "style": "g6cvocc_copper",
+ "lotDesigns": {
+  "hall": "vocc_copper_cabin"
+ },
+ "expect": {
+  "part": "copper_only",
+  "class": "fits",
+  "overall": "READY",
+  "sameAs": "valid/v64_vocc_copper.json"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "vocc_r04",
+  "zones": [
+   {
+    "id": "reach",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 24
+     }
+    },
+    "program": {
+     "lots": [
+      {
+       "id": "hall",
+       "type": "house",
+       "size": [
+        9,
+        11
+       ],
+       "entry": "vocc_copper_cabin"
+      }
+     ],
+     "shared": "none"
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "reach_wall",
+    "kind": "wall",
+    "where": {
+     "around": {
+      "feature": {
+       "part": "reach"
+      },
+      "ring": [
+       4,
+       17
+      ]
+     }
+    },
+    "height": 5
+   }
+  ],
+  "forms": [
+   {
+    "id": "fount",
+    "kind": "fountain",
+    "basin": 5,
+    "spout": 2,
+    "where": {
+     "near": {
+      "anchor": "stockpile",
+      "within": 16
+     }
+    }
+   }
+  ],
+  "rules": [
+   {
+    "id": "copper_only",
+    "kind": "palette",
+    "required": true,
+    "scope": [
+     "reach",
+     "reach_wall",
+     "fount"
+    ],
+    "params": {
+     "family": "copper",
+     "share": [
+      1,
+      1
+     ],
+     "exempt": [
+      "terrain",
+      "support"
+     ],
+     "gradient": "bright at centre, oxidized at edges"
+    }
+   }
+  ]
+ }
+}

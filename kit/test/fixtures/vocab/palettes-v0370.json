@@ -1,5 +1,5 @@
 {
- "note": "palette() of every built-in palette and of every built-in and scenario bible at v0.37.0 (sha256 of JSON.stringify), the base of slice VOC (kit/test/vocab.test.mjs holds the current kit equal: CONTRACT VOC §6, gate item 3)",
+ "note": "palette() of every built-in palette and of every built-in and scenario bible at v0.37.0 (sha256 of JSON.stringify), the base of slice VOC (kit/test/vocab.test.mjs holds the current kit equal: CONTRACT VOC \u00a76, gate item 3)",
  "base": "23fb4921",
  "palettes": {
   "preset:birch": "274ea91f87c25330bece35a735c22ea77f4cb33928885c6447c51a7dadbd6b8f",
@@ -22,6 +22,8 @@
   "scenarios/bibles/g6cvoc_grotto_free.json": "9c35e6b2daa9c63666692d89ae24359f37b25963df6e2ff337ccb2ca8ce4a6b5",
   "scenarios/bibles/g6cvoc_modern.json": "9d63bec52079becaacea3f139071ad35e038e1aaf52e1db0299a49b47016294e",
   "scenarios/bibles/g6cvoc_modern_free.json": "dc4d9ebd8fd5a95cd988aabb71cfc85f50dd03b240380cf3146a8f6c2905551f",
+  "scenarios/bibles/g6cvocc_copper.json": "3f71a4e667d9c2bef06be4e364c596f77017daa337a04b92a9327a9b4dddfe46",
+  "scenarios/bibles/g6cvocc_spruce.json": "9c2863e21ade5bdce8b732def6cf20d72366e0ec651e70742ffa67aa0bce76ba",
   "scenarios/bibles/g6cw_coastal.json": "f4dfe888e080b48e9099b22ba58b2de17e0698f5b9456f7efbe234b5a20abd6e",
   "scenarios/bibles/g6cw_infernal.json": "f4dfe888e080b48e9099b22ba58b2de17e0698f5b9456f7efbe234b5a20abd6e",
   "scenarios/bibles/g6cw_path_oak_planks.json": "f4dfe888e080b48e9099b22ba58b2de17e0698f5b9456f7efbe234b5a20abd6e",
