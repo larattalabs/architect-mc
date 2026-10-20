@@ -255,7 +255,12 @@ steps.stop = async () => {
 steps.base = async () => {
   await ensure();
   const mark = path.join(SAVES, SURV, 'gate6cy-base.json');
-  if (!fs.existsSync(mark)) {
+  // (housekeeping 3) the base remembers the host that made it: a survival world a headless server made carries no cheats for the
+  // client's integrated server (every INSTANT twin then refused NOT_ALLOWED: permission level 2), so the other host makes its own
+  const host = (await import('./lib/basestamp.mjs')).gateHost();
+  let made = null;
+  try { made = JSON.parse(fs.readFileSync(mark, 'utf8')); } catch { made = null; }
+  if (made?.host !== host) {
     await leaveWorld();
     fs.rmSync(path.join(SAVES, SURV), { recursive: true, force: true });
     await openWorld(SURV, { mode: 'survival', preset: 'flat', seed: '2026101100', cheats: true });
@@ -267,7 +272,7 @@ steps.base = async () => {
     await stand(0.5, 0, 0.5, 'spectator');
     await cmd('/save-all flush');
     await leaveWorld();
-    fs.writeFileSync(mark, JSON.stringify({ made: new Date().toISOString() }));
+    fs.writeFileSync(mark, JSON.stringify({ made: new Date().toISOString(), host }));
   }
   spendZero();
   return { worlds: [SURV] };

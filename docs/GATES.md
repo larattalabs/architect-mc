@@ -296,10 +296,16 @@ Try one with `--host server --only <step>`, then mark it.
 - mp-ingame: its scenarios shoot cameras (`run it on a client`).
 - sch-ingame: the `ui` part calls `dev.library.export.schem`, which has no headless twin.
 - y2-ingame: `dev.crate.open` is client-only.
-- w-ingame: the plan surveys differ by host (5906 against 5907 frozen-water columns; other s1/s3 survey shas). Both hosts fail
-  item 7's s1 golden (572271bdae83 against 3e5bd5b77e40), which predates this batch.
-- y-ingame: headless fails `store`'s feed order (5 of 6 targets); on the client `store` fails NOT_ALLOWED (the INSTANT twins
-  need permission level 2). Neither matches, so it stays.
+- w-ingame: S1's pinned survey needs a base world the client made. A headless server's base (its level.dat records the data
+  packs and allowCommands 0) reads S1 as 572271bdae83 against the golden's 3e5bd5b77e40, in a fresh run dir too; a client that
+  reused it in the same run dir failed the same way, which is why both hosts failed in housekeeping 2. Since housekeeping 3 the
+  base stamp's recipe names its host (`tools/lib/basestamp.mjs` `gateHost`), so a base the other host made is moved aside and
+  rebuilt. The frozen site's count (item 6, recorded) varies from run to run on one host too (5904 on both hosts on
+  2026-10-19), as do the S2/S3 survey shas (recorded, not judged). It stays on the client.
+- y-ingame: both failures were the harness's (housekeeping 3). On the client, NOT_ALLOWED came from a survival base the headless
+  server had made in the same run dir (its mark now records the host; the other host rebuilds it). Headless, the host opened the
+  survival world with its creative launch spec, so the dedicated server's default game type was creative and AUTO placed the
+  batch road INSTANT; the host now opens an existing world in its own level.dat game mode (`server-host.mjs` `levelMode`).
 
 ### Headless against client (same commit, 3 rounds each, interleaved, other slices' runs on the box)
 

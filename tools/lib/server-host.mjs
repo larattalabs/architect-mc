@@ -23,6 +23,8 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { listen } from './wsserver.mjs';
+import zlib from 'node:zlib';
+import { decode as decodeNbt, plain as plainNbt } from '../../kit/lib/nbt.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const stamp = () => new Date().toISOString().slice(11, 19);
@@ -51,6 +53,25 @@ export function worldSpec(raw) {
   const c = raw.cheats === undefined || raw.cheats === null || raw.cheats === '' ? null : String(raw.cheats).toLowerCase();
   const cheats = c === null ? mode !== 'hardcore' : ['1', 'true', 'on', 'yes'].includes(c);
   return { name, preset, mode, seed, cheats };
+}
+
+/**
+ * (housekeeping 3) An existing world's game mode from its level.dat (Data.GameType 1: creative, else survival; hardcore 1 in
+ * Data.difficulty_settings, or Data itself: hardcore), or null when there is no world (a new one takes the spec's) or it can't be read.
+ */
+export function levelMode(worldDir) {
+  const f = path.join(worldDir, 'level.dat');
+  if (!fs.existsSync(f)) return null;
+  try {
+    const raw = fs.readFileSync(f);
+    const b = raw[0] === 0x1f && raw[1] === 0x8b ? zlib.gunzipSync(raw) : raw;
+    const d = plainNbt(decodeNbt(b)).Data ?? {};
+    // (26.3 keeps the flag in difficulty_settings; older level.dat files at the top of Data)
+    if (Number(d.difficulty_settings?.hardcore ?? d.hardcore ?? 0) === 1) return 'hardcore';
+    return Number(d.GameType ?? 0) === 1 ? 'creative' : 'survival';
+  } catch {
+    return null;
+  }
 }
 
 function serverProperties(spec, o) {
@@ -123,8 +144,12 @@ export async function runHost(opts) {
   const stats = { starts: 0, opens: 0, lastStopMs: null };
 
   function writeProperties(spec) {
+    // (housekeeping 3) an existing world opens in its own game mode, as a client's AutoWorld opens it: the dedicated server takes its
+    // default game type from server.properties, so a survival world opened by name alone (the host's creative launch world's spec)
+    // ran with a creative default and AUTO placed an INSTANT road where the client builds a construction road (y-ingame `once`)
+    const own = levelMode(path.join(gameDir, 'saves', spec.name));
     // the devserver mod opens no game port (NoTcpListenerMixin): this number is never bound
-    fs.writeFileSync(path.join(gameDir, 'server.properties'), serverProperties(spec, { gamePort: 25565, viewDistance, simulationDistance }));
+    fs.writeFileSync(path.join(gameDir, 'server.properties'), serverProperties(own ? { ...spec, mode: own } : spec, { gamePort: 25565, viewDistance, simulationDistance }));
     fs.rmSync(path.join(gameDir, 'saves', spec.name, 'session.lock'), { force: true });
   }
 
