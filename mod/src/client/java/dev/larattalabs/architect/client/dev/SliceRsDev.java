@@ -66,6 +66,25 @@ public final class SliceRsDev {
 				return t == null ? new JsonObject() : t;
 			});
 		});
+		DevBridge.register("dev.rs.cells", 120_000, "{region} - (6c RS) every target's queued cells [x, y, z, flags] (1 held, 2 built, 4 a cut), read now",
+			(req, mc) -> {
+				String region = req.get("region").getAsString();
+				return ServerTasks.callOnServer(s -> {
+					JsonObject o = new JsonObject();
+					var l = RegionsImpl.live(region);
+					JsonArray ts = new JsonArray();
+					if (l != null) {
+						for (var c : RegionTargets.counts(s, l.rec().groupId)) {
+							JsonObject t = RegionTargets.cellsJson(s, c.id());
+							if (t != null) {
+								ts.add(t);
+							}
+						}
+					}
+					o.add("targets", ts);
+					return o;
+				});
+			});
 		DevBridge.register("dev.rs.freeWrite", 30_000, "{at: [x,y,z] | cells: [[x,y,z]]} - (6c RS, N-RS-2) whether each cell is a survival region's "
 			+ "free write still standing (a break there drops nothing)", (req, mc) -> {
 				JsonArray cells = req.has("cells") ? req.getAsJsonArray("cells") : new JsonArray();

@@ -1,0 +1,240 @@
+#!/usr/bin/env node
+// Phase 6c slice RS gate (docs/CONTRACT.md "Phase 6c slice RS: regions in survival, the terrain half" §13, with Steward's review and the
+// coordinator's decisions) against the headless server of the RS run worktree (GATE6B_RUN, default `../architect-mc-RS-run`, a detached
+// worktree at this checkout's HEAD; the sim sidecar, no Claude). $0: no Claude call anywhere.
+//
+//   node tools/gate6crs.mjs <step>
+//     start [world] | stop | base       the headless server and the base worlds (the survival flat base: survival, cheats, the toggle on)
+//     unit      (rs-unit)               offline: item 1 (kit/test/rs.test.mjs; the mod's RegionTargetsTest; the broken variants carveFirst,
+//                                       loseCredit, lavaRefund caught), item 2 (byte identity: every committed plan fixture, the 59 asks
+//                                       among them, as on the merge base, kitVersion normalised; rs02's creative tile shas as on the base;
+//                                       the asks before and after: fixtures/plan/rs/asks-creative.md, asks-survival.md), item 17 (api-compat)
+//     latent                            §0's latent bug: a creative-game-type world with the toggle on realises a region (PLACED)
+//     item4  .. item15                  one item each, on a fresh world copy (the verifier re-runs item5, item8, item9, item10, item11)
+//     ingame    (rs-ingame)             latent, items 4, 6, 6b, 7, 12, 13, 15
+//     survival  (rs-survival)           items 3 and 5 (build, bills), 8 (conservation), 9 (removal), 10 (mid-build removal), 14 (natural)
+//     crash     (rs-crash)              item 11
+//     report                            REPORT.md over the step JSONs
+//
+// Evidence: artifacts/gate6c-rs/<step>.json in the main checkout (GATE6CRS_OUT overrides), all.log, REPORT.md, spend.json ($0.00).
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-RS-run');
+process.env.GATE6B_OUT = process.env.GATE6CRS_OUT ?? process.env.GATE6B_OUT ?? path.join(path.resolve(here, '..', 'architect-mc'), 'artifacts', 'gate6c-rs');
+process.env.GATE6B_SIDECAR_PORT ??= '8930';
+process.env.GATE6B_DEV_PORT ??= '8931';
+process.env.GATE6B_CLIENT_SCRIPT ??= 'tools/run-headless-server.mjs';
+process.env.HEADLESS_SIDECAR ??= 'sim';
+fs.mkdirSync(process.env.GATE6B_OUT, { recursive: true });
+const L = await import('./lib/run6b.mjs');
+const { OUT, check, connect, log, results, root, state, startClient, stopClient, cmd, sleep } = L;
+const core = await import('./lib/gate6chy-core.mjs');
+const B = await import('./lib/gate6chy-b.mjs');
+const G = await import('./lib/gate6crs-game.mjs');
+
+L.refuseKeys();
+const KIT = path.join(root, 'kit');
+const imp = (p) => import(pathToFileURL(path.join(KIT, p)).href);
+const json = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
+const ctx = { L, OUT, KIT, imp, json, root, check, log, core, B };
+const sum = (m) => Object.values(m ?? {}).reduce((a, b) => a + b, 0);
+
+const steps = {};
+async function run(name) {
+  for (const k of Object.keys(results)) delete results[k];
+  const t0 = Date.now();
+  let data, error;
+  log(`== ${name}`);
+  try {
+    data = await steps[name]();
+  } catch (e) {
+    log(String(e?.stack ?? e));
+    error = String(e?.stack ?? e);
+    check(false, `${name}: ${String(e?.message ?? e).slice(0, 300)}`);
+  }
+  if (!['stop', 'start'].includes(name)) L.write(`${name}.json`, { step: name, seconds: (Date.now() - t0) / 1000, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), load1: os.loadavg()[0], error, results: { ...results }, data });
+}
+const ensure = async () => { if (!state.dev) await connect(); };
+function spendZero() {
+  fs.writeFileSync(path.join(OUT, 'spend.json'), `${JSON.stringify({ capUsd: 0, totalUsd: 0, runs: [], note: 'slice RS is $0: sim only, no Claude call' }, null, 2)}\n`);
+}
+
+// ------------------------------------------------------------------ the server and the worlds
+
+steps.start = async () => {
+  const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim();
+  execFileSync('git', ['-C', L.RUN, 'checkout', '-q', '--detach', head]);
+  execFileSync('npm', ['run', 'build'], { cwd: path.join(L.RUN, 'sidecar'), stdio: 'ignore' });
+  await startClient(process.argv[3] ?? 'G6B RS Lobby', { backend: 'sim' });
+  spendZero();
+  return { head };
+};
+steps.stop = async () => {
+  try { await connect(10_000); } catch { /* by PID below */ }
+  await stopClient();
+};
+steps.base = async () => {
+  await ensure();
+  await L.ensureBase(G.FLAT);
+  await G.survivalBase(ctx);
+  spendZero();
+  return { worlds: [G.FLAT, G.SURV] };
+};
+
+// ------------------------------------------------------------------ offline: items 1, 2, 17
+
+function nodeTest(files, timeout = 3_600_000) {
+  const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
+  const t = `${r.stdout}${r.stderr}`;
+  const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
+  return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };
+}
+async function javaTests(patterns, minTests) {
+  const { srcGradle } = await import('./lib/src-gradle.mjs');
+  const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
+  const args = ['test', '--offline', '-q', ...patterns.flatMap((p) => ['--tests', p])];
+  const g = srcGradle(root, () => spawnSync('./gradlew', args, { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 1_800_000 }));
+  const dir = path.join(root, 'mod', 'build', 'test-results', 'test');
+  let tests = 0, failures = 0;
+  const names = [];
+  for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
+    if (!f.endsWith('.xml') || !patterns.some((p) => f.includes(p.replaceAll('*', '')))) continue;
+    const x = fs.readFileSync(path.join(dir, f), 'utf8');
+    const m = /tests="(\d+)" skipped="\d+" failures="(\d+)" errors="(\d+)"/.exec(x);
+    if (m) { tests += +m[1]; failures += +m[2] + +m[3]; names.push(`${f.replace(/^TEST-|\.xml$/g, '')}: ${m[1]}/${+m[2] + +m[3]}`); }
+  }
+  return { code: g.status, tests, failures, names, tail: `${g.stdout ?? ''}${g.stderr ?? ''}`.split('\n').slice(-12), ok: g.status === 0 && tests >= minTests && failures === 0 };
+}
+
+steps.unit = async () => {
+  const out = {};
+  out.kit = nodeTest(['kit/test/rs.test.mjs']);
+  check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 9, `item 1 (kit, kit/test/rs.test.mjs): the free rule per row (a terrain fill free, a cut free, a wall's body and its natural stone paid, a fill and a cut beside a wall held, an ore paid, a creative-only block paid and named, a dirt path free on the surface and paid over it, a pad free though its part holds, water, an ice cap and lava's source no target cell), notes.survival, free marks only in a survival IR, the kinds, FREE_EXCEPT, the region's bill equal to bom.mjs's, every RS fixture's cost.survival and cost.bom and its artifact, SURVIVAL {creativeOnly}, rs01's held terrace: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
+  out.java = await javaTests(['*RegionTargetsTest*'], 6);
+  check(out.java.ok, `item 1 (mod, RegionTargetsTest): a carve after its lining and the broken variant carveFirst caught; runs a course each within a quarter of the capacity; ARTL v2's classes and groups; the lava scoop never mints a bucket and credits once (lavaRefund and loseCredit caught by the sum); a target's record (region, part, held cells, no crate): ${out.java.tests} tests, ${out.java.failures} failures (${out.java.names.join('; ')})`, out.java.tail);
+  out.regression = await javaTests(['*ApiDTest*', '*RegionFluidsHYTest*', '*PlanChecksT3Test*', '*IrStale*', '*C29CreditTest*', '*FeedOrderTest*', '*RoadFreeCellTest*'], 10);
+  check(out.regression.ok, `item 1 (mod): the neighbours RS touches still pass (RegionView's trailing build, the kinds list, the key body, the feed order, the road's free cell): ${out.regression.tests} tests, ${out.regression.failures} failures`, out.regression.tail);
+  // item 2: byte identity against the merge base (every committed plan fixture, the 59 asks among them)
+  const U = await import('./lib/gate6crs-kit.mjs');
+  const u = await U.unchanged(root, { check, log });
+  out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ };
+  fs.writeFileSync(path.join(OUT, 'rs-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
+  out.tiles = await U.creativeTiles(root, { check, log });
+  out.asks = await U.asksTables(root, { check, log, OUT });
+  // item 17
+  const ac = spawnSync(process.execPath, ['tools/api-compat.mjs'], { cwd: root, encoding: 'utf8', timeout: 900_000, env: { ...process.env, PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
+  out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').filter((l) => /^(ok|FAIL)/.test(l)) };
+  check(ac.status === 0, `item 17: api-compat clean against the archived apitest jars (RegionView gains a trailing build, PlanCheck a trailing survival: the old constructors kept; RegionBuild, PartBuild new); $0.00`, out.apicompat.tail);
+  spendZero();
+  return out;
+};
+
+// ------------------------------------------------------------------ the latent bug (§0, §5)
+
+steps.latent = async () => {
+  await ensure();
+  const fx = G.fixture(ctx, 'rs01_land');
+  const s = await G.site(ctx, 'latent', fx, { creative: true });
+  await L.call('dev.survival.set', { on: true });
+  const sv = await L.call('dev.survival.state', {});
+  const ck = await G.check(ctx, 'latent', s);
+  const region = await G.realise(ctx, ck.check.artifactSha);
+  const st = await L.waitRegion(region, 1_800_000);
+  const r = await G.regionState(ctx, region);
+  const out = { toggle: sv, survivalCheck: ck.check?.survival ?? false, state: st.view.state, items: st.items, failed: r.failed ?? {} };
+  check(sv.survival === true && !ck.check?.survival && st.view.state === 'PLACED' && Object.keys(r.failed ?? {}).length === 0, `§0's latent bug: in a creative-game-type world with the survival toggle on (mode creative by the world), rs01 checked in creative and realised: ${st.view.state}, ${Object.keys(r.failed ?? {}).length} item(s) failed (on the base e755d663 every item failed NOT_ALLOWED "survival was switched on after this was queued": artifacts/gate6c-rs/latent-base.json); its items now queue survivalAtQueue from the toggle`, out);
+  await G.remove(ctx, region);
+  return out;
+};
+
+// ------------------------------------------------------------------ item 4: the free pass
+
+steps.item4 = async () => {
+  await ensure();
+  const fx = G.fixture(ctx, 'rs01_land');
+  const T = await G.twin(ctx, 'rs01', fx);
+  const s = await G.site(ctx, 'rs01', fx);
+  const box = G.boxOf(s.W);
+  const pre = await G.snap(ctx, box, 'rs-rs01-pre');
+  const ck = await G.check(ctx, 'rs01', s);
+  check(ck.check?.survival === true && ck.check?.overall === 'READY', `item 4: rs01 through Regions.checkPlan in survival: ${ck.check?.overall}, survival ${ck.check?.survival}, ${json((ck.check?.parts ?? []).map((a) => [a.part, a.class, a.cost?.survival?.free, a.cost?.survival?.held]))}`);
+  const crates = await G.pile(ctx, s, 3);
+  const cons = new G.Conservation(ctx, box);
+  await cons.start();
+  const region = await G.realise(ctx, ck.check.artifactSha);
+  // the free pass: every item of the first stages put down; then nothing more is built without the stockpile (no item consumed)
+  let w = null;
+  for (let k = 0; k < 60; k++) {
+    await sleep(3000);
+    const st = await G.regionState(ctx, region);
+    const busy = Object.entries(st.items ?? {}).some(([k2, n]) => /PLACING|QUEUED/.test(k2) && n > 0) && !Object.keys(st.items ?? {}).some((k2) => /WAITING/.test(k2));
+    if (!busy && k > 3) { w = st; break; }
+  }
+  const ps = await G.pileState(ctx);
+  const p = await cons.point('the free pass');
+  const rs = await G.rsState(ctx, region);
+  const cells = await L.call('dev.rs.cells', { region }, 300_000);
+  const target = new Set();
+  for (const t of cells.targets ?? []) for (const c of t.cells ?? []) target.add(`${c[0]},${c[1]},${c[2]}`);
+  const d = await G.twinDiff(ctx, T.box, T.file, crates);
+  const freeDiffer = d.list.filter((m) => !target.has(m.pos));
+  // every free cell as the twin's: a mismatch with the twin is at an unbuilt target cell only (or past the 16 named: counted in all)
+  const all = await L.call('dev.region.hash', { box: T.box, mode: 'diff', file: T.file }, 3_600_000);
+  const allDiffer = (all.list ?? []).filter((m) => !target.has(m.pos) && !crates.some((c) => c.join(',') === m.pos));
+  const out = { region, state: w?.view?.state, items: w?.items, consumed: ps.consumed ?? {}, entities: p.entities, targets: (rs.targets ?? []).map((t) => [t.target, t.part, t.cells, t.built, t.held]), parts: rs.build?.parts, twinDiff: { all: all.mismatches, listed: (all.list ?? []).length, freeDiffer: allDiffer.slice(0, 12) } };
+  check(sum(ps.consumed) === 0 && p.entities === 0, `item 4: the free pass consumed 0 items from the stockpile (consumed ${json(ps.consumed)}) and left 0 item entities in the box (${p.entities})`, out);
+  check(allDiffer.length === 0 && (all.list ?? []).length < 2000 ? true : allDiffer.length === 0, `item 4: the free cells equal the INSTANT twin's: of ${all.mismatches} cells differing from the twin, ${allDiffer.length} are not an unbuilt target cell (the crates aside; ${(all.list ?? []).length} listed)`, allDiffer.slice(0, 12));
+  void freeDiffer;
+  const steps0 = (rs.build?.parts ?? []).find((q) => q.part === 'steps');
+  check(!!steps0 && steps0.state === 'waiting' && steps0.built === 0 && steps0.freeCells === 0, `item 4: the held terrace waits whole (part steps: ${json(steps0 && { state: steps0.state, targets: steps0.targets, cells: steps0.cells, built: steps0.built, freeCells: steps0.freeCells })}): no cut or fill of it written before its stairs`);
+  await G.remove(ctx, region);
+  const e = await G.diff(ctx, box, pre);
+  const eflat = e.list.filter((m) => !crates.some((c) => c.join(',') === m.pos));
+  check(eflat.length === 0, `item 4: removed before any build: E-flat ${eflat.length} (the crates aside)`, eflat.slice(0, 8));
+  return out;
+};
+
+// ------------------------------------------------------------------ dispatch
+
+steps.report = async () => {
+  const files = fs.readdirSync(OUT).filter((f) => /^(unit|latent|item\d+b?|ingame|survival|crash)\.json$/.test(f)).sort();
+  const lines = ['# Slice RS gate report', '', `${new Date().toISOString()} · head ${execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim()}`, ''];
+  let fail = 0;
+  for (const f of files) {
+    const j = JSON.parse(fs.readFileSync(path.join(OUT, f), 'utf8'));
+    lines.push(`## ${j.step} (${Math.round(j.seconds)} s, head ${String(j.head).slice(0, 8)})`, '');
+    for (const [k, v] of Object.entries(j.results ?? {})) {
+      const ok = v?.ok === true;
+      if (!ok) fail++;
+      lines.push(`- ${ok ? 'ok' : 'FAIL'} ${k}`);
+    }
+    lines.push('');
+  }
+  lines.push(`${fail} failure(s); $0.00`);
+  fs.writeFileSync(path.join(OUT, 'REPORT.md'), `${lines.join('\n')}\n`);
+  return { files, fail };
+};
+
+const groups = {
+  ingame: ['latent', 'item4', 'item6', 'item6b', 'item7', 'item12', 'item13', 'item15'],
+  survival: ['item5', 'item8', 'item9', 'item10', 'item14'],
+  crash: ['item11'],
+};
+const name = process.argv[2];
+if (!name || (!steps[name] && !groups[name])) {
+  console.error(`usage: node tools/gate6crs.mjs ${[...Object.keys(steps), ...Object.keys(groups)].join('|')}`);
+  process.exit(2);
+}
+for (const s of groups[name] ?? [name]) {
+  if (!steps[s]) { check(false, `step ${s} is not built`); continue; }
+  await run(s);
+}
+const f = L.fails();
+log(f ? `${f} FAILURE(S)` : 'all checks passed');
+if (state.dev) await state.dev.close?.();
+process.exit(f ? 1 : 0);

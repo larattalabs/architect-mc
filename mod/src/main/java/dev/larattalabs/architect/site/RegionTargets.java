@@ -292,6 +292,33 @@ public final class RegionTargets {
 		if (n > 0) {
 			ends.add(n);
 		}
+		// (§4.3) a held cell is written with the paid ones: a run with no paid cell joins the next run that has one (the last such joins the
+		// run before it), so no cut or fill of a part with a wall goes in before a paid course of it
+		List<Integer> merged = new ArrayList<>();
+		int from = 0;
+		boolean pendingFree = false;
+		for (int e : ends) {
+			boolean paid = false;
+			for (int r = from; r < e && !paid; r++) {
+				paid = !costs.get(order[r]).isEmpty();
+			}
+			if (paid) {
+				merged.add(e);
+				pendingFree = false;
+			} else {
+				pendingFree = true;
+			}
+			from = e;
+		}
+		if (pendingFree) {
+			if (merged.isEmpty()) {
+				merged.add(n);
+			} else {
+				merged.set(merged.size() - 1, n);
+			}
+		}
+		ends.clear();
+		ends.addAll(merged);
 		// the deps by queue index (the order's positions)
 		int[] posOf = new int[n];
 		for (int r = 0; r < n; r++) {
@@ -608,9 +635,52 @@ public final class RegionTargets {
 		JsonObject res = new JsonObject();
 		reservation(srv, i, r).forEach(res::addProperty);
 		o.add("reserving", res);
+		// the target's whole bill (its paid cells: what it put on the stockpile at put-down) and its wait (C25)
+		JsonObject bom = new JsonObject();
+		new TreeMap<>(r.bom).forEach((k, v) -> {
+			if (v != 0) {
+				bom.addProperty(k, v);
+			}
+		});
+		o.add("bom", bom);
+		o.add("wait", SiteWaits.json(SiteWaits.view(srv, id), Sites.levelOf(srv, i.dimension())));
+		o.addProperty("paused", i.construction() != null && i.construction().paused());
 		if (runs.size() <= 64) {
 			o.add("runList", runs);
 		}
+		return o;
+	}
+
+	/**
+	 * Dev (the gate's items 4 and 6): a target's queued cells as {@code [x, y, z, flags]} (1 held, 2 built now, 4 its target air: a cut),
+	 * read from the world now (loaded chunks).
+	 */
+	public static @Nullable JsonObject cellsJson(MinecraftServer srv, String id) {
+		Infra i = Infras.get(id);
+		if (!is(i)) {
+			return null;
+		}
+		Builder.Run r = RoadBuilder.run(srv, i);
+		Plan pl = r == null ? null : planOf(srv, i);
+		ServerLevel level = Sites.levelOf(srv, i.dimension());
+		JsonObject o = new JsonObject();
+		o.addProperty("target", id);
+		o.addProperty("part", partOf(i));
+		if (r == null || pl == null || level == null) {
+			return o;
+		}
+		r.rescan(level, false, true);
+		JsonArray a = new JsonArray();
+		for (int q = 0; q < r.size(); q++) {
+			BlockPos p = r.pos(q);
+			JsonArray c = new JsonArray();
+			c.add(p.getX());
+			c.add(p.getY());
+			c.add(p.getZ());
+			c.add((pl.held.get(q) ? 1 : 0) | (r.built.get(q) ? 2 : 0) | (r.target[q].isAir() ? 4 : 0));
+			a.add(c);
+		}
+		o.add("cells", a);
 		return o;
 	}
 
@@ -640,6 +710,12 @@ public final class RegionTargets {
 		}
 		int run = currentRun(r, pl);
 		if (run < 0) {
+			return;
+		}
+		// (§4.3, the half-built safety) a target with no paid cell (its part's cut or fill in a tile of its own) waits until every other
+		// target of its part that has paid cells is BUILT: the part's walls, linings and shells stand before its free cells are written
+		if (r.bom.isEmpty() && pl.started < 0 && r.built.isEmpty() && paidSiblingBuilding(t)) {
+			SiteWaits.observe(srv, level, t.id(), WaitCalc.Outcome.IDLE);
 			return;
 		}
 		if (!started(r, pl, run)) {
@@ -725,6 +801,22 @@ public final class RegionTargets {
 			pl.before = main == null ? null : SiteJournal.beforeOf(main.id(), t.box());
 		}
 		return pl.before;
+	}
+
+	/** Whether another target of the same region part, one with paid cells, is still building. */
+	static boolean paidSiblingBuilding(Infra t) {
+		String part = partOf(t), group = t.group();
+		for (Infra o : Infras.all()) {
+			if (o == t || !is(o) || !java.util.Objects.equals(group, o.group()) || !java.util.Objects.equals(part, partOf(o)) || !o.building()) {
+				continue;
+			}
+			JsonObject rs = spec(o);
+			int held = rs.has("heldCells") ? rs.get("heldCells").getAsInt() : 0;
+			if (o.construction() != null && o.construction().size() > held) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Writes queue cell {@code q} as the tile writes its cells: CELL_FLAGS (no neighbour updates, no onPlace), the entry's NBT. */
