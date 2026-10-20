@@ -63,6 +63,44 @@ Mod:
 - Crash: targets rescan from the world (Builder.Run.rescan); a survival region's free-pass entries re-checked at load (a cell back at its
   before is written again).
 
+## The split (Noah, via the coordinator, 2026-10-20 night)
+
+RS is split so no builder runs out of context. **RS-a (this branch, `slice/RS`; its interface pushed as `rs/core`)** finishes the core
+and gates its own items. **RS-b** is a separate builder on `rs/core`'s interface.
+
+### The shared interface (frozen on `rs/core`)
+
+- Kit: `planRegion({survival})`, `ir.survival {format 1, groups, parts, pads, cells, creativeOnly?}`, ARTL v2 (class byte 0 free /
+  1 held / 2 paid, u16 group per cell), `kit/lib/region/survival.mjs` (freeCell, canPay, chargedOf, itemsOf), `cost.survival`,
+  plan `cost.bom` + mod-added `bomParts`. A fluid op's cells are always class 0 (never held: the fluids gate writes them in waves).
+- Mod: `RegionSurvival` (mode by world, creativeOnly, buildsFromStock), `Packed.Tile.cls()/group()`, `site/RegionTargets` (targets =
+  tile x group Infra `cells:architect:terrain|path` with spec `regionTarget {region, part, group, tile, held, heldCells, runs, capStacks}`,
+  ext `architect_mc:region` / `architect_mc:part`; `stepFed`, `stageWait`, `building(group)`, `buildingMember(group)`, runs from
+  `BuildOrder` + `firstUnsafeCut`), `RegionFluids.survivalBarrier/charge/scoop/survivalStanding/pendingCharges`, `Stockpiles.charge /
+  chargeShort / scoop / scoopInto`, `RegionFreeDrops`, API `RegionView.build` (`RegionBuild`, `PartBuild`), `PlanCheck.survival`,
+  feature `regionSurvival`, DevBridge `dev.rs.state | target | cells | freeWrite | break`.
+- Gate driver: `tools/gate6crs.mjs` + `tools/lib/gate6crs-game.mjs` (`buildOne`, `feed`, `Conservation`, `twinDiff`, `billsOf`).
+
+### What RS-b must build (and gate)
+
+Already on `rs/core` (RS-b verifies and extends, doesn't rebuild): the bodies' barrier (the fluids stage waits for every target, road and
+lot of the region BUILT), lava buckets charged at the gate (a bucket back) and scooped at removal, grates' iron bars charged and refunded,
+courses written in `after` order (rs03's brook: both reaches settled, world equal to its INSTANT twin, 0 differ), irrigation after its lot
+(a construction lot never queues its LotMask cells: fixed in `Builder.planConvert`; rs03's f1 bodies settled).
+
+RS-b builds:
+1. **Tunnels ring by ring** (§6.4, rs04): today a bore's target orders bottom up with every carve after its paid neighbours above and
+   beside within 1 (`RegionTargets` queue order + `firstUnsafeCut`, the unit test's carveFirst caught). RS-b: rings (a ring's lining, then
+   its carve) along the bore's axis, runs cut per ring within the quarter cap; prove no bore cell open without its lining half fed.
+2. **Item 5's rs04 row** (build, twin 0, E-flat 0) and **item 6's rs04 row** (half fed: runs whole, M3/M4/M8/gravity 0, no open cut).
+3. **Ice caps in game** (N-RS-4: free; a cold-biome body, not in any RS fixture yet).
+4. **Item 8** (conservation through bodies: lava charged, bucket back, at 10+ checkpoints on rs03) and **item 9's lava rows** (scooped with
+   a bucket, drained without: keep fewer buckets than sources in stock before the removal).
+5. **Brushes in survival in game** (item 13's last row: a concrete-pattern stroke refused NOT_ALLOWED, a natural stroke free via
+   `dev.brush`).
+6. RS-b's rows of item 16 that touch bodies: `hy-ingame`, `irr-ingame`, `h-ingame`, `ha-ingame`, `kc-ingame` (survival unchanged
+   elsewhere; creative unchanged).
+
 ## Status (2026-10-20 evening)
 
 - [x] RS-a kit: survival IR, evaluator v2, check answers, FREE_EXCEPT; kit/test/rs.test.mjs (9 pass)
@@ -86,6 +124,7 @@ Mod:
 - A region's construction road writes with CELL_FLAGS (as its tiles), else a dirt path under a lantern post turned to dirt (C16's builder).
 - Ad-hoc servers claim a gate slot (scratchpad/rs-build/slot.mjs) by the host's pid.
 
-## Next step
+## Next step (RS-a)
 
-The gate driver: per item steps (item5, item8, item9, item10, item11 alone for the verifier).
+Gate RS-a's items: 3, 4, 5 (rs02, rs03, survival_village), 6 (rs02, rs06), 6b, 7, 10, 11, 12, 13 (bar brushes), 14, 15, 16 (RS-a rows), 17;
+the verifier on 5, 9 (no lava rows), 10, 11; "RS-a as built"; merge origin/main's provenance change and fill it from the targets.
