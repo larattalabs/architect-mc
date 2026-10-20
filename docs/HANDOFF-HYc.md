@@ -43,6 +43,24 @@ r.fluidBody(cells, { ...opts, grate: wg.grate });
   can instead force its profile level over the crossing and call `waterGate` on the reach it made.
 - The wall does the rest (lintel, footing on the banks, meta `walls[].waterGates`, the answer's `crossing`).
 
+## HY-b and HY-c at merge (for the coordinator)
+
+origin/slice/HY-b (35a7c6c7) reads `crossingsOf(K)` in course.mjs `emit` and passes a crossing's `grate` to its reach, and answers
+`UNREACHABLE {kind: wall}` for a wall over the course with no crossing; nobody registers the crossing for its reaches yet. The one
+change that joins them, in course.mjs `emit`, right after `branchOverflows(K, p, geo)` and in place of the `crossingsOf` loop:
+
+```js
+for (const R of geo.reaches) {   // R's body cells, surface, and its step members (whatever HY-b names them)
+  const wg = waterGate(K, { course: p.id, body: R.id, cells: <R's body cells [[x, y, z]]>, level: <R's surface>, outlets: <R's outlets>, lining: <R's lining> });
+  if (wg.grate.length) R.grate = [...(R.grate ?? []), ...wg.grate];
+}
+```
+
+`waterGate` throws `UNREACHABLE: ...` with `{kind: 'wall', wall, why}` for a sealed wall, one at its gates.max, a wall over a step or
+a reach less than 2 cells still past a face (the router then needs a level reach there: `flow: level`, or a profile kept level across
+the wall line); HY-b's own UNREACHABLE wall check stays for the walls with no crossing. Then v58 (v30 + a stream through the ring)
+replaces `hy-pending-c.json`.
+
 ## State
 
 - Kit: gate.mjs, handgate.mjs, hy_gate_demo, wall.mjs (lintel, footing, gates.max, runFree, gates.min capped), checkWalls metric;
@@ -50,4 +68,5 @@ r.fluidBody(cells, { ...opts, grate: wg.grate });
 - In game on my own server (dev runs, artifacts/hyc-dev): every HY-c ingame check ok (READY, PLACED, census 48/48 with 12 joined
   grate cells, lintel 6/6, nav never through the grate, push 0 of 5 through and the open control 3 of 5, sealed and max refused
   UNREACHABLE {kind: wall}, E-flat 0); look 12 shots in 3 bibles.
-- Running: the slice tier (`artifacts/gate-runs-HYc`, 3 shards, 8942-8947). Next: verifier, "HY-c as built", the gallery, push.
+- hy/core 5fcf966c merged (ApiBTest's rebase point: the first slice run stopped at unit-mod on it, HY-core's). Running: the slice
+  tier again (`artifacts/gate-runs-HYc`, 3 shards, 8942-8947). Next: verifier, "HY-c as built", the gallery.
