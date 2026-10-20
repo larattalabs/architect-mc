@@ -516,6 +516,7 @@ steps.survival = async () => {
     const expect = bomOf(was);
     const returned = minus(Ld1.returned, Ld0.returned);
     deltaRefund = dl.refund ?? {};
+    out.goneTargets = gone.map((g) => [g.join(','), targets1[g.join(',')] ?? null, Object.keys(targets1).filter((k) => k.startsWith(`${g[0]},`)).slice(0, 12)]);
     gone.forEach((g, i) => { const t = targets1?.[g.join(',')]; if (t && was[i] && idOf(t) !== idOf(was[i])) perCell.push({ pos: g.join(','), by: 'delta', target: withId(was[i], idOf(t)), standing: was[i] }); });
     out.c = { cells: gone.map((g, i) => ({ at: g, standing: was[i] })), check: { ok: chk.ok ?? chk.allowed, refusals: chk.refusals, kept: chk.kept, edited: chk.edited }, delta: { applied: dl.applied, refund: dl.refund, refusals: dl.refusals }, returned, expect };
     check(was.every((s) => s && oxidized(s)) && (chk.refusals ?? []).length === 0, `item 7: Sites.checkDelta (PlayerEdits REFUSE) over the weathered cells ${json(was.map(idOf))}: no PLAYER_EDITS, no refusal (${json(chk.refusals ?? [])}; kept ${json(chk.kept ?? null)})`, out.c.check);
@@ -533,7 +534,6 @@ steps.survival = async () => {
     const goneKeys = new Set([[X + 5, y + 1, Z + 5], [X + 6, y + 1, Z + 5], [X + 7, y + 1, Z + 5], [X + 8, y + 2, Z + 3]].map((g) => g.join(',')));
     out.unqueued = Object.entries(targets1).filter(([k]) => !(k in targets) && !goneKeys.has(k)).map(([k, t]) => ({ pos: k, target: t, standing: now.get(k) ?? null }));
     const standing = [];
-    const perCell = [];
     for (const [pos, tid] of Object.entries(targets ?? {})) {
       const s = now.get(pos);
       if (!s || /^minecraft:(air|cave_air)/.test(s)) continue;
