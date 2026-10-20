@@ -19562,8 +19562,8 @@ Anything those slices' as-builts change wins over the facts quoted here.
 | **CL** climbs | `connector.stair`, `connector.switchback`, `connector.ladder` over T2's own moves; the behavioural villager test | ⟨6d⟩+1 minor, catalogue ⟨6d⟩+1 | none before release (plan answers and routes only, GATES policy 4) | 1.5 days |
 | **K2** walls II | `wall.along`; wall walks | next minor | none | 1.75-2 days |
 | **CW** catwalks | `connector.catwalk`, face form: route row 10 | next minor | none | 1.25 days |
-| **RK** rock stairs | `connector.rock_stair`: route row 11 on T3b's bore, the two-plan flow, the stale rock | next minor (Java: `hasVolume`) | none (as T3b) | 1.5 days |
-| **LF** lifts | `connector.lift`: route row 9, a bubble column as an H body, a StillOurs row | next minor (Java) | **RC** (a global StillOurs row; a new body in the fluids stage's census and drain) | 2 days |
+| **RK** rock stairs | `connector.rock_stair`: route row 11 on T3b's bore, the two-plan flow, the stale rock | next minor (Java: `hasVolume`) | none (as T3b) | 1.5-2 days |
+| **LF** lifts | `connector.lift`: route row 9, a bubble column as an H body, a StillOurs row | next minor (Java) | **RC** (a global StillOurs row; a new body in the fluids stage's census and drain) | 2.5 days |
 | **SA** spirals | `connector.stairs_around` round a form part to a lookout | next minor | none | 1.25 days |
 | **K3** wall lots | towers and gatehouses as lots on a wall's line; gatehouse passages; closure at bind | next minor (Java: the bind's closure check, artifact ports) | **RC** (Steward designs and binds these lots; a new `realiseApproved` refusal) | 2.5 days |
 | **GJ** gate joins | a district beside a walled town joins through a standing gate | next minor (Java: the reach over a wall region) | **RC** (removal in both orders, as D3) | 1.5 days |
@@ -19587,7 +19587,7 @@ Anything those slices' as-builts change wins over the facts quoted here.
   LF's lift doors, so after LF for its exception list, or with a stub list). One release, **one Steward RC** covering K3 and GJ.
 - **At most 3 gate runs machine-wide** (GATES policy 6). FL, F3, S3, RS and D3 hold slots while they build, so 7a's lanes take
   turns at the slice tier; the batches above are sized to three lanes.
-- **Totals:** about 15 days of work; about 6-7 elapsed with three lanes and the foundation first.
+- **Totals:** about 15.5 days of work; about 6-7 elapsed with three lanes and the foundation first.
 
 ### Rules for every slice here
 
@@ -19601,7 +19601,10 @@ From the FL/F3, KC, CU and D3 batches' as-builts; they bind each slice below:
   Steward-shaped plan per slice** in plan v1's shape (pending parts `required: false`, every street zone `orientation: "ew"` with
   rotate off, lot ext; STEWARD-SYNC "Plan v1").
 - **Villagers across** every villager-legal kind (vanilla `dev.nav.villager` both ways) is a **hard bar**: the slice doesn't pass
-  without it. Player-only kinds prove a bot player across instead, and a villager edge asking for one answers `MOVER`.
+  without it. **Ladders, lifts and wall walks are player-only by kind** (movers fixed to `['player']`, not inferred from their ends:
+  S-7a-8); they answer `MOVER` only when a part's own `movers` names villagers, and they prove the player across instead: the kit
+  `player` mover is the judged bar, with the physics shown by a probe (a named DevBridge hook, or a client-run step) where the
+  headless bot can't move that way.
 - **E-normal world classes** by kind, only at unwritten cells, only away from the plan (D2's `far`/`deep`, F2's `distant`, VOC's
   `farfluid`); never widened. A natural-site failure is first run against a no-region control.
 - **KC binds every new writer:** a body's cells are its own; whoever is placed later keeps clear (S-KC-1); watch cells strict
@@ -19630,6 +19633,7 @@ form to climb. So every recorded climb finds nothing to climb.
 | upside_down / winch_lift (required) | `unsupported {connector.lift}` | `refused NO_CLIMB`, `wouldFit` a `path` | LF |
 | mining_town / rail_1 (required) | `unsupported {connector.rail, until 7a}` | `unsupported {connector.rail, until CR}` (only `until` moves) | foundation |
 | castle_city / curtain_wall | `adjusted` (4 corner lots and `gate_lot` as `join` deviations; `wall_walk` noted) | `fits`, provisional: towers on the corners, the gatehouse on the gate run, the walk on the wall | K2, K3 |
+| the six walled zones (castle_city / castle, walled_town / town, metropolis / capital, camp_to_city / camp_city, redstone_gate / fortress, border_fort / fort) | `fits` or `adjusted` | the same class or `fits` (fewer lots on their street); each re-laid without its wall lots, its answer re-recorded | K3 |
 | walled_town / town_wall | `adjusted` (`gateLots` noted as joins) | `fits`, provisional: 4 gatehouses at the 4 gates | K3 |
 | metropolis / city_wall | `fits` (towers and gate lots noted) | `fits`, provisional, or `refused OUT_OF_CLAIM` as before | K3 |
 | camp_to_city / city_wall | `adjusted` | `fits` or `adjusted` (move), provisional; or `refused OUT_OF_CLAIM` as before | K3 |
@@ -19652,7 +19656,8 @@ honest repair. S-7a-2 asks.
 - **S-7a-1. `auto` does not grow in this batch.** S-K1-5 accepted that `auto` grows. CL's profiles, CW's catwalk, RK's rock stair and
   LF's lift are all opt-in per explicit part, and `auto` gets none of them, so every `auto` answer and v34/v38 stay byte-identical.
   Growing `auto` with the villager-legal ones (catwalk, rock stair) would be a later, measured change. Default: no growth now.
-- **S-7a-2. Nothing to climb.** A `stair`, `switchback`, `ladder`, `lift` or `rock_stair` whose ends rise less than 2 (4 for a lift)
+- **S-7a-2. Nothing to climb.** A `stair`, `switchback`, `ladder`, `lift` or `rock_stair` whose cheapest dry route climbs less than 2
+  (CL: the route's ascent, max minus min; the rows: no face or flight rising 2, or 4 for a lift, within `approach`)
   answers `refused NO_CLIMB` with a `path` `wouldFit`, as S-K1-6. The alternative is S-T3-4's `unsupported` with no repair. Default:
   refused with the repair.
 - **S-7a-3. `span_bridge` is a supported alias of `connector.bridge`.** SETTLEMENTS §8.2 defines it as 6a's `bridge` "for gaps with a
@@ -19668,6 +19673,9 @@ honest repair. S-7a-2 asks.
   knows the shape. mining_town's `rail_1` keeps waiting.
 - **S-7a-6. The nav slice.** `seconds`, `risk`, `nav.json` and the `steward` mover (SETTLEMENTS §15) have no consumer yet. Default:
   their own slice when your villager or steward phase asks; GJ types only the gate join's edge.
+- **S-7a-8. Player-only by kind.** A ladder, lift or wall walk carries movers `['player']` whatever its ends' lot kinds (S-T2-1's
+  inference would make almost every lift between dwellings refuse). Its ends' villager reach stays M2's job on the other routes. A
+  part whose own `movers` names villagers answers `MOVER` with a stair or path repair. Default: yes.
 - **S-7a-7. M8 as an error.** FB records how many committed plans would lose READY if M8 (fall protection) became an error. Default:
   decide at the batch's release tier with those counts.
 
@@ -19909,8 +19917,10 @@ The builder may tune these within CL (recorded in the as-built); they never touc
 
 ### 3. The fittings and the climbed check
 
-- **Climbed (post-check).** From the survey, before routing: the ends' rise `|y1 - y0| < 2` answers **`refused NO_CLIMB`** with
-  `evidence {rise, need: 2}` and a `path` `wouldFit` between the same ends (re-checked alone). After routing, a route whose
+- **Climbed (post-check).** The connector's ends are first routed dry as a plain `path` (T2, no profile, rolled back). Its
+  **ascent** (the highest point of that route's surface minus its lowest, so a stair over a ridge, or down and up between ends
+  at one height, counts) under 2 answers **`refused NO_CLIMB`** with `evidence {ascent, need: 2}` and that path as the `wouldFit`
+  (re-checked alone). After routing, a route whose
   segments hold no flight (stair), no hairpin (switchback) or no ladder (ladder) answers **`adjusted`**, deviation `{what: climb,
   value: walk, rise}`, note "the land's grade needed no <kind>" (a gentle rise walked within the grade).
 - **Stair rails.** Every stair tread or landing cell beside a drop over 3 (the fill side of a flight on a slope) gets the rail role
@@ -19932,8 +19942,9 @@ The builder may tune these within CL (recorded in the as-built); they never touc
 
 ### 4. Movers and answers
 
-- Movers inferred as T2 (S-T2-1). A **ladder** is player-only: a ladder part whose ends infer villagers, or whose `movers` include
-  `villager`, answers `refused MOVER` with a `stair` `wouldFit` where one fits alone, else a `path`'s.
+- Stairs and switchbacks: movers inferred as T2 (S-T2-1). A **ladder** is player-only by kind (S-7a-8): its movers are
+  `['player']` whatever its ends; a ladder part whose own `movers` include `villager` answers `refused MOVER` with a `stair`
+  `wouldFit` where one fits alone, else a `path`'s. `NO_CLIMB` is judged before `MOVER`.
 - Answers carry `geometry.climbs[{leg, rise, flights, hairpins, ladders: [{at, rungs, landings}]}]`, the graph edge `type: <kind>`
   with its `crossing`, `cost.bom`.
 
@@ -19989,7 +20000,7 @@ ladder), `ANCHOR` (a sand face), `SPAN` (a 49-high ladder), `UNREACHABLE` (a kee
 | 5 | Villagers (hard bar) | vanilla `dev.nav.villager` both ways on every stair and switchback edge of `climbs_demo` flat and natural: 100% found; kit `villager` and `player` movers 100% |
 | 6 | The behavioural villager test (hard bar) | on `climbs_demo` flat: a bed lot reached only by the ladder: `dev.nav.villager` finds no path (0 of 3 tries) while the bot player climbs it; the same bed reached by a stair route: found both ways |
 | 7 | Geometry, realised | flights rise 1 a cell, at most 8, then 2 flat; walk windows within the grade (M2:grade 0); M8 0 on stairs and landings (rails); hairpins with their landings; every ladder cell against a sturdy face; rest landings at most `rest` apart; the top gate in place; M5 0 dark walk, tread and landing cells; M3 0 |
-| 8 | Player across | a bot player up and down every ladder: the top reached, the rest landings stood on. If the headless bot can't climb yet, a new hook `dev.climb` (DEVBRIDGE changelog) drives it, as T3a added `dev.t3.boat` |
+| 8 | Player across | **judged:** the kit `player` mover up and down every ladder, rest landings included, on the realised world re-read. **Shown:** a bot player climbing each ladder, through a new hook `dev.climb` (DEVBRIDGE changelog, as T3a added `dev.t3.boat`) or, if the server bot can't climb, a client-run step; the physics probe is recorded, and a harness gap there does not block the slice |
 | 9 | KC | a stair beside a fountain: 0 cells in its hard or watch sets, M25:clear 0 |
 | 10 | Exact undo | E-flat 0 on `climbs_demo` flat; natural E-normal 0 unclassified under the narrowed classes |
 | 11 | Survival (if RS merged) | `v7a_cl_stair` in a survival world: treads and rails from the stockpile, the cut free; BOM equals `bomFull`; removal refunds once per key |
@@ -20012,8 +20023,8 @@ rounds and the villager test (0.5).
 - **S-CL-1. A walked climb is `adjusted`.** A stair whose ends rise 2 or more but whose cheapest route stays within the grade
   without a flight answers `adjusted` (deviation `climb: walk`). Fine, or should it lay flights anyway?
   Default: `adjusted`, because forcing flights onto a gentle slope would cut steps into land that doesn't need them.
-- **S-CL-2. Ladders are player-only.** A villager edge asking for a ladder answers `MOVER`, with a stair or a path as the repair.
-  Default: yes (A7: villagers don't climb).
+- **S-CL-2. Ladders are player-only by kind** (S-7a-8): a ladder never refuses for its ends' lot kinds; only `movers: [..., villager]`
+  answers `MOVER`, with a stair or a path as the repair. Default: yes (A7: villagers don't climb).
 
 ### Open questions for Noah
 
@@ -20146,7 +20157,7 @@ walk wall (`NO_ROOM {why: walk}` with its `wouldFit`), an access with no room an
 | 3 | Recorded plans | §8's bar |
 | 4 | In game, Steward-shaped | `v7a_k2_walk` in plan v1's shape through `checkPlan` then `realiseApproved`; `v7a_k2_along_shore` the same on S3's claim |
 | 5 | Closure and crossing (K1 item 1-3's bars) | on `v7a_k2_walk`: closure 0 leaks, every node across with gates open; 0 route cells under wall cells; villagers through the gates, vanilla, both ways (hard bar) |
-| 6 | Walk, realised | a bot player round the whole walk: every walk cell visited, up and down every access; M8 0 on walk cells (the parapet course continuous, re-read); M5 0 dark walk cells; M3 0 |
+| 6 | Walk, realised | **judged:** the kit `player` mover round the whole walk and up and down every access on the re-read world; M8 0 on walk cells (the parapet course continuous, re-read); M5 0 dark walk cells; M3 0. **Shown:** a bot player walking it (the server bot walks stairs; a ladder access by `dev.climb` or a client step) |
 | 7 | Along, realised | every line cell within `distance` of the spine (or the recorded deviation); 0 cells in water; the free ends' posts |
 | 8 | KC | an along wall past a pond: kept clear (M25:clear 0) |
 | 9 | Exact undo | E-flat 0 (flat rounds); S3 natural E-normal 0 unclassified |
@@ -20338,8 +20349,9 @@ connector.rock_stair: connector.routed's members (kind "rock_stair"), plus width
 
 - **A flight** is a straight cardinal run from a start walk cell `y0` to a landing walk cell `y0 + rise`, `2 <= rise <= 48`: steps
   rise 1 a cell, with a 2-cell flat landing after every `landing` steps (default 8: SETTLEMENTS §8.2 "landings every 8"). Its
-  floor profile replaces the tunnel's level profile; every other part of `tunnelGeom` applies to the void over it (`height` clear
-  over each tread's walking surface).
+  floor profile replaces the tunnel's (which steps at most half a block a cell; a stair rises a full block a cell), so the void
+  over it (`height` clear over each tread's walking surface) is a staircase of slices. **The builder re-derives `tunnelGeom`'s
+  cover, shell, portal and gravity rules per tread** against that void and tests each; they are reused, not assumed to hold.
 - **Carved, not built:** every tread and landing stands on site-solid ground (the cell under each tread is ROCK, SOIL or the plan's
   own grounded fill of at most 1). A tread over air or deeper fill answers `ANCHOR {why: tread}`: a stair standing on fill is a
   built stair (CL's), not a rock stair.
@@ -20410,6 +20422,7 @@ ravine), `WATER` (a pocket 2 from the bore; at 3 it fits), `PROTECTED` (under a 
 | 5 | Realised | re-read: every tread rises 1, landings flat; cover where bored; every shell cell solid; sand band lined (0 falling-block entities through a 60 s stand); 0 fluid cells within 2 of the void; M3 0, M4 0, M5 0 dark treads, M6 0 |
 | 6 | Villagers (hard bar) | vanilla `dev.nav.villager` up and down every rock stair both ways (the 1-wide one included); kit movers 100% |
 | 7 | Stale rock | approve, then `/setblock` air in one shell cell, and separately water 2 from the void: `ARTIFACT_STALE` naming the rock stair and the cell; with neither, it realises |
+| 7b | KC | a flight within 2 of a pond's shell (KC's `k05` analog): `refused WATER {kind: body}`; at 3 it fits; M25:clear 0 |
 | 8 | Exact undo | E-flat 0 (flat ridge); natural E-normal 0 mismatches within 6 of the written cells (T3b's rule) |
 | 9 | Survival (if RS merged) | carved flight by flight behind its lining; BOM exact |
 | 10 | Catalogue, determinism, API | the flip with `limits.volume: true`; 3 checks identical with the same volume shas; api-compat; $0.00 |
@@ -20420,8 +20433,9 @@ ravine), `WATER` (a pocket 2 from the bore; at 3 it fits), `PROTECTED` (under a 
 
 ### 9. Size
 
-One owner, **about 1.5 days**: the flight over `tunnelGeom` and the row (0.75), the Java trigger and guard prefix (0.25), the
-rounds (0.5). Most of the risk is T3b's and already proven.
+One owner, **about 1.5-2 days**: the flight over `tunnelGeom` and the row (0.75), re-deriving its rules per tread (0.25-0.5), the
+Java trigger and guard prefix (0.25), the rounds (0.5). The fluid buffer and the stale rock are T3b's, proven; the stepped void is
+new.
 
 ### Open questions for Steward
 
@@ -20506,19 +20520,24 @@ connector.lift: connector.routed's members (kind "lift"; movers, if given, must 
 - From a walk cell on a cardinal heading, 3 cells out from a face (the airlock's two layers between it and the shaft), the row
   tries the face's rise (4..64, or the part's `rise`) and lands on the top walk cell; down columns the other way.
 - `once: 'lift'`; `approach` (default 16) at each end. **Cost:** 300 + 10 a cell of rise (+ 100 with `down`).
+- **`commit`:** a routed lift marks its tower's footprint (shaft, shell, airlock, rim) hard for every later edge of the same pass
+  and reserves it with KC's registry then (`reserve`, replaced by the exact sets at emit), so no later leg routes through its shell.
 - **`fail`:** NO_CLIMB (no face rising 4 within `approach`), SPAN (rise outside the limits), ANCHOR (the face's cells behind the
   shaft neither site-solid nor writable), HEADROOM, WATER, PROTECTED; UNREACHABLE if a candidate passes.
-- **Movers:** player-only. A lift whose ends infer villagers, or whose `movers` include `villager`, answers `refused MOVER` with a
-  `stair` (CL) `wouldFit` where one fits alone, else a `path`'s.
+- **Movers:** player-only by kind (S-7a-8): `['player']` whatever its ends. A lift whose own `movers` include `villager` answers
+  `refused MOVER` with a `stair` (CL) `wouldFit` where one fits alone, else a `path`'s. `NO_CLIMB` is judged before `MOVER`.
 
 ### 4. Fluids, the census, undo and the Java row
 
 - **Registered at emit** with KC's registry as a body (`registerBody`: hard = shaft ∪ shell ∪ base; watch = the airlock's
   vestibule), as courses are. A lift is placed after every route and wall, so it keeps clear of their cells by construction (S-KC-1:
   the later part moves): its siting obstacles include every planned cell.
-- **The fluids stage** writes its bubble-column cells after every solid (H's barrier), in (y, x, z) order. **The census** counts a
-  `bubble_column` cell as a water source of the body (as HY's grate bars and F3's waterlogged decor are counted). `predicted`
-  includes them. No spill: the top is open, and a source doesn't rise.
+- **The fluids stage (Java, `RegionFluids`)** writes its bubble-column cells after every solid (H's barrier), in (y, x, z) order,
+  **as `bubble_column` states directly** (with `CELL_FLAGS`). H's forced fluid tick is adapted for them: the shaft's cells get a
+  block tick (so vanilla keeps the column over its base) instead of a fluid tick, and their face-neighbours outside the body get
+  H's fluid tick as today. **The census** (mod side, the realise report's `fluids` row) counts a `bubble_column` cell as a source of
+  the body (as HY's grate bars and F3's waterlogged decor are counted); the kit's `predicted` includes them. No spill: the top is
+  open, and a source doesn't rise.
 - **StillOurs (Java, global):** a cell written as `bubble_column` is still ours as any `bubble_column` state (either `drag`), as a
   water source, or as air; and a cell written as a water source is still ours as a `bubble_column`. This is a `fluidHolds` row, so it
   reaches deltas, `versionOf`, PT2's adopt counts and survival `matches` for any bubble column (the RC trigger, as F3's rows).
@@ -20545,7 +20564,9 @@ shell 2 thick on the open sides at every y, both airlock doors, the rim and rail
 
 - Row 9 is off unless an edge lists it, and a plan without a lift has no new body: every other fixture byte-identical.
 - Feature `liftConnectors` (sidecar `region.lifts`); siteplan `lifts[]`; the `architect_mc:fluids` rows gain lifts (H's shape
-  `{part, body, state, reason, at}`); graph `type: lift`, movers `['player']`, `crossing {type, rise, down}`. Java: the StillOurs row.
+  `{part, body, state, reason, at}`); graph `type: lift`, movers `['player']`, `crossing {type, rise, down}`. **Java:** the
+  fluids-stage write of `bubble_column` states and its ticks, the census and realise report counting them, the StillOurs row, and
+  the drain's restore of those cells.
 
 ### 8. Steward's recorded plans
 
@@ -20565,11 +20586,11 @@ face of sand with no room for a written shell), `HEADROOM` (an overhang 2 over t
 
 | # | Check | Bar |
 |---|---|---|
-| 1 | Probe (headless) | command-built: water over soul sand and magma forms the columns; a written `bubble_column` over its base stays; a bot player rides up 8, 30 and 48 and is launched over a rim at `yT`, and stepping toward the face lands on the top cell; down columns carry it to the airlock; a door holds a column open and shut; drowned spawn in a dark column in a river biome and not in a lit one (the light-every-6 rule rests on it) |
+| 1 | Probe | command-built: water over soul sand and magma forms the columns; a written `bubble_column` over its base stays; a door holds a column open and shut; drowned spawn in a dark column in a river biome and not in a lit one (the light-every-6 rule rests on it). **The ride:** a bot player (a new hook `dev.lift.ride`) rides up 8, 30 and 48, is launched over a rim at `yT` and, stepping toward the face, lands on the top cell, and the down column carries it to the airlock. If the server bot can't ride, a client-run step shows it, and server-side a mob and an item entity carried up and down the columns stand in for it (recorded) |
 | 2 | Unit | siting, the shell's two layers, the airlock, rim and rails, light spacing, the down column; every refusal with evidence; the single breach reaches nothing outside; `M10:lift` on broken variants (`_unsafe.oneLayer`: M25 breach reach outside; `_unsafe.oneDoor`; `_unsafe.noLight`) |
 | 3 | Byte identity | every fixture without a lift unchanged |
 | 4 | In game, Steward-shaped | `v7a_lf_cliff` in plan v1's shape through `checkPlan` then `realiseApproved`; PLACED only when the lift's body has settled; the census exact (every shaft cell a bubble column, 0 fluid elsewhere in its watch box) |
-| 5 | Player across (hard bar) | a bot player from the approach through the airlock, up to the top cell, and down the down column back to the approach: 100% of rides arrive (5 each); kit `player` mover across; kit `villager` refused (the airlock is not a villager route) |
+| 5 | Player across (hard bar) | **judged:** the kit `player` mover from the approach through the airlock to the top cell and back by the down column (the kit gains the column as a move: up over soul sand, down over magma), and kit `villager` refused (not a villager route); every realised column cell a bubble column of the right drag (re-read). **Shown:** item 1's ride on the realised lift, 5 rides each way, by the bot or the client step |
 | 6 | Containment | M25 0; a 2-minute stand at default rules: 0 fluid cells outside the shaft; a breach probe (`/setblock` air at one inner shell cell): the water stops at the outer layer |
 | 7 | KC | a lift beside a pond: kept clear, M25:clear 0 |
 | 8 | Exact undo (verifier re-runs) | `Regions.remove`: E-flat 0 on `lifts_demo` flat, fluid cells compared exactly; natural E-normal 0 within 6 of any lift cell |
@@ -20584,13 +20605,13 @@ LF's `lf-unit`, `lf-probe`, `lf-ingame`, `lf-natural` (driver `tools/gate7alf.mj
 
 ### 10. Size
 
-One owner, **about 2 days**: the probe (0.25), geometry and the row (0.5), the fluids stage, census and StillOurs row (0.5), M25 on
-lifts and fixtures (0.25), the rounds (0.5).
+One owner, **about 2.5 days**: the probe (0.25), geometry and the row (0.5), the Java fluids-stage write, ticks, census and
+StillOurs row (1), M25 on lifts and fixtures (0.25), the rounds (0.5). If it runs long, `down` columns can follow as a patch.
 
 ### Open questions for Steward
 
-- **S-LF-1. A lift is a bubble column, player-only.** "Winch", "rope" and "elevator" in a card map to it (noted), at the foot of a
-  face rising 4 to 64. Villager edges get `MOVER` with a stair repair. Fine? Default: yes.
+- **S-LF-1. A lift is a bubble column, player-only by kind.** "Winch", "rope" and "elevator" in a card map to it (noted), at the foot
+  of a face rising 4 to 64. Only `movers` naming villagers answers `MOVER` (S-7a-8), with a stair repair. Fine? Default: yes.
 - **S-LF-2. The RC.** The StillOurs row is global, and the census counts bubble columns. Will you run on the RC a lift realised and
   removed, a delta and a PT2 adopt over a standing lift, and (with RS) a survival lift? Default: yes.
 
@@ -20866,9 +20887,11 @@ Survival: the lots are lots (Steward's construction sites, unchanged); the wall'
 | redstone_gate / main_gate (optional) | `fits`: the gate is `gatehouse_1`'s passage | its `from {part: fortress, port: gatehouse_1}` resolves to the passage |
 | border_fort / fort_wall | `fits` provisional | `anchors` read |
 | desert_jungle_wall / great_wall | `fits` provisional (unchanged class); `gatehouse_1` a through lot with its passage | a `wall.line` via a gatehouse lot |
+| castle_city / castle, walled_town / town, metropolis / capital, camp_to_city / camp_city, redstone_gate / fortress, border_fort / fort | the same class as today, or `fits` where a withheld lot was the one left unplaced; geometry and lots re-recorded | each zone is laid out without its wall lots (§2), so its street, lot positions and IR move |
+| desert_jungle_wall / town | unchanged | `gatehouse_1` is a lot of the wall's `via`, not withheld from `town`'s street unless it is one of `town`'s lots (the builder records which) |
 
-**Bar:** 0 `malformed`; only these parts change, each with its before and after in `fixtures/plan/k3/`; no `join` deviation left
-on a lot the wall could site.
+**Bar:** 0 `malformed`; only these parts change (the walls and their zones), each with its before and after in `fixtures/plan/k3/`;
+no zone gets worse than its class today; no `join` deviation left on a lot the wall could site.
 
 ### 10. Gate (slice tier, $0)
 
@@ -20908,6 +20931,9 @@ the bind check, the artifact read, items 4, 6-8) against a frozen `onWall` shape
   (doors face in), and a gatehouse must leave its reserved passage open. Today that is a brief line plus the bind check; a typed
   `DesignRequest` member for closed faces would let your designer's checker catch it first. Want it now? Default: the brief line
   and the bind check; the member later if designs miss it.
+- **S-K3-4. A zone's lot outside its zone's rect.** A wall lot keeps its zone (`$.lots[].zone`, its tags, Steward's lot ext), but its
+  box stands on the wall's line, outside the zone's rect. Does plan v1's lot reading and tagging accept a zone lot outside the rect
+  (it reads `$.lots[]`, not the rect, as far as Architect can see)? Default: yes, with `onWall` telling you why.
 - **S-K3-3. The RC.** Will you run on the RC: castle_city's shape designed and bound (towers and a gatehouse), a bind refusal and its
   repair, villagers through the gatehouse, and the region's removal? Default: yes.
 
@@ -21026,7 +21052,8 @@ None use `beside` or `endpoint.region` (D1's gap table): unchanged.
 
 ### 11. Gate (slice tier, $0)
 
-**Fixtures:** `d3_walled` (D3's) with its C38 wall's gates (two auto gates on the street ends, one `gates.min` gate); `gj_town_wall`
+**Fixtures:** `d3_walled` (D3's): its C38 ring crosses none of the town's roads (a V street ends inside it), so its gates are
+`gates.min`'s (facing the street ends), and D3 answers it `NO_JOIN [wall]` first; `gj_town_wall`
 (`d3_town` with a K1 `wall.around` as the town's own part, a gate with a wooden door); `gj_fence` (the only gate a fence gate);
 `gj_sealed` (`gates: 0`). Plan fixture `v7a_gj_endpoint` (an `endpoint.region` route to the walled town's street).
 
