@@ -1,0 +1,73 @@
+{
+  "about": "(6c KC \u00a710) k04_rope_landing: a rope bridge over a 12-wide ravine, a fountain on the west lip whose apron (its watched reach) holds the nearest landing: the rope bridge is placed after the body, so it keeps clear (lands beside the apron) or is refused OVERLAP {kind: body}; the fountain unchanged, M25:clear 0.",
+  "terrain": {
+    "W": 240,
+    "D": 160,
+    "x0": 1000,
+    "z0": 2000,
+    "y": 64,
+    "bands": [
+      {
+        "x0": 1100,
+        "z0": 2000,
+        "x1": 1111,
+        "z1": 2159,
+        "y": 40
+      }
+    ]
+  },
+  "on": "flat",
+  "anchors": {
+    "a": [
+      1094,
+      65,
+      2120
+    ],
+    "b": [
+      1118,
+      65,
+      2120
+    ],
+    "kc_fount": [
+      1093,
+      65,
+      2125
+    ]
+  },
+  "volume": {},
+  "expect": {
+    "part": "span",
+    "clear": 0,
+    "fountUnchanged": true
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "kc_k04",
+    "forms": [
+      {
+        "id": "fount",
+        "kind": "fountain",
+        "basin": 5,
+        "spout": 2,
+        "where": {
+          "near": {
+            "anchor": "kc_fount",
+            "within": 2
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "span",
+        "kind": "rope_bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        }
+      }
+    ]
+  }
+}

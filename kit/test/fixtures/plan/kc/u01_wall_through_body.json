@@ -1,0 +1,98 @@
+{
+  "about": "(6c KC \u00a710, broken variant) u01_wall_through_body: k01's plan, its wall's ext architect_mc:unsafe {wallThroughBody: true}: the old wall grid (the bodies' footprints left out), so the ring runs through the fountain as on main; the plan check never refuses an unsafe part, and the region check's M25:clear catches it (hard: the basin's water and rim; watch: the apron).",
+  "on": "flat",
+  "style": "g6cvoc_forge",
+  "volume": {},
+  "expect": {
+    "clearRule": true,
+    "sets": [
+      "cells",
+      "shell",
+      "watch"
+    ],
+    "writer": "forge_wall"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "kc_u01",
+    "zones": [
+      {
+        "id": "forge",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "f1",
+                "type": "smithy",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "f2",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "f3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        },
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 24
+          }
+        }
+      }
+    ],
+    "forms": [
+      {
+        "id": "fount",
+        "kind": "fountain",
+        "basin": 5,
+        "spout": 3,
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 40
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "forge_wall",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "forge"
+            },
+            "ring": [
+              4,
+              8
+            ]
+          }
+        },
+        "height": 4,
+        "ext": {
+          "architect_mc:unsafe": {
+            "wallThroughBody": true
+          }
+        }
+      }
+    ]
+  }
+}

@@ -79,7 +79,7 @@ function findArtifact(L, sha) {
 const boxOf = (g) => [CLAIM[0] - 8, g - 8, CLAIM[1] - 8, CLAIM[2] + 8, g + 40, CLAIM[3] + 8];
 
 /** The water gate's geometry from a realised region: the reach body, the wall's water gate, the axis and the inside's sign. */
-function gateGeometry(r, wallId = 'castle') {
+export function gateGeometry(r, wallId = 'castle') {
   const meta = JSON.parse(fs.readFileSync(path.join(r.planDir, 'meta.json'), 'utf8'));
   const wall = (meta.walls ?? []).find((w) => w.id === wallId);
   const wg = wall?.waterGates?.[0];

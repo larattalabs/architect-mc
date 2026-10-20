@@ -88,7 +88,7 @@ export default function hCoreDemo(ctx) {
     const level = low - 1;
     const basin = [];
     for (let x = bx - 2; x <= bx + 2; x++) for (let z = bz - 2; z <= bz + 2; z++) if (x !== bx || z !== bz) basin.push([x, level, z]);
-    const carve = r.part('basin_carve', { stage: 'ground' });
+    const carve = r.part('spout_basin_carve', { stage: 'ground' });
     const cols = [];
     for (const [x, y, z] of basin) cols.push(x, z, y, g(x, z), 0);
     carve.columns({ abs: 0 }, { abs: 0 }, cols, [null], { cond: 0 });

@@ -11,7 +11,8 @@ import { pathToFileURL } from 'node:url';
  * Item 12's named exceptions: fixtures HY re-answers by name. h/r08_course is a course (now HY-b's v51, the stub's UNREACHABLE until HYb
  * meanwhile) and extension/e15 lost its course part (channel.course is supported).
  */
-export const UNCHANGED_EXCEPTIONS = Object.freeze(['h/r08_course.json', 'extension/e15_every_reserved_a.json']);
+// ((6c KC) valid/v51_voc_forge: KC's named exception (its wall ran through the fountain; the ring repaired to [4, 17], tools/lib/gate6ckc-kit.mjs))
+export const UNCHANGED_EXCEPTIONS = Object.freeze(['h/r08_course.json', 'extension/e15_every_reserved_a.json', 'valid/v51_voc_forge.json']);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const k3 = (c) => `${c[0]},${c[1]},${c[2]}`;

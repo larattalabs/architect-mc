@@ -89,7 +89,7 @@ class RegionFluidsHYTest {
 	@Test
 	void versionsKindsAndFeatures() {
 		assertEquals("1.36.0", ArchitectApi.VERSION);
-		assertEquals("0.37.0", IrStale.KIT_VERSION);
+		assertTrue(IrStale.semverCompare(IrStale.KIT_VERSION, "0.37.0") >= 0, IrStale.KIT_VERSION); // ((6c KC) at least HY's kit: KC's patch is 0.37.1)
 		assertEquals("courses", IrStale.KINDS_FORMAT2.get(IrStale.KINDS_FORMAT2.size() - 1), "appended at the end");
 		assertTrue(ApiRules.features(2, List.of("region.hydrology", "region.courses", "region.waterGates")).containsAll(List.of("hydrologyPass", "regionCourses", "waterGates")));
 		assertFalse(ApiRules.features(2, List.of("region.fluids")).contains("regionCourses"), "an H helper has no courses");

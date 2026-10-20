@@ -1,0 +1,96 @@
+{
+  "about": "(6c KC \u00a710, broken variant) u03_slab_in_watch: v51's plan (the ring clear of the fountain), its wall's ext architect_mc:unsafe {slabInWatch: true}: the wall writes one stone slab, a non-shell-grade block, into the first watch cell of the fountain's apron; M25:clear's watch clause catches it (strict, S-KC-2).",
+  "on": "flat",
+  "style": "g6cvoc_forge",
+  "volume": {},
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "kc_u03",
+    "zones": [
+      {
+        "id": "forge",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "f1",
+                "type": "smithy",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "f2",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "f3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        },
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 24
+          }
+        }
+      }
+    ],
+    "forms": [
+      {
+        "id": "fount",
+        "kind": "fountain",
+        "basin": 5,
+        "spout": 3,
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 40
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "forge_wall",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "forge"
+            },
+            "ring": [
+              4,
+              17
+            ]
+          }
+        },
+        "height": 4,
+        "ext": {
+          "architect_mc:unsafe": {
+            "slabInWatch": true
+          }
+        }
+      }
+    ]
+  },
+  "expect": {
+    "clearRule": true,
+    "sets": [
+      "watch"
+    ],
+    "writer": "forge_wall"
+  }
+}

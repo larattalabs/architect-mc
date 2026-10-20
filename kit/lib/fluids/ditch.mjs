@@ -140,3 +140,8 @@ export function answer(K, p, res) {
 }
 
 void rectArr; void k2;
+
+/** (6c KC, §2) The footprint this part reserves at resolve (keep.mjs): its runs grown by its shell. Pure: [[x0, z0, x1, z1]]. */
+export function footprint(res) {
+  return Array.isArray(res?.footprints) ? res.footprints.map((q) => [...q]) : [];
+}

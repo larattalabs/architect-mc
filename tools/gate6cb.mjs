@@ -134,7 +134,7 @@ steps.stale = async () => {
   execFileSync('sh', ['-c', `git -C '${root}' archive v0.23.1 kit | tar -x -C '${tmp}'`]);
   const old = await import(pathToFileURL(path.join(tmp, 'kit', 'lib', 'realise.mjs')).href);
   const out = { requires: masked.ir.requires, kitVersion: plain.ir.kitVersion, oldKit: { version: old.EVAL_KIT_VERSION, plain: old.staleReason(plain.ir), masked: old.staleReason(masked.ir), kind: old.staleReason(asOld(masked.ir)) } };
-  check(/^plan needs kit 0\.\d+\.0; this is kit/.test(out.oldKit.plain ?? '') && /kinds \[volume:blocks\]/.test(out.oldKit.masked ?? '') && /^plan needs kinds \[volume:blocks\]/.test(out.oldKit.kind ?? ''),
+  check(/^plan needs kit 0\.\d+\.\d+; this is kit/.test(out.oldKit.plain ?? '') && /kinds \[volume:blocks\]/.test(out.oldKit.masked ?? '') && /^plan needs kinds \[volume:blocks\]/.test(out.oldKit.kind ?? ''),
     `the v0.23.1 kit (${out.oldKit.version}) refuses a brush plan PLAN_STALE ("${out.oldKit.plain}"), a block-masked one by the kind too ("${out.oldKit.kind}")`);
   const gson = execFileSync('sh', ['-c', `ls '${path.join(root, '.gradle-home')}'/caches/modules-2/files-2.1/com.google.code.gson/gson/*/*/gson-*.jar | grep -v sources | head -1`]).toString().trim();
   const src = path.join(tmp, 'Stale.java');
@@ -142,7 +142,7 @@ steps.stale = async () => {
   const runJar = (cp) => execFileSync(path.join(JAVA_HOME, 'bin', 'java'), ['-cp', `${cp}:${gson}`, src, path.join(tmp, 'plain.json'), path.join(tmp, 'masked.json'), path.join(tmp, 'masked-kind.json')]).toString().trim().split('\n');
   const jar = path.join(MAIN, 'artifacts', 'gate6c-b', 'v0230', 'architect_mc-0.23.0.jar');
   out.oldMod = runJar(jar);
-  check(/^plan needs kit 0\.\d+\.0; this is kit /.test(out.oldMod[0]) && /kinds \[volume:blocks\]/.test(out.oldMod[1]) && /^plan needs kinds \[volume:blocks\]/.test(out.oldMod[2]), `the 0.23.0 mod's IrStale refuses them PLAN_STALE: ${out.oldMod.join(' | ')}`);
+  check(/^plan needs kit 0\.\d+\.\d+; this is kit /.test(out.oldMod[0]) && /kinds \[volume:blocks\]/.test(out.oldMod[1]) && /^plan needs kinds \[volume:blocks\]/.test(out.oldMod[2]), `the 0.23.0 mod's IrStale refuses them PLAN_STALE: ${out.oldMod.join(' | ')}`);
   // this checkout's classes (the unit step's gradle test compiled them at this head)
   const classes2 = path.join(root, 'mod', 'build', 'classes', 'java', 'main');
   out.thisMod = runJar(classes2);

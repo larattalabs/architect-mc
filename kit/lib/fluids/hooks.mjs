@@ -68,6 +68,17 @@ export function fluidResolve(C, p) {
   return moduleOf(p, C).resolve(C, p);
 }
 
+/**
+ * (6c KC, §2) Compile step 2: the footprint an H part that fits reserves ([[x0, z0, x1, z1]]), or null. A course or race (routed at
+ * emit, after the walls: HY-c's water gates) and the unsafe hand fixtures reserve nothing at resolve: they register at emit.
+ */
+export function fluidFootprint(C, p, res) {
+  const m = moduleOf(p, C);
+  if (typeof m.footprint !== 'function') return null;
+  const fp = m.footprint(res);
+  return fp.length ? fp : null;
+}
+
 /** Compile step 3: write an H part that fits (throws 'CODE: message' to refuse it). */
 export function fluidEmit(K, p, res) {
   return moduleOf(p, K).emit(K, p, res);

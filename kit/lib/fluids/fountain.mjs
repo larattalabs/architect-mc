@@ -187,3 +187,12 @@ export function answer(K, p, res) {
 }
 
 void rectOf;
+
+/** (6c KC, §2) A raised basin's apron: the single breach's reach over the ground round it (water 1 over the ground runs 7 past the
+ * basin's edge, so 5 past the resolved square's room for a 2-thick coping); the watch set it emits covers it. */
+export const APRON = 5;
+/** (6c KC, §2) The footprint this part reserves at resolve (keep.mjs): its basin, coping and apron. Pure: [[x0, z0, x1, z1]]. */
+export function footprint(res) {
+  const a = res?.rect;
+  return a ? [[a.minX - APRON, a.minZ - APRON, a.maxX + APRON, a.maxZ + APRON]] : [];
+}

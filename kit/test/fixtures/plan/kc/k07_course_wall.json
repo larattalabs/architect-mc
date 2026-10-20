@@ -1,0 +1,158 @@
+{
+  "about": "(6c KC \u00a710) k07_course_wall: a course alongside a wall and one across it. v58's plan (the brook leaves the walled village under a water gate, HY-c's one legal crossing) plus brook2, a spring-to-pool course running east along the ring's south face, 5 cells out, beside the brook: both READY, the wall writes no cell of either course and neither course a wall cell; M25:clear 0, its exempt count the water gate's lintel and frame only.",
+  "terrain": {
+    "W": 240,
+    "D": 200,
+    "x0": 1000,
+    "z0": 2000,
+    "y": 64,
+    "bands": [
+      {
+        "x0": 1000,
+        "x1": 1239,
+        "z0": 2000,
+        "z1": 2109,
+        "y": 67
+      }
+    ]
+  },
+  "volume": {},
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "kc_k07",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "h1",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h2",
+                "type": "cottage",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "town_wall",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            },
+            "ring": [
+              4,
+              8
+            ]
+          }
+        },
+        "height": 6
+      },
+      {
+        "id": "in",
+        "kind": "road",
+        "from": {
+          "anchor": "claim_e"
+        },
+        "to": {
+          "part": "town"
+        }
+      },
+      {
+        "id": "west_gate",
+        "kind": "gate",
+        "at": {
+          "anchor": "claim_w"
+        },
+        "door": "door"
+      },
+      {
+        "id": "west_path",
+        "kind": "path",
+        "from": {
+          "anchor": "claim_w"
+        },
+        "to": {
+          "part": "town"
+        }
+      },
+      {
+        "id": "brook",
+        "kind": "channel",
+        "label": "a brook from the village's centre out through the ring wall under a water gate",
+        "from": {
+          "anchor": "claim_center"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "brook2",
+        "kind": "channel",
+        "label": "a brook along the ring's south face",
+        "from": {
+          "anchor": "kc_s1"
+        },
+        "to": {
+          "anchor": "kc_s2"
+        }
+      }
+    ]
+  },
+  "anchors": {
+    "kc_s1": [
+      1128,
+      65,
+      2124
+    ],
+    "kc_s2": [
+      1160,
+      65,
+      2124
+    ]
+  },
+  "expect": {
+    "parts": {
+      "brook": [
+        "fits",
+        "adjusted"
+      ],
+      "brook2": [
+        "fits",
+        "adjusted"
+      ],
+      "town_wall": [
+        "fits",
+        "adjusted"
+      ]
+    },
+    "waterGate": "brook",
+    "clear": 0
+  }
+}

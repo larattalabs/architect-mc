@@ -362,3 +362,8 @@ export function answer(K, p, res) {
 }
 
 void inside; void FLAG_FROZEN;
+
+/** (6c KC, §2) The footprint this part reserves at resolve (keep.mjs): its header pool, curtain and basin (each rect grown by 1). Pure: [[x0, z0, x1, z1]]. */
+export function footprint(res) {
+  return Array.isArray(res?.footprints) ? res.footprints.map((q) => [...q]) : [];
+}
