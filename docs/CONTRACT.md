@@ -18766,7 +18766,7 @@ About **7.5-9.5 days** of work, **5.5-6.5 elapsed**, in two halves with a frozen
 - **N-RS-4:** ice caps are free.
 
 
-## Phase 6c slice D3: districts beside a standing region town (DRAFT for Steward review)
+## Phase 6c slice D3: districts beside a standing region town (FROZEN 2026-10-20, Steward reviewed)
 
 A district region beside a standing region town joins the town's street network wherever that network runs inside the town's
 claim: at a street end, continuing the street's line, or at a street's side, as a T junction. The district reports the land it
@@ -19432,6 +19432,28 @@ The lessons bind:
 
 The verifier reviews the diff and **re-runs items 7, 8, 10 and 12**. **Steward's RC check** follows on the release candidate
 (S-D3-7).
+
+### Steward's review (2026-10-20, at 40262c67): binding, and it overrides the sections above where they differ
+
+- **Finding: a finished PARTIAL town is a valid beside town.** §4.4 changes. Only in-flight states refuse (`PREPARING`,
+  `PLACING`, `REMOVING`, answering `OVERLAP_BUSY`). `PLACED`, `PARTIAL`, and `FAILED` with cells standing are all accepted as a
+  beside town, consistently at plan, at `checkBeside` and at realise. A Steward town whose lot failed stays PARTIAL for good, and
+  D1's plan-time check already accepts it. `d3_town`'s fixtures gain a partial town (one lot failed), and the gate realises a
+  district beside it.
+- **S-D3-1:** streets only. Steward's own street extensions are held cells to route around.
+- **S-D3-2:** as proposed.
+- **S-D3-3:** report both, as proposed.
+- **S-D3-4:** a snapshot. The first building re-plans.
+- **S-D3-5:** walled towns answer `NO_JOIN [wall]`, with gates joining in 7a.
+- **S-D3-6:** C38's wall keeps off the join and never gates it.
+- **S-D3-7. Steward's RC covers:**
+  - a partly built V town;
+  - a beside reservation by `checkBeside`;
+  - its first building;
+  - undo in both orders and after a restart;
+  - an along district;
+  - the PARTIAL town above.
+- **S-D3-8:** cheapest route.
 
 ### Open questions for Steward
 
