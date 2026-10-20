@@ -555,7 +555,11 @@ steps.look = async () => {
     }
     check((meta.tunnels ?? []).length === 2, `look (${tag}): crossings_demo flat's two tunnels realised beside the bridges (recorded, not judged: Noah's call, N-T3-3)`);
     await call('dev.release', {}).catch(() => null);
-    await call('dev.region.remove', { region, requester: OWNER }, 3_600_000).catch(() => null);
+    // (gate waits, 2026-10-20) the last camera can leave the player inside a site's box (the tunnel shots), and the removal waits
+    // for a player to leave it (10 minutes, then PARTIAL). Above the claim it removes at once.
+    await tp((FLAT_CLAIM[0] + FLAT_CLAIM[2]) / 2, 300, (FLAT_CLAIM[1] + FLAT_CLAIM[3]) / 2);
+    const rm = await call('dev.region.remove', { region, requester: OWNER }, 3_600_000).catch((e) => ({ error: String(e?.message ?? e) }));
+    out.bibles[tag].remove = { removed: rm.removed ?? null, restored: rm.restored ?? null, seconds: rm.seconds ?? null, blockers: rm.blockers ?? null, error: rm.error ?? null };
     await leaveWorld();
   }
   fs.writeFileSync(path.join(OUT, 'look', 'look.json'), JSON.stringify(out, null, 2));
