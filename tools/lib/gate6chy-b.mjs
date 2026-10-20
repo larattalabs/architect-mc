@@ -170,7 +170,12 @@ export async function realiseFixture(ctx, tag, fx, o = {}) {
   const guards = guardsIn(art).filter((g) => g && g.fluids === true);
   out.guards = { n: guards.length, kinds: [...new Set(guards.map((g) => g.kind))] };
   check(guards.length > 0 && guards.every((g) => typeof g.part === 'string' && typeof g.body === 'string' && Array.isArray(g.runs) && g.runs.every((v) => typeof v === 'number')), `item 9 (${tag}): every body's guard is flat ({part, body, kind, fluids, volume, runs: numbers}, H RC3): ${guards.length} guard(s)`, guards.slice(0, 2));
-  const box = [W.claim[0] - 8, Math.max(-64, W.minY - 8), W.claim[1] - 8, W.claim[2] + 8, Math.min(319, W.maxY + 20), W.claim[3] + 8];
+  let box = [W.claim[0] - 8, Math.max(-64, W.minY - 8), W.claim[1] - 8, W.claim[2] + 8, Math.min(319, W.maxY + 20), W.claim[3] + 8];
+  if (o.normal) {
+    // (E-normal on a natural site: the box round the parts' own rects grown by 12, not the whole claim, whose far side lives its own life)
+    const rs = (ck.check.parts ?? []).map((a) => a.geometry?.rect).filter(Array.isArray);
+    if (rs.length) box = [Math.min(...rs.map((q) => q[0])) - 12, box[1], Math.min(...rs.map((q) => q[1])) - 12, Math.max(...rs.map((q) => q[2])) + 12, box[4], Math.max(...rs.map((q) => q[3])) + 12];
+  }
   if (o.rules !== 'exact' && o.rules) { await L.cmd('/kill @e[type=!minecraft:player]'); }
   const file = await core.snap(ctx, box, `hyb-${tag}`);
   const before = new Map((await L.call('dev.fluid.census', { box }, 900_000)).fluids.map(([x, y, z, s]) => [`${x},${y},${z}`, s]));
