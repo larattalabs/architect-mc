@@ -48,7 +48,7 @@ function genVocab(root, args) {
   return { code: r.status, ms: Date.now() - t0, out: `${r.stdout}${r.stderr}`.split('\n').filter((l) => /gen-vocab|DIFFERS|tables|error/i.test(l)).slice(-4) };
 }
 
-/** A detached worktree beside this checkout at the base this branch builds on (the merge base with origin/main: v0.37.0 and docs). */
+/** A detached worktree beside this checkout at the base this branch builds on (the merge base with origin/main: v0.37.1 since the VOC batch). */
 export function baseTree(root) {
   const dir = path.resolve(root, '..', 'architect-mc-VOC-main');
   try { execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']); } catch { /* offline: the last fetched origin/main */ }
@@ -189,7 +189,7 @@ const unit = [
       check(sc.status === 0, `S-VOC-6 (sidecar): the systemRef vocab/1 and vocab/1#compact from the kit's generated document; the feature vocab: ${out.sidecar.tail.join(' ')}`, out.sidecar);
       const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6cvoc'], { cwd: root, encoding: 'utf8', timeout: 900_000, env: { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
       out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').slice(-8) };
-      check(ac.status === 0, 'item 14: api-compat --gate6cvoc clean against the 0.37.0, 0.36.1 and 0.36.0 apitest jars and the 0.37.0 jar\'s 1.34.0 surface', out.apicompat.tail);
+      check(ac.status === 0, 'item 14: api-compat --gate6cvoc clean against the 0.37.1, 0.37.0 and 0.36.1 apitest jars and the 0.37.1 jar\'s 1.34.0 surface', out.apicompat.tail);
       return out;
     },
   },
