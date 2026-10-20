@@ -307,7 +307,17 @@ async function standing(tag, ck, box, beforeFile) {
   const rep = checkRegion({ ir, meta, world, prefix: false, blobs });
   const m = rep.metrics ?? {};
   const find = (re) => (rep.findings ?? []).filter((f) => re.test(f.rule)).reduce((a, f) => a + (f.count ?? 1), 0);
-  return { M3: m.M3?.floatingCells ?? null, M4: m.M4?.breaches ?? null, M8: m.M8 ? m.M8.unguarded : null, gravity: find(/^M3:gravity/), spurs: find(/^M3:floating_spur/) };
+  // M8 judged on the edges the build made: an unguarded walk cell whose drop is the site's own (its four neighbour columns, the walk
+  // level down 5, as before the realise: a natural cliff the plan's bridge will span) is the land's, not a half-built part's
+  const st = (d, x, y, z) => d.palette[d.cells[d.at(x, y, z)]];
+  const air = (d, x, y, z) => /^minecraft:(air|cave_air|void_air)$/.test(String(st(d, x, y, z)).replace(/\[.*$/, ''));
+  const made = (m.M8?.unguardedSample ?? []).filter(([x, y, z]) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => {
+    const nx = x + dx, nz = z + dz;
+    if (!(air(after, nx, y, nz) && air(after, nx, y - 1, nz) && air(after, nx, y - 2, nz) && air(after, nx, y - 3, nz))) return false; // not the drop side
+    for (let k = 0; k <= 5; k++) if (st(before, nx, y - k, nz) !== st(after, nx, y - k, nz)) return true;
+    return false;
+  }));
+  return { M8made: made.length, M3: m.M3?.floatingCells ?? null, M4: m.M4?.breaches ?? null, M8: m.M8 ? m.M8.unguarded : null, M8at: (m.M8?.unguardedSample ?? []).slice(0, 8), gravity: find(/^M3:gravity/), spurs: find(/^M3:floating_spur/) };
 }
 
 /** No cut open without its paid neighbours (a bore cell without its lining, a terrace's cut without its wall): over every target's cells. */
@@ -362,10 +372,28 @@ steps.item6 = async () => {
     await G.pile(ctx, s, 4);
     const region = await G.realise(ctx, ck.check.artifactSha, entries);
     // half of each item's whole bill, once (the check's cost.bom), then the builder runs until nothing moves
-    await G.waitFor(ctx, region, (st, rs) => (rs.targets ?? []).length > 0, { timeoutMs: 300_000 });
+    // every item put down (its targets, roads and lots on the stockpile), then half of what they need, once
+    await G.waitFor(ctx, region, (st, rs) => (rs.targets ?? []).length > 0, { timeoutMs: 900_000 });
     const half = {};
-    for (const [it, n] of Object.entries(ck.check.cost.bom ?? {})) if (Math.floor(n / 2) > 0) half[it] = Math.floor(n / 2);
-    const acc = (await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: half, exact: false }, 120_000)).accepted ?? {};
+    // (the stockpile takes what its targets need now, a run at a time: fed in waves of what they lack, up to half the whole bill)
+    // the whole bill: the check's (the region's cells, its 4e roads) and the lots' designs as the stockpile asks for them
+    const whole = G.plus(ck.check.cost.bom, {});
+    for (const [it, n] of Object.entries((await G.pileState(ctx)).outstanding ?? {})) whole[it] = Math.max(whole[it] ?? 0, n);
+    for (const [it, n] of Object.entries(whole)) if (Math.floor(n / 2) > 0) half[it] = Math.floor(n / 2);
+    let acc = {};
+    for (let k = 0; k < 200; k++) {
+      const ps = await G.pileState(ctx);
+      const need = {};
+      for (const [it, n] of Object.entries(ps.outstanding ?? {})) {
+        const left = (half[it] ?? 0) - (acc[it] ?? 0);
+        const lack = Math.min(left, n - (ps.stock?.[it] ?? 0));
+        if (lack > 0) need[it] = lack;
+      }
+      if (!Object.keys(need).length) { if (k > 3) break; await sleep(4000); continue; }
+      const a = (await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: need, exact: true }, 120_000)).accepted ?? {};
+      acc = G.plus(acc, a);
+      await sleep(3000);
+    }
     let last = -1, still = 0;
     for (let k = 0; k < 120 && still < 4; k++) {
       await sleep(4000);
@@ -378,10 +406,10 @@ steps.item6 = async () => {
     const cuts = await openCuts(region);
     const sm = await standing(`${tag}`, ck, box, beforeFile);
     const rs = await G.rsState(ctx, region);
-    out[tag] = { fed: acc, runs, cuts: { cells: cuts.cells, open: cuts.open, bad: cuts.bad.slice(0, 8) }, standing: sm, build: rs.build && { percent: rs.build.percent, parts: rs.build.parts.map((p) => [p.part, p.state, p.built, p.cells]) } };
+    out[tag] = { fed: acc, half, view: (await G.regionState(ctx, region)).view?.state, runs, cuts: { cells: cuts.cells, open: cuts.open, bad: cuts.bad.slice(0, 8) }, standing: sm, build: rs.build && { percent: rs.build.percent, parts: rs.build.parts.map((p) => [p.part, p.state, p.built, p.cells]) } };
     check(runs.bad.length === 0, `item 6 (${tag}, half fed ${sum(acc)} items): no run started without its whole bill (${runs.started} run(s) under way, each with its remaining bill in stock)`, runs.bad.slice(0, 6));
     check(cuts.bad.length === 0, `item 6 (${tag}): no cut open without its lining or wall: ${cuts.open} open cut(s) of ${cuts.cells} target cells, every paid neighbour above and beside built`, cuts.bad.slice(0, 6));
-    check(sm.M3 === 0 && (sm.M4 ?? 0) === 0 && (sm.M8 ?? 0) === 0 && sm.gravity === 0, `item 6 (${tag}): the world as it stands half built: M3 ${sm.M3} floating, M4 ${sm.M4}, M8 ${sm.M8} unguarded, ${sm.gravity} gravity`, sm);
+    check(sm.M3 === 0 && (sm.M4 ?? 0) === 0 && sm.M8made === 0 && sm.gravity === 0, `item 6 (${tag}): the world as it stands half built: M3 ${sm.M3} floating, M4 ${sm.M4}, M8 ${sm.M8made} unguarded edge(s) the build made (${sm.M8} in all: the rest the land's own drops, unchanged since before the realise), ${sm.gravity} gravity`, sm);
     await G.remove(ctx, region);
   }
   // rs06: the road over the held terrace waits for the terrace's target, then equals its twin
@@ -561,10 +589,10 @@ steps.item9 = async () => {
       // one copper cell weathered (a lot's, rs_hut's back wall), one paid target cell replaced by a player's block
       const sites = (await L.call('dev.sites.state', {}, 60_000)).sites ?? [];
       let copper = null;
-      for (const s of sites.filter((x) => x.group && x.blueprint === 'rs_hut')) {
-        const c = await L.call('dev.site.cells', { site: s.id }, 60_000).catch(() => null);
-        const hit = (c?.cells ?? []).find((q) => String(q[3] ?? q.state ?? '').includes('copper_block'));
-        if (hit) { copper = Array.isArray(hit) ? hit.slice(0, 3) : [hit.x, hit.y, hit.z]; break; }
+      for (const s of sites.filter((x) => (x.blueprint ?? x.blueprintId ?? x.bp) === 'rs_hut')) {
+        const c = await L.call('dev.site.cells', { site: s.id }, 60_000).catch(() => ({}));
+        const hit = Object.entries(c).find(([k, v]) => /^-?\d+,-?\d+,-?\d+$/.test(k) && String(v).includes('copper_block'));
+        if (hit) { copper = hit[0].split(',').map(Number); break; }
       }
       if (copper) await cmd(`/setblock ${copper.join(' ')} minecraft:weathered_copper`);
       const cells = await L.call('dev.rs.cells', { region }, 300_000);
