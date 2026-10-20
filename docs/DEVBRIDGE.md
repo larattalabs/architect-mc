@@ -348,6 +348,10 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-20 (6c slice IRR):** no new hook. `dev.journal.killAt` gains `FL6` (and `FL6+save`): a farm lot's site removal has
+  drained its irrigation sources (`RegionFluids.drainLot`, saved) and not restored the site yet. A lot site's `ext` carries
+  `architect_mc:irrigation {cells}` (its mask) and `architect_mc:irrigationDropped` (`dev.sites.state`); the region's
+  `architect_mc:fluids` rows gain `breach` (cells of a breach's flow a drain took back) and the reason `lot removed: <lot>`.
 - **2026-10-20 (6c slice CU):** new `dev.copper.use {at?: [x,y,z], cells?: [[x,y,z]], item: honeycomb|axe|weather}` (`SliceCuDev`,
   generated headless too): what a player's honeycomb (waxes: `HoneycombItem.getWaxed`) or axe (unwaxes, else scrapes one stage back:
   `WeatheringCopper.getPrevious`) does to a copper block in place, or one weathering step (`weather`: `WeatheringCopper.getNext`), each

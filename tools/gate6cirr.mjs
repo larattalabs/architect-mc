@@ -16,6 +16,7 @@
 //                                      a versionOf, the entries' ownership); the unmasked variant PARTIAL; the probe and a pad's breach
 //                                      recorded
 //     crash     (irr-crash)            item 6: FL1+save and FL2+save on v62's realise, FL6+save on a lot removal's drain
+//     look      (irr-look)             a client, recorded: camera shots of v62's irrigated farms (Noah's look, the gallery)
 //     report                            REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate6c-irr/<step>.json in the main checkout (GATE6CIRR_OUT overrides), all.log, REPORT.md, spend.json.
@@ -137,6 +138,13 @@ steps.ingame = async () => {
 steps.crash = async () => {
   await ensure();
   const out = await G.crash(ctx);
+  spendZero();
+  return out;
+};
+
+steps.look = async () => {
+  await ensure();
+  const out = await G.look(ctx);
   spendZero();
   return out;
 };

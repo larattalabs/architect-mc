@@ -609,3 +609,40 @@ async function waitDown(ctx, point) {
   if (!down) throw new Error(`the kill point ${point} did not halt the server`);
   ctx.log(`  ${point}: the server halted`);
 }
+
+/** The look step (a client, recorded, not judged): v62's two irrigated farms with their field entries, at noon, from the camera. */
+export async function look(ctx) {
+  const { L, OUT, log, B } = ctx;
+  const F = await installFields(ctx);
+  const o = await realiseIrr(ctx, 'look', B.fixture(ctx, 'valid/v62_irr_farm.json'), { entries: { f1: 'g6c_irr_field_13x11', f2: 'g6c_irr_field_11x11' }, fields: F, snapshot: false });
+  const dir = path.join(OUT, 'irr-look');
+  fs.mkdirSync(dir, { recursive: true });
+  const shots = [];
+  if (!o.r) { ctx.check(false, `look: v62 not realised (${ctx.json(o.parts)})`); return { shots }; }
+  await L.cmd('/time set 6000');
+  const shot = async (name, eye, at, what) => {
+    await L.call('dev.camera', { x: eye[0], y: eye[1], z: eye[2], lookAt: { x: at[0], y: at[1], z: at[2] }, mode: 'spectator', fov: 70 }, 60_000);
+    await L.call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => null);
+    await L.settle(3000);
+    const q = await L.call('dev.screenshot', { name: `irr_${name}`, frames: 10, chunkTimeoutMs: 60_000 }, 180_000);
+    const file = path.join(dir, `${name}.png`);
+    fs.copyFileSync(q.path, file);
+    log(`  shot ${name}`);
+    shots.push({ name, what, eye, at, file: path.relative(OUT, file) });
+  };
+  const lots = o.r.ir.lots.filter((l) => l.irrigation);
+  const xs = lots.flatMap((l) => [l.box.minX, l.box.maxX]), zs = lots.flatMap((l) => [l.box.minZ, l.box.maxZ]);
+  const fy = lots[0].floorY;
+  const mid = [(Math.min(...xs) + Math.max(...xs)) / 2, fy, (Math.min(...zs) + Math.max(...zs)) / 2];
+  await shot('both_farms', [mid[0] + 4, fy + 22, Math.max(...zs) + 18], mid, 'v62: both farms (f2 left, f1 right), each source a 1x1 hole flush with the wheat, its four sides farmland');
+  for (const l of lots) {
+    const b = l.box, c = [(b.minX + b.maxX) / 2, fy, (b.minZ + b.maxZ) / 2];
+    await shot(`${l.id}_field`, [c[0] - 3, fy + 10, b.maxZ + 7], c, `${l.id}: its field from the street side (${l.irrigation.sources} source(s))`);
+    const s = o.r.bodies.find((q) => q.id === l.irrigation.bodies[0]).cells[0];
+    await shot(`${l.id}_source`, [s[0] + 2.5, fy + 2.6, s[2] + 3.5], [s[0] + 0.5, fy, s[2] + 0.5], `${l.id}: a source up close: water on the bed, moist farmland on four sides, wheat round it`);
+  }
+  fs.writeFileSync(path.join(dir, 'look.json'), `${JSON.stringify({ head: o.r.planId, shots }, null, 1)}\n`);
+  ctx.check(shots.length >= 3, `look (recorded): ${shots.length} shots of v62's irrigated farms in ${path.relative(OUT, dir)}`);
+  await L.leaveWorld();
+  return { shots };
+}
