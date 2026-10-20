@@ -136,6 +136,8 @@ public final class Builder {
 		Stockpiles.init(); // 6c Y (C24): settlement stockpiles
 		ServerTickEvents.END_SERVER_TICK.register(Stockpiles::tick);
 		SiteWaits.init(); // 6c Y2 (C25): waiting status
+		RegionFreeDrops.init(); // 6c RS (N-RS-2): a survival region's free cells drop nothing
+		RegionTargets.init(); // 6c RS (§10): a survival region's free pass rescanned at the world's start
 		ServerLifecycleEvents.SERVER_STARTED.register(s -> server = s);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			RUNS.clear();

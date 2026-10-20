@@ -16,7 +16,8 @@ import org.jspecify.annotations.Nullable;
  */
 public record RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,
 	RegionState state, List<StageProgress> stages, List<LotState> lots, long cellsWritten, Map<String, Long> cellsSkipped, @Nullable Refusal waiting,
-	@Nullable PrepareView prepare, List<WaitAction> actions, long removedAt, @Nullable String brush, List<BuildHit> buildHits, @Nullable String beside) {
+	@Nullable PrepareView prepare, List<WaitAction> actions, long removedAt, @Nullable String brush, List<BuildHit> buildHits, @Nullable String beside,
+	@Nullable RegionBuild build) {
 	public RegionView {
 		ext = ext == null ? new JsonObject() : ext;
 		stages = List.copyOf(stages);
@@ -24,6 +25,17 @@ public record RegionView(String id, String planId, String irSha, @Nullable Strin
 		cellsSkipped = Map.copyOf(cellsSkipped);
 		actions = actions == null ? List.of() : List.copyOf(actions);
 		buildHits = buildHits == null ? List.of() : List.copyOf(buildHits);
+	}
+
+	/**
+	 * The 1.27.0 constructor: no build (since 1.41.0, 6c RS: a survival region's {@link RegionBuild}, its targets' progress per part; null for
+	 * a creative region).
+	 */
+	public RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,
+		RegionState state, List<StageProgress> stages, List<LotState> lots, long cellsWritten, Map<String, Long> cellsSkipped, @Nullable Refusal waiting,
+		@Nullable PrepareView prepare, List<WaitAction> actions, long removedAt, @Nullable String brush, List<BuildHit> buildHits, @Nullable String beside) {
+		this(id, planId, irSha, owner, ext, groupId, claim, state, stages, lots, cellsWritten, cellsSkipped, waiting, prepare, actions, removedAt, brush, buildHits,
+			beside, null);
 	}
 
 	/**

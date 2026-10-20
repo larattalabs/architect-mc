@@ -895,6 +895,81 @@ public final class Stockpiles {
 		return c;
 	}
 
+	/**
+	 * (6c RS, §7.3) A survival region's bodies' write: takes {@code items} (a lava bucket per lava source, the grates' iron bars) from the
+	 * owner's stockpile, a lava bucket's empty bucket given back (C24's container rule). Only when every item is available after the feed's
+	 * reservations (the bodies come after every target of the region, so they take what is left); false (nothing taken) otherwise.
+	 */
+	public static boolean charge(MinecraftServer srv, @Nullable String owner, Map<String, Integer> items) {
+		Pile p = get(owner);
+		if (p == null) {
+			return items.values().stream().allMatch(n -> n <= 0);
+		}
+		Map<String, Integer> reserved = LAST_RESERVED.getOrDefault(p.id, Map.of());
+		for (var e : items.entrySet()) {
+			if (e.getValue() > 0 && p.ledger.stock(e.getKey()) - reserved.getOrDefault(e.getKey(), 0) < e.getValue()) {
+				return false;
+			}
+		}
+		int cap = capacity(srv, p);
+		Map<String, Integer> over = new TreeMap<>();
+		for (var e : new TreeMap<>(items).entrySet()) {
+			p.ledger.consume(e.getKey(), e.getValue(), cap, Stockpiles::maxStack, over);
+		}
+		dropOverflow(srv, p, over, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
+		changed(p);
+		save();
+		Architect.LOGGER.info("Stockpile {}: a region's bodies took {}", p.owner, items);
+		return true;
+	}
+
+	/** (6c RS) What {@link #charge} would still lack: per item, {@code need - (stock - reserved)} when short. */
+	public static Map<String, Integer> chargeShort(@Nullable String owner, Map<String, Integer> items) {
+		Map<String, Integer> out = new TreeMap<>();
+		Pile p = get(owner);
+		Map<String, Integer> reserved = p == null ? Map.of() : LAST_RESERVED.getOrDefault(p.id, Map.of());
+		for (var e : items.entrySet()) {
+			int have = p == null ? 0 : p.ledger.stock(e.getKey()) - reserved.getOrDefault(e.getKey(), 0);
+			if (have < e.getValue()) {
+				out.put(e.getKey(), e.getValue() - Math.max(0, have));
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * (6c RS, §9.2, S-RS-6) A survival region's removal: its standing lava sources are scooped (for each, a bucket from stock becomes a lava
+	 * bucket credited; with no bucket in stock the source drains and nothing is credited: never a bucket minted) and its standing grates
+	 * refunded, once per {@code key} (a resumed removal credits nothing again). Returns what was credited.
+	 */
+	public static Map<String, Integer> scoop(MinecraftServer srv, @Nullable String owner, String key, int lavaSources, int grates) {
+		Pile p = get(owner);
+		if (p == null || p.ledger.credited(key)) {
+			return Map.of();
+		}
+		int cap = capacity(srv, p);
+		int take = Math.max(0, Math.min(lavaSources, p.ledger.stock(StockLedger.BUCKET)));
+		Map<String, Integer> over = new TreeMap<>();
+		if (take > 0) {
+			p.ledger.consume(StockLedger.BUCKET, take, cap, Stockpiles::maxStack, over);
+		}
+		Map<String, Integer> items = new TreeMap<>();
+		if (take > 0) {
+			items.put("minecraft:lava_bucket", take);
+		}
+		if (grates > 0) {
+			items.put("minecraft:iron_bars", grates);
+		}
+		BlockPos fb = p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above();
+		dropOverflow(srv, p, over, fb);
+		StockLedger.Credit c = credit(srv, p, key, items, fb);
+		save();
+		Architect.LOGGER.info("Stockpile {}: a region's removal scooped {} of {} lava source(s) and refunded {} grate(s) ({})", p.owner, take, lavaSources, grates, key);
+		Map<String, Integer> out = new TreeMap<>(c.returned());
+		c.overflow().forEach((k, v) -> out.merge(k, v, Integer::sum));
+		return out;
+	}
+
 	/** Credits without a key (a swap's old block, a bucket's container) as it happens. */
 	static StockLedger.Credit giveBack(MinecraftServer srv, Pile p, Map<String, Integer> items, BlockPos fallback) {
 		StockLedger.Credit c = p.ledger.giveBack(items, capacity(srv, p), Stockpiles::maxStack);
@@ -1070,7 +1145,8 @@ public final class Stockpiles {
 			boolean building = t instanceof Site s ? Sites.get(s.id()) != null && Sites.get(s.id()).building() : Infras.get(idOf(t)) != null && Infras.get(
 				idOf(t)).building();
 			boolean reserves = FeedOrder.reserves(building, paused, r.built.cardinality() < r.size(), r.frontierLoaded(level, ticks));
-			reserve.add(r.unbuilt, reserves);
+			// (6c RS, §6.2) a region's target reserves only its current run's bill
+			reserve.add(t instanceof Infra ri && RegionTargets.is(ri) ? RegionTargets.reservation(srv, ri, r) : r.unbuilt, reserves);
 		}
 		LAST_RESERVED.put(p.id, reserve.reserved());
 	}
@@ -1107,7 +1183,8 @@ public final class Stockpiles {
 				continue; // C29: its reservation was released
 			}
 			boolean paused = t instanceof Site x ? x.construction().paused() : ((Infra) t).construction().paused();
-			reserve.add(r.unbuilt, FeedOrder.reserves(true, paused, r.built.cardinality() < r.size(), level == null || r.frontierLoaded(level, ticks)));
+			reserve.add(t instanceof Infra ri && RegionTargets.is(ri) ? RegionTargets.reservation(srv, ri, r) : r.unbuilt, FeedOrder.reserves(true, paused, r
+				.built.cardinality() < r.size(), level == null || r.frontierLoaded(level, ticks)));
 		}
 		return Map.of();
 	}
@@ -1412,6 +1489,14 @@ public final class Stockpiles {
 			if (be != null && crates.add(be.getBlockPos())) {
 				be.ledger().stock().forEach((k, v) -> crateStock.merge(k, v, Integer::sum));
 			}
+		}
+		// (6c RS) a survival region's standing lava sources (a lava bucket less its bucket each) and grates: what its bodies took
+		Map<String, Integer> fluids = dev.larattalabs.architect.region.RegionFluids.survivalStanding(srv, owner);
+		if (!fluids.isEmpty()) {
+			fluids.forEach((k, v) -> paid.merge(k, v, Integer::sum));
+			JsonObject fo = new JsonObject();
+			fluids.forEach(fo::addProperty);
+			o.add("fluidStanding", fo);
 		}
 		o.add("paidStanding", Builder.counts(paid));
 		o.add("paidByTarget", byTarget);

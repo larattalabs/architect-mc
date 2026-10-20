@@ -39,8 +39,8 @@ class ApiDTest {
 		var pc = RegionPlanRequest.class.getRecordComponents();
 		assertEquals("beside", pc[pc.length - 1].getName());
 		var vc = RegionView.class.getRecordComponents();
-		assertEquals("beside", vc[vc.length - 1].getName());
-		assertEquals("buildHits", vc[vc.length - 2].getName());
+		assertEquals("beside", vc[vc.length - 2].getName()); // ((6c RS) RegionView's build follows it)
+		assertEquals("buildHits", vc[vc.length - 3].getName());
 		// the 1.14.0 (opKey) and 1.24.0 constructors, by descriptor
 		RegionPlanRequest.class.getConstructor(String.class, JsonObject.class, net.minecraft.server.level.ServerLevel.class, BoundingBox.class, Long.class, String.class,
 			Integer.class, LoadPolicy.class, String.class, JsonObject.class, String.class);

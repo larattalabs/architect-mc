@@ -15,6 +15,7 @@ import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.state.BlockState;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A packed tile ({@code ARTL}, kit/REGIONS.md "Packed tiles"): the cells the kit's evaluator wrote for one tile, decoded off
@@ -27,12 +28,31 @@ public final class Packed {
 	public static final int ALWAYS_OURS = 3;
 	private static final byte[] MAGIC = "ARTL".getBytes(StandardCharsets.US_ASCII);
 
-	/** Decoded cells: positions ({@link BlockPos#asLong}), state index into {@code states}, cond (0-3), walk. */
-	public record Tile(long[] pos, int[] state, byte[] cond, boolean[] walk, List<BlockState> states, List<String> stateIds, String sha) {
+	/**
+	 * Decoded cells: positions ({@link BlockPos#asLong}), state index into {@code states}, cond (0-3), walk; (6c RS) a survival IR's tile
+	 * (ARTL version 2) also each cell's class ({@link #FREE}, {@link #HELD}, {@link #PAID}) and group (an index into the IR's
+	 * {@code survival.groups}); null in a creative tile.
+	 */
+	public record Tile(long[] pos, int[] state, byte[] cond, boolean[] walk, List<BlockState> states, List<String> stateIds, String sha, byte @Nullable [] cls,
+		int @Nullable [] group) {
+		public Tile(long[] pos, int[] state, byte[] cond, boolean[] walk, List<BlockState> states, List<String> stateIds, String sha) {
+			this(pos, state, cond, walk, states, stateIds, sha, null, null);
+		}
+
 		public int size() {
 			return pos.length;
 		}
+
+		/** (6c RS) Whether the tile carries survival classes (a survival IR's). */
+		public boolean survival() {
+			return cls != null;
+		}
 	}
+
+	/** (6c RS) ARTL v2 classes: written in the free pass, a held free cell of a target, a paid cell of a target. */
+	public static final byte FREE = 0;
+	public static final byte HELD = 1;
+	public static final byte PAID = 2;
 
 	private Packed() {
 	}
@@ -60,9 +80,12 @@ public final class Packed {
 			}
 		}
 		int ver = r.u8();
-		if (ver != 1) {
+		if (ver != 1 && ver != 2) {
 			throw new IllegalArgumentException("ARTL version " + ver);
 		}
+		boolean v2 = ver == 2; // (6c RS) after each section's palette indexes: the classes (u8), then the groups (u16)
+		List<byte[]> clsChunks = v2 ? new ArrayList<>() : null;
+		List<int[]> grpChunks = v2 ? new ArrayList<>() : null;
 		r.p += 3;
 		int sections = (int) r.varint();
 		List<long[]> posChunks = new ArrayList<>();
@@ -121,6 +144,22 @@ public final class Packed {
 					st[i] = map[r.u16()];
 				}
 			}
+			if (v2) {
+				byte[] cl = new byte[n];
+				for (int i = 0; i < n; i++) {
+					int c = r.u8();
+					if (c > PAID) {
+						throw new IllegalArgumentException("ARTL class " + c + " in section " + sx + "," + sy + "," + sz);
+					}
+					cl[i] = (byte) c;
+				}
+				int[] gr = new int[n];
+				for (int i = 0; i < n; i++) {
+					gr[i] = r.u16();
+				}
+				clsChunks.add(cl);
+				grpChunks.add(gr);
+			}
 			posChunks.add(ps);
 			stChunks.add(st);
 			condChunks.add(cs);
@@ -134,6 +173,8 @@ public final class Packed {
 		int[] st = new int[total];
 		byte[] cond = new byte[total];
 		boolean[] walk = new boolean[total];
+		byte[] cls = v2 ? new byte[total] : null;
+		int[] grp = v2 ? new int[total] : null;
 		int o = 0;
 		for (int s = 0; s < posChunks.size(); s++) {
 			int n = posChunks.get(s).length;
@@ -141,13 +182,17 @@ public final class Packed {
 			System.arraycopy(stChunks.get(s), 0, st, o, n);
 			System.arraycopy(condChunks.get(s), 0, cond, o, n);
 			System.arraycopy(walkChunks.get(s), 0, walk, o, n);
+			if (v2) {
+				System.arraycopy(clsChunks.get(s), 0, cls, o, n);
+				System.arraycopy(grpChunks.get(s), 0, grp, o, n);
+			}
 			o += n;
 		}
 		List<BlockState> states = new ArrayList<>(ids.size());
 		for (String id : ids) {
 			states.add(parse(id));
 		}
-		return new Tile(pos, st, cond, walk, states, ids, sha256(a));
+		return new Tile(pos, st, cond, walk, states, ids, sha256(a), cls, grp);
 	}
 
 	public static BlockState parse(String id) {

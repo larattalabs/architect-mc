@@ -80,6 +80,81 @@ final class InfraJob implements Placement.Job {
 	final List<dev.larattalabs.architect.api.RoadSpan> skipped = new ArrayList<>();
 	/** Who waits for it (the API's placeRoad / placeCells). */
 	transient final List<CompletableFuture<PlaceResult>> futures = new ArrayList<>();
+	/**
+	 * (6c RS) A survival region tile's construction targets beyond the main entry: each its own cell site and CELL entry, created in the
+	 * same PLACING transaction and made ACTIVE in the same P7 commit, its cells never written here (the builder writes them, fed).
+	 */
+	final List<Extra> extras = new ArrayList<>();
+	/** (6c RS) Whether P5 writes the main entry's cells: false when the main entry is itself a target (a tile with no free-pass cell). */
+	boolean writeMain = true;
+
+	/** (6c RS) One extra target entry: its record, its cells until P3 (then its entry id). */
+	static final class Extra {
+		Infra record;
+		transient long[] positions;
+		transient Value[] afters;
+		@Nullable String entry;
+
+		Extra(Infra record, long[] positions, Value[] afters) {
+			this.record = record;
+			this.positions = positions;
+			this.afters = afters;
+		}
+
+		JsonObject toJson() {
+			JsonObject o = new JsonObject();
+			o.add("record", record.toJson());
+			if (entry != null) {
+				o.addProperty("entry", entry);
+			}
+			return o;
+		}
+
+		static Extra fromJson(JsonObject o) {
+			Extra e = new Extra(Infra.fromJson(o.getAsJsonObject("record")), new long[0], new Value[0]);
+			e.entry = o.has("entry") ? o.get("entry").getAsString() : null;
+			return e;
+		}
+	}
+
+	/** (6c RS) The extra targets' entries in a PLACING transaction: their befores captured now, their afters as planned. */
+	private void extrasInto(ServerLevel level, JournalStore s, JournalStore.Txn txn) {
+		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+		for (Extra e : extras) {
+			if (e.entry != null) {
+				continue;
+			}
+			long layer = s.newLayer();
+			String id = s.newId();
+			List<Cell> cells = new ArrayList<>(e.positions.length);
+			for (int i = 0; i < e.positions.length; i++) {
+				long p = e.positions[i];
+				cells.add(new Cell(p, layer, WorldJournal.valueAt(level, m.set(Journal.x(p), Journal.y(p), Journal.z(p))), e.afters[i]));
+			}
+			txn.create(JournalStore.Meta.header(id, entryKind, e.record.id(), e.record.group(), dimension, policy, layer, Journal.Status.PLACING, System
+				.currentTimeMillis()), JournalStore.bySection(cells), new JournalNbt.Head(e.record.toJson(), new int[0]));
+			e.entry = id;
+		}
+	}
+
+	/** (6c RS) The extras' PLACING entries made ACTIVE in the main entry's P7 commit. */
+	private void extrasActive(JournalStore.Txn t) {
+		for (Extra e : extras) {
+			for (JournalStore.Meta m : SiteJournal.active(e.record.id())) {
+				if (m.status() == Journal.Status.PLACING) {
+					t.status(m.id(), Journal.Status.ACTIVE, null, 0L);
+				}
+			}
+		}
+	}
+
+	/** (6c RS) Every site this job places: the main one, then the extra targets. */
+	List<String> siteIds() {
+		List<String> out = new ArrayList<>(1 + extras.size());
+		out.add(siteId);
+		extras.forEach(e -> out.add(e.record.id()));
+		return out;
+	}
 
 	InfraJob(String siteId, String dimension, String entryKind, Journal.Policy policy, Infra record, @Nullable String batchId, @Nullable String itemKey) {
 		this.siteId = siteId;
@@ -247,6 +322,7 @@ final class InfraJob implements Placement.Job {
 		JournalStore.Txn txn = s.begin().label("P3:" + siteId).create(JournalStore.Meta.header(id, entryKind, siteId, record.group(), dimension, policy,
 			buildingLayer, Journal.Status.PLACING, System.currentTimeMillis()), secs, new JournalNbt.Head(record.toJson(), new int[0]));
 		leaves(s, txn);
+		extrasInto(level, s, txn);
 		commit = s.submit(txn);
 		entry = id;
 		befores = null;
@@ -284,6 +360,7 @@ final class InfraJob implements Placement.Job {
 		JournalStore.Txn txn = s.begin().label("P3:" + siteId).create(JournalStore.Meta.header(id, entryKind, siteId, record.group(), dimension, policy,
 			layer, Journal.Status.PLACING, System.currentTimeMillis()), JournalStore.bySection(cells), new JournalNbt.Head(record.toJson(), new int[0]));
 		leaves(s, txn);
+		extrasInto(level, s, txn);
 		commit = s.submit(txn);
 		entry = id;
 		befores = null;
@@ -377,8 +454,11 @@ final class InfraJob implements Placement.Job {
 					if (positions.length == 0) {
 						readBack();
 					}
-					// P4: the record, placing
+					// P4: the record, placing; (6c RS) the extra targets' too
 					Infras.put(server, record.withPlacing(true));
+					for (Extra e : extras) {
+						Infras.put(server, e.record.withPlacing(true));
+					}
 					beforeRecord = false;
 					dropsBefore = record.box().volume() <= 4_000_000 ? Sites.Drops.before(level, record.box()).uuids() : null;
 					phase = WRITE;
@@ -386,12 +466,14 @@ final class InfraJob implements Placement.Job {
 					return false;
 				}
 				case WRITE -> {
-					if (positions.length == 0 && cursor == 0) {
+					if (!writeMain) {
+						cursor = positions.length; // (6c RS) the main entry is a target: nothing written at put-down
+					} else if (positions.length == 0 && cursor == 0) {
 						readBack();
 					}
 					BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 					int n = 0;
-					if (cursor == 0 && leafPos.length > 0) {
+					if (writeMain && cursor == 0 && leafPos.length > 0) {
 						// held leaves first (persistent, no neighbour updates), before any log under them goes
 						for (int i = 0; i < leafPos.length; i++) {
 							long p = leafPos[i];
@@ -429,7 +511,8 @@ final class InfraJob implements Placement.Job {
 					if (dropsBefore != null) {
 						Sites.Drops.of(level, record.box(), dropsBefore).clearNew(level);
 					}
-					commit = SiteJournal.complete(siteId, WorldJournal.empty(new dev.larattalabs.architect.placement.Anchors.Bounds(0, 0, 0, 0, 0, 0)), null);
+					commit = SiteJournal.complete(siteId, WorldJournal.empty(new dev.larattalabs.architect.placement.Anchors.Bounds(0, 0, 0, 0, 0, 0)), extras
+						.isEmpty() ? null : this::extrasActive);
 					phase = AFTER_COMMIT;
 					return false;
 				}
@@ -451,6 +534,13 @@ final class InfraJob implements Placement.Job {
 					}
 					Infras.put(server, done);
 					record = done;
+					// (6c RS) the extra targets are placed (put down: building, fed from the owner's stockpile)
+					for (Extra e : extras) {
+						Infra x = e.record.withPlacing(false);
+						Infras.put(server, x);
+						e.record = x;
+						dev.larattalabs.architect.apiimpl.ApiEvents.placedInfra(server, x);
+					}
 					phase = DONE;
 					Architect.LOGGER.info("Placed {} ({} cells){}", done.describe(), positions.length, notes.isEmpty() ? "" : "; " + String.join("; ", notes));
 					dev.larattalabs.architect.apiimpl.ApiEvents.placedInfra(server, done);
@@ -569,6 +659,14 @@ final class InfraJob implements Placement.Job {
 			dropsBefore.forEach(d::add);
 			o.add("dropsBefore", d);
 		}
+		if (!extras.isEmpty()) {
+			JsonArray x = new JsonArray();
+			extras.forEach(e -> x.add(e.toJson()));
+			o.add("extras", x);
+		}
+		if (!writeMain) {
+			o.addProperty("writeMain", false);
+		}
 		JsonArray n = new JsonArray();
 		notes.forEach(n::add);
 		o.add("notes", n);
@@ -592,6 +690,10 @@ final class InfraJob implements Placement.Job {
 		if (o.has("notes")) {
 			o.getAsJsonArray("notes").forEach(e -> j.notes.add(e.getAsString()));
 		}
+		if (o.get("extras") instanceof JsonArray x) {
+			x.forEach(e -> j.extras.add(Extra.fromJson(e.getAsJsonObject())));
+		}
+		j.writeMain = !o.has("writeMain") || o.get("writeMain").getAsBoolean();
 		if (j.phase == WRITE) {
 			j.cursor = 0; // the cells are written again from the start (the same values: idempotent)
 		}

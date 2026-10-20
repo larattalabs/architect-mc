@@ -221,6 +221,14 @@ public final class RoadBuilder {
 		if (r != null && r.placedAt == i.placedAt()) {
 			return r;
 		}
+		if (RegionTargets.is(i)) {
+			// (6c RS) a survival region's construction target: its run (held cells free, its plan of runs) is RegionTargets'
+			r = RegionTargets.newRun(srv, i);
+			if (r != null) {
+				RUNS.put(i.id(), r);
+			}
+			return r;
+		}
 		Cells target = SiteJournal.target(i.id(), i.box());
 		JournalStore.Meta main = SiteJournal.main(i.id());
 		Cells before = main == null ? null : SiteJournal.beforeOf(main.id(), i.box());
@@ -323,8 +331,8 @@ public final class RoadBuilder {
 	static void tick(MinecraftServer srv) {
 		ticks++;
 		for (Infra i : Infras.all()) {
-			if (!i.building() || i.placing() || Stockpiles.fed(i)) {
-				continue; // 6c Y: a stockpile's roads are fed by its owner loop
+			if (!i.building() || i.placing() || Stockpiles.fed(i) || RegionTargets.is(i)) {
+				continue; // 6c Y: a stockpile's roads are fed by its owner loop; (6c RS) a region's targets only by it
 			}
 			ServerLevel level = Sites.levelOf(srv, i.dimension());
 			Builder.Run r = level == null ? null : run(srv, i);
@@ -344,7 +352,11 @@ public final class RoadBuilder {
 	/** 6c Y: one owner-loop turn of a stockpile's construction road. */
 	static void stepFed(MinecraftServer srv, ServerLevel level, Infra road, Builder.Run r, Builder.Purse purse) {
 		try {
-			step(srv, level, road, r, purse);
+			if (RegionTargets.is(road)) {
+				RegionTargets.stepFed(srv, level, road, r, purse, ticks); // (6c RS) runs, the start rule, the tile's writer
+			} else {
+				step(srv, level, road, r, purse);
+			}
 		} catch (RuntimeException e) {
 			Architect.LOGGER.error("Construction road {}: builder step failed", road.id(), e);
 		}
@@ -434,7 +446,7 @@ public final class RoadBuilder {
 	}
 
 	/** Every queued cell built: the road is built; the group's crate goes once nothing of the group builds from it. */
-	private static void complete(MinecraftServer srv, ServerLevel level, @Nullable Infra road, Builder.Run r, @Nullable CrateBlockEntity crate) {
+	static void complete(MinecraftServer srv, ServerLevel level, @Nullable Infra road, Builder.Run r, @Nullable CrateBlockEntity crate) {
 		if (road == null) {
 			return;
 		}
@@ -458,12 +470,13 @@ public final class RoadBuilder {
 		Builder.sendClear(srv, r, true);
 		r.blockedSince.clear();
 		SiteWaits.ended(srv, road.id());
+		boolean target = RegionTargets.is(road); // (6c RS) a region's construction target
 		for (ServerPlayer p : level.players()) {
 			if (Builder.near(p, road.box(), Builder.RANGE)) {
-				p.sendSystemMessage(Component.literal("[Architect] road " + road.id() + " is built"));
+				p.sendSystemMessage(Component.literal("[Architect] " + (target ? r.name : "road " + road.id()) + " is built"));
 			}
 		}
-		Architect.LOGGER.info("Construction road {}: built ({} cells); crate leftovers {}", road.id(), r.size(), left);
+		Architect.LOGGER.info("{} {}: built ({} cells); crate leftovers {}", target ? "Region target" : "Construction road", road.id(), r.size(), left);
 		PROGRESS.remove(road.id());
 		dev.larattalabs.architect.apiimpl.ApiEvents.builtInfra(srv, done);
 	}
@@ -517,6 +530,9 @@ public final class RoadBuilder {
 		if (r == null) {
 			throw new Sites.SiteException(id + " can't be finished (not loaded)");
 		}
+		if (RegionTargets.is(i)) {
+			return RegionTargets.finish(srv, level, i, r); // (6c RS) written as the tile writes
+		}
 		int n = 0;
 		for (int q = r.built.nextClearBit(0); q < r.size(); q = r.built.nextClearBit(q + 1)) {
 			Builder.put(level, r, q, r.pos(q), false);
@@ -549,6 +565,7 @@ public final class RoadBuilder {
 			RUNS.remove(road.id());
 			BEFORE.remove(road.id());
 			PROGRESS.remove(road.id());
+			RegionTargets.forget(road.id());
 			Architect.LOGGER.info("Construction road {} removing: refunds {} to credit to the stockpile of {} once restored", road.id(), refund, pile.owner());
 			return new Groups.Credit(pile.owner(), creditKey(road), Map.copyOf(refund), dropAt(road).asLong());
 		}

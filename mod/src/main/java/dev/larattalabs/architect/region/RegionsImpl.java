@@ -86,6 +86,27 @@ public final class RegionsImpl implements Regions {
 		}
 	}
 
+	/** (6c RS) Whether a region realises in survival. */
+	public static boolean survival(Live l) {
+		return l.rec().survival();
+	}
+
+	/** (6c RS) A survival region's target groups (its IR's {@code survival.groups}, ARTL v2's group indexes). */
+	public static List<String> survivalGroups(Live l) {
+		return RegionSurvival.groups(l.ir().json());
+	}
+
+	/** (6c RS) A tile's free-pass cells per part, counted into the region's record (RegionView.build's freeCells). */
+	public static void freeCells(Live l, Map<String, Long> freeOf) {
+		JsonObject sv = l.rec().survival;
+		if (sv == null || freeOf.isEmpty()) {
+			return;
+		}
+		JsonObject f = sv.get("freeCells") instanceof JsonObject o ? o : new JsonObject();
+		freeOf.forEach((k, v) -> f.addProperty(k, (f.has(k) ? f.get(k).getAsLong() : 0L) + v));
+		sv.add("freeCells", f);
+	}
+
 	private static final Map<String, PlanRec> PLANS = new ConcurrentHashMap<>();
 	private static final Map<String, Live> REGIONS = new LinkedHashMap<>();
 	private static final Map<String, CompletableFuture<JsonObject>> PLANNING = new ConcurrentHashMap<>();
@@ -613,6 +634,10 @@ public final class RegionsImpl implements Regions {
 		}
 		m.addProperty("type", "region.plan");
 		m.addProperty("program", r.program());
+		// (6c RS) plans in the world's mode: a survival plan's IR carries the free marks and the target groups
+		if (RegionSurvival.on(r.level().getServer())) {
+			m.addProperty("survival", true);
+		}
 		m.add("params", r.params().deepCopy());
 		if (r.seed() != null) {
 			m.addProperty("seed", Long.toUnsignedString(r.seed()));
@@ -1155,8 +1180,17 @@ public final class RegionsImpl implements Regions {
 		if (stale != null) {
 			throw refusal(Reason.PLAN_STALE, stale);
 		}
-		if (r.mode() == Mode.CONSTRUCTION || dev.larattalabs.architect.survival.SurvivalWorld.on() && s.getDefaultGameType() != GameType.CREATIVE) {
-			throw refusal(Reason.NOT_ALLOWED, "regions are INSTANT only (creative, or the survival toggle off) in this version");
+		// (6c RS, §3) the mode is the world's: survival when the toggle is on and the default game type isn't creative
+		boolean survival = RegionSurvival.on(s);
+		if (r.mode() == Mode.CONSTRUCTION && !survival) {
+			throw refusal(Reason.NOT_ALLOWED, "a region builds in the world's mode: CONSTRUCTION needs a survival world (the toggle on, not creative)");
+		}
+		if (survival != RegionSurvival.planned(p.ir().json())) {
+			throw refusal(Reason.NOT_ALLOWED, survival ? "this plan was made in creative: plan it again in survival (this world builds from a stockpile)"
+				: "this plan was made in survival: plan it again in creative");
+		}
+		if (survival) {
+			survivalRefusal(s, p, r);
 		}
 		String why = WorldJournal.unavailable();
 		if (why != null) {
@@ -1196,6 +1230,11 @@ public final class RegionsImpl implements Regions {
 		String id = reserved != null ? reserved : "rg" + nextRegion++;
 		Path w = s.getWorldPath(LevelResource.ROOT);
 		RegionRec rec = new RegionRec(id, p.planId(), p.irSha(), p.owner(), r.ext(), p.dimension(), ir.claim(), System.currentTimeMillis());
+		if (survival) {
+			JsonObject sv = new JsonObject();
+			sv.addProperty("on", true);
+			rec.survival = sv; // (6c RS) its tiles put targets down, its lots and roads are construction items
+		}
 		// (6c D1) planned beside a standing region: the record names it (the join is this region's; a dangling end is noted on removal)
 		if (ir.json().get("beside") instanceof JsonObject bs && bs.get("id") instanceof JsonElement bid && bid.isJsonPrimitive()) {
 			rec.beside = bid.getAsString();
@@ -1336,6 +1375,36 @@ public final class RegionsImpl implements Regions {
 		return id;
 	}
 
+	/**
+	 * (6c RS, §3, §4.2) A survival realise's refusals, before anything is written: a creative-only block in the plan (CREATIVE_ONLY_BLOCK,
+	 * naming the parts), a plan that builds anything with no stockpile of its owner in its dimension (NOT_ALLOWED, with the bill).
+	 */
+	private static void survivalRefusal(MinecraftServer s, PlanRec p, RealiseRequest r) {
+		JsonObject ir = p.ir().json();
+		var co = RegionSurvival.creativeOnly(ir);
+		if (!co.isEmpty()) {
+			List<String> parts = new ArrayList<>();
+			co.forEach((g, b) -> parts.add(g + " (" + String.join(", ", b.keySet()) + ")"));
+			throw refusal(Reason.CREATIVE_ONLY_BLOCK, "a survival world can't build a creative-only block: part" + (parts.size() == 1 ? " " : "s ") + String
+				.join("; ", parts));
+		}
+		boolean lots = r.lotEntries() != null && !r.lotEntries().isEmpty();
+		if (!RegionSurvival.buildsFromStock(ir, lots)) {
+			return; // all of it is free: no stockpile needed
+		}
+		String dimWhy = dev.larattalabs.architect.site.Stockpiles.dimensionRefusal(p.owner(), p.dimension());
+		if (dimWhy != null) {
+			throw refusal(Reason.NOT_ALLOWED, "a survival region builds from its owner's stockpile, and " + dimWhy);
+		}
+		if (!dev.larattalabs.architect.site.Stockpiles.drawsFrom(p.owner(), p.dimension())) {
+			JsonElement bom = p.planned().get("planCheck") instanceof JsonObject pc && pc.get("cost") instanceof JsonObject c ? c.get("bom") : null;
+			long[] cells = RegionSurvival.cells(ir);
+			throw refusal(Reason.NOT_ALLOWED, (p.owner() == null ? "the player" : p.owner()) + " has no stockpile in " + p.dimension() + ": a survival region builds "
+				+ "from its owner's stockpile (create one first); the bill: " + (bom != null && bom.isJsonObject() ? bom.toString() : cells[2] + " paid cells")
+				+ (lots ? ", and its lots' designs" : ""));
+		}
+	}
+
 	static String tileKey(String stage, String set, String key) {
 		return "t:" + stage + ":" + set + ":" + key;
 	}
@@ -1344,8 +1413,9 @@ public final class RegionsImpl implements Regions {
 		int[] t = Ir.tile(key);
 		JsonObject ext = new JsonObject();
 		ext.addProperty(RegionItems.EXT_TILE, stage + "|" + set + "|" + key);
+		// (6c RS, §5) the flags from the region's mode (the latent bug: queued creative-only, a toggle switched on failed them)
 		QItem q = new QItem(tileKey(stage, set, key), stage, after, "tile", rec.dimension, Heights.TILE * t[0], rec.claim[1], Heights.TILE * t[1], 0, false,
-			ext, null, false, false);
+			ext, null, rec.survival(), dev.larattalabs.architect.survival.SurvivalWorld.on());
 		q.itemKind = "tile";
 		q.layer = true;
 		JsonObject sp = new JsonObject();
@@ -1405,9 +1475,11 @@ public final class RegionsImpl implements Regions {
 	private static QItem roadItem(ServerLevel level, RegionRec rec, Ir.Road road, List<String> after) {
 		List<BlockPos> pts = new ArrayList<>();
 		road.points().forEach(pt -> pts.add(new BlockPos(pt[0], pt[1], pt[2])));
-		var rr = new dev.larattalabs.architect.api.RoadRequest(level, pts, road.width(), road.surface(), null, road.lanterns(), false, Mode.INSTANT, rec.owner,
-			new JsonObject(), null, true);
-		QItem q = dev.larattalabs.architect.site.RegionQueue.roadItem(level, rec.id, "road:" + road.id(), road.stage(), after, rr);
+		// (6c RS, §5) a survival region's 4e road is a construction road (C16) from the owner's stockpile
+		var rr = new dev.larattalabs.architect.api.RoadRequest(level, pts, road.width(), road.surface(), null, road.lanterns(), false, rec.survival() ? Mode.CONSTRUCTION
+			: Mode.INSTANT, rec.owner, new JsonObject(), null, true);
+		QItem q = dev.larattalabs.architect.site.RegionQueue.roadItem(level, rec.id, "road:" + road.id(), road.stage(), after, rr, rec.survival(),
+			dev.larattalabs.architect.survival.SurvivalWorld.on());
 		if (road.lamp() != null) {
 			q.spec.add("lamp", road.lamp().deepCopy()); // 6c W: the bible's lamp fixture for the street's lanterns
 		}
@@ -1441,7 +1513,8 @@ public final class RegionsImpl implements Regions {
 		int[] b = lot.box();
 		QItem q;
 		if (bp == null) {
-			q = new QItem("lot:" + lot.id(), lot.stage(), after, bpId, rec.dimension, b[0], b[1], b[2], 0, false, ext, null, false, false);
+			q = new QItem("lot:" + lot.id(), lot.stage(), after, bpId, rec.dimension, b[0], b[1], b[2], 0, false, ext, null, rec.survival(),
+				dev.larattalabs.architect.survival.SurvivalWorld.on());
 			q.fail(Reason.UNKNOWN_BLUEPRINT.name(), "No design " + bpId + " in the library");
 			return q;
 		}
@@ -1453,8 +1526,9 @@ public final class RegionsImpl implements Regions {
 			ext.add(dev.larattalabs.architect.site.LotMask.EXT, dev.larattalabs.architect.site.LotMask.extOf(irr));
 			ext.addProperty(dev.larattalabs.architect.site.LotMask.EXT_DROPPED, dropped(bpId, f, dev.larattalabs.architect.site.LotMask.of(ext)));
 		}
+		// (6c RS, §5) a survival region's lot is a construction site (Y1: the owner's stockpile, no crate)
 		q = new QItem("lot:" + lot.id(), lot.stage(), after, bpId, rec.dimension, f.ox(), f.oy(), f.oz(), f.turns(), false, ext, r.actor() == null ? null
-			: r.actor().getStringUUID(), false, false);
+			: r.actor().getStringUUID(), rec.survival(), dev.larattalabs.architect.survival.SurvivalWorld.on());
 		q.layer = true;
 		q.consented.addAll(rec.consented); // (6c PT) the realise's consented builds
 		if (!f.fits()) {
@@ -1808,6 +1882,11 @@ public final class RegionsImpl implements Regions {
 		}
 	}
 
+	/** (6c RS) Saves a region's record (RegionFluids' charge). */
+	public static void saveRec(Live l) {
+		save(l);
+	}
+
 	static void save(Live l) {
 		try {
 			RegionStore.writeJson(RegionStore.region(l.world(), l.rec().id).resolve("region.json"), l.rec().toJson());
@@ -1884,7 +1963,7 @@ public final class RegionsImpl implements Regions {
 		PrepareView pv = Prepare.view(r.planId);
 		List<dev.larattalabs.architect.api.WaitAction> actions = actionsOf(l, waiting, waitingItem, heldStage, pv);
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), r.state, st, lots,
-			r.cellsWritten, r.skipped, waiting, pv, actions, 0L, Brushes.kindOf(r), r.buildHitList(), r.beside);
+			r.cellsWritten, r.skipped, waiting, pv, actions, 0L, Brushes.kindOf(r), r.buildHitList(), r.beside, dev.larattalabs.architect.site.RegionTargets.build(l));
 	}
 
 	/** (6c X, C22) The view of a removed region: REMOVED, with the time its removal finished. */
