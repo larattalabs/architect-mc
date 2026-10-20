@@ -21,17 +21,29 @@ Scratch: `scratchpad/vocc/` (git-excluded). $0.
    a `rule.palette`; `finish.mjs`'s cost members must not appear where they did not before.
 5. **The artifact's `palette` rows carry the parts' counts** (`partsCells`, `partsFamily`) and the check-time lot counts, so Java
    recomputes without a vocabulary. `natural` lists every block the kit's measured predicate drops (fluids, common naturals).
-6. **One Java measure** (`PlanChecks.paletteCheck`) for the pre-check call (`Regions.checkPalette(sha, lotEntries)`), the
-   `realiseApproved` refusal (`PALETTE`) and the `versionOf`/delta re-judge (checkDelta finding or refusal, applyDelta refusal for a
-   required rule). It measures the template that will be placed (the named version), not the head.
+6. **One Java measure** (`PaletteRules.measure`) for the pre-check call (`Regions.checkPalette(sha, lotEntries)`), the
+   `realiseApproved` refusal (`PALETTE`) and the `versionOf`/delta re-judge (checkDelta finding or refusal, applyDelta and revert
+   refusal for a required rule). It measures the template that will be placed: a realise places an entry's current template (lotItem
+   drops `@version`, as lotProblem reads it); a delta its target version; the other lots their standing version.
 7. **`lotBlocks`** mirrors `biomes`: Java `extra`, the sidecar's caps regex and a file, `region.mjs --lot-blocks`, `planRegion`. Sent
    only for a plan with a palette rule and lots whose entry the plan names. The check's key body is unchanged.
 8. `vocab-1.json` is generated: `groups` and `compact.palette` come from `vocab-derive.mjs` (`gen-vocab --check` stays clean).
 
-## State
+## State (2026-10-20)
 
-- [ ] kit: def, groups, measure, answers, re-plan, artifact rows, lotBlocks, vocab/1, catalogue 9, fixtures
-- [ ] Java: Reason.PALETTE, lotBlocks, checkPalette, realiseApproved refusal, delta re-judge, versions, tests
-- [ ] sidecar: lotBlocks plumbing
-- [ ] gate: tools/lib/gate6cvoc-c.mjs, gate-chains steps, impact rule
-- [ ] slice run, verifier, as-built, push
+- [x] kit: def (plan.json, strict + kindError for min > max), groups (`kit/lib/vocab/groups.mjs`), measure, answers, the no-X re-plan
+      (`kit/lib/plan/palette.mjs`; wired in compile.mjs's placeholders and region/plan.mjs's vocab pass), artifact rows (finish.mjs),
+      `--lot-blocks`, vocab/1 groups + compact.palette (generated), catalogue 9 (catalogue-hy.json archived), versions (API 1.39.0,
+      mod 0.42.0, kit 0.40.0)
+- [x] fixtures: valid/v64_vocc_copper, valid/v65_vocc_nowood, vocc/r01-r04, vocc/asks-before.txt and asks-after.txt;
+      vocc-designs.mjs (vocc_copper_cabin, vocc_oak_cabin); bibles g6cvocc_copper, g6cvocc_spruce; e05 now a rule.shape, e16 lost
+      r_palette's expectation
+- [x] Java: Reason.PALETTE, PaletteCheck + Regions.checkPalette, RegionRefused(reason, msg, detail), PaletteRules (lotBlocks, measure,
+      refusal, ext rows, delta re-judge), realiseApproved hook, SitesImpl checkDelta/applyDelta/revert hooks, feature rulePalette,
+      SliceVoccDev hooks, PaletteRulesTest
+- [x] sidecar: lotBlocks (protocol, caps, file, flag), feature plan.rules, test/vocc.test.ts
+- [x] gate: tools/lib/gate6cvoc-c.mjs (cunit/cingame in gate6cvoc.mjs), gate-chains vocc-unit/vocc-ingame + impact rule; the named
+      exceptions added to HY's item 12 and VOC-a's item 5; HY-b's asks item ignores the palette lines; api-compat --gate6cvocc
+- [ ] full kit suite, mod build, sidecar check green; goldens re-cut if needed
+- [ ] slice run (ports 8918-8923, run dir ../architect-mc-VOCc-run, out ../architect-mc/artifacts/gate-runs-VOCc)
+- [ ] verifier, as-built, retire this file, push

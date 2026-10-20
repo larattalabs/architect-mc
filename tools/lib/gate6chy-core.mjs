@@ -11,7 +11,11 @@ import { pathToFileURL } from 'node:url';
  * Item 12's named exceptions: fixtures HY re-answers by name. h/r08_course is a course (now HY-b's v51, the stub's UNREACHABLE until HYb
  * meanwhile) and extension/e15 lost its course part (channel.course is supported).
  */
-export const UNCHANGED_EXCEPTIONS = Object.freeze(['h/r08_course.json', 'extension/e15_every_reserved_a.json']);
+// ((6c VOC-c) rule.palette is supported: the 7 asks with a palette rule (that rule's answer only), extension/e16 (r_palette left the
+// reserved list) and e05 (its reserved rule is rule.shape's draft now); tools/lib/gate6cvoc-c.mjs UNCHANGED_EXCEPTIONS)
+export const UNCHANGED_EXCEPTIONS = Object.freeze(['h/r08_course.json', 'extension/e15_every_reserved_a.json', 'asks/desert_jungle_wall.json', 'asks/hidden_village.json',
+  'asks/mage_exiles.json', 'asks/old_new_town.json', 'asks/one_block.json', 'asks/rival_families.json', 'asks/row_houses.json', 'extension/e05_reserved_rule.json',
+  'extension/e16_every_reserved_b.json']);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const k3 = (c) => `${c[0]},${c[1]},${c[2]}`;
