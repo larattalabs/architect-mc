@@ -34,6 +34,9 @@ export const APPROACH = 3, APPROACH_OFF = 3;
 export const RETAIN_OVER = 2;
 /** A rim with a drop of more than this beside it gets a rail (M8). */
 export const RAIL_OVER = 3;
+/** A join steeper than 1 in STEEP between a site's junction and its nearest placed lot's costs STEEP_COST (a soft rule: the site stays
+ * when nothing else fits). */
+export const STEEP = 4, STEEP_COST = 400;
 /** A level between a lot and the lot placed before it costs this much (consecutive lots share a level where the ground allows). */
 export const LEVEL_COST = 40;
 /** A lot's junction lies this many cells out of its front, on its approach (inside the approach room TERRACE_FRONT keeps clear). */
@@ -115,9 +118,12 @@ export function layoutTerraces({ claim, survey: S, specs, terraces, keepOut = []
           if (!within(x, z) || !dry(x, z) || placed.some((q) => inRect(x, z, [q.rect[0] - 2, q.rect[1] - 2, q.rect[2] + 2, q.rect[3] + 2])) || stop.some((q) => inRect(x, z, q))) { open = false; break; }
         }
         if (!open) continue;
-        // and the others' approach rooms stay clear of this rect (with its apron and ring)
+        // and the others' approach rooms stay clear of this rect (with its apron and ring); its junction 3 or more from theirs (each
+        // lot meets the district's routes at its own junction)
         const grown = [x0 - 2, z0 - 2, x1 + 2, z1 + 2];
         if (placed.some((q) => roomOf(q).some(([x, z]) => inRect(x, z, grown)))) continue;
+        const jx = ex + fx * JUNCTION, jz = ez + fz * JUNCTION;
+        if (placed.some((q) => { const [qx, qz] = CARD[q.front]; return Math.max(Math.abs(q.entrance[0] + qx * JUNCTION - jx), Math.abs(q.entrance[2] + qz * JUNCTION - jz)) < 3; })) continue;
         // no tree in the footprint, its apron or its ring
         let treed = false;
         for (let z = grown[1]; z <= grown[3] && !treed; z++) for (let x = grown[0]; x <= grown[2]; x++) if (tree(x, z)) { treed = true; break; }
@@ -143,7 +149,15 @@ export function layoutTerraces({ claim, survey: S, specs, terraces, keepOut = []
         for (let t = 0; t <= APPROACH; t++) off = Math.max(off, Math.abs(S.groundAt(ex + fx * t, ez + fz * t) - pick.top));
         if (off > APPROACH_OFF) continue;
         const near = prev ? Math.abs(ex - prev.entrance[0]) + Math.abs(ez - prev.entrance[2]) : Math.abs(((x0 + x1) >> 1) - ((R[0] + R[2]) >> 1)) + Math.abs(((z0 + z1) >> 1) - ((R[1] + R[3]) >> 1));
-        const cost = 4 * (pick.cut + pick.fill) + 3 * off + 2 * near + (prev ? LEVEL_COST * Math.abs(pick.k - prev.level) : 0);
+        // a join to the nearest placed lot that would have to climb steeper than 1 in STEEP (junction to junction) costs STEEP_COST:
+        // such a join needs a flight where the lots leave no room for one
+        let steep = 0;
+        if (placed.length) {
+          let nd = Infinity, ny = 0;
+          for (const q of placed) { const [qx, qz] = CARD[q.front]; const d = Math.abs(q.entrance[0] + qx * JUNCTION - jx) + Math.abs(q.entrance[2] + qz * JUNCTION - jz); if (d < nd) { nd = d; ny = Math.abs(q.floorY - 1 - pick.top); } }
+          if (ny * STEEP > nd) steep = STEEP_COST;
+        }
+        const cost = 4 * (pick.cut + pick.fill) + 3 * off + 2 * near + steep + (prev ? LEVEL_COST * Math.abs(pick.k - prev.level) : 0);
         if (!best || cost < best.cost) best = { cost, rect, front, floorY: pick.top + 1, level: pick.k, cut: pick.cut, fill: pick.fill, entrance: [ex, pick.top + 1, ez] };
       }
     }
@@ -182,9 +196,9 @@ export function terraceEnds(L) {
 /**
  * The lots' joins (pure): from the landmark (the first lot), each lot not yet joined in turn (the nearest to the joined set first),
  * tried against its CHAIN_TRIES nearest joined lots by a dry route `dry(a, b)` between their junctions ({at, facing: null} each; ->
- * {ok, cost}); a lot no try routes drops (`unreachable`). Returns `{edges: [{a, b}] (lot ids), kept: [lot], dropped: [{id, reason}]}`.
+ * {ok, cost}); a lot no try routes drops (`unreachable`). `forbid`: "a|b" pairs not to try (a join the one-pass run failed). Returns `{edges: [{a, b}] (lot ids), kept: [lot], dropped: [{id, reason}]}`.
  */
-export function chainTerraces(L, { dry }) {
+export function chainTerraces(L, { dry, forbid = new Set() }) {
   const lots = L.lots;
   if (!lots.length) return { edges: [], kept: [], dropped: [] };
   const end = (l) => ({ at: [...junctionOf(l).at], facing: null });
@@ -196,7 +210,11 @@ export function chainTerraces(L, { dry }) {
     const tries = [...joined].sort((p, q) => man(l, p) - man(l, q) || lots.indexOf(p) - lots.indexOf(q)).slice(0, CHAIN_TRIES);
     let ok = null;
     const why = [];
-    for (const j of tries) { const e = dry(end(j), end(l)); if (e.ok) { ok = j; break; } why.push(`${j.spec.id}: ${e.failed ?? 'no route'}`); }
+    for (const j of tries) {
+      // (a pair the one-pass run failed, `forbid` "a|b", is not tried again)
+      if (forbid.has(`${j.spec.id}|${l.spec.id}`)) { why.push(`${j.spec.id}: failed in the one pass`); continue; }
+      const e = dry(end(j), end(l)); if (e.ok) { ok = j; break; } why.push(`${j.spec.id}: ${e.failed ?? 'no route'}`);
+    }
     if (!ok) { dropped.push({ id: l.spec.id, reason: 'unreachable', tried: why }); continue; }
     edges.push({ a: ok.spec.id, b: l.spec.id });
     joined.push(l);
@@ -236,7 +254,7 @@ export function ringOf(S, l) {
  * the districts pass reads it: `{terraced: true, lots: [{...l, lot}], res: {bell, area: [], golem: []}, laneCells: {}, unplaced,
  * ring: [[x0, z0, x1, z1]] (the retaining rings' cells as 1x1 rects: hard to the routes), retained, rails, blended, notes}`.
  */
-export function emitTerraces(r, L, { stages = {}, prefix = '', maxHeight = 32, blendFill = 6, keepOut = [] } = {}) {
+export function emitTerraces(r, L, { stages = {}, prefix = '', maxHeight = 32, blendFill = 6, keepOut = [], unretained = false } = {}) {
   const sg = stages.ground ?? 'ground', sl = stages.lots ?? 'lots';
   const S = r.survey;
   const pads = r.part(`${prefix}pads`, { stage: sg });
@@ -255,7 +273,7 @@ export function emitTerraces(r, L, { stages = {}, prefix = '', maxHeight = 32, b
       ext: { ...s.ext, 'architect_mc:village': { role: s.role, type: s.type, villager: s.villager, entrance: l.entrance, landmark: s.landmark, placement: s.placement, slot: 'terrace', terrace: { level: l.level, y: l.floorY - 1 } } },
     });
     if (blend) blended++;
-    else {
+    else if (!unretained) { // (`unretained`: the broken variant, no ring or rail)
       const ring = ringOf(S, l);
       const t = l.floorY - 1;
       const pins = [];

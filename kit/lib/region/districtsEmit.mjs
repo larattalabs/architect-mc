@@ -36,6 +36,8 @@ export const END_CLEAR = 2;
 export const DRY_EXPANDED = 1_000_000;
 /** (6c S3) A terraced district's join between two of its lots gives up after this many (a join that routes takes far fewer). */
 export const CHAIN_EXPANDED = 300_000;
+/** (6c S3) Rounds of the joins' one-pass dry run (a round drops the lots whose join failed and joins the district again). */
+export const CHAIN_ROUNDS = 4;
 /** (6c D2) Windows of a following district's boundary tried for its street before the plan refuses NO_EDGE. */
 export const FOLLOW_WINDOWS = 4;
 /** (6c D2) A following street keeps within this many cells of its line (the route pass's per-edge `within`). */
@@ -300,7 +302,7 @@ export function emitDistricts(r, intent = {}) {
   // entrances (terraces.mjs chainTerraces); a lot no route reaches drops (its district's unplaced lots, as D1's unreachable districts)
   const terr = new Map(); // district id -> {L (the kept lots), edges, dropped}
   const lotHard = (l) => [l.rect[0] - 1, l.rect[1] - 1, l.rect[2] + 1, l.rect[3] + 1];
-  const terraceHard = (L) => L.lots.flatMap((l) => [lotHard(l), ...(L.retain === 'wall' || l.fill > 6 ? ringOf(S, l).wall.map(([x, z]) => [x, z, x, z]) : [])]);
+  const terraceHard = (L) => L.lots.flatMap((l) => [lotHard(l), ...((L.retain === 'wall' || l.fill > 6) && !it._unsafeUnretained ? ringOf(S, l).wall.map(([x, z]) => [x, z, x, z]) : [])]);
   const srOf = (L) => {
     const o = L.orientation, half = Math.floor(STREET_RULES.streetWidth / 2), sv = L.road.sv;
     const a = toWorld(o, L.u0, sv - half), b = toWorld(o, L.u1, sv + half);
@@ -316,6 +318,51 @@ export function emitDistricts(r, intent = {}) {
     const clearC = [...hardC.clearTrees, ...L0.lots.map((l) => [l.entrance[0] - END_CLEAR, l.entrance[2] - END_CLEAR, l.entrance[0] + END_CLEAR, l.entrance[2] + END_CLEAR])];
     const ch = chainTerraces(L0, { dry: (a, b) => dryRoute(a, b, hardC.hard, clearC, [], CHAIN_EXPANDED, { width: CHAIN_WIDTH, ...(d.terraces.stairs ? {} : { stairs: false }) }) });
     terr.set(d.id, { L: { ...L0, lots: ch.kept, unplaced: [...L0.unplaced, ...ch.dropped] }, edges: ch.edges, dropped: ch.dropped });
+  }
+  // the joins as the route pass will lay them (each district's approaches, then its joins, district by district, one pass: an earlier
+  // edge's stairs bar a later one): a dry run of exactly those edges; a lot whose approach or join fails drops and its district is
+  // joined again without it (at most CHAIN_ROUNDS rounds)
+  if (terr.size) {
+    const CARD = { north: [0, -1], east: [1, 0], south: [0, 1], west: [-1, 0] };
+    for (let round = 0; round < CHAIN_ROUNDS; round++) {
+      const E = [];
+      const tds = ds.filter((d) => terr.has(d.id));
+      for (const d of tds) {
+        const t = terr.get(d.id);
+        t.L.lots.forEach((l, k) => E.push({ d: d.id, lot: l.spec.id, kind: 'a', id: `${d.id}_a${k + 1}`, from: { at: [...l.entrance], facing: [...CARD[l.front]] }, to: { at: [...junctionOf(l).at], facing: null }, width: CHAIN_WIDTH }));
+        const lotOf = new Map(t.L.lots.map((l) => [l.spec.id, l]));
+        t.edges.forEach((e, k) => E.push({ d: d.id, lot: e.b, pair: `${e.a}|${e.b}`, kind: 't', id: `${d.id}_t${k + 1}`, from: { at: [...junctionOf(lotOf.get(e.a)).at], facing: null }, to: { at: [...junctionOf(lotOf.get(e.b)).at], facing: null }, width: CHAIN_WIDTH, ...(d.terraces.stairs ? {} : { stairs: false }) }));
+      }
+      if (!E.length) break;
+      const allHard = [...ds.filter((d) => pick.has(d.id) && !follows.has(d.id)).flatMap((d) => (terr.has(d.id) ? terraceHard(terr.get(d.id).L) : [...pick.get(d.id).L.lots.map(lotHard), ...srOf(pick.get(d.id).L)])), ...standing, ...followRectsT];
+      const base0 = r._routeObstacles({ hard: allHard });
+      const clear0 = [...base0.clearTrees, ...tds.flatMap((d) => terr.get(d.id).L.lots.flatMap((l) => { const j = junctionOf(l).at; return [[l.entrance[0] - END_CLEAR, l.entrance[2] - END_CLEAR, l.entrance[0] + END_CLEAR, l.entrance[2] + END_CLEAR], [j[0] - END_CLEAR, j[2] - END_CLEAR, j[0] + END_CLEAR, j[2] + END_CLEAR]]; }))];
+      const out = PASSES.route(cols, ctx.volumes ?? [], {
+        edges: E.map((e) => ({ id: e.id, from: e.from, to: e.to, width: e.width, movers: ['player', 'villager'], ladders: false, ...(e.stairs === false ? { stairs: false } : {}) })),
+        maxGrade, hairpinLanding: 3, stairs: true, maxCut: 4, maxFill: 4, margin: 2, hard: base0.hard, keepOut: rko ? [...keepOut, ...rko] : keepOut, prefer: [], clearTrees: clear0,
+        maxExpanded: CHAIN_EXPANDED * E.length,
+      });
+      // a failed approach drops its lot; a failed join is forbidden and the district joined again (the lot tries its other neighbours)
+      const bad = new Map(); // district -> {drop: lots, forbid: pairs}
+      out.data.edges.forEach((x, i) => {
+        if (x.ok) return;
+        const e = E[i];
+        if (!bad.has(e.d)) bad.set(e.d, { drop: new Set(), forbid: new Set() });
+        if (e.kind === 'a' || round === CHAIN_ROUNDS - 1) bad.get(e.d).drop.add(e.lot);
+        else bad.get(e.d).forbid.add(e.pair);
+      });
+      if (!bad.size) break;
+      for (const [did, b] of bad) {
+        const d = ds.find((q) => q.id === did), t = terr.get(did);
+        t.forbid = new Set([...(t.forbid ?? []), ...b.forbid]);
+        const keep = t.L.lots.filter((l) => !b.drop.has(l.spec.id) || l === t.L.lots[0]);
+        const lost = t.L.lots.filter((l) => !keep.includes(l)).map((l) => ({ id: l.spec.id, reason: 'unreachable', tried: ['its approach or join in the one pass'] }));
+        const L1 = { ...t.L, lots: keep };
+        const hardC = r._routeObstacles({ hard: allHard });
+        const ch = chainTerraces(L1, { forbid: t.forbid, dry: (a, q) => dryRoute(a, q, hardC.hard, clear0, [], CHAIN_EXPANDED, { width: CHAIN_WIDTH, ...(d.terraces.stairs ? {} : { stairs: false }) }) });
+        terr.set(did, { L: { ...L1, lots: ch.kept, unplaced: [...t.L.unplaced.filter((u) => !ch.kept.some((l) => l.spec.id === u.id)), ...lost, ...ch.dropped] }, edges: ch.edges, dropped: [...t.dropped.filter((u) => !ch.kept.some((l) => l.spec.id === u.id)), ...lost, ...ch.dropped], forbid: t.forbid });
+      }
+    }
   }
   const Lof = (d) => terr.get(d.id)?.L ?? pick.get(d.id).L;
   // ---- route costs between the placed districts' street ends (dry runs, each pair alone)
@@ -414,7 +461,7 @@ export function emitDistricts(r, intent = {}) {
     const c = pick.get(d.id);
     if (Lof(d).terraced) {
       // (6c S3) the terraced lots on their levels, their retaining rings and rails (no street, square or props)
-      layouts[d.id] = emitTerraces(r, Lof(d), { stages: { ground: stages.ground, lots: stages.lots }, prefix: `${d.id}_`, keepOut });
+      layouts[d.id] = emitTerraces(r, Lof(d), { stages: { ground: stages.ground, lots: stages.lots }, prefix: `${d.id}_`, keepOut, unretained: !!it._unsafeUnretained });
       continue;
     }
     let props = null;

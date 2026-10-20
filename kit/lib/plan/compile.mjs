@@ -682,7 +682,7 @@ export function resolveTerracedZone(env, p, geomOf, taken) {
   const cw = env.claim.maxX - env.claim.minX + 1 - 2 * MARGIN, cd = env.claim.maxZ - env.claim.minZ + 1 - 2 * MARGIN;
   // the size: the zone's own (a range's largest), else room for the lots with their gaps (half again, for the slope)
   const area = specs.reduce((a, s) => a + (s.size[0] + TERRACE_GAP) * (s.size[1] + TERRACE_GAP), 0);
-  const auto = Math.max(24, Math.ceil(Math.sqrt((area * 3) / 2)));
+  const auto = Math.max(24, Math.ceil(Math.sqrt(area * 3)));
   const asked = sideOf(zone.size);
   const w = Math.max(24, Math.min(256, cw, asked?.[0] ?? auto)), d = Math.max(24, Math.min(256, cd, asked?.[1] ?? auto));
   const obs = taken.map((o) => grow(o, ZONE_GAP));
@@ -1100,6 +1100,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         stage: { ground: stageOf('ground'), street: stageOf('street'), routes: stageOf('routes'), lots: stageOf('lots'), props: stageOf('props') },
         routePart: `routes_${p.id}`.slice(0, 48), hard: [...env.hard.map(rectArr), ...others], ...extra,
         // ((6c S3) a terraced zone's routes keep its grade tolerance; every other zone as before)
+        // ((6c S3) the broken variant `unretained` (the zone's ext architect_mc:unsafe): no retaining ring or rail on any terraced lot)
+        ...(p.part.ext?.['architect_mc:unsafe']?.unretained === true ? { _unsafeUnretained: true } : {}),
         ...(z.ds.some((d) => d.terraces) ? { maxGrade: tolOf(p.part, 'grade').max, routeKeepOut: [...env.protectedAreas.map((a) => rectArr(a.rect)), ...env.regions.map((a) => rectArr(a.rect)), ...env.buildRects.map((a) => rectArr(a.rect))] } : {}),
       });
       for (const k of out.reserved) reserved.add(k);
