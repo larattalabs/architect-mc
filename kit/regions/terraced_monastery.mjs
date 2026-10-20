@@ -156,7 +156,7 @@ function draftWorld(r, ctx) {
  * (the route guard holds those), a lot's entrance or within 1 of one; the cell inward then stands beside the rail. Twice (a rail
  * moves the brink in by one). Returns the rails placed.
  */
-function brinkRails(r, ctx, { stage, rounds = 2 }) {
+function brinkRails(r, ctx, { stage, rounds = 3 }) {
   const D4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const routeParts = new Set(Object.entries(r.meta.parts).filter(([, m]) => m.kind === 'path').map(([k]) => k));
   const ents = Object.values(r.meta.lots).map((l) => l.entrance);

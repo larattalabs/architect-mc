@@ -50,10 +50,15 @@ export async function build({ phase, local, ART, SCEN, evidenceSha }) {
   if (phase === '6c') {
     // (6c S2) the 6c gallery: S2 (bar 16: Noah's approval of its evidence sha), then the page's earlier sections as published (W's S7
     // and its looks, V's S7), their images already on the page (jpg) and their decisions keyed to their own phases
+    // (6c S3) S3 v1 first (bar 16: Noah's approval of its evidence sha); S2 after it, approved (2026-10-14, 932dafe971f1: PLAN.md)
+    const sc3 = JSON.parse(fs.readFileSync(path.join(SCEN, 's3_monastery.json'), 'utf8'));
+    const dir3 = path.join(ART, '6c', 's3');
+    const nat3 = latest(dir3, false);
+    if (nat3) scenarios.push(section({ sc: sc3, nat: nat3, flat: latest(dir3, true), key: 's3', img, evidenceSha, extra: { phase: '6c', section: 'S3 v1', note: 'S3 v1, terraced (N-S3-1): the monastery laid down its mountainside in three districts at the claim\'s level bands (the gate low, the gardens mid in the cherry grove, the cloister high), every lot on its own terrace level 3 apart, rims over 2 held by stone-brick retaining rings with spruce rails, the levels joined by stone paths with switchbacks and stair flights (grade 0.2), the gardens\' fountain (a copper coping, a sea-lantern spout), a rock spire on a shoulder, a player-only path to the lookout on the highest ground, the relief blended round the districts, boulders, stumps, moss and snow, and soul lanterns (light 10). The spring stream (x 3664-3672) is untouched.' } }));
     const sc = JSON.parse(fs.readFileSync(path.join(SCEN, 's2_ice_spikes.json'), 'utf8'));
     const dir = path.join(ART, '6c', 's2');
     const nat = latest(dir, false);
-    if (nat) scenarios.push(section({ sc, nat, flat: latest(dir, true), key: 's2', img, evidenceSha, extra: { phase: '6c', note: 'The outpost stands on the land only (N-S2-1): 7 lots on the ice-free band between the natural spikes (a longhouse, the watch tower, a smithy, a store, the farm Steward asked for, and 2 huts; a third hut has no site), each pad blended into the snow, 1-wide plank boardwalks from the gate to every door, 6 generated spike clusters in the gaps, boulders, spruce stumps and snow layers, and soul lanterns (light 10: no ice or snow melts). The frozen sea and every natural spike are untouched.' } }));
+    if (nat) scenarios.push(section({ sc, nat, flat: latest(dir, true), key: 's2', img, evidenceSha, extra: { phase: '6c', ...(nat3 ? { earlier: true, approved: { by: 'Noah', at: '2026-10-14', evidence: '932dafe971f1' } } : {}), note: 'The outpost stands on the land only (N-S2-1): 7 lots on the ice-free band between the natural spikes (a longhouse, the watch tower, a smithy, a store, the farm Steward asked for, and 2 huts; a third hut has no site), each pad blended into the snow, 1-wide plank boardwalks from the gate to every door, 6 generated spike clusters in the gaps, boulders, spruce stumps and snow layers, and soul lanterns (light 10: no ice or snow melts). The frozen sea and every natural spike are untouched.' } }));
     const wData = path.join(ART, '6c-w', 'gallery', 'data.json');
     if (fs.existsSync(wData)) {
       const jpg = (src) => (src && /\.png$/.test(src) ? src.replace(/\.png$/, '.jpg') : src);
@@ -96,7 +101,7 @@ export async function build({ phase, local, ART, SCEN, evidenceSha }) {
   if (fs.existsSync(calFile)) calibration = JSON.parse(fs.readFileSync(calFile, 'utf8')).renders;
   // (6c V, W) the slice's own page title and bar reference; W republishes V's page (the same title, a new section)
   const title = phase === '6c-v' || phase === '6c-w' || phase === '6c' ? 'Architect 6c-V gallery' : `Architect ${phase} gallery`; // (6c S2: 'Architect 6c gallery', the same page)
-  const barsTitle = phase === '6c' ? 'Bars (CONTRACT 6c slice S2 §3; earlier sections: V §7 and W §7), on the realised world' : phase === '6c-w' ? 'Bars (CONTRACT 6c slice V §7 and W §7), on the realised world' : phase === '6c-v' ? 'Bars (CONTRACT 6c slice V §7), on the realised world' : 'Bars (CONTRACT 6b §8.3), on the realised world';
+  const barsTitle = phase === '6c' ? 'Bars (CONTRACT 6c slice S3 §7 and S2 §3; earlier sections: V §7 and W §7), on the realised world' : phase === '6c-w' ? 'Bars (CONTRACT 6c slice V §7 and W §7), on the realised world' : phase === '6c-v' ? 'Bars (CONTRACT 6c slice V §7), on the realised world' : 'Bars (CONTRACT 6b §8.3), on the realised world';
   const data = { phase, title, barsTitle, built: new Date().toISOString(), local: !!local, scenarios, calibration };
   if (!local) fs.writeFileSync(path.join(out, 'data.json'), `${JSON.stringify(data, null, 1)}\n`);
   const tpl = fs.readFileSync(path.join(HERE, 'gallery6b.html'), 'utf8');

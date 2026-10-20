@@ -124,6 +124,71 @@ export function s3NearBodies(diff, ir) {
   return { ...diff, classes, list: diff.list.map((m) => (back.has(m) ? { ...m, class: 'none', was_class: m.class } : m)) };
 }
 
+/** (6c F1) The world's own freezing (a class body; scenarios.mjs `freezeOf` picks the scenarios): an unclassified mismatch where still water
+ * became ice (or a snow layer fell) at a cell the plan never writes is classed `freeze`. Pure. */
+export function freezeClass(e, vw, F_WRITTEN) {
+  const moved = (e.list ?? []).filter((m) => m.class === 'none' && !(vw.flags(...m.pos.split(',').map(Number)) & F_WRITTEN)
+    && ((/^minecraft:water/.test(m.was) && /^minecraft:ice$/.test(m.now)) || (/air$/.test(m.was) && /^minecraft:snow\[/.test(m.now))));
+  if (!moved.length) return e;
+  const classes = { ...e.classes, none: e.classes.none - moved.length, freeze: (e.classes.freeze ?? 0) + moved.length };
+  return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'freeze' } : m)) };
+}
+
+/** (6c H §4.5) D2's rule for `flow`: a cell more than 6 columns from every written column (`far`), or more than 8 below the surveyed
+ * ground and every written cell within 6 columns (`deep`). Returns (x, y, z) -> boolean (the written columns read once). */
+export function awayFromWrites(vw, sampleIndexOf) {
+  let writtenCols = null;
+  return (x, y, z) => {
+    if (!writtenCols) {
+      writtenCols = new Map();
+      vw.eachWritten((wx, wy, wz) => { const k = `${wx},${wz}`; writtenCols.set(k, Math.min(writtenCols.get(k) ?? Infinity, wy)); });
+    }
+    let near = Infinity, nearest = Infinity;
+    for (let dx = -6; dx <= 6; dx++) for (let dz = -6; dz <= 6; dz++) { const lo = writtenCols.get(`${x + dx},${z + dz}`); if (lo !== undefined) { near = Math.min(near, lo); nearest = 0; } }
+    if (nearest === Infinity) return true; // far
+    const g = vw.survey ? vw.survey.ground[sampleIndexOf(vw.survey, x, z)] : Infinity;
+    return y < g - 8 && y < near - 8; // deep
+  };
+}
+
+/** (6c T1; H §4.5's narrowing) The world's flowing water (`flowOf` picks the scenarios): flowing water in the snapshot, air now, at an
+ * unwritten cell `away` from the writes, is classed `flow`. Pure. */
+export function flowClass(e, vw, F_WRITTEN, away) {
+  const moved = (e.list ?? []).filter((m) => m.class === 'none' && /^minecraft:water\[level=[1-9]/.test(m.was) && /^minecraft:(air|cave_air)$/.test(m.now)
+    && !(vw.flags(...m.pos.split(',').map(Number)) & F_WRITTEN) && away(...m.pos.split(',').map(Number)));
+  if (!moved.length) return e;
+  const classes = { ...e.classes, none: e.classes.none - moved.length, flow: (e.classes.flow ?? 0) + moved.length };
+  return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'flow' } : m)) };
+}
+
+/** (6c T2) The region's lamps melting the world's snow (`meltOf` picks the scenarios): a snow layer in the snapshot, air now, at an
+ * unwritten cell lit over 11 by a light the plan placed (unoccluded), is classed `melt`. Pure. */
+export function meltClass(e, vw, F_WRITTEN) {
+  const lights = [];
+  vw.eachWritten((x, y, z, idx) => { const em = vw.pal.emit[idx]; if (em > 11) lights.push([x, y, z, em]); });
+  const lit = (x, y, z) => lights.some(([lx, ly, lz, em]) => em - (Math.abs(lx - x) + Math.abs(ly - y) + Math.abs(lz - z)) > 11);
+  const moved = (e.list ?? []).filter((m) => { if (m.class !== 'none' || !/^minecraft:snow\[/.test(m.was) || !/^minecraft:(air|cave_air)$/.test(m.now)) return false; const [x, y, z] = m.pos.split(',').map(Number); return !(vw.flags(x, y, z) & F_WRITTEN) && lit(x, y, z); });
+  if (!moved.length) return e;
+  const classes = { ...e.classes, none: e.classes.none - moved.length, melt: (e.classes.melt ?? 0) + moved.length };
+  return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'melt' } : m)) };
+}
+
+/**
+ * (6c S3, CONTRACT S3 §6) S3's E-normal classes on a diff, in one place (the natural scenario run and the s3-plan copy): the mod's growth,
+ * grazed and live only at unwritten cells; then `freeze`, `flow` (D2's far and deep) and `melt` by kind at unwritten cells; `farfluid`
+ * (voc-natural's rule); and nothing within 6 (3D) of a body's cells, shell or watch stays classed. `vw`: the plan's virtual world.
+ */
+export function s3Classify(e, { vw, ir, F_WRITTEN, sampleIndexOf }) {
+  if (!e) return e;
+  let d = s3Unwritten(e, vw, F_WRITTEN);
+  if (d.classes?.none > 0) d = freezeClass(d, vw, F_WRITTEN);
+  if (d.classes?.none > 0) d = flowClass(d, vw, F_WRITTEN, awayFromWrites(vw, sampleIndexOf));
+  if (d.classes?.none > 0) d = meltClass(d, vw, F_WRITTEN);
+  const written = new Set();
+  vw.eachWritten((x, y, z) => { written.add(`${x},${y},${z}`); });
+  return s3NearBodies(farFluidOf(d, { written, lots: ir.lots ?? [] }), ir);
+}
+
 /** Tile shas of a plan's IR over its own survey, with 1 worker forward and 4 workers shuffled. */
 export async function tileShas(planDir, { timingPasses = 1 } = {}) {
   const irJson = fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8');
@@ -589,7 +654,10 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
         const gIr = JSON.parse(fs.readFileSync(path.join(gDir, 'ir.json'), 'utf8'));
         // (6c S2) with the golden's committed frozen volumes (its keep sets read them)
         const gVols = gIr.volumes ? await irVolumesIn(gIr, path.join(gDir, 'blobs')) : [];
-        const re = await planRegion({ programFile: path.join(root, 'kit', 'regions', `${gIr.id}.mjs`), params: gIr.params, survey: gSurvey, seed: gIr.seed, claim: { ...gIr.claim, minY: -64, maxY: 319 }, roles: gIr.roles, kitVersion: gIr.kitVersion, keepOut: gIr.keepOut ?? [], ...(gVols.length ? { volumes: gVols } : {}) }); // (6c F2) the golden's own recorded kit: a later slice's KIT_VERSION bump alone moves no planner output
+        // ((6c S3) a golden that kept its plan's biome grid and bible fluids (biomes.json, bible.json: the fountain reads both) re-plans with them)
+        const gBiomes = fs.existsSync(path.join(gDir, 'biomes.json')) ? JSON.parse(fs.readFileSync(path.join(gDir, 'biomes.json'), 'utf8')) : null;
+        const gFluids = fs.existsSync(path.join(gDir, 'bible.json')) ? JSON.parse(fs.readFileSync(path.join(gDir, 'bible.json'), 'utf8')).fluids ?? null : null;
+        const re = await planRegion({ programFile: path.join(root, 'kit', 'regions', `${gIr.id}.mjs`), params: gIr.params, survey: gSurvey, seed: gIr.seed, claim: { ...gIr.claim, minY: -64, maxY: 319 }, roles: gIr.roles, kitVersion: gIr.kitVersion, keepOut: gIr.keepOut ?? [], ...(gVols.length ? { volumes: gVols } : {}), ...(gBiomes ? { biomes: gBiomes } : {}), ...(gFluids ? { fluids: gFluids } : {}) }); // (6c F2) the golden's own recorded kit: a later slice's KIT_VERSION bump alone moves no planner output
         const gts = await tileShas(gDir);
         const ok = re.irSha === g.irSha && gts.irSha === g.irSha && gts.workersSame && JSON.stringify(gts.tiles) === JSON.stringify(g.tiles);
         golden = ok ? `match (the golden's committed inputs re-plan to its IR ${g.irSha.slice(0, 12)} and its ${Object.keys(g.tiles).length} tile shas; this run's live survey differs from the golden's in ${cols} columns, so its IR ${ts.irSha.slice(0, 12)} is its own)`
@@ -606,39 +674,14 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const exactOther = sibling ? JSON.parse(fs.readFileSync(path.join(sibling, 'exact.json'), 'utf8')) : null;
   // (6c F1) the world's own freezing during the stand: an unclassified mismatch where still water became ice (or a snow layer
   // fell) at a cell the plan never writes is the cold biome's doing, not the undo's: classed `freeze` (a world class)
-  const freezeOf = (e) => {
-    if (!e || flat || !(isF1(sc) || isF2(sc) || isS2(sc) || isS3(sc)) || !(e.classes?.none > 0)) return e;
-    const moved = (e.list ?? []).filter((m) => m.class === 'none' && !(vw.flags(...m.pos.split(',').map(Number)) & F_WRITTEN)
-      && ((/^minecraft:water/.test(m.was) && /^minecraft:ice$/.test(m.now)) || (/air$/.test(m.was) && /^minecraft:snow\[/.test(m.now))));
-    if (!moved.length) return e;
-    const classes = { ...e.classes, none: e.classes.none - moved.length, freeze: (e.classes.freeze ?? 0) + moved.length };
-    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'freeze' } : m)) };
-  };
+  const freezeOf = (e) => (!e || flat || !(isF1(sc) || isF2(sc) || isS2(sc) || isS3(sc)) || !(e.classes?.none > 0) ? e : freezeClass(e, vw, F_WRITTEN));
   // (6c T1) the world's flowing water: an unclassified mismatch where the snapshot held flowing (non-source) water and the world now
   // holds air is a stream that moved between the snapshot and the write (SETTLEMENTS §4.2: flowing water is outside E-normal), classed
   // `flow` (a world class); the plan never places flowing water
   // (6c H §4.5) narrowed to D2's rule, so no class can hide a fluid undo error: only at a cell the plan never writes, more than 6 columns
   // from every written column (`far`), or more than 8 below the surveyed ground and every written cell within 6 columns (`deep`)
-  let writtenCols = null;
-  const awayFromWrites = (x, y, z) => {
-    if (!writtenCols) {
-      writtenCols = new Map();
-      vw.eachWritten((wx, wy, wz) => { const k = `${wx},${wz}`; writtenCols.set(k, Math.min(writtenCols.get(k) ?? Infinity, wy)); });
-    }
-    let near = Infinity, nearest = Infinity;
-    for (let dx = -6; dx <= 6; dx++) for (let dz = -6; dz <= 6; dz++) { const lo = writtenCols.get(`${x + dx},${z + dz}`); if (lo !== undefined) { near = Math.min(near, lo); nearest = 0; } }
-    if (nearest === Infinity) return true; // far
-    const g = vw.survey ? vw.survey.ground[sampleIndexOf(vw.survey, x, z)] : Infinity;
-    return y < g - 8 && y < near - 8; // deep
-  };
-  const flowOf = (e) => {
-    if (!e || flat || !(isT1(sc) || isT2(sc) || isD(sc) || isS2(sc) || isS3(sc)) || !(e.classes?.none > 0)) return e;
-    const moved = (e.list ?? []).filter((m) => m.class === 'none' && /^minecraft:water\[level=[1-9]/.test(m.was) && /^minecraft:(air|cave_air)$/.test(m.now)
-      && !(vw.flags(...m.pos.split(',').map(Number)) & F_WRITTEN) && awayFromWrites(...m.pos.split(',').map(Number)));
-    if (!moved.length) return e;
-    const classes = { ...e.classes, none: e.classes.none - moved.length, flow: (e.classes.flow ?? 0) + moved.length };
-    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'flow' } : m)) };
-  };
+  const away = awayFromWrites(vw, sampleIndexOf);
+  const flowOf = (e) => (!e || flat || !(isT1(sc) || isT2(sc) || isD(sc) || isS2(sc) || isS3(sc)) || !(e.classes?.none > 0) ? e : flowClass(e, vw, F_WRITTEN, away));
   // (6c F2) the world's own changes far from every cell the plan writes: an unclassified mismatch at a cell the plan never writes,
   // in no lot box, 8 or more (Manhattan) from every written cell, is classed `distant` (a world class): the undo writes only the
   // journal's cells, so it can't reach there (the cave fixture's lava still settling, leaves re-counting their distance)
@@ -689,27 +732,10 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   // after the undo is exactly the shape of an undo error), lit over 11 (vanilla's snow melt) by a light the plan placed (block light
   // from the plan's emitters, unoccluded: emission minus the Manhattan distance), is classed `melt` (a world class: the undo restores
   // the cells the plan wrote; a melted layer was never one). The lamps cannot see snow at plan time (the survey has no snow layers).
-  const meltOf = (e) => {
-    if (!e || flat || !(isT2(sc) || isD(sc) || isS2(sc) || isS3(sc)) || !(e.classes?.none > 0)) return e;
-    const lights = [];
-    vw.eachWritten((x, y, z, idx) => { const em = vw.pal.emit[idx]; if (em > 11) lights.push([x, y, z, em]); });
-    const lit = (x, y, z) => lights.some(([lx, ly, lz, em]) => em - (Math.abs(lx - x) + Math.abs(ly - y) + Math.abs(lz - z)) > 11);
-    const moved = (e.list ?? []).filter((m) => { if (m.class !== 'none' || !/^minecraft:snow\[/.test(m.was) || !/^minecraft:(air|cave_air)$/.test(m.now)) return false; const [x, y, z] = m.pos.split(',').map(Number); return !(vw.flags(x, y, z) & F_WRITTEN) && lit(x, y, z); });
-    if (!moved.length) return e;
-    const classes = { ...e.classes, none: e.classes.none - moved.length, melt: (e.classes.melt ?? 0) + moved.length };
-    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'melt' } : m)) };
-  };
-  // (6c S3, CONTRACT S3 §6) S3's natural run: the mod's growth, grazed and live only at unwritten cells (a mismatch at a cell the plan
-  // wrote is never the world's); then the world classes by kind; farfluid (voc-natural's rule); nothing within 6 (3D) of a body's
-  // cells, shell or watch stays classed (H §4.5)
-  const s3Pre = (e) => (e && !flat && isS3(sc) ? s3Unwritten(e, vw, F_WRITTEN) : e);
-  const s3Post = (e) => {
-    if (!e || flat || !isS3(sc)) return e;
-    const written = new Set();
-    vw.eachWritten((x, y, z) => { written.add(`${x},${y},${z}`); });
-    return s3NearBodies(farFluidOf(e, { written, lots: ir.lots ?? [] }), ir);
-  };
-  const exN = s3Post(meltOf(distantOf(amethystOf(flowOf(freezeOf(s3Pre(exact)))))));
+  const meltOf = (e) => (!e || flat || !(isT2(sc) || isD(sc) || isS2(sc) || isS3(sc)) || !(e.classes?.none > 0) ? e : meltClass(e, vw, F_WRITTEN));
+  // (6c S3, CONTRACT S3 §6) S3's natural run: s3Classify (the mod's growth, grazed and live only at unwritten cells; freeze, flow and melt
+  // by kind; farfluid; nothing within 6 of a body classed)
+  const exN = !flat && isS3(sc) ? s3Classify(exact, { vw, ir, F_WRITTEN, sampleIndexOf }) : meltOf(distantOf(amethystOf(flowOf(freezeOf(exact)))));
   const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exN, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
@@ -937,6 +963,8 @@ async function golden(id, runDir) {
   const gDir = path.join(SCEN, 'goldens', short(sc));
   fs.mkdirSync(path.join(gDir, 'blobs'), { recursive: true });
   for (const f of ['ir.json', 'survey.bin', 'meta.json']) fs.copyFileSync(path.join(planDir, f), path.join(gDir, f));
+  // ((6c S3) the monastery's fountain reads the plan's biome grid and the bible's fluids: kept beside the golden's inputs)
+  if (isS3(sc)) for (const f of ['biomes.json', 'bible.json']) if (fs.existsSync(path.join(planDir, f))) fs.copyFileSync(path.join(planDir, f), path.join(gDir, f));
   for (const f of fs.existsSync(path.join(planDir, 'blobs')) ? fs.readdirSync(path.join(planDir, 'blobs')) : []) fs.copyFileSync(path.join(planDir, 'blobs', f), path.join(gDir, 'blobs', f));
   const run = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
   const g = { scenario: sc.id, version: sc.version, note: `tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/${short(sc)}/`, fromRun: run.runId, irSha: ts.irSha, kitVersion: JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8')).kitVersion, cells: ts.cells, tiles: ts.tiles };

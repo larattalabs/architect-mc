@@ -38,6 +38,8 @@ export const DRY_EXPANDED = 1_000_000;
 export const CHAIN_EXPANDED = 300_000;
 /** (6c S3) Rounds of the joins' one-pass dry run (a round drops the lots whose join failed and joins the district again). */
 export const CHAIN_ROUNDS = 4;
+/** (6c S3) Pairs of ends tried between two districts when one of them is terraced (the nearest first). */
+export const TERRACED_COMBOS = 4;
 /** (6c D2) Windows of a following district's boundary tried for its street before the plan refuses NO_EDGE. */
 export const FOLLOW_WINDOWS = 4;
 /** (6c D2) A following street keeps within this many cells of its line (the route pass's per-edge `within`). */
@@ -383,7 +385,8 @@ export function emitDistricts(r, intent = {}) {
   const base = r._routeObstacles({ hard: [...districtHard, ...layoutLots, ...standing], clearTrees: endClear });
   // (a following street's own cells are not hard to the routes that end on it: its ends are open, as a V street's past-end cells are)
   const dryOne = (a, b) => {
-    const e = dryRoute(a, b, base.hard, base.clearTrees);
+    // ((6c S3) a pair with a terraced end tries several ends: each failure gives up after CHAIN_EXPANDED, not DRY_EXPANDED)
+    const e = dryRoute(a, b, base.hard, base.clearTrees, [], DRY_EXPANDED);
     return e.ok ? { cost: e.cost, length: e.length } : { cost: DISTRICT_INF, failed: e.failed };
   };
   // ((6c S3) a terraced district's end is a lot's junction: the route ends there from any side)
@@ -402,7 +405,9 @@ export function emitDistricts(r, intent = {}) {
     const combos = [];
     for (const ea of ends.get(A.id)) for (const eb of ends.get(B.id)) combos.push({ ea, eb, dd: cheb([ea.x, ea.z], [eb.x, eb.z]) });
     combos.sort((p, q) => p.dd - q.dd || p.ea.k - q.ea.k || p.eb.k - q.eb.k);
-    for (const { ea, eb, dd } of combos) {
+    // ((6c S3) with a terraced end, the TERRACED_COMBOS nearest pairs of ends only)
+    const terracedPair = combos.some((q) => q.ea.terraced || q.eb.terraced);
+    for (const { ea, eb, dd } of terracedPair ? combos.slice(0, TERRACED_COMBOS) : combos) {
       if (best && best.dry.cost < DISTRICT_INF && 10 * dd >= best.dry.cost) continue;
       const na = endNode(A, ea), nb = endNode(B, eb);
       const dry = dryOne(na, nb);
