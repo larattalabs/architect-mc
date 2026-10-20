@@ -870,3 +870,9 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
 - A route ending on a lot its zone couldn't place answers `blocked {dependency}` (naming the lot and zone), not refused NO_ROOM.
 - `rule.palette` gains `scope: "lots" | "all"` (default "all" = today), and `exempt` accepts `ways` and `forms`.
 - Take Steward's 12 re-recorded asks (steward-mc f-strange-asks) into the asks fixtures and gap table.
+
+## Queued (coordinator, 2026-10-20)
+
+- **Stale asks tables after VOC-c** (found by the release-tool run): h-unit and ha-unit fail H-a item 10, and vocc-unit fails
+  VOC-c item 3, because `rule.palette` became supported. Re-cut the tables (vocc's "after" table already matches) and fold them
+  into the 6c close-out with Steward's 12 re-recorded asks.
