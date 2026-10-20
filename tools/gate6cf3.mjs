@@ -172,22 +172,17 @@ async function determinism() {
   return out;
 }
 
-/** Item 13 (recorded): the compact plan/0's size here and on the merge base (the sidecar's expansion of plan/0#compact). */
+/** Item 13 (recorded): the compact plan/0's length here and on the merge base (the sidecar's own expansion of plan/0#compact, by tsx). */
 async function compactSize() {
-  const one = (dir) => {
-    const r = spawnSync(process.execPath, ['--input-type=module', '-e', `
-      const fs = await import('node:fs');
-      const p = JSON.parse(fs.readFileSync(${JSON.stringify(path.join(dir, 'kit', 'schemas', 'plan.json'))}, 'utf8'));
-      const c = p['x-catalogue'];
-      const cat = { catalogueVersion: c.catalogueVersion, entries: c.entries.map(({ sinceApi, schemaVersion, ...e }) => e) };
-      const { ['x-catalogue']: _x, ...schema } = p;
-      process.stdout.write(String(JSON.stringify(schema).length + JSON.stringify(cat).length));`], { encoding: 'utf8' });
-    return Number(r.stdout);
+  const one = (kit) => {
+    const src = `import { expandSystemRefs } from ${JSON.stringify(path.join(root, 'sidecar', 'src', 'jobs', 'systemrefs.ts'))};\nprocess.stdout.write(String((await expandSystemRefs(${JSON.stringify(kit)}, ['plan/0#compact'])).length));`;
+    const f = path.join(OUT, 'f3-compact.mts');
+    fs.writeFileSync(f, src);
+    const r = spawnSync(path.join(root, 'sidecar', 'node_modules', '.bin', 'tsx'), [f], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 300_000 });
+    return Number(r.stdout.trim());
   };
-  const here2 = one(root), base = one(path.resolve(root, '..', 'architect-mc-F3-main'));
-  // the sidecar's own measure (its test bounds it): the expansion's length
-  const t = spawnSync('npx', ['vitest', 'run', 'test/system-refs.test.ts', '-t', 'much shorter'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 600_000 });
-  return { approx: here2, base, delta: here2 - base, chars: here2, sidecarTest: t.status === 0 ? 'pass' : `exit ${t.status}` };
+  const chars = one(KIT), base = one(path.join(path.resolve(root, '..', 'architect-mc-F3-main'), 'kit'));
+  return { chars, base, delta: chars - base };
 }
 
 // ------------------------------------------------------------------ in game (items 3, 4, 6, 8)
