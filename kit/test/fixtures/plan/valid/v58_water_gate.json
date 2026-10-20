@@ -1,6 +1,21 @@
 {
- "about": "(6c HY, \u00a78.3, \u00a714 items 9 and 14) v30's walled village (the ring [4, 8], height 6, the road's auto gate and the west gate) plus a brook from the claim's centre out to its south edge: the brook's reach crosses the ring under a water gate (the wall on a lintel over the still reach, a waterlogged iron grate in the wall's thickness; no walk gate). It replaces hy-pending-c.json.",
- "on": "s7",
+ "about": "(6c HY, \u00a78.3, \u00a714 items 9 and 14) v30's walled village (its plan unchanged: the ring [4, 8], height 6, the road's auto gate, the west gate and path) plus a brook from the claim's centre out to its south edge, on a terrace 3 over the plain to the south: the brook falls once and its lower reach crosses the ring under a water gate (the wall on a lintel over the still reach, a waterlogged iron grate in the wall's thickness; no walk gate). A terrain fixture so the gate realises it in game (HY-b's item 9 builds terrains); kit/test/hy-c.test.mjs also plans it on s7, v30's site. It replaces hy-pending-c.json.",
+ "terrain": {
+  "W": 240,
+  "D": 200,
+  "x0": 1000,
+  "z0": 2000,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1000,
+    "x1": 1239,
+    "z0": 2000,
+    "z1": 2109,
+    "y": 67
+   }
+  ]
+ },
  "volume": {},
  "covers": [
   "connector.channel",

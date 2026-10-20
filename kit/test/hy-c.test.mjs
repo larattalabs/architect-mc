@@ -192,4 +192,8 @@ test('item 9 (the batch): valid/v58 (v30 plus a brook through the ring) READY; t
   assert.equal(p.meta.planCheck.links.bom.brook['minecraft:iron_bars'], cellsOf(op.grate).length);
   const sp = sitePlan({ ir: p.ir, meta: p.meta, planId: 'p', irSha: 'x'.repeat(64) });
   assert.deepEqual(sp.courses.find((c) => c.id === 'brook').waterGates, ['town_wall']);
+  // the same plan on v30's own site (s7): READY, the brook under a water gate of the ring
+  const s7 = await run({ ...f, terrain: undefined, on: 's7' });
+  assert.equal(s7.check.overall, 'READY', JSON.stringify(s7.check.parts.map((q) => [q.part, q.class, q.reasons])));
+  assert.equal(s7.res.meta.walls.find((w) => w.id === 'town_wall').waterGates.length, 1);
 });

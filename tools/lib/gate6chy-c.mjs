@@ -79,11 +79,12 @@ function findArtifact(L, sha) {
 const boxOf = (g) => [CLAIM[0] - 8, g - 8, CLAIM[1] - 8, CLAIM[2] + 8, g + 40, CLAIM[3] + 8];
 
 /** The water gate's geometry from a realised region: the reach body, the wall's water gate, the axis and the inside's sign. */
-function gateGeometry(r) {
-  const body = r.bodies.find((b) => b.id === 'race_r1');
+function gateGeometry(r, wallId = 'castle') {
   const meta = JSON.parse(fs.readFileSync(path.join(r.planDir, 'meta.json'), 'utf8'));
-  const wall = (meta.walls ?? []).find((w) => w.id === 'castle');
+  const wall = (meta.walls ?? []).find((w) => w.id === wallId);
   const wg = wall?.waterGates?.[0];
+  // (the batch: the reach the water gate stands over, hy_gate_demo's race_r1 or a routed course's)
+  const body = r.bodies.find((b) => b.id === (wg?.body ?? 'race_r1'));
   if (!body || !wg) return null;
   const xs = body.cells.map((c) => c[0]), zs = body.cells.map((c) => c[2]);
   const along = Math.max(...zs) - Math.min(...zs) > Math.max(...xs) - Math.min(...xs) ? 'z' : 'x';
@@ -141,7 +142,8 @@ async function navAcross(ctx, G) {
   for (const [k, a, b] of [['bank', feet(vIn), feet(vOut)], ['water', water(vIn), water(vOut)]]) {
     const r = await L.call('dev.nav.villager', { from: a, to: b, range: 256, cells: true }, 120_000).catch((e) => ({ error: String(e.message ?? e) }));
     const cells = r.cells ?? [];
-    res[k] = { canReach: !!r.canReach, nodes: r.nodes ?? null, throughGrate: cells.filter(([x, y, z]) => G.grateCols.has(k2(x, z)) && y <= G.wg.lintel).length, error: r.error };
+    const walkGates = new Set((G.wall.gates ?? []).flatMap((q) => q.cells ?? []).map(([x, z]) => k2(x, z)));
+    res[k] = { canReach: !!r.canReach, nodes: r.nodes ?? null, throughGrate: cells.filter(([x, y, z]) => G.grateCols.has(k2(x, z)) && y <= G.wg.lintel).length, throughWalkGate: cells.filter(([x, , z]) => walkGates.has(k2(x, z))).length, error: r.error };
   }
   return res;
 }
@@ -297,8 +299,43 @@ async function gateUnit(ctx) {
   return out;
 }
 
+/**
+ * (the batch) valid/v58 in game: v30's walled village and a brook routed by HY-b's router out through the ring under a water gate (HY-c's
+ * waterGate joined to the course's emit). HY-b's item 9 helper (realiseFixture: the terrain over the flat base, Regions.checkPlan's
+ * two-plan flow, realiseApproved, every reach settled, its census equal to its prediction, Regions.remove E-flat 0 under the exact rules),
+ * and while it stands: every grate cell joined bars, the lintel over every grate column, and vanilla's villager from the reach's inside
+ * bank to its outside bank going round through a walk gate, never through the grate.
+ */
+async function v58Ingame(ctx) {
+  const { L, check, json } = ctx;
+  const { realiseFixture, fixture } = await import('./gate6chy-b.mjs');
+  const fx = fixture(ctx, 'valid/v58_water_gate.json');
+  return realiseFixture(ctx, 'v58', fx, {
+    after: async (r) => {
+      const out = {};
+      r.planDir = path.join(L.SIDECAR_DATA, 'regions', 'plans', r.planId);
+      const G = gateGeometry(r, 'town_wall');
+      check(!!G, `item 9 (v58): the realised plan carries the water gate (meta walls[town_wall].waterGates over a reach of the brook: ${json(G ? { body: G.body.id, cells: G.wg.cells.length, lintel: G.wg.lintel } : null)})`);
+      if (!G) return out;
+      const cen = await ctx.core.censusOf(ctx, G.body, null, r.bodies);
+      const grateStates = G.body.grate.map(([x, y, z]) => cen.fluids.get(`${x},${y},${z}`) ?? 'none');
+      const joined = grateStates.filter((st) => /^minecraft:iron_bars\[/.test(st) && /waterlogged=true/.test(st) && (st.match(/(east|west|north|south)=true/g) ?? []).length >= 2).length;
+      out.grate = { cells: G.body.grate.length, joined, sample: grateStates.slice(0, 3) };
+      check(G.body.grate.length > 0 && joined === G.body.grate.length, `item 14 (v58): every grate cell of ${G.body.id} is joined waterlogged bars (${joined}/${G.body.grate.length}; e.g. ${grateStates[0]})`);
+      let lintel = 0;
+      for (const [x, z] of G.wg.cells) { const res = await L.cmd(`/execute unless block ${x} ${G.wg.lintel} ${z} minecraft:air`); if (Number(res.result) > 0 || res.success) lintel++; }
+      out.lintel = { cells: G.wg.cells.length, solid: lintel, y: G.wg.lintel };
+      check(lintel === G.wg.cells.length, `item 14 (v58): the lintel stands over every grate column at the reach's open top y ${G.wg.lintel} (${lintel}/${G.wg.cells.length})`);
+      out.nav = await navAcross(ctx, G);
+      const bank = out.nav.bank ?? {};
+      check(!bank.error && bank.canReach && bank.throughGrate === 0 && bank.throughWalkGate > 0 && Object.values(out.nav).every((v) => !v.error && v.throughGrate === 0), `item 10 / 14 (v58): vanilla dev.nav.villager from the reach's inside bank to its outside bank goes round through a walk gate (${bank.throughWalkGate} path cell(s) in a gate), never through the grate or under the lintel (${json(out.nav)})`);
+      return out;
+    },
+  });
+}
+
 export const items = {
   unit: [{ name: 'hyc-unit', run: gateUnit }],
-  ingame: [{ name: 'hyc-water-gate', run: gateIngame }],
+  ingame: [{ name: 'hyc-water-gate', run: gateIngame }, { name: 'hy-v58 (the batch: a routed course through a ring wall)', run: v58Ingame }],
   look: [{ name: 'hyc-look', run: gateLook }],
 };

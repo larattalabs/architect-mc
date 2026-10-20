@@ -1,5 +1,5 @@
 {
- "about": "(\u00a78.3) a spring in v30's walled village running out to the claim's south edge through a sealed ring (gates 0, S-K1-1): a sealed wall refuses a water gate, so the brook is refused UNREACHABLE wall (why sealed). The same brook through v30's open ring is valid/v58_water_gate.",
+ "about": "(\u00a78.3) a spring in v30's walled village running out to the claim's south edge through a sealed ring (gates 0, S-K1-1): a sealed wall refuses a water gate, so the brook is refused UNREACHABLE wall (why sealed). The same brook through v30's open ring is valid/v58_water_gate (planned on s7 too in kit/test/hy-c.test.mjs).",
  "on": "s7",
  "volume": {},
  "expect": {
