@@ -39,16 +39,25 @@ Resume notes for `slice/F3` (worktree `../architect-mc-F3`). The contract is doc
   question for Steward at the RC.
 - The compact plan/0 bound is 84,000 (Steward's S-FL-8).
 
+## Done since (commits after 95be73ef)
+
+- F3-b (75a56515): `kit/lib/forms/cave.mjs` (stalactites, roots), `hooks.mjs f3CaveEmit` (volume box, incomplete VOLUME first plan and
+  past the 4M cap, NO_FEATURE no ceiling), M3:gravity holds a stalactite by the cell above; v74, v75, f3/r02, r05, r06, u06.
+- grove_demo + `scenarios/sites/grove.json` (pinned by the probe, not find-site), `kit/lib/forms/forest.mjs` + `kit/regions/mega_bench_forest.mjs`
+  (mega_bench.mjs untouched: its source sha is its IR's programSha; the golden stays), 30.0% cover on the synthetic survey.
+- Gate: `tools/gate6cf3.mjs` (unit, ingame, natural, forest, look, golden), `tools/lib/gate6cf3-{game,kit,look}.mjs`, chain `6cf3` + `6cf3-look`,
+  impact rule "6c F3", api-compat `--gate6cf3` (v0.40.0 built from its tag into artifacts/gate6c-f3/v0400), apijars over 0.40.0/0.39.1/0.39.0.
+- Asks before = after (f3/asks-*.md); byte identity 261/262 (e16 the named exception); compact plan/0 81,064 (bound 84,000, S-FL-8);
+  kitVersion goldens re-cut (IR identical but kitVersion); grove_demo_flat golden.
+- Site retries: a grown form tries up to 3 other seeds of its species before NO_ROOM (noted).
+- In game (change runs, artifacts/gate-runs-F3/): v72, v74, v75, v77 pass items 3, 4, 6, 8 (20261020-205519-change; v72's removal check
+  fixed after: dumps before/after compared at the written cells after a stand).
+
 ## Left
 
-- F3-b: `roots`, `stalactites` (volume, two-plan flow), v74, v75, r02, r05, `_unsafe.stalactiteUnderWater` (lint GROWS).
-- F3-c (coral): delegated, see "Lanes" below.
-- s01_steward_glade (needs coral), v76 (FL's around: deferred to whichever merges second).
-- Byte identity (§8) against `../architect-mc-F3-main`; asks before/after (§9); the compact size; kitVersion goldens re-cut.
-- Driver `tools/gate6cf3.mjs` (f3-unit, f3-ingame, f3-natural, f3-forest, f3-look), chain `6cf3`, impact rule "6c F3".
-- grove_demo (kit/regions, catalogue false) + `scenarios/sites/grove.json` (forest site: S5's area, the probe survey in
-  `scratchpad/f3-build/site/`: plains SE of the forest round 3392..3583, -1536..-1345), mega_bench `forest: true`.
-- In-game items 3-6, 8, 10, 14; the look gallery; slice tier; gate-verifier; "F3 as built".
+- F3-c (coral): delegated (lane below); then s01 in game, the coral items, plan-p0 item 9 (form.coral's valid fixture).
+- v76 (FL's around): deferred to whichever merges second.
+- The natural round (f3-natural) and its golden (F3_WRITE_GOLDEN=1), the look + gallery, the slice tier, the gate-verifier, "F3 as built".
 
 ## Lanes
 
