@@ -15,7 +15,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /**
- * API 1.35.0, a placeholder the coordinator renumbers at merge (docs/CONTRACT.md "Phase 6c slice VOC" §7): {@link BibleRequest.Rarity}, the
+ * API 1.35.0 (released in the VOC batch as v0.38.0; docs/CONTRACT.md "Phase 6c slice VOC" §7): {@link BibleRequest.Rarity}, the
  * typed budget record (S-VOC-5), as BibleRequest's trailing component with the 1.10.0 constructor kept; the feature vocabulary (sidecar
  * vocab); the versions.
  */

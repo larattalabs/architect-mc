@@ -120,6 +120,10 @@ export function emitFountain(r, o) {
   const spout = r.fluidBody([[cx, top, cz]], { id: `${o.id}_spout`.slice(0, 48), part: o.part ?? null, kind: 'fountain', stage: o.stage, level: top, outlets, shellRole: spoutB, solid: pillar,
     world: (x, y, z) => (basinSet.has(k3(x, y, z)) ? 'water' : null) });
   basin.shellStates = shellStatesOf(basin, shellRole);
+  // (6c VOC batch) the pillar's cells outside the basin's shell (its foot under the basin's floor course and the cells over the rim up
+  // to the spout's source, the spout's one shell cell among them) are written too (the works part, the spout's shell): billed once each
+  const billed = new Set(basin.shell.map((c) => k3(...c)));
+  for (const c of pillar) if (!billed.has(k3(...c))) basin.shellStates.push(spoutB);
   spout.shellStates = [];
   if (o.thick === 2) for (let i = 0; i < 4 * (o.basin + 3); i++) basin.shellStates.push(structure, structure, ...(i < 2 ? [] : [coping]));
   return { basin, spout, floor: f, top, thick: o.thick };
