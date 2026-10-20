@@ -229,3 +229,18 @@ test('the moat\'s berm: v45\'s wall writes no cell of the moat\'s sets, and ever
   assert.deepEqual(sc.counts, { hard: 0, watch: 0, exempt: 0 });
   void n;
 });
+
+// ------------------------------------------------------------------ the backstop's order rule (§3, S-KC-1)
+
+test('the backstop refuses the part placed later: the writer after a body, the body after a zone or relief, the course after a wall', async () => {
+  const { clearRefusals } = await import('../lib/region/checkFluids.mjs');
+  const plan = { zones: [{ id: 'town' }], forms: [{ id: 'fount', kind: 'fountain' }, { id: 'hill', kind: 'relief' }, { id: 'bad', kind: 'pond', ext: { 'architect_mc:unsafe': { x: 1 } } }], connectors: [{ id: 'w', kind: 'wall' }, { id: 'brook', kind: 'channel' }, { id: 'r', kind: 'rope_bridge' }] };
+  const f = (writerPart, part, body, set = 'watch') => ({ writerPart, part, body, set, count: 2, cells: [[0, 0, 0]] });
+  const out = clearRefusals({ plan, courses: new Set(['brook_r1']), findings: [f('w', 'fount', 'w_fount', 'shell'), f('town', 'fount', 'w_fount'), f('w', 'brook', 'brook_r1'), f('hill', 'bad', 'w_bad'), f('__lamps__', 'fount', 'w_fount'), f('town', 'town', 'w_f1_pond')] });
+  assert.deepEqual(Object.keys(out).sort(), ['brook', 'fount', 'w']);
+  assert.deepEqual([out.w.code, out.w.evidence.kind], ['OVERLAP', 'body']);
+  assert.deepEqual([out.fount.code, out.fount.evidence.kind, out.fount.evidence.writer], ['NO_ROOM', 'clear', 'town'], 'the zone placed first, the body keeps clear (never the zone)');
+  assert.deepEqual([out.brook.code, out.brook.evidence.kind, out.brook.evidence.wall], ['UNREACHABLE', 'wall', 'w']);
+  assert.equal(out.town, undefined);
+  assert.equal(out.bad, undefined, 'never an unsafe part');
+});

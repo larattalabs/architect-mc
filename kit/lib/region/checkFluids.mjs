@@ -235,6 +235,47 @@ export function clearScan({ ir, vw, meta, bodies = bodiesOf(ir) }) {
   return { findings, counts };
 }
 
+/** (6c KC, §3) The forms placed before the H bodies (compile step 3: relief, terraces and spikes; zones, their lots and props too). */
+const EARLY_FORMS = Object.freeze(['relief', 'terrace', 'rock_spire', 'ice_spike']);
+
+/**
+ * (6c KC, §3, §5, S-KC-1) The plan check's backstop refusals from M25:clear findings ({part: reason}): the part placed later is refused.
+ *   a wall or gate in a course's sets      the course (routed and emitted after the walls): UNREACHABLE {kind: wall, why: clear}
+ *   a zone (its lots, pads, streets, props) or a relief, terrace or spike in an H body's sets
+ *                                          the body's part (resolved after them): NO_ROOM {kind: clear}; a farm pond (its zone's) is
+ *                                          never refused here (its zone is the writer's too: the region check names it)
+ *   any other writer                       the writer (placed after the body's footprint): OVERLAP {kind: body}
+ * Never a part asked `architect_mc:unsafe` (a broken variant the checker must catch), never a writer the plan does not name, never a
+ * part `already` refused. Pure.
+ */
+export function clearRefusals({ findings, plan, courses = new Set(), already = {} }) {
+  const parts = ['zones', 'forms', 'connectors', 'links'].flatMap((k) => (Array.isArray(plan?.[k]) ? plan[k].map((q) => ({ q, k })) : [])).filter(({ q }) => q && typeof q.id === 'string');
+  const byId = new Map(parts.map(({ q, k }) => [q.id, { ...q, _family: k }]));
+  const unsafe = (id) => !!byId.get(id)?.ext?.['architect_mc:unsafe'];
+  const early = (id) => { const q = byId.get(id); return !!q && (q._family === 'zones' || (q._family === 'forms' && EARLY_FORMS.includes(q.kind))); };
+  const wall = (id) => { const q = byId.get(id); return !!q && (q.kind === 'wall' || q.kind === 'gate'); };
+  const fresh = {};
+  for (const q of findings ?? []) {
+    const w = q.writerPart;
+    if (!w || !byId.has(w) || w === q.part) continue;
+    let target, reason;
+    if (courses.has(q.body) && wall(w) && q.part) {
+      target = q.part;
+      reason = { code: 'UNREACHABLE', message: `wall ${w}, planned before it, stands in ${q.count} cell(s) of its reach ${q.body}'s ${q.set === 'watch' ? 'watched reach' : q.set} (a course crosses a wall only under a water gate)`, evidence: { kind: 'wall', wall: w, why: 'clear', body: q.body, set: q.set, cells: q.cells.slice(0, 16) } };
+    } else if (early(w)) {
+      if (!q.part || !byId.has(q.part) || byId.get(q.part)._family === 'zones') continue;
+      target = q.part;
+      reason = { code: 'NO_ROOM', message: `its body ${q.body} is placed after ${w}, which writes ${q.count} cell(s) of its ${q.set === 'watch' ? 'watched reach' : q.set}: the body keeps clear of what was placed before it`, evidence: { kind: 'clear', body: q.body, writer: w, set: q.set, cells: q.cells.slice(0, 16) } };
+    } else {
+      target = w;
+      reason = { code: 'OVERLAP', message: `it writes ${q.count} cell(s) of ${q.set === 'watch' ? 'the watched reach' : `the ${q.set}`} of body ${q.body}${q.part ? ` (part ${q.part})` : ''}, placed before it: a body's cells are its own (M25:clear)`, evidence: { kind: 'body', body: q.body, part: q.part, set: q.set, cells: q.cells.slice(0, 16) } };
+    }
+    if (unsafe(target) || unsafe(w) || already[target] || fresh[target]) continue;
+    fresh[target] = reason;
+  }
+  return fresh;
+}
+
 /**
  * The fluid rules. `args`: check.mjs's ({ir, vw, meta, volumes (decoded, by name), want, findings, metrics, partStage, finding}).
  * Adds findings; fills metrics.M25 ({bodies: [{id, cells, shell, spill, joins, watch, settleTicks, predicted}], wet}) and metrics.M20.
