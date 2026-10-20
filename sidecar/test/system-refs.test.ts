@@ -97,8 +97,9 @@ describe('systemRefs: expansion from the kit', () => {
     const compact = await expandSystemRefs(KIT, ['plan/0#compact']);
     // (6c T3) the bound grew from 60,000 with catalogue 6 (the bridge and tunnel defs, R18-R20, six ids): the structured jobs' system
     // cap (120,000) is the real limit; this keeps the compact form well under it. (6c H) 66,000 -> 76,000 with catalogue 7 (the pond,
-    // fountain, waterfall, quay and channel defs, waterDepth, farmPond, R21-R23, four ids)
-    expect(compact.length).toBeLessThan(76_000);
+    // fountain, waterfall, quay and channel defs, waterDepth, farmPond, R21-R23, four ids). (The CU/IRR/VOC-c batch) 76,000 -> 80,000
+    // with catalogue 9: IRR's irrigate member and VOC-c's strict rule.palette def together reach 76,652 (each alone stayed under)
+    expect(compact.length).toBeLessThan(80_000);
   });
 });
 

@@ -1,5 +1,5 @@
 {
- "about": "(6c VOC-c, \u00a79) a required copper rule over a provisional lot: the check answers fits over the parts with the lot pending (R11 as amended: verified at realiseApproved), READY with the artifact's palette row; realiseApproved with the lot bound to vocc_oak_cabin refuses PALETTE naming the lot and its entry (nothing written), with vocc_copper_cabin it realises",
+ "about": "(6c VOC-c, \u00a79) a required copper rule over a provisional lot: the check answers fits over the parts with the lot pending (R11 as amended: verified at realiseApproved), READY with the artifact's palette row; realiseApproved with the lot bound to vocc_oak_cabin refuses PALETTE naming the lot and its entry (nothing written), with vocc_copper_cabin it realises (the CU/IRR/VOC-c batch: the wall's ring widened from [4, 8] to [4, 17], as KC repaired v51, so the wall keeps clear of the fountain's basin, rim and apron: KC, main v0.39.1, refuses the [4, 8] ring OVERLAP {kind: body})",
  "on": "flat",
  "volume": {},
  "style": "g6cvocc_copper",
@@ -55,7 +55,7 @@
       },
       "ring": [
        4,
-       8
+       17
       ]
      }
     },
