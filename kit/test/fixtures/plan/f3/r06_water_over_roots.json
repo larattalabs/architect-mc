@@ -1,0 +1,51 @@
+{
+ "about": "(6c F3 \u00a72) r06_water_over_roots: the same cave as u06 without the broken variant: every ceiling has water over its root, so no stalactite is placed: refused NO_FEATURE (none would grow: vanilla's dripstone grows only under a water source)",
+ "on": "flat",
+ "volume": {
+  "edits": [
+   {
+    "box": [
+     1107,
+     44,
+     2067,
+     1130,
+     55,
+     2090
+    ],
+    "class": "AIR"
+   },
+   {
+    "box": [
+     1107,
+     57,
+     2067,
+     1130,
+     57,
+     2090
+    ],
+    "class": "WATER"
+   }
+  ]
+ },
+ "expect": {
+  "part": "drips",
+  "class": "refused",
+  "code": "NO_FEATURE"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "f3_r06",
+  "forms": [
+   {
+    "id": "drips",
+    "kind": "stalactites",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 12
+     }
+    }
+   }
+  ]
+ }
+}

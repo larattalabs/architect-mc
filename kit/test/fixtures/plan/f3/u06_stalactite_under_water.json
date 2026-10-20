@@ -1,0 +1,56 @@
+{
+ "about": "(6c F3 \u00a72, \u00a710.1) u06_stalactite_under_water: the broken variant `_unsafe.stalactiteUnderWater`: a cave whose roof holds water just over it (a water layer over the chamber's ceiling in the frozen volume): the generator places a stalactite under it anyway and its lint GROWS refuses the part (vanilla's dripstone would grow under a water source)",
+ "on": "flat",
+ "volume": {
+  "edits": [
+   {
+    "box": [
+     1107,
+     44,
+     2067,
+     1130,
+     55,
+     2090
+    ],
+    "class": "AIR"
+   },
+   {
+    "box": [
+     1107,
+     57,
+     2067,
+     1130,
+     57,
+     2090
+    ],
+    "class": "WATER"
+   }
+  ]
+ },
+ "expect": {
+  "part": "drips",
+  "class": "refused",
+  "message": "GROWS:"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "f3_u06",
+  "forms": [
+   {
+    "id": "drips",
+    "kind": "stalactites",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 12
+     }
+    },
+    "ext": {
+     "architect_mc:unsafe": {
+      "stalactiteUnderWater": true
+     }
+    }
+   }
+  ]
+ }
+}

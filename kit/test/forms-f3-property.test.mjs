@@ -68,3 +68,39 @@ test('item 1: giantMushroom, 200 seeds per preset: ops at most 32 primitives, ev
   const bad = giantMushroom({ at: [0, 64, 0], preset: 'red', seed: 'm0' }, { _unsafe: { mushroomFaces: true } });
   assert.match(lintStates(bad.cells) ?? '', /^STATE: /);
 });
+
+test('item 1, item 8: stalactites and roots, 200 seeds per preset over a synthetic cave and bank: ops at most 32 primitives, thickness as vanilla computes it (no impossible sequence), no root under water, hanging roots only under a solid cell', async () => {
+  const { fixtureVolume, flatSurvey } = await import('./plan-helpers.mjs');
+  const { STALACTITE_PRESETS, ROOT_PRESETS, ceilingsOf, facesOf, growsAt, roots, stalactites } = await import('../lib/forms/cave.mjs');
+  const { surveyApi } = await import('../lib/region/survey.mjs');
+  const s = flatSurvey({ bands: [{ x0: 1130, x1: 1239, z0: 2000, z1: 2159, y: 72 }] });
+  const S = surveyApi(s.bytes, s.claim);
+  const box = { minX: 1100, minY: 30, minZ: 2060, maxX: 1140, maxY: 72, maxZ: 2100 };
+  const v = (await fixtureVolume(box, { edits: [{ box: [1104, 44, 2064, 1126, 55, 2096], class: 'AIR' }] }, s.bytes, s.claim)).decoded;
+  const rect = { minX: 1102, minZ: 2062, maxX: 1138, maxZ: 2098 };
+  const ceilings = ceilingsOf(v, rect, (x, z) => S.groundAt(x, z));
+  const faces = facesOf(v, rect, (x, z) => S.groundAt(x, z));
+  assert.ok(ceilings.length > 100 && faces.length > 10, `${ceilings.length} ceilings, ${faces.length} faces`);
+  for (const preset of Object.keys(STALACTITE_PRESETS)) for (let i = 0; i < SEEDS; i++) {
+    const site = ceilings[i % ceilings.length];
+    const g = stalactites({ preset, seed: `s${i}` }, { vol: v, site });
+    for (const o of g.ops) assert.ok(primitiveCount(o.shape) <= MAX_PRIMITIVES);
+    assert.equal(lintStates(g.cells), null, `${preset} s${i}`);
+    for (const [k, st] of g.cells) {
+      if (st !== 'minecraft:dripstone_block') continue;
+      const [x, y, z] = unkey(k);
+      assert.ok(!growsAt(v, x, y, z), `${k}: a root under a fluid`);
+    }
+  }
+  for (const preset of Object.keys(ROOT_PRESETS)) for (let i = 0; i < SEEDS; i++) {
+    const face = i % 2 === 0;
+    const g = roots({ preset, seed: `r${i}` }, face ? { vol: v, site: faces[i % faces.length] } : { vol: v, site: ceilings[i % ceilings.length], ceiling: true });
+    for (const o of g.ops) assert.ok(primitiveCount(o.shape) <= MAX_PRIMITIVES);
+    for (const [k, st] of g.cells) {
+      if (st !== 'minecraft:hanging_roots') continue;
+      const [x, y, z] = unkey(k);
+      const above = g.cells.get(`${x},${y + 1},${z}`);
+      assert.ok(above && above !== 'minecraft:hanging_roots', `${preset} r${i} ${k}: hanging roots under ${above ?? 'nothing the form writes'}`);
+    }
+  }
+});

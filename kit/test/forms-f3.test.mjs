@@ -25,7 +25,7 @@ async function run(fx, plan = fx.plan) {
 const cache = new Map();
 const of = (rel) => { if (!cache.has(rel)) cache.set(rel, run(read(rel))); return cache.get(rel); };
 const ruleOf = (rep, rule) => rep.findings.filter((f) => f.rule === rule);
-const F3_VALID = ['valid/v72_f3_grove.json', 'valid/v77_f3_nether.json'];
+const F3_VALID = ['valid/v72_f3_grove.json', 'valid/v74_f3_roots_bank.json', 'valid/v75_f3_stalactites.json', 'valid/v77_f3_nether.json'];
 
 test('item 2: every valid F3 fixture fits, its check clean of M18, M19, M25:clear, M3 (no floating cell)', async () => {
   for (const rel of F3_VALID) {
@@ -36,7 +36,7 @@ test('item 2: every valid F3 fixture fits, its check clean of M18, M19, M25:clea
     assert.equal(rep.metrics.M18.decaying, 0);
     assert.equal(rep.metrics.M18.distanceOff, 0, `${rel}: every written leaf's distance is vanilla's (item 8)`);
     // every F3 form baked, its column mask in the IR
-    const f3 = (r.res.ir.forms ?? []).filter((f) => ['giantTree', 'giantMushroom'].includes(f.generator));
+    const f3 = (r.res.ir.forms ?? []).filter((f) => ['giantTree', 'giantMushroom', 'stalactites', 'roots'].includes(f.generator));
     assert.ok(f3.length > 0, rel);
     for (const f of f3) { assert.ok(f.baked?.cells > 0, `${f.id} baked`); assert.ok(Array.isArray(f.columns) && f.columns.length % 3 === 0 && f.columns.length > 0, `${f.id} columns`); }
   }
@@ -138,4 +138,31 @@ test('item 9: catalogue 11 is the golden; against catalogue 9 (catalogue-vocc.js
   }
   // no entry waits for F3 any more
   assert.deepEqual(golden.entries.filter((e) => e.until === 'F3').map((e) => e.id), []);
+});
+
+test('§3.3: the cave forms take the two-plan flow: the first plan asks one volume per part and answers incomplete VOLUME, the second reads it and fits; r02 NO_FEATURE {why: no ceiling}, r05 past the cap, r06 water over every root, u06 lint GROWS', async () => {
+  for (const rel of ['valid/v74_f3_roots_bank.json', 'valid/v75_f3_stalactites.json']) {
+    const { r } = await of(rel);
+    assert.ok(r.asked.length >= 1, `${rel}: asked ${r.asked.length}`);
+    for (const a of r.first.check.parts) assert.equal(a.class, 'incomplete', `${rel} first plan ${a.part}`);
+    for (const a of r.first.check.parts) assert.equal(a.reasons[0].code, 'VOLUME');
+    assert.equal(r.check.overall, 'READY');
+    // every stalactite root's cell over it holds no fluid (vanilla's growth needs a water source there); merged tips are tip_merge pairs
+    const ir = r.res.ir;
+    assert.ok((ir.forms ?? []).every((f) => !['stalactites', 'roots'].includes(f.generator) || f.baked?.cells > 0));
+  }
+  const r2 = await of('f3/r02_no_ceiling.json');
+  assert.equal(r2.part('drips').class, 'refused');
+  assert.equal(r2.part('drips').reasons[0].code, 'NO_FEATURE');
+  assert.equal(r2.part('drips').reasons[0].evidence.why, 'no ceiling');
+  const r5 = await of('f3/r05_volume_cap.json');
+  assert.equal(r5.part('drips').class, 'incomplete');
+  assert.equal(r5.part('drips').reasons[0].evidence.cap, 'boxCells');
+  assert.equal(r5.r.asked.length, 0, 'past the cap: never asked');
+  const r6 = await of('f3/r06_water_over_roots.json');
+  assert.equal(r6.part('drips').class, 'refused');
+  assert.equal(r6.part('drips').reasons[0].code, 'NO_FEATURE');
+  const u6 = await of('f3/u06_stalactite_under_water.json');
+  assert.equal(u6.part('drips').class, 'refused');
+  assert.match(u6.part('drips').reasons[0].message, /^GROWS: /);
 });

@@ -188,7 +188,9 @@ function supportCheck(vw, ir, stage) {
   const gravity = [];
   vw.eachWritten((x, y, z, idx, f, pi) => {
     if (!solid(idx)) return;
-    if (P.gravity[idx] && !solid(vw.get(x, y - 1, z))) gravity.push([x, y, z, pi]);
+    // ((6c F3) a stalactite hangs: pointed dripstone pointing down is held by the cell above it, a sturdy block or more dripstone pointing
+    // down (SpeleothemBlock.isValidSpeleothemPlacement); it falls only when that support goes)
+    if (P.gravity[idx] && (/^minecraft:pointed_dripstone\[.*vertical_direction=down/.test(P.states[idx]) ? !solid(vw.get(x, y + 1, z)) : !solid(vw.get(x, y - 1, z)))) gravity.push([x, y, z, pi]);
     const g = pi >= 0 ? groupOf(pi) : -1;
     if (g >= 0) { groupCells[g].push(x, y, z); if (ok.add(x, y, z)) queue.push(x, y, z); return; }
     for (const [dx, dy, dz] of DIRS6) {

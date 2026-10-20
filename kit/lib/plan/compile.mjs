@@ -26,7 +26,7 @@ import { keptBuilds, pickBuild, buildEndpoint, buildKeepOut } from '../region/bu
 import { besidePorts, emitDistricts, parseDistricts, placeDistricts } from '../region/districtsEmit.mjs';
 import { placeFollow } from '../region/followEmit.mjs';
 import { zoneDistricts, channelForm } from './schema.mjs';
-import { f3Emit, f3Resolve, GROWN, isF3 } from '../forms/hooks.mjs';
+import { CAVE, f3CaveEmit, f3Emit, f3Resolve, GROWN, isF3 } from '../forms/hooks.mjs';
 // (7a K1) walls and gates (K1a), rope bridges and auto connectors (K1b): the compiler's hooks for the four connector kinds
 import { WALL_KINDS, emitWalls, finishGates, planWalls, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
 import { ROPE_KINDS, emitRopes, ropeAnswer, ropeFailAnswer, ropeLeg, ropePassInput, ropeResolve } from '../connectors/rope.mjs';
@@ -41,7 +41,7 @@ import { emitTunnels, tunnelAnswer, tunnelAutoLeg, tunnelFailAnswer, tunnelLeg, 
 export const LINK_KINDS = Object.freeze([...K1_KINDS, ...T3_KINDS]);
 // (6c H) water bodies and wet structures: the generators behind one dispatcher (lib/fluids/hooks.mjs), the stage name from a leaf
 import { asksFarmPond, asksIrrigate, dropOverflows, emitOrder, fluidAnswer, fluidEmit, fluidFallbackClearance, fluidFarmPonds, fluidFootprint, fluidIrrigation, fluidPassInput, fluidResolve, fluidStageWanted, isHPart, wetBridgeFallback } from '../fluids/hooks.mjs';
-import { registerBody, release as releaseKeep, reserve, spanOf } from '../fluids/keep.mjs';
+import { keptBy, registerBody, release as releaseKeep, reserve, spanOf } from '../fluids/keep.mjs';
 import { FLUIDS_STAGE } from '../fluids/kinds.mjs';
 // (6c VOC-c) rule.palette's lenient read (the measure runs after the IR: kit/lib/region/plan.mjs)
 import { readPaletteRule } from './palette.mjs';
@@ -1144,10 +1144,10 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     notes.push(`relief_pads: ${unblended.length} pad(s) blended by the default relief (their relief form did not run)`);
   }
   // terrace and spikes; (6c F3) the grown forms, placed here on the zones' layouts (forms/hooks.mjs)
-  const f3C = () => ({ env, r, ctx, geom, geomOf, byId, res, partOf, zones: zonesAccepted, keep, stageOf, checkpoint: () => checkpoint(r), rollback: (c) => rollback(r, c), addedSince: (c) => addedSince(r, c), mark, ans, tolOf, judge, locatorOf, rectStats });
+  const f3C = () => ({ env, r, ctx, geom, geomOf, byId, res, partOf, zones: zonesAccepted, keep, keepBy: (x, y, z) => keptBy(keep, x, y, z), stageOf, checkpoint: () => checkpoint(r), rollback: (c) => rollback(r, c), addedSince: (c) => addedSince(r, c), mark, ans, tolOf, judge, locatorOf, rectStats });
   for (const p of order) {
     if (p.family !== 'form' || p.kind === 'relief' || isHPart(p) || !okClass(p.id)) continue;
-    if (isF3(p)) { if (p.kind in GROWN) f3Emit(f3C(), p); continue; }
+    if (isF3(p)) { if (p.kind in GROWN) f3Emit(f3C(), p); else if (p.kind in CAVE) f3CaveEmit(f3C(), p); continue; }
     const f = res.get(p.id);
     const cp = checkpoint(r);
     const id = `f_${p.id}`.slice(0, 44);
