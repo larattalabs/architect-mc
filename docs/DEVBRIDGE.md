@@ -348,6 +348,11 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-20 (slice RP, v0.40.1):** new (in `RegionDev`, generated headless too) `dev.region.realised {region, layer?: 0, tile?:
+  "stage|set|tx,tz", cells?, verify?, world?: true}` (the realised record: per tile its status, codes, extras, sizes, shas and writers;
+  `sites.json`; `composedSha` per key; `verify` against the journal and the world) and `dev.region.realised.audit {on?, dir?}` (each
+  tile re-read right after its commit, each region at its batch's end, JSON lines; also the env `ARCHITECT_RP_AUDIT`). Kill points
+  `RP1` and `RP2` (CONTRACT "Slice RP" §6).
 - **2026-10-20 (6c slice VOC-c):** new (`SliceVoccDev`, generated headless too) `dev.vocc.checkPalette {sha, lotEntries?: {lot: entry}}`
   (`Regions.checkPalette`: the artifact's palette rules measured with these lot entries over its own -> `{paletteOk, rules: [{rule, required,
   family, share, cells, familyCells, measured, fits, worstLot, lots: {lot: {entry, cells, familyCells}}, pendingLots}]}` or `{missing}`),
