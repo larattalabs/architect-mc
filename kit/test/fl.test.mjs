@@ -201,3 +201,26 @@ test('§6: a free zone\'s geometry adds layout, streets, hub (and around/outline
   const g01 = part(await run(v.find((f) => f.name.startsWith('v01'))), 'town').geometry;
   for (const k of ['layout', 'streets', 'hub', 'mask']) assert.equal(g01[k], undefined, `a street zone has no ${k}`);
 });
+
+// ------------------------------------------------------------------ item 1: the masks
+
+test('item 1: the masks: a polygon is the cells whose centre lies inside it; a polyline outline keeps the land near its line; around\'s mask leaves the feature out', async () => {
+  const { polygonCells, sketchCells } = await import('../lib/region/layouts/outline.mjs');
+  // a 10 x 6 rectangle drawn on cell corners holds exactly its 60 cells; a right triangle half of a 10 x 10 square holds 45 (the diagonal's
+  // centres on the inside count half: (x + 0.5) + (z + 0.5) < 10)
+  assert.equal(polygonCells([[0, 0], [10, 0], [10, 6], [0, 6]]).length, 60);
+  assert.equal(polygonCells([[0, 0], [10, 0], [0, 10]]).length, 45);
+  const claim = { minX: 100, minZ: 200, maxX: 163, maxZ: 263 };
+  assert.deepEqual(sketchCells(claim, { frame: 'claim', unit: 'q64', points: [[0, 0], [32, 64]] }, new Map()), [[100, 200], [132, 264]]);
+  assert.deepEqual(sketchCells(claim, { frame: 'anchor', anchor: 'a', unit: 'block', points: [[-3, 4]] }, new Map([['a', [140, 230]]])), [[137, 234]]);
+  // v71's polyline zone: every lot within the deepest lot + setback + 2 (+ the push) of its line
+  const v71 = read('valid').find((f) => f.name.startsWith('v71'));
+  const r = await run(v71);
+  const g = part(r, 'lane').geometry;
+  assert.ok(g.mask.length > 0 && g.streets[0].name === 'street_line');
+  // v67: the annulus' mask holds no cell of the pond's rect
+  const v67 = read('valid').find((f) => f.name.startsWith('v67'));
+  const q = await run(v67);
+  const pond = part(q, 'pond').geometry.rect, m = part(q, 'shore').geometry.mask;
+  for (const [x0, z, x1] of m) assert.ok(z < pond[1] || z > pond[3] || x1 < pond[0] || x0 > pond[2], `mask row ${x0}..${x1} at ${z} meets the pond ${pond}`);
+});

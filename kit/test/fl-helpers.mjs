@@ -75,6 +75,12 @@ export function assertLayout(F0, L, tag) {
     const [ex, , ez] = l.entrance;
     const side = { north: ez === r[1] - 1, south: ez === r[3] + 1, west: ex === r[0] - 1, east: ex === r[2] + 1 }[l.front];
     assert.ok(side, `${tag}: lot ${l.spec.id}'s entrance ${ex},${ez} is not outside its ${l.front} edge`);
+    // the front faces its street: that street's cell nearest the lot's front edge's middle lies on its front side
+    let best = null;
+    for (const st of L.streets.filter((q) => q.name === l.street)) for (const [x, z] of st.cells) { const d = Math.max(Math.abs(x - ex), Math.abs(z - ez)); if (!best || d < best.d) best = { d, x, z }; }
+    const fd = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] }[l.front];
+    const mx = (r[0] + r[2]) / 2, mz = (r[1] + r[3]) / 2;
+    assert.ok((best.x - mx) * fd[0] + (best.z - mz) * fd[1] > 0, `${tag}: lot ${l.spec.id} fronts ${l.front} but its nearest street cell ${best.x},${best.z} is behind it`);
   }
   return { lots: L.lots.length, unplaced: L.unplaced.length };
 }
