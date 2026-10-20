@@ -1,8 +1,83 @@
 {
   "id": "s3_monastery",
+  "short": "s3",
   "phase": "6c",
-  "version": 0,
+  "version": 1,
   "brief": "a monastery that grows down its cliff",
+  "program": "terraced_monastery",
+  "params": {},
+  "bible": "g6c_s3_monastery",
+  "bibleFixture": "bibles/g6c_s3_monastery.json",
+  "entries": {
+    "g6cs3_gatehouse_p3d7": {
+      "design": "gatehouse",
+      "values": {
+        "passage": 3,
+        "depth": 7
+      }
+    },
+    "g6cs3_cabin_w9d7": {
+      "design": "cabin",
+      "values": {
+        "width": 9,
+        "depth": 7,
+        "porch": false
+      }
+    },
+    "g6cs3_cabin_w9d7p": {
+      "design": "cabin",
+      "values": {
+        "width": 9,
+        "depth": 7,
+        "porch": true
+      }
+    },
+    "g6cs3_cabin_w7d6": {
+      "design": "cabin",
+      "values": {
+        "width": 7,
+        "depth": 6,
+        "porch": false
+      }
+    },
+    "g6cs3_cabin_w11d8": {
+      "design": "cabin",
+      "values": {
+        "width": 11,
+        "depth": 8,
+        "porch": false
+      }
+    },
+    "g6cs3_tavern_l14": {
+      "design": "tavern",
+      "values": {
+        "length": 14
+      }
+    },
+    "g6cs3_tavern_l12h": {
+      "design": "tavern",
+      "values": {
+        "length": 12,
+        "roof": "hip"
+      }
+    }
+  },
+  "entryFor": {
+    "gatehouse": "g6cs3_gatehouse_p3d7@1",
+    "guest_house": "g6cs3_cabin_w9d7@1",
+    "stable": "g6cs3_cabin_w9d7p@1",
+    "infirmary": "g6cs3_cabin_w9d7@1",
+    "herb_garden": "g6cs3_cabin_w7d6@1",
+    "orchard": "g6cs3_cabin_w7d6@1",
+    "church": "g6cs3_tavern_l14@1",
+    "cloister_range": "g6cs3_tavern_l12h@1",
+    "refectory": "g6cs3_cabin_w11d8@1",
+    "cell_1": "g6cs3_cabin_w7d6@1",
+    "cell_2": "g6cs3_cabin_w7d6@1",
+    "cell_3": "g6cs3_cabin_w7d6@1",
+    "cell_4": "g6cs3_cabin_w7d6@1"
+  },
+  "restraint": "rustic",
   "world": {
     "seed": "2026100906",
     "preset": "normal",
@@ -85,5 +160,66 @@
       3700,
       -1900
     ]
-  }
+  },
+  "seed": "5638267085663388350",
+  "cams": {
+    "cam_e": [
+      3751.5,
+      203,
+      -965.5,
+      90.4,
+      46.9
+    ],
+    "cam_ground": [
+      3668.5,
+      112,
+      -922.5,
+      -176.7,
+      -6.5
+    ],
+    "cam_high": [
+      3679.5,
+      224,
+      -957.5,
+      135,
+      83.6
+    ],
+    "cam_n": [
+      3671.5,
+      181,
+      -1035.5,
+      0.4,
+      42.6
+    ],
+    "cam_s": [
+      3671.5,
+      129,
+      -885.5,
+      179.6,
+      8.5
+    ],
+    "cam_w": [
+      3604.5,
+      143,
+      -965.5,
+      -90.4,
+      21.4
+    ]
+  },
+  "lotEntries": {
+    "gatehouse": "g6cs3_gatehouse_p3d7@1",
+    "guest_house": "g6cs3_cabin_w9d7@1",
+    "stable": "g6cs3_cabin_w9d7p@1",
+    "infirmary": "g6cs3_cabin_w9d7@1",
+    "herb_garden": "g6cs3_cabin_w7d6@1",
+    "orchard": "g6cs3_cabin_w7d6@1",
+    "church": "g6cs3_tavern_l14@1",
+    "cloister_range": "g6cs3_tavern_l12h@1",
+    "refectory": "g6cs3_cabin_w11d8@1",
+    "cell_1": "g6cs3_cabin_w7d6@1",
+    "cell_2": "g6cs3_cabin_w7d6@1",
+    "cell_3": "g6cs3_cabin_w7d6@1",
+    "cell_4": "g6cs3_cabin_w7d6@1"
+  },
+  "camsNote": "cams computed offline from the plan on the pre-settle survey (scenarios/goldens/districts_demo): the plan anchors cam_* looking at its hub, as `scenarios.mjs pin` aims them"
 }

@@ -183,40 +183,10 @@ async function anchorsOf(ctx, claim) {
   return H.stewardAnchors({ minX: claim[0], minZ: claim[1], maxX: claim[2], maxZ: claim[3] });
 }
 
-/**
- * (fix/voc-natural) Item 9's world class for S3's own fluids still settling: F2's `distant` rule (tools/scenarios.mjs `distantOf`)
- * restricted to flowing fluid. S3's fresh chunks carry worldgen springs (a cave stream at x 3752-3760, y 37-48, z -924..-914; lava at
- * y -2, x 3787-3789) whose flow front can cross the snapshot: with no region at all the same cells go air -> flowing water within 15 s
- * of a snapshot. An unclassified (`none`) mismatch is classed `farfluid` only when
- *   - kind: was and now are each air, cave air, or a non-source water or lava (level 1-15), and at least one side is that fluid
- *     (a source block on either side, or any other block, is never classed);
- *   - place: a cell the plan never writes, in no lot box, and 8 or more (Manhattan) from every written cell (the undo writes only the
- *     journal's cells, which are the written cells and what stood on them).
- * Pure: `written` is a Set of "x,y,z" keys, `lots` the IR's lots. Returns the diff with the moved cells' class and the counts updated.
- */
-export function farFluidOf(diff, { written, lots = [] }) {
-  if (!diff || !(diff.classes?.none > 0)) return diff;
-  const empty = (st) => /^minecraft:(air|cave_air)$/.test(String(st));
-  const flowing = (st) => /^minecraft:(water|lava)\[level=([1-9]|1[0-5])\]$/.test(String(st));
-  const kind = (m) => (empty(m.was) || flowing(m.was)) && (empty(m.now) || flowing(m.now)) && (flowing(m.was) || flowing(m.now));
-  const inLot = (x, y, z) => lots.some((l) => x >= l.box.minX && x <= l.box.maxX && y >= l.box.minY && y <= l.box.maxY && z >= l.box.minZ && z <= l.box.maxZ);
-  const near = (x, y, z) => {
-    for (let dx = -7; dx <= 7; dx++) for (let dy = -7 + Math.abs(dx); dy <= 7 - Math.abs(dx); dy++) {
-      const r = 7 - Math.abs(dx) - Math.abs(dy);
-      for (let dz = -r; dz <= r; dz++) if (written.has(`${x + dx},${y + dy},${z + dz}`)) return true;
-    }
-    return false;
-  };
-  const moved = new Set((diff.list ?? []).filter((m) => {
-    if (m.class !== 'none' || !kind(m)) return false;
-    const [x, y, z] = String(m.pos).split(',').map(Number);
-    return !written.has(`${x},${y},${z}`) && !inLot(x, y, z) && !near(x, y, z);
-  }));
-  if (!moved.size) return diff;
-  const classes = { ...diff.classes, none: diff.classes.none - moved.size, farfluid: (diff.classes.farfluid ?? 0) + moved.size };
-  if (!classes.none) delete classes.none;
-  return { ...diff, classes, list: diff.list.map((m) => (moved.has(m) ? { ...m, class: 'farfluid' } : m)) };
-}
+// (fix/voc-natural) item 9's `farfluid` class lives in tools/scenarios.mjs since 6c S3 (S3's natural run classes by it too); the rule is
+// unchanged and this module re-exports it for item 9 and kit/test/voc-farfluid.test.mjs.
+import { farFluidOf } from '../scenarios.mjs';
+export { farFluidOf };
 
 /** Regions.checkPlan in game (the two-plan flow, chunks generated). */
 async function checkIn(ctx, tag, { plan, claim, anchors, bible }) {
