@@ -1,0 +1,46 @@
+{
+  "id": "grove",
+  "purpose": "(6c F3 §10.2) grove_demo's forest site: open plains on the south-east edge of S5's forest on the pinned seed, natural trees round it (north and west), room for every giant tree species 8 clear of them",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "default"
+  },
+  "needs": {
+    "size": [
+      192,
+      192
+    ],
+    "treesMin": 5,
+    "biomes": {
+      "any": [
+        "forest",
+        "plains"
+      ],
+      "share": 0.6
+    },
+    "note": "pinned by the F3 site probe, not find-site: S5's area (3264..3583, -1664..-1345) surveyed at resolution 4, its tree columns (FLAG_TREE) mapped; the claim takes the forest's south-east edge and the plains beyond it, and grove_demo planned on that survey places all ten forms (2026-10-20)"
+  },
+  "fixture": {
+    "claim": [
+      3392,
+      -1536,
+      3583,
+      -1345
+    ],
+    "yRange": [
+      40,
+      140
+    ],
+    "foundBy": "the F3 site probe over S5's pinned area (scenarios/s5_treehouses.json) @ seed 2026100906",
+    "probeSurveySha": "0efa00f1fb2d6445b2fe6eb0974c4b5f4a657ee9138843aab8e676ae3f3bfb06"
+  },
+  "flat": {
+    "preset": "flat",
+    "claimOffset": [
+      0,
+      0
+    ],
+    "gamerules": "exact"
+  }
+}
