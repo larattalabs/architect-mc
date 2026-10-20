@@ -638,6 +638,14 @@ export async function look(ctx) {
   fs.mkdirSync(dir, { recursive: true });
   const shots = [];
   if (!o.r) { ctx.check(false, `look: v62 not realised (${ctx.json(o.parts)})`); return { shots }; }
+  // (default rules for 5 minutes, the camera over the farms: every field cell has its random tick, so the whole field shows moist)
+  for (const g of ['random_tick_speed 3', 'spawn_monsters false']) await L.cmd(`/gamerule ${g}`);
+  {
+    const l0 = o.r.ir.lots.find((l) => l.irrigation);
+    await L.tp(l0.box.minX, l0.floorY + 8, l0.box.maxZ);
+    await L.settle(300_000);
+    await L.cmd('/gamerule random_tick_speed 0');
+  }
   await L.cmd('/time set 6000');
   const shot = async (name, eye, at, what) => {
     await L.call('dev.camera', { x: eye[0], y: eye[1], z: eye[2], lookAt: { x: at[0], y: at[1], z: at[2] }, mode: 'spectator', fov: 70 }, 60_000);
@@ -653,7 +661,7 @@ export async function look(ctx) {
   const xs = lots.flatMap((l) => [l.box.minX, l.box.maxX]), zs = lots.flatMap((l) => [l.box.minZ, l.box.maxZ]);
   const fy = lots[0].floorY;
   const mid = [(Math.min(...xs) + Math.max(...xs)) / 2, fy, (Math.min(...zs) + Math.max(...zs)) / 2];
-  await shot('both_farms', [mid[0] + 4, fy + 22, Math.max(...zs) + 18], mid, 'v62: both farms (f2 left, f1 right), each source a 1x1 hole flush with the wheat, its four sides farmland');
+  await shot('both_farms', [mid[0] + 4, fy + 22, Math.max(...zs) + 18], mid, 'v62: both farms (f2 left, f1 right) after 5 minutes at default rules: every field moist; each source a 1x1 hole flush with the wheat, its four sides farmland; the farm ponds (farmPond) outside the boxes');
   for (const l of lots) {
     const b = l.box, c = [(b.minX + b.maxX) / 2, fy, (b.minZ + b.maxZ) / 2];
     await shot(`${l.id}_field`, [c[0] - 3, fy + 10, b.maxZ + 7], c, `${l.id}: its field from the street side (${l.irrigation.sources} source(s))`);
