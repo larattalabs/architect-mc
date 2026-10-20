@@ -19968,8 +19968,8 @@ Parts are matched to the parent artifact's `$.parts[].part` ids (plan/0 R: "a re
 | same id, a zone whose `program.lots` only gains lots | `unsupported {block: revision.grow}` until GR, then GR's answer per added lot | `revision.grow` (reserved, until GR) |
 | same id, any other change | `unsupported {block: revision.change}` | `revision.change` (reserved, until a later slice) |
 
-- `removed` is the only new answer class. Steward's reader treats an unknown class as `incomplete` today; S-RV-4 asks whether it
-  prefers `fits` with `removed: true` instead.
+- `removed` is the only new answer class. Steward's plan reader knows only today's seven classes, so S-RV-4 asks whether it prefers
+  `fits` with `removed: true` instead.
 - Added parts may be placed beside or inside the standing region's claim, never outside it (the claim is the region's, S-RV-8).
   A new zone inside the claim with its own lots is an added part; its lots join the region.
 - Dependencies (`dependency.after`) may name standing parts: a standing part is satisfied.
