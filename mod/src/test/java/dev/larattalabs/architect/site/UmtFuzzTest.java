@@ -42,6 +42,9 @@ class UmtFuzzTest {
 					FOUND.merge(v.substring(0, v.indexOf(']') + 1), 1, Integer::sum);
 				}
 			}
+			if (!r.violations().isEmpty()) {
+				BASELINE.add(g.toString().replace(" ", "_") + " " + s + " " + digest(r.violations()));
+			}
 			List<String> unknown = r.violations().stream().filter(v -> strict || !UmtRunner.known(v)).toList();
 			if (!unknown.isEmpty()) {
 				UmtRunner.Result m = UmtRunner.shrink(r, UmtRunner.kind(unknown.get(0)));
@@ -49,6 +52,27 @@ class UmtFuzzTest {
 			}
 		}
 		assertTrue(bad.isEmpty(), String.join("\n\n", bad));
+	}
+
+	/** Per failing seed of the CI set: its generator, seed, tags and a digest of its violations (sorted). */
+	static final List<String> BASELINE = new ArrayList<>();
+	static final java.nio.file.Path BASELINE_FILE = java.nio.file.Path.of("src/test/resources/umt/ci-baseline.txt");
+
+	static String digest(List<String> violations) {
+		java.util.TreeSet<String> tags = new java.util.TreeSet<>();
+		for (String v : violations) {
+			tags.add(UmtRunner.known(v) ? v.substring(0, v.indexOf(']') + 1) : "[?]");
+		}
+		try {
+			java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+			for (String v : new java.util.TreeSet<>(violations)) {
+				md.update(v.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+				md.update((byte) 10);
+			}
+			return String.join("", tags) + " " + java.util.HexFormat.of().formatHex(md.digest()).substring(0, 16);
+		} catch (java.security.NoSuchAlgorithmException e) {
+			throw new IllegalStateException(e);
+		}
 	}
 
 	static int seeds(int ci) {
@@ -76,7 +100,31 @@ class UmtFuzzTest {
 		fuzz(UmtOps.Gen.ALL, 1, seeds(500));
 	}
 
+	/**
+	 * The CI set's findings are pinned (provisional, until the coordinator decides on them): every failing seed's tags and the digest
+	 * of its violations must equal src/test/resources/umt/ci-baseline.txt, so a change inside a known finding's bucket (more, fewer or
+	 * other cells) fails too. {@code -Dumt.rebaseline=true} rewrites the file (a deliberate act, reviewed in the diff).
+	 */
 	@AfterAll
+	static void pinned() throws java.io.IOException {
+		report();
+		if (!System.getProperty("umt.seeds", "").isEmpty() || BASELINE.isEmpty() || scenarios != 2000) {
+			return; // a long or partial run: nothing pinned
+		}
+		List<String> now = BASELINE.stream().sorted().toList();
+		if (Boolean.getBoolean("umt.rebaseline")) {
+			java.nio.file.Files.createDirectories(BASELINE_FILE.getParent());
+			java.nio.file.Files.write(BASELINE_FILE, now);
+			return;
+		}
+		List<String> was = java.nio.file.Files.exists(BASELINE_FILE) ? java.nio.file.Files.readAllLines(BASELINE_FILE) : List.of();
+		List<String> gone = was.stream().filter(x -> !now.contains(x)).toList();
+		List<String> added = now.stream().filter(x -> !was.contains(x)).toList();
+		assertTrue(gone.isEmpty() && added.isEmpty(), "UMT CI findings differ from " + BASELINE_FILE + " (a fix, a regression or a model change: "
+			+ "rebaseline with -Dumt.rebaseline=true once understood)\nno longer:\n" + String.join("\n", gone.subList(0, Math.min(20, gone.size())))
+			+ "\nnew:\n" + String.join("\n", added.subList(0, Math.min(20, added.size()))));
+	}
+
 	static void report() {
 		System.out.println("UMT fuzz: " + scenarios + " scenarios in " + (System.nanoTime() - started) / 1_000_000 + " ms; findings seen " + FOUND
 			+ "; vanilla rules fired " + UmtVanilla.FIRED + "; noise (rule names it / rule misses it / real diff the rule would hide) "

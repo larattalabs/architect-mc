@@ -112,6 +112,8 @@ test {
 		// UMT (docs/UMT.md): the findings' repros, the long fuzz and exploration run by their own tasks, never in build
 		excludeTags "umt-findings", "umt-long", "umt-explore"
 	}
+	// UMT: -Dumt.strict=true fails the findings too; -Dumt.rebaseline=true rewrites the pinned CI findings (docs/UMT.md)
+	systemProperties(providers.systemPropertiesPrefixedBy("umt.").get())
 	// -Darvx.write=true rewrites the ARVX fixtures (src/test/resources/arvx, ArvxTest)
 	systemProperty "arvx.write", providers.systemProperty("arvx.write").getOrElse("false")
 	// -Dmirror.write=true rewrites kit/test/fixtures/mirror-oracle.json (MirrorOracleTest, slice 0b)
@@ -415,7 +417,7 @@ def umtTask = { String name, String tag, String desc ->
 		classpath = sourceSets.test.runtimeClasspath
 		useJUnitPlatform { includeTags tag }
 		// every -Dumt.* property reaches the tests (umt.seeds, umt.explore, umt.unknown, umt.strict)
-		System.getProperties().each { k, v -> if (k.toString().startsWith("umt.")) systemProperty k.toString(), v.toString() }
+		systemProperties(providers.systemPropertiesPrefixedBy("umt.").get())
 		outputs.upToDateWhen { false }
 		testLogging {
 			events "failed"

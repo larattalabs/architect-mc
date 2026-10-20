@@ -65,6 +65,10 @@ final class UmtVanilla {
 			+ "(FluidRearm wakes it once the restores are done)", "relief re-tick (7bd8c817)",
 			"UmtSim's FluidRearm property: every non-source fluid a restore writes is queued (production SiteJournal.writeCells calls "
 				+ "FluidRearm.wrote)", "relief-probe (fix/relief-flow branch): a stream feeder restored, the cell below it after 20 ticks"),
+		new Rule("V10", Kind.EQUIV, "a property StillOurs counts volatile changes by use or neighbours: a door or trapdoor opened, a lamp lit, "
+			+ "powered, a fence or wall connecting, a stair's shape, leaves' distance, waterlogged", "StillOurs.VOLATILE / CONNECTIONS (4e S2)",
+			"UmtSim.volatileFlip: one volatile property of a standing entry's cell cycled", "(to build) each volatile property flipped on a road "
+				+ "cell, then its removal"),
 		new Rule("N1", Kind.NOISE, "brown and red mushrooms pop off at light > 12 and spread at random ticks; leaf litter and short plants "
 			+ "are trampled or eaten", "4d's intermittent 'group undo back exactly' (18 of 84 logs: leaf_litter, brown mushroom)",
 			"UmtSim.noise: a decor cell no entry ever wrote, two or more cells from any written one, goes to air; the oracle names it NOISE",

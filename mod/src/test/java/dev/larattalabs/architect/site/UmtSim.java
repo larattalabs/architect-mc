@@ -200,6 +200,7 @@ final class UmtSim {
 					removeGroup(members, g.crash());
 				}
 			}
+			case UmtOps.Delta d -> delta(d);
 			case UmtOps.Drift d -> drift(d);
 			case UmtOps.Edit e -> edit(e);
 			case UmtOps.Noise n -> noise(n);
@@ -372,6 +373,9 @@ final class UmtSim {
 		}
 		if ((pathAfter.contains(p) || initial.get(p).is(Blocks.DIRT_PATH)) && (now.is(Blocks.DIRT) || now.is(Blocks.GRASS_BLOCK))) {
 			return "[LP] ";
+		}
+		if ((UmtVanilla.decor(initial.get(p)) || UmtVanilla.decor(now)) && !everWritten.contains(p)) {
+			return "[F8] "; // V5: a plant, carpet or litter on a cell a write changed broke; it was no entry's cell
 		}
 		if (reverted.contains(p)) {
 			return "[UC] "; // a crash lost world writes the journal had already recorded (unsaved chunks)
@@ -668,7 +672,7 @@ final class UmtSim {
 				target.put(BlockPos.offset(post, Direction.UP), Blocks.LANTERN.defaultBlockState());
 			}
 		} else {
-			int op = r.nextInt(5);
+			int op = r.nextInt(6);
 			for (int z = b.minZ(); z <= b.maxZ(); z++) {
 				for (int x = b.minX(); x <= b.maxX(); x++) {
 					int top = UmtWorld.Y1;
@@ -684,7 +688,9 @@ final class UmtSim {
 						case 1 -> target.put(BlockPos.offset(tp, Direction.UP), Blocks.DIRT.defaultBlockState()); // raise
 						case 2 -> target.put(tp, pick(r, Blocks.DIRT_PATH, Blocks.GRAVEL, Blocks.COBBLESTONE)); // pave
 						case 3 -> target.put(tp, Blocks.WATER.defaultBlockState()); // a pond's sources
-						default -> target.put(tp, pick(r, Blocks.COPPER_BLOCK.asList().get(0), Blocks.FARMLAND, Blocks.SAND));
+						case 4 -> target.put(tp, pick(r, Blocks.COPPER_BLOCK.asList().get(0), Blocks.FARMLAND, Blocks.SAND));
+						default -> target.put(BlockPos.offset(tp, Direction.UP), pick(r, Blocks.OAK_STAIRS, Blocks.OAK_LEAVES, Blocks.REDSTONE_LAMP,
+							Blocks.OAK_FENCE, Blocks.OAK_TRAPDOOR)); // decorations with volatile properties (V10)
 					}
 				}
 			}
@@ -889,7 +895,9 @@ final class UmtSim {
 
 	private WorldJournal.UndoWork plan(List<String> ids, String g) throws IOException {
 		WorldJournal.UndoPlanner p = new WorldJournal.UndoPlanner(UmtWorld.DIM_ID, world::holdsOurs, ids, g);
-		p.step(Long.MAX_VALUE);
+		if (!p.step(Long.MAX_VALUE)) {
+			throw new IllegalStateException("the planner did not finish (over 24 sections it warms region files off the thread: UMT plans sync only)");
+		}
 		return p.work();
 	}
 
@@ -977,6 +985,59 @@ final class UmtSim {
 		}
 	}
 
+	/**
+	 * SiteDeltas D1-D7 (modelled sequence, production store and capture): a BOX entry of kind {@code delta} under the site's id, its
+	 * cells inside the site's box or growing it upwards, PLACING with the befores, the writes (Sites.FLAGS), then ACTIVE with afters.
+	 * The site's removal undoes it with the site; SiteJournal.restore writes one template over the union of their boxes.
+	 */
+	void delta(UmtOps.Delta d) throws Exception {
+		List<Rec> st = standing().stream().filter(x -> x.kind == Kind.SITE || x.kind == Kind.LOT).toList();
+		if (st.isEmpty()) {
+			return;
+		}
+		Random r = new Random(d.seed());
+		Rec x = st.get(Math.floorMod(d.ordinal(), st.size()));
+		Anchors.Bounds b = x.box;
+		int x0 = b.minX() + r.nextInt(b.maxX() - b.minX() + 1);
+		int z0 = b.minZ() + r.nextInt(b.maxZ() - b.minZ() + 1);
+		int x1 = Math.min(UmtWorld.X1, x0 + r.nextInt(3));
+		int z1 = Math.min(UmtWorld.Z1, z0 + r.nextInt(3));
+		int y0 = b.minY() + 1 + r.nextInt(Math.max(1, b.maxY() - b.minY()));
+		int y1 = Math.min(UmtWorld.Y1, y0 + r.nextInt(3)); // may grow above the box
+		BlockState to = pick(r, Blocks.SPRUCE_PLANKS, Blocks.GLASS, Blocks.AIR, Blocks.BRICKS, Blocks.OAK_LEAVES);
+		Map<Long, BlockState> cellsTo = new LinkedHashMap<>();
+		for (int y = y0; y <= y1; y++) {
+			for (int z = z0; z <= z1; z++) {
+				for (int xx = x0; xx <= x1; xx++) {
+					cellsTo.put(BlockPos.asLong(xx, y, z), to);
+				}
+			}
+		}
+		cellsTo.keySet().forEach(k -> everWritten.add(k.longValue()));
+		markStacked(x, cellsTo.keySet());
+		JournalStore s = store;
+		long layer = s.newLayer();
+		String id = s.newId();
+		List<Cell> placing = new ArrayList<>();
+		for (long q : cellsTo.keySet()) {
+			placing.add(new Cell(q, layer, world.value(q), null));
+		}
+		JsonObject meta = new JsonObject();
+		meta.addProperty("kind", "update");
+		s.submit(s.begin().label("D3:" + x.id).create(JournalStore.Meta.header(id, WorldJournal.DELTA, x.id, group(x), UmtWorld.DIM_ID, Policy.BOX, layer,
+			Status.PLACING, clock), JournalStore.bySection(placing), new JournalNbt.Head(meta, new int[0]))).get();
+		for (var e : cellsTo.entrySet()) {
+			world.write(e.getKey(), e.getValue(), null, Sites.FLAGS);
+		}
+		world.tick();
+		List<Cell> done = new ArrayList<>();
+		for (Cell c : placing) {
+			done.add(new Cell(c.pos(), c.layer(), c.before(), world.value(c.pos()), c.pt()));
+		}
+		s.submit(s.begin().label("D7:" + x.id).sections(id, JournalStore.bySection(done)).status(id, Status.ACTIVE, null, 0L)).get();
+		trace.add("  delta of " + x.id + ": " + cellsTo.size() + " cell(s) to " + to);
+	}
+
 	// ------------------------------------------------------------------ the world changing by itself, players
 
 	/** Cells the world changed by itself: an undo must put them back (they are not tainted), but a standing check skips them. */
@@ -1009,6 +1070,12 @@ final class UmtSim {
 				to = Blocks.ICE.defaultBlockState(); // froze
 			} else if (s.isAir() && nextToWater(p)) {
 				to = Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 7); // flowed in
+			} else if ((to = volatileFlip(s, r)) != null) {
+				UmtVanilla.fired("V10");
+				world.natural(p, to);
+				drifted.add(p);
+				trace.add("  drift " + BlockPos.of(p).toShortString() + " " + s + " -> " + to + " (volatile)");
+				return;
 			} else if (s.getBlock() instanceof WeatheringCopper && r.nextBoolean()) {
 				Block waxed = net.minecraft.world.item.HoneycombItem.WAXABLES.get().get(s.getBlock());
 				if (waxed != null) {
@@ -1058,6 +1125,27 @@ final class UmtSim {
 		}
 	}
 
+	/**
+	 * V10: a property StillOurs counts volatile changed by the world or a player's use (a door opened, a lamp lit, a fence connected, a
+	 * stair's shape, leaves' distance, a block waterlogged): the cell stays the entry's. Null when {@code s} has none.
+	 */
+	static @Nullable BlockState volatileFlip(BlockState s, Random r) {
+		List<net.minecraft.world.level.block.state.properties.Property<?>> ps = new ArrayList<>();
+		for (var pr : s.getProperties()) {
+			if (dev.larattalabs.architect.journal.StillOurs.volatileProperty(s, pr.getName()) && pr.getPossibleValues().size() > 1) {
+				ps.add(pr);
+			}
+		}
+		if (ps.isEmpty()) {
+			return null;
+		}
+		return cycle(s, ps.get(r.nextInt(ps.size())));
+	}
+
+	private static <T extends Comparable<T>> BlockState cycle(BlockState s, net.minecraft.world.level.block.state.properties.Property<T> p) {
+		return s.cycle(p);
+	}
+
 	private boolean nextToWater(long p) {
 		for (Direction d : Direction.values()) {
 			if (d != Direction.DOWN && world.get(BlockPos.offset(p, d)).getFluidState().is(net.minecraft.tags.FluidTags.WATER)) {
@@ -1083,7 +1171,13 @@ final class UmtSim {
 		Pt rec = new Pt(new java.util.UUID(7L, 7L), null);
 		BlockState s = world.get(p);
 		String what;
-		if (s.isAir()) {
+		if (s.hasProperty(net.minecraft.world.level.block.StairBlock.FACING) && r.nextBoolean()) {
+			// a non-volatile change (a stair turned: mined and placed again): the player's
+			world.player(p, Blocks.AIR.defaultBlockState(), null, null);
+			world.player(p, s.setValue(net.minecraft.world.level.block.StairBlock.FACING, s.getValue(net.minecraft.world.level.block.StairBlock.FACING)
+				.getClockWise()), rec, null);
+			what = "turned the stair";
+		} else if (s.isAir()) {
 			world.player(p, Blocks.COBBLESTONE.defaultBlockState(), rec, null);
 			what = "placed cobblestone";
 		} else if (Copper(s) && r.nextBoolean()) {

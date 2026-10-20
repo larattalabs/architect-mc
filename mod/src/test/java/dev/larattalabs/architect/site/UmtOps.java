@@ -36,7 +36,7 @@ final class UmtOps {
 		}
 	}
 
-	sealed interface Op permits Place, Remove, RemoveGroup, Drift, Edit, Noise, Autosave, Restart {
+	sealed interface Op permits Place, Remove, RemoveGroup, Delta, Drift, Edit, Noise, Autosave, Restart {
 	}
 
 	/** Places a change of {@code kind} over [x, x+w) x [z, z+d), {@code h} high; {@code group} 0 is none. */
@@ -49,6 +49,10 @@ final class UmtOps {
 
 	/** Removes a group's standing members as one undo (Groups: one plan, one commit, writes last placed first). */
 	record RemoveGroup(int group, @Nullable Crash crash) implements Op {
+	}
+
+	/** A delta of a standing site (SiteDeltas D1-D7): a BOX entry of kind delta, in the site's undo group, inside or growing its box. */
+	record Delta(int ordinal, long seed) implements Op {
 	}
 
 	/** The world changes a cell of a standing placement by itself (weathering, drying, spreading, flowing, freezing). */
@@ -119,6 +123,8 @@ final class UmtOps {
 				ops.add(new Remove(r.nextInt(8), crash(r, g, false)));
 			} else if (k < 66) {
 				ops.add(new RemoveGroup(1 + r.nextInt(3), crash(r, g, false)));
+			} else if (k < 70) {
+				ops.add(new Delta(r.nextInt(8), r.nextLong()));
 			} else if (k < 76 && g.drift()) {
 				ops.add(new Drift(r.nextInt(8), r.nextLong()));
 			} else if (k < 80 && g.drift()) {

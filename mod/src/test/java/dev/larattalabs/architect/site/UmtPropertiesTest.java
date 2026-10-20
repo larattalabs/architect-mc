@@ -69,6 +69,33 @@ class UmtPropertiesTest {
 		}
 	}
 
+	/**
+	 * (4e S2, StillOurs.VOLATILE and CONNECTIONS; vanilla V10) A road's stair changes shape, its lamp is lit, its fence connects, its
+	 * trapdoor opens, its leaves' distance changes: still the road's, the removal puts the ground back. A stair a player turned
+	 * (facing is not volatile, a record) is the player's: the removal leaves it.
+	 */
+	@Test
+	void p3_volatilePropertiesStayOursAndAFacingIsThePlayers() throws Exception {
+		try (UmtCase c = UmtCase.of(w -> {
+		})) {
+			BlockState stair = Blocks.OAK_STAIRS.defaultBlockState();
+			c.sim.cells(UmtOps.Kind.ROAD, 0, cells(p(1, G + 1, 1), stair, p(2, G + 1, 1), Blocks.REDSTONE_LAMP, p(3, G + 1, 1), Blocks.OAK_FENCE, p(4, G + 1, 1),
+				Blocks.OAK_TRAPDOOR, p(5, G + 1, 1), Blocks.OAK_LEAVES, p(1, G + 1, 3), stair));
+			c.sim.world.natural(p(1, G + 1, 1), stair.setValue(net.minecraft.world.level.block.StairBlock.SHAPE,
+				net.minecraft.world.level.block.state.properties.StairsShape.INNER_LEFT));
+			c.sim.world.natural(p(2, G + 1, 1), Blocks.REDSTONE_LAMP.defaultBlockState().setValue(net.minecraft.world.level.block.RedstoneLampBlock.LIT, true));
+			c.sim.world.natural(p(3, G + 1, 1), Blocks.OAK_FENCE.defaultBlockState().setValue(net.minecraft.world.level.block.FenceBlock.NORTH, true));
+			c.sim.world.natural(p(4, G + 1, 1), Blocks.OAK_TRAPDOOR.defaultBlockState().setValue(net.minecraft.world.level.block.TrapDoorBlock.OPEN, true));
+			c.sim.world.natural(p(5, G + 1, 1), Blocks.OAK_LEAVES.defaultBlockState().setValue(net.minecraft.world.level.block.LeavesBlock.DISTANCE, 3));
+			BlockState turned = stair.setValue(net.minecraft.world.level.block.StairBlock.FACING, net.minecraft.core.Direction.EAST);
+			c.sim.world.player(p(1, G + 1, 3), Blocks.AIR.defaultBlockState(), null, null);
+			c.sim.world.player(p(1, G + 1, 3), turned, PLAYER, null);
+			c.sim.tainted.add(p(1, G + 1, 3));
+			exact(c.sim.end());
+			assertEquals(turned, c.at(p(1, G + 1, 3)), "the player's turned stair stays");
+		}
+	}
+
 	/** (CU S-CU-3) Farmland a tile wrote that dried to dirt, and dirt a tile wrote that a hoe made farmland: both still the tile's. */
 	@Test
 	void p3_farmlandAndDirtAreInterchangeable() throws Exception {

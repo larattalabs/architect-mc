@@ -78,6 +78,19 @@ class UmtFindingsTest {
 	}
 
 	/**
+	 * F8: a plant standing on a cell a site (or a delta) changes, but outside its box: the write (Sites.FLAGS) updates it, it breaks
+	 * (V5), and no entry has its cell, so the removal can't bring it back. The 4d "leaf_litter missing after the undo" has this cause
+	 * when the litter sat next to the plan.
+	 */
+	@Test
+	void f8_aPlantOverABoxsTopBreaks() throws Exception {
+		try (UmtCase c = UmtCase.of(w -> w.put0(p(2, G + 1, 2), Blocks.POPPY.defaultBlockState(), null, null))) {
+			c.site(1, G - 1, 1, 3, G, 3, Blocks.STONE_BRICKS.defaultBlockState(), Map.of(), 0);
+			exact(c.sim.end());
+		}
+	}
+
+	/**
 	 * F4 (the coordinator's crash window, item 1): Groups.committed saves the removal with its undo group as the R2 commit is submitted,
 	 * before it is durable. A kill inside that commit (the K8 window, before the index) leaves a saved removal that names an undo group
 	 * the journal never got. Resumed, it marks every member pending and runs RestoreJob.writing for each: SiteJournal.restore finds no
