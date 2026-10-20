@@ -213,6 +213,34 @@ function brinkRails(r, ctx, { stage, rounds = 5 }) {
   return { rails: total, lanterns };
 }
 
+/** The bodies' footing (see the program): the natural top cell (the survey's ground) right under a solid cell of a body's own parts,
+ * unwritten, outside every body's hard and watch sets, written as the subsurface role. Returns the cells written. */
+function footing(r, ctx, { stage }) {
+  const bodies = r._fluidBodies ?? [];
+  if (!bodies.length) return 0;
+  const { ir, vw } = draftWorld(r, ctx);
+  const keep = Array.isArray(r._keep) ? r._keep.filter((q) => q.kind === 'body') : [];
+  // the bodies' own parts (w_<part>, w_<part>_room, _works, _shell, ...): every solid cell they write stands on the cell below
+  const own = new Set(ir.parts.map((p, i) => [p.id, i]).filter(([id]) => bodies.some((b) => id === b.id || id.startsWith(`${b.id}_`))).map(([, i]) => i));
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const b of bodies) for (const [x, y, z] of [...(b.cells ?? []), ...(b.shell ?? [])]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  const cols = [];
+  for (let x = x0 - 3; x <= x1 + 3; x++) for (let z = z0 - 3; z <= z1 + 3; z++) for (let y = y0 - 2; y <= y1 + 3; y++) {
+    if (!(vw.flags(x, y, z) & 1) || !own.has(vw.partAt(x, y, z)) || !vw.pal.solid[vw.get(x, y, z)]) continue;
+    if (vw.flags(x, y - 1, z) & 1) continue; // written already: the plan's own
+    // (the natural top of the column: the survey's ground; the draft reads a volume's SOIL there as dirt, the world holds grass)
+    if (y - 1 !== ctx.survey.groundAt(x, z) || ctx.survey.waterAt(x, z) || vw.pal.air[vw.get(x, y - 1, z)]) continue;
+    const k = `${x},${y - 1},${z}`;
+    if (keep.some((q) => q.hard.has(k) || q.watch.has(k))) continue;
+    cols.push(x, z, y - 1, y - 1, 0);
+  }
+  if (!cols.length) return 0;
+  const part = r.part('mon_footing', { stage });
+  (r.meta.parts['mon_footing'] ??= {}).kind = 'footing';
+  part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: [r.material('subsurface', 'body footing')], cond: 0, walk: false });
+  return cols.length / 5;
+}
+
 export default function terracedMonastery(ctx) {
   const P = ctx.params;
   const { claim, survey: S } = ctx;
@@ -232,6 +260,11 @@ export default function terracedMonastery(ctx) {
     const [x0, z0, x1, z1] = SPRING.cols;
     r.part('unsafe_spring_fill', { stage: stages[0] })._shapeOp({ kind: 'box', min: [x0, { floor: 1 }, z0], max: [x1, { height: 1 }, z1] }, r.material('subsurface', 'unsafe fill'), 0);
   }
+
+  // ---- the bodies' footing: a natural grass (or mycelium, podzol) block right under a body's shell would die to dirt under it while the
+  // monastery stands, a change the undo can't restore and H §4.5 never classes (it is within 6 of the body): the plan writes it as the
+  // subsurface itself, so the journal holds the grass and the removal puts it back
+  info2.footing = footing(r, ctx, { stage: stages[0] });
 
   // ---- HY's wet field (a read of the survey: no water written), for the moss
   const hy = r.hydrology ? null : r.pass('hydrology', { planWater: false });
