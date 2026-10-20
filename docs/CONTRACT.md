@@ -20446,6 +20446,12 @@ still works (D3's town-first order, `dangling`).
 
 - Turning, branching or forking extensions; a second square; extensions past the claim (S-RV-8); growth of ring and spiral ends.
 
+### Coordinator decisions (2026-10-20, on Noah's behalf)
+
+- **N-GR-1:** an extension keeps the street's own look.
+- **N-GR-2:** new lots go nearest the square first.
+
+
 ## Phase 6d slice FS: updates follow the source (DRAFT for Steward review)
 
 When a source design gets a new version, each of its copies can be re-made from that version by its own recipe, at $0, and then each
@@ -20576,6 +20582,11 @@ unaffected (a lot is BOX above its pads).
 
 - SITE followers (7b). Copies of an adopted entry (PT2's N-PT2-2, its own ask). Automatic application.
 
+### Coordinator decisions (2026-10-20, on Noah's behalf)
+
+- **N-FS-1:** a copy that can't follow stays as it is, at $0, with no paid redesign.
+
+
 ## Phase 6d slice LC: land change in a standing region (DRAFT for Steward review)
 
 A standing region can say what has changed in it since it was built, part by part and lot by lot, with the player's cells apart. And a
@@ -20693,6 +20704,11 @@ default CompletableFuture<RegionPlan> replanStages(String regionId, @Nullable St
 
 - **N-LC-1. Damage in the card.** Proposed: Architect reports damage only when asked (`landCheck`), and Steward decides whether to
   mention it. The alternative is an event per damaged part. Default: on request only.
+
+### Coordinator decisions (2026-10-20, on Noah's behalf)
+
+- **N-LC-1:** land damage is reported on request only, not as an event.
+
 
 ## Phase 6d slice AD: adopting a VillageLayout settlement as a region, the 6d half of C12 (DRAFT for Steward review)
 
