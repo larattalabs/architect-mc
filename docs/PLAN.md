@@ -764,3 +764,16 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 - **Two cheap tests from the HY integration verifier:**
   - a Java test running PlanChecks' sample cache with two guards on one volume sha;
   - an in-game stale check on a 2+ reach course with one cell changed in a single reach, confirming only that reach is named.
+
+- ~~**6ct1-scenario-relief's falling-water cells**~~ **Root-caused and fixed (branch `fix/relief-flow`, 2026-10-20).** An undo
+  defect, not load and not a missing class. S3's claim has a worldgen spring whose stream (x 3664-3672, y 122-125, z -980..-965)
+  only starts flowing once the fresh copy's chunks tick, so relief_demo's survey (taken before the 90 s settle) never sees it.
+  In 17 of 36 recorded runs the layout's relief fill covered the stream (`writtenFlowing` >= 16); every one of those had
+  unclassified cells, and no other run did (load 7.9 failed, 52-89 passed). The fill writes dirt over the feeder (3671-3672,
+  123, -972, level 1). Vanilla then drains the falling column below it (3671-3672, 122, -972), which the region never wrote, so
+  it isn't in the journal. The undo restores the feeder exactly, but CELL entries are written with every side effect skipped, so
+  the restored flowing water had no fluid tick. The column stayed air at +10 s and at +60 s. Fix: `site/FluidRearm` gives every
+  non-source fluid cell a restore wrote one fluid tick once no removal and no restore or delta job is writing. With it, the
+  column refills by +10 s. Older passes with these cells came only from T1's `flow` class, before H narrowed it.
+  Not covered: HY-b's run also had 13 unwritten cells beside the stream (grass turned to flowing water) that were still dry
+  after the realise; a re-tick can't undo a spread like that. No class added.
