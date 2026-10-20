@@ -1,0 +1,47 @@
+{
+ "about": "(6c F3 \u00a75, \u00a710.1) u04_coral_other_part: the broken variant `_unsafe.coralOtherPart`: the coral's cells written as the coral part's own op (in the fluids stage, after the pond's) instead of the pond's decor set: M25:clear names the coral (another part's write in the pond's cells and shell); an architect_mc:unsafe part is never refused by the backstop (KC's rule), the pond fits",
+ "on": "flat",
+ "volume": {},
+ "expect": {
+  "rule": "M25:clear",
+  "part": "reef",
+  "bodyPart": "pond",
+  "bodyClass": "fits"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "f3_u04",
+  "forms": [
+   {
+    "id": "pond",
+    "kind": "pond",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 16
+     }
+    },
+    "size": {
+     "w": 11,
+     "d": 9
+    },
+    "depth": 3
+   },
+   {
+    "id": "reef",
+    "kind": "coral",
+    "where": {
+     "inside": {
+      "part": "pond"
+     }
+    },
+    "count": 3,
+    "ext": {
+     "architect_mc:unsafe": {
+      "coralOtherPart": true
+     }
+    }
+   }
+  ]
+ }
+}

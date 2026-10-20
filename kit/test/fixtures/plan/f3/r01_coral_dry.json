@@ -1,0 +1,47 @@
+{
+ "about": "(6c F3 \u00a710.1, \u00a73.4) r01_coral_dry: coral named near the stone, inside no plan body (and a second inside a lava pit): each answers refused NO_FEATURE {why: no plan water} (coral in natural water is the seabed slice's); the pit itself fits",
+ "on": "flat",
+ "volume": {},
+ "expect": {
+  "part": "reef",
+  "class": "refused",
+  "code": "NO_FEATURE",
+  "why": "no plan water"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "f3_r01",
+  "forms": [
+   {
+    "id": "reef",
+    "kind": "coral",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 8
+     }
+    }
+   },
+   {
+    "id": "pit",
+    "kind": "pond",
+    "fluid": "lava",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 24
+     }
+    }
+   },
+   {
+    "id": "pit_coral",
+    "kind": "coral",
+    "where": {
+     "inside": {
+      "part": "pit"
+     }
+    }
+   }
+  ]
+ }
+}

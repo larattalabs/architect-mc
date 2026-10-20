@@ -5,7 +5,12 @@
 // - giant_tree, giant_mushroom: resolve checks the locator and answers `fits` provisionally (`placedAtEmit`); emit picks the sites
 //   (forms/place.mjs) on the real layout, grows each form on the real ground and writes it baked (r.form), its column mask in the IR's
 //   forms[]; the answer becomes fits, adjusted (moved past the locator, fewer than count) or refused (NO_ROOM, OVERLAP).
-// - coral, roots, stalactites: F3-b and F3-c (stubs answer refused NO_ROOM {until} until each lands).
+// - coral (F3-c, §3.4): resolve checks that `where.inside.part` names a plan body (a water form.pond, a form.fountain, a form.quay, a
+//   channel.moat): anything else answers refused NO_FEATURE {why: 'no plan water'}. The coral is grown at its body's emit (the body's
+//   generator passes coralRequests(K, part) to r.fluidBody, which writes it as the body's own `decor` set); after the H parts emit,
+//   f3CoralAnswers gives each coral part its answer from its body's record: fits, adjusted (fewer patches than count) or refused
+//   NO_ROOM (no bed with room under the surface; a quay, which holds no body of its own), blocked when its body did not emit.
+// - roots, stalactites: F3-b (stubs answer refused NO_ROOM {until} until they land).
 import { fnv64 } from '../noise.mjs';
 import { opBounds } from '../region/plan.mjs';
 import { giantMushroom } from './giantMushroom.mjs';
@@ -19,8 +24,10 @@ export const GROWN = Object.freeze({
   giant_mushroom: { generator: 'giantMushroom', grow: giantMushroom, preset: 'brown' },
 });
 /** The F3 kinds still waiting for their sub-slice (stubs). */
-export const PENDING = Object.freeze({ roots: 'F3b', stalactites: 'F3b', coral: 'F3c' });
-export const isF3 = (p) => p.family === 'form' && (p.kind in GROWN || p.kind in PENDING);
+export const PENDING = Object.freeze({ roots: 'F3b', stalactites: 'F3b' });
+/** (6c F3-c) The kinds that compile into a plan body (§3.4). */
+export const INTO_BODY = Object.freeze({ coral: 'coral' });
+export const isF3 = (p) => p.family === 'form' && (p.kind in GROWN || p.kind in PENDING || p.kind in INTO_BODY);
 
 const rectArr = (a) => [a.minX, a.minZ, a.maxX, a.maxZ];
 
@@ -28,6 +35,7 @@ const rectArr = (a) => [a.minX, a.minZ, a.maxX, a.maxZ];
  * Step 2: a grown form's locator is checked; its sites wait for the emit. Returns {klass, reasons, notes, placedAtEmit}.
  */
 export function f3Resolve(C, p) {
+  if (p.kind in INTO_BODY) return coralResolve(C, p);
   if (p.kind in PENDING) return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `${p.block} is built by slice ${PENDING[p.kind]} (not in this build yet)`, evidence: { until: PENDING[p.kind] } }] };
   const loc = C.locatorOf(C.env, p.part.where, C.geomOf, { within0: 24 });
   if (loc.error) return { klass: loc.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: loc.error.code, message: loc.error.message, evidence: { locator: Object.keys(p.part.where ?? {})[0] ?? null, ...(loc.error.evidence ?? {}) } }] };
@@ -145,3 +153,70 @@ export function f3Emit(C, p) {
 }
 
 export { rectArr };
+
+// ------------------------------------------------------------------ (6c F3-c) coral, a body's own cells (§3.4)
+
+/** The plan part kinds coral may stand in (the body is that part's own): block -> whether it holds a plan body of its own. */
+export const CORAL_TARGETS = Object.freeze({ 'form.pond': true, 'form.fountain': true, 'form.quay': false, 'channel.moat': true });
+
+/** A part's block as the coral reads it (a channel's by its path form: channel.moat, channel.course, ...). */
+function blockOf(C, q) {
+  if (q.family === 'connector' && q.kind === 'channel') return C.channelBlockOf ? C.channelBlockOf(q) : null;
+  return q.block ?? `${q.family === 'connector' ? 'connector' : q.family}.${q.kind}`;
+}
+
+/**
+ * Step 2 for form.coral: its body must be a plan body of water. `C`: {byId, res, channelBlockOf}. Returns {klass, reasons, notes,
+ * placedAtEmit}: fits (provisional: the coral is grown at its body's emit), or refused NO_FEATURE {why: 'no plan water'} / NO_ROOM.
+ */
+export function coralResolve(C, p) {
+  const tid = p.part.where?.inside?.part;
+  const q = tid ? C.byId?.get?.(tid) : null;
+  const block = q ? blockOf(C, q) : null;
+  const nf = (message, evidence = {}) => ({ klass: 'refused', reasons: [{ code: 'NO_FEATURE', message, evidence: { why: 'no plan water', ...evidence } }] });
+  if (!q || !(block in CORAL_TARGETS)) return nf(`form.coral grows only inside a plan body (where.inside a form.pond, form.fountain, form.quay or channel.moat part)${q ? `: ${tid} is ${block ?? q.kind}` : ''}; coral in natural water is the seabed slice's`, { part: tid ?? null, block });
+  const fluid = q.kind === 'pond' ? (C.res?.get?.(tid)?.spec?.fluid ?? q.part?.fluid ?? q.part?.params?.fluid ?? 'water') : 'water';
+  if (fluid !== 'water') return nf(`${tid} is a ${fluid} pit: coral grows only in water`, { part: tid, block, fluid });
+  if (!CORAL_TARGETS[block]) return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `${tid} is a quay: it stands in natural water and holds no plan body of its own, so it has no bed of ours (coral in natural water is the seabed slice's)`, evidence: { why: 'no plan bed', part: tid, block } }] };
+  return { klass: 'fits', reasons: [], notes: [], placedAtEmit: true };
+}
+
+/**
+ * After the H parts emit (compile step 3): each coral part's answer from its body's record (r.fluidBody's `corals`). `C`: {order,
+ * okClass, res, answers, ans, geom, partOf, judge, tolOf}. A coral whose body did not emit is blocked; one that grew no cell is refused
+ * NO_ROOM; fewer patches than `count` answer adjusted ({what: count}); its geometry is its cells' rect and the patch centres.
+ */
+export function f3CoralAnswers(C) {
+  for (const p of C.order) {
+    if (p.family !== 'form' || !(p.kind in INTO_BODY) || !C.okClass(p.id)) continue;
+    const tid = p.part.where.inside.part;
+    if (!C.okClass(tid)) { C.ans(p, { class: 'blocked', blockedBy: [tid], reasons: [{ code: 'DEPENDENCY', message: `depends on ${tid}, which is not fits or adjusted`, evidence: { blockedBy: [tid] } }] }); continue; }
+    const bodies = C.res.get(tid)?.emitted?.bodies ?? [];
+    let rec = null, body = null;
+    for (const b of bodies) { const c = (b.corals ?? []).find((x) => x.id === p.id); if (c) { rec = c; body = b; break; } }
+    if (!rec) {
+      // ((the body capped, or its first plan waiting on its volume: the body's own answer says why) the coral waits with it)
+      const a0 = C.answers.get(tid);
+      C.ans(p, a0?.class === 'incomplete' ? { class: 'incomplete', reasons: a0.reasons } : { class: 'refused', reasons: [{ code: 'NO_ROOM', message: `${tid} wrote no body this coral could grow in`, evidence: { why: 'no plan bed', part: tid } }] });
+      continue;
+    }
+    if (rec.irPart && C.partOf) C.partOf[rec.irPart] = p.id; // (the broken variant coralOtherPart: its op is the coral part's own)
+    if (!rec.cells) {
+      C.ans(p, { class: 'refused', reasons: [{ code: 'NO_ROOM', message: `the bed of ${tid} holds no room for coral: no bed cell under water${rec.room ? '' : ' (every column capped with ice or no deeper than its bed)'}`, evidence: { why: 'no room under the surface', part: tid, body: body.id, room: rec.room } }] });
+      continue;
+    }
+    const tCount = C.tolOf(p.part, 'count');
+    const j = C.judge([{ what: 'count', value: rec.count - rec.patches, ...tCount }]);
+    const notes = [`grown in ${body.id}, the body's own cells (decor): ${rec.cells} cell(s) in ${rec.patches} patch(es): ${rec.stats.blocks} coral block(s) in the bed, ${rec.stats.plants} plant(s), ${rec.stats.fans} fan(s), ${rec.stats.wallFans} wall fan(s), ${rec.stats.pickles} sea pickle(s)${rec.stats.capped ? ' (under the ice cap: 1 pickle a cluster)' : ''}`];
+    if (!rec.stats.plants && !rec.stats.fans && !rec.stats.wallFans && !rec.stats.pickles) notes.push('no water cell of the body is 2 under the surface: coral blocks in the bed only');
+    if (rec.patches < rec.count) notes.push(`${rec.patches} of ${rec.count} patch(es): the bed has no other room ${3} apart`);
+    C.geom.set(p.id, { rect: rec.rect });
+    const f = C.res.get(p.id) ?? {};
+    f.sites = rec.sites.map((s) => [s[0], s[2]]);
+    f.rect = rec.rect;
+    C.res.set(p.id, f);
+    // (a count short past its ceiling still answers adjusted: the coral is already the body's own cells, which stand with the body)
+    if (j.klass === 'refused') notes.push(`count short by ${rec.count - rec.patches}, past its tolerance: answered adjusted (the coral is the body's own cells)`);
+    C.ans(p, { class: j.klass === 'refused' ? 'adjusted' : j.klass, deviations: j.deviations, notes, reasons: [] });
+  }
+}

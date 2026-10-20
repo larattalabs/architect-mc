@@ -1,0 +1,43 @@
+{
+  "about": "(6c F3 §10.1, §3.4) a coral pond and a coral fountain on a flat claim: a natural pond (13x11, 3 deep at its centre) with mixed coral inside it (4 patches, cover 0.4), and a fountain (basin 7) with brain coral in its basin's bed. Each coral part compiles into its body: the body op's decor set, the body's own cells (M25:clear 0 with no exception)",
+  "on": "flat",
+  "volume": {},
+  "covers": [
+    "form.coral"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "f3_v73",
+    "forms": [
+      {
+        "id": "pond",
+        "kind": "pond",
+        "where": { "near": { "anchor": "stone", "within": 16 } },
+        "size": { "w": 13, "d": 11 },
+        "depth": 3
+      },
+      {
+        "id": "reef",
+        "kind": "coral",
+        "where": { "inside": { "part": "pond" } },
+        "count": 4,
+        "cover": 0.4
+      },
+      {
+        "id": "fount",
+        "kind": "fountain",
+        "basin": 7,
+        "spout": 2,
+        "where": { "near": { "anchor": "stone", "within": 40 } }
+      },
+      {
+        "id": "fount_coral",
+        "kind": "coral",
+        "preset": "brain",
+        "where": { "inside": { "part": "fount" } },
+        "count": 2,
+        "cover": 0.5
+      }
+    ]
+  }
+}

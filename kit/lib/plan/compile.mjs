@@ -26,7 +26,7 @@ import { keptBuilds, pickBuild, buildEndpoint, buildKeepOut } from '../region/bu
 import { besidePorts, emitDistricts, parseDistricts, placeDistricts } from '../region/districtsEmit.mjs';
 import { placeFollow } from '../region/followEmit.mjs';
 import { zoneDistricts, channelForm } from './schema.mjs';
-import { f3Emit, f3Resolve, GROWN, isF3 } from '../forms/hooks.mjs';
+import { f3CoralAnswers, f3Emit, f3Resolve, GROWN, INTO_BODY, isF3 } from '../forms/hooks.mjs';
 // (7a K1) walls and gates (K1a), rope bridges and auto connectors (K1b): the compiler's hooks for the four connector kinds
 import { WALL_KINDS, emitWalls, finishGates, planWalls, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
 import { ROPE_KINDS, emitRopes, ropeAnswer, ropeFailAnswer, ropeLeg, ropePassInput, ropeResolve } from '../connectors/rope.mjs';
@@ -40,7 +40,7 @@ import { emitTunnels, tunnelAnswer, tunnelAutoLeg, tunnelFailAnswer, tunnelLeg, 
 /** (6c T3) The connector kinds that get the `links` stage and the K context: K1's and T3's. */
 export const LINK_KINDS = Object.freeze([...K1_KINDS, ...T3_KINDS]);
 // (6c H) water bodies and wet structures: the generators behind one dispatcher (lib/fluids/hooks.mjs), the stage name from a leaf
-import { asksFarmPond, asksIrrigate, dropOverflows, emitOrder, fluidAnswer, fluidEmit, fluidFallbackClearance, fluidFarmPonds, fluidFootprint, fluidIrrigation, fluidPassInput, fluidResolve, fluidStageWanted, isHPart, wetBridgeFallback } from '../fluids/hooks.mjs';
+import { asksFarmPond, asksIrrigate, channelBlockOf, dropOverflows, emitOrder, fluidAnswer, fluidEmit, fluidFallbackClearance, fluidFarmPonds, fluidFootprint, fluidIrrigation, fluidPassInput, fluidResolve, fluidStageWanted, isHPart, wetBridgeFallback } from '../fluids/hooks.mjs';
 import { registerBody, release as releaseKeep, reserve, spanOf } from '../fluids/keep.mjs';
 import { FLUIDS_STAGE } from '../fluids/kinds.mjs';
 // (6c VOC-c) rule.palette's lenient read (the measure runs after the IR: kit/lib/region/plan.mjs)
@@ -940,7 +940,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     }
     if (p.family === 'form' && isF3(p)) {
       // (6c F3) a grown form: its locator checked here, its sites picked at emit on the zones' real layouts (forms/hooks.mjs)
-      const f = f3Resolve({ env, geomOf, locatorOf }, p);
+      const f = f3Resolve({ env, geomOf, locatorOf, byId, res, channelBlockOf: (q) => channelBlockOf({ plan: P.plan }, q) }, p);
       res.set(p.id, f);
       ans(p, { class: f.klass, reasons: f.reasons, notes: f.notes });
       continue;
@@ -1240,6 +1240,9 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       geom.delete(p.id);
     }
   }
+
+  // ---- (6c F3-c, §3.4) the coral parts' answers, from the bodies they grew in (only a plan with coral)
+  if (order.some((p) => p.family === 'form' && p.kind in INTO_BODY)) f3CoralAnswers({ order, okClass, res, answers, ans, geom, partOf, judge, tolOf });
 
   // ---- 4. connectors: legs, one route pass per grade limit (a dry run, then only the connectors whose every leg routed)
   // ((7a K1) a wall or gate is answered by its own steps; a rope_bridge or auto connector routes here with its leg options)
