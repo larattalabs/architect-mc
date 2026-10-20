@@ -49,10 +49,12 @@ release and after each sync. Contracts and as-builts stay in `docs/CONTRACT.md`;
    D-S3 land taken in the view ext, D-S4 dry beside check). Contract drafting; builds after FL merges. D-S2 (grow a district) is
    with 6d.
 7. The 6c close-out.
-8. 7a, the connector set (drafted 2026-10-20, in review): foundation, then batches 7a-1 (CL, K2, CW), 7a-2 (RK, LF, SA; LF
-   RC), 7a-3 (K3, GJ, FB; RC). Carts and rails are re-reserved until CR.
-9. 6d (revisions, growth incl. D-S2, follow-the-source, land change, adopt): drafted, RV being revised after a GPT-6.1 review,
-   then Steward review. Lands after 7a, as agreed 2026-10-09.
+8. D3 and 7a-1 (CL, K2, CW). 7a is frozen; Steward accepted every default.
+9. 6d growth first (Noah, 2026-10-20, from Steward's ask): RV v3, additive-only revisions (add parts, lots, street extensions,
+   new bodies; LIFO undo; never remove or change what stands), plus GR (towns and districts, D-S2). Full revisions (RV2) come
+   later, with a better design.
+10. 7a-2 (RK, LF, SA) and 7a-3 (K3, GJ, FB).
+11. The rest of 6d: FS, LC (report), AD.
 10. 7b, 7c.
 
 ### Open asks either way
