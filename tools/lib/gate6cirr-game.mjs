@@ -387,25 +387,40 @@ async function removeLot(ctx, o, lotId = 'f2') {
 }
 
 /** The region removed (exact rules): E-flat 0 over the snapshot (items 4, 5 (a) and (e)). */
-async function removeRegion(ctx, o, item) {
+async function removeRegion(ctx, o, item, { judged = true } = {}) {
   const { L, core, check } = ctx;
   await L.setRules('exact');
+  // (diagnosis: the journal stacks round each irrigated lot's box at its pad's top, the apron, kept for a mismatch there)
+  const stacks = {};
+  for (const lot of (o.r?.ir?.lots ?? []).filter((l) => l.irrigation)) {
+    const b = lot.box, y = lot.floorY - 1;
+    for (let x = b.minX - 1; x <= b.maxX + 1; x++) for (let z = b.minZ - 1; z <= b.maxZ + 1; z++) {
+      if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) continue;
+      const st = await L.call('dev.journal.at', { x, y, z }, 30_000).catch(() => null);
+      if (st && (st.stack ?? st.entries ?? []).length) stacks[`${x},${y},${z}`] = (st.stack ?? st.entries).map((e) => [e.site ?? e.entry, e.kind, e.before, e.after]);
+    }
+  }
   const rm = await core.removeWait(ctx, o.r.region);
   await sleep(3000);
   const df = await core.diff(ctx, o.box, o.file);
-  check(rm.state === 'REMOVED' && df.mismatches === 0, `${item}: Regions.remove (the sources drained first, then the shells and the lots) restores the box exactly: E-flat ${df.mismatches} (${rm.seconds} s)`, df.sample);
-  return { state: rm.state, seconds: rm.seconds, mismatches: df.mismatches, sample: df.sample };
+  const at = Object.fromEntries((df.sample ?? []).map((m) => [m.pos, stacks[m.pos] ?? null]).filter(([, v]) => v));
+  if (df.mismatches) ctx.log(`  ${item}: the journal stacks at the mismatched apron cells before the removal: ${ctx.json(at)}`);
+  (judged ? check : (ok, m, d) => check(true, `(recorded${ok ? '' : ', not as hoped'}) ${m}`, d))(rm.state === 'REMOVED' && df.mismatches === 0, `${item}: Regions.remove (the sources drained first, then the shells and the lots) restores the box exactly: E-flat ${df.mismatches} (${rm.seconds} s)`, df.sample);
+  return { state: rm.state, seconds: rm.seconds, mismatches: df.mismatches, sample: df.sample, stacks: at };
 }
 
 /** The whole irr-ingame step. */
 export async function ingame(ctx) {
   const { L, check, json, B } = ctx;
   const out = {};
+  // (development: IRR_ONLY=v62a,v62b,v63,s01,d01,u01b,pad,probe runs those sections only)
+  const only = (process.env.IRR_ONLY ?? '').split(',').filter(Boolean);
+  const want = (k) => !only.length || only.includes(k);
   const F = await installFields(ctx);
   const fx = (rel) => B.fixture(ctx, rel);
   const E62 = { f1: 'g6c_irr_field_13x11', f2: 'g6c_irr_field_11x11' };
   // ---- v62 world A: items 2, 3, 7, 4, 5 (c) (d) (b) (e)
-  {
+  if (want('v62a')) {
     const o = await realiseIrr(ctx, 'v62a', fx('valid/v62_irr_farm.json'), { entries: E62, fields: F });
     if (o.r) {
       out.v62 = await placedChecks(ctx, 'v62', o, F, E62);
@@ -419,7 +434,7 @@ export async function ingame(ctx) {
     await L.leaveWorld();
   }
   // ---- v62 world B: item 5 (a): the region removed with its lots standing
-  {
+  if (want('v62b')) {
     const o = await realiseIrr(ctx, 'v62b', fx('valid/v62_irr_farm.json'), { entries: E62, fields: F });
     if (o.r) {
       check(o.r.view.state === 'PLACED', `item 5 (a): v62 realised again (${o.r.view.state})`);
@@ -429,6 +444,7 @@ export async function ingame(ctx) {
   }
   // ---- v63 (a 40 x 40 farm), Steward's hamlet (type-implied, bound in its plan), a district lot: every new path in game
   for (const [tag, rel, entries] of [['v63', 'valid/v63_irr_large.json', { big: 'g6c_irr_field_40x40' }], ['s01', 'irr/s01_hamlet.json', {}], ['d01', 'irr/d01_district.json', { field_1: 'g6c_irr_field_13x11' }]]) {
+    if (!want(tag)) continue;
     const o = await realiseIrr(ctx, tag, fx(rel), { entries, fields: F });
     if (o.r) {
       out[tag] = await placedChecks(ctx, tag, o, F, entries);
@@ -437,7 +453,7 @@ export async function ingame(ctx) {
     await L.leaveWorld();
   }
   // ---- the broken variant in game: irrUnmasked (the lot's design placed over the sides): the live check refuses the source, PARTIAL
-  {
+  if (want('u01b')) {
     const o = await realiseIrr(ctx, 'u01b', fx('irr/u01b_unmasked_game.json'), { entries: { f1: 'g6c_irr_field_13x11' }, fields: F });
     if (o.r) {
       const rows = o.r.fluids.filter((x) => /_irr_/.test(x.body));
@@ -447,8 +463,9 @@ export async function ingame(ctx) {
     } else check(false, `irrUnmasked: not realised (${json(o.parts)})`);
     await L.leaveWorld();
   }
-  // ---- recorded: a breach on a bare pad (no entry: air over the pad where the field model assumes farmland)
-  {
+  // ---- a breach on a bare pad (no entry: air over the pad where the field model assumes farmland): its reach recorded, the removal
+  // judged (the drain follows the breach's flow: no orphan water)
+  if (want('pad')) {
     const o = await realiseIrr(ctx, 'pad', fx('valid/v62_irr_farm.json'), { entries: {}, fields: F });
     if (o.r) {
       const lot = o.r.ir.lots.find((l) => l.id === 'f2');
@@ -463,11 +480,11 @@ export async function ingame(ctx) {
       const outside = added.filter(([x, , z]) => x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ);
       out.padBreach = { added: added.length, outside: outside.length, sample: outside.slice(0, 6) };
       check(true, `(recorded, the field model's limit) a breach on a bare pad (no lot entry): ${added.length} new fluid cell(s), ${outside.length} outside the lot's box`, out.padBreach);
-      out.padBreach.removal = await removeRegion(ctx, o, '(recorded pad breach) the region');
+      out.padBreach.removal = await removeRegion(ctx, o, 'item 4 (a breach on a bare pad): the region, the breach\'s flow taken back with its source');
     }
     await L.leaveWorld();
   }
-  out.probe = await probe(ctx);
+  if (want('probe')) out.probe = await probe(ctx);
   return out;
 }
 
