@@ -22,7 +22,9 @@
 // size cap, at most the massing's size + 2; warnings `massing: ...`: part names, boxes within 1, size, roof forms) and,
 // with --json, `conformance: { ok, errors[], issues[] }`.
 // --restraint <bible.json|name> (phase 5a): checks the metrics against the bible's restraint (lib/bible.mjs restraintOf):
-// warnings `restraint: ...` when accentShare, windowsMin or detailNoise break it.
+// warnings `restraint: ...` when accentShare, windowsMin or detailNoise break it. (6c VOC-b) The same bible's style sets the rarity budget
+// (lib/vocab/budget.mjs styleOf): `metrics.rarity` (and `metrics.drift`) always, measured at the defaults when the bible carries no
+// `rarity`; warnings `rarity: ...` and `coherence: ...` only when it does. Without --restraint, a --bible's style is used.
 // --mirror (slice 0b): the build is mirrored left-right across its front axis (lib/mirror.mjs: x flips for a north or south
 // front, z for east or west; `front` is unchanged); the sidecar records `mirrored: 'x'|'z'`. With --massing, the massing is
 // mirrored the same way before conformance.
@@ -33,6 +35,7 @@ import { writeBlueprint } from './lib/write.mjs';
 import { checkFiles, parseMax } from './lib/check.mjs';
 import { BUILDING_TYPES, TYPE_RE, parseProfile, resolvePalette } from './lib/kit.mjs';
 import { readBibleArg, restraintOf } from './lib/bible.mjs';
+import { styleOf } from './lib/vocab/budget.mjs';
 import { readMassingArg } from './lib/massing.mjs';
 import { resolveValues, validateParams } from './lib/params.mjs';
 import { mirrorAxisOf, mirrorBlueprint, mirrorSidecar } from './lib/mirror.mjs';
@@ -95,12 +98,12 @@ export async function loadDesign(id, { palette, values, dir, mirror } = {}) {
 }
 
 /** Build + check one design. */
-export async function buildDesign(id, { out = DEFAULT_OUT, max, type, profile, palette, values, massing, restraint, dir, mirror } = {}) {
+export async function buildDesign(id, { out = DEFAULT_OUT, max, type, profile, palette, values, massing, restraint, style, dir, mirror } = {}) {
   const bp = await loadDesign(id, { palette, values, dir, mirror });
   // (0b) the massing a mirrored copy conforms to is the archetype's, mirrored with it
   if (mirror && massing) massing = mirrorSidecar(massing, mirrorAxisOf(bp.front));
   const written = writeBlueprint(bp, out);
-  const result = checkFiles(written.nbtPath, written.jsonPath, { max, type, ...(profile !== undefined ? { profile } : {}), ...(massing !== undefined ? { massing } : {}), ...(restraint ? { restraint } : {}) });
+  const result = checkFiles(written.nbtPath, written.jsonPath, { max, type, ...(profile !== undefined ? { profile } : {}), ...(massing !== undefined ? { massing } : {}), ...(restraint ? { restraint } : {}), ...(style ? { style } : {}) });
   // (C35) said where a caller reads it: the check's warnings
   if (bp.paletteIgnored) result.warnings.unshift(`palette ignored: ${id} is a captured source (the player's build as built); it keeps its blocks, the ${ignoredLabel(bp.paletteIgnored)} was not applied`);
   return { bp, written, result };
@@ -131,6 +134,7 @@ function parseArgs(argv) {
     } else if (a === '--bible') {
       if (o.palette !== undefined) throw new Error('--bible and --palette exclude each other');
       o.palette = { bible: readBibleArg(val()) };
+      o.style ??= styleOf(o.palette.bible);
     } else if (a === '--palette') {
       if (o.palette !== undefined) throw new Error('--bible and --palette exclude each other');
       const v = val();
@@ -140,7 +144,9 @@ function parseArgs(argv) {
     } else if (a === '--values') {
       try { o.values = JSON.parse(val()); } catch (e) { throw new Error(`--values: bad JSON (${e.message})`); }
     } else if (a === '--restraint') {
-      o.restraint = restraintOf(readBibleArg(val()));
+      const b = readBibleArg(val());
+      o.restraint = restraintOf(b);
+      o.style = styleOf(b);
     } else if (a === '--mirror') o.mirror = true;
     else if (a === '--json') o.json = true;
     else if (a === '-h' || a === '--help') o.help = true;
@@ -174,7 +180,7 @@ async function main() {
   if (o.json) console.log = console.info = console.debug = console.error;
   let r;
   try {
-    r = await buildDesign(id, { out: o.out ?? DEFAULT_OUT, max: o.max, type: o.type, profile: o.profile, palette: o.palette, values: o.values, massing: o.massing, restraint: o.restraint, mirror: o.mirror });
+    r = await buildDesign(id, { out: o.out ?? DEFAULT_OUT, max: o.max, type: o.type, profile: o.profile, palette: o.palette, values: o.values, massing: o.massing, restraint: o.restraint, style: o.style, mirror: o.mirror });
   } catch (e) {
     Object.assign(console, saved);
     if (e instanceof UsageError) return fail2(e.message);

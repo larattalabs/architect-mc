@@ -16,6 +16,8 @@ import { outline } from '../lib/fluids/pond.mjs';
 import { validateBible } from '../lib/bible.mjs';
 import { sitePlan } from '../lib/region/siteplan.mjs';
 import * as village from '../regions/flat_village.mjs';
+import { buildVirtual } from '../lib/region/vworld.mjs';
+import { bomOf } from '../lib/connectors/bom.mjs';
 
 const read = (dir, re = /./) => fs.readdirSync(path.join(FIX, dir)).filter((f) => f.endsWith('.json') && re.test(f)).sort().map((f) => ({ name: f, ...JSON.parse(fs.readFileSync(path.join(FIX, dir, f), 'utf8')) }));
 const svOf = (fx) => (fx.terrain ? flatSurvey(fx.terrain) : fx.on === 'asks' ? asksSurvey() : fx.on === 'flat' ? flatSurvey() : fx.on ? goldenSurvey(fx.on) : flatSurvey());
@@ -68,6 +70,32 @@ test('items 1, 11: the valid water bodies fit through the two-plan flow; M25, M2
   assert.equal(by.v49.r.res.meta.waters.filter((w) => w.kind === 'farm_pond').length, 2);
   assert.ok(Object.values(by.v49.rep.metrics.M24.planWater).every((d) => d <= 4), JSON.stringify(by.v49.rep.metrics.M24));
   assert.ok(part(by.v49.r, 'farms').notes.some((n) => /farmPond: f1 gets a 3x3 pond/.test(n)));
+});
+
+test('(6c VOC batch) the fountain\'s cost.bom is the items of every cell its IR parts write (v43 with a 1-thick coping; a 2-thick one)', async () => {
+  // v51's fountain stood 49 nether bricks against a bill of 46: the pillar's foot and its cells over the rim (the spout's shell among
+  // them) were written but never billed
+  const v43 = read('valid', /^v43_/)[0];
+  const sv = svOf(v43);
+  const standing = (r, id) => {
+    const mine = new Set(Object.entries(r.res.meta.planCheck.partOf).filter(([, o]) => o === id).map(([k]) => k));
+    const idx = new Set(r.res.ir.parts.map((p, i) => (mine.has(p.id) ? i : -1)).filter((i) => i >= 0));
+    const { vw } = buildVirtual({ ir: r.res.ir, survey: sv.bytes, blobs: (s) => r.res.blobs.get(s) ?? null });
+    const states = [];
+    vw.eachWritten((x, y, z, vi, _f, pi) => { if (idx.has(pi) && !/^minecraft:(air|cave_air|water|lava)$/.test(vw.pal.states[vi].replace(/\[.*$/, ''))) states.push(vw.pal.states[vi]); });
+    return bomOf(states);
+  };
+  const thin = await run(v43);
+  const a = part(thin, 'fount');
+  assert.equal(a.geometry.coping, 1);
+  assert.deepEqual(a.cost.bom, standing(thin, 'fount'));
+  // a protected grove 4 east of the fountain's square: a 1-thick coping's single breach would reach it, so the coping is 2 thick
+  const [, z0, x1, z1] = a.geometry.rect;
+  const thick = await run({ ...v43, protected: [{ id: 'grove', rect: [x1 + 4, z0, x1 + 10, z1] }] });
+  const b = part(thick, 'fount');
+  assert.equal(b.class, 'fits');
+  assert.equal(b.geometry.coping, 2);
+  assert.deepEqual(b.cost.bom, standing(thick, 'fount'));
 });
 
 test('item 11: the refusals answer their codes with evidence; each wouldFit fits re-checked alone', async () => {

@@ -1,0 +1,89 @@
+{
+  "about": "(6c VOC-b) a flat village, a fountain and a wall in g6cvoc_forge (blackstone, nether brick, magma accents, soul lanterns): the forge's own blocks are exempt from the shares (S-VOC-3); the wall's cost.bom against its realised cells (item 8)",
+  "on": "flat",
+  "style": "g6cvoc_forge",
+  "volume": {},
+  "covers": [
+    "program.flat_village",
+    "form.fountain",
+    "connector.wall"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "voc_v51",
+    "zones": [
+      {
+        "id": "forge",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "f1",
+                "type": "smithy",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "f2",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "f3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        },
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 24
+          }
+        }
+      }
+    ],
+    "forms": [
+      {
+        "id": "fount",
+        "kind": "fountain",
+        "basin": 5,
+        "spout": 3,
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 40
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "forge_wall",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "forge"
+            },
+            "ring": [
+              4,
+              8
+            ]
+          }
+        },
+        "height": 4
+      }
+    ]
+  }
+}

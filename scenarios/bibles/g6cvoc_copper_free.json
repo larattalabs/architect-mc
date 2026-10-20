@@ -1,0 +1,25 @@
+{
+ "name": "G6C-VOC copper hall (free)",
+ "format": 2,
+ "scope": "settlement",
+ "prompt": "VOC look: a copper hall: a cut copper roof, copper bulbs, unwaxed copper walls that weather",
+ "roles": {
+  "wall": "minecraft:copper_block",
+  "wall_alt": "minecraft:cut_copper",
+  "trim": "minecraft:waxed_cut_copper",
+  "roof": "minecraft:cut_copper",
+  "floor": "minecraft:spruce_planks",
+  "frame": "minecraft:spruce_log",
+  "accent": "minecraft:copper_bulb",
+  "light": "minecraft:copper_lantern",
+  "glass": "minecraft:glass",
+  "foundation": "minecraft:stone_bricks",
+  "path": "minecraft:stone_bricks",
+  "rail": "minecraft:spruce_fence",
+  "structure": "minecraft:stone_bricks",
+  "rock": "minecraft:stone",
+  "surface": "minecraft:grass_block",
+  "subsurface": "minecraft:dirt",
+  "rubble": "minecraft:andesite"
+ }
+}

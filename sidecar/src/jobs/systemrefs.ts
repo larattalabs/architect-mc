@@ -9,7 +9,8 @@
 //   provider's prompt cache hits on it).
 // - A block holds nothing that varies between runs or machines (no paths, no times): the schema text, and the catalogue the
 //   kit returns with every plan check (`planCatalogue()`: catalogueVersion, api, kitVersion, schemaVersion, entries).
-// - `<family>/<id>` is the full rendering; `#compact` is the same minus bookkeeping (COMPACT below says exactly what).
+// - `<family>/<id>` is the full rendering; `#compact` is the same minus bookkeeping (COMPACT below says exactly what). (6c VOC) vocab/1's
+//   file holds both forms itself (RefDoc.forms): `#compact` is its grouped member instead of the per-block one.
 // - A ref the registry lacks, or two forms of one document, is refused with FIELD_LIMIT naming the ref; so is a kit that does
 //   not carry the document.
 import fs from 'node:fs';
@@ -27,6 +28,11 @@ interface RefDoc {
   title: string;
   /** plan/0 only: the catalogue the schema carries is rendered once, from the kit's own planCatalogue() */
   catalogue?: boolean;
+  /**
+   * (6c VOC) vocab/1: the generated file holds both forms, `blocks` (the full form) and `compact` (the grouped one); the full rendering
+   * drops `compact` and the compact one drops `blocks` (kit/tools/vocab-derive.mjs vocabDoc says what each holds)
+   */
+  forms?: { full: string; compact: string };
 }
 
 /** The documents, in the order their blocks come in the prompt. Append only: the order is the cache key. */
@@ -35,6 +41,8 @@ export const SYSTEM_REF_DOCS: readonly RefDoc[] = [
   { id: 'siteplan/1', file: 'siteplan-1.json', title: "Architect's site plan schema (siteplan/1)" },
   { id: 'mask/1', file: 'mask.json', title: "Architect's mask schema (mask/1)" },
   { id: 'pattern/1', file: 'pattern.json', title: "Architect's pattern schema (pattern/1)" },
+  // (6c VOC, S-VOC-6) the block vocabulary: every 26.3 block's family, colour, tier and survival class (kit/tools/gen-vocab.mjs)
+  { id: 'vocab/1', file: 'vocab-1.json', title: "Architect's block vocabulary (vocab/1)", forms: { full: 'blocks', compact: 'compact' } },
 ];
 
 /** The forms of a ref, after its `#`. */
@@ -157,7 +165,10 @@ async function renderBlock(kitDir: string, p: ParsedRef): Promise<string> {
     }
     delete schema['x-catalogue']; // rendered once, below, from the kit's own catalogue
   }
-  if (p.compact) {
+  if (p.doc.forms) {
+    // (6c VOC) a document with both forms in one file: each rendering keeps its own member
+    delete schema[p.compact ? p.doc.forms.full : p.doc.forms.compact];
+  } else if (p.compact) {
     schema = inlineTrivialRefs(schema);
     if (catalogue) catalogue = compactCatalogue(catalogue);
   }

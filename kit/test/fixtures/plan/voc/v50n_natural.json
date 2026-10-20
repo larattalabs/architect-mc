@@ -1,0 +1,66 @@
+{
+  "about": "(6c VOC-b, item 9) v50's natural twin: route_demo's hall pad zone on S3's pinned site (scenarios/route_demo.json, P0's natural round), styled by g6cvoc_modern (the glazed-terracotta pattern on its square), one lot bound to the voc_copper_hall entry; realiseApproved then remove under the exact rules (E-normal), and the drift probe on the hall's unwaxed copper",
+  "on": "s3",
+  "style": "g6cvoc_modern",
+  "anchors": {
+    "stone": [
+      3642,
+      100,
+      -926
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "voc_v50n",
+    "zones": [
+      {
+        "id": "hamlet",
+        "program": {
+          "lots": [
+            {
+              "id": "c1",
+              "type": "house",
+              "size": [
+                11,
+                13
+              ],
+              "entry": "voc_copper_hall"
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h3",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 40
+          }
+        }
+      }
+    ],
+    "forms": [
+      {
+        "id": "blend",
+        "kind": "relief",
+        "around": [
+          "hamlet"
+        ],
+        "radius": 10
+      }
+    ]
+  }
+}

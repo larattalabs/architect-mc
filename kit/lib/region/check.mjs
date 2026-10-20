@@ -16,13 +16,18 @@ import { bridgeRules } from './checkBridges.mjs';
 import { tunnelRules } from './checkTunnels.mjs';
 // (6c H) the fluid rules: M25 containment per body and wet write, M20 fire for lava bodies (checkFluids.mjs, H-core)
 import { fluidRules } from './checkFluids.mjs';
+// (6c VOC-b) the vocabulary rules: M26 rarity, M27 vocabulary misuse, M20 widened (checkVocab.mjs)
+import { vocabRules } from './checkVocab.mjs';
 
 
-export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17', 'M20', 'M25'];
+export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17', 'M20', 'M25', 'M26', 'M27'];
 /** (6c V) The parts a flat village's components emit (the M1 lot-box rule applies to them only). */
 const VILLAGE_PARTS = /^(square|green|verges|lanes|props_[a-z]+)$/;
 // (6c H) M25 (containment) and M20 (fire, run for lava bodies only) are errors
 const ERRORS = new Set(['M1', 'M13', 'M14', 'M20', 'M25']);
+// (6c VOC-b) per sub-rule severities over the rule's own: M27's state and convert are errors (the rest of M27 and M26 warnings); M20 (b),
+// natural lava near a plan-written flammable, is a warning
+const SUB_SEVERITY = Object.freeze({ 'M27:state': 'error', 'M27:convert': 'error', 'M20:natural': 'warning' });
 // (finding() keeps at most 20 sample positions)
 const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
@@ -57,7 +62,7 @@ class CellBytes {
 }
 
 function finding(rule, part, stage, count, sample, message) {
-  return { rule, severity: ERRORS.has(rule.split(':')[0]) && !(rule === 'M14' && /warning/.test(message)) ? 'error' : 'warning', part: part ?? null, stage: stage ?? null, count, sample: sample.slice(0, 20), message };
+  return { rule, severity: SUB_SEVERITY[rule] ?? (ERRORS.has(rule.split(':')[0]) && !(rule === 'M14' && /warning/.test(message)) ? 'error' : 'warning'), part: part ?? null, stage: stage ?? null, count, sample: sample.slice(0, 20), message };
 }
 
 // ------------------------------------------------------------------ the walk graph (M2, `player` mover)
@@ -429,6 +434,14 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   if ((want.has('M25') || want.has('M20')) && (ir.parts.some((p) => (p.ops ?? []).some((o) => o.op === 'fluid')) || (Array.isArray(meta?.wet) && meta.wet.length))) {
     time('M25', () => fluidRules({ ir, vw, meta, vols: irVolumes(ir, volumes, blobs), want, findings, metrics, partStage, finding }));
   }
+
+  // ---- (6c VOC-b) M26, M27 and M20 widened, on every IR (checkVocab.mjs): natural lava is looked for only where the survey or a frozen
+  // volume holds some
+  if (want.has('M26') || want.has('M27') || want.has('M20')) time('M27', () => {
+    const vols = [...(volumes ?? []), ...irVolumes(ir, volumes, blobs).values()];
+    const lava = world ? null : (vols.some((v) => (v.counts?.LAVA ?? 0) > 0) ? true : null);
+    vocabRules({ ir, vw, meta, want, findings, metrics, finding, lava });
+  });
 
   // ---- M3 support
   if (want.has('M3')) time('M3', () => {

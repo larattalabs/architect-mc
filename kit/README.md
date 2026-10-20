@@ -219,6 +219,16 @@ family that isn't from the sidecar's `palette`. Phase 4b warnings: named parts (
 outside); an open type's profile geometry. Phase 5a warnings: `attach:` and `facing:` (below), and `restraint:` with
 `--restraint`.
 
+**Vocabulary rules (6c VOC).** Two errors catch blocks that change the world wrongly when placed: `state:` (a cell with
+`waterlogged=true` that isn't under water makes a water source and floods; half of a door, bed or tall plant without its
+other half pops off) and `hazard:` (fire, soul fire or lava within 3 sideways, 1 below or 3 above a flammable block; concrete
+powder touching the design's water; a sponge within 7 of it). Fix them like any error: drop the waterlogging, place both
+halves, keep fire and lava away from wood, keep powder and sponges away from water. `metrics.rarity` (tier shares, precious
+blocks, dye colours, rare families; `lib/vocab/budget.mjs`) and `metrics.drift` (blocks that change on their own, such as
+unwaxed copper) are always measured, but they become warnings (`rarity:`, `coherence:`) only when the bible carries a `rarity`
+budget. Then fix them as you fix `restraint:`: use the bible's own blocks, which never count against its shares. Don't add
+rare or precious blocks a bible doesn't name.
+
 **Imports** (`--imported`, `import.mjs`): a structure the player built is theirs, so the rules about how a building
 works (anchors standable, doors closed / with buttons, an outside door, light) and a size that doesn't match the block
 extents become warnings prefixed `imported:`. These stay errors: the structure format, palette validity (vanilla

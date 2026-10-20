@@ -25,8 +25,9 @@ class ApiHTest {
 
 	@Test
 	void versionsAndKinds() {
-		assertEquals("1.34.0", ArchitectApi.VERSION);
-		assertEquals("0.35.1", IrStale.KIT_VERSION);
+		// at least H's versions: later slices bump them (6c VOC: 1.35.0, kit 0.36.0)
+		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.34.0") >= 0, ArchitectApi.VERSION);
+		assertTrue(IrStale.semverCompare(IrStale.KIT_VERSION, "0.35.0") >= 0, IrStale.KIT_VERSION);
 		assertTrue(IrStale.KINDS_FORMAT2.containsAll(List.of("fluid", "volume:fluids")));
 		assertEquals(List.of("fluid", "volume:fluids"), IrStale.KINDS_FORMAT2.subList(IrStale.KINDS_FORMAT2.size() - 2, IrStale.KINDS_FORMAT2.size()), "appended at the end");
 	}

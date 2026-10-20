@@ -4,7 +4,7 @@
 //
 //   bible.json      { id, name, version, format?, prompt, scope, roles, proportions, roofLanguage, silhouette, motifs, tiers,
 //                     lighting, avoid, components, restraint? (format 2), connectors? (format 2, 7a K1), fluids? (format 2, 6c H),
-//                     createdAt, cost }
+//                     rarity? (format 2, 6c VOC: lib/vocab/rarity.mjs), createdAt, cost }
 //   Format 2 (phase 5a): `format: 2`, `restraint: { heroMotifs (<= 3 of the motifs), accentShareMax (0.04-0.20, 0.12),
 //   detailDensity (sparse|moderate|rich, moderate), windowsPerFacadeMin (int, 2) }` (defaults filled in by validateBible),
 //   at most 6 motifs, the 5 required components plus at most 3. Format 1 (no `format`) keeps its limits; restraintOf()
@@ -22,6 +22,9 @@ import { info, qualify } from './blocks.mjs';
 import { patternError, patternMats } from './pattern.mjs';
 import { REQUIRED_COMPONENTS, buildFrame } from './components.mjs';
 import { checkBlueprint } from './check.mjs';
+// (6c VOC-b) the `rarity` member (format 2) and role fitness, reported as `warnings` (never errors: stored bibles stay valid)
+import { validateRarity } from './vocab/rarity.mjs';
+import { fitsRole } from './vocab.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 /** Built-in bibles that ship a reference component library (kit/bibles/<name>/components.mjs). */
@@ -108,14 +111,15 @@ const isStrList = (v, max) => Array.isArray(v) && v.length <= max && v.every((x)
 /**
  * Validate (and normalise) a bible JSON. Roles must be vanilla blocks (ids get their `minecraft:` prefix) and must build a
  * palette (lib/kit.mjs palette({ bible })): a roof with stairs and slab variants, and so on. A settlement-scope bible also
- * needs the macro roles. Returns { ok, errors, bible } (bible: the normalised copy).
+ * needs the macro roles. Returns { ok, errors, warnings, bible } (bible: the normalised copy). (6c VOC) `warnings`: each role whose block
+ * fails its role fitness (kit/vocab/roles.json), `roles.<role>: <block> fails <check>[, <check>] (kit/vocab/roles.json)`; never an error.
  * @param {object} j
  * @param {{scope?: 'building'|'settlement', requireId?: boolean, frame?: boolean}} [opts] frame: false skips the test-house check
  */
 export function validateBible(j, opts = {}) {
   const errors = [];
   const err = (m) => errors.push(m);
-  if (!j || typeof j !== 'object' || Array.isArray(j)) return { ok: false, errors: ['the bible must be a JSON object'], bible: null };
+  if (!j || typeof j !== 'object' || Array.isArray(j)) return { ok: false, errors: ['the bible must be a JSON object'], warnings: [], bible: null };
   const b = structuredClone(j);
   if (b.id !== undefined || opts.requireId) {
     if (typeof b.id !== 'string' || !BIBLE_ID.test(b.id)) err(`id '${b.id}' must match [a-z0-9_]+`);
@@ -224,8 +228,20 @@ export function validateBible(j, opts = {}) {
     if (!f2) err('fluids needs format: 2');
     else { const fe = fluidsError(b.fluids, b.roles ?? {}); if (fe) err(fe); }
   }
+  // (6c VOC) rarity: the style's budget (format 2; lib/vocab/rarity.mjs). Stored as given (the defaults are filled in where it is read)
+  if (b.rarity !== undefined) {
+    if (!f2) err('rarity needs format: 2');
+    else for (const e of validateRarity(b.rarity).errors) err(e);
+  }
   if (b.components !== undefined && !(Array.isArray(b.components) && b.components.every((c) => typeof c === 'string' && /^[a-z][a-z0-9_]{0,39}$/.test(c)))) err('components must be a list of component names ([a-z][a-z0-9_]*)');
   b.components = [...new Set([...REQUIRED_COMPONENTS, ...(Array.isArray(b.components) ? b.components.filter((c) => typeof c === 'string') : [])])];
   if (f2 && b.components.length > REQUIRED_COMPONENTS.length + FORMAT2_MAX_EXTRA_COMPONENTS) err(`components: format 2 allows the ${REQUIRED_COMPONENTS.length} required components plus at most ${FORMAT2_MAX_EXTRA_COMPONENTS} (got ${b.components.length - REQUIRED_COMPONENTS.length} more: ${b.components.filter((c) => !REQUIRED_COMPONENTS.includes(c)).join(', ')})`);
-  return { ok: errors.length === 0, errors, bible: b };
+  // (6c VOC) role fitness (§2.3): a warning per role whose block fails its predicate
+  const warnings = [];
+  for (const [role, block] of Object.entries(b.roles && typeof b.roles === 'object' ? b.roles : {}).sort(([a], [c]) => (a < c ? -1 : a > c ? 1 : 0))) {
+    if (typeof block !== 'string') continue;
+    const f = fitsRole(role, block);
+    if (!f.ok) warnings.push(`roles.${role}: ${block} fails ${f.failed.join(', ')} (kit/vocab/roles.json)`);
+  }
+  return { ok: errors.length === 0, errors, warnings, bible: b };
 }

@@ -63,6 +63,15 @@ export async function findJar(kind, explicit, work) {
   return download(kind, dest);
 }
 
+/** (6c VOC) The jar when one is already on this machine (`explicit`, the Loom caches or the work dir), else null: never downloads. */
+export function findLocalJar(kind, explicit, work) {
+  if (explicit) return fs.existsSync(explicit) ? explicit : null;
+  const name = kind === 'server' ? 'minecraft-server.jar' : 'minecraft-client.jar';
+  for (const d of LOOM_DIRS) if (fs.existsSync(path.join(d, name))) return path.join(d, name);
+  const dest = path.join(work, `${kind}-${MC_VERSION}.jar`);
+  return fs.existsSync(dest) ? dest : null;
+}
+
 /** A Java >= 25 binary: `--java`, $JAVA, Homebrew openjdk@25, $JAVA_HOME, else `java` on PATH. */
 export function findJava(explicit) {
   const cands = [explicit, process.env.JAVA, '/opt/homebrew/opt/openjdk@25/bin/java', '/usr/local/opt/openjdk@25/bin/java',

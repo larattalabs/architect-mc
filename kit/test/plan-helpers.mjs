@@ -49,9 +49,11 @@ export function stewardAnchors(claim) {
  * Check a plan in process: plan_v0 over `survey` (bytes) and `claim`, then finish. Options: anchors {name: [x, y, z]}, protected
  * [{id, rect}], regions [{id, rect}], budget, bible, fingerprint, keepOut [[x0, z0, x1, z1]], planCache (key -> entry | null).
  */
-export async function checkPlanLocal(plan, { survey, claim, anchors = {}, protected: prot = [], regions = [], builds = [], standing = null, biomes = null, budget = {}, bible = null, fingerprint = null, keepOut = [], planCache = null, volumes = [] } = {}) {
+export async function checkPlanLocal(plan, { survey, claim, anchors = {}, protected: prot = [], regions = [], builds = [], standing = null, biomes = null, budget = {}, bible = null, fingerprint = null, keepOut = [], planCache = null, volumes = [], style = null } = {}) {
   const params = { plan, anchors: { anchors }, protected: { areas: prot }, regions: { regions }, builds: { builds }, ...(standing ? { standing: { standing } } : {}), budget, bible, fingerprint: fingerprint ? { sha: fingerprint } : null };
-  const res = await planRegion({ programFile: PLAN_V0, params, survey, claim, roles: {}, keepOut, planCache, ...(biomes ? { biomes } : {}), ...(volumes.length ? { volumes } : {}) });
+  // (6c VOC) `style`: a bible.json's members as the sidecar passes them to the plan CLI (roles, patterns, connectors, fluids, rarity)
+  const sty = style ? { roles: { ...(style.roles ?? {}) }, ...(style.patterns ? { patterns: style.patterns } : {}), ...(style.connectors ? { connectors: style.connectors } : {}), ...(style.fluids ? { fluids: style.fluids } : {}), ...(style.rarity ? { rarity: style.rarity } : {}) } : { roles: {} };
+  const res = await planRegion({ programFile: PLAN_V0, params, survey, claim, ...sty, keepOut, planCache, ...(biomes ? { biomes } : {}), ...(volumes.length ? { volumes } : {}) });
   const cols = fillMissing(asColumns(survey)).columns;
   const f = finishCheck({ res, survey: cols, blobs: (sha) => res.blobs.get(sha) ?? null, surveyBytesSha: createHash('sha256').update(survey).digest('hex'), inputs: { surveyRes: cols.resolution } });
   return { ...f, res };
