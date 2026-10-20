@@ -2,7 +2,7 @@
 // on a flat world through Regions.checkPlan and realiseApproved, then camera shots of every grown form: each giant tree species and
 // mushroom (grove_demo's plan on its flat claim: the eight overworld species and both mushrooms), the nether's giants (v77), roots
 // down a bank (v74), the cave's stalactites (v75, lit by night vision), a coral pond (the coral lane's v73, when present). Writes
-// look/<name>.png and look.json (each shot's name, what, eye and target) under the step's OUT.
+// look/<name>.png and look-shots.json (each shot's name, what, eye and target) under the step's OUT.
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildWorld, fixture, grownCells } from './gate6cf3-game.mjs';
@@ -84,7 +84,7 @@ export async function look(ctx) {
     }
     await L.leaveWorld();
   }
-  fs.writeFileSync(path.join(OUT, 'look.json'), `${JSON.stringify(shots, null, 1)}\n`);
-  check(shots.length >= 10, `item 14 (recorded): ${shots.length} shots for the gallery (look/, look.json): ${shots.map((s) => s.name).join(', ')}`);
+  fs.writeFileSync(path.join(OUT, 'look-shots.json'), `${JSON.stringify(shots, null, 1)}\n`);
+  check(shots.length >= 10, `item 14 (recorded): ${shots.length} shots for the gallery (look/, look-shots.json): ${shots.map((s) => s.name).join(', ')}`);
   return { shots: shots.length, dir };
 }
