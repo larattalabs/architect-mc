@@ -18,9 +18,6 @@
   "f_g_jungle_1": {
    "kind": "form"
   },
-  "f_g_mangrove_1": {
-   "kind": "form"
-  },
   "f_g_oak_1": {
    "kind": "form"
   },
@@ -55,15 +52,15 @@
     "required": false,
     "geometry": {
      "rect": [
-      3515,
-      -1451,
-      3537,
-      -1426
+      3472,
+      -1418,
+      3495,
+      -1396
      ],
      "sites": [
       [
-       3526,
-       -1438
+       3484,
+       -1408
       ]
      ]
     }
@@ -75,15 +72,15 @@
     "required": false,
     "geometry": {
      "rect": [
-      3423,
-      -1412,
-      3440,
-      -1395
+      3523,
+      -1442,
+      3540,
+      -1425
      ],
      "sites": [
       [
-       3432,
-       -1404
+       3532,
+       -1434
       ]
      ]
     }
@@ -93,17 +90,20 @@
     "block": "form.giant_tree",
     "class": "fits",
     "required": false,
+    "notes": [
+     "1 grown from another seed of the species (its own shape fit nowhere within the locator)"
+    ],
     "geometry": {
      "rect": [
-      3473,
-      -1440,
-      3486,
-      -1427
+      3475,
+      -1439,
+      3485,
+      -1429
      ],
      "sites": [
       [
-       3478,
-       -1432
+       3480,
+       -1434
       ]
      ]
     }
@@ -113,20 +113,17 @@
     "block": "form.giant_tree",
     "class": "fits",
     "required": false,
-    "notes": [
-     "1 grown from another seed of the species (its own shape fit nowhere within the locator)"
-    ],
     "geometry": {
      "rect": [
-      3512,
-      -1482,
-      3537,
-      -1457
+      3510,
+      -1422,
+      3533,
+      -1397
      ],
      "sites": [
       [
-       3524,
-       -1468
+       3522,
+       -1410
       ]
      ]
     }
@@ -136,20 +133,17 @@
     "block": "form.giant_tree",
     "class": "fits",
     "required": false,
-    "notes": [
-     "1 grown from another seed of the species (its own shape fit nowhere within the locator)"
-    ],
     "geometry": {
      "rect": [
-      3443,
-      -1425,
-      3473,
-      -1395
+      3504,
+      -1468,
+      3533,
+      -1442
      ],
      "sites": [
       [
-       3458,
-       -1410
+       3520,
+       -1456
       ]
      ]
     }
@@ -161,15 +155,15 @@
     "required": false,
     "geometry": {
      "rect": [
-      3501,
-      -1458,
-      3518,
-      -1442
+      3458,
+      -1429,
+      3475,
+      -1413
      ],
      "sites": [
       [
-       3508,
-       -1448
+       3466,
+       -1420
       ]
      ]
     }
@@ -177,22 +171,18 @@
    {
     "part": "g_mangrove",
     "block": "form.giant_tree",
-    "class": "fits",
+    "class": "refused",
     "required": false,
-    "geometry": {
-     "rect": [
-      3508,
-      -1421,
-      3533,
-      -1396
-     ],
-     "sites": [
-      [
-       3520,
-       -1408
-      ]
-     ]
-    }
+    "reasons": [
+     {
+      "code": "NO_ROOM",
+      "message": "no site for the giant tree within its locator: dry, level, 8 clear of natural trees, 2 clear of bodies, zones, lots and forms",
+      "evidence": {
+       "tried": 4966,
+       "want": 1
+      }
+     }
+    ]
    },
    {
     "part": "g_pale_oak",
@@ -201,14 +191,14 @@
     "required": false,
     "geometry": {
      "rect": [
-      3479,
-      -1411,
-      3502,
+      3429,
+      -1413,
+      3455,
       -1387
      ],
      "sites": [
       [
-       3492,
+       3442,
        -1400
       ]
      ]
@@ -222,14 +212,14 @@
     "geometry": {
      "rect": [
       3488,
-      -1439,
+      -1441,
       3514,
-      -1413
+      -1415
      ],
      "sites": [
       [
        3502,
-       -1426
+       -1428
       ]
      ]
     }
@@ -241,15 +231,15 @@
     "required": false,
     "geometry": {
      "rect": [
-      3530,
-      -1425,
-      3544,
-      -1411
+      3514,
+      -1483,
+      3528,
+      -1469
      ],
      "sites": [
       [
-       3538,
-       -1418
+       3522,
+       -1476
       ]
      ]
     }
@@ -273,7 +263,6 @@
    "f_g_cherry_1": "g_cherry",
    "f_g_dark_oak_1": "g_dark_oak",
    "f_g_jungle_1": "g_jungle",
-   "f_g_mangrove_1": "g_mangrove",
    "f_g_oak_1": "g_oak",
    "f_g_pale_oak_1": "g_pale_oak",
    "f_g_red_1": "g_red",

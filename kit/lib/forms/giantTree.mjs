@@ -199,9 +199,15 @@ export function giantTree(params, { groundAt = null, _unsafe = null } = {}) {
     }
     // a lobe at every tip and at every third node (a full crown), holed at its skin below
     const tipList = [...tips.values()].sort((a, b) => a[1] - b[1] || a[0] - b[0] || a[2] - b[2]);
-    for (const q of tipList) lobes.push({ kind: 'ellipsoid', c: [q[0], { abs: q[1] }, q[2]], r: [lobeR + 0.5, Math.max(2, Math.round(lobeR * (P.kind === 'flat' ? 0.55 : 0.75))) + 0.5, lobeR + 0.5] });
-    // the crown's own body over the trunk top (no gap between the lobes)
-    lobes.push({ kind: 'ellipsoid', c: [cx, { abs: cy }, cz], r: [Math.max(3, attR) + 0.5, Math.max(2, cyR - 1) + 0.5, Math.max(3, attR) + 0.5] });
+    // each tip's lobe its own size (a cloud of lobes, not one ball), a little lower than the tip (the leaves hang round the twigs)
+    for (const q of tipList) {
+      const lr = Math.max(2, lobeR + rr.int(-1, 1));
+      const ly = Math.max(2, Math.round(lr * (P.kind === 'flat' ? 0.55 : 0.75)));
+      lobes.push({ kind: 'ellipsoid', c: [q[0], { abs: q[1] - (ly >> 1) }, q[2]], r: [lr + 0.5, ly + 0.5, lr + 0.5] });
+    }
+    // the crown's own body over the trunk top, smaller than the crown (it fills the gaps between the lobes; the lobes give the outline)
+    const bodyR = Math.max(3, Math.round(attR * 0.7));
+    lobes.push({ kind: 'ellipsoid', c: [cx, { abs: cy }, cz], r: [bodyR + 0.5, Math.max(2, Math.round((cyR - 1) * 0.8)) + 0.5, bodyR + 0.5] });
     if (!segs.length) throw new Error('giantTree: no branch grew (crown attractors out of reach)');
   } else if (P.kind === 'cone') {
     // ---- stacked discs from the crown's foot to the top, the radius falling linearly; short branches into each disc
@@ -262,7 +268,7 @@ export function giantTree(params, { groundAt = null, _unsafe = null } = {}) {
       cells.set(k, log(Math.abs(dx) >= Math.abs(dz) ? 'x' : 'z'));
     }
   }
-  // leaf holes: a 2x2x2 hash field at the crown's skin (a cell with an empty face neighbour), 18%
+  // leaf holes: a 2x2x2 hash field at the crown's skin (a cell with an empty face neighbour), 22%
   if (leafState) {
     const holes = [];
     for (const [k, s] of cells) {
@@ -270,7 +276,7 @@ export function giantTree(params, { groundAt = null, _unsafe = null } = {}) {
       const [x, y, z] = unkey(k);
       let skin = false;
       for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) if (!cells.has(key(x + dx, y + dy, z + dz))) { skin = true; break; }
-      if (skin && cellHash(p.seed, x >> 1, y >> 1, z >> 1) < 0.18) holes.push(k);
+      if (skin && cellHash(p.seed, x >> 1, y >> 1, z >> 1) < 0.22) holes.push(k);
     }
     for (const k of holes) cells.delete(k);
   }

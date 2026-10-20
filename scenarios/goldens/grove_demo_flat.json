@@ -3,16 +3,17 @@
  "variant": "flat",
  "version": 0,
  "note": "tile shas of grove_demo planned by the kit over its flat claim, 1 worker = 4 workers shuffled; inputs in goldens/grove_demo_flat/",
- "irSha": "7bec2fc020826c5f6ab6e3647c0339410d613e697805acf85ae609fed3b345b9",
+ "irSha": "0266a027555575105f0dd95b5c9798b0be1a7cca1b7f473a14973c90d04daf07",
  "kitVersion": "0.40.0",
- "cells": 23586,
+ "cells": 20220,
  "tiles": {
-  "forms|terrain|53,-22": "2446b305561b9c439ecbc7c2f17b0758695b358e8a72b1c57f57500353d12657",
-  "forms|terrain|53,-23": "92988df9cc8c508e794400de7f78c3bc3e5d693f9c138d370c979f131aeefa93",
-  "forms|terrain|54,-22": "9ea9e627ca2cedfaf4796cc6c61e84255a94961f8a8b0010f1a59825de004529",
-  "forms|terrain|54,-23": "69aec98087d5965dd0d34e6a36bdba118aa1153e3006a45d4cf72289ad0d5b58",
-  "forms|terrain|54,-24": "fac95c1ec1b0d6e11f3fe307d21d5f5c42e16dc2e9a00588dd2368e565aace1b",
-  "forms|terrain|55,-22": "dcd5a5764019e4dd6e547e8bc6516fb0ff492fc922078ceed84524610cfbc4b4",
-  "forms|terrain|55,-23": "687a4c2cee10372dd30466271a7c0ac0d872007710cf5a84a393f20db8bd3532"
+  "forms|terrain|53,-22": "37fb1a3533cf1727762996b15fce8a21542dacdb1267273fa09f9d4f96da79ce",
+  "forms|terrain|53,-23": "231176739c40dce1afaf1cd5a6b242672828a72a84ca5d2134ddddb838933419",
+  "forms|terrain|54,-22": "102b1676bb00a745488b6435b221140bc91d39f8f708568c1ebb8e8f6854cf0a",
+  "forms|terrain|54,-23": "5bbfc9edf781722fd8f30dab9ebffbc3ef649bbcd22feebd0d867dc46326ab8d",
+  "forms|terrain|54,-24": "c92359a80884ee171d55a8667b6baad2f184d59dc111f9172e153114bc46d324",
+  "forms|terrain|55,-22": "132a4de09f2c145609ab3fd4182ff301f4fc8a1ebf36c6145e22aa3044adfab0",
+  "forms|terrain|55,-23": "ca67376b817bc3310ecadfaee15cce1447fe604374acec9cf432ddad78a31e4a",
+  "forms|terrain|55,-24": "b72eef1210e51fbb82f37a6d08bbf4b38d095c0c476c7415ac5ec8ea78b020e0"
  }
 }

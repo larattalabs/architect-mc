@@ -385,7 +385,14 @@ async function organicRead() {
 steps.golden = async () => {
   const H = await import(pathToFileURL(path.join(KIT, 'test', 'plan-helpers.mjs')).href);
   const s = H.flatSurvey({ W: 192, D: 192, x0: 3392, z0: -1536 });
-  return groveGolden('grove_demo_flat', s.bytes, s.claim);
+  const out = { flat: await groveGolden('grove_demo_flat', s.bytes, s.claim) };
+  // the natural golden again over its committed survey (f3-natural cut it from the site's own survey)
+  const sv = path.join(root, 'scenarios', 'goldens', 'grove_demo', 'survey.bin');
+  if (fs.existsSync(sv)) {
+    const c = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 'sites', 'grove.json'), 'utf8')).fixture.claim;
+    out.natural = await groveGolden('grove_demo', fs.readFileSync(sv), { minX: c[0], minZ: c[1], maxX: c[2], maxZ: c[3], minY: -64, maxY: 319 });
+  }
+  return out;
 };
 
 // ------------------------------------------------------------------ the look (item 14, a client)

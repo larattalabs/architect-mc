@@ -50,7 +50,11 @@ export async function look(ctx) {
     await L.cmd('/time set 6000');
     await L.cmd('/weather clear');
     if (tag === 'cave') await L.cmd('/effect give @s minecraft:night_vision infinite 0 true');
-    // each form: from the south-east, back by its size, a little over its middle (a cave form: from inside the cave, level)
+    // each form: from outside the group (along the line from the group's middle through the form), back by its size, a little over its
+    // middle, so no other form stands between (a cave form: from inside the cave, level)
+    let ga = [Infinity, Infinity], gb = [-Infinity, -Infinity];
+    for (const k of g.cells.keys()) { const c = k.split(',').map(Number); ga = [Math.min(ga[0], c[0]), Math.min(ga[1], c[2])]; gb = [Math.max(gb[0], c[0]), Math.max(gb[1], c[2])]; }
+    const gmid = [(ga[0] + gb[0]) / 2, (ga[1] + gb[1]) / 2];
     for (const f of g.byForm) {
       let a = [Infinity, Infinity, Infinity], b = [-Infinity, -Infinity, -Infinity];
       for (const k of f.cells.keys()) { const c = k.split(',').map(Number); for (let i = 0; i < 3; i++) { a[i] = Math.min(a[i], c[i]); b[i] = Math.max(b[i], c[i]); } }
@@ -59,11 +63,14 @@ export async function look(ctx) {
       const name = `${tag}_${f.id.replace(/^f_/, '')}`;
       const desc = `${f.generator} ${f.id}: ${f.cells.size} cells, ${b[1] - a[1] + 1} high, ${Math.max(b[0] - a[0], b[2] - a[2]) + 1} across`;
       if (f.generator === 'stalactites' || f.generator === 'roots') {
-        const eye = f.generator === 'roots' ? [mid[0] - 9, mid[1] + 1, mid[2] + 6] : [mid[0] + 8, mid[1] - 1, mid[2] + 8];
+        const eye = f.generator === 'roots' ? [mid[0] - 10, mid[1] + 1, mid[2] + 4] : [mid[0] + 8, mid[1] - 1, mid[2] + 8];
         await shot(name, eye, mid, desc);
       } else {
-        const d = span * 0.85 + 6;
-        await shot(name, [mid[0] + d * 0.7, a[1] + span * 0.45 + 2, mid[2] + d * 0.7], [mid[0], a[1] + (b[1] - a[1]) * 0.45, mid[2]], desc);
+        const d = span * 0.9 + 8;
+        let vx = mid[0] - gmid[0], vz = mid[2] - gmid[1];
+        const n = Math.sqrt(vx * vx + vz * vz);
+        if (n < 4) { vx = 0.7; vz = 0.7; } else { vx /= n; vz /= n; }
+        await shot(name, [mid[0] + d * vx, a[1] + span * 0.45 + 2, mid[2] + d * vz], [mid[0], a[1] + (b[1] - a[1]) * 0.45, mid[2]], desc);
       }
     }
     // an overview of the fixture
@@ -72,7 +79,8 @@ export async function look(ctx) {
       for (const k of g.cells.keys()) { const c = k.split(',').map(Number); for (let i = 0; i < 3; i++) { a[i] = Math.min(a[i], c[i]); b[i] = Math.max(b[i], c[i]); } }
       const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
       const span = Math.max(b[0] - a[0], b[2] - a[2], 16);
-      if (tag !== 'cave') await shot(`${tag}_overview`, [mid[0] + span * 0.6, b[1] + span * 0.35, mid[2] + span * 0.8], mid, `${what}: overview`, 75);
+      if (tag === 'bank') await shot(`${tag}_overview`, [mid[0] - 22, b[1] + 6, mid[2] + 10], mid, `${what}: overview`, 75);
+      else if (tag !== 'cave') await shot(`${tag}_overview`, [mid[0] + span * 0.6, b[1] + span * 0.35, mid[2] + span * 0.8], mid, `${what}: overview`, 75);
     }
     await L.leaveWorld();
   }

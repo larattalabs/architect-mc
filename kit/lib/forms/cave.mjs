@@ -9,7 +9,8 @@
 //   GROWS refuses it.
 // - roots: `capsuleChain`s down a steep face (a bank or a cliff: rooted dirt in the face, a ledge of it out of the face every few cells
 //   with hanging roots under it) or along a cave ceiling (rooted dirt in the ceiling, hanging roots under it); `mangrove`: mangrove roots
-//   for the rooted dirt. Hanging roots only under a solid cell the form writes or the volume shows.
+//   for the rooted dirt (ledges at seeded steps, the chains wandering along the face). Hanging roots only under a solid cell the form
+//   writes or the volume shows.
 // Sites: the volume's AIR cells under ROCK, SOIL or LOOSE with at least 4 headroom (ceilings; the floors are the solid cells under them),
 // and faces at least 4 high. Integer maths only; seeded fnv64(seed, generator, label).
 import { fnv64, splitmix64 } from '../noise.mjs';
@@ -196,7 +197,7 @@ export function roots(params, { vol, site, ceiling = false, keepCell = () => tru
   const put = (x, y, z, s) => { if (keepCell(x, y, z)) cells.set(key(x, y, z), s); };
   if (!ceiling) {
     // chains down the face: along it (perpendicular to (dx, dz)), each from the top to at most `length` down, the face's own cells
-    // rooted; every 3 cells a ledge of one rooted cell out of the face, hanging roots under it
+    // rooted, wandering along the face; a ledge of one rooted cell out of the face at seeded steps, hanging roots under it
     const ax = site.dz !== 0 ? 1 : 0, az = site.dx !== 0 ? 1 : 0;
     for (let i = 0; i < nChains; i++) {
       const off = (i - (nChains >> 1)) * 2 + rr.int(0, 1);
@@ -205,12 +206,12 @@ export function roots(params, { vol, site, ceiling = false, keepCell = () => tru
       let y = site.top - 1, w = 0;
       const pts = [];
       for (let s = 0; s < L; s++, y--) {
-        if (s && s % 4 === 0) w += rr.int(-1, 1);
+        if (s && rr() < 0.35) w += rr.int(-1, 1);
         const cx = x + ax * w, cz = z + az * w;
         if (!solidAt(cx, y, cz) || !airAt(cx + site.dx, y, cz + site.dz)) continue;
         put(cx, y, cz, P.block);
         pts.push([cx, y, cz]);
-        if (s % 3 === 2 && airAt(cx + site.dx, y - 1, cz + site.dz)) {
+        if (s >= 1 && rr() < 0.3 && airAt(cx + site.dx, y - 1, cz + site.dz)) {
           put(cx + site.dx, y, cz + site.dz, P.block);
           if (cells.has(key(cx + site.dx, y, cz + site.dz))) put(cx + site.dx, y - 1, cz + site.dz, 'minecraft:hanging_roots');
         }
