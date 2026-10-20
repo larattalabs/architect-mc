@@ -2,7 +2,7 @@
  "scenario": "grove_demo",
  "variant": "flat",
  "version": 0,
- "note": "tile shas of grove_demo planned by the kit on its flat claim (3392..3583, -1536..-1345 at y 64), 1 worker = 4 workers shuffled; inputs in goldens/grove_demo_flat/",
+ "note": "tile shas of grove_demo planned by the kit over its flat claim, 1 worker = 4 workers shuffled; inputs in goldens/grove_demo_flat/",
  "irSha": "7bec2fc020826c5f6ab6e3647c0339410d613e697805acf85ae609fed3b345b9",
  "kitVersion": "0.40.0",
  "cells": 23586,

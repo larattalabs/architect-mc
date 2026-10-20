@@ -205,7 +205,7 @@ export async function realiseF3(ctx, tag, fx, o = {}) {
   const r = await core.realiseApproved(ctx, ck.check.artifactSha);
   const tr = await L.call('dev.mspt.trace', { stop: true }, 30_000).catch(() => null);
   if (r.refused) { check(false, `item 3 (${tag}): realiseApproved refused (${json(r.refused)})`); await L.leaveWorld(); return out; }
-  out.realise = { region: r.region, state: r.view.state, fluids: r.fluids.map((x) => [x.part, x.body, x.state]), lightShare: lightShare(tr), trace: tr };
+  out.realise = { region: r.region, planId: r.planId, state: r.view.state, fluids: r.fluids.map((x) => [x.part, x.body, x.state]), lightShare: lightShare(tr), trace: tr };
   const g = await grownCells(ctx, path.join(L.SIDECAR_DATA, 'regions', 'plans', r.planId), r.ir);
   check(r.view.state === 'PLACED' && r.fluids.every((x) => x.state === 'settled'), `item 3 (${tag}): realised from the approved artifact: ${r.view.state}${r.fluids.length ? `, bodies ${json(out.realise.fluids)}` : ''}; ${g.byForm.length} grown form(s), ${g.cells.size} cells (light-engine share of the realise's ticks: ${out.realise.lightShare ?? 'n/a'}, recorded)`);
   // the realised cells against the baked ones, by state

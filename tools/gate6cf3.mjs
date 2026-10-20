@@ -287,9 +287,28 @@ steps.natural = async () => {
   check(true, `item 5 (recorded): the no-region control on the grove site: ${df.mismatches} mismatch(es) in 60 s ${json(df.classes ?? {})}`);
   await L.leaveWorld();
   out.grove = await G.realiseF3(ctx, 'grove', fx, { base: 'G6B Seed Base', site: c, control: out.control });
+  // item 11: grove_demo's golden over the natural site's own survey (the check's plan dir), as the scenario goldens are cut
+  if (out.grove.realise?.planId && process.env.F3_WRITE_GOLDEN === '1') out.golden = await groveGolden('grove_demo', fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', out.grove.realise.planId, 'survey.bin')), { minX: c[0], minZ: c[1], maxX: c[2], maxZ: c[3], minY: -64, maxY: 319 });
   spendZero();
   return out;
 };
+
+/** Cut scenarios/goldens/<name> from grove_demo planned by the kit over `survey` and `claim`. */
+async function groveGolden(name, survey, claim) {
+  const { planRegion } = await imp('lib/region/plan.mjs');
+  const { tileShas } = await import('./scenarios.mjs');
+  const p = await planRegion({ programFile: path.join(KIT, 'regions', 'grove_demo.mjs'), params: {}, survey, claim, roles: {}, node: 'golden' });
+  const dir = path.join(root, 'scenarios', 'goldens', name);
+  fs.mkdirSync(path.join(dir, 'blobs'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'ir.json'), p.irJson);
+  fs.writeFileSync(path.join(dir, 'survey.bin'), survey);
+  fs.writeFileSync(path.join(dir, 'meta.json'), `${JSON.stringify(p.meta, null, 1)}\n`);
+  for (const [k, b] of p.blobs) fs.writeFileSync(path.join(dir, 'blobs', `${k}.bin`), b);
+  const t = await tileShas(dir);
+  fs.writeFileSync(path.join(root, 'scenarios', 'goldens', `${name}.json`), `${JSON.stringify({ scenario: 'grove_demo', variant: name.endsWith('_flat') ? 'flat' : 'natural', version: 0, note: `tile shas of grove_demo planned by the kit over ${name.endsWith('_flat') ? 'its flat claim' : 'its forest site\'s own survey (the f3-natural check\'s)'}, 1 worker = 4 workers shuffled; inputs in goldens/${name}/`, irSha: t.irSha, kitVersion: p.ir.kitVersion, cells: t.cells, tiles: t.tiles }, null, 1)}\n`);
+  check(t.workersSame, `golden: ${name} cut: IR ${t.irSha.slice(0, 12)}, ${Object.keys(t.tiles).length} tiles, ${t.cells} cells, 1 worker = 4 workers shuffled`);
+  return { irSha: t.irSha, tiles: Object.keys(t.tiles).length, cells: t.cells };
+}
 
 // ------------------------------------------------------------------ the forest variant (item 10, recorded)
 
@@ -366,21 +385,9 @@ async function organicRead() {
 // ------------------------------------------------------------------ the golden (by hand)
 
 steps.golden = async () => {
-  const { planRegion } = await imp('lib/region/plan.mjs');
   const H = await import(pathToFileURL(path.join(KIT, 'test', 'plan-helpers.mjs')).href);
-  const { tileShas } = await import('./scenarios.mjs');
   const s = H.flatSurvey({ W: 192, D: 192, x0: 3392, z0: -1536 });
-  const p = await planRegion({ programFile: path.join(KIT, 'regions', 'grove_demo.mjs'), params: {}, survey: s.bytes, claim: s.claim, roles: {}, node: 'golden' });
-  const dir = path.join(root, 'scenarios', 'goldens', 'grove_demo_flat');
-  fs.mkdirSync(path.join(dir, 'blobs'), { recursive: true });
-  fs.writeFileSync(path.join(dir, 'ir.json'), p.irJson);
-  fs.writeFileSync(path.join(dir, 'survey.bin'), s.bytes);
-  fs.writeFileSync(path.join(dir, 'meta.json'), `${JSON.stringify(p.meta, null, 1)}\n`);
-  for (const [k, b] of p.blobs) fs.writeFileSync(path.join(dir, 'blobs', `${k}.bin`), b);
-  const t = await tileShas(dir);
-  fs.writeFileSync(path.join(root, 'scenarios', 'goldens', 'grove_demo_flat.json'), `${JSON.stringify({ scenario: 'grove_demo', variant: 'flat', version: 0, note: 'tile shas of grove_demo planned by the kit on its flat claim (3392..3583, -1536..-1345 at y 64), 1 worker = 4 workers shuffled; inputs in goldens/grove_demo_flat/', irSha: t.irSha, kitVersion: p.ir.kitVersion, cells: t.cells, tiles: t.tiles }, null, 1)}\n`);
-  check(t.workersSame, `golden: grove_demo_flat cut: IR ${t.irSha.slice(0, 12)}, ${Object.keys(t.tiles).length} tiles, ${t.cells} cells, 1 worker = 4 workers shuffled`);
-  return { irSha: t.irSha, tiles: Object.keys(t.tiles).length, cells: t.cells };
+  return groveGolden('grove_demo_flat', s.bytes, s.claim);
 };
 
 // ------------------------------------------------------------------ the look (item 14, a client)
