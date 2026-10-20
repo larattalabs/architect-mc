@@ -294,13 +294,24 @@ export async function natural(ctx) {
   await L.call('dev.region.survey', { claim: S3, surveyLoad: 'bounded:256', file: sv }, 600_000);
   const { surveyApi } = await ctx.imp('lib/region/survey.mjs');
   const S = surveyApi(fs.readFileSync(sv), { minX: S3[0], minZ: S3[1], maxX: S3[2], maxZ: S3[3], minY: -64, maxY: 319 });
-  let low = null;
-  for (let x = S3[0] + 40; x <= S3[2] - 40; x += 8) for (let z = S3[1] + 40; z <= S3[3] - 40; z += 8) {
+  // the lower band: the claim's 33 x 33 windows (a lattice of 8, inset 24) with at most 2 wet columns, lowest first; of the 8 lowest,
+  // the one where the kit's own check (over this survey, as the game will) places the most lots (ties: the lower)
+  const wins = [];
+  for (let x = S3[0] + 24; x <= S3[2] - 24; x += 8) for (let z = S3[1] + 24; z <= S3[3] - 24; z += 8) {
     let lo = Infinity, hi = -Infinity, sum = 0, n = 0, wet = 0;
     for (let i = -16; i <= 16; i += 2) for (let j = -16; j <= 16; j += 2) { const g = S.groundAt(x + i, z + j); lo = Math.min(lo, g); hi = Math.max(hi, g); sum += g; n++; if (S.waterAt(x + i, z + j)) wet++; }
-    if (wet > 2 || hi - lo > 12) continue;
-    const mean = Math.floor(sum / n);
-    if (!low || mean < low.mean || (mean === low.mean && (hi - lo) < low.range)) low = { x, z, mean, range: hi - lo };
+    if (wet <= 2) wins.push({ x, z, mean: Math.floor(sum / n), range: hi - lo });
+  }
+  wins.sort((p, q) => p.mean - q.mean || p.z - q.z || p.x - q.x);
+  const { checkPlanLocal, stewardAnchors } = await import(pathToFileURL(path.join(ctx.KIT, 'test', 'plan-helpers.mjs')).href);
+  const sc = { minX: S3[0], minZ: S3[1], maxX: S3[2], maxZ: S3[3], minY: -64, maxY: 319 };
+  let low = null;
+  for (const w of wins.slice(0, 8)) {
+    const pl = { ...fx.plan, zones: fx.plan.zones.map((z) => ({ ...z, where: { near: { anchor: 'low', within: 16 } } })) };
+    const res = await checkPlanLocal(pl, { survey: fs.readFileSync(sv), claim: sc, anchors: { ...stewardAnchors(sc), low: [w.x, w.mean + 1, w.z] } });
+    const lots = res.check.overall === 'READY' ? res.check.parts[0].geometry?.lots?.length ?? 0 : 0;
+    log(`  lower band window ${w.x},${w.z} (mean ${w.mean}, range ${w.range}): ${res.check.overall}, ${lots} lot(s)`);
+    if (lots && (!low || lots > low.lots)) low = { ...w, lots };
   }
   await L.leaveWorld();
   check(!!low, `item 7: S3's lower band: a dry window round ${json(low)} (mean ground, range)`);
