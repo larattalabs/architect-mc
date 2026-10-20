@@ -693,11 +693,11 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 
 ## Queued (coordinator, 2026-10-19)
 
-- **Farm irrigation (Steward S-HY-2, Noah's working/automated farms):** a source per 9x9 inside a farm lot's field, as H bodies
+- ~~**Farm irrigation (Steward S-HY-2, Noah's working/automated farms):**~~ **Slice IRR, in the CU/IRR/VOC-c batch (v0.40.0 RC).** a source per 9x9 inside a farm lot's field, as H bodies
   (contained, drain-first undo), set by an Architect member on the farm lot (for example `irrigate: true`). Lot designs never
   own fluids. A small slice after HY.
-- **VOC-c (S-VOC-2):** `rule.palette` measured, with a `realiseApproved` refusal and Steward's RC check, after VOC-a and VOC-b.
-- **Copper weathering and undo** (VOC §10): `StillOurs` needs the same block, so oxidized copper is left behind by undo and
+- ~~**VOC-c (S-VOC-2):**~~ **Slice VOC-c, in the CU/IRR/VOC-c batch (v0.40.0 RC).** `rule.palette` measured, with a `realiseApproved` refusal and Steward's RC check, after VOC-a and VOC-b.
+- ~~**Copper weathering and undo** (VOC §10):~~ **Slice CU, in the CU/IRR/VOC-c batch (v0.40.0 RC).** `StillOurs` needs the same block, so oxidized copper is left behind by undo and
   removal. It is on main today. Its own slice, with verifier re-runs and Steward's pre-release check. **Evidence (VOC-b's
   drift probe, voc-natural):** under `dev.vocab.tick` 157 of 157 unwaxed copper cells of voc_copper_hall weathered, and after
   `Regions.remove` 134-138 of them remained standing (classified `growth`; VOC-b's runs and the verifier's re-run). Still queued
@@ -818,3 +818,36 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   the region check names it as an error. Only broken variants reach it today.
 - **The strict watch makes a raised fountain's apron (7 past its basin) hard for every later writer.** If Steward's plans meet it
   often, S-KC-2's shell-grade allowance is the lever.
+
+## Queued from the CU/IRR/VOC-c batch (integration, 2026-10-20)
+
+Integrated on `integrate/batch-cu` as v0.40.0 (API 1.37.0, mod 0.40.0, kit 0.38.0, catalogue 9); CONTRACT "CU/IRR/VOC-c batch as
+integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2). Queued, not fixed here:
+
+- **IRR: a removal that fails after the drain** (verifier note 3). `Sites.removeDetailed` (a journal commit failure) or a stage
+  undo whose plan ends `Removed(false)` leaves the lot standing with its sources drained (`lotRemoved`, never written again).
+  Blockers and players are checked before the drain, so it needs a failure after it. Either drain after the commit point, or
+  rewrite the sources (clear `lotRemoved`) when the removal fails.
+- **IRR: `SiteJournal.retake` reads the mask from the site record** (verifier note 1), which a new placement has not written yet.
+  Latent (a Placing is always built without a tracker, so retake returns early). Carry the mask on the Placing.
+- **IRR: hooks checked only in code** (verifier note 4): the stage undo, the placing rollback, the cascade and `removeLarge` call
+  `RegionFluids.drainLot`, but no gate drives them in game. One irr-ingame case each (a stage undo of a farm's stage; a cascade
+  over a farm lot; a large removal).
+- **CU: plain `holds` left in three places** (CU's verifier): `Sites.journalOwn`, `Sites.foreignBlockEntities` and PT2's
+  adopted-site edit count use plain `WorldJournal.holds`, not `holdsOurs` with its player-record check, so a player-placed weathered
+  copper block entity there could count as ours. Route them through `WorldJournal.holdsOurs`, with a test each.
+- **CU: the delta path's player-record check has no in-game test.** `SiteDeltas`' delta world treats a copper-equivalent cell that
+  PT records as player-placed as the player's; only the undo planner's twin is driven in game (cu-ingame). Add a delta case: a
+  player places a waxed copper block over Architect's copper, then a versionOf.
+- **CU: the stale `M27:drift` text.** The kit's warning over copper ("an undo keeps a changed cell") is wrong since CU (undo and
+  removal restore weathered copper). The kit was frozen by CU's contract; reword it in the next kit slice (kit output changes: a
+  kitVersion bump and the named fixtures).
+- **Possible main bug: a road lantern post turns the lane's dirt_path to dirt, and removal leaves it.** Seen once on Steward's
+  farm hamlet (main's own `farm_hamlet`, with a lot entry bound, no irrigation: control h0, E-flat 1; IRR as built "Pre-existing,
+  found here" (1)), not again since. dirt_path and dirt are not interchangeable in `StillOurs`, so a lamp post that turns the path
+  under it to dirt (vanilla: a solid block over dirt_path) leaves a kept cell. Reproduce on main (h-ingame's hamlet, several seeds);
+  if real, either the lamp keeps off the path or the path cell under a written block is journaled as dirt.
+- **IRR's breach fix, its stated limit.** The drain's record of a breach is made at the drain from the fluid levels, not by a census
+  (a breach comes after the body settled, when no census runs). Water where a foreign flow (a pond, a player's water) meets the
+  breach's flow is spared, so a few cells of joint water can stay outside the lot after its removal. A periodic shell check that
+  re-opens a census on a breach would record the flow as it runs, at a per-tick cost; only if Steward's worlds show such cells.

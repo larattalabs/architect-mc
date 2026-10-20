@@ -10,6 +10,10 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
+import { UNCHANGED_EXCEPTIONS as VOCC_EXCEPTIONS } from './gate6cvoc-c.mjs';
+
+/** (The CU/IRR/VOC-c batch) VOC-c's named exceptions (rule.palette supported: the 7 asks with a palette rule, extension/e05 and e16): its own item 4 holds them. */
+export const LATER_EXCEPTIONS = VOCC_EXCEPTIONS;
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -38,14 +42,15 @@ export async function unchanged(root, { check, log = console.log, only = null } 
     try { a = sig((await planFixture(hNew, root, fx)).r); } catch (e) { err = `head: ${String(e.message).slice(0, 160)}`; }
     try { b = sig((await planFixture(hOld, mainDir, fx)).r); } catch (e) { err = (err ? `${err}; ` : '') + `base: ${String(e.message).slice(0, 160)}`; }
     const same = !!a && !!b && a.answers === b.answers && a.overall === b.overall && a.ir === b.ir && a.first === b.first;
-    out.fixtures[name] = { same, ...(err ? { err } : {}), ...(a && b && !same ? { head: a, base: b } : {}) };
+    out.fixtures[name] = { same, ...(err ? { err } : {}), ...(a && b && !same ? { head: a, base: b } : {}), ...(LATER_EXCEPTIONS.includes(name) ? { later: true } : {}) };
+    if (LATER_EXCEPTIONS.includes(name)) { check(true, `${name}: ${same ? 'byte-identical' : 'differs'} (VOC-c's named exception, judged by its own item 4)`); continue; }
     check(same || (!a && !b), `${name}: ${same ? 'byte-identical (answers, overall, IR, first plan)' : !a && !b ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, base: b })}`}`);
   }
   const rows = Object.entries(out.fixtures);
   out.n = rows.length;
   out.same = rows.filter(([, r]) => r.same).length;
-  out.differ = rows.filter(([, r]) => !r.same && !/errors on both/.test(r.err ?? '')).map(([k]) => k);
+  out.differ = rows.filter(([, r]) => !r.same && !r.later && !/errors on both/.test(r.err ?? '')).map(([k]) => k);
   if (!only) check(out.n >= 230, `${out.n} committed fixtures without irrigate planned (every dir, the 59 asks included)`);
-  check(out.differ.length === 0, `${out.same} of ${out.n} byte-identical, no exception; new on this branch (not compared): ${out.added.join(', ')}`);
+  check(out.differ.length === 0, `${out.same} of ${out.n} byte-identical, no exception of IRR's own (VOC-c's named ones aside); new on this branch (not compared): ${out.added.join(', ')}`);
   return out;
 }

@@ -16485,7 +16485,7 @@ One owner, about **1-1.5 days**: the canonical form, `holds` and the wrappers (0
 
 - **N-CU-1:** as proposed. Leaves, saplings and snow stay "not ours" after they drift.
 
-### CU as built (2026-10-20, `slice/CU`; placeholders API 1.37.0, mod 0.40.0; kit version unchanged, PLAN_API follows the API)
+### CU as built (2026-10-20, `slice/CU`; integrated in the CU/IRR/VOC-c batch as v0.40.0 (RC, not yet released): API 1.37.0 / mod 0.40.0 / kit 0.38.0 / catalogue 9; the slice's placeholders were API 1.37.0, mod 0.40.0, kit unchanged)
 
 **Item 1, measured first** (at c25c11cc, before any change to still ours; the lists kept as `vocb-v50n-drift-remove.json` and
 `cu-measure-list.json` under `artifacts/gate-runs-CU/20261020-054332-change/`):
@@ -16779,7 +16779,7 @@ member (0.25 day); items 2-7, mostly the undo paths (1 day). No split: the mask 
 - **N-IRR-1:** `irrigate: true`, mirroring `farmPond`. A pattern string can be added later; `true` keeps its meaning.
 - **N-IRR-2:** open 1x1 sources, the vanilla farm look.
 
-### Phase 6c slice IRR as built (branch `slice/IRR` over main v0.39.1 plus `slice/CU`; placeholders API 1.38.0, mod 0.41.0, kit 0.39.0, catalogue unchanged; recorded 2026-10-20)
+### Phase 6c slice IRR as built (branch `slice/IRR` over main v0.39.1 plus `slice/CU`; integrated in the CU/IRR/VOC-c batch as v0.40.0 (RC, not yet released): API 1.37.0 / mod 0.40.0 / kit 0.38.0 / catalogue 9; the slice's placeholders were API 1.38.0, mod 0.41.0, kit 0.39.0, catalogue unchanged; recorded 2026-10-20)
 
 | Area | As built |
 |---|---|
@@ -17051,7 +17051,7 @@ saves about half a day and the RC check, but then "only copper" over provisional
 - **N-VOCc-2:** as proposed. "No wood" swaps each wood block for the next block in VOC-a's material chain.
 
 
-### Phase 6c slice VOC-c as built (`rule.palette` measured; branch `slice/VOC-c`; placeholders API 1.39.0 / mod 0.42.0 / kit 0.40.0 / catalogue 9, set at merge; recorded 2026-10-20)
+### Phase 6c slice VOC-c as built (`rule.palette` measured; branch `slice/VOC-c`; integrated in the CU/IRR/VOC-c batch as v0.40.0 (RC, not yet released): API 1.37.0 / mod 0.40.0 / kit 0.38.0 / catalogue 9; the slice's placeholders were API 1.39.0 / mod 0.42.0 / kit 0.40.0 / catalogue 9; recorded 2026-10-20)
 
 Branch `slice/VOC-c` (worktree `../architect-mc-VOCc`, the contract's `slice/VOCc`), from main 773eae51 (v0.39.0: API 1.36.0, kit 0.37.0,
 catalogue 8, and the batch's frozen contracts). Additive. $0.
