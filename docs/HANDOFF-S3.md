@@ -50,6 +50,11 @@ Offline on the pre-settle S3 survey (scratchpad/s3-build/an.mjs): 12/13 lots (or
 lookout path fits, spire_1 refused NO_ROOM (spire_2 placed), fountain adjusted (2-thick coping).
 
 In flight: in-game natural dev run (chain 6cs3-dev, ports 8924/8925, run dir ../architect-mc-S3-run, out scratchpad/s3-build/runs).
+Dev runs 1-3 failed before the realise: (1) finish.mjs crash (fixed), (2)/(3) a plan past 120 s (the settled survey's pair routes;
+fixed: memo, dedupe, caps; offline 23 s). The settled (post-90 s) survey of run 3 is scratchpad/s3-build/repro-surveys/settled.bin
+(+ biomes.json): offline there 11 lots (orchard, herb_garden dropped), virtual M5 0.07%, M8 100%, M3 0.
+Added since: gate6cs3.mjs (unit, identity, feasibility, plan, apicompat, report), tools/lib/gate6cs3-game.mjs (item 4), chain
+steps s3-unit, s3-plan, 6c-scenario-s3 (release always), impact rule "6c S3", gallery S3 section, s3Classify.
 
 Next: realised M5 from that run; re-pin planSurvey from its raw/plan/survey.bin; gate6cs3.mjs (unit, feasibility, plan, apicompat,
 report) + chain steps (s3-unit, s3-plan, 6c-scenario-s3) + impact rule; item 4 driver; flat variant run; golden; gallery;
