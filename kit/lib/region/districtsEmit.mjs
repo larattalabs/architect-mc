@@ -19,6 +19,7 @@ import { PASSES } from './passes/index.mjs';
 import { lampSpots } from './passes/route.mjs';
 import { placeFollow, followLots, emitFollowLots, maskRuns } from './followEmit.mjs';
 import { footprintOf } from './passes/route.mjs';
+import { CHAIN_WIDTH, chainTerraces, emitTerraces, junctionOf, layoutTerraces, parseTerraces, ringOf, terraceEnds } from './terraces.mjs';
 import { BANDS, DISTRICTS_MAX, DISTRICT_GAP, DISTRICT_INF, EXACT_MAX, LOT_UNPLACED, PREFER_TAGS, UNPLACED, assignDistricts, bandOf, candidateCost, districtCandidates, levelBands, rectsMeet, spanningEdges } from './passes/districts.mjs';
 
 const DISTRICT_ID = /^[a-z][a-z0-9_]{0,23}$/;
@@ -33,6 +34,8 @@ export const PAIR_NEIGHBOURS = 6;
 export const END_CLEAR = 2;
 /** A dry route (a pair's cost) gives up after this many A* expansions (a dead end otherwise searches the whole claim). */
 export const DRY_EXPANDED = 1_000_000;
+/** (6c S3) A terraced district's join between two of its lots gives up after this many (a join that routes takes far fewer). */
+export const CHAIN_EXPANDED = 300_000;
 /** (6c D2) Windows of a following district's boundary tried for its street before the plan refuses NO_EDGE. */
 export const FOLLOW_WINDOWS = 4;
 /** (6c D2) A following street keeps within this many cells of its line (the route pass's per-edge `within`). */
@@ -66,7 +69,7 @@ export function parseDistricts(list, where = 'districts') {
   const out = list.map((d, i) => {
     const w = `${where}[${i}]`;
     if (!d || typeof d !== 'object' || Array.isArray(d)) throw new Error(`${w} must be an object`);
-    for (const k of Object.keys(d)) if (!['id', 'size', 'lots', 'levelBand', 'prefer', 'near', 'shared', 'squareSize', 'label', 'follow', 'side', 'outpost'].includes(k)) throw new Error(`${w}: unknown member '${k}'`);
+    for (const k of Object.keys(d)) if (!['id', 'size', 'lots', 'levelBand', 'prefer', 'near', 'shared', 'squareSize', 'label', 'follow', 'side', 'outpost', 'terraces'].includes(k)) throw new Error(`${w}: unknown member '${k}'`);
     if (typeof d.id !== 'string' || !DISTRICT_ID.test(d.id)) throw new Error(`${w}.id must match ${DISTRICT_ID}`);
     if (ids.has(d.id)) throw new Error(`${w}.id '${d.id}' is used twice`);
     ids.add(d.id);
@@ -111,7 +114,13 @@ export function parseDistricts(list, where = 'districts') {
       if (follow) throw new Error(`${w}: an outpost is placed on a survey candidate (no follow)`);
       outpost = { gap };
     }
-    return { id: d.id, size: [...d.size], specs, levelBand, prefer: [...prefer], near: [...near], shared: shared === 'square' ? { kind: 'square', size: squareSize } : { kind: 'well', size: 7 }, ...(d.label ? { label: d.label } : {}), ...(follow ? { follow, side: d.side ?? 'a' } : {}), ...(outpost ? { outpost } : {}) };
+    // (6c S3) a terraced district: its lots on levels down the slope (terraces.mjs); only when given, so every other district is as before
+    let terraces = null;
+    if (d.terraces !== undefined) {
+      terraces = parseTerraces(d.terraces, `${w}.terraces`);
+      if (follow) throw new Error(`${w}: a following district is laid along its boundary (no terraces)`);
+    }
+    return { id: d.id, size: [...d.size], specs, levelBand, prefer: [...prefer], near: [...near], shared: shared === 'square' ? { kind: 'square', size: squareSize } : { kind: 'well', size: 7 }, ...(d.label ? { label: d.label } : {}), ...(follow ? { follow, side: d.side ?? 'a' } : {}), ...(outpost ? { outpost } : {}), ...(terraces ? { terraces } : {}) };
   });
   for (const d of out) for (const t of d.near) if (!ids.has(t) || t === d.id) throw new Error(`${where}: district ${d.id}'s near names '${t}', not another district`);
   return out;
@@ -188,7 +197,8 @@ export function placeDistricts({ S, claim, keepOut = [], blocked = [], ds, step 
     const cs = d.follow ? [] : districtCandidates(cols, claim, d.size, { bands, blocked, step, limit: d.outpost ? limit * 4 : limit, band: d.levelBand, gap: 1, wet }).filter(far).slice(0, limit);
     const out = [];
     for (const c of cs) {
-      const L = layoutStreet({ claim: rectOf(c), survey: S, specs: d.specs, rules: STREET_RULES, shared: d.shared, keepOut });
+      // (6c S3) a terraced district's candidate: its terraced layout (layoutStreet refuses a slope steeper than a street)
+      const L = d.terraces ? layoutTerraces({ claim: rectOf(c), survey: S, specs: d.specs, terraces: d.terraces, keepOut }) : layoutStreet({ claim: rectOf(c), survey: S, specs: d.specs, rules: STREET_RULES, shared: d.shared, keepOut });
       if (L.fail || !L.lots.length) continue;
       out.push({ ...c, L, unplacedLots: L.unplaced.length });
     }
@@ -240,11 +250,14 @@ export function emitDistricts(r, intent = {}) {
   const own = r._routeObstacles({}).hard;
   const blocked = [...keepOut, ...(it.hard ?? []), ...standing, ...own];
   const maxGrade = it.maxGrade ?? 0.25;
+  // ((6c S3) `routeKeepOut`: rects every route of the pass keeps out of (a terraced plan's protected areas, other regions, builds); absent:
+  // as before)
+  const rko = Array.isArray(it.routeKeepOut) && it.routeKeepOut.length ? it.routeKeepOut.map((k) => [...k]) : null;
   const feet = (x, z) => [x, S.groundAt(x, z) + 1, z];
   const dryRoute = (a, b, hardRects, clearTrees, prefer = [], cap = DRY_EXPANDED, extra = {}) => {
     const out = PASSES.route(cols, ctx.volumes ?? [], {
       edges: [{ id: 'dry', from: { at: a.at, facing: a.facing }, to: { at: b.at, facing: b.facing }, width: DISTRICT_ROUTE_WIDTH, movers: ['player', 'villager'], ladders: false, ...(prefer.length ? { prefer } : {}), ...extra }],
-      maxGrade, hairpinLanding: 3, stairs: true, maxCut: 4, maxFill: 4, margin: 2, hard: hardRects, keepOut, prefer: [], clearTrees,
+      maxGrade, hairpinLanding: 3, stairs: true, maxCut: 4, maxFill: 4, margin: 2, hard: hardRects, keepOut: rko ? [...keepOut, ...rko] : keepOut, prefer: [], clearTrees,
       maxExpanded: cap,
     });
     return out.data.edges[0];
@@ -283,9 +296,31 @@ export function emitDistricts(r, intent = {}) {
   const { bands, cands, pick, phases, methods } = P;
   const unplaced = P.unplaced.filter((u) => !follows.has(u.id));
   let { exact, bnbNodes, totalCost } = P;
+  // ---- (6c S3) a terraced district's joins, before anything is emitted: a tree of dry routes from its landmark between its lots'
+  // entrances (terraces.mjs chainTerraces); a lot no route reaches drops (its district's unplaced lots, as D1's unreachable districts)
+  const terr = new Map(); // district id -> {L (the kept lots), edges, dropped}
+  const lotHard = (l) => [l.rect[0] - 1, l.rect[1] - 1, l.rect[2] + 1, l.rect[3] + 1];
+  const terraceHard = (L) => L.lots.flatMap((l) => [lotHard(l), ...(L.retain === 'wall' || l.fill > 6 ? ringOf(S, l).wall.map(([x, z]) => [x, z, x, z]) : [])]);
+  const srOf = (L) => {
+    const o = L.orientation, half = Math.floor(STREET_RULES.streetWidth / 2), sv = L.road.sv;
+    const a = toWorld(o, L.u0, sv - half), b = toWorld(o, L.u1, sv + half);
+    const sh = L.shared.rect;
+    return [[Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])], [sh[0], sh[1], sh[2], sh[3]]];
+  };
+  const followRectsT = [...follows.values()].map((f) => [f.pf.rect.minX - 1, f.pf.rect.minZ - 1, f.pf.rect.maxX + 1, f.pf.rect.maxZ + 1]);
+  for (const d of ds) {
+    if (!d.terraces || !pick.has(d.id) || follows.has(d.id)) continue;
+    const L0 = pick.get(d.id).L;
+    const others = [...pick.entries()].filter(([id]) => id !== d.id).flatMap(([, q]) => (q.L.terraced ? terraceHard(q.L) : [...q.L.lots.map(lotHard), ...srOf(q.L)]));
+    const hardC = r._routeObstacles({ hard: [...others, ...terraceHard(L0), ...standing, ...followRectsT] });
+    const clearC = [...hardC.clearTrees, ...L0.lots.map((l) => [l.entrance[0] - END_CLEAR, l.entrance[2] - END_CLEAR, l.entrance[0] + END_CLEAR, l.entrance[2] + END_CLEAR])];
+    const ch = chainTerraces(L0, { dry: (a, b) => dryRoute(a, b, hardC.hard, clearC, [], CHAIN_EXPANDED, { width: CHAIN_WIDTH, ...(d.terraces.stairs ? {} : { stairs: false }) }) });
+    terr.set(d.id, { L: { ...L0, lots: ch.kept, unplaced: [...L0.unplaced, ...ch.dropped] }, edges: ch.edges, dropped: ch.dropped });
+  }
+  const Lof = (d) => terr.get(d.id)?.L ?? pick.get(d.id).L;
   // ---- route costs between the placed districts' street ends (dry runs, each pair alone)
   const placed = ds.filter((d) => pick.has(d.id) || follows.has(d.id));
-  const ends = new Map(placed.map((d) => [d.id, follows.has(d.id) ? follows.get(d.id).pf.ends : streetEnds(pick.get(d.id).L)]));
+  const ends = new Map(placed.map((d) => [d.id, follows.has(d.id) ? follows.get(d.id).pf.ends : Lof(d).terraced ? terraceEnds(Lof(d)) : streetEnds(Lof(d))]));
   // the districts' streets and squares are hard to every route (the lots join through this.lots once emitted; before, from the layouts)
   const streetRects = (L) => {
     const o = L.orientation, half = Math.floor(STREET_RULES.streetWidth / 2), sv = L.road.sv;
@@ -294,8 +329,8 @@ export function emitDistricts(r, intent = {}) {
     const s = L.shared.rect;
     return [q, [s[0], s[1], s[2], s[3]]];
   };
-  const districtHard = placed.flatMap((d) => (follows.has(d.id) ? follows.get(d.id).hard : streetRects(pick.get(d.id).L)));
-  const layoutLots = placed.flatMap((d) => (follows.has(d.id) ? follows.get(d.id).lots.map((l) => [l.rect[0] - 1, l.rect[1] - 1, l.rect[2] + 1, l.rect[3] + 1]) : pick.get(d.id).L.lots.map((l) => [l.rect[0] - 1, l.rect[1] - 1, l.rect[2] + 1, l.rect[3] + 1])));
+  const districtHard = placed.flatMap((d) => (follows.has(d.id) ? follows.get(d.id).hard : Lof(d).terraced ? terraceHard(Lof(d)).filter((q) => q[0] === q[2] && q[1] === q[3]) : streetRects(Lof(d))));
+  const layoutLots = placed.flatMap((d) => (follows.has(d.id) ? follows.get(d.id).lots.map((l) => [l.rect[0] - 1, l.rect[1] - 1, l.rect[2] + 1, l.rect[3] + 1]) : Lof(d).lots.map((l) => [l.rect[0] - 1, l.rect[1] - 1, l.rect[2] + 1, l.rect[3] + 1])));
   // a street end's ground is the street's to clear: no tree obstacle within END_CLEAR of it (the route fells what stands there)
   const endClear = placed.flatMap((d) => ends.get(d.id).map((e) => [e.x - END_CLEAR, e.z - END_CLEAR, e.x + END_CLEAR, e.z + END_CLEAR]));
   const base = r._routeObstacles({ hard: [...districtHard, ...layoutLots, ...standing], clearTrees: endClear });
@@ -304,7 +339,8 @@ export function emitDistricts(r, intent = {}) {
     const e = dryRoute(a, b, base.hard, base.clearTrees);
     return e.ok ? { cost: e.cost, length: e.length } : { cost: DISTRICT_INF, failed: e.failed };
   };
-  const endNode = (d, e) => ({ name: `${d.id}_s${e.k}`, at: feet(e.x, e.z), facing: e.facing, e, d });
+  // ((6c S3) a terraced district's end is a lot's junction: the route ends there from any side)
+  const endNode = (d, e) => (e.terraced ? { name: e.junction, at: [e.x, e.y, e.z], facing: null, e, d } : { name: `${d.id}_s${e.k}`, at: feet(e.x, e.z), facing: e.facing, e, d });
   const pairs = [];
   const rectOfD = (d) => (follows.has(d.id) ? follows.get(d.id).pf.rect : pick.get(d.id).rect);
   const centre = (d) => { const q = rectOfD(d); return [(q.minX + q.maxX) >> 1, (q.minZ + q.maxZ) >> 1]; };
@@ -376,6 +412,11 @@ export function emitDistricts(r, intent = {}) {
       continue;
     }
     const c = pick.get(d.id);
+    if (Lof(d).terraced) {
+      // (6c S3) the terraced lots on their levels, their retaining rings and rails (no street, square or props)
+      layouts[d.id] = emitTerraces(r, Lof(d), { stages: { ground: stages.ground, lots: stages.lots }, prefix: `${d.id}_`, keepOut });
+      continue;
+    }
     let props = null;
     const L = streetLayout(r, d.specs, {
       rules: STREET_RULES, shared: d.shared, laneWidth: 2, maxHeight: 32, rect: c.rect, prefix: `${d.id}_`, layout: c.L, padEdge: it.padEdge ?? 'wall',
@@ -398,11 +439,20 @@ export function emitDistricts(r, intent = {}) {
     addNode(na); addNode(nb);
     edges.push({ id: `st_${d.id}`, from: na.name, to: nb.name, width: DISTRICT_ROUTE_WIDTH, prefer: f.path.map(([x, , z]) => [x, z]), within: f.pf.line, withinRadius: FOLLOW_WITHIN });
   }
+  // (6c S3) a terraced district first: each lot's approach to its junction (ids <d>_a<k>), then the joins between the junctions (ids
+  // <d>_t<k>; stairs as its member says); the joins between districts meet the junctions after (an earlier edge's walk is preferred)
+  for (const d of placedNow) {
+    const t = terr.get(d.id);
+    if (!t) continue;
+    t.L.lots.forEach((l, k) => { const j = junctionOf(l); nodes[j.name] = { at: [...j.at], kind: 'junction', facing: null }; edges.push({ id: `${d.id}_a${k + 1}`.slice(0, 48), from: l.spec.id, to: j.name, width: CHAIN_WIDTH }); });
+    const jn = new Map(t.L.lots.map((l) => [l.spec.id, junctionOf(l).name]));
+    t.edges.forEach((e, k) => edges.push({ id: `${d.id}_t${k + 1}`.slice(0, 48), from: jn.get(e.a), to: jn.get(e.b), width: CHAIN_WIDTH, ...(d.terraces.stairs ? {} : { stairs: false }) }));
+  }
   for (const p of chosen) { addNode(p.na); addNode(p.nb); edges.push({ id: `d_${p.a}__${p.b}`.slice(0, 48), from: p.na.name, to: p.nb.name, width: DISTRICT_ROUTE_WIDTH }); }
   if (join) { addNode(join.a); addNode(join.b); edges.push({ id: 'join', from: join.a.name, to: join.b.name, width: DISTRICT_ROUTE_WIDTH }); }
   let routed = null;
-  const streetHard = placedNow.filter((d) => !follows.has(d.id)).flatMap((d) => streetRects(pick.get(d.id).L));
-  if (edges.length) routed = r._route({ nodes, edges, maxGrade, stage: stages.routes, part: it.routePart ?? 'routes', hard: [...streetHard, ...standing], keepOut: it.keepOut ?? [], lanterns: true, clearTrees: [...endClear, ...[...follows.values()].flatMap((f) => f.clear)], roadSurface: 'path', lamp: roadLamp(lampFixture(r)) });
+  const streetHard = placedNow.filter((d) => !follows.has(d.id)).flatMap((d) => (Lof(d).terraced ? layouts[d.id].ring : streetRects(Lof(d))));
+  if (edges.length) routed = r._route({ nodes, edges, maxGrade, stage: stages.routes, part: it.routePart ?? 'routes', hard: [...streetHard, ...standing], keepOut: [...(it.keepOut ?? []), ...(rko ?? [])], lanterns: true, clearTrees: [...endClear, ...[...follows.values()].flatMap((f) => f.clear), ...[...terr.values()].flatMap((t) => t.L.lots.map((l) => [l.entrance[0] - END_CLEAR, l.entrance[2] - END_CLEAR, l.entrance[0] + END_CLEAR, l.entrance[2] + END_CLEAR]))], roadSurface: 'path', lamp: roadLamp(lampFixture(r)), ...(terr.size ? { guard: true } : {}) });
   const byId = new Map((routed?.edges ?? []).map((e) => [e.id, e]));
   // a following street that does not route refuses the plan, named
   for (const d of placedNow) if (follows.has(d.id) && !byId.get(`st_${d.id}`)?.ok) throw new Error(`NO_EDGE: the street of district ${d.id} along the ${follows.get(d.id).pf.kind.replace('_', ' ')} did not route (${byId.get(`st_${d.id}`)?.failed ?? 'not routed'})`);
@@ -416,7 +466,7 @@ export function emitDistricts(r, intent = {}) {
   // the route ends join their streets: a link edge from each end node to the street's terminal junction
   const linked = new Set();
   const linkEnd = (en) => {
-    if (en.e.follow || linked.has(en.name) || !r.graph.nodes.some((x) => x.id === en.name)) return;
+    if (en.e.follow || en.e.terraced || linked.has(en.name) || !r.graph.nodes.some((x) => x.id === en.name)) return;
     linked.add(en.name);
     const [xe, ze] = en.e.street;
     const term = r.graph.nodes.find((x) => x.kind === 'junction' && x.id.startsWith(`${en.d.id}_`) && x.at[0] === xe && x.at[2] === ze);
@@ -486,6 +536,12 @@ export function emitDistricts(r, intent = {}) {
       street: (r.meta.route?.edges?.find((e) => e.id === `st_${id}`)?.path ?? []).map((q) => [...q]), spineLength: f.pf.spineLength,
     }])) } : {}),
     ...(Object.keys(corridor).length ? { corridor } : {}),
+    ...(terr.size ? { terraces: Object.fromEntries([...terr.entries()].filter(([id]) => placedNow.some((d) => d.id === id)).map(([id, t]) => [id, {
+      rise: t.L.rise, retain: t.L.retain, stairs: t.L.stairs, base: t.L.base, flat: t.L.flat, levels: layouts[id].levels,
+      lots: t.L.lots.map((l) => ({ id: l.spec.id, level: l.level, y: l.floorY - 1, front: l.front, cut: l.cut, fill: l.fill, rect: [...l.rect] })),
+      edges: t.edges.map((e, k) => ({ id: `${id}_t${k + 1}`.slice(0, 48), a: e.a, b: e.b, ok: !!byId.get(`${id}_t${k + 1}`.slice(0, 48))?.ok })),
+      dropped: t.dropped, retained: layouts[id].retained, rails: layouts[id].rails, blended: layouts[id].blended,
+    }])) } : {}),
     lamps, ms: Math.round(performance.now() - t0),
   };
   if (it.meta !== false) r.meta.districts = data;

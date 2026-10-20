@@ -211,6 +211,9 @@ export class Region {
     this.passRuns = [];
     this.blendLots = [];
     this.reliefLots = new Set();
+    // (6c S3) the terraces on a `blend` edge ({id, stage, levels, cells: Map "x,z" -> level, retain}) and those a relief pinned
+    this.blendTerraces = [];
+    this.reliefTerraces = new Set();
     // (6c HY-a) the hydrology pass's fields ({flow, wet}: {type, minX, minZ, width, depth, res, values}) once it ran; D1 reads `wet`
     this.hydrology = null;
   }
@@ -240,6 +243,11 @@ export class Region {
     // (never below the claim's bottom 2 rows, as terraces: bedrock on a flat world)
     // (6c S2) the plan's kept natural cells (r.keepNatural): the relief never writes their columns
     const kept = it._unsafe?.ignoreKeep ? [] : this._keptColumns(); // (`_unsafe.ignoreKeep`: the broken variant)
+    // ((6c S3) a terraced lot's retaining ring is pinned at its pad's top: the relief leaves the wall and blends the land to it)
+    if (name === 'relief' && this.terraceRings?.size) {
+      const rings = (it.around ?? []).filter((a) => a && typeof a.id === 'string' && this.terraceRings.has(a.id)).flatMap((a) => this.terraceRings.get(a.id).map(([x, z, y]) => ({ rect: [x, z, x, z], y })));
+      if (rings.length) it.around = [...it.around, ...rings];
+    }
     const out = PASSES[name](this.survey.columns, this.ctx.volumes ?? [], { ...it, name: fname, minY: Math.max(it.minY ?? -32768, this.claim.minY + 2), ...(kept.length ? { keep: kept } : {}) });
     const ms = Math.round(performance.now() - t0);
     const heapMb = Math.round(process.resourceUsage().maxRSS / 1024);
@@ -250,9 +258,52 @@ export class Region {
       for (const op of out.ops) p._push(op);
     }
     for (const a of it.around ?? []) if (a && typeof a.id === 'string' && Array.isArray(a.at)) this.reliefLots.add(a.id);
+    // (6c S3) a blend terrace's pins: the terrace is blended, and its rims retained against the land the relief leaves
+    if (this.blendTerraces.length) {
+      const tids = [...new Set((it.around ?? []).filter((a) => a && typeof a.terrace === 'string' && Array.isArray(a.rect)).map((a) => a.terrace))].sort();
+      for (const tid of tids) if (!this.reliefTerraces.has(tid)) { this.reliefTerraces.add(tid); this._retainTerrace(tid, out.fields[fname] ?? null); }
+    }
     this.passRuns.push({ name, ms, heapMb });
     this.note(`pass ${name}: ${(ms / 1000).toFixed(1)} s, ${heapMb} MB${out.data?.resolution > 1 ? ` (coarse: resolution ${out.data.resolution})` : ''}`);
     return res;
+  }
+
+  /**
+   * (6c S3) A blend terrace's retaining walls, after the relief that pinned it (`field`: the relief's delta field, dh against the
+   * survey's ground; NONE outside its band): every rim cell of a level standing more than 2 over the land outside it (a lower level's
+   * y, else the survey's ground plus the relief's dh) gets the terrace's `retain` from that land's height up to the level's top.
+   * Written in the terrace's own part (after its fill: last op wins). Recorded in meta.parts[id].terrace.retained.
+   */
+  _retainTerrace(tid, field) {
+    const T = this.blendTerraces.find((t) => t.id === tid);
+    const part = this.parts.find((p) => p.id === tid);
+    if (!T || !part) return;
+    const s = this.survey;
+    const dhAt = (x, z) => {
+      if (!field) return 0;
+      const i = Math.floor((x - field.minX) / field.res), j = Math.floor((z - field.minZ) / field.res);
+      if (i < 0 || j < 0 || i >= field.width || j >= field.depth) return 0;
+      const v = field.values[i + j * field.width];
+      return v === -32768 ? 0 : v;
+    };
+    const keys = [...T.cells.keys()].map((k) => k.split(',').map(Number)).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+    const cols = [];
+    let rims = 0;
+    for (const [x, z] of keys) {
+      const k = T.cells.get(`${x},${z}`), y = T.levels[k];
+      let low = Infinity;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const kn = T.cells.get(`${x + dx},${z + dz}`);
+        const g = kn === undefined ? s.groundAt(x + dx, z + dz) + dhAt(x + dx, z + dz) : kn < k ? T.levels[kn] : Infinity;
+        if (g < low) low = g;
+      }
+      if (!(y - low > 2)) continue;
+      rims++;
+      cols.push(x, z, Math.max(low, this.claim.minY + 2), y, 0);
+    }
+    if (cols.length) part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: [T.retain], cond: COND.IF_NATURAL, walk: false });
+    const m = this.meta.parts[tid]?.terrace;
+    if (m) m.retained = rims;
   }
 
   /**
@@ -350,7 +401,7 @@ export class Region {
       const k1 = {};
       // ((6c T3) and the bridge and tunnel rows': `once` and the opaque per-edge `t3` options)
       for (const key of ['spans', 'spanOnce', 'span', 'approach', 'once', 't3']) if (e[key] !== undefined) k1[key] = e[key];
-      return { id, a, b, width: e.width ?? 3, type: e.type ?? ((e.width ?? 3) >= 5 ? 'road' : 'path'), movers, ladders: ladders && (!movers.includes(VILLAGER) || !!it._unsafe?.villagerLadders), ...(Array.isArray(e.prefer) && e.prefer.length ? { prefer: e.prefer.map((q) => [q[0], q[q.length - 1]]) } : {}), k1 };
+      return { id, a, b, width: e.width ?? 3, type: e.type ?? ((e.width ?? 3) >= 5 ? 'road' : 'path'), movers, ladders: ladders && (!movers.includes(VILLAGER) || !!it._unsafe?.villagerLadders), ...(Array.isArray(e.prefer) && e.prefer.length ? { prefer: e.prefer.map((q) => [q[0], q[q.length - 1]]) } : {}), ...(e.stairs === false ? { stairs: false } : {}), k1 };
     });
     if (new Set(edges.map((e) => e.id)).size !== edges.length) throw new Error(`${what}: edge ids must be unique`);
     // obstacles: lot footprints and aprons, forms, keep sets (x/z); keep-out (the owner's, read through ctx so the IR records it)
@@ -365,8 +416,8 @@ export class Region {
     for (const m of Object.values(this.meta.paths)) if (m.kind === 'graded' && Array.isArray(m.cells)) for (const q of m.cells) prefer.push([q[0], q[2]]);
     const stage = it.stage ?? this.stageList[this.stageList.length - 1];
     const t0 = performance.now();
-    const out = PASSES.route(this.survey.columns, this.ctx.volumes ?? [], {
-      edges: edges.map((e) => ({ id: e.id, from: { at: e.a.at, facing: e.a.facing }, to: { at: e.b.at, facing: e.b.facing }, width: e.width, movers: e.movers, ladders: e.ladders, prefer: [...preferOf(e.id), ...(e.prefer ?? [])], ...e.k1 })),
+    const routeIn = {
+      edges: edges.map((e) => ({ id: e.id, from: { at: e.a.at, facing: e.a.facing }, to: { at: e.b.at, facing: e.b.facing }, width: e.width, movers: e.movers, ladders: e.ladders, prefer: [...preferOf(e.id), ...(e.prefer ?? [])], ...(e.stairs === false ? { stairs: false } : {}), ...e.k1 })),
       maxGrade: it.maxGrade ?? 0.25, hairpinLanding: it.hairpinLanding ?? 3, stairs: it.stairs ?? true, maxCut: it.maxCut ?? 4, maxFill: it.maxFill ?? 4, margin: it.margin ?? 2,
       hard, keepOut, prefer, clearTrees, base: it.base ?? null, _unsafe: it._unsafe ?? {},
       // (6c P0) the plan check's node budget over all edges (absent: none)
@@ -377,7 +428,8 @@ export class Region {
       ...(it.bridge ? { bridge: it.bridge } : {}), ...(it.tunnel ? { tunnel: it.tunnel } : {}),
       // (6c H) the plan's own water (lib/fluids/moat.mjs passInput), only when the plan has a body
       ...(it.fluids ? { fluids: it.fluids } : {}),
-    });
+    };
+    const out = PASSES.route(this.survey.columns, this.ctx.volumes ?? [], routeIn);
     const ms = Math.round(performance.now() - t0);
     const heapMb = Math.round(process.resourceUsage().maxRSS / 1024);
     // ---- emit
@@ -391,6 +443,9 @@ export class Region {
       return i >= 0 && j >= 0 && i < b.width && j < b.depth ? b.values[i + j * b.width] : 0;
     };
     const mats = { surface: it.surface ?? 'path', foundation: it.foundation ?? 'foundation', retain: it.retain ?? 'structure', stair: it.stairMaterial ?? 'structure' };
+    // (6c S3) `guard: true`: a walk run's edge over a drop of more than 3 gets a parapet column (the retain role) with a rail on it, and
+    // stair flights get railings (M8 on a mountainside); absent: as before
+    if (it.guard) mats.guard = it.guardRail ?? 'rail';
     const res = [];
     const written = new Map(); // "x,z" -> edge id (the keep-out guard)
     const mark = (x, z, id) => { const k = `${x},${z}`; if (!written.has(k)) written.set(k, id); };
@@ -406,6 +461,11 @@ export class Region {
     // (6c S2) nor on a kept natural cell's column (r.keepNatural: a natural ice spike beside the walk stands over it as land)
     const keptCols = new Set(it._unsafe?.retainOnKept ? [] : this._keptColumns().map(([x, z]) => `${x},${z}`)); // (`_unsafe.retainOnKept`: the broken variant)
     const noRetain = (x, z) => routeCols.has(`${x},${z}`) || nearLot(x, z) || keptCols.has(`${x},${z}`);
+    // ((6c S3) the guard's parapet columns, once each over every edge; never on another route's cells, a kept column, or a lot's
+    // footprint, apron or (a slope pad's) batter, but beside a wall pad's apron: its ring is the parapet's ground)
+    const guardCols = mats.guard ? new Set() : null;
+    const inPad = (x, z) => this.lots.some((l) => { const m = 1 + (l.pad?.edge === 'slope' ? Math.max(l.pad.maxCut ?? 0, l.pad.maxFill ?? 0) : 0); return x >= l.box.minX - m && x <= l.box.maxX + m && z >= l.box.minZ - m && z <= l.box.maxZ + m; });
+    const noGuard = mats.guard ? (x, z) => routeCols.has(`${x},${z}`) || inPad(x, z) || keptCols.has(`${x},${z}`) : null;
     // a slope pad's batter fill (stage before the routes): ring k (1..maxFill) out from the apron is filled to the pad's top - 1 - k
     const fillTop = (x, z) => {
       let top = -Infinity;
@@ -442,7 +502,7 @@ export class Region {
         if (g.kind === 'bridge') {
           const land = cells[cells.length - 1];
           const fp = footprintOf([land], e.width).filter((q) => !taken.has(`${q[0]},${q[1]}`)).map((q) => [q[0], q[1], q[2], q[3]]);
-          if (fp.length) rec.paths.push(p._routeRun(`${rid}_${n}l`, fp, mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells: [land], noRetain, fillTop }));
+          if (fp.length) rec.paths.push(p._routeRun(`${rid}_${n}l`, fp, mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells: [land], noRetain, fillTop, guardCols, noGuard }));
           return;
         }
         // (6c T3b: a tunnel segment's own handling goes here)
@@ -450,7 +510,7 @@ export class Region {
         if (g.kind === 'rope') return;
         if (g.kind === 'walk' || g.kind === 'landing' || g.kind === 'gate') {
           // 4e's ground road where a walk lies on the surveyed ground (4e follows the realised ground at realise), else graded columns
-          const onGround = g.kind === 'walk' && !it.base && e.width <= 5 && cells.length >= 4 && cells.every(([x, y, z]) => y === s.groundAt(x, z) && !s.waterAt(x, z));
+          const onGround = g.kind === 'walk' && !it.base && !mats.guard && e.width <= 5 && cells.length >= 4 && cells.every(([x, y, z]) => y === s.groundAt(x, z) && !s.waterAt(x, z));
           if (onGround) {
             const idx = polylineOf(cells);
             const id = `${rid}_${n}`;
@@ -460,11 +520,11 @@ export class Region {
             for (const q of footprintOf(cells, e.width + 2)) mark(q[0], q[1], e.id);
             return;
           }
-          rec.paths.push(p._routeRun(`${rid}_${n}`, fpOf(si), mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells, noRetain, fillTop }));
+          rec.paths.push(p._routeRun(`${rid}_${n}`, fpOf(si), mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells, noRetain, fillTop, guardCols, noGuard }));
         } else if (g.kind === 'stair') {
           // the flight's ground (cut above, fill below), then the treads
           p._routeRun(`${rid}_${n}g`, fpOf(si), mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells, noSurface: true, register: false, noRetain, fillTop });
-          const st = p.stair([cells[0], cells[cells.length - 1]], { width: e.width, landingEvery: 8, carve: true, material: mats.stair, id: `${rid}_${n}` });
+          const st = p.stair([cells[0], cells[cells.length - 1]], { width: e.width, landingEvery: 8, carve: true, material: mats.stair, id: `${rid}_${n}`, ...(mats.guard ? { railing: mats.guard } : {}) });
           rec.paths.push(st.id);
         } else if (g.kind === 'ladder') {
           ladderSegs.push(n);
@@ -1311,11 +1371,16 @@ class Part {
    * Each level is flat: cut above its y (to the column top), filled below (`fill` role, from the frozen floor), its top
    * block the `surface` role over `soil` blocks of `fill` (never into the claim's bottom 2 rows). `edge: 'slope'` keeps every riser <= `riser`; `edge: 'wall'`
    * builds a retaining wall of `retain` on each level's rim. `stairs`: one stair of `stairWidth` joins each pair of levels.
-   * Returns the levels `[{y, radius|polygon}]`.
+   * (6c S3) `edge: 'blend'` (a program that declares the `relief` pass only): no batters; each level's footprint joins T1's relief
+   * as a pin (the levels' `pins`, `{rect, y, terrace}` row runs, go in `r.pass('relief', {around})`, as a lot pad does) and the relief
+   * blends the land into it; after the relief, the rim is retained by `retain` where the level stands more than 2 over the land
+   * outside it (the relief's surface, else the survey's ground: a relief clamped by its maxFill leaves such a step). A blend terrace
+   * no relief pass pinned fails the plan (as a blend pad does). Returns the levels `[{y, radius|polygon, pins?}]`.
    */
   terrace(area, levels, { riser = 2, step, retain = 'structure', edge = 'slope', stairs = true, stairWidth = 3, surface = 'surface', fill = 'subsurface', soil = 3, stairMaterial = 'structure', startAngle = 45 } = {}) {
     if (!area || typeof area !== 'object') throw new Error(`part ${this.id}: terrace area must be {center, radius} or {polygon}`);
-    if (edge !== 'slope' && edge !== 'wall') throw new Error(`part ${this.id}: terrace edge must be slope or wall`);
+    if (edge !== 'slope' && edge !== 'wall' && edge !== 'blend') throw new Error(`part ${this.id}: terrace edge must be slope, wall or blend`);
+    if (edge === 'blend' && !(this.region.ctx.passes ?? []).includes('relief')) throw new Error(`part ${this.id}: terrace edge blend needs the relief pass (export const passes = ['relief'])`);
     const circle = Array.isArray(area.center) && isNum(area.radius);
     if (!circle && !(Array.isArray(area.polygon) && area.polygon.length >= 3)) throw new Error(`part ${this.id}: terrace area must be {center, radius} or {polygon}`);
     const center = area.center ?? centroid(area.polygon);
@@ -1323,7 +1388,7 @@ class Part {
     if (!(isInt(n) && n >= 1 && n <= 32)) throw new Error(`part ${this.id}: terrace needs 1..32 levels`);
     const fr = area.fractions ?? Array.from({ length: n }, (_, k) => 1 - k / n);
     if (fr.length !== n || fr.some((f, k) => !(f > 0 && f <= 1 && (k === 0 || f < fr[k - 1])))) throw new Error(`part ${this.id}: terrace fractions must be ${n} descending values in (0, 1]`);
-    const stepH = step ?? (edge === 'wall' ? 4 : riser);
+    const stepH = step ?? (edge === 'wall' ? 4 : edge === 'blend' ? 3 : riser);
     let ys;
     if (Array.isArray(levels)) {
       ys = levels;
@@ -1359,6 +1424,30 @@ class Part {
         this._shapeOp({ kind: 'clipY', y0: lo, y1: { abs: y }, of: wall }, ret, COND.IF_NATURAL);
       }
       out.push(circle ? { y, radius: area.radius * fr[k] } : { y, polygon: scalePoly(area.polygon, center, fr[k]) });
+    }
+    if (edge === 'blend') {
+      // (6c S3) the levels' footprint cells by the evaluator's own rule (sd <= 0 at the cell), each cell in its highest level; the
+      // pins are their row runs at the level's y (the relief fixes them), the rim retained after the relief (Region.pass)
+      const inLevel = (k, x, z) => (circle ? Math.sqrt((x - center[0]) * (x - center[0]) + (z - center[1]) * (z - center[1])) - area.radius * fr[k] <= 0 : polygonDistance(out[k].polygon, x, z) <= 0);
+      const R0 = circle ? area.radius : Math.max(...area.polygon.map((p) => Math.max(Math.abs(p[0] - center[0]), Math.abs(p[1] - center[1]))));
+      const x0 = Math.floor(center[0] - R0) - 1, x1 = Math.ceil(center[0] + R0) + 1, z0 = Math.floor(center[1] - R0) - 1, z1 = Math.ceil(center[1] + R0) + 1;
+      const levelOf = new Map(); // "x,z" -> k
+      for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) for (let k = n - 1; k >= 0; k--) if (inLevel(k, x, z)) { levelOf.set(`${x},${z}`, k); break; }
+      for (let k = 0; k < n; k++) {
+        const pins = [];
+        for (let z = z0; z <= z1; z++) {
+          let run = null;
+          for (let x = x0; x <= x1 + 1; x++) {
+            const on = x <= x1 && levelOf.get(`${x},${z}`) === k;
+            if (on && !run) run = [x, x];
+            else if (on) run[1] = x;
+            else if (run) { pins.push({ rect: [run[0], z, run[1], z], y: out[k].y, terrace: this.id }); run = null; }
+          }
+        }
+        out[k].pins = pins;
+      }
+      this.region.blendTerraces.push({ id: this.id, stage: this.stage, levels: out.map((l) => l.y), cells: levelOf, retain: ret });
+      (this.region.meta.parts[this.id] ??= {}).terrace = { edge: 'blend', levels: out.map((l) => l.y), retained: null };
     }
     if (stairs && n > 1) {
       for (let k = 0; k + 1 < n; k++) {
@@ -1830,7 +1919,7 @@ class Part {
    * (and over the program's `baseAt` raise), the surface at y (a walk cell); a retaining column outside an edge where the land
    * stands more than 2 above the surface. Registered as a `graded` path with its centre `cells` unless `register: false`.
    */
-  _routeRun(id, fp, mats, { baseAt = () => 0, mark = () => {}, cells = [], noSurface = false, register = true, noRetain = () => false, fillTop = () => -Infinity } = {}) {
+  _routeRun(id, fp, mats, { baseAt = () => 0, mark = () => {}, cells = [], noSurface = false, register = true, noRetain = () => false, fillTop = () => -Infinity, guardCols = null, noGuard = null } = {}) {
     this._requirePath('route');
     const s = this.region.survey;
     const surfM = this._mat(mats.surface, 'route surface'), fM = this._mat(mats.foundation, 'route foundation'), rM = this._mat(mats.retain, 'route retain');
@@ -1841,6 +1930,8 @@ class Part {
     const cutB = new Cols({ abs: 0 }, { abs: 0 });
     const surfC = new Cols({ abs: 0 }, { abs: 0 });
     const retC = new Cols({ abs: 0 }, { abs: 0 });
+    const gM = mats.guard && guardCols ? this._mat(mats.guard, 'route guard rail') : null;
+    const guardC = gM ? new Cols({ abs: 0 }, { abs: 0 }) : null, railC = gM ? new Cols({ abs: 0 }, { abs: 0 }) : null;
     const inFp = new Set(fp.map(([x, z]) => `${x},${z}`));
     const box = { minX: Infinity, minY: Infinity, minZ: Infinity, maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity };
     const grow = (x, y, z) => { box.minX = Math.min(box.minX, x); box.maxX = Math.max(box.maxX, x); box.minY = Math.min(box.minY, y); box.maxY = Math.max(box.maxY, y); box.minZ = Math.min(box.minZ, z); box.maxZ = Math.max(box.maxZ, z); };
@@ -1859,8 +1950,11 @@ class Part {
       if (edge) {
         for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
           const ox = x + dx, oz = z + dz;
-          if (inFp.has(`${ox},${oz}`) || noRetain(ox, oz)) continue;
+          if (inFp.has(`${ox},${oz}`)) continue;
           const land = s.groundAt(ox, oz) + baseAt(ox, oz);
+          // ((6c S3) the guard: a drop of more than 3 beside the walk gets a parapet column up to the walk's surface and a rail on it)
+          if (guardC && y - land > 3) { if (!noGuard(ox, oz) && !guardCols.has(`${ox},${oz}`)) { guardCols.add(`${ox},${oz}`); guardC.add(ox, oz, land + 1, y, rM); railC.add(ox, oz, y + 1, y + 1, gM); mark(ox, oz); grow(ox, land, oz); grow(ox, y + 1, oz); } continue; }
+          if (noRetain(ox, oz)) continue;
           if (land - y > 2) { retC.addOnce(`${ox},${oz}`, ox, oz, y + 1, land, rM); mark(ox, oz); grow(ox, land, oz); }
         }
       }
@@ -1871,6 +1965,7 @@ class Part {
     this._colsOp(cutB, COND.IF_NATURAL);
     this._colsOp(surfC, COND.IF_NATURAL, true);
     this._colsOp(retC, COND.IF_NATURAL);
+    if (guardC && !guardC.empty) { this._colsOp(guardC, COND.IF_NATURAL); this._colsOp(railC, COND.IF_AIR_OR_FLUID); }
     if (register) {
       if (!PART_ID.test(id)) throw new Error(`part ${this.id}: route id '${id}' must match ${PART_ID}`);
       this.region.paths.push({ id, stage: this.stage, part: this.id, kind: 'graded', box });

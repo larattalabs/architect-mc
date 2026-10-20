@@ -25,6 +25,8 @@ import { CATALOGUE_VERSION } from './schema.mjs';
 import { keptBuilds, pickBuild, buildEndpoint, buildKeepOut } from '../region/builds.mjs';
 import { besidePorts, emitDistricts, parseDistricts, placeDistricts } from '../region/districtsEmit.mjs';
 import { placeFollow } from '../region/followEmit.mjs';
+import { TERRACE_GAP, layoutTerraces, parseTerraces } from '../region/terraces.mjs';
+import { levelBands } from '../region/passes/districts.mjs';
 import { zoneDistricts, channelForm } from './schema.mjs';
 // (7a K1) walls and gates (K1a), rope bridges and auto connectors (K1b): the compiler's hooks for the four connector kinds
 import { WALL_KINDS, emitWalls, finishGates, planWalls, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
@@ -630,6 +632,8 @@ export function planDistricts(part) {
   return (part.program.districts ?? []).map((d) => ({
     id: d.id, size: sideOf(d.size), lots: d.lots.map((l) => { const { label, entry, ...rest } = l; void label; void entry; return rest; }),
     ...(d.levelBand ? { levelBand: d.levelBand } : {}), ...(d.prefer ? { prefer: d.prefer } : {}), ...(d.near ? { near: d.near } : {}), ...(d.shared ? { shared: d.shared } : {}),
+    // ((6c S3) a terraced district: its own member, else its zone's; absent: as before)
+    ...((d.terraces ?? part.terraces) !== undefined ? { terraces: d.terraces ?? part.terraces } : {}),
   }));
 }
 
@@ -659,6 +663,64 @@ export function resolveDistrictsZone(env, p, taken) {
     rect, rects, ds, dsRaw, placement, unplacedLots, districts: true,
   };
 }
+
+/**
+ * (6c S3) A standard zone with `terraces` (a lots program): one terraced district (terraces.mjs) on its locator's candidates (scan,
+ * as a zone: its where, sketch and move tolerance read), the candidate that places the most lots, then the best layout score (scan
+ * order on ties). fits, adjusted (count, move) or refused NO_ROOM / TOLERANCE as a zone; its emission is the districts pass's (one
+ * district), so its routes join the lots and a connector to it ends at a lot. Never cached.
+ */
+export function resolveTerracedZone(env, p, geomOf, taken) {
+  const zone = p.part;
+  let specs, terr;
+  try { specs = lotSpecs(zone); terr = parseTerraces(zone.terraces, 'terraces'); } catch (e) { return { klass: 'malformed', reasons: [{ code: 'SCHEMA', path: `${p.path}`, message: e.message }] }; }
+  if (!specs.length) return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: 'the zone lists no lots: nothing to lay out', evidence: { lots: 0 } }] };
+  const loc = locatorOf(env, zone.where, geomOf);
+  if (loc.error) return { klass: loc.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: loc.error.code, message: loc.error.message, evidence: { locator: Object.keys(zone.where ?? {})[0] ?? null, ...(loc.error.evidence ?? {}) } }] };
+  const tMove = tolOf(zone, 'move'), tCount = tolOf(zone, 'count'), tSketch = tolOf(zone, 'sketch');
+  const sk = sketchPoint(env, zone.sketch);
+  const cw = env.claim.maxX - env.claim.minX + 1 - 2 * MARGIN, cd = env.claim.maxZ - env.claim.minZ + 1 - 2 * MARGIN;
+  // the size: the zone's own (a range's largest), else room for the lots with their gaps (half again, for the slope)
+  const area = specs.reduce((a, s) => a + (s.size[0] + TERRACE_GAP) * (s.size[1] + TERRACE_GAP), 0);
+  const auto = Math.max(24, Math.ceil(Math.sqrt((area * 3) / 2)));
+  const asked = sideOf(zone.size);
+  const w = Math.max(24, Math.min(256, cw, asked?.[0] ?? auto)), d = Math.max(24, Math.min(256, cd, asked?.[1] ?? auto));
+  const obs = taken.map((o) => grow(o, ZONE_GAP));
+  const keepOut = env.keepOut.map(rectArr);
+  const blocked = env.hard.map(rectArr);
+  const search = (maxMove) => {
+    let best = null;
+    for (const c of scan(env, w, d, loc, { sketch: sk, obstacles: obs, maxMove, limit: TERRACED_CANDIDATES })) {
+      if (blocked.some((q) => meets(arrRect(q), c.rect))) continue;
+      const L = layoutTerraces({ claim: { ...env.claim, ...c.rect }, survey: env.S, specs, terraces: terr, keepOut });
+      if (L.fail) continue;
+      if (!best || L.lots.length > best.L.lots.length || (L.lots.length === best.L.lots.length && L.score > best.L.score)) best = { ...c, L };
+      if (best.L.lots.length === specs.length) break;
+    }
+    return best;
+  };
+  const best = search(tMove.ceiling);
+  if (!best) {
+    const beyond = tMove.ceiling < Infinity ? search(Infinity) : null;
+    if (beyond && beyond.move > tMove.ceiling) return { klass: 'refused', reasons: [{ code: 'TOLERANCE', message: `the nearest terraced place for the zone is ${beyond.move} cells past its locator (move at most ${tMove.ceiling})`, evidence: { move: beyond.move, max: tMove.max, ceiling: tMove.ceiling } }] };
+    return { klass: 'refused', reasons: [{ code: obs.length ? 'OVERLAP' : 'NO_ROOM', message: obs.length ? 'no terraced fit for the zone beside the zones placed before it' : 'no terraced fit for the zone within the claim (water, keep-out, or pads past their limits on every candidate)', evidence: { size: [w, d] } }] };
+  }
+  const unplaced = best.L.unplaced.length;
+  const j = judge([{ what: 'move', value: best.move, ...tMove }, { what: 'count', value: unplaced, ...tCount }, ...(sk ? [{ what: 'sketch', value: best.sketch, ...tSketch }] : [])]);
+  const id = districtIdOf(p.id);
+  const lots = zoneLots(zone).map((l) => { const { label, entry, ...rest } = l.lot; void label; void entry; return rest; });
+  let ds;
+  try { ds = parseDistricts([{ id, size: [w, d], lots, terraces: zone.terraces }], 'zone'); } catch (e) { return { klass: 'malformed', reasons: [{ code: 'SCHEMA', path: `${p.path}.program`, message: e.message }] }; }
+  const cand = { id: `t${w}x${d}_${best.rect.minX}_${best.rect.minZ}`.replace(/-/g, 'm'), rect: best.rect, y: best.L.y, L: best.L, unplacedLots: unplaced };
+  const placement = { bands: levelBands(env.cols, env.claim), cands: [[cand]], pick: new Map([[id, cand]]), unplaced: [], phases: [[id]], methods: new Set(['locator']), exact: true, bnbNodes: 0, totalCost: 0 };
+  const notes = ['terraces: the zone is laid out as one terraced district (its lots on levels, routes between their entrances)'];
+  return {
+    klass: j.klass, deviations: j.deviations, notes, rect: best.rect, rects: [best.rect], ds, dsRaw: [{ id, size: [w, d], lots, terraces: zone.terraces }], placement, unplacedLots: unplaced, districts: true, terraced: true,
+    reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${j.failed.what} ${j.failed.value} is past its ${j.failed.hard ? 'hard limit' : 'ceiling'} (${j.failed.hard ? j.failed.max : j.failed.ceiling})`, evidence: { what: j.failed.what, value: j.failed.value } }] : [],
+  };
+}
+/** (6c S3) Candidate rects a terraced standard zone evaluates (each a terraced layout). */
+export const TERRACED_CANDIDATES = 24;
 
 /** A district id for a plan zone (the pass's ids are at most 24 characters). */
 const districtIdOf = (zoneId) => (/^[a-z][a-z0-9_]{0,23}$/.test(zoneId) ? zoneId : `z_${sha256Hex(zoneId).slice(0, 12)}`);
@@ -858,6 +920,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     if (p && !answers.has(id)) ans(p, { class: 'refused', reasons: [why] });
   }
   const order = V.order.map((id) => byId.get(id));
+  // (6c S3) a plan with a terraced zone or district: its routes guard their drops (M8 on a mountainside); every other plan as before
+  const terracedPlan = V.parts.some((q) => q.family === 'zone' && q.verdict === 'compile' && (q.part?.terraces !== undefined || (Array.isArray(q.part?.program?.districts) && q.part.program.districts.some((d) => d?.terraces !== undefined))));
   const zonesAccepted = []; // {id, rect}
   const formsAccepted = []; // footprint rects of the forms placed so far
   // ---- (6c HY-a) the hydrology pass, only when the plan has a course, race or ditch part (CONTRACT HY §5: every other plan is
@@ -891,6 +955,14 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         if (kfp) reserve(keep, { part: p.id, body: `w_${p.id}`.slice(0, 40), rects: kfp, ...spanOf(env.S, kfp) });
       }
       ans(p, { class: f.klass, reasons: f.reasons, deviations: f.deviations, wouldFit: f.wouldFit, notes: f.notes });
+      continue;
+    }
+    if (p.family === 'zone' && p.part.terraces !== undefined && p.kind !== 'outpost' && !p.part.where?.along && !Array.isArray(p.part.program?.districts) && zoneLots(p.part).length) {
+      // (6c S3) a terraced standard zone: one terraced district on its locator's candidates (never cached)
+      const z = resolveTerracedZone(env, p, geomOf, [...zonesAccepted.map((o) => o.rect), ...formsAccepted]);
+      res.set(p.id, z);
+      if (z.klass === 'fits' || z.klass === 'adjusted') { geom.set(p.id, { rect: z.rect }); for (const q of z.rects) zonesAccepted.push({ id: p.id, rect: q }); }
+      ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, notes: z.notes });
       continue;
     }
     if (p.family === 'zone' && (p.part.where?.along || p.kind === 'outpost') && !Array.isArray(p.part.program?.districts)) {
@@ -1027,6 +1099,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         districts: z.dsRaw, _placed: z.placement, ...(z.follow ? { _follow: z.follow } : {}), ...(z.near ? { near: z.near } : {}), loopiness: p.part.program?.loopiness ?? 0.15, lamps: false, anchors: false, meta: false,
         stage: { ground: stageOf('ground'), street: stageOf('street'), routes: stageOf('routes'), lots: stageOf('lots'), props: stageOf('props') },
         routePart: `routes_${p.id}`.slice(0, 48), hard: [...env.hard.map(rectArr), ...others], ...extra,
+        // ((6c S3) a terraced zone's routes keep its grade tolerance; every other zone as before)
+        ...(z.ds.some((d) => d.terraces) ? { maxGrade: tolOf(p.part, 'grade').max, routeKeepOut: [...env.protectedAreas.map((a) => rectArr(a.rect)), ...env.regions.map((a) => rectArr(a.rect)), ...env.buildRects.map((a) => rectArr(a.rect))] } : {}),
       });
       for (const k of out.reserved) reserved.add(k);
       laneCells.push(...out.laneCells);
@@ -1044,6 +1118,16 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         const t = tolOf(p.part, 'count');
         const j = judge([{ what: 'count', value: z.unplacedLots + lateLots, max: t.max, hard: t.hard, ceiling: t.ceiling }]);
         ans(p, { class: j.klass, deviations: j.deviations, notes: [...(z.notes ?? []), `${lateLots} lot(s) without room along the street`], reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${z.unplacedLots + lateLots} lot(s) unplaced, past the count tolerance`, evidence: { unplaced: z.unplacedLots + lateLots } }] : [] });
+      }
+      // ((6c S3) a terraced district's lots no route reached dropped at emission: they count against count; its notes join the answer)
+      if (out.data.terraces) {
+        const tDropped = Object.values(out.data.terraces).reduce((a, t) => a + t.dropped.length, 0);
+        const tNotes = [...Object.entries(out.data.terraces).filter(([, t]) => t.flat).map(([id]) => (z.terraced ? 'terraces: flat site, one level' : `terraces: district ${id}: flat site, one level`)), ...Object.values(out.layouts).flatMap((L) => (L.terraced ? L.notes.filter((n) => !/flat site/.test(n)) : []))];
+        if (tDropped && !late.length) {
+          const t = tolOf(p.part, 'count');
+          const j = judge([{ what: 'count', value: z.unplacedLots + tDropped, max: t.max, hard: t.hard, ceiling: t.ceiling }]);
+          ans(p, { class: j.klass, deviations: j.deviations, notes: [...(z.notes ?? []), ...tNotes, `${tDropped} lot(s) no route reached on the terraces (${Object.values(out.data.terraces).flatMap((x) => x.dropped.map((u) => u.id)).join(', ')})`], reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${z.unplacedLots + tDropped} lot(s) unplaced, past the count tolerance`, evidence: { unplaced: z.unplacedLots + tDropped } }] : [] });
+        } else if (tNotes.length) { const a = answers.get(p.id); if (a) a.notes = [...(a.notes ?? []), ...tNotes]; }
       }
       if (late.length) {
         const lost = late.reduce((a, u) => a + (z.ds.find((d) => d.id === u.id)?.specs.length ?? 0), 0);
@@ -1290,7 +1374,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         const walls = K ? wallsPassInput(K) : null, rope = K ? ropePassInput(K) : null, bridge = K ? bridgePassInput(K) : null, tunnel = K ? tunnelPassInput(K) : null;
         // (6c H) the plan's own water (a moat: the routes keep 1 off it), only when the plan has some
         const fluids = K ? fluidPassInput(K) : null;
-        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length || rope?.hard?.length ? { hard: [...env.standingHard, ...(rope?.hard ?? [])] } : {}), ...(rope?.base ? { base: rope.base } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}), ...(bridge ? { bridge } : {}), ...(tunnel ? { tunnel } : {}), ...(fluids ? { fluids } : {}) });
+        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(terracedPlan ? { guard: true } : {}), ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length || rope?.hard?.length ? { hard: [...env.standingHard, ...(rope?.hard ?? [])] } : {}), ...(rope?.base ? { base: rope.base } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}), ...(bridge ? { bridge } : {}), ...(tunnel ? { tunnel } : {}), ...(fluids ? { fluids } : {}) });
       } catch (e) {
         rollback(r, cp);
         for (const l of group) if (!answers.has(l.conn.id)) ans(l.conn, { class: 'refused', reasons: [{ code: /KEEP_OUT/.test(e.message) ? 'KEEP_OUT' : 'UNREACHABLE', message: e.message }] });
@@ -1435,7 +1519,9 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         const lots = e.L.lots.map((l) => ({ id: l.spec.id, box: [l.lot.box.minX, l.lot.box.minY, l.lot.box.minZ, l.lot.box.maxX, l.lot.box.maxY, l.lot.box.maxZ], entrance: l.lot.entrance, front: l.lot.front, size: [l.rect[2] - l.rect[0] + 1, l.rect[3] - l.rect[1] + 1] }));
         a.geometry = { rect: rectArr(z.rect), districts: Object.fromEntries(Object.entries(d.rects).map(([id, q]) => [id, { rect: q, band: d.bandOf[id].got, bell: d.bells[id], lots: d.lots[id], unplaced: d.unplacedLots[id] }])), unplaced: d.unplaced.map((u) => u.id), edges: d.edges.map((x) => ({ id: x.id, a: x.a, b: x.b, kind: x.kind, ok: x.ok })), treeCost: d.treeCost, loopCost: d.loopCost, lots,
           ...(d.follow ? { follow: Object.fromEntries(Object.entries(d.follow).map(([id, f]) => [id, { kind: f.kind, side: f.side, rect: f.rect, mask: f.mask, boundary: f.boundary, street: corners(f.street) }])) } : {}),
-          ...(d.corridor ? { corridor: Object.fromEntries(Object.entries(d.corridor).map(([id, c]) => [id, { runs: c.runs, cells: c.cells }])) } : {}), ...(d.join && !d.join.region ? { join: d.join } : {}) };
+          ...(d.corridor ? { corridor: Object.fromEntries(Object.entries(d.corridor).map(([id, c]) => [id, { runs: c.runs, cells: c.cells }])) } : {}), ...(d.join && !d.join.region ? { join: d.join } : {}),
+          // ((6c S3) a terraced district's levels and lots on them)
+          ...(d.terraces ? { terraces: Object.fromEntries(Object.entries(d.terraces).map(([id, t]) => [id, { rise: t.rise, retain: t.retain, levels: t.levels, lots: t.lots.map((l) => ({ id: l.id, level: l.level, y: l.y })), retained: t.retained, rails: t.rails, ...(t.dropped.length ? { dropped: t.dropped.map((u) => u.id) } : {}) }])) } : {}) };
         const entries = new Map(zoneLots(p.part).map((l) => [l.id, l.lot?.entry ?? null]));
         a.provisional = styleOf(P.plan, p.part)?.pending !== undefined || lots.some((l) => !entries.get(l.id));
         continue;
@@ -1558,7 +1644,10 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
       const did = ids.includes(port ?? '') ? port : port === 'start' || port === 'end' ? d0 : [...ids].sort((p1, p2) => dist([out.data.bells[p1][0], out.data.bells[p1][2]]) - dist([out.data.bells[p2][0], out.data.bells[p2][2]]) || cmp(p1, p2))[0];
       if (!out.ends[did]) return { error: { code: 'NO_ROOM', message: `district ${port} was not placed`, path: where } };
       const en = out.ends[did];
-      const pick = port === 'start' ? en[0] : port === 'end' ? en[1] : dist([en[1].x, en[1].z]) < dist([en[0].x, en[0].z]) ? en[1] : en[0];
+      // ((6c S3) a terraced district's ends are its lots: the nearest of them all)
+      const pick = port === 'start' ? en[0] : port === 'end' ? en[1] : en[0]?.terraced ? [...en].sort((p1, p2) => dist([p1.x, p1.z]) - dist([p2.x, p2.z]) || p1.k - p2.k)[0] : dist([en[1].x, en[1].z]) < dist([en[0].x, en[0].z]) ? en[1] : en[0];
+      // ((6c S3) a terraced district's end is a lot: the route ends at its entrance)
+      if (pick.junction) { const g = r.graph.nodes.find((x) => x.id === pick.junction); if (g) return { name: g.id, at: [...g.at] }; }
       return feet(pick.x, pick.z, `s_${tag}`, pick.facing);
     }
     if (z) {

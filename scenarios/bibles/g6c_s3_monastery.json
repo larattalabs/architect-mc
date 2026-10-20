@@ -1,0 +1,26 @@
+{
+  "name": "G6C-S3 mountain monastery",
+  "format": 2,
+  "scope": "settlement",
+  "prompt": "S3's fixture bible (CONTRACT 6c S3 §4, N-S3-2): a mountain monastery terraced into the slope in stone bricks with deepslate-tile roofs, a spruce frame and waxed copper accents (waxed: no weathering to undo, CU), soul lanterns on spruce fences for light (block light 10, under vanilla's melt: the high band is frozen peaks and snowy slopes), moss and cobblestone rubble; the gardens' fountain has a copper coping and a sea-lantern spout (its own light: no lamp may stand in its watch, KC); the lot entries are built in its roles too",
+  "roles": {
+    "wall": "minecraft:stone_bricks",
+    "wall_alt": "minecraft:mossy_stone_bricks",
+    "frame": "minecraft:spruce_log",
+    "floor": "minecraft:spruce_planks",
+    "roof": "minecraft:deepslate_tiles",
+    "trim": "minecraft:deepslate_bricks",
+    "accent": "minecraft:waxed_cut_copper",
+    "foundation": "minecraft:stone_bricks",
+    "path": "minecraft:stone_bricks",
+    "light": "minecraft:soul_lantern",
+    "surface": "minecraft:grass_block",
+    "subsurface": "minecraft:dirt",
+    "rock": "minecraft:stone",
+    "rubble": "minecraft:cobblestone",
+    "rail": "minecraft:spruce_fence",
+    "structure": "minecraft:stone_bricks",
+    "glow": "minecraft:sea_lantern"
+  },
+  "fluids": { "coping": "accent", "spout": "glow", "rim": "structure", "bed": "foundation" }
+}
