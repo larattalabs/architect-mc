@@ -64,6 +64,14 @@ export function baseTree(root) {
  * warnings; every built-in and scenario bible's palette() is the same; the catalogue's entries and catalogueVersion are the same (its
  * header's api and kitVersion move); the re-cut goldens differ only in irSha and kitVersion.
  */
+/**
+ * (6c VOC-c) What later slices change by name (each slice's own identity item holds the rest): the 7 asks with a palette rule and
+ * extension/e05 and e16 (rule.palette supported, VOC-c), and the catalogue entries they flip (rule.palette; the catalogueVersion moves).
+ */
+export const LATER_EXCEPTIONS = Object.freeze({ fixtures: ['extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json'],
+  asks: ['desert_jungle_wall.json', 'hidden_village.json', 'mage_exiles.json', 'old_new_town.json', 'one_block.json', 'rival_families.json', 'row_houses.json'],
+  catalogue: ['rule.palette'] });
+
 export async function unchanged(root) {
   const { dir: mainDir, base } = baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
@@ -120,7 +128,9 @@ export async function unchanged(root) {
   // the catalogue: entries and catalogueVersion the same; the header's api and kitVersion move
   const cat = (d) => JSON.parse(fs.readFileSync(path.join(d, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
   const [gNew, gOld] = [cat(root), cat(mainDir)];
-  out.catalogue = { entries: JSON.stringify(gNew.entries) === JSON.stringify(gOld.entries), catalogueVersion: gNew.catalogueVersion === gOld.catalogueVersion, header: { api: [gOld.api, gNew.api], kitVersion: [gOld.kitVersion, gNew.kitVersion] } };
+  const kept = (g) => JSON.stringify(g.entries.filter((e) => !LATER_EXCEPTIONS.catalogue.includes(e.id)));
+  const flipped = LATER_EXCEPTIONS.catalogue.some((id) => JSON.stringify(gNew.entries.find((e) => e.id === id)) !== JSON.stringify(gOld.entries.find((e) => e.id === id)));
+  out.catalogue = { entries: kept(gNew) === kept(gOld), catalogueVersion: gNew.catalogueVersion === gOld.catalogueVersion || flipped, header: { api: [gOld.api, gNew.api], kitVersion: [gOld.kitVersion, gNew.kitVersion] }, later: flipped ? LATER_EXCEPTIONS.catalogue : [] };
   // the scenario goldens: tiles and cells as the base's; only irSha and kitVersion may move
   const gd = path.join(root, 'scenarios', 'goldens');
   for (const f of fs.readdirSync(gd).filter((x) => x.endsWith('.json')).sort()) {
@@ -133,7 +143,8 @@ export async function unchanged(root) {
     out.goldens[f] = { same: JSON.stringify(ra) === JSON.stringify(rb), recut: a.kitVersion !== b.kitVersion ? `${b.kitVersion} -> ${a.kitVersion}` : null };
   }
   const bad = (m) => Object.entries(m).filter(([, v]) => v === false || v?.error || (typeof v === 'object' && v !== null && Object.entries(v).some(([k, x]) => k !== 'recut' && x === false))).map(([k]) => k);
-  out.differ = { fixtures: bad(out.fixtures), asks: bad(out.asks), examples: bad(out.examples), palettes: bad(out.palettes), goldens: bad(out.goldens) };
+  out.differ = { fixtures: bad(out.fixtures).filter((k) => !LATER_EXCEPTIONS.fixtures.includes(k)), asks: bad(out.asks).filter((k) => !LATER_EXCEPTIONS.asks.includes(k)), examples: bad(out.examples), palettes: bad(out.palettes), goldens: bad(out.goldens) };
+  out.later = { fixtures: bad(out.fixtures).filter((k) => LATER_EXCEPTIONS.fixtures.includes(k)), asks: bad(out.asks).filter((k) => LATER_EXCEPTIONS.asks.includes(k)) };
   out.counts = { fixtures: Object.keys(out.fixtures).length, asks: Object.keys(out.asks).length, examples: Object.keys(out.examples).length, palettes: Object.keys(out.palettes).length, goldens: Object.keys(out.goldens).length };
   out.ok = Object.values(out.differ).every((l) => l.length === 0) && out.counts.asks === 59 && out.counts.fixtures >= 40 && out.catalogue.entries && out.catalogue.catalogueVersion;
   return out;

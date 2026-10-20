@@ -6627,6 +6627,23 @@
    "ft": 1
   }
  },
+ "groups": {
+  "wood": [
+   "acacia",
+   "bamboo",
+   "birch",
+   "cherry",
+   "crimson",
+   "dark_oak",
+   "jungle",
+   "mangrove",
+   "oak",
+   "pale_oak",
+   "poplar",
+   "spruce",
+   "warped"
+  ]
+ },
  "compact": {
   "note": "families: members of every family with more than one (any other block is a family of its own, named by its id); tiers: whole families, else blocks (the rest is common); dyed: the families whose members are dyed (a member's colour is its id's dye prefix); survival: the blocks not simply crafted or mined (silk: silk touch only; loot: chests, mobs, trades; cost: placed with another item; none: creative only)",
   "families": {
@@ -8265,6 +8282,24 @@
     "trial_spawner",
     "vault"
    ]
-  }
+  },
+  "groups": {
+   "wood": [
+    "acacia",
+    "bamboo",
+    "birch",
+    "cherry",
+    "crimson",
+    "dark_oak",
+    "jungle",
+    "mangrove",
+    "oak",
+    "pale_oak",
+    "poplar",
+    "spruce",
+    "warped"
+   ]
+  },
+  "palette": "rule.palette {family, share} measures a family's share of written blocks; family is a family or group named here; 'only X' is share [1, 1], 'no X' is share [0, 0]"
  }
 }

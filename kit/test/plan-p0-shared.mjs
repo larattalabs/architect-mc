@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import { asksSurvey, goldenSurvey, stewardAnchors, checkPlanLocal, checkPlanVolumes, memoryCache, flatSurvey, FIX, ROOT } from './plan-helpers.mjs';
+import { asksSurvey, goldenSurvey, stewardAnchors, checkPlanLocal, checkPlanVolumes, memoryCache, flatSurvey, FIX, ROOT, fixtureStyle, fixtureLotBlocks } from './plan-helpers.mjs';
 import { validatePlan, PLAN_SCHEMA } from '../lib/plan/schema.mjs';
 import { planCatalogue, diffCatalogues } from '../lib/plan/catalogue.mjs';
 
@@ -14,9 +14,13 @@ export const read = (dir) => fs.readdirSync(path.join(FIX, dir)).filter((f) => f
 // ravine, a water channel or a ridge; (T3b) and its `volume`: the frozen rock a tunnel's corridor reads, through the check's two-plan
 // flow (plan_v0 asks, the fixture answers))
 export const svOf = (fx) => (fx.terrain ? flatSurvey(fx.terrain) : SV[fx.on]);
-export const run = (fx, extra = {}) => {
+// ((6c VOC-c) a VOC-c fixture (one with a rule.palette) is checked in its bible (`style`) with its bound lots' histograms (`lotDesigns`),
+// as the game checks it; every other fixture as before)
+export const run = async (fx, extra = {}) => {
   const s = svOf(fx);
-  const o = { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}), ...extra };
+  const vocc = (fx.plan?.rules ?? []).some((r) => r?.kind === 'palette') && (fx.style || fx.lotDesigns);
+  const lb = vocc ? await fixtureLotBlocks(fx) : null;
+  const o = { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}), ...(vocc ? { style: fixtureStyle(fx) } : {}), ...(lb ? { lotBlocks: lb } : {}), ...extra };
   return fx.volume ? checkPlanVolumes(fx.plan, { ...o, volume: fx.volume }) : checkPlanLocal(fx.plan, o);
 };
 export const lots = (n, p = 'h') => Array.from({ length: n }, (_, i) => ({ id: `${p}${i + 1}`, type: 'house', size: [9, 9] }));

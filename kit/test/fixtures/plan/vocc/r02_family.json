@@ -1,0 +1,101 @@
+{
+ "about": "(6c VOC-c, \u00a79) families that resolve to nothing: an unknown family (moss_stone_spruce_oak: refused NO_FEATURE {kind: family, family}, wouldFit required false), a prose rule with no family (NO_FEATURE {kind: family}, \"palette guidance only\", wouldFit required false) and a near miss (copper_blocks: NO_FEATURE, wouldFit {family: copper}, re-checked over v64's copper reach: fits). None is required: overall NEEDS_REPAIR",
+ "on": "flat",
+ "volume": {},
+ "style": "g6cvocc_copper",
+ "lotDesigns": {
+  "hall": "vocc_copper_cabin"
+ },
+ "expect": {
+  "parts": {
+   "mossy": "NO_FEATURE",
+   "prose": "NO_FEATURE",
+   "near": "NO_FEATURE"
+  },
+  "overall": "NEEDS_REPAIR"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "vocc_r02",
+  "zones": [
+   {
+    "id": "reach",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 24
+     }
+    },
+    "program": {
+     "lots": [
+      {
+       "id": "hall",
+       "type": "house",
+       "size": [
+        9,
+        11
+       ],
+       "entry": "vocc_copper_cabin"
+      }
+     ],
+     "shared": "none"
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "reach_wall",
+    "kind": "wall",
+    "where": {
+     "around": {
+      "feature": {
+       "part": "reach"
+      },
+      "ring": [
+       4,
+       8
+      ]
+     }
+    },
+    "height": 5
+   }
+  ],
+  "forms": [
+   {
+    "id": "fount",
+    "kind": "fountain",
+    "basin": 5,
+    "spout": 2,
+    "where": {
+     "near": {
+      "anchor": "stockpile",
+      "within": 16
+     }
+    }
+   }
+  ],
+  "rules": [
+   {
+    "id": "mossy",
+    "kind": "palette",
+    "family": "moss_stone_spruce_oak",
+    "notes": "no such family"
+   },
+   {
+    "id": "prose",
+    "kind": "palette",
+    "notes": "Plain, simple, utilitarian materials only."
+   },
+   {
+    "id": "near",
+    "kind": "palette",
+    "family": "copper_blocks",
+    "scope": [
+     "reach",
+     "reach_wall",
+     "fount"
+    ]
+   }
+  ]
+ }
+}

@@ -97,4 +97,5 @@ class RegionFluidsHYTest {
 		// a course IR needs `courses`: a 0.37.0 helper (or this mod's list without it) refuses it PLAN_STALE
 		assertNull(IrStale.reason(PlanStaleTest.ir(2, IrStale.KIT_VERSION, "fluid", "courses"), null));
 	}
+
 }

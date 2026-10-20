@@ -17,7 +17,8 @@ test('item 1: valid/ fixtures (at least 12) validate and every part fits', async
     for (const p of v.parts) assert.equal(p.verdict, 'compile', `${f.name} ${p.id}: ${p.verdict} ${JSON.stringify(p.reason)}`);
     const r = await run(f);
     assert.equal(r.check.overall, 'READY', `${f.name}: ${r.check.overall}`);
-    for (const a of r.check.parts) assert.equal(a.class, 'fits', `${f.name} ${a.part}: ${a.class} ${JSON.stringify(a.reasons ?? a.deviations)}`);
+    // ((6c VOC-c) a fixture may name parts that answer adjusted by design: v65's "no wood" rule, re-planned with its swaps)
+    for (const a of r.check.parts) assert.equal(a.class, (f.adjusted ?? []).includes(a.part) ? 'adjusted' : 'fits', `${f.name} ${a.part}: ${a.class} ${JSON.stringify(a.reasons ?? a.deviations)}`);
     assert.match(r.artifactSha, /^[0-9a-f]{64}$/);
   }
 });

@@ -19,10 +19,10 @@ import { planHy, checkHy } from './hy-helpers.mjs';
 const FIX = path.join(ROOT, 'kit', 'test', 'fixtures', 'plan');
 
 test('catalogue 8: the golden; the H -> HY diff is exactly the one flip, the four new ids, connector.channel\'s limits and five notes', () => {
-  const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
-  assert.deepEqual(planCatalogue(), golden);
+  // ((6c VOC-c) catalogue 8 is archived as fixtures/plan/catalogue-hy.json; the golden is catalogue 9 now: vocc.test.mjs)
+  const golden = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-hy.json'), 'utf8'));
   assert.equal(golden.catalogueVersion, 8);
-  assert.equal(golden.api, PLAN_API);
+  assert.equal(golden.api, '1.36.0');
   const h = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-h.json'), 'utf8'));
   assert.equal(h.catalogueVersion, 7);
   const d = diffCatalogues(h, golden, { pending: [{ part: 'canal', block: 'channel.course' }] });
@@ -42,6 +42,7 @@ test('catalogue 8: the golden; the H -> HY diff is exactly the one flip, the fou
   // nothing waits for HY any more (§14 item 12's search over the catalogue: the archived ones aside)
   for (const x of golden.entries) assert.ok(x.until !== 'HY' && !/until HY\b/.test(x.note ?? ''), x.id);
   assert.ok(!/"until":\s*"HY"/.test(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8')));
+  assert.ok(planCatalogue().catalogueVersion >= 8 && PLAN_API !== undefined, 'a later catalogue keeps HY\'s entries (vocc.test.mjs checks 9)');
 });
 
 test('R24: a channel\'s path forms (moat, course, race with a lot in via, ditch); none or two malformed; the course members validate', () => {

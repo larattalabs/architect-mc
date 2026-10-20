@@ -317,6 +317,8 @@ export function registerTemplate(name, params, check) {
 }
 
 function kindError(family, kind, part) {
+  // (6c VOC-c) a palette rule's share is [min, max] (the schema subset can't order the two)
+  if (family === 'rule' && kind === 'palette' && Array.isArray(part.share) && part.share[0] > part.share[1]) return { path: '$.share', message: `share [${part.share.join(', ')}]: min is above max` };
   if (family === 'zone') {
     const p = part.program;
     if (p.template !== undefined) {

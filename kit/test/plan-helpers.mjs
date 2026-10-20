@@ -49,11 +49,11 @@ export function stewardAnchors(claim) {
  * Check a plan in process: plan_v0 over `survey` (bytes) and `claim`, then finish. Options: anchors {name: [x, y, z]}, protected
  * [{id, rect}], regions [{id, rect}], budget, bible, fingerprint, keepOut [[x0, z0, x1, z1]], planCache (key -> entry | null).
  */
-export async function checkPlanLocal(plan, { survey, claim, anchors = {}, protected: prot = [], regions = [], builds = [], standing = null, biomes = null, budget = {}, bible = null, fingerprint = null, keepOut = [], planCache = null, volumes = [], style = null } = {}) {
+export async function checkPlanLocal(plan, { survey, claim, anchors = {}, protected: prot = [], regions = [], builds = [], standing = null, biomes = null, budget = {}, bible = null, fingerprint = null, keepOut = [], planCache = null, volumes = [], style = null, lotBlocks = null } = {}) {
   const params = { plan, anchors: { anchors }, protected: { areas: prot }, regions: { regions }, builds: { builds }, ...(standing ? { standing: { standing } } : {}), budget, bible, fingerprint: fingerprint ? { sha: fingerprint } : null };
   // (6c VOC) `style`: a bible.json's members as the sidecar passes them to the plan CLI (roles, patterns, connectors, fluids, rarity)
   const sty = style ? { roles: { ...(style.roles ?? {}) }, ...(style.patterns ? { patterns: style.patterns } : {}), ...(style.connectors ? { connectors: style.connectors } : {}), ...(style.fluids ? { fluids: style.fluids } : {}), ...(style.rarity ? { rarity: style.rarity } : {}) } : { roles: {} };
-  const res = await planRegion({ programFile: PLAN_V0, params, survey, claim, ...sty, keepOut, planCache, ...(biomes ? { biomes } : {}), ...(volumes.length ? { volumes } : {}) });
+  const res = await planRegion({ programFile: PLAN_V0, params, survey, claim, ...sty, keepOut, planCache, ...(biomes ? { biomes } : {}), ...(volumes.length ? { volumes } : {}), ...(lotBlocks ? { lotBlocks } : {}) });
   const cols = fillMissing(asColumns(survey)).columns;
   const f = finishCheck({ res, survey: cols, blobs: (sha) => res.blobs.get(sha) ?? null, surveyBytesSha: createHash('sha256').update(survey).digest('hex'), inputs: { surveyRes: cols.resolution } });
   return { ...f, res };
@@ -137,4 +137,19 @@ export async function checkPlanVolumes(plan, { volume = {}, ...o } = {}) {
   for (const b of need) if (!vols.some((v) => v.box.minX === b.minX && v.box.minY === b.minY && v.box.minZ === b.minZ && v.box.maxX === b.maxX && v.box.maxY === b.maxY && v.box.maxZ === b.maxZ)) vols.push(await fixtureVolume(b, volume, o.survey, o.claim));
   const second = await checkPlanLocal(plan, { ...o, volumes: vols });
   return { ...second, volumes: vols, first, asked: need };
+}
+
+/** (6c VOC) A fixture's style: a scenario bible's name (scenarios/bibles/<name>.json), or an inline bible, or null. */
+export function fixtureStyle(fx) {
+  return typeof fx.style === 'string' ? JSON.parse(fs.readFileSync(path.join(ROOT, 'scenarios', 'bibles', `${fx.style}.json`), 'utf8')) : fx.style ?? null;
+}
+
+/**
+ * (6c VOC-c) A fixture's `lotDesigns` ({lot: design id}, kit/test/fixtures/vocab/vocc-designs.mjs) as the check's `lotBlocks`: each
+ * design's block histogram, as the mod reads the bound entry's template. Null without any.
+ */
+export async function fixtureLotBlocks(fx) {
+  if (!fx.lotDesigns) return null;
+  const { VOCC_DESIGNS, blueprintBlocks } = await import('./fixtures/vocab/vocc-designs.mjs');
+  return Object.fromEntries(Object.entries(fx.lotDesigns).map(([lot, id]) => [lot, blueprintBlocks(VOCC_DESIGNS[id]())]));
 }

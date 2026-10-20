@@ -76,7 +76,7 @@
 
   "x-catalogue": {
     "about": "The capability catalogue that P0 ships (catalogueVersion 1). Each entry: a stable block id (never reused or renamed), the API version it arrived in (sinceApi: the API version at which the entry reached its current state and schemaVersion, always a real semver; a new or changed entry carries the branch's placeholder API version and the merge-time renumber restamps it, which tools/catalogue-since-check.mjs enforces), its own schemaVersion (bumped when its members grow, additively), its state (supported | reserved | retired) and, for reserved, the slice it waits for (until). Checks return this catalogue with every answer; a release commits it as a golden so two catalogues diff by id. Reserved entries carry their parameters through $defs/extension until supported.",
-    "catalogueVersion": 8,
+    "catalogueVersion": 9,
     "entries": [
       { "id": "zone.standard", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.standard" },
       { "id": "zone.outpost", "sinceApi": "1.29.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.outpost" },
@@ -147,7 +147,7 @@
       { "id": "form.seabed_site", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "later", "note": "Building under water; a later slice, not yet named." },
       { "id": "form.ship_hull", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "unscheduled", "note": "Structures that move or float; not yet scheduled." },
       { "id": "form.mast", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "unscheduled", "note": "Structures that move or float; not yet scheduled." },
-      { "id": "rule.palette", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.palette" },
+      { "id": "rule.palette", "sinceApi": "1.39.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/rule.palette", "limits": { "groups": ["wood"], "share": [0, 1], "exempt": ["terrain", "support"], "scope": 32 }, "note": "measured over parts and bound lots; required rules are checked again at realise" },
       { "id": "rule.shape", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.shape" },
       { "id": "rule.variety", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.variety" },
       { "id": "rule.density", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.density" },
@@ -836,14 +836,30 @@
     },
 
     "rule.common": {
-      "description": "Members every rule has. Rules are verified on the fitted output with evidence (the rule-check slice, RC); in plan/0 every rule kind is reserved and answers unsupported. The drafts below are guidance for the plan writer; RC makes them strict, widening only additively.",
+      "description": "Members every rule has. Rules are verified on the fitted output with evidence (the rule-check slice, RC); in plan/0 every rule kind but palette (VOC-c: measured) is reserved and answers unsupported. The drafts below are guidance for the plan writer; RC makes them strict, widening only additively.",
       "type": "object",
       "properties": {
         "id": { "$ref": "#/$defs/id" }, "kind": { "$ref": "#/$defs/kind" }, "required": { "type": "boolean" },
         "scope": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/id" }, "description": "Parts the rule binds; absent: the whole plan." }
       }
     },
-    "rule.palette": { "type": "object", "x-state": "reserved", "description": "A block family with a share, measured over written cells, exempting terrain and support.", "properties": { "family": { "type": "string" }, "share": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "number", "minimum": 0, "maximum": 1 } }, "exempt": { "type": "array", "items": { "enum": ["terrain", "support"] } } } },
+    "rule.palette": {
+      "type": "object", "required": ["id", "kind"], "additionalProperties": false,
+      "description": "(VOC-c) A family's share of the measured cells (written, not air, fluid or common natural) of the parts in scope and their zones' bound lots, less terrain and support (exempt, default both). family: a vocab/1 family or group (wood). share [min, max], default [1, 1]: only X is [1, 1], no X is [0, 0] (re-planned, X swapped along its material chain). Read from params too. A required rule over lots without an entry is checked at realiseApproved (PALETTE).",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "palette" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "scope": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/id" }, "description": "Parts the rule binds; absent: the whole plan." },
+        "family": { "type": "string", "pattern": "^[\\s\\S]{1,64}$" },
+        "share": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "number", "minimum": 0, "maximum": 1 } },
+        "exempt": { "type": "array", "maxItems": 2, "items": { "enum": ["terrain", "support"] } },
+        "params": { "type": "object", "description": "Read leniently, never malformed: family, share and exempt when the top level leaves them out; other keys (gradient, colours, material) noted, not read." }
+      }
+    },
     "rule.shape": { "type": "object", "x-state": "reserved", "description": "At the outline or footprint level, above voxel faces: no_right_angles, symmetric, round.", "properties": { "shape": { "enum": ["no_right_angles", "symmetric", "round"] }, "level": { "enum": ["outline", "footprint"] } } },
     "rule.variety": { "type": "object", "x-state": "reserved", "description": "Measured on the built output (0b's lever metric), for example no two alike.", "properties": { "minDistance": { "type": "number", "minimum": 0, "maximum": 1 } } },
     "rule.density": { "type": "object", "x-state": "reserved", "properties": { "buildingsPer1024": { "$ref": "#/$defs/intRange" } } },
@@ -890,7 +906,7 @@
     "reason": {
       "type": "object", "required": ["code"], "additionalProperties": false,
       "properties": {
-        "code": { "enum": ["SCHEMA", "UNKNOWN_REF", "CYCLE", "EXTENSION_BOUND", "UNSUPPORTED", "NO_FEATURE", "NO_ROOM", "OUT_OF_CLAIM", "OVERLAP", "PROTECTED", "KEEP_OUT", "TOO_STEEP", "WATER", "UNREACHABLE", "TOLERANCE", "DEPENDENCY", "BUDGET", "CANCELLED", "LIMIT", "NO_GAP", "SPAN", "ANCHOR", "HEADROOM", "MOVER", "NO_COVER", "VOLUME", "LEAK", "FIRE", "VOCAB"] },
+        "code": { "enum": ["SCHEMA", "UNKNOWN_REF", "CYCLE", "EXTENSION_BOUND", "UNSUPPORTED", "NO_FEATURE", "NO_ROOM", "OUT_OF_CLAIM", "OVERLAP", "PROTECTED", "KEEP_OUT", "TOO_STEEP", "WATER", "UNREACHABLE", "TOLERANCE", "DEPENDENCY", "BUDGET", "CANCELLED", "LIMIT", "NO_GAP", "SPAN", "ANCHOR", "HEADROOM", "MOVER", "NO_COVER", "VOLUME", "LEAK", "FIRE", "VOCAB", "PALETTE"] },
         "message": { "type": "string" },
         "path": { "type": "string", "description": "SCHEMA: the JSON path of the first error." },
         "block": { "$ref": "#/$defs/blockId" },
@@ -909,13 +925,14 @@
         "geometry": { "type": "object", "description": "Resolved, in world cells: rect or polygon, y, lots (LotSpec shape), path polylines, form bounds." },
         "cost": { "type": "object", "description": "For a provisional part (a building without a library entry, or a pending style) the range form is used and the artifact also records the part's fit box (R13). {cells, removed, added, tiles, chunksToGenerate, bom?} exact, or {range: {cells: [min, max], bom?}} when provisional." },
         "provisional": { "type": "boolean" },
-        "deviations": { "type": "array", "items": { "type": "object", "required": ["what", "value"], "properties": { "what": { "enum": ["move", "size", "rotate", "count", "grade", "detour", "sketch", "join", "crossing"] }, "value": { "type": "number" }, "max": { "type": "number" }, "exceeds": { "type": "boolean" } } } },
+        "deviations": { "type": "array", "items": { "type": "object", "required": ["what", "value"], "properties": { "what": { "enum": ["move", "size", "rotate", "count", "grade", "detour", "sketch", "join", "crossing", "material"] }, "value": { "type": "number" }, "max": { "type": "number" }, "exceeds": { "type": "boolean" } } } },
         "reasons": { "type": "array", "items": { "$ref": "#/$defs/reason" } },
         "wouldFit": { "type": "array", "maxItems": 4, "items": { "type": "object", "description": "A concrete alternative as a plan fragment (for example a smaller size, another where) with its own geometry and cost." } },
         "blockedBy": { "type": "array", "items": { "$ref": "#/$defs/id" } },
         "ext": { "$ref": "#/$defs/ext", "description": "The part's own ext, echoed unchanged (Steward's hook)." },
         "cached": { "type": "boolean" },
-        "notes": { "type": "array", "maxItems": 16, "items": { "type": "string" }, "description": "What the check did with the part that is not a deviation or a reason (for example a member v0 reads but does not act on). Never a verified requirement." }
+        "notes": { "type": "array", "maxItems": 16, "items": { "type": "string" }, "description": "What the check did with the part that is not a deviation or a reason (for example a member v0 reads but does not act on). Never a verified requirement." },
+        "measured": { "type": "object", "description": "(VOC-c) A palette rule's measure: {cells, family, share, parts: {id: [family, cells]}, lots: {id: [family, cells]}, pendingLots} (at most 16 parts and 16 lots, the worst first)." }
       }
     }
   }

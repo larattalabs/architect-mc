@@ -384,6 +384,11 @@ public final class RegionsImpl implements Regions {
 	}
 
 	@Override
+	public Optional<dev.larattalabs.architect.api.PaletteCheck> checkPalette(String artifactSha, java.util.Map<String, String> lotEntries) {
+		return PaletteRules.check(artifactSha, lotEntries);
+	}
+
+	@Override
 	public void pinArtifact(String artifactSha, String owner) {
 		PlanChecks.pin(artifactSha, owner, true);
 	}
@@ -2495,6 +2500,12 @@ public final class RegionsImpl implements Regions {
 
 		RegionException(Reason r, String msg) {
 			super(r, msg);
+			this.reason = r;
+		}
+
+		/** (VOC-c) With a detail (PALETTE: the rule id). */
+		RegionException(Reason r, String msg, String detail) {
+			super(r, msg, detail);
 			this.reason = r;
 		}
 	}

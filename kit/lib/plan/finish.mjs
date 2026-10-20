@@ -165,6 +165,9 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
       // (6c T3b, §6) the tunnels' guard cells (void, shell, 2-cell buffer) and the frozen volume each was checked against:
       // realiseApproved compares their classes with the world now (ARTIFACT_STALE on a change). Only in a plan with a tunnel
       ...(pc.links?.guards?.length ? { guards: pc.links.guards.filter((g) => answers.some((a) => a.part === g.part && OK.has(a.class))) } : {}),
+      // (6c VOC-c, §4) each palette rule with lots in scope: what realiseApproved measures again (the family's blocks, the unmeasured
+      // blocks, the parts' counts, the bound lots' counts at check time). Only in a plan with one
+      ...(pc.paletteRows?.length ? { palette: pc.paletteRows } : {}),
     };
     artifactSha = sha256Hex(canonicalJson(artifact));
   }

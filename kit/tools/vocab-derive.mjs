@@ -318,9 +318,10 @@ export function survivalItemsJson(creativeOnly, costs, modRows) {
  * The vocab/1 document (kit/schemas/vocab-1.json; the systemRef `vocab/1`, S-VOC-6): families, tiers, colours and survival class per
  * block (`blocks`, the full form) and the same grouped (`compact`, the `#compact` form: a family's members only when it has more than
  * one; a tier by whole families where every member shares it, else by block; the dyed families (a member's colour is its name's dye
- * prefix); the blocks survival can't simply mine or craft). Nothing in it varies between runs.
+ * prefix); the blocks survival can't simply mine or craft). (6c VOC-c) `groups` (a rule.palette family may name one) in both forms and
+ * `compact.palette`'s note. Nothing in it varies between runs.
  */
-export function vocabDoc(fields) {
+export function vocabDoc(fields, { groups = {} } = {}) {
   const ids = Object.keys(fields).sort(cmp);
   const blocksOut = {};
   const fam = {};
@@ -344,6 +345,8 @@ export function vocabDoc(fields) {
     else for (const b of fam[n]) if (blocksOut[b].t) tiers[blocksOut[b].t].blocks.push(b);
   }
   const dyed = famNames.filter((n) => fam[n].some((b) => blocksOut[b].col));
+  const groupsOut = Object.fromEntries(Object.keys(groups).sort(cmp).map((g) => [g, [...groups[g]].sort(cmp)]));
+  for (const [g, fs] of Object.entries(groupsOut)) for (const f of fs) if (!fam[f]) throw new Error(`group ${g}: ${f} is not a family`);
   const survival = { silk: [], loot: [], cost: [], none: [] };
   for (const b of Object.keys(blocksOut)) if (survival[blocksOut[b].sv]) survival[blocksOut[b].sv].push(b);
   return {
@@ -361,12 +364,19 @@ export function vocabDoc(fields) {
     survivalClasses: SURVIVAL_CLASSES,
     colours: DYES,
     blocks: blocksOut,
+    // (6c VOC-c) family groups (kit/lib/vocab/groups.mjs): a rule.palette's family may name one; both forms carry them
+    groups: groupsOut,
     compact: {
       note: 'families: members of every family with more than one (any other block is a family of its own, named by its id); tiers: whole families, else blocks (the rest is common); dyed: the families whose members are dyed (a member\'s colour is its id\'s dye prefix); survival: the blocks not simply crafted or mined (silk: silk touch only; loot: chests, mobs, trades; cost: placed with another item; none: creative only)',
       families: Object.fromEntries(famNames.filter((n) => fam[n].length > 1).map((n) => [n, fam[n]])),
       tiers,
       dyed,
       survival,
+      groups: groupsOut,
+      palette: PALETTE_NOTE,
     },
   };
 }
+
+/** (6c VOC-c) compact.palette: how a plan writer names a family in rule.palette. */
+export const PALETTE_NOTE = "rule.palette {family, share} measures a family's share of written blocks; family is a family or group named here; 'only X' is share [1, 1], 'no X' is share [0, 0]";

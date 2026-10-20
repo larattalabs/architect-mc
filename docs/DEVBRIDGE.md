@@ -348,6 +348,16 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-20 (6c slice VOC-c):** new (`SliceVoccDev`, generated headless too) `dev.vocc.checkPalette {sha, lotEntries?: {lot: entry}}`
+  (`Regions.checkPalette`: the artifact's palette rules measured with these lot entries over its own -> `{paletteOk, rules: [{rule, required,
+  family, share, cells, familyCells, measured, fits, worstLot, lots: {lot: {entry, cells, familyCells}}, pendingLots}]}` or `{missing}`),
+  `dev.vocc.histogram {entry}` (the block histogram of the template a realise places for the entry: what a check's `lotBlocks` and the
+  realise measure -> `{entry, blocks}` or `{missing}`), `dev.vocc.regionPalette {region}` (the region record's ext `architect_mc:palette`:
+  the realise's rows -> `{region, palette}`) and `dev.vocc.delta {site, version?: 0, owner?, apply?: false}` (`Sites.checkDelta`, or
+  `applyDelta` with `apply`, through the public API, so a region lot's delta is judged against its palette rules -> `{verdictOk, refusals:
+  [{reason, message}], notes}` or `{applied, written, refusals, notes}`; `dev.site.delta.check` and `.apply` call SiteDeltas directly and
+  skip that judgement).
+
 - **2026-10-20 (6c slice IRR):** no new hook. `dev.journal.killAt` gains `FL6` (and `FL6+save`): a farm lot's site removal has
   drained its irrigation sources (`RegionFluids.drainLot`, saved) and not restored the site yet. A lot site's `ext` carries
   `architect_mc:irrigation {cells}` (its mask) and `architect_mc:irrigationDropped` (`dev.sites.state`); the region's
