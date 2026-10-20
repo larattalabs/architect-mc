@@ -40,7 +40,7 @@ import { shapeOf } from './style.mjs';
 import { voxelClassOf, isGravity } from '../blocks.mjs';
 import { bomOf } from './bom.mjs';
 import { fixtureFor } from '../region/fixtures.mjs';
-import { profile, sagOf, deckY, isSlab, rightOf, lateral, SITE_SOLID } from './ropeGeom.mjs';
+import { profile, sagOf, deckY, isSlab, rightOf, latOn, SITE_SOLID } from './ropeGeom.mjs';
 import { WET, askWet, fluidVolumes, noteWet, underwaterBlock, underwaterOk, wetColumn, wetKind, wetRuns } from '../fluids/wet.mjs';
 
 /** The limits (catalogue 6: `connector.bridge`), costs in T2's units (a straight walk cell is 10). */
@@ -85,6 +85,9 @@ const cmpKeys = (a, b) => { for (let t = 0; t < a.length; t++) if (a[t] !== b[t]
 /** The fewest piers a span of n deck cells needs. */
 export const piersFor = (n, every = BRIDGE.pierEvery) => Math.max(0, Math.floor((n + 1 + every - 1) / every) - 1);
 
+/** (the H batch) The deck on the route's side: ropeGeom.mjs latOn, shared with rope bridges and tunnels since housekeeping 3. */
+export { latOn };
+
 /**
  * Check one span (§3, §4's order: NO_GAP, SPAN, TOO_STEEP, HEADROOM, ANCHOR, WATER). `land`: {groundAt, topAt, waterAt, frozenAt,
  * blocked, classAt, written} (ropeGeom.mjs checkSpan's). `a` = [x, y0, z] the near landing, `dir` cardinal, `n` deck cells, `rise`,
@@ -92,17 +95,6 @@ export const piersFor = (n, every = BRIDGE.pierEvery) => Math.max(0, Math.floor(
  * broken variants' pier spacing and pier depth). Returns {ok, form, code?, evidence?, until?, ys, lowest, piers, springing, intrados,
  * over, depth, under} (auto: the arch when it holds, else the beam; failing both, the beam's failure with the arch's in evidence.arch).
  */
-/**
- * (the H batch) The deck's lateral offsets along rightOf(dir), on the route's side: the route's footprint (passes/route.mjs footprintOf)
- * puts an even width's extra column on +x or +z whichever way the path runs, so the deck does too (where rightOf(dir) points to -x or -z
- * the offsets flip). An odd width is symmetric, so unchanged. Before, a width-2 deck running +z or -x stood one column off the walk
- * that lands it: its landing column on no fill (M10:bridge, support and step).
- */
-export function latOn(width, dir) {
-  const { lo, hi } = lateral(width), [rx, rz] = rightOf(dir);
-  return rx + rz < 0 ? { lo: -hi, hi: -lo } : { lo, hi };
-}
-
 export function checkBridge(land, a, dir, n, rise, width, opts = {}) {
   const form = opts.form ?? 'auto';
   if (form === 'auto') {

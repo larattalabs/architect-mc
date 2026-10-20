@@ -1,0 +1,53 @@
+{
+  "about": "(housekeeping 3: the H batch's even-width rule for rope bridges) a 2-wide rope_bridge over a 16-wide ravine 24 deep, running +z. Before the fix ropeGeom's checkSpan and ropeCells put the deck's extra column along rightOf(dir), so running +z or -x the deck stood one column off the walk that lands it (the route's footprint takes +x / +z). even-width-hk3.test.mjs runs it both ways on both axes (the terrain transposed for x)",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2036,
+        "x1": 1159,
+        "z1": 2051,
+        "y": 40
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1080,
+      65,
+      2035
+    ],
+    "b": [
+      1080,
+      65,
+      2052
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "span",
+        "kind": "rope_bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        },
+        "width": 2
+      }
+    ]
+  },
+  "expect": {
+    "part": "span",
+    "class": "fits",
+    "widths": [
+      2
+    ]
+  }
+}

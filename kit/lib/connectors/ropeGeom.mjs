@@ -61,6 +61,16 @@ export function maxStep(ys) {
 export const rightOf = ([dx, dz]) => [-dz, dx];
 /** The lateral offsets of a deck of width w about its centre line (T2's footprint: lo..hi). */
 export const lateral = (w) => ({ lo: -Math.floor((w - 1) / 2), hi: Math.floor(w / 2) });
+/**
+ * (the H batch; housekeeping 3 for ropes and tunnels) The deck's lateral offsets along rightOf(dir), on the route's side: the route's
+ * footprint (region/passes/route.mjs footprintOf) puts an even width's extra column on +x or +z whichever way the path runs, so a
+ * deck, a rope bridge and a bore do too (where rightOf(dir) points to -x or -z the offsets flip). An odd width is symmetric, so
+ * unchanged. Before, a width-2 or width-4 span running +z or -x stood one column off the walk that lands it.
+ */
+export function latOn(width, dir) {
+  const { lo, hi } = lateral(width), [rx, rz] = rightOf(dir);
+  return rx + rz < 0 ? { lo: -hi, hi: -lo } : { lo, hi };
+}
 
 /** Voxel classes a post or a landing may stand in (§3 Anchors: site-solid). */
 export const SITE_SOLID = Object.freeze(['ROCK', 'SOIL']);
@@ -73,7 +83,7 @@ export const SITE_SOLID = Object.freeze(['ROCK', 'SOIL']);
  * Returns {ok, code?, evidence?, gap, ys}: the first failing check in order SPAN, TOO_STEEP, NO_GAP, HEADROOM, ANCHOR.
  */
 export function checkSpan(land, a, dir, n, rise, width, { gapDepth = ROPE.gapDepth } = {}) {
-  const [x0, y0, z0] = a, [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo, hi } = lateral(width);
+  const [x0, y0, z0] = a, [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo, hi } = latOn(width, dir);
   if (n < ROPE.spanMin || n > ROPE.spanMax) return { ok: false, code: 'SPAN', evidence: { span: n, min: ROPE.spanMin, max: ROPE.spanMax } };
   if (Math.abs(rise) > maxRiseOf(n)) return { ok: false, code: 'TOO_STEEP', evidence: { span: n, rise, max: maxRiseOf(n) } };
   const ys = profile(n, y0, rise);
@@ -147,7 +157,7 @@ const axisOf = ([dx]) => (dx !== 0 ? 'x' : 'z');
  * a full block; the player-only fallback and the `_unsafe.wholeBlockDeck` variant), `postDepth` (2; the broken variant 1).
  */
 export function ropeCells(a, dir, n, rise, width, { lampEvery = 12, chains = true, whole = false, postDepth = 2 } = {}) {
-  const [x0, y0, z0] = a, [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo, hi } = lateral(width);
+  const [x0, y0, z0] = a, [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo, hi } = latOn(width, dir);
   const ys = profile(n, y0, rise).map((y2) => (whole && isSlab(y2) ? y2 + 1 : y2));
   const deck = [], beds = [], rails = [], ropes = [], posts = [], lamps = [], clear = [];
   for (let i = 1; i <= n; i++) {
