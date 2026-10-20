@@ -4,7 +4,7 @@
 // summit, so the street climbs to it and the landmark lots stand at the top. A turn too steep for a ground road ends the street there
 // (fewer turns: lots that miss out are unplaced); a hill too steep for even the first turn answers NO_ROOM {why: grade}.
 import { polarArc, frontage, groundRoadProblem, hubSpace, hubAvoid, spokes, FL_RULES, TURN } from '../frontage.mjs';
-import { sidesAbout, boundsOf } from './ring.mjs';
+import { sidesAbout, boundsOf, bareHub } from './ring.mjs';
 
 export const MAX_TURNS = 3;
 /** The rise a centre needs over the land round it to count as a hill's summit. */
@@ -20,7 +20,14 @@ export function summitNear(F, c, reach) {
     const d = Math.max(Math.abs(x - c[0]), Math.abs(z - c[1]));
     if (!top || g > top.g || (g === top.g && (d < top.d || (d === top.d && (z < top.z || (z === top.z && x < top.x)))))) top = { x, z, g, d };
   }
-  return top ? { at: [top.x, top.z], top: top.g, low: lo, rise: top.g - lo } : null;
+  if (!top) return null;
+  // a summit inside the land: the ground falls away from it on every side (4 lower within 24 cells, or the land's edge further out); a
+  // slope's high edge is no summit
+  const falls = [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dz]) => {
+    for (let t = 1; t <= 24; t++) { const x = top.x + dx * t, z = top.z + dz * t; if (!F.ok(x, z)) return t > 12; if (F.S.heightAt(x, z) <= top.g - 4) return true; }
+    return false;
+  });
+  return { at: [top.x, top.z], top: top.g, low: lo, rise: falls ? top.g - lo : 0 };
 }
 
 /**
@@ -50,8 +57,8 @@ export function spiralAt(F0, { c, r0, k0 = 0, specs, shared, pitch }) {
   const full = cells;
   F.markBand(full);
   const st = { name: 'spiral', cells: full, closed: false };
-  const h = hubSpace(F, c, shared.kind === 'none' ? { kind: 'none' } : shared);
-  if (h.fail) return { fail: { why: 'hub', message: h.fail } };
+  const h = shared.kind === 'none' ? bareHub(F, c, Math.max(0, r0 - 8)) : hubSpace(F, c, shared);
+  if (!h || h.fail) return { fail: { why: 'hub', message: h?.fail ?? `no level spot for the hub's bell area inside the spiral's first turn (radius ${r0})` } };
   const avoid = hubAvoid(h);
   for (const a of avoid) F.occupy(a, 2);
   // the hub's lots on the first turn's inner side; the rest on the outer side, packed from the inner end

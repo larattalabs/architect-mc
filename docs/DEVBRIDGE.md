@@ -348,6 +348,9 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-20 (6c slice FL):** new (`SliceFlDev`, generated headless too) `dev.region.items {region, owner?}`: the region's batch items
+  as `BatchView.ItemView` -> `{batch, items: [{key, stage, status, ext}]}`; a plan region's street road item carries
+  `architect_mc:street {zone, district?}` in its ext (S-FL-5), which the FL gate reads.
 - **2026-10-20 (6c slice VOC-c):** new (`SliceVoccDev`, generated headless too) `dev.vocc.checkPalette {sha, lotEntries?: {lot: entry}}`
   (`Regions.checkPalette`: the artifact's palette rules measured with these lot entries over its own -> `{paletteOk, rules: [{rule, required,
   family, share, cells, familyCells, measured, fits, worstLot, lots: {lot: {entry, cells, familyCells}}, pendingLots}]}` or `{missing}`),

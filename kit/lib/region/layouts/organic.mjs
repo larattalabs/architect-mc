@@ -53,6 +53,7 @@ export function walkLanes(F, c, { n, r0, seed, maxLen = 72 }) {
     let h = (h0 + Math.floor((j * 8) / n)) % 8;
     let p = polarCell(c, h * 32, r0);
     const pts = [p];
+    const wps = [{ h, len: 0 }];
     let len = 0, join = null, seg = 0;
     while (len < maxLen) {
       const L = draw(`${seed}:${j}:len:${seg}`, 6, 12);
@@ -72,8 +73,9 @@ export function walkLanes(F, c, { n, r0, seed, maxLen = 72 }) {
       // another lane within 6: join its nearest cell and stop
       let hit = null;
       for (let t = 0; t < pick.cells.length && !hit; t++) { const nb = near(pick.cells[t][0], pick.cells[t][1], j); if (nb && nb.d < 6 && len + t > 6) hit = { at: t, nb }; }
-      if (hit) { pts.push(pick.cells[hit.at]); pts.push([hit.nb.x, hit.nb.z]); join = { x: hit.nb.x, z: hit.nb.z, lane: hit.nb.lane }; break; }
+      if (hit) { pts.push(pick.cells[hit.at]); pts.push([hit.nb.x, hit.nb.z]); wps.push({ h: pick.hh, len: hit.at + 1, join: true }); join = { x: hit.nb.x, z: hit.nb.z, lane: hit.nb.lane }; break; }
       pts.push(pick.q);
+      wps.push({ h: pick.hh, len: L });
       p = pick.q; h = pick.hh; len += L; seg++;
     }
     const raw = [];
@@ -86,7 +88,7 @@ export function walkLanes(F, c, { n, r0, seed, maxLen = 72 }) {
       cells = cells.slice(0, lo);
       join = null;
     }
-    lanes.push({ cells, join });
+    lanes.push({ cells, join, waypoints: wps });
   }
   return lanes.filter((l) => l.cells.length >= 8);
 }
@@ -102,7 +104,7 @@ export function organicAt(F0, { c, specs, shared, seed }) {
   const r0 = Math.ceil(((h.sh.u1 - h.sh.u0 + 1) * 3) / 4) + 3;
   const lanes = walkLanes(F, c, { n, r0, seed });
   if (lanes.length < 2) return { fail: { why: 'land', message: 'fewer than 2 lanes grow from the green (the land round it)' } };
-  const streets = lanes.map((l, j) => ({ name: `l${j + 1}`, cells: l.cells, closed: false }));
+  const streets = lanes.map((l, j) => ({ name: `l${j + 1}`, cells: l.cells, closed: false, waypoints: l.waypoints }));
   for (const st of streets) F.markBand(st.cells);
   const crossings = lanes.map((l, j) => (l.join ? { x: l.join.x, z: l.join.z, streets: [`l${j + 1}`, `l${l.join.lane + 1}`] } : null)).filter(Boolean);
   // the slots: the green's lots nearest it, edge lots at the lanes' far ends, the rest outward from the green lane by lane in turn

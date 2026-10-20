@@ -284,10 +284,10 @@ export function resolveFreeZone(env, p, geomOf, o0) {
  * A wouldFit re-checked alone (§3.1, §4.2): the zone with `fragment` applied resolved again (no wouldFit of its own); the fragment with
  * its geometry when it fits or is adjusted, else null.
  */
-export function recheck(env, p, geomOf, o, fragment) {
+export function recheck(env, p, geomOf, o, fragment, { full = false } = {}) {
   const part = { ...p.part, ...fragment };
   const z = resolveFreeZone(env, { ...p, part }, geomOf, { ...o, noWouldFit: true });
-  if (z.klass !== 'fits' && z.klass !== 'adjusted') return null;
+  if (z.klass !== 'fits' && z.klass !== 'adjusted') return full ? { fail: z } : null;
   return { part: p.part.id, fragment, geometry: { rect: rectArr(z.rect) }, rechecked: z.klass };
 }
 
@@ -321,9 +321,18 @@ function finishFree(env, p, L, { shared, layout, asked, notes, extraDevs, tMove,
     if (f.what === 'count') {
       // more lots than the land holds: NO_ROOM, wouldFit the lots that place (re-checked alone)
       res.reasons.push({ code: 'NO_ROOM', message: `${L.unplaced.length} lot(s) do not fit the ${L.kind} layout here (count ${L.unplaced.length} past its ${f.hard ? 'hard limit' : 'ceiling'})`, evidence: { what: 'count', value: L.unplaced.length, unplaced: L.unplaced.map((u) => u.id) } });
-      const frag = { program: { ...zone.program, lots: zone.program.lots.filter((l) => !L.unplaced.some((u) => u.id === l.id)) } };
-      const wf = o.noWouldFit ? null : recheck(env, p, o.geomOf, o, frag);
-      res.wouldFit = wf ? [wf] : [{ part: zone.id, fragment: frag, geometry: { rect: rectArr(L.rect) } }];
+      // the lots that place, re-checked alone; a lot the re-check leaves out is dropped too (at most 3 rounds)
+      let keep = zone.program.lots.filter((l) => !L.unplaced.some((u) => u.id === l.id));
+      let wf = null;
+      for (let round = 0; round < 3 && !o.noWouldFit && keep.length && !wf; round++) {
+        const frag = { program: { ...zone.program, lots: keep } };
+        const q = recheck(env, p, o.geomOf, o, frag, { full: true });
+        if (!q.fail) { wf = q; break; }
+        const un = q.fail.unplaced ?? [];
+        if (!un.length) break;
+        keep = keep.filter((l) => !un.some((u) => u.id === l.id));
+      }
+      res.wouldFit = wf ? [wf] : [{ part: zone.id, fragment: { program: { ...zone.program, lots: keep } }, geometry: { rect: rectArr(L.rect) } }];
     } else if (f.what === 'outline') {
       res.reasons.push({ code: 'TOLERANCE', message: `the outline is ${f.value} cells from the drawing (sketch at most ${f.ceiling})`, evidence: { what: 'outline', value: f.value } });
       if (draw?.wouldFit) { const wf = o.noWouldFit ? null : recheck(env, p, o.geomOf, o, { sketch: draw.wouldFit }); if (wf) res.wouldFit = [wf]; }

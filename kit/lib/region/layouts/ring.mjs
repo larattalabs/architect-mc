@@ -18,7 +18,7 @@ export function sidesAbout(st, c, which) {
 }
 
 /** A level spot for a bare hub's bell area (shared none): the centre, else the nearest level 5x5 within `reach` (step 2). */
-function bareHub(F, c, reach) {
+export function bareHub(F, c, reach) {
   for (let d = 0; d <= reach; d += 2) {
     for (let dz = -d; dz <= d; dz += 2) for (let dx = -d; dx <= d; dx += 2) {
       if (Math.max(Math.abs(dx), Math.abs(dz)) !== d) continue;
