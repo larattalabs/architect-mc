@@ -17401,6 +17401,12 @@ verifier reviews the diff and the evidence and **re-runs items 6 and 7** (realis
   alternative faces outward (backs to a shared yard). Default: inward (every recorded ring asks for it: "facing the water",
   "ringed around the oak", "around a central fire").
 
+### Coordinator decisions (2026-10-20, on Noah's behalf; Noah judges the look at the gallery step)
+
+- **N-FL-1:** organic layouts are moderately irregular.
+- **N-FL-2:** ring lots face inward, onto the ring street.
+
+
 ## Phase 6c slice F3: forms II, trees, mushrooms, coral, roots and stalactites (DRAFT for Steward review)
 
 The rest of SETTLEMENTS §9.2's generator library as **plan forms**: giant trees, giant mushrooms, coral, roots and stalactites,
@@ -17729,3 +17735,9 @@ drift). **Steward's RC check before release** (S-F3-5).
   `cost.cells` shows the count.
 - **N-F3-2. Scale and look.** Proposed: giant trees 2 to 4 times vanilla's largest (16-64 high), mushrooms 2 to 4 times, coral
   mixed colours by default, stalactites up to 16. Default: as proposed; the look step (item 14) shows each.
+
+### Coordinator decisions (2026-10-20, on Noah's behalf; Noah judges the look at the gallery step)
+
+- **N-F3-1:** giant trees stay free in Supplied worlds (forms are free, Noah's rule).
+- **N-F3-2:** scale is 2-4x vanilla.
+
