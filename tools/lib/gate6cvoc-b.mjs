@@ -565,13 +565,14 @@ const survival = [{
       const { bomOf } = await ctx.imp('lib/connectors/bom.mjs');
       const siteCells = await L.call('dev.site.cells', { site }).catch(() => null);
       // the blocks standing: every cell of the restore box that changed since before the site (dev.box.hash cells: "x,y,z state[ be=nbt]")
-      // (the hash's state is the block state's NBT, Name and Properties: as "minecraft:x[k=v,...]"; quotes of either kind or none)
+      // (the hash's state is the block state's NBT, {id:"minecraft:x",properties:{k:"v"}} in 26.3 (Name/Properties before): as
+      // "minecraft:x[k=v,...]"; quotes of either kind or none)
       const asState = (nbt) => {
         const bs = /^Block\{([a-z0-9_.-]+:[a-z0-9_./-]+)\}(\[[^\]]*\])?/.exec(nbt);
         if (bs) return `${bs[1]}${bs[2] ?? ''}`;
-        const n = /Name\s*:\s*["']?([a-z0-9_.-]+:[a-z0-9_./-]+)/.exec(nbt)?.[1];
+        const n = /(?:Name|id)\s*:\s*["']?([a-z0-9_.-]+:[a-z0-9_./-]+)/i.exec(nbt)?.[1];
         if (!n) return nbt;
-        const pm = /Properties\s*:\s*\{([^}]*)\}/.exec(nbt)?.[1];
+        const pm = /properties\s*:\s*\{([^}]*)\}/i.exec(nbt)?.[1];
         const props = pm ? [...pm.matchAll(/["']?([a-z0-9_]+)["']?\s*:\s*["']?([a-z0-9_]+)["']?/g)].map((m) => `${m[1]}=${m[2]}`).sort() : [];
         return props.length ? `${n}[${props.join(',')}]` : n;
       };
