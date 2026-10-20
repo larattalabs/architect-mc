@@ -183,6 +183,41 @@ async function anchorsOf(ctx, claim) {
   return H.stewardAnchors({ minX: claim[0], minZ: claim[1], maxX: claim[2], maxZ: claim[3] });
 }
 
+/**
+ * (fix/voc-natural) Item 9's world class for S3's own fluids still settling: F2's `distant` rule (tools/scenarios.mjs `distantOf`)
+ * restricted to flowing fluid. S3's fresh chunks carry worldgen springs (a cave stream at x 3752-3760, y 37-48, z -924..-914; lava at
+ * y -2, x 3787-3789) whose flow front can cross the snapshot: with no region at all the same cells go air -> flowing water within 15 s
+ * of a snapshot. An unclassified (`none`) mismatch is classed `farfluid` only when
+ *   - kind: was and now are each air, cave air, or a non-source water or lava (level 1-15), and at least one side is that fluid
+ *     (a source block on either side, or any other block, is never classed);
+ *   - place: a cell the plan never writes, in no lot box, and 8 or more (Manhattan) from every written cell (the undo writes only the
+ *     journal's cells, which are the written cells and what stood on them).
+ * Pure: `written` is a Set of "x,y,z" keys, `lots` the IR's lots. Returns the diff with the moved cells' class and the counts updated.
+ */
+export function farFluidOf(diff, { written, lots = [] }) {
+  if (!diff || !(diff.classes?.none > 0)) return diff;
+  const empty = (st) => /^minecraft:(air|cave_air)$/.test(String(st));
+  const flowing = (st) => /^minecraft:(water|lava)\[level=([1-9]|1[0-5])\]$/.test(String(st));
+  const kind = (m) => (empty(m.was) || flowing(m.was)) && (empty(m.now) || flowing(m.now)) && (flowing(m.was) || flowing(m.now));
+  const inLot = (x, y, z) => lots.some((l) => x >= l.box.minX && x <= l.box.maxX && y >= l.box.minY && y <= l.box.maxY && z >= l.box.minZ && z <= l.box.maxZ);
+  const near = (x, y, z) => {
+    for (let dx = -7; dx <= 7; dx++) for (let dy = -7 + Math.abs(dx); dy <= 7 - Math.abs(dx); dy++) {
+      const r = 7 - Math.abs(dx) - Math.abs(dy);
+      for (let dz = -r; dz <= r; dz++) if (written.has(`${x + dx},${y + dy},${z + dz}`)) return true;
+    }
+    return false;
+  };
+  const moved = new Set((diff.list ?? []).filter((m) => {
+    if (m.class !== 'none' || !kind(m)) return false;
+    const [x, y, z] = String(m.pos).split(',').map(Number);
+    return !written.has(`${x},${y},${z}`) && !inLot(x, y, z) && !near(x, y, z);
+  }));
+  if (!moved.size) return diff;
+  const classes = { ...diff.classes, none: diff.classes.none - moved.size, farfluid: (diff.classes.farfluid ?? 0) + moved.size };
+  if (!classes.none) delete classes.none;
+  return { ...diff, classes, list: diff.list.map((m) => (moved.has(m) ? { ...m, class: 'farfluid' } : m)) };
+}
+
 /** Regions.checkPlan in game (the two-plan flow, chunks generated). */
 async function checkIn(ctx, tag, { plan, claim, anchors, bible }) {
   const { L, OUT } = ctx;
@@ -439,19 +474,21 @@ const natural = [{
     const blobs = (s) => { const f = path.join(pdir, 'blobs', `${s}.bin`); return fs.existsSync(f) ? fs.readFileSync(f) : null; };
     const { vw } = V.buildVirtual({ ir, survey: fs.readFileSync(path.join(pdir, 'survey.bin')), blobs });
     const rare = [];
-    vw.eachWritten((x, y, z, idx) => { const n = vw.pal.states[idx].replace(/\[.*$/, ''); const t = tierOf(n); if (t && t !== 'common') rare.push([x, y, z]); });
+    const written = new Set();
+    vw.eachWritten((x, y, z, idx) => { written.add(`${x},${y},${z}`); const n = vw.pal.states[idx].replace(/\[.*$/, ''); const t = tierOf(n); if (t && t !== 'common') rare.push([x, y, z]); });
     for (const l of ir.lots) rare.push([l.box.minX, l.box.minY, l.box.minZ], [l.box.maxX, l.box.maxY, l.box.maxZ]);
     await L.cmd('/kill @e[type=!minecraft:player]');
     await L.settle(5000);
     const rm = await L.call('dev.region.remove', { region: rr.region, requester: OWNER }, 4 * 3_600_000);
     await L.settle(10_000);
-    const diff = await L.call('dev.region.hash', { box, mode: 'diff', file: snapF }, 4 * 3_600_000);
+    // S3's own fluids settling far from the plan are the world's (farFluidOf); every other unclassified cell still fails
+    const diff = farFluidOf(await L.call('dev.region.hash', { box, mode: 'diff', file: snapF }, 4 * 3_600_000), { written, lots: ir.lots ?? [] });
     const near = (x, y, z) => rare.some(([a, b, q]) => Math.max(Math.abs(a - x), Math.abs(b - y), Math.abs(q - z)) <= 6);
     const BRIDGE = new Set(['growth', 'grazed']);
     const bad = (diff.list ?? []).filter((m) => { const [x, y, z] = String(m.pos).split(',').map(Number); return near(x, y, z) && !BRIDGE.has(m.class); });
     out.remove = { removed: rm.removed, mismatches: diff.mismatches, classes: diff.classes ?? null, nearNonCommon: bad.slice(0, 20) };
     fs.writeFileSync(path.join(ctx.OUT, 'vocb-v50n-remove.json'), `${JSON.stringify({ ...out.remove, list: diff.list ?? [] }, null, 1)}\n`);
-    check(rm.removed && (diff.classes ? diff.classes.none ?? 0 : diff.mismatches) === 0 && bad.length === 0, `item 9: Regions.remove under the exact rules: E-normal ${diff.mismatches} mismatches, 0 unclassified (${j(diff.classes ?? {})}), ${bad.length} within 6 of a non-common written cell outside T3's bridge classes`, bad.slice(0, 8));
+    check(rm.removed && (diff.classes ? diff.classes.none ?? 0 : diff.mismatches) === 0 && bad.length === 0, `item 9: Regions.remove under the exact rules: E-normal ${diff.mismatches} mismatches, ${diff.classes ? diff.classes.none ?? 0 : diff.mismatches} unclassified (${j(diff.classes ?? {})}; farfluid: S3's own fluids settling far from the plan), ${bad.length} within 6 of a non-common written cell outside T3's bridge classes`, bad.slice(0, 8));
     // ---- the drift probe (default rules, separate): the copper hall's unwaxed cells, ticked until each weathers once
     await L.cmd('/gamerule random_tick_speed 3');
     const c2 = await checkIn(ctx, 'v50n-drift', { plan: { ...fx.plan, planId: 'voc_v50n_drift' }, claim, anchors, bible: 'g6cvoc_modern' });
