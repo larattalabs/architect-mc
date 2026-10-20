@@ -725,7 +725,7 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 - ~~**6ct1-scenario-relief's falling-water cells**~~ **Root-caused and fixed (branch `fix/relief-flow`, 2026-10-20).** An undo
   defect, not load and not a missing class. S3's claim has a worldgen spring whose stream (x 3664-3672, y 122-125, z -980..-965)
   only starts flowing once the fresh copy's chunks tick, so relief_demo's survey (taken before the 90 s settle) never sees it.
-  In 16 of 36 recorded runs the layout's relief fill covered the stream (`writtenFlowing` >= 16); every one of those had
+  In 17 of 36 recorded runs the layout's relief fill covered the stream (`writtenFlowing` >= 16); every one of those had
   unclassified cells, and no other run did (load 7.9 failed, 52-89 passed). The fill writes dirt over the feeder (3671-3672,
   123, -972, level 1). Vanilla then drains the falling column below it (3671-3672, 122, -972), which the region never wrote, so
   it isn't in the journal. The undo restores the feeder exactly, but CELL entries are written with every side effect skipped, so
