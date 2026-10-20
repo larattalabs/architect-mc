@@ -301,7 +301,7 @@ test('the block mask term (MP ruling): real over a volume with block ids; refuse
   const need = /plan needs kit (\d+\.\d+\.\d+)/.exec(staleReason(p.ir, '0.21.0') ?? '');
   assert.ok(need && need[1].localeCompare('0.23.0', undefined, { numeric: true }) >= 0, staleReason(p.ir, '0.21.0'));
   // appended (rebase point); (6c H) H's fluid and volume:fluids are appended after it
-  assert.deepEqual(KINDS_FORMAT2.slice(KINDS_FORMAT2.indexOf('volume:blocks')), ['volume:blocks', 'fluid', 'volume:fluids'], 'appended (rebase point)');
+  assert.deepEqual(KINDS_FORMAT2.slice(KINDS_FORMAT2.indexOf('volume:blocks'), KINDS_FORMAT2.indexOf('volume:blocks') + 3), ['volume:blocks', 'fluid', 'volume:fluids'], 'appended (rebase point; (6c HY) courses after them)');
 });
 
 test('the 0.21.0 kit refuses a brush IR (kitVersion, and volume:blocks when it has one)', () => {

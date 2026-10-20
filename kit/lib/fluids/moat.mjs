@@ -27,7 +27,10 @@ import { channelForm } from '../plan/schema.mjs';
 import { bodiesMark, bodiesRollback, centre, featureOf, fluidRolesOf, grow, inside, intIn, linesBody, meets, protectedMet, reachMeetsKeep, readParams, rectArr,
   rectSurvey, shellBlock, takenRects, volumeAnswer, volumeKeep, MARGIN, flagsAt, refusal, leakRefusal, exitNotches } from './place.mjs';
 import { shellCheck, bodyAnswer, bodyId, iceFor, naturalOf, shellStatesOf } from './pond.mjs';
+import { overflowsOn } from './hooks.mjs';
 
+/** (6c HY, §1.5) A moat may feed a course (an overflow) or receive one (a fall over its rim). */
+export const acceptsOverflow = true;
 export const MOAT = Object.freeze({ width: 5, depth: 3, ring: [6, 12], berm: 5 });
 const cheb = (x, z, T) => Math.max(Math.max(0, T.minX - x, x - T.maxX), Math.max(0, T.minZ - z, z - T.maxZ));
 
@@ -83,7 +86,8 @@ function wallsOn(C, f) {
 /** Place the part: the first offset of its ring range whose ring is dry, clear and inside the claim. */
 export function resolve(C, p) {
   const env = C.env, part = p.part;
-  if (channelForm(part) !== 'moat') return { klass: 'unsupported', reasons: [{ code: 'UNSUPPORTED', message: 'a channel along a line is channel.course, reserved until HY', block: 'channel.course', until: 'HY' }] };
+  // ((6c HY) hooks.mjs dispatches a course, race or ditch to its own generator: a moat never sees one)
+  if (channelForm(part) !== 'moat') return { klass: 'refused', reasons: [{ code: 'UNREACHABLE', message: 'a channel along a line or a lot is a course, race or ditch (fluids/course.mjs), not a moat', evidence: { form: channelForm(part) } }] };
   const sp = moatSpec(part);
   if (sp.fluid === 'lava') {
     const frag = { ...part, params: Object.fromEntries(Object.entries(part.params ?? {}).filter(([k]) => k !== 'fluid')) };
@@ -186,7 +190,9 @@ export function emitMoat(r, o) {
   const ec = [];
   for (const [x, y, z] of exits) { const t = S.topAt(x, z); if (t >= y) ec.push(x, z, y, t, 0); }
   if (ec.length) { const ex = r.part(`${o.id}_exits`.slice(0, 48), { stage: o.stage }); ex.columns({ abs: 0 }, { abs: 0 }, ec, [null], { cond: 0 }); (r.meta.parts[ex.id] ??= {}).kind = 'carve'; }
-  const rec = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: 'moat', stage: o.stage, level, shellRole, ice: o.ice ?? null, outlets: exits });
+  // ((6c HY, §1.5) a course leaving the moat: its overflows, only when there are any)
+  const ov = Array.isArray(o.overflow) && o.overflow.length ? { overflow: o.overflow, raised: true } : {};
+  const rec = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: 'moat', stage: o.stage, level, shellRole, ice: o.ice ?? null, outlets: exits, ...ov });
   rec.shellStates = shellStatesOf(rec, shellRole);
   return Object.assign(rec, { ring: o.ring, columns: water.length });
 }
@@ -211,7 +217,7 @@ export function emit(K, p, res) {
     if (vcells > VOLUME_CAP) { res.capped = { cells: vcells }; return; }
     const dec = iceFor(K.ctx, water.map(([x, z]) => [x, level, z]), p.part.ice);
     if (dec.refuse) throw refusal(dec.refuse.code, dec.refuse.message, dec.refuse.evidence);
-    const rec = emitMoat(r, { id: bodyId(p.id), part: p.id, T: res.T, ring: res.ring, width: sp.width, depth: sp.depth, omit: res.omit, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice: dec.ice });
+    const rec = emitMoat(r, { id: bodyId(p.id), part: p.id, T: res.T, ring: res.ring, width: sp.width, depth: sp.depth, omit: res.omit, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice: dec.ice, overflow: overflowsOn(K, p.id) });
     const hit = reachMeetsKeep(r, env, rec, { volClass: volumeKeep(r, VC, classAt) });
     if (hit) throw leakRefusal(rec, hit);
     shellCheck(r, rec);
@@ -258,6 +264,28 @@ export function passInput(K) {
       const q = shell.get(k) ?? { top: S.groundAt(x, z), level: b.level };
       q.top = Math.max(q.top, y); q.level = Math.min(q.level, b.level);
       shell.set(k, q);
+    }
+    // ((6c HY, §8.1) a course's spill (lips, falls, riffles) is water to the routes and its lining shell, so no route walks in it or
+    // lands a bridge on it; a course's end within 8 of the claim's edge reaches the edge (a course from edge to edge seals the claim,
+    // as a closed moat does). Only for courses: an H plan's input is as before)
+    if (b.kind === 'course' || b.kind === 'ditch') {
+      for (const [x, y, z] of b.spill) { const k = k2(x, z); if (!water.has(k)) water.set(k, Math.min(y, b.level)); }
+      for (const [x, y, z] of b.lining ?? []) {
+        const k = k2(x, z);
+        if (water.has(k)) continue;
+        const q = shell.get(k) ?? { top: S.groundAt(x, z), level: b.level };
+        q.top = Math.max(q.top, y); q.level = Math.min(q.level, b.level);
+        shell.set(k, q);
+      }
+      const c = K.env.claim;
+      for (const [x, , z] of b.cells) {
+        const run = [];
+        if (x - c.minX <= 8) for (let a = c.minX; a < x; a++) run.push([a, z]);
+        if (c.maxX - x <= 8) for (let a = x + 1; a <= c.maxX; a++) run.push([a, z]);
+        if (z - c.minZ <= 8) for (let a = c.minZ; a < z; a++) run.push([x, a]);
+        if (c.maxZ - z <= 8) for (let a = z + 1; a <= c.maxZ; a++) run.push([x, a]);
+        for (const [a, d] of run) { const k = k2(a, d); if (!water.has(k) && !shell.has(k)) shell.set(k, { top: S.groundAt(a, d), level: b.level }); }
+      }
     }
     if (b.raised) {
       const xs = [...b.cells, ...b.shell].map((c) => c[0]), zs = [...b.cells, ...b.shell].map((c) => c[2]);

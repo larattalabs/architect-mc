@@ -1,0 +1,8 @@
+{
+ "about": "(6c HY-b, §14 item 10's swept stand) a spring head above two falls of 5 and a riffle (flow: riffles), down four terraces to a terminal pool",
+ "terrain": {"W": 240, "D": 160, "x0": 1000, "z0": 2000, "y": 64, "bands": [{"x0": 1000, "x1": 1049, "z0": 2000, "z1": 2159, "y": 80}, {"x0": 1050, "x1": 1099, "z0": 2000, "z1": 2159, "y": 75}, {"x0": 1100, "x1": 1149, "z0": 2000, "z1": 2159, "y": 70}, {"x0": 1150, "x1": 1189, "z0": 2000, "z1": 2159, "y": 67}]},
+ "anchors": {"spring": [1020, 80, 2080], "pool": [1215, 64, 2080]},
+ "volume": {},
+ "covers": ["connector.channel", "channel.course"],
+ "plan": {"schemaVersion": "plan/0", "planId": "hyb_v60", "connectors": [{"id": "brook", "kind": "channel", "flow": "riffles", "from": {"anchor": "spring"}, "to": {"anchor": "pool"}}]}
+}

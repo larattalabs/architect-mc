@@ -8,7 +8,7 @@
 // plan has either, so every other plan's report is unchanged. A body without a frozen volume over its box is a finding (M25:shell
 // "no volume"), never a pass (§9).
 import { simulate } from '../fluids/sim.mjs';
-import { FLUID_OP, fromRuns } from '../fluids/body.mjs';
+import { FLUID_OP, fromRuns, isCourseOp, splitJoins } from '../fluids/body.mjs';
 import { VC, classAt } from './volume.mjs';
 import { F_WRITTEN } from './vworld.mjs';
 import { kindOf } from '../fluids/world.mjs';
@@ -25,16 +25,95 @@ export const FIRE_REACH = Object.freeze({ side: 3, below: 1, above: 3 });
 const k3 = (x, y, z) => `${x},${y},${z}`;
 const D6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
 
-/** The bodies of an IR (its `fluid` ops), with their IR part index. */
+/**
+ * The bodies of an IR (its `fluid` ops), with their IR part index. (6c HY) A course's op adds `lining` (cells), `after` (ids), `planJoins`
+ * ([{body, cells}]: joins into other bodies of the plan) and `grate` (cells); `joins` stays the natural joins' cells; `course` is true.
+ */
 export function bodiesOf(ir) {
   const out = [];
   ir.parts.forEach((p, pi) => {
     for (const o of p.ops ?? []) {
       if (o.op !== FLUID_OP) continue;
-      out.push({ id: o.id, part: o.part ?? null, irPart: p.id, pi, fluid: o.fluid, level: o.level, cells: fromRuns(o.cells), shell: fromRuns(o.shell), spill: fromRuns(o.spill), joins: fromRuns(o.joins), watch: fromRuns(o.watch), ice: fromRuns(o.ice), predicted: o.predicted ?? [], settleTicks: o.settleTicks });
+      const j = splitJoins(o.joins);
+      out.push({ id: o.id, part: o.part ?? null, irPart: p.id, pi, fluid: o.fluid, level: o.level, cells: fromRuns(o.cells), shell: fromRuns(o.shell), spill: fromRuns(o.spill), joins: fromRuns(j.natural), watch: fromRuns(o.watch), ice: fromRuns(o.ice), predicted: o.predicted ?? [], settleTicks: o.settleTicks,
+        lining: fromRuns(o.lining), after: Array.isArray(o.after) ? o.after : [], planJoins: j.plan.map((q) => ({ body: q.body, cells: fromRuns(q.cells) })), grate: fromRuns(o.grate), course: isCourseOp(o) });
     }
   });
   return out;
+}
+
+/**
+ * (6c HY, §3.1) The write order of an IR's bodies: each after every body in its `after` (ties: plan order, the IR's op order); a cycle or
+ * an unknown id leaves the rest in plan order. Returns {order: [ids], cycle: [ids] | null, unknown: [[body, after]]}. The mod's own
+ * order (RegionFluids.writeOrder) is the same rule.
+ */
+export function writeOrder(bodies) {
+  const ids = bodies.map((b) => b.id);
+  const known = new Set(ids);
+  const unknown = [];
+  for (const b of bodies) for (const a of b.after ?? []) if (!known.has(a)) unknown.push([b.id, a]);
+  const out = [], done = new Set();
+  let cycle = null;
+  while (out.length < bodies.length) {
+    let pick = bodies.find((b) => !done.has(b.id) && (b.after ?? []).every((a) => done.has(a) || !known.has(a)));
+    if (!pick) { cycle ??= bodies.filter((b) => !done.has(b.id)).map((b) => b.id); pick = bodies.find((b) => !done.has(b.id)); }
+    done.add(pick.id);
+    out.push(pick.id);
+  }
+  return { order: out, cycle, unknown };
+}
+
+const H4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+/**
+ * (6c HY, §2) The course rules, on the bodies of an IR with a course op (an H-only IR never runs them, so its report is unchanged):
+ *   M25:order   a course body's spill lands in a plan body that is not written before it (its plan joins, and any other body a spill
+ *               cell of it falls into or lies beside), a cycle of `after`, or an `after` naming no body of the plan
+ *   M25:shell   a weir 1 thick: a body cell at or under its surface whose shell (or lining) neighbour has natural water right behind it
+ *               (a weir is 2 thick wherever a body faces natural water at its level)
+ *   M25:keep    the single breach of a course body's shell, lining or weir reaches a cell beside natural water (the breach would
+ *               connect the course to the river); its own natural joins aside
+ */
+function courseRules({ bodies, sim, world, findings, finding }) {
+  const byId = new Map(bodies.map((b) => [b.id, b]));
+  const cellOf = new Map();
+  for (const b of bodies) for (const c of b.cells) cellOf.set(k3(...c), b.id);
+  const W = writeOrder(bodies);
+  const pos = new Map(W.order.map((id, i) => [id, i]));
+  const natural = (x, y, z) => { const w = world.at(x, y, z); return (w === 'water' || w === 'flowing_water') && !cellOf.has(k3(x, y, z)); };
+  for (const [b, a] of W.unknown) findings.push(finding('M25:order', byId.get(b)?.irPart ?? null, 'fluids', 1, [], `body ${b}: after names ${a}, no body of the plan`));
+  if (W.cycle) findings.push(finding('M25:order', byId.get(W.cycle[0])?.irPart ?? null, 'fluids', W.cycle.length, [], `a join cycle: ${W.cycle.join(', ')} each wait for another (after)`));
+  bodies.forEach((b, i) => {
+    if (!b.course) return;
+    const s = sim.bodies[i];
+    // the bodies its spill lands in: its plan joins, and any body a reached spill cell falls into or lies beside
+    const lands = new Map();
+    for (const q of b.planJoins) lands.set(q.body, q.cells[0] ?? null);
+    for (const c of s.spill) for (const [dx, dy, dz] of [[0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]]) {
+      const o = cellOf.get(k3(c[0] + dx, c[1] + dy, c[2] + dz));
+      if (o && o !== b.id && byId.get(o)?.fluid === b.fluid && !lands.has(o)) lands.set(o, c);
+    }
+    const bad = [...lands].filter(([o]) => byId.has(o) && !(pos.get(o) < pos.get(b.id)));
+    if (bad.length) findings.push(finding('M25:order', b.irPart, 'fluids', bad.length, bad.map(([, c]) => c).filter(Boolean), `body ${b.id}: its spill lands in ${bad.map(([o]) => o).join(', ')}, not written before it (after: [${b.after.join(', ')}])`));
+    // the weir: 2 thick wherever the body faces natural water at its level
+    const wall = new Set([...b.shell, ...b.lining].map((c) => k3(...c)));
+    const thin = [];
+    for (const [x, y, z] of b.cells) {
+      if (y > b.level) continue;
+      for (const [dx, dz] of H4) if (wall.has(k3(x + dx, y, z + dz)) && natural(x + 2 * dx, y, z + 2 * dz)) thin.push([x + dx, y, z + dz]);
+    }
+    if (thin.length) findings.push(finding('M25:shell', b.irPart, 'fluids', thin.length, thin.slice(0, 16), `body ${b.id}: a weir 1 thick: ${thin.length} shell cell(s) with natural water right behind them (a weir is 2 thick wherever a body faces natural water at its level)`));
+    // the single breach beside natural water (its own natural joins aside)
+    const joinSet = new Set(b.joins.map((c) => k3(...c)));
+    const wet = [];
+    for (const [x, y, z] of s.breach ?? []) {
+      for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+        const q = [x + dx, y + dy, z + dz];
+        if (natural(...q) && !joinSet.has(k3(...q))) { wet.push([x, y, z]); break; }
+      }
+    }
+    if (wet.length) findings.push(finding('M25:keep', b.irPart, 'fluids', wet.length, wet.slice(0, 16), `body ${b.id}: the single breach reaches ${wet.length} cell(s) beside natural water (a breached weir would join the course to it)`));
+  });
 }
 
 /**
@@ -88,16 +167,20 @@ export function fluidRules({ ir, vw, meta, vols, want, findings, metrics, findin
     return P.vpass[a] && P.vpass[h] && !P.fluid[a] && !P.water[a] && P.floor[f] && !P.fluid[f];
   };
   const world = { at: (x, y, z) => kindOf(P, vw.get(x, y, z)), keep, shell: shellCheck, surface, exit, solid: (x, y, z) => P.solid[vw.get(x, y, z)] };
-  const sim = simulate(world, bodies.map((b) => ({ id: b.id, part: b.part, fluid: b.fluid, level: b.level, cells: b.cells, shell: b.shell, spill: b.spill, joins: b.joins })), { breach: true });
+  // ((6c HY) a course's lining and weir stand with its shell: M25:shell and the single breach cover them; its plan joins are declared)
+  const sim = simulate(world, bodies.map((b) => (b.course
+    ? { id: b.id, part: b.part, fluid: b.fluid, level: b.level, cells: b.cells, shell: [...b.shell, ...b.lining], spill: b.spill, joins: [...b.joins, ...b.planJoins.flatMap((q) => q.cells)], spillLands: b.planJoins.length > 0 }
+    : { id: b.id, part: b.part, fluid: b.fluid, level: b.level, cells: b.cells, shell: b.shell, spill: b.spill, joins: b.joins })), { breach: true });
   const per = [];
   if (want.has('M25')) {
     for (const f of sim.findings) findings.push(finding(f.rule, bodies.find((b) => b.id === f.body)?.irPart ?? null, 'fluids', f.count, f.sample, `body ${f.body}: ${f.message}`));
     // no frozen volume over a body's box (its cells, shell and the 2-cell buffer): a finding, never a pass (§9)
     for (const b of bodies) {
       const miss = [];
-      for (const q of [...b.cells, ...b.shell]) if (!covered(q[0], q[1], q[2])) { miss.push(q); if (miss.length >= 16) break; }
+      for (const q of [...b.cells, ...b.shell, ...b.lining]) if (!covered(q[0], q[1], q[2])) { miss.push(q); if (miss.length >= 16) break; }
       if (miss.length) findings.push(finding('M25:shell', b.irPart, 'fluids', miss.length, miss, `body ${b.id}: no volume: ${miss.length}+ cell(s) of its cells and shell outside every frozen volume the plan read (a body is checked against the frozen world, never a 2.5D guess)`));
     }
+    if (bodies.some((b) => b.course)) courseRules({ bodies, sim, world, P, vw, findings, finding });
   }
   bodies.forEach((b, i) => {
     const s = sim.bodies[i];

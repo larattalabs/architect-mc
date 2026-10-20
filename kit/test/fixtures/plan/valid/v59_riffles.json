@@ -1,0 +1,53 @@
+{
+ "about": "(6c HY-b, \u00a71.2, \u00a714) a brook with riffles (flow: riffles, opt-in): a stepped bed of 1-cell drops between two pools",
+ "terrain": {
+  "W": 240,
+  "D": 160,
+  "x0": 1000,
+  "z0": 2000,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1000,
+    "x1": 1079,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 67
+   }
+  ]
+ },
+ "anchors": {
+  "spring": [
+   1020,
+   67,
+   2080
+  ],
+  "pool": [
+   1200,
+   64,
+   2082
+  ]
+ },
+ "volume": {},
+ "covers": [
+  "connector.channel",
+  "channel.course"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_v59",
+  "connectors": [
+   {
+    "id": "brook",
+    "kind": "channel",
+    "flow": "riffles",
+    "from": {
+     "anchor": "spring"
+    },
+    "to": {
+     "anchor": "pool"
+    }
+   }
+  ]
+ }
+}

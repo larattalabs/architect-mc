@@ -26,6 +26,7 @@ import { lampFixture } from '../region/props.mjs';
 import { besidePorts } from '../region/districtsEmit.mjs';
 import { COND } from '../region/program.mjs';
 import { askWet, noteWet, underwaterBlock, underwaterOk, wetKind, wetRuns, wetWallFallback } from '../fluids/wet.mjs';
+import { waterGates } from '../fluids/gate.mjs';
 
 /** The kinds this module compiles. */
 export const WALL_KINDS = Object.freeze(['wall', 'gate']);
@@ -331,6 +332,8 @@ function runFree(W, a, b) {
     if (W.positions[i].axis !== ax) return false;
     if (W.ends.includes(i)) return false;
     if (W.gates.some((g) => i >= g.a - 1 && i <= g.b + 1)) return false;
+    // ((6c HY-c, §8.3) a water gate's positions and their neighbours hold no walk gate)
+    if (W.waterPos && (W.waterPos.has(i) || W.waterPos.has(i - 1) || W.waterPos.has(i + 1))) return false;
   }
   const p0 = W.positions[a - 1], p1 = W.positions[b + 1];
   return (p0.x === p1.x || p0.z === p1.z) && Math.abs(p0.x - p1.x) + Math.abs(p0.z - p1.z) === b - a + 2;
@@ -480,7 +483,9 @@ export function wallsPassInput(K) {
     // every column the wall writes is an obstacle: its cells and the corner stubs (axis 3)
     const cells = W.cells.map((c) => [c.x, c.z, c.axis]);
     for (const [x, z] of stubCells(W)) if (!W.cellAt.has(key(x, z))) cells.push([x, z, 3]);
-    return { id: W.id, max: W.st.gatesMax, opened: W.opened, cells, open, ...(W.closed && W.I ? { inside: [W.I.minX, W.I.minZ, W.I.maxX, W.I.maxZ] } : {}) };
+    // ((6c HY-c) a standing water gate counts against gates.max: the route pass opens fewer)
+    const wg = waterGates(K, W).length;
+    return { id: W.id, max: W.st.gatesMax, opened: W.opened + wg, cells, open, ...(W.closed && W.I ? { inside: [W.I.minX, W.I.minZ, W.I.maxX, W.I.maxZ] } : {}) };
   });
 }
 
@@ -513,6 +518,8 @@ export function wallsEvidence(K, leg) {
 
 export function finishGates(K) {
   if (!K.walls) return;
+  // ((6c HY-c, §8.3) the standing water gates' positions: no auto or gates.min gate stands on them or beside them)
+  for (const W of K.walls) { const wg = waterGates(K, W); if (wg.length) W.waterPos = new Set(wg.flatMap((q) => q.positions ?? [])); }
   for (const g of K.k1Parts.filter((q) => q.kind === 'gate' && !K.answers.has(q.id))) {
     const dep = K.depState(g);
     if (dep) { K.ans(g, dep); continue; }
@@ -542,7 +549,9 @@ export function finishGates(K) {
   // gates.min on a closed wall: first where a zone's street end faces the ring, then evenly along it (ties by position)
   for (const W of K.walls) {
     if (!W.closed || W.st.sealed) continue;
-    const want = W.st.gatesMin - W.gates.length;
+    let want = W.st.gatesMin - W.gates.length;
+    // ((6c HY-c) the standing water gates count against gates.max: gates.min adds no gate past it)
+    if (W.waterPos) want = Math.min(want, W.st.gatesMax - W.gates.length - waterGates(K, W).length);
     if (want <= 0) continue;
     const pts = [];
     const z = W.target?.zone ? K.zoneEmit.get(W.target.zone) : null;
@@ -697,8 +706,41 @@ function emitWall(K, W) {
   const unsafe = W.p.part.ext?.['architect_mc:unsafe'] ?? {};
   let gapRun = null;
   if (Number.isInteger(unsafe.gap) && unsafe.gap > 0) for (let a = 2; a + unsafe.gap < n - 2 && !gapRun; a++) if (runFree(W, a, a + unsafe.gap - 1)) gapRun = [a, a + unsafe.gap - 1];
+  // ((6c HY-c, §8.3) the water gates: in a crossing's columns the wall has no footing; it stands on the course's own cells (the banks'
+  // shell, its rim), and over the grate on a lintel at the reach's open top in the gate frame's role; never a cell of the course's body,
+  // shell or lining. Broken variants (the wall part's ext architect_mc:unsafe): `noLintel` leaves the crossing's columns unwritten (a gap
+  // in the wall over the water: M2:wall closure), `lintelLow` lays the lintel on as a ceiling over the reach 3 cells past each face
+  // (M25:trap))
+  const wgs = waterGates(K, W);
+  const courseTop = new Map(), grateCols = new Set(), lowCols = [];
+  for (const q of wgs) {
+    const b = (r._fluidBodies ?? []).find((o) => o.id === q.body);
+    if (!b) continue;
+    for (const [x, y, z] of [...b.cells, ...b.shell, ...(b.lining ?? [])]) { const k = key(x, z); if (W.cellAt.has(k) && !(courseTop.get(k) >= y)) courseTop.set(k, y); }
+    for (const [x, z] of q.cells) grateCols.add(key(x, z));
+    if (unsafe.lintelLow && q.normal) {
+      const [nx, nz] = q.normal, own = new Set(b.cells.map((c) => key(c[0], c[2])));
+      const d = (x, z) => x * nx + z * nz;
+      const dmin = Math.min(...q.cells.map(([x, z]) => d(x, z))), dmax = Math.max(...q.cells.map(([x, z]) => d(x, z)));
+      for (const [x, z] of q.cells) {
+        if (d(x, z) === dmin) for (let k = 1; k <= 3; k++) if (own.has(key(x - nx * k, z - nz * k))) lowCols.push([x - nx * k, q.lintel, z - nz * k]);
+        if (d(x, z) === dmax) for (let k = 1; k <= 3; k++) if (own.has(key(x + nx * k, z + nz * k))) lowCols.push([x + nx * k, q.lintel, z + nz * k]);
+      }
+    }
+  }
   for (const c of W.cells) {
     if (gapRun && c.pos >= gapRun[0] && c.pos <= gapRun[1]) continue;
+    const ct = courseTop.size ? courseTop.get(key(c.x, c.z)) : undefined;
+    if (ct !== undefined) {
+      if (unsafe.noLintel) continue;
+      const top = T[c.pos];
+      const y0 = ct + 1;
+      if (grateCols.has(key(c.x, c.z))) put(c.x, y0, c.z, frame);
+      else put(c.x, y0, c.z, body);
+      for (let y = y0 + 1; y < top; y++) put(c.x, y, c.z, body);
+      capCells.set(key(c.x, c.z), { y: Math.max(top, y0 + 1), merlon: !st.crenels || (c.depth === t - 1 && (c.pos & 1) === 0) });
+      continue;
+    }
     const g = opening.get(key(c.x, c.z));
     if (!g && walkSet.has(key(c.x, c.z))) continue; // never on a walk cell (a network's crossing is a gate)
     const foot = footAt(c.x, c.z);
@@ -728,6 +770,7 @@ function emitWall(K, W) {
     }
     capCells.set(key(c.x, c.z), { y: top, merlon: !st.crenels || (c.depth === t - 1 && (c.pos & 1) === 0) });
   }
+  for (const [x, y, z] of lowCols) put(x, y, z, frame);
   // corner stubs: 3 above the wall
   for (const [x, z] of stubCells(W)) {
     const c = W.cellAt.get(key(x, z));
@@ -828,6 +871,9 @@ function emitWall(K, W) {
     cells: W.cells.filter((c) => opening.has(key(c.x, c.z)) || !walkSet.has(key(c.x, c.z))).map((c) => [c.x, c.z, T[c.pos], c.pos, c.depth]),
     gates: unsafe.noGates ? [] : gatesOut,
   };
+  // ((6c HY-c) the water gates: meta walls[].waterGates, the record's, the answer's geometry and its crossing)
+  const wgOut = wgs.map((q) => ({ course: q.course, body: q.body, cells: q.cells, lintel: q.lintel, level: q.level, grate: q.grate.length }));
+  if (wgOut.length) meta.waterGates = wgOut;
   const record = { id: W.id, form: W.form, closed: W.closed, sealed: st.sealed, line, cells: W.cells.length, top: [Math.min(...T), Math.max(...T)], gates: gatesOut.map(({ cells, ...g }) => { void cells; return g; }) };
   const geometry = { form: W.form, line, closed: W.closed, height: st.height, thickness: t, cells: W.cells.length, top: [Math.min(...T), Math.max(...T)], gates: gatesOut.map((g) => ({ id: g.id, at: g.at, width: g.width, door: g.door, auto: g.auto, kind: g.kind })), ...(W.I ? { ring: arr(W.I) } : {}), ...(W.joined.length ? { joined: W.joined } : {}), ...(st.sealed ? { sealed: true } : {}) };
   // ((H-b) a harbour wall: its wet sections (runs of positions in natural water: from, to at the surface, the deepest water) and its
@@ -849,6 +895,11 @@ function emitWall(K, W) {
     geometry.crossing = { type: 'wall', over: 'water', depth: Math.max(...runs.map((q) => q.depth)) };
     meta.wet = { record: W.wet.record, columns: W.wet.cols.map((q) => [...q]), waterDepth: W.wet.waterDepth };
     record.wet = geometry.wet;
+  }
+  if (wgOut.length) {
+    record.waterGates = wgOut;
+    geometry.waterGates = wgOut.map(({ course, cells, lintel }) => ({ course, cells: cells.length, lintel }));
+    if (!geometry.crossing) geometry.crossing = { type: 'wall', over: 'course', gate: 'water', course: wgOut[0].course };
   }
   return { meta, record, geometry, bom: bomOf(states), gateBom };
 }

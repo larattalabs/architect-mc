@@ -1,0 +1,61 @@
+{
+ "about": "(6c HY-b, \u00a714 item 18 (c), recorded, not shipped) one long riffle past the cap: 4 segments of 6 (24 cells, 3 drops), ext architect_mc:unsafe longRiffle",
+ "terrain": {
+  "W": 240,
+  "D": 160,
+  "x0": 1000,
+  "z0": 2000,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1000,
+    "x1": 1110,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 68
+   }
+  ]
+ },
+ "anchors": {
+  "a": [
+   1020,
+   68,
+   2080
+  ],
+  "b": [
+   1200,
+   64,
+   2080
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "long",
+  "class": "fits"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_p02",
+  "connectors": [
+   {
+    "id": "long",
+    "kind": "channel",
+    "flow": "riffles",
+    "params": {
+     "riffle": 6
+    },
+    "from": {
+     "anchor": "a"
+    },
+    "to": {
+     "anchor": "b"
+    },
+    "ext": {
+     "architect_mc:unsafe": {
+      "longRiffle": true
+     }
+    }
+   }
+  ]
+ }
+}

@@ -716,6 +716,36 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   Trace it as the fountain's was (h-a's bill test compares a part's bill with its written cells).
 
 
+## Queued from the HY batch (integration, 2026-10-20)
+
+- **A body's prediction ignores other bodies' falling water beside its spill** (HY-b's "for the batch" item 3, the spout case:
+  vanilla takes a cell's level from any falling neighbour, so a fountain-fed lip ran 1 and 2 beside the spout's falling side in
+  game). The generators keep apart where they know of it (HY-b's landings keep off a spout's curtain). Not a small fix: sim.mjs
+  simulates one body over its own world, so a cross-body pass (or the other bodies' falling cells in each body's world) is needed,
+  with a fixture where two bodies' flows meet. Its own slice item.
+- **The router doesn't know the walls.** compile.mjs resolves courses (step 2) before `planWalls`, so a routed course meets a wall
+  only at emit: where its reach is still for 2 cells past each face it gets a water gate (v58), else it is refused UNREACHABLE
+  {kind: wall, why: still | step | corner | width}. A router that forces its profile level across a planned wall's line (or lays
+  `gate.mjs reachAcross` there) would turn those refusals into water gates. Needs the walls' lines before the course's profile.
+- **The 16-volume limit, the rest of it.** A course now asks one volume (the union of its reaches' boxes), so 3 courses of 6 reaches
+  ask 3 (hy-b.test). A course whose union passes the per-part cap (4M cells) still asks one per reach, and every H body (pond,
+  fountain, moat, ditch) still asks its own: a plan of many bodies can still pass the sidecar's 16 (`region.plan` `volumes.max(16)`).
+  The riffle probe (hy/p01 and p01b) could be one plan again. If a real plan reaches 16, merge nearby bodies' boxes, or raise the cap
+  with a memory measurement (each volume is decoded in the plan worker).
+- **Fixture numbers:** VOC's `valid/v50_voc_village` and `v51_voc_forge` share their numbers with HY's `v50_stream` and `v51_canal`.
+  Tests that pick fixtures by number filter by kind (hy-b.test's item 2 reads only channel fixtures). Renumber one family at a quiet
+  moment, or keep the kind in every filter.
+- **apijars over v0.38.0 before release.** api-compat `--gate6chy` runs the 0.38.0, 0.37.1 and 0.37.0 jars (v0.38.0 built from its tag
+  into `artifacts/gate6c-hy/v0380`); `gate6a.mjs` apijars still runs VOC's set (0.37.1, 0.37.0, 0.36.1). Add 0.38.0 (with its base
+  world) at the release tier.
+- **HY-b's own uncrossed-wall refusal has no fixture now.** `hy/r11_wall` became the sealed-ring case once courses take water gates;
+  HY-b's emit check (a wall within 1 of a reach, or over a step, with no crossing registered: UNREACHABLE wall) needs a fixture that
+  reaches it (e.g. a wall line alongside a course).
+- **HY-a's pinned shas on Linux.** `hy-a.test`'s flow/wet/courses shas were verified on macOS only (a pushed branch runs no CI): the
+  PR or the merge's CI must show them on Linux.
+- **`GATE6CHY_SKIP_CORE`** (HY-b's development switch: runs only the halves' items of an in-game step) is kept; no gate chain sets
+  it, and a step run with it records `core: skipped (GATE6CHY_SKIP_CORE)` in its output.
+
 ## Queued (coordinator, 2026-10-20): priority
 
 - **Walls and other parts don't keep clear of fluid bodies (safety).** In v51 the forge wall runs through the fountain's basin,

@@ -14,7 +14,11 @@
 //            world.keep(x, y, z) -> reason | null (M25:keep), world.shell(x, y, z, body) -> reason | null (M25:shell),
 //            world.surface(x, y, z) -> bool (sky above: no ceiling over the cell, for M25:trap), world.exit(x, y, z) -> bool (a bank
 //            cell a villager can stand on, for M25:exit).
-//   bodies: [{id, part?, fluid, level, cells: [[x, y, z]], shell?: [[x, y, z]], spill?: [[x, y, z]], joins?: [[x, y, z]]}]
+//   bodies: [{id, part?, fluid, level, cells: [[x, y, z]], shell?: [[x, y, z]], spill?: [[x, y, z]], joins?: [[x, y, z]], spillLands?:
+//            true}]  ((6c HY) spillLands: the body's spill ends in another body of the plan (a course's step): a mover swept along it ends
+//            up in that body, so its spill's surface cells are judged for M25:exit there (by the landing body's own rule), not here;
+//            M25:trap covers them as before. The shell a course passes includes its lining and weir: M25:shell and the single breach
+//            cover them)
 //   breach: true also runs the single-breach flow per shell cell at or under the surface (§2.5): its reach in `breach` per body.
 // Returns, per body (in input order): {id, reached: [[x, y, z]] (cells included), spill: reached minus cells, predicted: [[x, y, z,
 // level]] (the block state's level, 1..7 flowing, 8 falling; every non-source cell the steady state holds), path (the longest
@@ -326,7 +330,9 @@ function breachReach(world, own, fluid, others, body, shell) {
     const at = bodyWorld(world, own, fluid, others, opened);
     if (noSpill && D6.every(([dx, dy, dz]) => { const w = at(x + dx, y + dy, z + dz); return w !== 'open' && w !== `flowing_${fluid}`; })) {
       for (const k of base.amt.keys()) out.add(k);
-      out.add(opened);
+      // ((6c HY-b) the opened cell takes the fluid only from a body cell beside it: a course's weir course or lining behind its shell is
+      // reached by nothing, as the full reach finds; an H body's shell is always beside its cells, so H's result is unchanged)
+      if (D6.some(([dx, dy, dz]) => own.has(k3(x + dx, y + dy, z + dz)))) out.add(opened);
       continue;
     }
     // the opened cell is reached from a body cell beside it: start the flow from the sources as before
@@ -462,6 +468,8 @@ export function simulate(world, bodies, { breach = false } = {}) {
         const memo = new Map();
         const exitAt = (x, y, z) => { const kk = k3(x, y, z); let v = memo.get(kk); if (v === undefined) { v = !!world.exit(x, y, z); memo.set(kk, v); } return v; };
         for (const [x, y, z] of surf) {
+          // ((6c HY) a course's spill ends in the body below it: judged there)
+          if (b.spillLands === true && spillSet.has(k3(x, y, z))) continue;
           let ok = false;
           for (let dx = -EXIT_REACH; dx <= EXIT_REACH && !ok; dx++) for (let dz = -EXIT_REACH; dz <= EXIT_REACH && !ok; dz++) {
             if (Math.abs(dx) + Math.abs(dz) > EXIT_REACH) continue;

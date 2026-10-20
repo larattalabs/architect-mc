@@ -1,5 +1,5 @@
 {
-  "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; first half) (D1: program.districts, its alias zone kind district and endpoint.region left the list when they shipped; D2: zone.outpost, locator.along, feature.biome_edge and feature.ridge; K1: connector.auto, connector.wall, connector.gate and connector.rope_bridge left it when they shipped, wall.along and layout.elevated joined); T3: connector.bridge and connector.tunnel left it when they shipped, connector.tube and connector.drawbridge (a bridge whose params name a mechanism, R18) joined; tunnel.under is answered by the compiler only (a tunnel without cover), so T3b's fixtures cover it; H: connector.channel shipped (channel.moat), so the from/to channel c_channel answers channel.course (reserved until HY, R21)",
+  "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; first half) (D1: program.districts, its alias zone kind district and endpoint.region left the list when they shipped; D2: zone.outpost, locator.along, feature.biome_edge and feature.ridge; K1: connector.auto, connector.wall, connector.gate and connector.rope_bridge left it when they shipped, wall.along and layout.elevated joined); T3: connector.bridge and connector.tunnel left it when they shipped, connector.tube and connector.drawbridge (a bridge whose params name a mechanism, R18) joined; tunnel.under is answered by the compiler only (a tunnel without cover), so T3b's fixtures cover it; H: connector.channel shipped (channel.moat), so the from/to channel c_channel answers channel.course (reserved until HY, R21); HY: channel.course shipped (the from/to channel c_channel left it, a course now), channel.aqueduct joined the catalogue reserved but is answered by the compiler only (a valley past a course's fill), so HY-b's fixtures cover it",
   "on": "s7",
   "expect": {
     "all": [
@@ -18,10 +18,6 @@
       {
         "part": "z5",
         "block": "layout.organic"
-      },
-      {
-        "part": "c_channel",
-        "block": "channel.course"
       },
       {
         "part": "c_tube",
@@ -261,16 +257,6 @@
       }
     ],
     "connectors": [
-      {
-        "id": "c_channel",
-        "kind": "channel",
-        "from": {
-          "anchor": "claim_n"
-        },
-        "to": {
-          "anchor": "claim_s"
-        }
-      },
       {
         "id": "c_tube",
         "kind": "tube",

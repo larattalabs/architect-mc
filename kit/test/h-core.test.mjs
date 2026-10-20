@@ -97,7 +97,7 @@ test('ARVX version 3 (§10): the fluid layer round-trips; versions 1 and 2 are u
   assert.equal(decodeArvx(encodeArvx(box, classes)).version, 1);
   assert.throws(() => encodeArvx(box, classes, [], new Map(), null, fl), /version-3/);
   // a kit before 0.35.0 can't read a fluid op or a fluid volume: PLAN_STALE
-  assert.deepEqual(KINDS_FORMAT2.slice(-2), ['fluid', 'volume:fluids']);
+  assert.deepEqual(KINDS_FORMAT2.slice(KINDS_FORMAT2.indexOf('fluid'), KINDS_FORMAT2.indexOf('fluid') + 2), ['fluid', 'volume:fluids']); // ((6c HY) courses appended after)
   assert.match(staleReason({ format: 2, requires: ['fluid'], kitVersion: '0.35.0' }, '0.34.0') ?? '', /kit 0\.35\.0/);
 });
 
