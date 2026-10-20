@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // node kit/build.mjs <id> [--out <dir>] [--max x,y,z] [--type <t>] [--profile <rules>] [--palette <preset>|<json> | --bible <file|name>]
-//                        [--values <json>] [--restraint <bible.json>] [--mirror] [--json]
+//                        [--values <json>] [--restraint <bible.json>] [--reserved <json|file>] [--mirror] [--json]
+// --reserved (6c IRR, S-IRR-2): {front, size: [w, d], cells: [[u, y, v]]} (lib/reserved.mjs): the lot's cells the design must leave
+// (an irrigated field's sources and their edges); a non-air block there, placed as the realise places it, is an error.
 //
 // Imports kit/designs/<id>.mjs (`export const id`, `export const params` (optional), a default export taking
 // `{ palette, ...values }` and returning the Blueprint), writes
@@ -38,12 +40,13 @@ import { readBibleArg, restraintOf } from './lib/bible.mjs';
 import { styleOf } from './lib/vocab/budget.mjs';
 import { readMassingArg } from './lib/massing.mjs';
 import { resolveValues, validateParams } from './lib/params.mjs';
+import { leaveReserved, parseReserved } from './lib/reserved.mjs';
 import { mirrorAxisOf, mirrorBlueprint, mirrorSidecar } from './lib/mirror.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DESIGNS = path.join(HERE, 'designs');
 export const DEFAULT_OUT = path.join(HERE, 'out');
-const USAGE = 'usage: node kit/build.mjs <id> [--out <dir>] [--max x,y,z] [--type <t>] [--profile <rules>|massing] [--massing <massing.blueprint.json>] [--palette <preset>|<json> | --bible <file|name>] [--values <json>] [--restraint <bible.json>] [--mirror] [--json]';
+const USAGE = 'usage: node kit/build.mjs <id> [--out <dir>] [--max x,y,z] [--type <t>] [--profile <rules>|massing] [--massing <massing.blueprint.json>] [--palette <preset>|<json> | --bible <file|name>] [--values <json>] [--restraint <bible.json>] [--reserved <json|file> [--leave-reserved]] [--mirror] [--json]';
 
 /** A request the design cannot build (bad palette or values): exit 2, but not the design's fault. */
 export class UsageError extends Error {}
@@ -98,12 +101,14 @@ export async function loadDesign(id, { palette, values, dir, mirror } = {}) {
 }
 
 /** Build + check one design. */
-export async function buildDesign(id, { out = DEFAULT_OUT, max, type, profile, palette, values, massing, restraint, style, dir, mirror } = {}) {
+export async function buildDesign(id, { out = DEFAULT_OUT, max, type, profile, palette, values, massing, restraint, style, dir, mirror, reserved, leave = false } = {}) {
   const bp = await loadDesign(id, { palette, values, dir, mirror });
+  // ((6c IRR) --leave-reserved: the reserved cells are dropped before the write (the sim's stand-in honours them so))
+  if (reserved && leave) leaveReserved(bp, reserved);
   // (0b) the massing a mirrored copy conforms to is the archetype's, mirrored with it
   if (mirror && massing) massing = mirrorSidecar(massing, mirrorAxisOf(bp.front));
   const written = writeBlueprint(bp, out);
-  const result = checkFiles(written.nbtPath, written.jsonPath, { max, type, ...(profile !== undefined ? { profile } : {}), ...(massing !== undefined ? { massing } : {}), ...(restraint ? { restraint } : {}), ...(style ? { style } : {}) });
+  const result = checkFiles(written.nbtPath, written.jsonPath, { max, type, ...(profile !== undefined ? { profile } : {}), ...(massing !== undefined ? { massing } : {}), ...(restraint ? { restraint } : {}), ...(style ? { style } : {}), ...(reserved ? { reserved } : {}) });
   // (C35) said where a caller reads it: the check's warnings
   if (bp.paletteIgnored) result.warnings.unshift(`palette ignored: ${id} is a captured source (the player's build as built); it keeps its blocks, the ${ignoredLabel(bp.paletteIgnored)} was not applied`);
   return { bp, written, result };
@@ -148,6 +153,8 @@ function parseArgs(argv) {
       o.restraint = restraintOf(b);
       o.style = styleOf(b);
     } else if (a === '--mirror') o.mirror = true;
+    else if (a === '--reserved') { const v = val(); o.reserved = parseReserved(JSON.parse(v.trim().startsWith('{') ? v : fs.readFileSync(v, 'utf8'))); } // (6c IRR) inline JSON or a file
+    else if (a === '--leave-reserved') o.leave = true;
     else if (a === '--json') o.json = true;
     else if (a === '-h' || a === '--help') o.help = true;
     else if (a.startsWith('-')) throw new Error(`unknown option ${a}`);
@@ -180,7 +187,7 @@ async function main() {
   if (o.json) console.log = console.info = console.debug = console.error;
   let r;
   try {
-    r = await buildDesign(id, { out: o.out ?? DEFAULT_OUT, max: o.max, type: o.type, profile: o.profile, palette: o.palette, values: o.values, massing: o.massing, restraint: o.restraint, style: o.style, mirror: o.mirror });
+    r = await buildDesign(id, { out: o.out ?? DEFAULT_OUT, max: o.max, type: o.type, profile: o.profile, palette: o.palette, values: o.values, massing: o.massing, restraint: o.restraint, style: o.style, mirror: o.mirror, reserved: o.reserved, leave: o.leave });
   } catch (e) {
     Object.assign(console, saved);
     if (e instanceof UsageError) return fail2(e.message);

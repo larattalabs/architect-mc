@@ -1441,6 +1441,13 @@ public final class RegionsImpl implements Regions {
 			return q;
 		}
 		LotFitting.Fit f = LotFitting.fit(bp, new Anchors.Bounds(b[0], b[1], b[2], b[3], b[4], b[5]), lot.front(), true, 0, true);
+		// (6c IRR, §4) the region's irrigation cells in this lot's box: the lot's design drops its blocks there and its site never owns them
+		// (LotMask, on the site's ext); how many of the entry's blocks the mask drops is reported (irrigationDropped)
+		JsonArray irr = lotIrrigation(ir, lot.id());
+		if (irr != null) {
+			ext.add(dev.larattalabs.architect.site.LotMask.EXT, dev.larattalabs.architect.site.LotMask.extOf(irr));
+			ext.addProperty(dev.larattalabs.architect.site.LotMask.EXT_DROPPED, dropped(bpId, f, dev.larattalabs.architect.site.LotMask.of(ext)));
+		}
 		q = new QItem("lot:" + lot.id(), lot.stage(), after, bpId, rec.dimension, f.ox(), f.oy(), f.oz(), f.turns(), false, ext, r.actor() == null ? null
 			: r.actor().getStringUUID(), false, false);
 		q.layer = true;
@@ -1449,6 +1456,38 @@ public final class RegionsImpl implements Regions {
 			q.fail(Reason.LOT_TOO_SMALL.name(), "The lot is too small for " + bpId + ": " + f.why());
 		}
 		return q;
+	}
+
+	/**
+	 * (6c IRR) A lot's irrigation cells in the IR ({@code lots[].irrigation.cells}: column runs), or null: none, or the broken variant
+	 * {@code unmasked} (the lot's design is then placed over them, and the live check refuses the sources).
+	 */
+	static @Nullable JsonArray lotIrrigation(Ir ir, String lotId) {
+		if (ir.json().get("lots") instanceof JsonArray lots) {
+			for (JsonElement e : lots) {
+				if (e instanceof JsonObject lo && lotId.equals(str(lo, "id")) && lo.get("irrigation") instanceof JsonObject g && g.get("cells") instanceof JsonArray c
+					&& !c.isEmpty()) {
+					return g.get("unmasked") instanceof JsonElement u && u.isJsonPrimitive() && u.getAsBoolean() ? null : c;
+				}
+			}
+		}
+		return null;
+	}
+
+	/** (6c IRR) How many of an entry's non-air blocks, fitted by {@code f}, stand on a masked cell (the count the realise drops). */
+	static int dropped(String bpId, LotFitting.Fit f, java.util.function.@Nullable LongPredicate mask) {
+		var grid = dev.larattalabs.architect.placement.TemplateGrid.of(bpId);
+		if (grid == null || mask == null) {
+			return 0;
+		}
+		var m = grid.ghost(f.turns());
+		int n = 0;
+		for (int i = 0; i < m.count(); i++) {
+			if (mask.test(net.minecraft.core.BlockPos.asLong(f.ox() + m.x(i), f.oy() + m.y(i), f.oz() + m.z(i)))) {
+				n++;
+			}
+		}
+		return n;
 	}
 
 	private static boolean overlaps(int[] a, int[] b) {

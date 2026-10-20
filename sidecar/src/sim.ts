@@ -605,7 +605,9 @@ export class SimDesigner implements Designer {
     // a fallback example (cabin for a tower) is checked as what it is, not as the requested type
     const smallSrc = !d.massing && !req.versionOf && req.effort === 'small' && fitsSmall(req.maxSize);
     const limits = d.massing ? plan.limits : { ...plan.limits, type: src === req.type || open || smallSrc ? req.type : undefined, profile: open ? (req.profile ?? ['door', 'lit', 'no_floating']) : undefined };
-    const res = await checkDesign(cfg.kitDir, scratch, bp, limits, 120_000, plan.extra);
+    // ((6c IRR) the sim's stand-in honours a lot's reserved cells: the kit drops the copied example's blocks there before the check)
+    const leave = req.reserved && plan.extra.includes('--reserved') ? ['--leave-reserved'] : [];
+    const res = await checkDesign(cfg.kitDir, scratch, bp, limits, 120_000, [...plan.extra, ...leave]);
     this.check(id, r);
     const problem = res.ok ? sc.checkOutcome(d, res) : (sc.checkOutcome(d, res), res.problem ?? 'the check failed');
     if (problem) throw new Error(`the sim installs ${what}, which did not pass: ${problem}`);

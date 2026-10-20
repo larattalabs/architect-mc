@@ -185,6 +185,20 @@ public final class FieldLimits {
 		return null;
 	}
 
+	/** (6c IRR) A request's reserved cells: a cardinal front, a size 1..256 a side, at most {@link DesignRequest#MAX_RESERVED} cells. */
+	static @Nullable String reserved(String path, DesignRequest.@Nullable Reserved r) {
+		if (r == null) {
+			return null;
+		}
+		if (!java.util.List.of("north", "east", "south", "west").contains(r.front())) {
+			return path + ".front must be north, east, south or west";
+		}
+		if (r.width() < 1 || r.width() > 256 || r.depth() < 1 || r.depth() > 256) {
+			return path + ": width and depth must be 1..256";
+		}
+		return count(path + ".cells", r.cells(), DesignRequest.MAX_RESERVED);
+	}
+
 	public static @Nullable String design(String path, DesignRequest r) {
 		String p = path.isEmpty() ? "" : path + ".";
 		String why = first(len(p + "style", r.style(), Limits.STYLE_MAX, true), len(p + "materials", r.materials(), Limits.MATERIALS_MAX, true), count(p
@@ -192,7 +206,7 @@ public final class FieldLimits {
 				false), len(p + "remix", r.remix(), Limits.REMIX_MAX, false), count(p + "profile", r.profile(), Limits.PROFILE_MAX), len(p + "owner", r.owner(),
 					Limits.OWNER_MAX, true), ext(p + "ext", r.ext()), model(p + "model", r.model()), len(p + "group", r.group(), Limits.GROUP_ID_MAX, false),
 			context(p + "context", r.context()), critique(p + "critique", r.critique()), len(p + "versionOf.entryId", r.versionOf(), Limits.VERSION_OF_ENTRY_MAX,
-				false), len(p + "versionOf.siteId", r.versionOfSite(), Limits.VERSION_OF_SITE_MAX, false));
+				false), len(p + "versionOf.siteId", r.versionOfSite(), Limits.VERSION_OF_SITE_MAX, false), reserved(p + "reserved", r.reserved()));
 		if (why != null) {
 			return why;
 		}

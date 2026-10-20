@@ -245,6 +245,8 @@ public final class RegionFluids {
 		boolean uncontained;
 		/** (6c HY) Not written: a body it lands in failed (the upstream closure) before it was written. */
 		boolean held;
+		/** (6c IRR, S-IRR-4) Drained because its lot's site was removed (the sources belong to the farm): never written again. Saved. */
+		boolean lotRemoved;
 		/** (6c HY) When an ordered region wrote and forced this body (game time), else -1 (the region's forcedAt). */
 		long writtenAt = -1;
 		/** Before the write: the cells', ice cap's, spill's and watched cells' states. */
@@ -750,7 +752,8 @@ public final class RegionFluids {
 		LongOpenHashSet drop = new LongOpenHashSet();
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
-			if ("drained".equals(bs.state) && (bs.uncontained || bs.held || bs.before.isEmpty())) { // not contained (or held, HY): never written
+			// not contained (or held, HY): never written; (6c IRR) nor a source whose lot was removed
+			if ("drained".equals(bs.state) && (bs.uncontained || bs.held || bs.lotRemoved || bs.before.isEmpty())) {
 				for (long p : b.cells) {
 					drop.add(p);
 				}
@@ -1222,7 +1225,79 @@ public final class RegionFluids {
 	/** Whether a body of the region was not written or was drained (the region ends PARTIAL, §2.4, §3.4). */
 	public static boolean anyDrained(RegionsImpl.Live l) {
 		Regional st = of(l);
-		return st != null && !"gate".equals(st.phase) && st.states.values().stream().anyMatch(x -> "drained".equals(x.state));
+		// ((6c IRR) a source drained with its removed lot is no failure of the region)
+		return st != null && !"gate".equals(st.phase) && st.states.values().stream().anyMatch(x -> "drained".equals(x.state) && !x.lotRemoved);
+	}
+
+	// ------------------------------------------------------------------ (6c IRR) a lot's sources leave with the lot
+
+	/**
+	 * (6c IRR, S-IRR-4) Server thread, before a lot site's removal (or undo) restores anything: the irrigation sources of that lot (the
+	 * IR's {@code lots[].irrigation.bodies}) are drained, drain-first and exact (H's drain: the sources, the spill and the watched cells
+	 * holding new fluid back to their befores; another standing body's cells left alone), marked {@code drained} with the reason
+	 * {@code lot removed: <lot>} ({@link BodyState#lotRemoved}: never written again, not a PARTIAL), saved and reported. A source not
+	 * written yet is marked the same, so the fluids stage never writes it. The shells stay the region's until the region is removed.
+	 * Idempotent. Returns the cells written, or -1 when the group is no region or the lot has no irrigation.
+	 */
+	public static int drainLot(ServerLevel level, @Nullable String group, @Nullable String lotId) {
+		if (group == null || lotId == null) {
+			return -1;
+		}
+		RegionsImpl.Live l = null;
+		for (RegionsImpl.Live x : RegionsImpl.all()) {
+			if (group.equals(x.rec().groupId)) {
+				l = x;
+				break;
+			}
+		}
+		if (l == null) {
+			return -1;
+		}
+		java.util.Set<String> ids = lotBodies(l.ir().json(), lotId);
+		Regional st = ids.isEmpty() ? null : of(l);
+		if (st == null) {
+			return -1;
+		}
+		int n = 0;
+		boolean changed = false;
+		for (Body b : st.bodies) {
+			if (!ids.contains(b.id)) {
+				continue;
+			}
+			BodyState bs = st.states.get(b.id);
+			if (bs.lotRemoved) {
+				continue;
+			}
+			if (!bs.before.isEmpty()) {
+				n += drain(level, st, b, bs, true, st.othersOf(b));
+			}
+			bs.state = "drained";
+			bs.reason = "lot removed: " + lotId + " (its sources leave with it, S-IRR-4)";
+			bs.lotRemoved = true;
+			bs.at.clear();
+			changed = true;
+		}
+		if (changed) {
+			save(l, st);
+			report(l, st);
+			Architect.LOGGER.info("Region {}: lot {} removed: its irrigation sources drained ({} cell(s) written)", l.rec().id, lotId, n);
+			WorldJournal.kill("FL6"); // (6c IRR) the lot's sources drained, its site not restored yet
+		}
+		return n;
+	}
+
+	/** (6c IRR) The irrigation body ids of a lot in an IR ({@code lots[].irrigation.bodies}). */
+	static java.util.Set<String> lotBodies(JsonObject ir, String lotId) {
+		java.util.Set<String> out = new java.util.LinkedHashSet<>();
+		if (ir.get("lots") instanceof JsonArray lots) {
+			for (var e : lots) {
+				if (e instanceof JsonObject lo && lo.get("id") instanceof com.google.gson.JsonElement id && lotId.equals(id.getAsString()) && lo.get("irrigation") instanceof JsonObject g
+					&& g.get("bodies") instanceof JsonArray bs) {
+					bs.forEach(x -> out.add(x.getAsString()));
+				}
+			}
+		}
+		return out;
 	}
 
 	// ------------------------------------------------------------------ the removal
@@ -1441,6 +1516,9 @@ public final class RegionFluids {
 			if (bs.held) {
 				b.addProperty("held", true);
 			}
+			if (bs.lotRemoved) {
+				b.addProperty("lotRemoved", true);
+			}
 			if (bs.writtenAt >= 0) {
 				b.addProperty("writtenAt", bs.writtenAt);
 			}
@@ -1500,6 +1578,7 @@ public final class RegionFluids {
 					bs.escaped = b.has("escaped") && b.get("escaped").getAsBoolean();
 					bs.uncontained = b.has("uncontained") && b.get("uncontained").getAsBoolean();
 					bs.held = b.has("held") && b.get("held").getAsBoolean();
+					bs.lotRemoved = b.has("lotRemoved") && b.get("lotRemoved").getAsBoolean();
 					bs.writtenAt = b.has("writtenAt") ? b.get("writtenAt").getAsLong() : -1;
 					unpackStates(b.get("before"), bs.before);
 					if (b.get("escapedCells") instanceof JsonArray esc) {

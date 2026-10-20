@@ -387,7 +387,7 @@ public final class PlanChecks {
 				}
 			}
 		}
-		return farmPond(plan.get("zones"));
+		return farmPond(plan.get("zones")) || irrigate(plan.get("zones")); // ((6c IRR) irrigate: true asks its sources' volumes too)
 	}
 
 	/**
@@ -395,18 +395,31 @@ public final class PlanChecks {
 	 * the zones (a zone's program lots, a district's lots).
 	 */
 	static boolean farmPond(@Nullable JsonElement e) {
+		return trueMember(e, "farmPond");
+	}
+
+	/**
+	 * (6c IRR, §7) Irrigation is an opt-in body with no part of its own, as a farm pond: {@code irrigate: true} on a zone, or on a lot at
+	 * any depth under the zones (a zone's program lots, its template's params.lots, a district's lots).
+	 */
+	static boolean irrigate(@Nullable JsonElement e) {
+		return trueMember(e, "irrigate");
+	}
+
+	/** Whether {@code name: true} (a JSON boolean, never a string) stands on any object at any depth of {@code e}. */
+	private static boolean trueMember(@Nullable JsonElement e, String name) {
 		if (e instanceof JsonObject o) {
-			if (o.get("farmPond") instanceof JsonElement f && f.isJsonPrimitive() && f.getAsJsonPrimitive().isBoolean() && f.getAsBoolean()) {
+			if (o.get(name) instanceof JsonElement f && f.isJsonPrimitive() && f.getAsJsonPrimitive().isBoolean() && f.getAsBoolean()) {
 				return true;
 			}
 			for (var en : o.entrySet()) {
-				if (farmPond(en.getValue())) {
+				if (trueMember(en.getValue(), name)) {
 					return true;
 				}
 			}
 		} else if (e instanceof JsonArray a) {
 			for (JsonElement x : a) {
-				if (farmPond(x)) {
+				if (trueMember(x, name)) {
 					return true;
 				}
 			}
@@ -1247,12 +1260,34 @@ public final class PlanChecks {
 					+ w + "x" + h + "x" + d + "): approve again";
 			}
 			long top = l.getAsJsonArray("costRange").get(1).getAsLong();
-			long cells = cells(id);
+			// ((6c IRR, §5) an entry's blocks on the lot's irrigation cells are dropped at the realise: not counted, so this is the count placed)
+			long cells = cells(id) - irrigationDropped(l, bp, id);
 			if (cells > top) {
 				return "lot " + e.getKey() + ": entry " + e.getValue() + " is " + cells + " cells, past the top of its approved cost range (" + top + "): approve again";
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * (6c IRR) How many of an entry's non-air blocks the realise drops on an artifact lot's irrigation cells ({@code irrigation.cells},
+	 * the lot fitted as the realise fits it: LotFitting on its box and front, centred, setback 0). 0 without irrigation.
+	 */
+	static long irrigationDropped(JsonObject lot, dev.larattalabs.architect.placement.Blueprint bp, String id) {
+		if (!(lot.get("irrigation") instanceof JsonObject g) || !(g.get("cells") instanceof JsonArray c) || !(lot.get("box") instanceof JsonArray b)
+			|| b.size() < 6) {
+			return 0;
+		}
+		var f = dev.larattalabs.architect.batch.LotFitting.fit(bp, new dev.larattalabs.architect.placement.Anchors.Bounds(b.get(0).getAsInt(), b.get(1)
+			.getAsInt(), b.get(2).getAsInt(), b.get(3).getAsInt(), b.get(4).getAsInt(), b.get(5).getAsInt()), lot.get("front") instanceof JsonElement fr
+				&& fr.isJsonPrimitive() ? fr.getAsString() : "south", true, 0, true);
+		return RegionsImpl.dropped(id, f, dev.larattalabs.architect.site.LotMask.of(maskExt(c)));
+	}
+
+	private static JsonObject maskExt(JsonArray runs) {
+		JsonObject o = new JsonObject();
+		o.add(dev.larattalabs.architect.site.LotMask.EXT, dev.larattalabs.architect.site.LotMask.extOf(runs));
+		return o;
 	}
 
 	/** The non-air blocks of an entry's template (0 when it can't be read): the one function {@code Library.Entry.cells()} shares ({@link Blueprints#nonAirCells}). */

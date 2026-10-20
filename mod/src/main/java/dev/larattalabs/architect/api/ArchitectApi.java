@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.37.0";
+	String VERSION = "1.38.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -117,6 +117,10 @@ public interface ArchitectApi {
 	 * stage of the block Architect wrote, waxed or scraped, is still Architect's, so undo and removal restore it (fewer {@code kept}
 	 * cells), deltas replace it, the survival builder never re-queues it, and its refund is a {@code REFUND} of the block standing,
 	 * credited to the stockpile; farmland and dirt are interchangeable the same way. A player's own placed block stays the player's.
+	 * Since 1.38.0 (6c IRR), an IRR helper ({@code region.irrigation}) adds {@code "farmIrrigation"}: plan/0's {@code irrigate: true} on a
+	 * farm lot or its zone puts an open water source in every 9x9 of the lot's field, the region's (inside the lot's box: the lot's
+	 * design never writes those cells, the plan-check artifact's {@code lots[].irrigation}), removed with the lot; and
+	 * ({@code reserved}) {@code "designReserved"}: {@link DesignRequest#reserved} is kept by the design job and checked by its checker.
 	 */
 	Set<String> features();
 }
