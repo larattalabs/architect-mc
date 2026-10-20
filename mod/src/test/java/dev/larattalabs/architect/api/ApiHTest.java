@@ -26,7 +26,7 @@ class ApiHTest {
 	@Test
 	void versionsAndKinds() {
 		assertEquals("1.34.0", ArchitectApi.VERSION);
-		assertEquals("0.35.0", IrStale.KIT_VERSION);
+		assertEquals("0.35.1", IrStale.KIT_VERSION);
 		assertTrue(IrStale.KINDS_FORMAT2.containsAll(List.of("fluid", "volume:fluids")));
 		assertEquals(List.of("fluid", "volume:fluids"), IrStale.KINDS_FORMAT2.subList(IrStale.KINDS_FORMAT2.size() - 2, IrStale.KINDS_FORMAT2.size()), "appended at the end");
 	}
