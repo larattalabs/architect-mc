@@ -220,9 +220,14 @@ steps.unit = async () => {
   check(out.java.ok, `RealisedTest (each code from TileCheck's decision order: a held cell, a player build, an unbreakable block, a failed condition, a no-op, a write; the fluids gate's FLUID cells and the causes over the tile as evaluated; a felled tree's TREE extras and their LEAF with their cause, dependents; ARPR v1 round trips, its CRC, layers as separate files, RS's UNFINISHED marks; a drained body's row in sites.json; the chain and composed hashes) and TileGravityTest: ${out.java.tests} tests, ${out.java.failures} failures (${out.java.names.join('; ')})`, out.java.tail);
   out.kit = nodeTest(['kit/test/rp.test.mjs']);
   check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 2, `kit rp.test: evalTile's writers leave the payload and its sha unchanged, the winners are cellOps', every op that wrote a cell alone is its winner or among its losers (oldest first), encodings byte-identical: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
-  const ac = spawnSync(process.execPath, ['tools/api-compat.mjs'], { cwd: root, encoding: 'utf8', timeout: 900_000, env: { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
-  out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').slice(-8) };
-  check(ac.status === 0, 'api-compat: the API unchanged against the archived apitest jars', out.apicompat.tail);
+  // the API unchanged: v0.40.0's apitest jar and mod surface (built from its tag: artifacts/gate6c-f3/v0400), and the batch's older jars
+  const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` };
+  const A = path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts', 'gate6c-f3', 'v0400');
+  out.apicompat = [['tools/api-compat.mjs', path.join(A, 'architect_apitest-0.40.0.jar')], ['tools/api-compat.mjs', '--surface', path.join(A, 'architect_mc-0.40.0.jar')], ['tools/api-compat.mjs', '--gate6cbatchcu']].map((args) => {
+    const ac = spawnSync(process.execPath, args, { cwd: root, encoding: 'utf8', timeout: 900_000, env });
+    return { args: args.slice(1).map((a) => path.basename(a)), code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').filter(Boolean).slice(-3) };
+  });
+  check(out.apicompat.every((a) => a.code === 0), 'api-compat: the API unchanged (the 0.40.0 apitest jar and the 0.40.0 mod surface; the 0.39.x and 0.38.0 jars)', out.apicompat);
   spendZero();
   return out;
 };
