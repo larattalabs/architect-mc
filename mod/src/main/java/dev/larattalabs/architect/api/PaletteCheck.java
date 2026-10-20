@@ -8,7 +8,7 @@ import org.jspecify.annotations.Nullable;
  * before {@link Regions#realiseApproved}, which refuses {@link Reason#PALETTE} on the same measure for a required rule. The parts' counts
  * are the plan check's (the artifact's {@code palette} rows); each lot bound in the given entries (the artifact's own, then the ones
  * given) is measured from its entry's template (its non-air blocks less the artifact row's unmeasured {@code natural} blocks); a lot
- * with no entry is pending (it stays a pad, so it adds nothing). {@code ok}: every required rule fits. Since 1.39.0.
+ * with no entry is pending (it stays a pad, so it adds nothing). {@code ok}: every required rule fits. Since 1.37.0.
  *
  * @param ok every required rule fits
  * @param rules each palette rule with lots in its scope, by rule id

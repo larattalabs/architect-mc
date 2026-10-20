@@ -84,7 +84,7 @@ public final class Limits {
 	/** {@code extraCriteria}: at most 3, each trimmed 1-200. */
 	public static final int EXTRA_CRITERIA_MAX = 3;
 	public static final int EXTRA_CRITERION_MAX = 200;
-	/** (since 1.38.0, 6c IRR) The most reserved cells a {@link DesignRequest#reserved} carries. */
+	/** (since 1.37.0, 6c IRR) The most reserved cells a {@link DesignRequest#reserved} carries. */
 	public static final int RESERVED_CELLS_MAX = 65536;
 
 	// ---- BibleRequest

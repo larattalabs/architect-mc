@@ -147,7 +147,7 @@
       { "id": "form.seabed_site", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "later", "note": "Building under water; a later slice, not yet named." },
       { "id": "form.ship_hull", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "unscheduled", "note": "Structures that move or float; not yet scheduled." },
       { "id": "form.mast", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "unscheduled", "note": "Structures that move or float; not yet scheduled." },
-      { "id": "rule.palette", "sinceApi": "1.39.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/rule.palette", "limits": { "groups": ["wood"], "share": [0, 1], "exempt": ["terrain", "support"], "scope": 32 }, "note": "measured over parts and bound lots; required rules are checked again at realise" },
+      { "id": "rule.palette", "sinceApi": "1.37.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/rule.palette", "limits": { "groups": ["wood"], "share": [0, 1], "exempt": ["terrain", "support"], "scope": 32 }, "note": "measured over parts and bound lots; required rules are checked again at realise" },
       { "id": "rule.shape", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.shape" },
       { "id": "rule.variety", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.variety" },
       { "id": "rule.density", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.density" },

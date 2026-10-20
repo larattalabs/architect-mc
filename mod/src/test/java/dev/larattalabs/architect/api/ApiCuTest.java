@@ -8,7 +8,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * API 1.37.0 (placeholder; docs/CONTRACT.md "Phase 6c slice CU" §6): the feature {@code "weatheringOurs"}, always there (no record,
+ * API 1.37.0 (the CU/IRR/VOC-c batch, v0.40.0; docs/CONTRACT.md "Phase 6c slice CU" §6): the feature {@code "weatheringOurs"}, always there (no record,
  * method or enum changes), and the versions.
  */
 class ApiCuTest {

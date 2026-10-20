@@ -32,7 +32,7 @@ import org.jspecify.annotations.Nullable;
  * @param critique (since 1.6.0, a helper with {@code "critique"}) critique this design: {@link CritiqueMode#REPORT} (one critic
  *     call) or {@link CritiqueMode#LOOP} (revise on the verdict, install the best round); null or OFF = none (the default).
  *     On a massing request it critiques the massing itself (its own rubric: silhouette, brief, site fit; maxRevisions default 1)
- * @param reserved (since 1.38.0, a helper with {@code "reserved"}; 6c IRR, S-IRR-2) cells of the lot the design must leave as given
+ * @param reserved (since 1.37.0, a helper with {@code "reserved"}; 6c IRR, S-IRR-2) cells of the lot the design must leave as given
  *     (an irrigated farm's sources, their beds and farmland sides and the air over each: the plan-check artifact's
  *     {@code lots[].irrigation.lotCells}), in the lot's frame ({@link Reserved}); the design job leaves them and its checker refuses a
  *     design writing one; null = none. The realise drops any block there anyway
@@ -58,7 +58,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	}
 
 	/**
-	 * (Since 1.38.0; 6c IRR, S-IRR-2) A lot's reserved cells, in the lot's frame: the lot seen with its front to the south, {@code x}
+	 * (Since 1.37.0; 6c IRR, S-IRR-2) A lot's reserved cells, in the lot's frame: the lot seen with its front to the south, {@code x}
 	 * across it (0 at its left seen from the street), {@code z} from its back ({@code depth - 1} is the front row), {@code y} from its
 	 * floor (0 is the field's level). {@code front} is the lot's real front (north, east, south or west): a design narrower than the
 	 * lot is centred across it as the realise centres it, which rounds the other way for a north or east front. The artifact's
@@ -107,7 +107,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 			fromMassing, massingVersion, context, critique, versionOf, versionOfSite, null);
 	}
 
-	/** A copy whose design leaves {@code r}'s cells of the lot as given (null = none). Since 1.38.0. */
+	/** A copy whose design leaves {@code r}'s cells of the lot as given (null = none). Since 1.37.0. */
 	public DesignRequest withReserved(@Nullable Reserved r) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
 			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, r);

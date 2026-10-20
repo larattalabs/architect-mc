@@ -17,7 +17,7 @@ import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
 /**
- * API 1.38.0 (placeholder; docs/CONTRACT.md "Phase 6c slice IRR" §7, S-IRR-2): the features {@code "farmIrrigation"} (an IRR helper's
+ * API 1.37.0 (the CU/IRR/VOC-c batch, v0.40.0; docs/CONTRACT.md "Phase 6c slice IRR" §7, S-IRR-2): the features {@code "farmIrrigation"} (an IRR helper's
  * {@code region.irrigation}) and {@code "designReserved"} (its {@code reserved}); {@link DesignRequest#reserved}, a typed nullable trailing
  * component with the 1.11.0 constructor kept, sent only when set and only to a helper that keeps it; its field limits; the versions.
  */
@@ -29,8 +29,8 @@ class ApiIrrTest {
 
 	@Test
 	void versionsAndFeatures() {
-		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.38.0") >= 0, ArchitectApi.VERSION);
-		assertTrue(IrStale.semverCompare(IrStale.KIT_VERSION, "0.39.0") >= 0, IrStale.KIT_VERSION);
+		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.37.0") >= 0, ArchitectApi.VERSION);
+		assertTrue(IrStale.semverCompare(IrStale.KIT_VERSION, "0.38.0") >= 0, IrStale.KIT_VERSION);
 		Set<String> f = ApiRules.features(2, List.of("region.fluids", "region.irrigation", "reserved"));
 		assertTrue(f.contains("farmIrrigation") && f.contains("designReserved") && f.contains("regionFluids"));
 		assertFalse(ApiRules.features(2, List.of("region.fluids")).contains("farmIrrigation"), "an H helper has no irrigation");

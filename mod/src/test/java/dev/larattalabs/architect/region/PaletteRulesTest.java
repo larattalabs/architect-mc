@@ -107,7 +107,7 @@ class PaletteRulesTest {
 
 	@Test
 	void theApiAdditions() {
-		assertTrue(dev.larattalabs.architect.region.IrStale.semverCompare(ArchitectApi.VERSION, "1.39.0") >= 0, ArchitectApi.VERSION);
+		assertTrue(dev.larattalabs.architect.region.IrStale.semverCompare(ArchitectApi.VERSION, "1.37.0") >= 0, ArchitectApi.VERSION);
 		assertEquals(Reason.ADOPT_REFUSED.ordinal() + 1, Reason.PALETTE.ordinal(), "VOC-c appends PALETTE after ADOPT_REFUSED");
 		assertTrue(assertDoesNotThrowM(() -> Regions.class.getMethod("checkPalette", String.class, Map.class)).isDefault(), "a default method (binary compatible)");
 		ArchitectRefused e = new RegionRefused(Reason.PALETTE, "m", "copper_only");
