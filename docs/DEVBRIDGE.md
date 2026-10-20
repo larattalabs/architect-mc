@@ -358,6 +358,11 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   [{reason, message}], notes}` or `{applied, written, refusals, notes}`; `dev.site.delta.check` and `.apply` call SiteDeltas directly and
   skip that judgement).
 
+- **2026-10-20 (fix/drain-holders, 0.40.1):** no new hook. `dev.journal.killAt` takes `+save` on K1-K8 and RG1-RG6, and `R2q`
+  (`R2q+save`): a group removal's R2 commit is durable and the queue file has not been saved after it (`Groups.committed`; the journal's
+  writer and the queue's saver are separate threads). `dev.journal.at` names each entry's `group`. apitest's `cells` step takes a full
+  block state (`minecraft:oak_stairs[waterlogged=true]`).
+
 - **2026-10-20 (6c slice IRR):** no new hook. `dev.journal.killAt` gains `FL6` (and `FL6+save`): a farm lot's site removal has
   drained its irrigation sources (`RegionFluids.drainLot`, saved) and not restored the site yet. A lot site's `ext` carries
   `architect_mc:irrigation {cells}` (its mask) and `architect_mc:irrigationDropped` (`dev.sites.state`); the region's
