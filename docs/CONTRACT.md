@@ -9995,7 +9995,7 @@ bible member, checker rules, M26. 5. Fixture bibles, re-skins, gate.
 
 - Bible format 3's settlement-scale styling (7c). Palette suggestions from a chest (phase 3's optional item).
 
-## Phase 6c slice S3: the mountainside monastery v1, terraced, goes green (DRAFT for Steward review)
+## Phase 6c slice S3: the mountainside monastery v1, terraced, goes green (DRAFT; SUPERSEDED 2026-10-20 by "Phase 6c slice S3: the mountainside monastery v1, terraced, goes green" at the end)
 
 API 1.27.0, mod 0.30.0 (wave 5). SETTLEMENTS §16.2 (S3 v1 "terraced"; v2 "cliff-built" is 7b), §16.3, §17.2.
 
@@ -10349,7 +10349,7 @@ from the 6b volume fixture for stalactites; a pool (H) for coral.
 
 - Trunk-wrapping and canopy lots (7b). Live capture of vanilla trees (stamps cover them, F2).
 
-## Phase 6c slice RS: regions in survival, the terrain half (DRAFT for Steward review)
+## Phase 6c slice RS: regions in survival, the terrain half (DRAFT; SUPERSEDED 2026-10-20 by "Phase 6c slice RS: regions in survival, the terrain half" at the end)
 
 API 1.30.0, mod 0.33.0 (wave 6). Noah's survival rule (SETTLEMENTS "Noah's decisions (2026-10-08)"); coordinator decision
 N-6b-5 ("the terrain half of the survival rule lands in 6c, and the connector half in 7a"); coordinator decision on the V
@@ -16952,3 +16952,714 @@ saves about half a day and the RC check, but then "only copper" over provisional
 - **N-VOCc-1:** one group for now, `wood`. Other groups are later additive changes.
 - **N-VOCc-2:** as proposed. "No wood" swaps each wood block for the next block in VOC-a's material chain.
 
+## Batch S3 and RS: summary for one Steward review round (DRAFT, 2026-10-20)
+
+Two slices drafted together for one Steward review round, each in its own section below, marked "(DRAFT for Steward review)".
+They replace the old drafts "Phase 6c slice S3: the mountainside monastery v1, terraced, goes green" and "Phase 6c slice RS:
+regions in survival, the terrain half" (both marked superseded where they stand). Agreed order (STEWARD-SYNC): FL, F3, S3, RS, then
+the 6c close-out. Written over the CU/IRR/VOC-c batch (v0.40.0 RC on `integrate/batch-cu`: API 1.37.0, mod 0.40.0, kit 0.38.0,
+catalogue 9), assumed released. FL and F3 are drafted by a sibling on `docs/batch-fl`, which held no commit when this was written;
+their numbers below are assumptions (one minor each).
+
+| Slice | What | API / versions (placeholders; the coordinator renumbers) | Steward check | Size |
+|---|---|---|---|---|
+| (FL) | (the sibling's draft) | assumed 1.38.0, mod 0.41.0, kit 0.39.0 | (its own) | (its own) |
+| (F3) | (the sibling's draft) | assumed 1.39.0, mod 0.42.0, kit 0.40.0 | (its own) | (its own) |
+| **S3** | The monastery terraced into S3's site goes green: the terrace's blended edge, a zone member `terraces` (one lot per step, retaining walls), the bundled program on it, golden, gallery approval, and the Steward-shaped plan twin through `checkPlan` and `realiseApproved` | 1.40.0, mod 0.43.0, kit 0.41.0, catalogue unchanged (a member) | none before release (plan answers and a member; GATES policy 4); Steward re-checks after (old IRs `PLAN_STALE`) | 4.5-6 days: S3-a kit 2-2.5, S3-b scenario 2.5-3.5 |
+| **RS** | Regions in survival: land free, every built block a construction target from the owner's stockpile, every kind on main (land, routes, walls, bridges, tunnels, bodies with lava buckets, courses, irrigation), waits, refunds of the standing block, crash and resume | 1.41.0, mod 0.44.0, kit 0.42.0, catalogue unchanged | **RC check** (removal and accounting); the verifier re-runs build, conservation, removal and crash | 7-9 days of work, 5-6 elapsed: RS-a 4-5, RS-b 2.5-3 |
+
+**Build order and parallelism.**
+1. **S3-a and RS-a in parallel.** They share no Java (S3 is kit and tools only) and only one kit file family: S3-a edits
+   `program.mjs`'s `terrace` and the plan compile's zone layout; RS-a edits the plan answers (`finish.mjs`), the IR's survival marks
+   and `kit/vocab/survival.json`. Merge `origin/main` when the other lands.
+2. **S3-b on S3-a; RS-b on RS-a's interface** (frozen at the end of RS-a's first day). At most 3 gate runs at once (GATES policy 6):
+   S3-b's scenario runs are long (cameras on a client), so RS's in-game rounds take the other slots.
+3. **Releases.** S3 merges and releases without an RC (it may batch with FL and F3). RS releases on its own with Steward's RC check
+   (removal, accounting), after its verifier re-runs. If RS is ready before S3, it takes the lower numbers.
+4. **Then the 6c close-out** (CONTRACT "6c close-out"), which needs S3 v1 approved by Noah. What these leave for it: S3's golden
+   (`scenarios/goldens/s3*`) and evidence, S3's per-tile p50/p99, S2's and S3's approvals recorded in PLAN.md; RS keeps every
+   creative output byte-identical, so the pass goldens and mega_bench A don't move.
+- **Rules for both** (from the batches before): never edit `kit/regions/plan_v0.mjs` (its sha is every IR's `programSha`); new
+  fixture numbers start after FL's and F3's (the coordinator sets them); KC's keep-clear, `M25:clear` and S-KC-1 bind every new
+  writer; every new path goes through `checkPlan` then `realiseApproved` in game.
+- **Totals:** about 11.5-15 days of work; about 6-7 days elapsed with the halves in parallel, plus Noah's gallery approval and
+  Steward's RC round.
+
+## Phase 6c slice S3: the mountainside monastery v1, terraced, goes green (DRAFT for Steward review)
+
+The second 6c scenario goes green, as S2 did: a monastery terraced into S3's pinned mountainside, with retaining walls and
+switchback paths, built by a bundled program, golden on macOS and Linux, and approved by Noah on the gallery. New since the old
+draft (2026-10-11, "Phase 6c slice S3 ... (DRAFT for Steward review)" above, now superseded): plan/0 and the catalogue, H, HY,
+VOC, KC, CU, IRR and VOC-c are on main, and the lessons of those slices bind the gate (§9). Over the CU/IRR/VOC-c batch (v0.40.0:
+API 1.37.0, mod 0.40.0, kit 0.38.0, catalogue 9) and FL and F3 (drafted on `docs/batch-fl`; their numbers are placeholders).
+
+- **Branch:** `slice/S3` (or `slice/S3-a`, `slice/S3-b`, §10), worktree `../architect-mc-S3`. **Spend:** $0 (fixture bible and library entries; no pick, no claude login).
+- **Scope:** the terrace's blended edge (§2), the zone member `terraces` that lays a street as stepped terraces (§3), the bundled
+  program `terraced_monastery` built on that member (§4), its fixture bible and entries, the scenario's harness (§6), the
+  Steward-shaped plan twin through `checkPlan` and `realiseApproved` (§9 item 4), the golden and the gallery page.
+- **Not in scope:** S3 v2, cliff-built (7b: buildings on the cliff face, `layout.elevated`); a stream (N-HY-1); rope bridges, lifts
+  and ladders between terraces as typed connectors (7a; T2's player-only ladders on the lookout edge stay, S-T2-2); F3's trees
+  (S3 uses F2 scatter; F3's forest variant is the close-out's); survival (RS's).
+- **Depends on (all on main):** T1 (relief, blended pads), T2 (switchbacks, grade windows), D1 (districts by level band), F1
+  (`rockSpire`, M17), F2 (scatter), W (`lightCover`), H (a fountain), KC (keep-clear), VOC (vocabulary, M26/M27). **Optional:**
+  T3 (a bridge or tunnel only where T2's route picks one).
+- **Track A's last scenario.** The 6c close-out runs after the last 6c slice (RS in the agreed order), and needs S3 v1 green.
+
+### Binding answers carried over
+
+- **N-S3-1 (coordinator, 2026-10-11):** "v1 terraced" means buildings on terraces cut into the slope, with retaining walls and
+  switchback paths. Cliff-built is 7b's v2.
+- **N-HY-1 (2026-10-11; HY §"Binding answers carried over"):** S3 v1 has no stream. S3 doesn't depend on HY. The old draft's
+  "Optional: HY (a stepped stream)" and "moss by `wet` (HY when merged)" are dropped; the scatter may read HY's `wet` field (a
+  read of the survey, no water written), never a course.
+- **N-T1-1:** `blend` is the default pad edge for a program that declares passes.
+- **S-T2-2 (Noah):** ladders on player-only edges (the lookout); villager edges never use ladders.
+- **N-F1-1:** the axis-run share stays recorded only through 6c.
+- **N-F2-1:** stamps are local-only; S3 uses scatter items, no stamps.
+- **S-K1-6, S-K1-7:** a pending part newly refused is a repair, never a build stop; unknown codes pass through.
+- **S-KC-1, S-KC-2:** the later part moves, never the body; watch cells are strict.
+- **SETTLEMENTS §16.3:** a scenario is green when every bar passes and Noah approves its gallery page, with notes in PLAN.md.
+
+### 0. Facts (main b5667a19 plus `integrate/batch-cu`)
+
+**The site.** `scenarios/s3_monastery.json`: seed 2026100906, claim `[3604,-1036,3795,-845]` (192x192), yRange [22, 220],
+ground 62-180 (mean 117.6), biomes frozen peaks 32%, cherry grove 26%, sunflower plains 22%, snowy slopes 11%, river 6%. Its
+`planSurvey` (sha c375efa8, kit 0.18.0, re-pinned by W) counts 3907 water columns; live surveys vary 3890-3934 (flowing water).
+The file holds no program, bible, entries, `cams`, `feasibility` or `lotEntries` yet (S2's has all of them). There is **no S3
+golden and no monastery bible**. Nothing in kit, tools or mod is named monastery.
+
+**The site drifts, and its own fluids move.** Three worldgen fluids on the claim start after a fresh copy's chunks tick:
+- a surface spring stream (x 3664-3672, y 122-125, z -980..-965). relief_demo's survey, taken before the 90 s settle, never sees
+  it; when a relief fill covered its feeder (3671-3672, 123, -972), the undo left the falling column dry until `site/FluidRearm`
+  (fix/relief-flow, edf879f4) gave restored flowing water a fluid tick. HY-b's run also saw 13 unwritten cells beside the stream
+  (grass turned to flowing water) that a re-tick can't undo: no class was added;
+- a cave stream (x 3752-3760, y 37-48, z -924..-914) and a lava spring (x 3787-3789, y -2, z -995..-990), 90 and 122 from the
+  nearest written cell of voc-natural's plan. `fix/voc-natural` classes these `farfluid` in voc-natural's item 9 only
+  (`tools/lib/gate6cvoc-b.mjs` `farFluidOf`: air or non-source fluid on both sides, unwritten, in no lot box, at least 8 Manhattan
+  from every written cell; a source and every other kind stay unclassified). `tools/scenarios.mjs` has no `farfluid`;
+- relief_demo's golden is held through its committed inputs because fresh S3 copies differ (35 ground and 2,009 flag differences,
+  T1 as built). S2 held its golden the same way.
+
+**Who else uses the claim:** relief_demo, route_demo and districts_demo (goldens), and the gates of W, T3a, D, H-a, H-b, HY-b and
+voc-natural. HY-b's natural plan on it is the fall join only.
+
+**The terrace on main** (`kit/lib/region/program.mjs:1316`): `terrace(area, levels, {riser, step, retain, edge, stairs,
+stairWidth, surface, fill, soil, stairMaterial, startAngle})`, `edge` `slope` (1:1 batters) or `wall` (a retaining wall of
+`retain` on each level's rim); anything else throws. **`blend` exists only for lot pads** (program.mjs:2065-2069, pushed to
+`blendLots`). So the old draft's "outer edges `blend`ed (T1)" is new kit code (§2).
+
+**In plan/0:** `form.terrace` (steps 2-8, rise 1-8, edge `blend|slope`) compiles beside zones only: a terrace with
+`where.inside` a zone is refused `OVERLAP` ("terraces stand beside zones", compile.mjs:574) and `edge: blend` is noted and built as
+slope (compile.mjs:583). Steward's plan writer was told "terraces sit beside zones" (STEWARD-SYNC, 2026-10-20), and "terraces
+inside zones" is one of the 7 non-fitting parts it lists (steward-mc ARCHITECT-ASKS.md:490). Recorded plans with a terrace part:
+`terraced_hill` (beside, steps 4, rise 3, edge blend, "stone-retained flat steps"), `one_block`, `end_city_ruins`; monastery
+plans: `cliff_monks` (a standard zone, two paths), `sky_monastery` (waits on `sky_island`, `long_stair`).
+
+**Districts (D1):** `program.districts` places each district on a survey candidate at its level band (the claim's height
+terciles, `levelBands`), one street per district, joined by routes (MST plus loops). In plan/0 the zone's `where` and `size` are
+not read. `districts_demo` on S3 uses wall pads, not slope (D1 decision 5).
+
+**The M5 risk.** T2's verifier recorded realised M5 over the routes at **5.25% on S3** (virtual 0.41%, flat 0.24%; 0.61% on a
+fresh-world re-run), from soul lanterns (light 10) and snow; not judged then. S3's bar is full M5 under 1%.
+
+**S2 as the model** (S2 as built, v0.31.0): `kit/regions/ice_outpost.mjs` (`catalogue = false`, `passes = ['relief', 'route']`),
+a fixture bible, a feasibility item first, `tools/lib/scenario-s2.mjs` and `tools/gate6cs2.mjs`, chain steps `s2-unit` and
+`6c-scenario-s2` (in release's `always`), world classes by kind (`freeze`, `flow`, `melt`; `distant` not used), the golden held
+through committed inputs, evidence 932dafe971f1. S2 needed kit fixes outside "program and bible" (keep sets as routes' obstacles,
+retaining columns, relief and kept columns, the 0.2 grade quantum, `lightCover` with side blobs): accepted as a deviation.
+**Noah's approval of S2 is recorded only in `artifacts/scenarios/6c/s2/approvals.json`** (2026-10-14, evidence 932dafe971f1),
+not in PLAN.md as §16.3 asks; S3 records both (§9 item 9).
+
+### 1. The rule in one line
+
+**Every lot of the monastery stands on its own terrace step, cut into the slope and retained where it is over 2 high; the steps
+are joined by switchback paths within grade; the outer edges blend into the mountain.**
+
+### 2. The terrace's blended edge (kit, `program.mjs`)
+
+- `terrace(..., {edge: 'blend'})`: each level is flat as today, its rim retained by `retain` where the level stands more than 2
+  over the ground outside it (the retaining wall of `edge: 'wall'`, only where needed), and its outer batters are not built:
+  the level's footprint joins T1's relief as a pin (as a lot pad's does), so the relief pass blends the land into it.
+- Only a program that declares the `relief` pass may ask for it (else the call throws, as an unknown edge does today).
+- **Byte identity:** `slope` and `wall` are unchanged; no existing program asks for `blend` (walled_hill, mega_bench,
+  region_small and plan compile's terrace use `slope` or `wall`).
+
+### 3. The zone member `terraces` (plan/0, a member like `irrigate`)
+
+`zone.standard` and each `program.districts` district gain an optional `terraces: {rise?: 2..6 (3), retain?: "wall" | "blend"
+("wall"), stairs?: boolean (true)}`.
+- **What it does:** the zone's street layout is laid down the slope as steps: each lot (with its apron) on its own level, levels
+  `rise` apart at most, consecutive lots sharing a level where the ground allows. The street becomes T2's route between the
+  levels' entrances (switchbacks and stairs within the zone's `maxGrade`), not a flat street.
+- **Retaining walls** in the bible's `structure` role on every rim over 2 high (`retain: wall`), or blended rims (§2, `retain:
+  blend`, where the relief's cut and fill limits allow; else a wall and a deviation note).
+- **Answers:** a zone whose slope has no stepped fit within the claim answers as a zone does today (`NO_ROOM`, `TOLERANCE`). A
+  member on a flat site lays one level and notes `terraces: flat site, one level`.
+- **What it does not change:** `form.terrace` still stands beside zones (compile.mjs:574 unchanged); a terrace part inside a zone
+  stays refused. Steward's "terraces inside zones" is answered by the member instead (S-S3-1).
+- **Catalogue:** unchanged (a member, as `irrigate`); `plan/0`'s def gains it, so the plan writer sees it in `plan/0#compact`.
+- **Byte identity:** every plan without `terraces` is byte-identical (the member is absent); `kit/regions/plan_v0.mjs` is not
+  edited.
+
+### 4. The program `terraced_monastery` (`catalogue = false`)
+
+`kit/regions/terraced_monastery.mjs`: a fixed plan/0 compiled by the plan compile (the same code path Steward's plans take), then
+two program-only steps the catalogue doesn't offer (`form.scatter` is reserved F2):
+- **Districts (D1, `program.districts` with `terraces`):** `gate` (low band: gatehouse, guest house, stable), `gardens` (mid: herb
+  garden lot, orchard lot, the infirmary), `cloister` (high: the church as landmark, cloister range with its garth, refectory,
+  4 cells). 10-12 lots.
+- **Garden fountain (H, `form.fountain` in the gardens district):** one small contained fountain on the mid band (cherry grove,
+  not freezing). It is the scenario's KC case (the gardens' lots and the paths keep clear of its footprint and apron, S-KC-1).
+  Not in the cloister: the high band is frozen peaks and snowy slopes, where N-H-4 caps a source with ice. If the feasibility
+  item finds no unfrozen site, the fountain answers as H does there (ice cap named in bar 11) or N-S3-3 drops it.
+- **Routes (T2):** the districts' joins as switchbacks (`maxGrade` 0.2, stairs, landings), villager edges to the dwellings (cells,
+  guest house), a player-only edge with ladders to a lookout on the highest shoulder.
+- **Forms (F1):** 1-3 `form.rock_spire` (preset `pinnacle`) on the shoulders where the survey is steepest, clear of lots, routes and
+  the spring stream's columns.
+- **Relief (T1):** `form.relief` around the districts (blend), cut and fill limits as T1's defaults.
+- **Program steps:** F2 scatter (cherry and spruce stumps, boulders, moss where HY's `wet` field is high; snow layers only where
+  M17 allows; no stamps); W's `lightCover` with soul lanterns' reach planned 2 under the light (S2's fix), sunk posts on snow.
+- **Bible:** `scenarios/bibles/g6c_s3_monastery.json`, "mountain monastery": stone bricks and deepslate tiles, spruce frame,
+  copper accents (CU: weathering is ours), moss and cobblestone `rubble` (its own row since fix/voc-natural). Entries from the
+  library, installed by the harness as S2's (`prepV`).
+- **The spring stream:** its columns (x 3664-3672, z -980..-965) are kept: no lot, route, terrace or relief writes there, so
+  the realise never buries the feeder (the root of T1's falling-water failures).
+
+### 5. API, catalogue and versions
+
+- **Placeholders** (the coordinator renumbers): the next minor after F3's. `docs/batch-fl` holds no commit yet, so this assumes
+  FL and F3 each take one minor over the CU/IRR/VOC-c batch (FL 1.38.0 / 0.41.0 / kit 0.39.0, F3 1.39.0 / 0.42.0 / kit 0.40.0):
+  S3 is API **1.40.0**, mod **0.43.0**, kit **0.41.0**, catalogue unchanged (a member). Feature `scenarioS3` (sidecar `region.terracedZones` -> `terracedZones`, and `scenarioS3` from the
+  program, as S2's `region.outpost` -> `scenarioS2`). No new records, methods, reasons or IR kinds.
+- **KIT_VERSION** = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` moves: old IRs go `PLAN_STALE`, Steward re-checks (as every kit bump).
+- api-compat clean against the three previous apitest jars; apijars on them.
+- **The compact plan/0.** It is 76,652 characters of the 80,000 bound after the CU/IRR/VOC-c batch, and FL, F3 and this member
+  all add defs. The builder measures it; if it passes the bound, the bound moves (as the batch moved it; the jobs' system cap is
+  120,000) and the as-built says by how much.
+
+### 6. The scenario harness (`tools/scenarios.mjs`, `tools/lib/scenario-s3.mjs`)
+
+- `isS3`: bible and entries installed (`prepV`), three IR-sha plans under `/tick freeze`, mobs cleared before placing, T2's
+  `routeNav` along every villager edge, the after-stand dump, cameras `cam_e`, `cam_n`, `cam_s`, `cam_w`, `cam_ground`, `cam_high`.
+- **The survey after the settle.** The fixture is re-pinned from a survey taken **after** the 90 s settle, so the spring stream
+  is in the frozen survey and volume (today it starts after the survey). The golden is held through the committed inputs and the
+  frozen volume when a live survey differs (S2's and relief_demo's rule).
+- **World classes, by kind, at unwritten cells, away from the plan** (D2's narrowing, H's rule; no class may hide an undo error):
+  `freeze` (frozen peaks, snowy slopes), `flow` (more than 6 columns from any written column, or deep), `melt` (lit over 11 by a
+  planned light), and **`farfluid` moved into `scenarios.mjs`** with its rule unchanged (the voc-natural copy then imports it).
+  The mod's `growth`, `grazed` and `live` likewise **only at unwritten cells** (K1b's and T3's bridge rule): a mismatch at a cell
+  the plan wrote is never classed, so a grass/dirt flip on a restored pad (CU's probe) counts. Exactness rounds run at exact rules
+  (random ticks 0), where none is expected at written cells. `distant` is not used. **Nothing within 6 cells (3D) of the
+  fountain's cells, shell or watch is classed** (H §4.5).
+- `tools/gate6cs3.mjs` (unit, feasibility, plan, apicompat, report); chain steps `s3-unit` (client none), `s3-plan` (headless) and
+  `6c-scenario-s3` (cameras; added to release's `always`); impact rule "6c S3" adds the relief, route and districts scenario steps
+  (they share the claim).
+
+### 7. Bars (realised world, re-surveyed; SETTLEMENTS §16.3)
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Checker | 0 errors; no M1-M4; M25 0 (the fountain), M25:clear 0 |
+| 2 | Reachability `player` | 100% of nodes, the lookout included; 0 unreachable lot entrances |
+| 3 | Reachability `villager` | 100% of the dwellings that declare it, kit and vanilla `routeNav` both ways (recorded in 6c as S2's, judged from 7a) |
+| 4 | Grade | 100% of walk runs within `maxGrade` per 8-cell window (T2's bar 1), virtual and realised |
+| 5 | Structure | M3 0 floating, 0 `M3:gravity`; every terrace rim over 2 high retained (by wall, or blended within the relief's limits) |
+| 6 | Safety | M4 0; full M5 under 1% of walk area; M8 100% of walk cells beside a drop over 3 guarded; M17 0 before and after a 2-minute stand |
+| 7 | Palette | role adherence at least 0.9; M26 and M27 warnings listed |
+| 8 | Organic read | axis-run share of form and relief boundary cells, per N-F1-1 (recorded); terrace risers and retaining walls are structure, not counted |
+| 9 | Earthworks | cut + fill cells per district and per terrace level (recorded) |
+| 10 | Buildings | kit checker 0 errors; restraint as 5a |
+| 11 | The fountain | settled, census equal to its prediction; 0 other parts' cells in its sets |
+| 12 | MSPT | own CPU at most 50 ms, p99 at most 25 ms; recorded in slice, judged at release (GATES policy 1) |
+| 13 | Tile evaluation | p50 and p99 per tile; p99 under 2 s (recorded; judged at the close-out) |
+| 14 | Exactness | flat variant E-flat 0; natural E-normal 0 unclassified under §6's classes, at most 0.01% classified |
+| 15 | Determinism | IR sha over 3 plans; tile shas 1 and 4 workers, forward and shuffled; golden `scenarios/goldens/s3*`; macOS and Linux CI |
+| 16 | Spend, gallery | $0.00; Noah approves this run's `evidence.sha` on the 6c gallery (section S3 v1) |
+
+### 8. Byte identity and Steward's recorded plans
+
+- **Bar:** every committed plan fixture (all of `kit/test/fixtures/plan`, the 59 asks included) re-plans byte-identical (answers
+  and IR, but kitVersion). No fixture carries `terraces`. Every scenario and kit tile golden unchanged but those re-cut for the kit
+  version alone (named, as KC's re-cuts).
+- **Expected answers (predicted, not run):**
+
+| Plan / part | Expected | Why |
+|---|---|---|
+| every recorded plan | unchanged | no plan carries the member; `form.terrace` beside zones is unchanged |
+| `terraced_hill` / `terraces` | unchanged (beside the town, edge noted as slope) | the member is the plan writer's to adopt (S-S3-1); re-recording is Noah's paid call |
+| `cliff_monks`, `sky_monastery` | unchanged | cliff-built is v2 (7b); `sky_island`, `long_stair` still wait |
+
+### 9. Gate (slice tier, $0)
+
+The lessons bind: **every new path goes through `checkPlan` then `realiseApproved` in game, on a Steward-shaped plan**; world
+classes are **by kind, at unwritten cells, away from the plan**; **KC keep-clear** is judged, not assumed; **natural sites drift**,
+so the natural run reads its frozen inputs and its classes, and the flat variant carries exactness.
+
+1. **Feasibility first** (`gate6cs3.mjs feasibility`, offline on the re-pinned survey and frozen volume): at least 9 lots placed
+   on terrace levels, every lot routed from the gate within grade, virtual M5 under 0.5%, the checker 0 errors and no M1-M4, the
+   spring's columns unwritten. If not, the coordinator re-pins or reduces the lot list (S2's precedent) before the runs.
+2. **Unit** (`s3-unit`): `terrace` with `edge: 'blend'` (pins, retaining only over 2, throws without the relief pass); the member
+   (levels, rise, retain, the flat-site note, the districts form); broken variants `_unsafe.unretained` (a rim over 2 with no wall:
+   M3/M8 caught) and `_unsafe.springBuried` (a fill over the kept spring columns: caught by the program's own check).
+3. **S3 natural** (`6c-scenario-s3`): bars 1-16. **Flat variant:** the harness sculpts a 60-high hill first (through the relief
+   pass's `base`, as T1's flat hill), then the same program: bar 14's E-flat 0, and bars 1-6.
+4. **The Steward-shaped plan, in game** (`s3-plan`, headless, exact rules): the monastery's plan/0 as Steward would send it (no
+   program steps: districts with `terraces`, the fountain, the spires, relief, the paths), through `Regions.checkPlan`'s two-plan
+   flow (guards, the fountain's volume) and **`realiseApproved`**, on a fresh copy of S3's site and on the flat hill: READY,
+   PLACED with the fountain settled and census-exact, the realised world equal to the virtual one over every written cell,
+   M25:clear 0; then `Regions.remove`: E-flat 0 on the flat hill, E-normal 0 unclassified on the copy. **The verifier re-runs
+   this item** (removal).
+5. **Byte identity:** §8's bar; the 59 asks unchanged (kit CI).
+6. **Regressions:** S1, S2 and S7 green on their goldens; relief_demo, route_demo and districts_demo (S3's claim) on theirs.
+7. **Survival** is RS's. S3 itself is creative; RS's gate carries its own terraced plan and may add this one as an optional row
+   when S3 has merged (RS §11), so the two slices don't wait on each other.
+8. **API:** api-compat clean, apijars; $0.00.
+9. **Gallery and approval:** the run's page on the 6c gallery (section S3 v1). **S3 v1 is green only when Noah approves it**;
+   the approval is recorded in PLAN.md with its evidence sha, and S2's approval (2026-10-14, 932dafe971f1) is recorded there too.
+
+**Evidence:** `artifacts/scenarios/6c/s3/`, `artifacts/gate6c-s3/REPORT.md`. **Tier:** slice: the units, apijars/api-compat, the
+impact steps for `kit/lib/region/program.mjs` and `kit/lib/plan/**`, and S3's own steps. **gate-verifier** reviews the diff and
+evidence, recomputes the evidence sha and **re-runs item 4** (realise and removal). **Steward:** no RC check (plan answers and a
+new member only; GATES policy 4); Steward re-checks after release (old IRs `PLAN_STALE`).
+
+### 10. Size and split
+
+About **4.5-6 days**, split by default:
+- **S3-a, the kit (2-2.5 days):** the terrace's blend (§2) and the member (§3). The member re-lays D1's one street per district as
+  stepped levels joined by T2's routes: layout-engine work, not a flag, and S2 alone needed five composition fixes. Gate: items 2,
+  5, 8 and item 4 on a small terraced test plan (a flat-hill fixture and a copy of S3's site). Merges first and gives Steward the
+  member early.
+- **S3-b, the scenario (2.5-3.5 days, on S3-a):** the program, bible and feasibility on the pinned survey (1-1.5 days, mostly
+  iterating on previews), the harness, classes, flat variant and item 4 on the monastery plan (0.5-1 day), runs, golden and gallery
+  (0.5-1 day).
+- The approval may lag the merge (S2's did); the close-out waits for it, the release does not.
+
+### Open questions for Steward
+
+- **S-S3-1. Terraced zones.** The member `terraces` lays a zone (or a district) down the slope as steps, one lot per level, with
+  retaining walls; `form.terrace` still stands beside zones. Does that answer your "terraces inside zones" (your plan writer would
+  write `terraces` on the zone instead of a terrace part under it), and are rise 3, walls and stairs the right defaults?
+- **S-S3-2. Recorded plans.** `terraced_hill` keeps its answer (the member is absent). Re-recording it with the member is Noah's
+  paid call. Fine to leave it until then?
+- **S-S3-3. Release.** No RC check: S3 changes no removal, stop or accounting behaviour (GATES policy 4); old IRs go
+  `PLAN_STALE` with the kit bump. Fine?
+
+### Open questions for Noah
+
+- **N-S3-2. The look.** Proposed: stone bricks and deepslate tiles, spruce frame, copper accents, soul lanterns, moss and
+  cobblestone rubble, cherry stumps in the gardens. The gallery shows it; a change there is a bible default, not a contract change.
+  Default: as proposed.
+- **N-S3-3. The garden fountain.** A small fountain in the gardens (mid band, unfrozen) gives the terraces a centre and exercises
+  KC in a scenario. Default: on. Off makes S3 a plan with no body.
+
+### Deferred
+
+- S3 v2, cliff-built (7b). Rope bridges, lifts and stairs as typed connectors between terraces (7a). A stream (N-HY-1, 7b's v2).
+  `form.terrace` inside a zone (the member covers it). F3's trees on the monastery's slopes.
+
+## Phase 6c slice RS: regions in survival, the terrain half (DRAFT for Steward review)
+
+A region realises in a survival-toggle world: the land it shapes is free, and everything it builds is a construction target fed
+from the owner's stockpile, in the region's own order, with waits, partial progress, exact refunds on removal and a resume after
+a crash. It supersedes the old draft ("Phase 6c slice RS ... (DRAFT for Steward review)" above), written before Y1, plan/0, the
+catalogue and the typed parts (K1, T3, H, HY, IRR), each of which froze "INSTANT only; RS builds it". Over the CU/IRR/VOC-c batch
+(v0.40.0: API 1.37.0, mod 0.40.0, kit 0.38.0, catalogue 9), FL, F3 and S3 (placeholders, §10).
+
+**RS changes removal and survival accounting.** Steward's RC check comes before release (GATES policy 4), and the verifier
+re-runs the realise, accounting, removal and crash items (policy 3).
+
+- **Branch:** `slice/RS-a`, `slice/RS-b` (§13), worktrees `../architect-mc-RS-a`, `../architect-mc-RS-b`. **Spend:** $0.
+- **Scope:** the survival check and artifact (§3), the free rule per written cell (§4), the region's construction targets and
+  their order (§5, §6), each kind's build path (§7), waits and partial progress (§8), removal and refunds (§9), crash and resume
+  (§10), the API (§11), the gate (§12).
+- **Not in scope:** Hardcore's own difference (Steward builds Hardcore as Supplied; phase 3's rules hold); the 7a connectors still
+  reserved (`connector.ladder`, `stair`, `rail`, `catwalk`, `rock_stair`, `switchback`, `lift`, `branch_walk`, `span_bridge`,
+  `stairs_around`: each gets its survival row in its own slice); villager or entity hauling; a general storehouse (S-Y-3).
+- **Depends on:** Y1, Y2, C29 (the stockpile, waits, leaving the feed), CU (the standing block's refund, `holdsOurs`), H, HY, IRR,
+  KC, K1, T3, VOC (all on main or in the CU/IRR/VOC-c batch). Independent of S3 (§12's terraced plan is its own).
+
+### Binding answers carried over
+
+- **Noah's survival rule (SETTLEMENTS, 2026-10-08):** natural cut and fill and grown natural forms are free; connectors and
+  buildings are construction sites with a bill of materials.
+- **Phase 3 (2026-10-05):** clearing a site gives no drops, and Remove restores the terrain snapshot exactly.
+- **N-H-1 (Noah):** placed water sources are free; each placed lava source costs one lava bucket (the bucket comes back).
+  Containment (M25) applies in both modes. **N-H-3:** no lava courses. **N-H-4:** ice caps in freezing biomes.
+- **S-Y-7:** no region crate. `RealiseRequest.crateAt` and `RegionView.crate` are dropped; regions draw from the owner's stockpile.
+  **S-Y-1:** a blocked target keeps its reservation, except one whose whole frontier is in unloaded chunks. **S-Y-6:** one
+  dimension per stockpile.
+- **C29:** a target being removed leaves the feed; refunds are what stands when the restore writes, credited once per key.
+- **S-CU-1, S-CU-2, S-CU-3:** ours means the block we wrote at any copper stage (a player record wins); the refund pays the
+  standing block; farmland and dirt are interchangeable.
+- **S-RS-1 (Steward, 2026-10-11):** RS is useful; Steward adopts it at its phase 4 (Supplied on construction sites).
+- **S-H-6:** a per-body `fluids` report and **no new region state**.
+- **S-K1-6, S-K1-7:** a pending part newly refused is a repair, never a build stop; unknown codes and kinds pass through.
+- **S-KC-1, S-KC-2:** the later part moves, never the body; watch cells are strict.
+- **N-RS-1 is superseded for the typed parts on main.** N-RS-1 (2026-10-11) kept "the connector half" (path, structure and prop
+  parts as construction) in 7a. Since then **N-K1-3** (2026-10-14: "leave survival to RS"), T3 (§8: "INSTANT-only, as K1 (N-K1-3:
+  RS)"), H (§12: "RS builds it"), HY (§12) and IRR (§7) each sent their survival build to RS. So RS builds every part on main;
+  the connectors still reserved for 7a stay there. The old draft's `CONNECTOR_SURVIVAL` reason and its refusal rows go. N-RS-1'
+  asks Noah to confirm this reading.
+
+### 0. Facts (main b5667a19 plus `integrate/batch-cu`)
+
+**Where survival is refused today.**
+- `RegionsImpl.realise0` (RegionsImpl.java:1153-1155; :1158 on the batch) refuses `NOT_ALLOWED` "regions are INSTANT only" when
+  `mode == CONSTRUCTION` or the toggle is on and the default game type isn't creative. `plan`, `checkPlan` (PlanChecks.java:133-170:
+  Overworld only), `prepare` and `realiseApproved` (PlanChecks.java:883-956) check nothing, so `realiseApproved` meets the refusal
+  only after the artifact, tunnel-rock and drift checks.
+- Brush strokes refuse on the toggle alone (Brushes.java:133-135, "until regions in survival"); `BrushKind` is SMOOTH, ERODE,
+  MELT, BLEND, RAISE, LOWER, OVERLAY, CAVE_CARVE. **The fluid brushes (fill, drain, flood fill) were never built.**
+- Cell sites refuse construction (`InfraPlace.modeRefusal`, :81-99), except construction roads (`constructionRoad()`, :76-79).
+- **Latent:** region items are queued with `construction=false, survivalAtQueue=false` (tiles :1342, lots :1439/:1444, roads
+  RegionQueue.java:24-25), and `Batches.tick` (:738-742) fails such an item when the toggle is on ("survival was switched on after
+  this was queued") without checking the game type. A creative-game-type world with the toggle on passes `realise0` and then
+  fails its items. RS sets these flags deliberately (§5).
+
+**How a region realises.** `realise0` (:1241-1332) builds batch items stage by stage: terrain tiles (`t:<stage>:terrain:<tx,tz>`),
+path tiles after the stage's terrain tiles within 1, 4e roads (`RoadRequest` INSTANT, :1400-1415), lots (blueprint items through
+`LotFitting.fit`, `layer`, consented builds, :1430-1452) after the tiles within their box + 8. `Batches.queueRegion` makes one
+batch and one group, a StageRec per stage. Plan compile's stages: `ground, street, forms, routes, (links), lots, props, (fluids)`
+(compile.mjs:971); `fluids` is always last. Per-stage gates: the drift check (`stageGate`) and `RegionFluids.gate`.
+- **A tile** is 64x64 columns, its entry a cell site `c<n>` of kind `architect:terrain` or `architect:path` (only two sets),
+  `Journal.Policy.CELL`. `TileCheck` skips `owned`, `player_build`, `unbreakable`, `condition`, `same` cells and handles
+  dependents (`gravityKept`). `InfraJob` captures `before`, commits PLACING, writes lowest first with `CELL_FLAGS`
+  (`UPDATE_CLIENTS|UPDATE_SKIP_ALL_SIDEEFFECTS`), commits ACTIVE, and at AFTER_COMMIT calls `RoadBuilder.convert` when the item is
+  a construction road (InfraJob.java:446-451).
+- **End state:** PLACED when every item is PLACED and no body drained, else PARTIAL or FAILED. A construction item is PLACED when
+  its site is put down, not when it is built (C30). `RegionView` already carries `@Nullable Refusal waiting`; `RegionState` is
+  PLANNED, PREPARING, PREPARED, PLACING, PLACED, PARTIAL, FAILED, REMOVING, REMOVED. There is no region event; Steward reads the view.
+- **Fluids** (H §3, HY §3): the stage is last; every solid and shell is written before any source; a forced tick; settle and
+  census; the region is PLACED only when every body settled; the escape guard drains. IRR: shells in `ground`, then the masked lot,
+  then the sources.
+- **Removal:** `Regions.remove` -> `removeGroup`; bodies drained first (H §4.1, `removalGate`); `Journal.planUndo` restores a
+  CELL entry's cell only while the world `holds(after)` (else kept); FluidRearm re-ticks restored flowing water.
+
+**The survival machinery.**
+- `Builder` (sites): `planConvert` captures the target, clears the queued cells without drops, orders by `BuildOrder` (bottom up;
+  full, partial, attachables; pairs together), builds as fed (`affordable`, `supportOf`, `free()`: the cell must be air or
+  replaceable), writes with `Sites.FLAGS` (drops suppressed; `onPlace` runs). `blocksPerTick` per target (default 4); the time
+  left after the placement budget.
+- `RoadBuilder` (construction roads, the CELL model): `convert` reads target and before from the journal, sends every queued cell
+  **back to its before** with `CLEAR_FLAGS`, and `step` replaces "what the road planned to replace". Cuts (target air) are never
+  queued: they stay cleared and free. `freeCell`: a dirt path on grass, dirt, coarse dirt, podzol, mycelium or rooted dirt.
+- `Stockpiles`: `targets()` are every placed, building, fed Site **and Infra** of the owner in feed order; one purse per target,
+  `stock - reservations` of earlier targets; leaving targets skipped (C29); `availableTo` is C25's seam. `StockLedger.consume`
+  gives a bucket back for any `*_bucket` cost; `credit(key)` once per key. `Groups` credits a fed Infra's refund after its
+  restore (`decCredit`), keys `site:<id>@<placedAt>`, `road:<id>@<placedAt>`, `delta:<entry>:<site>`.
+- `Refunds.classify`: REFUND (queued, as placed, not free), NONE (air, as snapshot, natural), else PLAYER_DROP. CU: `refundCost`
+  pays the standing block.
+- **Costs:** `Cells.cost` over `survival_items.json` (28 rows: grass, dirt path and farmland cost dirt; **water, lava and frosted
+  ice cost nothing**; stone costs stone; ice costs ice), 35 `creativeOnly` blocks (bedrock, budding amethyst, infested blocks,
+  suspicious sand and gravel, reinforced deepslate, spawner, the crate, ...). **No mod code prices a lava source**; only the kit's
+  `bodyBom` does (one `lava_bucket` per source, `ice` per cap cell, `iron_bars` per grate).
+- **The kit's bills:** `cost.bom` per part from `links.bom` (walls, bridges, ropes, tunnels with `carved`/`lined`, ponds, quays,
+  water gates; IRR's beds, farmland as dirt), through `bomOf` (mirrors `SurvivalItems`). **Terrain parts have no bill anywhere.**
+  The whole plan's cost is `bom: null, bomNote: "regions are INSTANT only: no BOM"` (finish.mjs:146). VOC's `sv` (survival class:
+  craft, drop, silk, loot, cost, none) and `t` (tier) are on every block; `cost.creativeOnly` on a part only when it writes one.
+  **v44's waterfall bill** (stone 219 billed, 201 standing) is untraced (PLAN, queued from the VOC batch).
+- **Voxel classes** (`kit/voxel_classes.json`): AIR, ROCK, SOIL, LOOSE, ICE, SNOW, WATER, LAVA, LOG, LEAVES, PLANT, plus OWNED,
+  PLAYER, BLOCK_ENTITY, MISSING. Cobblestone (the default rubble) has none.
+- **PT:** Architect's writes clear a cell's record; the builder writes through `Placed.set`, so built cells are never
+  player-placed; a player's block on a queued cell counts as built and keeps its record.
+- **The toggle** is `<world>/architect-world.json`, default on for survival and hardcore worlds; `blocksPerTick` and
+  `placementBudgetMs` there. Hardcore can't change it.
+
+**What Steward waits on** (STEWARD-SYNC; steward-mc COMPOSITION.md:133, :170; PLAN.md:579; `PendingOffers.noInstant`): plan v1
+for Supplied builds, additions and districts; the waiting-part offer (C38/K1-target) in survival; Supplied villages on
+`flat_village`. Steward has recorded no ask about per-mode catalogue states. Of the 59 recorded plans only `survival_village`
+("a small village I build up from my own materials", one standard zone) speaks of survival, and it carries no mode field.
+
+### 1. The rule in one line
+
+**In survival a region's land is shaped at once and for free; every block it builds is bought from the owner's stockpile, cell
+by cell, in the region's own order, and is refunded as it stands when the region goes.**
+
+### 2. The order, start to finish
+
+1. **Check** (`checkPlan`, in survival, §3): every part answers with its survival bill; a creative-only part is refused.
+2. **Accept** (`realiseApproved` or `realise`): the owner's stockpile must exist in the region's dimension when the plan builds
+   anything; the artifact must have been checked in survival.
+3. **The free pass:** each stage's tiles are written as today, but only the cells that are free **and** belong to a part with no
+   paid cell (§4.3). Relief, pads' cut and fill, natural forms and scatter land at once.
+4. **Targets put down:** every tile that holds a paid cell becomes a construction target (§5), its cells left as they were;
+   lots become construction sites (Y1), 4e roads construction roads (C16). They join the owner's feed order.
+5. **Building:** each target starts when its whole remaining bill is available to it (§6.2), then builds bottom up with its held
+   free cells interleaved.
+6. **Bodies:** each fluid body is written when its barrier is built (§7.3): water free, lava a bucket per source.
+7. **PLACED** when every target is put down and every body has settled; **built** when every target is BUILT (§8).
+
+### 3. The survival check and the artifact
+
+- **Mode by world.** `Regions.checkPlan` in a survival-toggle world whose default game type isn't creative checks in survival;
+  elsewhere in creative, unchanged. The answer's top level carries `survival: true`. No request member (Steward checks in the
+  world it builds in).
+- **Per part:** `cost.survival = {free: cells, held: cells, bom: {item: n}, creativeOnly?: {block: n}}`, where `bom` is the bill of
+  the part's paid cells (§4) and equals what the mod will put on its targets. Present only in a survival check.
+- **Whole plan:** `cost.bom` is the sum of every part's survival `bom` plus each lot's design bill (C26's `bomFull`, from the bound
+  entry) and each 4e road's (`checkRoad`'s), instead of `null`; `bomNote` names what is not counted (an unbound lot).
+- **Refused:** a part that writes a creative-only block answers `refused` with a new kit code **`SURVIVAL`** `{kind:
+  "creativeOnly", blocks: {block: n}}` (S-K1-7: unknown codes pass through). A pending part newly refused is a repair (S-K1-6).
+- **The IR:** a survival check's IR marks each op `free: true` when its writer is a terrain kind (§4.1) and carries `requires:
+  ['survival']`, so an older mod refuses it `PLAN_STALE`. A creative check's IR is byte-identical to today.
+- **The artifact** records `survival: true`. `realiseApproved` in survival refuses an artifact checked in creative with
+  `ARTIFACT_STALE` ("check the plan again in survival"); Steward's plan v1 already re-checks at Start.
+
+### 4. What is free
+
+**4.1 Per written cell, by writer and block.** A cell is **free** when one of these holds:
+- **a cut or carve:** its target is air or cave air (relief cuts, pad cuts, tunnel bores, channel and pond carves, felling);
+- **a natural write by a terrain kind:** the op is a terrain writer (relief, a terrace's or pad's cut and fill, 6a `shape` fills,
+  F1/F3 forms, F2 scatter and stamps, natural-only brush strokes) **and** the block's voxel class is natural (ROCK, SOIL, LOOSE,
+  ICE, SNOW, LOG, LEAVES, PLANT) **and** it is obtainable (`sv` not `none`) **and** it is not a valuable natural block (a
+  generated `freeExcept` set in `kit/vocab/survival.json`: ores, amethyst blocks and clusters, obsidian and crying obsidian,
+  ancient debris, and any natural block of tier `precious`; N-RS-3);
+- **a dirt path by `freeCell`** (C16's rule);
+- **a water source or an ice cap** (N-H-1, §7.3).
+
+Every other cell is **paid** at `Cells.cost` (C26's table): retaining walls, wall bodies, gates, decks, piers, rails, lining,
+portals, lamps, props, paths of gravel or planks, shells, weirs, grates, beds, farmland (as dirt), cobblestone rubble (no voxel
+class), a stone block written by a wall. The kit (`cost.survival`) and the mod (the targets) apply the same rule from the same
+generated data (one source, VOC §3).
+
+**4.2 Creative-only.** A written block with `sv: none` (the 35) is refused (§3). That covers a spawner prop, a stamp holding
+budding amethyst or a suspicious block, and a bundled program (`catalogue = false`) that writes one: `realise` refuses it
+`CREATIVE_ONLY_BLOCK` naming the parts, nothing written. Brush strokes with a `PLAYER_BLOCKS` pattern or any paid cell are refused
+`NOT_ALLOWED` (a stroke is the player's tool, with no stockpile); natural-only strokes realise free.
+
+**4.3 Held free cells (the half-built rule).** The checker certifies the final world; a survival region may stand half built for
+days. So a free cell is written in the free pass only when its **part has no paid cell**. In a part with paid cells (a terrace
+with retaining walls, a tunnel, a channel, a pond, a bridge's abutment cuts), its free cells are **held**: they wait in that
+part's targets as zero-cost cells and are written in build order with the paid ones. So no cut stands without its wall, no bore
+without its lining, no basin without its shell.
+
+### 5. The construction targets
+
+- **A target is a tile entry** (`c<n>`), as a construction road is: a tile holding any paid or held cell becomes a fed Infra of
+  the region's owner (RoadBuilder's model: the entry's planned after keeps every cell; the builder writes the queued ones). Unlike
+  `RoadBuilder.convert`, which writes then sends queued cells back to their before, RS leaves the paid and held cells unwritten in
+  the first place (the tile's write skips them), so no held cut or carve is ever open for a tick. A tile with neither stays an
+  ordinary INSTANT tile.
+  **The builder's first finding:** whether a tile's cells carry their part (for §4.3). If not, a survival IR puts each part with
+  paid cells in its own tile entries (the kit splits them; only survival IRs change).
+- **Ids and order:** the targets join the owner's feed order after the targets already there, in the region's stage order, then
+  tile order within a stage; the region's lots and roads sit where their stage puts them. `Sites.feedOrder`, `setFeedOrder`,
+  `pause` and `waiting` take the ids. `RegionView.build` maps each plan part to its target ids (§11), so Steward can put "the wall
+  first" or pause the bridge.
+- **Lots** are construction sites (`Builder.planConvert`, Y1's stockpile, no crate), placed by the lots stage as today. Their
+  entries, masks (IRR) and consented builds are unchanged.
+- **4e roads** in a region are construction roads (C16) from the stockpile.
+- **Flags:** every region item is queued with `construction` and `survivalAtQueue` set from the region's mode, so `Batches.tick`
+  no longer fails them (§0's latent bug, fixed for both modes).
+
+### 6. How a target builds
+
+**6.1 The writer keeps the tile's semantics.** A region target writes its cells as the tile path does (`CELL_FLAGS`, the tile's
+dependents and `gravityKept`, FluidRearm for restored flowing water), not with `Sites.FLAGS` (which runs `onPlace`). **Bar:** a
+survival-built region equals its INSTANT twin, cell for cell, block entities included.
+
+**6.2 Start only with the whole bill.** A region target places its first cell only when its whole remaining bill is available to
+it (`stock - reserved` covers it); until then it reserves what it can (S-Y-1) and waits (C25). Once started it builds without
+pause for materials (only blockers: a player in a cell, an unloaded chunk, a support). Sites (lots) keep Y1's build-as-fed. S-RS-3.
+
+**6.3 Order inside a target:** `BuildOrder` (bottom up; full, partial, attachables; pairs together), with held free cells in it:
+- a carve or cut cell is cleared only after every paid cell above it and beside it within 1 is built (a bore's roof lining before
+  the carve under it; a terrace's retaining wall before the cut behind it);
+- a natural fill held for a retaining wall comes after the wall course under it.
+
+### 7. Each kind in survival
+
+**7.1 Land and forms**
+
+| Kind | Free | Paid | Path |
+|---|---|---|---|
+| Relief, pads' cut and fill, `form.relief` | every cell (natural) | none | free pass |
+| `form.terrace`, 6a `terrace` | the cut and fill | retaining walls, stairs (`structure`) | the part is held (§4.3): one target |
+| F1 rock spires, ice spikes | natural blocks (packed ice is ICE) | none | free pass |
+| F3 trees, mushrooms, coral, roots (as F3 lands) | logs, leaves, stems, natural blocks | a block outside the natural classes | free pass, unless paid |
+| F2 scatter, stamps | natural common blocks | cobblestone boulders, a stamp's non-natural block | the free cells in the free pass if the part has none paid |
+| Brush strokes (B) | natural-only strokes | any other: refused | free pass |
+
+**7.2 Routes and connectors**
+
+| Kind | Free | Paid | Path |
+|---|---|---|---|
+| Streets, paths, squares (path set) | dirt path by `freeCell`, cuts | gravel, planks, slabs, stairs, retaining columns | a target per tile with paid cells |
+| Route lamps, lanterns, posts; zone props | none | every block | targets (the props stage's tiles) |
+| 4e roads in a region | `freeCell` | the rest | C16 construction roads |
+| Walls, gates, auto gates (K1a) | the wall's footprint cuts | body, cap, crenels, frame, doors (a pair) | targets; doors as pairs |
+| Rope bridges (K1b) | landing cuts | deck, rails, posts, chains, lamps | targets |
+| Beam and arch bridges (T3a) | abutment cuts | deck, piers, arches, rails, lamps | targets; piers before the deck (bottom up) |
+| Tunnels (T3b) | the bore (`carved`), held | lining, seal, portals, lamps (`lined`) | the part held; the bore carved ring by ring behind its lining (§6.3) |
+
+**7.3 Fluids**
+
+| Kind | Free | Paid | Path |
+|---|---|---|---|
+| Water bodies (pond, pool, fountain, waterfall, quay, moat) | the carve (held), water sources | shell, basin, apron, header, wet writes | the shell's targets; then the body |
+| Lava bodies (lava pit) | the carve (held) | shell; **one `lava_bucket` per source** (a `bucket` back) | the body's sources charged from the stock when written |
+| Ice caps (N-H-4) | the cap (§ below) | none | written with the body |
+| Courses, races, ditches (HY) | carves (held), sources | lining, weirs, steps | reaches in `after` order, each when its own lining is built |
+| Water gates (HY-c) | none | lintel, frame, grate (`iron_bars`) | the wall's and the course's targets; the reach's sources after the grate |
+| Farm ponds, irrigation (IRR) | sources | bed, farmland edges (as dirt) | shells in `ground`; the lot site; the sources once the lot is BUILT |
+
+- **The barrier, per body.** A body is written (H §3: sources, forced tick, settle, census) when every paid cell of its shell,
+  lining, weir, grate and apron is built and still ours, and for irrigation when its lot is BUILT. Until then `RegionFluids.gate`
+  holds that body only, and the region's `waiting` names it. The barrier rule of H and the ordered write of HY are unchanged.
+- **Lava** is charged when the body is written: one `lava_bucket` per source, reserved in feed order like any cost; the ledger
+  gives a `bucket` back (C24's container rule). A lava body waits until all its buckets are available (§6.2). No lava courses.
+- **Ice caps are free** (N-RS-4): the water under them is free, and the biome freezes it the same way; a cap is written with its
+  sources so the census holds as in creative. `bodyBom`'s `ice` per cap cell leaves the survival bill.
+- **KC holds unchanged:** footprints, the order rule and `M25:clear` are plan-time; survival changes only when cells are written.
+
+### 8. Waits and partial progress
+
+- **Each target** has C25's `SiteWait` (`waiting`, `waitingSince`, `nextNeeded`, `moreUnits`) through `Sites.waiting(id)` and
+  `SITE_WAITING`; `Stockpile.outstandingByTarget` lists the region's targets. A region target not yet started reports its whole
+  bill's shortfall.
+- **The region's state:** no new `RegionState` (S-H-6). PLACING while targets are being put down or a body waits for its barrier
+  (the view's `waiting` names the first waiting body or target); PLACED once every target is down and every body settled. A
+  region with no body is PLACED when its targets are down, as a construction site is.
+- **Built:** `RegionView.build.built` is true when every target is BUILT. Until then each part reports `state` (`waiting`,
+  `building`, `built`) and counts, so Steward neither routes villagers over an unbuilt bridge nor claims an unbuilt wall.
+- **Partial use is safe by construction** (§4.3, §6.2): free cells of a part with paid cells wait with it, and a target starts only
+  with its whole bill.
+
+### 9. Removal and refunds
+
+`Regions.remove` in survival, in order:
+1. **Targets leave the feed** at the start (C29's `Groups.leaving` covers the region's targets and lots), so nothing more is built
+   or reserved.
+2. **Bodies drain first** (H §4.1). Water and ice: nothing to refund. **Lava, by scooping:** for each standing lava source the
+   ledger consumes one `bucket` from stock and credits one `lava_bucket`; with no bucket in stock the source is drained and nothing
+   is credited. Exact both ways (never a bucket minted). S-RS-6.
+3. **Paid cells** of each target, by `Refunds.classify` with CU's rule: standing as placed (`holdsOurs`, a player record first) is
+   a REFUND of **the standing block's items** to the stockpile; a player's block is a PLAYER_DROP at the cell; a cell never built
+   or mined away refunds nothing. Lots deconstruct as sites (Y1/C29).
+4. **Free and held cells** restore from the journal's before, free: no refund, no drop.
+- **Exactly once:** each target's refund is credited under its key (`road:<c-id>@<placedAt>`, Infra's key, or `region:` if the
+  builder prefers a family of its own) when its restore is written, across C22/C23's resumed removals.
+- **Conservation** (Y1's sum) holds at every checkpoint: inventories, stock, Architect's item entities, the cost of paid cells
+  standing, the driver's hand-placed blocks.
+- **Mid-build removal:** the same; only paid cells standing are refunded; held free cells never written are not restored (they
+  were never changed).
+
+### 10. Crash and resume
+
+- **Clean stop:** the region record, the queue, the targets (as Infra and site records), the ledger (`stockpiles.json`) and waits
+  (`waits.json`) are saved together; on load every target resumes from its cursor, bodies re-check their barrier (H-core's re-check
+  after a halt), and the region's state is recomputed.
+- **Rescan from the world, not the journal** (H-core's queued "halt without a save": PLACED entries over chunks the halt did not
+  save). On load a region target re-reads each of its cells (`Run.rescan`): a paid cell not in the world is unbuilt and queued
+  again; a free cell of the free pass not in the world is re-written (it is free).
+- **Kill:** the ledger and the chunks may come from different saves (Y1's bound): the drift is recorded and stays within the units
+  fed or placed since the last save.
+- **Removal across a restart:** C22/C23 resume; credits once per key.
+
+### 11. API, kit and versions
+
+- **Placeholders** (the coordinator renumbers): the next minor after S3. With FL, F3 and S3 each taking one minor over the
+  CU/IRR/VOC-c batch: API **1.41.0**, mod **0.44.0**, kit **0.42.0** (1.40.0 / 0.43.0 / 0.41.0 if RS merges before S3), catalogue
+  unchanged (no id or state moves).
+- **Features:** `regionSurvival` (Java); sidecar `region.survival` -> `regionSurvival`.
+- **Behaviour:** a survival-toggle world no longer refuses regions or natural brush strokes; it refuses only §4.2's cases.
+- **`RegionView`** gains trailing `@Nullable RegionBuild build` (null for a creative region; old constructors kept):
+  `record RegionBuild(boolean built, Map<Item,Integer> outstanding, List<PartBuild> parts)` and `record PartBuild(String part,
+  String state, List<String> targets, long cells, long built, long freeCells)`.
+- **No new Reason, no new event.** Refusals: `NOT_ALLOWED` (no stockpile, wrong dimension, a paid stroke), `CREATIVE_ONLY_BLOCK`,
+  `ARTIFACT_STALE`. Waits: `SITE_WAITING`, `STOCKPILE_CHANGED` (S-RS-4).
+- **Plan check wire (additive):** `survival` on the answer, `cost.survival` per part, `cost.bom` filled in survival, the kit code
+  `SURVIVAL {kind: creativeOnly}`, `free` and `requires: ['survival']` in a survival IR, `survival` on the artifact.
+- **KIT_VERSION** moves (survival output is new; creative output unchanged), so old IRs go `PLAN_STALE` and Steward re-checks.
+- api-compat clean against the three previous apitest jars; apijars on them.
+
+### 12. Gate (slice tier plus the engine tag, $0)
+
+The lessons bind: **every new path goes through `checkPlan` then `realiseApproved` in game, in survival and on Steward-shaped
+plans**; E-normal classes **by kind, at unwritten cells, away from the plan** (S3 §6's narrowing); **KC keep-clear** measured in
+survival; **natural sites drift**, so exactness is judged on flat worlds and the natural round reads frozen inputs and classes.
+
+**Fixtures** (`kit/test/fixtures/plan/rs/`, `valid/v7x_rs_*`; the coordinator sets numbers after FL, F3 and S3; never edit
+`plan_v0.mjs`): `rs01_land` (relief, a rock spire, scatter by a program, a terraced zone or `form.terrace` beside a zone: the
+held-part case); `rs02_walled` (Steward's plan v1 shape: an `ew` street zone with rotate off, lots with lot ext and bound entries,
+pending parts `required: false`, a wall around with an auto gate, a rope bridge, lamps, gravel paths); `rs03_water` (a fountain,
+a pond, a lava pit, a course with a water gate and a beam bridge over it, an irrigated farm lot); `rs04_tunnel` (a bore through a
+flat-world hill with sand over it); `rs05_offer` (C38's one-part `wall.around {feature: {region}}` round `rs02`'s region);
+`survival_village` (the recorded ask). Optional row: S3's monastery plan once S3 has merged. **Broken variants:** `_unsafe.carveFirst`
+(a bore carved before its lining), `_unsafe.loseCredit` (a refund without its key), `_unsafe.lavaRefund` (a lava refund without the
+scoop), each caught.
+
+**Clients:** the p3 survival client (toggle on, owner `test:settle`, a stockpile of 3-6 crates); items enter only by
+`dev.crate.insert` with exact items (Y1's rule); the driver never mines by hand except where an item says so.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the free rule per kind (§7's tables row by row), held parts, `freeExcept`, the survival IR and artifact, `SURVIVAL` answers, the start rule, the order inside a target (carve after lining), lava scoop, credit keys; the broken variants caught |
+| 2 | Creative unchanged | every committed plan fixture and the 59 asks re-check in creative byte-identical (answers and IR, but kitVersion); every tile golden unchanged; a creative realise of `rs02` writes the same tile shas as before |
+| 3 | Bills | in survival every fixture's `cost.survival.bom` per part equals the mod's outstanding for that part's targets right after put-down, item for item (Y2's bar); lots' `bomFull` likewise; v44's waterfall bill traced or named as the one exception |
+| 4 | Free pass | `rs01` through `checkPlan` and `realiseApproved` in survival: 0 items consumed, 0 item entities, the free cells equal the INSTANT twin's; the held terrace waits as one target |
+| 5 | Build (verifier re-runs) | `rs02`, `rs03`, `rs04` and `survival_village` through `checkPlan` (survival) and `realiseApproved`, fed exactly their bills in waves: every target and lot BUILT, every body settled with its census, M25:clear 0, the realised world equal to the INSTANT twin cell for cell (gravity, dependents, block entities), E-flat 0 after `Regions.remove` |
+| 6 | Half fed | feed half of `rs04`'s and `rs02`'s bills: no target started without its whole bill; at the checkpoint M3, M4, M8 and gravity 0 over the world as it stands; no bore cell open without its lining |
+| 7 | Order and waits | `setFeedOrder` puts `rs02`'s wall first (built first); `pause` on the bridge; `SITE_WAITING` and `nextNeeded` per target; S-Y-1's unloaded exception on a far tile; `RegionView.build` per part |
+| 8 | Conservation (verifier re-runs) | Y1's per-item sum constant at 10 or more checkpoints through feed, build, bodies (lava charged, bucket back) and removal |
+| 9 | Removal (verifier re-runs) | built `rs02` and `rs03` removed: refunds equal the paid cells standing, as standing blocks (one weathered copper cell named); a player's block drops at its cell; lava scooped with a bucket and drained without; free cells restored; E-flat 0; one credit per key |
+| 10 | Mid-build removal (verifier re-runs) | `rs02` half built: targets leave the feed at once; refunds equal paid standing; then the same with a save, leave and reopen mid-removal: credited once |
+| 11 | Crash (verifier re-runs) | clean stop mid-build and mid body wait: resumes to PLACED and built; `kill -9` after an autosave: drift within the units moved; a halt without a save: the rescan re-queues the lost cells |
+| 12 | Steward's flows | plan v1's shape on `rs02`: re-check at Start in survival, pin, `realiseApproved` with one stale retry under a second key across a restart; `rs05`, the offer, in survival: realised and undone alone, the town untouched |
+| 13 | Refusals | a spawner prop: `SURVIVAL {creativeOnly}` at check, `CREATIVE_ONLY_BLOCK` at `realise`, nothing written; no stockpile: `NOT_ALLOWED` with the bill; a creative artifact in survival: `ARTIFACT_STALE`; a concrete-pattern stroke refused, a natural stroke free |
+| 14 | Natural site | `rs02` on a fresh copy of S3's claim in survival: PLACED and built; after removal E-normal 0 unclassified under S3 §6's classes (`farfluid` included) |
+| 15 | Free drops | per N-RS-2's answer: a player breaks a free fill cell and a spire cell (the drops the answer says); removal then as item 9 |
+| 16 | Unchanged elsewhere | the gate3 survival and Hardcore steps, y-ingame, c29-ingame, cu-survival, voc-survival, pt2-survival |
+| 17 | API, spend | api-compat clean; apijars; $0.00 |
+
+**Tier:** slice plus the engine tag (`region/**`, `site/**`, `survival/**`, `journal/**`): the units, apijars, y-ingame,
+c29-ingame, cu-survival, pt2-survival, voc-survival, h-ingame, ha-ingame, hy-ingame, irr-ingame, kc-ingame, k1a-ingame, t3b-unit,
+4d-all, 6a-eflat, the gate3 survival and Hardcore steps, and RS's own `rs-unit`, `rs-ingame`, `rs-survival`, `rs-crash` (driver
+`tools/gate6crs.mjs`). The verifier reviews the diff and **re-runs items 5, 8, 9, 10 and 11**. **Steward's RC check** follows on
+the release candidate.
+
+### 13. Size and split
+
+About **7-9 days** of work, **5-6 elapsed**, in two halves with a frozen interface:
+- **RS-a, the core (4-5 days):** the survival check, IR and artifact (§3), the free rule and its generated data (§4), held parts,
+  the targets and their hook, the start rule and order (§5, §6), lots and roads in the stockpile, the flags fix, `RegionBuild`,
+  removal and refunds (§9), crash and resume (§10); land, routes, walls, gates and bridges ride on it. Its interface (the target
+  model, the free rule's data, `RegionBuild`) is frozen at the end of its first day.
+- **RS-b, the hard kinds (2.5-3 days, on RS-a's interface):** tunnels' ring order, the bodies' barrier, lava's charge and scoop, ice
+  caps, courses and water gates, irrigation, brushes; items 4-6's water and tunnel rows.
+- **Shared:** the gate (items 5-14) and one RC. RS-b merges into RS-a's branch; one release.
+
+### Open questions for Steward
+
+- **S-RS-2. Targets.** A target is a tile entry (`c<n>`) with paid cells, as a construction road is; `RegionView.build.parts`
+  maps each plan part to its targets for `setFeedOrder` and `pause`. Enough, or do you need a target per plan part?
+- **S-RS-3. Start only with the whole bill.** A region target starts only when its whole bill is available (so nothing stands half
+  built); lots still build as fed. Fine for your card's "waiting for materials"?
+- **S-RS-4. State.** No new `RegionState` (your S-H-6): PLACING while bodies wait for their shells, PLACED once targets are down and
+  bodies settled, `build.built` when everything is built, no new event (you read `SITE_WAITING`, `STOCKPILE_CHANGED` and the
+  view). Is PLACED-then-built what plan v1's Supplied flow wants, or should PLACED wait for built?
+- **S-RS-5. Mode by world.** A plan checked in a survival world answers in survival, and `realiseApproved` refuses a creative
+  artifact there (`ARTIFACT_STALE`). Fine, given plan v1 re-checks at Start?
+- **S-RS-6. Lava refunds.** Scooping: a bucket from stock becomes a lava bucket; none in stock, nothing credited. Fine for your
+  ledger?
+- **S-RS-7. The RC check.** RS changes removal and accounting. Will you run a Supplied region build and its removal (and a
+  mid-build removal) on the RC?
+- **S-RS-8. The catalogue.** No per-mode state in the catalogue: survival shows in each part's answer (`cost.survival`, the
+  `SURVIVAL` refusal). You have never asked for one; say if the card wants it before the check.
+
+### Open questions for Noah
+
+- **N-RS-1'. Scope.** RS builds every typed part on main in survival (walls, gates, rope and beam bridges, tunnels, water and lava
+  bodies, courses, water gates, irrigation), as N-K1-3, T3, H, HY and IRR deferred them to RS; N-RS-1's 7a split then covers only
+  the connectors still reserved. Default: yes (RS-a and RS-b as §13).
+- **N-RS-2. Drops from free cells.** Free fill, spires and grown trees cost nothing, so a player could mine them for blocks
+  (stone, logs). Proposed: a free cell the region wrote drops nothing while the region owns it (as phase 3's cleared cells), and
+  undo restores as today. The alternative keeps vanilla drops (free materials). Default: no drops.
+- **N-RS-3. What counts as free.** Natural, obtainable blocks written by terrain kinds, except ores, amethyst, obsidian, ancient
+  debris and precious natural blocks, which are paid. Default: as proposed.
+- **N-RS-4. Ice caps free.** The water is free and the biome freezes it the same way. Default: free.
+
+### Deferred
+
+- The reserved 7a connectors' survival rows (each with its slice). Hardcore's own difference. Hauling by villagers. A batch BOM
+  call. Crash-exact ledgers (a write-ahead log) if the kill drift matters.
