@@ -96,7 +96,7 @@ export async function unchanged(root, { check, log = console.log, only = null } 
         const cols = fillMissing(asColumns(s.bytes)).columns;
         const { vw } = buildVirtual({ ir, survey: cols, filled: cols, blobs: (sha) => r.res.blobs.get(sha) ?? null, volumes: r.volumes.map((v) => v.decoded ?? v) });
         const sc = clearScan({ ir, vw, meta: r.res.meta });
-        const broken = /^kc\/u\d/.test(name) || /^irr\/u01_/.test(name); // ((6c IRR) irrigation's M25:clear variant, u01, too)
+        const broken = /^kc\/u\d/.test(name) || /^irr\/u01_/.test(name) || /^f3\/u0[14]_/.test(name); // ((6c IRR) irrigation's M25:clear variant, u01, too; (6c F3) treeInPond u01 and coralOtherPart u04)
         (out.headCensus ??= {})[name] = sc.counts;
         if (broken) check(sc.counts.hard + sc.counts.watch > 0, `${name} (a broken variant): M25:clear catches it on this head (${JSON.stringify(sc.counts)})`);
         else check(sc.counts.hard + sc.counts.watch === 0, `${name}: M25:clear 0 on this head (${JSON.stringify(sc.counts)})`);
