@@ -419,6 +419,8 @@ steps.checkonly = async () => {
   const s = await G.site(ctx, 'checkonly', fx, { creative: process.env.RS_CREATIVE === '1' });
   const ck = await G.check(ctx, 'checkonly', s);
   for (const a of ck.check?.parts ?? []) log(`  ${a.part} ${a.class} ${a.reasons?.[0]?.code ?? ''} ${(a.reasons?.[0]?.message ?? '').slice(0, 300)}`);
+  if (process.env.RS_VERBOSE) for (const a of ck.check?.parts ?? []) if (a.reasons?.length) log(JSON.stringify(a.reasons).slice(0, 3000));
+  if (process.env.RS_VERBOSE) log(JSON.stringify(s).slice(0, 1500));
   return { overall: ck.check?.overall };
 };
 

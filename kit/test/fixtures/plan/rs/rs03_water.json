@@ -16,7 +16,7 @@
     ],
     "forms": [
       { "id": "fount", "kind": "fountain", "basin": 5, "spout": 3, "where": { "near": { "anchor": "fount_at", "within": 12 } } },
-      { "id": "pond", "kind": "pond", "size": { "w": 9, "d": 7 }, "depth": 2, "where": { "near": { "anchor": "pond_at", "within": 16 } } },
+      { "id": "pond", "kind": "pond", "size": { "w": 9, "d": 7 }, "depth": 2, "edge": "built", "where": { "near": { "anchor": "pond_at", "within": 16 } } },
       { "id": "pit", "kind": "pond", "fluid": "lava", "depth": 2, "where": { "near": { "anchor": "pit_at", "within": 16 } } }
     ]
   }
