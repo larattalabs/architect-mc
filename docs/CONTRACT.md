@@ -19584,7 +19584,7 @@ redesigned on the facts in §0.
 removals. So Steward's RC check comes before release (GATES policy 4's exception), and the verifier re-runs the undo, removal and crash
 items (policy 3).
 
-- **Branch:** `slice/RV`, worktree `../architect-mc-RV` (lanes RV-a and RV-b, §13). **Spend:** $0, sim and stub only.
+- **Branch:** `slice/RV`, worktree `../architect-mc-RV` (lanes RV-a, RV-b and RV-c, §13). **Spend:** $0, sim and stub only.
 - **Scope:**
   - the revision IR and the part diff (§2);
   - the tile delta against the frozen heights and the journal (§3);
