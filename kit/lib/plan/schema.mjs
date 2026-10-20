@@ -1,5 +1,6 @@
 // (6c P0) The plan validator (docs/CONTRACT.md "Phase 6c slice P0" §1, kit/schemas/plan.json `plan/0`, its x-rules R1-R14; K1 adds R15-R17;
-// T3 R18-R20: the drawbridge block here, the rest in the compiler; H R21's path form and channel.course here, R22-R23 in the compiler).
+// T3 R18-R20: the drawbridge block here, the rest in the compiler; H R21's path form and channel.course here, R22-R23 in the compiler;
+// HY R24's path forms here, the race and the uphill refusal in the compiler).
 // The schema subset (lib/specschema.mjs), then dispatch on each part's kind against the capability catalogue, then the x-rules
 // the subset can't say: unique ids, references, the dependency graph (acyclic, topological order with ties by id), the
 // extension envelope's bounds, ext, ranges, anchors. Pure and deterministic; no survey (the resolver, resolve.mjs, places things).
@@ -129,12 +130,38 @@ export function wallForm(part) {
   return forms.length === 1 ? forms[0] : null;
 }
 
-/** (6c H, R21) A channel's path form: moat (where.around) or course (from, via, to); null when it has none or two. */
+/**
+ * (6c H, R21; HY, R24) A channel's path form: moat (where.around), course (from, via, to) or ditch (where.along); null when it has none
+ * or two. A course with a lot in via is a mill race: channelBlock() names its block.
+ */
 export function channelForm(part) {
   const forms = [];
   if (part.from !== undefined || part.to !== undefined || part.via !== undefined) forms.push('course');
-  if (part.where) forms.push('moat');
+  if (part.where) {
+    const ks = Object.keys(part.where);
+    if (!ks.length) forms.push('moat');
+    for (const k of ks) forms.push(k === 'along' ? 'ditch' : 'moat');
+  }
   return forms.length === 1 ? forms[0] : null;
+}
+
+/**
+ * (HY, R24) A channel's block id: channel.moat, channel.course, channel.race (a course whose via names a lot: `lotIds`, the plan's lot
+ * ids, a Set or an array) or channel.ditch; null when its path form is malformed.
+ */
+export function channelBlock(part, lotIds = []) {
+  const form = channelForm(part);
+  if (!form) return null;
+  if (form === 'course') {
+    const lots = lotIds instanceof Set ? lotIds : new Set(lotIds);
+    if ((Array.isArray(part.via) ? part.via : []).some((v) => v && typeof v.part === 'string' && lots.has(v.part))) return 'channel.race';
+  }
+  return `channel.${form}`;
+}
+
+/** (HY, R24) Every lot id a plan's zones declare (channelBlock's `lotIds`). */
+export function planLotIds(plan) {
+  return new Set((plan?.zones ?? []).flatMap((z) => zoneLots(z).map((l) => l.id)).filter((x) => typeof x === 'string'));
 }
 
 /** The first reserved block a supported part names (program, layout, locator, feature, target, endpoint, sketch), or null. */
@@ -194,12 +221,14 @@ function nestedUnsupported(family, part) {
       if (w?.around && w.around.feature?.region === undefined) { const r1 = featureCheck(w.around.feature, '$.where.around.feature'); if (r1) return r1; }
       if (w?.along) { const r1 = featureCheck(w.along.feature, '$.where.along.feature'); if (r1) return r1; }
     }
-    // (6c H, R21) a channel's path form is a block id of its own (channel.moat, channel.course); a reserved one answers for the part
+    // (6c H, R21; HY, R24) a channel's path form is a block id of its own (channel.moat, channel.course, channel.ditch; a race is a
+    // course with a lot in via, the compiler's); a reserved one answers for the part
     if (part.kind === 'channel') {
       const form = channelForm(part);
-      const r0 = form ? reserved(`channel.${form}`, form === 'course' ? '$.from' : '$.where.around') : null;
+      const r0 = form ? reserved(`channel.${form}`, form === 'course' ? '$.from' : form === 'ditch' ? '$.where.along' : '$.where.around') : null;
       if (r0) return r0;
       if (part.where?.around) { const r1 = featureCheck(part.where.around.feature, '$.where.around.feature'); if (r1) return r1; }
+      if (part.where?.along) { const r1 = featureCheck(part.where.along.feature, '$.where.along.feature'); if (r1) return r1; }
     }
     for (const [k, e] of [['from', part.from], ...(part.via ?? []).map((v, i) => [`via[${i}]`, v]), ['to', part.to], ...(part.at ? [['at', part.at]] : [])]) {
       const r0 = endpointCheck(e, `$.${k}`);
@@ -320,9 +349,10 @@ function kindError(family, kind, part) {
     if (wallForm(part) === 'line' && (part.from === undefined || part.to === undefined)) return { path: part.from === undefined ? '$.from' : '$.to', message: 'a wall on a line names both from and to (R15)' };
     if (part.gates !== null && typeof part.gates === 'object' && Number.isInteger(part.gates.min) && Number.isInteger(part.gates.max) && part.gates.min > part.gates.max) return { path: '$.gates', message: `gates {min: ${part.gates.min}, max: ${part.gates.max}}: min over max (R8)` };
   }
-  // (6c H, R21) a channel has exactly one path form (where.around: channel.moat; from/via/to: channel.course)
+  // (6c H, R21; HY, R24) a channel has exactly one path form (where.around: channel.moat; from/via/to: channel.course or a race;
+  // where.along: channel.ditch)
   if (family === 'connector' && kind === 'channel') {
-    if (!channelForm(part)) return { path: '$', message: 'a channel has exactly one path form: where.around (channel.moat) or from/to with via (channel.course) (R21)' };
+    if (!channelForm(part)) return { path: '$', message: 'a channel has exactly one path form: where.around (channel.moat), from/to with via (channel.course, a race with a lot in via) or where.along (channel.ditch) (R21, R24)' };
     if (channelForm(part) === 'course' && (part.from === undefined || part.to === undefined)) return { path: part.from === undefined ? '$.from' : '$.to', message: 'a channel on a line names both from and to (R21)' };
   }
   // (6c H) a fountain's basin is odd (3, 5, 7, 9); a lava pond is 1..2 deep

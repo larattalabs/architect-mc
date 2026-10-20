@@ -29,6 +29,12 @@ export const LOT_UNPLACED = 1_000_000;
 export const BNB_MAX = 512;
 /** Columns of water distance that count as `near_water`. */
 export const NEAR_WATER = 8;
+/**
+ * (6c HY-a) With the hydrology pass's `wet` field (the pass ran in this plan), a candidate is `wet` when the field's highest value
+ * over its rect is at least this (the contract's own mud rule, `{field: wet, gte: 170}`); without the field, `wet` is `near_water`
+ * as in D1 (surveyed water within NEAR_WATER).
+ */
+export const WET_TAG = 170;
 const INF = Number.MAX_SAFE_INTEGER;
 const isInt = Number.isInteger;
 
@@ -102,7 +108,7 @@ function sat(a, W, D) {
  * ground), range (max - min ground), band, trees, water (columns of water within NEAR_WATER), tags}`; at most `limit`, by (range,
  * trees, z, x) with neighbours suppressed (a candidate whose centre is within half its size of a kept one's is dropped). Pure.
  */
-export function districtCandidates(cols, claim, size, { bands = null, blocked = [], step = 4, margin = 2, gap = 1, limit = EXACT_MAX, band = null } = {}) {
+export function districtCandidates(cols, claim, size, { bands = null, blocked = [], step = 4, margin = 2, gap = 1, limit = EXACT_MAX, band = null, wet = null } = {}) {
   const r = cols.resolution, W = cols.width, D = cols.depth;
   const [sw, sd] = size;
   if (!isInt(sw) || !isInt(sd) || sw < 8 || sd < 8) throw new Error(`districts: size must be [w, d], integers of at least 8 (got ${JSON.stringify(size)})`);
@@ -134,6 +140,12 @@ export function districtCandidates(cols, claim, size, { bands = null, blocked = 
   const gMax = windowExtreme(g, W, D, w, d, true), gMin = windowExtreme(g, W, D, w, d, false);
   const badS = sat(bad, W, D), blkS = sat(blk, W, D), treeS = sat(tree, W, D), nearS = sat(near, W, D), gS = sat(g, W, D);
   const W2 = W - w + 1;
+  // (6c HY-a) the wet field's highest value per window (the field covers the survey grid: hydrology's fields do)
+  let wetMax = null;
+  if (wet) {
+    if (wet.width !== W || wet.depth !== D || (wet.res ?? 1) !== r || wet.minX !== cols.minX || wet.minZ !== cols.minZ) throw new Error('districts: the wet field must cover the survey grid (the hydrology pass\'s)');
+    wetMax = windowExtreme(Int32Array.from(wet.values), W, D, w, d, true);
+  }
   const out = [];
   const st = Math.max(1, Math.floor(step / r));
   const m = Math.floor((margin + r - 1) / r);
@@ -147,7 +159,8 @@ export function districtCandidates(cols, claim, size, { bands = null, blocked = 
       const b = bandOf(bs, y);
       if (band && band !== 'any' && b !== band) continue;
       const trees = treeS(i, j, i + w - 1, j + d - 1), nw = nearS(i, j, i + w - 1, j + d - 1);
-      const tags = [hi - lo <= 2 ? 'flat' : 'sloped', nw > 0 ? 'near_water' : 'dry', ...(nw > 0 ? ['wet'] : []), trees * 8 >= w * d ? 'wooded' : 'open'];
+      const isWet = wetMax ? wetMax[i + j * W2] >= WET_TAG : nw > 0;
+      const tags = [hi - lo <= 2 ? 'flat' : 'sloped', nw > 0 ? 'near_water' : 'dry', ...(isWet ? ['wet'] : []), trees * 8 >= w * d ? 'wooded' : 'open'];
       out.push({ rect: { minX: x0, minZ: z0, maxX: x1, maxZ: z1 }, y, range: hi - lo, band: b, trees, water: nw, tags });
     }
   }
@@ -305,7 +318,8 @@ export function spanningEdges(ids, pairs, loopiness = 0.15) {
 
 /**
  * The pure pass (`PASSES.districts`): candidates per district and the assignment, no emission. `intent`: `{districts: [{id, size,
- * levelBand, prefer, near}], blocked, step, limit, exact, costs: {(district index, candidate) -> extra cost}}`. Returns
+ * levelBand, prefer, near}], blocked, step, limit, exact, costs: {(district index, candidate) -> extra cost}, wet (6c HY-a: the
+ * hydrology pass's `wet` field, for the `wet` tag)}`. Returns
  * `{fields: {}, ops: [], data: {bands, candidates: {id: [...]}, assign: {districtId: candidateId}, unplaced, exact, cost}}`.
  * (Region._districts runs the same steps with the street layouts in the cost.)
  */
@@ -314,7 +328,7 @@ export function districtsPass(survey, volumes, intent) {
   const claim = it.claim ?? { minX: survey.minX, minZ: survey.minZ, maxX: survey.minX + survey.width * survey.resolution - 1, maxZ: survey.minZ + survey.depth * survey.resolution - 1 };
   const bands = levelBands(survey, claim);
   const ds = it.districts ?? [];
-  const cands = ds.map((d) => districtCandidates(survey, claim, d.size, { bands, blocked: it.blocked ?? [], step: it.step ?? 4, limit: it.limit ?? EXACT_MAX, band: d.levelBand ?? null }));
+  const cands = ds.map((d) => districtCandidates(survey, claim, d.size, { bands, blocked: it.blocked ?? [], step: it.step ?? 4, limit: it.limit ?? EXACT_MAX, band: d.levelBand ?? null, wet: it.wet ?? null }));
   const costs = cands.map((cs, i) => cs.map((c) => ({ ...c, cost: candidateCost(ds[i], c) })));
   const a = assignDistricts(ds, costs, { exact: it.exact !== false });
   const assign = {}, unplaced = [];

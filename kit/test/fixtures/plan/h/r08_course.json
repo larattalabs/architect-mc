@@ -1,11 +1,11 @@
 {
-  "about": "(6c H, R21) a channel from/to (a course with reaches): unsupported {channel.course, until: HY}",
+  "about": "(6c H, R21; HY) a canal from/to (a course with reaches): channel.course is supported from HY; with HY-core's foundation only it answers refused UNREACHABLE {until: HYb} (HY-b re-answers it fits and renames it valid/v51_canal)",
   "on": "flat",
   "expect": {
     "part": "canal",
-    "class": "unsupported",
-    "block": "channel.course",
-    "until": "HY"
+    "class": "refused",
+    "code": "UNREACHABLE",
+    "until": "HYb"
   },
   "plan": {
     "schemaVersion": "plan/0",

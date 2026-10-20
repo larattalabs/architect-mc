@@ -148,6 +148,9 @@ export function sitePlan({ ir, meta, planId = null, irSha = null, vw = null }) {
   // the plan meta (§12)
   if (Array.isArray(meta?.waters) && meta.waters.length) out.waters = meta.waters.map((w) => ({ id: w.id, part: w.part ?? w.id, kind: w.kind, fluid: w.fluid, level: w.level, cells: w.cells, spill: w.spill, ice: w.ice }));
   if (Array.isArray(meta?.quays) && meta.quays.length) out.quays = meta.quays.map((q) => ({ id: q.id, part: q.part, along: q.along.map((c) => [...c]), length: q.length, reach: q.reach, wetCells: q.wetCells }));
+  // (6c HY, §12) the plan's courses (one row per course, race or ditch part: its reach bodies, steps and ends; a race's serves, the water
+  // gates it passes), from the plan meta's courses records (HY-b's generators; HY-core's hand course)
+  if (Array.isArray(meta?.courses) && meta.courses.length) out.courses = meta.courses.map((c) => ({ id: c.id, part: c.part, kind: c.kind, look: c.look, flow: c.flow, bodies: [...c.bodies], steps: (c.steps ?? []).map((q) => ({ kind: q.kind, from: q.from, to: q.to, drop: q.drop })), ends: (c.ends ?? []).map((e) => ({ end: e.end, kind: e.kind, ref: e.ref })), ...(c.serves ? { serves: c.serves } : {}), ...(c.waterGates ? { waterGates: c.waterGates } : {}) }));
   return out;
 }
 
