@@ -2530,6 +2530,26 @@ public final class Sites {
 	}
 
 	/**
+	 * The world-start settle's decision for a pending site on its evidence ({@link #reconcile}; UMT calls it too): covered releases,
+	 * else {@link Reconcile#decide} with no overlap check.
+	 */
+	static Reconcile.Action settleSite(Evidence ev, boolean moved, boolean hasCurrent, @Nullable Boolean currentStands) {
+		return ev.covered() ? Reconcile.Action.RELEASE : Reconcile.decide(moved, ev.stands(), ev.restored(), Reconcile.Overlap.NONE, hasCurrent,
+			currentStands);
+	}
+
+	/**
+	 * The settle's decision for a pending road or cell site ({@link #reconcile}; UMT calls it too): RELEASE when covered, restored or
+	 * undecidable (no comparable cell), RECOVER when it stands, else KEEP.
+	 */
+	static Reconcile.Action settleInfra(Evidence ev) {
+		if (ev.covered() || Boolean.TRUE.equals(ev.restored()) || ev.restored() == null && ev.stands() == null) {
+			return Reconcile.Action.RELEASE;
+		}
+		return Boolean.TRUE.equals(ev.stands()) ? Reconcile.Action.RECOVER : Reconcile.Action.KEEP;
+	}
+
+	/**
 	 * At world start (docs/CONTRACT.md phase 4e "World-start settle"), checks the records against the journal and the world:
 	 * <ul>
 	 * <li>records come from the journal: an ACTIVE entry whose site has no record gets its record back from the entry's
@@ -2695,8 +2715,7 @@ public final class Sites {
 			}
 			Evidence ev = evidence(server, gone, group);
 			Site current = map.get(gone.id());
-			Reconcile.Action action = ev.covered() ? Reconcile.Action.RELEASE : Reconcile.decide(moved, ev.stands(), ev.restored(),
-				Reconcile.Overlap.NONE, current != null, current == null ? null : standsNow.get(gone.id()));
+			Reconcile.Action action = settleSite(ev, moved, current != null, current == null ? null : standsNow.get(gone.id()));
 			Architect.LOGGER.info("Sites check: {} site of {} at {} (stands {}, restored {}, covered {}): {}", p.why(), gone.id(), Anchors.str(gone.restoreBox()),
 				ev.stands(), ev.restored(), ev.covered(), action);
 			List<String> groupIds = SiteJournal.undone(gone.id(), group).stream().map(JournalStore.Meta::id).toList();
@@ -2761,10 +2780,11 @@ public final class Sites {
 			List<String> groupIds = SiteJournal.undone(gone.id(), group).stream().map(JournalStore.Meta::id).toList();
 			Architect.LOGGER.info("Sites check: removed {} at {} (stands {}, restored {}, covered {})", gone.id(), Anchors.str(gone.box()), ev.stands(),
 				ev.restored(), ev.covered());
-			if (ev.covered() || Boolean.TRUE.equals(ev.restored()) || ev.restored() == null && ev.stands() == null) {
+			Reconcile.Action action = settleInfra(ev);
+			if (action == Reconcile.Action.RELEASE) {
 				SiteJournal.releaseGroup(groupIds);
 				Infras.drop(server, gone.id());
-			} else if (Boolean.TRUE.equals(ev.stands())) {
+			} else if (action == Reconcile.Action.RECOVER) {
 				try {
 					SiteJournal.reactivate(group);
 					Infras.recover(server, gone.id());

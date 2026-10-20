@@ -1305,14 +1305,14 @@ final class UmtSim {
 			boolean release;
 			boolean recover;
 			if (x.kind == Kind.SITE || x.kind == Kind.LOT) {
-				Reconcile.Action a = ev.covered() ? Reconcile.Action.RELEASE : Reconcile.decide(false, ev.stands(), ev.restored(), Reconcile.Overlap.NONE,
-					false, null);
+				Reconcile.Action a = Sites.settleSite(ev, false, false, null); // production (a removal: not moved, no current record)
 				release = a == Reconcile.Action.RELEASE;
 				recover = a == Reconcile.Action.RECOVER;
 				trace.add("  settle " + x.id + " " + g + ": " + ev + " -> " + a);
 			} else {
-				release = ev.covered() || Boolean.TRUE.equals(ev.restored()) || ev.restored() == null && ev.stands() == null;
-				recover = !release && Boolean.TRUE.equals(ev.stands());
+				Reconcile.Action a = Sites.settleInfra(ev); // production
+				release = a == Reconcile.Action.RELEASE;
+				recover = a == Reconcile.Action.RECOVER;
 				trace.add("  settle " + x.id + " " + g + ": " + ev + " -> " + (release ? "RELEASE" : recover ? "RECOVER" : "KEEP"));
 			}
 			if (release) {

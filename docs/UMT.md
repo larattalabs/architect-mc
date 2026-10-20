@@ -41,8 +41,13 @@ Gate steps (`tools/gate-chains.json`): `umt` runs when a change touches the jour
 - `SiteJournal.begin` (P3, with `LotMask`) and `complete` (P7), `restore` (R4's template, mask, cells, halves, PT expectations),
   `writeCells` and `fixHalves` (the R4 cell writes, including the `FluidRearm.wrote` call), `reactivate`, `releaseGroup`,
   `active`/`undone`/`lastGroup`.
-- `Sites.evidence` and `Reconcile.decide` (the world-start settle's decisions), `TileCheck.dependent` and `keepsGravity`,
-  `FluidRearm`'s queue, `RegionFluids.drain`, `StockLedger`.
+- `Sites.evidence`, and the settle's decisions on it: `Sites.settleSite` (sites and lots: `covered` releases, else
+  `Reconcile.decide`) and `Sites.settleInfra` (roads, tiles and cell sites). Both are the helpers `Sites.reconcile` calls. UMT
+  passes the removal's arguments only: not moved, no current record, `Overlap.NONE` (as production does for every pending site).
+- `TileCheck.dependent` and `keepsGravity`, `FluidRearm`'s queue, `StockLedger`.
+- `RegionFluids.drain`'s body loops (ice and cells, spill and watch, strays) through `DrainTarget`. Its irrigation breach path
+  (`breachFlow`, `sweepBreach`) reads and writes the level directly: UMT passes no level and no other bodies, so it isn't run
+  (irr-ingame covers it).
 - `JournalStore.ptSource`, the hook where production annotates PT records.
 
 **Seams (production changes, behaviour unchanged).** Each one only widens a parameter or adds an overload that the level version
@@ -54,8 +59,12 @@ delegates to:
 - `SiteJournal.CellTarget`, with `writeCells`/`fixHalves(CellTarget, ...)`. The level versions wrap the level (`levelTarget`).
 - `Sites.evidence(BlockGetter, ...)`. Was `ServerLevel`; it only reads block states.
 - `FluidRearm.wrote(ResourceKey, ...)` and `pending(dim, pos)`. `RegionFluids.DrainTarget` with `drain(DrainTarget, level, ...)`.
+- `Sites.settleSite` and `Sites.settleInfra`: the settle's two decisions, moved out of `Sites.reconcile` unchanged so UMT calls them
+  instead of copies.
 
 **Modelled (test code, each with a calibration pointer):**
+- The P3/P7 commits of roads, tiles and deltas: their headers, cells and status are built in `UmtSim` (sites and lots go through
+  `SiteJournal.begin` and `complete`). The store's commit itself is real.
 - The sequencing of PlaceJob/InfraJob (P1-P8) and RestoreJob/Groups (R1-R5), and what each saves when:
   - records are saved at each change;
   - a RestoreJob is in the queue from the start;
@@ -68,6 +77,8 @@ delegates to:
   - a site that has a job is left to its job;
   - pending sites settle on evidence, sites first, then roads and cells;
   - a placing record rolls back as a RestoreJob ROLLBACK.
+
+  The loop is modelled; the evidence and each decision are production (see above).
 
   Calibration: 4e-crash, 6a-crash.
 - A rolled-back placement's evidence. A PLACING entry has no afters, and production reads the blueprint grid (`ownGrid`), which UMT
@@ -87,6 +98,9 @@ delegates to:
 
   RoadPlan, the kit and IRR are not run.
 - Block entities are opaque NBT. There are no entities.
+
+- The F6 detection: which other group members a RECOVER brings back is worked out in `UmtSim` (a copy of the scope of
+  `SiteJournal.reactivate(group)`, to name the finding). The reactivation itself is real.
 
 ## The vanilla table
 
@@ -201,7 +215,7 @@ Each finding has a repro in `UmtFindingsTest` (`./gradlew umtFindings`, failing 
 | LP | (fix/lamp-path) a journaled dirt path under a later solid write turns to dirt; the path's entry no longer counts it as its own | `StillOurs`/`WorldJournal.holds` (the fix adds `pathTurned`) | known, fix pending |
 | DRAIN | (the coordinator's item 2) the region drain overwrites a later separate site's waterlogged block at a body source cell, before any journal hand-down | `RegionFluids.drain`'s first loop: no holder check | a waterlogged block placed by a later site on a body cell |
 | F8 | a plant, carpet or leaf litter standing on a cell a site or delta changes, but outside its box, breaks (V5); no entry has its cell, so the removal can't bring it back | sites and deltas have no dependents stage (tiles do) | a box edge under decor; the 4d leaf_litter noise when the litter sat next to the plan |
-| UC | (open: unsaved chunks) a crash loses world writes the journal recorded; for example a covered release (`Sites.evidence` covered) of a site whose blocks the world still shows | journal durable ahead of the world | crashes within an autosave interval |
+| UC | (open: unsaved chunks) a crash loses world writes the journal recorded; for example a recovered site whose delta's writes were lost (repro `uc_aRecoveredSiteLostItsDeltasWrites`, re-minimised from CI seed 130 after the old seed-2115 repro went stale), or a covered release of a site whose blocks the world still shows | journal durable ahead of the world | crashes within an autosave interval |
 
 F1, F4 and DRAIN reproduce against production code with only glue modelled. F5, F6, F7 and UC need a crash that loses world writes,
 which is the unsaved-chunks question; their mechanisms are in production code, and their reach depends on the autosave interval.

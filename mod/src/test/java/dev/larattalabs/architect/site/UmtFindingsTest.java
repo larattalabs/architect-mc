@@ -197,15 +197,18 @@ class UmtFindingsTest {
 	}
 
 	/**
-	 * UC (unsaved chunks; an open question in docs/PLAN.md): a tile removed (pending), a second tile placed over its cells, then a crash
-	 * that loses every world write since the last autosave. The first tile's evidence counts its cells as owned by the second tile
-	 * (covered) and releases it; the world still shows its blocks, which the second tile's removal then leaves (they are not its after).
+	 * UC (unsaved chunks; an open question in docs/PLAN.md): a site and a delta of it (oak leaves), an autosave before the delta, the group
+	 * removed, another site placed, then a crash that loses every world write since the autosave. The journal kept the delta and the
+	 * removal; the world shows the site without the delta's leaves. The settle finds the site standing (RECOVER: its group comes back,
+	 * the delta's entry too), so the standing site's delta cells should hold leaves and hold air. (Re-minimised from the CI pin's CRASH
+	 * seed 130 after the V10/F8 generator changes made the old seed-2115 repro stale.)
 	 */
 	@Test
-	void uc_aCoveredReleaseAfterLostWrites() throws Exception {
-		UmtRunner.Result r = UmtRunner.run(new UmtOps.Scenario(2115L, List.of(new UmtOps.Place(UmtOps.Kind.TILE, 25, 12, 2, 5, 3, -4208298833246131724L, 0,
-			null), new UmtOps.Autosave(), new UmtOps.Remove(4, null), new UmtOps.Place(UmtOps.Kind.TILE, 18, 10, 9, 8, 4, 3585917898638864187L, 1, null),
-			new UmtOps.Place(UmtOps.Kind.SITE, 34, 34, 2, 2, 2, 1L, 0, new UmtOps.Crash("P3", "index", 0, false))), UmtOps.Gen.CRASH));
-		assertTrue(r.violations().isEmpty(), r.report());
+	void uc_aRecoveredSiteLostItsDeltasWrites() throws Exception {
+		UmtRunner.Result r = UmtRunner.run(new UmtOps.Scenario(4037L, List.of(new UmtOps.Place(UmtOps.Kind.SITE, 17, 21, 6, 8, 5, 8909114239340923264L, 1,
+			null), new UmtOps.Autosave(), new UmtOps.Delta(7, 7518167551877707928L), new UmtOps.RemoveGroup(1, null), new UmtOps.Place(UmtOps.Kind.SITE, 14,
+				19, 2, 7, 5, 486550789251323484L, 0, null), new UmtOps.Place(UmtOps.Kind.SITE, 10, 12, 6, 6, 4, 2876625382995206321L, 2, new UmtOps.Crash("K2",
+					null, 7, false))), UmtOps.Gen.CRASH));
+		assertTrue(r.violations().stream().noneMatch(v -> v.startsWith("[UC]")), r.report());
 	}
 }
