@@ -20445,7 +20445,7 @@ About **4.5-5.5 days** of work, **3 elapsed**:
 | 4 | Town extension | `gr_town` grown by 6 lots (`prefer: extend`): one extension from the extendable end, its road joined to the standing road, flagged; the new end terminal; walkable as item 3 |
 | 5 | Steward's district, two buildings | `gr_beside`: building 3 then building 4, each a growth under Steward's opKeys (`dgrow:<district>:<k>`), each realised; `undoRevision` of building 4 then 3 (verifier re-runs): the world before each, cell for cell; the district's join and the town untouched (hash) |
 | 6 | plan/0 | `v8x_6d_gr_zone` through `checkPlan` (zone `fits standing`, 2 added lots `fits`) then `realiseApproved`, with one stale retry under a second key across a restart |
-| 7 | Later districts (end join) | after item 4: a D3 district beside `gr_town` joins the extension's new end (`besidePorts` on the effective IR). `undoRevision` of the growth then refuses `NOT_ALLOWED {why: joined, region}` (RV §6.1), and nothing is written (hash). Once the district is removed, the undo succeeds: the world before the growth |
+| 7 | Later districts (end join) | after item 4: a D3 district beside `gr_town` joins the extension's new end (`besidePorts` on the effective IR). `undoRevision` of the growth then refuses `NOT_ALLOWED {why: joined, region}` at preflight (RV §4.4, §6.4), and nothing is written (hash). Once the district is removed, the undo succeeds: the world before the growth |
 | 7b | Later districts (side join) | after item 4: a D3 district north of the extension joins its side by a T (`<region>:<roadId>` of `street_e_g<n>`); `undoRevision` of the growth refuses `joined` at preflight, nothing written (hash); the district removed, then the undo is exact |
 | 8 | Removal (verifier re-runs) | `gr_town` with two growths and a beside district: D3's removal orders, then `Regions.remove` of the town with both growths standing: E-flat 0 over the claim against the world before the town |
 | 9 | KC and held | a growth whose cheapest slot is beside the farm pond: the lot keeps clear (0 cells in its hard or watch set); the Steward addition and the PT build never written; a growth with every slot held answers `NO_ROOM {kind: held}` with nothing planned |
@@ -20619,7 +20619,7 @@ unaffected (a lot is BOX above its pads).
 | 3 | followAll | the 3 copies followed: 3 new versions, each passing the check and the bar; `ENTRY_VERSIONED` 3 times |
 | 4 | Lots (verifier re-runs) | the 3 copies placed as lots of a `flat_village` realised through `checkPlan` then `realiseApproved` (Steward's plan v1 shape); `outdated` lists them; `applyDelta` on each, a player's block on one lot kept (`KEEP`); `revert` of each to the old version: the world before the delta, cell for cell |
 | 5 | Refused | a source v3 with a moved front: every follower `frame`, nothing installed, lots unchanged |
-| 6 | With RV | one lot's site removed alone (RV §4.4), the region revised to re-add it at the new copy version; then `Regions.remove`: E-flat 0 |
+| 6 | With RV | one lot's site removed alone (RV §4.6), the region revised to refill it (`lots.refill`) at the new copy version; then `Regions.remove`: E-flat 0 |
 | 7 | Unchanged, API, spend | 0b's copy units, 5b's delta suite, pt2-ingame's adopt items; api-compat clean; apijars; $0.00 |
 
 **Tier:** slice plus `sidecar/**` and `api/**`: the units, apijars, 5b-deltas; FS's own `fs-unit`, `fs-ingame` (driver
@@ -20858,6 +20858,6 @@ And the region record is a third file. Sites with their own deltas keep them: de
   want to migrate them (C12), or keep the legacy path for old saves until they're rebuilt? Default: yes, migrate on load as C12 says.
 - **S-AD-2. The geometry.** You send `{streetZ, xLo, xHi}` (or the north-south form) and the lot-to-site map; Architect checks the
   rest. Enough? Default: yes.
-- **S-AD-3. Your history.** After adoption, undo of a building inside the adopted village is `Sites.remove` of its lot (RV §4.4) or
+- **S-AD-3. Your history.** After adoption, undo of a building inside the adopted village is `Sites.remove` of its lot (RV §4.6) or
   `undoRevision` of a growth; the settlement's founding entry becomes `Regions.remove`. Workable? Default: yes.
 - **S-AD-4. The joint gate.** Run the 6d rows on AD's slice gate, and the joint row once 7a's link pass is in? Default: yes.
