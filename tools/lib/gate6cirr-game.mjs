@@ -114,7 +114,7 @@ export async function artifactLots(ctx, sha) {
  * One fixture through the whole round: a fresh flat world, its terrain, checkPlan (generate), the artifact, realiseApproved with
  * `entries`, the region waited for. Returns {W, T, box, file, before, ck, sha, lots (artifact), r (core.regionOf), parts}.
  */
-export async function realiseIrr(ctx, tag, fx, { entries = {}, rules = 'exact', snapshot = true, fields = null, noRealise = false } = {}) {
+export async function realiseIrr(ctx, tag, fx, { entries = {}, rules = 'exact', snapshot = true, fields = null, noRealise = false, lotSnap = null } = {}) {
   const { L, core, B, json } = ctx;
   await L.fresh(`G6B IRR ${tag}`, core.FLAT);
   if (fields) await loadFields(ctx, fields);
@@ -133,6 +133,13 @@ export async function realiseIrr(ctx, tag, fx, { entries = {}, rules = 'exact', 
   out.lots = (await artifactLots(ctx, out.sha)).lots;
   out.box = [W.claim[0] - 8, W.ground - 8, W.claim[1] - 8, W.claim[2] + 8, W.ground + 24, W.claim[3] + 8];
   if (snapshot) out.file = await core.snap(ctx, out.box, `irr-${tag}`);
+  // (the batch's breach fix) one lot's own box snapshotted too: its E-flat is judged alone where the world round it is changed on purpose
+  const sl = lotSnap ? out.lots.find((l) => l.id === lotSnap) : null;
+  if (sl) {
+    const bx = Array.isArray(sl.box) ? { minX: sl.box[0], minZ: sl.box[2], maxX: sl.box[3], maxZ: sl.box[5] } : sl.box;
+    out.lotBox = [bx.minX, W.ground - 8, bx.minZ, bx.maxX, W.ground + 24, bx.maxZ];
+    out.lotFile = await core.snap(ctx, out.lotBox, `irr-${tag}-${lotSnap}`);
+  }
   if (noRealise) return out;
   const rr = await L.call('dev.region.realiseApproved', { sha: out.sha, ...(Object.keys(entries).length ? { lotEntries: entries } : {}) }, 300_000);
   out.realiseCall = rr;
@@ -401,6 +408,94 @@ async function removeLot(ctx, o, lotId = 'f2') {
   return out;
 }
 
+/**
+ * (The CU/IRR/VOC-c batch, the verifier's breach finding) A breach whose flow joins a pond and a player's water beside the lot: neither is
+ * taken by the drain. On v62's f2 with its field entry: a player's well (a source in a 1 x 1 hole) and a 2 x 2 pond, both sunk one under
+ * the ground just outside the box on the side nearest f2's source, placed after the realise; then the player breaks the source's side
+ * there and digs a trench through the field to the box edge, so the flow runs out of the lot and over both. Judged: the flow leaves the
+ * box and touches the pond and the well (before anything is removed); f2's site removed (the drain judged from the fluid levels):
+ * the well and every pond cell still sources, 0 water in the lot's box, the flow outside taken back; then the region removed: the well
+ * and the pond still there, E-flat exact over f2's own box (its snapshot alone: the world round it was changed on purpose).
+ */
+async function spareForeign(ctx, o) {
+  const { L, check, json, core } = ctx;
+  const r = o.r;
+  const lot = r.ir.lots.find((l) => l.id === 'f2');
+  const C = lotCellsOf(lot, r.bodies);
+  const b = lot.box;
+  const S = C.sources[0];
+  const y = S[1];
+  // the exit: the box edge nearest the source (dir d along x or z), the lateral axis l
+  // (the strip outside the edge, where the pond and the well go, must hold no cell of another body: the farm ponds stand outside the boxes)
+  const bodyCells = new Set(r.bodies.filter((q) => !C.own.includes(q)).flatMap((q) => [...q.cells, ...q.shell, ...q.spill, ...q.watch, ...(q.lining ?? [])]).map(k3));
+  const cand = [[[-1, 0], S[0] - b.minX], [[1, 0], b.maxX - S[0]], [[0, -1], S[2] - b.minZ], [[0, 1], b.maxZ - S[2]]].sort((p, q) => p[1] - q[1]);
+  const free = ([[cx, cz], ce]) => {
+    for (let a = ce + 1; a <= ce + 3; a++) for (let l = -2; l <= 3; l++) for (let dy = -1; dy <= 2; dy++) if (bodyCells.has(k3([S[0] + a * cx + l * cz, y + dy, S[2] + a * cz + l * cx]))) return false;
+    return true;
+  };
+  const pick = cand.find((c) => c[1] <= 5 && free(c)) ?? cand[0];
+  const [[dx, dz], e] = pick;
+  const [lx, lz] = [dz, dx]; // lateral (perpendicular)
+  const at = (a, l, dy = 0) => [S[0] + a * dx + l * lx, y + dy, S[2] + a * dz + l * lz];
+  const side = at(1, 0);
+  const out = { source: S, exit: [dx, dz], edge: e, side };
+  check(C.sides.some((c) => k3(c) === k3(side)) && e <= 5 && free(pick), `(breach fix) f2's source ${k3(S)} is ${e} from the box edge (at most 5, so a breach's flow leaves the box), its side ${k3(side)} toward it is a farmland side, no other body in the strip outside`, out);
+  // the ground outside the box where the flow runs: a 3 x 5 strip made plain (dirt under, air over), then the pond and the well sunk in it
+  for (let a = e + 1; a <= e + 3; a++) for (let l = -2; l <= 3; l++) {
+    const [x, , z] = at(a, l);
+    await L.cmd(`/fill ${x} ${y} ${z} ${x} ${y + 2} ${z} minecraft:air`);
+    await L.cmd(`/setblock ${x} ${y - 1} ${z} minecraft:dirt`);
+  }
+  const pond = [at(e + 1, 1, -1), at(e + 1, 2, -1), at(e + 2, 1, -1), at(e + 2, 2, -1)];
+  const well = at(e + 1, -1, -1); // (apart from the pond: the cell between them stays dirt)
+  for (const c of [...pond, well]) await L.cmd(`/setblock ${c.join(' ')} minecraft:water`);
+  await L.settle(5000);
+  const B = [b.minX - 12, y - 4, b.minZ - 12, b.maxX + 12, y + 2, b.maxZ + 12];
+  const isSource = (m, c) => /^minecraft:water(\[level=0\])?$/.test(m.get(k3(c)) ?? '');
+  const before = await fluidsIn(ctx, B);
+  out.placed = { pond: pond.filter((c) => isSource(before, c)).length, well: isSource(before, well) };
+  // the player's breach: the side, then a trench through the field to the box edge (the crop and the fence over it too)
+  for (let a = e; a >= 1; a--) {
+    const [x, , z] = at(a, 0);
+    await L.cmd(`/fill ${x} ${y + 2} ${z} ${x} ${y + 1} ${z} minecraft:air`);
+    await L.cmd(`/setblock ${x} ${y} ${z} minecraft:air`);
+  }
+  await L.settle(30_000);
+  await L.cmd('/kill @e[type=minecraft:item]');
+  const now = await fluidsIn(ctx, B);
+  const foreign = new Set([...pond, well].map(k3));
+  const flow = [...now.keys()].filter((k) => !before.has(k) && !foreign.has(k)).map((k) => k.split(',').map(Number));
+  const inBox = ([x, , z]) => x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ;
+  const adj = (c, set) => [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].some(([u, v, w]) => set.has(k3([c[0] + u, c[1] + v, c[2] + w])));
+  const pondSet = new Set(pond.map(k3)), wellSet = new Set([k3(well)]);
+  out.flow = { cells: flow.length, outside: flow.filter((c) => !inBox(c)).length, touchesPond: flow.some((c) => adj(c, pondSet)), touchesWell: flow.some((c) => adj(c, wellSet)) };
+  check(out.placed.pond === 4 && out.placed.well && out.flow.outside > 0 && out.flow.touchesPond && out.flow.touchesWell,
+    `(breach fix) a pond (2 x 2 sources) and a player's well beside f2, then f2's side broken with a trench to the box edge: the breach's flow (${out.flow.cells} cells, ${out.flow.outside} outside the box) touches the pond and the well`, out);
+  // f2's site removed: the drain takes the flow back and leaves the pond and the well
+  const sites = await lotSites(ctx, r.view);
+  const rm = await L.call('dev.sites.remove', { site: sites.f2.siteId, force: true }, 600_000);
+  for (let i = 0; i < 120; i++) { const st = await L.call('dev.sites.state', {}, 30_000); if (!JSON.stringify(st).includes(`"${sites.f2.siteId}"`) || JSON.stringify(st).includes('"removed":true')) break; await sleep(1000); }
+  await L.settle(5000);
+  const after = await fluidsIn(ctx, B);
+  const st = await L.call('dev.region.state', { region: r.region }, 60_000);
+  const rows = (st.view.ext?.['architect_mc:fluids'] ?? []).filter((x) => C.own.some((q) => q.id === x.body));
+  const left = [...after.keys()].filter((k) => !before.has(k) && !foreign.has(k)).map((k) => k.split(',').map(Number));
+  out.lotRemoved = { removed: rm.removed ?? rm, pond: pond.filter((c) => isSource(after, c)).length, well: isSource(after, well), leftInBox: left.filter(inBox).length, leftOutside: left.filter((c) => !inBox(c)).length,
+    leftSample: left.slice(0, 8), rows: rows.map((x) => [x.body, x.state, x.reason, x.breach ?? null]) };
+  check(out.lotRemoved.pond === 4 && out.lotRemoved.well && out.lotRemoved.leftInBox === 0 && rows.every((x) => x.state === 'drained'),
+    `(breach fix) f2's site removed: the drain took the breach's flow back and spared what is not the body's: the pond ${out.lotRemoved.pond}/4 sources, the player's well ${out.lotRemoved.well ? 'a source' : 'TAKEN'}, 0 water in f2's box (${out.lotRemoved.leftInBox}); outside it ${out.lotRemoved.leftOutside} cell(s) left (joint water is spared: recorded)`, out.lotRemoved);
+  // the region removed: the pond and the well still there, f2's own box exactly as before the realise
+  await L.setRules('exact');
+  const rr = await core.removeWait(ctx, r.region);
+  await sleep(3000);
+  const fin = await fluidsIn(ctx, B);
+  const df = o.lotFile ? await core.diff(ctx, o.lotBox, o.lotFile) : { mismatches: -1 };
+  out.removal = { state: rr.state, pond: pond.filter((c) => isSource(fin, c)).length, well: isSource(fin, well), lotEflat: df.mismatches, sample: df.sample ?? null, lotBox: o.lotBox, irBox: [b.minX, b.minZ, b.maxX, b.maxZ] };
+  check(rr.state === 'REMOVED' && out.removal.pond === 4 && out.removal.well && df.mismatches === 0,
+    `(breach fix) then Regions.remove: ${rr.state}, the pond ${out.removal.pond}/4 and the well ${out.removal.well ? 'standing' : 'TAKEN'}, E-flat over f2's own box ${df.mismatches}`, out.removal);
+  return out;
+}
+
 /** The region removed (exact rules): E-flat 0 over the snapshot (items 4, 5 (a) and (e)). */
 async function removeRegion(ctx, o, item, { judged = true } = {}) {
   const { L, core, check } = ctx;
@@ -428,7 +523,7 @@ async function removeRegion(ctx, o, item, { judged = true } = {}) {
 export async function ingame(ctx) {
   const { L, check, json, B } = ctx;
   const out = {};
-  // (development: IRR_ONLY=v62a,v62b,v63,s01,d01,u01b,pad,probe runs those sections only)
+  // (development: IRR_ONLY=v62a,v62b,spare,v63,s01,d01,u01b,pad,probe runs those sections only)
   const only = (process.env.IRR_ONLY ?? '').split(',').filter(Boolean);
   const want = (k) => !only.length || only.includes(k);
   const F = await installFields(ctx);
@@ -456,6 +551,13 @@ export async function ingame(ctx) {
       out.v62.removeLot = await removeLot(ctx, o, 'f2');
       out.v62.removal = await removeRegion(ctx, o, 'items 4 and 5 (e): after the breach, the versionOf and f2 removed alone, the region');
     } else check(false, `v62: not realised (${json(o.parts)} ${json(o.refused ?? null)})`);
+    await L.leaveWorld();
+  }
+  // ---- (the batch's breach fix) v62 world C: a breach's flow over a pond and a player's well beside f2; the lot removed, then the region
+  if (want('spare')) {
+    const o = await realiseIrr(ctx, 'spare', fx('valid/v62_irr_farm.json'), { entries: E62, fields: F, lotSnap: 'f2' });
+    if (o.r) out.spare = await spareForeign(ctx, o);
+    else check(false, `(breach fix) v62: not realised (${json(o.parts)} ${json(o.refused ?? null)})`);
     await L.leaveWorld();
   }
   // ---- v62 world B: item 5 (a): the region removed with its lots standing

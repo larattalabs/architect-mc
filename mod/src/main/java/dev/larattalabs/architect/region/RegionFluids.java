@@ -1140,6 +1140,10 @@ public final class RegionFluids {
 		int n = 0;
 		Fluid src = b.source();
 		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
+		// ((6c IRR, the batch's fix) an irrigation source's breach flow is judged before anything is written: once the source is air, its
+		// flow has no feeder left to tell it from a pond's or a player's)
+		int[] lot = strays ? st.irrigation.get(b.id) : null;
+		LongOpenHashSet breach = lot == null ? null : breachFlow(level, st, b, lot, others);
 		for (long[] a : new long[][] {b.ice, b.cells}) {
 			for (long p : a) {
 				BlockPos bp = BlockPos.of(p);
@@ -1191,9 +1195,8 @@ public final class RegionFluids {
 				}
 			}
 			// ((6c IRR) an irrigation source: its breach's flow over its own field too)
-			int[] lot = st.irrigation.get(b.id);
-			if (lot != null) {
-				n += sweepBreach(level, st, b, bs, lot, others);
+			if (breach != null) {
+				n += sweepBreach(level, st, b, bs, breach);
 			}
 		}
 		return n;
@@ -1204,51 +1207,149 @@ public final class RegionFluids {
 
 	/**
 	 * (6c IRR, S-IRR-3, S-IRR-4) An irrigation source's breach floods its own field: a player broke a farmland side, and the water ran
-	 * over the field (a bare pad: up to 7 over it and past its edge). With {@code strays}, the drain follows the water connected to the
-	 * body's cells, shell and watch (flowing, falling, or a source the flow made), within its lot's box grown by {@link #BREACH_REACH}
-	 * and from 12 under its floor to 1 over it, and puts each cell back to the region's record (else air): no orphan water. Water that
-	 * was there before the realise ({@code fluidBefore}) and another body's cells stay. Counted in {@link BodyState#breached}.
+	 * over the field (a bare pad: up to 7 over it and past its edge). With {@code strays}, the drain takes back the breach's flow, the
+	 * cells {@link #breachFlow} judged this body's before the drain wrote anything, each to the region's record (else air): no orphan
+	 * water. Counted in {@link BodyState#breached}.
 	 */
-	static int sweepBreach(ServerLevel level, Regional st, Body b, BodyState bs, int[] lot, LongOpenHashSet others) {
+	static int sweepBreach(ServerLevel level, Regional st, Body b, BodyState bs, LongOpenHashSet take) {
 		Fluid src = b.source();
-		int x0 = lot[0] - BREACH_REACH, z0 = lot[1] - BREACH_REACH, x1 = lot[2] + BREACH_REACH, z1 = lot[3] + BREACH_REACH;
-		int y0 = lot[4] - 12, y1 = lot[4] + 1;
-		LongOpenHashSet seen = new LongOpenHashSet();
-		java.util.ArrayDeque<Long> q = new java.util.ArrayDeque<>();
-		for (long[] a : new long[][] {b.cells, b.shell, b.watch}) {
-			for (long p : a) {
-				if (seen.add(p)) {
-					q.add(p);
-				}
-			}
-		}
-		LongOpenHashSet own = new LongOpenHashSet(b.cells);
+		long[] cells = take.toLongArray();
+		java.util.Arrays.sort(cells);
 		int n = 0;
-		while (!q.isEmpty() && seen.size() < 65536) {
-			long p = q.poll();
-			BlockPos bp = BlockPos.of(p);
-			for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
-				BlockPos np = bp.relative(d);
-				long k = np.asLong();
-				if (np.getX() < x0 || np.getX() > x1 || np.getZ() < z0 || np.getZ() > z1 || np.getY() < y0 || np.getY() > y1 || !seen.add(k)) {
-					continue;
-				}
-				if (own.contains(k) || others.contains(k) || st.fluidBefore.containsKey(k)) {
-					continue;
-				}
-				BlockState now = level.getBlockState(np);
-				if (!(now.getBlock() instanceof LiquidBlock) || !now.getFluidState().getType().isSame(src)) {
-					continue;
-				}
-				String was = beforeAny(st, k);
-				dev.larattalabs.architect.placed.Placed.set(level, np, was == null ? Blocks.AIR.defaultBlockState() : parse(was), Block.UPDATE_CLIENTS
-					| Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
-				n++;
-				q.add(k);
+		for (long k : cells) {
+			BlockPos p = BlockPos.of(k);
+			BlockState now = level.getBlockState(p);
+			FluidState f = now.getFluidState();
+			if (!(now.getBlock() instanceof LiquidBlock) || f.isSource() || !f.getType().isSame(src)) {
+				continue; // (a stray pass took it already, or it changed)
 			}
+			String was = beforeAny(st, k);
+			dev.larattalabs.architect.placed.Placed.set(level, p, was == null ? Blocks.AIR.defaultBlockState() : parse(was), Block.UPDATE_CLIENTS
+				| Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+			n++;
 		}
 		bs.breached += n;
 		return n;
+	}
+
+	/**
+	 * (6c IRR, the batch's fix of the verifier's breach finding) The cells of an irrigation body's breach flow, judged from the world as it
+	 * stands, before the drain writes: {@link #breachTake} over the body's own cells, shell and watch, within its lot's box grown by
+	 * {@link #BREACH_REACH} and from 12 under its floor to 1 over it. Water there before the realise ({@code fluidBefore}) and another
+	 * body's cells are never taken, and they feed nothing of this body's.
+	 */
+	static LongOpenHashSet breachFlow(ServerLevel level, Regional st, Body b, int[] lot, LongOpenHashSet others) {
+		Fluid src = b.source();
+		LongOpenHashSet foreign = new LongOpenHashSet(others);
+		foreign.addAll(st.fluidBefore.keySet());
+		java.util.List<long[]> seeds = List.of(b.cells, b.shell, b.watch);
+		int[] box = {lot[0] - BREACH_REACH, lot[4] - 12, lot[1] - BREACH_REACH, lot[2] + BREACH_REACH, lot[4] + 1, lot[3] + BREACH_REACH};
+		return breachTake(seeds, new LongOpenHashSet(b.cells), foreign, box, k -> {
+			BlockState s = level.getBlockState(BlockPos.of(k));
+			FluidState f = s.getFluidState();
+			return f.isEmpty() || !f.getType().isSame(src) ? null : new Wet(f.getAmount(), f.isSource(), s.getBlock() instanceof LiquidBlock);
+		}, BREACH_MAX);
+	}
+
+	/** (6c IRR) The most cells {@link #breachTake} follows. */
+	static final int BREACH_MAX = 65536;
+
+	/** (6c IRR) A cell holding the body's fluid: its amount (8 for a source or falling water), a source (a waterlogged block too), a liquid block. */
+	record Wet(int amount, boolean source, boolean liquid) {
+	}
+
+	/**
+	 * (6c IRR, the batch's fix) Which water a breach's flow is, read from the fluid levels (pure: {@code at} reads a cell, null = not the
+	 * body's fluid). A breach comes after the body settled, when no census runs, so nothing recorded its flow as it ran; the levels show
+	 * where each cell is fed from. First the flowing water connected to the seeds (the body's cells, shell and watch, whatever they hold now)
+	 * inside {@code box} {x0, y0, z0, x1, y1, z1}: never a source (a pond's, a player's bucket, a waterlogged block), never a
+	 * {@code foreign} cell (water there before the realise, another body's). Then every cell with a feeder outside the set is dropped, and
+	 * what it fed after it, until none is left: a feeder is a neighbour of the same fluid at a higher amount, or the cell over it (the body's
+	 * own source cells count as inside). The flow is followed from the body's cells and the taken cells only. So the flow that only this body's source can have made is taken; a flow joined by a pond or a
+	 * player's water is spared where they meet and everywhere downstream of that (a few cells of joint water may stay). A cell with no feeder
+	 * at all (the source already drained: a removal resumed after a stop) stays in the set.
+	 */
+	static LongOpenHashSet breachTake(java.util.List<long[]> seeds, LongOpenHashSet own, LongOpenHashSet foreign, int[] box,
+		java.util.function.LongFunction<@Nullable Wet> at, int max) {
+		LongOpenHashSet set = new LongOpenHashSet();
+		LongOpenHashSet seen = new LongOpenHashSet();
+		java.util.ArrayDeque<Long> q = new java.util.ArrayDeque<>();
+		for (long[] a : seeds) {
+			for (long p : a) {
+				if (seen.add(p)) {
+					q.add(p);
+					if (!own.contains(p) && takeable(p, foreign, box, at)) {
+						set.add(p);
+					}
+				}
+			}
+		}
+		while (!q.isEmpty() && seen.size() < max) {
+			long p = q.poll();
+			if (!own.contains(p) && !set.contains(p)) {
+				continue; // (a seed holding no flow of this body's: nothing to follow from it)
+			}
+			for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+				long k = BlockPos.offset(p, d);
+				if (!seen.add(k)) {
+					continue;
+				}
+				if (own.contains(k) || takeable(k, foreign, box, at)) {
+					if (!own.contains(k)) {
+						set.add(k);
+					}
+					q.add(k);
+				}
+			}
+		}
+		// prune: a cell fed from outside the set goes, and so may what it fed
+		java.util.ArrayDeque<Long> w = new java.util.ArrayDeque<>();
+		for (long p : set) {
+			w.add(p);
+		}
+		while (!w.isEmpty()) {
+			long p = w.poll();
+			if (!set.contains(p)) {
+				continue;
+			}
+			Wet c = at.apply(p);
+			if (c == null || fedFromOutside(p, c, set, own, at)) {
+				set.remove(p);
+				for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+					long k = BlockPos.offset(p, d);
+					if (set.contains(k)) {
+						w.add(k);
+					}
+				}
+			}
+		}
+		return set;
+	}
+
+	/** Flowing (or falling) water of the body's fluid in a liquid block, inside the box, not foreign. */
+	private static boolean takeable(long p, LongOpenHashSet foreign, int[] box, java.util.function.LongFunction<@Nullable Wet> at) {
+		int x = BlockPos.getX(p), y = BlockPos.getY(p), z = BlockPos.getZ(p);
+		if (x < box[0] || y < box[1] || z < box[2] || x > box[3] || y > box[4] || z > box[5] || foreign.contains(p)) {
+			return false;
+		}
+		Wet c = at.apply(p);
+		return c != null && c.liquid() && !c.source();
+	}
+
+	/** A feeder of the cell (the same fluid over it, or beside it at a higher amount) that is neither in the set nor the body's own cell. */
+	private static boolean fedFromOutside(long p, Wet c, LongOpenHashSet set, LongOpenHashSet own, java.util.function.LongFunction<@Nullable Wet> at) {
+		for (net.minecraft.core.Direction d : new net.minecraft.core.Direction[] {net.minecraft.core.Direction.UP, net.minecraft.core.Direction.NORTH,
+			net.minecraft.core.Direction.SOUTH, net.minecraft.core.Direction.WEST, net.minecraft.core.Direction.EAST}) {
+			long k = BlockPos.offset(p, d);
+			if (set.contains(k) || own.contains(k)) {
+				continue;
+			}
+			Wet n = at.apply(k);
+			if (n != null && (d == net.minecraft.core.Direction.UP || n.amount() > c.amount())) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** (6c IRR) The irrigation bodies of an IR with their lot: body id -> {minX, minZ, maxX, maxZ, floorY}. */
