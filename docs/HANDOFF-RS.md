@@ -92,6 +92,10 @@ RS-b builds:
 1. **Tunnels ring by ring** (§6.4, rs04): today a bore's target orders bottom up with every carve after its paid neighbours above and
    beside within 1 (`RegionTargets` queue order + `firstUnsafeCut`, the unit test's carveFirst caught). RS-b: rings (a ring's lining, then
    its carve) along the bore's axis, runs cut per ring within the quarter cap; prove no bore cell open without its lining half fed.
+   **Found (RS-a's run, 22:15):** rs04 in survival stops at 95.3%: target c3 (the bore's lining, 520/662) deadlocks at run 9, a
+   hanging lantern (9645,68,9079) under a roof cell (9645,69,9079): the roof waits for the cell below it (the lantern, bottom up), the
+   lantern waits for its support (the roof), the held cut under them waits for its paid neighbours above. Ring order must place a
+   hanging block after its support (support before bottom-up), and a cut's deps must not include cells that wait on it.
 2. **Item 5's rs04 row** (build, twin 0, E-flat 0) and **item 6's rs04 row** (half fed: runs whole, M3/M4/M8/gravity 0, no open cut).
 3. **Ice caps in game** (N-RS-4: free; a cold-biome body, not in any RS fixture yet).
 4. **Item 8** (conservation through bodies: lava charged, bucket back, at 10+ checkpoints on rs03) and **item 9's lava rows** (scooped with

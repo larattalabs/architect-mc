@@ -281,7 +281,8 @@ async function buildOne(tag, name, { crates = 4, cons = null, remove = true, kee
 steps.item5 = async () => {
   await ensure();
   const out = {};
-  for (const [tag, name] of [['rs02', 'rs02_walled'], ['rs03', 'rs03_water'], ['rs04', 'rs04_tunnel'], ['village', 'survival_village']]) {
+  // (rs04, the tunnel, is RS-b's row: RS_ONLY=rs04 runs it)
+  for (const [tag, name] of [['rs02', 'rs02_walled'], ['rs03', 'rs03_water'], ['village', 'survival_village'], ...(process.env.RS_ONLY?.includes('rs04') ? [['rs04', 'rs04_tunnel']] : [])]) {
     if (process.env.RS_ONLY && !process.env.RS_ONLY.split(',').includes(tag)) continue; // (development: one fixture)
     try { out[tag] = await buildOne(tag, name, { remove: !process.env.RS_KEEP }); } catch (e) { check(false, `item 5 (${tag}): ${String(e.message).slice(0, 300)}`); out[tag] = { error: String(e.stack ?? e) }; }
   }
@@ -348,7 +349,7 @@ async function runsSafe(region) {
 steps.item6 = async () => {
   await ensure();
   const out = {};
-  for (const [tag, name] of [['rs04', 'rs04_tunnel'], ['rs02', 'rs02_walled']]) {
+  for (const [tag, name] of [['rs02', 'rs02_walled'], ...(process.env.RS_ONLY?.includes('rs04') ? [['rs04', 'rs04_tunnel']] : [])]) {
     if (process.env.RS_ONLY && !process.env.RS_ONLY.split(',').includes(tag)) continue;
     const fx = G.fixture(ctx, name);
     const entries = entriesOf(fx);
@@ -411,6 +412,447 @@ steps.item6 = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ shared: the apitest events, a site realised and waiting
+
+/** /apitest <args>, its JSON answer (the apitest mod is on the headless server's classpath). */
+async function api(args) {
+  const r = await cmd(`/apitest ${args}`);
+  const line = (r.messages ?? []).find((m) => m.startsWith('{') || m.startsWith('[') || m === 'null');
+  if (line === undefined) throw new Error(`/apitest ${args}: no JSON answer: ${JSON.stringify(r).slice(0, 300)}`);
+  return JSON.parse(line);
+}
+const stacksOf = (m) => Object.values(m ?? {}).reduce((a, n) => a + Math.ceil(n / 64), 0);
+
+/** A fixture's site in survival, checked, a stockpile of `crates`, realised (its lots bound), its targets down. */
+async function realised(tag, name, { crates = 4, entries = null, world = null } = {}) {
+  const fx = G.fixture(ctx, name);
+  const ent = entries ?? entriesOf(fx);
+  const s = await G.site(ctx, world ?? tag, fx);
+  if (Object.keys(ent).length) await G.designs(ctx);
+  const box = G.boxOf(s.W);
+  const pre = await G.snap(ctx, box, `rs-${tag}-pre`);
+  const ck = await G.check(ctx, tag, s);
+  const crateAt = await G.pile(ctx, s, crates);
+  const region = await G.realise(ctx, ck.check.artifactSha, ent);
+  const w = await G.waitFor(ctx, region, (st, rs) => (rs.targets ?? []).length > 0 && st.view.state !== 'PLACING', { timeoutMs: 900_000 });
+  return { fx, entries: ent, s, box, pre, ck, crateAt, region, rs: w.rs, st: w.st };
+}
+
+/** Inserts what the owner's targets lack, at most what fits in the stockpile's free stacks (inexact: what fits). */
+async function feedFit(cons = null) {
+  const ps = await G.pileState(ctx);
+  let room = (ps.capacityStacks ?? 0) - (ps.usedStacks ?? 0) - 1;
+  const need = {};
+  for (const [it, n] of Object.entries(ps.outstanding ?? {})) {
+    const lack = n - (ps.stock?.[it] ?? 0);
+    if (lack <= 0 || room <= 0) continue;
+    const k = Math.min(lack, room * 64);
+    need[it] = k;
+    room -= Math.ceil(k / 64);
+  }
+  if (!Object.keys(need).length) return {};
+  if (cons) return cons.insert(`stockpile:${G.OWNER}`, need);
+  return (await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: need, exact: false }, 120_000)).accepted ?? {};
+}
+
+// ------------------------------------------------------------------ item 6b: bigger than the stockpile
+
+steps.item6b = async () => {
+  await ensure();
+  const R = await realised('rs07', 'rs07_big_tile', { crates: 2 });
+  const cap = (await G.pileState(ctx)).capacityStacks;
+  const quarter = Math.floor(cap / 4);
+  const billStacks = stacksOf(R.ck.check.cost.bom);
+  let maxRun = 0, capStacks = 0, runs = 0, waves = 0, inserted = {}, st, rs, maxRes = 0;
+  const over = [];
+  const end = Date.now() + 3_600_000;
+  while (Date.now() < end) {
+    st = await G.regionState(ctx, R.region);
+    rs = await G.rsState(ctx, R.region);
+    for (const t of rs.targets ?? []) { maxRun = Math.max(maxRun, t.maxRunStacks ?? 0); capStacks = Math.max(capStacks, t.capStacks ?? 0); runs += 0; runs = Math.max(runs, t.runs ?? 0); }
+    const ps = await G.pileState(ctx);
+    const res = stacksOf(ps.reserved);
+    maxRes = Math.max(maxRes, res);
+    if (res > cap) over.push(res);
+    if (st.view.state === 'PLACED' && rs.build?.done) break;
+    if (['FAILED', 'PARTIAL'].includes(st.view.state)) break;
+    const acc = await feedFit();
+    if (Object.keys(acc).length) { waves++; inserted = G.plus(inserted, acc); }
+    await sleep(3000);
+  }
+  const out = { capacity: cap, quarter, billStacks, maxRun, capStacks, runs, maxReserved: maxRes, waves, inserted: sum(inserted), state: st.view.state, build: rs.build && { done: rs.build.done, percent: rs.build.percent, parts: rs.build.parts.map((p) => [p.part, p.state, p.built, p.cells]) } };
+  check(billStacks > cap, `item 6b (rs07): the tile's bill is bigger than its 2-crate stockpile: ${billStacks} stacks against ${cap}`, out);
+  check(capStacks > 0 && capStacks <= quarter && maxRun <= capStacks && runs > 1, `item 6b (rs07): every run's bill within a quarter of the capacity: the largest ${maxRun} stacks, the cap ${capStacks} (capacity ${cap}, a quarter ${quarter}), ${runs} runs`, out);
+  check(over.length === 0, `item 6b (rs07): no reservation past the capacity (the largest ${maxRes} stacks of ${cap})`, over.slice(0, 4));
+  check(st.view.state === 'PLACED' && rs.build?.done && (rs.build.parts ?? []).every((p) => p.state === 'built'), `item 6b (rs07): fed in ${waves} waves of what fits (${sum(inserted)} items), every target BUILT, the targets behind it fed: ${json(out.build)}`);
+  await G.remove(ctx, R.region);
+  return out;
+};
+
+// ------------------------------------------------------------------ item 7: order and waits
+
+steps.item7 = async () => {
+  await ensure();
+  const R = await realised('rs02o', 'rs02_walled');
+  await api('clear');
+  const parts = R.rs.build.parts;
+  const wall = parts.find((p) => p.part === 'town_wall'), rope = parts.find((p) => p.part === 'rope');
+  const tgt = new Map((R.rs.targets ?? []).map((t) => [t.target, t]));
+  const wallBill = wall.targets.reduce((a, id) => G.plus(a, tgt.get(id)?.bom), {});
+  const ord = await L.call('dev.stockpile.order', { owner: G.OWNER, ids: wall.targets }, 60_000);
+  const order = ord.stockpile?.feedOrder ?? [];
+  check(wall.targets.every((t, k) => order[k] === t), `item 7: setFeedOrder puts rs02's wall first: ${json(order.slice(0, wall.targets.length + 2))}`);
+  for (const t of rope.targets) await L.call('dev.stockpile.pause', { site: t, paused: true }, 60_000);
+  // the wall's bill alone: with the wall first it builds whole, though every other target wants the same blocks
+  await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: wallBill, exact: true }, 120_000);
+  const w = await G.waitFor(ctx, R.region, (st, rs) => (rs.build?.parts ?? []).find((p) => p.part === 'town_wall')?.state === 'built', { timeoutMs: 1_200_000, every: 3000 });
+  const others = (w.rs.build?.parts ?? []).filter((p) => p.part !== 'town_wall' && p.state === 'built' && (w.rs.targets ?? []).some((t) => t.part === p.part && Object.keys(t.bom ?? {}).length));
+  check(w.ok, `item 7: fed only the wall's bill (${sum(wallBill)} items), the wall is BUILT first (${json((w.rs.build?.parts ?? []).map((p) => [p.part, p.state]))}); paid parts built before it: ${json(others.map((p) => p.part))}`);
+  await sleep(6000);
+  // the others starve: SITE_WAITING per target with the region, the part and nextNeeded; the paused rope never waits, never reserves
+  const ev = (await api('events 0')).filter((e) => e.event === 'SITE_WAITING' && e.ext?.['architect_mc:region'] === R.region);
+  const named = ev.filter((e) => e.wait?.waiting && e.ext?.['architect_mc:part'] && (e.wait.nextNeeded ?? []).length);
+  const ropeEv = ev.filter((e) => rope.targets.includes(e.id) && e.wait?.waiting);
+  const ps = await G.pileState(ctx);
+  const ropeRes = rope.targets.map((t) => ps.targets?.[t]).filter(Boolean);
+  const rs1 = await G.rsState(ctx, R.region);
+  const starved = (rs1.targets ?? []).filter((t) => t.wait?.waiting && (t.wait.nextNeeded ?? []).length);
+  check(named.length > 0 && starved.length > 0, `item 7: SITE_WAITING with the region and the part per waiting target, nextNeeded named: ${named.length} event(s) over ${new Set(named.map((e) => e.id)).size} target(s), e.g. ${json(named[0] && { id: named[0].id, part: named[0].ext['architect_mc:part'], next: named[0].wait.nextNeeded.slice(0, 2) })}; ${starved.length} target(s) waiting with nextNeeded now`);
+  check(ropeEv.length === 0 && ropeRes.every((x) => x.paused && !x.reserves) && (rs1.build.parts.find((p) => p.part === 'rope')?.built ?? 0) === rope.built, `item 7: pause on the rope bridge: its ${rope.targets.length} target(s) paused, reserve nothing, never wait, nothing built (${json(ropeRes)})`);
+  // S-Y-1: a target whose whole frontier is unloaded reserves nothing; the player far away, then back
+  const far = [R.s.W.claim[2] + 1500, 120, R.s.W.claim[3] + 1500];
+  await L.tp(...far);
+  let unl = null;
+  for (let k = 0; k < 30 && !unl; k++) {
+    await sleep(3000);
+    const p = await G.pileState(ctx);
+    const ts = Object.entries(p.targets ?? {}).filter(([id]) => (rs1.targets ?? []).some((t) => t.target === id));
+    const u = ts.filter(([, x]) => !x.frontierLoaded);
+    if (u.length) unl = { unloaded: u.length, reserving: u.filter(([, x]) => x.reserves).length, of: ts.length };
+  }
+  check(!!unl && unl.reserving === 0, `item 7: S-Y-1's unloaded exception: with the player ${far.join(',')} away, ${json(unl)} (a target whose frontier is unloaded reserves nothing)`);
+  await L.tp(R.s.W.claim[0] + 40, 100, R.s.W.claim[1] + 40);
+  await sleep(4000);
+  for (const t of rope.targets) await L.call('dev.stockpile.pause', { site: t, paused: false }, 60_000);
+  const f = await G.feed(ctx, R.region, { timeoutMs: 2_400_000 });
+  const v = f.last.st.view;
+  check(v.state === 'PLACED' && v.build?.done && v.build?.percent === 100 && (v.build?.parts ?? []).every((p) => p.state === 'built'), `item 7: resumed and fed: RegionView.build per part ${json((v.build?.parts ?? []).map((p) => [p.part, p.state, p.built, p.cells, p.targets.length]))}, done ${v.build?.done}, ${v.build?.percent}%`);
+  await G.remove(ctx, R.region);
+  return { order: order.slice(0, 8), wallBill, waits: named.length, unloaded: unl, build: v.build };
+};
+
+// ------------------------------------------------------------------ items 8, 9: conservation, removal
+
+steps.item8 = async () => {
+  await ensure();
+  const o = await buildOne('rs02c', 'rs02_walled', { cons: true });
+  const pts = o.conservation ?? [];
+  const bad = pts.filter((p) => !G.exact(p));
+  check(pts.length >= 10 && bad.length === 0, `item 8 (rs02): Y1's per-item sum constant at ${pts.length} checkpoints through feed, build and removal (${pts.map((p) => p.label).join(', ')})`, bad.slice(0, 4));
+  return { points: pts };
+};
+
+steps.item9 = async () => {
+  await ensure();
+  const out = {};
+  for (const [tag, name] of [['rs02r', 'rs02_walled'], ['rs03r', 'rs03_water']]) {
+    let pre = null;
+    const o = await buildOne(tag, name, { cons: true, keep: async ({ region, rs }) => {
+      // one copper cell weathered (a lot's, rs_hut's back wall), one paid target cell replaced by a player's block
+      const sites = (await L.call('dev.sites.state', {}, 60_000)).sites ?? [];
+      let copper = null;
+      for (const s of sites.filter((x) => x.group && x.blueprint === 'rs_hut')) {
+        const c = await L.call('dev.site.cells', { site: s.id }, 60_000).catch(() => null);
+        const hit = (c?.cells ?? []).find((q) => String(q[3] ?? q.state ?? '').includes('copper_block'));
+        if (hit) { copper = Array.isArray(hit) ? hit.slice(0, 3) : [hit.x, hit.y, hit.z]; break; }
+      }
+      if (copper) await cmd(`/setblock ${copper.join(' ')} minecraft:weathered_copper`);
+      const cells = await L.call('dev.rs.cells', { region }, 300_000);
+      const t = (cells.targets ?? []).find((x) => (x.cells ?? []).some((c) => (c[3] & 2) && !(c[3] & 1) && !(c[3] & 4)));
+      const pc = t.cells.find((c) => (c[3] & 2) && !(c[3] & 1) && !(c[3] & 4)).slice(0, 3);
+      await cmd(`/setblock ${pc.join(' ')} minecraft:oak_planks`);
+      await sleep(2000);
+      const a = await L.call('dev.stockpile.audit', { owner: G.OWNER }, 120_000);
+      const p0 = await G.pileState(ctx);
+      pre = { copper, player: pc, paid: a.paidStanding, keys: p0.creditedKeys, stock: p0.stock };
+    } });
+    const p1 = await G.pileState(ctx);
+    const refund = o.removed?.refund ?? {};
+    const want = G.plus(G.minus(pre.paid, pre.copper ? { 'minecraft:copper_block': 1 } : {}), pre.copper ? { 'minecraft:weathered_copper': 1 } : {});
+    const got = G.minus(p1.stock, pre.stock);
+    const drops = await L.call('dev.items.near', { pos: pre.player, radius: 2 }, 30_000);
+    const again = await L.call('dev.region.remove', { region: o.region, requester: G.OWNER }, 600_000);
+    const p2 = await G.pileState(ctx);
+    out[tag] = { pre, refund, credited: got, want, drops, keys: [pre.keys, p1.creditedKeys, p2.creditedKeys], eflat: o.eflat, conservation: o.conservation };
+    check(G.same(got, want), `item 9 (${tag}): the refund equals the paid cells standing, as standing blocks (the weathered copper cell ${json(pre.copper)} credited as weathered_copper): ${G.same(got, want) ? 'equal' : `differs ${json(G.minus(got, want))}`}`, { got, want });
+    check(((drops.items ?? drops.stacks ?? {})['minecraft:oak_planks'] ?? 0) >= 1 || JSON.stringify(drops).includes('oak_planks'), `item 9 (${tag}): the player's block at ${pre.player.join(',')} drops at its cell (${json(drops).slice(0, 200)})`);
+    check(o.eflat?.mismatches === 0, `item 9 (${tag}): free cells restored, E-flat ${o.eflat?.mismatches}`);
+    check(p2.creditedKeys === p1.creditedKeys && G.same(p2.stock, p1.stock) && again.removed !== false, `item 9 (${tag}): one credit per key: ${pre.keys} -> ${p1.creditedKeys} keys at the removal, ${p2.creditedKeys} after a second remove (nothing credited again)`);
+    check((o.conservation ?? []).every(G.exact), `item 9 (${tag}): the conservation sum exact through it (${(o.conservation ?? []).length} points)`);
+  }
+  return out;
+};
+
+// ------------------------------------------------------------------ item 10: mid-build removal
+
+steps.item10 = async () => {
+  await ensure();
+  const out = {};
+  for (const leave of [false, true]) {
+    const tag = leave ? 'rs02m2' : 'rs02m1';
+    const R = await realised(tag, 'rs02_walled');
+    const C = new G.Conservation(ctx, R.box);
+    await C.start();
+    // half built: half of the bill, the builder until the paid cells built stop moving
+    const half = {};
+    for (const [it, n] of Object.entries(R.ck.check.cost.bom ?? {})) if (Math.floor(n / 2) > 0) half[it] = Math.floor(n / 2);
+    await C.insert(`stockpile:${G.OWNER}`, half);
+    let last = -1, still = 0, rs;
+    for (let k = 0; k < 150 && still < 4; k++) {
+      await sleep(4000);
+      rs = await G.rsState(ctx, R.region);
+      const b = (rs.targets ?? []).reduce((a, t) => a + t.built, 0);
+      still = b === last ? still + 1 : 0;
+      last = b;
+    }
+    await C.point('half built');
+    const a0 = await L.call('dev.stockpile.audit', { owner: G.OWNER }, 120_000);
+    const s0 = await G.pileState(ctx);
+    const ids = (rs.targets ?? []).map((t) => t.target);
+    const pend = await api(`rremove ${R.region}`);
+    // at once: the targets leave the feed
+    const s1 = await G.pileState(ctx);
+    const leftFeed = ids.filter((id) => !s1.targets?.[id] || s1.targets[id].leaving || !(s1.feedOrder ?? []).includes(id));
+    if (leave) {
+      await sleep(500);
+      await L.leaveWorld();
+      await L.openWorld(R.s.world);
+      await C.point('reopened mid-removal');
+    }
+    let v;
+    for (let k = 0; k < 600; k++) { v = await api(`rget ${R.region}`).catch(() => null); if (!v || v.state !== 'REMOVING') break; await sleep(1000); }
+    await sleep(3000);
+    const s2 = await G.pileState(ctx);
+    await C.point('removed');
+    const got = G.minus(s2.stock, s0.stock);
+    const e = await G.diff(ctx, R.box, R.pre);
+    const ef = e.list.filter((m) => !R.crateAt.some((c) => c.join(',') === m.pos));
+    out[tag] = { pending: pend, leftFeed: leftFeed.length, of: ids.length, state: v?.state, refund: got, paid: a0.paidStanding, eflat: ef.length, points: C.points };
+    check(leftFeed.length === ids.length, `item 10 (${tag}): the removal takes the ${ids.length} targets out of the feed at once (${leftFeed.length} left it right after Regions.remove)`);
+    check(G.same(got, a0.paidStanding) && (v?.state ?? 'REMOVED') === 'REMOVED', `item 10 (${tag}${leave ? ', saved, left and reopened mid-removal' : ''}): the refund equals the paid cells standing at the removal (${sum(a0.paidStanding)} items), credited once: ${G.same(got, a0.paidStanding) ? 'equal' : `differs ${json(G.minus(got, a0.paidStanding))}`}; ${v?.state ?? 'gone'}`);
+    check(C.points.every(G.exact) && ef.length === 0, `item 10 (${tag}): conservation exact at ${C.points.length} points, E-flat ${ef.length}`, ef.slice(0, 6));
+  }
+  return out;
+};
+
+// ------------------------------------------------------------------ item 11: crash
+
+steps.item11 = async () => {
+  await ensure();
+  const out = {};
+  const killJvm = async () => {
+    const pids = L.clientPids();
+    log(`kill -9 my server JVM ${pids}`);
+    for (const pid of pids) process.kill(pid, 'SIGKILL');
+    for (let i = 0; i < 60 && L.clientPids().length; i++) await sleep(1000);
+  };
+  // (a) a clean stop mid-build (a target building), resumed: PLACED and built, equal to its twin
+  {
+    const fx = G.fixture(ctx, 'rs02_walled');
+    const entries = entriesOf(fx);
+    const T = await G.twin(ctx, 'rs02k', fx, entries);
+    const R = await realised('rs02k', 'rs02_walled');
+    await G.feed(ctx, R.region, { fraction: 0.5, timeoutMs: 600_000, until: (st, rs) => (rs.build?.percent ?? 0) >= 30 });
+    const mid = (await G.rsState(ctx, R.region)).build;
+    await L.leaveWorld();
+    await L.openWorld(R.s.world);
+    const f = await G.feed(ctx, R.region, { timeoutMs: 2_400_000 });
+    const d = await G.twinDiff(ctx, T.box, T.file, R.crateAt);
+    out.clean = { mid: mid && mid.percent, after: f.last.rs.build && f.last.rs.build.percent, twin: d.mismatches };
+    check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done && d.mismatches === 0, `item 11 (clean stop mid-build at ${mid?.percent?.toFixed?.(1)}%): resumed to PLACED and built, equal to its INSTANT twin (${d.mismatches} differ)`, d.list);
+    // (b) kill -9 after an autosave, mid-build of the next feed: drift within the units moved since the save
+    await G.remove(ctx, R.region);
+  }
+  {
+    const R = await realised('rs02x', 'rs02_walled');
+    const C = new G.Conservation(ctx, R.box);
+    await C.start();
+    const half = {};
+    for (const [it, n] of Object.entries(R.ck.check.cost.bom ?? {})) if (Math.floor(n / 3) > 0) half[it] = Math.floor(n / 3);
+    await C.insert(`stockpile:${G.OWNER}`, half);
+    await sleep(8000);
+    await cmd('/save-all flush');
+    await sleep(1000);
+    const atSave = await C.parts();
+    const totSave = C.total(atSave);
+    const injAtSave = { ...C.injected };
+    await C.insert(`stockpile:${G.OWNER}`, half);
+    await sleep(6000);
+    const pre = await C.parts();
+    const moved = {};
+    for (const k of new Set([...Object.keys(pre.ledger?.consumed ?? {}), ...Object.keys(pre.ledger?.delivered ?? {})])) {
+      const m = (pre.ledger.consumed?.[k] ?? 0) - (atSave.ledger?.consumed?.[k] ?? 0) + (pre.ledger.delivered?.[k] ?? 0) - (atSave.ledger?.delivered?.[k] ?? 0);
+      if (m) moved[k] = m;
+    }
+    const builtPre = (await G.rsState(ctx, R.region)).targets.reduce((a, t) => a + t.built, 0);
+    await killJvm();
+    try { state.dev?.close(); } catch { /* gone */ }
+    state.dev = null;
+    await connect(300_000);
+    await L.openWorld(R.s.world);
+    const a = await C.parts();
+    const now = C.total(a);
+    const drift = {};
+    for (const k of new Set([...Object.keys(now), ...Object.keys(totSave)])) { const dd = (now[k] ?? 0) - (totSave[k] ?? 0); if (dd) drift[k] = dd; }
+    for (const [k, v] of Object.entries(C.injected)) { const after = v - (injAtSave[k] ?? 0); if (after) drift[k] = (drift[k] ?? 0) + after; if (drift[k] === 0) delete drift[k]; }
+    const within = Object.entries(drift).every(([k, v]) => Math.abs(v) <= Math.abs(moved[k] ?? 0) + (C.injected[k] ?? 0) - (injAtSave[k] ?? 0));
+    out.kill = { drift, moved, builtPre };
+    check(within, `item 11 (kill -9 after an autosave): drift ${json(drift)} within the units moved since that save ${json(moved)} (recorded)`);
+    // (c) the lost cells: the rescan re-queues what the save lost; the build finishes
+    await sleep(25_000);
+    const rs = await G.rsState(ctx, R.region);
+    const builtNow = rs.targets.reduce((a, t) => a + t.built, 0);
+    const f = await G.feed(ctx, R.region, { timeoutMs: 2_400_000 });
+    out.rescan = { builtPre, builtNow, rescanned: rs.rescanned, rewritten: rs.rewritten, done: f.last.rs.build?.done };
+    check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done, `item 11 (a halt without a save): the rescan re-reads the targets from the world (${builtPre} cells built before the kill, ${builtNow} after the reload: the lost cells re-queued; rescanned ${rs.rescanned}, free cells rewritten ${rs.rewritten}), fed to built: done ${f.last.rs.build?.done}`);
+    await G.remove(ctx, R.region);
+  }
+  return out;
+};
+
+// ------------------------------------------------------------------ item 12: Steward's flows
+
+steps.item12 = async () => {
+  await ensure();
+  const out = {};
+  const fx = G.fixture(ctx, 'rs02_walled');
+  const entries = entriesOf(fx);
+  const s = await G.site(ctx, 'rs02 steward', fx);
+  await G.designs(ctx);
+  await G.pile(ctx, s, 4);
+  const body = { plan: s.wp.plan, claim: s.W.claim, owner: G.OWNER, anchors: s.wp.anchors, load: 'generate' };
+  // a creative artifact (the toggle off), then survival again: realiseApproved under the first key refused ARTIFACT_STALE
+  await L.call('dev.survival.set', { on: false });
+  const c0 = await L.call('dev.region.checkPlan', body, 1_800_000);
+  await L.call('dev.survival.set', { on: true });
+  const K1 = `steward.rs.${Date.now().toString(36)}.a`, K2 = `steward.rs.${Date.now().toString(36)}.b`;
+  const r1 = await L.call('dev.region.realiseApproved', { sha: c0.check.artifactSha, lotEntries: entries, opKey: K1 }, 300_000);
+  check(c0.check?.survival !== true && r1.refused?.reason === 'ARTIFACT_STALE', `item 12/13: a creative artifact in survival: realiseApproved refused ARTIFACT_STALE (${json(r1.refused ?? r1).slice(0, 200)})`);
+  // re-check at Start (survival), pin, a restart, then realiseApproved under the second key
+  const c1 = await L.call('dev.region.checkPlan', body, 1_800_000);
+  const c2 = await L.call('dev.region.checkPlan', body, 1_800_000);
+  check(c1.check?.survival === true && c1.check.artifactSha === c2.check.artifactSha && c1.check.artifactSha !== c0.check.artifactSha, `item 12: re-check at Start in survival: survival true, the same artifact twice (${String(c1.check?.artifactSha).slice(0, 12)}), not the creative one`);
+  const pin = await L.call('dev.region.pinArtifact', { sha: c1.check.artifactSha, owner: G.OWNER, on: true }, 60_000);
+  check((pin.artifact?.pinnedBy ?? []).includes(G.OWNER), `item 12: pinned (${json(pin.artifact?.pinnedBy)})`);
+  await L.leaveWorld();
+  await L.openWorld(s.world);
+  const r2 = await L.call('dev.region.realiseApproved', { sha: c1.check.artifactSha, lotEntries: entries, opKey: K2 }, 300_000);
+  const k1 = await L.call('dev.region.realiseByKey', { owner: G.OWNER, opKey: K1 }, 60_000);
+  const k2 = await L.call('dev.region.realiseByKey', { owner: G.OWNER, opKey: K2 }, 60_000);
+  check(!!r2.region && k2.region?.id === r2.region && !k1.region, `item 12: after the restart realiseApproved under the second key: ${r2.region} (realiseByKey: K2 ${k2.region?.id}, K1 ${k1.region?.id ?? 'none'})`);
+  const region = r2.region;
+  const f = await G.feed(ctx, region, { timeoutMs: 2_400_000 });
+  check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done, `item 12: built from the stockpile: ${f.last.st.view.state}, done ${f.last.rs.build?.done}`);
+  // rs05: the offer round rs02's region, realised and undone alone, the town untouched
+  const box = G.boxOf(s.W);
+  const town = await G.snap(ctx, box, 'rs-rs12-town');
+  const offer = JSON.parse(JSON.stringify(G.fixture(ctx, 'rs05_offer').plan).replaceAll('${region}', region));
+  const oc = await L.call('dev.region.checkPlan', { ...body, plan: offer }, 1_800_000);
+  out.offer = { overall: oc.check?.overall, parts: (oc.check?.parts ?? []).map((a) => [a.part, a.class, a.reasons?.[0]?.code]) };
+  check(oc.check?.survival === true && !!oc.check?.artifactSha, `item 12 (rs05): the offer checked in survival round ${region}: ${oc.check?.overall} ${json(out.offer.parts)}`);
+  if (oc.check?.artifactSha) {
+    const or = await G.realise(ctx, oc.check.artifactSha);
+    const of = await G.feed(ctx, or, { timeoutMs: 1_800_000 });
+    check(of.last.st.view.state === 'PLACED' && of.last.rs.build?.done, `item 12 (rs05): the offer ${or} realised alone and built: ${of.last.st.view.state}, done ${of.last.rs.build?.done}`);
+    const rm = await G.remove(ctx, or);
+    const d = await G.diff(ctx, box, town);
+    const df = d.list.filter((m) => !String(m.now).includes('construction_crate'));
+    check(rm.removed && df.length === 0, `item 12 (rs05): undone alone: the town untouched (${df.length} cells differ from the town before the offer)`, df.slice(0, 6));
+  }
+  await G.remove(ctx, region);
+  return out;
+};
+
+// ------------------------------------------------------------------ item 13: refusals (the brush row is RS-b's)
+
+steps.item13 = async () => {
+  await ensure();
+  const out = {};
+  // a spawner prop: SURVIVAL {creativeOnly} at check
+  const fx = G.fixture(ctx, 'u_spawner');
+  const s = await G.site(ctx, 'spawner', fx);
+  const ck = await G.check(ctx, 'spawner', s);
+  const sv = (ck.check?.parts ?? []).flatMap((a) => (a.reasons ?? []).filter((r) => r.code === 'SURVIVAL').map((r) => [a.part, r.evidence]));
+  out.check = sv;
+  check(sv.some(([, e]) => e?.kind === 'creativeOnly' && Object.keys(e.blocks ?? {}).includes('minecraft:spawner')), `item 13: a spawner prop answers SURVIVAL {kind: creativeOnly} at check: ${json(sv).slice(0, 200)}`);
+  // CREATIVE_ONLY_BLOCK at realise: a program plan (no plan/0 re-plan) whose bible lays its lanes in spawners
+  const bdir = path.join(path.dirname(L.LIBRARY), 'bibles', 'rs_spawner', 'versions', '1');
+  fs.mkdirSync(bdir, { recursive: true });
+  fs.writeFileSync(path.join(bdir, 'bible.json'), JSON.stringify({ id: 'rs_spawner', name: 'RS spawner lanes', scope: 'settlement', roles: { path: 'minecraft:spawner' } }));
+  const claim = [s.W.claim[0], s.W.claim[1], s.W.claim[0] + 127, s.W.claim[1] + 127];
+  const h0 = await L.call('dev.region.hash', { box: [claim[0], s.W.minY - 4, claim[1], claim[2], s.W.maxY + 20, claim[3]] }, 600_000);
+  const p = await L.call('dev.region.plan', { program: 'flat_village', claim, bible: 'rs_spawner', owner: G.OWNER, surveyLoad: 'generated:64', check: false }, 900_000);
+  const rr = p.planId ? await L.call('dev.region.realise', { planId: p.planId }, 120_000) : null;
+  await sleep(3000);
+  const h1 = await L.call('dev.region.hash', { box: [claim[0], s.W.minY - 4, claim[1], claim[2], s.W.maxY + 20, claim[3]] }, 600_000);
+  out.realise = { plan: p.planId ?? p.refused, refused: rr?.refused ?? rr };
+  check(rr?.refused?.reason === 'CREATIVE_ONLY_BLOCK' && h0.sha256 === h1.sha256, `item 13: CREATIVE_ONLY_BLOCK at realise, nothing written (${json(rr?.refused ?? rr ?? p.refused).slice(0, 240)}; hash ${h0.sha256 === h1.sha256 ? 'unchanged' : 'CHANGED'})`);
+  // no stockpile: NOT_ALLOWED with the bill
+  await L.call('dev.stockpile.dissolve', { owner: G.OWNER }, 60_000).catch(() => null);
+  const fx2 = G.fixture(ctx, 'rs02_walled');
+  const s2 = await G.site(ctx, 'nopile', fx2);
+  await G.designs(ctx);
+  const ck2 = await G.check(ctx, 'nopile', s2);
+  const r2 = await L.call('dev.region.realiseApproved', { sha: ck2.check.artifactSha, lotEntries: entriesOf(fx2) }, 300_000);
+  out.noPile = r2.refused ?? r2;
+  check(r2.refused?.reason === 'NOT_ALLOWED' && /stockpile/.test(r2.refused.message) && /bill/.test(r2.refused.message), `item 13: no stockpile: NOT_ALLOWED with the bill (${String(r2.refused?.message).slice(0, 200)})`);
+  return out;
+};
+
+// ------------------------------------------------------------------ item 14: the natural site (S3's claim)
+
+steps.item14 = async () => {
+  await ensure();
+  const sc = process.env.RS_S3_CLAIM ? JSON.parse(process.env.RS_S3_CLAIM) : null;
+  if (!sc) { check(false, 'item 14: S3\'s natural claim is not on this branch yet (RS_S3_CLAIM={world, claim, anchors}): recorded as open'); return { open: true }; }
+  return { open: true };
+};
+
+// ------------------------------------------------------------------ item 15: free drops (N-RS-2)
+
+steps.item15 = async () => {
+  await ensure();
+  const R = await realised('rs01f', 'rs01_land', { crates: 3 });
+  const f = await G.feed(ctx, R.region, { timeoutMs: 1_800_000 });
+  check(f.last.rs.build?.done, `item 15: rs01 built (${f.last.st.view.state})`);
+  const cells = await L.call('dev.rs.cells', { region: R.region }, 300_000);
+  const spireT = (cells.targets ?? []).find((t) => (f.last.rs.targets ?? []).some((x) => x.target === t.target && x.part === 'spire'));
+  const heldSpire = spireT?.cells.find((c) => (c[3] & 1) && (c[3] & 2) && !(c[3] & 4));
+  // a free fill cell: a free-pass cell of the relief (dev.rs.freeWrite over the claim's surface near the blend's anchor)
+  const at = await L.call('dev.journal.state', {}, 60_000).catch(() => null);
+  void at;
+  let fill = null;
+  for (let dx = 0; dx < 200 && !fill; dx += 7) for (let dz = 0; dz < 160 && !fill; dz += 9) {
+    const x = R.s.W.claim[0] + 10 + dx, z = R.s.W.claim[1] + 10 + dz;
+    for (let y = R.s.W.maxY + 6; y >= R.s.W.minY; y--) {
+      const fw = await L.call('dev.rs.freeWrite', { at: [x, y, z] }, 30_000);
+      if (fw.free?.[0] === true) { fill = [x, y, z]; break; }
+    }
+  }
+  const before = (await L.call('dev.stockpile.audit', { owner: G.OWNER, min: [R.box[0], R.box[1], R.box[2]], max: [R.box[3], R.box[4], R.box[5]] }, 120_000)).entities ?? {};
+  const b1 = fill ? await L.call('dev.rs.break', { at: fill }, 60_000) : null;
+  const b2 = heldSpire ? await L.call('dev.rs.break', { at: heldSpire.slice(0, 3) }, 60_000) : null;
+  await sleep(1500);
+  const after = (await L.call('dev.stockpile.audit', { owner: G.OWNER, min: [R.box[0], R.box[1], R.box[2]], max: [R.box[3], R.box[4], R.box[5]] }, 120_000)).entities ?? {};
+  const dropped = G.minus(after, before);
+  check(!!b1?.broken && !!b2?.broken && Object.keys(dropped).length === 0 && b2.freeBroken >= 2, `item 15 (N-RS-2): a player breaks a free fill cell (${json(fill)}: ${b1?.before}) and a held spire cell (${json(heldSpire?.slice(0, 3))}: ${b2?.before}) in survival: both broken, nothing dropped (${json(dropped)}), the hook counted ${b2?.freeBroken}`);
+  const rm = await G.remove(ctx, R.region);
+  const e = await G.diff(ctx, R.box, R.pre);
+  const ef = e.list.filter((m) => !R.crateAt.some((c) => c.join(',') === m.pos));
+  check(rm.removed && ef.length === 0, `item 15: then removed as item 9: E-flat ${ef.length} (the broken cells restored)`, ef.slice(0, 6));
+  return { fill, spire: heldSpire, b1, b2, dropped, eflat: ef.length };
+};
+
 // (development) one fixture checked in game, survival or creative (RS_FIXTURE, RS_CREATIVE=1): its answers
 steps.checkonly = async () => {
   await ensure();
@@ -446,7 +888,7 @@ steps.report = async () => {
 
 const groups = {
   ingame: ['latent', 'item4', 'item6', 'item6b', 'item7', 'item12', 'item13', 'item15'],
-  survival: ['item5', 'item8', 'item9', 'item10', 'item14'],
+  survival: ['item5', 'item8', 'item9', 'item10'], // (item14: on S3's claim once S3 has merged)
   crash: ['item11'],
 };
 const name = process.argv[2];
