@@ -21,7 +21,7 @@ export const STUBS = Object.freeze(['g6a_stub_24', 'g6a_stub_19', 'g6a_stub_14',
 /** The look's entries: the kit's example buildings first (they read as buildings), the stubs after. */
 export const LOOK_ENTRIES = Object.freeze(['tavern', 'gatehouse', 'tower', 'cabin', ...STUBS]);
 /** Item 6's fixtures: every layout and around, the outlines, and the Steward-shaped grove. */
-export const ITEM6 = Object.freeze([['v66', 'valid/v66_fl_ring.json'], ['v67', 'valid/v67_fl_around_pond.json'], ['v68', 'valid/v68_fl_grid.json'], ['v70', 'valid/v70_fl_spiral.json'], ['v71', 'valid/v71_fl_outline.json'], ['s01', 'fl/s01_steward_grove.json']]);
+export const ITEM6 = Object.freeze([['v66', 'valid/v66_fl_ring.json'], ['v67', 'valid/v67_fl_around_pond.json'], ['v68', 'valid/v68_fl_grid.json'], ['v70', 'valid/v70_fl_spiral.json'], ['v71', 'valid/v71_fl_outline.json'], ['s01', 'fl/s01_steward_grove.json'], ['w01', 'fl/w01_spiral_uphill_infernal.json'], ['w03', 'fl/w03_organic_bare_hub.json']]);
 
 const json = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
 
