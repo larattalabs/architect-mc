@@ -854,3 +854,9 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
 - **IRR's breach fix, in game: a foreign flow beside the breach.** The `spare` case puts the pond and the well under the flow, so
   the prune by a foreign *flowing* feeder (a player's flow meeting the breach's at a higher amount) is unit-tested only
   (RegionFluidsBreachTest). Add an irr-ingame case with a player's source on the ground beside the trench's exit.
+
+## Queued (coordinator, 2026-10-20)
+
+- **Discarding unrealised plans** (found drafting D3): nothing in the mod or sidecar discards a plan. Every `Regions.plan` keeps
+  `plans/<id>.json` plus `.survey.bin` (0.4-0.9 MB each) and its sidecar directory. Add `Regions.discardPlan` and a world-start
+  sweep of unrealised plans past an age.
