@@ -308,13 +308,28 @@ export async function realiseF3(ctx, tag, fx, o = {}) {
       out.undo = { state: rm.state, kept: rm.kept, mismatches: df.mismatches, classes: df.classes ?? {}, left: left.slice(0, 12) };
       check(rm.state === 'REMOVED' && df.mismatches === keep.length && keep.every((k) => left.includes(k)), `item ${o.drift ? 6 : 3} (${tag}): Regions.remove restores the box exactly under the exact rules: E-flat ${df.mismatches}${keep.length ? ` (the player's ${keep.length} cell(s) kept: ${keep.join(' ')})` : ''}, kept ${rm.kept ?? 'n/a'} (${rm.seconds} s)`, list.slice(0, 8));
     } else {
-      // after a stand at default random ticks: every written cell restored exactly (E-flat over the region's cells: 0, but the player's
-      // kept ones), and every mismatch at an unwritten cell the world's own (classified: grass spreading, a sapling, a sheep), none unexplained
-      const atWritten = list.filter((m) => written?.has(m.pos) && !keep.includes(m.pos));
-      const unexplained = list.filter((m) => !written?.has(m.pos) && !keep.includes(m.pos) && !['growth', 'grazed', 'live'].includes(m.class));
-      out.undo = { state: rm.state, kept: rm.kept, mismatches: df.mismatches, classes: df.classes ?? {}, atWritten: atWritten.slice(0, 12), nWritten: atWritten.length, unexplained: unexplained.slice(0, 12), keptLeft: keep.filter((k) => left.includes(k)) };
-      check(rm.state === 'REMOVED' && atWritten.length === 0 && unexplained.length === 0 && keep.every((k) => left.includes(k)),
-        `item ${o.drift ? 6 : 4} (${tag}): Regions.remove after the stand${o.drift ? ' and the drift' : ''}: E-flat over the region's ${written?.size ?? '?'} written cells ${atWritten.length}${keep.length ? ` (the player's ${keep.length} cell(s) kept: ${keep.join(' ')})` : ''}; ${df.mismatches - atWritten.length - keep.length} unwritten cell(s) the world's own drift ${JSON.stringify(df.classes ?? {})}, ${unexplained.length} unexplained; kept ${rm.kept ?? 'n/a'} (${rm.seconds} s)`, { atWritten: atWritten.slice(0, 6), unexplained: unexplained.slice(0, 6) });
+      // after a stand at default random ticks: every written cell restored exactly (the dumps before the realise and after the removal,
+      // compared cell by cell: 0 differ at a written cell but the player's kept ones), and every difference at an unwritten cell the
+      // world's own (grass and dirt spreading, a plant growing or popping: the stand's random ticks), none unexplained
+      const post = await dumpOf(ctx, box, `f3-${tag}-removed`);
+      const SPREAD = /^minecraft:(dirt|grass_block|mycelium|podzol|farmland)(\[|$)/;
+      const PLANT = /^minecraft:(short_grass|tall_grass|fern|large_fern|dandelion|poppy|[a-z_]*_tulip|oxeye_daisy|cornflower|azure_bluet|allium|lily_of_the_valley|bush|[a-z_]*_sapling|sweet_berry_bush|pink_petals|wildflowers|leaf_litter|firefly_bush|short_dry_grass|tall_dry_grass)(\[|$)/;
+      const kind = (a, b) => (SPREAD.test(a) && SPREAD.test(b) ? 'growth' : (PLANT.test(a ?? '') || a === 'minecraft:air') && (PLANT.test(b ?? '') || b === 'minecraft:air') ? 'growth' : 'none');
+      const bd = before.d, pd = post.d;
+      let atW = 0, world = 0;
+      const atWritten = [], unexplained = [], keptSeen = [];
+      for (let x = bd.box.minX; x <= bd.box.maxX; x++) for (let z = bd.box.minZ; z <= bd.box.maxZ; z++) for (let y = bd.box.minY; y <= bd.box.maxY; y++) {
+        const a = bd.palette[bd.cells[bd.at(x, y, z)]], b = pd.palette[pd.cells[pd.at(x, y, z)]];
+        if (a === b) continue;
+        const k = `${x},${y},${z}`;
+        if (keep.includes(k)) { keptSeen.push(k); continue; }
+        if (written?.has(k)) { atW++; if (atWritten.length < 12) atWritten.push([k, a, b]); continue; }
+        if (kind(a, b) === 'growth') { world++; continue; }
+        if (unexplained.length < 12) unexplained.push([k, a, b]);
+      }
+      out.undo = { state: rm.state, kept: rm.kept, hashDiff: { mismatches: df.mismatches, classes: df.classes ?? {} }, atWritten, nWritten: atW, world, unexplained, keptSeen };
+      check(rm.state === 'REMOVED' && atW === 0 && unexplained.length === 0 && keep.every((k) => keptSeen.includes(k)),
+        `item ${o.drift ? 6 : 4} (${tag}): Regions.remove after the stand${o.drift ? ' and the drift' : ''}: E-flat over the region's ${written?.size ?? '?'} written cells ${atW} (dumps before the realise and after the removal)${keep.length ? `, the player's ${keep.length} cell(s) kept (${keptSeen.join(' ')})` : ''}; ${world} unwritten cell(s) the world's own drift (grass and dirt spreading, plants), ${unexplained.length} unexplained; kept ${rm.kept ?? 'n/a'} (${rm.seconds} s)`, { atWritten: atWritten.slice(0, 6), unexplained: unexplained.slice(0, 6) });
     }
   }
   await L.leaveWorld();
