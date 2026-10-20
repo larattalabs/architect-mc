@@ -4,7 +4,7 @@ The shared view of what Architect ships, what Steward has adopted, and the agree
 release and after each sync. Contracts and as-builts stay in `docs/CONTRACT.md`; Steward's design stays in steward-mc
 `docs/COMPOSITION.md`.
 
-## Last sync: 2026-10-19 (Steward at steward-mc main 3121085, needs Architect >= 0.37.0)
+## Last sync: 2026-10-20 (Steward at steward-mc main f7acef1, on v0.37.1)
 
 ### Steward has shipped against Architect
 - **Plan v0 (composition).** Claude writes a plan on describe (systemRef `plan/0#compact`), runs checkPlan, makes up to 2 repairs
@@ -19,13 +19,19 @@ release and after each sync. Contracts and as-builts stay in `docs/CONTRACT.md`;
 - **T3.** `load` bounded (512) whenever a plan holds a tunnel (composition, Start, stale re-check, offer); past the caps, the
   player is told where to stand.
 - **H.** `farmPond` on homely farms; drained bodies reported from `architect_mc:fluids`.
+- **Strange asks (2026-10-20).** The plan writer has rules for the 20 non-fitting parts (6 patterns): zones always have lots,
+  terraces sit beside zones, bridges only over a real gap (treetop huts as `layout.elevated`), gates on their wall, water only
+  where the land has it, reserved layouts written as such. It knows the live catalogue. Recorded plans are not re-recorded yet
+  (paid; Noah's call).
+- **D1 districts through plan v1** (a `program.districts` plan's lots are read, tagged, designed and realised).
+- **North-south lots.** Front gains EAST/WEST, and plan v1 no longer falls back for east/west-facing lots. The town's own
+  zone keeps `ew` with rotate off.
+- **T3 `crossing.span` / `length` / `lands` on the card** (from the check's preview siteplan edges).
 
 ### Not started on Steward's side (none blocked on Architect)
-- T3 `crossing.span` / `lands` on cards (no per-part geometry on cards yet).
-- North-south lots: `ew` is still forced, and east/west-facing lots fall back to V.
-- Plan v1 for Supplied builds, additions and districts; the offer in survival (waits for RS).
-- D1/D2 region districts (and T2's note: `Districts.streetOf` should read graph edges on slope villages).
-- The 7 non-fitting strange-ask parts from P0's CI.
+- Steward's own districts on Architect's region districts and boundary districts (D2). Known limit: additions after a D1 build
+  don't recognise `road:<district>_street_*` keys as a street, so they lay a fresh one.
+- Plan v1 for Supplied builds (waits for RS); the offer in survival (RS).
 - VOC: `BibleRequest.Rarity`, and `vocab/1` for the plan writer once VOC-c lands.
 
 ### Agreed order (Architect)
@@ -40,3 +46,4 @@ release and after each sync. Contracts and as-builts stay in `docs/CONTRACT.md`;
 
 ### Open asks either way
 - None blocking.
+- For Noah: re-record Steward's recorded plans with the new plan-writer rules (paid). Steward is waiting on his go.
