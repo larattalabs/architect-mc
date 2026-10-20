@@ -26,6 +26,7 @@ import { keptBuilds, pickBuild, buildEndpoint, buildKeepOut } from '../region/bu
 import { besidePorts, emitDistricts, parseDistricts, placeDistricts } from '../region/districtsEmit.mjs';
 import { placeFollow } from '../region/followEmit.mjs';
 import { zoneDistricts, channelForm } from './schema.mjs';
+import { f3Emit, f3Resolve, GROWN, isF3 } from '../forms/hooks.mjs';
 // (7a K1) walls and gates (K1a), rope bridges and auto connectors (K1b): the compiler's hooks for the four connector kinds
 import { WALL_KINDS, emitWalls, finishGates, planWalls, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
 import { ROPE_KINDS, emitRopes, ropeAnswer, ropeFailAnswer, ropeLeg, ropePassInput, ropeResolve } from '../connectors/rope.mjs';
@@ -937,6 +938,13 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, wouldFit: z.wouldFit, notes: z.notes, cached: z.cached || undefined, provisional: undefined });
       continue;
     }
+    if (p.family === 'form' && isF3(p)) {
+      // (6c F3) a grown form: its locator checked here, its sites picked at emit on the zones' real layouts (forms/hooks.mjs)
+      const f = f3Resolve({ env, geomOf, locatorOf }, p);
+      res.set(p.id, f);
+      ans(p, { class: f.klass, reasons: f.reasons, notes: f.notes });
+      continue;
+    }
     if (p.family === 'form') {
       if (p.kind === 'relief') {
         const around = p.part.around;
@@ -1135,9 +1143,11 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     r.pass('relief', { around: lots, name: 'relief_pads', part: 'relief_pads' });
     notes.push(`relief_pads: ${unblended.length} pad(s) blended by the default relief (their relief form did not run)`);
   }
-  // terrace and spikes
+  // terrace and spikes; (6c F3) the grown forms, placed here on the zones' layouts (forms/hooks.mjs)
+  const f3C = () => ({ env, r, ctx, geom, geomOf, byId, res, partOf, zones: zonesAccepted, keep, stageOf, checkpoint: () => checkpoint(r), rollback: (c) => rollback(r, c), addedSince: (c) => addedSince(r, c), mark, ans, tolOf, judge, locatorOf, rectStats });
   for (const p of order) {
     if (p.family !== 'form' || p.kind === 'relief' || isHPart(p) || !okClass(p.id)) continue;
+    if (isF3(p)) { if (p.kind in GROWN) f3Emit(f3C(), p); continue; }
     const f = res.get(p.id);
     const cp = checkpoint(r);
     const id = `f_${p.id}`.slice(0, 44);

@@ -1,0 +1,111 @@
+{
+ "about": "(6c F3 \u00a710.1) a grove on a flat claim: three giant trees of three species (an oak near the west street end, a spruce near the east one, a birch inside the village's open land) and two giant mushrooms (brown and red) south of the village, beside a village zone near the stone",
+ "on": "flat",
+ "covers": [
+  "form.giant_tree",
+  "form.giant_mushroom"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "f3_v72",
+  "zones": [
+   {
+    "id": "village",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 8
+     }
+    },
+    "program": {
+     "lots": [
+      {
+       "id": "h1",
+       "type": "house",
+       "size": [
+        9,
+        9
+       ]
+      },
+      {
+       "id": "h2",
+       "type": "house",
+       "size": [
+        9,
+        9
+       ]
+      },
+      {
+       "id": "h3",
+       "type": "house",
+       "size": [
+        9,
+        9
+       ]
+      }
+     ]
+    },
+    "size": {
+     "w": 72,
+     "d": 56
+    }
+   }
+  ],
+  "forms": [
+   {
+    "id": "oak",
+    "kind": "giant_tree",
+    "preset": "oak",
+    "where": {
+     "near": {
+      "anchor": "street_w",
+      "within": 24
+     }
+    }
+   },
+   {
+    "id": "spruce",
+    "kind": "giant_tree",
+    "preset": "spruce",
+    "where": {
+     "near": {
+      "anchor": "street_e",
+      "within": 24
+     }
+    }
+   },
+   {
+    "id": "birch",
+    "kind": "giant_tree",
+    "preset": "birch",
+    "where": {
+     "inside": {
+      "part": "village"
+     }
+    }
+   },
+   {
+    "id": "brown",
+    "kind": "giant_mushroom",
+    "preset": "brown",
+    "where": {
+     "near": {
+      "anchor": "stockpile",
+      "within": 32
+     }
+    }
+   },
+   {
+    "id": "red",
+    "kind": "giant_mushroom",
+    "preset": "red",
+    "where": {
+     "near": {
+      "anchor": "stockpile",
+      "within": 32
+     }
+    }
+   }
+  ]
+ }
+}

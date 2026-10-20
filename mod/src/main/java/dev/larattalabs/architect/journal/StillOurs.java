@@ -8,8 +8,10 @@ import net.minecraft.world.level.block.BaseRailBlock;
 import net.minecraft.world.level.block.ComposterBlock;
 import net.minecraft.world.level.block.CrossCollisionBlock;
 import net.minecraft.world.level.block.FenceBlock;
+import net.minecraft.world.level.block.HugeMushroomBlock;
 import net.minecraft.world.level.block.IronBarsBlock;
 import net.minecraft.world.level.block.RedstoneWireBlock;
+import net.minecraft.world.level.block.SpeleothemBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.WallBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -24,7 +26,8 @@ import org.jspecify.annotations.Nullable;
  * {@code LeafGuard.stillHeld}. Since phase 6a a fluid in air the entry cleared counts as still the entry's (it flowed in after the
  * write: the undo puts the cell back and the flow recedes). Since 6c CU a copper block at another weathering stage of its chain, waxed or
  * scraped, still holds the stage we wrote ({@link Copper}: the same form; shape-defining properties still compare), and farmland and dirt
- * are interchangeable. Pure: a player's record (PT) is the caller's to consult first.
+ * are interchangeable. Since 6c F3 a huge mushroom block's six faces and pointed dripstone's {@code thickness} are volatile, and a dead coral
+ * still holds the live coral we wrote ({@link Coral}). Pure: a player's record (PT) is the caller's to consult first.
  */
 public final class StillOurs {
 	/** Volatile on every block. */
@@ -32,6 +35,11 @@ public final class StillOurs {
 		"waterlogged", "distance", "moisture", "age", "stage", "honey_level", "bites");
 	/** Volatile on fences, walls, panes, iron bars and redstone wire. */
 	static final Set<String> CONNECTIONS = Set.of("north", "east", "south", "west", "up");
+	/**
+	 * (6c F3 §6) Volatile on huge mushroom blocks and stems: the six faces, which {@code HugeMushroomBlock.updateShape} sets false next to
+	 * the same block whenever a neighbour changes (a player's block beside a cap, the cap's own neighbour removed).
+	 */
+	static final Set<String> FACES = Set.of("north", "east", "south", "west", "up", "down");
 
 	private StillOurs() {
 	}
@@ -42,6 +50,12 @@ public final class StillOurs {
 			return true;
 		}
 		var b = s.getBlock();
+		if (b instanceof HugeMushroomBlock && FACES.contains(p)) {
+			return true; // (6c F3 §6)
+		}
+		if (b instanceof SpeleothemBlock && p.equals("thickness")) {
+			return true; // (6c F3 §6) pointed dripstone: its thickness follows its neighbours (vertical_direction stays shape-defining)
+		}
 		if (CONNECTIONS.contains(p)) {
 			return b instanceof CrossCollisionBlock || b instanceof WallBlock || b instanceof RedstoneWireBlock || b instanceof FenceBlock
 				|| b instanceof IronBarsBlock;
@@ -89,6 +103,8 @@ public final class StillOurs {
 		}
 		// (6c CU §2.2) a copper block at any weathering stage, waxed or not, is the same block as the stage we wrote: the same form
 		boolean copper = now.getBlock() != after.getBlock() && Copper.sameBlock(now.getBlock(), after.getBlock());
+		// (6c F3 §6) a coral that died (its pond drained, its water gone) is the live coral we wrote: the same form, as copper's stages
+		copper = copper || now.getBlock() != after.getBlock() && Coral.sameBlock(now.getBlock(), after.getBlock());
 		if (now.getBlock() != after.getBlock() && !copper) {
 			return false;
 		}

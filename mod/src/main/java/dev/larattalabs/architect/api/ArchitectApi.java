@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.37.0";
+	String VERSION = "1.39.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -124,6 +124,12 @@ public interface ArchitectApi {
 	 * Since 1.37.0 (6c VOC-c), a VOC-c helper ({@code plan.rules}) adds {@code "rulePalette"}: plan/0's {@code rule.palette} is
 	 * measured over the parts and the bound lots in its scope, {@link Regions#checkPalette} pre-checks an artifact's lot entries, and
 	 * {@link Regions#realiseApproved} and a lot's delta refuse {@link Reason#PALETTE} when a required rule is broken.
+	 * Since 1.39.0 (6c F3), a forms-II helper ({@code plan.forms2}) adds {@code "formsTrees"} (plan/0's {@code form.giant_tree} and
+	 * {@code form.giant_mushroom}: grown landscape on open land, 8 off natural trees, its canopy's columns hard for lots, streets and
+	 * walls), {@code "formsCave"} ({@code form.stalactites}, {@code form.roots}: their check reads a frozen volume, the catalogue's
+	 * {@code limits.volume}) and {@code "formsWater"} ({@code form.coral}: live coral as a plan body's own cells). And the journal's
+	 * "still ours" (Java, always): a huge mushroom block's faces and pointed dripstone's thickness are volatile, and a dead coral is
+	 * the live coral Architect wrote (undo and removal restore it).
 	 */
 	Set<String> features();
 }

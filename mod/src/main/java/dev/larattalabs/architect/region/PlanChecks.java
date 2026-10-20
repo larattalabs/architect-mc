@@ -375,6 +375,21 @@ public final class PlanChecks {
 		return false;
 	}
 
+	/** (6c F3 §3.3) The cave forms: their sites read a frozen volume (a ceiling, its floor), so a check plans them twice as a tunnel's. */
+	static final java.util.Set<String> CAVE_KINDS = java.util.Set.of("stalactites", "roots");
+
+	/** (6c F3 §3.3) Whether a plan has a cave form part ({@link #CAVE_KINDS}): with a tunnel or an H part it makes a check plan twice. */
+	static boolean hasCaveForm(JsonObject plan) {
+		if (plan.get("forms") instanceof JsonArray a) {
+			for (JsonElement e : a) {
+				if (e instanceof JsonObject p && p.get("kind") instanceof JsonElement k && k.isJsonPrimitive() && CAVE_KINDS.contains(k.getAsString())) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	/** (6c H §10) The kinds whose parts ask fluid volumes in a check: the bodies (pond, fountain, waterfall, the moat channel) and the quay. */
 	static final java.util.Set<String> H_KINDS = java.util.Set.of("pond", "fountain", "waterfall", "quay", "channel");
 
@@ -449,7 +464,7 @@ public final class PlanChecks {
 		String blobId, String surveySha, byte[] survey, @Nullable LoadPolicy load, long t0, Object[] first) {
 		JsonObject planned = (JsonObject) first[0];
 		JsonArray need = planned.get("needVolumes") instanceof JsonArray a ? a : new JsonArray();
-		if (need.isEmpty() || !(hasTunnel(r.plan()) || hasH(r.plan()) || wetAsked(planned))) {
+		if (need.isEmpty() || !(hasTunnel(r.plan()) || hasH(r.plan()) || hasCaveForm(r.plan()) || wetAsked(planned))) {
 			lastVolumePass = null;
 			return CompletableFuture.completedFuture(first);
 		}
@@ -474,7 +489,7 @@ public final class PlanChecks {
 				vp.addProperty("read", 0);
 				vp.addProperty("why", why);
 				lastVolumePass = vp;
-				checkNote(planned, (hasTunnel(r.plan()) ? "the tunnels" : "the plan's water") + " asked for " + need.size() + " volume" + (need.size() == 1 ? "" : "s") + " (" + nCells + " cells) that could not be read ("
+				checkNote(planned, (hasTunnel(r.plan()) ? "the tunnels" : hasCaveForm(r.plan()) && !hasH(r.plan()) ? "the cave forms" : "the plan's water") + " asked for " + need.size() + " volume" + (need.size() == 1 ? "" : "s") + " (" + nCells + " cells) that could not be read ("
 					+ why + "): prepare (or check with load: \"generate\"), then check again");
 				Architect.LOGGER.info("Plan check: volume pass not read ({}), {} boxes, {} cells", why, need.size(), nCells);
 				return CompletableFuture.completedFuture(first);

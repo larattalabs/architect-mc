@@ -1,0 +1,45 @@
+{
+ "about": "(6c F3 \u00a75, \u00a710.1) u01_tree_in_body: the broken variant `_unsafe.treeInPond`: a giant oak placed as if no body were there, its trunk 3 inside the east edge of a fountain's footprint (its apron, where the basin's single breach runs): the trunk, roots and the soil under them stand in the fountain's watch, so M25:clear names the tree (an architect_mc:unsafe part is never refused by the backstop, KC's rule) and the fountain fits. (A canopy over a pond's still water is in none of the pond's sets; a trunk in its water makes the pond refuse itself LEAK unwritable before the backstop runs: so the variant stands in a fountain's watch.)",
+ "on": "flat",
+ "volume": {},
+ "expect": {
+  "rule": "M25:clear",
+  "part": "f_oak_1",
+  "bodyPart": "fount",
+  "bodyClass": "fits"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "f3_u01",
+  "forms": [
+   {
+    "id": "fount",
+    "kind": "fountain",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 4
+     }
+    },
+    "basin": 5,
+    "spout": 2
+   },
+   {
+    "id": "oak",
+    "kind": "giant_tree",
+    "preset": "oak",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 0
+     }
+    },
+    "ext": {
+     "architect_mc:unsafe": {
+      "treeInPond": true
+     }
+    }
+   }
+  ]
+ }
+}

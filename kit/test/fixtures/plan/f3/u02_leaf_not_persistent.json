@@ -1,0 +1,30 @@
+{
+ "about": "(6c F3 \u00a74, \u00a710.1) u02_leaf_not_persistent: the broken variant `_unsafe.leafNotPersistent`: a giant oak whose leaves are written as vanilla's own (persistent=false): M18 names its leaves past 6 from a log",
+ "on": "flat",
+ "expect": {
+  "rule": "M18",
+  "part": "f_oak_1"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "f3_u02",
+  "forms": [
+   {
+    "id": "oak",
+    "kind": "giant_tree",
+    "preset": "oak",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 8
+     }
+    },
+    "ext": {
+     "architect_mc:unsafe": {
+      "leafNotPersistent": true
+     }
+    }
+   }
+  ]
+ }
+}

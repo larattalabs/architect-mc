@@ -25,7 +25,7 @@ import { lintFluidState } from '../fluids/body.mjs';
 import { fluidsError } from '../fluids/place.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.38.0';
+export const KIT_VERSION = '0.40.0';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -455,7 +455,7 @@ export async function planRegion(o) {
     const base = new Map();
     let n = 0;
     for (const p of parts) { base.set(p.id, n); n += p.ops.length; }
-    ir.forms = r.forms.map((f) => ({ id: f.id, generator: f.generator, version: f.version, params: f.params, seed: f.seed, bounds: f.bounds, ...(f.baked ? { baked: f.baked } : {}),
+    ir.forms = r.forms.map((f) => ({ id: f.id, generator: f.generator, version: f.version, params: f.params, seed: f.seed, bounds: f.bounds, ...(f.baked ? { baked: f.baked } : {}), ...(f.columns ? { columns: f.columns } : {}),
       ops: Array.from({ length: f.opsTo - f.opsFrom }, (_, k) => base.get(f.part) + f.opsFrom + k) }));
   }
   if (r.floatingDecl.length) ir.floating = r.floatingDecl;

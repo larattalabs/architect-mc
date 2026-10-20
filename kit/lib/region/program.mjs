@@ -29,7 +29,10 @@ import { voxelsSize } from './voxels.mjs';
 import { floatingIsland } from '../forms/floatingIsland.mjs';
 import { iceSpike } from '../forms/iceSpike.mjs';
 import { rockSpire } from '../forms/rockSpire.mjs';
-import { BAKE_OPS, bakeOps } from '../forms/rules.mjs';
+import { BAKE_OPS, bakeCells, bakeOps } from '../forms/rules.mjs';
+import { giantTree } from '../forms/giantTree.mjs';
+import { giantMushroom } from '../forms/giantMushroom.mjs';
+import { lintStates } from '../forms/states.mjs';
 import { VOXEL_CLASSES, VC, classAt } from './volume.mjs';
 import { PASSES, PASS_NAMES } from './passes/index.mjs';
 import { emitDistricts } from './districtsEmit.mjs';
@@ -295,7 +298,11 @@ export class Region {
     const clearTrees = this.lots.filter((l) => l.pad?.edge === 'slope').map((l) => { const m = 1 + Math.max(l.pad.maxCut ?? 0, l.pad.maxFill ?? 0); return [l.box.minX - m, l.box.minZ - m, l.box.maxX + m, l.box.maxZ + m]; });
     // (6c PT) the caller's rects whose logs are no trees (a player's log build: kept out, never felled, so no tree reach)
     for (const b of it.clearTrees ?? []) clearTrees.push([...b]);
-    for (const f of this.forms) if (f.bounds) hard.push([f.bounds.minX, f.bounds.minZ, f.bounds.maxX, f.bounds.maxZ]);
+    // ((6c F3 §3.2) a grown form's column mask, not its bounds: a canopy's columns are hard, a 32-wide canopy does not block its rect)
+    for (const f of this.forms) {
+      if (f.columns) for (let i = 0; i < f.columns.length; i += 3) hard.push([f.columns[i + 1], f.columns[i], f.columns[i + 2], f.columns[i]]);
+      else if (f.bounds) hard.push([f.bounds.minX, f.bounds.minZ, f.bounds.maxX, f.bounds.maxZ]);
+    }
     // (6c S2) a keep set is an obstacle where it keeps a cell: its kept columns, not its whole box (F1's keepNatural over a claim's
     // volume would otherwise block every column of the claim); so for the districts pass's placement, dry runs and routes too
     // (`_unsafe.keepBoxes`: the broken variant, T2's whole-box rule)
@@ -841,6 +848,23 @@ export class Region {
     return gen;
   }
 
+  /**
+   * (6c F3) A `giantTree` (lib/forms/giantTree.mjs) as form part `id`, on the plan ground: always baked, its column mask in the IR's
+   * `forms[]`. Returns the generator's result.
+   */
+  giantTree(id, params, opts = {}) {
+    const gen = giantTree({ ...params, seed: params.seed ?? fnv64(this.ctx.seed, 'giantTree', id).hex }, { groundAt: (x, z) => this.survey.heightAt(x, z) });
+    this.form(id, gen, opts);
+    return gen;
+  }
+
+  /** (6c F3) A `giantMushroom` (lib/forms/giantMushroom.mjs) as form part `id`, on the plan ground (always baked). */
+  giantMushroom(id, params, opts = {}) {
+    const gen = giantMushroom({ ...params, seed: params.seed ?? fnv64(this.ctx.seed, 'giantMushroom', id).hex }, { groundAt: (x, z) => this.survey.heightAt(x, z) });
+    this.form(id, gen, opts);
+    return gen;
+  }
+
   /** (6c F1) A `rockSpire` (lib/forms/rockSpire.mjs) as form part `id`, on the plan ground. Options as `form` (`bake`, `_unsafe`). */
   rockSpire(id, params, { _unsafe, ...opts } = {}) {
     const gen = rockSpire({ ...params, seed: params.seed ?? fnv64(this.ctx.seed, 'rockSpire', id).hex }, { groundAt: (x, z) => this.survey.heightAt(x, z), _unsafe });
@@ -884,6 +908,27 @@ export class Region {
     if (![true, false, 'auto'].includes(bake)) throw new Error(`form ${id}: bake must be true, false or 'auto'`);
     const p = this.part(id, { stage, set });
     const from = p.ops.length;
+    if (gen.cells) {
+      // (6c F3) a generator handing over its own final cells (block states, drift states fixed): always baked into one voxels op; its
+      // 2.5D column mask rides beside its bounds (§3.2: what routes, walls, lots and later forms keep off). Lint STATE first.
+      const lint = lintStates(gen.cells);
+      if (lint) throw new Error(`form ${id}: ${lint}`);
+      const blob = gen.blob ?? `vox_${id}`.slice(0, 32);
+      let baked;
+      if (gen.reuse) {
+        // a copy of a form baked before (mega_bench's forest: a few variants per species, placed by origin)
+        p._push({ op: 'voxels', blob, origin: gen.reuse.origin, rotation: 0, cond: COND.IF_NATURAL, walk: false });
+        baked = { blob, cells: gen.reuse.cells, ops: gen.ops.length, copy: true };
+      } else {
+        const b = bakeCells(gen.cells, blob, { cond: COND.IF_NATURAL });
+        this._sideBlob(blob, 'voxels', b.bytes);
+        p._push(b.op);
+        baked = { blob, cells: b.cells, ops: gen.ops.length };
+      }
+      this.forms.push({ id, generator: gen.generator, version: gen.version, params: gen.params, seed: gen.seed, bounds: gen.bounds, columns: gen.columns, part: id, opsFrom: from, opsTo: p.ops.length, baked });
+      (this.meta.parts[id] ??= {}).kind = 'form';
+      return p;
+    }
     const resolved = [];
     for (const op of gen.ops) {
       if (op.op === 'shape') { const e = shapeError(op.shape); if (e) throw new Error(`form ${id}: ${e}`); }

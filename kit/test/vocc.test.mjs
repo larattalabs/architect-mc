@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { FIX, ROOT, checkPlanVolumes, fixtureLotBlocks, fixtureStyle, flatSurvey, stewardAnchors } from './plan-helpers.mjs';
 import { validatePlan } from '../lib/plan/schema.mjs';
-import { diffCatalogues, planCatalogue, PLAN_API } from '../lib/plan/catalogue.mjs';
+import { diffCatalogues } from '../lib/plan/catalogue.mjs';
 import { irPartExempt, measureLot, measurePalette, readPaletteRule, shareFits, unmeasuredBlocks, swapChain, swapState } from '../lib/plan/palette.mjs';
 import { GROUPS, nearestFamily, resolvePalette } from '../lib/vocab/groups.mjs';
 import { VOCC_DESIGNS, blueprintBlocks } from './fixtures/vocab/vocc-designs.mjs';
@@ -272,11 +272,11 @@ test('a non-required rule\'s answers never block; an upper bound of 0 without a 
 
 // ------------------------------------------------------------------ item 2: the catalogue
 
-test('item 2: catalogue 9 is the golden; its diff from catalogue-hy.json (HY\'s 8) is exactly the one flip, its limits and note folded in', () => {
-  const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
-  assert.deepEqual(planCatalogue(), golden);
+test('item 2: catalogue 9 (archived as catalogue-vocc.json by 6c F3) against catalogue-hy.json (HY\'s 8) is exactly the one flip, its limits and note folded in', () => {
+  // ((6c F3) catalogue 9 is archived as fixtures/plan/catalogue-vocc.json; the golden is F3's catalogue now: forms-f3.test.mjs)
+  const golden = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-vocc.json'), 'utf8'));
   assert.equal(golden.catalogueVersion, 9);
-  assert.equal(golden.api, PLAN_API);
+  assert.equal(golden.api, '1.37.0');
   const hy = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-hy.json'), 'utf8'));
   assert.equal(hy.catalogueVersion, 8);
   const d = diffCatalogues(hy, golden, { pending: [{ part: 'copper_only', block: 'rule.palette' }] });
@@ -285,7 +285,7 @@ test('item 2: catalogue 9 is the golden; its diff from catalogue-hy.json (HY\'s 
   assert.deepEqual([d.added, d.removed, d.retired, d.otherStateChanges, d.untilChanged, d.notesChanged, d.limitsChanged], [[], [], [], [], [], [], []]);
   assert.deepEqual(d.recheck, [{ part: 'copper_only', block: 'rule.palette' }]);
   const e = golden.entries.find((x) => x.id === 'rule.palette');
-  assert.deepEqual(e, { id: 'rule.palette', sinceApi: PLAN_API, schemaVersion: 1, state: 'supported', limits: { groups: ['wood'], share: [0, 1], exempt: ['terrain', 'support'], scope: 32 }, note: 'measured over parts and bound lots; required rules are checked again at realise' });
+  assert.deepEqual(e, { id: 'rule.palette', sinceApi: '1.37.0', schemaVersion: 1, state: 'supported', limits: { groups: ['wood'], share: [0, 1], exempt: ['terrain', 'support'], scope: 32 }, note: 'measured over parts and bound lots; required rules are checked again at realise' });
   for (const x of golden.entries.filter((q) => q.id.startsWith('rule.') && q.id !== 'rule.palette')) assert.equal(x.state, 'reserved', x.id);
   // every other entry as HY's
   const others = (c) => JSON.stringify(c.entries.filter((x) => x.id !== 'rule.palette'));

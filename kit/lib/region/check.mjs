@@ -18,9 +18,10 @@ import { tunnelRules } from './checkTunnels.mjs';
 import { fluidRules } from './checkFluids.mjs';
 // (6c VOC-b) the vocabulary rules: M26 rarity, M27 vocabulary misuse, M20 widened (checkVocab.mjs)
 import { vocabRules } from './checkVocab.mjs';
+import { formRulesVw } from './checkForms.mjs';
 
 
-export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17', 'M20', 'M25', 'M26', 'M27'];
+export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17', 'M20', 'M25', 'M26', 'M27', 'M18', 'M19'];
 /** (6c V) The parts a flat village's components emit (the M1 lot-box rule applies to them only). */
 const VILLAGE_PARTS = /^(square|green|verges|lanes|props_[a-z]+)$/;
 // (6c H) M25 (containment) and M20 (fire, run for lava bodies only) are errors
@@ -294,10 +295,15 @@ export function blockLight(vw) {
 
 // ------------------------------------------------------------------ (6c F1) M3 overhangs, M17 melt, kept cells
 
-/** The parts of generated forms (not floating groups: an island's underside overhangs by design). */
+/**
+ * (6c F3) The grown forms' generators: a canopy's underside, a cap's rim and a stalactite overhang by design, so M3:overhang (F1's
+ * ledge rule) leaves them out; M3's support (no floating cell) still holds them (CONTRACT F3 as built).
+ */
+export const GROWN_GENERATORS = new Set(['giantTree', 'giantMushroom', 'coral', 'roots', 'stalactites']);
+/** The parts of generated forms (not floating groups: an island's underside overhangs by design; not F3's grown forms). */
 function formPartIndexes(ir) {
   const floating = new Set((ir.floating ?? []).flatMap((f) => f.parts));
-  const ids = new Set((ir.forms ?? []).map((f) => f.part ?? f.id).filter((id) => !floating.has(id)));
+  const ids = new Set((ir.forms ?? []).filter((f) => !GROWN_GENERATORS.has(f.generator)).map((f) => f.part ?? f.id).filter((id) => !floating.has(id)));
   return new Set(ir.parts.map((p, i) => (ids.has(p.id) ? i : -1)).filter((i) => i >= 0));
 }
 
@@ -450,13 +456,18 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
     metrics.M3 = sup.metrics;
     if (ir.forms?.length) { const oh = overhangCheck(vw, ir); findings.push(...oh.findings); Object.assign(metrics.M3, oh.metrics); }
   });
+  // ---- (6c F3 §4) M18 leaf decay, M19 dead coral (warnings; checkForms.mjs)
+  if (want.has('M18') || want.has('M19')) time('M18', () => formRulesVw({ vw, ir, want, findings, metrics, finding, partStage }));
 
   // ---- the walk area: reached cells whose floor the region wrote (or walk-marked cells)
   const walkArea = [];
   const reachedArr = graph.reached;
+  // ((6c F3) a grown form's cells are landscape, not a walk: a root's or a trunk's top is no path to light (M5, M6))
+  const grownParts = new Set();
+  for (const f of ir.forms ?? []) if (GROWN_GENERATORS.has(f.generator)) { const i = ir.parts.findIndex((p) => p.id === (f.part ?? f.id)); if (i >= 0) grownParts.add(i); }
   for (let i = 0; i < reachedArr.length; i += 3) {
     const x = reachedArr[i], y = reachedArr[i + 1], z = reachedArr[i + 2];
-    if (vw.flags(x, y - 1, z) & F_WRITTEN) walkArea.push(x, y, z);
+    if (vw.flags(x, y - 1, z) & F_WRITTEN && !(grownParts.size && grownParts.has(vw.partAt(x, y - 1, z)))) walkArea.push(x, y, z);
   }
 
   // ---- M4 fluid containment
