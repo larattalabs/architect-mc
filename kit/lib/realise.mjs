@@ -480,9 +480,22 @@ export function evalTile(ir, key, heights, opts = {}) {
   const [tx, tz] = parseKey(key);
   const cols = asColumns(heights);
   if (cols.resolution !== 1) throw new Error(`evalTile: heights must have resolution 1 (got ${cols.resolution})`);
-  const { stage = null, set = null, countOnly = false, cellOps = false } = opts;
+  const { stage = null, set = null, countOnly = false, writers = false } = opts;
+  const cellOps = opts.cellOps || writers;
   // (6b, the checker) the op index of every emitted cell, in payload order
   let opsOut = cellOps ? new Int32Array(4096) : null, opsN = 0;
+  // (RP, realised provenance) every op an emitted cell's winner overwrote in this tile: buffer index -> [op index...] (oldest first),
+  // per chunk column; then payload cell index -> those ops. Off unless asked: the payload and its sha never change.
+  const track = writers && !countOnly ? new Map() : null;
+  const losers = track ? [] : null; // [cellIndex, [op...]] pairs, in payload order
+  const lose = (i, tag) => {
+    const prev = buf[i];
+    if (prev === 0) return;
+    const pt = prev % OP_SLOTS;
+    if (pt === tag) return;
+    const l = track.get(i);
+    if (l) l.push(pt - 1); else track.set(i, [pt - 1]);
+  };
   if (set !== null && !SETS.includes(set)) throw new Error(`evalTile: set must be terrain or path (got '${set}')`);
   const claim = C.claim;
   const x0 = tx * 64, z0 = tz * 64;
@@ -635,16 +648,16 @@ export function evalTile(ir, key, heights, opts = {}) {
                   R.x = wx; R.z = wz; R.node = node; R.node2 = o.rule.node2; R.lo = node.lo; R.hi = node.hi; R.cols = false;
                   for (let y = a; y <= b; y++, row++) {
                     const v = node.sd(y);
-                    if (v <= 0 && (mask === null || mask(wx, y, wz, MC))) { R.y = y; buf[row * 256 + cell] = tag + pick(wx, y, wz, v, env) * OP_SLOTS; any = true; }
+                    if (v <= 0 && (mask === null || mask(wx, y, wz, MC))) { R.y = y; { if (track) lose(row * 256 + cell, tag); buf[row * 256 + cell] = tag + pick(wx, y, wz, v, env) * OP_SLOTS; } any = true; }
                   }
                 } else if (o.paint || mask) {
                   const paint = o.paint;
                   for (let y = a; y <= b; y++, row++) {
-                    if (node.sd(y) <= 0 && (mask === null || mask(wx, y, wz, MC))) { buf[row * 256 + cell] = paint ? tag + paint(wx, y, wz, col.g) * OP_SLOTS : val; any = true; }
+                    if (node.sd(y) <= 0 && (mask === null || mask(wx, y, wz, MC))) { { if (track) lose(row * 256 + cell, tag); buf[row * 256 + cell] = paint ? tag + paint(wx, y, wz, col.g) * OP_SLOTS : val; } any = true; }
                   }
                 } else {
                   for (let y = a; y <= b; y++, row++) {
-                    if (node.sd(y) <= 0) { buf[row * 256 + cell] = val; any = true; }
+                    if (node.sd(y) <= 0) { { if (track) lose(row * 256 + cell, tag); buf[row * 256 + cell] = val; } any = true; }
                   }
                 }
                 if (any) { if (a - yBase < wLo) wLo = a - yBase; if (b - yBase > wHi) wHi = b - yBase; }
@@ -657,7 +670,7 @@ export function evalTile(ir, key, heights, opts = {}) {
                   const y = list[q];
                   if (y < cMinY || y > cMaxY) { if (y >= cMinY - CLIP_COUNT_MARGIN && y <= cMaxY + CLIP_COUNT_MARGIN) clipped++; continue; }
                   const row = y - yBase;
-                  buf[row * 256 + cell] = tag + list[q + 1] * OP_SLOTS;
+                  { if (track) lose(row * 256 + cell, tag); buf[row * 256 + cell] = tag + list[q + 1] * OP_SLOTS; }
                   if (row < wLo) wLo = row;
                   if (row > wHi) wHi = row;
                 }
@@ -670,7 +683,7 @@ export function evalTile(ir, key, heights, opts = {}) {
                   const y = list[q];
                   if (y < cMinY || y > cMaxY) { if (y >= cMinY - CLIP_COUNT_MARGIN && y <= cMaxY + CLIP_COUNT_MARGIN) clipped++; continue; }
                   const row = y - yBase;
-                  buf[row * 256 + cell] = tag + list[q + 1] * OP_SLOTS;
+                  { if (track) lose(row * 256 + cell, tag); buf[row * 256 + cell] = tag + list[q + 1] * OP_SLOTS; }
                   if (row < wLo) wLo = row;
                   if (row > wHi) wHi = row;
                 }
@@ -693,9 +706,9 @@ export function evalTile(ir, key, heights, opts = {}) {
                 if (pick) { R.x = wx; R.z = wz; R.a = a; R.b = top; R.cols = true; }
                 const val = tag + o.mat * OP_SLOTS;
                 for (let y = a, row = a - yBase; y <= b; y++, row++) {
-                  if (y > top) buf[row * 256 + cell] = tag; // air (material 0)
-                  else if (pick) { R.y = y; buf[row * 256 + cell] = tag + pick(wx, y, wz, y - top, env) * OP_SLOTS; }
-                  else buf[row * 256 + cell] = val;
+                  if (y > top) { if (track) lose(row * 256 + cell, tag); buf[row * 256 + cell] = tag; } // air (material 0)
+                  else if (pick) { R.y = y; { if (track) lose(row * 256 + cell, tag); buf[row * 256 + cell] = tag + pick(wx, y, wz, y - top, env) * OP_SLOTS; } }
+                  else { if (track) lose(row * 256 + cell, tag); buf[row * 256 + cell] = val; }
                 }
                 if (a - yBase < wLo) wLo = a - yBase;
                 if (b - yBase > wHi) wHi = b - yBase;
@@ -720,15 +733,15 @@ export function evalTile(ir, key, heights, opts = {}) {
                     R.x = wx; R.z = wz; R.a = ua; R.b = ub; R.cols = true;
                     for (let y = a, row = a - yBase; y <= b; y++, row++) {
                       if (mask !== null && !mask(wx, y, wz, MC)) continue;
-                      R.y = y; buf[row * 256 + cell] = tag + pick(wx, y, wz, y - ub, env) * OP_SLOTS;
+                      R.y = y; { if (track) lose(row * 256 + cell, tag); buf[row * 256 + cell] = tag + pick(wx, y, wz, y - ub, env) * OP_SLOTS; }
                     }
                   } else if (E[ei + 4] < 0) {
                     const paint = o.paints[-E[ei + 4] - 1];
-                    for (let y = a, row = a - yBase; y <= b; y++, row++) if (mask === null || mask(wx, y, wz, MC)) buf[row * 256 + cell] = tag + paint(wx, y, wz, col.g) * OP_SLOTS;
+                    for (let y = a, row = a - yBase; y <= b; y++, row++) if (mask === null || mask(wx, y, wz, MC)) { if (track) lose(row * 256 + cell, tag); buf[row * 256 + cell] = tag + paint(wx, y, wz, col.g) * OP_SLOTS; }
                   } else {
                     const val = tag + E[ei + 4] * OP_SLOTS;
-                    if (mask === null) for (let y = a, row = a - yBase; y <= b; y++, row++) buf[row * 256 + cell] = val;
-                    else for (let y = a, row = a - yBase; y <= b; y++, row++) if (mask(wx, y, wz, MC)) buf[row * 256 + cell] = val;
+                    if (mask === null) for (let y = a, row = a - yBase; y <= b; y++, row++) { if (track) lose(row * 256 + cell, tag); buf[row * 256 + cell] = val; }
+                    else for (let y = a, row = a - yBase; y <= b; y++, row++) if (mask(wx, y, wz, MC)) { if (track) lose(row * 256 + cell, tag); buf[row * 256 + cell] = val; }
                   }
                   if (a - yBase < wLo) wLo = a - yBase;
                   if (b - yBase > wHi) wHi = b - yBase;
@@ -737,7 +750,7 @@ export function evalTile(ir, key, heights, opts = {}) {
             }
           }
         }
-        if (wHi < 0) continue;
+        if (wHi < 0) { if (track) track.clear(); continue; }
         // scan the chunk's touched sections in ARTL order, then clear them
         const s0 = wLo >> 4, s1 = wHi >> 4;
         for (let s = s0; s <= s1; s++) {
@@ -757,6 +770,10 @@ export function evalTile(ir, key, heights, opts = {}) {
             if (opsOut) {
               if (opsN === opsOut.length) { const g = new Int32Array(opsN * 2); g.set(opsOut); opsOut = g; }
               opsOut[opsN++] = opi;
+            }
+            if (track) {
+              const l = track.get(off + p);
+              if (l) losers.push(count + n, l);
             }
             if (!countOnly) {
               let li = local[m];
@@ -788,10 +805,12 @@ export function evalTile(ir, key, heights, opts = {}) {
           body.len = L;
           for (const m of pal) local[m] = -1;
         }
+        if (track) track.clear();
       }
     }
   } catch (e) {
     BUF.fill(0); // never leave a dirty buffer for the next tile
+    if (track) track.clear();
     throw e;
   }
 
@@ -813,5 +832,71 @@ export function evalTile(ir, key, heights, opts = {}) {
   const payload = w.result();
   const res = { payload, count, sha: sha256Hex(payload), removed, added, minY, maxY, notes };
   if (opsOut) res.cellOps = opsOut.subarray(0, opsN);
+  if (losers) res.cellLosers = losers;
   return res;
+}
+
+/**
+ * (RP, realised provenance) The writers of a tile evaluated with `{writers: true}`, packed as `ARWR` v1 (docs/CONTRACT.md "RP as
+ * built"): which op of which IR part won each cell of the payload, and every op it overwrote in the same tile. Little endian, LEB128
+ * varints.
+ *   "ARWR", u8 1;
+ *   varint nOps; per op: varint byteLen + UTF-8 part id, varint ordinal (the op's index in its IR part's `ops`), varint opIndex (its
+ *     index over the whole IR, IR part order), u8 cond. Ops in ascending opIndex; the table holds every op named below.
+ *   varint nCells (the payload's cell count);
+ *   varint nRuns; per run: varint table index of the winning op, varint run length (in payload cell order; the runs sum to nCells);
+ *   varint nLoserCells; per cell: varint delta of its payload index from the previous one (the first from 0), varint k, k varint
+ *     table indexes, oldest write first (the winner itself never listed).
+ * Pure: the same IR, key, heights and options give the same bytes.
+ */
+export function encodeWriters(ir, res) {
+  if (!res || !res.cellOps) throw new Error('encodeWriters: evaluate with {writers: true}');
+  const C = compileIR(ir);
+  const ops = res.cellOps;
+  const losers = res.cellLosers ?? [];
+  const used = new Set();
+  for (let i = 0; i < ops.length; i++) used.add(ops[i]);
+  const clean = [];
+  for (let i = 0; i < losers.length; i += 2) {
+    const win = ops[losers[i]];
+    const seen = new Set();
+    const l = [];
+    for (const o of losers[i + 1]) if (o !== win && !seen.has(o)) { seen.add(o); l.push(o); used.add(o); }
+    if (l.length) clean.push(losers[i], l);
+  }
+  const table = [...used].sort((a, b) => a - b);
+  const at = new Map(table.map((o, i) => [o, i]));
+  const first = new Map(); // IR part index -> its first op index
+  C.ops.forEach((o) => { if (!first.has(o.part)) first.set(o.part, o.index); });
+  const enc = new TextEncoder();
+  const w = new ByteWriter(1024 + ops.length);
+  w.bytes(enc.encode('ARWR'));
+  w.bytes(Uint8Array.of(1));
+  w.varint(table.length);
+  for (const oi of table) {
+    const o = C.ops[oi];
+    const id = enc.encode(String(C.parts[o.part].id));
+    w.varint(id.length); w.bytes(id);
+    w.varint(oi - first.get(o.part));
+    w.varint(oi);
+    w.bytes(Uint8Array.of(o.cond));
+  }
+  w.varint(ops.length);
+  const runs = [];
+  for (let i = 0; i < ops.length;) {
+    let j = i + 1;
+    while (j < ops.length && ops[j] === ops[i]) j++;
+    runs.push(at.get(ops[i]), j - i);
+    i = j;
+  }
+  w.varint(runs.length / 2);
+  for (const v of runs) w.varint(v);
+  w.varint(clean.length / 2);
+  let prev = 0;
+  for (let i = 0; i < clean.length; i += 2) {
+    w.varint(clean[i] - prev); prev = clean[i];
+    w.varint(clean[i + 1].length);
+    for (const o of clean[i + 1]) w.varint(at.get(o));
+  }
+  return w.result();
 }

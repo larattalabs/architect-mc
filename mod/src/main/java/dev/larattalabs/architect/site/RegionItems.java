@@ -177,7 +177,7 @@ public final class RegionItems {
 		}
 		if (p.check == null) {
 			// (6c H) a fluids-stage tile leaves out the cells of a body its gate did not let through
-			p.check = tileCheck(dev.larattalabs.architect.region.RegionFluids.filter(r, t[1], tile.cells()), r, win);
+			p.check = tileCheck(dev.larattalabs.architect.region.RegionFluids.filter(r, t[1], tile.cells()), r, win).provenance(tile.cells()); // (RP)
 		}
 		TileCheck.Result res = p.check.step(level, deadline);
 		if (res == null) {
@@ -197,6 +197,13 @@ public final class RegionItems {
 		RegionsImpl.tileChecked(t[0], t[1], res.skipped(), res.builds());
 		if (c.cells() == 0) {
 			// nothing to write here (every cell skipped or already so): done without an entry
+			try {
+				RealisedRecords.tile(level, r, t, tile, res, null); // (RP) before the item is marked placed
+			} catch (java.io.IOException e) {
+				Batches.fail(b, i, Reason.OTHER, "the tile's realised record could not be written (" + e.getMessage() + ")");
+				return;
+			}
+			WorldJournal.kill("RP2"); // the record written, the item not yet placed
 			TileStream.release(t[0], t[1], t[2], t[3]);
 			PIPES.remove(b.id + "/" + i.key);
 			Batches.startStage(server, b, i);
@@ -207,7 +214,15 @@ public final class RegionItems {
 		Site.Member member = new Site.Member(b.group, b.id, i.key);
 		try {
 			InfraJob job = InfraPlace.beginTile(level, dev.larattalabs.architect.site.RegionKinds.of(t[2]), c, b.owner, i.ext, member, res, String.join("|",
-				t));
+				t), sid -> {
+					// (RP) the realised record, durable before the PLACING commit is submitted
+					try {
+						RealisedRecords.tile(level, r, t, tile, res, sid);
+					} catch (java.io.IOException e) {
+						throw new Sites.SiteException(Reason.OTHER, "the tile's realised record could not be written (" + e.getMessage() + ")");
+					}
+					WorldJournal.kill("RP1"); // the record written, the PLACING commit not submitted
+				});
 			i.status = QItem.Status.PLACING;
 			i.siteId = job.siteId;
 			i.reason = null;
@@ -389,7 +404,8 @@ public final class RegionItems {
 				} else if (tile != null && tile.phase == TileStream.Phase.DECODED && p.check == null && dev.larattalabs.architect.region.RegionFluids.checkedAhead(r,
 					t[1])) {
 					// its cells sorted and turned into journal values off the server thread now; the world checks run when it is next
-					p.check = tileCheck(dev.larattalabs.architect.region.RegionFluids.filter(r, t[1], tile.cells()), r, window(t[3], r.rec().claim));
+					p.check = tileCheck(dev.larattalabs.architect.region.RegionFluids.filter(r, t[1], tile.cells()), r, window(t[3], r.rec().claim))
+						.provenance(tile.cells()); // (RP)
 				}
 				continue;
 			}

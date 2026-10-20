@@ -452,8 +452,23 @@ public final class InfraPlace {
 	 */
 	static InfraJob beginTile(ServerLevel level, String kind, Check c, @Nullable String owner, @Nullable JsonObject ext, Site.@Nullable Member member,
 		TileCheck.Result r, String tile) throws Sites.SiteException {
+		return beginTile(level, kind, c, owner, ext, member, r, tile, null);
+	}
+
+	/** (RP) Run with the new cell site's id after it is named and before its PLACING commit is submitted. */
+	@FunctionalInterface
+	interface BeforeCommit {
+		void run(String siteId) throws Sites.SiteException;
+	}
+
+	/** {@link #beginTile}; (RP) {@code before} runs with the site id before the PLACING commit (the realised record). */
+	static InfraJob beginTile(ServerLevel level, String kind, Check c, @Nullable String owner, @Nullable JsonObject ext, Site.@Nullable Member member,
+		TileCheck.Result r, String tile, @Nullable BeforeCommit before) throws Sites.SiteException {
 		SiteJournal.requireAvailable();
 		String id = "c" + SiteJournal.store().newCells();
+		if (before != null) {
+			before.run(id);
+		}
 		JsonObject spec = c.spec() == null ? new JsonObject() : c.spec().deepCopy();
 		spec.addProperty("kind", kind);
 		spec.addProperty("policy", Journal.Policy.CELL.name());

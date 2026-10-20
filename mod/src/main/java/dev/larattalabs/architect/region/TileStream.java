@@ -86,6 +86,8 @@ public final class TileStream {
 		/** (6c 0a) a slow tile: its timeout answers so far, and when it is asked again ({@link #CLOCK} ms) */
 		public volatile int slowRound;
 		public volatile long askAgainAt;
+		/** (RP) The kit's writers of the tile (ARWR v1, gunzipped), when the helper sent them; else null. */
+		public volatile byte @Nullable [] writers;
 
 		Tile(String region, String planId, String stage, String set, String key) {
 			this.region = region;
@@ -521,6 +523,7 @@ public final class TileStream {
 		String sha = m.get("sha").getAsString();
 		int count = m.get("count").getAsInt();
 		t.count = count;
+		String wr = m.has("writers") && m.get("writers").isJsonPrimitive() ? m.get("writers").getAsString() : null;
 		// (6c P0) the sha of every realise tile, per region (dev.region.tileShas: a realised region's tiles against its artifact's)
 		if (TILE_SHAS.size() > 200_000) {
 			TILE_SHAS.clear();
@@ -542,6 +545,8 @@ public final class TileStream {
 					throw new IllegalStateException("tile " + tt.key + ": " + p.size() + " cells, the helper said " + count);
 				}
 				tt.frames.clear();
+				// (RP) the writers ride along; unreadable ones are dropped (the record goes without them)
+				tt.writers = wr == null ? null : Realised.gunzip(Base64.getDecoder().decode(wr));
 				return p;
 			} catch (Exception e) {
 				throw new java.util.concurrent.CompletionException(e);

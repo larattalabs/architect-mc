@@ -1085,7 +1085,7 @@ export class Regions {
     for (let seq = 0; seq < n; seq++) {
       if (s.closed || !s.client.open) return;
       const data = res.gz.subarray(seq * MAX_TILE_FRAME_BYTES, (seq + 1) * MAX_TILE_FRAME_BYTES).toString('base64');
-      await sendFlushed(s.client, { type: 'region.tile', ...head, seq, more: seq < n - 1, data, count: res.count, sha: res.sha } as Outbound);
+      await sendFlushed(s.client, { type: 'region.tile', ...head, seq, more: seq < n - 1, data, count: res.count, sha: res.sha, ...(seq === n - 1 && res.writers ? { writers: res.writers.toString('base64') } : {}) } as Outbound);
     }
   }
 
