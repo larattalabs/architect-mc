@@ -521,7 +521,13 @@ export function wetWell(r, well, { stage = 'props', id = null } = {}) {
   const ringY = Math.min(...ring.filter((c) => c[0] !== cx || c[2] !== cz).map((c) => c[1]));
   const y = ringY - 1;
   const block = shellBlock(r.ctx.roles, 'structure');
-  const rec = r.fluidBody([[cx, y, cz]], { id: id ?? `${well.id}_water`.slice(0, 40), kind: 'well', stage, level: y, shellRole: (x, yy, z, where) => (where === 'rim' ? block : block) });
+  // ((6c KC, §5) the water cell is the square's plaza surface: cleared first (its own part), or the source's write (into air or a fluid
+  // only) would leave the square's block in the body's cell, which M25:clear catches)
+  const bid = id ?? `${well.id}_water`.slice(0, 40);
+  const room = r.part(`${bid}_room`.slice(0, 48), { stage });
+  room.columns({ abs: 0 }, { abs: 0 }, [cx, cz, y, y, 0], [null], { cond: 3 });
+  (r.meta.parts[room.id] ??= {}).kind = 'carve';
+  const rec = r.fluidBody([[cx, y, cz]], { id: bid, kind: 'well', stage, level: y, shellRole: (x, yy, z, where) => (where === 'rim' ? block : block) });
   return rec;
 }
 

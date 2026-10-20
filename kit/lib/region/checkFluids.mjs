@@ -116,6 +116,117 @@ function courseRules({ bodies, sim, world, findings, finding }) {
   });
 }
 
+/** (6c KC, §5) The hard sets of a body, in the order a finding names them (the weir rides in `lining`). */
+export const CLEAR_SETS = Object.freeze(['cells', 'ice', 'shell', 'lining', 'grate', 'spill']);
+
+/**
+ * (6c KC, §5, S-KC-2) The cells exempt from `M25:clear`'s watch clause, by name: key `x,y,z` -> {body, wall, why}. One kind only:
+ * a registered water gate's lintel and frame (HY-c): the cells of its wall over the crossing's columns, from the lintel up, in the
+ * reach's watch set (meta walls[].waterGates). Nothing in a hard set is ever exempt.
+ */
+export function clearExempt(meta) {
+  const out = [];
+  for (const w of meta?.walls ?? []) for (const g of w.waterGates ?? []) out.push({ wall: w.part ?? w.id, body: g.body, cols: new Set((g.cells ?? []).map(([x, z]) => `${x},${z}`)), lintel: g.lintel });
+  return out;
+}
+
+/**
+ * (6c KC, §1, §5) `M25:clear`: a body's cells are its own. Over the final virtual world, for every body of the IR:
+ *   hard   a cell of its cells, ice, shell, lining (the weir), grate or spill whose last writer is a part other than the body's own; a
+ *          water or ice cell holding any written block that is not its fluid or ice, whoever wrote it
+ *   watch  (strict, S-KC-2) a cell of its watch set (computed at emit, over the draft world) written by any other part, whatever the
+ *          block; the registered water gate's lintel and frame are the one named exception (clearExempt)
+ * Ownership: in a plan's IR (meta.planCheck.partOf) the writer's plan part against the body's `part`; a body with no `part`, or a
+ * writer the plan does not map, is "owner unknown" (a finding, never a pass). In a program's IR (no planCheck) the writer's IR part
+ * against the body's own: its op's part, or a part named `<part>_...` (`<part>` the op's `part`, else its IR part).
+ * Returns {findings: [{body, part, irPart, set, writer, writerPart, why, cells (<= 16), count}], counts: {hard, watch, exempt}}.
+ */
+export function clearScan({ ir, vw, meta, bodies = bodiesOf(ir) }) {
+  const P = vw.pal;
+  const partOf = meta?.planCheck && !meta.planCheck.malformed ? (meta.planCheck.partOf ?? {}) : null;
+  const exempt = clearExempt(meta);
+  const counts = { hard: 0, watch: 0, exempt: 0 };
+  const findings = [];
+  // ((HY) joined bodies share their meeting cells: a course's spill lands in the body it joins (that body's own parts write there), an
+  // overflow's outlet is the feeding body's: the parts of every body linked to this one by a plan join or `after`, either way, are its
+  // partners)
+  const byId = new Map(bodies.map((b) => [b.id, b]));
+  const links = new Map(bodies.map((b) => [b.id, new Set()]));
+  const link = (a, c) => { if (byId.has(a) && byId.has(c) && a !== c) { links.get(a).add(c); links.get(c).add(a); } };
+  for (const b of bodies) { for (const q of b.planJoins ?? []) link(b.id, q.body); for (const a of b.after ?? []) link(b.id, a); }
+  // (and a body whose spill falls into or lies beside another body's cells: a spout over its basin)
+  const cellBody = new Map();
+  for (const b of bodies) for (const c of b.cells) cellBody.set(k3(...c), b.id);
+  for (const b of bodies) for (const [x, y, z] of b.spill ?? []) for (const [dx, dy, dz] of [[0, 0, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]]) {
+    const o = cellBody.get(k3(x + dx, y + dy, z + dz));
+    if (o && o !== b.id) link(b.id, o);
+  }
+  // (a program's IR: a body's root is its op's part, else its course's (meta.courses), else the shortest IR part of the bodies its own IR
+  // part is named under (a fountain's `w_x` for its spout `w_x_spout`); a part named `<root>_...` is the body's)
+  const courseOf = new Map();
+  for (const c of meta?.courses ?? []) for (const id of c.bodies ?? []) courseOf.set(id, c.part ?? c.id);
+  const rootOf = (b) => b.part ?? courseOf.get(b.id) ?? bodies.filter((q) => b.irPart === q.irPart || String(b.irPart).startsWith(`${q.irPart}_`)).map((q) => q.irPart).sort((a, c) => a.length - c.length)[0] ?? b.irPart;
+  for (const b of bodies) {
+    const partners = [b, ...[...links.get(b.id)].map((id) => byId.get(id))];
+    const own = (wid) => {
+      if (partners.some((q) => wid === q.irPart)) return { own: true };
+      if (partOf) {
+        if (!b.part) return { own: false, why: 'owner unknown' };
+        const wp = partOf[wid];
+        if (wp === undefined || wp === null) return { own: false, why: 'owner unknown', writerPart: null };
+        return partners.some((q) => q.part && wp === q.part) ? { own: true } : { own: false, why: "another part's", writerPart: wp };
+      }
+      return partners.some((q) => wid === rootOf(q) || String(wid).startsWith(`${rootOf(q)}_`)) ? { own: true } : { own: false, why: "another part's", writerPart: null };
+    };
+    const groups = new Map();
+    const hit = (set, c, wid, why, writerPart) => {
+      const k = `${set}|${wid}|${why}`;
+      let g = groups.get(k);
+      if (!g) { g = { body: b.id, part: b.part, irPart: b.irPart, set, writer: wid, writerPart: writerPart ?? null, why, cells: [], count: 0 }; groups.set(k, g); }
+      g.count++;
+      if (g.cells.length < 16) g.cells.push(c);
+    };
+    const hard = new Set();
+    const fluidCells = new Set([...b.cells, ...b.ice].map((c) => k3(...c)));
+    const grate = new Set(b.grate.map((c) => k3(...c)));
+    for (const set of CLEAR_SETS) {
+      for (const c of b[set] ?? []) {
+        const kk = k3(...c);
+        if (hard.has(kk)) continue;
+        hard.add(kk);
+        const [x, y, z] = c;
+        if (!(vw.flags(x, y, z) & F_WRITTEN)) continue;
+        const pi = vw.partAt(x, y, z);
+        const wid = pi >= 0 ? ir.parts[pi]?.id ?? null : null;
+        const o = own(wid);
+        if (!o.own) { hit(set, c, wid, o.why, o.writerPart); counts.hard++; continue; }
+        // a water or ice cell holding a written block that is not its fluid or ice (whoever wrote it); a grate cell holds its bars
+        if (fluidCells.has(kk) && !grate.has(kk)) {
+          const i = vw.get(x, y, z), st = P.states[i] ?? '';
+          const ok = b.fluid === 'lava' ? P.lava[i] : (P.water[i] || P.fluid[i] || /^minecraft:(ice|packed_ice|blue_ice)$/.test(st));
+          if (!ok) { hit(set, c, wid, `holds ${st}`, null); counts.hard++; }
+        }
+      }
+    }
+    for (const c of b.watch) {
+      const kk = k3(...c);
+      if (hard.has(kk)) continue;
+      const [x, y, z] = c;
+      if (!(vw.flags(x, y, z) & F_WRITTEN)) continue;
+      const pi = vw.partAt(x, y, z);
+      const wid = pi >= 0 ? ir.parts[pi]?.id ?? null : null;
+      const o = own(wid);
+      if (o.own) continue;
+      const ex = exempt.find((e) => e.body === b.id && e.cols.has(`${x},${z}`) && y >= e.lintel && (partOf ? partOf[wid] === e.wall : true));
+      if (ex) { counts.exempt++; continue; }
+      hit('watch', c, wid, o.why, o.writerPart);
+      counts.watch++;
+    }
+    findings.push(...groups.values());
+  }
+  return { findings, counts };
+}
+
 /**
  * The fluid rules. `args`: check.mjs's ({ir, vw, meta, volumes (decoded, by name), want, findings, metrics, partStage, finding}).
  * Adds findings; fills metrics.M25 ({bodies: [{id, cells, shell, spill, joins, watch, settleTicks, predicted}], wet}) and metrics.M20.
@@ -149,6 +260,7 @@ export function fluidRules({ ir, vw, meta, vols, want, findings, metrics, findin
   const fluidsStage = ir.stages.indexOf('fluids');
   const stageOfPart = (pi) => (pi < 0 ? -1 : ir.stages.indexOf(ir.parts[pi]?.stage));
   const planPartOf = (pi) => (pi < 0 ? null : meta?.planCheck?.partOf?.[ir.parts[pi]?.id] ?? null);
+  const planned = !!(meta?.planCheck && !meta.planCheck.malformed && meta.planCheck.partOf);
   const shellCheck = (x, y, z, b) => {
     if (!(vw.flags(x, y, z) & F_WRITTEN)) return 'not written';
     const pi = vw.partAt(x, y, z);
@@ -158,6 +270,9 @@ export function fluidRules({ ir, vw, meta, vols, want, findings, metrics, findin
     if (P.gravity[i]) return 'a gravity block';
     const own = b.part ? planPartOf(pi) : null;
     if (b.part && own && own !== b.part) return "another part's";
+    // ((6c KC, §5) in a plan's IR a missing part id is a finding, never a pass: a body with no part, or a writer the plan does not map
+    // (its own fluid op aside))
+    if (planned && (!b.part || (!own && ir.parts[pi]?.id !== b.irPart))) return 'owner unknown';
     return null;
   };
   const surface = (x, y, z) => { const a = vw.get(x, y + 1, z); return !P.fs[a] && !P.fluid[a] && !P.water[a]; };
@@ -169,8 +284,8 @@ export function fluidRules({ ir, vw, meta, vols, want, findings, metrics, findin
   const world = { at: (x, y, z) => kindOf(P, vw.get(x, y, z)), keep, shell: shellCheck, surface, exit, solid: (x, y, z) => P.solid[vw.get(x, y, z)] };
   // ((6c HY) a course's lining and weir stand with its shell: M25:shell and the single breach cover them; its plan joins are declared)
   const sim = simulate(world, bodies.map((b) => (b.course
-    ? { id: b.id, part: b.part, fluid: b.fluid, level: b.level, cells: b.cells, shell: [...b.shell, ...b.lining], spill: b.spill, joins: [...b.joins, ...b.planJoins.flatMap((q) => q.cells)], spillLands: b.planJoins.length > 0 }
-    : { id: b.id, part: b.part, fluid: b.fluid, level: b.level, cells: b.cells, shell: b.shell, spill: b.spill, joins: b.joins })), { breach: true });
+    ? { id: b.id, part: b.part, irPart: b.irPart, fluid: b.fluid, level: b.level, cells: b.cells, shell: [...b.shell, ...b.lining], spill: b.spill, joins: [...b.joins, ...b.planJoins.flatMap((q) => q.cells)], spillLands: b.planJoins.length > 0 }
+    : { id: b.id, part: b.part, irPart: b.irPart, fluid: b.fluid, level: b.level, cells: b.cells, shell: b.shell, spill: b.spill, joins: b.joins })), { breach: true });
   const per = [];
   if (want.has('M25')) {
     for (const f of sim.findings) findings.push(finding(f.rule, bodies.find((b) => b.id === f.body)?.irPart ?? null, 'fluids', f.count, f.sample, `body ${f.body}: ${f.message}`));
@@ -181,6 +296,11 @@ export function fluidRules({ ir, vw, meta, vols, want, findings, metrics, findin
       if (miss.length) findings.push(finding('M25:shell', b.irPart, 'fluids', miss.length, miss, `body ${b.id}: no volume: ${miss.length}+ cell(s) of its cells and shell outside every frozen volume the plan read (a body is checked against the frozen world, never a 2.5D guess)`));
     }
     if (bodies.some((b) => b.course)) courseRules({ bodies, sim, world, P, vw, findings, finding });
+  }
+  // ((6c KC, §5) M25:clear: a body's cells are its own (an error); counts in metrics.M25.clear)
+  const clear = clearScan({ ir, vw, meta, bodies });
+  if (want.has('M25')) for (const q of clear.findings) {
+    findings.push(finding('M25:clear', q.writer, 'fluids', q.count, q.cells, `body ${q.body}${q.part ? ` (part ${q.part})` : ''}: ${q.count} cell(s) of its ${q.set} written by ${q.writer ?? 'an unknown part'}${q.writerPart ? ` (plan part ${q.writerPart})` : ''}: ${q.why}`));
   }
   bodies.forEach((b, i) => {
     const s = sim.bodies[i];
@@ -210,7 +330,7 @@ export function fluidRules({ ir, vw, meta, vols, want, findings, metrics, findin
     }
     if (want.has('M25') && wetBad.length) findings.push(finding('M25:wet', null, null, wetBad.length, wetBad, `${wetBad.length} wet write cell(s): ${[...wetWhy].map(([k, n]) => `${k} ${n}`).join(', ')}`));
   }
-  metrics.M25 = { bodies: per, wet: { records: wet.length, cells: wetCells, bad: wetBad.length } };
+  metrics.M25 = { bodies: per, wet: { records: wet.length, cells: wetCells, bad: wetBad.length }, ...(bodies.length ? { clear: clear.counts } : {}) };
   // ---- M20 fire: no flammable block within the fire reach of exposed lava (an error for lava bodies)
   const lavaBodies = bodies.filter((b) => b.fluid === 'lava');
   if (lavaBodies.length) {
