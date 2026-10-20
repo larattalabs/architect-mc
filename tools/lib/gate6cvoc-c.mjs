@@ -331,6 +331,17 @@ const ingame = [{
       const pre = await L.call('dev.vocc.checkPalette', { sha: k65.c.check.artifactSha, lotEntries: lots });
       out.v65preOak = pre;
       check(pre.paletteOk === true && pre.rules?.[0]?.fits === false && pre.rules[0].required === false, `item 5 (v65): the pre-check with every lot bound to the oak cabin: the non-required no_wood measures ${pre.rules?.[0]?.measured} (outside [0, 0]) but the check is ok: a non-required rule never refuses`, pre);
+      // a non-required rule never refuses: realised with every lot bound to the oak cabin (wood in the lots), its ext row records the miss
+      const oakRun = await realise(ctx, k65.c.check.artifactSha, lots);
+      out.v65oak = { ...oakRun, record: undefined };
+      if (oakRun.region) {
+        const ext = await L.call('dev.vocc.regionPalette', { region: oakRun.region });
+        out.v65oakExt = ext;
+        check(oakRun.state === 'PLACED' && ext.palette?.[0]?.rule === 'no_wood' && ext.palette[0].fits === false && ext.palette[0].measured > 0, `item 5 (v65): realiseApproved with every lot bound to the oak cabin: ${oakRun.state} (the non-required no_wood never refuses); its ext row records measured ${ext.palette?.[0]?.measured} over ${ext.palette?.[0]?.cells} cells, fits ${ext.palette?.[0]?.fits}`, { oakRun: out.v65oak, ext });
+        const rm0 = await removeRegion(ctx, oakRun.region);
+        const d0 = await diffSnap(ctx, s);
+        check(rm0.removed && d0.mismatches === 0, `item 5 (v65, oak lots): Regions.remove restores the box exactly: E-flat ${d0.mismatches}`, (d0.list ?? []).slice(0, 12));
+      } else check(false, `item 5 (v65): realiseApproved with oak lots refused (${oakRun.reason}: ${oakRun.refused}): a non-required rule must never refuse`);
       const rr = await realise(ctx, k65.c.check.artifactSha, Object.fromEntries(Object.keys(lots).map((l) => [l, 'vocc_copper_cabin'])));
       out.v65realise = { ...rr, record: undefined };
       check(rr.state === 'PLACED', `item 5 (v65): realiseApproved with its lots bound to the copper cabin: PLACED (${rr.state ?? `refused ${rr.reason}: ${rr.refused}`})`, out.v65realise);
