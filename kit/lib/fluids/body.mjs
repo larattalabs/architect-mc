@@ -259,6 +259,8 @@ function cellsOf(list, what, claim) {
  *   [[x, y, z]] (body cells written as GRATE_STATE), overflow: [{cells: [[x, y, z]] (side shell cells at the surface opened as
  *   outlets), lining: [[x, y, z]] (the spillway's lining, this body's own), into: {body, cells} (the course reach it falls into)}]
  *   (hooks.mjs overflowsOn(K, part): a course registered them on this part), raised: true (the volume grows 9: an overflow head),
+ *   volumeBox: {minX, minY, minZ, maxX, maxY, maxZ} (the batch: a frozen volume shared with other bodies, asked when it holds this
+ *   body's own grown box, else the own box is),
  *   _unsafe.noLiningCell: true | [x, y, z] (that lining cell left unwritten, still declared), _unsafe.after: [ids] (the op's `after`
  *   as given, the dependency order broken: M25:order; in game the head is written first).
  * Returns the body record: {id, part, kind, fluid, level, cells, shell, spill, joins, watch, ice, predicted, settleTicks, path} (HY:
@@ -345,7 +347,11 @@ export function fluidBody(r, cellsIn, opts = {}) {
   // incomplete VOLUME)
   const raised = isRaised(r.ctx.survey, cells, own) || opts.raised === true;
   const grow = raised ? 9 : 2;
-  const vbox = { minX: box.minX - grow, minY: box.minY - grow, minZ: box.minZ - grow, maxX: box.maxX + grow, maxY: box.maxY + grow, maxZ: box.maxZ + grow };
+  let vbox = { minX: box.minX - grow, minY: box.minY - grow, minZ: box.minZ - grow, maxX: box.maxX + grow, maxY: box.maxY + grow, maxZ: box.maxZ + grow };
+  // ((6c HY, the batch) opts.volumeBox: a box shared by several bodies (a course's reaches: one frozen volume per course, so a plan of
+  // several courses stays under the plan's 16 volumes); asked instead of the body's own only when it holds the body's own box)
+  const vb = opts.volumeBox;
+  if (vb && vb.minX <= vbox.minX && vb.minY <= vbox.minY && vb.minZ <= vbox.minZ && vb.maxX >= vbox.maxX && vb.maxY >= vbox.maxY && vb.maxZ >= vbox.maxZ) vbox = { minX: vb.minX, minY: vb.minY, minZ: vb.minZ, maxX: vb.maxX, maxY: vb.maxY, maxZ: vb.maxZ };
   const vcells = (vbox.maxX - vbox.minX + 1) * (vbox.maxY - vbox.minY + 1) * (vbox.maxZ - vbox.minZ + 1);
   let volume = null, volumeState = 'off';
   if (opts.volume !== false) {

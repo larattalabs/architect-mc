@@ -33,7 +33,7 @@
 // Every shell and lining cell is the first block of its chain that differs from what stands there (H-a's reading), so the realise writes
 // it and the body owns it.
 import { _bindCourse } from '../region/program.mjs';
-import { reachId, shellOf } from './body.mjs';
+import { reachId, shellOf, isRaised, VOLUME_CAP } from './body.mjs';
 import { profileOf, PROFILE } from './profile.mjs';
 import { FLAG_WATER, FLAG_LAVA } from '../region/pack.mjs';
 import { VC, classAt } from '../region/volume.mjs';
@@ -592,11 +592,26 @@ export function layCourse(r, geo, o) {
     (r.meta.parts[bp.id] ??= {}).kind = 'add';
     notes.push(`raised banks: ${geo.banks.length} cell(s) of fill (the reach stands over a dip of at most ${o.fill ?? COURSE.fill})`);
   }
+  // (the batch, HY-b's item 2 of "for the batch") one frozen volume per course: the union of its reaches' own volume boxes (each reach's
+  // cells, shell and lining grown by 2, by 9 when raised, as r.fluidBody grows its own), shared by every reach's guard; a union past the
+  // per-part cap (VOLUME_CAP) leaves each reach its own box, as before
+  const vbox = { minX: Infinity, minY: Infinity, minZ: Infinity, maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity };
+  for (const R of geo.reaches) {
+    const ov = R.overflow ?? [];
+    const pts = [...R.cells, ...shellOf(R.cells, { open: [...R.outlets, ...R.exits, ...ov.flatMap((q) => q.cells ?? [])] }), ...R.lining, ...R.weir, ...ov.flatMap((q) => q.lining ?? [])];
+    const g = isRaised(r.ctx.survey, R.cells) || R.raised ? 9 : 2;
+    for (const [x, y, z] of pts) {
+      vbox.minX = Math.min(vbox.minX, x - g); vbox.minY = Math.min(vbox.minY, y - g); vbox.minZ = Math.min(vbox.minZ, z - g);
+      vbox.maxX = Math.max(vbox.maxX, x + g); vbox.maxY = Math.max(vbox.maxY, y + g); vbox.maxZ = Math.max(vbox.maxZ, z + g);
+    }
+  }
+  const shared = geo.reaches.length > 1 && (vbox.maxX - vbox.minX + 1) * (vbox.maxY - vbox.minY + 1) * (vbox.maxZ - vbox.minZ + 1) <= VOLUME_CAP ? vbox : null;
   const bodies = [];
   for (const R of [...geo.reaches].reverse()) {
     const exits = R.exits;
     const overflow = R.overflow ?? [];
     const rec = r.fluidBody(R.cells, {
+      ...(shared ? { volumeBox: shared } : {}),
       id: R.id, part: o.part ?? null, kind: o.kind ?? 'course', stage, level: R.level, shellRole, outlets: [...R.outlets, ...exits],
       lining: R.lining, weir: R.weir, joins: [...R.joins, ...R.planJoins], solid: R.solid, ice: R.ice.length ? R.ice : null,
       ...(R.grate?.length ? { grate: R.grate } : {}), ...(overflow.length ? { overflow } : {}), ...(R.raised ? { raised: true } : {}),

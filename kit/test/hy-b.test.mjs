@@ -125,3 +125,38 @@ test('hydro_demo (r.course over sculpted terraces): a brook through two falls an
   const rep = checkRegion({ ir: a.ir, survey: sv.bytes, blobs: a.blobs, volumes: a.volumes.map((v) => v.decoded), meta: a.meta });
   assert.deepEqual((rep.findings ?? []).filter((x) => /^M25/.test(x.rule)).map((x) => [x.rule, x.part, x.message]), []);
 });
+
+test('the batch: one frozen volume per course (the union of its reaches\' boxes, shared by their guards): 3 brooks of 6 reaches each READY in 3 volumes, not 18', async () => {
+  // six terraces 3 apart, 24 wide, down to the plain; a brook down each third of the claim
+  const ys = [79, 76, 73, 70, 67];
+  const bands = ys.map((y, i) => ({ x0: 1000 + i * 24, x1: 1023 + i * 24, z0: 2000, z1: 2159, y }));
+  const anchors = {}, connectors = [];
+  [2030, 2080, 2130].forEach((z, j) => {
+    anchors[`s${j}`] = [1012, 79, z]; anchors[`p${j}`] = [1200, 64, z];
+    connectors.push({ id: `brook${j}`, kind: 'channel', from: { anchor: `s${j}` }, to: { anchor: `p${j}` } });
+  });
+  const f = { name: 'vol3', terrain: { W: 240, D: 160, x0: 1000, z0: 2000, y: 64, bands }, anchors, volume: {}, plan: { schemaVersion: 'plan/0', planId: 'hy_vol3', connectors } };
+  const r = await run(f);
+  assert.equal(r.check.overall, 'READY', JSON.stringify(r.check.parts.map((p) => [p.part, p.class, p.reasons])));
+  const courses = r.res.meta.courses;
+  assert.deepEqual(courses.map((c) => c.bodies.length), [6, 6, 6], 'each brook 6 reaches');
+  // the volumes asked: one per course, every one with the fluid layer, at most 16 (the sidecar's region.plan schema), within the caps
+  assert.equal(r.res.needVolumes.length, 3, JSON.stringify(r.res.needVolumes));
+  assert.ok(r.res.needVolumes.every((v) => v.fluids));
+  const cellsOf = (b) => (b.maxX - b.minX + 1) * (b.maxY - b.minY + 1) * (b.maxZ - b.minZ + 1);
+  assert.ok(r.res.needVolumes.every((v) => cellsOf(v) <= 4_000_000), 'each within the per-part cap');
+  assert.ok(r.res.needVolumes.reduce((a, v) => a + cellsOf(v), 0) <= 16_000_000, 'the plan within the per-plan cap');
+  // one guard per reach (ARTIFACT_STALE names the reach), each reach of a course on its course's volume, every guard cell inside its box
+  const guards = r.artifact.guards;
+  assert.equal(guards.length, 18);
+  for (const c of courses) {
+    const gs = guards.filter((g) => g.part === c.part);
+    assert.deepEqual(gs.map((g) => g.body).sort(), [...c.bodies].sort(), c.part);
+    assert.equal(new Set(gs.map((g) => g.volume.sha)).size, 1, `${c.part}: its reaches share one volume`);
+    for (const g of gs) {
+      const [x0, y0, z0, x1, y1, z1] = g.volume.box;
+      for (let i = 0; i < g.runs.length; i += 4) assert.ok(g.runs[i] >= x0 && g.runs[i] <= x1 && g.runs[i + 1] >= z0 && g.runs[i + 1] <= z1 && g.runs[i + 2] >= y0 && g.runs[i + 3] <= y1, `${g.body}: guard run ${g.runs.slice(i, i + 4)} inside ${g.volume.box}`);
+    }
+  }
+  assert.equal(new Set(guards.map((g) => g.volume.sha)).size, 3);
+});
