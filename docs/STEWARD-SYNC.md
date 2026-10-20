@@ -48,7 +48,12 @@ release and after each sync. Contracts and as-builts stay in `docs/CONTRACT.md`;
 6. D3, districts beside a standing region town (Steward round 11: D-S1 join inside the town's claim to its street network,
    D-S3 land taken in the view ext, D-S4 dry beside check). Contract drafting; builds after FL merges. D-S2 (grow a district) is
    with 6d.
-7. The 6c close-out, then 7a-7c.
+7. The 6c close-out.
+8. 7a, the connector set (drafted 2026-10-20, in review): foundation, then batches 7a-1 (CL, K2, CW), 7a-2 (RK, LF, SA; LF
+   RC), 7a-3 (K3, GJ, FB; RC). Carts and rails are re-reserved until CR.
+9. 6d (revisions, growth incl. D-S2, follow-the-source, land change, adopt): drafted, RV being revised after a GPT-6.1 review,
+   then Steward review. Lands after 7a, as agreed 2026-10-09.
+10. 7b, 7c.
 
 ### Open asks either way
 - None blocking.
