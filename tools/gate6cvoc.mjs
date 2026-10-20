@@ -16,6 +16,8 @@
 //     ingame    (voc-ingame)           VOC-b's item 8 (v50 and v51 through checkPlan and realiseApproved)
 //     natural   (voc-natural)          VOC-b's item 9 (v50n; the drift probe)
 //     look      (6cvoc-look)           VOC-b's item 15 (the look, client, recorded not judged)
+//     cunit     (vocc-unit)            VOC-c's offline items (tools/lib/gate6cvoc-c.mjs): 1-4, 7-9
+//     cingame   (vocc-ingame)          VOC-c's in-game items (headless): 5, 6, the pre-check (S-VOCc-2), the delta re-judge (S-VOCc-3)
 //     report                            REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate6c-voc/<step>.json in the main checkout (GATE6CVOC_OUT overrides), all.log, REPORT.md, spend.json.
@@ -34,6 +36,8 @@ const L = await import('./lib/run6b.mjs');
 const { OUT, check, connect, log, results, root, state, startClient, stopClient } = L;
 const A = await import('./lib/gate6cvoc-a.mjs');
 const B = await import('./lib/gate6cvoc-b.mjs');
+// (6c VOC-c) rule.palette measured: its own steps, cunit and cingame
+const C = await import('./lib/gate6cvoc-c.mjs');
 
 L.refuseKeys();
 const KIT = path.join(root, 'kit');
@@ -44,7 +48,7 @@ const json = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
 const ctx = { L, OUT, KIT, imp, json, root, check, log };
 
 /** The step names (frozen with voc/core): the driver step -> its gate-chains.json step. */
-export const STEPS = Object.freeze({ unit: 'voc-unit', registry: 'voc-registry', probe: 'voc-probe', survival: 'voc-survival', ingame: 'voc-ingame', natural: 'voc-natural', look: '6cvoc-look' });
+export const STEPS = Object.freeze({ unit: 'voc-unit', registry: 'voc-registry', probe: 'voc-probe', survival: 'voc-survival', ingame: 'voc-ingame', natural: 'voc-natural', look: '6cvoc-look', cunit: 'vocc-unit', cingame: 'vocc-ingame' });
 
 const steps = {};
 async function run(name) {
@@ -98,6 +102,17 @@ steps.base = async () => {
 };
 
 steps.unit = async () => { const r = await items('unit'); spendZero(); return r; };
+// (6c VOC-c) its items only (no VOC-a/VOC-b item runs under these steps)
+async function itemsC(step) {
+  const out = {};
+  for (const it of C.items[step] ?? []) {
+    log(`-- ${it.name}`);
+    out[it.name] = await it.run(ctx);
+  }
+  return out;
+}
+steps.cunit = async () => { const r = await itemsC('vocc-unit'); spendZero(); return r; };
+steps.cingame = async () => { await ensure(); const r = await itemsC('vocc-ingame'); spendZero(); return r; };
 for (const s of ['registry', 'probe', 'survival', 'ingame', 'natural', 'look']) {
   steps[s] = async () => { await ensure(); const r = await items(s); spendZero(); return r; };
 }

@@ -843,7 +843,7 @@
     },
     "rule.palette": {
       "type": "object", "required": ["id", "kind"], "additionalProperties": false,
-      "description": "(VOC-c) A block family's share of the measured cells (written, not air, not a fluid source, not a common natural block) of the parts in scope and the lots of the zones in scope (from their bound entries), exempting the parts written by terrain ops and the pads (exempt, default both). family: a vocab/1 family or group (groups: wood). share [min, max] in 0..1, default [1, 1]: 'only X' is [1, 1], 'no X' is [0, 0] (the plan is re-planned with X swapped for the next block of its material chain). family, share and exempt are also read from params when the top level leaves them out; other params keys are noted, not read. A required rule over lots without an entry is verified at realiseApproved (PALETTE).",
+      "description": "(VOC-c) A family's share of the measured cells (written, not air, fluid or common natural) of the parts in scope and their zones' bound lots, less terrain and support (exempt, default both). family: a vocab/1 family or group (wood). share [min, max], default [1, 1]: only X is [1, 1], no X is [0, 0] (re-planned, X swapped along its material chain). Read from params too. A required rule over lots without an entry is checked at realiseApproved (PALETTE).",
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "kind": { "const": "palette" },

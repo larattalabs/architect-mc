@@ -138,3 +138,18 @@ export async function checkPlanVolumes(plan, { volume = {}, ...o } = {}) {
   const second = await checkPlanLocal(plan, { ...o, volumes: vols });
   return { ...second, volumes: vols, first, asked: need };
 }
+
+/** (6c VOC) A fixture's style: a scenario bible's name (scenarios/bibles/<name>.json), or an inline bible, or null. */
+export function fixtureStyle(fx) {
+  return typeof fx.style === 'string' ? JSON.parse(fs.readFileSync(path.join(ROOT, 'scenarios', 'bibles', `${fx.style}.json`), 'utf8')) : fx.style ?? null;
+}
+
+/**
+ * (6c VOC-c) A fixture's `lotDesigns` ({lot: design id}, kit/test/fixtures/vocab/vocc-designs.mjs) as the check's `lotBlocks`: each
+ * design's block histogram, as the mod reads the bound entry's template. Null without any.
+ */
+export async function fixtureLotBlocks(fx) {
+  if (!fx.lotDesigns) return null;
+  const { VOCC_DESIGNS, blueprintBlocks } = await import('./fixtures/vocab/vocc-designs.mjs');
+  return Object.fromEntries(Object.entries(fx.lotDesigns).map(([lot, id]) => [lot, blueprintBlocks(VOCC_DESIGNS[id]())]));
+}
