@@ -353,32 +353,30 @@ steps.forest = async () => {
   return out;
 };
 
-/** The axis-run share (F1's organic read): of a form's boundary cells (a face neighbour empty), those on a straight run of 6+ along an axis. */
+/** The organic read (F1's, N-F1-1, recorded): tools/lib/scenario-metrics.mjs axisRunShare per generator over grove_demo's and v77's plans. */
 async function organicRead() {
-  const T = await imp('lib/forms/giantTree.mjs');
-  const M = await imp('lib/forms/giantMushroom.mjs');
+  const M = await import('./lib/scenario-metrics.mjs');
+  const H = await import(pathToFileURL(path.join(KIT, 'test', 'plan-helpers.mjs')).href);
+  const { planRegion } = await imp('lib/region/plan.mjs');
+  const { buildVirtual } = await imp('lib/region/vworld.mjs');
   const out = {};
-  const share = (cells) => {
-    let b = 0, run = 0;
-    const has = (x, y, z) => cells.has(`${x},${y},${z}`);
-    for (const k of cells.keys()) {
-      const [x, y, z] = k.split(',').map(Number);
-      if (has(x + 1, y, z) && has(x - 1, y, z) && has(x, y + 1, z) && has(x, y - 1, z) && has(x, y, z + 1) && has(x, y, z - 1)) continue;
-      b++;
-      for (const [dx, dy, dz] of [[1, 0, 0], [0, 1, 0], [0, 0, 1]]) {
-        let n = 1;
-        for (let s = 1; s < 6 && has(x + dx * s, y + dy * s, z + dz * s); s++) n++;
-        for (let s = 1; s < 6 && has(x - dx * s, y - dy * s, z - dz * s); s++) n++;
-        if (n >= 6) { run++; break; }
-      }
+  const s = H.flatSurvey({ W: 192, D: 192, x0: 3392, z0: -1536 });
+  const plans = [await planRegion({ programFile: path.join(KIT, 'regions', 'grove_demo.mjs'), params: {}, survey: s.bytes, claim: s.claim, roles: {} })];
+  const v77 = G.fixture(ctx, 'valid/v77_f3_nether.json');
+  const s2 = H.flatSurvey();
+  plans.push((await H.checkPlanLocal(v77.plan, { survey: s2.bytes, claim: s2.claim, anchors: H.stewardAnchors(s2.claim) })).res);
+  const acc = {};
+  for (const [i, p] of plans.entries()) {
+    const sv = i === 0 ? s.bytes : s2.bytes;
+    const { vw } = buildVirtual({ ir: p.ir, survey: sv, blobs: (sha) => p.blobs.get(sha) ?? null });
+    for (const gname of [...new Set((p.ir.forms ?? []).map((f) => f.generator))]) {
+      const r = M.axisRunShare({ ...p.ir, forms: p.ir.forms.filter((f) => f.generator === gname), floating: [] }, vw);
+      const a = (acc[gname] ??= { boundary: 0, inRun: 0 });
+      a.boundary += r.boundaryCells ?? r.boundary ?? 0;
+      a.inRun += (r.share ?? 0) * (r.boundaryCells ?? r.boundary ?? 0);
     }
-    return { boundary: b, share: b ? Math.round((1000 * run) / b) / 1000 : 0 };
-  };
-  for (const [gen, presets, grow] of [['giantTree', Object.keys(T.PRESETS), T.giantTree], ['giantMushroom', Object.keys(M.PRESETS), M.giantMushroom]]) {
-    let b = 0, s = 0;
-    for (const preset of presets) for (let i = 0; i < 4; i++) { const g = grow({ at: [0, 64, 0], preset, seed: `o${i}` }); const r = share(g.cells); b += r.boundary; s += r.share * r.boundary; }
-    out[gen] = { boundary: b, share: b ? Math.round((1000 * s) / b) / 1000 : 0 };
   }
+  for (const [k, a] of Object.entries(acc)) out[k] = { boundaryCells: a.boundary, share: a.boundary ? Math.round((1000 * a.inRun) / a.boundary) / 1000 : 0 };
   return out;
 }
 

@@ -1,10 +1,10 @@
 // (6c F3 §10.3) A forest of giant trees over a share of a region's claim, with undergrowth: the forest-heavy benchmark variant
 // (kit/regions/mega_bench_forest.mjs) and any program that wants one. Plan time only.
 //
-// The trees stand on the columns the region leaves free: none it wrote so far (the draft virtual world's written columns, grown by 2: F1's
-// gap), no lot box + 3 (lot + 1 grown by 2), no survey water, lava or natural tree column, one free column between two canopies (their leaves never touch). A few
+// The trees stand on the columns the region leaves free: none it wrote so far (the draft virtual world's written columns, grown by 1: a
+// canopy never over a road or a terrace), no lot box + 3 (lot + 1 grown by 2), no survey water, lava or natural tree column, one free column between two canopies (their leaves never touch). A few
 // variants per species are grown once at the origin and baked; every other tree of a variant places its blob again by origin (one side
-// blob each: the IR and the blobs stay small). Each tree's foot (its trunk and roots) stands on level ground (a range of at most 2).
+// blob each: the IR and the blobs stay small). Each tree's foot (its trunk and roots) stands on level ground (a range of at most 3, F3's roughness).
 // Then the undergrowth: F2's scatter under the canopies, off the trees' feet (bushes, ferns, moss carpets as raw items on the survey's
 // ground, and stumps; the claim holds no frozen volume, so F2's bundled plants would not fire).
 import { fnv64 } from '../noise.mjs';
@@ -16,7 +16,7 @@ import { scatter } from '../region/scatterPlan.mjs';
 import { giantTree } from './giantTree.mjs';
 import { eachColumn, runsRect, shiftRuns } from './states.mjs';
 
-export const FOREST = Object.freeze({ species: ['oak', 'spruce', 'birch', 'dark_oak', 'jungle', 'cherry'], variants: 3, cover: 0.3, step: 2, margin: 2, lotMargin: 3 });
+export const FOREST = Object.freeze({ species: ['oak', 'spruce', 'birch', 'dark_oak', 'jungle', 'cherry'], variants: 3, cover: 0.3, step: 2, margin: 1, lotMargin: 3 });
 
 /** Grow the forest into region `r` (stage `stage`). Returns its record (also `r.meta.forest`). */
 export function growForest(r, ctx, { stage, cover = FOREST.cover, species = FOREST.species, variants: nv = FOREST.variants, undergrowth = true } = {}) {
@@ -72,7 +72,7 @@ export function growForest(r, ctx, { stage, cover = FOREST.cover, species = FORE
     if (!ok) return 0;
     let lo = Infinity, hi = -Infinity;
     for (const [dx, dz] of V.foot) { const g = ground(ox + dx, oz + dz); if (g < lo) lo = g; if (g > hi) hi = g; }
-    return hi - lo > 2 ? 0 : n;
+    return hi - lo > 3 ? 0 : n;
   };
   for (const [x, z] of order) {
     if (covered >= want) break;
