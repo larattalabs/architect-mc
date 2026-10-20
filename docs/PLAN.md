@@ -658,7 +658,8 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 - **6ct1-scenario-relief's falling water** (H-b's slice run): 2 unclassified falling-water cells far from any H part under the
   narrowed `flow` class. Re-check at the release tier; widen the class or record the cells.
   **Still intermittent (VOC batch, 2026-10-20):** the same "the undo's own" unclassified cells failed relief in D2's slice run
-  (2026-10-13, 1), H-b's (2) and VOC-b's (4), and passed in hk3's slice run and others; relief_demo takes no compile pass. Not VOC's.
+  (2026-10-13, 1), H-b's (2) and VOC-b's (4), and passed in hk3's slice run and others; relief_demo takes no compile pass. Not VOC's: on integrate/voc it passed
+  (`artifacts/gate-runs-int-voc/20261020-030357-change`, unclassified 0).
 - **The breach runoff past `watch`.** The removal's drain now takes only the body's cells, spill, watch, predicted flow and the
   census's recorded escapes (a player's water stays, §4.2). If a single breach's runoff ever reaches past the watch set, widen
   sim.mjs's watch reach instead of the drain.

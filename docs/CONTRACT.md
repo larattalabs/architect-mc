@@ -15077,7 +15077,7 @@ driver; `voc/core`'s HANDOFF-VOCa is retired by VOC-a). No Steward RC: VOC chang
 | Item | Fix |
 |---|---|
 | **v51's fountain: 49 nether bricks standing against cost.bom's 46** (VOC-b's verifier, open) | H's bill (`fountain.mjs` `emitFountain`) counted only the basin's shell. The pillar's foot under the floor course and its cells over the rim up to the spout's source (the spout's one shell cell among them) are written by `_works` and the spout's shell but were never billed: `spout` cells short (3 in v51, 2 at the default). Each pillar cell outside the basin's shell is now billed once in the spout block. New test (h-a.test): v43's fountain with a 1-thick and a 2-thick coping (a protected grove 4 east): cost.bom equals the items of every cell its IR parts write in the virtual world; it fails before the fix. No ask has a fountain and item 5 skips the volume fixtures, so no identity exception was needed. In game (voc-ingame below) the fountain's nether bricks now equal the bill; its polished blackstone 18 vs 13 stays, listed: the forge wall overwrites five rim cells (see PLAN "Queued from the VOC batch"). |
-| 6ct1-scenario-relief (VOC-b's verifier, open) | Pre-existing and intermittent, not VOC's: the same "the undo's own" unclassified cells (`none`, falling water) failed relief in D2's slice run (2026-10-13, 1 cell), the H-b slice run (2026-10-18, 2 cells; queued in PLAN since) and VOC-b's (4); relief_demo takes no compile pass and its IR is unchanged. |
+| 6ct1-scenario-relief (VOC-b's verifier, open) | Pre-existing and intermittent, not VOC's: the same "the undo's own" unclassified cells (`none`, falling water) failed relief in D2's slice run (2026-10-13, 1 cell), the H-b slice run (2026-10-18, 2 cells; queued in PLAN since) and VOC-b's (4); relief_demo takes no compile pass and its IR is unchanged. On integrate/voc (f6704e93) relief PASSED: `artifacts/gate-runs-int-voc/20261020-030357-change`, E-normal 194 (growth 192, live 2), unclassified 0. |
 | api-compat `--gate6cvoc`, apijars | Over v0.37.1: the 0.37.1, 0.37.0 and 0.36.1 apitest jars (API 1.34.0, 1.34.0, 1.33.0) and the 0.37.1 mod jar's 1.34.0 surface. v0.37.1 was built from its tag (131c3213, sidecar bundled) into `artifacts/gate6c-voc/v0371` with its tools/; 0.37.0 is VOC-a's `gate6c-voc/v0370`, 0.36.1 H's. VOC item 14's wording follows. All 4 checks clean. |
 | Goldens re-cut for kit 0.36.0 | `kit/tools/region.mjs plan` over each golden's committed survey, params, seed, claim and roles (crossings with its frozen volume) writes an ir.json byte-identical to v0.37.1's but kitVersion; links_demo's side blob identical; tile shas and cells unchanged (scenario-goldens 13/13). irSha: links_demo b85a5c3e -> 6240e2b1 (151,293 cells), links_demo_flat d516b91c -> 00eaff42 (38,383), crossings_demo_flat 66530cae -> 9ddc78ca (75,225). No other golden carries the current kitVersion. |
 
@@ -15089,8 +15089,8 @@ unchanged (VOC lists no catalogue entry; `VOCAB` is a plan.json reason code, app
 
 **Tests at ec2d4c27 (this head's code):**
 - kit `node --test test/*.test.mjs`: 570 pass, 0 fail (catalogue 7, the vocab drift test and the new fountain bill test included).
-- sidecar `npm run check` (tsc and vitest) and `npm run build`: 734 pass, 1 fail, 15 skipped of 750 on a machine at load 50-60;
-  the two files that timed out there (`versions.test.ts`'s hook, `groups.test.ts`'s round-robin) pass on re-run, 33/33.
+- sidecar `npm run check` (tsc and vitest) and `npm run build`: tsc clean, the bundle built; vitest at load 50-60 timed out in two
+  files (`versions.test.ts`'s hook, `groups.test.ts`'s round-robin); the full suite re-run at load 13: 750 of 750 pass, 44 files.
 - mod `./gradlew build --offline`: 708 tests, 0 failures.
 - `gen-vocab.mjs --check` clean with the jar and with `--no-jar`.
 - api-compat `--gate6cvoc`: 4/4 clean.
