@@ -15857,7 +15857,7 @@ Taste and product calls only, each with a proposed default.
 - Lava courses (N-H-3).
 - Building HY's parts in survival (RS).
 
-### Phase 6c slice HY-a as built (the hydrology pass; branch `slice/HY-a`, pure kit; for the HY batch, placeholder versions; recorded 2026-10-19)
+### Phase 6c slice HY-a as built (the hydrology pass; branch `slice/HY-a`, pure kit; released in the HY batch as v0.39.0: API 1.36.0 / mod 0.39.0 / kit 0.37.0 / catalogue 8; recorded 2026-10-19)
 
 | Area | As built |
 |---|---|
@@ -15875,7 +15875,7 @@ Taste and product calls only, each with a proposed default.
 | Evidence | `artifacts/gate6c-hy/hya/` (local): kit suite **566/0** at a1db3a9c, plus the 2 tests added after it (`hy-a` 21/0) (`kit-suite.log`), `unchanged.json` and `.log`, `timing.json` and `.log`. No in-game item is HY-a's, so no game ran ($0, no ports). |
 | Verifier | gate-verifier **PASS** at 149948ca, no defects: hy-a 21/0; full kit suite 568/0 (`artifacts/gate6c-hy/hya-verify/suite.txt`); its own `gate6chya.mjs unchanged` run gave 193 planned, 191 identical, excepted r08 and e15, ALL PASS. Diff review clean: plan_v0 unedited, `_ran` stripped in `r.pass`, D8, accumulation, data.courses and D1's tag as recorded. |
 
-### Phase 6c slice HY-core as built (the course foundation; branch `slice/HY-core`, the interface on `hy/core`; for the HY batch, placeholder versions API 1.36.0 / mod 0.39.0 / kit 0.37.0 / catalogue 8; recorded 2026-10-19)
+### Phase 6c slice HY-core as built (the course foundation; branch `slice/HY-core`, the interface on `hy/core`; released in the HY batch as v0.39.0: API 1.36.0 / mod 0.39.0 / kit 0.37.0 / catalogue 8; recorded 2026-10-19)
 
 | Area | As built |
 |---|---|
@@ -15886,7 +15886,7 @@ Taste and product calls only, each with a proposed default.
 | Gate | Driver `tools/gate6chy.mjs` (ports 8918-8923, run dir `../architect-mc-HY-run`), evidence under `artifacts/gate-runs-HYcore/`. **In game** (headless, every realise through Regions.checkPlan's two-plan flow and realiseApproved with the artifact), `20261019-205512-change` at e1690e7a's tree: **hy-ingame 26/0** — item 2: READY (4 volumes with the fluid layer, read 4), PLACED with 4 rows settled, written downstream first (r3, r2, r1, feed at ticks 510, 516, 531, 556); S-HY-6's row shape; item 3: every census equal to its prediction (r1's lip and column 12, r2's spillway film 6, the feed's spillway 4), settled within each bound (5/30, 14/40, 24/50, 24/50), a 2-minute stand clean; the negative controls (no_lining_cell with the check bypassed: the census names the feed's spillway floor, the feed drained, PARTIAL; wrong_order: the head written first, its fall floods r2's basin, escaped, its closure drained "upstream of stream_r1", PARTIAL, 0 water left); item 4: predict_short on r2 drains r2 (escaped) and, in the same tick, r1 and the feed (another part) "upstream of stream_r2", r3 stands, 0 fluid after a bound; a protected weir cell: r1 not written (uncontained, naming the cell), the feed held "upstream of stream_r1", r2 and r3 settled; item 5: E-flat 0 under the exact rules; item 6: ticks held on a shell over the removal: the cap (2 x 50) reached, REMOVED, E-flat 0 after it; item 7: a bank, a weir and a lining cell breached: nothing past the watched reach, the lake's 84 sources unchanged, the removal leaves 0 extra fluid, and the exact-rules breach (bank, lining, weir from 8525a046) E-flat 0; §10: a block in r2's guard buffer answers ARTIFACT_STALE naming the reach (from 8525a046); item 18 (b), recorded: 0 fall damage landing in 1- and 2-deep water from 3 to 8 high. **hy-crash 10/0:** FL1+save, FL4+save (between reaches) complete PLACED with every census equal and E-flat 0 after the undo; FL5+save (the head drained, the tail not) and FL3 finish REMOVED, E-flat 0. **hy-cold 1/0** (`20261019-204226-change`), item 18 (a) recorded: on 2026101102 at random ticks 300 for 2 minutes, 33 of 87 source cells froze and 0 of 18 flowing or falling cells: §1.7's assumption holds (falls and spillways stay open). **Slice tier** `20261019-232020-slice` at 5fcf966c (3 shards, 2h29m): 67 PASS, 6 FAIL; re-run after merging main v0.37.1 and re-cutting three goldens, `20261020-015144-slice` at 216c276d: unit-mod 708/0, unit-kit 578/0, unit-sidecar 744/0, hy-unit 7/0 (item 12: 191 of 193 fixtures identical to origin/main, the 2 differing exactly r08 and e15; api-compat --gate6chy clean over 0.37.0, 0.36.1, 0.36.0 and the 0.37.0 surface), h-unit 12/0, t3a-ingame 23/0, 6b-volume 4/0; sim-jobs passed alone (`20261020-025104-slice`, 33/0: its contended FAIL was a sidecar left on the shard's port, `reused true`); 6ct1-scenario-relief's 4 unclassified cells are falling water (`level=8`) at y 122 far from any body: T1's falling-water anomaly, failing the same way on VOC-b and H-b's slices, no course op in relief_demo. Spend $0.00. |
 | Verifier | gate-verifier **PASS** (reported to the coordinator; its row written at the batch's integration, the builder having run out first): its own run on ports 8918-8921 at 216c276d (8b505a95 adds only this section's Gate row and HANDOFF-HYcore's state), `artifacts/gate-runs-HYcore-verify/20261020-025205-change` (2 shards, 11m37s): **hy-ingame 27/0** (items 2-7, §10's ARTIFACT_STALE naming the reach, item 18 (b): READY with 4 volumes read 4, PLACED downstream first, every census equal, the negative controls fired, the upstream closure across parts, E-flat 0) and **hy-crash 10/0** (FL1, FL3, FL4 and FL5 with and without save: PLACED or REMOVED, E-flat 0). HANDOFF-HYcore.md retired at the integration. |
 
-### Phase 6c slice HY-b as built (courses; branch `slice/HY-b` over `hy/core`; for the HY batch, placeholder versions as HY-core's; recorded 2026-10-19)
+### Phase 6c slice HY-b as built (courses; branch `slice/HY-b` over `hy/core`; released in the HY batch as v0.39.0: API 1.36.0 / mod 0.39.0 / kit 0.37.0 / catalogue 8; recorded 2026-10-19)
 
 | Area | As built |
 |---|---|
@@ -15901,7 +15901,7 @@ Taste and product calls only, each with a proposed default.
 | For the batch | (1) HY-core's `sim.mjs` one line (above). (2) The sidecar helper refuses a plan asking more than 16 frozen volumes; with per-body volumes (§10) a plan of several multi-reach courses reaches it (the riffle probe is two plans for it). (3) A body's prediction ignores other bodies' falling water beside its spill (the spout case); the generators keep apart where they know of it. |
 | Verifier | gate-verifier **PASS** at 5ac4ec57, no defects: its own run on ports 8928/8929 (`artifacts/gate-runs-HYb-verify/20261020-034602-6chy`, `GATE6CHY_SKIP_CORE=1 ... 6chy --only hy-ingame,hy-cold`): hy-ingame 83/0 (items 9, 10, 18 (c): every fixture and the Steward plan READY, PLACED, census exact, E-flat 0; the walks and the swept stand), hy-cold 10/0 (E-normal 0); `hy-b.test.mjs` 8/0; diff review clean (plan_v0, body.mjs, hooks.mjs untouched; sim.mjs's line judged sound for H; overflow, passInput and lamp edits gated to courses; no `until: 'HY'`; refusals, never raw throws). HY-core's items, the natural and look runs (both PASS in the builder's runs: `gate-runs-HYb/run-natural.log`, `gate-runs-HYb-look/20261020-034526-6chy-look`) and the five shared slice failures were not re-run by it. |
 
-### Phase 6c slice HY-c as built (water gates, `wall.water_gate`; branch `slice/HY-c` over `hy/core`; for the HY batch, placeholder versions API 1.36.0 / mod 0.39.0 / kit 0.37.0 / catalogue 8; recorded 2026-10-20)
+### Phase 6c slice HY-c as built (water gates, `wall.water_gate`; branch `slice/HY-c` over `hy/core`; released in the HY batch as v0.39.0: API 1.36.0 / mod 0.39.0 / kit 0.37.0 / catalogue 8; recorded 2026-10-20)
 
 | Area | As built |
 |---|---|
@@ -15913,3 +15913,85 @@ Taste and product calls only, each with a proposed default.
 | The fixture | `kit/lib/fluids/handgate.mjs` (ext `architect_mc:unsafe.handGate {wall, at, width, depth, beyond, variant}`, one additive dispatch line in hooks.mjs; no plan Claude writes reaches it): `reachAcross` + `waterGate` + `r.fluidBody` (kind course, its grate), carved in the ground stage; variant `no_grate` (the crossing and lintel, the water under it open: item 14's negative control). `kit/regions/hy_gate_demo.mjs` (not in the catalogue): a flat_village yard in a closed `wall.around` with corner towers, optionally a moat, and the reach across the south side; variants `no_grate`, `sealed` (gates 0), `max` (gates {min 1, max 1} and a gate part at claim_w), `no_lintel`, `lintel_low`. |
 | Deviations | **v58 waits for HY-b**: `fixtures/plan/hy-pending-c.json` stays (P0 item 9 wants a valid/ fixture with a real course; a hand-gate fixture would cover the id with an unsafe part). HY-b's course.mjs (35a7c6c7) reads `crossingsOf(K)` and answers UNREACHABLE wall for an uncrossed wall but registers no crossing; the join is one `waterGate` call per reach in its emit (HANDOFF-HYc wrote the call; the coordinator's at merge). The item 14 mob check is a push stand (zombies, villagers, a spider pushed at the grate by `Motion` for 20 s, AI on) with its open-water control, beside vanilla `dev.nav.villager` (the only nav hook; HY-c adds no Java hook). |
 | Gate | Kit: `kit/test/hy-c.test.mjs` 7/0 (READY, the grate exactly the reach's cells under the wall, the lintel at level + 1 over every grate column, the wall writes no course cell, M25/M2/M8/M1 clean, closure 0 leaks for both movers, the wire shapes and siteplan `courses[].waterGates` valid, sealed and max refused with the evidence, no_lintel / lintel_low / no_grate caught, the moat castle READY, deterministic, `waterGate`'s checks on a hand wall); kit suite 585/0; item 12 `unchanged` 191 of 193 identical (r08 and e15 by name). Slice tier `artifacts/gate-runs-HYc/20261020-011618-slice` (3 shards, 8942-8947): 39 PASS, h-unit FAIL only on H's `unchanged` for v33/v34 because hy/core had since taken main's 0.37.1 (re-planned equal to hy/core once merged); re-run of the affected steps at 4a89eece `20261020-031211-slice`: unit-mod 708/0, unit-kit 585/0, h-unit 12/0, hy-unit 9/0 (HY-c's unit item and K1a's wall tests 21/0), hy-ingame 41/0, k1a-unit 8/0, k1a-ingame 19/0. HY-c in game (headless, exact rules): sealed and max refused UNREACHABLE {kind: wall} through Regions.checkPlan; READY through the two-plan flow, the reach's guard per body and flat; PLACED, the reach settled; census 48/48 sources with 12/12 grate cells joined bars; the lintel 6/6; vanilla villager from the reach's inside bank to its outside goes round by the walk gate, 0 path cells under the lintel; push stand 0 of 5 through, open-water control 3 of 5 through; Regions.remove E-flat 0 (lintel and grate included). Look (client, 3 bibles, recorded): https://claude.ai/artifact/TZ2mx1GntGXBW3xEqukCRq. Spend $0.00. |
+
+### HY batch as integrated (HY-core + HY-a + HY-b + HY-c as v0.39.0: API 1.36.0, mod 0.39.0, kit 0.37.0, catalogue 8; branch `integrate/hy`, recorded 2026-10-20)
+
+`origin/hy/core` (8b505a95: HY-core with HY-a merged in), `slice/HY-b` (1aa9b931) and `slice/HY-c` (94e027a9) were merged `--no-ff`
+over origin/main v0.38.0 (VOC, 0d665136), in that order. VOC merged after HY's slices were cut, so the conflicts were VOC's: every
+one kept both sides and no test was dropped. No throwing stub or `hy-pending-*.json` survives (`hy-pending-c.json` gave way to v58;
+r.course's and course.mjs's `until: 'HYb'` strings are unreachable references, never answered). `kit/regions/plan_v0.mjs` is
+unedited (equal to origin/main). HANDOFF-HYcore is retired and HY-core's Verifier row written.
+
+| Where | Resolution |
+|---|---|
+| Versions | HY's placeholders were already the batch's numbers: `ArchitectApi.VERSION` 1.36.0, `mod_version` 0.39.0, `PLAN_API` 1.36.0, `KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` 0.37.0, the catalogue golden's header (catalogueVersion 8, api 1.36.0, kitVersion 0.37.0). Each conflict took only the version hunk from HY; every other hunk of those files kept VOC's. |
+| `plan.mjs` meta | VOC's vocab plan check kept, HY's `courses` member added to the meta line. |
+| Features | sidecar `FEATURES` (and its two snapshot tests), `ApiRules`: VOC's `vocab`, `bible.rarity`, then HY's `region.hydrology`, `region.courses`, `region.waterGates`. VOC-b's test that `bible.rarity` is last now reads "right after `vocab`". |
+| DEVBRIDGE, gate-chains | Both entries; both chains (6c VOC, 6c HY-core). |
+| h-foundation, ApiHTest | VOC's comments and at-least pins (they already read any later version). |
+| api-compat | `--gate6cvoc` kept; `--gate6chy` moved over v0.38.0 (below). |
+| CONTRACT | HY-b's and HY-c's as-built sections both kept, now headed with the released numbers. |
+| Catalogue 7's archive | `fixtures/plan/catalogue-h.json` (HY-core's) holds catalogue 7's entries exactly as main served them through v0.38.0: VOC changed no entry (only the header's api 1.35.0 / kit 0.36.0) and archived nothing, so no name clashes. |
+| Fixture numbers | VOC's `valid/v50_voc_village` and `v51_voc_forge` share numbers with HY's `v50_stream` and `v51_canal`. HY-b's item-2 test picked `v5x`/`v6x` by number and tripped on VOC's (no connectors); it now reads only fixtures with a channel part. Queued in PLAN. |
+
+**Coordinator decisions, applied:**
+
+| Decision | As integrated |
+|---|---|
+| 1. HY-b's `breachReach` line (sim.mjs) and HY-c's grate join (`RegionFluids.writeBody`) | Accepted as merged, unchanged. |
+| 2. Water gates joined to courses | course.mjs `emit` calls `gate.mjs waterGate(K, {course, body, cells, level, outlets, lining})` once per reach before laying it, in place of HY-b's `crossingsOf` read; the returned grate goes to the reach (`r.fluidBody` `grate`); a refusal (`UNREACHABLE {kind: wall, why}`) propagates and rolls the course back. No exit notch is cut within 3 of a crossing along the flow (the gate's still cells). HY-b's own UNREACHABLE wall check stays for walls with no crossing. The course's answer gains `geometry.waterGates [{wall, cells, lintel, grate}]`, siteplan `courses[].waterGates [wall]`, and a body's bill counts its grate's iron bars (`place.mjs bodyBom`; H bodies have none). Every plan without a crossing is byte-identical: all 230 plan fixtures planned at 200ce93d and after the join, 229 identical, the one differing `hy/r11_wall` (below), plus v58 new. |
+| v58 | `valid/v58_water_gate`: v30's plan unchanged plus a brook from `claim_center` to `claim_s`, on a terrain fixture (the plain, a terrace 3 over it to the south) so the gate's item-9 helper builds it in game: READY, the brook falls once and its lower reach crosses the ring under a water gate (in the kit's plan 3 positions wide: 6 columns, 12 grate cells; in game 4 columns, 8 grate cells; the lintel at level + 1). kit (hy-c.test): the grate exactly the reach's cells in the wall's thickness, the lintel over every grate column and nothing of the wall under it, the wall writes no cell of any reach's body, shell or lining, M25/M2:wall/M8:wall/M1 clean, closure 0 leaks for both movers, walk gates off the water gate, the wire (answer, crossing, bill, siteplan); the same plan on s7 (v30's site) READY with a water gate. `hy/r11_wall` (HY-b's "a wall across a course") answered READY once joined, so it is now the same brook through a sealed ring: refused UNREACHABLE {kind: wall, why: sealed}; HY-b's refusal test now also checks `expect.why`. `hy-pending-c.json` deleted. In game: below. |
+| 3. The 16-volume limit | One frozen volume per course: `layCourse` asks, for a course of 2 or more reaches, the union of its reaches' own volume boxes (cells, shell and lining grown by 2, by 9 when raised, as `r.fluidBody` grows its own), through `r.fluidBody`'s additive `volumeBox` (asked only when it holds the body's own box, else the own box as before). A union past `VOLUME_CAP` (4,000,000, the per-part cap) leaves each reach its own box. Guards stay one per reach (their runs unchanged), so ARTIFACT_STALE still names the reach; `PlanChecks` now decodes and samples each guard volume once per check, shared by the guards on it. Sound by construction: every reach's own box lies inside the union, and the kit's virtual world and the mod's guard read any volume that holds the box. Test (hy-b.test): 3 brooks of 6 reaches each READY in 3 volumes (18 before, past the sidecar's 16), each within the per-part cap, the plan's total within the per-plan 16,000,000, 18 guards each naming its reach, every guard run inside its volume's box. Every committed course fixture's multi-reach course now asks one volume. No cap was raised. |
+| 4. The prediction gap (HY-b item 3) | Not small (sim.mjs simulates one body over its own world): queued in PLAN. |
+| 5. HY-b's contract deviations, accepted | (a) the ditch's water stands **4** from the box (§7.6 said 3, which puts the shell's neighbour in the box + 1 and M25:keep refuses it); (b) S3's natural plan is the **fall join only** (no weir head site on S3 in game: the river runs between cliffs, no bank holds a level canal within cut 6), the canal leaving the pond high on the slope (hy/n01); (c) v53's fall join is on **its own terrain** (a lake 4 under its banks: the asks lake is flush with its banks); (d) **no VOLUME fixture** for courses (a reach is level and a course at most 512 long: an L of 512 is about 0.5M cells against the 4M cap; H's r07 keeps the path); (e) **the uphill rule reads levels** (a dry end at its ground - 1, water at its surface, a plan body at its level; a course cuts down to a dry `to` by up to `cut`). |
+| 6. `GATE6CHY_SKIP_CORE` | Kept (development only, HY-b's): no gate chain sets it; a step run with it records `core: skipped`. |
+
+**Versions:** `ArchitectApi.VERSION` 1.36.0, `mod_version` 0.39.0, `PLAN_API` 1.36.0, the catalogue golden's header api 1.36.0
+and kitVersion 0.37.0, `KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` 0.37.0, catalogueVersion 8 (catalogue 7 archived
+as `catalogue-h.json`). sinceApi 1.36.0 on connector.channel, wall.water_gate, channel.course, channel.race, channel.ditch and the
+reserved channel.aqueduct; `tools/catalogue-since-check.mjs`: every sinceApi a semver at or below the catalogue api. Features
+`hydrologyPass`, `regionCourses`, `waterGates`.
+
+**Goldens re-cut for kit 0.37.0:** `kit/tools/region.mjs plan` over each golden's committed survey, params, seed, claim and roles
+(crossings_demo_flat with its frozen volume passed by `--volumes`, the file named by its ARVX sha 9a00f18a, not the IR blob's
+fb508da2) writes an ir.json byte-identical to the committed one on this tree; against v0.38.0's only kitVersion and the irSha move
+(normalised IRs equal): links_demo 6240e2b1 -> 01bc72a4, links_demo_flat 00eaff42 -> 8ab69970, crossings_demo_flat 9ddc78ca ->
+0e9c3219. No other golden carries the current kitVersion.
+
+**api-compat `--gate6chy`** over v0.38.0: the 0.38.0, 0.37.1 and 0.37.0 apitest jars (API 1.35.0, 1.34.0, 1.34.0) and the 0.38.0
+mod jar's 1.35.0 surface. v0.38.0 was built from its tag (25dd9a04, sidecar bundled) into `artifacts/gate6c-hy/v0380` with its
+tools/; 0.37.1 and 0.37.0 are VOC's. All 4 checks clean. (apijars still runs VOC's set; not part of this batch's checks.)
+
+**Tests at bb60e193 (the gated head; later commits are docs only):**
+- kit `node --test kit/test/*.test.mjs`: **616 pass, 0 fail** (v58's water gate, the 3-course volume test, HY-b's item 2 and item 12 with `why`).
+- sidecar `npm run check` (tsc and vitest): **750 of 750** pass, 44 files; `npm run build`: the bundle built.
+- mod `./gradlew build --offline`: **713 tests, 0 failures**.
+- `gen-vocab.mjs --check`: every file up to date (1286 blocks, 450 families, 35 creative-only).
+- api-compat `--gate6chy`: **4/4 clean** (0.38.0, 0.37.1, 0.37.0 jars; the 0.38.0 surface).
+- Plan fixtures before/after the join: 229 of 230 identical (r11 by design), v58 new; after the shared volume, every course fixture's
+  multi-reach course asks one volume (v50 3 reaches, v54 4, v58 4 on s7 / 2 on its terrace, v60 5, s01's race 4, hy/n01 3, c01 2 + 2).
+
+**In game:** `node tools/gate-run.mjs change --since origin/main --only hy-ingame,hy-crash,hy-cold,h-ingame,voc-ingame,t3a-ingame,k1a-ingame`
+(3 shards, ports 8948-8953, run worktrees `../architect-mc-int-hy-run[-s2|-s3]`), `artifacts/gate-runs-HY-int/20261020-045515-change`
+at bb60e193: **7 PASS** in 32m21s: **hy-ingame 133/0** (HY-core's items, §10's ARTIFACT_STALE naming stream_r2, HY-b's item 9
+fixtures, item 10's walks and the swept stand, item 18 (c), HY-c's water gate, and **v58**: READY through the two-plan flow, 2
+guards flat, PLACED with brook_r2 and brook_r1 settled downstream first, census exact (346 and 50 + 8 flowing), the water gate over
+brook_r2 (4 columns, lintel y 65 over all 4), the grate 8/8 joined waterlogged bars, vanilla's villager from the inside bank to the
+outside bank and from water to water round through a walk gate, 0 cells through the grate, Regions.remove E-flat 0), **hy-crash
+10/0**, **hy-cold 11/0**, **h-ingame 60/0**, **voc-ingame 46/0**, **t3a-ingame 23/0**, **k1a-ingame 19/0**. Spend $0.00.
+
+**The RC for Steward (GATES policy 4):**
+- Built from the bb60e193 tree (the gated head). `artifacts/rc/architect-mc-0.39.0-rc1.jar` (sha256
+  `58d5e678b205d3c15a575b683b3eee6ba15ea9e39846cd8e59f7e02c414ce8db`), with `-sources.jar` (`8d748f0a...`) and the `.sha256` files
+  beside it, following H's RC.
+- The jar bundles the sidecar and kit (`architect-sidecar/BUNDLE.json` modVersion 0.39.0, mainSha256 39d95525 = `sidecar/dist/main.mjs`).
+  All 672 bundled kit files match the tree (the joined course emit, the shared volume, the grate's bill among them); the jar holds
+  `PlanChecks$GuardSample`.
+- What Steward's RC check should look at: the write order (downstream first, each reach once its landings settled) and the removal
+  order (the exact reverse, head first); the cross-part upstream drain (a reach that escapes or stays unsettled drains its upstream
+  closure, "upstream of <body>", across parts, in the same tick); the per-reach `architect_mc:fluids` rows `{part, body, state,
+  reason, at}`; water gates (a course through a wall: the grate, the lintel, walk gates only for walkers); ARTIFACT_STALE per reach,
+  now with a course's reaches on one shared volume (in game §10 ran on hy_core_demo's per-body volumes; the shared case is the kit
+  test and PlanChecks' per-guard runs).
+
+Not merged, not tagged.
