@@ -31,7 +31,15 @@ review and the coordinator's decisions win), docs/HANDOFF-HYcore.md (the frozen 
   across a course with no crossing answers `UNREACHABLE {kind: wall}` (emit). The router does not force a still reach at a wall
   line (HY-c's).
 
-## State
-- Kit: all fixtures answer as expected; hy-b.test.mjs. In game: v50 passed item 9 once (single reach then: the terrain bug, fixed).
-- Running: `6chy --only hy-ingame` with GATE6CHY_SKIP_CORE (items 18c, 10, 9). Next: natural, cold, look (client), the unit tier,
-  the slice tier, the verifier, the gallery, "HY-b as built".
+## State (2026-10-20 01:05Z)
+- Kit: hy-b.test.mjs 8/0; the whole kit suite passed but the catalogue check (fixed: extension/e18_aqueduct).
+- In game (dev runs with GATE6CHY_SKIP_CORE, artifacts/gate-runs-HYb/*): items 9 (v50-v59, v57b, the Steward plan: all READY, PLACED,
+  every census exact, E-flat 0), 10 (bridge and pool walks, the swept stand 24/24), 18 (c) (riffles 2/4/6 x 1-3 drops and the long one:
+  every census exact), natural (S3 fall join, E-normal 0), cold (capped brook and twin, E-normal 0; probe: only the twin's sources froze)
+  pass. Fixed on the way: apron lamps stood in a race's lip (light.mjs skips course spill), a fountain landing beside its spout curtain
+  (edgeSites keep off it), the frozen site's ice under a built terrain, S3's weir head sites (none: dropped, recorded).
+- Running: the slice tier (`artifacts/gate-runs-HYb/run-slice1.log`, ports 8924-8929, 3 shards). Then: the look (6chy-look, client,
+  same ports after the slice), the gallery, the gate-verifier, "HY-b as built" rows, push, report.
+- For the coordinator: (1) HY-core's sim.mjs one-line change (breachReach shortcut); (2) the sidecar helper refuses a plan whose bodies
+  ask more than 16 frozen volumes (`volumes: <=16 items`): a plan with many course reaches hits it (p01 split in two); per-body volumes
+  (§10) make it likely for real plans with several courses.
