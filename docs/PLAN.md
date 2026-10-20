@@ -860,3 +860,13 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
 - **Discarding unrealised plans** (found drafting D3): nothing in the mod or sidecar discards a plan. Every `Regions.plan` keeps
   `plans/<id>.json` plus `.survey.bin` (0.4-0.9 MB each) and its sidecar directory. Add `Regions.discardPlan` and a world-start
   sweep of unrealised plans past an age.
+
+## For the 6c close-out (coordinator, 2026-10-20; Steward round 12 asks)
+
+- `realiseApproved` after ARTIFACT_STALE: the same opKey may re-check and retry (a stated rule), so Steward drops its second
+  key (`vrealise2`).
+- Pins expire with their opKey, so they can't leak.
+- `Regions.discardPlan` plus a world-start sweep of unrealised plans.
+- A route ending on a lot its zone couldn't place answers `blocked {dependency}` (naming the lot and zone), not refused NO_ROOM.
+- `rule.palette` gains `scope: "lots" | "all"` (default "all" = today), and `exempt` accepts `ways` and `forms`.
+- Take Steward's 12 re-recorded asks (steward-mc f-strange-asks) into the asks fixtures and gap table.
