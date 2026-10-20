@@ -1,0 +1,19 @@
+{
+ "scenario": "grove_demo",
+ "variant": "natural",
+ "version": 0,
+ "note": "tile shas of grove_demo planned by the kit over its forest site's own survey (the f3-natural check's), 1 worker = 4 workers shuffled; inputs in goldens/grove_demo/",
+ "irSha": "7d156c1765c750eb4ddf0a5b2e003cce9e57298d3f5026509fc6da13c93d45fd",
+ "kitVersion": "0.40.0",
+ "cells": 24264,
+ "tiles": {
+  "forms|terrain|53,-22": "387419668097f9f7390cce3fcf0af04e9aadd3af386e7119b12aad25a3e0092f",
+  "forms|terrain|53,-23": "971225bf0b506b7c70c5f89a575544e8718d484085baee8fbace90839a3239cb",
+  "forms|terrain|54,-22": "ffc0b68ea4da9acb31461d782dbc5ba2fc306e4aa8c4b3a64f0b739c3c604c38",
+  "forms|terrain|54,-23": "25b897c0f2c77ac790500af0bb27b304edb09368d87986c1ddaf7c946a78e1d0",
+  "forms|terrain|54,-24": "eff64d33a32a9d6ee20e3273f72fad5f74a65d5c4080b8691508c4436ea6eccf",
+  "forms|terrain|55,-22": "956c1846171d8e283c3a0ac4b89881686550765acbad20453c04e9b78e536cf8",
+  "forms|terrain|55,-23": "0e0a1d4d45c3ebf2f688bf6a4ff7f4e90c1ac743db9b539176027c5ab2c89b98",
+  "forms|terrain|55,-24": "606f9fed0c3a31ead2252fe9559d6e8f4d02c397205ad778c3e8c361462b1d12"
+ }
+}

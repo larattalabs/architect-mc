@@ -1,0 +1,331 @@
+{
+ "format": 1,
+ "paths": {},
+ "lots": {},
+ "parts": {
+  "f_g_birch_1": {
+   "kind": "form"
+  },
+  "f_g_brown_1": {
+   "kind": "form"
+  },
+  "f_g_cherry_1": {
+   "kind": "form"
+  },
+  "f_g_dark_oak_1": {
+   "kind": "form"
+  },
+  "f_g_jungle_1": {
+   "kind": "form"
+  },
+  "f_g_mangrove_1": {
+   "kind": "form"
+  },
+  "f_g_oak_1": {
+   "kind": "form"
+  },
+  "f_g_pale_oak_1": {
+   "kind": "form"
+  },
+  "f_g_red_1": {
+   "kind": "form"
+  },
+  "f_g_spruce_1": {
+   "kind": "form"
+  }
+ },
+ "planCheck": {
+  "schemaVersion": "plan/0",
+  "catalogueVersion": 11,
+  "kitVersion": "0.40.0",
+  "budget": {
+   "maxNodes": 2000000,
+   "maxEdges": 128,
+   "maxCells": 20000000,
+   "maxMs": 120000,
+   "maxHeapMb": 2048
+  },
+  "surveySha": "df64da732d441c31c57151e5a40dfa91e7241239ab3bd5222bba0950ae8ef081",
+  "malformed": null,
+  "answers": [
+   {
+    "part": "g_oak",
+    "block": "form.giant_tree",
+    "class": "fits",
+    "required": false,
+    "geometry": {
+     "rect": [
+      3515,
+      -1451,
+      3537,
+      -1426
+     ],
+     "sites": [
+      [
+       3526,
+       -1438
+      ]
+     ]
+    }
+   },
+   {
+    "part": "g_spruce",
+    "block": "form.giant_tree",
+    "class": "fits",
+    "required": false,
+    "geometry": {
+     "rect": [
+      3423,
+      -1412,
+      3440,
+      -1395
+     ],
+     "sites": [
+      [
+       3432,
+       -1404
+      ]
+     ]
+    }
+   },
+   {
+    "part": "g_birch",
+    "block": "form.giant_tree",
+    "class": "fits",
+    "required": false,
+    "geometry": {
+     "rect": [
+      3473,
+      -1440,
+      3486,
+      -1427
+     ],
+     "sites": [
+      [
+       3478,
+       -1432
+      ]
+     ]
+    }
+   },
+   {
+    "part": "g_jungle",
+    "block": "form.giant_tree",
+    "class": "fits",
+    "required": false,
+    "notes": [
+     "1 grown from another seed of the species (its own shape fit nowhere within the locator)"
+    ],
+    "geometry": {
+     "rect": [
+      3512,
+      -1482,
+      3537,
+      -1457
+     ],
+     "sites": [
+      [
+       3524,
+       -1468
+      ]
+     ]
+    }
+   },
+   {
+    "part": "g_dark_oak",
+    "block": "form.giant_tree",
+    "class": "fits",
+    "required": false,
+    "notes": [
+     "1 grown from another seed of the species (its own shape fit nowhere within the locator)"
+    ],
+    "geometry": {
+     "rect": [
+      3443,
+      -1425,
+      3473,
+      -1395
+     ],
+     "sites": [
+      [
+       3458,
+       -1410
+      ]
+     ]
+    }
+   },
+   {
+    "part": "g_cherry",
+    "block": "form.giant_tree",
+    "class": "fits",
+    "required": false,
+    "geometry": {
+     "rect": [
+      3501,
+      -1458,
+      3518,
+      -1442
+     ],
+     "sites": [
+      [
+       3508,
+       -1448
+      ]
+     ]
+    }
+   },
+   {
+    "part": "g_mangrove",
+    "block": "form.giant_tree",
+    "class": "fits",
+    "required": false,
+    "geometry": {
+     "rect": [
+      3508,
+      -1421,
+      3533,
+      -1396
+     ],
+     "sites": [
+      [
+       3520,
+       -1408
+      ]
+     ]
+    }
+   },
+   {
+    "part": "g_pale_oak",
+    "block": "form.giant_tree",
+    "class": "fits",
+    "required": false,
+    "geometry": {
+     "rect": [
+      3479,
+      -1411,
+      3502,
+      -1387
+     ],
+     "sites": [
+      [
+       3492,
+       -1400
+      ]
+     ]
+    }
+   },
+   {
+    "part": "g_brown",
+    "block": "form.giant_mushroom",
+    "class": "fits",
+    "required": false,
+    "geometry": {
+     "rect": [
+      3488,
+      -1439,
+      3514,
+      -1413
+     ],
+     "sites": [
+      [
+       3502,
+       -1426
+      ]
+     ]
+    }
+   },
+   {
+    "part": "g_red",
+    "block": "form.giant_mushroom",
+    "class": "fits",
+    "required": false,
+    "geometry": {
+     "rect": [
+      3530,
+      -1425,
+      3544,
+      -1411
+     ],
+     "sites": [
+      [
+       3538,
+       -1418
+      ]
+     ]
+    }
+   }
+  ],
+  "order": [
+   "g_birch",
+   "g_brown",
+   "g_cherry",
+   "g_dark_oak",
+   "g_jungle",
+   "g_mangrove",
+   "g_oak",
+   "g_pale_oak",
+   "g_red",
+   "g_spruce"
+  ],
+  "partOf": {
+   "f_g_birch_1": "g_birch",
+   "f_g_brown_1": "g_brown",
+   "f_g_cherry_1": "g_cherry",
+   "f_g_dark_oak_1": "g_dark_oak",
+   "f_g_jungle_1": "g_jungle",
+   "f_g_mangrove_1": "g_mangrove",
+   "f_g_oak_1": "g_oak",
+   "f_g_pale_oak_1": "g_pale_oak",
+   "f_g_red_1": "g_red",
+   "f_g_spruce_1": "g_spruce"
+  },
+  "notes": [],
+  "hit": null,
+  "zones": {},
+  "lotZone": {},
+  "lotMeta": {},
+  "lotEntries": {},
+  "styles": {},
+  "cacheOut": {},
+  "protectedRects": [],
+  "anchors": {
+   "claim_center": [
+    3487,
+    105,
+    -1441
+   ],
+   "claim_n": [
+    3487,
+    91,
+    -1534
+   ],
+   "claim_s": [
+    3487,
+    103,
+    -1347
+   ],
+   "claim_w": [
+    3394,
+    71,
+    -1441
+   ],
+   "claim_e": [
+    3581,
+    95,
+    -1441
+   ]
+  },
+  "vocab": {
+   "ms": 0,
+   "scanned": false,
+   "found": [],
+   "refused": [],
+   "pass": 1
+  }
+ },
+ "vocab": {
+  "roles": {},
+  "own": [],
+  "opted": false
+ }
+}
