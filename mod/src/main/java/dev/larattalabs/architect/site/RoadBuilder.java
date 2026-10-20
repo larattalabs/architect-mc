@@ -397,6 +397,7 @@ public final class RoadBuilder {
 		}
 		Builder.Purse purse = fed != null ? fed : Builder.ledgerPurse(level, crate);
 		BlockState[] before = BEFORE.get(road.id());
+		boolean regionRoad = RegionItems.inRegion(road.id());
 		boolean starved = false;
 		int budget = SurvivalWorld.blocksPerTick();
 		int placed = 0;
@@ -432,7 +433,11 @@ public final class RoadBuilder {
 			}
 			r.blockedSince.remove(i);
 			purse.pay(r.cost.get(i));
-			Builder.put(level, r, i, p, true);
+			if (regionRoad) {
+				RegionTargets.write(level, r, i, p); // (6c RS, §6.1) a region's road writes as its tiles do: a dirt path under a post stays one
+			} else {
+				Builder.put(level, r, i, p, true);
+			}
 			budget--;
 			placed++;
 		}
