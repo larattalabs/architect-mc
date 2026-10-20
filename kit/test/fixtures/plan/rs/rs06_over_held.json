@@ -1,0 +1,74 @@
+{
+ "about": "(6c RS, \u00a713 item 6) a route and its lamps over a held terrace: a path with lamps from the stone to an anchor on the far side of a terrace beside the zone; the routes stage waits until the terrace's target (its cut and fill held with its stairs) is BUILT (\u00a76.3), then equals its INSTANT twin",
+ "on": "flat",
+ "anchors": {
+  "far": [
+   1170,
+   65,
+   2079
+  ],
+  "beyond": [
+   1215,
+   65,
+   2079
+  ]
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "rs06_over_held",
+  "zones": [
+   {
+    "id": "town",
+    "program": {
+     "lots": [
+      {
+       "id": "h1",
+       "type": "cottage",
+       "size": [
+        9,
+        9
+       ]
+      }
+     ]
+    },
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 12
+     }
+    }
+   }
+  ],
+  "forms": [
+   {
+    "id": "steps",
+    "kind": "terrace",
+    "steps": 3,
+    "rise": 2,
+    "edge": "slope",
+    "size": {
+     "preset": "S"
+    },
+    "where": {
+     "near": {
+      "anchor": "far",
+      "within": 6
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "walk",
+    "kind": "road",
+    "from": {
+     "part": "town"
+    },
+    "to": {
+     "anchor": "beyond"
+    },
+    "lamps": "street"
+   }
+  ]
+ }
+}

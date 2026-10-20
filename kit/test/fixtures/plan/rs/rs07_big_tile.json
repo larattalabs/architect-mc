@@ -1,0 +1,70 @@
+{
+ "about": "(6c RS, \u00a713 item 6b) a tile whose wall bill is larger than a 2-crate stockpile: a zigzag wall 12 high and 2 thick inside one world tile (kit x 1036..1099, z 2024..2087 over the gate's world offset): built run by run, every run within a quarter of the capacity",
+ "on": "flat",
+ "anchors": {
+  "a": [
+   1040,
+   65,
+   2030
+  ],
+  "b": [
+   1094,
+   65,
+   2030
+  ],
+  "c": [
+   1094,
+   65,
+   2050
+  ],
+  "d": [
+   1040,
+   65,
+   2050
+  ],
+  "e": [
+   1040,
+   65,
+   2070
+  ],
+  "f": [
+   1094,
+   65,
+   2070
+  ]
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "rs07_big_tile",
+  "connectors": [
+   {
+    "id": "zig",
+    "kind": "wall",
+    "height": 12,
+    "thickness": 2,
+    "crenels": false,
+    "from": {
+     "anchor": "a"
+    },
+    "via": [
+     {
+      "anchor": "b"
+     },
+     {
+      "anchor": "c"
+     },
+     {
+      "anchor": "d"
+     },
+     {
+      "anchor": "e"
+     }
+    ],
+    "to": {
+     "anchor": "f"
+    },
+    "gates": 0
+   }
+  ]
+ }
+}

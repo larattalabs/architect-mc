@@ -63,14 +63,29 @@ Mod:
 - Crash: targets rescan from the world (Builder.Run.rescan); a survival region's free-pass entries re-checked at load (a cell back at its
   before is written again).
 
-## Status
+## Status (2026-10-20 evening)
 
-- [ ] RS-a kit: survival IR, evaluator v2, check answers, FREE_EXCEPT, fixtures rs01-rs07 + survival_village
-- [ ] RS-a mod: mode, flags fix, decode v2, targets, runs, feed, stage waits, removal, view, events, hook, rescan
-- [ ] RS-b: tunnels ring order, bodies/lava/grates, courses, irrigation
-- [ ] gate driver tools/gate6crs.mjs (rs-unit, rs-ingame, rs-survival, rs-crash), chains, impact rule
+- [x] RS-a kit: survival IR, evaluator v2, check answers, FREE_EXCEPT; kit/test/rs.test.mjs (9 pass)
+- [x] fixtures kit/test/fixtures/plan/rs/: rs01_land, rs02_walled, rs03_water, rs04_tunnel, rs05_offer (game: the region id), rs06_over_held
+  (a 4e road over a held terrace), rs07_big_tile (a zigzag wall 12 high in one world tile), survival_village, u_spawner
+- [x] RS-a mod: mode, flags fix, decode v2, targets (InfraJob extras), runs, feed reservation, stage waits (SITE_BUSY), fluids barrier
+  and charge, scoop, RegionView.build, free-drop hook, rescan at start, dev hooks dev.rs.*; RegionTargetsTest (6 pass); mod unit suite green
+- [x] latent bug: reproduced on the base (artifacts/gate6c-rs/latent-base.json: every item FAILED "survival was switched on after this
+  was queued"), fixed (PLACED on this head)
+- [x] in-game smoke (scratchpad/rs-build/smoke-game.mjs, headless on 8930/8931, run worktree ../architect-mc-RS-run): rs01 in survival
+  built from the stockpile, equal to its INSTANT twin cell for cell (bar the crates), removed: E-flat 0, the refund exactly the bill
+- [ ] the gate driver tools/gate6crs.mjs (rs-unit, rs-ingame, rs-survival, rs-crash), chains, impact rule
+- [ ] RS-b specifics: tunnels ring order (today: courses bottom up, a carve after its lining), bodies, courses, irrigation in game
 - [ ] gate runs, verifier, "RS as built", HANDOFF retired
+
+## Notes for the as-built
+
+- Rock spires' default material rule ages their surface to cobblestone (no voxel class): a spire is a held part (its stone cells build
+  with its cobblestone). The relief and the pads are the free pass; the terrace is held whole.
+- A shared route part (routes:a,b) builds with its first connector (rs02: the rope's group holds the road's cells).
+- A region's construction road writes with CELL_FLAGS (as its tiles), else a dirt path under a lantern post turned to dirt (C16's builder).
+- Ad-hoc servers claim a gate slot (scratchpad/rs-build/slot.mjs) by the host's pid.
 
 ## Next step
 
-Kit survival IR and evaluator.
+The gate driver: per item steps (item5, item8, item9, item10, item11 alone for the verifier).

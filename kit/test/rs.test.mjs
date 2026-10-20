@@ -174,7 +174,7 @@ test('item 1: the region evaluator\'s bill per cell equals bom.mjs\'s (C26) over
 // ------------------------------------------------------------------ the fixtures through the plan check, in survival
 
 const RS = path.join(FIX, 'rs');
-const fixtures = () => fs.readdirSync(RS).filter((f) => f.endsWith('.json')).sort().map((f) => [f, JSON.parse(fs.readFileSync(path.join(RS, f), 'utf8'))]);
+const fixtures = () => fs.readdirSync(RS).filter((f) => f.endsWith('.json')).sort().map((f) => [f, JSON.parse(fs.readFileSync(path.join(RS, f), 'utf8'))]).filter(([, fx]) => !fx.game); // (game: a fixture the gate fills in, rs05's region)
 
 async function check(fx, survival) {
   const s = fx.terrain ? flatSurvey(fx.terrain) : fx.on === 'asks' ? asksSurvey() : flatSurvey();
