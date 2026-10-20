@@ -354,7 +354,8 @@ async function versionOf(ctx, o, F) {
   const src = await countBlock(ctx, C.sources, 'minecraft:water');
   const carrots = await countBlock(ctx, fieldCells(f1).map(([x, y, z]) => [x, y + 1, z]), 'minecraft:carrots');
   const cs = await censusAll(ctx, { ...r, bodies: C.own }, new Map());
-  const out = { applied: d.applied ?? null, written: d.written ?? null, refusals: d.refusals ?? null, sides: [sideFarm, C.sides.length], over: [overAir, C.over.length], sources: [src, C.sources.length], carrots };
+  ctx.log(`  versionOf: dev.site.delta.apply answered ${json(d).slice(0, 1500)}`);
+  const out = { response: d, applied: d.applied ?? null, written: d.written ?? null, refusals: d.refusals ?? null, sides: [sideFarm, C.sides.length], over: [overAir, C.over.length], sources: [src, C.sources.length], carrots };
   check(d.applied === true && carrots > 0 && sideFarm === C.sides.length && overAir === C.over.length && src === C.sources.length && cs.ok, `item 5 (c): a versionOf replacement of f1's entry (v2, carrots: ${carrots} planted): the mask holds (sides ${sideFarm}/${C.sides.length}, over ${overAir}/${C.over.length}), the sources unchanged and census-exact (${src}/${C.sources.length})`, out);
   return out;
 }
@@ -433,12 +434,22 @@ export async function ingame(ctx) {
   const F = await installFields(ctx);
   const fx = (rel) => B.fixture(ctx, rel);
   const E62 = { f1: 'g6c_irr_field_13x11', f2: 'g6c_irr_field_11x11' };
-  // ---- v62 world A: items 2, 3, 7, 4, 5 (c) (d) (b) (e)
+  // ---- v62, the live world (default rules: random ticks, villagers, time; its removal is recorded, not judged: 10 minutes of random
+  // ticks change the terrain round it): items 3 and 7, the crops
+  if (want('v62live')) {
+    const o = await realiseIrr(ctx, 'v62live', fx('valid/v62_irr_farm.json'), { entries: E62, fields: F });
+    if (o.r) {
+      out.v62live = { placed: await placedChecks(ctx, 'v62live', o, F, E62), live: await liveChecks(ctx, o) };
+      await L.cmd('/kill @e[type=minecraft:item]');
+      out.v62live.removal = await removeRegion(ctx, o, '(recorded: the live world) the region', { judged: false });
+    } else check(false, `v62 (live): not realised (${json(o.parts)} ${json(o.refused ?? null)})`);
+    await L.leaveWorld();
+  }
+  // ---- v62 world A (exact rules): items 2, 4, 5 (c) (d) (b) (e)
   if (want('v62a')) {
     const o = await realiseIrr(ctx, 'v62a', fx('valid/v62_irr_farm.json'), { entries: E62, fields: F });
     if (o.r) {
       out.v62 = await placedChecks(ctx, 'v62', o, F, E62);
-      out.v62.live = await liveChecks(ctx, o);
       out.v62.breach = await breach(ctx, o, 'f2');
       out.v62.versionOf = await versionOf(ctx, o, F);
       out.v62.ownership = await ownership(ctx, o);
