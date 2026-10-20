@@ -12,6 +12,7 @@ import { GRATE_STATE } from '../lib/fluids/body.mjs';
 import { grateState, waterGate, waterGates } from '../lib/fluids/gate.mjs';
 import { crossingsOf } from '../lib/fluids/hooks.mjs';
 import { sitePlan, validateSchema } from '../lib/region/siteplan.mjs';
+import { checkRegion } from '../lib/region/check.mjs';
 
 const k2 = (x, z) => `${x},${z}`, k3 = (c) => `${c[0]},${c[1]},${c[2]}`;
 const cellsOf = (runs) => { const out = []; for (const [x, z, y0, y1] of runs ?? []) for (let y = y0; y <= y1; y++) out.push([x, y, z]); return out; };
@@ -149,4 +150,46 @@ test('waterGate (unit): the checks on a straight wall 2 thick along x', () => {
   assert.equal(waterGates(K2, 'w').length, 0);
   // no wall met: no grate
   assert.deepEqual(waterGate(mk(), { course: 'c', body: 'b', cells: reach(5, 7, 0, 6), level: 63 }), { grate: [], crossings: [] });
+});
+
+test('item 9 (the batch): valid/v58 (v30 plus a brook through the ring) READY; the reach crossing the ring under a water gate, the wall on its lintel', async () => {
+  const { run, svOf } = await import('./plan-p0-shared.mjs');
+  const { FIX } = await import('./plan-helpers.mjs');
+  const f = JSON.parse(fs.readFileSync(path.join(FIX, 'valid', 'v58_water_gate.json'), 'utf8'));
+  assert.equal(fs.existsSync(path.join(FIX, 'hy-pending-c.json')), false, 'v58 replaced hy-pending-c.json');
+  const r = await run(f);
+  assert.equal(r.check.overall, 'READY', JSON.stringify(r.check.parts.map((p) => [p.part, p.class, p.reasons])));
+  const p = r.res;
+  const wall = p.meta.walls.find((w) => w.id === 'town_wall');
+  assert.equal(wall.waterGates.length, 1);
+  const wg = wall.waterGates[0];
+  const op = p.ir.parts.flatMap((q) => q.ops).find((o) => o.op === 'fluid' && o.id === wg.body);
+  assert.ok(op?.grate?.length, `${wg.body} carries the grate`);
+  assert.equal(wg.lintel, op.level + 1, 'the lintel at the reach\'s open top');
+  // the grate is exactly the reach's cells in the wall's thickness
+  const wallCols = new Set(wall.cells.map((c) => k2(c[0], c[1])));
+  assert.deepEqual(new Set(cellsOf(op.grate).map(k3)), new Set(cellsOf(op.cells).filter(([x, , z]) => wallCols.has(k2(x, z))).map(k3)));
+  // the wall writes no cell of any reach's body, shell or lining; nothing of it under the lintel in a crossing column
+  const W = writes(p.ir, 'w_town_wall');
+  const course = new Set(p.ir.parts.flatMap((q) => q.ops).filter((o) => o.op === 'fluid').flatMap((o) => [...cellsOf(o.cells), ...cellsOf(o.shell), ...cellsOf(o.lining)]).map(k3));
+  assert.deepEqual([...W.keys()].filter((k) => course.has(k)), [], 'the wall writes no cell of the course');
+  for (const [x, z] of wg.cells) {
+    assert.ok(W.get(`${x},${wg.lintel},${z}`), `a lintel at ${x}, ${wg.lintel}, ${z}`);
+    const ys = [...W.keys()].map((k) => k.split(',').map(Number)).filter((c) => c[0] === x && c[2] === z).map((c) => c[1]);
+    assert.equal(Math.min(...ys), wg.lintel, 'nothing of the wall under the lintel');
+  }
+  // the checker: M25, M2:wall, M8:wall, M1 clean; closure holds for both movers; walk gates off the water gate's positions
+  const rep = checkRegion({ ir: p.ir, survey: svOf(f).bytes, blobs: p.blobs, volumes: (r.volumes ?? []).map((v) => v.decoded), meta: p.meta });
+  assert.deepEqual(findingsOf(rep, /^M(25|20|2:wall|8:wall)|^M1$/).map((x) => `${x.rule} ${x.message}`), []);
+  const m = rep.metrics.walls.town_wall;
+  assert.equal(m.waterGates, 1);
+  for (const mover of ['player', 'villager']) assert.equal(m.closure[mover].leaks, 0, `${mover}: no leak through the water gate`);
+  assert.ok(wall.gates.every((g) => g.cells.every(([x, z]) => !wg.cells.some((c) => Math.abs(c[0] - x) + Math.abs(c[1] - z) <= 1))));
+  // the wire: the brook's answer and siteplan name the water gate; its bill holds the grate's bars
+  const a = p.meta.planCheck.answers.find((q) => q.part === 'brook');
+  assert.deepEqual(a.geometry.waterGates, [{ wall: 'town_wall', cells: wg.cells.length, lintel: wg.lintel, grate: cellsOf(op.grate).length }]);
+  assert.deepEqual(p.meta.planCheck.answers.find((q) => q.part === 'town_wall').geometry.crossing, { type: 'wall', over: 'course', gate: 'water', course: 'brook' });
+  assert.equal(p.meta.planCheck.links.bom.brook['minecraft:iron_bars'], cellsOf(op.grate).length);
+  const sp = sitePlan({ ir: p.ir, meta: p.meta, planId: 'p', irSha: 'x'.repeat(64) });
+  assert.deepEqual(sp.courses.find((c) => c.id === 'brook').waterGates, ['town_wall']);
 });

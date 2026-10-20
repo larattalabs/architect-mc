@@ -70,6 +70,7 @@ test('item 12: every HY refusal fixture answers its code and evidence kind; a wo
     }
     assert.equal(a.reasons?.[0]?.code, f.expect.code, `${f.name}: ${JSON.stringify(a.reasons)}`);
     if (f.expect.kind) assert.equal(a.reasons[0].evidence?.kind, f.expect.kind, `${f.name}: ${JSON.stringify(a.reasons[0])}`);
+    if (f.expect.why) assert.equal(a.reasons[0].evidence?.why, f.expect.why, `${f.name}: ${JSON.stringify(a.reasons[0])}`);
     if (f.expect.until) assert.equal(a.reasons[0].until ?? a.reasons[0].evidence?.until, f.expect.until, f.name);
     if (f.expect.wouldFit) {
       assert.ok(a.wouldFit?.length, `${f.name}: a wouldFit`);
@@ -83,7 +84,8 @@ test('item 12: every HY refusal fixture answers its code and evidence kind; a wo
 });
 
 test('item 2: every HY valid fixture fits, its plan M25-clean in the checker, one siteplan courses row per course part', async () => {
-  const hy = [...read('valid').filter((f) => /^v[56][0-9]_/.test(f.name)), ...HY.filter((f) => ['fits', 'adjusted'].includes(f.expect?.class))];
+  // (the HY valid fixtures: v50..v69 with a channel part; VOC's v50_voc_village and v51_voc_forge share the numbers, not the kind)
+  const hy = [...read('valid').filter((f) => /^v[56][0-9]_/.test(f.name) && (f.plan.connectors ?? []).some((c) => c.kind === 'channel')), ...HY.filter((f) => ['fits', 'adjusted'].includes(f.expect?.class))];
   assert.ok(hy.length >= 6, hy.map((f) => f.name).join(', '));
   for (const f of hy) {
     const r = await run(f);

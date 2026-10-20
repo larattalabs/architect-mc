@@ -47,7 +47,8 @@ describe.skipIf(!hasKit)('(6c VOC-b) rarity budgets in the sidecar', () => {
 
   it('the feature bible.rarity', () => {
     expect(FEATURES).toContain('bible.rarity');
-    expect(FEATURES.indexOf('bible.rarity')).toBe(FEATURES.length - 1);
+    // appended right after VOC-a's vocab ((6c HY) the HY features follow it)
+    expect(FEATURES.indexOf('bible.rarity')).toBe(FEATURES.indexOf('vocab') + 1);
   });
 
   it('checkRarity: the kit\'s validateRarity; a malformed budget is FIELD_LIMIT naming its path', async () => {
