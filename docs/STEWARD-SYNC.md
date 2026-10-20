@@ -55,7 +55,7 @@ release and after each sync. Contracts and as-builts stay in `docs/CONTRACT.md`;
    later, with a better design.
 10. 7a-2 (RK, LF, SA) and 7a-3 (K3, GJ, FB).
 11. The rest of 6d: FS, LC (report), AD.
-10. 7b, 7c.
+12. 7b, 7c.
 
 ### Open asks either way
 - None blocking.
