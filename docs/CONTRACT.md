@@ -16298,6 +16298,11 @@ One owner, about **1-1.5 days**: the canonical form, `holds` and the wrappers (0
   mining also leaves; a grown tree is new blocks). The alternative treats a decayed leaf cell as ours and restores what stood
   before it, which would also restore over a player's mining. Default: as today.
 
+### Coordinator decisions (2026-10-20, on Noah's behalf)
+
+- **N-CU-1:** as proposed. Leaves, saplings and snow stay "not ours" after they drift.
+
+
 ## Phase 6c slice IRR: farm irrigation (DRAFT for Steward review)
 
 Working farms: a water source in every 9x9 of a farm lot's field, so all of its farmland is hydrated. Each source is an H body
@@ -16496,6 +16501,12 @@ member (0.25 day); items 2-7, mostly the undo paths (1 day). No split: the mask 
 - **N-IRR-2. The look.** Proposed: open 1x1 sources on a clay bed (the bible's `fluids.bed`), flush with the field. The
   alternative covers each with a slab or a lily pad so players can walk over (a slab is waterloggable; a lily pad is a block on
   the water, outside the body). Default: open.
+
+### Coordinator decisions (2026-10-20, on Noah's behalf; Noah can overrule at the look step)
+
+- **N-IRR-1:** `irrigate: true`, mirroring `farmPond`. A pattern string can be added later; `true` keeps its meaning.
+- **N-IRR-2:** open 1x1 sources, the vanilla farm look.
+
 
 ## Phase 6c slice VOC-c: `rule.palette` measured (DRAFT for Steward review)
 
@@ -16726,3 +16737,9 @@ saves about half a day and the RC check, but then "only copper" over provisional
   come when an ask needs them. Default: `wood` only.
 - **N-VOCc-2. What "no wood" swaps to.** Proposed: VOC-a's role chain (the next block of the role, usually stone or the style's
   `structure`). The alternative refuses and lets Steward pick a bible. Default: the role chain.
+
+### Coordinator decisions (2026-10-20, on Noah's behalf)
+
+- **N-VOCc-1:** one group for now, `wood`. Other groups are later additive changes.
+- **N-VOCc-2:** as proposed. "No wood" swaps each wood block for the next block in VOC-a's material chain.
+
