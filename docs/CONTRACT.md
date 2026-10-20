@@ -17391,3 +17391,322 @@ verifier reviews the diff and the evidence and **re-runs items 6 and 7** (realis
 - **N-FL-2. Ring facing.** Proposed: lots on a ring face the hub (inward), central lots in the hub face the street. The
   alternative faces outward (backs to a shared yard). Default: inward (every recorded ring asks for it: "facing the water",
   "ringed around the oak", "around a central fire").
+
+## Phase 6c slice F3: forms II, trees, mushrooms, coral, roots and stalactites (DRAFT for Steward review)
+
+The rest of SETTLEMENTS §9.2's generator library as **plan forms**: giant trees, giant mushrooms, coral, roots and stalactites,
+with **M18** (leaf decay) and **M19** (dead coral) from §11, and the **forest-heavy `mega_bench` variant** the 6c close-out
+measures. Supersedes the 2026-10-11 draft (now marked superseded where it stands), which predates plan/0, the catalogue, H, KC and CU:
+that draft's generators, rules and forest variant stand; its API, its "no Java" and its gate are replaced here. Over the CU/IRR/
+VOC-c batch (API 1.37.0, mod 0.40.0, kit 0.38.0, catalogue 9) and, for `around`, FL.
+
+- **Branch:** `slice/F3` (F3-a), then `slice/F3-b`, `slice/F3-c` over `f3/core`; worktrees `../architect-mc-F3*`. **Spend:** $0.
+- **Scope:** the generators (§2), their footprint and placement in a plan (§3), M18 and M19 (§4), KC's rows (§5), StillOurs (§6),
+  the catalogue and API (§7), byte identity (§8), the forest variant (§10.3), the gate (§10).
+- **Not in scope:**
+  - **Lots in or on forms:** treehouses, canopy huts, houses inside giant mushrooms (`layout.elevated`, S5: 7b), cave cities (S6:
+    7b), `form.hidden_room` (7b). F3's forms are standalone landscape.
+  - Coral, kelp or seagrass in **natural** water (the seabed and under-water slice, `form.seabed_site`); kelp and seagrass
+    anywhere (kelp grows by random tick into its body's cells; deferred with F2's water scatter).
+  - Streets under canopies (§3.2: a canopy's columns are hard); lanterns hung in trees (style, later).
+  - `form.scatter` (still reserved `until: F2` although F2 shipped scatter as a region op: a stale entry noted for the coordinator,
+    not F3's to flip).
+- **Depends on:** F1 (generator rules, `voxels`, `settleForm`), F2 (stamps' block rows), H (bodies), KC (the registry,
+  `M25:clear`), CU (`StillOurs`' canonical chains), FL (`around` for forms; F3 builds without it, §11).
+
+### 0. Facts (integrate/batch-cu, 631f89c0)
+
+**F1's rules** (`kit/lib/forms/rules.mjs`): `MAX_PRIMITIVES` 32 per op (:15), `BAKE_OPS` 400 ops per form (:20), `SKIRT` 6 (:21);
+`bakeOps` (:84) bakes to one `voxels` op (cond `IF_NATURAL`); `settleForm` (:173) trims ungrounded fragments and adds 45-degree
+supports for overhangs over 4. `r.form(id, gen, {stage, bake: 'auto'})` (`program.mjs:880`) records `ir.forms[]` and marks the part
+`kind: form`.
+
+**F1 in a plan** (`compile.mjs`): `resolveSpikes` (:589) scans for `count` sites (1..32) skipping water, roughness over 3, sites
+closer than 8 and frozen survey columns; `resolveForm` (:956) treats accepted zones and forms as obstacles (gap 2) and re-places
+on a clash (`adjusted`); emit (:1138-1170) calls `r.iceSpike`/`r.rockSpire` per site; forms past the claim roll back (`refused
+OUT_OF_CLAIM`). In a plan `keepNatural` is a note only (:614). Schema: `form` kinds `ice_spike | rock_spire` (`plan.json:745`).
+
+**The checker** (`check.mjs:23`): RULES M1-M14, M17, M20, M22-M27. **No M18 or M19.** Errors M1, M13, M14, M20, M25, M27:state and
+M27:convert. M3 support with `M3:overhang` for forms (limit 4). `vocab/budget.mjs:194-201` approximates leaf reach for
+`M27:drift` by **offset** (`LEAF_REACH` 6), not vanilla's path through leaves.
+
+**How the mod writes.** `Sites.FLAGS` = CLIENTS | SUPPRESS_DROPS | SKIP_BE_SIDEEFFECTS (`Sites.java:108`): **no neighbour updates**.
+So a written block keeps the exact state the kit wrote (leaves' `distance`, mushroom faces, dripstone `thickness`) until something
+next to it changes. **The kit never writes `persistent=true`** today; only the mod's held leaves do (`LeafGuard`, `TileCheck`
+stage 4, C31's felling).
+
+**Trees in the survey.** `FLAG_TREE` (`pack.mjs:54`); routes keep 6 off trees (`TREE_REACH`, `route.mjs:39`); `clearTrees` rects
+(`program.mjs:289-306`); C31 fells a trunk whole and stops at owned cells.
+
+**Blocks** (`blocks.mjs`): leaves `distance 1..7`, `persistent`, `waterlogged`, class LEAVES; logs and wood `axis`, class LOG;
+`mushroom_stem` 6 faces, class LOG; `brown_`/`red_mushroom_block` 6 faces, **class LEAVES**; `pointed_dripstone` `thickness`
+(tip_merge, tip, frustum, middle, base) and `vertical_direction`, class PLANT, random-ticked; `dripstone_block` ROCK; `rooted_dirt`
+SOIL; `hanging_roots` PLANT (ceiling); `mangrove_roots` waterlogged, no voxel class; live coral plants and fans PLANT,
+**waterlogged by default**; live coral blocks ROCK. **No coral row is random-ticked** (coral dies by a scheduled tick), so
+`drifts()` never catches it.
+
+**Bodies and coral** (KC as built, `checkFluids.mjs`): `clearScan` (:153) makes any write by another part into a body's hard sets
+(cells, ice, shell, lining, grate, spill) an `M25:clear` error, and a water or ice cell holding anything but its fluid **whoever wrote
+it**, the body's own part included (:208-212). "Water" is water, a bubble column or any `waterlogged=true` state (`vworld.mjs:49`):
+so a waterlogged coral fan written by the body's own part passes, a coral **block** in a water cell fails. M27:state already refuses
+`waterlogged=true` outside body cells and natural water.
+
+**The removal.** CU's `StillOurs.holds` treats `distance`, `waterlogged`, `age`, ... as volatile and adds copper's canonical chain;
+**mushroom faces, dripstone `thickness` and coral death are not in it**: a live coral block that dies when its pond drains (removal
+drains first) fails "same block", so `Regions.remove` would leave it standing as a player's edit.
+
+**Volumes.** `r.needVolume(box)` (`program.mjs:759`) takes the two-plan flow (the first plan returns null); classes AIR, ROCK, SOIL,
+LOOSE, ICE, SNOW, WATER, LAVA, LOG, LEAVES, PLANT, ...; T3b's caps (`tunnelGeom.mjs:29`): 4M cells per edge, 16M per plan. Scatter
+already finds ceilings (`scatter.mjs:372`: an air cell under a solid one).
+
+**Survival.** Forms carry no BOM (`finish.mjs:106-146`: regions are INSTANT); `cost.rarity` and `cost.creativeOnly` apply to any part.
+
+**What is missing for the close-out.** `kit/regions/mega_bench.mjs` has params `lots` and `scale` only: **no forms or forest
+variant** exists; the close-out's `mega_bench A --forms` and its per-tile figures on "F3's forest variant" wait on this slice.
+
+### 1. The rule in one line
+
+**A form is landscape the region owns:** written exactly, kept by its own drift rules, removed exactly, clear of every lot, street and
+body, never a write in a lot box, and never a cell that vanilla would change on its own (decay, death, growth) unless the change
+is named and still ours.
+
+### 2. The generators
+
+All follow F1's rules (§0): one bounded op per cluster (at most 32 primitives), baked to `voxels` past 400 ops, absolute y with
+skirts to 6 under the plan ground, species presets plus a bible's own within the param schema, seeded `fnv64(seed, generator, id)`.
+
+| Generator (block id) | Skeleton | Materials | Drift handled at write |
+|---|---|---|---|
+| `giantTree` (`form.giant_tree`, F3-a) | trunk `capsuleChain` tapering with height; branches by integer space colonisation toward canopy attractors; buttress roots bending into the ground (its own `roots`, §2.1) | bark (`log`, `axis` from the segment's direction), `wood` core, leaves in noise-holed `ellipsoid` lobes | every leaf `persistent=true`, `distance` written as vanilla would compute it (path through leaves from the tree's own logs, capped 7) |
+| `giantMushroom` (`form.giant_mushroom`, F3-b) | stem `capsuleChain`, cap `ellipsoid` cut by `clipY` (flat brown, domed red), gills under | `mushroom_stem`, the cap block, gills | the six faces from the op's own cells (a face is false where the neighbour is the same block), as vanilla's `updateShape` would set them |
+| `coral` (`form.coral`, F3-c) | branching `capsuleChain`s and fans on a body's bed | live coral plants, fans and wall fans (waterlogged), sea pickles (waterlogged, 1-4), live coral blocks on the bed only | written only inside a plan body as the body's own cells (§3.4); dead variants never chosen by the generator |
+| `roots` (`form.roots`, F3-b) | `capsuleChain`s down a steep face (a bank or cliff) or from a cave ceiling | `rooted_dirt` in the face, `hanging_roots` under it; `mangrove_roots` for the mangrove preset | hanging roots only under a solid cell the form writes or the volume shows |
+| `stalactites` (`form.stalactites`, F3-b) | cones from a ceiling and from the floor under it, merged into columns where they meet | `dripstone_block` roots, `pointed_dripstone` with `vertical_direction` and `thickness` from the cone (tip, frustum, middle, base; `tip_merge` where two meet) | never under a root whose block above holds or touches a fluid source (vanilla's growth needs water over the root block), so none grows |
+
+**Presets:** trees oak, spruce, birch, jungle, dark oak, cherry, mangrove, pale oak, and the nether's crimson and warped (stems and
+wart blocks, shroomlight: no leaves, no M18); mushrooms brown, red; coral tube, brain, bubble, fire, horn (mixed by default);
+roots dirt, mangrove; dripstone small, large. **Sizes:** giant trees 16 to 64 high (default by preset), canopies up to 32 across;
+giant mushrooms 8 to 32; stalactites 2 to 16 long.
+
+**2.1 A tree's own roots** are part of the tree's op set (buttresses into the ground, `IF_NATURAL`, at most the skirt's 6 below);
+`form.roots` is the standalone form (exposed roots down a bank, hanging roots in a cave).
+
+### 3. In a plan: placement, footprint and the volume
+
+**3.1 Placement** (resolve, as `resolveSpikes` with these changes):
+- **Sites:** `count` (giant trees and mushrooms 1..16, coral 1..8 patches, roots and stalactites 1..8 clusters) in the part's
+  `where` (`inside`, `near`, `adjacent`, and `around` once FL is in: FL §4.1), never on water, roughness at the trunk or stem base
+  at most 3 within its radius + 2.
+- **Clear of natural trees:** a giant tree's or mushroom's column footprint grown by **8** holds no natural log or leaf column
+  (the survey's `FLAG_TREE`, the volume's LOG/LEAVES/mushroom cells). Our logs never sit within a natural leaf's reach, so no
+  natural leaf's `distance` or decay changes because of us (§10 item 5's E-normal depends on it). Natural trees are never felled
+  by a form.
+- **`inside {part: <zone>}`** (F3's kinds only; F1's unchanged): the zone's **open land**, its rect minus its layout's lots + 1,
+  streets and verges, lanes, shared space and props, each grown by 2. A ring's hub (FL §2.3) is such land: the giant oak at the
+  centre of a ring.
+- **Obstacles** as F1's (accepted zones and forms, gap 2) plus every registered body footprint (§5).
+
+**3.2 The footprint other writers see.** A form's 2.5D footprint for routes, walls, lots and later forms is its **column mask**
+(trunk, roots and canopy projected), not its bounds rect: F3 forms register `columns` beside `bounds` in `ir.forms[]`, and
+`_routeObstacles`, the wall grid (`OB.OVERLAP`) and `resolveForm` read the mask when it is there (F1's forms have none: unchanged).
+- Lot boxes + 1 never meet a form's columns (K5: a canopy over a lot box would be a write in it).
+- Streets and paths never pass under a canopy (S-F3-4); walls never under one.
+- The mask is the tree's own projection, so a 32-wide canopy does not block a 32 x 32 rect.
+
+**3.3 The cave forms' volume.** `stalactites` and `roots` from a ceiling need a frozen volume over their search box: the `where`
+rect x [the ground - 48, the ground]. They take the two-plan flow (`PlanChecks.hasVolume` gains them), within T3b's caps; a plan
+past the caps answers `refused VOLUME` as a tunnel does. No ceiling of at least 4 headroom in the box: `refused NO_FEATURE {why:
+no ceiling}`. Ceilings are the volume's AIR cells under ROCK, SOIL or LOOSE; floors the solid cells under them (stalagmites).
+S-F3-3 asks whether Steward's `load` rule for tunnel plans extends here.
+
+**3.4 Coral is its body's.** `form.coral` must name a plan body: `where: {inside: {part: <form.pond | form.fountain | form.quay |
+channel.moat>}}`; anything else answers `refused NO_FEATURE {why: no plan water}` (natural water is the seabed slice's).
+- It **compiles into the body**: its cells are a new body set `decor` (the body's own writes, `part` = the body's part), written in
+  the fluids stage's body order after the bed and before the water: coral blocks replace bed cells (shell-grade: full blocks),
+  plants, fans, wall fans and sea pickles (all waterlogged) stand in water cells at least 2 below the surface.
+- **H's census and prediction** count a waterlogged decor cell as a source cell (as HY's grate bars are); `predicted` includes
+  them. The flow model treats them as sources; the breach as H's.
+- KC's registry records `decor` in the body's hard set; `M25:clear`'s water check passes them (waterlogged, the body's own part).
+  So coral never needs an exception to KC.
+
+### 4. M18 and M19 (checker, warnings; bars 0 in F3's gate)
+
+- **M18 decay:** every leaf cell a plan part writes is `persistent=true`, **or** lies within 6 of a log by vanilla's rule
+  (`distance` propagated through leaves and logs from logs, 6-neighbour). On the virtual world. Findings per part: the cells and
+  their distance. F2's stamps (harvested `persistent=false` leaves) are judged by the same rule. M27:drift's offset approximation
+  (`budget.mjs`) is left as it is and queued to read M18's rule (kit only).
+- **M19 dead coral:** no live coral block without a water cell beside it, and no live coral plant, fan or wall fan that is not
+  waterlogged. On the virtual world and on the realised world's dump. Findings per part.
+- Both are warnings in RULES (`M18`, `M19`), as the 2026-10-11 draft had them; F3's gate holds them at 0 on every fixture, and the
+  6c close-out at 0 on the forest variant.
+
+### 5. KC: every new writer keeps clear
+
+| Writer | Placed (vs H resolve and emit) | KC rule | Refused as |
+|---|---|---|---|
+| Giant trees, giant mushrooms, roots, stalactites | after H resolve (they resolve with forms, after the bodies' reservations at step 2) | **the later part:** sites keep off every registered footprint grown by 2, and no cell (canopy included) in a hard or watch cell | the form: `adjusted` (fewer, moved) or `NO_ROOM`; never the body. They are **not** added to `EARLY_FORMS` (relief, terrace, spikes keep their row) |
+| Coral | inside its body | the body's own cells (`decor`, §3.4): no exception needed | `NO_FEATURE` when no body; `NO_ROOM` when the bed holds no room 2 under the surface |
+| Lamps, routes, walls near a form | after | the form's column mask (§3.2) is hard, as forms' bounds are today | as today |
+
+`_unsafe.treeInPond` (a canopy over a pond's water) and `_unsafe.coralOtherPart` (coral written as a separate part's op) are
+`M25:clear`'s broken variants; the backstop refuses the tree, never the pond.
+
+### 6. StillOurs: the new blocks' drift (Java)
+
+What vanilla changes on our blocks without anyone placing anything, so that undo, removal, deltas and PT2's counts keep them ours
+(CU's rule, extended):
+- **Volatile properties** (added to `StillOurs`' list): the six faces of `brown_mushroom_block`, `red_mushroom_block` and
+  `mushroom_stem`; `pointed_dripstone`'s `thickness` (`vertical_direction` stays shape-defining). Leaves' `distance` and
+  `waterlogged` are volatile already; `persistent` stays compared (a player can't flip it).
+- **A coral chain** beside copper's: `Coral.canonical(block)` maps every dead coral block, plant, fan and wall fan to its live
+  form, read from vanilla at class load (each live coral block's dead block), never a hand table; a unit test pins it against
+  `blocks.mjs`. `holds` compares canonical forms first, so a coral that died in a drained pond is ours.
+- **Undo order.** The fluids stage writes the bed, then decor, then water; removal drains, then restores decor and bed (H's
+  order). The forms stage writes supports before dependants (logs before leaves, dripstone roots before tips, the face before
+  hanging roots); removal is the journal's reverse. With `Sites.FLAGS` no neighbour update runs, so no dependant drops mid-removal;
+  the order is still stated so a later flag change can't break it.
+- **Refunds** don't apply (forms are instant and free, below). PT's records win first, as CU's §2.3.
+- **Survival (binding, Noah):** grown natural forms are free and instant (the RS draft's table, "Noah: grown natural forms are
+  free"). F3 keeps that. A giant tree is a lot of wood in a Supplied world (N-F3-1 asks once, with the measured counts).
+
+### 7. Catalogue 11, API and versions
+
+| Block id | Before | After |
+|---|---|---|
+| `form.giant_tree` | reserved, until F3 | supported, sinceApi 1.39.0 (placeholder), its own `$defs/form.giant_tree` |
+| `form.giant_mushroom`, `form.coral`, `form.roots`, `form.stalactites` | absent | **added** supported (one id per idea, P0's freeze rule), each its own lean def |
+
+- **Defs** (strict, lenient params by S-K1-3): `kind`, `count`, `preset`, `height` (or `size`), `where`, and per kind one member at
+  most (`roots: bool` on giant_tree, default by preset; `cover` 0..1 on coral). Unread params are noted. The compact plan/0's
+  delta predicted 3,000-4,500 characters, measured (S-FL-8).
+- **Coverage:** no catalogue entry says `until: F3` after the slice. Catalogue 10 (FL's) archived as `fixtures/plan/catalogue-fl.json`
+  (or catalogue 9 as `catalogue-vocc.json` if F3 merges first); the diff is exactly one flip and four added ids.
+- **Checker:** RULES gains `M18`, `M19` (warnings). **IR:** `ir.forms[].columns` (additive), the body op's `decor` set (format 2,
+  `requires: ['coralDecor']`: an older mod refuses it `PLAN_STALE`).
+- **Placeholders:** API 1.39.0, mod 0.42.0, `KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` 0.40.0, catalogue 11.
+  Features `formsTrees`, `formsCave`, `formsWater` (as the old draft), sidecar `FEATURES` `plan.forms2`. **Java:** `StillOurs`,
+  `Coral`, `IrStale.KINDS_FORMAT2`, `PlanChecks.hasVolume`; api-compat clean (no public type changes).
+
+### 8. Byte identity
+
+- **Bar:** every committed fixture re-plans byte-identical (answers and IR, but its kitVersion), **except by name**: those holding a
+  `form.giant_tree` part (`extension/e15`/`e16`'s reserved lists and any other the builder finds), each named. F1's forms keep their
+  bounds-rect footprint (no `columns`), so every F1 and F2 fixture and golden is unchanged.
+- M18 and M19 counts recorded on every committed fixture and every scenario golden (predicted 0; any finding on a stamp named).
+- The kitVersion goldens re-cut (links_demo, links_demo_flat, crossings_demo_flat); every other tile golden unchanged.
+
+### 9. Steward's recorded plans (the asks claim): expected answers
+
+**No recorded plan names an F3 block** (the gap table holds no `form.giant_tree`, and none of the 59 writes a mushroom, coral, root
+or stalactite form). **Expected: every recorded answer unchanged; the gap table unchanged.** The builder commits the before and
+after tables to show it.
+
+Re-record candidates, for Steward's information (not judged): treetop_village (jungle giant trees as forms beside the zone; the huts
+stay `layout.elevated`, 7b), around_my_tree (a giant oak in the ring's hub, with FL), mushroom_town (giant mushrooms round the
+hamlet; houses inside them are 7b), hidden_village (stalactites and hanging roots in the hollow, where a volume shows a ceiling).
+
+**Bar:** 0 `malformed`, no recorded part changes class.
+
+### 10. Gate (slice tier, $0)
+
+**10.1 Fixtures.**
+- `valid/v72_f3_grove` (3 giant trees of 3 species and 2 giant mushrooms on a flat claim, a village zone beside them), `v73_f3_coral_pond`
+  (a `form.pond` with `form.coral` inside it, a fountain with coral), `v74_f3_roots_bank` (roots down a sculpted 8-high bank),
+  `v75_f3_stalactites` (a synthetic cave volume: a frozen volume fixture with a 12-high chamber), `v76_f3_hub_tree` (a ring zone
+  with a giant oak in its hub: FL's, added when FL is in), `v77_f3_nether` (crimson and warped giants, shroomlight light).
+- `f3/`: `r01_coral_dry` (coral not inside a body: `NO_FEATURE`), `r02_no_ceiling` (stalactites over solid ground: `NO_FEATURE`),
+  `r03_tree_near_natural` (a site within 8 of natural leaves: moved, `adjusted`), `r04_tree_in_pond_band` (a tree whose only site meets
+  a pond's footprint: `NO_ROOM`, the pond untouched), `r05_volume_cap` (`VOLUME`), and **`s01_steward_glade`** (Steward-shaped: a
+  hamlet zone, a giant oak `near` its well, a coral pond `farmPond`-style beside it, two giant mushrooms at its edge, written as the
+  plan writer would).
+- **Broken variants:** `_unsafe.leafNotPersistent` (M18), `_unsafe.liveCoralDry` (M19), `_unsafe.coralOtherPart` and
+  `_unsafe.treeInPond` (`M25:clear`), `_unsafe.stalactiteUnderWater` (a root under a water source: the generator's lint
+  `GROWS`), `_unsafe.mushroomFaces` (all faces true: the lint `STATE` against the computed faces).
+
+**10.2 Sites.** `grove_demo` (bundled, `catalogue = false`): on a forest location of the pinned seed found by `find-site`
+(`scenarios/sites/grove.json`, natural trees round it) and its flat variant; a cave box from 6b's volume fixture for stalactites;
+a pond (H) for coral.
+
+**10.3 The forest variant.** `mega_bench` gains `forest: true`: giant trees over 30% of its claim, undergrowth by F2's scatter
+(shrubs, ferns, moss), plan only plus a realise of 16 tiles (the close-out runs the whole of mega_bench A `--forms`). Its per-tile
+p50/p99 and IR and blob sizes are **recorded** here (GATES policy 1) and judged at the close-out (p99 under 2 s, at least 45k
+cells/s, IR under 4 MB, blobs under 16 MB).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Bounded ops (property, 200 seeds per generator and preset) | 100% of ops at most 32 primitives; forms over 400 ops baked |
+| 2 | Plan answers | every valid fixture `fits`; every `f3/r*` its code with `wouldFit`s re-checked alone; §9's bar on the 59 asks |
+| 3 | **Every new kind through `realiseApproved`, flat** | in game, through `Regions.checkPlan` (the two-plan flow where a volume or a body asks for it) and `realiseApproved` with the artifact: v72, v73, v74, v75, v77 and `s01_steward_glade`, each READY, PLACED, the realised cells equal the virtual ones by state (leaves' `distance` and `persistent`, mushroom faces, dripstone thickness), coral ponds' census equal to `predicted` with decor, then `Regions.remove`: **E-flat 0** |
+| 4 | Decay and death (the stand) | after a 2-minute stand at default random ticks: 0 written leaf cells changed (re-surveyed), M18 0; 0 live coral turned dead, M19 0; 0 pointed dripstone grown; the realised M3 0 floating (branches on trunks, stalactites on ceilings) |
+| 5 | **Natural round** | `grove_demo` on its forest site through the same flow: removal E-normal 0 unclassified, with D2's narrowed classes (`decay` of a natural non-persistent leaf, `flow`, `live`, each at unwritten cells and `far`/`deep` from the plan) and VOC's `farfluid`, reused exactly; **0 classified cells within 8 of a form's columns**; a no-region control run first |
+| 6 | **Undo with drift** (verifier re-runs) | v73 with its pond drained by removal: every coral cell restored (dead ones counted ours, `Coral.canonical`); a leaf, a mushroom face and a dripstone tip changed by a player-like `/setblock` neighbour before removal: each still ours and restored, E-flat 0; a player-placed block (PT record) on a form cell: kept, reported |
+| 7 | KC | `M25:clear` 0 on every valid fixture; `_unsafe.coralOtherPart` and `_unsafe.treeInPond` caught; r04 refuses the tree |
+| 8 | Block states | 0 `pointed_dripstone` with an impossible `thickness` sequence; mushroom faces equal the computed faces; every leaf's `distance` equal to vanilla's rule |
+| 9 | Byte identity, catalogue | §8's bar; the golden equals catalogue 11, the diff exactly §7's |
+| 10 | Forest variant (recorded) | §10.3's figures, the light-engine tick share under canopies, and the organic read (axis-run share per generator, recorded per N-F1-1) |
+| 11 | Determinism | IR and blob shas over 3 plans; golden `scenarios/goldens/grove_demo*.json`; macOS and Linux CI |
+| 12 | Unchanged | S1, S2, S3, S7, mega_bench (default), forms_demo, scatter_demo, water_demo and the rest of H's and HY's goldens |
+| 13 | API, spend | api-compat clean, apijars; compact plan/0 size recorded; $0.00 |
+| 14 | Look (camera, client; recorded) | each species, a coral pond, a cave with stalactites, roots down a bank, a ring with a hub tree: Noah's call (N-F3-2) |
+
+**Tier:** slice plus the engine tag (a new op set in the fluids stage, `StillOurs`): the units, apijars and api-compat, the impact
+map's steps for `kit/lib/forms/**`, `kit/lib/region/**`, `checkFluids.mjs`, `journal/**` (F1's `f1-unit`, `6cf1-scenario-forms`,
+F2's scatter steps, H's `h-unit`/`h-ingame`/`ha-ingame`, KC's `kc-unit`/`kc-ingame`, CU's `cu-ingame`, PT2's `pt2-ingame`, 6a's
+`6a-forest`), and F3's own `f3-unit`, `f3-ingame`, `f3-natural`, `f3-forest`, `f3-look` (driver `tools/gate6cf3.mjs`, chain `6cf3`,
+impact rule "6c F3"). The verifier reviews the diff and the evidence and **re-runs items 3, 4 and 6** (realise, the stand, undo with
+drift). No Steward RC by default (S-F3-5).
+
+### 11. Build order, the split and the shared interface
+
+1. **F3-a, trees and the core (one owner, about 2 days):** archive the apitest jar and the catalogue; the flip and the four added ids
+   with stubs answering `refused NO_ROOM {until: F3b | F3c}` until each lands; `giantTree` with its roots, M18, the column mask
+   (§3.2), placement (§3.1, `inside` a zone's open land), the clear-of-natural-trees rule, StillOurs' volatile list and its tests;
+   `grove_demo` (trees), v72, v77, r03, r04, s01; items 1-5, 7-9, 11. **Interface frozen on `f3/core`** at the end of day 1: the
+   form record (`columns`), the placement call, the volatile list.
+2. **F3-b, mushrooms and the cave forms (about 1.5 days):** `giantMushroom`, `roots`, `stalactites`, the volume (§3.3); v74, v75, r02,
+   r05; its items.
+3. **F3-c, coral (about 1.5 days):** `coral`, the body's `decor` set, the census, M19, `Coral.canonical`; v73, r01; items 3, 4 and 6
+   for coral.
+4. **The forest variant (0.5 day, F3-a's owner after F3-a):** §10.3, item 10.
+- **FL:** F3 does not wait for FL. `around` for F3's forms and v76 land with whichever merges second (a two-line test change).
+- **Total:** about 5.5-6 days of work, about 3 elapsed. The sub-slices merge into `integrate/f3` and ship as one release.
+
+### Binding answers carried over
+
+- **The 2026-10-11 batch review** froze the old F3 draft with these, still binding: the generators and presets of its table (§2), M18
+  and M19 as warnings (§4), the forest-heavy variant with plan plus 16 tiles (§10.3), and the **6c close-out** gating 7a's merge
+  with "F3's forest variant" and "mega_bench A with forms" in it.
+- **N-F1-1:** the axis-run (organic read) stays recorded only through 6c.
+- **N-F2-1:** stamps are harvested locally, never committed; F3's generators are code, not stamps.
+- **Survival (Noah, in the RS draft):** grown natural forms are free and instant.
+- **N-H-1, S-H-4:** water is free; wet writes are a fallback only (F3 writes none: coral is a plan body's own).
+- **S-KC-1, S-KC-2:** the later part moves, never the body; watch cells strict.
+- **CU:** StillOurs reads canonical chains from vanilla, never a hand table; a player's record wins.
+- **S-K1-3, S-K1-6, S-K1-7:** lenient params, a newly refused pending part is a repair, unknown codes pass through.
+
+### Open questions for Steward
+
+- **S-F3-1. Coral as a part.** Proposed: `form.coral` is its own part whose `where` names a plan pond, fountain, quay or moat, and
+  compiles into that body's own cells. The alternative is a member on the body (`coral: {preset, cover}` on `form.pond`), with no
+  new id. A part keeps "one id per idea" and lets your plan writer add coral without rewriting the pond. Which?
+- **S-F3-2. Four new ids.** `form.giant_mushroom`, `form.coral`, `form.roots`, `form.stalactites` beside `form.giant_tree`, each its
+  own lean def (about 3,000-4,500 characters together in the compact plan/0). Or one `form.giant_tree` with mushroom presets and the
+  cave forms as members? Proposed: the five ids.
+- **S-F3-3. Volumes for cave forms.** Stalactites and ceiling roots take the two-plan flow with a frozen volume, like a tunnel. Your
+  rule bounds `load` (512) whenever a plan holds a tunnel; will you apply it to plans holding `form.stalactites` or `form.roots` too?
+- **S-F3-4. No streets under canopies.** A canopy's columns are hard for streets, paths, walls and lots (K5 for lots). Fine for v1,
+  or do you need roads that pass under a giant tree (a later member, with headroom 4 and W's lamps under it)?
+- **S-F3-5. RC.** F3 changes `StillOurs` only for blocks your region parts never wrote before F3 (lots are BOX entries, restored
+  exactly), so GATES policy 4 asks no RC; the verifier re-runs the undo items. Do you want a pre-release check of
+  `s01_steward_glade` anyway?
+- **S-F3-6. Forms near your builds.** A giant tree keeps 8 off natural trees and its canopy off lot boxes + 1. Should it also keep
+  off player builds by more than PT's keep-out + 1 (shade on a player's farm)?
+
+### Open questions for Noah
+
+- **N-F3-1. Wood in Supplied worlds.** Grown natural forms are free (your rule). A giant oak of the default preset is predicted at
+  roughly 1,500-3,000 logs and wood (the builder records each preset's count), which a player can fell. Keep them free, or make
+  giant trees creative-only (or Steward-allowance only) in Supplied worlds? Default: free, as you decided; each part's
+  `cost.cells` shows the count.
+- **N-F3-2. Scale and look.** Proposed: giant trees 2 to 4 times vanilla's largest (16-64 high), mushrooms 2 to 4 times, coral
+  mixed colours by default, stalactites up to 16. Default: as proposed; the look step (item 14) shows each.
