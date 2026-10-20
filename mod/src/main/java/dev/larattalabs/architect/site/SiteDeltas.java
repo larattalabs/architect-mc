@@ -719,7 +719,9 @@ public final class SiteDeltas {
 
 			@Override
 			public boolean holds(long pos, Value after) {
-				return WorldJournal.same(now.apply(pos), after);
+				Value v = now.apply(pos);
+				// (6c CU, S-CU-1) a player's own block over our cell, holding it only through CU's equivalence, is the player's edit
+				return WorldJournal.same(v, after) && !WorldJournal.playersOver(level, pos, WorldJournal.state(v), WorldJournal.state(after));
 			}
 		};
 		DeltaPlanner.Outcome o = DeltaPlanner.outcome(set.delta(), pb.snapBox(), stacks, nowW, r.edits());

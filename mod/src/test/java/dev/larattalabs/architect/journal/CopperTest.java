@@ -213,6 +213,18 @@ class CopperTest {
 	}
 
 	@Test
+	void playersRecordOnlyOverCusEquivalence() {
+		// (S-CU-1) the PT lookup applies only where CU made a different block ours; the same block is judged as before CU
+		assertTrue(WorldJournal.cuEquivalent(st("oxidized_copper"), st("copper_block")));
+		assertTrue(WorldJournal.cuEquivalent(st("waxed_cut_copper_stairs"), st("cut_copper_stairs")));
+		assertTrue(WorldJournal.cuEquivalent(Blocks.DIRT.defaultBlockState(), Blocks.FARMLAND.defaultBlockState()));
+		assertTrue(WorldJournal.cuEquivalent(Blocks.FARMLAND.defaultBlockState(), Blocks.DIRT.defaultBlockState()));
+		assertFalse(WorldJournal.cuEquivalent(st("copper_block"), st("copper_block")));
+		assertFalse(WorldJournal.cuEquivalent(Blocks.GRASS_BLOCK.defaultBlockState(), Blocks.DIRT.defaultBlockState()), "6a's spread: as before");
+		assertFalse(WorldJournal.cuEquivalent(Blocks.STONE.defaultBlockState(), st("copper_block")));
+	}
+
+	@Test
 	void builderAndRefundBlockTest() {
 		// Builder.Run.matches, RoadBuilder.refundOf (through it) and Sites.evidence compare by block through Copper.is
 		assertTrue(Copper.is(st("waxed_weathered_cut_copper"), block("cut_copper")));

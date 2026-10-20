@@ -255,7 +255,7 @@ async function javaTests(patterns, minTests) {
 
 steps.unit = async () => {
   const out = {};
-  out.copper = await javaTests(['*CopperTest*'], 7);
+  out.copper = await javaTests(['*CopperTest*'], 8);
   check(out.copper.ok, `item 2 (CopperTest): the canonical form over vanilla's maps equal to kit/lib/blocks.mjs's wx (60 rows, 120 blocks), every stage, waxed and scraped state holds against the written one, another form never does, facing and half still compare, the copper chest's empty-container rule, farmland and dirt; WorldJournal.same and holds, the builder's and the refund's block test: ${out.copper.tests} tests, ${out.copper.failures} failures (${out.copper.names.join('; ')})`, out.copper.tail);
   out.regression = await javaTests(['*StillOursFluidsTest*', '*JournalTest*', '*JournalPropertyTest*', '*RefundsAndBitsTest*', '*DeltaPropertyTest*', '*ApiCuTest*'], 10);
   check(out.regression.ok, `items 9, 10 (Java): StillOursFluidsTest, JournalTest, JournalPropertyTest, RefundsAndBitsTest, DeltaPropertyTest unchanged; ApiCuTest (the version and weatheringOurs): ${out.regression.tests} tests, ${out.regression.failures} failures (${out.regression.names.join('; ')})`, out.regression.tail);
@@ -490,6 +490,11 @@ steps.survival = async () => {
   const charged = minus(ps3.ledger.consumed, L0.consumed);
   out.a.built = { state: st3?.state, charged };
   check(st3?.state === 'built' && same(charged, bill), `item 8a: the ${hold} fed, the site BUILT; charged exactly the bill once (${sum(charged)} items, ${json(minus(charged, bill))} over)`, out.a.built);
+  const targets1 = await call('dev.site.cells', { site });
+  /** Every cell refunded a block other than its plan's: {pos, target (the plan's state: the standing state's properties), standing}. */
+  const perCell = [];
+  const withId = (state, id) => String(state).replace(/^minecraft:[a-z0-9_]+/, `minecraft:${id}`);
+  let deltaRefund = {};
   // ---- (c) and item 7: a version delta over weathered cells: v2 takes the three rail stairs and one wall block out
   {
     const { writeBlueprint } = await imp('lib/write.mjs');
@@ -508,6 +513,8 @@ steps.survival = async () => {
     const { bomOf } = await imp('lib/connectors/bom.mjs');
     const expect = bomOf(was);
     const returned = minus(Ld1.returned, Ld0.returned);
+    deltaRefund = dl.refund ?? {};
+    gone.forEach((g, i) => { const t = targets1?.[g.join(',')]; if (t && was[i] && idOf(t) !== idOf(was[i])) perCell.push({ pos: g.join(','), by: 'delta', target: withId(was[i], idOf(t)), standing: was[i] }); });
     out.c = { cells: gone.map((g, i) => ({ at: g, standing: was[i] })), check: { ok: chk.ok ?? chk.allowed, refusals: chk.refusals, kept: chk.kept, edited: chk.edited }, delta: { applied: dl.applied, refund: dl.refund, refusals: dl.refusals }, returned, expect };
     check(was.every((s) => s && oxidized(s)) && (chk.refusals ?? []).length === 0, `item 7: Sites.checkDelta (PlayerEdits REFUSE) over the weathered cells ${json(was.map(idOf))}: no PLAYER_EDITS, no refusal (${json(chk.refusals ?? [])}; kept ${json(chk.kept ?? null)})`, out.c.check);
     check(dl.applied && same(dl.refund, expect) && same(returned, expect), `item 8c: the delta removed them and refunded the standing blocks' items ${json(expect)} into the stockpile (refund ${json(dl.refund)}, returned ${json(returned)})`, out.c.delta);
@@ -527,7 +534,7 @@ steps.survival = async () => {
       const s = now.get(pos);
       if (!s || /^minecraft:(air|cave_air)/.test(s)) continue;
       standing.push(s);
-      if (idOf(s) !== idOf(tid)) perCell.push({ pos, target: idOf(tid), standing: idOf(s), steps: [...ws.waxed.filter((q) => q.at.join(',') === pos).map(() => 'waxed'), ...ws.scraped.filter((q) => q.at.join(',') === pos).map(() => 'scraped')] });
+      if (idOf(s) !== idOf(tid)) perCell.push({ pos, by: 'deconstruct', target: withId(s, idOf(tid)), standing: s, steps: ['weathered', ...ws.waxed.filter((q) => q.at.join(',') === pos).map(() => 'waxed'), ...ws.scraped.filter((q) => q.at.join(',') === pos).map(() => 'scraped')] });
     }
     // the door's upper half is not queued apart; bomOf counts a door once (its lower half)
     const { bomOf } = await imp('lib/connectors/bom.mjs');
@@ -544,10 +551,14 @@ steps.survival = async () => {
     out.b = { weather: w2, waxed: ws.waxed.length, scraped: ws.scraped.length, perCell, expect, remove: { removed: rm.removed, refund: rm.refund, blockers: rm.blockers }, returned, dropped, differ: differ.length };
     check(perCell.length > 0 && rm.removed && same(returned, expect) && same(rm.refund ?? returned, expect), `item 8b: deconstructed after weathering (${w2.cells} cells), waxing (${ws.waxed.length}) and scraping (${ws.scraped.length}): the stockpile was credited the items of the blocks standing (${sum(expect)} items; returned ${json(minus(returned, expect))} off); ${perCell.length} cells refunded a block other than their plan's, named per cell`, { expect, returned, perCell: perCell.slice(0, 20) });
     check(Object.keys(dropped).length === 0, `item 8b: 0 copper dropped at the site as a player's block (${json(near.items ?? {})})`, dropped);
-    // charged and refunded differ exactly by the cells' recorded steps: bill(v2) - refund = sum over the changed cells of (target - standing)
-    const tgt = bomOf(Object.values(targets ?? {}).map((t) => t));
-    const stepDiff = minus(bomOf(perCell.map((q) => `minecraft:${q.target}`)), bomOf(perCell.map((q) => `minecraft:${q.standing}`)));
-    check(same(minus(tgt, expect), stepDiff), `item 8b: the plan's items and the refund differ exactly by the ${perCell.length} named cells' weathering, waxing and scraping (${json(stepDiff).slice(0, 300)})`, { planBill: tgt, refund: expect, stepDiff });
+    // the ledger: charged (consumed over the whole build) minus everything refunded (the delta's and the deconstruct's) equals, per item,
+    // what the named cells' weathering, waxing and scraping changed (each cell's plan state against the state standing, full states)
+    const Lend = (await pstate()).ledger;
+    const chargedAll = minus(Lend.consumed, L0.consumed);
+    const refundedAll = minus(Lend.returned, L0.returned);
+    const stepDiff = minus(bomOf(perCell.map((q) => q.target)), bomOf(perCell.map((q) => q.standing)));
+    out.ledger = { charged: chargedAll, refunded: refundedAll, deltaRefund, perCell };
+    check(same(minus(chargedAll, refundedAll), stepDiff) && same(chargedAll, bill), `item 8b: one charge and one refund per cell: charged ${sum(chargedAll)} (the bill), refunded ${sum(refundedAll)}; they differ exactly by the ${perCell.length} named cells' steps (${json(stepDiff).slice(0, 300)})`, { charged: chargedAll, refunded: refundedAll, stepDiff, perCell });
     check(differ.length === 0, `item 8b: the terrain came back (${differ.length} cells differ outside soil)`, differ.slice(0, 8));
   }
   await L.leaveWorld();
