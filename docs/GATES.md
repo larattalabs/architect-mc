@@ -247,6 +247,12 @@ tile sha equal the re-cut crossings_demo_flat) and k1b-ingame 17/0 (item 10: the
 by kit 0.38.9. (A first run, `20261020-221536-change`, failed k1b-ingame with PLAN_STALE "plan needs kit 0.38.9; this is kit
 0.38.0": the source worktree's HEAD was switched back mid-run, and the drivers import the kit from the source checkout, not the
 run worktree. Keep the source HEAD still until a run ends.)
+The drivers' offline items on the same scratch head (`--only unit-kit,unit-mod,b-unit,t3a-unit,t3b-unit,k1b-unit,k1a-unit,
+p0-unit,h-unit,ha-unit,hy-unit,voc-unit,vocc-unit,cu-unit,kc-unit,irr-unit,c37-unit,c38-unit,d-unit,f2-unit,t1-unit,s2-unit,mp-unit`,
+3 shards, `artifacts/gate-runs-reltool/20261020-222622-change`, 1h24m at load 60-70): **20 PASS, 3 FAIL, none from the bump**.
+h-unit and ha-unit fail H-a's item 10 and vocc-unit VOC-c's item 3, both since VOC-c made `rule.palette` supported: H-a's
+committed asks table still has the 7 palette parts unsupported (they are refused NO_FEATURE/TOLERANCE now), and VOC-c's "before"
+table is computed at the merge base, which already holds VOC-c. Its "after" table at kit 0.38.9 equals the committed one.
 
 ### Measured
 
