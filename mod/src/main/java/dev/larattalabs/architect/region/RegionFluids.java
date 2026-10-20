@@ -91,9 +91,10 @@ import org.jspecify.annotations.Nullable;
  * the body: the census and the escape guard count it as a source, its water is its own) and live coral blocks in bed cells (shell floor
  * cells). The write order is the bed (the shell's stage), then the stage's tiles write the sources with the decor, the decor winning
  * its cells (the kit's evaluator, as a grate's bars); a re-write ({@link #writeBody}) never puts water over a decor cell. The gate's
- * check reads a decor cell holding its decor as open, a body that is not written leaves its decor too ({@link #filter}), and a drain
- * never takes a decor cell: the removal drains the sources, then the group undo restores the decor and the bed (H's order; a coral that
- * died meanwhile is still the entry's, {@code StillOurs} via {@code Coral.canonical}). Not a course member: a coral pond is not ordered.
+ * check reads a decor cell holding its decor as open, a body that is not written leaves its decor too ({@link #filter}); the removal's
+ * drain leaves the decor (it drains the sources, then the group undo restores the decor and the bed: H's order; a coral that died
+ * meanwhile is still the entry's, {@code StillOurs} via {@code Coral.canonical}), while every other drain (escape, unsettled, upstream,
+ * recheck, a wave's clear) takes water decor back with the sources. Not a course member: a coral pond is not ordered.
  */
 public final class RegionFluids {
 	public static final String STAGE = "fluids";
@@ -1224,11 +1225,21 @@ public final class RegionFluids {
 	 * Writes skip updates (nothing flows). Returns the cells written.
 	 */
 	static int drain(ServerLevel level, Regional st, Body b, BodyState bs, boolean strays) {
-		return drain(level, st, b, bs, strays, new LongOpenHashSet());
+		// ((6c F3-c) only the removal drains through here: it leaves the decor for the group undo, H's order)
+		return drain(level, st, b, bs, strays, new LongOpenHashSet(), true);
 	}
 
 	/** {@code others}: cells another standing body plans, left alone (the escape guard drains one body of several). */
 	static int drain(ServerLevel level, Regional st, Body b, BodyState bs, boolean strays, LongOpenHashSet others) {
+		return drain(level, st, b, bs, strays, others, false);
+	}
+
+	/**
+	 * (6c F3-c) {@code removal}: the removal's drain leaves the body's decor standing (the group undo restores it and the bed right after,
+	 * H's order); every other drain (the escape guard, an unsettled body, the upstream closure, a recheck, a wave's clear) takes a water
+	 * decor cell back to its before state with the sources, so a drained body holds no water (a bed coral block holds none and stays).
+	 */
+	static int drain(ServerLevel level, Regional st, Body b, BodyState bs, boolean strays, LongOpenHashSet others, boolean removal) {
 		int n = 0;
 		Fluid src = b.source();
 		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
@@ -1238,7 +1249,7 @@ public final class RegionFluids {
 		LongOpenHashSet breach = lot == null ? null : breachFlow(level, st, b, lot, others);
 		for (long[] a : new long[][] {b.ice, b.cells}) {
 			for (long p : a) {
-				if (drainSkips(b, p)) {
+				if (removal && drainSkips(b, p)) {
 					continue; // ((6c F3-c) a decor cell: the group undo restores it after the drain, as the bed)
 				}
 				BlockPos bp = BlockPos.of(p);
@@ -1298,8 +1309,8 @@ public final class RegionFluids {
 	}
 
 	/**
-	 * (6c F3-c, §6) Whether a drain leaves a body cell alone: a decor cell (the coral's own water is its block's). The removal's group
-	 * undo restores it after the drain, with the bed: H's order, drain then decor and bed.
+	 * (6c F3-c, §6) Whether the removal's drain leaves a body cell alone: a decor cell (the coral's own water is its block's). The
+	 * removal's group undo restores it after the drain, with the bed: H's order, drain then decor and bed. Other drains take it.
 	 */
 	static boolean drainSkips(Body b, long p) {
 		return b.decor.length > 0 && b.decorSet().contains(p);

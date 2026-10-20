@@ -82,7 +82,8 @@ class RegionFluidsF3Test {
 	@Test
 	void aDrainLeavesTheDecor() {
 		RegionFluids.Body b = bodies().get(0);
-		assertTrue(RegionFluids.drainSkips(b, BlockPos.asLong(0, 63, 0)), "a waterlogged fan: the undo restores it after the drain");
+		// (drainSkips is read by the removal's drain only: drain(level, st, b, bs, strays) passes removal = true, every other drain false)
+		assertTrue(RegionFluids.drainSkips(b, BlockPos.asLong(0, 63, 0)), "a waterlogged fan: the undo restores it after the removal's drain");
 		assertTrue(RegionFluids.drainSkips(b, BlockPos.asLong(0, 62, 0)), "a bed cell");
 		assertFalse(RegionFluids.drainSkips(b, BlockPos.asLong(0, 64, 0)), "a source");
 		assertFalse(RegionFluids.drainSkips(bodies().get(1), BlockPos.asLong(9, 63, 9)));
