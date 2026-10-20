@@ -408,6 +408,17 @@ export class Region {
     if (new Set(edges.map((e) => e.id)).size !== edges.length) throw new Error(`${what}: edge ids must be unique`);
     // obstacles: lot footprints and aprons, forms, keep sets (x/z); keep-out (the owner's, read through ctx so the IR records it)
     const { hard, clearTrees } = this._routeObstacles(it);
+    // (6c S3) a guarded pass (a terraced plan's) never crosses an earlier pass's walk: each pass grades its cells from the survey, so a
+    // later one would cut its own stairs through an earlier run; those runs are obstacles (their width), except within 2 of this
+    // pass's own ends (a connector leaves from a district's junction)
+    if (it.guard) {
+      const ends = edges.flatMap((e) => [e.a.at, e.b.at]);
+      for (const m of Object.values(this.meta.paths)) {
+        if (!Array.isArray(m.cells) || this.meta.parts[m.part]?.kind !== 'path') continue;
+        const h = (m.width ?? 1) >> 1;
+        for (const [x, , z] of m.cells) if (!ends.some((a) => Math.max(Math.abs(a[0] - x), Math.abs(a[2] - z)) <= 2)) hard.push([x - h, z - h, x + h, z + h]);
+      }
+    }
     const keepOut = [...(this.ctx.keepOut ?? []), ...(it.keepOut ?? [])].map((k) => [...k]);
     // hysteresis: the caller's cells, 4e roads and graded paths already in the plan
     // (ctx.routePrefer: an earlier plan's routes, [[x, z]] for every edge or {edgeId: [[x, z]]} each edge its own)

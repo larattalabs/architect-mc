@@ -129,7 +129,7 @@ export function monasteryPlan(claim, S, P = {}) {
   for (let k = 1; k <= spires; k++) if (A.anchors[`shoulder_${k}`]) forms.push({ id: `spire_${k}`, kind: 'rock_spire', preset: 'pinnacle', where: { near: { anchor: `shoulder_${k}`, within: 24 } }, required: false });
   forms.push({ id: 'relief', kind: 'relief', around: ['monastery'], radius: 6 });
   const connectors = [];
-  if (A.anchors.lookout) connectors.push({ id: 'lookout_path', kind: 'path', width: 1, movers: ['player'], from: { part: 'monastery', port: 'cloister' }, to: { anchor: 'lookout' }, required: false });
+  if (A.anchors.lookout) connectors.push({ id: 'lookout_path', kind: 'path', width: 1, movers: ['player'], from: { part: 'monastery', port: 'cloister' }, to: { anchor: 'lookout' }, tolerance: { grade: { max: grade } }, required: false });
   // the plan order: the fountain and the spires first (the districts are placed around them; KC: the later part moves), the zone,
   // the relief, the paths
   const order = [...forms.filter((f) => f.kind !== 'relief')];
@@ -213,6 +213,59 @@ function brinkRails(r, ctx, { stage, rounds = 5 }) {
   return { rails: total, lanterns };
 }
 
+/** The walk volume's span under the claim's lowest ground and over its highest (cells). */
+export const WALK_VOLUME_BELOW = 12, WALK_VOLUME_ABOVE = 8;
+
+/**
+ * Asks the frozen volume over the claim from WALK_VOLUME_BELOW under its lowest ground to WALK_VOLUME_ABOVE over its highest (a box of
+ * the survey alone, so both plans ask the same one). Returns the box and whether the volume came.
+ */
+function walkVolume(r, ctx) {
+  const { claim, survey: S } = ctx;
+  let lo = Infinity, hi = -Infinity;
+  for (let z = claim.minZ; z <= claim.maxZ; z++) for (let x = claim.minX; x <= claim.maxX; x++) { const g = S.groundAt(x, z); if (g < lo) lo = g; if (g > hi) hi = g; }
+  const box = { minX: claim.minX, minY: Math.max(claim.minY, lo - WALK_VOLUME_BELOW), minZ: claim.minZ, maxX: claim.maxX, maxY: Math.min(claim.maxY, hi + WALK_VOLUME_ABOVE), maxZ: claim.maxZ };
+  const v = r.needVolume(box);
+  return { box: [box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ], read: !!v };
+}
+
+/** The deepest natural void an underpin fills (cells); a deeper one is left (the brink rails guard its edge). */
+export const UNDERPIN_MAX = 24;
+
+/**
+ * The underpin (with the walk volume read): a relief or route cell the plan writes solid over a natural void (a cave or an overhang the
+ * survey's column can't show: the relief cuts a top down onto a thin ceiling) would float. Fills each such void under it with the rock
+ * role, down to the first natural cell that isn't air (at most UNDERPIN_MAX; never into water, a written cell or a body's kept cells).
+ * Returns the cells written.
+ */
+function underpin(r, ctx, { stage }) {
+  if (!Object.keys(r.volumesUsed ?? {}).length) return 0;
+  const { claim } = ctx;
+  const { ir, vw } = draftWorld(r, ctx);
+  const P = vw.pal;
+  const ground = new Set(ir.parts.map((p, i) => [p.id, i]).filter(([id]) => /^(relief_|routes_)/.test(id)).map(([, i]) => i));
+  const keep = Array.isArray(r._keep) ? r._keep : [];
+  const kept = (k) => keep.some((q) => q.hard?.has(k) || q.watch?.has(k));
+  const b = Object.values(r.volumesUsed).map((u) => u.box).find((x) => x.minX === claim.minX && x.minZ === claim.minZ && x.maxX === claim.maxX && x.maxZ === claim.maxZ);
+  if (!b) return 0;
+  const cols = [];
+  for (let x = claim.minX; x <= claim.maxX; x++) for (let z = claim.minZ; z <= claim.maxZ; z++) for (let y = b.maxY; y > b.minY + 1; y--) {
+    if (!(vw.flags(x, y, z) & 1) || !ground.has(vw.partAt(x, y, z)) || !P.solid[vw.get(x, y, z)]) continue;
+    if (vw.flags(x, y - 1, z) & 1 || !P.passable[vw.get(x, y - 1, z)]) continue;
+    let d = 1;
+    while (d <= UNDERPIN_MAX && y - d > b.minY && !(vw.flags(x, y - d, z) & 1) && P.passable[vw.get(x, y - d, z)] && !P.water[vw.get(x, y - d, z)] && !kept(`${x},${y - d},${z}`)) d++;
+    const st = vw.get(x, y - d, z);
+    if (d > UNDERPIN_MAX || y - d <= b.minY || P.passable[st] || P.water[st]) continue; // too deep, water, or a kept cell: left
+    cols.push(x, z, y - d + 1, y - 1, 0);
+  }
+  if (!cols.length) return 0;
+  const part = r.part('mon_underpin', { stage });
+  (r.meta.parts['mon_underpin'] ??= {}).kind = 'underpin';
+  part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: [r.material('rock', 'underpin')], cond: 2, walk: false });
+  let n = 0; for (let i = 0; i < cols.length; i += 5) n += cols[i + 3] - cols[i + 2] + 1;
+  return n;
+}
+
 /** The bodies' footing (see the program): the natural top cell (the survey's ground) right under a solid cell of a body's own parts,
  * unwritten, outside every body's hard and watch sets, written as the subsurface role. Returns the cells written. */
 function footing(r, ctx, { stage }) {
@@ -241,12 +294,40 @@ function footing(r, ctx, { stage }) {
   return cols.length / 5;
 }
 
+/** Records every route pass's meta.route (each pass overwrites it) into `log`. */
+function logRoutes(reg, log) {
+  const own = reg._route.bind(reg);
+  reg._route = (it) => { const before = reg.meta.route; const out = own(it); if (reg.meta.route && reg.meta.route !== before) log.push(reg.meta.route); return out; };
+  return reg;
+}
+
+/**
+ * The plan's routes in one meta.route (the checker's route rules and the scenario's grade and villager rows read meta.route, which holds
+ * only the last pass: the lookout path's): every pass whose part the plan kept (a rolled-back pass's part is gone; a part routed again
+ * keeps its last pass), edges concatenated in pass order. Every pass here routes at the same maxGrade (the zone's grade tolerance and the
+ * lookout path's own, 0.2, which plan/0 quantises to 1/64: the stricter is judged); a mix would throw.
+ */
+function mergeRoutes(r, log) {
+  const parts = new Set(r.parts.map((p) => p.id));
+  const byPart = new Map();
+  for (const m of log) if (parts.has(m.part)) { byPart.delete(m.part); byPart.set(m.part, m); }
+  const recs = [...byPart.values()];
+  if (recs.length < 2) return recs.map((m) => m.part);
+  const grades = recs.map((m) => m.maxGrade);
+  const g = Math.min(...grades);
+  if (Math.max(...grades) - g > 1 / 64) throw new Error(`terraced_monastery: route passes at different grades (${grades.join(', ')})`);
+  r.meta.route = { ...recs[0], maxGrade: g, edges: recs.flatMap((m) => m.edges), hairpins: recs.reduce((a, m) => a + (m.hairpins ?? 0), 0), keepOut: recs.flatMap((m) => m.keepOut ?? []), passes: recs.map((m) => ({ part: m.part, stage: m.stage, edges: m.edges.length })) };
+  return recs.map((m) => m.part);
+}
+
 export default function terracedMonastery(ctx) {
   const P = ctx.params;
   const { claim, survey: S } = ctx;
   const { plan, anchors, protected: prot, info } = monasteryPlan(claim, S, P);
-  const { region: r, record } = runCheck(ctx, { plan, anchors, protected: prot, regions: [], builds: [], standing: [], budget: {}, bible: null, fingerprint: null }, { makeRegion: () => region(ctx) });
+  const routeLog = [];
+  const { region: r, record } = runCheck(ctx, { plan, anchors, protected: prot, regions: [], builds: [], standing: [], budget: {}, bible: null, fingerprint: null }, { makeRegion: () => logRoutes(region(ctx), routeLog) });
   r.meta.planCheck = record;
+  const routeParts = mergeRoutes(r, routeLog);
   const bad = record.answers.filter((a) => !['fits', 'adjusted'].includes(a.class));
   if (bad.length) r.note(`terraced_monastery: ${bad.map((a) => `${a.part} ${a.class} ${a.reasons?.[0]?.code ?? ''}`).join('; ')}`);
   const mon = record.answers.find((a) => a.part === 'monastery');
@@ -254,6 +335,12 @@ export default function terracedMonastery(ctx) {
   const keepOut = prot.map((a) => a.rect);
   const stages = r.stageList;
   const decor = stages.includes('props') ? 'props' : stages[stages.length - 1] === 'fluids' ? stages[stages.length - 2] : stages[stages.length - 1];
+
+  // ---- the walk volume: the natural cells under and over the whole claim's ground (caves and overhangs the survey's columns can't show), so
+  // the draft world the brink rails, the footing and the light cover read is the real terrain (a rail planned on the survey's solid
+  // column misses a cave mouth beside a relief floor)
+  info2.walkVolume = walkVolume(r, ctx);
+  info2.underpin = underpin(r, ctx, { stage: stages[0] });
 
   // ---- (the broken variant) a fill over the spring's columns
   if (P.unsafe === 'spring_buried') {
@@ -365,6 +452,7 @@ export default function terracedMonastery(ctx) {
   cam('cam_high', hx + 8, hz + 8, 100);
   const g0 = bells[0] ?? [hx, 0, hz];
   cam('cam_ground', g0[0] + 6, g0[2] + 6, 3);
+  info2.routeParts = routeParts;
   r.meta.monastery = info2;
   return r;
 }
