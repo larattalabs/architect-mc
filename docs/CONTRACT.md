@@ -17257,6 +17257,12 @@ About **4.5-6 days**, split by default:
 - S3 v2, cliff-built (7b). Rope bridges, lifts and stairs as typed connectors between terraces (7a). A stream (N-HY-1, 7b's v2).
   `form.terrace` inside a zone (the member covers it). F3's trees on the monastery's slopes.
 
+### Coordinator decisions (2026-10-20, on Noah's behalf; Noah judges the look at the gallery step)
+
+- **N-S3-2, the look:** as proposed. Stone bricks and deepslate tiles, spruce, copper accents, soul lanterns.
+- **N-S3-3:** the gardens fountain is on.
+
+
 ## Phase 6c slice RS: regions in survival, the terrain half (DRAFT for Steward review)
 
 A region realises in a survival-toggle world: the land it shapes is free, and everything it builds is a construction target fed
@@ -17698,3 +17704,12 @@ About **7.5-9.5 days** of work, **5.5-6.5 elapsed**, in two halves with a frozen
 
 - The reserved 7a connectors' survival rows (each with its slice). Hardcore's own difference. Hauling by villagers. A batch BOM
   call. Crash-exact ledgers (a write-ahead log) if the kill drift matters.
+
+### Coordinator decisions (2026-10-20, on Noah's behalf)
+
+- **N-RS-1' (scope):** yes. RS builds every typed part on main in survival.
+- **N-RS-2:** free cells drop nothing while they're still the region's write (anti-dupe), with the block-break hook (+0.5
+  day).
+- **N-RS-3:** the free boundary as proposed.
+- **N-RS-4:** ice caps are free.
+
