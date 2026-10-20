@@ -19471,3 +19471,8 @@ The verifier reviews the diff and **re-runs items 7, 8, 10 and 12**. **Steward's
 - Growing a district (D-S2) and extending a standing street (6d).
 - `Regions.discardPlan` and the plan sweep (proposed for PLAN's queue, §7.3).
 - Side junctions on diagonal and turning streets.
+
+### Coordinator decisions (2026-10-20, on Noah's behalf)
+
+- **N-D3-1:** today's 3-wide join look inside the town.
+- **N-D3-2:** the join's lamps skip spots within 6 of a town lamp.
