@@ -13,7 +13,7 @@ undo bug was of that last kind: relief re-tick, copper weathering, lamp on dirt 
 
 | what | command | time |
 |---|---|---|
-| CI set (in `build`, and the gate step `umt`) | `./gradlew test --tests 'dev.larattalabs.architect.site.Umt*'` | about 45 s (2000 scenarios, 31 s) |
+| CI set (in `build`, and the gate step `umt`) | `./gradlew test --tests 'dev.larattalabs.architect.site.Umt*'` | about 50 s (2000 scenarios in 41 s); `build` grows from 1:17 to 1:54 |
 | long fuzz (gate step `umt-long`, release tier) | `./gradlew umtLong -Dumt.seeds=5000 [-Dumt.from=<seed>]` | about 5 min |
 | the findings' repros (expected to fail until fixed) | `./gradlew umtFindings` | 5 s |
 | explore a generator or one seed | `./gradlew umtExplore -Dumt.explore=<PLAIN\|CRASH\|DRIFT\|ALL\|FINDINGS>:<from>:<count>[:one] [-Dumt.unknown=1]` | |
@@ -21,7 +21,16 @@ undo bug was of that last kind: relief re-tick, copper weathering, lamp on dirt 
 
 A violation tagged with a finding id (`[F1]`, `[LP]`, ...) is counted and printed in the summary line. It doesn't fail CI unless
 `umt.strict` is set, because the coordinator decides which findings are bugs. Any untagged violation fails, shrunk, with its seed.
+
+The CI set's findings are also **pinned** (provisional, until the coordinator decides). Every failing seed's tags and a digest of its
+sorted violations must equal `mod/src/test/resources/umt/ci-baseline.txt`. So a change inside a known finding's bucket fails CI: more
+cells, fewer cells or other cells. Rewriting the pin is a deliberate, reviewed act (`-Dumt.rebaseline=true`). The run is
+deterministic: two runs give byte-identical pins.
+
 The summary line also prints how often each vanilla rule fired. A rule stuck at 0 is a generator gap.
+
+Gate steps (`tools/gate-chains.json`): `umt` runs when a change touches the journal, undo, settle or evidence code (impact rule
+"UMT"). It is offline and needs no slot. `umt-long` is in `tiers.release.always`, a tier change for the coordinator to accept.
 
 ## Real code and modelled code
 
@@ -67,6 +76,9 @@ delegates to:
   `Restore.writing`'s record restore is modelled in `UmtWorld.restoring`, because `Placed` can't load without the game.
   Calibration: 4d-all, 4e-orders.
 - The world's durability: a crash puts the world back to its last autosave, and the journal stays as committed.
+- Site deltas (`SiteDeltas` D1-D7) are modelled as a BOX entry of kind `delta` under the site's id, inside or growing its box.
+  Its store calls and `SiteJournal.restore`'s union of the site's and its deltas' boxes are real. Delta planning, folding at 7 and
+  growth rings are not run; `DeltaPropertyTest` covers them.
 - Roads, region tiles and lots are abstract designs:
   - a road is a path with posts beside it;
   - a tile lowers, raises, paves, fills or seeds a rectangle;
@@ -98,6 +110,7 @@ first follow-up (see "Calibration").
 | V7 | equiv | farmland dries; grass spreads and dies | CU S-CU-3, 6a |
 | V8 | equiv | water flows into cleared air; a source freezes | 6a, H §4.3 |
 | V9 | update | restored flowing water has no tick until FluidRearm wakes it | relief re-tick |
+| V10 | equiv | a volatile property changes by use or neighbours: open, lit, powered, connections, stair shape, leaves' distance, waterlogged | StillOurs.VOLATILE (4e S2) |
 | N1 | noise | mushrooms pop off, leaf litter is trampled | 4d intermittent "back exactly" |
 | N2 | noise | an entity in a box makes removal wait | 4d bee |
 
@@ -131,6 +144,7 @@ So in game, the rule leaves some noise to fail the hash, but never hides a miss.
 
   Then the restart and recovery, and the same final result.
 - **P3, StillOurs equivalences** (`p3`, and the targeted `p3_*`):
+  - a volatile property changed (V10) is still ours, and a turned stair (facing, not volatile) is the player's;
   - weathered and waxed copper is still ours;
   - a player's own oxidized copper (with a record) wins;
   - farmland and dirt are interchangeable;
@@ -156,7 +170,16 @@ So in game, the rule leaves some noise to fail the hash, but never hides a miss.
   | lamp on path | `UmtFindingsTest.lp_*`, a finding until fix/lamp-path merges |
   | the wall through the fountain | not undo-relevant: a writer keep-clear rule (structure lint) |
 
-  Each of the first three was checked to go red with its fix reverted (see the gate evidence).
+  Each of the first three was checked to go red with its fix reverted:
+
+  | mutation | goes red |
+  |---|---|
+  | `writeCells` without its `FluidRearm.wrote` call | `p4_restoredFlowingWaterIsQueuedForATick` |
+  | `StillOurs`/`WorldJournal.holds` without the copper chain (pre-CU) | `p3_weatheredAndWaxedCopperIsStillOurs`, `p3_aCoveredWeatheredCellHandsDown`, fuzz `p3` |
+  | `TileCheck.keepsGravity` returning false (pre-70fc0dd0) | `p4_supportedSandStaysOverATile` |
+  | farmland out of `StillOurs.spread` (pre-S-CU-3) | `p3_farmlandAndDirtAreInterchangeable`, fuzz `p3` and `all` |
+  | `lit` out of `StillOurs.VOLATILE` | `p3_volatilePropertiesStayOursAndAFacingIsThePlayers` |
+  | fix/lamp-path's `pathTurned` applied | `UmtFindingsTest.lp_*` turns green, and the fuzz's [LP] count drops to 0 |
 - **The R2-R4 crash window:**
   - after a durable R2 (K6), mid-R4 (K7) and after R4 (R5), single and group, a region among them: exact
     (`r2r4_killAfterTheDurableUndoAndMidWritesRecovers`);
@@ -177,11 +200,17 @@ Each finding has a repro in `UmtFindingsTest` (`./gradlew umtFindings`, failing 
 | F7 | two pending sites recovered at one start, the lower first: its hand-downs to the upper are skipped (the upper is still UNDONE, `Journal.reactivate`), so after the upper is recovered too its before is the ground. Removing the upper then cuts the lower | `Journal.reactivate`'s "receiver not active" skip; sites settle before roads | a crash that loses two stacked removals |
 | LP | (fix/lamp-path) a journaled dirt path under a later solid write turns to dirt; the path's entry no longer counts it as its own | `StillOurs`/`WorldJournal.holds` (the fix adds `pathTurned`) | known, fix pending |
 | DRAIN | (the coordinator's item 2) the region drain overwrites a later separate site's waterlogged block at a body source cell, before any journal hand-down | `RegionFluids.drain`'s first loop: no holder check | a waterlogged block placed by a later site on a body cell |
+| F8 | a plant, carpet or leaf litter standing on a cell a site or delta changes, but outside its box, breaks (V5); no entry has its cell, so the removal can't bring it back | sites and deltas have no dependents stage (tiles do) | a box edge under decor; the 4d leaf_litter noise when the litter sat next to the plan |
 | UC | (open: unsaved chunks) a crash loses world writes the journal recorded; for example a covered release (`Sites.evidence` covered) of a site whose blocks the world still shows | journal durable ahead of the world | crashes within an autosave interval |
 
 F1, F4 and DRAIN reproduce against production code with only glue modelled. F5, F6, F7 and UC need a crash that loses world writes,
 which is the unsaved-chunks question; their mechanisms are in production code, and their reach depends on the autosave interval.
-F2 and F3 rest on the vanilla gravity rule (V2), which is modelled; confirm them in game.
+F2, F3 and F8 rest on modelled vanilla rules (V2, V5); confirm them in game.
+
+UMT settles region tiles through the roads-and-cell-sites loop of `Sites.reconcile`. Region records may settle elsewhere
+(`RegionsImpl`), which could change F5, F6 and F7 for tiles. No in-game gate removes two stacked sites one by one, restarts, and checks
+the journal is empty: 4e-orders checks the world after each order, but never a settle. So nothing in game contradicts F1. Adding that
+check to 4e-orders confirms it in game.
 
 ## Calibration
 
