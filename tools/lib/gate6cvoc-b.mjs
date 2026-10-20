@@ -565,12 +565,14 @@ const survival = [{
       const { bomOf } = await ctx.imp('lib/connectors/bom.mjs');
       const siteCells = await L.call('dev.site.cells', { site }).catch(() => null);
       // the blocks standing: every cell of the restore box that changed since before the site (dev.box.hash cells: "x,y,z state[ be=nbt]")
-      // (the hash's state is the block state's NBT, {Name:"minecraft:x",Properties:{k:"v",...}}: as "minecraft:x[k=v,...]")
+      // (the hash's state is the block state's NBT, Name and Properties: as "minecraft:x[k=v,...]"; quotes of either kind or none)
       const asState = (nbt) => {
-        const n = /Name:"([^"]+)"/.exec(nbt)?.[1];
+        const bs = /^Block\{([a-z0-9_.-]+:[a-z0-9_./-]+)\}(\[[^\]]*\])?/.exec(nbt);
+        if (bs) return `${bs[1]}${bs[2] ?? ''}`;
+        const n = /Name\s*:\s*["']?([a-z0-9_.-]+:[a-z0-9_./-]+)/.exec(nbt)?.[1];
         if (!n) return nbt;
-        const pm = /Properties:\{([^}]*)\}/.exec(nbt)?.[1];
-        const props = pm ? pm.split(',').map((kv) => kv.replace(/"/g, '').replace(':', '=')).sort() : [];
+        const pm = /Properties\s*:\s*\{([^}]*)\}/.exec(nbt)?.[1];
+        const props = pm ? [...pm.matchAll(/["']?([a-z0-9_]+)["']?\s*:\s*["']?([a-z0-9_]+)["']?/g)].map((m) => `${m[1]}=${m[2]}`).sort() : [];
         return props.length ? `${n}[${props.join(',')}]` : n;
       };
       const cellMap = (h) => new Map((h.cells ?? []).map((l) => { const sp = l.indexOf(' '); return [l.slice(0, sp), asState(l.slice(sp + 1).split(' be=')[0])]; }));
@@ -582,7 +584,7 @@ const survival = [{
       const dec = await L.call('dev.site.deconstruct', { site }, 120_000);
       o.deconstruct = { removed: dec.removed, refund: dec.tally?.refund ?? null };
       const expect = bomOf(standing);
-      check(dec.removed && canon(dec.tally?.refund ?? {}) === canon(expect) && canon(expect) === canon(bill), `item 11 (${id}): deconstructed under the exact rules, the refund equals the items of the ${standing.length} blocks standing (${Object.values(expect).reduce((p, q) => p + q, 0)} items, the fed bill)`, { refund: dec.tally?.refund, expect, bill });
+      check(dec.removed && canon(dec.tally?.refund ?? {}) === canon(expect) && canon(expect) === canon(bill), `item 11 (${id}): deconstructed under the exact rules, the refund equals the items of the ${standing.length} blocks standing (${Object.values(expect).reduce((p, q) => p + q, 0)} items, the fed bill)`, { refund: dec.tally?.refund, expect, bill, sample: (cellsBefore.cells ?? []).slice(0, 3) });
       // the instant reference at the same spot
       await L.fresh(`G6B VOCb SurvRef ${k}`, FLAT);
       await L.setRules('exact');
