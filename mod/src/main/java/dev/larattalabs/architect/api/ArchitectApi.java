@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.35.0";
+	String VERSION = "1.37.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -113,6 +113,10 @@ public interface ArchitectApi {
 	 * scatter and melt-safe light; with it, a keep set is a route obstacle at its kept columns and the relief keeps them).
 	 * Since 1.31.0 (C38), {@code "planCatalogueView"} is always there: {@link Regions#planCatalogue()} reads the capability catalogue
 	 * synchronously from the mod.
+	 * Since 1.37.0 (6c CU), {@code "weatheringOurs"} is always there (the journal's "still ours"): a copper block at any weathering
+	 * stage of the block Architect wrote, waxed or scraped, is still Architect's, so undo and removal restore it (fewer {@code kept}
+	 * cells), deltas replace it, the survival builder never re-queues it, and its refund is a {@code REFUND} of the block standing,
+	 * credited to the stockpile; farmland and dirt are interchangeable the same way. A player's own placed block stays the player's.
 	 */
 	Set<String> features();
 }

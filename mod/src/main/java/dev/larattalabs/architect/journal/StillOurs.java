@@ -22,7 +22,9 @@ import org.jspecify.annotations.Nullable;
  * entity exactly when {@code after} does, and a container is empty when {@code after}'s was empty. For leaves the volatile
  * {@code distance} (and {@code waterlogged}) leave only the block and {@code persistent}, which is AgentCraft's
  * {@code LeafGuard.stillHeld}. Since phase 6a a fluid in air the entry cleared counts as still the entry's (it flowed in after the
- * write: the undo puts the cell back and the flow recedes).
+ * write: the undo puts the cell back and the flow recedes). Since 6c CU a copper block at another weathering stage of its chain, waxed or
+ * scraped, still holds the stage we wrote ({@link Copper}: the same form; shape-defining properties still compare), and farmland and dirt
+ * are interchangeable. Pure: a player's record (PT) is the caller's to consult first.
  */
 public final class StillOurs {
 	/** Volatile on every block. */
@@ -85,13 +87,25 @@ public final class StillOurs {
 			// phase 6a: grass, mycelium and podzol die to dirt under a block and spread back onto it by random ticks: the world's doing
 			return true;
 		}
-		if (now.getBlock() != after.getBlock()) {
+		// (6c CU §2.2) a copper block at any weathering stage, waxed or not, is the same block as the stage we wrote: the same form
+		boolean copper = now.getBlock() != after.getBlock() && Copper.sameBlock(now.getBlock(), after.getBlock());
+		if (now.getBlock() != after.getBlock() && !copper) {
 			return false;
 		}
 		if (now != after) {
 			for (Property<?> p : now.getProperties()) {
-				if (!volatileProperty(now, p.getName()) && !now.getValue(p).equals(after.getValue(p))) {
+				if (volatileProperty(now, p.getName())) {
+					continue;
+				}
+				if (copper && !after.hasProperty(p) || !now.getValue(p).equals(after.getValue(p))) {
 					return false;
+				}
+			}
+			if (copper) {
+				for (Property<?> p : after.getProperties()) {
+					if (!now.hasProperty(p) && !volatileProperty(after, p.getName())) {
+						return false;
+					}
 				}
 			}
 		}
@@ -101,11 +115,15 @@ public final class StillOurs {
 		return !(emptyContainer(afterNbt) && !emptyContainer(nowNbt));
 	}
 
-	/** Dirt and the blocks random ticks turn it into and back. */
+	/**
+	 * Dirt and the blocks random ticks turn it into and back. (6c CU, S-CU-3) Farmland too: it dries or is trampled to dirt, so a cell we
+	 * wrote as farmland or as dirt is ours as either.
+	 */
 	static boolean spread(BlockState s) {
 		var b = s.getBlock();
 		return b == net.minecraft.world.level.block.Blocks.DIRT || b == net.minecraft.world.level.block.Blocks.GRASS_BLOCK
-			|| b == net.minecraft.world.level.block.Blocks.MYCELIUM || b == net.minecraft.world.level.block.Blocks.PODZOL;
+			|| b == net.minecraft.world.level.block.Blocks.MYCELIUM || b == net.minecraft.world.level.block.Blocks.PODZOL
+			|| b == net.minecraft.world.level.block.Blocks.FARMLAND;
 	}
 
 	/** A container's data with no items (no data at all counts as empty). */

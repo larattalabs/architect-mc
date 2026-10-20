@@ -559,7 +559,8 @@ public final class RoadBuilder {
 		if (r != null) {
 			r.rescan(level, true);
 			for (int q = r.built.nextSetBit(0); q >= 0; q = r.built.nextSetBit(q + 1)) {
-				r.cost.get(q).forEach(x -> refund.merge(x.item(), x.count(), Integer::sum));
+				// (6c CU, S-CU-2) the block standing: a weathered, waxed or scraped copper cell pays what is there
+				r.refundCost(level.getBlockState(r.pos(q)), q).forEach(x -> refund.merge(x.item(), x.count(), Integer::sum));
 			}
 		}
 		if (c.building() && c.crate() != null && road.group() != null && !Builder.anyBuildingShared(road.group()) && building(road.group()).stream()
@@ -604,7 +605,8 @@ public final class RoadBuilder {
 		if (r != null) {
 			r.rescan(level, true);
 			for (int q = r.built.nextSetBit(0); q >= 0; q = r.built.nextSetBit(q + 1)) {
-				r.cost.get(q).forEach(x -> refund.merge(x.item(), x.count(), Integer::sum));
+				// (6c CU, S-CU-2) the block standing: a weathered, waxed or scraped copper cell pays what is there
+				r.refundCost(level.getBlockState(r.pos(q)), q).forEach(x -> refund.merge(x.item(), x.count(), Integer::sum));
 			}
 		}
 		return refund;
