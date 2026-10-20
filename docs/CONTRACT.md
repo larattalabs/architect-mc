@@ -20728,35 +20728,54 @@ record AdoptRegionRequest(String owner, ResourceKey<Level> dimension, BoundingBo
   `$.lots[]` with C36's members and the sites' ext), so a plan/0 revision can name it as `parentArtifact` (RV §9) and Steward's plan
   writer can grow the adopted village as any region.
 
-#### 2.3 Ownership: what moves, and the crash-safe order
+#### 2.3 Ownership: what moves, and the crash-safe order (v2, after GPT-6.1's second pass)
 
-**What says who owns a site** (from code): a journal entry names its **site**, not a group (`Journal.java` :176, `Entry(id, kind, site,
-...)`), so no journal cell or header is rewritten. Group ownership lives in two other places, both of which move:
-- each site record's membership `Site.Member(group, batchId, itemKey)` (the sites file);
-- each group's `SiteGroupRec` and its `StageRec(name, items, state, sites, batchId)` lists (the groups file, `SiteGroupRec.java` :55).
-And the region record is a third file. Sites with their own deltas keep them: deltas are entries of the site, so they move with it.
+**What says who owns a site** (from code; v1 of this section was wrong about the journal):
+- **The journal index:** every entry's `JournalStore.Meta` carries `group` (`JournalStore.java` :89), and region tile checks read it to
+  decide what is the region's own (`TileCheck.java` :758-760).
+- **The journal head's record copy:** `Sites.reconcile` rebuilds a lost site or infra record from its main entry's head `meta()` JSON
+  (`Sites.java` :2587-2600), which holds the record as it was saved, membership included.
+- **`architect-sites.json`:** site records (`Site.Member(group, batchId, itemKey)`), infra records (roads and cell sites, their `member`),
+  and every group's `SiteGroupRec` with its `StageRec` lists, all saved together by `Sites.save` (`Sites.java` :3022), one atomic file.
+- **The region record**, its own file.
 
-**The order** (one intent file makes the three writes recoverable):
-1. **Intent:** `<world>/architect-regions/adopt-<regionId>.json` with the request, every site's old membership, and every old group's
-   stage lists as they are (fsync, rename).
-2. **Region record** `region.json` in state `ADOPTING` (a new value of RegionRec's own state field, mapped to `PREPARING` in
-   `RegionView` so API readers see an in-flight region; `RegionState` is unchanged).
-3. **Groups file:** the new group `g<N>` with one stage `adopted` listing every site; each old group's stage lists without them (an old
-   group left empty is retired as today's empty groups are).
-4. **Sites file:** each site's membership to `g<N>`.
-5. **Region record** `PLACED`; then the intent file deleted.
-- **Recovery at world start:** an intent file whose region is `ADOPTING` rolls **forward** if steps 3 and 4 are complete for every site
-  (each site's membership checked), else **back**: every site's membership and every old group's stage lists restored from the intent,
-  the region record deleted. Either way the intent file goes last.
-- While `ADOPTING`, the sites refuse deltas and removal `SITE_BUSY` (the same state their group would be in during a batch).
+So adoption moves four things: each adopted entry's `Meta.group` (its site entry, deltas, crates, leaves and the road entries), each head
+record copy's membership, the one `architect-sites.json` save (sites, infra, groups), and the region record. No journal cell is written.
+
+**A metadata-only journal operation (new):** `JournalStore.regroup(entryIds, group, headMetaPatch)`: one index transaction that sets
+`Meta.group` and patches the head `meta()`'s membership for the given entries, idempotent (re-applying the same values is a no-op),
+logged like any index transaction (`label("ADOPT:<regionId>")`). It writes no section file.
+
+**The order:**
+1. **Intent:** `<world>/architect-regions/adopt-<regionId>.json`: the request, the new group id, each entry's old `Meta.group`, each site's
+   and infra's old membership (fsync, rename).
+2. **Region record** in RegionRec state `ADOPTING` (shown as `PREPARING` in `RegionView`; `RegionState` unchanged). The sites refuse deltas
+   and removal `SITE_BUSY` while it lasts.
+3. **Journal:** `regroup` of every adopted entry to the new group.
+4. **`architect-sites.json`:** the new group `g<N>` (one stage `adopted` listing the sites and infra), each site's and infra's membership,
+   and each old group's stage lists **with those sites removed** (not replaced by a saved copy), one save.
+5. **Region record** `PLACED`; then the intent deleted.
+
+**Recovery at world start** (an intent file present):
+- **No region record** (a crash in step 1-2): roll back: any `regroup` already applied is reversed from the intent's old groups (it can't
+  have been, but the check is cheap); `architect-sites.json` is untouched; the intent deleted.
+- **Region `ADOPTING`:** roll **forward** if `architect-sites.json` shows every site and infra in the new group (step 4 done): re-apply
+  `regroup` (idempotent), then step 5. Otherwise roll **back**: reverse `regroup` to each entry's old group, delete the region record, then
+  the intent.
+- `Sites.reconcile` runs after this recovery, so a rebuilt record always reads the reconciled head meta.
 
 ### 3. Un-adopt and removal
 
-- **`Regions.remove`** of an adopted region removes its group: every adopted site and road, plus every revision's cells, last placed
-  first. That is exact as RV §6.2 (the sites' own entries restore their land).
-- **`Regions.unadopt(regionId)`** (default throws): allowed only with no revision accepted (position 0). It runs §2.3's order in reverse
-  with its own intent file (`unadopt-<regionId>.json`): region `UNADOPTING`, the old memberships and stage lists restored, the region
-  record deleted, the intent deleted; recovery rolls forward or back as above. No cell is written.
+- **`Regions.remove`** of an adopted region removes its group (every adopted site and road plus every revision), last placed first; exact as
+  RV §6.2. The tombstoned region can't be un-adopted.
+- **`Regions.unadopt(regionId)`** (default throws), only at position 0 (no revision accepted) and in state `PLACED`:
+  - its own intent `unadopt-<regionId>.json` (the adoption's old groups, read from the region record, which keeps them);
+  - for each site: if its old group still exists, the site is **added back** to that group's current stage list (the stage named in the
+    old membership, or a stage `readopted` appended), preserving every change made to that group since; if the old group is gone, the site
+    gets a new standalone group (named in the result);
+  - `regroup` of the entries to their resulting groups; `architect-sites.json` saved; the region record deleted; the intent deleted;
+  - recovery as adoption's, mirrored (forward when the sites file shows the resulting groups, else back to the region's group).
+- No cell is written by either.
 
 ### 4. Gate (slice tier, $0): the 6d rows of the joint gate
 
@@ -20768,10 +20787,11 @@ And the region record is a third file. Sites with their own deltas keep them: de
 | 4 | A 6d delta | `applyDelta` on one adopted lot (a stub v2) |
 | 5 | Remove (verifier re-runs) | `Regions.remove`: E-flat 0 over the claim against the world before the settlement |
 | 6 | Un-adopt | a second settlement adopted then un-adopted: memberships and stage lists as before, Steward's own undo of one of its sites still works |
-| 6b | Crashes (verifier re-runs) | a kill after each of §2.3's steps 1-4, for adopt and for un-adopt, on a settlement whose sites include one with two deltas: each restart rolls forward or back, every site's membership and every group's stage lists consistent (one owner per site), 0 cells written; then `Regions.remove` or Steward's own undo exact |
+| 6b | Crashes (verifier re-runs) | a kill after each of §2.3's steps 1-4, for adopt and for un-adopt, on a settlement whose sites include one with two deltas and a road: each restart rolls forward or back; every entry's `Meta.group`, every head record copy's membership, every site's and infra's membership and every group's stage lists agree (one owner per site); then `architect-sites.json` deleted and `Sites.reconcile` rebuilds every record with the same membership; 0 cells written; then `Regions.remove` or Steward's own undo exact |
+| 6c | Un-adopt keeps later changes | after adoption, Steward adds a site to one old group; un-adopt: that site stays in it, the adopted sites rejoin it, nothing else changes |
 | 7 | Joint row (with 7a) | once 7a's link pass lands: its link pass over the adopted region, then rows 3-5 again (run on the integration branch) |
 
-**Size:** 3.5-4 days, one builder. **Placeholders:** API **1.47.0**, mod **0.50.0**, kit **0.46.0**, catalogue unchanged.
+**Size:** 4-4.5 days, one builder. **Placeholders:** API **1.47.0**, mod **0.50.0**, kit **0.46.0**, catalogue unchanged.
 
 ### Byte identity, KC and Steward's asks
 
@@ -20787,3 +20807,55 @@ And the region record is a third file. Sites with their own deltas keep them: de
 - **S-AD-3. Your history.** After adoption, undo of a building inside the adopted village is `Sites.remove` of its lot (RV §4.6) or
   `undoRevision` of a growth; the settlement's founding entry becomes `Regions.remove`. Workable? Default: yes.
 - **S-AD-4. The joint gate.** Run the 6d rows on AD's slice gate, and the joint row once 7a's link pass is in? Default: yes.
+
+## 6d later: full revisions (RV2) (a design record, not a slice yet)
+
+RV v3 ships additive revisions only (Noah, option A, 2026-10-20). **Full revisions** (removing or changing a standing part, road, lot box
+or fluid body) were drafted as RV v1 and v2 and reviewed twice by GPT-6.1 (the coordinator's `codex-6d-review.log` and
+`codex-6d-verify.log`). This section keeps what those rounds found, what the realised provenance (RP) now records to make it solvable, and
+the open directions, so a later slice starts from them. It becomes a slice when Steward has a flow that needs it (S-RV-6).
+
+### The problems found
+
+| # | Problem | Where it bit |
+|---|---|---|
+| 1 | **Re-plan-and-diff is everything.** Parts aggregate lots, layouts are global searches, ids are ordinals, the seed follows the params. | the old outline |
+| 2 | **Tiles are parts only.** Roads and lots are separate items, so a patch built from `evalTile` alone targets road cells back to the land. | v1 |
+| 3 | **Intent isn't what stands.** Realise skips held, built, failed-condition and no-op cells, gates fluids, and fells trees and holds leaves; PARTIAL and FAILED regions have unwritten tiles. | v1, v2 |
+| 4 | **Skipped winners hide removed writers.** Stage A wrote stone; a later stage B's glass was skipped by its condition. Removing A leaves B as both the old and new intent, so a diff of intents is empty and A's stone stays. | v2 (second pass) |
+| 5 | **Extras have no intent.** Felled logs, dependents and held leaves are written by no op, so no intent diff ever includes them, and the part that caused them must be known to undo them. | v2 (second pass) |
+| 6 | **Hashes per stage and set aren't a composed hash.** Comparing a composed intent with a per-stage tile sha compares different objects. | v2 (second pass) |
+| 7 | **`before` must be the world at the write**, not the journal's `after` (StillOurs equivalence: copper, farmland, volatile states). | v1 (fixed in v2) |
+| 8 | **Head, publication and recovery** across files, journal, queue and artifacts; competing plans. | v1 (fixed in v2/v3) |
+| 9 | **Survival:** replacing a paid or unbuilt target needs cancellation, reservation release and refunds across histories. | v1, v2 |
+| 10 | **Fluids:** removing or changing a body needs a scoped drain-and-restore with containment checks. | v1, v2 |
+| 11 | **Dependencies** of other regions (end and side joins, `reach`, hold columns) on what a revision removes. | v1 (fixed in v2/v3 for undo) |
+
+v3 avoids 2-6, 9 and 10 by never removing or changing anything standing; 7, 8 and 11 are solved in v3 and carry over.
+
+### What RP records now (feat/realised-provenance, building; its as-built wins)
+
+- **Per stage, set and tile, the writers** (`ARWR` v1, `kit/lib/realise.mjs` `encodeWriters`): each emitted cell's winning op (part,
+  ordinal, op index, condition) and every op it overwrote in that tile, oldest first. The payload and its sha don't change.
+- **The realised record** per stage, set and tile (the coordinator's brief to RP): the code per emitted cell (written, no-op, held, build,
+  condition, fluid, clip), the extras with their cause (the op that cut a tree; the logs and held leaves), and the entry's layer.
+- Together they answer, for any cell, **every intended writer in write order, which one stands, why the others don't, and what extras
+  depend on which op**: the data problems 3-6 need.
+
+### Directions (open)
+
+- **Patch from provenance, not from intents.** For a removed or changed op, walk its cells in the writers files: where it stands, the
+  target is the next intended writer below it that **would have stood** (re-checked against today's world and holders), else the land;
+  where it was skipped, nothing changes unless a writer above it was skipped only because of it (a condition that read its block): those
+  cells are re-checked. Extras caused by a removed op go back to their `before`.
+- **Hash like with like:** keep per-(stage, set, tile) shas and v3's `historySha`; add a composed hash only if a consumer needs one, defined
+  over the per-stage shas in layer order.
+- **Roads and lots as first-class writers** in the same provenance (4e road planner cells recorded per road item), so a road can be moved
+  or removed by the same rule.
+- **Survival:** a replacement is a paid forward delta (5b D8) with targets cancelled or swapped per cell and one refund owner per block;
+  undo of a replacing revision stays refused (no free undo after refunds).
+- **Fluids:** removing a body reuses v3's suffix drain; changing a body is remove-then-add in one revision, with containment re-checked
+  before sources return.
+- **The oracle** stays v3's: an independent enumeration of expected transitions compared over the whole claim.
+- **Size guess:** larger than RV v3 (provenance-driven patching, road provenance, survival replacement); split at least into kit patch,
+  mod patch and survival lanes.
