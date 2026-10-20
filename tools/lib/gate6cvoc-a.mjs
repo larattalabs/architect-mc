@@ -289,7 +289,10 @@ const AT = (i) => [64 * (i % 6), 100, 64 * Math.floor(i / 6)];
  * or 3 above burns (H's FIRE_REACH, M20).
  */
 const FIRE_POSTS = [
-  ['fire', [2, 0, 0], 'side', true], ['fire', [3, 0, 0], 'side', false], ['fire', [1, 5, 0], 'above', true], ['fire', [1, 6, 0], 'above', false],
+  ['fire', [2, 0, 0], 'side', true], ['fire', [3, 0, 0], 'side', false],
+  // (fire lights a cell 4 up at about 1 in 200 of its ticks: four trials of each high post)
+  ['fire', [1, 5, 0], 'above', true], ['fire', [1, 5, 0], 'above', true], ['fire', [1, 5, 0], 'above', true], ['fire', [1, 5, 0], 'above', true],
+  ['fire', [1, 6, 0], 'above', false], ['fire', [1, 6, 0], 'above', false], ['fire', [1, 6, 0], 'above', false], ['fire', [1, 6, 0], 'above', false],
   ['fire', [1, -2, 0], 'below', true], ['fire', [1, -3, 0], 'below', false],
   ['soul_fire', [1, 0, 0], 'side', false], ['soul_fire', [1, 1, 0], 'above', false],
   ['lava', [3, 2, 0], 'side', true], ['lava', [4, 2, 0], 'side', false], ['lava', [2, 3, 0], 'above', true], ['lava', [2, 4, 0], 'above', false],
@@ -342,8 +345,8 @@ const probe = [{
     // fire ticks only near a player who is not a spectator (26.3's fire_spread_radius_around_player): the bot plays in creative
     await L.cmd('/gamemode creative');
     for (const c of cases) await P(c.kind, c.at, { d: c.d });
-    // wait in game ticks, not wall time (a loaded box falls behind): 6,000 ticks, or every post the reach says catches has caught;
-    // at most 20 minutes of wall time
+    // wait in game ticks, not wall time (a loaded box falls behind): 12,000 ticks;
+    // at most 30 minutes of wall time
     const gt = async () => Number(/(\d+)/.exec((await L.cmd('/time query gametime')).messages?.join(' ') ?? '')?.[1] ?? 0);
     const t0 = await gt();
     const w0 = Date.now();
@@ -354,7 +357,7 @@ const probe = [{
       for (const c of cases.filter((x) => x.kind === 'fire')) await L.cmd(`/setblock ${c.at[0]} ${c.at[1]} ${c.at[2]} minecraft:fire[age=0]`);
       for (const c of cases) { const r = await R(c.kind, c.at, { d: c.d }); c.post = r.states[1]; c.source = r.states[0]; c.caught = r.states[1] !== 'minecraft:oak_planks'; }
       ticks = (await gt()) - t0;
-      if (ticks >= 6000 || Date.now() - w0 > 1_200_000) break;
+      if (ticks >= 12000 || Date.now() - w0 > 1_800_000) break;
     }
     out.fireTicks = ticks;
     out.fire = cases.map(({ kind, d, expect, caught, post, source }) => ({ kind, d, expect, caught, post, source }));
@@ -364,7 +367,15 @@ const probe = [{
       return { side: m('side', (c) => Math.abs(c.d[0])), below: m('below', (c) => -c.d[1]), above: m('above', (c) => c.d[1]) };
     };
     for (const k of ['fire', 'soul_fire', 'lava']) {
-      const mine = cases.filter((c) => c.kind === k);
+      // a post position is lit when any of its trials caught
+      const byPos = new Map();
+      for (const c of cases.filter((x) => x.kind === k)) {
+        const key = json(c.d);
+        const g = byPos.get(key) ?? { d: c.d, expect: c.expect, caught: false, trials: 0 };
+        g.caught ||= c.caught; g.trials++;
+        byPos.set(key, g);
+      }
+      const mine = [...byPos.values()];
       const r = reachOf(k);
       const want = row(k).reach.fire;
       // lava's `below` is H's margin (vanilla lights nothing under the lava's level): not probed
