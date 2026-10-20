@@ -696,3 +696,4 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 - **VOC-c (S-VOC-2):** `rule.palette` measured, with a `realiseApproved` refusal and Steward's RC check, after VOC-a and VOC-b.
 - **Copper weathering and undo** (VOC §10): `StillOurs` needs the same block, so oxidized copper is left behind by undo and
   removal. It is on main today. Its own slice, with verifier re-runs and Steward's pre-release check.
+- **v0.37.1 bumps the kit to 0.35.1** (hk3's even-width rope bridge and tunnel fix changes kit output for v33/v34-style plans, so IrStale marks older IRs stale). The VOC and HY branches (kit placeholders 0.36.0 and 0.37.0) must merge main after this lands. Kit version sequence: 0.35.1 → VOC 0.36.0 → HY 0.37.0.
