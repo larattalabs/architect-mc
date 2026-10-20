@@ -24,6 +24,7 @@ import { VC, blockAt, classAt } from '../region/volume.mjs';
 import { isFlammable } from '../blocks.mjs';
 import { localWorld } from './body.mjs';
 import { inferVillager } from '../params.mjs';
+import { overflowsOn } from './hooks.mjs';
 import { F_WRITTEN } from '../region/vworld.mjs';
 import {
   PRESET_SIZES, arrRect, bodiesMark, bodiesRollback, bodyBom, centre, flagsAt, fluidRolesOf, gap, grow, intIn, inside, linesBody, locatorOf,
@@ -34,6 +35,8 @@ import {
 const k2 = (x, z) => `${x},${z}`;
 const k3 = (x, y, z) => `${x},${y},${z}`;
 const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+/** (6c HY, §1.5) A pond may feed a course: a course `from: {part: <pond>}` registers an overflow on it (hooks.mjs). */
+export const acceptsOverflow = true;
 /** The default sizes: a water pond 9 x 7, a lava pit 3 x 3. The area limit (catalogue 7 `form.pond.limits.area`). */
 export const POND = Object.freeze({ water: [9, 7], lava: [3, 3], areaMax: 1024, areaMin: 4, depth: 2, lavaDepth: 1 });
 /** The farm pond (S-H-1): 3 x 3, 1 deep, its rim 2 from the lot's box (M25:keep keeps one clear cell beside a box). */
@@ -158,7 +161,10 @@ export function emitPond(r, o) {
     for (const [x, y, z] of exits) { const t = S.topAt(x, z); if (t >= y) ec.push(x, z, y, t, 0); }
     if (ec.length) { ex.columns({ abs: 0 }, { abs: 0 }, ec, [null], { cond: 0 }); (r.meta.parts[ex.id] ??= {}).kind = 'carve'; }
   }
-  const rec = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: o.kind ?? 'pond', fluid, stage: o.stage, level, shellRole, ice: o.ice ?? null, outlets: exits, _unsafe: o._unsafe ?? null });
+  // ((6c HY, §1.5) a course leaving the pond: its overflows open side shell cells at the surface; only when there are any, so an H pond's
+  // body is as before)
+  const ov = Array.isArray(o.overflow) && o.overflow.length ? { overflow: o.overflow, raised: true } : {};
+  const rec = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: o.kind ?? 'pond', fluid, stage: o.stage, level, shellRole, ice: o.ice ?? null, outlets: exits, _unsafe: o._unsafe ?? null, ...ov });
   return Object.assign(rec, { rect: o.rect, level, depth, cols: cols.length, rim, shellStates: shellStatesOf(rec, shellRole) });
 }
 
@@ -319,7 +325,7 @@ export function emit(K, p, res) {
       if (dec.refuse) throw refusal(dec.refuse.code, dec.refuse.message, dec.refuse.evidence);
       ice = dec.ice; notes.push(...dec.notes);
     }
-    const rec = emitPond(r, { id: bodyId(p.id), part: p.id, kind: 'pond', rect: res.water, shape, depth: sp.depth, edge: sp.edge, fluid: sp.fluid, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice });
+    const rec = emitPond(r, { id: bodyId(p.id), part: p.id, kind: 'pond', rect: res.water, shape, depth: sp.depth, edge: sp.edge, fluid: sp.fluid, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice, overflow: overflowsOn(K, p.id) });
     leakCheck(r, env, rec);
     if (sp.fluid === 'lava') mixCheck(r, rec);
     res.emitted = { bodies: [rec], notes };

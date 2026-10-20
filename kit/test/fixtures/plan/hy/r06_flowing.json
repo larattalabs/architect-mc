@@ -1,0 +1,51 @@
+{
+ "about": "(\u00a71.6) a weir head on the asks lake, its frozen volume reading the lake as flowing (a current): refused WATER flowing",
+ "on": "asks",
+ "anchors": {
+  "mill": [
+   200,
+   64,
+   254
+  ]
+ },
+ "volume": {
+  "edits": [
+   {
+    "box": [
+     240,
+     61,
+     240,
+     279,
+     64,
+     267
+    ],
+    "class": "WATER",
+    "fluid": "water_flowing"
+   }
+  ]
+ },
+ "expect": {
+  "part": "leat",
+  "class": "refused",
+  "code": "WATER",
+  "kind": "flowing"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_r06",
+  "connectors": [
+   {
+    "id": "leat",
+    "kind": "channel",
+    "from": {
+     "feature": {
+      "water": {}
+     }
+    },
+    "to": {
+     "anchor": "mill"
+    }
+   }
+  ]
+ }
+}

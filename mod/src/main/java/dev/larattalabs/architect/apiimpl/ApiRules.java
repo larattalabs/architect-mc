@@ -75,6 +75,9 @@ public final class ApiRules {
 					case "region.wet" -> "wetWrites"; // 6c H: wet piers, harbour walls and quays (the wet fallback)
 					case "vocab" -> "vocabulary"; // 6c VOC: the block vocabulary (the systemRef vocab/1, generated families, tiers, survival classes)
 					case "bible.rarity" -> "rarityBudgets"; // 6c VOC-b: BibleRequest.rarity, a bible's rarity member, metrics.rarity, M26/M27, VOCAB
+					case "region.hydrology" -> "hydrologyPass"; // 6c HY: the hydrology pass (flow and wet fields, data.courses)
+					case "region.courses" -> "regionCourses"; // 6c HY: courses, mill races and ditches (channel.course, .race, .ditch)
+					case "region.waterGates" -> "waterGates"; // 6c HY: a course under a wall behind a grate (wall.water_gate)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

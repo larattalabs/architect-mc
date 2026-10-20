@@ -1,0 +1,65 @@
+{
+ "about": "(\u00a72, \u00a79) a canal over a cave that runs under a protected area beside it: the single breach of its floor floods the cave to the area: refused LEAK",
+ "on": "flat",
+ "protected": [
+  {
+   "id": "grove",
+   "rect": [
+    1110,
+    2084,
+    1130,
+    2096
+   ]
+  }
+ ],
+ "volume": {
+  "edits": [
+   {
+    "box": [
+     1100,
+     58,
+     2075,
+     1140,
+     62,
+     2115
+    ],
+    "class": "AIR"
+   }
+  ]
+ },
+ "anchors": {
+  "a": [
+   1030,
+   64,
+   2080
+  ],
+  "b": [
+   1210,
+   64,
+   2080
+  ]
+ },
+ "expect": {
+  "part": "canal",
+  "class": "refused",
+  "code": "LEAK"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_r08",
+  "connectors": [
+   {
+    "id": "canal",
+    "kind": "channel",
+    "look": "built",
+    "flow": "level",
+    "from": {
+     "anchor": "a"
+    },
+    "to": {
+     "anchor": "b"
+    }
+   }
+  ]
+ }
+}

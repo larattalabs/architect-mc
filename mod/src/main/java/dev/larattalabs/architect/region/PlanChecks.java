@@ -975,6 +975,9 @@ public final class PlanChecks {
 		}
 		Path vols = level.getServer().getWorldPath(LevelResource.ROOT).resolve(dev.larattalabs.architect.region.volume.VolumeSurvey.STANDALONE_DIR);
 		CompletableFuture<@Nullable String> chain = CompletableFuture.completedFuture(null);
+		// ((6c HY, the batch) a course's reaches share one frozen volume: each volume (sha, box, fluid layer) is decoded and sampled again
+		// once per check, every guard on it compares its own runs, so ARTIFACT_STALE still names the reach)
+		java.util.Map<String, CompletableFuture<GuardSample>> samples = new java.util.HashMap<>();
 		int gi = 0;
 		for (JsonElement ge : guards) {
 			String bad = guardMalformed(gi++, ge);
@@ -986,7 +989,7 @@ public final class PlanChecks {
 			}
 			JsonObject g = ge.getAsJsonObject();
 			chain = chain.thenCompose(prev -> prev != null ? CompletableFuture.completedFuture(prev) : RegionsImpl.onServer(level.getServer(), () -> guardDiff(level,
-				vols, g)).thenCompose(f -> f));
+				vols, g, samples)).thenCompose(f -> f));
 		}
 		return chain;
 	}
@@ -1034,7 +1037,7 @@ public final class PlanChecks {
 		return true;
 	}
 
-	private static CompletableFuture<@Nullable String> guardDiff(ServerLevel level, Path vols, JsonObject g) {
+	private static CompletableFuture<@Nullable String> guardDiff(ServerLevel level, Path vols, JsonObject g, java.util.Map<String, CompletableFuture<GuardSample>> samples) {
 		// (6c H §10) a fluid guard (a body's shell, buffer and joins, or a wet column) names its body, compares the fluid layer too, and is
 		// sampled again with it (ARVX version 3)
 		boolean fluids = g.get("fluids") instanceof JsonElement fe && fe.isJsonPrimitive() && fe.getAsBoolean();
@@ -1045,25 +1048,33 @@ public final class PlanChecks {
 		JsonArray bx = v.getAsJsonArray("box");
 		BoundingBox bb = new BoundingBox(bx.get(0).getAsInt(), bx.get(1).getAsInt(), bx.get(2).getAsInt(), bx.get(3).getAsInt(), bx.get(4).getAsInt(), bx.get(5)
 			.getAsInt());
-		dev.larattalabs.architect.region.volume.Arvx.Decoded before;
-		try {
-			before = dev.larattalabs.architect.region.volume.Arvx.decode(dev.larattalabs.architect.region.volume.Arvx.gunzip(Files.readAllBytes(vols.resolve(sha
-				+ ".bin"))));
-		} catch (IOException | RuntimeException e) {
-			return CompletableFuture.completedFuture((fluids ? "" : "tunnel ") + part + ": the frozen volume " + sha.substring(0, Math.min(12, sha.length()))
-				+ " it was checked against is gone (" + e.getMessage() + "): check again");
-		}
-		int chunks = ((bb.maxX() >> 4) - (bb.minX() >> 4) + 1) * ((bb.maxZ() >> 4) - (bb.minZ() >> 4) + 1);
-		return dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, bb, LoadPolicy.GENERATED_ONLY(chunks + 8), null, fluids, fluids).thenApply(res -> {
-			dev.larattalabs.architect.region.volume.Arvx.Decoded now;
+		String key = sha + " " + bx + " " + fluids;
+		CompletableFuture<GuardSample> sample = samples.get(key);
+		if (sample == null) {
+			dev.larattalabs.architect.region.volume.Arvx.Decoded before;
 			try {
-				now = dev.larattalabs.architect.region.volume.Arvx.decode(dev.larattalabs.architect.region.volume.Arvx.gunzip(res.gz()));
-			} catch (IOException e) {
-				throw new java.io.UncheckedIOException(e);
+				before = dev.larattalabs.architect.region.volume.Arvx.decode(dev.larattalabs.architect.region.volume.Arvx.gunzip(Files.readAllBytes(vols.resolve(sha
+					+ ".bin"))));
+			} catch (IOException | RuntimeException e) {
+				return CompletableFuture.completedFuture((fluids ? "" : "tunnel ") + part + ": the frozen volume " + sha.substring(0, Math.min(12, sha.length()))
+					+ " it was checked against is gone (" + e.getMessage() + "): check again");
 			}
-			return fluids ? waterDiff(part, before, now, g.getAsJsonArray("runs")) : rockDiff(part, before, now, g.getAsJsonArray("runs"));
-		});
+			int chunks = ((bb.maxX() >> 4) - (bb.minX() >> 4) + 1) * ((bb.maxZ() >> 4) - (bb.minZ() >> 4) + 1);
+			sample = dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, bb, LoadPolicy.GENERATED_ONLY(chunks + 8), null, fluids, fluids).thenApply(res -> {
+				try {
+					return new GuardSample(before, dev.larattalabs.architect.region.volume.Arvx.decode(dev.larattalabs.architect.region.volume.Arvx.gunzip(res.gz())));
+				} catch (IOException e) {
+					throw new java.io.UncheckedIOException(e);
+				}
+			});
+			samples.put(key, sample);
+		}
+		return sample.thenApply(bn -> fluids ? waterDiff(part, bn.before(), bn.now(), g.getAsJsonArray("runs")) : rockDiff(part, bn.before(), bn.now(), g.getAsJsonArray(
+			"runs")));
 	}
+
+	/** A guard's frozen volume as planned and the same box sampled again (one per volume and check, shared by the guards on it). */
+	private record GuardSample(dev.larattalabs.architect.region.volume.Arvx.Decoded before, dev.larattalabs.architect.region.volume.Arvx.Decoded now) {}
 
 	/** The guard cells' classes before and now (PLANT as AIR; MISSING now not judged): null when equal, else the message. */
 	static @Nullable String rockDiff(String part, dev.larattalabs.architect.region.volume.Arvx.Decoded before, dev.larattalabs.architect.region.volume.Arvx.Decoded now,

@@ -14,11 +14,12 @@ import { sitePlan, validateSchema } from '../lib/region/siteplan.mjs';
 
 const FIX = path.join(ROOT, 'kit', 'test', 'fixtures', 'plan');
 
-test('catalogue 7: the golden, and the T3 -> H diff is exactly the three flips, the four new ids, the two limits and the two notes', () => {
-  const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
-  assert.deepEqual(planCatalogue(), golden);
+test('catalogue 7 (archived as catalogue-h.json by HY): the T3 -> H diff is exactly the three flips, the four new ids, the two limits and the two notes', () => {
+  // ((6c HY) catalogue 7 is archived as fixtures/plan/catalogue-h.json; the golden is catalogue 8 now: hy-core.test.mjs)
+  const golden = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-h.json'), 'utf8'));
+  assert.deepEqual(planCatalogue().catalogueVersion >= 8, true);
   assert.equal(golden.catalogueVersion, 7);
-  assert.equal(golden.api, PLAN_API);
+  assert.equal(golden.api, '1.34.0');
   const t3 = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-t3.json'), 'utf8'));
   assert.equal(t3.catalogueVersion, 6);
   const pending = [{ part: 'waterfall_curtain', block: 'form.waterfall' }, { part: 'moat', block: 'connector.channel' }, { part: 'drawbridge', block: 'connector.drawbridge' }];
@@ -64,10 +65,10 @@ test('the schema: the H defs, waterDepth, farmPond, R21\'s path form, an odd bas
   assert.equal(channelForm({ where: {} }), 'moat');
   assert.equal(channelForm({ from: {}, to: {} }), 'course');
   assert.equal(channelForm({ from: {}, where: {} }), null);
+  // ((6c HY) channel.course is supported from catalogue 8: a from/to channel compiles; hy-core.test.mjs has R24)
   let p = one({ connectors: [{ id: 'c', kind: 'channel', from: { anchor: 'claim_n' }, to: { anchor: 'claim_s' } }] });
-  assert.equal(p.verdict, 'unsupported');
-  assert.equal(p.block, 'channel.course');
-  assert.equal(p.reason.until, 'HY');
+  assert.equal(p.verdict, 'compile');
+  assert.equal(p.block, 'connector.channel');
   p = one({ connectors: [{ id: 'c', kind: 'channel', from: { anchor: 'claim_n' }, to: { anchor: 'claim_s' }, where: { around: { feature: { water: {} } } } }] });
   assert.equal(p.verdict, 'malformed');
   assert.match(p.reason.message, /R21/);

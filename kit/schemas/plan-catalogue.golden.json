@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 7,
+ "catalogueVersion": 8,
  "api": "1.37.0",
- "kitVersion": "0.36.0",
+ "kitVersion": "0.37.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -204,7 +204,7 @@
   },
   {
    "id": "connector.channel",
-   "sinceApi": "1.34.0",
+   "sinceApi": "1.36.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -217,10 +217,13 @@
      4
     ],
     "forms": [
-     "moat"
+     "moat",
+     "course",
+     "race",
+     "ditch"
     ]
    },
-   "note": "H: a level ring of water round a feature (channel.moat); channel.course, a channel along a line at several levels or joined to natural water, waits for HY."
+   "note": "H: a level ring of water round a feature (channel.moat). HY: courses, races and ditches (channel.course, channel.race, channel.ditch): water that follows the land from a head to a tail, as a chain of level reaches joined by falls and spillways."
   },
   {
    "id": "connector.tube",
@@ -260,7 +263,8 @@
      0,
      8
     ]
-   }
+   },
+   "note": "A course crosses under a water gate (HY, wall.water_gate): the wall on a lintel over a still reach, an iron grate in the water under it; it counts against gates.max, and a sealed wall refuses it."
   },
   {
    "id": "connector.gate",
@@ -401,6 +405,13 @@
    "note": "D2's boundary spine plus an offset (where.along on a wall): the same member, no format change."
   },
   {
+   "id": "wall.water_gate",
+   "sinceApi": "1.36.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "HY: where a course crosses a wall's line or ring, the wall stands on a lintel over a still reach and a waterlogged iron grate fills the water under it; still water passes, flowing water and mobs don't. It counts against the wall's gates.max; a sealed wall refuses it (UNREACHABLE wall). No walk gate."
+  },
+  {
    "id": "bridge.beam",
    "sinceApi": "1.33.0",
    "schemaVersion": 1,
@@ -434,15 +445,89 @@
    "sinceApi": "1.34.0",
    "schemaVersion": 1,
    "state": "supported",
-   "note": "H: a level ring of still water round a feature (where.around; ring default [6, 12]), sunk, lined, closed or capped on the side facing the claim's centre; routes cross it on T3's bridge fallback."
+   "note": "H: a level ring of still water round a feature (where.around; ring default [6, 12]), sunk, lined, closed or capped on the side facing the claim's centre; routes cross it on T3's bridge fallback. HY: may feed a course (overflow) or receive one (a fall over the rim)."
   },
   {
    "id": "channel.course",
-   "sinceApi": "1.34.0",
+   "sinceApi": "1.36.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "width": [
+     1,
+     5
+    ],
+    "depth": [
+     1,
+     3
+    ],
+    "length": [
+     4,
+     512
+    ],
+    "drop": [
+     1,
+     8
+    ],
+    "riffle": [
+     2,
+     6
+    ],
+    "cut": [
+     0,
+     6
+    ],
+    "fill": [
+     0,
+     2
+    ],
+    "flows": [
+     "level",
+     "pools",
+     "riffles"
+    ],
+    "looks": [
+     "natural",
+     "built"
+    ]
+   },
+   "note": "A channel along a line (from, via, to) with reaches at several levels or joined to natural water: HY's, built from H's fluid bodies."
+  },
+  {
+   "id": "channel.race",
+   "sinceApi": "1.36.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "HY: a mill race, a course with a lot in via: a wheel fall of at least 3 beside the lot, outside its box (the wheel is the lot design's); the answer names the side and the fall (serves)."
+  },
+  {
+   "id": "channel.ditch",
+   "sinceApi": "1.36.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "width": [
+     1,
+     1
+    ],
+    "depth": [
+     1,
+     1
+    ],
+    "length": [
+     3,
+     64
+    ]
+   },
+   "note": "HY: a level irrigation ditch 1 wide and 1 deep along the sides of a lot or zone (where.along), outside its box; it hydrates nothing in the lot (working farms are a later block)."
+  },
+  {
+   "id": "channel.aqueduct",
+   "sinceApi": "1.36.0",
    "schemaVersion": 0,
    "state": "reserved",
-   "until": "HY",
-   "note": "A channel along a line (from, via, to) with reaches at several levels or joined to natural water: HY's, built from H's fluid bodies."
+   "until": "7c",
+   "note": "A course carried over low ground on piers or arches: what a course needing more than its fill answers (unsupported, with the shape it needs)."
   },
   {
    "id": "form.relief",
@@ -509,7 +594,8 @@
      "natural",
      "built"
     ]
-   }
+   },
+   "note": "HY: may feed a course (overflow) or receive one (a fall over the rim)."
   },
   {
    "id": "form.fountain",
@@ -525,7 +611,8 @@
      1,
      4
     ]
-   }
+   },
+   "note": "HY: may feed a course (overflow) or receive one (a fall over the rim)."
   },
   {
    "id": "form.scatter",

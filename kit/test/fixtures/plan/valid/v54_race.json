@@ -1,0 +1,95 @@
+{
+ "about": "(6c HY-b, \u00a77.5, \u00a714) a mill race past a mill lot: the course passes the lot's side and takes a wheel fall of at least 3 within 4 of its box (serves)",
+ "terrain": {
+  "W": 240,
+  "D": 160,
+  "x0": 1000,
+  "z0": 2000,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1000,
+    "x1": 1059,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 72
+   },
+   {
+    "x0": 1060,
+    "x1": 1100,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 68
+   }
+  ]
+ },
+ "anchors": {
+  "head": [
+   1020,
+   72,
+   2080
+  ],
+  "tail": [
+   1200,
+   64,
+   2082
+  ],
+  "mills": [
+   1070,
+   68,
+   2060
+  ]
+ },
+ "volume": {},
+ "covers": [
+  "connector.channel",
+  "channel.race"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_v54",
+  "zones": [
+   {
+    "id": "millz",
+    "program": {
+     "template": "flat_village",
+     "params": {
+      "lots": [
+       {
+        "id": "mill1",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       }
+      ]
+     }
+    },
+    "where": {
+     "near": {
+      "anchor": "mills",
+      "within": 4
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "race",
+    "kind": "channel",
+    "from": {
+     "anchor": "head"
+    },
+    "via": [
+     {
+      "part": "mill1"
+     }
+    ],
+    "to": {
+     "anchor": "tail"
+    }
+   }
+  ]
+ }
+}

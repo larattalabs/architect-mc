@@ -1,0 +1,63 @@
+{
+ "about": "(\u00a77.2, N-HY-5) two plateaus 8 over a valley across the whole claim: a level course between them would stand past fill (2): unsupported channel.aqueduct until 7c",
+ "terrain": {
+  "W": 240,
+  "D": 160,
+  "x0": 1000,
+  "z0": 2000,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1000,
+    "x1": 1099,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 72
+   },
+   {
+    "x0": 1140,
+    "x1": 1239,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 72
+   }
+  ]
+ },
+ "anchors": {
+  "a": [
+   1030,
+   72,
+   2080
+  ],
+  "b": [
+   1210,
+   72,
+   2080
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "canal",
+  "class": "unsupported",
+  "code": "UNSUPPORTED",
+  "until": "7c",
+  "block": "channel.aqueduct"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_r03",
+  "connectors": [
+   {
+    "id": "canal",
+    "kind": "channel",
+    "look": "built",
+    "from": {
+     "anchor": "a"
+    },
+    "to": {
+     "anchor": "b"
+    }
+   }
+  ]
+ }
+}

@@ -1,0 +1,54 @@
+{
+ "about": "(\u00a77.2) a ridge 9 high across the whole claim between two ends on the plain: deeper than cut (6): refused UNREACHABLE cut",
+ "terrain": {
+  "W": 240,
+  "D": 160,
+  "x0": 1000,
+  "z0": 2000,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1100,
+    "x1": 1139,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 73
+   }
+  ]
+ },
+ "anchors": {
+  "a": [
+   1030,
+   64,
+   2080
+  ],
+  "b": [
+   1210,
+   64,
+   2080
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "brook",
+  "class": "refused",
+  "code": "UNREACHABLE",
+  "kind": "cut"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_r02",
+  "connectors": [
+   {
+    "id": "brook",
+    "kind": "channel",
+    "from": {
+     "anchor": "a"
+    },
+    "to": {
+     "anchor": "b"
+    }
+   }
+  ]
+ }
+}

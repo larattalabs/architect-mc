@@ -353,6 +353,11 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `WeatheringCopper.getPrevious`) does to a copper block in place, or one weathering step (`weather`: `WeatheringCopper.getNext`), each
   cell set with its other properties and a door's other half with it; no player placement is recorded -> `{cells: [{at, before, after,
   changed}]}`.
+- **2026-10-19 (6c slice HY-core):** `dev.journal.killAt` takes FL4 (an ordered region: one wave of reaches written and forced, more to
+  come: downstream written, upstream not) and FL5 (a removal: the head drained, the rest of the course not yet), each also with `+save`.
+  `dev.fluid.state {region}` gains `ordered`, `order` (the write order), and per body `writtenAt` (game time; -1: forced with the stage)
+  and `held` (never written: upstream of a body that failed). `dev.entity.damage` already records every damage type: `{type: "fall"}`
+  reads fall damage (HY item 18 (b)).
 - **2026-10-19 (6c slice VOC-b):** new (`SliceVocbDev`, generated headless too) `dev.vocab.bibleRequest {prompt, name?, owner?, scope?,
   seedPreset?, rarity?: {...}, opKey?}` (Bibles.request with `BibleRequest.Rarity`, the typed record built from the JSON -> `{jobId, bibleId,
   version, status, step, request, wire}` (`wire`: Wire4b's request JSON) or `{wire, refused, code?, detail?}`: a malformed budget is refused

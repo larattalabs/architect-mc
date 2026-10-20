@@ -171,11 +171,12 @@ export function besidePorts(beside) {
 
 /**
  * The placement (pure): candidates per district, each with V's street layout in its rect, and the assignment in phases by `near`.
- * `{S (ctx.survey), claim, keepOut, blocked, ds (parseDistricts), step, limit, exact}` -> `{bands, cands, pick: Map(id -> candidate),
+ * `{S (ctx.survey), claim, keepOut, blocked, ds (parseDistricts), step, limit, exact, wet (6c HY-a: the hydrology pass's `wet` field)}` ->
+ * `{bands, cands, pick: Map(id -> candidate),
  * unplaced, phases, methods, exact, bnbNodes, totalCost}`. The plan check (plan_v0) places a districts zone with it at resolve time
  * and hands the result to emitDistricts (`_placed`).
  */
-export function placeDistricts({ S, claim, keepOut = [], blocked = [], ds, step = 4, limit = EXACT_MAX, exact: wantExact = true, farFrom = [] }) {
+export function placeDistricts({ S, claim, keepOut = [], blocked = [], ds, step = 4, limit = EXACT_MAX, exact: wantExact = true, farFrom = [], wet = null }) {
   const cols = S.columns;
   step ??= 4; limit ??= EXACT_MAX;
   const bands = levelBands(cols, claim);
@@ -184,7 +185,7 @@ export function placeDistricts({ S, claim, keepOut = [], blocked = [], ds, step 
   const cands = ds.map((d) => {
     // (6c D2) an outpost keeps `gap` from the standing region and the following districts (`farFrom` rects)
     const far = (c) => !d.outpost || farFrom.every((q) => !rectsMeet(c.rect, { minX: q[0], minZ: q[1], maxX: q[2], maxZ: q[3] }, d.outpost.gap));
-    const cs = d.follow ? [] : districtCandidates(cols, claim, d.size, { bands, blocked, step, limit: d.outpost ? limit * 4 : limit, band: d.levelBand, gap: 1 }).filter(far).slice(0, limit);
+    const cs = d.follow ? [] : districtCandidates(cols, claim, d.size, { bands, blocked, step, limit: d.outpost ? limit * 4 : limit, band: d.levelBand, gap: 1, wet }).filter(far).slice(0, limit);
     const out = [];
     for (const c of cs) {
       const L = layoutStreet({ claim: rectOf(c), survey: S, specs: d.specs, rules: STREET_RULES, shared: d.shared, keepOut });
@@ -278,7 +279,7 @@ export function emitDistricts(r, intent = {}) {
   }
   const followRects = [...follows.values()].map((f) => [f.pf.rect.minX - 1, f.pf.rect.minZ - 1, f.pf.rect.maxX + 1, f.pf.rect.maxZ + 1]);
   const farFrom = [...(beside ? [beside.claim] : []), ...followRects];
-  const P = it._placed ?? placeDistricts({ S, claim, keepOut, blocked: [...blocked, ...followRects], ds, step: it.step, limit: it.limit, exact: it.exact, farFrom });
+  const P = it._placed ?? placeDistricts({ S, claim, keepOut, blocked: [...blocked, ...followRects], ds, step: it.step, limit: it.limit, exact: it.exact, farFrom, wet: r.hydrology?.wet ?? null });
   const { bands, cands, pick, phases, methods } = P;
   const unplaced = P.unplaced.filter((u) => !follows.has(u.id));
   let { exact, bnbNodes, totalCost } = P;

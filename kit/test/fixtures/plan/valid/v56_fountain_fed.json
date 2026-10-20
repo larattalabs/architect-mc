@@ -1,0 +1,96 @@
+{
+ "about": "(6c HY-b, \u00a71.5, \u00a77.4, \u00a714) a brook falling over a fountain's coping into its basin (a fountain fed from a course), and a pond on the terrace overflowing into a stream that leaves it",
+ "terrain": {
+  "W": 240,
+  "D": 160,
+  "x0": 1000,
+  "z0": 2000,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1000,
+    "x1": 1106,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 68
+   }
+  ]
+ },
+ "anchors": {
+  "head": [
+   1020,
+   68,
+   2120
+  ],
+  "fz": [
+   1112,
+   64,
+   2120
+  ],
+  "pz": [
+   1040,
+   68,
+   2035
+  ],
+  "tail": [
+   1200,
+   64,
+   2035
+  ]
+ },
+ "volume": {},
+ "covers": [
+  "connector.channel",
+  "channel.course",
+  "form.fountain",
+  "form.pond"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_v56",
+  "forms": [
+   {
+    "id": "fountain",
+    "kind": "fountain",
+    "where": {
+     "near": {
+      "anchor": "fz",
+      "within": 6
+     }
+    }
+   },
+   {
+    "id": "pond",
+    "kind": "pond",
+    "where": {
+     "near": {
+      "anchor": "pz",
+      "within": 2
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "brook",
+    "kind": "channel",
+    "from": {
+     "anchor": "head"
+    },
+    "to": {
+     "part": "fountain"
+    }
+   },
+   {
+    "id": "drain",
+    "kind": "channel",
+    "from": {
+     "part": "pond"
+    },
+    "to": {
+     "anchor": "tail"
+    }
+   }
+  ]
+ }
+}
