@@ -19694,7 +19694,18 @@ honest repair. S-7a-2 asks.
 - **Order:** 7a lands before 6d, as SETTLEMENTS agreed with Steward on 2026-10-09. 6d's RV is being revised after an
   independent review in any case.
 
-## Phase 7a foundation: the shared interface (DRAFT for Steward review)
+
+### Steward's review (2026-10-20, at 7e7cd2d5): binding
+
+Every batch and slice default is accepted:
+- S-7a-1 to S-7a-8.
+- S-CL-1/2, S-K2-1/2, S-CW-1, S-RK-1 (LOAD_BOUNDED(512) from `limits.volume`).
+- S-LF-1/2 (RC), S-SA-1, S-K3-1..4 (S-K3-4 checked: plan v1 reads `$.lots[]` by id and never checks the zone's rect; K3 RC).
+- S-GJ-1/2 (RC), S-FB-1.
+
+7a lands before 6d.
+
+## Phase 7a foundation: the shared interface (FROZEN 2026-10-20, Steward reviewed: every default accepted)
 
 One owner, frozen before any 7a slice branches, as `k1/foundation` and `t3/foundation` were. It changes no answer by itself: every
 row it adds is inert, and every def it adds is read only once its kind's catalogue entry flips (R4). The slices merge it; it never
@@ -19874,7 +19885,7 @@ PROFILES[name] = { stairs: bool, ladders: bool, ladderMax: int, cost: {flight, s
 
 S-7a-1 to S-7a-5 (batch level) decide §3.2's `auto` row and §4's table.
 
-## Phase 7a slice CL: climbs, stairs, switchbacks and ladders (DRAFT for Steward review)
+## Phase 7a slice CL: climbs, stairs, switchbacks and ladders (FROZEN 2026-10-20, Steward reviewed: every default accepted)
 
 `connector.stair`, `connector.switchback` and `connector.ladder` reserved -> supported. Each is a routed connector whose search is
 T2's own, under a per-edge cost profile (foundation §3.1), plus the fittings T2 doesn't lay (stair rails, ladder rest landings and
@@ -20043,7 +20054,7 @@ rounds and the villager test (0.5).
   - ladders with a rest landing every 24 and a fence gate at the top.
   The look step shows them in three bibles.
 
-## Phase 7a slice K2: walls along a boundary, and wall walks (DRAFT for Steward review)
+## Phase 7a slice K2: walls along a boundary, and wall walks (FROZEN 2026-10-20, Steward reviewed: every default accepted)
 
 `wall.along` reserved (`until: K2`) -> supported: D2's boundary spine plus an offset, through K1's line code. And a `walk` member
 on `connector.wall`: a railed, lit walk along the wall's top with stairs up from the inside. Both are K1 extensions in K1a's files.
@@ -20195,7 +20206,7 @@ functions of `wall.mjs` and merge cleanly.
 - **N-K2-1. How walks look.** Proposed: a 1-wide walk on a thickness-2 wall, a continuous wall-block parapet with merlons above,
   a fence rail on the inside, lanterns on the parapet, stairs up the inside face at each gate. Default as proposed.
 
-## Phase 7a slice CW: catwalks along a face (DRAFT for Steward review)
+## Phase 7a slice CW: catwalks along a face (FROZEN 2026-10-20, Steward reviewed: every default accepted)
 
 `connector.catwalk` reserved -> supported, in its **face form**: a deck shelf on brackets along a cliff or a steep bank, railed on
 the open side, where a walk would otherwise cut deep into the face or go a long way round. SETTLEMENTS §8.2's second form, a deck
@@ -20319,7 +20330,7 @@ One owner, **about 1.25 days**: geometry and the row (0.5), the checker and fixt
 - **N-CW-1. How catwalks look.** Proposed: a 2-wide plank deck (`floor`), upside-down stair brackets with wall-block struts in
   `frame`, fence rails, lanterns on the rail posts. Default as proposed.
 
-## Phase 7a slice RK: rock stairs (DRAFT for Steward review)
+## Phase 7a slice RK: rock stairs (FROZEN 2026-10-20, Steward reviewed: every default accepted)
 
 `connector.rock_stair` reserved -> supported: a straight stair flight carved into rising ground, open where the ground over it is
 thin and bored where it is thick, lined where soil or sand shows, lit, with T3b's 2-cell fluid buffer read from a frozen volume.
@@ -20456,7 +20467,7 @@ new.
 - **N-RK-1. How rock stairs look.** Proposed: raw rock walls lined only where soil or sand shows, stone-brick treads, arched
   portals, lanterns at each landing. Default as proposed.
 
-## Phase 7a slice LF: lifts, bubble columns against a face (DRAFT for Steward review)
+## Phase 7a slice LF: lifts, bubble columns against a face (FROZEN 2026-10-20, Steward reviewed: every default accepted)
 
 `connector.lift` reserved -> supported: SETTLEMENTS §8.2's bubble column, a 1 x 1 water shaft over soul sand (up) or magma (down)
 that carries a player between the foot of a face and its top. It is an H body: contained by construction, M25-checked, census-exact,
@@ -20630,7 +20641,7 @@ StillOurs row (1), M25 on lifts and fixtures (0.25), the rounds (0.5). If it run
   the inner layer, a railed rim at the top. The alternative is glass in both layers so riders see out (glass is `fs`). Default: solid, as
   proposed.
 
-## Phase 7a slice SA: spiral stairs round a form (DRAFT for Steward review)
+## Phase 7a slice SA: spiral stairs round a form (FROZEN 2026-10-20, Steward reviewed: every default accepted)
 
 `connector.stairs_around` reserved -> supported: a spiral stair round a rock spire, an ice spike, a giant tree's trunk or a giant
 mushroom's stem, from the ground to a railed lookout at the top (a spire or spike) or just under the canopy or cap (a tree or
@@ -20757,7 +20768,7 @@ One owner, **about 1.25 days**: the hug and tops (0.5), the leg and answers (0.2
 - **N-SA-1. How spirals look.** Proposed: 1-wide stairs in the tread role (`structure`'s stairs; the host's wood on a tree), fence
   rails, a slab lookout deck, soul lanterns by ice. Default as proposed.
 
-## Phase 7a slice K3: towers and gatehouses as lots on a wall's line (DRAFT for Steward review)
+## Phase 7a slice K3: towers and gatehouses as lots on a wall's line (FROZEN 2026-10-20, Steward reviewed: every default accepted)
 
 The lots a recorded wall names (towers, corner lots, gatehouses, `joins`, `anchors`) are sited **on the wall's line** instead of
 beside it: a tower at a ring's corner, a gatehouse straddling a gate run with a passage through it. The wall ends at each lot's box
@@ -20952,7 +20963,7 @@ the bind check, the artifact read, items 4, 6-8) against a frozen `onWall` shape
   the wall raised under nothing (the lots carry their own height). Default as proposed; the look step shows a castle in three
   bibles.
 
-## Phase 7a slice GJ: a district joins a walled town through a standing gate (DRAFT for Steward review)
+## Phase 7a slice GJ: a district joins a walled town through a standing gate (FROZEN 2026-10-20, Steward reviewed: every default accepted)
 
 D3 answers `NO_JOIN [wall]` when every candidate in a town's claim is enclosed by the town's wall (S-D3-5: "walled towns answer
 `NO_JOIN [wall]`, with gates joining in 7a"). GJ lets the join pass through one of the wall's **standing** gates: it routes to the
@@ -21099,7 +21110,7 @@ None use `beside` or `endpoint.region` (D1's gap table): unchanged.
 
 None: GJ has no new look (D3's join look, N-D3-1).
 
-## Phase 7a slice FB: flood behaviour, M16 (DRAFT for Steward review)
+## Phase 7a slice FB: flood behaviour, M16 (FROZEN 2026-10-20, Steward reviewed: every default accepted)
 
 SETTLEMENTS §11's **M16**, which H (§2.5: "M16 proper (barrier thickness under a water surface) stays 7a's") and HY ("Deferred")
 left here. H's single breach asks "what floods if one shell cell opens"; M16 asks the static question beside it: **is any walk cell
