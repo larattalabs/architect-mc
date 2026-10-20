@@ -188,7 +188,9 @@ export function irrBodyId(lot, i, j) {
  * Each asked farm lot's sources (§2, §3): its grid in its field, each source an H body `<lot>_irr_<i>_<j>` (kind irrigation) whose shell,
  * written by the zone in stage `ground` after the pads, is its bed (the bible's `fluids.bed`, differing from the pad's top) and its four
  * sides (EDGE_STATE); its water in the fluids stage. One frozen volume per lot, shared by its sources. The lot records
- * `irrigation {sources, bodies, field, cells, lotCells}` (the IR's lots[], the artifact's). Notes go to the zone's answer.
+ * `irrigation {sources, bodies, field: [x0, z0, x1, z1], cells: world column runs [x, z, y0, y1], frame: [width, depth] (the lot's frame,
+ * its front to the south), lotCells: the same cells in the frame as runs [u, v, y0, y1] (y from the floor)}` (the IR's lots[], the
+ * artifact's). Notes go to the zone's answer.
  * Broken variants (the zone's `ext.architect_mc:unsafe`): irrNoBed (the first source's bed written as air, a hole: M25:shell), irrBreachOut (the
  * first source moved onto the field's edge row against the border, so its breach leaves the lot: M25:keep), irrUnmasked (true: the
  * IR lot says `unmasked`, so the mod places the lot's design over the sides and the live check refuses the source, PARTIAL; 'plan': a
@@ -250,7 +252,7 @@ export function emitIrrigation(K) {
       // the lot's record: the world cells and the same cells in the lot's frame (front to the south: the design's)
       const F = lotFrame(lot);
       const lotCells = cellsAll.map((c) => F.toFrame(...c)).sort((a, c) => a[1] - c[1] || a[0] - c[0] || a[2] - c[2]);
-      lot.irrigation = { sources: bodies.length, bodies: bodies.map((q) => q.id), field: [field.x0, field.z0, field.x1, field.z1], cells: toRuns(cellsAll), lotCells: toRuns(lotCells.map(([u, y, v]) => [u, y, v])) };
+      lot.irrigation = { sources: bodies.length, bodies: bodies.map((q) => q.id), field: [field.x0, field.z0, field.x1, field.z1], cells: toRuns(cellsAll), frame: [...F.size], lotCells: toRuns(lotCells) };
       if (unsafe.irrUnmasked === true || unsafe.irrUnmasked === 'plan') {
         // (the broken variant: the mod is told not to mask this lot, so its design writes over the sides; 'plan' also writes one side
         // here, a part of no plan part standing in for the design: M25:clear at plan time)
