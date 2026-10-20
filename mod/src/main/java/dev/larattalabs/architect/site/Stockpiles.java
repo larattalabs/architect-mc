@@ -341,7 +341,11 @@ public final class Stockpiles {
 	static int maxStack(String item) {
 		return MAX_STACK.computeIfAbsent(item, id -> {
 			Item it = Cells.item(id);
-			return it == null ? 64 : new ItemStack(it).getMaxStackSize();
+			try {
+				return it == null ? 64 : new ItemStack(it).getMaxStackSize();
+			} catch (RuntimeException e) {
+				return 64; // (unit tests: the item components are not bound)
+			}
 		});
 	}
 
@@ -948,10 +952,32 @@ public final class Stockpiles {
 			return Map.of();
 		}
 		int cap = capacity(srv, p);
-		int take = Math.max(0, Math.min(lavaSources, p.ledger.stock(StockLedger.BUCKET)));
 		Map<String, Integer> over = new TreeMap<>();
+		StockLedger.Credit c = scoopInto(p.ledger, key, lavaSources, grates, cap, Stockpiles::maxStack, over);
+		BlockPos fb = p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above();
+		dropOverflow(srv, p, over, fb);
+		dropOverflow(srv, p, c.overflow(), fb);
+		changed(p);
+		save();
+		Architect.LOGGER.info("Stockpile {}: a region's removal scooped and refunded {} ({} lava source(s), {} grate(s); {})", p.owner, c.returned(), lavaSources, grates, key);
+		Map<String, Integer> out = new TreeMap<>(c.returned());
+		c.overflow().forEach((k, v) -> out.merge(k, v, Integer::sum));
+		return out;
+	}
+
+	/**
+	 * (6c RS, S-RS-6) The scoop on a ledger, pure: per standing lava source a bucket from stock becomes a lava bucket (as many as there are
+	 * buckets, never more: no bucket is minted), the grates' iron bars credited, all of it once under {@code key}. {@code over}: the
+	 * consumed buckets' overflow (none: a consume returns nothing); the returned credit's overflow is the caller's to drop.
+	 */
+	static StockLedger.Credit scoopInto(StockLedger led, String key, int lavaSources, int grates, int cap, java.util.function.ToIntFunction<String> maxStack,
+		Map<String, Integer> over) {
+		if (led.credited(key)) {
+			return new StockLedger.Credit(Map.of(), Map.of(), true);
+		}
+		int take = Math.max(0, Math.min(lavaSources, led.stock(StockLedger.BUCKET)));
 		if (take > 0) {
-			p.ledger.consume(StockLedger.BUCKET, take, cap, Stockpiles::maxStack, over);
+			led.consume(StockLedger.BUCKET, take, cap, maxStack, over);
 		}
 		Map<String, Integer> items = new TreeMap<>();
 		if (take > 0) {
@@ -960,14 +986,7 @@ public final class Stockpiles {
 		if (grates > 0) {
 			items.put("minecraft:iron_bars", grates);
 		}
-		BlockPos fb = p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above();
-		dropOverflow(srv, p, over, fb);
-		StockLedger.Credit c = credit(srv, p, key, items, fb);
-		save();
-		Architect.LOGGER.info("Stockpile {}: a region's removal scooped {} of {} lava source(s) and refunded {} grate(s) ({})", p.owner, take, lavaSources, grates, key);
-		Map<String, Integer> out = new TreeMap<>(c.returned());
-		c.overflow().forEach((k, v) -> out.merge(k, v, Integer::sum));
-		return out;
+		return led.credit(key, items, cap, maxStack);
 	}
 
 	/** Credits without a key (a swap's old block, a bucket's container) as it happens. */

@@ -307,6 +307,41 @@ public final class RegionTargets {
 		return new Order(order, ends.stream().mapToInt(Integer::intValue).toArray(), qdeps);
 	}
 
+	/**
+	 * (§6.4, the broken variant {@code _unsafe.carveFirst}'s check) The order position of the first held cut (its target air) that comes
+	 * before a paid cell above it or beside it within 1 (a bore open before its lining), or -1 when every cut waits for them.
+	 */
+	static int firstUnsafeCut(long[] pos, BlockState[] st, BitSet held, int[] order) {
+		int n = pos.length;
+		Long2IntOpenHashMap at = new Long2IntOpenHashMap(n * 2);
+		at.defaultReturnValue(-1);
+		for (int i = 0; i < n; i++) {
+			at.put(pos[i], i);
+		}
+		int[] rank = new int[n];
+		for (int r = 0; r < n; r++) {
+			rank[order[r]] = r;
+		}
+		for (int r = 0; r < n; r++) {
+			int i = order[r];
+			if (!held.get(i) || !st[i].isAir()) {
+				continue;
+			}
+			BlockPos p = BlockPos.of(pos[i]);
+			for (int dy = 0; dy <= 1; dy++) {
+				for (int dx = -1; dx <= 1; dx++) {
+					for (int dz = -1; dz <= 1; dz++) {
+						int j = at.get(BlockPos.asLong(p.getX() + dx, p.getY() + dy, p.getZ() + dz));
+						if (j >= 0 && j != i && !held.get(j) && rank[j] > r) {
+							return r;
+						}
+					}
+				}
+			}
+		}
+		return -1;
+	}
+
 	/** A bill's size in stacks: sum over items of ceil(n / max stack). */
 	static int stacks(Map<String, Integer> bill, java.util.function.ToIntFunction<String> maxStack) {
 		int s = 0;

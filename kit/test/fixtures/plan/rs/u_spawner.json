@@ -1,0 +1,10 @@
+{
+  "about": "(6c RS, §13 item 13) a creative-only block in survival: the zone's lamp posts in a style whose rail role is a spawner (one of the 35 creative-only blocks): the zone refused SURVIVAL {kind: creativeOnly} in a survival check (fits in creative)",
+  "on": "flat",
+  "style": { "roles": { "rail": "minecraft:spawner" } },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "rs_u_spawner",
+    "zones": [{ "id": "town", "program": { "lots": [{ "id": "h1", "type": "cottage", "size": [9, 9] }, { "id": "h2", "type": "cottage", "size": [9, 9] }] }, "where": { "near": { "anchor": "stone", "within": 16 } } }]
+  }
+}
