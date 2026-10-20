@@ -1,7 +1,7 @@
 // (6c IRR gate fixture, not a catalogue design) A working field for a farm lot of `width` x `depth`: a dirt layer under it (row 0, the
 // pad's level, so the lot's design writes the irrigation sources' beds too and the mask must drop them), farmland over the field with
 // wheat on it, an oak fence on coarse dirt round its border with a gate in the front row's middle, a dirt path along the front row, and a composter
-// beside the gate (a farmer villager's job site). It knows nothing of irrigation: the mask drops what it writes on the sources' cells
+// beside the gate (in the fence line) (a farmer villager's job site). It knows nothing of irrigation: the mask drops what it writes on the sources' cells
 // (the realise reports irrigationDropped). `crop` picks the crop; the gate's v2 ("add a floor" stand-in, a versionOf) swaps it.
 // Front south, groundY 1: row 1 is the lot's floor (the field's farmland level), row 2 the crops.
 import { Blueprint, PALETTES } from '../../../lib/kit.mjs';
@@ -38,7 +38,7 @@ export default function build({ palette: p = PALETTES.rustic, width = 13, depth 
     for (let z = 1; z < Z - 1; z++) for (const x of [0, X]) { bp.set(x, 1, z, 'minecraft:coarse_dirt'); bp.set(x, 2, z, 'minecraft:oak_fence'); }
     bp.set(gx, 1, Z - 1, 'minecraft:dirt_path');
     bp.set(gx, 2, Z - 1, 'minecraft:oak_fence_gate', { facing: 'south' });
-    bp.set(gx + 1, 2, Z, 'minecraft:composter');
+    bp.set(gx + 1, 2, Z - 1, 'minecraft:composter'); // (in the fence line beside the gate, on its coarse dirt: never on the path)
   });
   bp.spot('entrance', gx, Z, 180, { y: 2 });
   bp.spot('spawn', gx, Z, 180, { y: 2 });

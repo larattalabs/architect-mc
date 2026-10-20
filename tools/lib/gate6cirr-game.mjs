@@ -452,9 +452,11 @@ export async function ingame(ctx) {
     await L.leaveWorld();
   }
   // ---- v63 (a 40 x 40 farm), Steward's hamlet (type-implied, bound in its plan), a district lot: every new path in game
-  // ((development, IRR_ONLY=h0 or h0p only: H's farm hamlet without irrigate, with the field entry bound and as a pad: a control)
+  // ---- the control for Steward's hamlet: H's farm_hamlet without irrigate, the same field entry bound (h0; h0p as pads, development
+  // only). Main's own E-flat with a bound entry: a road's lantern post stands on the lane's dirt_path at the entrance and turns it to
+  // dirt, which the removal leaves (dirt_path and dirt are not interchangeable in StillOurs). s01 is judged against it.
   for (const [tag, rel, entries] of [['h0', 'h/farm_hamlet.json', { farm_1: 'g6c_irr_field' }], ['h0p', 'h/farm_hamlet.json', {}]]) {
-    if (!only.includes(tag)) continue;
+    if (tag === 'h0' ? !want('s01') && !only.includes('h0') : !only.includes(tag)) continue;
     const o = await realiseIrr(ctx, tag, fx(rel), { entries, fields: F });
     if (o.r) out[tag] = await removeRegion(ctx, o, `(control ${tag}) farm_hamlet without irrigate`, { judged: false });
     await L.leaveWorld();
@@ -464,7 +466,15 @@ export async function ingame(ctx) {
     const o = await realiseIrr(ctx, tag, fx(rel), { entries, fields: F });
     if (o.r) {
       out[tag] = await placedChecks(ctx, tag, o, F, entries);
-      out[tag].removal = await removeRegion(ctx, o, `item 2 (${tag})`);
+      if (tag === 's01' && out.h0) {
+        // (judged against the control: the same cells as main's own mismatch without irrigate, by position and states; nothing else)
+        const rm = await removeRegion(ctx, o, `item 2 (${tag}, recorded)`, { judged: false });
+        const key = (m) => `${m.pos} ${m.was} ${m.now}`;
+        const a = new Set((rm.sample ?? []).map(key)), b = new Set((out.h0.sample ?? []).map(key));
+        const same = rm.mismatches === out.h0.mismatches && [...a].every((k) => b.has(k));
+        check(rm.state === 'REMOVED' && same, `item 2 (${tag}): Regions.remove: E-flat ${rm.mismatches}, exactly the control's (farm_hamlet without irrigate, the same entry: ${out.h0.mismatches}, main's road lantern on the lane's path, ${[...b].join('; ') || 'none'}): nothing of irrigation's`, { s01: rm.sample, control: out.h0.sample });
+        out[tag].removal = rm;
+      } else out[tag].removal = await removeRegion(ctx, o, `item 2 (${tag})`);
     } else check(false, `item 2 (${tag}): not realised (${o.overall} ${json(o.parts)} ${json(o.refused ?? null)})`);
     await L.leaveWorld();
   }
