@@ -486,9 +486,14 @@ const natural = [{
     const diff2 = await L.call('dev.region.hash', { box, mode: 'diff', file: snapF }, 4 * 3_600_000);
     // (what the undo kept: the cells inside the hall's lot box that differ from the snapshot; the diff classes them `growth`)
     const inHall = (diff2.list ?? []).filter((m) => { const [x, y, z] = String(m.pos).split(',').map(Number); return x >= b2[0] && x <= b2[3] && y >= b2[1] && y <= b2[4] && z >= b2[2] && z <= b2[5]; });
-    const kept = inHall.length || (diff2.classes?.growth ?? 0);
-    out.drift = { cells: cells.length, weathered: weathered.size, rounds: 'n 50 per call', removed: rm2.removed, kept, mismatches: diff2.mismatches, classes: diff2.classes ?? null };
-    check(true, `item 9 (drift probe, recorded): ${weathered.size} of ${cells.length} unwaxed copper cells of the hall weathered under dev.vocab.tick; after Regions.remove an undo kept ${kept} weathered cell(s) standing (StillOurs needs the same block: the queued §10 item's evidence; ${diff2.mismatches} mismatches ${j(diff2.classes ?? {})})`, out.drift);
+    // (6c CU item 1) the cells inside the hall's lot box only; the growth outside it (grass and dirt, buds) is counted apart
+    const kept = inHall.length;
+    const growthOutside = (diff2.list ?? []).filter((m) => m.class === 'growth' && !inHall.includes(m)).length;
+    out.drift = { cells: cells.length, weathered: weathered.size, rounds: 'n 50 per call', removed: rm2.removed, kept, growthOutside, mismatches: diff2.mismatches, classes: diff2.classes ?? null };
+    // (6c CU §8 item 1) the cell list itself, so the kept figure can be read cell by cell: the hall's lot box (b2), the weathered cells,
+    // and every cell the diff listed (position, class, states)
+    fs.writeFileSync(path.join(ctx.OUT, 'vocb-v50n-drift-remove.json'), `${JSON.stringify({ ...out.drift, hallBox: b2, copperCells: cells, weatheredCells: [...weathered], list: diff2.list ?? [] }, null, 1)}\n`);
+    check(true, `item 9 (drift probe, recorded): ${weathered.size} of ${cells.length} unwaxed copper cells of the hall weathered under dev.vocab.tick; after Regions.remove ${kept} cell(s) inside the hall's lot box differ from the snapshot (a lot is a BOX entry: restored whatever the copper did), ${growthOutside} growth cell(s) outside it (${diff2.mismatches} mismatches ${j(diff2.classes ?? {})})`, out.drift);
     return out;
   },
 }];

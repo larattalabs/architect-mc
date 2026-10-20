@@ -37,7 +37,8 @@ test('catalogue 8: the golden; the H -> HY diff is exactly the one flip, the fou
   assert.deepEqual(e['channel.course'].limits, { width: [1, 5], depth: [1, 3], length: [4, 512], drop: [1, 8], riffle: [2, 6], cut: [0, 6], fill: [0, 2], flows: ['level', 'pools', 'riffles'], looks: ['natural', 'built'] });
   assert.deepEqual(e['channel.ditch'].limits, { width: [1, 1], depth: [1, 1], length: [3, 64] });
   assert.deepEqual([e['channel.aqueduct'].state, e['channel.aqueduct'].until], ['reserved', '7c']);
-  for (const id of ['channel.course', 'channel.race', 'channel.ditch', 'wall.water_gate', 'channel.aqueduct', 'connector.channel']) assert.equal(e[id].sinceApi, PLAN_API, id);
+  // (HY released them at API 1.36.0; a later API keeps their sinceApi)
+  for (const id of ['channel.course', 'channel.race', 'channel.ditch', 'wall.water_gate', 'channel.aqueduct', 'connector.channel']) assert.equal(e[id].sinceApi, '1.36.0', id);
   // nothing waits for HY any more (§14 item 12's search over the catalogue: the archived ones aside)
   for (const x of golden.entries) assert.ok(x.until !== 'HY' && !/until HY\b/.test(x.note ?? ''), x.id);
   assert.ok(!/"until":\s*"HY"/.test(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8')));

@@ -16485,6 +16485,82 @@ One owner, about **1-1.5 days**: the canonical form, `holds` and the wrappers (0
 
 - **N-CU-1:** as proposed. Leaves, saplings and snow stay "not ours" after they drift.
 
+### CU as built (2026-10-20, `slice/CU`; placeholders API 1.37.0, mod 0.40.0; kit version unchanged, PLAN_API follows the API)
+
+**Item 1, measured first** (at c25c11cc, before any change to still ours; the lists kept as `vocb-v50n-drift-remove.json` and
+`cu-measure-list.json` under `artifacts/gate-runs-CU/20261020-054332-change/`):
+- VOC's drift probe: 157/157 unwaxed hall cells weathered; after `Regions.remove` 147 cells differed from the snapshot and **none was
+  inside the hall's lot box** (a BOX entry, restored exactly). 124 grass_block->dirt, 5 dirt->grass and 8 amethyst buds (`growth`),
+  9 water or lava flowed into air (`none`), 1 bee nest (`live`). The probe printed `inHall.length || growth`, so with 0 in the box it
+  printed the growth count: the "134-138 copper cells" were never copper. The probe now prints the box and the growth apart, and PLAN's
+  queue entry is corrected.
+- cu_demo (copper as CELL tiles): 55 copper cells, the 28 unwaxed ones ticked to oxidized; after `Regions.remove` kept 29 (the 28 plus
+  the door's upper half), E-flat 29. That was the real exposure. After the fix the same probe answers kept 0, E-flat 0.
+- voc-natural's first check (E-normal under the exact rules) failed at c25c11cc too: 10 mismatches, 9 water/lava flowing into air
+  (`none`) and 1 live. That is main's, not CU's.
+
+**What was built.**
+- `journal/Copper`: `canonical(Block)` (`HoneycombItem.WAX_OFF_BY_BLOCK`, then `WeatheringCopper.getFirst`), `inChain`, `sameBlock`,
+  `is(state, block)`. Vanilla's maps only; `CopperTest` pins all 60 `wx` rows and their 60 waxed twins (120 blocks, 15 forms) against
+  `kit/lib/blocks.mjs`, both ways.
+- `StillOurs.holds`: the same form at any stage, waxed or not, holds; shape properties still compare (`facing`, `half`, `type`,
+  `axis`, a door's half), volatile ones stay volatile, the block entity and the empty-container rule as before. Farmland joins the
+  `spread` set (S-CU-3). `holds` stays pure.
+- `WorldJournal.holds`'s pre-filter lets a copper pair through. **A player record first (S-CU-1):** no undo caller consulted PT
+  before CU (the undo's world was `WorldJournal.holds` itself), so CU adds `WorldJournal.holdsOurs` for the undo planner and the same
+  test in `SiteDeltas`' delta world: a cell that holds only through CU's equivalence (another copper stage; farmland and dirt) and that
+  PT records as player-placed is the player's. Architect's writes clear a cell's record, so a record there was placed after our
+  write. The same block as written is judged exactly as before CU (no PT lookup), and so is 6a's grass/dirt spread.
+- `Builder.Run.matches` (rescan's `built`, finish, the builder's "already there", deconstruct's `asPlaced`, `RoadBuilder.refundOf`
+  through it) and `holdsOld` compare through `Copper.is`; the deconstruct's `asSnapshot` and PT2's "the undo writes the same block
+  back" too, and the layered-cover refund. `Sites.evidence`'s block test and the pin match likewise.
+- **The refund pays the block standing (S-CU-2):** `Run.refundCost(now, i)` is the plan's cost while the cell stands as the plan's
+  block, else `Cells.cost(now)`. Used by the deconstruct's REFUND, the cover refund, both `RoadBuilder` refund loops and the
+  stockpile audit's `paidStanding` (so the audit's per-item numbers follow the copper as it weathers). Delta refunds already paid
+  the standing block (`Cells.cost(old)`), so with still ours fixed a delta over weathered cells refunds them as they stand.
+- API 1.37.0 (placeholder): `"weatheringOurs"` in `ApiRules.JAVA_FEATURES` (pinned in `ApiRulesTest`; `ApiCuTest`); mod 0.40.0.
+- `dev.copper.use` (`SliceCuDev`, generated headless too); `kit/regions/cu_demo.mjs` (catalogue false); `tools/gate6ccu.mjs`
+  (unit, measure, ingame, survival); chain steps cu-unit, cu-measure, cu-ingame, cu-survival; `api-compat --gate6ccu`.
+
+**Decisions made while building.**
+- `Builder.Run.matches` is copper only: farmland dried to dirt in a survival build that waits is still re-queued, as grass dying to
+  dirt is today. S-CU-3 is about still ours (undo, removal, deltas).
+- A delta that changes a cell only within one copper form (`copper_block` -> `waxed_copper_block`) counts as built at once; the world
+  keeps the stage it has.
+- The kit's `M27:drift` warning text over copper ("an undo keeps a changed cell") is stale after CU. The kit is unchanged by contract,
+  so it stays for a kit slice.
+- Item 4's blocker leg passes on main too: an INSTANT or construction site's pin lists its block entities, so `journalOwn` never
+  decides for a pinned site. It is kept as a regression check; the pre-fix control shows it.
+
+**Gate evidence** (headless, $0). Pre-fix control: today's driver at c25c11cc (`gate-runs-CU-pre/20261020-055911-change`) fails
+items 3 (kept 36, E-flat 36), 6 (kept 29), 7 (refused), 8a (95/260 built: weathered cells re-queued), 8b and 8c.
+After the fix, at af49ae7b (main with HY merged, v0.39.0), the slice tier `artifacts/gate-runs-CU/20261020-064234-slice`: **57 PASS,
+1 FAIL** in 1h59m (3 shards, ports 8960-8965).
+- cu-unit 3/0 (CopperTest 8 tests, the regression units, ApiCuTest; api-compat --gate6ccu over 0.39.0/0.38.0/0.37.1 and the 0.39.0
+  surface, all clean). cu-measure (item 1 after the fix): kept 0, E-flat 0. cu-ingame 9/0: item 3 E-flat 0, kept 0 over 55 copper
+  cells in 15 forms (every unwaxed cell to oxidized, then waxed and scraped); item 6 kept 1 at the player's cell, PT's record kept;
+  item 5 (recorded): 9 farmland->dirt restored, the sapling's tree, the decayed leaves and the melted snow left as §5 says; item 4
+  no blockers, the box back. cu-survival 10/0: 8a 164 copper cells weathered while the build waited, still 259/260 built, outstanding
+  only the held rod, charged the bill once; item 7 and 8c the delta over weathered cells not refused, its 4 cells refunded as they
+  stood; 8b 0 copper dropped, the stockpile credited the standing blocks' items, charged minus refunded equal per item to the 170
+  named cells' steps.
+- apijars 6/0 (0.39.0, 0.38.0, 0.37.1: 46 ok each); y-ingame, c29-ingame, pt-ingame, pt2-survival, voc-survival, h-ingame, hy-*,
+  6a-eflat, 4e-crash, 4e-orders, 4d-all, 5b-village and the rest pass. Timing recorded, not judged: pt-ingame's classifier CPU 1.01 ms
+  against its 1 ms budget.
+- **voc-natural FAIL, pre-existing:** E-normal 8 under the exact rules (5 water cells at 3758-3760, y 37-39, z -924 flowing into
+  air, and 3 bee nests). The same 5 water cells failed it at c25c11cc, before any CU change. Its drift probe now reads 0 cells in the
+  hall's box, 142 growth outside.
+- **Verifier: PASS** (gate-verifier, at dae9e175): diff and evidence reviewed; items 3, 4, 6, 7 and 8 re-run by the verifier
+  (`artifacts/gate-runs-CU-verify/20261020-084314-change`: cu-ingame 9/0, cu-survival 10/0). No blocking findings. Non-blocking,
+  recorded for a later slice: `Sites.journalOwn`, `Sites.foreignBlockEntities` and PT2's adopted-site edit count use plain
+  `WorldJournal.holds`, so a player-placed weathered copper block entity there could count as ours; the delta path's player-record
+  check has no in-game item of its own (item 6 covers the undo path); item 8b's per-cell steps are derived from the plan and the
+  standing states, not tracked separately.
+- **After merging main's relief fix (edf879f4, FluidRearm)** at d6dc819a (`artifacts/gate-runs-CU/20261020-084734-change`):
+  unit-mod 722/0, cu-unit, cu-ingame and cu-survival PASS; voc-natural fails on the same pre-existing cells (water at
+  3758-3760,37-38,-924 and lava at 3787-3789,-2, both in the c25c11cc list).
+- **$0.00**, sim and stub only.
+
 
 ## Phase 6c slice IRR: farm irrigation (FROZEN 2026-10-20, Steward reviewed)
 

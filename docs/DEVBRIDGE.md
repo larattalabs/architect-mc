@@ -31,7 +31,7 @@ A headless gate server (docs/GATES.md "Headless gates") serves the same protocol
 `headless: true`.
 
 - **Generated hooks.** The hooks in the client's `client/dev/` files `JournalDev`, `RegionDev`, `RegionDev6b`, `DeltaDev`,
-  `SliceVDev`, `SliceWDev`, `SliceF2Dev`, `SliceBDev`, `SliceP0Dev`, `SlicePTDev`, `SlicePT2Dev`, `SliceT3Dev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
+  `SliceVDev`, `SliceWDev`, `SliceF2Dev`, `SliceBDev`, `SliceP0Dev`, `SlicePTDev`, `SlicePT2Dev`, `SliceT3Dev`, `SliceHDev`, `SliceVocDev`, `SliceVocbDev`, `SliceCuDev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
   only the package and imports changed.
   - **Rule for those files:** no reference to client classes (`net.minecraft.client.*`, `dev.larattalabs.architect.client.*`)
     besides `ServerTasks`, `DevBridge` and the handler's `mc` parameter. A new one fails the build, `unit-mod` included.
@@ -348,6 +348,11 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-20 (6c slice CU):** new `dev.copper.use {at?: [x,y,z], cells?: [[x,y,z]], item: honeycomb|axe|weather}` (`SliceCuDev`,
+  generated headless too): what a player's honeycomb (waxes: `HoneycombItem.getWaxed`) or axe (unwaxes, else scrapes one stage back:
+  `WeatheringCopper.getPrevious`) does to a copper block in place, or one weathering step (`weather`: `WeatheringCopper.getNext`), each
+  cell set with its other properties and a door's other half with it; no player placement is recorded -> `{cells: [{at, before, after,
+  changed}]}`.
 - **2026-10-19 (6c slice HY-core):** `dev.journal.killAt` takes FL4 (an ordered region: one wave of reaches written and forced, more to
   come: downstream written, upstream not) and FL5 (a removal: the head drained, the rest of the course not yet), each also with `+save`.
   `dev.fluid.state {region}` gains `ordered`, `order` (the write order), and per body `writtenAt` (game time; -1: forced with the stage)

@@ -2383,8 +2383,8 @@ public final class Sites {
 				continue;
 			}
 			total++;
-			// by block, not state: players open doors
-			if (level.getBlockState(p).is(want.getBlock())) {
+			// by block, not state: players open doors (6c CU: and copper weathers)
+			if (dev.larattalabs.architect.journal.Copper.is(level.getBlockState(p), want.getBlock())) {
 				match++;
 			}
 		}
@@ -2479,9 +2479,10 @@ public final class Sites {
 					}
 					total++;
 					BlockState now = level.getBlockState(p.set(BlockPos.getX(pos), BlockPos.getY(pos), BlockPos.getZ(pos)));
-					if (now.is(before.getBlock())) {
+					// (6c CU §3) by block, a copper block at any stage of its chain counting as the stage recorded
+					if (dev.larattalabs.architect.journal.Copper.is(now, before.getBlock())) {
 						holdBefore++;
-					} else if (now.is(after.getBlock())) {
+					} else if (dev.larattalabs.architect.journal.Copper.is(now, after.getBlock())) {
 						holdAfter++;
 					}
 				}
