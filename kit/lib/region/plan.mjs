@@ -14,7 +14,7 @@ import { scatterBounds, stampBounds } from './scatter.mjs';
 import { stampLibrary } from './stamps.mjs';
 import { parseBiomes } from './boundary.mjs';
 import { decodeArbl } from '../realise.mjs';
-import { COND, DEFAULT_MACRO_ROLES, Region, blockState, region as makeRegion } from './program.mjs';
+import { COND, DEFAULT_MACRO_ROLES, Region, TERRAIN_OPS, blockState, region as makeRegion } from './program.mjs';
 import { surveyApi, windowFromSurvey } from './survey.mjs';
 import { validateParams, resolveValues } from '../params.mjs';
 import { mapPatternMats, patternError } from '../pattern.mjs';
@@ -25,7 +25,7 @@ import { lintFluidState } from '../fluids/body.mjs';
 import { fluidsError } from '../fluids/place.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.38.0';
+export const KIT_VERSION = '0.42.0';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -317,6 +317,34 @@ export function opBounds(op, blobs, bytesOf = null) {
  * @param {string} [o.kitVersion] / [o.node] recorded in the IR (defaults: KIT_VERSION, this Node's major)
  * @returns {Promise<{ir, irJson, irSha, notes: string[], stats}>}
  */
+/**
+ * (6c RS, §3, §4) A survival plan's IR marks: each op a terrain kind wrote gets `free: true` (TERRAIN_OPS; relief, scatter and stamp ops by
+ * kind; every op of a brush stroke), and the member `survival` names the target groups: `groups` (sorted ids), `parts` (IR part id -> group
+ * index: a plan part, so its own parts build together; the first connector of a shared route part; a bundled program's IR part itself) and
+ * `pads` (the lots' pad parts, whose free cells are always the free pass). Mutates `ir`.
+ */
+export function markSurvival(ir, r, programId) {
+  const all = programId === 'brush';
+  ir.parts.forEach((p, i) => {
+    const src = r.parts[i];
+    p.ops.forEach((op, j) => {
+      if (all || TERRAIN_OPS.has(src.ops[j]) || op.op === 'relief' || op.op === 'scatter' || op.op === 'stamp') op.free = true;
+    });
+  });
+  const partOf = r.meta.planCheck?.partOf ?? null;
+  const groupOf = (pid) => {
+    const o = partOf ? partOf[pid] : null;
+    if (typeof o !== 'string' || !o) return pid;
+    return o.startsWith('routes:') ? o.slice(7).split(',')[0] : o;
+  };
+  const ids = ir.parts.map((p) => groupOf(p.id));
+  const groups = [...new Set(ids)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const parts = {};
+  ir.parts.forEach((p, i) => { parts[p.id] = groups.indexOf(ids[i]); });
+  const pads = [...new Set((ir.lots ?? []).map((l) => l.part))].filter((x) => parts[x] !== undefined).sort();
+  ir.survival = { format: 1, groups, parts, pads };
+}
+
 export async function planRegion(o) {
   const t0 = performance.now();
   const claim = parseClaim(o.claim);
@@ -383,6 +411,10 @@ export async function planRegion(o) {
       vocabRefuse: o.vocabRefuse ? Object.freeze({ ...o.vocabRefuse }) : null,
       // (6c KC, §5) the plan check's M25:clear refusals of the replan ({part: reason}): a part that wrote a body's cells is refused
       clearRefuse: o.clearRefuse ? Object.freeze({ ...o.clearRefuse }) : null,
+      // (6c RS, §3) a survival check's SURVIVAL refusals of the replan ({part: reason}): a part that writes a creative-only block
+      survivalRefuse: o.survivalRefuse ? Object.freeze({ ...o.survivalRefuse }) : null,
+      // (6c RS) the plan is checked or planned in survival (the world's mode): its IR carries the free marks and the target groups
+      survival: !!o.survival,
       kitVersion: o.kitVersion ?? KIT_VERSION, rng: (label) => makeRng(seed, String(label)),
       volumes: o.volumes ?? [],
       // (6c F2) the local stamp library (lib/region/stamps.mjs stampLibrary: a dir or an id -> bytes map; local-only, N-F2-1)
@@ -468,6 +500,8 @@ export async function planRegion(o) {
   // (6c D2) the biome grid the plan read (its sha), and an outpost's corridor (settlement land its road crosses: row runs per outpost)
   if (biomesRead) ir.biomes = { sha: sha256Hex(canonicalJson({ minX: biomes.minX, minZ: biomes.minZ, res: biomes.res, width: biomes.width, depth: biomes.depth, palette: biomes.palette, ids: [...biomes.ids] })) };
   if (r.meta.corridor) ir.corridor = r.meta.corridor;
+  // (6c RS) a survival plan (the world's mode): free marks and the target groups (a creative plan's IR is unchanged)
+  if (o.survival) markSurvival(ir, r, ctx.__id);
   const kinds = walkKinds(ir);
   if (kinds.length) { ir.format = 2; ir.requires = kinds; }
   // (6c H, §1.1) lint FLUID_STATE: no op carries a flowing water or lava state (sources only)
@@ -479,6 +513,7 @@ export async function planRegion(o) {
   const tBudget = performance.now();
   let cells = 0, removed = 0, added = 0, evaluated = 0, cellLo = Infinity, cellHi = -Infinity;
   const perStage = {};
+  const sv = ir.survival ? {} : null; // (6c RS) per group: free, held, paid cells and creative-only blocks over the survey
   const windows = new Map();
   for (const s of stages) {
     perStage[s] = { terrain: 0, path: 0 };
@@ -488,12 +523,25 @@ export async function planRegion(o) {
         if (!w) { w = windowFromSurvey(survey, key); w.flags.forEach((f, i) => { w.flags[i] = f & ~FLAG_MISSING; }); windows.set(key, w); }
         const e = evalTile(ir, key, w, { stage: s, set, countOnly: true, blobs: evalBlobs });
         cells += e.count; removed += e.removed; added += e.added; evaluated++;
+        if (sv) for (const [g, x] of Object.entries(e.notes.survival ?? {})) {
+          const t = (sv[g] ??= { free: 0, held: 0, paid: 0, creativeOnly: {} });
+          t.free += x.free; t.held += x.held; t.paid += x.paid;
+          for (const [b, n] of Object.entries(x.creativeOnly ?? {})) t.creativeOnly[b] = (t.creativeOnly[b] ?? 0) + n;
+        }
         if (e.minY !== null) { cellLo = Math.min(cellLo, e.minY); cellHi = Math.max(cellHi, e.maxY); }
         perStage[s][set] += e.count;
       }
     }
   }
   ir.budget = { cells, removed, added };
+  if (sv) {
+    // (6c RS) the plan's survival estimate (over the survey, like the budget): the cells per group, and the creative-only blocks a group
+    // writes (realise refuses CREATIVE_ONLY_BLOCK naming them; a plan check refuses the part SURVIVAL)
+    const keys = Object.keys(sv).sort();
+    ir.survival.cells = Object.fromEntries(keys.map((g) => [g, { free: sv[g].free, held: sv[g].held, paid: sv[g].paid }]));
+    const co = keys.filter((g) => Object.keys(sv[g].creativeOnly).length);
+    if (co.length) ir.survival.creativeOnly = Object.fromEntries(co.map((g) => [g, Object.fromEntries(Object.entries(sv[g].creativeOnly).sort())]));
+  }
   if (cells > budgetCap) throw new Error(`the region writes ${cells} cells, over its budget of ${budgetCap}${r.budgetCells ? '' : ' (the default; declare more with region.budget(n), at most 64M)'}`);
   // tighten the y range inside the request's: the surveyed land and every cell the budget pass emitted, plus a margin of
   // Y_MARGIN (every emitted cell stays inside, so the budget is unchanged)
@@ -509,6 +557,22 @@ export async function planRegion(o) {
   if (missing) notes.push('claim: the y range stays the request\'s (the survey has missing columns)');
   else if (Number.isFinite(yLo)) {
     ir.claim = { ...claim, minY: Math.max(claim.minY, yLo - Y_MARGIN), maxY: Math.min(claim.maxY, yHi + Y_MARGIN) };
+  }
+  // (6c RS, §3) a survival plan check: a part that writes a creative-only block (one of the 35, survival class none) is refused SURVIVAL
+  // {kind: "creativeOnly"} and the plan planned again without it (at most 3 times), as the vocab refusals are
+  if (o.survival && ir.survival?.creativeOnly && r.meta.planCheck && !r.meta.planCheck.malformed && (o._survivalPass ?? 0) < 3) {
+    const ok = new Set((r.meta.planCheck.answers ?? []).filter((a) => a.class === 'fits' || a.class === 'adjusted').map((a) => a.part));
+    const fresh = {};
+    for (const [g, blocks] of Object.entries(ir.survival.creativeOnly)) {
+      if (!ok.has(g) || (o.survivalRefuse ?? {})[g]) continue;
+      const n = Object.values(blocks).reduce((a, b) => a + b, 0);
+      fresh[g] = { code: 'SURVIVAL', message: `it writes ${n} creative-only block${n === 1 ? '' : 's'} (${Object.keys(blocks).join(', ')}): a survival world can't build ${n === 1 ? 'it' : 'them'}`, evidence: { kind: 'creativeOnly', blocks } };
+    }
+    if (Object.keys(fresh).length) {
+      const again = await planRegion({ ...o, survivalRefuse: { ...(o.survivalRefuse ?? {}), ...fresh }, _survivalPass: (o._survivalPass ?? 0) + 1 });
+      again.meta.planCheck.survival = { refused: Object.keys({ ...(o.survivalRefuse ?? {}), ...fresh }).sort(), pass: (o._survivalPass ?? 0) + 1 };
+      return again;
+    }
   }
   const irJson = canonicalJson(ir);
   const irBytes = Buffer.byteLength(irJson);

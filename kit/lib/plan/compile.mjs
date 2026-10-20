@@ -857,6 +857,12 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     const p = byId.get(id);
     if (p && !answers.has(id)) ans(p, { class: 'refused', reasons: [why] });
   }
+  // (6c RS, §3) a survival check's refusals (the replan): a part that writes a creative-only block is refused SURVIVAL {kind:
+  // "creativeOnly"} before it resolves, so it writes nothing
+  for (const [id, why] of Object.entries(ctx.survivalRefuse ?? {}).sort(([a], [b]) => (a < b ? -1 : 1))) {
+    const p = byId.get(id);
+    if (p && !answers.has(id)) ans(p, { class: 'refused', reasons: [why] });
+  }
   const order = V.order.map((id) => byId.get(id));
   const zonesAccepted = []; // {id, rect}
   const formsAccepted = []; // footprint rects of the forms placed so far

@@ -171,6 +171,13 @@ export function _bindCourse(fn) {
   _bindCourse.fn = fn;
 }
 
+/**
+ * (6c RS, §4.1) The ops a terrain kind wrote (relief, pads' and terraces' cut and fill, forms, a clearing, brush strokes, and any write in
+ * `r.terrain(fn)` or with `{terrain: true}`): a survival plan marks them `free: true` in the IR (lib/region/plan.mjs), so their natural,
+ * obtainable blocks are free. Kept outside the ops (never in a creative IR).
+ */
+export const TERRAIN_OPS = new WeakSet();
+
 export class Region {
   constructor(ctx) {
     this.ctx = ctx;
@@ -213,6 +220,18 @@ export class Region {
     this.reliefLots = new Set();
     // (6c HY-a) the hydrology pass's fields ({flow, wet}: {type, minX, minZ, width, depth, res, values}) once it ran; D1 reads `wet`
     this.hydrology = null;
+    // (6c RS) inside a terrain kind's writes (`terrain(fn)`): the ops pushed are TERRAIN_OPS
+    this._terrain = 0;
+  }
+
+  /** (6c RS, §4.1) Runs `fn` with every op it writes marked as a terrain kind's (free in survival when natural); returns its result. */
+  terrain(fn) {
+    this._terrain++;
+    try {
+      return fn();
+    } finally {
+      this._terrain--;
+    }
   }
 
   /**
@@ -247,7 +266,7 @@ export class Region {
     for (const [fn, f] of Object.entries(out.fields)) res.fields[fn] = this.field(fn, f);
     if (out.ops.length) {
       const p = this.part(it.part ?? fname, { stage });
-      for (const op of out.ops) p._push(op);
+      this.terrain(() => { for (const op of out.ops) p._push(op); }); // (6c RS) the relief's cut and fill
     }
     for (const a of it.around ?? []) if (a && typeof a.id === 'string' && Array.isArray(a.at)) this.reliefLots.add(a.id);
     this.passRuns.push({ name, ms, heapMb });
@@ -630,7 +649,7 @@ export class Region {
    */
   clearing(name, [x, z], { r = 2, stage } = {}) {
     const p = this.part(`clear_${name}`, { stage });
-    p.fill({ kind: 'box', min: [x - r, { surface: 1 }, z - r], max: [x + r, { max: [{ height: 0 }, { surface: 3 }] }, z + r] }, null, { cond: COND.IF_NATURAL });
+    p.fill({ kind: 'box', min: [x - r, { surface: 1 }, z - r], max: [x + r, { max: [{ height: 0 }, { surface: 3 }] }, z + r] }, null, { cond: COND.IF_NATURAL, terrain: true });
     return this.anchor(name, [x, z]);
   }
 
@@ -899,9 +918,9 @@ export class Region {
       const blob = `vox_${id}`.slice(0, 32);
       const b = bakeOps(resolved, blob, { cond: COND.IF_NATURAL });
       this._sideBlob(blob, 'voxels', b.bytes);
-      p._push(b.op);
+      this.terrain(() => p._push(b.op)); // (6c RS) a form is a terrain kind's write
       baked = { blob, cells: b.cells, ops: resolved.length };
-    } else for (const o of resolved) p._push(o);
+    } else this.terrain(() => { for (const o of resolved) p._push(o); });
     this.forms.push({ id, generator: gen.generator, version: gen.version, params: gen.params, seed: gen.seed, bounds: gen.bounds, part: id, opsFrom: from, opsTo: p.ops.length, ...(baked ? { baked } : {}) });
     (this.meta.parts[id] ??= {}).kind = 'form';
     return p;
@@ -966,6 +985,7 @@ class Part {
   _push(op) {
     this.region.opCount++;
     if (this.mask !== null && op.mask === undefined) op.mask = this.mask;
+    if (this.region._terrain > 0) TERRAIN_OPS.add(op); // (6c RS)
     this.ops.push(op);
   }
 
@@ -976,14 +996,16 @@ class Part {
    * Low-level: every cell inside `shape` gets `material` (null: air) with `cond` and `walk`. (6c MP) `material` may be a
    * pattern ({mix} / {gradient}, or a role with a bible pattern); `mask` keeps only the cells it selects.
    */
-  fill(shape, material, { cond = COND.IF_NATURAL, walk = false, mask } = {}) {
+  fill(shape, material, { cond = COND.IF_NATURAL, walk = false, mask, terrain = false } = {}) {
     const err = shapeError(shape);
     if (err) throw new Error(`part ${this.id}: ${err}`);
     if (!isInt(cond) || cond < 0 || cond > 3) throw new Error(`part ${this.id}: cond must be 0..3`);
     const op = { op: 'shape', shape, material: this._paint(material, 'fill material'), cond, walk: !!walk };
     const m = this._mask(mask);
     if (m !== undefined) op.mask = m;
-    this._push(op);
+    // (6c RS) `terrain: true`: a 6a shape fill, a terrain kind's write (free in survival when natural)
+    if (terrain) this.region.terrain(() => this._push(op));
+    else this._push(op);
     return this;
   }
 
@@ -992,7 +1014,7 @@ class Part {
    * `resolve(from) + a` to `resolve(to) + b` get `materials[m]`); `materials` are anything `fill` takes (roles, block states, null
    * for air, patterns). `mask` keeps only the cells it selects.
    */
-  columns(from, to, cols, materials, { cond = COND.IF_NATURAL, walk = false, mask } = {}) {
+  columns(from, to, cols, materials, { cond = COND.IF_NATURAL, walk = false, mask, terrain = false } = {}) {
     if (!isInt(cond) || cond < 0 || cond > 3) throw new Error(`part ${this.id}: cond must be 0..3`);
     if (!Array.isArray(cols) || cols.length % 5 !== 0 || !cols.every(isInt)) throw new Error(`part ${this.id}: columns needs [x, z, a, b, m] integer entries`);
     if (!Array.isArray(materials) || !materials.length) throw new Error(`part ${this.id}: columns needs materials`);
@@ -1001,7 +1023,8 @@ class Part {
     const op = { op: 'columns', from, to, cols: [...cols], materials: materials.map((m, i) => this._paint(m, `columns material ${i}`)), cond, walk: !!walk };
     const m = this._mask(mask);
     if (m !== undefined) op.mask = m;
-    this._push(op);
+    if (terrain) this.region.terrain(() => this._push(op)); // (6c RS) a terrain kind's write
+    else this._push(op);
     return this;
   }
 
@@ -1348,9 +1371,12 @@ class Part {
     const out = [];
     for (let k = 0; k < n; k++) {
       const y = ys[k];
-      this._shapeOp(footprint(k, { abs: y + 1 }, { height: 0 }), null, COND.IF_NATURAL);
-      this._shapeOp(footprint(k, { min: [{ floor: 1 }, { abs: Math.max(y - soil, this.region.claim.minY + 2) }] }, { abs: y - 1 }), fillM, COND.IF_NATURAL);
-      this._shapeOp(footprint(k, { abs: y }, { abs: y }), surf, COND.IF_NATURAL);
+      // (6c RS) the level's cut and fill are a terrain kind's write; its retaining wall and stairs are built (paid)
+      this.region.terrain(() => {
+        this._shapeOp(footprint(k, { abs: y + 1 }, { height: 0 }), null, COND.IF_NATURAL);
+        this._shapeOp(footprint(k, { min: [{ floor: 1 }, { abs: Math.max(y - soil, this.region.claim.minY + 2) }] }, { abs: y - 1 }), fillM, COND.IF_NATURAL);
+        this._shapeOp(footprint(k, { abs: y }, { abs: y }), surf, COND.IF_NATURAL);
+      });
       if (edge === 'wall') {
         const lo = k === 0 ? { floor: 1 } : { abs: ys[k - 1] + 1 };
         const wall = circle
@@ -2083,32 +2109,35 @@ class Part {
     const none = padFill === 'none';
     const Bc = edge === 'slope' && !none ? maxCut : 0, Bf = edge === 'slope' && !none ? maxFill : 0;
     const box = (k, ylo, yhi) => ({ kind: 'box', min: [x0 - 1 - k, ylo, z0 - 1 - k], max: [x1 + 1 + k, yhi, z1 + 1 + k] });
-    // fill: batter steps (subsurface) then the pad itself (foundation, wins where they overlap)
-    if (Bf > 0) this._shapeOp({ kind: 'union', of: Array.from({ length: Bf }, (_, i) => box(i + 1, { floor: 1 }, { abs: t - 2 - i })) }, bat, COND.IF_NATURAL);
-    if (!none) this._shapeOp(box(0, { floor: 1 }, { abs: t - 1 }), fdn, COND.IF_NATURAL);
-    // cut: the footprint to the lot box's top, the apron and batter steps to the column top
-    const cut = [{ kind: 'box', min: [x0, { abs: floorY }, z0], max: [x1, { max: [{ height: 0 }, { abs: boxMaxY }] }, z1] }];
-    for (let k = 0; k <= Bc; k++) cut.push(box(k, { abs: floorY + k }, { height: 0 }));
-    // (pad fill none: the mass under it is a generated form; only the footprint is cleared, its apron stays the form's)
-    if (none) this._shapeOp({ kind: 'box', min: [x0, { abs: floorY }, z0], max: [x1, { abs: boxMaxY }, z1] }, null, COND.ALWAYS_OURS);
-    else this._shapeOp({ kind: 'union', of: cut }, null, COND.IF_NATURAL);
-    // the pad's top: (6b addition, region lot
-    // entrances) the 1-column apron keeps the surrounding ground: a natural or region-made top stays, only a gap (air or
-    // fluid) takes the surface role; never the foundation block. A fill-none pad's apron is the form's own top.
-    // (a plan recorded as kit 0.11.x keeps 0.11's pad: the foundation over the apron too, so its IR stays byte-identical)
-    const v = String(this.region.ctx?.kitVersion ?? '0.12.0').split('.').map(Number);
-    const legacy = v[0] === 0 && v[1] < 12;
-    // (the footprint's top reads as ground too where a smaller child leaves it uncovered: the surface role; a fill-none pad
-    // keeps the foundation, written over the form's own top)
-    this._shapeOp(legacy ? box(0, { abs: t }, { abs: t }) : { kind: 'box', min: [x0, { abs: t }, z0], max: [x1, { abs: t }, z1] }, legacy || none ? fdn : this._mat('surface', 'lot top'), none ? COND.ALWAYS_OURS : COND.IF_NATURAL);
-    if (!none && !legacy) {
-      const T = { abs: t };
-      const apron = { kind: 'union', of: [
-        { kind: 'box', min: [x0 - 1, T, z0 - 1], max: [x1 + 1, T, z0 - 1] }, { kind: 'box', min: [x0 - 1, T, z1 + 1], max: [x1 + 1, T, z1 + 1] },
-        { kind: 'box', min: [x0 - 1, T, z0], max: [x0 - 1, T, z1] }, { kind: 'box', min: [x1 + 1, T, z0], max: [x1 + 1, T, z1] },
-      ] };
-      this._shapeOp(apron, this._mat('surface', 'lot apron'), COND.IF_AIR_OR_FLUID);
-    }
+    // (6c RS) the pad's cut, fill, batter and top are a terrain kind's write (free in survival when natural)
+    this.region.terrain(() => {
+      // fill: batter steps (subsurface) then the pad itself (foundation, wins where they overlap)
+      if (Bf > 0) this._shapeOp({ kind: 'union', of: Array.from({ length: Bf }, (_, i) => box(i + 1, { floor: 1 }, { abs: t - 2 - i })) }, bat, COND.IF_NATURAL);
+      if (!none) this._shapeOp(box(0, { floor: 1 }, { abs: t - 1 }), fdn, COND.IF_NATURAL);
+      // cut: the footprint to the lot box's top, the apron and batter steps to the column top
+      const cut = [{ kind: 'box', min: [x0, { abs: floorY }, z0], max: [x1, { max: [{ height: 0 }, { abs: boxMaxY }] }, z1] }];
+      for (let k = 0; k <= Bc; k++) cut.push(box(k, { abs: floorY + k }, { height: 0 }));
+      // (pad fill none: the mass under it is a generated form; only the footprint is cleared, its apron stays the form's)
+      if (none) this._shapeOp({ kind: 'box', min: [x0, { abs: floorY }, z0], max: [x1, { abs: boxMaxY }, z1] }, null, COND.ALWAYS_OURS);
+      else this._shapeOp({ kind: 'union', of: cut }, null, COND.IF_NATURAL);
+      // the pad's top: (6b addition, region lot
+      // entrances) the 1-column apron keeps the surrounding ground: a natural or region-made top stays, only a gap (air or
+      // fluid) takes the surface role; never the foundation block. A fill-none pad's apron is the form's own top.
+      // (a plan recorded as kit 0.11.x keeps 0.11's pad: the foundation over the apron too, so its IR stays byte-identical)
+      const v = String(this.region.ctx?.kitVersion ?? '0.12.0').split('.').map(Number);
+      const legacy = v[0] === 0 && v[1] < 12;
+      // (the footprint's top reads as ground too where a smaller child leaves it uncovered: the surface role; a fill-none pad
+      // keeps the foundation, written over the form's own top)
+      this._shapeOp(legacy ? box(0, { abs: t }, { abs: t }) : { kind: 'box', min: [x0, { abs: t }, z0], max: [x1, { abs: t }, z1] }, legacy || none ? fdn : this._mat('surface', 'lot top'), none ? COND.ALWAYS_OURS : COND.IF_NATURAL);
+      if (!none && !legacy) {
+        const T = { abs: t };
+        const apron = { kind: 'union', of: [
+          { kind: 'box', min: [x0 - 1, T, z0 - 1], max: [x1 + 1, T, z0 - 1] }, { kind: 'box', min: [x0 - 1, T, z1 + 1], max: [x1 + 1, T, z1 + 1] },
+          { kind: 'box', min: [x0 - 1, T, z0], max: [x0 - 1, T, z1] }, { kind: 'box', min: [x1 + 1, T, z0], max: [x1 + 1, T, z1] },
+        ] };
+        this._shapeOp(apron, this._mat('surface', 'lot apron'), COND.IF_AIR_OR_FLUID);
+      }
+    });
     // front
     let fr = front;
     if (typeof front === 'string' && front.startsWith('toward:')) {

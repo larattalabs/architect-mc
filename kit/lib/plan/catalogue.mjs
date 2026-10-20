@@ -6,7 +6,7 @@ import { PLAN_SCHEMA, SCHEMA_VERSION } from './schema.mjs';
 import { KIT_VERSION } from '../region/plan.mjs';
 
 /** The Java API this kit's catalogue belongs to (set at merge, the CU/IRR/VOC-c batch: 1.37.0; a mod test holds it to ArchitectApi.VERSION). */
-export const PLAN_API = '1.37.0';
+export const PLAN_API = '1.41.0';
 
 /** The catalogue as checks return it. */
 export function planCatalogue({ api = PLAN_API, kitVersion = KIT_VERSION } = {}) {
