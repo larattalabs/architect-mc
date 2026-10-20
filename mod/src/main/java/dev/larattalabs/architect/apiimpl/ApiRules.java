@@ -81,6 +81,8 @@ public final class ApiRules {
 					case "region.irrigation" -> "farmIrrigation"; // 6c IRR: a farm lot's irrigate (its sources, lots[].irrigation, the lot mask)
 					case "reserved" -> "designReserved"; // 6c IRR: DesignRequest.reserved, kept by the design job and its checker
 					case "plan.rules" -> "rulePalette"; // 6c VOC-c: rule.palette measured (lotBlocks, the artifact's palette rows, PALETTE)
+					case "region.terracedZones" -> "terracedZones"; // 6c S3: plan/0's terraces member (a zone or district laid down the slope as levels)
+					case "region.monastery" -> "scenarioS3"; // 6c S3: the helper's kit bundles the terraced_monastery program (S3's scenario)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}
