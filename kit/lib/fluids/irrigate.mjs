@@ -21,8 +21,8 @@
 // aside) as the design's farmland (fluid-stopping), as the brief and the reserved cells ask of the design. A breach then floods its
 // own broken cell, inside the lot's box (S-IRR-3); a lot left as a bare pad (no entry) holds air there, which no plan-time rule sees.
 import { inferVillager } from '../params.mjs';
-import { fluidRolesOf, shellBlock, freezesAt, bodiesMark, bodiesRollback, linesBody } from './place.mjs';
-import { naturalOf } from './pond.mjs';
+import { fluidRolesOf, shellBlock, freezesAt, bodiesMark, bodiesRollback, bodyBom, linesBody } from './place.mjs';
+import { naturalOf, shellStatesOf } from './pond.mjs';
 import { toRuns } from './body.mjs';
 export { irFields } from './irrfield.mjs';
 
@@ -235,11 +235,12 @@ export function emitIrrigation(K) {
       try {
         for (const [x, zz, i, j] of grid) {
           const id = irrBodyId(lot.id, i, j);
+          // (the broken variant irrNoBed: the first source's bed written as air, a hole under the water: M25:shell)
+          const shellRole = (sx, sy, sz, where) => (where === 'floor' ? (unsafe.irrNoBed === true && !bodies.length ? null : bed(sx, sy, sz)) : EDGE_STATE);
           const rec = r.fluidBody([[x, fy, zz]], {
-            id, part: z.zone.id, kind: 'irrigation', fluid: 'water', stage: K.stageOf('street'), level: fy, rim: false, raised: false, world, volumeBox,
-            // (the broken variant irrNoBed: the first source's bed written as air, a hole under the water: M25:shell)
-            shellRole: (sx, sy, sz, where) => (where === 'floor' ? (unsafe.irrNoBed === true && !bodies.length ? null : bed(sx, sy, sz)) : EDGE_STATE),
+            id, part: z.zone.id, kind: 'irrigation', fluid: 'water', stage: K.stageOf('street'), level: fy, rim: false, raised: false, world, volumeBox, shellRole,
           });
+          rec.shellStates = shellStatesOf(rec, shellRole); // (§7: the bill: the beds and the farmland sides, farmland priced as dirt)
           bodies.push(rec);
         }
         K.mark(z.zone.id, K.addedSince(cp));
@@ -263,6 +264,9 @@ export function emitIrrigation(K) {
           dp.columns({ abs: 0 }, { abs: 0 }, [x + 1, zz, fy, fy, 0], ['minecraft:oak_planks'], { cond: 3 });
         }
       }
+      // (§7, survival: the zone's cost.bom gains the sources' shells (water is free, N-H-1; farmland costs dirt, the vocab's survival map))
+      const bom = (K.record.bom ??= {})[z.zone.id] ??= {};
+      for (const [item, n] of Object.entries(bodyBom(bodies))) bom[item] = (bom[item] ?? 0) + n;
       out.lots.push({ lot: lot.id, def: def.id, zone: z.zone.id, bodies });
       note(z.zone.id, `irrigate: ${def.id} gets ${bodies.length} source${bodies.length === 1 ? '' : 's'} (${new Set(grid.map((g) => g[2])).size} x ${new Set(grid.map((g) => g[3])).size}), every field column within ${HYDRATE} of one`);
     }

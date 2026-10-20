@@ -178,6 +178,10 @@ test('v62: v49\'s farms with irrigate: 2 + 1 sources, READY, clean (M25 and M1),
   assert.ok(sp.ops[0].materials.includes('minecraft:farmland[moisture=7]'));
   assert.equal(sp.stage, 'street');
   assert.equal(r.res.meta.planCheck.partOf['f1_irr_0_0_shell'], 'farms');
+  // §7: the zone's bill: water free, each source's bed and its 4 farmland sides (farmland costs dirt)
+  const bom = r.check.parts.find((a) => a.part === 'farms').cost.bom;
+  assert.equal(Object.values(bom).reduce((t, n) => t + n, 0), 3 * 5, JSON.stringify(bom));
+  assert.ok(bom['minecraft:dirt'] >= 12 && !bom['minecraft:farmland'] && !bom['minecraft:water'], JSON.stringify(bom));
 });
 
 test('v63: a 40 x 40 farm lot: 5 x 5 sources, one volume for the lot; the barn (irrigate false) none', async () => {
