@@ -715,3 +715,12 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   part in the plan). Untraced: a bill over a cell its own carve or shell writes twice, or a condition that keeps natural stone.
   Trace it as the fountain's was (h-a's bill test compares a part's bill with its written cells).
 
+
+## Queued (coordinator, 2026-10-20): priority
+
+- **Walls and other parts don't keep clear of fluid bodies (safety).** In v51 the forge wall runs through the fountain's basin,
+  overwriting 5 water cells and 5 rim cells, and the plan is still READY. Every connector and part that writes cells must treat
+  a body's shell, water and watch cells as hard (as plan water already is for routes), or refuse. M25 must catch any write into
+  a body's cells. Next after HY, ahead of the copper undo.
+- **6ct1-scenario-relief's falling-water cells** have now failed on D2, H-b, VOC-b, HY-b and HY-core. Investigate the root cause
+  (T1's falling-water note) instead of re-running.

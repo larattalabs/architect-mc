@@ -37,7 +37,7 @@ release and after each sync. Contracts and as-builts stay in `docs/CONTRACT.md`;
 ### Agreed order (Architect)
 1. **Released 2026-10-19:** v0.37.1 patch (kit 0.35.1): even-width rope bridges and tunnels; malformed guards answer
    ARTIFACT_STALE. Old IRs go PLAN_STALE, so Steward re-checks. Steward checks it after release.
-2. VOC, v0.38.0 (API 1.35.0, no RC): `BibleRequest.Rarity`, `vocab/1`, `VOCAB`, `cost.rarity` / `cost.creativeOnly`.
+2. **Released 2026-10-20:** VOC, v0.38.0 (API 1.35.0, no RC): `BibleRequest.Rarity`, `vocab/1`, `VOCAB`, `cost.rarity` / `cost.creativeOnly`.
 3. HY, API 1.36.0 (Steward RC): channel.course / race / ditch, wall.water_gate, per-reach `architect_mc:fluids` rows.
 4. Copper-weathering undo (Steward's pre-release check).
 5. Farm irrigation (`irrigate` on a farm lot; member name to be confirmed in its contract).
