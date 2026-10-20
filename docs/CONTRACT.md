@@ -22650,6 +22650,13 @@ queued question in PLAN.md ("a halt without a save loses an earlier stage's worl
   lag or `/save-off` it can be minutes old, and a site or tile spanning chunks can come back half new and half old. "The world goes back
   to its last autosave" (UMT's model) is too coarse. Every rule below holds per chunk, and a majority threshold over a site's cells (90 %
   restored, 80 % standing) will always leave some sites in between.
+- **"The world" has three clocks after a halt.** Chunks are seconds old (the eager saver). level.dat and SavedData are as old as the last
+  bulk save (minutes), so any consumer state kept in SavedData (Steward's, if it has any) has the same lag. Architect's own files
+  (`journal.json`, `architect-sites.json`, the queue file, region records) are current as of their last change. The one exception is
+  the stockpile ledger, saved at `BEFORE_SAVE`, which is as old as the bulk save.
+- **The world is never ahead of the journal.** A block write waits for its commit's future (4e "I/O thread"), so the journal always
+  holds what the world shows. The only artifact written ahead of the journal is RP's realised record, made durable before P3. It
+  records a decision, and its status is read from the journal.
 - Architect forces no save anywhere in production. The only save call is the test kill point `+save`
   (`WorldJournal`: `saveAllChunks(true, true, true)`, then `halt`). `Stockpiles` saves its ledger on Fabric's `BEFORE_SAVE`.
 
@@ -22738,11 +22745,11 @@ later, and two removals of a stack can come in either order. Computing holder ch
 #### 3.1 Durability marks in the journal
 
 - **`seq`**: every commit that changes the world's meaning (P3, P7, R2, a delta's commit, a release) takes the next value of a new index
-  counter `nextSeq`, stored on the entries it touches (`placedSeq` at P7, `undoSeq` at R2). Sequence numbers, not `undoneAt` (wall clock)
+  counter `nextSeq`, stored on the entries it touches: `placeSeq` at P3, the key for replaying placements, and `undoSeq` at R2. Sequence numbers, not `undoneAt` (wall clock)
   and not `layer` (an undo has no layer), decide every order below.
 - **`durable`**: an entry's flag (index meta, absent = durable, so old journals need no migration) meaning "the world writes this entry's
-  current status implies are on disk". It is set **false** when the entry's writes start (P5 for a placement, R4 for an undo, the rollback's
-  writes for K3), and set **true** once those writes are on disk (§3.3).
+  current status implies are on disk". It is set **false** in the commit before the writes (P3 for a placement, R2 for an undo, the rollback's
+  commit for K3), because P5 and R4 are not commits, and set **true** once those writes are on disk (§3.3).
 - **"ended"**: an in-memory mark per entry, set when its job's writes end (P8, the RestoreJob's end, the rollback's end).
 - The journal's undo record (`written`, `handed`) and the UNDONE entry itself stay until the entry is durable. **Release requires
   durable.** This replaces "released at the world start that settles them" (4e Compaction).
@@ -22750,7 +22757,7 @@ later, and two removals of a stack can come in either order. Computing holder ch
 #### 3.2 Recovery: roll forward, per cell, at a start after an unclean stop
 
 At a start after an unclean stop (§3.4), every entry with `durable == false` is **suspect**. Recovery replays the suspect operations in
-`seq` order, each one per cell:
+`placeSeq`/`undoSeq` order, each one per cell:
 
 | operation | its pre-value | its target | world holds the pre-value (StillOurs) | world holds the target | anything else |
 |---|---|---|---|---|---|
@@ -22763,14 +22770,14 @@ At a start after an unclean stop (§3.4), every entry with `durable == false` is
   (the placement writers), so a replayed operation writes exactly what the original wrote. A replay that finds the target already there
   writes nothing (idempotent).
 - **Only cells the operation is still on top of** are written: a cell owned now by a later entry is skipped; that later entry's own
-  replay (later in `seq`) or its durable `after` decides the cell. This is the guard RS's `rescanFree` lacks.
+  replay (later in commit order) or its durable `after` decides the cell. This is the guard RS's `rescanFree` lacks.
 - **Construction entries are not replayed.** "Built is derived from the world" already covers them (phase 3, RS's rescan of targets):
   a lost write is an unbuilt cell, queued again and paid again; RS's ledger drift rule stands.
 - **Fluid sources are not replayed blindly.** A suspect region with a fluids stage goes through H's restart path (§3.5 of H: the live
   check before the tiles, idempotent drain on failure), then its census. Solid tiles are replayed first, so the shells H checks are back.
-- **Refunds:** a replayed member restore credits under its existing keys; "once per key" (StockLedger) makes a credit that survived the
-  crash a no-op, and a credit lost with the world's ledger is credited again. (Open: the ledger is saved with the world, the removal's
-  `credit` with the queue file; §8 Q3.)
+- **Refunds:** the R2 commit records the removal's credit keys and amounts with the undo. That is required, not optional: today they
+  are kept only in the queue file. A replayed member restore credits every key the ledger lacks. "Once per key" (StockLedger) makes a
+  credit that survived the halt a no-op, and a credit lost with the ledger is credited again. Release waits for the bulk save (§3.3).
 - **Records follow the journal:** an UNDONE entry's site is pending (K6 as today), an ACTIVE entry's site is placed (K4 as today). No
   record comes back from a removal the journal committed: **a removal committed to the journal always completes.** This changes 4e's K6
   outcome ("the site stands again; remove it again") and 5b's lost-writes outcome (§6).
@@ -22781,21 +22788,41 @@ At a start after an unclean stop (§3.4), every entry with `durable == false` is
   undos, a new `RedoJob` for placements: RestoreJob's writer with the `after` side), ticketed by section like RS's rescan, under
   `placementBudgetMs`. While a suspect entry is unrecovered its cells are **reserved**: overlapping placements and removals wait
   (`RECOVERING`, a new internal wait shown as `OVERLAP_BUSY`'s message), so no new operation reads a stale world.
+- **One writer per suspect entry.** The replay owns a suspect undo. A resumed queue-file job for the same group (a `Groups` removal's
+  remaining members, K7's re-run of a RestoreJob) becomes that replay, so it is not a second writer. The group's removal record
+  resumes for its bookkeeping (credits, events, `reconcileRemovals`), and only the replay writes cells. A suspect PLACING entry stays
+  K3's rollback job, as today.
+- **Regions drain first.** A suspect undo of a region group runs `RegionFluids.removalGate`'s drain (idempotent, once per session as
+  today) and waits its bound before the solids are replayed. The drain's writes are not journaled, so replaying the journal's undo
+  alone would open shells with water still standing in them.
 - **A crash during recovery** leaves the suspects suspect (`durable` is still false): the next start replays them again. Idempotent.
 
 #### 3.3 Checkpoints: when writes become durable
 
 An entry becomes **durable** when every chunk it wrote has been saved after its writes ended and that save's I/O has completed. Two
 ways reach it:
-  - **Observed, per entry (the main path; no mixin).** When an entry's job ends, Architect notes the chunks it wrote (the sections it
-    has, as chunk positions). A sliced check (at most 64 chunks per tick) waits until each one is either loaded with
-    `ChunkAccess.isUnsaved() == false`, or not loaded at all (unloading saved it first, §0). The save took its snapshot after our writes,
+  - **Observed, per entry (the main path; no mixin).** When an entry's job ends, Architect notes the chunks it wrote. That is more
+    than its sections: it includes the leaf ring (box + 8), the BOX restore's edge-update neighbours (box + 1), the `FluidRearm`
+    cells and, for regions, the drain's watch cells, which are not journaled. A sliced check (at most 64 chunks per tick) waits until each one is either loaded with
+    `ChunkAccess.isUnsaved() == false`, or not loaded at all.
+    "Not loaded" is a race: a chunk can leave `getChunkNow` while it sits in `pendingUnloads`, before `scheduleUnload` saves it. So
+    a chunk that isn't loaded counts only once its `ChunkHolder` save future (`getSaveSyncFuture`, read through
+    `getUpdatingChunkIfPresent`) has completed, or else at the next bulk save. The save took its snapshot after our writes,
     because `tryMarkSaved` and `copyOf` run on the server thread after them, and any later write marks the chunk dirty again. Then it
-    chains the level's `chunkMap.synchronize(false)`, so every queued write has reached the region file. In the normal case an entry is
+    chains the level's `chunkMap.synchronize(false)`, so every queued write has reached the region file. C1 must check, not assume,
+    that `ChunkMap.save` hands its write to `IOWorker.store` within the same call (the encoding future is joined inside the supplier
+    `store` takes). If it doesn't, `synchronize` could complete before the write is queued, and C1 adds a short delay or a second
+    `synchronize`. In the normal case an entry is
     durable within about 10 s of its job's end.
   - **The bulk save** (Fabric `ServerLifecycleEvents.AFTER_SAVE`, present in the Fabric API the mod builds against) chained
     with `synchronize(false)` per level is a checkpoint for every entry that ended before the save began. This is the fallback when
     the eager saver lags.
+  - **Only this session's writes count.** After a restart every loaded chunk is clean. So a suspect entry (§3.2) can become durable
+    only after its replay has ended, and only through either path's check starting after that end. The `BEFORE_SAVE` snapshot holds
+    only entries marked "ended" in this session.
+  - **Survival credits wait for the bulk save.** The stockpile ledger is saved only at `BEFORE_SAVE`. So an entry whose restore
+    credited refunds becomes durable only through the bulk path, at an `AFTER_SAVE` whose save began after the credit. Its credit keys
+    are also written into the undo commit (§3.2; Q3), so a replay can tell which keys are missing from the ledger.
   - A JVM halt keeps what the IO thread wrote (the OS has it), so `flush` (fsync) isn't needed for §4's crash model.
 - For the bulk path, Architect snapshots the set of entries marked "ended" (§3.1) at `BEFORE_SAVE`. An entry whose job ended after
   that waits for the next save, or for the observed path.
@@ -22828,7 +22855,7 @@ Every other RECOVER path goes: K6 and lost-writes RECOVER become roll-forward.
 |---|---|
 | F5 | the ended restore's entries are not durable until a checkpoint, so they are not released; the crash makes them suspect and the restore is replayed: exact |
 | F6 | no reactivation of a removal: every member's undo is replayed; the resumed `Groups` removal and the replay write the same `written` values (idempotent) |
-| F7 | replay in `seq` order re-runs the lower's undo (with its hand-downs, already in the journal) then the upper's: the stacks are those of the journal, never rebuilt |
+| F7 | replay in `placeSeq`/`undoSeq` order re-runs the lower's undo (with its hand-downs, already in the journal) then the upper's: the stacks are those of the journal, never rebuilt |
 | UC | no release before durable; "covered" no longer releases (§3.2 evidence report-only) |
 | H-core | a PLACED stage's suspect entries are replayed (RedoJob) before the next stage runs; H's recheck stays as the fluids' second line |
 | 6a tiles (§0 gap) | tiles are entries like any other: replayed, not left ACTIVE over a world that lost them |
@@ -22844,7 +22871,7 @@ worker are lost. Power loss is out of scope (nothing of Architect's fsyncs, §0)
 | C-I1 | **The world agrees with the journal per cell.** Every cell an active entry is on top of holds that entry's `after`, a StillOurs equivalent, or is reported kept; every cell an UNDONE entry's undo wrote holds `written` (or a StillOurs equivalent), unless a later entry owns it or it is reported kept. |
 | C-I2 | **Release only after durable.** No entry is released, and no undo record dropped, before every chunk it wrote has been saved after its writes ended and that I/O has completed (§3.3). |
 | C-I3 | **No limbo.** Every suspect entry is replayed at the start after the crash, and every UNDONE entry is released once its replay is durable. No pending record is kept across two clean starts. |
-| C-I4 | **Commit order.** Replays run in `seq` order; reactivations (moves only) in reverse `undoSeq` order. Settling several operations at one start equals settling them one start each. |
+| C-I4 | **Commit order.** Replays run in `placeSeq`/`undoSeq` order; reactivations (moves only) in reverse `undoSeq` order. Settling several operations at one start equals settling them one start each. |
 | C-I5 | **One outcome per commit.** An undo group completes or (a move only) comes back as a whole; never per member. |
 | C-I6 | **Stacks stay chained.** After recovery, at every position each active cell's `before` is what the cell below it would leave (the hand-down rule); removing any standing entry next is exact and never cuts another (F7's property). |
 | C-I7 | **No cut into standing sites.** No recovery write changes a cell a standing entry other than the replayed one owns. |
@@ -22882,7 +22909,7 @@ Then:
 
 - `UmtFindingsTest`'s F5, F6, F7 and UC repros turn green and move to `UmtPropertiesTest`; their fuzz tags drop to 0. Rebaselining the
   CI pin (`-Dumt.rebaseline=true`) is a reviewed step of the slice that changes the counts.
-- The mutation table gains rows: "release without the durable check" goes red on `c2`/`c1`; "replay out of `seq` order" on `c4`/`c6`;
+- The mutation table gains rows: "release without the durable check" goes red on `c2`/`c1`; "replay out of `placeSeq`/`undoSeq` order" on `c4`/`c6`;
   "replay without the on-top guard" on `c7`.
 - UMT lives on `feat/umt`, not on main. These properties need it merged first (or C1 carries it).
 
@@ -22896,7 +22923,7 @@ tick of the named point. Today's no-save kill points (FL1 without `+save`) lose 
 
 | point | where | bar after the restart (and recovery) |
 |---|---|---|
-| RX1 | a single removal's RestoreJob ended, before a checkpoint | without save: replayed, exact, released at the next checkpoint; with save: released at that checkpoint, nothing replayed |
+| RX1 | a single removal's RestoreJob ended, before a checkpoint | without save: replayed, exact, released once durable; with save: replayed with 0 cells written (the halt comes before the release commit), then released |
 | RX2 | a group removal with some members written (members on both sides of a chunk boundary) | every member replayed or resumed; none comes back; E-flat 0 |
 | RX3 | two stacked sites removed one after the other, both ended | replay in order; then place and remove a third over them: exact |
 | RX4 | P8 of an instant site, no checkpoint | the site complete (replayed); remove: exact |
@@ -22945,21 +22972,22 @@ Removal and recovery semantics change, so Steward's pre-release check is needed:
 
 | slice | what | size |
 |---|---|---|
-| **C1: durability** | `seq`, `durable`, "ended"; the checkpoint hook (§3.3) and its release commit; release requires durable; one unclean signal; UMT's chunk-granular saves and checkpoint model; `c2`, `c3` | about half a day plus the UMT model |
-| **C2: roll forward** | recovery (§3.2): RestoreJob replay of suspect undos in `seq` order, `RedoJob` for suspect placements and tiles, the on-top guard, reserved cells; evidence report-only; reactivation for moves only (§3.5); K6 and 5b's rule changed; RS's `rescanFree` folded in (it becomes the free-pass case of the replay); UMT `c1`, `c4`-`c10`; in-game RX1-RX8 | 1.5 to 2 days |
+| **C1: durability** (a build step; ships with C2) | `seq`, `durable`, "ended"; the checkpoint hook (§3.3) and its release commit; release requires durable; one unclean signal; UMT's chunk-granular saves and checkpoint model; `c2`, `c3` | about half a day plus the UMT model |
+| **C2: roll forward** | recovery (§3.2): RestoreJob replay of suspect undos in `placeSeq`/`undoSeq` order, `RedoJob` for suspect placements and tiles, the on-top guard, reserved cells; evidence report-only; reactivation for moves only (§3.5); K6 and 5b's rule changed; RS's `rescanFree` folded in (it becomes the free-pass case of the replay); UMT `c1`, `c4`-`c10`; in-game RX1-RX8 | 1.5 to 2 days |
 | **C3: regions, fluids, survival** (can merge into C2 if small) | the fluids order (solids replayed, then H's live check); refunds on replay (`c11`); construction excluded; `Placement.load`'s fallback for Infras | about half a day |
 
-C1 is safe alone (it only delays releases; today's evidence settle still runs and finds the same things), so it can merge first. C2 and
-C3 change semantics and ship together, after Steward's check. Part A's fixes (F1, F4, DRAIN) are independent; if A changes
+**C1 doesn't ship alone.** "Release requires durable" with no replay would keep every suspect pending forever, which is a new limbo.
+Releasing on clean chunks instead would release F5's half-restored sites together with their undo records, which is worse than today.
+C1 and C2 ship together; C1 is a build step inside one batch. C3 can follow in the same release. All of it ships after Steward's check. Part A's fixes (F1, F4, DRAIN) are independent; if A changes
 `Sites.reconcile`, C2 merges after it.
 
 ### 8. Open questions
 
 | # | for | question | default |
 |---|---|---|---|
-| Q1 | Steward | Is "a committed removal always completes after a crash" (§6) acceptable for Steward's own records, which may themselves have lost their last change? | yes |
+| Q1 | Steward | Is "a committed removal always completes after a crash" (§6) acceptable for Steward's own records? Any record Steward keeps in SavedData lags by a bulk save (§0), so it may itself have lost its last change. | yes |
 | Q2 | Steward | 5b's lost-writes rule becomes a replay (version b): acceptable? | yes |
-| Q3 | coordinator | The stockpile ledger is saved with the world, the removal's `credit` with the queue file: after a halt they can disagree. Make the credit keys part of the undo commit (journal), so the ledger's "once per key" check reads one durable source? | yes, in C3 |
+| Q3 | coordinator | The credit keys in the undo commit are now required (§3.2). Is it also worth moving the ledger's save from `BEFORE_SAVE` to every credit, so survival removals become durable on the observed path? | not now |
 | Q4 | coordinator | Hasten checkpoints (§5.6) in C1, or only when the window proves to matter? | later |
 | Q5 | Noah | Power loss: fsync the journal's index move (and the region files are the game's)? Cheap for the index; it doesn't make chunks durable. | not now |
 | Q7 | coordinator | The F6 hazard in the code (§0: a resumed group removal writing over members its own settle reactivated) is live without any lost write in a narrow case. Fix it in part A (skip RECOVER for a group that still has a resumed removal) rather than wait for C2? | yes, in A |
