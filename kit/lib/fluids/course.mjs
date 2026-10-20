@@ -689,7 +689,10 @@ export function planBodyOf(C, X) {
     const surface = [];
     for (let x = cx - h; x <= cx + h; x++) for (let z = cz - h; z <= cz + h; z++) if (x !== cx || z !== cz) surface.push([x, z]);
     const notches = new Set([k2(cx, cz - h - 1), k2(cx, cz + h + 1)]);
-    return { kind: 'fountain', id: X, bodyId: bodyId(X), level: f + 1, surface, depth: new Map(surface.map((c) => [k2(...c), 1])), notches, raised: true, bodies: [bodyId(X)] };
+    // (the spout's four falling sides: a course's water landing beside one takes its level from that falling water, as vanilla's
+    // flow does, not from its own lip: no landing or outlet beside them)
+    const busy = new Set([k2(cx + 1, cz), k2(cx - 1, cz), k2(cx, cz + 1), k2(cx, cz - 1)]);
+    return { kind: 'fountain', id: X, bodyId: bodyId(X), level: f + 1, surface, depth: new Map(surface.map((c) => [k2(...c), 1])), notches, busy, raised: true, bodies: [bodyId(X)] };
   }
   if (q.kind === 'channel' && res.T && Number.isInteger(res.ring)) {
     const { water, all } = ringColumns(res.T, res.ring, res.spec.width, res.omit);
@@ -726,6 +729,7 @@ function edgeSites(B) {
     const [px, pz] = perp(DIRS[d]);
     if (own.has(k2(ox + px, oz + pz)) || own.has(k2(ox - px, oz - pz))) continue;
     if (B.notches?.has(k2(ox, oz))) continue;
+    if (B.busy && [[0, 0], ...DIRS].some(([a, b]) => B.busy.has(k2(x + a, z + b)))) continue;
     const level = B.levels ? B.levels.get(k2(x, z)) : B.level;
     out.push({ x, z, d, ox, oz, level, body: B.bodyOf ? B.bodyOf.get(k2(x, z)) : B.bodyId });
   }
