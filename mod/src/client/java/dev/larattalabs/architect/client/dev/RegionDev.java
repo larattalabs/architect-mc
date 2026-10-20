@@ -313,7 +313,8 @@ public final class RegionDev {
 					}
 					Path file = req.has("file") ? Path.of(req.get("file").getAsString()) : null;
 					ServerLevel level = s.overworld();
-					return RegionHash.start(level, box, ex, mode == null ? "hash" : mode, file).thenApply(o -> {
+					int limit = req.has("limit") ? req.get("limit").getAsInt() : 2000; // (6c RS) the mismatches listed
+					return RegionHash.start(level, box, ex, mode == null ? "hash" : mode, file, limit).thenApply(o -> {
 						JsonArray bb = new JsonArray();
 						for (int v : box) {
 							bb.add(v);

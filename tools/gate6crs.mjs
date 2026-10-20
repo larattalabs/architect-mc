@@ -181,17 +181,20 @@ steps.item4 = async () => {
   const cells = await L.call('dev.rs.cells', { region }, 300_000);
   const target = new Set();
   for (const t of cells.targets ?? []) for (const c of t.cells ?? []) target.add(`${c[0]},${c[1]},${c[2]}`);
-  const d = await G.twinDiff(ctx, T.box, T.file, crates);
-  const freeDiffer = d.list.filter((m) => !target.has(m.pos));
-  // every free cell as the twin's: a mismatch with the twin is at an unbuilt target cell only (or past the 16 named: counted in all)
-  const all = await L.call('dev.region.hash', { box: T.box, mode: 'diff', file: T.file }, 3_600_000);
-  const allDiffer = (all.list ?? []).filter((m) => !target.has(m.pos) && !crates.some((c) => c.join(',') === m.pos));
-  const out = { region, state: w?.view?.state, items: w?.items, consumed: ps.consumed ?? {}, entities: p.entities, targets: (rs.targets ?? []).map((t) => [t.target, t.part, t.cells, t.built, t.held]), parts: rs.build?.parts, twinDiff: { all: all.mismatches, listed: (all.list ?? []).length, freeDiffer: allDiffer.slice(0, 12) } };
+  // every free cell written as the twin's: a cell differing from the twin is an unbuilt target cell, or lies in a tile the region has not
+  // put down yet (its stage waits SITE_BUSY for the earlier targets it stands on, §6.3)
+  const all = await L.call('dev.region.hash', { box: T.box, mode: 'diff', file: T.file, limit: 1_000_000 }, 3_600_000);
+  const r0 = await G.regionState(ctx, region);
+  const waitingTiles = new Set((r0.unfinished ?? []).filter((it) => it.key.startsWith('t:')).map((it) => it.key.slice(it.key.lastIndexOf(':') + 1)));
+  const tileOf = (pos) => { const [x, , z] = pos.split(',').map(Number); return `${Math.floor(x / 64)},${Math.floor(z / 64)}`; };
+  const crateSet = new Set(crates.map((c) => c.join(',')));
+  const notTarget = (all.list ?? []).filter((m) => !target.has(m.pos) && !crateSet.has(m.pos));
+  const free = notTarget.filter((m) => !waitingTiles.has(tileOf(m.pos)));
+  const out = { region, state: w?.view?.state, items: w?.items, consumed: ps.consumed ?? {}, entities: p.entities, targets: (rs.targets ?? []).map((t) => [t.target, t.part, t.cells, t.built, t.held]), parts: rs.build?.parts, waitingTiles: [...waitingTiles], twinDiff: { all: all.mismatches, listed: (all.list ?? []).length, notTarget: notTarget.length, freeDiffer: free.slice(0, 12) } };
   check(sum(ps.consumed) === 0 && p.entities === 0, `item 4: the free pass consumed 0 items from the stockpile (consumed ${json(ps.consumed)}) and left 0 item entities in the box (${p.entities})`, out);
-  check(allDiffer.length === 0 && (all.list ?? []).length < 2000 ? true : allDiffer.length === 0, `item 4: the free cells equal the INSTANT twin's: of ${all.mismatches} cells differing from the twin, ${allDiffer.length} are not an unbuilt target cell (the crates aside; ${(all.list ?? []).length} listed)`, allDiffer.slice(0, 12));
-  void freeDiffer;
+  check((all.list ?? []).length === all.mismatches && free.length === 0, `item 4: the free cells equal the INSTANT twin's: of ${all.mismatches} cells differing from the twin (all listed), ${all.mismatches - notTarget.length} are unbuilt target cells, ${notTarget.length - free.length} lie in tiles not yet put down (${[...waitingTiles].join(' ')}), ${free.length} are written free cells that differ`, free.slice(0, 12));
   const steps0 = (rs.build?.parts ?? []).find((q) => q.part === 'steps');
-  check(!!steps0 && steps0.state === 'waiting' && steps0.built === 0 && steps0.freeCells === 0, `item 4: the held terrace waits whole (part steps: ${json(steps0 && { state: steps0.state, targets: steps0.targets, cells: steps0.cells, built: steps0.built, freeCells: steps0.freeCells })}): no cut or fill of it written before its stairs`);
+  check(!steps0 || steps0.state === 'waiting' && steps0.built === 0, `item 4: the held terrace waits whole (${steps0 ? `part steps: ${json({ state: steps0.state, targets: steps0.targets, cells: steps0.cells, built: steps0.built, freeCells: steps0.freeCells })}` : 'its forms tiles not yet put down: they wait SITE_BUSY for the street\'s roads'}): no cut or fill of it written before its stairs`);
   await G.remove(ctx, region);
   const e = await G.diff(ctx, box, pre);
   const eflat = e.list.filter((m) => !crates.some((c) => c.join(',') === m.pos));
