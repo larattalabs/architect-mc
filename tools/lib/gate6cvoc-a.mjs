@@ -350,6 +350,8 @@ const probe = [{
     let ticks = 0;
     for (;;) {
       await L.settle(20_000);
+      // a fire's spread odds fall with its age (it reaches 15 in about 900 ticks and stays, on netherrack): relight each source young
+      for (const c of cases.filter((x) => x.kind === 'fire')) await L.cmd(`/setblock ${c.at[0]} ${c.at[1]} ${c.at[2]} minecraft:fire[age=0]`);
       for (const c of cases) { const r = await R(c.kind, c.at, { d: c.d }); c.post = r.states[1]; c.source = r.states[0]; c.caught = r.states[1] !== 'minecraft:oak_planks'; }
       ticks = (await gt()) - t0;
       if (ticks >= 6000 || Date.now() - w0 > 1_200_000) break;
