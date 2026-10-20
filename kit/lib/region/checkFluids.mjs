@@ -12,6 +12,7 @@ import { FLUID_OP, fromRuns, isCourseOp, splitJoins } from '../fluids/body.mjs';
 import { VC, classAt } from './volume.mjs';
 import { F_WRITTEN } from './vworld.mjs';
 import { kindOf } from '../fluids/world.mjs';
+import { irFields } from '../fluids/irrfield.mjs';
 
 export { kindOf } from '../fluids/world.mjs';
 
@@ -295,10 +296,20 @@ export function fluidRules({ ir, vw, meta, vols, want, findings, metrics, findin
   const keptCols = new Set();
   for (const p of ir.parts) for (const kp of p.keep ?? []) for (let x = kp.box.minX; x <= kp.box.maxX; x++) for (let z = kp.box.minZ; z <= kp.box.maxZ; z++) keptCols.add(`${x},${z}`);
   const lots = ir.lots ?? [];
-  const keep = (x, y, z) => {
+  // ((6c IRR) the irrigated fields: an irrigation body's own lot box is its own (K5's one exception, §4), and nothing outside it is;
+  // the flow reads a field's floorY as the design's farmland, and its feet cells over the field as exits (irrigate.mjs's field model))
+  const fields = irFields(ir);
+  const ownField = new Map();
+  for (const f of fields) for (const id of f.bodies) ownField.set(id, f);
+  const keep = (x, y, z, body = null) => {
+    const own = body ? ownField.get(body.id) : null;
+    if (own) {
+      const b = own.box;
+      if (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ) return 'outside its lot (irrigation)';
+    }
     if (x <= c.minX || x >= c.maxX || z <= c.minZ || z >= c.maxZ) return 'claim ring';
     for (const r of keepRects) if (x >= r[0] && x <= r[2] && z >= r[1] && z <= r[3]) return 'keep-out';
-    for (const l of lots) { const b = l.box; if (x >= b.minX - 1 && x <= b.maxX + 1 && z >= b.minZ - 1 && z <= b.maxZ + 1 && y >= b.minY - 1 && y <= b.maxY + 1) return 'lot'; }
+    for (const l of lots) { if (own && l.id === own.lot) continue; const b = l.box; if (x >= b.minX - 1 && x <= b.maxX + 1 && z >= b.minZ - 1 && z <= b.maxZ + 1 && y >= b.minY - 1 && y <= b.maxY + 1) return 'lot'; }
     if (keptCols.has(`${x},${z}`)) return 'kept';
     const vc = volClass(x, y, z);
     if (vc === VC.OWNED) return 'owned';
@@ -326,11 +337,16 @@ export function fluidRules({ ir, vw, meta, vols, want, findings, metrics, findin
   };
   const surface = (x, y, z) => { const a = vw.get(x, y + 1, z); return !P.fs[a] && !P.fluid[a] && !P.water[a]; };
   const exit = (x, y, z) => {
+    // ((6c IRR) a feet cell over an irrigated field's farmland (the design's): the field is walked; the reserved cells are not feet)
+    for (const f of fields) if (y === f.floorY + 1 && x >= f.field.x0 && x <= f.field.x1 && z >= f.field.z0 && z <= f.field.z1) return !f.cells.has(k3(x, y - 1, z)) && !f.cells.has(k3(x, y, z));
     if (vw.lotAt(x, y, z)) return false;
     const a = vw.get(x, y, z), h = vw.get(x, y + 1, z), f = vw.get(x, y - 1, z);
     return P.vpass[a] && P.vpass[h] && !P.fluid[a] && !P.water[a] && P.floor[f] && !P.fluid[f];
   };
-  const world = { at: (x, y, z) => kindOf(P, vw.get(x, y, z)), keep, shell: shellCheck, surface, exit, solid: (x, y, z) => P.solid[vw.get(x, y, z)] };
+  const fieldAt = (x, y, z) => { for (const f of fields) if (y === f.floorY && x >= f.field.x0 && x <= f.field.x1 && z >= f.field.z0 && z <= f.field.z1 && !f.cells.has(k3(x, y, z))) return true; return false; };
+  const world = fields.length
+    ? { at: (x, y, z) => (fieldAt(x, y, z) ? 'stop' : kindOf(P, vw.get(x, y, z))), keep, shell: shellCheck, surface, exit, solid: (x, y, z) => fieldAt(x, y, z) || P.solid[vw.get(x, y, z)] }
+    : { at: (x, y, z) => kindOf(P, vw.get(x, y, z)), keep, shell: shellCheck, surface, exit, solid: (x, y, z) => P.solid[vw.get(x, y, z)] };
   // ((6c HY) a course's lining and weir stand with its shell: M25:shell and the single breach cover them; its plan joins are declared)
   const sim = simulate(world, bodies.map((b) => (b.course
     ? { id: b.id, part: b.part, irPart: b.irPart, fluid: b.fluid, level: b.level, cells: b.cells, shell: [...b.shell, ...b.lining], spill: b.spill, joins: [...b.joins, ...b.planJoins.flatMap((q) => q.cells)], spillLands: b.planJoins.length > 0 }

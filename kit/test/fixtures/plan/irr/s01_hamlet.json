@@ -1,0 +1,45 @@
+{
+  "about": "(6c IRR, §8, §9) Steward's farm hamlet (h/farm_hamlet: a template zone, a farm lot typed farm with no villager member) with irrigate: true on its zone, as Steward's plan writer sets it for a working farm (S-IRR-1), and its farm lot bound to the gate's field entry (g6c_irr_field: farmland and wheat, built by tools/gate6cirr.mjs into the run's library). farm_1 (13 x 14) gets 2 x 2 sources; the cottage none",
+  "on": "flat",
+  "volume": {},
+  "covers": [],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "irr_s01",
+    "zones": [
+      {
+        "id": "town",
+        "kind": "standard",
+        "required": true,
+        "farmPond": true,
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "farm_1",
+                "type": "farm",
+                "role": "farm",
+                "size": [
+                  13,
+                  14
+                ],
+                "entry": "g6c_irr_field"
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "cottage",
+                "size": [
+                  13,
+                  14
+                ]
+              }
+            ]
+          }
+        },
+        "irrigate": true
+      }
+    ]
+  }
+}

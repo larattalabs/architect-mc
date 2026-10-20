@@ -24,6 +24,7 @@ import * as race from './race.mjs';
 import * as ditch from './ditch.mjs';
 import * as handcourse from './handcourse.mjs';
 import * as handgate from './handgate.mjs';
+import * as irrigate from './irrigate.mjs';
 import { isBodyPart, isHPart } from './kinds.mjs';
 import { channelBlock, planLotIds } from '../plan/schema.mjs';
 
@@ -176,7 +177,8 @@ export function crossingsOf(K) {
  */
 export function fluidStageWanted(C) {
   if (C.order.some((p) => isBodyPart(p) && C.okClass(p.id))) return true;
-  return !!pond.stageWanted(C);
+  // ((6c IRR) a farm lot asking irrigate brings its sources, on a wet claim too)
+  return !!pond.stageWanted(C) || irrigate.stageWanted(C);
 }
 
 /** The route pass's input for the plan's own water (the moat's): null when there is none, so the pass is byte for byte as before. */
@@ -195,6 +197,19 @@ export function fluidFarmPonds(K) {
 /** (H-a, additive) Whether a plan's zones ask for farm ponds (a cheap test: compile.mjs makes the K context only then). */
 export function asksFarmPond(order) {
   return order.some((p) => p.family === 'zone' && /"farmPond":true/.test(JSON.stringify(p.part)));
+}
+
+/**
+ * (6c IRR, additive) Compile step 3, after the farm ponds: each asked farm lot's sources (irrigate.mjs). Returns {lots, notes: Map(zone
+ * id -> [note])}. Only called when a zone of the plan writes `irrigate` (asksIrrigate; else the plan is as before).
+ */
+export function fluidIrrigation(K) {
+  return irrigate.emitIrrigation(K);
+}
+
+/** (6c IRR, additive) Whether a plan's zones write `irrigate` anywhere (structural: a zone, its lots, its template's lots, its districts' lots). */
+export function asksIrrigate(order) {
+  return irrigate.asksIrrigate(order);
 }
 
 /** (H-a, additive) N-H-5: the clearance a street fallback's bridge keeps over the plan's own water (1), or null (T3's default). */

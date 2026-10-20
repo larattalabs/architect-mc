@@ -128,7 +128,7 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
       const cols = (x1 - x0 + 1) * (z1 - z0 + 1);
       const band = [cols * PROVISIONAL_BAND[0], cols * PROVISIONAL_BAND[1]];
       const m = pc.lotMeta?.[l.id] ?? {};
-      lots.push({ id: l.id, zone: a.part, box: l.box, role: m.role ?? null, label: m.label ?? null, ext: m.ext ?? null, front: l.front ?? null, entrance: l.entrance ?? null, entry, provisional: prov, ...(prov ? { costRange: band, fitBox: l.box } : {}), ...(pending ? { pendingStyle: style.pending } : {}) });
+      lots.push({ id: l.id, zone: a.part, box: l.box, role: m.role ?? null, label: m.label ?? null, ext: m.ext ?? null, front: l.front ?? null, entrance: l.entrance ?? null, entry, provisional: prov, ...(prov ? { costRange: band, fitBox: l.box } : {}), ...(pending ? { pendingStyle: style.pending } : {}), ...(pc.irrigation?.[l.id] ? { irrigation: pc.irrigation[l.id] } : {}) });
       if (prov) { lo += band[0]; hi += band[1]; }
     }
     if (a.provisional) a.cost = { ...(a.cost ?? {}), range: { cells: [(a.cost?.cells ?? 0) + lo, (a.cost?.cells ?? 0) + hi] } };

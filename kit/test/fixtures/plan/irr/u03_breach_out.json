@@ -1,0 +1,42 @@
+{
+  "about": "(6c IRR, §9, broken) _unsafe.irrBreachOut: the first source moved onto the field's edge row against the border, its outer side in the border column (air in the field model): its single breach runs along the border out of the lot's box: M25:keep",
+  "on": "flat",
+  "volume": {},
+  "covers": [],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "irr_u03",
+    "zones": [
+      {
+        "id": "farms",
+        "irrigate": true,
+        "ext": {
+          "architect_mc:unsafe": {
+            "irrBreachOut": true
+          }
+        },
+        "program": {
+          "lots": [
+            {
+              "id": "f1",
+              "type": "farm",
+              "size": [
+                13,
+                11
+              ],
+              "villager": "farm"
+            },
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
