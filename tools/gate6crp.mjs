@@ -144,6 +144,8 @@ async function setup(gy, Z) {
     { item: 'minecraft:cobblestone', at: [bx0, y0, bz0], on: [bx0, gy, bz0], face: 'up', placer: 'RPPlayer' },
     { item: 'minecraft:torch', at: [bx0 + 2, y0, bz0 + 2], on: [bx0 + 2, gy, bz0 + 2], face: 'up', placer: 'RPPlayer' },
   ] }, 120_000);
+  // the two blocks a kept build (a lone block may be classed incidental, which writes may take as natural)
+  out.claim = await call('dev.pt.claim', { box: [bx0, y0, bz0, bx0 + 2, y0, bz0 + 2], actor: 'RPPlayer' }, 120_000);
   const [tx0, tz0, tx1, tz1] = z('tree');
   const tc = [(tx0 + tx1) >> 1, (tz0 + tz1) >> 1];
   out.tree = await cmd(`/place feature minecraft:oak ${tc[0]} ${y0} ${tc[1]}`);
@@ -242,7 +244,7 @@ steps.ingame = async () => {
   fs.rmSync(auditDir, { recursive: true, force: true });
   await call('dev.region.realised.audit', { dir: auditDir }, 10_000);
   out.setup = await setup(gy, ZONES);
-  check(out.setup.held?.placed && out.setup.build?.results?.every((r) => r.tracked) && out.setup.tree?.success !== false, `the setup: a cell site over the held zone (${out.setup.held?.siteId}), a player's cobblestone and torch (PT tracked: ${json(out.setup.build?.results?.map((r) => r.tracked))}), an oak (${json(out.setup.tree?.messages)}), short grass, a water source`, out.setup);
+  check(out.setup.held?.placed && out.setup.build?.results?.every((r) => r.tracked) && out.setup.claim?.state === 'CLAIMED' && out.setup.tree?.success !== false, `the setup: a cell site over the held zone (${out.setup.held?.siteId}), a player's cobblestone and torch (PT tracked: ${json(out.setup.build?.results?.map((r) => r.tracked))}, claimed ${out.setup.claim?.buildId} ${out.setup.claim?.state}), an oak (${json(out.setup.tree?.messages)}), short grass, a water source`, out.setup);
   const box = [CX - 32, gy - 2, CZ - 32, CLAIM[2], gy + 14, CZ + 2];
   const pre = await cellsOf(box);
   const p = await planDemo();
