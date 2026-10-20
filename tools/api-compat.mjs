@@ -68,6 +68,8 @@
 //   node tools/api-compat.mjs --gate6ckc [--artifacts <dir>] [classesDir]
 //                     phase 6c slice KC (the patch over v0.39.0): the unchanged 0.39.0, 0.38.0 and 0.37.1 apitest jars (API 1.36.0, 1.35.0,
 //                     1.34.0) and the 0.39.0 mod jar's 1.36.0 surface (artifacts/gate6c-kc/v0390, built from its tag with its tools/; HY's v0380,
+//   node tools/api-compat.mjs --gate6cirr [--artifacts <dir>] [classesDir]
+//                     phase 6c slice IRR (over v0.39.1): CU's jars (0.39.0, 0.38.0, 0.37.1 and the 0.39.0 surface; 0.39.1 changed no Java)
 //   node tools/api-compat.mjs --gate6ccu [--artifacts <dir>] [classesDir]
 //                     phase 6c slice CU (over v0.39.0): the unchanged 0.39.0, 0.38.0 and 0.37.1 apitest jars (API 1.36.0, 1.35.0, 1.34.0)
 //                     and the 0.39.0 mod jar's 1.36.0 surface (artifacts/gate6c-cu/v0390, built from its tag with its tools/; HY's v0380,
@@ -122,11 +124,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a' || process.argv[2] === '--gate6c0b' || process.argv[2] === '--gate6cx' || process.argv[2] === '--gate6cw' || process.argv[2] === '--gate6cmp' || process.argv[2] === '--gate6cy2' || process.argv[2] === '--gate6cf1' || process.argv[2] === '--gate6ct1' || process.argv[2] === '--gate6csch' || process.argv[2] === '--gate6cf2' || process.argv[2] === '--gate6cb' || process.argv[2] === '--gate6ct2' || process.argv[2] === '--gate6cpt' || process.argv[2] === '--gate6cpt2' || process.argv[2] === '--gate6cp0' || process.argv[2] === '--gate6cc33' || process.argv[2] === '--gate6cd' || process.argv[2] === '--gate6cs2' || process.argv[2] === '--gate7ak1' || process.argv[2] === '--gate6ct3' || process.argv[2] === '--gate6ch' || process.argv[2] === '--gate6cvoc' || process.argv[2] === '--gate6chy' || process.argv[2] === '--gate6ckc' || process.argv[2] === '--gate6ccu') {
+if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a' || process.argv[2] === '--gate6c0b' || process.argv[2] === '--gate6cx' || process.argv[2] === '--gate6cw' || process.argv[2] === '--gate6cmp' || process.argv[2] === '--gate6cy2' || process.argv[2] === '--gate6cf1' || process.argv[2] === '--gate6ct1' || process.argv[2] === '--gate6csch' || process.argv[2] === '--gate6cf2' || process.argv[2] === '--gate6cb' || process.argv[2] === '--gate6ct2' || process.argv[2] === '--gate6cpt' || process.argv[2] === '--gate6cpt2' || process.argv[2] === '--gate6cp0' || process.argv[2] === '--gate6cc33' || process.argv[2] === '--gate6cd' || process.argv[2] === '--gate6cs2' || process.argv[2] === '--gate7ak1' || process.argv[2] === '--gate6ct3' || process.argv[2] === '--gate6ch' || process.argv[2] === '--gate6cvoc' || process.argv[2] === '--gate6chy' || process.argv[2] === '--gate6ckc' || process.argv[2] === '--gate6ccu' || process.argv[2] === '--gate6cirr') {
   const voc = process.argv[2] === '--gate6cvoc';
   const chy = process.argv[2] === '--gate6chy';
   const ckc = process.argv[2] === '--gate6ckc';
-  const ccu = process.argv[2] === '--gate6ccu';
+  // ((6c IRR) the same jars as CU's: main's 0.39.1 changed no Java over 0.39.0, so its surface is 0.39.0's)
+  const ccu = process.argv[2] === '--gate6ccu' || process.argv[2] === '--gate6cirr';
   const ch = process.argv[2] === '--gate6ch';
   const t3 = process.argv[2] === '--gate6ct3';
   const cd = process.argv[2] === '--gate6cd';
