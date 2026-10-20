@@ -16529,6 +16529,15 @@ After the fix, at af49ae7b (main with HY merged, v0.39.0), the slice tier `artif
 - **voc-natural FAIL, pre-existing:** E-normal 8 under the exact rules (5 water cells at 3758-3760, y 37-39, z -924 flowing into
   air, and 3 bee nests). The same 5 water cells failed it at c25c11cc, before any CU change. Its drift probe now reads 0 cells in the
   hall's box, 142 growth outside.
+- **Verifier: PASS** (gate-verifier, at dae9e175): diff and evidence reviewed; items 3, 4, 6, 7 and 8 re-run by the verifier
+  (`artifacts/gate-runs-CU-verify/20261020-084314-change`: cu-ingame 9/0, cu-survival 10/0). No blocking findings. Non-blocking,
+  recorded for a later slice: `Sites.journalOwn`, `Sites.foreignBlockEntities` and PT2's adopted-site edit count use plain
+  `WorldJournal.holds`, so a player-placed weathered copper block entity there could count as ours; the delta path's player-record
+  check has no in-game item of its own (item 6 covers the undo path); item 8b's per-cell steps are derived from the plan and the
+  standing states, not tracked separately.
+- **After merging main's relief fix (edf879f4, FluidRearm)** at d6dc819a (`artifacts/gate-runs-CU/20261020-084734-change`):
+  unit-mod 722/0, cu-unit, cu-ingame and cu-survival PASS; voc-natural fails on the same pre-existing cells (water at
+  3758-3760,37-38,-924 and lava at 3787-3789,-2, both in the c25c11cc list).
 - **$0.00**, sim and stub only.
 
 
