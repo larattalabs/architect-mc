@@ -657,6 +657,8 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   0.36.1 (built from its tag into `artifacts/gate6c-h/v0361`). Add 0.36.1 to apijars (with its base world) at the release tier.
 - **6ct1-scenario-relief's falling water** (H-b's slice run): 2 unclassified falling-water cells far from any H part under the
   narrowed `flow` class. Re-check at the release tier; widen the class or record the cells.
+  **Still intermittent (VOC batch, 2026-10-20):** the same "the undo's own" unclassified cells failed relief in D2's slice run
+  (2026-10-13, 1), H-b's (2) and VOC-b's (4), and passed in hk3's slice run and others; relief_demo takes no compile pass. Not VOC's.
 - **The breach runoff past `watch`.** The removal's drain now takes only the body's cells, spill, watch, predicted flow and the
   census's recorded escapes (a player's water stays, §4.2). If a single breach's runoff ever reaches past the watch set, widen
   sim.mjs's watch reach instead of the drain.
@@ -695,5 +697,20 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   own fluids. A small slice after HY.
 - **VOC-c (S-VOC-2):** `rule.palette` measured, with a `realiseApproved` refusal and Steward's RC check, after VOC-a and VOC-b.
 - **Copper weathering and undo** (VOC §10): `StillOurs` needs the same block, so oxidized copper is left behind by undo and
-  removal. It is on main today. Its own slice, with verifier re-runs and Steward's pre-release check.
+  removal. It is on main today. Its own slice, with verifier re-runs and Steward's pre-release check. **Evidence (VOC-b's
+  drift probe, voc-natural):** under `dev.vocab.tick` 157 of 157 unwaxed copper cells of voc_copper_hall weathered, and after
+  `Regions.remove` 134-138 of them remained standing (classified `growth`; VOC-b's runs and the verifier's re-run). Still queued
+  after the VOC batch (v0.38.0).
 - **v0.37.1 bumps the kit to 0.35.1** (hk3's even-width rope bridge and tunnel fix changes kit output for v33/v34-style plans, so IrStale marks older IRs stale). The VOC and HY branches (kit placeholders 0.36.0 and 0.37.0) must merge main after this lands. Kit version sequence: 0.35.1 → VOC 0.36.0 → HY 0.37.0.
+
+## Queued from the VOC batch (integration, 2026-10-20)
+
+- **A wall through a fountain's basin (v51).** In `valid/v51_voc_forge` the forge wall's ring (`wall.around {feature: {part:
+  forge}}`, ring 4-8) writes over the fountain's last basin row (5 water cells at y 65, z 2058) and five of its rim cells: the
+  final cells are the wall's, the plan is READY, and the realised world equals the virtual one. The fountain's
+  footprint (its rect grown by 1) is not kept by the wall's ring. Decide whether connectors keep forms' footprints (or refuse),
+  with a fixture; until then v51's fountain shows polished blackstone 18 billed vs 13 standing in voc-ingame (listed, not judged).
+- **v44's waterfall bill:** `cost.bom` stone 219 against 201 standing in its IR parts' final cells (offline virtual world, no other
+  part in the plan). Untraced: a bill over a cell its own carve or shell writes twice, or a condition that keeps natural stone.
+  Trace it as the fountain's was (h-a's bill test compares a part's bill with its written cells).
+
