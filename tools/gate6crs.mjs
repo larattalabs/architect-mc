@@ -257,8 +257,9 @@ async function buildOne(tag, name, { crates = 4, cons = null, remove = true, kee
   // item 3: the bills per part (the check's cost.survival.bom against the targets' bills put down)
   const bills = G.billsOf(ck, rs);
   out.bills = bills;
-  const differ = Object.keys({ ...bills.want, ...bills.got }).filter((p) => !G.same(bills.want[p], bills.got[p]));
-  check(true, `item 3 (${tag}, recorded per part): the check's cost.survival.bom against the targets' bills put down: ${differ.length ? `${differ.length} part(s) differ: ${differ.map((p) => `${p} ${json(G.minus(bills.want[p], bills.got[p]))}`).join('; ')}` : 'equal, item for item, for every part'}`, bills);
+  // per plan part (a helper group without a part answer counts in the region's whole bill only)
+  const differ = Object.keys({ ...bills.want, ...bills.got }).filter((p) => p in bills.want && !G.same(bills.want[p], bills.got[p]));
+  check(differ.length === 0, `item 3 (${tag}, per part and the region whole): the check's cost.survival.bom against the targets' bills put down: ${differ.length ? `${differ.length} part(s) differ: ${differ.map((p) => `${p} ${json(G.minus(bills.want[p], bills.got[p]))}`).join('; ')}` : 'equal, item for item, for every part'}`, bills);
   out.billsDiffer = differ;
   const d = await G.twinDiff(ctx, T.box, T.file, crateAt);
   out.twin = d;

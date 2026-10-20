@@ -278,5 +278,14 @@ export function billsOf(ck, rs) {
   for (const a of ck.check?.parts ?? []) if (a.cost?.survival) want[a.part] = a.cost.survival.bom;
   const got = {};
   for (const t of rs.targets ?? []) got[t.part] = plus(got[t.part], t.bom);
+  // the region's own cells whole (a helper group such as __lamps__ has no part answer): the plan's cost.bom less the game's road and lot
+  // bills (bomParts), against every target's bill
+  let region = { ...(ck.check?.cost?.bom ?? {}) };
+  for (const b of Object.values(ck.check?.cost?.bomParts ?? {})) region = minus(region, b);
+  for (const k of Object.keys(region)) if (!region[k]) delete region[k];
+  let all = {};
+  for (const t of rs.targets ?? []) all = plus(all, t.bom);
+  want.__region__ = region;
+  got.__region__ = all;
   return { want, got };
 }
