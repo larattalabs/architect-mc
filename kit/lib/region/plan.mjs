@@ -343,6 +343,10 @@ export function markSurvival(ir, r, programId) {
   ir.parts.forEach((p, i) => { parts[p.id] = groups.indexOf(ids[i]); });
   const pads = [...new Set((ir.lots ?? []).map((l) => l.part))].filter((x) => parts[x] !== undefined).sort();
   ir.survival = { format: 1, groups, parts, pads };
+  // (6c RS-b, §6.4, §7.2) the tunnels' bores: per bore its group, its start walk cell, its cardinal heading and its box, so the mod builds
+  // the group's target ring by ring along the heading (a ring's lining, then the carve behind it). Only a plan with a tunnel has it.
+  const bores = (r.meta.tunnels ?? []).filter((t) => parts[t.part] !== undefined).map((t) => ({ group: groups[parts[t.part]], from: [...t.from], dir: [...t.dir], box: [t.box.minX, t.box.minY, t.box.minZ, t.box.maxX, t.box.maxY, t.box.maxZ] }));
+  if (bores.length) ir.survival.bores = bores.sort((a, b) => (a.group < b.group ? -1 : a.group > b.group ? 1 : a.from[0] - b.from[0] || a.from[2] - b.from[2] || a.from[1] - b.from[1]));
 }
 
 export async function planRegion(o) {

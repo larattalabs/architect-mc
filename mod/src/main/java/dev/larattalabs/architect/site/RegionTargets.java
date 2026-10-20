@@ -68,6 +68,8 @@ public final class RegionTargets {
 		/** Per queue index: the queue indexes that must be built first (a cut's paid neighbours above and beside), or null. */
 		final int @Nullable [][] deps;
 		int started = -1;
+		/** (6c RS-b) A tunnel's target, built ring by ring: its cuts also wait for the paid cells beside them in its part's other targets. */
+		boolean rings;
 		/** The entry's before over the target's box (what the builder may replace), read once. */
 		@Nullable Cells before;
 
@@ -187,6 +189,11 @@ public final class RegionTargets {
 	 * it, a terrace's retaining wall before the cut behind it). Runs (§6.2): a new run at each new y (a course) and whenever the run's bill
 	 * would pass {@code capStacks} stacks (a quarter of the stockpile's capacity, cut now). {@code costs}: each cell's items (held: none).
 	 */
+	static Order order(long[] pos, BlockState[] st, BitSet held, List<List<SurvivalItems.Cost>> costs, int capStacks,
+		java.util.function.ToIntFunction<String> maxStack, List<Bore> bores) {
+		return bores.isEmpty() ? order(pos, st, held, costs, capStacks, maxStack) : ringOrder(pos, st, held, costs, capStacks, maxStack, bores);
+	}
+
 	static Order order(long[] pos, BlockState[] st, BitSet held, List<List<SurvivalItems.Cost>> costs, int capStacks,
 		java.util.function.ToIntFunction<String> maxStack) {
 		int n = pos.length;
@@ -369,6 +376,276 @@ public final class RegionTargets {
 		return -1;
 	}
 
+	// ------------------------------------------------------------------ (6c RS-b) tunnels: ring by ring (§6.2, §6.4, §7.2)
+
+	/**
+	 * A tunnel's bore ({@code ir.survival.bores}, the kit's tunnel records): its start walk cell {@code (fx, fy, fz)}, its cardinal
+	 * heading {@code (dx, dz)} and its box. A cell's ring is its step along the heading from the start.
+	 */
+	record Bore(int fx, int fy, int fz, int dx, int dz, int x0, int y0, int z0, int x1, int y1, int z1) {
+		int along(int x, int z) {
+			return (x - fx) * dx + (z - fz) * dz;
+		}
+
+		/** The box's first and last ring. */
+		int lo() {
+			return Math.min(along(x0, z0), along(x1, z1));
+		}
+
+		int hi() {
+			return Math.max(along(x0, z0), along(x1, z1));
+		}
+
+		/** Chebyshev distance from the box (0 inside). */
+		int dist(int x, int y, int z) {
+			int ax = Math.max(0, Math.max(x0 - x, x - x1)), ay = Math.max(0, Math.max(y0 - y, y - y1)), az = Math.max(0, Math.max(z0 - z, z - z1));
+			return Math.max(ax, Math.max(ay, az));
+		}
+	}
+
+	/** A group's bores in a survival IR ({@code survival.bores}: [{group, from, dir, box}]), in the IR's order; empty when it has none. */
+	static List<Bore> bores(@Nullable JsonObject ir, String group) {
+		List<Bore> out = new ArrayList<>();
+		if (ir == null || !(ir.get("survival") instanceof JsonObject sv) || !(sv.get("bores") instanceof JsonArray a)) {
+			return out;
+		}
+		for (var e : a) {
+			if (!(e instanceof JsonObject b) || !group.equals(b.has("group") ? b.get("group").getAsString() : null)) {
+				continue;
+			}
+			JsonArray f = b.getAsJsonArray("from"), d = b.getAsJsonArray("dir"), x = b.getAsJsonArray("box");
+			out.add(new Bore(f.get(0).getAsInt(), f.get(1).getAsInt(), f.get(2).getAsInt(), d.get(0).getAsInt(), d.get(1).getAsInt(), x.get(0).getAsInt(),
+				x.get(1).getAsInt(), x.get(2).getAsInt(), x.get(3).getAsInt(), x.get(4).getAsInt(), x.get(5).getAsInt()));
+		}
+		return out;
+	}
+
+	/**
+	 * (§7.2: "the bore carved ring by ring behind its lining") A tunnel target's order: each cell's ring is its step along its bore's
+	 * heading (the nearest bore; a cell past the bore's box, a portal's or a lamp's, takes the box's end ring). Ring {@code k}'s lining
+	 * (every cell but a held cut: lining, floor, bed, portal, lamp) builds in run {@code k}, bottom up ({@link BuildOrder}); its carve in
+	 * run {@code k + 1}, after ring {@code k + 1}'s lining: a carve cell waits for every paid cell above and beside it within 1 (§6.4), and
+	 * the next ring's lining lies beside it. A cell also comes after whatever blocks it in {@link #stepFed} (a solid cell under it, its
+	 * support, those paid neighbours): moved into the blocker's run when that is later, so a run never waits on a later one. Runs: one per
+	 * ring, cut by the bill cap ({@code capStacks}); a run with no paid cell joins the next paid one, as in {@link #order}.
+	 */
+	static Order ringOrder(long[] pos, BlockState[] st, BitSet held, List<List<SurvivalItems.Cost>> costs, int capStacks,
+		java.util.function.ToIntFunction<String> maxStack, List<Bore> bores) {
+		int n = pos.length;
+		Long2IntOpenHashMap at = new Long2IntOpenHashMap(n * 2);
+		at.defaultReturnValue(-1);
+		for (int i = 0; i < n; i++) {
+			at.put(pos[i], i);
+		}
+		int[] y = new int[n], kind = new int[n], support = new int[n], pairOf = new int[n];
+		for (int i = 0; i < n; i++) {
+			BlockPos p = BlockPos.of(pos[i]);
+			y[i] = p.getY();
+			kind[i] = Builder.kind(st[i]);
+			support[i] = -1;
+			if (kind[i] == BuildOrder.ATTACHABLE) {
+				int s = at.get(p.relative(Builder.supportDirection(st[i])).asLong());
+				support[i] = s == i ? -1 : s;
+			}
+			pairOf[i] = -1;
+			BlockState s = st[i];
+			BlockPos first = null;
+			if (s.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.DOUBLE_BLOCK_HALF) && s.getValue(
+				net.minecraft.world.level.block.state.properties.BlockStateProperties.DOUBLE_BLOCK_HALF) == net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER) {
+				first = p.below();
+			} else if (s.getBlock() instanceof net.minecraft.world.level.block.BedBlock && s.getValue(net.minecraft.world.level.block.BedBlock.PART)
+				== net.minecraft.world.level.block.state.properties.BedPart.HEAD) {
+				first = p.relative(s.getValue(net.minecraft.world.level.block.BedBlock.FACING).getOpposite());
+			}
+			if (first != null) {
+				int f = at.get(first.asLong());
+				pairOf[i] = f >= 0 && st[f].is(s.getBlock()) ? f : -1;
+			}
+		}
+		int[] base = BuildOrder.order(y, kind, support, pairOf);
+		int[] rank = new int[n];
+		for (int r = 0; r < n; r++) {
+			rank[base[r]] = r;
+		}
+		// each cell's ring (bores one after another: a later bore's rings after an earlier one's)
+		long[] major = new long[n];
+		int[] sub = new int[n];
+		long boreBase = 0;
+		long[] baseOf = new long[bores.size()];
+		for (int b = 0; b < bores.size(); b++) {
+			baseOf[b] = boreBase - bores.get(b).lo();
+			boreBase += (long) (bores.get(b).hi() - bores.get(b).lo()) + 4;
+		}
+		boolean[] cut = new boolean[n];
+		for (int i = 0; i < n; i++) {
+			BlockPos p = BlockPos.of(pos[i]);
+			int best = 0, bd = Integer.MAX_VALUE;
+			for (int b = 0; b < bores.size(); b++) {
+				int d = bores.get(b).dist(p.getX(), p.getY(), p.getZ());
+				if (d < bd) {
+					bd = d;
+					best = b;
+				}
+			}
+			Bore b = bores.get(best);
+			int t = Math.max(b.lo(), Math.min(b.hi(), b.along(p.getX(), p.getZ())));
+			cut[i] = held.get(i) && st[i].isAir();
+			major[i] = baseOf[best] + t + (cut[i] ? 1 : 0);
+			sub[i] = cut[i] ? 1 : 0;
+		}
+		// the blockers stepFed honours: a solid cell under it, its support, a cut's paid neighbours above and beside within 1
+		int[][] deps = new int[n][];
+		int[][] blockers = new int[n][];
+		for (int i = 0; i < n; i++) {
+			BlockPos p = BlockPos.of(pos[i]);
+			List<Integer> d = new ArrayList<>();
+			if (cut[i]) {
+				for (int dy = 0; dy <= 1; dy++) {
+					for (int dx = -1; dx <= 1; dx++) {
+						for (int dz = -1; dz <= 1; dz++) {
+							if (dx == 0 && dy == 0 && dz == 0) {
+								continue;
+							}
+							int j = at.get(BlockPos.asLong(p.getX() + dx, p.getY() + dy, p.getZ() + dz));
+							if (j >= 0 && !held.get(j)) {
+								d.add(j);
+							}
+						}
+					}
+				}
+			}
+			if (!d.isEmpty()) {
+				deps[i] = d.stream().mapToInt(Integer::intValue).toArray();
+			}
+			List<Integer> bl = new ArrayList<>(d);
+			int below = at.get(p.below().asLong());
+			if (below >= 0 && !st[below].isAir() && support[below] != i) {
+				bl.add(below);
+			}
+			if (support[i] >= 0) {
+				bl.add(support[i]);
+			}
+			blockers[i] = bl.stream().mapToInt(Integer::intValue).toArray();
+		}
+		// a cell no earlier than its blockers (to a fixed point; a cycle can't raise past the largest key, so this ends)
+		for (boolean changed = true; changed; ) {
+			changed = false;
+			for (int i = 0; i < n; i++) {
+				for (int j : blockers[i]) {
+					if (major[j] > major[i] || major[j] == major[i] && sub[j] > sub[i]) {
+						major[i] = major[j];
+						sub[i] = Math.max(sub[i], sub[j]);
+						changed = true;
+					}
+				}
+			}
+		}
+		Integer[] idx = new Integer[n];
+		for (int i = 0; i < n; i++) {
+			idx[i] = i;
+		}
+		java.util.Arrays.sort(idx, (a, b) -> major[a] != major[b] ? Long.compare(major[a], major[b]) : sub[a] != sub[b] ? Integer.compare(sub[a], sub[b])
+			: Integer.compare(rank[a], rank[b]));
+		int[] order = new int[n];
+		for (int r = 0; r < n; r++) {
+			order[r] = idx[r];
+		}
+		// the runs: a ring each (its lining, the carve behind it), cut by the bill cap
+		List<Integer> ends = new ArrayList<>();
+		Map<String, Integer> bill = new HashMap<>();
+		long runRing = Long.MIN_VALUE;
+		for (int r = 0; r < n; r++) {
+			int i = order[r];
+			Map<String, Integer> next = new HashMap<>(bill);
+			for (SurvivalItems.Cost c : costs.get(i)) {
+				next.merge(c.item(), c.count(), Integer::sum);
+			}
+			boolean newRing = r > 0 && major[i] != runRing;
+			boolean over = r > 0 && !bill.isEmpty() && stacks(next, maxStack) > Math.max(1, capStacks);
+			if (newRing || over) {
+				ends.add(r);
+				next = new HashMap<>();
+				for (SurvivalItems.Cost c : costs.get(i)) {
+					next.merge(c.item(), c.count(), Integer::sum);
+				}
+			}
+			bill = next;
+			runRing = major[i];
+		}
+		if (n > 0) {
+			ends.add(n);
+		}
+		List<Integer> merged = new ArrayList<>();
+		int from = 0;
+		boolean pendingFree = false;
+		for (int e : ends) {
+			boolean paid = false;
+			for (int r = from; r < e && !paid; r++) {
+				paid = !costs.get(order[r]).isEmpty();
+			}
+			if (paid) {
+				merged.add(e);
+				pendingFree = false;
+			} else {
+				pendingFree = true;
+			}
+			from = e;
+		}
+		if (pendingFree) {
+			if (merged.isEmpty()) {
+				merged.add(n);
+			} else {
+				merged.set(merged.size() - 1, n);
+			}
+		}
+		int[] posOf = new int[n];
+		for (int r = 0; r < n; r++) {
+			posOf[order[r]] = r;
+		}
+		int[][] qdeps = new int[n][];
+		for (int r = 0; r < n; r++) {
+			int[] d = deps[order[r]];
+			if (d != null) {
+				qdeps[r] = java.util.Arrays.stream(d).map(j -> posOf[j]).toArray();
+			}
+		}
+		return new Order(order, merged.stream().mapToInt(Integer::intValue).toArray(), qdeps);
+	}
+
+	/**
+	 * (the unit test's stuck-run check) The first queue position whose blocker in {@link #stepFed} (a solid cell under it in the target,
+	 * its support, a cut's paid neighbours above and beside within 1) comes after it, or -1: a run never waits on a later run.
+	 */
+	static int firstLateBlocker(long[] pos, BlockState[] st, BitSet held, int[] order) {
+		int n = pos.length;
+		Long2IntOpenHashMap at = new Long2IntOpenHashMap(n * 2);
+		at.defaultReturnValue(-1);
+		for (int i = 0; i < n; i++) {
+			at.put(pos[i], i);
+		}
+		int[] rank = new int[n];
+		for (int r = 0; r < n; r++) {
+			rank[order[r]] = r;
+		}
+		for (int r = 0; r < n; r++) {
+			int i = order[r];
+			BlockPos p = BlockPos.of(pos[i]);
+			int below = at.get(p.below().asLong());
+			boolean hangs = below >= 0 && Builder.kind(st[below]) == BuildOrder.ATTACHABLE && at.get(BlockPos.of(pos[below]).relative(Builder.supportDirection(
+				st[below])).asLong()) == i; // a lantern hanging from this cell waits for it, not it for the lantern
+			if (below >= 0 && !st[below].isAir() && !hangs && rank[below] > r) {
+				return r;
+			}
+			if (Builder.kind(st[i]) == BuildOrder.ATTACHABLE) {
+				int s = at.get(p.relative(Builder.supportDirection(st[i])).asLong());
+				if (s >= 0 && s != i && rank[s] > r) {
+					return r;
+				}
+			}
+		}
+		return firstUnsafeCut(pos, st, held, order);
+	}
+
 	/** A bill's size in stacks: sum over items of ceil(n / max stack). */
 	static int stacks(Map<String, Integer> bill, java.util.function.ToIntFunction<String> maxStack) {
 		int s = 0;
@@ -409,7 +686,10 @@ public final class RegionTargets {
 		}
 		Anchors.Bounds box = new Anchors.Bounds(x0, y0, z0, x1, y1, z1);
 		int cap = capStacks(srv, owner);
-		Order o = order(g.pos(), st, g.held(), costs, cap, Stockpiles::maxStack);
+		// (6c RS-b) a tunnel's group builds ring by ring along its bore
+		var live = dev.larattalabs.architect.region.RegionsImpl.live(regionId);
+		List<Bore> bores = live == null ? List.of() : bores(live.ir().json(), g.part());
+		Order o = order(g.pos(), st, g.held(), costs, cap, Stockpiles::maxStack, bores);
 		int dx = x1 - x0 + 1, dz = z1 - z0 + 1;
 		int[] queue = new int[n];
 		BitSet held = new BitSet();
@@ -434,6 +714,9 @@ public final class RegionTargets {
 		}
 		rs.add("runs", ends);
 		rs.addProperty("capStacks", cap);
+		if (!bores.isEmpty()) {
+			rs.addProperty("rings", true);
+		}
 		JsonObject spec = new JsonObject();
 		spec.addProperty("kind", kind);
 		spec.addProperty("policy", dev.larattalabs.architect.journal.Journal.Policy.CELL.name());
@@ -531,7 +814,9 @@ public final class RegionTargets {
 				deps[q] = d.stream().mapToInt(Integer::intValue).toArray();
 			}
 		}
-		return new Plan(i.placedAt(), held, ends, deps);
+		Plan pl = new Plan(i.placedAt(), held, ends, deps);
+		pl.rings = rs.has("rings") && rs.get("rings").getAsBoolean();
+		return pl;
 	}
 
 	static @Nullable Plan planOf(MinecraftServer srv, Infra i) {
@@ -747,7 +1032,8 @@ public final class RegionTargets {
 			}
 			// bottom up: a solid cell below first (a cut below is cleared after the paid cells over it, §6.4: never waited for)
 			int below = r.queuePos(p.below());
-			if (below >= 0 && !r.built.get(below) && !r.target[below].isAir() || r.support[q] >= 0 && !r.built.get(r.support[q])) {
+			// (6c RS-b) never a lantern hanging from this cell: it waits for this cell (its support), so waiting for it would never end
+			if (below >= 0 && !r.built.get(below) && !r.target[below].isAir() && r.support[below] != q || r.support[q] >= 0 && !r.built.get(r.support[q])) {
 				continue;
 			}
 			int[] d = pl.deps == null ? null : pl.deps[q];
@@ -762,6 +1048,10 @@ public final class RegionTargets {
 				if (!ok) {
 					continue;
 				}
+			}
+			// (6c RS-b) a bore's cut at a tile's edge: its paid neighbours in the part's other targets first (no bore open at a seam)
+			if (pl.rings && pl.held.get(q) && r.target[q].isAir() && seamOpen(srv, t, r, p)) {
+				continue;
 			}
 			if (!r.affordable(q, purse::stock)) {
 				starved = true;
@@ -793,6 +1083,49 @@ public final class RegionTargets {
 				RoadBuilder.complete(srv, level, now, r, null);
 			}
 		}
+	}
+
+	/**
+	 * (6c RS-b) Whether a cut at {@code p} of a tunnel's target {@code t} would open beside an unbuilt paid cell of another target of the
+	 * same region part (above it or beside it within 1, outside {@code t}): the §6.4 rule across a tile's edge.
+	 */
+	static boolean seamOpen(MinecraftServer srv, Infra t, Builder.Run r, BlockPos p) {
+		String part = partOf(t), region = regionOf(t);
+		List<Infra> others = null;
+		for (int dy = 0; dy <= 1; dy++) {
+			for (int dx = -1; dx <= 1; dx++) {
+				for (int dz = -1; dz <= 1; dz++) {
+					int x = p.getX() + dx, y = p.getY() + dy, z = p.getZ() + dz;
+					if (r.queuePos(new BlockPos(x, y, z)) >= 0) {
+						continue;
+					}
+					if (others == null) {
+						others = new ArrayList<>();
+						for (Infra o : Infras.all()) {
+							if (o != t && is(o) && o.construction() != null && java.util.Objects.equals(part, partOf(o)) && java.util.Objects.equals(region, regionOf(o))
+								&& o.dimension().equals(t.dimension())) {
+								others.add(o);
+							}
+						}
+					}
+					for (Infra o : others) {
+						if (!o.box().contains(x, y, z)) {
+							continue;
+						}
+						Builder.Run ro = RoadBuilder.run(srv, o);
+						Plan po = ro == null ? null : planOf(srv, o);
+						if (ro == null || po == null) {
+							continue;
+						}
+						int qo = ro.queuePos(new BlockPos(x, y, z));
+						if (qo >= 0 && !po.held.get(qo) && !ro.target[qo].isAir() && !ro.built.get(qo)) {
+							return true;
+						}
+					}
+				}
+			}
+		}
+		return false;
 	}
 
 	/** The target entry's before over its box (read once per plan). */
