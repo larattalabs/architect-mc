@@ -46,9 +46,14 @@
    "why": "M8's barrier: a rail stops a fall and is not walked over"
   },
   {
-   "roles": ["rock", "surface", "subsurface", "rubble"],
+   "roles": ["rock", "surface", "subsurface"],
    "all": ["natural"],
    "why": "terrain ops write them as ground"
+  },
+  {
+   "roles": ["rubble"],
+   "all": ["cube"],
+   "why": "a carve's lining and boulders: broken stone, natural or laid (the kit's default rubble is cobblestone, which has no voxel class), written as a full block"
   }
  ],
  "every": {

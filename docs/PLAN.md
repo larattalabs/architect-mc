@@ -771,6 +771,37 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   Not covered: HY-b's run also had 13 unwritten cells beside the stream (grass turned to flowing water) that were still dry
   after the realise; a re-tick can't undo a spread like that. No class added.
 
+- ~~**voc-natural's unclassified water and lava**~~ **Root-caused and fixed (branch `fix/voc-natural`, 2026-10-20).** The
+  world's own fluids, not an undo defect, not layout, and not HY. Item 9's E-normal diff named 4-9 `none` cells, every one air
+  turned to flowing fluid: S3's cave stream (3756-3760, 37-39, -924/-923) and a lava spring (3787-3789, -2, -995..-990). The
+  nearest written cell is 90 and 122 away (Chebyshev).
+  - **World-driven.** A probe with no region at all took item 9's snapshot, then got the same 8 water cells at +15 s. They
+    held from +15 s to +150 s: the stream's front, from a worldgen spring in fresh chunks, crosses the snapshot.
+  - **Not HY.** c25c11cc (v0.38.0, before HY) fails with the same cells. v50n re-planned on one survey under the 0.38.0 and
+    0.39.0 kits gives the same IR, apart from kitVersion, and the same blobs. The 0.39.0 re-plan reproduces the in-game irSha
+    7e3edf02.
+  - **Why it passed before (a correlation, not proven).** The four runs without housekeeping 3's base-host commits
+    (35b504f1, 66d97216) have 0 fluid cells. The 8 with them all have fluid cells.
+  - **Fix:** a gate-side world class in item 9 only, `farfluid` (`gate6cvoc-b.mjs` `farFluidOf`). It is F2's `distant` rule
+    restricted to flowing fluid:
+    - Each side is air, cave air, or non-source water or lava, and at least one side is that fluid.
+    - The cell is unwritten, in no lot box, and at least 8 (Manhattan) from every written cell.
+    - A source block, any other kind, and any cell near the plan stay unclassified (`kit/test/voc-farfluid.test.mjs`).
+    - `RegionHash.classify` is unchanged.
+  - Replayed over the 8 recorded failures that still have plan dirs: every `none` becomes `farfluid`, and `live` is untouched.
+
+- ~~**s2-unit's M27:role (rubble = cobblestone)**~~ **Fixed (branch `fix/voc-natural`, 2026-10-20): the role data was wrong.**
+  - **Cause:** VOC-b's `kit/vocab/roles.json` put `rubble` in the terrain row (`natural`: ROCK, SOIL, LOOSE, SNOW, ICE). But
+    the kit's own default rubble is cobblestone (`program.mjs` `DEFAULT_MACRO_ROLES`; CONTRACT "the rustic default ... rubble is
+    cobblestone"), and cobblestone has no voxel class, before VOC or after. So any bible that names rubble = cobblestone
+    (S2's g6c_s2_outpost) trips M27:role.
+  - **Not new since v0.38.0:** S2 feasibility passes on 5c61b6c7 (main before VOC) and fails on 0d665136 (v0.38.0) and on
+    every later head. No VOC run selected s2-unit, and no run before KC's had VOC in it.
+  - **Not the same cause as voc-natural.** The stonecutter putting cobblestone in the `stone` family is not involved:
+    `natural` reads the voxel class (`v`), not `fam`.
+  - **Fix:** `rubble` gets its own row, `all: [cube]` (a carve's lining and boulders, written as a full block). rock, surface
+    and subsurface keep `natural`. `fitsRole` and M27:role are unchanged.
+
 ## Queued from slice KC (builder, 2026-10-20)
 
 - **The rope row's OVERLAP and its nearest-landing wouldFit are not exercised.** k04's base already routes round the fountain, so
