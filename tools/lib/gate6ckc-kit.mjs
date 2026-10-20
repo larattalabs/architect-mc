@@ -67,7 +67,8 @@ export async function unchanged(root, { check, log = console.log, only = null } 
     if (only && !only.test(name)) continue;
     const existsOld = fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name));
     let a, b, err = null, census = null;
-    try { a = sig((await planFixture(hNew, root, fx)).r); } catch (e) { err = `head: ${String(e.message).slice(0, 160)}`; }
+    let headRun = null;
+    try { headRun = await planFixture(hNew, root, fx); a = sig(headRun.r); } catch (e) { err = `head: ${String(e.message).slice(0, 160)}`; }
     if (existsOld) {
       try {
         const { r, s } = await planFixture(hOld, mainDir, fx);
@@ -83,6 +84,20 @@ export async function unchanged(root, { check, log = console.log, only = null } 
         }
       } catch (e) { err = (err ? `${err}; ` : '') + `base: ${String(e.message).slice(0, 160)}`; }
     }
+    // the head's census: M25:clear 0 on every fixture but the broken variants (kc/u*)
+    if (headRun) try {
+      const { r, s } = headRun;
+      const ir = JSON.parse(r.res.irJson);
+      if (bodiesOf(ir).length) {
+        const cols = fillMissing(asColumns(s.bytes)).columns;
+        const { vw } = buildVirtual({ ir, survey: cols, filled: cols, blobs: (sha) => r.res.blobs.get(sha) ?? null, volumes: r.volumes.map((v) => v.decoded ?? v) });
+        const sc = clearScan({ ir, vw, meta: r.res.meta });
+        const broken = /^kc\/u\d/.test(name);
+        (out.headCensus ??= {})[name] = sc.counts;
+        if (broken) check(sc.counts.hard + sc.counts.watch > 0, `${name} (a broken variant): M25:clear catches it on this head (${JSON.stringify(sc.counts)})`);
+        else check(sc.counts.hard + sc.counts.watch === 0, `${name}: M25:clear 0 on this head (${JSON.stringify(sc.counts)})`);
+      }
+    } catch (e) { check(false, `${name}: the head's census threw (${String(e.message).slice(0, 160)})`); }
     const same = !!a && !!b && a.answers === b.answers && a.overall === b.overall && a.ir === b.ir && a.first === b.first;
     const ex = EXCEPT[name] ?? null;
     out.fixtures[name] = { existsOld, same, ...(ex ? { excepted: ex } : {}), ...(err ? { err } : {}), ...(census ? { census } : {}), ...(a && b && !same ? { head: a, base: b } : {}) };
