@@ -1,0 +1,349 @@
+{
+  "about": "(6c FL, §3.1, item 2) more lots than the claim holds (40 halls), count hard: NO_ROOM, wouldFit the lots that place, re-checked alone",
+  "on": "flat",
+  "expect": {
+    "part": "big",
+    "class": "refused",
+    "code": "NO_ROOM"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "fl_r01",
+    "zones": [
+      {
+        "id": "big",
+        "tolerance": {
+          "count": {
+            "max": 0,
+            "hard": true
+          }
+        },
+        "program": {
+          "layout": "ring",
+          "lots": [
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h3",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h4",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h5",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h6",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h7",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h8",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h9",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h10",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h11",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h12",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h13",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h14",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h15",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h16",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h17",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h18",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h19",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h20",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h21",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h22",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h23",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h24",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h25",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h26",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h27",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h28",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h29",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h30",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h31",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h32",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h33",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h34",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h35",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h36",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h37",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h38",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h39",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            },
+            {
+              "id": "h40",
+              "type": "house",
+              "size": [
+                17,
+                15
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

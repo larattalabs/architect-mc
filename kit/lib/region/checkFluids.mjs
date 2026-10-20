@@ -13,6 +13,7 @@ import { VC, classAt } from './volume.mjs';
 import { F_WRITTEN } from './vworld.mjs';
 import { kindOf } from '../fluids/world.mjs';
 import { irFields } from '../fluids/irrfield.mjs';
+import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
 
 export { kindOf } from '../fluids/world.mjs';
 
@@ -230,6 +231,30 @@ export function clearScan({ ir, vw, meta, bodies = bodiesOf(ir) }) {
       if (ex) { counts.exempt++; continue; }
       hit('watch', c, wid, o.why, o.writerPart);
       counts.watch++;
+    }
+    // ((6c FL, §5) a zone's street (a road item, which no op shows: its ext names it, S-FL-5) over a body's hard columns: the street's
+    // writer is the zone; only streets so marked are read, so a plan without one is as before)
+    const hardCols = new Map();
+    for (const set of CLEAR_SETS) for (const c of b[set] ?? []) { const kk = `${c[0]},${c[2]}`; if (!hardCols.has(kk)) hardCols.set(kk, [set, c]); }
+    for (const rd of ir.roads ?? []) {
+      const zone = rd.ext?.['architect_mc:street']?.zone;
+      if (!zone || partners.some((q) => q.part && q.part === zone)) continue;
+      const pts = rd.points.map((q) => [q[0], q[2]]);
+      const { cells } = centreCells(pts);
+      const offs = crossOffsets(rd.width ?? 3);
+      const seen = new Set();
+      for (const cc of cells) {
+        const a2 = pts[Math.min(cc.seg, pts.length - 1)], b2 = pts[Math.min(cc.seg + 1, pts.length - 1)];
+        const rr = rightOf(segmentAxis(a2, b2));
+        for (const k of offs) {
+          const kk = `${cc.x + rr[0] * k},${cc.z + rr[1] * k}`;
+          if (seen.has(kk) || !hardCols.has(kk)) continue;
+          seen.add(kk);
+          const [set, c] = hardCols.get(kk);
+          hit(set, c, rd.part ?? `road:${rd.id}`, "a zone's street", zone);
+          counts.hard++;
+        }
+      }
     }
     findings.push(...groups.values());
   }

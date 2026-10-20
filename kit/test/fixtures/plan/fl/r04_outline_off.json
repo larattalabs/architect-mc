@@ -1,0 +1,79 @@
+{
+  "about": "(6c FL, §4.2) a polygon outline half off the claim (anchor frame, blocks): TOLERANCE, wouldFit the sketch scaled to fit, re-checked alone",
+  "on": "flat",
+  "expect": {
+    "part": "edge_town",
+    "class": "refused",
+    "code": "TOLERANCE"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "fl_r04",
+    "zones": [
+      {
+        "id": "edge_town",
+        "program": {
+          "lots": [
+            {
+              "id": "c1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c2",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c3",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c4",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "sketch": {
+          "frame": "anchor",
+          "anchor": "claim_e",
+          "unit": "block",
+          "shape": "polygon",
+          "points": [
+            [
+              -50,
+              -40
+            ],
+            [
+              70,
+              -40
+            ],
+            [
+              70,
+              40
+            ],
+            [
+              -50,
+              40
+            ]
+          ],
+          "outline": true
+        }
+      }
+    ]
+  }
+}

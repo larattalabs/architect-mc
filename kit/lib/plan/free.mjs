@@ -139,7 +139,7 @@ function footprintOf(env, f, geomOf, keep) {
 }
 
 /** A footprint's polar extent about c: the farthest cell per step (+1), widened by its neighbours (the ring rounds the shape). */
-function polarBase(cells, c) {
+function polarBase(cells, c, widen = 12) {
   const ext = new Int32Array(TURN);
   for (const [x, z] of cells) {
     const dx = x - c[0], dz = z - c[1];
@@ -147,7 +147,7 @@ function polarBase(cells, c) {
     if (d > ext[k]) ext[k] = d;
   }
   const out = new Array(TURN).fill(0);
-  for (let k = 0; k < TURN; k++) { let m = 0; for (let t = -12; t <= 12; t++) m = Math.max(m, ext[(k + t + TURN) % TURN]); out[k] = m; }
+  for (let k = 0; k < TURN; k++) { let m = 0; for (let t = -widen; t <= widen; t++) m = Math.max(m, ext[(k + t + TURN) % TURN]); out[k] = m; }
   return out;
 }
 
@@ -168,7 +168,8 @@ function centres(aim, reach, step = 8) {
  * Resolve a free zone. `o`: {taken (earlier zones' and forms' rects), keep (KC's registry), tolOf, judge, locatorOf, sketchPoint, rng}.
  * Returns the answer draft with `free: true` and `layout` (the L emitFree writes).
  */
-export function resolveFreeZone(env, p, geomOf, o) {
+export function resolveFreeZone(env, p, geomOf, o0) {
+  const o = { ...o0, geomOf };
   const zone = p.part, program = zone.program;
   let specs;
   try { specs = specsOf(zone); } catch (e) { return { klass: 'malformed', reasons: [{ code: 'SCHEMA', path: `${p.path}.program`, message: e.message }] }; }
@@ -193,7 +194,10 @@ export function resolveFreeZone(env, p, geomOf, o) {
   let draw = null;
   if (outline) {
     draw = outlineMask(env, F, outline, { anchors: env.anchors });
-    if (draw.error) return { klass: 'refused', reasons: [draw.error] };
+    if (draw.error) {
+      const wf = draw.wouldFit && !o.noWouldFit ? recheck(env, p, geomOf, o, { sketch: draw.wouldFit }) : null;
+      return { klass: 'refused', reasons: [draw.error], ...(wf ? { wouldFit: [wf] } : {}) };
+    }
   }
   const fin = (L, c, extra = {}) => finishFree(env, p, L, { shared, layout, asked, notes, extraDevs, tMove, tCount, tSketch, o, around: extra.around ?? null, draw, mask: extra.mask ?? null, loc: extra.loc ?? null, sketchAt: extra.sketchAt ?? null, specs });
 
@@ -203,9 +207,11 @@ export function resolveFreeZone(env, p, geomOf, o) {
     if (fp.error) return { klass: fp.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: fp.error.code, message: fp.error.message, evidence: { locator: 'around', feature: around.feature } }] };
     const [r0, r1] = Array.isArray(around.ring) ? around.ring : Number.isInteger(around.ring) ? [around.ring, around.ring] : [6, 32];
     const c = fp.centre;
-    const base = polarBase(fp.cells, c);
+    // ((the broken variant zoneIgnoresBody) the ring hugs the footprint: no widening, 3 cells in, so its street and verges meet the body)
+    const ignore = !!zone.ext?.[UNSAFE]?.zoneIgnoresBody;
+    const base = polarBase(fp.cells, c, ignore ? 0 : 12).map((v) => (ignore ? v - 3 : v));
     // the footprint itself is no zone land (nothing is written in the hub); a body's (KC) is already cut
-    for (const [x, z] of fp.cells) if (F.in(x, z)) F.mask[F.k(x, z)] = 0;
+    if (!zone.ext?.[UNSAFE]?.zoneIgnoresBody) for (const [x, z] of fp.cells) if (F.in(x, z)) F.mask[F.k(x, z)] = 0;
     const open = around.closed === false ? stepToward(env, c) : null;
     const s = ringSearch(F, { c, specs, shared, base, hub: false, open, r0: Math.max(2, r0), r1: Math.max(r0, r1), step: 2 });
     if (!s.best) {
@@ -213,7 +219,8 @@ export function resolveFreeZone(env, p, geomOf, o) {
       const bodyHit = fp.body ? s.fails.find((q) => q.why === 'land' && q.at && bodyKeepRects(o.keep, [fp.bodyPart]).some((rr) => q.at.x >= rr[0] - 1 && q.at.x <= rr[2] + 1 && q.at.z >= rr[1] - 1 && q.at.z <= rr[3] + 1)) : null;
       let clear = null;
       for (let a = r1 + 2; a <= r1 + 48 && !clear; a += 2) { const t = ringSearch(F, { c, specs, shared, base, hub: false, open, r0: a, r1: a }); if (t.best && !t.best.unplaced.length) clear = a; }
-      const wf = clear !== null ? [{ part: zone.id, fragment: { where: { around: { ...around, ring: [clear, Math.max(clear, clear + (r1 - r0))] } } } }] : [];
+      const wfr = clear !== null && !o.noWouldFit ? recheck(env, p, geomOf, o, { where: { around: { ...around, ring: [clear, Math.max(clear, clear + (r1 - r0))] } } }) : null;
+      const wf = wfr ? [wfr] : [];
       if (bodyHit || (fp.body && clear !== null && r1 < clear)) return { klass: 'refused', reasons: [{ code: 'OVERLAP', message: `the ring round ${fp.what} meets body ${fp.body}'s footprint in its band [${r0}, ${r1}]: the zone is placed after the body and keeps clear of it (KC)`, evidence: { kind: 'body', body: fp.body, part: fp.bodyPart, ring: [r0, r1], ...(clear !== null ? { clears: clear } : {}) } }], ...(wf.length ? { wouldFit: wf } : {}) };
       const why = s.fails[0];
       return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `no ring round ${fp.what} in the band [${r0}, ${r1}] fits (${why ? why.message : 'no radius tried'})`, evidence: { ring: [r0, r1], tried: s.tried } }], ...(wf.length ? { wouldFit: wf } : {}) };
@@ -231,6 +238,7 @@ export function resolveFreeZone(env, p, geomOf, o) {
   // the zone's asked size bounds its land (centred on each candidate centre)
   const sz = zone.size ? sizeOf(zone.size) : null;
   // the layouts
+  const failsSeen = [];
   const search = (c) => {
     const G = sz ? F.clone() : F;
     if (sz) { const hw = sz[0] >> 1, hd = sz[1] >> 1; G.keepOnly((x, z) => x >= c[0] - hw && x < c[0] - hw + sz[0] && z >= c[1] - hd && z < c[1] - hd + sz[1]); }
@@ -239,7 +247,7 @@ export function resolveFreeZone(env, p, geomOf, o) {
       const reach = Math.min(c[0] - env.claim.minX, env.claim.maxX - c[0], c[1] - env.claim.minZ, env.claim.maxZ - c[1]);
       return ringSearch(G, { c, specs, shared, r0: 10, r1: Math.max(10, reach - 8) }).best;
     }
-    if (layout === 'spiral') return spiralSearch(G, { c, specs, shared, rng, notes }).best;
+    if (layout === 'spiral') { const s = spiralSearch(G, { c, specs, shared, rng, notes }); if (!s.best) failsSeen.push(...s.fails); return s.best; }
     if (layout === 'grid') return gridSearch(G, { c, specs, shared, orientation: program.orientation ?? 'auto' }).best;
     if (layout === 'organic') return organicSearch(G, { c, specs, shared, rng, zoneId: zone.id }).best;
     // a street (polygon outline): one straight street through the mask
@@ -261,8 +269,26 @@ export function resolveFreeZone(env, p, geomOf, o) {
     if (better) best = cand2;
     if (!L.unplaced.length && move <= tMove.max) break;
   }
-  if (!best) return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `no ${layout} layout fits the zone here (water, slope, keep-out, the zones before it or the claim)`, evidence: { layout, tried: tries } }] };
+  if (!best) {
+    // (§3.2) a spiral too steep for a ground road from its start: NO_ROOM {why: grade}, wouldFit the ring at the hill's foot (re-checked)
+    if (layout === 'spiral' && failsSeen.some((f) => f.why === 'grade')) {
+      const wf = o.noWouldFit ? null : recheck(env, p, geomOf, o, { program: { ...program, layout: 'ring' } });
+      return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `the spiral is too steep for a ground road (${failsSeen.find((f) => f.why === 'grade').message})`, evidence: { why: 'grade', layout } }], ...(wf ? { wouldFit: [wf] } : {}) };
+    }
+    return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `no ${layout} layout fits the zone here (water, slope, keep-out, the zones before it or the claim)`, evidence: { layout, tried: tries } }] };
+  }
   return fin(best.L, null, { loc, sketchAt: sk ? { value: best.sketch } : null, move: best.move });
+}
+
+/**
+ * A wouldFit re-checked alone (§3.1, §4.2): the zone with `fragment` applied resolved again (no wouldFit of its own); the fragment with
+ * its geometry when it fits or is adjusted, else null.
+ */
+export function recheck(env, p, geomOf, o, fragment) {
+  const part = { ...p.part, ...fragment };
+  const z = resolveFreeZone(env, { ...p, part }, geomOf, { ...o, noWouldFit: true });
+  if (z.klass !== 'fits' && z.klass !== 'adjusted') return null;
+  return { part: p.part.id, fragment, geometry: { rect: rectArr(z.rect) }, rechecked: z.klass };
 }
 
 /** A size {w, d} (ints or ranges, or a preset) as one [w, d] (a range's largest). */
@@ -295,10 +321,12 @@ function finishFree(env, p, L, { shared, layout, asked, notes, extraDevs, tMove,
     if (f.what === 'count') {
       // more lots than the land holds: NO_ROOM, wouldFit the lots that place (re-checked alone)
       res.reasons.push({ code: 'NO_ROOM', message: `${L.unplaced.length} lot(s) do not fit the ${L.kind} layout here (count ${L.unplaced.length} past its ${f.hard ? 'hard limit' : 'ceiling'})`, evidence: { what: 'count', value: L.unplaced.length, unplaced: L.unplaced.map((u) => u.id) } });
-      res.wouldFit = [{ part: zone.id, fragment: { program: { ...zone.program, lots: zone.program.lots.filter((l) => !L.unplaced.some((u) => u.id === l.id)) } }, geometry: { rect: rectArr(L.rect) } }];
+      const frag = { program: { ...zone.program, lots: zone.program.lots.filter((l) => !L.unplaced.some((u) => u.id === l.id)) } };
+      const wf = o.noWouldFit ? null : recheck(env, p, o.geomOf, o, frag);
+      res.wouldFit = wf ? [wf] : [{ part: zone.id, fragment: frag, geometry: { rect: rectArr(L.rect) } }];
     } else if (f.what === 'outline') {
       res.reasons.push({ code: 'TOLERANCE', message: `the outline is ${f.value} cells from the drawing (sketch at most ${f.ceiling})`, evidence: { what: 'outline', value: f.value } });
-      if (draw?.wouldFit) res.wouldFit = [{ part: zone.id, fragment: { sketch: draw.wouldFit } }];
+      if (draw?.wouldFit) { const wf = o.noWouldFit ? null : recheck(env, p, o.geomOf, o, { sketch: draw.wouldFit }); if (wf) res.wouldFit = [wf]; }
     } else res.reasons.push({ code: 'TOLERANCE', message: `${f.what} ${f.value} is past its ${f.hard ? 'hard limit' : 'ceiling'} (${f.hard ? f.max : f.ceiling})`, evidence: { what: f.what, value: f.value } });
   }
   void shared; void layout; void asked; void env; void specs;

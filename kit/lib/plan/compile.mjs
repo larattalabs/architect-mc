@@ -912,6 +912,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   const order = V.order.map((id) => byId.get(id));
   const zonesAccepted = []; // {id, rect}
   const formsAccepted = []; // footprint rects of the forms placed so far
+  const hTaken = new Set(); // ((6c FL) those of H parts: the broken variant zoneIgnoresBody leaves them out of its zone's mask)
   // ---- (6c HY-a) the hydrology pass, only when the plan has a course, race or ditch part (CONTRACT HY §5: every other plan is
   // byte-identical, D1's `wet` tag included): run here, before the zones resolve, so D1's tag reads its field; registered on the
   // region below (r._hydrology)
@@ -937,7 +938,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       if (!(f.klass === 'fits' || f.klass === 'adjusted')) dropOverflows(overflows, p.id);
       if (f.klass === 'fits' || f.klass === 'adjusted') {
         if (f.rect) geom.set(p.id, { rect: f.rect });
-        for (const fp of f.footprints ?? []) formsAccepted.push(arrRect(fp));
+        for (const fp of f.footprints ?? []) { const q = arrRect(fp); formsAccepted.push(q); hTaken.add(q); }
         // ((6c KC, §2) its footprint reserved: every writer placed after it keeps clear)
         const kfp = fluidFootprint(C, p, f);
         if (kfp) reserve(keep, { part: p.id, body: `w_${p.id}`.slice(0, 40), rects: kfp, ...spanOf(env.S, kfp) });
@@ -965,7 +966,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     if (p.family === 'zone' && isFreeZone(p)) {
       // (6c FL) a free layout (ring, spiral, grid, organic, around, an outline): placed clear of every zone and form before it and of every
       // H footprint (KC §5), never cached
-      const z = resolveFreeZone(env, p, geomOf, { taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted], keep, tolOf, judge, locatorOf, sketchPoint, rng: ctx.rng ? ctx.rng(`fl:${p.id}`) : null });
+      const ignoreBody = p.part.ext?.['architect_mc:unsafe']?.zoneIgnoresBody === true;
+      const z = resolveFreeZone(env, p, geomOf, { taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted.filter((q) => !(ignoreBody && hTaken.has(q)))], keep, tolOf, judge, locatorOf, sketchPoint, rng: ctx.rng ? ctx.rng(`fl:${p.id}`) : null });
       res.set(p.id, z);
       if (z.klass === 'fits' || z.klass === 'adjusted') { geom.set(p.id, { rect: z.rect }); zonesAccepted.push({ id: p.id, rect: z.rect }); }
       ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, wouldFit: z.wouldFit, notes: z.notes });

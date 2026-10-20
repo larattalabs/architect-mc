@@ -1,0 +1,111 @@
+{
+  "about": "(6c FL, §4.1) around a part the plan does not place (its pond is refused: no water may stand on lava rock here, a hard move of 0 off a protected spot): the zone is blocked",
+  "on": "flat",
+  "volume": {},
+  "expect": {
+    "part": "ring",
+    "class": "blocked",
+    "code": "DEPENDENCY"
+  },
+  "protected": [
+    {
+      "id": "grove",
+      "rect": [
+        1080,
+        2040,
+        1160,
+        2120
+      ]
+    }
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "fl_r02",
+    "forms": [
+      {
+        "id": "pond",
+        "kind": "pond",
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 0
+          }
+        },
+        "tolerance": {
+          "move": {
+            "max": 0,
+            "hard": true
+          }
+        },
+        "size": {
+          "w": 11,
+          "d": 9
+        }
+      }
+    ],
+    "zones": [
+      {
+        "id": "ring",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "pond"
+            }
+          }
+        },
+        "program": {
+          "lots": [
+            {
+              "id": "c1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c2",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c3",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c4",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c5",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c6",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -367,6 +367,28 @@ export function frontage(F, st, specs, { sides, setbackOf = () => FL_RULES.setba
   return { lots: out, unplaced };
 }
 
+/**
+ * Lots over several streets (a grid's avenues, an organic layout's lanes): each spec in V's order takes the first valid slot of
+ * `slotsFor(spec)` (`[{st, i, sides}]`, the caller's preference order), its front edge `setbackOf(spec)` off the centre, `gapOf(spec)`
+ * from the lots placed. Marks the lots occupied in F. `{lots, unplaced}`.
+ */
+export function placeMulti(F, specs, slotsFor, { setbackOf = () => FL_RULES.setback, gapOf = () => FL_RULES.lotGap, avoid = [], placed = [] } = {}) {
+  const out = [], unplaced = [];
+  const ordered = specs.map((s, i) => ({ s, i })).sort((a, b) => orderOf(a.s) - orderOf(b.s) || a.i - b.i);
+  for (const { s } of ordered) {
+    let got = null;
+    for (const q of slotsFor(s)) {
+      for (const sd of q.sides) {
+        const r = lotAt(F, q.st, q.i, sd, s, { near: setbackOf(s), gap: gapOf(s), placed: [...placed, ...out], avoid });
+        if (r.lot) { got = r.lot; break; }
+      }
+      if (got) break;
+    }
+    if (got) { out.push(got); F.occupy(got.rect, 1); for (const [x, z] of got.lane) F.occ[F.k(x, z)] = 3; } else unplaced.push({ id: s.id, reason: 'no_room' });
+  }
+  return { lots: out, unplaced };
+}
+
 // ------------------------------------------------------------------ the hub's shared space
 
 /**
@@ -448,7 +470,16 @@ export function emitFree(r, L, { stages = {}, prefix = '', padEdge = null, maxHe
   // pads and lots
   const pads = r.part(`${prefix}pads`, { stage: sg });
   const boxes = [], lotOut = [];
-  const bell = res ? res.bell : (() => { const l = L.lots[0]; return l ? [...l.entrance] : [F.x0, 64, F.z0]; })();
+  // the bell: the hub's; a layout with no hub (around, a line) has it on its street (L.bellAt), else at its first lot's entrance
+  const bell = res ? res.bell : L.bellAt ? [L.bellAt[0], r.survey.heightAt(L.bellAt[0], L.bellAt[1]) + 1, L.bellAt[1]] : (() => { const l = L.lots[0]; return l ? [...l.entrance] : [F.x0, 64, F.z0]; })();
+  // ((6c FL, broken variant lotOnStreet) the first lot moved onto its street (its entrance on the centre line): M1 must catch it)
+  if (_unsafe.lotOnStreet && L.lots.length) {
+    const l0 = [...L.lots].sort((a, b) => a.spec._i - b.spec._i)[0];
+    const dx = l0.junction[0] - l0.entrance[0], dz = l0.junction[1] - l0.entrance[2];
+    l0.rect = [l0.rect[0] + dx, l0.rect[1] + dz, l0.rect[2] + dx, l0.rect[3] + dz];
+    l0.entrance = [l0.entrance[0] + dx, l0.entrance[1], l0.entrance[2] + dz];
+    l0.lane = [];
+  }
   for (const l of [...L.lots].sort((a, b) => a.spec._i - b.spec._i)) {
     const s = l.spec;
     const water = rectWater(wd, l.rect);
@@ -512,6 +543,7 @@ export function emitFree(r, L, { stages = {}, prefix = '', padEdge = null, maxHe
   const lamp = roadLamp(lampFixture(r));
   const roads = [];
   const ends = [];
+  const crossNodes = new Map(); // "x,z" -> the shared junction
   const yAt = (x, z) => r.survey.heightAt(x, z) + 1;
   for (const st of L.streets) {
     const n = st.cells.length;
@@ -538,6 +570,14 @@ export function emitFree(r, L, { stages = {}, prefix = '', padEdge = null, maxHe
       sp.streetName = st.name; sp.at = bi;
       const v = stops.get(bi) ?? { lots: [], spokes: [] }; v.spokes.push(k); stops.set(bi, v);
     });
+    // crossings (a grid's, an organic lane's join): one junction shared by the streets that meet there
+    for (const cr of L.crossings ?? []) {
+      if (!cr.streets.includes(st.name)) continue;
+      let bi = -1, bd = Infinity;
+      st.cells.forEach((c, i) => { const d = Math.max(Math.abs(c[0] - cr.x), Math.abs(c[1] - cr.z)); if (d < bd) { bd = d; bi = i; } });
+      if (bd > 2) continue;
+      const v = stops.get(bi) ?? { lots: [], spokes: [] }; v.cross = `${cr.x},${cr.z}`; stops.set(bi, v);
+    }
     if (!st.closed) { for (const i of [0, n - 1]) if (!stops.has(i)) stops.set(i, { lots: [], spokes: [], end: true }); else stops.get(i).end = true; }
     const order = [...stops.keys()].sort((p, q) => p - q);
     void idxOf;
@@ -547,7 +587,9 @@ export function emitFree(r, L, { stages = {}, prefix = '', padEdge = null, maxHe
       const at = [x, yAt(x, z) - 1, z];
       const v = stops.get(i);
       const ports = [{ name: 'street', at, facing: 'up', width: 5 }];
-      const nd = r.graphNode({ id: `${rid}_j${k + 1}`, kind: 'junction', ref: rid, at, ports });
+      const shared = v.cross ? crossNodes.get(v.cross) : null;
+      const nd = shared ?? r.graphNode({ id: v.cross ? `${prefix}cross_${crossNodes.size + 1}` : `${rid}_j${k + 1}`, kind: 'junction', ref: rid, at, ports });
+      if (v.cross && !shared) crossNodes.set(v.cross, nd);
       for (const id of v.lots) {
         const port = `lane_${id}`;
         const l = lotOut.find((q) => q.spec.id === id);
@@ -562,22 +604,32 @@ export function emitFree(r, L, { stages = {}, prefix = '', padEdge = null, maxHe
         nd.ports.push({ name: pn, at, facing: facingOf(-sp.dir[0], -sp.dir[1]), width: 2 });
         r.graphEdge({ id: `${prefix}${pn}`, from: `${pl.id}.${pn}`, to: `${nd.id}.${pn}`, type: 'path', width: 2, path: `${prefix}lanes` });
       }
-      if (v.end) ends.push({ street: st.name, x, z, at, facing: (() => { const j = i === 0 ? Math.min(n - 1, 3) : Math.max(0, n - 4); const dx = x - st.cells[j][0], dz = z - st.cells[j][1]; return Math.abs(dx) >= Math.abs(dz) ? [Math.sign(dx) || 1, 0] : [0, Math.sign(dz) || 1]; })(), node: nd.id });
+      if (v.end && !v.cross) ends.push({ street: st.name, x, z, at, facing: (() => { const j = i === 0 ? Math.min(n - 1, 3) : Math.max(0, n - 4); const dx = x - st.cells[j][0], dz = z - st.cells[j][1]; return Math.abs(dx) >= Math.abs(dz) ? [Math.sign(dx) || 1, 0] : [0, Math.sign(dz) || 1]; })(), node: nd.id });
       nodes.push(nd);
     });
     for (let k = 0; k + 1 < nodes.length; k++) r.graphEdge({ id: `${rid}#${k + 1}`, from: `${nodes[k].id}.street`, to: `${nodes[k + 1].id}.street`, type: 'road', width: 5, path: rid });
     if (st.closed && nodes.length > 1) r.graphEdge({ id: `${rid}#${nodes.length}`, from: `${nodes[nodes.length - 1].id}.street`, to: `${nodes[0].id}.street`, type: 'road', width: 5, path: `${rid}_b` });
     st.nodes = nodes.map((x) => x.id);
   }
-  // a hub with no spoke (shared none, or every spoke blocked): the plaza joins the nearest street junction (its ground is walkable)
-  if (!(L.spokes ?? []).some((sp) => sp.streetName)) {
+  // the streets joined to one another (crossings share a junction); a group no spoke reaches joins the plaza at its junction nearest
+  // the plaza (shared none, a blocked spoke, an organic lane: the ground between is walkable)
+  const groupOf = new Map(L.streets.map((st, i) => [st.name, i]));
+  const find = (n) => { while (groupOf.get(n) !== n && typeof groupOf.get(n) === 'string') n = groupOf.get(n); return n; };
+  for (const st of L.streets) groupOf.set(st.name, st.name);
+  for (const cr of L.crossings ?? []) { const [a, b] = cr.streets.map(find); if (a !== b) groupOf.set(b, a); }
+  const reached = new Set((L.spokes ?? []).filter((sp) => sp.streetName).map((sp) => find(sp.streetName)));
+  const groups = [...new Set(L.streets.map((st) => find(st.name)))];
+  let link = 0;
+  for (const g of groups) {
+    if (reached.has(g)) continue;
     let best = null;
-    for (const st of L.streets) for (const id of st.nodes ?? []) { const nd = r.graph.nodes.find((x) => x.id === id); const d = Math.max(Math.abs(nd.at[0] - plazaAt[0]), Math.abs(nd.at[2] - plazaAt[2])); if (!best || d < best.d) best = { d, nd }; }
-    if (best) {
-      best.nd.ports.push({ name: 'hub', at: best.nd.at, facing: 'up', width: 2 });
-      pl.ports.push({ name: 'street', at: plazaAt, facing: 'up', width: 2 });
-      r.graphEdge({ id: `${prefix}hub_link`, from: `${pl.id}.street`, to: `${best.nd.id}.hub`, type: 'path', width: 2, path: `${prefix}hub` });
-    }
+    for (const st of L.streets) if (find(st.name) === g) for (const id of st.nodes ?? []) { const nd = r.graph.nodes.find((x) => x.id === id); const d = Math.max(Math.abs(nd.at[0] - plazaAt[0]), Math.abs(nd.at[2] - plazaAt[2])); if (!best || d < best.d || (d === best.d && nd.id < best.nd.id)) best = { d, nd }; }
+    if (!best) continue;
+    const pn = link ? `street_${link + 1}` : 'street';
+    link++;
+    best.nd.ports.push({ name: link > 1 ? `hub_${link}` : 'hub', at: best.nd.at, facing: 'up', width: 2 });
+    pl.ports.push({ name: pn, at: plazaAt, facing: 'up', width: 2 });
+    r.graphEdge({ id: link > 1 ? `${prefix}hub_link_${link}` : `${prefix}hub_link`, from: `${pl.id}.${pn}`, to: `${best.nd.id}.${link > 1 ? `hub_${link}` : 'hub'}`, type: 'path', width: 2, path: `${prefix}hub` });
   }
   if (L.unplaced.length) r.note(`unplaced: ${L.unplaced.map((u) => u.id).join(', ')}`);
   const wdU = wd;

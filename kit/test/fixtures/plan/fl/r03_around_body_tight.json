@@ -1,0 +1,96 @@
+{
+  "about": "(6c FL, §5, KC) a ring zone around a fountain with ring [2, 4]: the band meets the fountain's apron (its registered footprint), so the zone (placed after the body) answers OVERLAP {kind: body} with wouldFit the band that clears it, re-checked alone",
+  "on": "flat",
+  "volume": {},
+  "expect": {
+    "part": "plaza_ring",
+    "class": "refused",
+    "code": "OVERLAP"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "fl_r03",
+    "forms": [
+      {
+        "id": "fount",
+        "kind": "fountain",
+        "basin": 5,
+        "spout": 3,
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 8
+          }
+        }
+      }
+    ],
+    "zones": [
+      {
+        "id": "plaza_ring",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "fount"
+            },
+            "ring": [
+              2,
+              4
+            ]
+          }
+        },
+        "program": {
+          "lots": [
+            {
+              "id": "c1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c2",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c3",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c4",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c5",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c6",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

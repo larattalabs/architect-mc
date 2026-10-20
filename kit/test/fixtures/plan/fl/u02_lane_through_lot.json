@@ -1,0 +1,75 @@
+{
+  "about": "(6c FL, broken variant laneThroughLot) a lane driven through the next lot: the emit refuses it (the zone refused)",
+  "on": "flat",
+  "expect": {
+    "part": "ring",
+    "class": "refused"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "fl_u",
+    "zones": [
+      {
+        "id": "ring",
+        "ext": {
+          "architect_mc:unsafe": {
+            "laneThroughLot": true
+          }
+        },
+        "program": {
+          "layout": "ring",
+          "lots": [
+            {
+              "id": "c1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c2",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c3",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c4",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c5",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c6",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

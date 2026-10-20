@@ -73,7 +73,10 @@ export function ringAt(F0, { c, R, specs, shared, base = null, hub = true, open 
   for (const l of outer.lots) l.slot = 'street';
   const sp = h && h.sh.kind !== 'none' ? spokes(F, h, 4) : [];
   const lots = [...inner.lots, ...outer.lots];
-  return { L: { kind: 'ring', streets: [st], lots, unplaced: outer.unplaced, hub: h, spokes: sp, F, centre: c, R, rect: boundsOf(F, [st], lots, h) } };
+  // (around: no hub) the bell on the street, at its cell nearest the claim's centre
+  const cc = [(F.claim.minX + F.claim.maxX) >> 1, (F.claim.minZ + F.claim.maxZ) >> 1];
+  const bellAt = h ? null : cells.reduce((b, q) => (Math.max(Math.abs(q[0] - cc[0]), Math.abs(q[1] - cc[1])) < Math.max(Math.abs(b[0] - cc[0]), Math.abs(b[1] - cc[1])) ? q : b), cells[0]);
+  return { L: { kind: 'ring', streets: [st], lots, unplaced: outer.unplaced, hub: h, spokes: sp, F, centre: c, R, ...(bellAt ? { bellAt } : {}), rect: boundsOf(F, [st], lots, h) } };
 }
 
 /** The bounding rect of a layout: its streets' bands, its lots and its hub's space. */
@@ -98,7 +101,7 @@ export function ringSearch(F, { c, specs, shared, base = null, hub = true, open 
   // the outer frontage's lower bound: a ring of radius R holds about 5 (R + 3) cells of fronts (2 pi at 80%)
   const need = specs.filter((s) => !(hub && (s.placement === 'central' || s.landmark))).reduce((a, s) => a + s.size[0] + FL_RULES.lotGap, 0);
   for (let R = r0; R <= r1; R += step) {
-    if (!base && 5 * (R + 3) < need) continue;
+    if (!base && 5 * (R + 3) < need && R + step <= r1) continue;
     tried++;
     const g = ringAt(F, { c, R, specs, shared, base, hub, open });
     if (g.fail) { fails.push({ R, ...g.fail }); continue; }
