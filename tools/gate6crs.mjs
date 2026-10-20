@@ -202,6 +202,91 @@ steps.item4 = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ items 3 and 5: build, the bills
+
+/** The lot entries a fixture binds (fixture lotEntries, else every lot of its plan an rs_hut, a farm or a smithy an rs_shed). */
+function entriesOf(fx) {
+  if (fx.lotEntries) return fx.lotEntries;
+  const out = {};
+  const walk = (o) => {
+    if (Array.isArray(o)) o.forEach(walk);
+    else if (o && typeof o === 'object') {
+      if (Array.isArray(o.lots)) for (const l of o.lots) if (l?.id && l.type) out[l.id] = ['farm', 'smithy', 'barn'].includes(l.type) ? 'rs_shed' : 'rs_hut';
+      Object.values(o).forEach(walk);
+    }
+  };
+  walk(fx.plan?.zones ?? []);
+  return out;
+}
+
+/** The fluid bodies' report (the region's ext architect_mc:fluids): [{body, state}]. */
+const bodiesOf = (st) => (st.view?.ext?.['architect_mc:fluids'] ?? []).map((b) => ({ body: b.body, state: b.state, reason: b.reason ?? null }));
+
+/**
+ * One fixture built in survival (item 5): its INSTANT twin, then a survival world: checked in survival, a stockpile of `crates`, realised,
+ * fed in waves (half of what is lacking, then the rest), every target and lot BUILT, every body settled, the world equal to the twin
+ * cell for cell (the crates aside), the bills per part equal to the check's (item 3); removed: E-flat 0. Returns the evidence.
+ */
+async function buildOne(tag, name, { crates = 4, cons = null, remove = true, keep = null } = {}) {
+  const fx = G.fixture(ctx, name);
+  const entries = entriesOf(fx);
+  const T = await G.twin(ctx, tag, fx, entries);
+  const s = await G.site(ctx, tag, fx);
+  if (Object.keys(entries).length) await G.designs(ctx);
+  const box = G.boxOf(s.W);
+  const pre = await G.snap(ctx, box, `rs-${tag}-pre`);
+  const ck = await G.check(ctx, tag, s);
+  const out = { tag, fixture: name, overall: ck.check?.overall, survival: ck.check?.survival, entries };
+  check(ck.check?.survival === true && ['READY', 'NEEDS_REPAIR'].includes(ck.check?.overall) && !!ck.check?.artifactSha, `item 5 (${tag}): Regions.checkPlan in survival: ${ck.check?.overall}, ${json((ck.check?.parts ?? []).map((a) => [a.part, a.class]))}`);
+  const crateAt = await G.pile(ctx, s, crates);
+  const C = cons ? new G.Conservation(ctx, box) : null;
+  if (C) await C.start();
+  const region = await G.realise(ctx, ck.check.artifactSha, entries);
+  out.region = region;
+  if (C) await C.point('realised');
+  let waves = 0;
+  const f = await G.feed(ctx, region, { cons: C, fraction: 0.5, timeoutMs: 2_400_000, onWave: async () => { waves++; if (C && waves % 2 === 0) await C.point(`wave ${waves}`); } });
+  const st = f.last.st, rs = f.last.rs;
+  out.feed = { waves: f.waves, inserted: f.inserted };
+  out.state = st.view.state;
+  out.build = rs.build;
+  out.bodies = bodiesOf(st);
+  check(st.view.state === 'PLACED' && rs.build?.built && rs.build?.done && rs.build?.percent === 100, `item 5 (${tag}): realiseApproved and fed in ${f.waves} waves (${sum(f.inserted)} items): ${st.view.state}, build ${json(rs.build && { built: rs.build.built, done: rs.build.done, percent: rs.build.percent })}, every part built ${json((rs.build?.parts ?? []).map((p) => [p.part, p.state, p.targets.length]))}`);
+  if (out.bodies.length) check(out.bodies.every((b) => b.state === 'settled'), `item 5 (${tag}): every body settled with its census after its barrier (${json(out.bodies)})`);
+  if (C) await C.point('built');
+  // item 3: the bills per part (the check's cost.survival.bom against the targets' bills put down)
+  const bills = G.billsOf(ck, rs);
+  out.bills = bills;
+  const differ = Object.keys({ ...bills.want, ...bills.got }).filter((p) => !G.same(bills.want[p], bills.got[p]));
+  check(true, `item 3 (${tag}, recorded per part): the check's cost.survival.bom against the targets' bills put down: ${differ.length ? `${differ.length} part(s) differ: ${differ.map((p) => `${p} ${json(G.minus(bills.want[p], bills.got[p]))}`).join('; ')}` : 'equal, item for item, for every part'}`, bills);
+  out.billsDiffer = differ;
+  const d = await G.twinDiff(ctx, T.box, T.file, crateAt);
+  out.twin = d;
+  check(d.mismatches === 0, `item 5 (${tag}): the realised world equals its INSTANT twin cell for cell (gravity, dependents, block entities; the stockpile's crates aside): ${d.mismatches} differ`, d.list);
+  if (keep) await keep({ region, s, box, pre, crateAt, ck, rs, C });
+  if (remove) {
+    const rm = await G.remove(ctx, region);
+    out.removed = { removed: rm.removed, refund: rm.refund, kept: rm.kept };
+    const e = await G.diff(ctx, box, pre);
+    const ef = e.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
+    out.eflat = { mismatches: ef.length, list: ef.slice(0, 8) };
+    check(rm.removed && ef.length === 0, `item 5 (${tag}): Regions.remove: E-flat ${ef.length} (the crates aside)`, ef.slice(0, 8));
+    if (C) await C.point('removed');
+  }
+  if (C) out.conservation = C.points;
+  return out;
+}
+
+steps.item5 = async () => {
+  await ensure();
+  const out = {};
+  for (const [tag, name] of [['rs02', 'rs02_walled'], ['rs03', 'rs03_water'], ['rs04', 'rs04_tunnel'], ['village', 'survival_village']]) {
+    if (process.env.RS_ONLY && !process.env.RS_ONLY.split(',').includes(tag)) continue; // (development: one fixture)
+    try { out[tag] = await buildOne(tag, name); } catch (e) { check(false, `item 5 (${tag}): ${String(e.message).slice(0, 300)}`); out[tag] = { error: String(e.stack ?? e) }; }
+  }
+  return out;
+};
+
 // ------------------------------------------------------------------ dispatch
 
 steps.report = async () => {

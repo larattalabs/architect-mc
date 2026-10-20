@@ -699,6 +699,29 @@ public final class RegionFluids {
 		return out;
 	}
 
+	/**
+	 * (6c RS, §7.3) What an owner's survival regions' bodies will take when they are written (a lava bucket per lava source, a grate's iron
+	 * bars), per region, while not yet charged: the stockpile accepts these items and lists them as outstanding ({@code <region>:fluids}).
+	 */
+	public static Map<String, Map<String, Integer>> pendingCharges(@Nullable String owner) {
+		Map<String, Map<String, Integer>> out = new java.util.TreeMap<>();
+		for (RegionsImpl.Live l : RegionsImpl.all()) {
+			if (!l.rec().survival() || !java.util.Objects.equals(owner, l.rec().owner) || l.rec().survival.has("chargedAt")
+				|| l.rec().state == dev.larattalabs.architect.api.RegionState.REMOVING || l.rec().state == dev.larattalabs.architect.api.RegionState.REMOVED) {
+				continue;
+			}
+			Regional st = of(l);
+			if (st == null) {
+				continue;
+			}
+			Map<String, Integer> c = chargeOf(st);
+			if (!c.isEmpty()) {
+				out.put(l.rec().id + ":fluids", c);
+			}
+		}
+		return out;
+	}
+
 	/** (6c RS, §7.3) What the pending bodies' write takes: a lava bucket per lava source, an iron bars per grate cell. */
 	static Map<String, Integer> chargeOf(Regional st) {
 		Map<String, Integer> out = new java.util.TreeMap<>();

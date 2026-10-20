@@ -718,6 +718,8 @@ public final class Stockpiles {
 				});
 			}
 		}
+		// (6c RS) a survival region's bodies' pending charge (lava buckets, grates' iron bars) is needed too
+		dev.larattalabs.architect.region.RegionFluids.pendingCharges(p.owner).values().forEach(m -> m.forEach((k, v) -> out.merge(k, v, Integer::sum)));
 		return out;
 	}
 
@@ -1241,6 +1243,11 @@ public final class Stockpiles {
 			}
 			byT.put(idOf(t), out);
 		}
+		// (6c RS) a survival region's bodies' pending charge: listed as its own outstanding ({region}:fluids), until the bodies are written
+		dev.larattalabs.architect.region.RegionFluids.pendingCharges(p.owner).forEach((id, m) -> {
+			byT.put(id, new TreeMap<>(m));
+			m.forEach((k, v) -> total.merge(k, v, Integer::sum));
+		});
 		// C25 per target (Y2's SiteWaits, fed by this stockpile's supply)
 		Map<String, dev.larattalabs.architect.api.SiteWait> waits = new LinkedHashMap<>();
 		for (String id : byT.keySet()) {
