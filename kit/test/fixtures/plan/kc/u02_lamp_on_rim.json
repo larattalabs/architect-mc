@@ -1,0 +1,37 @@
+{
+  "about": "(6c KC \u00a710, broken variant) u02_lamp_on_rim: v41's pond with ext architect_mc:unsafe {lampOnRim: true}: the lamps write a lantern over its rim's top shell cell; M25:clear's hard clause names the shell cell and the writer (the lamps, __lamps__).",
+  "on": "flat",
+  "volume": {},
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "kc_u02",
+    "forms": [
+      {
+        "id": "pond",
+        "kind": "pond",
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 16
+          }
+        },
+        "size": {
+          "w": 11,
+          "d": 9
+        },
+        "depth": 3,
+        "ext": {
+          "architect_mc:unsafe": {
+            "lampOnRim": true
+          }
+        }
+      }
+    ]
+  },
+  "expect": {
+    "clearRule": true,
+    "sets": [
+      "shell"
+    ]
+  }
+}

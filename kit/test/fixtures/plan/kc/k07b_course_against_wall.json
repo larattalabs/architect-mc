@@ -1,0 +1,135 @@
+{
+  "about": "(6c KC \u00a710) k07b_course_against_wall: v58's walled village without its brook, and brook2 laid along the ring's south face, its bank on the wall's outer course: the course is placed after the wall, so the course is refused UNREACHABLE {kind: wall} (HY's answer), never the wall (S-KC-1).",
+  "terrain": {
+    "W": 240,
+    "D": 200,
+    "x0": 1000,
+    "z0": 2000,
+    "y": 64,
+    "bands": [
+      {
+        "x0": 1000,
+        "x1": 1239,
+        "z0": 2000,
+        "z1": 2109,
+        "y": 67
+      }
+    ]
+  },
+  "volume": {},
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "kc_k07b",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "h1",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h2",
+                "type": "cottage",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "town_wall",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            },
+            "ring": [
+              4,
+              8
+            ]
+          }
+        },
+        "height": 6
+      },
+      {
+        "id": "in",
+        "kind": "road",
+        "from": {
+          "anchor": "claim_e"
+        },
+        "to": {
+          "part": "town"
+        }
+      },
+      {
+        "id": "west_gate",
+        "kind": "gate",
+        "at": {
+          "anchor": "claim_w"
+        },
+        "door": "door"
+      },
+      {
+        "id": "west_path",
+        "kind": "path",
+        "from": {
+          "anchor": "claim_w"
+        },
+        "to": {
+          "part": "town"
+        }
+      },
+      {
+        "id": "brook2",
+        "kind": "channel",
+        "label": "a brook along the ring's south face",
+        "from": {
+          "anchor": "kc_s1"
+        },
+        "to": {
+          "anchor": "kc_s2"
+        }
+      }
+    ]
+  },
+  "anchors": {
+    "kc_s1": [
+      1100,
+      65,
+      2119
+    ],
+    "kc_s2": [
+      1134,
+      65,
+      2119
+    ]
+  },
+  "expect": {
+    "part": "brook2",
+    "class": "refused",
+    "code": "UNREACHABLE",
+    "kind": "wall"
+  }
+}

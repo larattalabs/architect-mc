@@ -366,6 +366,10 @@ const ingame = [{
     // ---- v51: the forge's wall keeps its cost.bom against the realised cells
     await L.fresh('G6B VOCb v51', FLAT);
     out.v51 = await realiseRun(ctx, 'v51', { claim: FLAT_CLAIM, plan: v51.plan, bible: 'g6cvoc_forge', rarityWant: v51.styleJson.rarity });
+    // ((6c KC §10 item 4, judged now) the fountain's bill equals its standing blocks: no later part (the wall) writes a cell of its sets)
+    const fb = out.v51.costs?.fount;
+    const sum = (o) => Object.values(o ?? {}).reduce((p, q) => p + q, 0);
+    check(!!fb && fb.costBomDiff && Object.keys(fb.costBomDiff).length === 0, `v51 (KC item 4, judged): the fountain's cost.bom equals its standing blocks (${sum(out.v51.artifactCost?.fount?.bom)} billed, ${sum(fb?.bom)} standing; polished blackstone ${out.v51.artifactCost?.fount?.bom?.['minecraft:polished_blackstone'] ?? 0} = ${fb?.bom?.['minecraft:polished_blackstone'] ?? 0}; differing ${j(fb?.costBomDiff ?? null)})`, fb);
     // ---- BibleRequest.rarity through the stub sidecar into a bible, then a plan
     const bad = await L.call('dev.vocab.bibleRequest', { prompt: 'VOC-b gate: a bad budget', name: 'Vocb Bad', rarity: { rareShareMax: 2 } }, 120_000);
     out.badRequest = bad;

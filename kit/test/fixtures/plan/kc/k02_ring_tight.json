@@ -1,0 +1,95 @@
+{
+  "about": "(6c KC \u00a710) k02_ring_tight: a wall ring [4, 4] round a zone whose band holds a pond (placed before the wall): no ring in the band avoids the pond's footprint, so the wall is refused OVERLAP {kind: body} with the wider ring as its wouldFit (re-checked alone: READY).",
+  "on": "flat",
+  "volume": {},
+  "anchors": {
+    "kc_pool": [
+      1119,
+      65,
+      2054
+    ]
+  },
+  "expect": {
+    "part": "yard_wall",
+    "class": "refused",
+    "code": "OVERLAP",
+    "kind": "body",
+    "bodyPart": "pool"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "kc_k02",
+    "zones": [
+      {
+        "id": "yard",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "y1",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "y2",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "y3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        },
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 24
+          }
+        }
+      }
+    ],
+    "forms": [
+      {
+        "id": "pool",
+        "kind": "pond",
+        "where": {
+          "near": {
+            "anchor": "kc_pool",
+            "within": 2
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "yard_wall",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "yard"
+            },
+            "ring": [
+              4,
+              4
+            ]
+          }
+        },
+        "height": 4
+      }
+    ]
+  }
+}

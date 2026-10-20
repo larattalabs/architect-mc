@@ -10,10 +10,12 @@
 import { wetColumn } from '../fluids/wet.mjs';
 
 /** Obstacle classes, in the order a refusal names them. */
-export const OB = Object.freeze({ CLEAR: 0, OUT_OF_CLAIM: 1, PROTECTED: 2, WATER: 3, KEEP_OUT: 4, OVERLAP: 5 });
-export const OB_NAME = Object.freeze(['CLEAR', 'OUT_OF_CLAIM', 'PROTECTED', 'WATER', 'KEEP_OUT', 'OVERLAP']);
-/** A refusal's reason code per obstacle class (a tree near keep-out is the keep-out's). */
-export const OB_CODE = Object.freeze({ 1: 'OUT_OF_CLAIM', 2: 'PROTECTED', 3: 'WATER', 4: 'PROTECTED', 5: 'NO_ROOM' });
+// ((6c KC, §4) BODY: a plan body's footprint (fluids/keep.mjs: a reservation at resolve, a body's hard set at emit). Never WATER, so it
+// never sends a wall to the harbour fallback (wetWallFallback); a cell that is both natural water and a footprint is BODY)
+export const OB = Object.freeze({ CLEAR: 0, OUT_OF_CLAIM: 1, PROTECTED: 2, WATER: 3, KEEP_OUT: 4, OVERLAP: 5, BODY: 6 });
+export const OB_NAME = Object.freeze(['CLEAR', 'OUT_OF_CLAIM', 'PROTECTED', 'WATER', 'KEEP_OUT', 'OVERLAP', 'BODY']);
+/** A refusal's reason code per obstacle class (a tree near keep-out is the keep-out's; a body's footprint: OVERLAP {kind: body}). */
+export const OB_CODE = Object.freeze({ 1: 'OUT_OF_CLAIM', 2: 'PROTECTED', 3: 'WATER', 4: 'PROTECTED', 5: 'NO_ROOM', 6: 'OVERLAP' });
 /** The claim margin nothing is written in (compile.mjs MARGIN). */
 export const MARGIN = 2;
 /** How far a tree's logs may reach (T2's TREE_REACH): a tree within it of keep-out is an obstacle (6a's felling rule bounded, C31). */
@@ -32,7 +34,7 @@ export const WET_STEP = 3;
  * walkY: Int16Array, at(x, z) -> index | -1}`. `rects`: `{[class]: [{minX, minZ, maxX, maxZ}]}`; `cols`: the survey columns;
  * `walkCells`: [[x, z, y]] the existing networks' walk cells; `keepOut`: rects whose trees within TREE_REACH are obstacles.
  */
-export function obstacleGrid({ claim, cols, rects = {}, walkCells = [], keepOut = [], kept = [], wet = null }) {
+export function obstacleGrid({ claim, cols, rects = {}, walkCells = [], keepOut = [], kept = [], wet = null, bodies = [] }) {
   const x0 = claim.minX, z0 = claim.minZ, W = claim.maxX - claim.minX + 1, D = claim.maxZ - claim.minZ + 1, n = W * D;
   const ob = new Uint8Array(n), walk = new Uint8Array(n), walkY = new Int16Array(n).fill(-32768);
   const at = (x, z) => (x < x0 || z < z0 || x >= x0 + W || z >= z0 + D ? -1 : (x - x0) + (z - z0) * W);
@@ -69,7 +71,11 @@ export function obstacleGrid({ claim, cols, rects = {}, walkCells = [], keepOut 
     }
   }
   for (const [x, z, y] of walkCells) { const k = at(x, z); if (k >= 0) { walk[k] = 1; if (y > walkY[k]) walkY[k] = y; } }
-  return { x0, z0, W, D, ob, walk, walkY, at, ...(wet ? { wet: wetM, wetAt: (k) => (wetM[k] && !ob[k] ? wetInfo.get(k) : null), wetWhy } : {}) };
+  // ((6c KC) the plan's bodies' footprints ([[x, z, body]]): BODY over clear and water cells (the other classes keep theirs); bodyAt(k) the
+  // body or part keeping it)
+  const bodyOf = bodies.length ? new Map() : null;
+  for (const [x, z, id] of bodies) { const k = at(x, z); if (k < 0) continue; if (ob[k] === 0 || ob[k] === OB.WATER) ob[k] = OB.BODY; if (!bodyOf.has(k)) bodyOf.set(k, id); }
+  return { x0, z0, W, D, ob, walk, walkY, at, bodyAt: (k) => bodyOf?.get(k) ?? null, ...(wet ? { wet: wetM, wetAt: (k) => (wetM[k] && !ob[k] ? wetInfo.get(k) : null), wetWhy } : {}) };
 }
 
 // ------------------------------------------------------------------ rings (wall.around, wall.edge)
@@ -158,7 +164,7 @@ export function placeRing(G, R, order, t) {
       }
       if (i >= order.length) {
         const sets = seen[`${side}#all`] ?? [];
-        const every = [1, 2, 3, 4, 5].filter((k) => sets.length && sets.every((s) => s.has(k)));
+        const every = [1, 2, 3, 4, 5, 6].filter((k) => sets.length && sets.every((s) => s.has(k)));
         const any = Object.keys(seen[side] ?? {}).map(Number).sort((a, b) => a - b);
         const cls = every[0] ?? any[0] ?? OB.OVERLAP;
         return { ok: false, side, code: OB_CODE[cls], blockers: Object.fromEntries(Object.entries(seen[side] ?? {}).map(([k, v]) => [OB_NAME[k], v])), tried: [order[0], order[order.length - 1]] };

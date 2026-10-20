@@ -1,0 +1,76 @@
+{
+  "about": "(6c KC \u00a710) k08_farm_props: v49's farms (farmPond: true) ringed by a wall at offset 3: each farm lot's first pond site (behind it, north) holds the wall's planned cells (walls are planned before the farm ponds are sited, and emitted later in the links stage), so the pond takes its next side, and the zone's note says which; M25:clear 0. (The props' planned cells are read by the same rule: farmSite.)",
+  "on": "flat",
+  "volume": {},
+  "expect": {
+    "part": "farms",
+    "notNorth": true,
+    "clear": 0
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "kc_k08",
+    "zones": [
+      {
+        "id": "farms",
+        "farmPond": true,
+        "program": {
+          "lots": [
+            {
+              "id": "f1",
+              "type": "farm",
+              "size": [
+                13,
+                11
+              ],
+              "villager": "farm"
+            },
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "f2",
+              "type": "farm",
+              "size": [
+                11,
+                11
+              ],
+              "villager": "farm"
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "farm_wall",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "farms"
+            },
+            "ring": [
+              3,
+              3
+            ]
+          }
+        },
+        "height": 4
+      }
+    ]
+  }
+}

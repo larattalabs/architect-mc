@@ -25,7 +25,7 @@ import { lintFluidState } from '../fluids/body.mjs';
 import { fluidsError } from '../fluids/place.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.37.0';
+export const KIT_VERSION = '0.37.1';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -377,6 +377,8 @@ export async function planRegion(o) {
       // refusals of the second plan ({part: reason})
       rarity: vocabStyle.opted ? Object.freeze({ ...vocabStyle.rarity }) : null,
       vocabRefuse: o.vocabRefuse ? Object.freeze({ ...o.vocabRefuse }) : null,
+      // (6c KC, §5) the plan check's M25:clear refusals of the replan ({part: reason}): a part that wrote a body's cells is refused
+      clearRefuse: o.clearRefuse ? Object.freeze({ ...o.clearRefuse }) : null,
       kitVersion: o.kitVersion ?? KIT_VERSION, rng: (label) => makeRng(seed, String(label)),
       volumes: o.volumes ?? [],
       // (6c F2) the local stamp library (lib/region/stamps.mjs stampLibrary: a dir or an id -> bytes map; local-only, N-F2-1)
@@ -539,6 +541,25 @@ export async function planRegion(o) {
     if (Object.keys(fresh).length && (o._vocabPass ?? 0) < 3) {
       const again = await planRegion({ ...o, vocabRefuse: { ...(o.vocabRefuse ?? {}), ...fresh }, _vocabPass: (o._vocabPass ?? 0) + 1 });
       again.meta.planCheck.vocab.first = meta.planCheck.vocab;
+      return again;
+    }
+  }
+  // (6c KC, §3, §5) the backstop: M25:clear over this IR's virtual world, only when it has a body (every other plan is untouched). A plan
+  // part that wrote a cell of a body's hard or watch set (the water gate's lintel and frame aside) was placed after the body: it is
+  // refused OVERLAP {kind: "body"} and the plan planned again without it (at most 3 times). A part asked `architect_mc:unsafe` (a
+  // broken variant the checker must catch) and a writer the plan does not map are never refused here: the region check's M25:clear
+  // names them.
+  if (r.meta.planCheck && !r.meta.planCheck.malformed && irJson.includes('"op":"fluid"')) {
+    const { clearScan, clearRefusals, bodiesOf } = await import('./checkFluids.mjs');
+    const { buildVirtual } = await import('./vworld.mjs');
+    const irObj = JSON.parse(irJson);
+    const built = buildVirtual({ ir: irObj, survey, filled: survey, blobs: (sha) => sideBytes.get(sha), volumes: (o.volumes ?? []).map((x) => x.decoded ?? x) });
+    const sc = clearScan({ ir: irObj, vw: built.vw, meta });
+    const plan = ctx.__params?.plan ?? {};
+    const fresh = clearRefusals({ findings: sc.findings, plan, courses: new Set(bodiesOf(irObj).filter((b) => b.course).map((b) => b.id)), already: o.clearRefuse ?? {} });
+    if (Object.keys(fresh).length && (o._clearPass ?? 0) < 3) {
+      const again = await planRegion({ ...o, clearRefuse: { ...(o.clearRefuse ?? {}), ...fresh }, _clearPass: (o._clearPass ?? 0) + 1 });
+      again.meta.planCheck.clear = { refused: Object.keys({ ...(o.clearRefuse ?? {}), ...fresh }).sort(), pass: (o._clearPass ?? 0) + 1, counts: sc.counts };
       return again;
     }
   }

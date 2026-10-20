@@ -1,5 +1,5 @@
 {
-  "about": "(6c VOC-b) a flat village, a fountain and a wall in g6cvoc_forge (blackstone, nether brick, magma accents, soul lanterns): the forge's own blocks are exempt from the shares (S-VOC-3); the wall's cost.bom against its realised cells (item 8)",
+  "about": "(6c VOC-b) a flat village, a fountain and a wall in g6cvoc_forge (blackstone, nether brick, magma accents, soul lanterns): the forge's own blocks are exempt from the shares (S-VOC-3); the wall's cost.bom against its realised cells (item 8) (6c KC: the ring widened from [4, 8] to [4, 17], Steward's repair of the plan, so the wall keeps clear of the fountain's basin, rim and apron; the [4, 8] plan is kc/k01_forge, refused OVERLAP {kind: body} with this ring as its wouldFit)",
   "on": "flat",
   "style": "g6cvoc_forge",
   "volume": {},
@@ -78,7 +78,7 @@
             },
             "ring": [
               4,
-              8
+              17
             ]
           }
         },

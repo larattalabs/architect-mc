@@ -27,6 +27,7 @@ import { besidePorts } from '../region/districtsEmit.mjs';
 import { COND } from '../region/program.mjs';
 import { askWet, noteWet, underwaterBlock, underwaterOk, wetKind, wetRuns, wetWallFallback } from '../fluids/wet.mjs';
 import { waterGates } from '../fluids/gate.mjs';
+import { keptColumns } from '../fluids/keep.mjs';
 
 /** The kinds this module compiles. */
 export const WALL_KINDS = Object.freeze(['wall', 'gate']);
@@ -97,7 +98,7 @@ function standMap(K, walk) {
  * (K1-target) a standing region of the owner the wall rings: its lots stay hard, its roads, paths and ways are walk cells (crossings
  * that get gates) at the surveyed ground.
  */
-function gridOf(K, { allowZones = [], walkStanding = null, wet = null } = {}) {
+function gridOf(K, { allowZones = [], walkStanding = null, wet = null, bodies = true } = {}) {
   const env = K.env, r = K.r;
   const zoneRects = [];
   for (const p of K.order) {
@@ -115,7 +116,9 @@ function gridOf(K, { allowZones = [], walkStanding = null, wet = null } = {}) {
   if (st) for (const q of st.keep) for (let z = q[1]; z <= q[3]; z++) for (let x = q[0]; x <= q[2]; x++) walkCells.push([x, z, env.S.groundAt(x, z)]);
   // ((H-b) the wet grid: the plan's own water (its bodies' cells and shells) stays an obstacle)
   const wetO = wet ? { wet: { ...wet, plan: (r._fluidBodies ?? []).flatMap((b) => [...b.cells, ...b.shell].map((c) => [c[0], c[2]])) } } : {};
-  return obstacleGrid({ claim: env.claim, cols: env.cols, rects: { [OB.PROTECTED]: protectedR, [OB.OVERLAP]: overlap }, walkCells, keepOut: [...protectedR, ...env.regions.map((a) => a.rect), ...env.buildRects.map((a) => a.rect)], kept: r._keptColumns(), ...wetO });
+  // ((6c KC, §4) the plan's bodies' footprints (reserved at resolve: walls are planned before the bodies emit): OB.BODY, never WATER)
+  const bodyCols = bodies && K.keep?.length ? keptColumns(K.keep) : [];
+  return obstacleGrid({ claim: env.claim, cols: env.cols, rects: { [OB.PROTECTED]: protectedR, [OB.OVERLAP]: overlap }, walkCells, keepOut: [...protectedR, ...env.regions.map((a) => a.rect), ...env.buildRects.map((a) => a.rect)], kept: r._keptColumns(), ...wetO, ...(bodyCols.length ? { bodies: bodyCols } : {}) });
 }
 
 // ------------------------------------------------------------------ step 2: wall lines
@@ -176,7 +179,7 @@ function settingsOf(K, p) {
 const blockerText = (b) => Object.entries(b).map(([k, v]) => `${k.toLowerCase().replace(/_/g, ' ')} ${v}`).join(', ');
 
 /** Plan one wall's line: {positions, cells, ends, closed, I?, devs, notes, joined, crossings, G} or {error: reason}. */
-function lineOf(K, p, st, wet = null) {
+function lineOf(K, p, st, wet = null, bodies = true) {
   const w = p.part, t = st.thickness;
   const notes = [], devs = [];
   if (st.form === 'around') {
@@ -185,7 +188,7 @@ function lineOf(K, p, st, wet = null) {
     const [r0, r1] = Array.isArray(w.where.around.ring) ? w.where.around.ring : WALL_DEFAULTS.ring;
     const order = [];
     for (let d = r0; d <= r1; d++) order.push(d);
-    const G = gridOf(K, { walkStanding: tg.standing?.id ?? null, wet });
+    const G = gridOf(K, { walkStanding: tg.standing?.id ?? null, wet, bodies });
     const pl = placeRing(G, tg.rect, order, t);
     if (!pl.ok) return { error: { code: pl.code, message: `no clear ring round ${tg.what} at offsets ${r0}..${r1} on its ${pl.side} side (${blockerText(pl.blockers)})`, evidence: { side: pl.side, ring: [r0, r1], blockers: pl.blockers, target: arr(tg.rect) } } };
     return { ...ringOf(K, pl, t, st, notes), devs, notes, target: tg, G };
@@ -205,7 +208,7 @@ function lineOf(K, p, st, wet = null) {
       for (let d = -(t - 1); d <= WALL_DEFAULTS.edgeStep; d++) order.push(d);
       what = `zone ${inside.part}`;
     }
-    const G = gridOf(K, { allowZones: inside.part ? [inside.part] : [], wet });
+    const G = gridOf(K, { allowZones: inside.part ? [inside.part] : [], wet, bodies });
     const pl = placeRing(G, R, order, t);
     if (!pl.ok) return { error: { code: pl.code, message: `no clear ring on the edge of ${what} (${pl.side} side: ${blockerText(pl.blockers)})`, evidence: { side: pl.side, blockers: pl.blockers, edge: arr(R) } } };
     // a side that stepped off the edge: its cells (a move deviation)
@@ -218,7 +221,7 @@ function lineOf(K, p, st, wet = null) {
   const joinedLots = ends.filter((e) => e.part !== undefined && K.lotZone.has(e.part)).map((e) => e.part);
   const lotOf = (id) => K.r.lots.find((l) => l.id === id);
   const allowZones = [...new Set(joinedLots.map((l) => K.lotZone.get(l)))];
-  const G = gridOf(K, { allowZones, wet });
+  const G = gridOf(K, { allowZones, wet, bodies });
   const apron = new Set();
   for (const id of joinedLots) {
     const l = lotOf(id);
@@ -359,6 +362,40 @@ function nearestRun(W, pt, width) {
   return best;
 }
 
+/**
+ * (6c KC, §4) Whether the plan's bodies are what refused a wall: its line or ring planned once more without their footprints; when that
+ * one fits, the refusal is OVERLAP {kind: "body", body, part, cells (<= 16: the free plan's cells on a footprint)}. A ring's wouldFit is
+ * the wall with its ring widened (the first wider band, up to 32 past it, that avoids every footprint), re-checked alone on the grid
+ * with the footprints. Returns {reason, wouldFit?} or null (the bodies were not the blocker).
+ */
+function bodyBlame(K, p, st) {
+  const free = lineOf(K, p, st, null, false);
+  if (free.error) return null;
+  const G0 = gridOf(K, {});
+  const hits = [];
+  const ids = new Map();
+  for (const c of free.cells) {
+    const id = G0.bodyAt(G0.at(c.x, c.z));
+    if (id === null) continue;
+    if (hits.length < 16) hits.push([c.x, c.z]);
+    ids.set(id, (ids.get(id) ?? 0) + 1);
+  }
+  if (!ids.size) return null;
+  const body = [...ids].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0][0];
+  const rec = K.keep.find((q) => q.body === body || q.part === body);
+  const reason = { code: 'OVERLAP', message: `every ${st.form === 'line' ? 'line' : 'ring'} of wall ${p.id} in its band meets the footprint of ${rec?.body ? `body ${rec.body}` : `part ${rec?.part ?? body}`}, placed before it (a body's cells are its own)`, evidence: { kind: 'body', body: rec?.body ?? null, part: rec?.part ?? null, cells: hits } };
+  let wouldFit;
+  if (st.form === 'around') {
+    const [r0, r1] = Array.isArray(p.part.where.around.ring) ? p.part.where.around.ring : WALL_DEFAULTS.ring;
+    for (let w = r1 + 1; w <= r1 + 32 && !wouldFit; w++) {
+      const frag = { ...p.part, where: { ...p.part.where, around: { ...p.part.where.around, ring: [r0, w] } } };
+      const L2 = lineOf(K, { ...p, part: frag }, st);
+      if (!L2.error) wouldFit = [{ part: p.id, fragment: frag, geometry: { ring: arr(L2.I) }, notes: [`the ring widened to [${r0}, ${w}] keeps clear of ${rec?.body ?? rec?.part ?? body} (re-checked alone)`] }];
+    }
+  }
+  return { reason, ...(wouldFit ? { wouldFit } : {}) };
+}
+
 export function planWalls(K) {
   K.walls = [];
   K.gates = new Map();
@@ -369,7 +406,10 @@ export function planWalls(K) {
     const dep = K.depState(p);
     if (dep) { K.ans(p, dep); continue; }
     const st = settingsOf(K, p);
-    let L = lineOf(K, p, st);
+    // ((6c KC) the broken variant `wallThroughBody` (ext architect_mc:unsafe): the old wall grid, the bodies' footprints left out; M25:clear
+    // catches it)
+    const blind = p.part.ext?.['architect_mc:unsafe']?.wallThroughBody === true;
+    let L = blind ? lineOf(K, p, st, null, false) : lineOf(K, p, st);
     const notes = [...st.P.notes];
     // ((6c H-b, §8.2) a ring that fails on water, or a line with no clear leg on a claim with water: once more over the wet grid)
     let wetW = null;
@@ -386,6 +426,8 @@ export function planWalls(K) {
         L = { error: { ...L.error, message: `${L.error.message}; no harbour wall either (${kind === 'deep' ? `water deeper than waterDepth ${wf.waterDepth}` : `${kind === 'lava' ? 'lava' : 'flowing water'}`})`, evidence: { ...(L.error.evidence ?? {}), kind, waterDepth: wf.waterDepth } } };
       }
     }
+    // ((6c KC, §4) a wall no line or ring of which avoids the plan's bodies: OVERLAP {kind: body}, with the ring widened as its wouldFit)
+    if (L.error && K.keep?.length && !blind) { const bb = bodyBlame(K, p, st); if (bb) { K.ans(p, { class: 'refused', reasons: [bb.reason], notes, ...(bb.wouldFit ? { wouldFit: bb.wouldFit } : {}) }); continue; } }
     if (L.error) { K.ans(p, { class: 'refused', reasons: [L.error], notes }); continue; }
     // ((H-b) the wet sections: their columns read from the frozen volume (asked: the first plan answers incomplete VOLUME), recorded
     // and guarded)
@@ -628,6 +670,19 @@ function wallState(block, c) {
 
 const FACING = { '1,0': 'east', '-1,0': 'west', '0,1': 'south', '0,-1': 'north' };
 
+/**
+ * (6c KC) The broken variant `slabInWatch` (the wall part's ext architect_mc:unsafe): one slab, a non-shell-grade block, written by the
+ * wall into the first watch cell of the plan's first registered body; M25:clear's watch clause catches it.
+ */
+function unsafeSlab(K, W) {
+  if (W.p.part.ext?.['architect_mc:unsafe']?.slabInWatch !== true) return;
+  const rec = (K.keep ?? []).find((q) => q.kind === 'body' && q.watch.size);
+  if (!rec) return;
+  const [x, y, z] = [...rec.watch].sort()[0].split(',').map(Number);
+  const part = K.r.part(`${W.id}_unsafe_slab`.slice(0, 48), { stage: K.stageOf('links') });
+  part.columns({ abs: 0 }, { abs: 0 }, [x, z, y, y, 0], ['minecraft:stone_slab[type=bottom]'], { cond: 3 });
+}
+
 export function emitWalls(K) {
   if (!K.walls?.length) return;
   K.record.walls = [];
@@ -641,6 +696,7 @@ export function emitWalls(K) {
     const cp = K.checkpoint();
     try {
       const out = emitWall(K, W);
+      unsafeSlab(K, W);
       K.mark(W.id, K.addedSince(cp));
       metaWalls.push(out.meta);
       K.r.meta.walls = [...metaWalls];

@@ -1,0 +1,184 @@
+{
+  "about": "(6c KC \u00a710 items 5) v61_kc_village: a walled village with a fountain and a pond outside its moat, a moat round its wall, a brook from its centre out under a water gate into the moat, and a road bridged over the moat: READY, M25:clear 0 (hard and watch; the water gate's lintel and frame the only exempt cells), in game. Its roads cross the moat on the street fallback's bridges (adjusted), so it lives in kc/ with its expectations, as H's v45b and HY's v57 do (valid/ wants every part fits). (The 2x2 pit at the claim's north-west corner, in its margin, puts 6 courses of dirt under the plain in game, so the pond's shell stands in dirt, not on the flat world's bedrock.)",
+  "terrain": {
+    "W": 240,
+    "D": 200,
+    "x0": 1000,
+    "z0": 2000,
+    "y": 64,
+    "bands": [
+      {
+        "x0": 1000,
+        "x1": 1001,
+        "z0": 2000,
+        "z1": 2001,
+        "y": 58
+      },
+      {
+        "x0": 1080,
+        "x1": 1155,
+        "z0": 2066,
+        "z1": 2130,
+        "y": 67
+      }
+    ]
+  },
+  "volume": {},
+  "anchors": {
+    "kc_fount": [
+      1200,
+      65,
+      2050
+    ],
+    "kc_pool": [
+      1035,
+      65,
+      2050
+    ]
+  },
+  "expect": {
+    "overall": "READY",
+    "clear": 0,
+    "adjusted": [
+      "in",
+      "west_path"
+    ],
+    "waterGate": "brook"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "kc_v61",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "h1",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h2",
+                "type": "cottage",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "town_wall",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            },
+            "ring": [
+              4,
+              8
+            ]
+          }
+        },
+        "height": 6
+      },
+      {
+        "id": "in",
+        "kind": "road",
+        "from": {
+          "anchor": "claim_e"
+        },
+        "to": {
+          "part": "town"
+        }
+      },
+      {
+        "id": "west_gate",
+        "kind": "gate",
+        "at": {
+          "anchor": "claim_w"
+        },
+        "door": "door"
+      },
+      {
+        "id": "west_path",
+        "kind": "path",
+        "from": {
+          "anchor": "claim_w"
+        },
+        "to": {
+          "part": "town"
+        }
+      },
+      {
+        "id": "moat",
+        "kind": "channel",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            },
+            "ring": [
+              6,
+              16
+            ]
+          }
+        }
+      },
+      {
+        "id": "brook",
+        "kind": "channel",
+        "label": "a brook from the village's centre out under a water gate into the moat",
+        "from": {
+          "anchor": "claim_center"
+        },
+        "to": {
+          "part": "moat"
+        }
+      }
+    ],
+    "forms": [
+      {
+        "id": "fount",
+        "kind": "fountain",
+        "basin": 5,
+        "spout": 2,
+        "where": {
+          "near": {
+            "anchor": "kc_fount",
+            "within": 6
+          }
+        }
+      },
+      {
+        "id": "pool",
+        "kind": "pond",
+        "where": {
+          "near": {
+            "anchor": "kc_pool",
+            "within": 6
+          }
+        }
+      }
+    ]
+  }
+}

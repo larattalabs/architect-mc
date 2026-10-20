@@ -268,6 +268,16 @@ export function passInput(K) {
     // ((6c HY, §8.1) a course's spill (lips, falls, riffles) is water to the routes and its lining shell, so no route walks in it or
     // lands a bridge on it; a course's end within 8 of the claim's edge reaches the edge (a course from edge to edge seals the claim,
     // as a closed moat does). Only for courses: an H plan's input is as before)
+    // ((6c KC, §4) any other body's spill (a spout's fall, a curtain) is shell to the routes, as a course's lining is: no route writes in it)
+    if (b.kind !== 'course' && b.kind !== 'ditch') {
+      for (const [x, y, z] of b.spill ?? []) {
+        const k = k2(x, z);
+        if (water.has(k) || lava.has(k)) continue;
+        const q = shell.get(k) ?? { top: S.groundAt(x, z), level: b.level };
+        q.top = Math.max(q.top, y); q.level = Math.min(q.level, b.level);
+        shell.set(k, q);
+      }
+    }
     if (b.kind === 'course' || b.kind === 'ditch') {
       for (const [x, y, z] of b.spill) { const k = k2(x, z); if (!water.has(k)) water.set(k, Math.min(y, b.level)); }
       for (const [x, y, z] of b.lining ?? []) {
@@ -314,4 +324,9 @@ export function planWaterClearance(K, l) {
   const box = { minX: Math.min(a[0], b[0]) - 16, maxX: Math.max(a[0], b[0]) + 16, minZ: Math.min(a[2], b[2]) - 16, maxZ: Math.max(a[2], b[2]) + 16 };
   if (rectSurvey(K.env, box).water) return null;
   return inp.water.some(([x, z]) => x >= box.minX && x <= box.maxX && z >= box.minZ && z <= box.maxZ) ? 1 : null;
+}
+
+/** (6c KC, §2) The footprint this part reserves at resolve (keep.mjs): its ring and berm bands. Pure: [[x0, z0, x1, z1]]. */
+export function footprint(res) {
+  return Array.isArray(res?.footprints) ? res.footprints.map((q) => [...q]) : [];
 }
