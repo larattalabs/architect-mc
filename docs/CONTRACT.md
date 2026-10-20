@@ -19685,6 +19685,15 @@ honest repair. S-7a-2 asks.
   slice) as the table above says. Default: yes.
 - Each slice's look questions are in its own section; the coordinator answers them on Noah's behalf until the gallery step.
 
+
+### Coordinator decisions (2026-10-20, on Noah's behalf; Noah judges each look at its gallery step)
+
+- **N-7a-1:** yes. This batch is the connector set only. Affordances, site lots, the link pass, nav and S4 move to their
+  proposed homes in the ledger.
+- **N-CL-1, N-K2-1, N-CW-1, N-RK-1, N-LF-1, N-SA-1, N-K3-1:** as proposed in each slice.
+- **Order:** 7a lands before 6d, as SETTLEMENTS agreed with Steward on 2026-10-09. 6d's RV is being revised after an
+  independent review in any case.
+
 ## Phase 7a foundation: the shared interface (DRAFT for Steward review)
 
 One owner, frozen before any 7a slice branches, as `k1/foundation` and `t3/foundation` were. It changes no answer by itself: every
