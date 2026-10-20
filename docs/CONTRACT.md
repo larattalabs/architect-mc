@@ -21170,7 +21170,7 @@ Recorded as the shape the plan writer should expect, so the reservation's meanin
   standing on the track (the cart left as the player's entity, the rails restored).
 - **Size if scheduled:** about 2 days, plus an RC (redstone blocks next to Steward's lots).
 
-## Batch 6d: region evolution, growth first. Summary for one Steward review round (DRAFT v3, 2026-10-20)
+## Batch 6d: region evolution, growth first. Summary for one Steward review round (FROZEN 2026-10-20, Steward reviewed)
 
 Phase 6d is **region evolution**: growing and changing a region after it stands, exactly and undoably, without re-laying what stands.
 It replaces the old outline "Phase 6d (outline, recommended to wait)" (marked superseded where it stands), and takes every note that
@@ -21283,7 +21283,32 @@ with its `undo` is saved before or after the R2 journal commit, i.e. whether a k
 **The questions, in one place:** S-RV-1..3, 5..14, S-GR-1..7, S-FS-1..4, S-LC-1..4, S-AD-1..4 (Steward); N-GR-1, N-GR-2, N-FS-1, N-LC-1
 (Noah, taste or product, each with a default). They are listed at the end of each slice.
 
-## Phase 6d slice RV: region revisions, additive v1 (DRAFT v3 for Steward review, narrowed by Noah after GPT-6.1's second pass)
+
+### Steward's review (2026-10-20, at 3b10e4b3): binding, and it overrides the slice sections where they differ
+
+**Four points, settled as Steward asked:**
+1. **Region state after a revision.** While a revision writes, the region reads PLACING. Afterwards it reads its own
+   pre-revision state again (PLACED, PARTIAL, FAILED with cells), whatever the revision ended as. The revision's outcome
+   (PLACED, PARTIAL, FAILED, RACED) lives only in `RevisionView`. One failed grown lot never flips a town's state. Steward's town
+   lookup and D3's standing rules keep reading region state unchanged.
+2. **A candidate waiting on designs.** GR never shrinks a lot unasked. A re-plan with the same lot sizes returns boxes of exactly
+   those sizes (the front may change), or refuses `NO_ROOM`. Candidates stay valid for as long as Steward designs, unless an
+   accepted revision moves the head (then `parent_moved`).
+3. **Grown street roads** (keyed `rv<rid>:road:…`) always carry `architect_mc:street {zone, district?}`, including in towns
+   realised before FL whose standing roads have no flag.
+4. **AD is lazy (changes S-AD-1).** A VillageLayout settlement is adopted on demand, at its first growth, not migrated on
+   load. Adoption never changes site ids, so Steward's history keeps naming them.
+
+**Answers:**
+- **RV:** as proposed. S-RV-2: Steward treats `REGION_LIMIT` like `NO_ROOM` (full, so it proposes a district). S-RV-13:
+  Steward stops laying `street#n` on region towns once GR ships. S-RV-14: a refused irrigated refill is fine.
+- **GR:** as proposed. OpKeys `dgrow`/`drealise` for districts, `vgrow:<build>`/`vgrowrealise:<build>` for towns. No dry
+  check; Steward plans at acceptance and uses `discardPlan`.
+- **FS, LC:** as proposed.
+- **AD:** S-AD-1 is lazy, per point 4. S-AD-2, S-AD-3 and S-AD-4: yes.
+- **RCs:** RV and GR share one RC.
+
+## Phase 6d slice RV: region revisions, additive v1 (FROZEN 2026-10-20, Steward reviewed)
 
 A standing region can be **grown**: parts, lots, street extensions and new fluid bodies are **added** as revisions, written as new journal
 layers over the region, undone last-in-first-out, and removed with the region exactly. Every later reader sees the region as grown. The
@@ -21866,7 +21891,7 @@ to a standing zone is GR's; changing or removing a built part answers `unsupport
 RV2 (removing and changing standing parts, "6d later" below). The pad delta under standing lots. Folding. Revisions past the claim.
 Survival revisions over paid or unbuilt targets.
 
-## Phase 6d slice GR: growing a standing region (D-S2, `growDistrict`) (DRAFT for Steward review)
+## Phase 6d slice GR: growing a standing region (D-S2, `growDistrict`) (FROZEN 2026-10-20, Steward reviewed)
 
 New lots are added to a standing town or district as a revision (RV): first on free frontage along its standing streets, then on a
 street extended from an end that nothing else uses. Standing lots, streets and junctions never move. This is Steward's D-S2 (steward-mc
@@ -22167,7 +22192,7 @@ still works (D3's town-first order, `dangling`).
 - **N-GR-2:** new lots go nearest the square first.
 
 
-## Phase 6d slice FS: updates follow the source (DRAFT for Steward review)
+## Phase 6d slice FS: updates follow the source (FROZEN 2026-10-20, Steward reviewed)
 
 When a source design gets a new version, each of its copies can be re-made from that version by its own recipe, at $0, and then each
 lot that stands at the old copy is updated by the existing delta path. This is 0b's deferral ("a source's new version applied to its
@@ -22312,7 +22337,7 @@ unaffected (a lot is BOX above its pads).
 - **N-FS-1:** a copy that can't follow stays as it is, at $0, with no paid redesign.
 
 
-## Phase 6d slice LC: land change in a standing region, the report (DRAFT v2 for Steward review, after GPT-6.1's review)
+## Phase 6d slice LC: land change in a standing region, the report (FROZEN 2026-10-20, Steward reviewed)
 
 A standing region can say what has changed in it since it was built, part by part and lot by lot. v2 ships **the report only**: the
 stage re-plan of v1 is deferred (GPT-6.1's review: it would mostly refuse for layout-searched programs, and no Steward case shows its
@@ -22403,7 +22428,7 @@ record LotLand(String lot, String siteId, String state, double standing /* Recon
   of this section drafted them.
 - Removal provenance (who broke a block): a PT extension, if Steward asks.
 
-## Phase 6d slice AD: adopting a VillageLayout settlement as a region, the 6d half of C12 (DRAFT for Steward review)
+## Phase 6d slice AD: adopting a VillageLayout settlement as a region, the 6d half of C12 (FROZEN 2026-10-20, Steward reviewed)
 
 An existing Steward settlement built by VillageLayout (its own street road and lot sites, placed before regions) becomes a region
 record **without writing a cell**, so it can grow (GR), revise (RV) and be removed as one region. This is the 6d half of the C12 joint
