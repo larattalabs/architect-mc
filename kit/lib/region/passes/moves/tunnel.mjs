@@ -20,7 +20,7 @@
 //   tunnelPrune(state, from, to) -> note | null    (the gate row already prunes a sealed wall between the ends: none here)
 import { FLAG_FROZEN, FLAG_LAVA, FLAG_MISSING, FLAG_TREE, FLAG_WATER } from '../../pack.mjs';
 import { TUNNEL, maxRiseOf, surfaceCover, tunnelGeom, tunnelLand } from '../../../connectors/tunnelGeom.mjs';
-import { deckY } from '../../../connectors/ropeGeom.mjs';
+import { deckY, latOn } from '../../../connectors/ropeGeom.mjs';
 import { VOXEL_CLASSES, classAt as volumeClassAt } from '../../volume.mjs';
 
 const NONE = -32768;
@@ -285,7 +285,8 @@ function fastCheck(state, x0, y0, z0, hf, L, rise) {
 function fast0(state, x0, y0, z0, hf, L, rise) {
   const c = state.cur, land = landOf(state);
   const [dx, dz] = DIRS[hf], rx = -dz, rz = dx;
-  const lo = -Math.floor((c.width - 1) / 2), hi = Math.floor(c.width / 2), h = c.height;
+  // (housekeeping 3) the lanes on the route's side, as tunnelGeom's (an even width's extra lane on +x / +z)
+  const { lo, hi } = latOn(c.width, [dx, dz]), h = c.height;
   const coverNeed = isInt(c.unsafe?.cover) ? c.unsafe.cover : TUNNEL.cover;
   const buf = isInt(c.unsafe?.fluidBuffer) ? c.unsafe.fluidBuffer : TUNNEL.fluidBuffer;
   if (L < c.length.min || L > c.length.max || Math.abs(rise) > maxRiseOf(L)) return BAD;

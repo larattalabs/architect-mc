@@ -11,6 +11,10 @@ kit 0.37.0, catalogue 8 (VOC releases first as 1.35.0; the coordinator renumbers
   region through `r._hydrology`.
 - HY-a bumped no versions; versions are HY-core's (all seven constants and catalogue 8 are set on this branch).
 - HY-a is merged into `hy/core` (origin/slice/HY-a f3967b36).
+- **origin/main v0.37.1 is merged into `hy/core`** (kit 0.35.1 on main: hk3's even-width rope/tunnel fix with v33/v34 in H's
+  UNCHANGED_EXCEPTIONS, the guard reader and apijars over 0.37.0, hb-unchanged retired, host-stamped base worlds). HY keeps its
+  placeholders (kit 0.37.0, API 1.36.0, mod 0.39.0); VOC releases first as v0.38.0. The crossings_demo_flat, links_demo and
+  links_demo_flat goldens are re-cut for kit 0.37.0 (only the IR's kitVersion; irShas 0e9c3219, 01bc72a4, 8ab69970).
 
 ## The frozen interface (round 1)
 
@@ -37,5 +41,8 @@ and pond overflows, moat, water gate, riffle) must still go through it in HY-b's
 
 ## State
 
-- Round 1 committed and pushed (`hy/core`). Kit suite 575/0 with hy-core.test.mjs (7), RegionFluidsHYTest 5/0, api-compat --gate6chy clean.
-- Next: the in-game items (hy-ingame, hy-crash, hy-cold) on the new runner, then the slice tier, the gate-verifier, "HY-core as built".
+- In game: hy-ingame 26/0, hy-crash 10/0, hy-cold 1/0. Slice tier: everything in HY's diff passes. Remaining non-passes: 6ct1-scenario-relief, T1's falling-water anomaly, which also fails on VOC-b and H-b. sim-jobs passed when run alone.
+- CONTRACT "HY-core as built" has every row but the Verifier row.
+- **Left:** a gate-verifier is running. It reviews origin/main...HEAD and re-runs hy-ingame and hy-crash on ports 8918-8921, with output in `artifacts/gate-runs-HYcore-verify/`. Once it reports, either:
+  - on PASS: add the Verifier row, delete this HANDOFF, push, and report ready to merge;
+  - on FAIL: fix the defects it names.

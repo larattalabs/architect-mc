@@ -68,7 +68,7 @@ function flatVariant(ctx, P, W, D) {
     const lip = side === 0 ? bz : az;
     let k = 0;
     const post = (x, z) => {
-      if (z === lip && x >= b.xc - 3 && x <= b.xc) return; // the landing (xc - 2, xc - 1: a southward deck's right is west) and its posts
+      if (z === lip && x >= b.xc - 3 && x <= b.xc) return; // the landing (the deck on xc - 2, xc - 1 from the node on xc - 2: the route's side, +x) and its posts
       const y = S.groundAt(x, z) + H + 1;
       fcols.push(x, z, y, y, 0);
       if (k++ % 6 === 0) fcols.push(x, z, y + 1, y + 1, 1);
@@ -81,7 +81,9 @@ function flatVariant(ctx, P, W, D) {
   // the bridges: a rope_bridge edge from each section's north lip to its south lip (no approach walk: the span is the gap)
   const nodes = {}, edges = [];
   for (const b of banks) {
-    const xm = b.xc - 1;
+    // (housekeeping 3) the deck stands on the route's side (ropeGeom latOn: a 2-wide footprint takes +x), so the node on the deck's
+    // west column keeps the deck on xc - 2, xc - 1 and its posts on xc - 3, xc, as before
+    const xm = b.xc - 2;
     nodes[`n${b.s}`] = { at: [xm, S.groundAt(xm, b.zn) + H + 1, b.zn], kind: 'junction' };
     nodes[`s${b.s}`] = { at: [xm, S.groundAt(xm, b.zs) + H + 1, b.zs], kind: 'junction' };
     edges.push({ id: `span_${b.n}`, from: `n${b.s}`, to: `s${b.s}`, width: 2, movers: ['player', 'villager'], spans: ['rope'], spanOnce: true, approach: 0 });
@@ -121,8 +123,9 @@ function riftVariant(ctx, P) {
   if (fcols.length) { foot.columns({ abs: 0 }, { abs: 0 }, fcols, ['foundation']); (r.meta.parts.footings ??= {}).kind = 'add'; }
   const nodes = {}, edges = [];
   picks.forEach((x, i) => {
-    nodes[`n${i}`] = { at: [x, S.groundAt(x, zn) + 1, zn], kind: 'junction' };
-    nodes[`s${i}`] = { at: [x, S.groundAt(x, zs) + 1, zs], kind: 'junction' };
+    // (housekeeping 3) the node on the deck's west column x - 1 (the deck on the route's side: x - 1, x; posts x - 2, x + 1, as before)
+    nodes[`n${i}`] = { at: [x - 1, S.groundAt(x - 1, zn) + 1, zn], kind: 'junction' };
+    nodes[`s${i}`] = { at: [x - 1, S.groundAt(x - 1, zs) + 1, zs], kind: 'junction' };
     edges.push({ id: `span_${i + 1}`, from: `n${i}`, to: `s${i}`, width: 2, movers: ['player', 'villager'], spans: ['rope'], spanOnce: true, approach: 0 });
   });
   let routed = 0, ropes = [];
