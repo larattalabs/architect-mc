@@ -462,6 +462,9 @@ steps.survival = async () => {
   check(!!site && p.placed, `item 8: cu_shed placed as a construction site drawing from ${OWNER}'s stockpile (${json(p?.refusals ?? site)})`);
   if (!site) return out;
   const st0 = await siteState(site);
+  // the plan's cells (v1), read while the site builds
+  const targets1 = Object.fromEntries(Object.entries(await call('dev.site.cells', { site })).filter(([k]) => /^-?\d+,-?\d+,-?\d+$/.test(k)));
+  out.targets1 = Object.keys(targets1).length;
   const bill = st0.bom ?? {};
   out.bill = bill;
   // ---- (a) fed all but the lightning rod: the build waits on it; its copper weathers while it waits
@@ -475,8 +478,6 @@ steps.survival = async () => {
   st = await siteState(site);
   const ps1 = await pstate();
   const sb = box6((await api('sites')).all.find((s) => s.id === site)?.restoreBox ?? '');
-  // the plan's cells (dev.site.cells answers while the site builds: here, waiting on the rod)
-  const targets1 = Object.fromEntries(Object.entries(await call('dev.site.cells', { site })).filter(([k]) => /^-?\d+,-?\d+,-?\d+$/.test(k)));
   const built = await copperCells(await cellsOf(sb));
   const w = await weatherAll(built);
   await settle(10_000); // the builder's rescans
@@ -537,7 +538,9 @@ steps.survival = async () => {
       const s = now.get(pos);
       if (!s || /^minecraft:(air|cave_air)/.test(s)) continue;
       standing.push(s);
-      if (idOf(s) !== idOf(tid)) perCell.push({ pos, by: 'deconstruct', target: withId(s, idOf(tid)), standing: s, steps: ['weathered', ...ws.waxed.filter((q) => q.at.join(',') === pos).map(() => 'waxed'), ...ws.scraped.filter((q) => q.at.join(',') === pos).map(() => 'scraped')] });
+      // (the plan's block is v1's: the delta re-records the cells it writes or reshapes with what stood there)
+      const plan = targets1[pos] ?? tid;
+      if (idOf(s) !== idOf(plan)) perCell.push({ pos, by: 'deconstruct', target: withId(s, idOf(plan)), siteTarget: idOf(tid), standing: s, steps: ['weathered', ...ws.waxed.filter((q) => q.at.join(',') === pos).map(() => 'waxed'), ...ws.scraped.filter((q) => q.at.join(',') === pos).map(() => 'scraped')] });
     }
     // the door's upper half is not queued apart; bomOf counts a door once (its lower half)
     const { bomOf } = await imp('lib/connectors/bom.mjs');
