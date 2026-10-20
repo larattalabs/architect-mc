@@ -139,6 +139,15 @@ export async function realiseIrr(ctx, tag, fx, { entries = {}, rules = 'exact', 
   if (rr.refused || !rr.region) { out.refused = rr.refused ?? rr; return out; }
   await L.waitRegion(rr.region, 3_600_000, async (s) => { if (s.view?.waiting?.reason === 'OCCUPIED' || s.waiting?.OCCUPIED) await L.cmd('/kill @e[type=!minecraft:player]'); });
   out.r = await core.regionOf(ctx, rr.region);
+  // (development: IRR_PROBE="x,y,z;..." logs the journal stack and the block at those cells after the realise)
+  for (const q of (process.env.IRR_PROBE ?? '').split(';').filter(Boolean)) {
+    const c = q.split(',').map(Number);
+    const st = await L.call('dev.journal.at', { x: c[0], y: c[1], z: c[2] }, 30_000).catch(() => null);
+    const cands = ['air', 'dirt', 'dirt_path', 'grass_block', 'farmland', 'composter', 'oak_fence', 'oak_fence_gate', 'lantern', 'torch', 'cobblestone', 'coarse_dirt', 'wheat', 'water', 'spruce_fence', 'stone_bricks', 'oak_planks', 'spruce_planks'];
+    const is = [];
+    for (const b of cands) if (await isBlock(ctx, c, `minecraft:${b}`)) is.push(b);
+    ctx.log(`  probe ${q}: ${json(is)} stack ${json((st?.stack ?? st?.entries ?? []).map((e) => [e.site ?? e.entry, e.kind, e.before, e.after]))}`);
+  }
   ctx.log(`  ${tag}: ${out.r.view.state} ${json(out.r.fluids.map((x) => [x.body, x.state, x.reason ?? null]))}`);
   return out;
 }
