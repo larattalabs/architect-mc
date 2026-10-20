@@ -4,7 +4,7 @@
 // tools/gate6ch.mjs (whose steps run these same items after the core's).
 //
 //   node tools/gate6chb.mjs <unit | ingame | natural | cold | look | start [world] | stop | base> [item ...]
-//     unit: hb-kit, hb-unchanged, hb-asks; ingame: hb-flat (items 5, 8, 9 on a flat world); natural: hb-natural (S3); cold: hb-cold
+//     unit: hb-kit, hb-asks (hb-unchanged retired: H-core's item 11 covers it); ingame: hb-flat (items 5, 8, 9 on a flat world); natural: hb-natural (S3); cold: hb-cold
 //     (the frozen site 2026101102); look: hb-look (client). Item names after the step run only those.
 //
 // Evidence: <GATE6CH_OUT or <main>/artifacts/gate6c-h>/hb-<step>.json. $0: no Claude call.
