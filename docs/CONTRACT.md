@@ -20210,8 +20210,8 @@ read. So Steward's RC check comes before release, shared with RV's if they ship 
 
 ### Binding answers carried over
 
-- **RV, all of it:** a growth is a revision: kept parts byte for byte, `rv<n>_` ids, `rv<n>:` stages, the tile delta, LIFO undo, the
-  effective IR. A growth is undone by `undoRevision`, one building at a time.
+- **RV, all of it:** a growth is a revision: kept parts byte for byte, `rv<rid>_` ids, `rv<rid>:` stages, the composed-intent patch,
+  the realised record, the head, LIFO undo with its suffix preflight, the effective IR. In this section `n` is the growth's `rid`. A growth is undone by `undoRevision`, one building at a time.
 - **D3 §11:** a district's street ends stay terminal junctions in its graph; `land.v` moves to 2 when 6d adds grown parts.
 - **D3 S-D3-1:** Steward's own street extensions in a V town are held cells to route around. GR's extensions are Architect's, in the
   region's graph, so later districts may join them.
@@ -20272,11 +20272,11 @@ nobody uses, inside the claim, around everything that stands, and never moves a 
 3. **Then one extension** (§4), if lots remain and `extend` allows.
 4. **A lot that fits nowhere** is listed in `unplaced` with its reason (`NO_ROOM {kind: frontage | street | claim | held | body}`),
    as V lists them. A growth with no lot placed fails `NO_ROOM` and plans nothing.
-- The search is deterministic over the effective IR, the frozen heights, the held set and the revision seed (RV §2.1).
+- The search is deterministic over the effective IR, the frozen heights, the held set and the revision seed (RV §2.2).
 
 #### 2.3 Obstacles
 
-Everything RV §5.2 lists, plus: every standing lot box plus its apron (`lotGap` 3 to a new lot), every standing lane, prop, lamp and
+Everything RV §5.3 lists, plus: every standing lot box plus its apron (`lotGap` 3 to a new lot), every standing lane, prop, lamp and
 square cell, every beside region's `reach` and hold columns, and a beside district's land (D3's `land.union`) when the town grows.
 A town's growth never takes a district's land; a district's growth never takes town land except its own join's cells (it doesn't write
 them, §4.1).
@@ -20335,7 +20335,7 @@ A following district's street is a route on its boundary line. Its growth:
 - **Frontage:** new lots on both sides of the standing route where free (§3's rule with `FOLLOW_SETBACK` 3 and `FOLLOW_PAD` 6, the
   district's own lot geometry, `followEmit.mjs` :142-189).
 - **Extension:** the boundary is traced again (`traceBoundary`, the same `follow` and side) over a fresh survey of the claim (loaded
-  chunks, resolution 1, recorded with the revision's inputs as RV §5.2's files) from the standing route's free end along the spine,
+  chunks, resolution 1, recorded with the revision's inputs as RV §5.3's files) from the standing route's free end along the spine,
   outside the standing band. The new band continues the standing mask; its street is a T2 route from the end node along the new
   band's middle, and its lots are placed as D2's.
 - **Its mask grows:** `meta.districts.follow[id].mask` isn't kept, so the revision records the new band's mask as its own
@@ -20348,8 +20348,9 @@ A following district's street is a route on its boundary line. Its growth:
 - **Parts:** `rv<n>_pads`, `rv<n>_lanes`, `rv<n>_props` and, for an extension, `rv<n>_verges` and `rv<n>_street` (for a district:
   `rv<n>_<d>_pads` and so on), in `rv<n>:` stages after the parent's.
 - **Lots:** the caller's ids, unique across the region (M14).
-- **Joined nodes (an RV §6.1 refusal):** a revision that added a node a beside region's `join_external` now targets can't be undone while that
-  region stands: `undoRevision` refuses `NOT_ALLOWED {why: joined, region}`. The town's removal is unaffected (D3's `dangling`).
+- **Dependencies (RV §6.4):** a growth whose added node, road or port a beside region now targets (a D3 end join to its new end, or a D3
+  side join `<region>:<roadId>` to its extension road) can't be undone while that region stands: `undoRevision` refuses `NOT_ALLOWED
+  {why: joined, region}` at preflight. The town's removal is unaffected (D3's `dangling`).
 - **Roads:** `<roadId>_g<n>`.
 - **Graph:**
   - frontage: a new junction `<roadId>_g<n>_j<k>` on the street at each lane's foot, splitting no standing edge: the junction is
@@ -20358,7 +20359,7 @@ A following district's street is a route on its boundary line. Its growth:
     nodes. The standing end node gains one edge and stops being terminal; the new end is terminal, so a later district (D3) or a later
     growth can use it.
 - **Byte identity:** a program run without `params.grow` is unchanged (item 2); a growth's kept parts are RV's (byte for byte, checked
-  per tile, RV §3.4). `KIT_VERSION` moves.
+  per tile, RV §3.6). `KIT_VERSION` moves.
 - **The town's square and bell** are unchanged; M22, M23 and M24 are judged on the whole revised IR (a new trading hall must sit
   within 12 of the bell, or it is placed where it is and M23 warns as today).
 
@@ -20381,7 +20382,7 @@ no other member changed) is a growth:
 - the zone answers `fits` with `standing: true` and `grown: [lot ids]`;
 - catalogue: `revision.grow` reserved -> supported (catalogue 13).
 - A districts zone (`program.districts`) gaining lots in one district grows that district.
-- A zone whose lots lose a lot answers `unsupported revision.change` (removing a lot is `Sites.remove`, RV §4.4).
+- A zone whose lots lose a lot answers `unsupported revision.change` (removing a lot is `Sites.remove`, RV §4.6).
 
 ### 9. API, kit and versions
 
@@ -20421,23 +20422,24 @@ About **4.5-5.5 days** of work, **3 elapsed**:
 | 4 | Town extension | `gr_town` grown by 6 lots (`prefer: extend`): one extension from the extendable end, its road joined to the standing road, flagged; the new end terminal; walkable as item 3 |
 | 5 | Steward's district, two buildings | `gr_beside`: building 3 then building 4, each a growth under Steward's opKeys (`dgrow:<district>:<k>`), each realised; `undoRevision` of building 4 then 3 (verifier re-runs): the world before each, cell for cell; the district's join and the town untouched (hash) |
 | 6 | plan/0 | `v8x_6d_gr_zone` through `checkPlan` (zone `fits standing`, 2 added lots `fits`) then `realiseApproved`, with one stale retry under a second key across a restart |
-| 7 | Later districts | after item 4: a D3 district beside `gr_town` joins the extension's new end (`besidePorts` on the effective IR). `undoRevision` of the growth then refuses `NOT_ALLOWED {why: joined, region}` (RV §6.1), and nothing is written (hash). Once the district is removed, the undo succeeds: the world before the growth |
+| 7 | Later districts (end join) | after item 4: a D3 district beside `gr_town` joins the extension's new end (`besidePorts` on the effective IR). `undoRevision` of the growth then refuses `NOT_ALLOWED {why: joined, region}` (RV §6.1), and nothing is written (hash). Once the district is removed, the undo succeeds: the world before the growth |
+| 7b | Later districts (side join) | after item 4: a D3 district north of the extension joins its side by a T (`<region>:<roadId>` of `street_e_g<n>`); `undoRevision` of the growth refuses `joined` at preflight, nothing written (hash); the district removed, then the undo is exact |
 | 8 | Removal (verifier re-runs) | `gr_town` with two growths and a beside district: D3's removal orders, then `Regions.remove` of the town with both growths standing: E-flat 0 over the claim against the world before the town |
 | 9 | KC and held | a growth whose cheapest slot is beside the farm pond: the lot keeps clear (0 cells in its hard or watch set); the Steward addition and the PT build never written; a growth with every slot held answers `NO_ROOM {kind: held}` with nothing planned |
 | 10 | Along district | `gr_along` grown by 3 lots: frontage first, then the boundary extension; the mask grown; walkable from every lot to the district's street end |
 | 11 | Outpost | `gr_outpost` grown by 2 lots; `architect_mc:corridor` byte-identical |
 | 12 | Land v 2 | after items 5, 10, 11: every column each district holds in the journal lies in `union`; each grown part carries its revision; after `undoRevision` the parts are gone and `union` equals the one before |
-| 13 | Survival (only if RS has merged) | item 3 in a survival world: the new lots, lanes and pads as RS targets; `undoRevision` refunds once per key (`survival.undoable` true for frontage growth) |
+| 13 | Survival (only if RS has merged) | item 3 in a survival world: the new lots, lanes and pads as RS targets; `undoRevision` refunds once per key (`survival.allowed` true for frontage growth on land; a growth over a paid or unbuilt target refused, RV §8) |
 | 14 | Unchanged, API, spend | RV's item 18 plus rv-ingame; api-compat clean; apijars; $0.00 |
 | 15 | Natural round | S3's pinned claim: D3's item 15 town and shore district, the district grown by 2 lots (frontage and the boundary extension); plan, realise, save, leave, reopen; `undoRevision`, then removal in both orders; E-normal 0 unclassified under D2's narrowed classes and VOC's `farfluid` |
 
 **Tier:** slice plus `region/**` and `api/**`: the units and apijars; rv-ingame, d3-ingame, d2-ingame, fl-ingame; GR's own `gr-unit`,
 `gr-ingame` (driver `tools/gate6dgr.mjs`, chain `6dgr`, impact rule "6d GR").
 
-The verifier reviews the diff and **re-runs items 5, 7 and 8**. **Steward's RC check** follows (S-GR-7).
+The verifier reviews the diff and **re-runs items 5, 7, 7b and 8**. **Steward's RC check** follows (S-GR-7).
 
-Item 7's expected answer, plainly: a growth whose new end (or frontage junction) a later district joined can't be undone while that
-district stands (`NOT_ALLOWED joined`, naming it), since its join would be left pointing at a node that is gone. Removing the town
+Items 7 and 7b's expected answer, plainly: a growth whose new end, extension road or frontage junction a later district joined (end or
+side) can't be undone while that district stands (`NOT_ALLOWED joined`, naming it), since its join would point at something gone. Removing the town
 still works (D3's town-first order, `dangling`).
 
 ### Steward's recorded asks: expected answers
@@ -20458,8 +20460,8 @@ still works (D3's town-first order, `dangling`).
   `planByKey` and `realiseByKey` after a restart. Default: as proposed.
 - **S-GR-4. Rings and spirals.** FL rings, spirals and organic layouts grow only on free frontage of their straight runs; they never
   extend (`NO_ROOM {kind: layout}`). Default: yes.
-- **S-GR-5. A joined end.** A district's own join end, and a town end a district joined, are never extended; and a growth whose new end a
-  later district joined can't be undone while that district stands (`NOT_ALLOWED joined`). Fine for your undo order? Default: yes.
+- **S-GR-5. A joined end.** A district's own join end, and a town end a district joined, are never extended; and a growth whose new end or
+  extension road a later district joined (end or side) can't be undone while that district stands (`NOT_ALLOWED joined`). Fine for your undo order? Default: yes.
 - **S-GR-6. A dry growth check.** Do you want a `checkGrow` (D3's dry-check style: nothing kept) before offering "build here", or is
   `planRevision` (which keeps a plan) enough once plans can be discarded (PLAN's queued `discardPlan`)? Default: no dry check in GR;
   `planRevision` plus `discardPlan` when it ships.
@@ -20539,7 +20541,8 @@ record Follower(String entryId, Library.Derivation.Kind kind, int sourceVersion,
 default CompletableFuture<FollowResult> follow(String copyEntryId, int toSourceVersion /* 0 = head */, @Nullable String opKey)
 default CompletableFuture<List<FollowResult>> followAll(String sourceEntryId, int toSourceVersion, @Nullable String opKey)
 record FollowResult(String entryId, boolean followed, int fromVersion, int newVersion, int sourceVersion,
-    @Nullable String refused /* null | frame | check | bar | fit | bible_gone | source_gone */, String message)
+    @Nullable String refused /* null | frame | check | bar | fit | bible_gone | source_gone | head_moved */, boolean alreadyFollowed,
+    String message)
 ```
 
 - **The job** (sidecar `entry.follow`): load the source at `toSourceVersion`, apply the copy's recipe exactly (its `shift`, `param`,
@@ -20553,7 +20556,16 @@ record FollowResult(String entryId, boolean followed, int fromVersion, int newVe
   `ENTRY_VERSIONED` fires as for any version.
 - **Refused** (any check failing): nothing installs; `FollowResult.refused` names why; the copy stays at its version. No fallback
   design is made (N-FS-1).
-- **opKey:** the same key and request return the same result; `followAll` keys each follower `<key>:<entryId>`.
+- **`followAll` is one persisted operation.** At its start it resolves and freezes the source version (`toSourceVersion`, or the head
+  then) and the follower set (every COPY `behind` at that moment, with each one's head version), and saves both in
+  `<data>/follows/<opKey or a generated id>.json` before following any. Followers made or versioned after that aren't in it. A
+  restart resumes the remaining followers of a saved operation; a replay with the same key returns the saved results.
+- **Installs are compare-and-set.** A follower's new version installs only if the copy's head is still the version frozen for it and its
+  `derivation.sourceVersion` is still below the target (the same lock `versions.install` takes for `versionOf`'s `base_moved`). A head
+  that moved answers `refused: head_moved`, nothing installed.
+- **Already followed is a no-op:** a copy whose head already derives from the target version (or a later one) answers `followed: false,
+  refused: null, alreadyFollowed: true` and installs nothing. So a replay, or two overlapping calls, never install twice.
+- **opKey:** `follow` keys its one result; `followAll` keys the operation (each follower inside it is recorded by entry id).
 - `versionOf` and polish of a COPY stay refused (`VERSION_REFUSED copy`): following is how a copy changes.
 - An entry whose source is gone (deleted, never GC'd while pinned) refuses `source_gone`.
 
@@ -20579,7 +20591,7 @@ unaffected (a lot is BOX above its pads).
 
 | # | Check | Bar |
 |---|---|---|
-| 1 | Unit (sidecar, kit) | the follow job on the bundled cabin and tavern sources: a recipe re-applied to v2 gives the same blocks as a fresh copy made with that recipe from v2 (byte-identical NBT); each refusal (frame, check, bar, fit, source_gone); opKey replay |
+| 1 | Unit (sidecar, kit) | the follow job on the bundled cabin and tavern sources: a recipe re-applied to v2 gives the same blocks as a fresh copy made with that recipe from v2 (byte-identical NBT); each refusal (frame, check, bar, fit, source_gone, head_moved); opKey replay; `followAll` frozen set (a copy made mid-operation not followed; the source versioned again mid-operation: the frozen version used); already-followed no-op; a kill mid-`followAll` and its resume |
 | 2 | Followers | a group with an archetype and 3 copies, plus a VARIANT: `followers` lists 4; `behind` true for the 3 copies after the source's `versionOf` (stub) |
 | 3 | followAll | the 3 copies followed: 3 new versions, each passing the check and the bar; `ENTRY_VERSIONED` 3 times |
 | 4 | Lots (verifier re-runs) | the 3 copies placed as lots of a `flat_village` realised through `checkPlan` then `realiseApproved` (Steward's plan v1 shape); `outdated` lists them; `applyDelta` on each, a player's block on one lot kept (`KEEP`); `revert` of each to the old version: the world before the delta, cell for cell |
@@ -20618,128 +20630,96 @@ unaffected (a lot is BOX above its pads).
 - **N-FS-1:** a copy that can't follow stays as it is, at $0, with no paid redesign.
 
 
-## Phase 6d slice LC: land change in a standing region (DRAFT for Steward review)
+## Phase 6d slice LC: land change in a standing region, the report (DRAFT v2 for Steward review, after GPT-6.1's review)
 
-A standing region can say what has changed in it since it was built, part by part and lot by lot, with the player's cells apart. And a
-region held `DRIFTED` before a later stage can re-plan just the stages not yet placed, keeping everything placed. This is
-SETTLEMENTS §14 ("incremental replanning on land change"), PT's S-PT-1 ("to 6d with replanning on land change"), and §14's "drift at
-realise ... offer replan affected stages".
+A standing region can say what has changed in it since it was built, part by part and lot by lot. v2 ships **the report only**: the
+stage re-plan of v1 is deferred (GPT-6.1's review: it would mostly refuse for layout-searched programs, and no Steward case shows its
+value yet; S-LC-4). This is SETTLEMENTS §14 ("site-bound lots ... a change ... is reported") and PT's S-PT-1 ("to 6d with replanning on
+land change"), in its reporting half.
 
-LC adds a read-only report and an opt-in call on a waiting region; it changes no removal, so no RC (GATES policy 4).
+LC is read-only, so no RC (GATES policy 4).
 
 - **Branch:** `slice/LC`, worktree `../architect-mc-LC`. **Spend:** $0.
-- **Scope:** `Regions.landCheck` (§2), `Regions.replanStages` (§3), the stage wait's action, and wiring T2's route hysteresis
-  (`routePrefer`) through the mod for the first time.
-- **Not in scope:** SETTLEMENTS §14's incremental passes over dirty tiles with old fields as boundary conditions (a kit rewrite of
-  every pass; later, if a measured need appears, S-LC-3); re-fitting damaged buildings (C13's `versionOf` does that); repairing damage
-  automatically.
-- **Depends on:** RV (the effective IR, revisions as the repair path), PT (player records), CU and F3's StillOurs rows, T2.
+- **Scope:** `Regions.landCheck` (§2).
+- **Not in scope (deferred):** `replanStages` (re-planning the stages not yet placed for a region held `DRIFTED`), SETTLEMENTS §14's
+  incremental passes over dirty tiles, re-fitting damaged buildings (C13's `versionOf` does that), attributing removals to anyone.
+- **Depends on:** RV (the realised record, §3.1, which says which intended cells the region actually wrote), PT, CU and F3's StillOurs rows.
 
 ### 0. Facts (main f3f41d43, from code)
 
-- `Drift.check` at realise and `Drift.checkStage` before each later stage (`Drift.java` :17-36, :56+): a failed stage shows as
-  `drift["held: ..."]`, surfaced as `waiting = DRIFTED` (`RegionsImpl.java` :1852-1857). There is no `SITE_DRIFTED` reason
-  (SETTLEMENTS §14 names one; it doesn't exist).
-- Frozen heights exist only for columns a written tile touched (6a D3); unplaced stages' tiles may have none.
-- `ctx.routePrefer` (T2's hysteresis: cells of an earlier route cost a third, `route.mjs` :328-340, `program.mjs` :360-371) is set only
-  by gate tools (`gate6ct2.mjs`, `scenario-route.mjs`); the mod and sidecar never pass it.
-- PT keeps who placed a cell per chunk (`Placed`, `Sites.playerPlaced`), and the journal keeps a `Pt` per cell (`journal/Pt.java`).
+- PT records who **placed** a block (`Placed.Rec(placer, build)`, per chunk; `Sites.playerPlaced`). It records nothing when a block is
+  broken: a record is cleared when its cell becomes air or fluid or is replaced (`Placed.java` :296). So **who dug a cell is unknown.**
+- The journal holds each region cell's `after`; RV's realised record (§3.1) says which intended cells were written, skipped or no-ops.
+- `Drift.checkStage` (`Drift.java` :56+) holds a later stage `DRIFTED`; there is no `SITE_DRIFTED` reason.
 
 ### 1. The rule in one line
 
-**A land check reads, never writes; a stage re-plan changes only stages that have written nothing, and refuses if any placed part
-would come out different.**
+**A land check reads, never writes, and attributes only what the records prove: a block a player placed is the player's; a missing or
+changed block is just changed.**
 
 ### 2. `landCheck`
 
 ```java
 // Regions (default throws; feature "landCheck")
 default CompletableFuture<LandReport> landCheck(String regionId, @Nullable String part /* null: every part */)
-record LandReport(String region, int revision, List<PartLand> parts, List<LotLand> lots, long cellsChecked, long ms)
-record PartLand(String part, long cells, long changed, long player, long natural, Map<String, Long> kinds, List<BlockPos> sample)
-record LotLand(String lot, String siteId, String state, double standing /* Reconcile's score */, long changed, long player)
+record LandReport(String region, int position, List<PartLand> parts, List<LotLand> lots, long cellsChecked, long unloaded, long ms)
+record PartLand(String part, long cells, long changed, long removed, long playerPlaced, long volatileChanged,
+    Map<String, Long> kinds, List<BlockPos> sample)
+record LotLand(String lot, String siteId, String state, double standing /* Reconcile's score */, long changed, long playerPlaced)
 ```
 
-- For each cell the region holds on top (tile, revision and road entries): the world against the entry's `after` (StillOurs, with CU's
-  and F3's rows). Changed cells are split by PT's record: `player` (a player placed what's there), `natural` (air, fluid, leaves, snow,
-  grown plants: the volatile kinds), else counted by block kind in `kinds`.
-- Lots: each lot site's `Reconcile` standing score (`STANDING` 0.8, `RESTORED` 0.9, as world start) and its changed and player cells.
-- Bounded: at most 4M cells per call, over ticks at the queue's budget (recorded); a larger region answers per part.
-- $0, read-only, no ticket (unloaded chunks are counted `unloaded`, not loaded).
-- **Use:** Steward shows "the east field was dug up (120 cells, by players)"; a repair is a revision (RV) or a lot delta (5b).
+- **Which cells:** each cell the region holds on top (tile, revision and road entries), attributed to its part by the realised record
+  (the cell's writer). Cells in a region realised before RV with no record are counted under part `unattributed`.
+- **The classes** (each changed cell in exactly one):
+  - `removed`: the world holds air or fluid where the region wrote a solid (who removed it is not known);
+  - `playerPlaced`: the block there now carries a PT record (a player placed it);
+  - `volatileChanged`: a volatile kind changed (leaves, snow, grown plants, fluid levels);
+  - otherwise `changed`, counted by block kind in `kinds`.
+- **Lots:** each lot site's `Reconcile` standing score (`STANDING` 0.8, `RESTORED` 0.9, as world start) and its changed and player-placed
+  cells.
+- Bounded: at most 4M cells per call, over ticks at the queue's budget; larger regions answer per part. $0, no ticket (unloaded chunks
+  counted, not loaded).
+- **Use:** Steward can show "the east field changed: 120 blocks gone, 12 placed by players" and repair with a revision (RV) or a lot
+  delta (5b). It never says who dug.
 
-### 3. `replanStages`
+### 3. Byte identity, KC and Steward's asks
 
-```java
-// Regions (default throws; feature "replanStages")
-default CompletableFuture<RegionPlan> replanStages(String regionId, @Nullable String opKey)
-```
+- Read-only: no IR, tile, answer or journal change; kit unchanged.
+- **Steward's asks:** S-PT-1's reporting half is answered; the replan half is deferred (S-LC-4). The 59 asks are unaffected.
 
-- **When:** the region is `PLACING`, waiting `DRIFTED` at a stage gate (no tile of that stage or later written), or `PARTIAL` with
-  stages never started.
-- **What runs:** the region's program again with its **recorded** params and seed (the ones its plan ran with, kept in the sidecar's
-  plan directory; for plan_v0 regions that includes the `regions`, `builds`, `protected.areas` and `standing` inputs as they were),
-  over the claim, with the new land and the held set passed as separate inputs:
-  - the frozen heights where they exist (placed tiles' windows), and a fresh resolution-1 survey elsewhere (loaded chunks);
-  - `ctx.routePrefer` from the effective IR's route and road cells (T2's hysteresis), so routes stay where they were where the land
-    allows;
-  - the held set as obstacles (RV §5.2).
-- **The acceptance rule:** every part, lot, road, node and edge of the **placed** stages comes out byte-identical. If any differs, the
-  call refuses `DRIFTED {why: placed_parts_changed, parts}` and nothing changes (the region keeps waiting; the caller may `force` as
-  today, or remove it).
-- **When accepted:** the region's IR for the unplaced stages is replaced by the new one (a revision `n` with `kind: replan`, RV §4.1,
-  writing nothing until its stages run; the one revision allowed while the region is `PLACING`, since it touches only stages that
-  haven't started), `Drift.checkStage` re-baselines, and the queue continues. Undo and removal are RV's.
-- Through `realiseApproved`: a region realised from an artifact gets a new artifact for the replan (`revisionOf`, RV §9.3), so
-  Steward approves the changed stages before they run (S-LC-2).
-
-### 4. Byte identity, KC and Steward's asks
-
-- **Byte identity:** a region that never calls `replanStages` is unchanged; a replan keeps every placed part byte for byte (§3's
-  rule). Plain plans don't get `routePrefer` (only `replanStages` passes it), so no plan answer moves. Kit unchanged.
-- **KC:** the replanned stages are the region's own program; its bodies keep clear as at plan time, and the held set is hard.
-- **World classes:** item 3's natural twin classes E-normal by D2's narrowed classes at unwritten cells only (no new class).
-- **Steward's asks:** S-PT-1 ("C17 areas are enough until 6d's replanning") is answered by the report plus the stage replan; plan
-  v1's stale retry is unchanged. The 59 asks are unaffected.
-
-### 5. Gate (slice tier, $0)
+### 4. Gate (slice tier, $0)
 
 | # | Check | Bar |
 |---|---|---|
-| 1 | Unit | the classification (player, natural, kinds) on a synthetic journal; the acceptance rule on synthetic IRs (a placed part changed: refused) |
-| 2 | Land check | `rv_town` (RV's fixture): a player digs 40 cells of the square and places 12 blocks on a lane; a creeper-like removal of 20 pad cells (DevBridge); `landCheck` reports each part's counts exactly (against a driver-side diff); 0 cells written (hash) |
-| 3 | Replan, accepted | a 3-stage region whose stage 3's tiles are dug by the driver while stage 2 places: `DRIFTED` at stage 3's gate; `replanStages` accepted; stage 3 placed against the new land; then `Regions.remove`: E-flat 0 (verifier re-runs) |
-| 4 | Replan, refused | the same, with stage 2's ground changed too: refused `placed_parts_changed`, nothing changed |
-| 5 | Steward's shape | the plan v1 path: a region from `realiseApproved` held `DRIFTED`; `replanStages` gives a revision artifact; `realiseApproved` of it continues |
-| 6 | Unchanged, API, spend | rv-ingame, 6a drift items; api-compat; apijars; $0.00 |
+| 1 | Unit | the classification on a synthetic journal and realised record: each class, part attribution, unattributed legacy cells |
+| 2 | Land check | `rv_town` (RV's fixture): the driver removes 40 cells of the square (as a player breaking them), places 12 blocks on a lane as a player, and removes 20 pad cells by a non-player (DevBridge); `landCheck` reports each part's `removed`, `playerPlaced` and `changed` exactly (against a driver-side diff); 0 cells written (hash) |
+| 3 | Revised region | the same after an RV revision: cells attributed to the revision's parts |
+| 4 | Unchanged, API, spend | rv-ingame; api-compat; apijars; $0.00 |
 
-**Size:** 2.5-3 days, one builder. **Placeholders:** API **1.46.0**, mod **0.49.0**, kit unchanged (the kit already takes
-`routePrefer`), catalogue unchanged.
+**Size:** 1.5-2 days, one builder. **Placeholders:** API **1.46.0**, mod **0.49.0**, kit unchanged, catalogue unchanged.
 
 ### Open questions for Steward
 
-- **S-LC-1. The report's grain.** Per part and per lot, with player cells apart and a sample of positions (at most 16). Enough for the
-  card, or do you need cell lists? Default: counts and samples.
-- **S-LC-2. Approving a replan.** A replanned region from an approved artifact gets a new artifact, and its changed stages wait for
-  `realiseApproved` of it. Or should a replan whose changed parts are only terrain under no lot continue without a new approval?
-  Default: a new approval.
-- **S-LC-4. How often a replan is accepted.** Predicted low for layout-searched programs (V's street search and plan_v0's zone search
-  read the whole survey, so new land near any placed part can move it), higher for terrain-only stages. The builder records the rate
-  on item 3's fixture and on 20 synthetic drifts. Is a mostly-refusing replan still worth shipping, or should LC ship the report only?
-  Default: ship both; the refusal names the parts, which is useful by itself.
-- **S-LC-3. Incremental passes.** SETTLEMENTS §14's dirty-tile passes (fields re-run over changed tiles with old values as boundaries)
-  are not in LC: the stage replan re-runs the program whole and accepts only if placed parts are unchanged. Is that enough for your
-  phase 3? Default: yes, until a measured case needs more.
+- **S-LC-1. The report's grain.** Per part and per lot, the classes above, a sample of positions (at most 16). Enough for the card?
+  Default: yes.
+- **S-LC-2. Attribution.** Architect reports "placed by a player" only where PT recorded it, and never who removed a block. Fine?
+  Default: yes.
+- **S-LC-3. Incremental passes.** SETTLEMENTS §14's dirty-tile passes are not planned. Default: not until a measured case.
+- **S-LC-4. The stage re-plan.** Deferred: re-running the program for a region held `DRIFTED` would mostly refuse (V's street search and
+  plan_v0's zone search read the whole survey). Do you have a case where a long build drifts before a later stage? Default: deferred until
+  you show one.
 
 ### Open questions for Noah
 
-- **N-LC-1. Damage in the card.** Proposed: Architect reports damage only when asked (`landCheck`), and Steward decides whether to
-  mention it. The alternative is an event per damaged part. Default: on request only.
+- **N-LC-1. Damage in the card.** Proposed: reported only on request (`landCheck`); Steward decides whether to mention it. The alternative
+  is an event per damaged part. Default: on request only.
 
-### Coordinator decisions (2026-10-20, on Noah's behalf)
+### Deferred
 
-- **N-LC-1:** land damage is reported on request only, not as an event.
-
+- `replanStages` (S-LC-4), with its acceptance rule (every placed part byte-identical), its recorded inputs (the plan's recorded params,
+  seed, `regions`, `builds`, `protected.areas` and `standing`; the new land and held set separate) and T2's `routePrefer` wiring, as v1
+  of this section drafted them.
+- Removal provenance (who broke a block): a PT extension, if Steward asks.
 
 ## Phase 6d slice AD: adopting a VillageLayout settlement as a region, the 6d half of C12 (DRAFT for Steward review)
 
@@ -20799,19 +20779,35 @@ record AdoptRegionRequest(String owner, ResourceKey<Level> dimension, BoundingBo
   `$.lots[]` with C36's members and the sites' ext), so a plan/0 revision can name it as `parentArtifact` (RV §9) and Steward's plan
   writer can grow the adopted village as any region.
 
-#### 2.3 Group membership
+#### 2.3 Ownership: what moves, and the crash-safe order
 
-- The region gets a new group `g<N>`. Each adopted site's membership moves to it (`Site.Member(group, batchId, itemKey)`), its old
-  membership recorded in the region record (`adopted.from`) so un-adopt can restore it.
-- One `adopt` journal entry per site is **not** written (the sites' own entries stand); the region record and the membership change
-  are one atomic save.
+**What says who owns a site** (from code): a journal entry names its **site**, not a group (`Journal.java` :176, `Entry(id, kind, site,
+...)`), so no journal cell or header is rewritten. Group ownership lives in two other places, both of which move:
+- each site record's membership `Site.Member(group, batchId, itemKey)` (the sites file);
+- each group's `SiteGroupRec` and its `StageRec(name, items, state, sites, batchId)` lists (the groups file, `SiteGroupRec.java` :55).
+And the region record is a third file. Sites with their own deltas keep them: deltas are entries of the site, so they move with it.
+
+**The order** (one intent file makes the three writes recoverable):
+1. **Intent:** `<world>/architect-regions/adopt-<regionId>.json` with the request, every site's old membership, and every old group's
+   stage lists as they are (fsync, rename).
+2. **Region record** `region.json` in state `ADOPTING` (a new value of RegionRec's own state field, mapped to `PREPARING` in
+   `RegionView` so API readers see an in-flight region; `RegionState` is unchanged).
+3. **Groups file:** the new group `g<N>` with one stage `adopted` listing every site; each old group's stage lists without them (an old
+   group left empty is retired as today's empty groups are).
+4. **Sites file:** each site's membership to `g<N>`.
+5. **Region record** `PLACED`; then the intent file deleted.
+- **Recovery at world start:** an intent file whose region is `ADOPTING` rolls **forward** if steps 3 and 4 are complete for every site
+  (each site's membership checked), else **back**: every site's membership and every old group's stage lists restored from the intent,
+  the region record deleted. Either way the intent file goes last.
+- While `ADOPTING`, the sites refuse deltas and removal `SITE_BUSY` (the same state their group would be in during a batch).
 
 ### 3. Un-adopt and removal
 
 - **`Regions.remove`** of an adopted region removes its group: every adopted site and road, plus every revision's cells, last placed
   first. That is exact as RV §6.2 (the sites' own entries restore their land).
-- **`Regions.unadopt(regionId)`** (default throws): allowed only with no revision standing; restores each site's old membership and
-  deletes the region record. No cell is written.
+- **`Regions.unadopt(regionId)`** (default throws): allowed only with no revision accepted (position 0). It runs §2.3's order in reverse
+  with its own intent file (`unadopt-<regionId>.json`): region `UNADOPTING`, the old memberships and stage lists restored, the region
+  record deleted, the intent deleted; recovery rolls forward or back as above. No cell is written.
 
 ### 4. Gate (slice tier, $0): the 6d rows of the joint gate
 
@@ -20822,10 +20818,11 @@ record AdoptRegionRequest(String owner, ResourceKey<Level> dimension, BoundingBo
 | 3 | A 6d addition | a GR growth of one lot on its street (frontage): through `checkPlan` of a revision plan naming the adopted artifact (Steward's plan writer shape: the adopted zone with one more lot) then `realiseApproved` |
 | 4 | A 6d delta | `applyDelta` on one adopted lot (a stub v2) |
 | 5 | Remove (verifier re-runs) | `Regions.remove`: E-flat 0 over the claim against the world before the settlement |
-| 6 | Un-adopt | a second settlement adopted then un-adopted: memberships as before, Steward's own undo of one of its sites still works |
+| 6 | Un-adopt | a second settlement adopted then un-adopted: memberships and stage lists as before, Steward's own undo of one of its sites still works |
+| 6b | Crashes (verifier re-runs) | a kill after each of §2.3's steps 1-4, for adopt and for un-adopt, on a settlement whose sites include one with two deltas: each restart rolls forward or back, every site's membership and every group's stage lists consistent (one owner per site), 0 cells written; then `Regions.remove` or Steward's own undo exact |
 | 7 | Joint row (with 7a) | once 7a's link pass lands: its link pass over the adopted region, then rows 3-5 again (run on the integration branch) |
 
-**Size:** 3-3.5 days, one builder. **Placeholders:** API **1.47.0**, mod **0.50.0**, kit **0.46.0**, catalogue unchanged.
+**Size:** 3.5-4 days, one builder. **Placeholders:** API **1.47.0**, mod **0.50.0**, kit **0.46.0**, catalogue unchanged.
 
 ### Byte identity, KC and Steward's asks
 
