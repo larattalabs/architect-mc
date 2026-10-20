@@ -9,15 +9,15 @@
 import { fnv64 } from '../noise.mjs';
 import { opBounds } from '../region/plan.mjs';
 import { DEPTH, ceilingsOf, facesOf, lintGrows, roots, stalactites } from './cave.mjs';
-import { giantMushroom } from './giantMushroom.mjs';
-import { giantTree } from './giantTree.mjs';
+import { PRESETS as MUSHROOM_PRESETS, giantMushroom } from './giantMushroom.mjs';
+import { PRESETS as TREE_PRESETS, giantTree } from './giantTree.mjs';
 import { forbidden, pickSites } from './place.mjs';
 import { columnRuns, runsRect } from './states.mjs';
 
 /** The grown kinds F3 places on open land (trees and mushrooms), their generators and limits. */
 export const GROWN = Object.freeze({
-  giant_tree: { generator: 'giantTree', grow: giantTree, preset: 'oak' },
-  giant_mushroom: { generator: 'giantMushroom', grow: giantMushroom, preset: 'brown' },
+  giant_tree: { generator: 'giantTree', grow: giantTree, preset: 'oak', presets: TREE_PRESETS },
+  giant_mushroom: { generator: 'giantMushroom', grow: giantMushroom, preset: 'brown', presets: MUSHROOM_PRESETS },
 });
 /** The F3 kinds still waiting for their sub-slice (stubs). */
 export const PENDING = Object.freeze({ coral: 'F3c' });
@@ -89,7 +89,9 @@ export function f3Emit(C, p) {
     const preset = part.preset ?? G.preset;
     const height = part.height === undefined ? undefined : Array.isArray(part.height) ? part.height : [part.height, part.height];
     // (retry a: another seed of the site's species when its own shape fits nowhere; a = 0 is the site's own seed)
-    const params = (k, at, a = 0) => ({ preset, at, seed: fnv64(r.ctx.seed, G.generator, a ? `${id}_${k + 1}_r${a}` : `${id}_${k + 1}`).hex, ...(height ? { height } : {}), ...(part.roots !== undefined ? { roots: part.roots } : {}) });
+    // (from the second retry on, the lower half of the preset's heights: a smaller crown, when the part names no height)
+    const lower = (() => { const h0 = G.presets[preset]?.height; return h0 ? [h0[0], Math.max(h0[0], (h0[0] + h0[1]) >> 1)] : undefined; })();
+    const params = (k, at, a = 0) => ({ preset, at, seed: fnv64(r.ctx.seed, G.generator, a ? `${id}_${k + 1}_r${a}` : `${id}_${k + 1}`).hex, ...(height ? { height } : a >= 2 && lower ? { height: lower } : {}), ...(part.roots !== undefined ? { roots: part.roots } : {}) });
     const shapes = new Map();
     const shapeOf = (k, a = 0) => {
       const sk = `${k}/${a}`;

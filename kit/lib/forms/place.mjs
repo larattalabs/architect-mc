@@ -22,8 +22,8 @@ export const TREE_CLEAR = 8;
 /** Bodies, zones, forms and the form's own other sites keep this far (F1's gap). */
 export const FORM_GAP = 2;
 const STEP = 2;
-/** Other seeds a site tries when its own shape fits nowhere (§3.1: fewer, moved; a smaller crown first). */
-export const RETRIES = 3;
+/** Other seeds a site tries when its own shape fits nowhere (§3.1: fewer, moved; from the second on, the preset's lower heights). */
+export const RETRIES = 5;
 
 /** A bitmap over the claim (one byte a column). */
 function grid(claim) {

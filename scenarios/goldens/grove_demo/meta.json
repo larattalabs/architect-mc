@@ -18,6 +18,9 @@
   "f_g_jungle_1": {
    "kind": "form"
   },
+  "f_g_mangrove_1": {
+   "kind": "form"
+  },
   "f_g_oak_1": {
    "kind": "form"
   },
@@ -52,15 +55,15 @@
     "required": false,
     "geometry": {
      "rect": [
-      3472,
-      -1418,
-      3495,
-      -1396
+      3518,
+      -1446,
+      3541,
+      -1424
      ],
      "sites": [
       [
-       3484,
-       -1408
+       3530,
+       -1436
       ]
      ]
     }
@@ -72,15 +75,15 @@
     "required": false,
     "geometry": {
      "rect": [
-      3523,
-      -1442,
-      3540,
-      -1425
+      3532,
+      -1406,
+      3548,
+      -1390
      ],
      "sites": [
       [
-       3532,
-       -1434
+       3540,
+       -1398
       ]
      ]
     }
@@ -171,18 +174,25 @@
    {
     "part": "g_mangrove",
     "block": "form.giant_tree",
-    "class": "refused",
+    "class": "fits",
     "required": false,
-    "reasons": [
-     {
-      "code": "NO_ROOM",
-      "message": "no site for the giant tree within its locator: dry, level, 8 clear of natural trees, 2 clear of bodies, zones, lots and forms",
-      "evidence": {
-       "tried": 4966,
-       "want": 1
-      }
-     }
-    ]
+    "notes": [
+     "1 grown from another seed of the species (its own shape fit nowhere within the locator)"
+    ],
+    "geometry": {
+     "rect": [
+      3477,
+      -1414,
+      3495,
+      -1396
+     ],
+     "sites": [
+      [
+       3486,
+       -1406
+      ]
+     ]
+    }
    },
    {
     "part": "g_pale_oak",
@@ -263,6 +273,7 @@
    "f_g_cherry_1": "g_cherry",
    "f_g_dark_oak_1": "g_dark_oak",
    "f_g_jungle_1": "g_jungle",
+   "f_g_mangrove_1": "g_mangrove",
    "f_g_oak_1": "g_oak",
    "f_g_pale_oak_1": "g_pale_oak",
    "f_g_red_1": "g_red",
