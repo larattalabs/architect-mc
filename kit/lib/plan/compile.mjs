@@ -46,7 +46,7 @@ import { FLUIDS_STAGE } from '../fluids/kinds.mjs';
 import { readPaletteRule } from './palette.mjs';
 // (6c FL) free layouts: ring, spiral, grid, organic, around and outlines (free.mjs resolves, frontage.mjs emits)
 import { isFreeZone, resolveFreeZone, freeGeometry, aroundSites, bodyKeepRects, whereParts } from './free.mjs';
-import { emitFree } from '../region/frontage.mjs';
+import { emitFree, emitStreetLamps, possibleLanterns, LAMP_GAP } from '../region/frontage.mjs';
 
 /** §7's caps (each a request may only lower). */
 export const BUDGET_DEFAULTS = Object.freeze({ maxNodes: 2_000_000, maxEdges: 128, maxCells: 20_000_000, maxMs: 120_000, maxHeapMb: 2048 });
@@ -1143,9 +1143,9 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       try {
         let props = null;
         const L = emitFree(r, z.layout, {
-          prefix, zone: p.id, stages: { ground: stageOf('ground'), street: stageOf('street'), lots: stageOf('lots') }, _unsafe: p.part.ext?.['architect_mc:unsafe'] ?? {},
+          prefix, zone: p.id, stages: { ground: stageOf('ground'), street: stageOf('street'), lots: stageOf('lots'), props: stageOf('props') }, _unsafe: p.part.ext?.['architect_mc:unsafe'] ?? {},
           padEdge: reliefOf.has(p.id) && reliefOf.get(p.id).some((f) => okClass(f)) ? 'blend' : 'slope',
-          planProps: ({ o, sh, res: rs, lots }) => (props = planProps(r, { o, sh, res: rs, lots, laneWidth: 2, lamps: 'street', bell: false, keepOut: ctx.keepOut ?? [], rng: ctx.rng(`props:${p.id}`) })),
+          planProps: ({ o, sh, res: rs, lots }) => (props = planProps(r, { o, sh, res: rs, lots, laneWidth: 2, lamps: 'street', bell: false, keepOut: ctx.keepOut ?? [], rng: ctx.rng(`props:${p.id}`), lampGap: LAMP_GAP })),
         });
         if (props) emitProps(r, props, { stage: stageOf('props'), prefix });
         for (const q of props?.props ?? []) propsPlanned.push(q);
@@ -1496,13 +1496,25 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     emitTunnels(K);
   }
 
+  // ---- (6c FL, Noah's look fix 3) the free zones' street lamps, now that every road is laid: none within LAMP_GAP of another lamp
+  // or of a column a 4e lantern may take (a connector's route, a V street); then the apron lamps keep the same gap
+  {
+    const free = [...zoneEmit.values()].filter((e) => e.free && e.L.streetLamps?.length);
+    if (free.length) {
+      const avoid = r.roads.filter((rd) => rd.lanterns).flatMap((rd) => possibleLanterns(rd));
+      const kept = [];
+      for (const e of free) for (const q of e.L.propsPlan?.props ?? []) if (q.kind === 'lamp') { const c = q.cells[q.cells.length - 1]; kept.push([c[0], c[2]]); }
+      for (const e of free) emitStreetLamps(r, e.L, { prefix: e.prefix, avoid, kept });
+    }
+  }
   // ---- 5. apron lamps over every village lot; anchors
   if (villages && !whole) {
     const anyBell = [...zoneEmit.values()][0].L.res.bell;
     r.anchor('entrance', anyBell); r.anchor('spawn', anyBell);
     const cp = checkpoint(r);
     try {
-      const cover = lightCover(r, { fixture: lampFixture(r), stage: stageOf('props'), keepOut: ctx.keepOut ?? [], reserved, laneCells });
+      // ((6c FL, Noah's look fix 3) a plan with a free zone: no apron lamp within LAMP_GAP of another lamp, D3's rule; every other plan as before)
+      const cover = lightCover(r, { fixture: lampFixture(r), stage: stageOf('props'), keepOut: ctx.keepOut ?? [], reserved, laneCells, ...([...zoneEmit.values()].some((e) => e.free) ? { lampGap: LAMP_GAP } : {}) });
       if (r.meta.village) r.meta.village.apronLamps = { fixture: cover.fixture, perLot: cover.perLot, before: cover.before, after: cover.after, capped: cover.capped, ...(cover.keptSkipped ? { keptSkipped: cover.keptSkipped } : {}) };
       for (const x of r.parts.slice(cp.parts)) partOf[x.id] = '__lamps__';
     } catch (e) { rollback(r, cp); notes.push(`apron lamps: ${e.message}`); }

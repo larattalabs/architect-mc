@@ -11,11 +11,16 @@
 //
 // Determinism: every choice is integer and ordered (index, then min x, then min z); the seed is the caller's ctx.rng(label).
 import { surfaceOps, square, reservations, levelStats, toWorld, waterDistance, rectWater, BELL_AREA, STREET_RULES } from './village.mjs';
-import { line4 } from './geom.mjs';
-import { roadLamp } from './fixtures.mjs';
+import { line4, centreCells, crossOffsets } from './geom.mjs';
+import { roadLamp, ARM_DIRS, fixtureCells } from './fixtures.mjs';
+import { COND } from './program.mjs';
 import { lampFixture } from './props.mjs';
 
 /** V's street: road 3 plus a verge each side; lots 3 apart; slope at most 3; pads cut and fill at most 2. */
+/** (Noah's look fix 3) A free zone's lamps stand at least this far apart (Chebyshev, light cell to light cell): D3's rule. */
+export const LAMP_GAP = 6;
+const LIGHT_RE = /(lantern|torch|end_rod|glowstone|shroomlight|froglight|campfire|redstone_lamp)/;
+
 export const FL_RULES = Object.freeze({ setback: 3, lotGap: STREET_RULES.lotGap, maxSlope: STREET_RULES.maxSlope, pad: 2, half: 2 });
 
 // ------------------------------------------------------------------ integer trigonometry (256 steps a turn)
@@ -126,6 +131,50 @@ export function cornersOf(cells) {
   }
   out.push(cells[cells.length - 1]);
   return out.map((c) => [c[0], c[1]]);
+}
+
+// ------------------------------------------------------------------ 4e's ground walkway (RoadPlan.plan, ground mode)
+
+/** RoadPlan.smooth: the smallest 1-Lipschitz majorant and largest minorant of g, averaged and floored. */
+export function smoothFeet(g) {
+  const n = g.length, lo = g.slice(), hi = g.slice();
+  for (let i = 1; i < n; i++) { lo[i] = Math.max(lo[i], lo[i - 1] - 1); hi[i] = Math.min(hi[i], hi[i - 1] + 1); }
+  for (let i = n - 2; i >= 0; i--) { lo[i] = Math.max(lo[i], lo[i + 1] - 1); hi[i] = Math.min(hi[i], hi[i + 1] + 1); }
+  return lo.map((v, i) => Math.floor((v + hi[i]) / 2));
+}
+
+/** RoadPlan.MAX_SIDE: a side column more than this off its centre cell's smoothed feet is skipped (left as it was). */
+export const WALK_MAX_SIDE = 2;
+
+/**
+ * The walkway one ground road item lays (RoadPlan.plan, ground mode, on the plan survey): its centre cells (a 4-connected line through
+ * the points, a diagonal step through its corner cell), the feet smoothed (RoadPlan.smooth), and each centre cell's side columns
+ * (`crossOffsets(width)` right of its travel, a corner beside its x step; the first centre cell to reach a column owns it, a centre
+ * column always wins). Returns Map "x,z" -> {x, z, centre, sure}: `sure` when the mod lays it for certain (a centre column; a dry side
+ * column within MAX_SIDE - 1 of its feet: one block of margin for the world's ground against the survey's); a side column that is not
+ * sure may stay as it was (steep, water), so the verge covers it.
+ */
+export function groundWalk(points, width, S) {
+  const { cells } = centreCells(points.map((p) => [p[0], p[p.length - 1]]));
+  const n = cells.length;
+  const t = smoothFeet(cells.map((c) => S.heightAt(c.x, c.z) + 1));
+  const offs = crossOffsets(width);
+  const out = new Map();
+  for (let i = 0; i < n; i++) {
+    const c = cells[i], nx = cells[Math.min(n - 1, i + 1)], pv = cells[Math.max(0, i - 1)];
+    let dx = Math.sign(nx.x - pv.x), dz = Math.sign(nx.z - pv.z);
+    if (dx !== 0 && dz !== 0) dz = 0;
+    out.set(`${c.x},${c.z}`, { x: c.x, z: c.z, centre: true, sure: true });
+    const rx = -dz, rz = dx;
+    for (const k of offs) {
+      if (k === 0) continue;
+      const sx = c.x + k * rx, sz = c.z + k * rz, key = `${sx},${sz}`;
+      if (out.has(key)) continue;
+      const diff = Math.abs(S.heightAt(sx, sz) + 1 - t[i]);
+      out.set(key, { x: sx, z: sz, centre: false, sure: !S.waterAt(sx, sz) && diff <= WALK_MAX_SIDE - 1 });
+    }
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ the field: claim-sized grids
@@ -488,6 +537,56 @@ export function lanternPieces(n, guarded, lamp = null) {
   return out;
 }
 
+/**
+ * Every column a 4e lantern of a road with `lanterns` may take (RoadPlan.lanterns: the first `first` out, then every `every`, each
+ * placed (the spacing restarts) or not (half a spacing on): every outcome), on either side of the walkway (2 beside its travel).
+ */
+export function possibleLanterns(rd) {
+  if (!rd.lanterns) return [];
+  const { cells } = centreCells(rd.points.map((p) => [p[0], p[p.length - 1]]));
+  const every = rd.lamp ? rd.lamp.every : 12, first = rd.lamp ? rd.lamp.first : 6;
+  const offs = crossOffsets(rd.width), hi = offs[offs.length - 1] + 1, lo = offs[0] - 1;
+  const out = [];
+  let states = new Set([every - first]);
+  for (let i = 1; i < cells.length - 1; i++) {
+    const next = new Set();
+    let hit = false;
+    for (const v of states) { const w = v + 1; if (w + 1e-9 >= every) { hit = true; next.add(0); next.add(every / 2); } else next.add(w); }
+    states = next;
+    if (!hit) continue;
+    const c = cells[i], n = cells[i + 1];
+    const dx = Math.sign(n.x - c.x), dz = Math.sign(n.z - c.z);
+    for (const side of [hi, lo]) out.push([c.x + side * -dz, c.z + side * dx]);
+  }
+  return out;
+}
+
+/**
+ * Emit a free zone's street lamps (emitFree's `streetLamps`, in order) once the region's other roads are laid: each kept unless its
+ * light lies within LAMP_GAP (Chebyshev) of a lamp kept before it or of a column a 4e lantern may take (`avoid`, possibleLanterns);
+ * part `<prefix>props_street_lamp` (stage `lampStage`), the kept lights on the village meta's `streetLamps`.
+ */
+export function emitStreetLamps(r, E, { prefix = '', avoid = [], kept = [] } = {}) {
+  const lightOf = (q) => q.cells.find((c) => LIGHT_RE.test(c[3]) && !/_fence|_wall/.test(c[3])) ?? q.cells[q.cells.length - 1];
+  const out = [];
+  for (const q of E.streetLamps ?? []) {
+    const l = lightOf(q);
+    const near = (a) => Math.max(Math.abs(a[0] - l[0]), Math.abs(a[a.length - 1] - l[2])) < LAMP_GAP;
+    if (avoid.some(near) || kept.some(near)) continue;
+    out.push(q);
+    kept.push([l[0], l[2]]);
+  }
+  if (out.length) {
+    const lp = r.part(`${prefix}props_street_lamp`, { stage: E.lampStage });
+    const mats = [], mi = new Map(), cols = [];
+    for (const q of out) for (const [x, y, z, st] of q.cells) { let i = mi.get(st); if (i === undefined) { i = mats.length; mats.push(st); mi.set(st, i); } cols.push(x, z, y, y, i); }
+    lp._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: mats, cond: COND.IF_AIR_OR_FLUID, walk: false });
+    (r.meta.parts[lp.id] ??= {}).kind = 'add';
+  }
+  if (E.village) E.village.streetLamps = out.map((q) => lightOf(q));
+  return out.length;
+}
+
 /** The cardinal a world step faces ([1, 0]: east). */
 const facingOf = (dx, dz) => (dx > 0 ? 'east' : dx < 0 ? 'west' : dz > 0 ? 'south' : 'north');
 
@@ -501,7 +600,7 @@ const facingOf = (dx, dz) => (dx > 0 ? 'east' : dx < 0 ? 'west' : dz > 0 ? 'sout
  * plus `streets` and `ends`.
  */
 export function emitFree(r, L, { stages = {}, prefix = '', padEdge = null, maxHeight = 32, planProps = null, laneWidth = 2, zone = null, _unsafe = {} } = {}) {
-  const sg = stages.ground ?? 'ground', ss = stages.street ?? 'street', sl = stages.lots ?? 'lots';
+  const sg = stages.ground ?? 'ground', ss = stages.street ?? 'street', sl = stages.lots ?? 'lots', sp0 = stages.props ?? 'props';
   const F = L.F;
   const hub = L.hub;
   const res = hub ? hub.res : null;
@@ -535,36 +634,206 @@ export function emitFree(r, L, { stages = {}, prefix = '', padEdge = null, maxHe
   const o = 'ew';
   const propsPlan = hub && planProps && hub.sh.kind !== 'none' ? planProps({ o, sh: hub.sh, res, lots: lotOut, layout: L }) : null;
   if (hub && hub.sh.kind !== 'none') square(r, hub.sh, { stage: sg, o, noWalk: propsPlan?.noWalk ?? new Set(), prefix });
-  // the verges: each street's band less its road, the lots, the hub's space and anything off the mask (surface swap, walk)
-  const verges = r.part(`${prefix}verges`, { stage: sg, set: 'path' });
-  const vset = new Set(), road = new Set();
-  for (const st of L.streets) for (const [x, z] of st.cells) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) road.add(`${x + dx},${z + dz}`);
-  const inBox = (x, z) => boxes.some((b) => x >= b.minX - 1 && x <= b.maxX + 1 && z >= b.minZ - 1 && z <= b.maxZ + 1);
-  const inHub = (x, z) => hub && hub.sh.kind !== 'none' && x >= hub.sh.u0 && x <= hub.sh.u1 && z >= hub.sh.v0 && z <= hub.sh.v1;
-  const vcells = [];
-  for (const st of L.streets) for (const [x, z] of st.cells) for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
-    const X = x + dx, Z = z + dz, key = `${X},${Z}`;
-    if (vset.has(key) || road.has(key)) continue;
-    vset.add(key);
-    if (!F.ok(X, Z) || inBox(X, Z) || inHub(X, Z)) continue;
-    vcells.push([X, null, Z]);
+  // the streets first (stage street): ground roads (a closed street as two arcs), no 4e lanterns (the zone lights its streets itself,
+  // below: one spacing over the whole settlement); then the walkway each road item lays (groundWalk, RoadPlan's rules) is what the
+  // verges, lanes, spokes and lamps fit against
+  const street = r.part(`${prefix}street`, { stage: ss, set: 'path' });
+  const roads = [];
+  const walk = new Map(); // "x,z" -> {x, z, centre, sure}
+  for (const st of L.streets) {
+    const n = st.cells.length;
+    const rid = `${prefix}street_${st.name}`;
+    const base = st.closed ? [[rid, 0, n >> 1], [`${rid}_b`, n >> 1, n]] : [[rid, 0, n - 1]];
+    for (const [id, a, b] of base) {
+      const cells = st.closed ? Array.from({ length: b - a + 1 }, (_, i) => st.cells[(a + i) % n]) : st.cells.slice(a, b + 1);
+      const pts = cornersOf(cells);
+      const why = street._groundRoadProblem(pts.map((q) => [q[0], null, q[1]]));
+      if (why) throw new Error(`free layout: the street (${id}) can't be a ground road: ${why}`);
+      const r0 = r.roads.length;
+      const got = street.road(pts, { width: 3, surface: 'path', lanterns: false, mode: 'ground', id });
+      roads.push(...(got?.ids ?? [id]));
+      for (const rd of r.roads.slice(r0)) for (const [k, v] of groundWalk(rd.points, rd.width, r.survey)) { const o = walk.get(k); if (!o || (v.sure && !o.sure)) walk.set(k, v); }
+    }
   }
-  vcells.sort((a, b) => a[2] - b[2] || a[0] - b[0]);
-  if (vcells.length) surfaceOps(verges, vcells, 'path');
+  const K = (x, z) => `${x},${z}`;
+  const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const sure = (x, z) => walk.get(K(x, z))?.sure === true;
+  const meetsWalk = (x, z) => sure(x, z) || N4.some(([dx, dz]) => sure(x + dx, z + dz));
+  const inBoxM = (x, z, m = 0) => boxes.some((bx) => x >= bx.minX - m && x <= bx.maxX + m && z >= bx.minZ - m && z <= bx.maxZ + m);
+  const hubRect = hub ? hub.sh.rect : null;
+  const inHubRect = (x, z) => hubRect && x >= hubRect[0] && x <= hubRect[2] && z >= hubRect[1] && z <= hubRect[3];
+  const paved = new Set(); // lanes, spokes and the hub's landing: the verge leaves them alone
+  // the hub's landing, where the spokes and the streets meet it (Noah's look fix 5): a square is paved already; a green gets a paved
+  // ring 1 wide round it (levelled at the green's y); a bare hub (shared none) a paved pad over its bell area when a spoke reaches it
+  let hubLanding = null, landingCells = [];
+  if (hub) {
+    const [u0, v0, u1, v1] = hub.sh.rect;
+    if (hub.sh.kind === 'square') hubLanding = 'square';
+    else if (hub.sh.kind === 'none') {
+      hubLanding = (L.spokes ?? []).length ? 'pad' : 'none';
+      if (hubLanding === 'pad') for (let z = v0; z <= v1; z++) for (let x = u0; x <= u1; x++) landingCells.push([x, hub.sh.y, z]);
+    } else {
+      hubLanding = 'ring';
+      for (let z = v0 - 1; z <= v1 + 1; z++) for (let x = u0 - 1; x <= u1 + 1; x++) if ((x < u0 || x > u1 || z < v0 || z > v1) && F.ok(x, z) && !inBoxM(x, z)) landingCells.push([x, hub.sh.y, z]);
+    }
+  }
+  for (const [x, , z] of landingCells) paved.add(K(x, z));
+  // spokes, 2 wide, from the landing out to the road they serve (run on along their direction until they meet its walkway)
+  const spokeRuns = [];
+  for (const sp of L.spokes ?? []) {
+    const cells = sp.cells.map(([x, z]) => [x, z]);
+    let [x, z] = cells.length ? cells[cells.length - 1] : [sp.to[0] - sp.dir[0], sp.to[1] - sp.dir[1]];
+    for (let t = 0; t < 6 && !meetsWalk(x, z); t++) { x += sp.dir[0]; z += sp.dir[1]; if (sure(x, z) || !F.in(x, z) || inBoxM(x, z)) break; cells.push([x, z]); }
+    const run = [];
+    for (const [cx, cz] of cells) for (const [ox, oz] of [[0, 0], sp.side]) { const X = cx + ox, Z = cz + oz; if (!sure(X, Z) && !inHubRect(X, Z) && !inBoxM(X, Z) && F.in(X, Z)) run.push([X, Z]); }
+    // a spoke whose hub end meets no paving (an organic spoke cut short by the walkway, on a diagonal): a 4-connected path from the
+    // paved cell nearest its street's cell to that cell, 2 wide
+    const hubPaved = (x, z) => paved.has(K(x, z)) || (hub && hub.sh.kind === 'square' && inHubRect(x, z));
+    const touchHub = (x, z) => N4.some(([dx, dz]) => hubPaved(x + dx, z + dz));
+    if (hub && hubLanding !== 'none' && (!run.length || !touchHub(run[0][0], run[0][1]))) {
+      let best = null;
+      const [u0, v0, u1, v1] = hub.sh.rect;
+      for (let z = v0 - 1; z <= v1 + 1; z++) for (let x = u0 - 1; x <= u1 + 1; x++) if (hubPaved(x, z)) { const dd = Math.abs(x - sp.to[0]) + Math.abs(z - sp.to[1]); if (!best || dd < best.dd) best = { dd, x, z }; }
+      if (best) {
+        run.length = 0;
+        for (const [cx, cz] of line4(best.x, best.z, sp.to[0], sp.to[1])) for (const [ox, oz] of [[0, 0], sp.side]) { const X = cx + ox, Z = cz + oz; if (!sure(X, Z) && !hubPaved(X, Z) && !inHubRect(X, Z) && !inBoxM(X, Z) && F.in(X, Z) && !run.some(([a, b]) => a === X && b === Z)) run.push([X, Z]); }
+      }
+    }
+    if (run.length) spokeRuns.push(run); // (empty: the street's own walkway meets the landing there)
+    for (const [X, Z] of run) paved.add(K(X, Z));
+  }
+  // a hub no spoke reaches (a grid's plaza block): a 2-wide path from its paving (or its square) to the nearest walkway, so the landing
+  // is never a stub
+  if (hub && hubLanding !== 'none') {
+    const hubPaved = (x, z) => paved.has(K(x, z)) || (hub.sh.kind === 'square' && inHubRect(x, z));
+    const [u0, v0, u1, v1] = hub.sh.rect;
+    const edge = [];
+    for (let z = v0 - 1; z <= v1 + 1; z++) for (let x = u0 - 1; x <= u1 + 1; x++) if (hubPaved(x, z)) edge.push([x, z]);
+    const linked = spokeRuns.some((run) => run.some(([x, z]) => N4.some(([dx, dz]) => hubPaved(x + dx, z + dz)))) || edge.some(([x, z]) => N4.some(([dx, dz]) => sure(x + dx, z + dz)));
+    if (!linked && edge.length) {
+      let best = null;
+      for (const v of walk.values()) if (v.sure) for (const [x, z] of edge) { const dd = Math.abs(v.x - x) + Math.abs(v.z - z); if (!best || dd < best.dd || (dd === best.dd && (v.x < best.v.x || (v.x === best.v.x && v.z < best.v.z)))) best = { dd, v, x, z }; }
+      if (best) {
+        const run = [];
+        const side = Math.abs(best.v.x - best.x) >= Math.abs(best.v.z - best.z) ? [0, 1] : [1, 0];
+        for (const [cx, cz] of line4(best.x, best.z, best.v.x, best.v.z)) for (const [ox, oz] of [[0, 0], side]) { const X = cx + ox, Z = cz + oz; if (!sure(X, Z) && !hubPaved(X, Z) && !inHubRect(X, Z) && !inBoxM(X, Z) && F.in(X, Z) && !run.some(([a, b]) => a === X && b === Z)) run.push([X, Z]); }
+        if (run.length) { spokeRuns.push(run); for (const [X, Z] of run) paved.add(K(X, Z)); }
+      }
+    }
+  }
+  // lanes: each lot's entrance to its road at the entrance's width (laneWidth, V's cross offsets: the extra cell on the + side of the
+  // across axis, the - side where that is a lot or off the land), levelled at the entrance row, then following the ground, run on
+  // until they meet the road's walkway (Noah's look fix 4)
+  const laneOf = new Map();
+  for (const l of lotOut) {
+    const s = l.spec, e = l.entrance;
+    if (_unsafe.noLane === s.id) continue;
+    const towards = [Math.sign(l.junction[0] - e[0]), Math.sign(l.junction[1] - e[2])];
+    const d = Math.abs(l.junction[0] - e[0]) >= Math.abs(l.junction[1] - e[2]) ? [towards[0] || 1, 0] : [0, towards[1] || 1];
+    const axis = d[0] ? [0, 1] : [1, 0];
+    const spine = [[e[0], e[2]]];
+    for (const [x, z] of l.lane) if (x !== e[0] || z !== e[2]) spine.push([x, z]);
+    let [x, z] = spine[spine.length - 1];
+    for (let t = 0; t < 8 && !meetsWalk(x, z); t++) { x += d[0]; z += d[1]; if (sure(x, z)) break; spine.push([x, z]); }
+    const offs = crossOffsets(laneWidth);
+    const flip = spine.some(([sx, sz]) => offs.some((k) => { const X = sx + k * axis[0], Z = sz + k * axis[1]; return inBoxM(X, Z) || !F.ok(X, Z); }));
+    const cells = [];
+    for (const [sx, sz] of spine) for (const k of offs) {
+      const X = sx + (flip ? -k : k) * axis[0], Z = sz + (flip ? -k : k) * axis[1];
+      if (sure(X, Z)) continue;
+      const atEntrance = sx === e[0] && sz === e[2];
+      cells.push([X, atEntrance ? e[1] - 1 : null, Z]);
+    }
+    laneOf.set(s.id, cells);
+    for (const [X, , Z] of cells) paved.add(K(X, Z));
+  }
+  // the verges (Noah's look fix 1): every column within 1 (Chebyshev) of the walkway's sure columns, and the walkway's own unsure ones
+  // (a steep or wet side column the mod may leave), less the walkway, the lanes, spokes, landing, the hub's space and the lot boxes:
+  // so the verge lies against the road the mod actually lays, never a grass gap between them and never more than 1 from it
+  const vset = new Set();
+  const vcells = [];
+  const addVerge = (X, Z) => {
+    const key = K(X, Z);
+    if (vset.has(key) || sure(X, Z) || paved.has(key)) return;
+    vset.add(key);
+    if (!F.ok(X, Z) || inBoxM(X, Z) || (hub && hub.sh.kind !== 'none' && inHubRect(X, Z))) return;
+    vcells.push([X, null, Z]);
+  };
+  for (const v of walk.values()) {
+    if (!v.sure) { addVerge(v.x, v.z); continue; }
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (dx || dz) addVerge(v.x + dx, v.z + dz);
+  }
+  vcells.sort((p, q) => p[2] - q[2] || p[0] - q[0]);
+  const vergeCols = new Set(vcells.map(([x, , z]) => K(x, z)));
+  // the street lamps (Noah's look fix 3): one spacing over the whole settlement, D3's rule: a lamp is skipped within LAMP_GAP
+  // (Chebyshev) of another (the hub's own lamps first); along each street the first at 6 cells, then every 12, each at the verge
+  // column 2 beside the walkway's travel nearest its nominal cell (within 5 either way), never on a lane, a spoke, the landing, a lot's
+  // apron (its box + 1), the hub's space or beside an entrance; the lamp's verge column is written without walk
+  const lamp = roadLamp(lampFixture(r));
+  const fixture = lampFixture(r);
+  const lampLights = [];
+  for (const q of propsPlan?.props ?? []) if (q.kind === 'lamp') { const c = q.cells.find((cc) => LIGHT_RE.test(cc[3]) && !/_fence|_wall/.test(cc[3])) ?? q.cells[q.cells.length - 1]; lampLights.push([c[0], c[2]]); }
+  const entranceCols = new Set(lotOut.map((l) => K(l.entrance[0], l.entrance[2])));
+  const nearPaved = (x, z) => { for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const k = K(x + dx, z + dz); if (paved.has(k) || entranceCols.has(k)) return true; } return false; };
+  const res0 = res ? new Set([...res.area, ...res.golem].map(([x, z]) => K(x, z))) : new Set();
+  const colFree = (x, z) => vergeCols.has(K(x, z)) && !walk.has(K(x, z)) && !inBoxM(x, z, 1) && !inHubRect(x, z) && !res0.has(K(x, z)) && !nearPaved(x, z);
+  const streetLamps = [];
+  const noWalkVerge = new Set();
+  const arms = fixture.kind === 'hanging_lantern' ? ARM_DIRS : [undefined];
+  for (const st of L.streets) {
+    const n = st.cells.length;
+    for (let i0 = st.closed ? 0 : 6; st.closed ? i0 < n : i0 < n - 1; i0 += 12) {
+      let done = false;
+      for (const dd of [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5]) {
+        if (done) break;
+        const j = st.closed ? mod(i0 + dd, n) : i0 + dd;
+        if (!st.closed && (j < 1 || j > n - 2)) continue;
+        const c = st.cells[j], nx = st.cells[st.closed ? mod(j + 1, n) : j + 1], pv = st.cells[st.closed ? mod(j - 1, n) : j - 1];
+        let dx = Math.sign(nx[0] - pv[0]), dz = Math.sign(nx[1] - pv[1]);
+        if (dx !== 0 && dz !== 0) dz = 0;
+        for (const side of [2, -2]) {
+          if (done) break;
+          const qx = c[0] + side * -dz, qz = c[1] + side * dx;
+          if (!colFree(qx, qz)) continue;
+          const y = r.survey.heightAt(qx, qz);
+          for (const arm of arms) {
+            const fc = fixtureCells(fixture, [qx, y + 1, qz], { arm });
+            const light = fc.lightAt ?? fc.cells[fc.cells.length - 1];
+            if (lampLights.some(([lx, lz]) => Math.max(Math.abs(lx - light[0]), Math.abs(lz - light[2])) < LAMP_GAP)) break;
+            if (!fc.foot.every(([fx, fz]) => (fx === qx && fz === qz) || colFree(fx, fz))) continue;
+            streetLamps.push({ kind: 'lamp', id: `street_lamp_${streetLamps.length + 1}`, cells: fc.cells.map(([x, yy, z, st2]) => [x, yy, z, st2]), foot: fc.foot });
+            lampLights.push([light[0], light[2]]);
+            for (const [fx, fz] of fc.foot) noWalkVerge.add(K(fx, fz));
+            done = true;
+            break;
+          }
+        }
+      }
+    }
+  }
+  const verges = r.part(`${prefix}verges`, { stage: sg, set: 'path' });
+  const vWalk = vcells.filter(([x, , z]) => !noWalkVerge.has(K(x, z))), vStill = vcells.filter(([x, , z]) => noWalkVerge.has(K(x, z)));
+  if (vWalk.length) surfaceOps(verges, vWalk, 'path');
+  if (vStill.length) surfaceOps(verges, vStill, 'path', { walk: false });
   (r.meta.parts[verges.id] ??= {}).kind = 'path';
+  if (landingCells.length) {
+    const lp = r.part(`${prefix}landing`, { stage: sg, set: 'path' });
+    surfaceOps(lp, landingCells, 'path');
+    (r.meta.parts[lp.id] ??= {}).kind = 'path';
+  }
   // the plaza
   const plazaAt = res ? res.bell : bell;
   const pl = r.graphNode({ id: `${prefix}plaza`, kind: 'plaza', ref: hub?.sh.kind ?? 'none', at: plazaAt, ports: [{ name: 'bell', at: plazaAt, facing: 'up', width: BELL_AREA }] });
-  // lanes (each lot's entrance and the cells to the street, at the lot's pad top) and spokes
+  // lanes and spokes (part lanes)
   const lanes = r.part(`${prefix}lanes`, { stage: sg, set: 'path' });
   (r.meta.parts[lanes.id] ??= {}).kind = 'path';
   const laneCells = {};
   for (const l of lotOut) {
     const s = l.spec, e = l.entrance;
     r.graphNode({ id: `lot:${s.id}`, kind: 'lot', ref: s.id, at: e, ports: [{ name: 'entrance', at: e, facing: l.front, width: laneWidth }] });
-    if (_unsafe.noLane === s.id) continue;
-    const cells = [[e[0], e[1] - 1, e[2]], ...l.lane.filter(([x, z]) => x !== e[0] || z !== e[2]).map(([x, z]) => [x, null, z])];
-    if (!_unsafe.laneThroughLot) for (const [x, , z] of cells) for (const b of boxes) if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) throw new Error(`lane lane_${s.id} enters lot ${b.id}'s box at ${x},${z}`);
+    const cells = laneOf.get(s.id);
+    if (!cells) continue;
+    if (!_unsafe.laneThroughLot) for (const [x, , z] of cells) for (const bx of boxes) if (x >= bx.minX && x <= bx.maxX && z >= bx.minZ && z <= bx.maxZ) throw new Error(`lane lane_${s.id} enters lot ${bx.id}'s box at ${x},${z}`);
     surfaceOps(lanes, cells, 'path');
     laneCells[s.id] = cells.map(([x, y, z]) => [x, y ?? r.survey.heightAt(x, z), z]);
   }
@@ -574,38 +843,15 @@ export function emitFree(r, L, { stages = {}, prefix = '', padEdge = null, maxHe
     const cells = line4(a.entrance[0], a.entrance[2], (b.minX + b.maxX) >> 1, (b.minZ + b.maxZ) >> 1).map(([x, z]) => [x, z]);
     for (const [x, z] of cells) for (const q of boxes) if (q.id !== a.spec.id && x >= q.minX && x <= q.maxX && z >= q.minZ && z <= q.maxZ) throw new Error(`lane lane_${a.spec.id} enters lot ${q.id}'s box at ${x},${z}`);
   }
-  const spokeCells = [];
-  for (const sp of L.spokes ?? []) for (const [x, z] of sp.cells) spokeCells.push([x, null, z], [x + sp.side[0], null, z + sp.side[1]]);
+  const spokeCells = spokeRuns.flat().map(([x, z]) => [x, null, z]);
   if (spokeCells.length) surfaceOps(lanes, spokeCells, 'path');
-  // the streets: ground roads (a closed street as two arcs), junctions where lanes and spokes meet them, road edges between
-  const street = r.part(`${prefix}street`, { stage: ss, set: 'path' });
-  const lamp = roadLamp(lampFixture(r));
-  const roads = [];
+  void lamp;
   const ends = [];
   const crossNodes = new Map(); // "x,z" -> the shared junction
   const yAt = (x, z) => r.survey.heightAt(x, z) + 1;
   for (const st of L.streets) {
     const n = st.cells.length;
     const rid = `${prefix}street_${st.name}`;
-    // the street's entrances and spokes (the lots' street cells, the spokes' ends): no lantern stands beside them (a lantern's post
-    // there would close the door's cell: the road item is cut into pieces whose lanterns miss them, RoadPlan's spacing)
-    const guard = new Set();
-    for (const l of lotOut) if (l.street === st.name) guard.add(l.at);
-    for (const sp of L.spokes ?? []) { let bi = -1, bd = Infinity; st.cells.forEach((c, i) => { const d = Math.max(Math.abs(c[0] - sp.to[0]), Math.abs(c[1] - sp.to[1])); if (d < bd) { bd = d; bi = i; } }); if (bd <= 2) guard.add(bi); }
-    const base = st.closed ? [[rid, 0, n >> 1], [`${rid}_b`, n >> 1, n]] : [[rid, 0, n - 1]];
-    const pieces = [];
-    for (const [id, a, b] of base) {
-      const cut = lanternPieces(b - a + 1, (i) => guard.has((a + i) % n), lamp);
-      cut.forEach(([p0, p1], k) => pieces.push([k ? `${id}_p${k + 1}` : id, a + p0, a + p1]));
-    }
-    for (const [id, a, b] of pieces) {
-      const cells = st.closed ? Array.from({ length: b - a + 1 }, (_, i) => st.cells[(a + i) % n]) : st.cells.slice(a, b + 1);
-      const pts = cornersOf(cells);
-      const why = street._groundRoadProblem(pts.map((q) => [q[0], null, q[1]]));
-      if (why) throw new Error(`free layout: the street (${id}) can't be a ground road: ${why}`);
-      const got = street.road(pts, { width: 3, surface: 'path', lanterns: true, mode: 'ground', id, lamp });
-      roads.push(...(got?.ids ?? [id]));
-    }
     // junctions: each lot's, each spoke's, and the ends of an open street, in line order
     const stops = new Map(); // index -> {lots: [ids], spoke: k}
     const idxOf = new Map(st.cells.map((c, i) => [`${c[0]},${c[1]}`, i]));
@@ -685,7 +931,7 @@ export function emitFree(r, L, { stages = {}, prefix = '', padEdge = null, maxHe
   const village = {
     orientation: o, streetV: null, layout: L.kind, shared: hub ? { kind: hub.sh.kind, rect: hub.sh.rect, y: hub.sh.y } : null,
     bell: res ? res.bell : bell, bellArea: res ? res.area.map(([x, z]) => [x, z]) : [], bellY: res ? res.y : bell[1],
-    golem: res ? res.golem.map(([x, z]) => [x, z]) : [], golemCentre: res ? res.golemCentre : [bell[0], bell[2]], unplaced: L.unplaced, lanes: laneCells, roads, laneWidth,
+    golem: res ? res.golem.map(([x, z]) => [x, z]) : [], golemCentre: res ? res.golemCentre : [bell[0], bell[2]], unplaced: L.unplaced, lanes: laneCells, roads, laneWidth, hubLanding, spokes: spokeRuns, streetLamps: [],
     lots: Object.fromEntries(lotOut.map((l) => [l.spec.id, { villager: l.spec.villager, slot: l.slot, entrance: l.entrance, rect: l.rect, water: rectWater(wdU, l.rect) }])),
     waterAny: wdU.any, keepOut: r.ctx.keepOut ?? [],
   };
@@ -693,6 +939,6 @@ export function emitFree(r, L, { stages = {}, prefix = '', padEdge = null, maxHe
   void zone;
   return {
     free: true, kind: L.kind, orientation: L.orientation ?? null, claimCentre: [(r.claim.minX + r.claim.maxX) >> 1, (r.claim.minZ + r.claim.maxZ) >> 1], shared: hub ? { kind: hub.sh.kind, rect: hub.sh.rect, y: hub.sh.y } : null,
-    res: { bell: res ? res.bell : bell, area: res ? res.area : [], golem: res ? res.golem : [] }, lots: lotOut, boxes, laneCells, unplaced: L.unplaced, plaza: pl, propsPlan, roads, streets: L.streets, ends,
+    res: { bell: res ? res.bell : bell, area: res ? res.area : [], golem: res ? res.golem : [] }, lots: lotOut, boxes, laneCells, unplaced: L.unplaced, plaza: pl, propsPlan, roads, streets: L.streets, ends, streetLamps, lampStage: sp0, village,
   };
 }

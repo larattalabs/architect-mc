@@ -5,7 +5,7 @@
 //
 //   node tools/gate6cfl.mjs <step>
 //     start [world] | stop | base      the client (or headless server) and the base worlds
-//     unit      (fl-unit)              offline: items 1-3, 5, 8, 9 (kit/test/fl.test.mjs, fl-layouts-1/2.test.mjs: the mask, the frontage
+//     unit      (fl-unit)              offline: items 1-3, 5, 8, 9 (kit/test/fl.test.mjs, fl-layouts-1/2.test.mjs, fl-look.test.mjs (Noah's look fixes L1-L5): the mask, the frontage
 //                                      engine and each layout on 200 seeded claims, the fl/ answers with their wouldFits re-checked alone,
 //                                      KC, catalogue 10, the asks, plan v1's shape, the street ext); item 4 (byte identity against the
 //                                      merge base, kitVersion and the street ext normalised; the untouched files); item 8 (the asks before
@@ -105,7 +105,7 @@ function junit(name) {
 steps.unit = async () => {
   const out = {};
   // items 1-3, 5, 8, 9 and the street ext (kit)
-  out.kit = nodeTest(['kit/test/fl.test.mjs', 'kit/test/fl-layouts-1.test.mjs', 'kit/test/fl-layouts-2.test.mjs']);
+  out.kit = nodeTest(['kit/test/fl.test.mjs', 'kit/test/fl-layouts-1.test.mjs', 'kit/test/fl-layouts-2.test.mjs', 'kit/test/fl-look.test.mjs']);
   check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 13, `items 1-3, 5, 8, 9: the layouts on 200 seeded claims each (0 lots overlapping or outside the mask, every entrance joined, the ring closed, the spiral's pitch, the grid's blocks, the organic turn bound), the broken variants caught, the fl/ answers and their wouldFits re-checked alone, KC, catalogue 10, the five asks, plan v1's shape, the street ext: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   for (const n of out.kit.notes) log(`  ${n}`);
   // the mod: Ir reads a road's ext (S-FL-5)
