@@ -24,20 +24,23 @@ class PathTurnedTest {
 		Bootstrap.bootStrap();
 	}
 
+	private static boolean same(BlockState now, BlockState after) {
+		return WorldJournal.same(WorldJournal.value(now), WorldJournal.value(after));
+	}
+
+	/** (Only main's API here: the class compiles on main, where the first assertions fail.) */
 	@Test
 	void ourPathTurnedToDirtIsStillOurs() {
 		BlockState path = Blocks.DIRT_PATH.defaultBlockState();
 		BlockState dirt = Blocks.DIRT.defaultBlockState();
-		assertTrue(StillOurs.pathTurned(dirt, path), "a path we wrote, turned to dirt under a solid block: ours");
-		assertTrue(StillOurs.pathTurned(Blocks.GRASS_BLOCK.defaultBlockState(), path), "and grass spread onto that dirt: ours");
-		assertTrue(WorldJournal.same(WorldJournal.value(dirt), WorldJournal.value(path)), "the journal's own comparison");
+		assertTrue(same(dirt, path), "a path we wrote, turned to dirt under a solid block: ours");
+		assertTrue(same(Blocks.GRASS_BLOCK.defaultBlockState(), path), "and grass spread onto that dirt: ours");
 		assertTrue(WorldJournal.cuEquivalent(dirt, path), "a player's record (PT) there wins: a player who dug our path and placed dirt");
 		// one way only, and nothing else
-		assertFalse(StillOurs.pathTurned(path, dirt), "a path where we wrote dirt is a shovel's: not ours");
-		assertFalse(StillOurs.pathTurned(Blocks.FARMLAND.defaultBlockState(), path), "a hoe's");
-		assertFalse(StillOurs.pathTurned(Blocks.STONE.defaultBlockState(), path));
-		assertFalse(StillOurs.pathTurned(Blocks.AIR.defaultBlockState(), path));
-		assertFalse(WorldJournal.same(WorldJournal.value(path), WorldJournal.value(dirt)));
+		assertFalse(same(path, dirt), "a path where we wrote dirt is a shovel's: not ours");
+		assertFalse(same(Blocks.FARMLAND.defaultBlockState(), path), "a hoe's");
+		assertFalse(same(Blocks.STONE.defaultBlockState(), path));
+		assertFalse(same(Blocks.AIR.defaultBlockState(), path));
 		assertFalse(WorldJournal.cuEquivalent(path, path), "the same block: as before");
 		// the builder asks StillOurs.holds whether a path is built: dirt is still not a built path
 		assertFalse(StillOurs.holds(dirt, null, path, null));
