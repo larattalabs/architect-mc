@@ -951,6 +951,17 @@ public final class RegionFluids {
 				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
 			}
 		}
+		// ((6c HY-c, §8.3) the grate's bars joined to each other and to the shell, as vanilla's own neighbour update would join them:
+		// unjoined bars are posts 2/16 wide with gaps of 14/16, which a 0.6-wide mob passes (HY-c's probe). Still no update sent.)
+		for (long p : b.grate) {
+			BlockPos bp = BlockPos.of(p);
+			BlockState now = level.getBlockState(bp);
+			if (!now.is(Blocks.IRON_BARS)) continue;
+			BlockState joined = Block.updateFromNeighbourShapes(now, level, bp);
+			if (joined != now && joined.is(Blocks.IRON_BARS)) {
+				dev.larattalabs.architect.placed.Placed.set(level, bp, joined, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+			}
+		}
 	}
 
 	/** One fluid tick on every source of a body and every face neighbour that is no body cell (§3.2); the ticks scheduled. */

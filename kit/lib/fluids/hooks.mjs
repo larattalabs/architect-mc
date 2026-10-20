@@ -23,6 +23,7 @@ import * as course from './course.mjs';
 import * as race from './race.mjs';
 import * as ditch from './ditch.mjs';
 import * as handcourse from './handcourse.mjs';
+import * as handgate from './handgate.mjs';
 import { isBodyPart, isHPart } from './kinds.mjs';
 import { channelBlock, planLotIds } from '../plan/schema.mjs';
 
@@ -52,6 +53,8 @@ export function channelBlockOf(X, p) {
 function moduleOf(p, X = null) {
   if (p.kind === 'channel') {
     if (p.part?.ext?.[UNSAFE_EXT]?.handCourse) return handcourse;
+    // ((6c HY-c, additive) HY-c's hand-laid water gate: a still reach across a planned wall, its gate fixture)
+    if (p.part?.ext?.[UNSAFE_EXT]?.handGate) return handgate;
     const m = BY_CHANNEL[channelBlockOf(X, p)];
     if (m) return m;
   }

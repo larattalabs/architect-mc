@@ -30,6 +30,9 @@ export function wallRules({ ir, vw, walls, meta, want, findings, metrics, partSt
     const part = `w_${w.id}`.slice(0, 48);
     const stage = partStage.get(part) ?? null;
     const m = { cells: w.cells.length, gates: w.gates.length, closed: !!w.closed };
+    // ((6c HY-c) a wall's water gates: the grate (iron bars holding the reach's sources) under a lintel is wall to the movers, in the
+    // closure below as in the world; counted, never a walk gate)
+    if (w.waterGates?.length) m.waterGates = w.waterGates.length;
     const gateCell = new Map();
     for (const g of w.gates) for (const [x, z] of g.cells) gateCell.set(key(x, z), g);
     const wallCell = new Map(w.cells.map((c) => [key(c[0], c[1]), c]));
