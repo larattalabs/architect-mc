@@ -259,7 +259,7 @@ steps.unit = async () => {
   check(out.copper.ok, `item 2 (CopperTest): the canonical form over vanilla's maps equal to kit/lib/blocks.mjs's wx (60 rows, 120 blocks), every stage, waxed and scraped state holds against the written one, another form never does, facing and half still compare, the copper chest's empty-container rule, farmland and dirt; WorldJournal.same and holds, the builder's and the refund's block test: ${out.copper.tests} tests, ${out.copper.failures} failures (${out.copper.names.join('; ')})`, out.copper.tail);
   out.regression = await javaTests(['*StillOursFluidsTest*', '*JournalTest*', '*JournalPropertyTest*', '*RefundsAndBitsTest*', '*DeltaPropertyTest*', '*ApiCuTest*'], 10);
   check(out.regression.ok, `items 9, 10 (Java): StillOursFluidsTest, JournalTest, JournalPropertyTest, RefundsAndBitsTest, DeltaPropertyTest unchanged; ApiCuTest (the version and weatheringOurs): ${out.regression.tests} tests, ${out.regression.failures} failures (${out.regression.names.join('; ')})`, out.regression.tail);
-  const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6ccu'], { cwd: root, encoding: 'utf8', timeout: 900_000 });
+  const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6ccu'], { cwd: root, encoding: 'utf8', timeout: 900_000, env: { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
   out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').slice(-8) };
   check(ac.status === 0, 'item 10: api-compat --gate6ccu clean against the latest three releases\' apitest jars and the newest one\'s surface', out.apicompat.tail);
   spendZero();
