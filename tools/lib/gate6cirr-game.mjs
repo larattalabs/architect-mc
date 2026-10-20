@@ -576,6 +576,9 @@ async function lampPath(ctx, o) {
   let turned = 0;
   for (const p of paths) if (await isBlock(ctx, p.c, 'minecraft:dirt')) turned++;
   Object.assign(res, { underPosts, poked: poked.length, turned });
+  // (a road post must still stand on the region's own path verge: street_e's at the farm's lane, 9617,65,9091 under it; losing the
+  // street's lanterns would pass the undo vacuously)
+  check(posts.length >= 1, `(lamp-path) farm_hamlet: a road lantern post stands on the region's own dirt path verge (${res.posts.join(' ') || 'none'}; main's at 9617,65,9091)`, res);
   check(paths.length > 0 && poked.length > 0 && turned >= poked.length && underPosts === posts.length,
     `(lamp-path) farm_hamlet: ${paths.length} journaled dirt path cell(s) (${res.parts.join(', ')}); ${posts.length} under a road post (${res.posts.join(' ') || 'none'}), a block beside each turned ${underPosts} to dirt; a block over ${poked.length} other(s): ${turned} dirt in all (vanilla, outside the journal)`, res);
   res.removal = await removeRegion(ctx, o, `(lamp-path) farm_hamlet, its dirt paths turned to dirt: the region`);
