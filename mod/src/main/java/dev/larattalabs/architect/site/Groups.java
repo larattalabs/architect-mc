@@ -1041,6 +1041,11 @@ public final class Groups {
 		}
 	}
 
+	/** Whether a group or stage removal is still in progress (planning, committing or writing). */
+	static boolean removing() {
+		return !REMOVALS.isEmpty();
+	}
+
 	static void reset(MinecraftServer server) {
 		written.clear();
 		REMOVALS.forEach(r -> r.futures.forEach(f -> f.completeExceptionally(new IllegalStateException("the world stopped"))));

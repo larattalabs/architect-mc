@@ -985,7 +985,9 @@ public final class SiteJournal {
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 		for (CellWrite c : cells) {
 			m.set(Journal.x(c.pos()), Journal.y(c.pos()), Journal.z(c.pos()));
-			dev.larattalabs.architect.placed.Placed.set(level, m, WorldJournal.state(c.value()), c.flags());
+			BlockState st = WorldJournal.state(c.value());
+			dev.larattalabs.architect.placed.Placed.set(level, m, st, c.flags());
+			FluidRearm.wrote(level, m.asLong(), st); // (relief falling water) flowing fluid wakes once the restores are done
 			if (c.value().nbt() != null) {
 				BlockEntity be = level.getBlockEntity(m);
 				if (be != null) {
