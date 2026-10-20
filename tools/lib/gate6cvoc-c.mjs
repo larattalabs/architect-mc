@@ -210,7 +210,8 @@ async function installDesigns(ctx) {
   const D = await ctx.imp('test/fixtures/vocab/vocc-designs.mjs');
   const { writeBlueprint } = await ctx.imp('lib/write.mjs');
   const hist = {};
-  for (const [id, mk] of Object.entries(D.VOCC_DESIGNS)) { const bp = mk(); writeBlueprint(bp, path.join(ctx.L.LIBRARY, id)); hist[id] = D.blueprintBlocks(bp); }
+  // (each entry fresh: a run worktree reused from an earlier run may hold the oak version 2 the delta check installs)
+  for (const [id, mk] of Object.entries(D.VOCC_DESIGNS)) { const bp = mk(); fs.rmSync(path.join(ctx.L.LIBRARY, id), { recursive: true, force: true }); writeBlueprint(bp, path.join(ctx.L.LIBRARY, id)); hist[id] = D.blueprintBlocks(bp); }
   return hist;
 }
 
@@ -274,9 +275,11 @@ const ingame = [{
     // a fresh flat world per run, exact rules (no random ticks, mobs or fire), the bot over the claim
     const freshFlat = async (name) => { await L.fresh(name, FLAT); await L.setRules('exact'); await L.tp((CLAIM[0] + CLAIM[2]) >> 1, 200, (CLAIM[1] + CLAIM[3]) >> 1); };
 
-    // ---- v64: "only copper", the bound lot measured at check time from the mod's lotBlocks; realiseApproved PLACED; the pre-check
-    const v64 = fixture(root, 'valid', 'v64_vocc_copper.json');
-    await freshFlat('G6B VOCc v64');
+    // (order: r03 and v65 bind vocc_copper_cabin's version 1; v64 runs last, since its delta check installs the oak version 2 of that
+    // entry, which a realise then places as the entry's current template)
+    // ---- r03: a required rule over a provisional lot: READY (pending); realiseApproved with the oak entry refuses PALETTE, nothing written; then the copper entry: PLACED
+    const r03 = fixture(root, 'vocc', 'r03_entry.json');
+    await freshFlat('G6B VOCc r03');
     // ---- item 6: the mod's histogram of each entry equals the kit's (the blueprint the gate installed)
     out.hist = {};
     for (const id of Object.keys(kitHist)) {
@@ -285,65 +288,6 @@ const ingame = [{
       check(j(h.blocks) === j(kitHist[id]), `item 6: ${id}: the mod's block histogram of the entry (what lotBlocks and the realise measure) equals the kit's (${Object.values(kitHist[id]).reduce((a, b) => a + b, 0)} blocks: ${j(kitHist[id])})`, { mod: h.blocks, kit: kitHist[id] });
     }
 
-    const k64 = await checkIn(ctx, 'v64', { plan: v64.plan, claim: CLAIM, bible: 'g6cvocc_copper' });
-    const a64 = (k64.c.check?.parts ?? []).find((a) => a.part === 'copper_only');
-    out.v64 = { overall: k64.c.check?.overall, answer: a64, refused: k64.c.refused ?? null };
-    const copper = new Set(resolvePalette('copper').blocks);
-    const kitLot = measureLot(kitHist.vocc_copper_cabin, copper);
-    check(k64.c.check?.overall === 'READY' && a64?.class === 'fits' && j(a64.measured?.lots?.hall) === j([kitLot.family, kitLot.cells]) && (a64.measured?.pendingLots ?? []).length === 0,
-      `item 5 (v64): Regions.checkPlan READY, copper_only fits with the bound lot measured at check time from the mod's lotBlocks (hall ${j(a64?.measured?.lots?.hall)}, the kit's own ${j([kitLot.family, kitLot.cells])}; ${a64?.measured?.cells} cells, share ${a64?.measured?.share})`, out.v64);
-    const row64 = (k64.art?.body?.palette ?? []).find((r) => r.rule === 'copper_only');
-    check(row64 && row64.blocks.length === copper.size && j(row64.natural) === j(unmeasuredBlocks()) && j(row64.lotCounts) === j({ hall: [kitLot.family, kitLot.cells] }), `item 5 (v64): the artifact's palette row carries the family's ${row64?.blocks?.length} blocks, the ${row64?.natural?.length} unmeasured blocks, the parts' counts (${row64?.partsFamily}/${row64?.partsCells}) and the bound lot's (${j(row64?.lotCounts)})`, row64 ? { ...row64, blocks: row64.blocks.length, natural: row64.natural.length } : null);
-    if (k64.c.check?.artifactSha) {
-      const pre = await L.call('dev.vocc.checkPalette', { sha: k64.c.check.artifactSha });
-      out.v64pre = pre;
-      const pr = pre.rules?.[0];
-      check(pre.paletteOk === true && pr?.fits && pr.lots?.hall?.cells === kitLot.cells && pr.lots.hall.familyCells === kitLot.family && pr.cells === row64.partsCells + kitLot.cells, `S-VOCc-2 (the pre-check, v64): Regions.checkPalette ok, copper_only fits; the mod's lot count equals the kit's at check time (item 6: ${pr?.lots?.hall?.familyCells}/${pr?.lots?.hall?.cells}), ${pr?.cells} cells in all`, pre);
-      const preOak = await L.call('dev.vocc.checkPalette', { sha: k64.c.check.artifactSha, lotEntries: { hall: 'vocc_oak_cabin' } });
-      out.v64preOak = preOak;
-      check(preOak.paletteOk === false && preOak.rules?.[0]?.worstLot === 'hall' && !preOak.rules[0].fits, `S-VOCc-2 (the pre-check): with the hall re-bound to vocc_oak_cabin, checkPalette answers not ok, worst lot hall (${preOak.rules?.[0]?.familyCells}/${preOak.rules?.[0]?.cells}, share ${preOak.rules?.[0]?.measured}): Steward re-binds one lot before any realise`, preOak);
-      const s = await snap(ctx, 'v64', k64.c, CLAIM);
-      const rr = await realise(ctx, k64.c.check.artifactSha);
-      out.v64realise = { ...rr, record: undefined };
-      check(rr.state === 'PLACED', `item 5 (v64): realiseApproved PLACED (${rr.state ?? `refused ${rr.reason}: ${rr.refused}`})`, out.v64realise);
-      if (rr.region) {
-        const ext = await L.call('dev.vocc.regionPalette', { region: rr.region });
-        out.v64ext = ext;
-        check(Array.isArray(ext.palette) && ext.palette[0]?.rule === 'copper_only' && ext.palette[0].fits === true && ext.palette[0].lots?.hall?.[1] === kitLot.cells, `item 5 (v64): the realise's ext architect_mc:palette row: copper_only fits, hall ${j(ext.palette?.[0]?.lots?.hall)} (item 6: the realise's count equals the kit's ${kitLot.cells})`, ext);
-        // ---- S-VOCc-3: the hall's entry gets a version 2 in oak: a delta to it breaks the required rule (checkDelta refuses PALETTE, applyDelta writes nothing)
-        const site = (rr.items && Object.keys(rr.items).length) ? null : null;
-        void site;
-        const st = await L.call('dev.region.state', { region: rr.region }).catch(() => null);
-        const hallSite = st?.view?.lots?.find?.((l) => l.lot === 'hall' || l.id === 'hall')?.siteId ?? st?.record?.lots?.hall?.siteId ?? null;
-        out.hallSite = hallSite;
-        if (hallSite) {
-          const vdir = path.join(OUT, 'vocc-v2');
-          const D = await ctx.imp('test/fixtures/vocab/vocc-designs.mjs');
-          const { writeBlueprint } = await ctx.imp('lib/write.mjs');
-          const oak = D.voccOakCabin();
-          oak.id = 'vocc_copper_cabin';
-          fs.rmSync(vdir, { recursive: true, force: true });
-          writeBlueprint(oak, vdir);
-          const inst = await L.call('dev.entry.installVersion', { entry: 'vocc_copper_cabin', dir: vdir, summary: 'VOC-c gate: the cabin in oak' }, 60_000);
-          out.installVersion = inst;
-          const ver = inst.version ?? 2;
-          const cd = await L.call('dev.vocc.delta', { site: hallSite, version: ver, owner: OWNER });
-          out.deltaCheck = cd;
-          check(cd.verdictOk === false && (cd.refusals ?? []).some((x) => x.reason === 'PALETTE' && /copper_only/.test(x.message)), `S-VOCc-3: a delta of the hall to its oak version ${ver} (a versionOf): Sites.checkDelta refuses PALETTE for the required copper_only (${(cd.refusals ?? []).map((x) => `${x.reason}: ${String(x.message).slice(0, 120)}`).join('; ')})`, cd);
-          const ad = await L.call('dev.vocc.delta', { site: hallSite, version: ver, owner: OWNER, apply: true }, 120_000);
-          out.deltaApply = ad;
-          check(ad.applied === false && ad.written === 0 && (ad.refusals ?? []).some((x) => x.reason === 'PALETTE'), `S-VOCc-3: Sites.applyDelta to it refuses PALETTE and writes nothing (applied ${ad.applied}, written ${ad.written})`, ad);
-        } else check(false, `S-VOCc-3: the hall's site was not found in the region's state (${j(st)?.slice(0, 300)})`);
-        const rm = await removeRegion(ctx, rr.region);
-        const d = await diffSnap(ctx, s);
-        out.v64remove = { removed: rm.removed, mismatches: d.mismatches };
-        check(rm.removed && d.mismatches === 0, `item 5 (v64): Regions.remove restores the box exactly: E-flat ${d.mismatches}`, (d.list ?? []).slice(0, 12));
-      }
-    }
-
-    // ---- r03: a required rule over a provisional lot: READY (pending); realiseApproved with the oak entry refuses PALETTE, nothing written; then the copper entry: PLACED
-    const r03 = fixture(root, 'vocc', 'r03_entry.json');
-    await freshFlat('G6B VOCc r03');
     const k03 = await checkIn(ctx, 'r03', { plan: r03.plan, claim: CLAIM, bible: 'g6cvocc_copper' });
     const a03 = (k03.c.check?.parts ?? []).find((a) => a.part === 'copper_only');
     out.r03 = { overall: k03.c.check?.overall, answer: a03 };
@@ -421,6 +365,65 @@ const ingame = [{
         check(rm.removed && d.mismatches === 0, `item 5 (v65): Regions.remove restores the box exactly: E-flat ${d.mismatches}`, (d.list ?? []).slice(0, 12));
       }
     }
+    // ---- v64: "only copper", the bound lot measured at check time from the mod's lotBlocks; realiseApproved PLACED; the pre-check
+    const v64 = fixture(root, 'valid', 'v64_vocc_copper.json');
+    await freshFlat('G6B VOCc v64');
+    const k64 = await checkIn(ctx, 'v64', { plan: v64.plan, claim: CLAIM, bible: 'g6cvocc_copper' });
+    const a64 = (k64.c.check?.parts ?? []).find((a) => a.part === 'copper_only');
+    out.v64 = { overall: k64.c.check?.overall, answer: a64, refused: k64.c.refused ?? null };
+    const copper = new Set(resolvePalette('copper').blocks);
+    const kitLot = measureLot(kitHist.vocc_copper_cabin, copper);
+    check(k64.c.check?.overall === 'READY' && a64?.class === 'fits' && j(a64.measured?.lots?.hall) === j([kitLot.family, kitLot.cells]) && (a64.measured?.pendingLots ?? []).length === 0,
+      `item 5 (v64): Regions.checkPlan READY, copper_only fits with the bound lot measured at check time from the mod's lotBlocks (hall ${j(a64?.measured?.lots?.hall)}, the kit's own ${j([kitLot.family, kitLot.cells])}; ${a64?.measured?.cells} cells, share ${a64?.measured?.share})`, out.v64);
+    const row64 = (k64.art?.body?.palette ?? []).find((r) => r.rule === 'copper_only');
+    check(row64 && row64.blocks.length === copper.size && j(row64.natural) === j(unmeasuredBlocks()) && j(row64.lotCounts) === j({ hall: [kitLot.family, kitLot.cells] }), `item 5 (v64): the artifact's palette row carries the family's ${row64?.blocks?.length} blocks, the ${row64?.natural?.length} unmeasured blocks, the parts' counts (${row64?.partsFamily}/${row64?.partsCells}) and the bound lot's (${j(row64?.lotCounts)})`, row64 ? { ...row64, blocks: row64.blocks.length, natural: row64.natural.length } : null);
+    if (k64.c.check?.artifactSha) {
+      const pre = await L.call('dev.vocc.checkPalette', { sha: k64.c.check.artifactSha });
+      out.v64pre = pre;
+      const pr = pre.rules?.[0];
+      check(pre.paletteOk === true && pr?.fits && pr.lots?.hall?.cells === kitLot.cells && pr.lots.hall.familyCells === kitLot.family && pr.cells === row64.partsCells + kitLot.cells, `S-VOCc-2 (the pre-check, v64): Regions.checkPalette ok, copper_only fits; the mod's lot count equals the kit's at check time (item 6: ${pr?.lots?.hall?.familyCells}/${pr?.lots?.hall?.cells}), ${pr?.cells} cells in all`, pre);
+      const preOak = await L.call('dev.vocc.checkPalette', { sha: k64.c.check.artifactSha, lotEntries: { hall: 'vocc_oak_cabin' } });
+      out.v64preOak = preOak;
+      check(preOak.paletteOk === false && preOak.rules?.[0]?.worstLot === 'hall' && !preOak.rules[0].fits, `S-VOCc-2 (the pre-check): with the hall re-bound to vocc_oak_cabin, checkPalette answers not ok, worst lot hall (${preOak.rules?.[0]?.familyCells}/${preOak.rules?.[0]?.cells}, share ${preOak.rules?.[0]?.measured}): Steward re-binds one lot before any realise`, preOak);
+      const s = await snap(ctx, 'v64', k64.c, CLAIM);
+      const rr = await realise(ctx, k64.c.check.artifactSha);
+      out.v64realise = { ...rr, record: undefined };
+      check(rr.state === 'PLACED', `item 5 (v64): realiseApproved PLACED (${rr.state ?? `refused ${rr.reason}: ${rr.refused}`})`, out.v64realise);
+      if (rr.region) {
+        const ext = await L.call('dev.vocc.regionPalette', { region: rr.region });
+        out.v64ext = ext;
+        check(Array.isArray(ext.palette) && ext.palette[0]?.rule === 'copper_only' && ext.palette[0].fits === true && ext.palette[0].lots?.hall?.[1] === kitLot.cells, `item 5 (v64): the realise's ext architect_mc:palette row: copper_only fits, hall ${j(ext.palette?.[0]?.lots?.hall)} (item 6: the realise's count equals the kit's ${kitLot.cells})`, ext);
+        // ---- S-VOCc-3: the hall's entry gets a version 2 in oak: a delta to it breaks the required rule (checkDelta refuses PALETTE, applyDelta writes nothing)
+        const site = (rr.items && Object.keys(rr.items).length) ? null : null;
+        void site;
+        const st = await L.call('dev.region.state', { region: rr.region }).catch(() => null);
+        const hallSite = st?.view?.lots?.find?.((l) => l.lot === 'hall' || l.id === 'hall')?.siteId ?? st?.record?.lots?.hall?.siteId ?? null;
+        out.hallSite = hallSite;
+        if (hallSite) {
+          const vdir = path.join(OUT, 'vocc-v2');
+          const D = await ctx.imp('test/fixtures/vocab/vocc-designs.mjs');
+          const { writeBlueprint } = await ctx.imp('lib/write.mjs');
+          const oak = D.voccOakCabin();
+          oak.id = 'vocc_copper_cabin';
+          fs.rmSync(vdir, { recursive: true, force: true });
+          writeBlueprint(oak, vdir);
+          const inst = await L.call('dev.entry.installVersion', { entry: 'vocc_copper_cabin', dir: vdir, summary: 'VOC-c gate: the cabin in oak' }, 60_000);
+          out.installVersion = inst;
+          const ver = inst.version ?? 2;
+          const cd = await L.call('dev.vocc.delta', { site: hallSite, version: ver, owner: OWNER });
+          out.deltaCheck = cd;
+          check(cd.verdictOk === false && (cd.refusals ?? []).some((x) => x.reason === 'PALETTE' && /copper_only/.test(x.message)), `S-VOCc-3: a delta of the hall to its oak version ${ver} (a versionOf): Sites.checkDelta refuses PALETTE for the required copper_only (${(cd.refusals ?? []).map((x) => `${x.reason}: ${String(x.message).slice(0, 120)}`).join('; ')})`, cd);
+          const ad = await L.call('dev.vocc.delta', { site: hallSite, version: ver, owner: OWNER, apply: true }, 120_000);
+          out.deltaApply = ad;
+          check(ad.applied === false && ad.written === 0 && (ad.refusals ?? []).some((x) => x.reason === 'PALETTE'), `S-VOCc-3: Sites.applyDelta to it refuses PALETTE and writes nothing (applied ${ad.applied}, written ${ad.written})`, ad);
+        } else check(false, `S-VOCc-3: the hall's site was not found in the region's state (${j(st)?.slice(0, 300)})`);
+        const rm = await removeRegion(ctx, rr.region);
+        const d = await diffSnap(ctx, s);
+        out.v64remove = { removed: rm.removed, mismatches: d.mismatches };
+        check(rm.removed && d.mismatches === 0, `item 5 (v64): Regions.remove restores the box exactly: E-flat ${d.mismatches}`, (d.list ?? []).slice(0, 12));
+      }
+    }
+
     fs.writeFileSync(path.join(OUT, 'vocc-ingame.json'), `${JSON.stringify(out, null, 1)}\n`);
     return out;
   },
