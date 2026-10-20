@@ -519,56 +519,66 @@ async function removeRegion(ctx, o, item, { judged = true } = {}) {
   return { state: rm.state, seconds: rm.seconds, mismatches: df.mismatches, sample: df.sample, stacks: at };
 }
 
-/** (fix/lamp-path) The lanes' journaled dirt paths: no road post on one; each turned to dirt by a block over it, then the removal. */
+/**
+ * (fix/lamp-path) The region's journaled dirt paths (the IR's verges, lanes and square): every road lantern post standing on one gets a
+ * block set beside it and taken away, as the field's old composter did (the fence reconnects and its shape update turns the path under
+ * it to dirt, outside the journal); every other path cell gets a block over it and taken away (vanilla turns it to dirt, as under a
+ * lot's composter or a player's block). The region's removal must still restore every cell (E-flat 0, judged).
+ */
 async function lampPath(ctx, o) {
-  const { L, check, json } = ctx;
-  const lanes = (o.r.ir.paths ?? []).filter((p) => /^lane_/.test(p.id));
+  const { L, check } = ctx;
   const seen = new Set(), paths = [];
-  for (const ln of lanes) for (const [px, py, pz] of ln.points) for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
-    const c = [px + dx, py, pz + dz], k = k3(c);
-    if (seen.has(k)) continue;
-    seen.add(k);
-    const st = await L.call('dev.journal.at', { x: c[0], y: c[1], z: c[2] }, 30_000).catch(() => null);
-    const top = (st?.stack ?? st?.entries ?? []).at(-1);
-    if (top && /^minecraft:dirt_path/.test(top.after ?? '') && await isBlock(ctx, c, 'minecraft:dirt_path')) paths.push({ c, kind: top.kind });
+  for (const part of o.r.ir.parts ?? []) for (const op of part.ops ?? []) {
+    if (op.op !== 'columns' || !JSON.stringify(op.materials ?? []).includes('minecraft:dirt_path')) continue;
+    for (let i = 0; i + 4 < op.cols.length + 1; i += 5) {
+      const [x, z, c0] = op.cols.slice(i, i + 3);
+      // (absolute y, or from the flat village's surface: the row under its lots' floor)
+      const y0 = op.from?.abs !== undefined ? c0 : (o.r.ir.lots?.[0]?.floorY ?? 0) - 1 + c0;
+      const c = [x, y0, z], k = k3(c);
+      if (seen.has(k) || !(y0 > 1)) continue;
+      seen.add(k);
+      const st = await L.call('dev.journal.at', { x, y: y0, z }, 30_000).catch(() => null);
+      const top = (st?.stack ?? st?.entries ?? []).at(-1);
+      if (top && /^minecraft:dirt_path/.test(top.after ?? '') && await isBlock(ctx, c, 'minecraft:dirt_path')) paths.push({ c, part: part.id });
+    }
   }
   const posts = [];
   for (const p of paths) {
     const up = [p.c[0], p.c[1] + 1, p.c[2]];
-    if (await isBlock(ctx, up, '#minecraft:fences') || await isBlock(ctx, up, '#minecraft:walls')) posts.push({ ...p, up });
+    if (!(await isBlock(ctx, up, '#minecraft:fences'))) continue;
+    const st = await L.call('dev.journal.at', { x: up[0], y: up[1], z: up[2] }, 30_000).catch(() => null);
+    if ((st?.stack ?? st?.entries ?? []).at(-1)?.kind === 'road') posts.push({ ...p, up });
   }
-  const res = { lanes: lanes.map((l) => l.id), paths: paths.length, kinds: [...new Set(paths.map((p) => p.kind))], posts: posts.map((p) => k3(p.c)) };
-  check(lanes.length > 0 && paths.length > 0 && posts.length === 0, `(lamp-path) farm_hamlet: no road lantern post on a lane's dirt path (${paths.length} journaled path cell(s) round ${lanes.length} lane(s), ${posts.length} under a post${posts.length ? `: ${posts.map((p) => k3(p.c)).join(' ')}` : ''})`, res);
-  // a post on a path: a block set beside it and taken away, as the field's composter path did (the fence reconnects, the path ticks)
-  for (const p of posts) {
-    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const n = [p.up[0] + dx, p.up[1], p.up[2] + dz];
-      if (!(await isBlock(ctx, n, 'minecraft:air'))) continue;
-      await L.cmd(`/setblock ${n.join(' ')} minecraft:stone`);
-      await L.settle(500);
-      await L.cmd(`/setblock ${n.join(' ')} minecraft:air`);
-      break;
-    }
+  const res = { paths: paths.length, parts: [...new Set(paths.map((p) => p.part))], posts: posts.map((p) => k3(p.c)) };
+  // a road post on our path: a block set beside it and taken away (the post reconnects; the path under it ticks to dirt)
+  for (const p of posts) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const n = [p.up[0] + dx, p.up[1], p.up[2] + dz];
+    if (!(await isBlock(ctx, n, 'minecraft:air'))) continue;
+    await L.cmd(`/setblock ${n.join(' ')} minecraft:stone`);
+    await L.settle(500);
+    await L.cmd(`/setblock ${n.join(' ')} minecraft:air`);
+    break;
   }
-  // every other path cell: a block over it and taken away (vanilla turns the path to dirt; the journal still says dirt_path)
-  let poked = 0;
+  await L.settle(1000);
+  let underPosts = 0;
+  for (const p of posts) if (await isBlock(ctx, p.c, 'minecraft:dirt')) underPosts++;
+  // every other path cell: a block over it and taken away
+  const poked = [];
   for (const p of paths) {
     const up = [p.c[0], p.c[1] + 1, p.c[2]];
     if (!(await isBlock(ctx, up, 'minecraft:air'))) continue;
     await L.cmd(`/setblock ${up.join(' ')} minecraft:stone`);
-    poked++;
+    poked.push(up);
   }
   await L.settle(1500);
-  for (const p of paths) {
-    const up = [p.c[0], p.c[1] + 1, p.c[2]];
-    if (await isBlock(ctx, up, 'minecraft:stone')) await L.cmd(`/setblock ${up.join(' ')} minecraft:air`);
-  }
+  for (const up of poked) await L.cmd(`/setblock ${up.join(' ')} minecraft:air`);
   await L.settle(1500);
   let turned = 0;
   for (const p of paths) if (await isBlock(ctx, p.c, 'minecraft:dirt')) turned++;
-  res.poked = poked; res.turned = turned;
-  check(poked > 0 && turned >= poked, `(lamp-path) a block set over each of ${poked} lane path cell(s) and taken away: vanilla turned ${turned} to dirt (outside the journal)`, res);
-  res.removal = await removeRegion(ctx, o, `(lamp-path) farm_hamlet, the lanes' paths turned to dirt: the region`);
+  Object.assign(res, { underPosts, poked: poked.length, turned });
+  check(paths.length > 0 && poked.length > 0 && turned >= poked.length && underPosts === posts.length,
+    `(lamp-path) farm_hamlet: ${paths.length} journaled dirt path cell(s) (${res.parts.join(', ')}); ${posts.length} under a road post (${res.posts.join(' ') || 'none'}), a block beside each turned ${underPosts} to dirt; a block over ${poked.length} other(s): ${turned} dirt in all (vanilla, outside the journal)`, res);
+  res.removal = await removeRegion(ctx, o, `(lamp-path) farm_hamlet, its dirt paths turned to dirt: the region`);
   return res;
 }
 
@@ -632,11 +642,9 @@ export async function ingame(ctx) {
     if (o.r) out[tag] = await removeRegion(ctx, o, `(control ${tag}) farm_hamlet without irrigate`, { judged: false });
     await L.leaveWorld();
   }
-  // ---- (fix/lamp-path) the farm hamlet without an entry: (1) no road lantern post stands on a lane's dirt path (main's post at the
-  // farm's entrance did: a block written beside it reconnected the fence, vanilla turned the path under it to dirt outside the journal and
-  // the removal kept the dirt); a post found there is poked as the field's composter did (a block set beside it, then air), the chain
-  // shown. (2) Every journaled dirt path round the lanes gets a block set over it and taken away (vanilla turns it to dirt, as under a
-  // lot's composter or a player's block): the removal still restores every one (E-flat 0, judged).
+  // ---- (fix/lamp-path) the farm hamlet without an entry: street_e's lantern post stands on its dirt path verge by the farm's lane; a
+  // block set beside it (as the field's old composter did) turns the path under it to dirt outside the journal, and main's removal kept
+  // that dirt (E-flat 1). Every other journaled path is turned to dirt too (a block over it). The removal is judged: E-flat 0.
   if (want('lp')) {
     const o = await realiseIrr(ctx, 'lp', fx('h/farm_hamlet.json'), { entries: {}, fields: F });
     if (o.r) out.lp = await lampPath(ctx, o);
