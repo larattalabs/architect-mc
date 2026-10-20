@@ -384,9 +384,13 @@ export function emitDistricts(r, intent = {}) {
   const endClear = placed.flatMap((d) => ends.get(d.id).map((e) => [e.x - END_CLEAR, e.z - END_CLEAR, e.x + END_CLEAR, e.z + END_CLEAR]));
   const base = r._routeObstacles({ hard: [...districtHard, ...layoutLots, ...standing], clearTrees: endClear });
   // (a following street's own cells are not hard to the routes that end on it: its ends are open, as a V street's past-end cells are)
-  const dryOne = (a, b) => {
-    // ((6c S3) a pair with a terraced end tries several ends: each failure gives up after CHAIN_EXPANDED, not DRY_EXPANDED)
-    const e = dryRoute(a, b, base.hard, base.clearTrees, [], DRY_EXPANDED);
+  const dryMemo = new Map();
+  const dryOne = (a, b, cap = DRY_EXPANDED) => {
+    // ((6c S3) a terraced pass's dry pairs are remembered: the same two ends are routed once)
+    const mk = terr.size ? `${a.at}|${a.facing}|${b.at}|${b.facing}|${cap}` : null;
+    if (mk && dryMemo.has(mk)) return dryMemo.get(mk);
+    const e = dryRoute(a, b, base.hard, base.clearTrees, [], cap);
+    if (mk) dryMemo.set(mk, e.ok ? { cost: e.cost, length: e.length } : { cost: DISTRICT_INF, failed: e.failed });
     return e.ok ? { cost: e.cost, length: e.length } : { cost: DISTRICT_INF, failed: e.failed };
   };
   // ((6c S3) a terraced district's end is a lot's junction: the route ends there from any side)
@@ -407,10 +411,14 @@ export function emitDistricts(r, intent = {}) {
     combos.sort((p, q) => p.dd - q.dd || p.ea.k - q.ea.k || p.eb.k - q.eb.k);
     // ((6c S3) with a terraced end, the TERRACED_COMBOS nearest pairs of ends only)
     const terracedPair = combos.some((q) => q.ea.terraced || q.eb.terraced);
+    // ((6c S3) a terraced district may list one lot as two ends: each pair of junctions once)
+    if (terracedPair) { const seen = new Set(); for (let i = combos.length - 1; i >= 0; i--) { const k = `${combos[i].ea.junction ?? combos[i].ea.k}|${combos[i].eb.junction ?? combos[i].eb.k}`; if (seen.has(k)) combos.splice(i, 1); else seen.add(k); } combos.sort((p, q) => p.dd - q.dd || p.ea.k - q.ea.k || p.eb.k - q.eb.k); }
+    let tries = 0;
     for (const { ea, eb, dd } of terracedPair ? combos.slice(0, TERRACED_COMBOS) : combos) {
       if (best && best.dry.cost < DISTRICT_INF && 10 * dd >= best.dry.cost) continue;
       const na = endNode(A, ea), nb = endNode(B, eb);
-      const dry = dryOne(na, nb);
+      // ((6c S3) a terraced pair's later tries give up after CHAIN_EXPANDED: the nearest ends had the full budget)
+      const dry = dryOne(na, nb, terracedPair && tries++ > 0 ? CHAIN_EXPANDED : DRY_EXPANDED);
       if (!best || dry.cost < best.dry.cost) best = { na, nb, dry };
     }
     pairs.push({ a: A.id, b: B.id, cost: best.dry.cost, na: best.na, nb: best.nb, dry: best.dry });

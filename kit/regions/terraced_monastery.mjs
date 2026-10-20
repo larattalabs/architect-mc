@@ -156,7 +156,7 @@ function draftWorld(r, ctx) {
  * (the route guard holds those), a lot's entrance or within 1 of one; the cell inward then stands beside the rail. Twice (a rail
  * moves the brink in by one). Returns the rails placed.
  */
-function brinkRails(r, ctx, { stage, rounds = 3 }) {
+function brinkRails(r, ctx, { stage, rounds = 5 }) {
   const D4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const routeParts = new Set(Object.entries(r.meta.parts).filter(([, m]) => m.kind === 'path').map(([k]) => k));
   const ents = Object.values(r.meta.lots).map((l) => l.entrance);
@@ -196,7 +196,8 @@ function brinkRails(r, ctx, { stage, rounds = 3 }) {
         } else open = true;
       }
       if (onRoute) continue;
-      if (!open || !P.air[vw.get(x, y, z)]) continue;
+      // (the feet cell may hold a scatter item or a plant: the rail takes its place)
+      if (!open || !P.passable[vw.get(x, y, z)]) continue;
       placed.add(`${x},${y},${z}`);
       cols.push(x, z, y, y, 0);
     }
@@ -204,7 +205,7 @@ function brinkRails(r, ctx, { stage, rounds = 3 }) {
     const part = r.parts.find((q) => q.id === 'mon_brink') ?? r.part('mon_brink', { stage });
     (r.meta.parts['mon_brink'] ??= {}).kind = 'rails';
     if (wall.length) part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols: wall, materials: [r.material('structure', 'brink parapet')], cond: 2, walk: false });
-    if (cols.length) part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: [r.material('rail', 'brink rail')], cond: 2, walk: false });
+    if (cols.length) part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: [r.material('rail', 'brink rail')], cond: 3, walk: false });
     if (lit.length) part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols: lit, materials: [r.material('light', 'brink lantern')], cond: 2, walk: false });
     lanterns += lit.length / 5;
     total += cols.length / 5;
@@ -282,11 +283,13 @@ export default function terracedMonastery(ctx) {
     for (let x = b.minX - 4; x <= b.maxX + 4; x += 2) for (let z = b.minZ - 4; z <= b.maxZ + 4; z += 2) extra.push({ lot: key, x, z });
     extraCap[key] = 16;
   }
-  for (const e of r.meta.route?.edges ?? []) {
-    if (!e.ok || !e.path) continue;
-    const key = `side:${e.id}`;
-    for (let i = 0; i < e.path.length; i += 3) for (const d of [2, 3, 4]) for (const [dx, dz] of [[d, 0], [-d, 0], [0, d], [0, -d]]) extra.push({ lot: key, x: e.path[i][0] + dx, z: e.path[i][2] + dz });
-    extraCap[key] = 2 + (e.path.length >> 2);
+  // (every route pass's walks: meta.route holds only the last pass, the connectors'; meta.paths holds every run and flight)
+  for (const [pid, m] of Object.entries(r.meta.paths).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+    const cells = m.cells ?? [];
+    if (!cells.length || !(m.route || m.kind === 'stair')) continue;
+    const key = `side:${pid}`;
+    for (let i = 0; i < cells.length; i += 3) for (const d of [2, 3, 4]) for (const [dx, dz] of [[d, 0], [-d, 0], [0, d], [0, -d]]) extra.push({ lot: key, x: cells[i][0] + dx, z: cells[i][2] + dz });
+    extraCap[key] = 2 + (cells.length >> 2);
   }
   const reserved = new Set();
   for (const q of keepOut) for (let x = q[0]; x <= q[2]; x++) for (let z = q[1]; z <= q[3]; z++) reserved.add(`${x},${z}`);

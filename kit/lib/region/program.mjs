@@ -50,6 +50,8 @@ export const ROAD_MAX_CELLS = 2048;
 export const ROAD_MAX_POINTS = 256;
 /** cut/fill margin used when checking a ground road against the plan survey (4e allows 4 at realise) */
 export const GROUND_ROAD_MARGIN = 3;
+/** (6c S3) A guarded route's parapets: every this-many-th carries the light role on its rail. */
+export const GUARD_LIGHT_EVERY = 4;
 
 /** Macro role defaults when the bible does not name them (a settlement bible does). */
 export const DEFAULT_MACRO_ROLES = Object.freeze({
@@ -1932,6 +1934,8 @@ class Part {
     const retC = new Cols({ abs: 0 }, { abs: 0 });
     const gM = mats.guard && guardCols ? this._mat(mats.guard, 'route guard rail') : null;
     const guardC = gM ? new Cols({ abs: 0 }, { abs: 0 }) : null, railC = gM ? new Cols({ abs: 0 }, { abs: 0 }) : null;
+    const lM = gM ? this._mat('light', 'route guard light') : null, litC = gM ? new Cols({ abs: 0 }, { abs: 0 }) : null;
+    let nGuard = 0;
     const inFp = new Set(fp.map(([x, z]) => `${x},${z}`));
     const box = { minX: Infinity, minY: Infinity, minZ: Infinity, maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity };
     const grow = (x, y, z) => { box.minX = Math.min(box.minX, x); box.maxX = Math.max(box.maxX, x); box.minY = Math.min(box.minY, y); box.maxY = Math.max(box.maxY, y); box.minZ = Math.min(box.minZ, z); box.maxZ = Math.max(box.maxZ, z); };
@@ -1953,7 +1957,9 @@ class Part {
           if (inFp.has(`${ox},${oz}`)) continue;
           const land = s.groundAt(ox, oz) + baseAt(ox, oz);
           // ((6c S3) the guard: a drop of more than 3 beside the walk gets a parapet column up to the walk's surface and a rail on it)
-          if (guardC && y - land > 3) { if (!noGuard(ox, oz) && !guardCols.has(`${ox},${oz}`)) { guardCols.add(`${ox},${oz}`); guardC.add(ox, oz, land + 1, y, rM); railC.add(ox, oz, y + 1, y + 1, gM); mark(ox, oz); grow(ox, land, oz); grow(ox, y + 1, oz); } continue; }
+          // (every GUARD_LIGHT_EVERY-th parapet of the pass carries the light role on its rail: a walk along a drop has no ground beside
+          // it for a lamp post)
+          if (guardC && y - land > 3) { if (!noGuard(ox, oz) && !guardCols.has(`${ox},${oz}`)) { guardCols.add(`${ox},${oz}`); guardC.add(ox, oz, land + 1, y, rM); railC.add(ox, oz, y + 1, y + 1, gM); if (lM && nGuard++ % GUARD_LIGHT_EVERY === 0) litC.add(ox, oz, y + 2, y + 2, lM); mark(ox, oz); grow(ox, land, oz); grow(ox, y + 2, oz); } continue; }
           if (noRetain(ox, oz)) continue;
           if (land - y > 2) { retC.addOnce(`${ox},${oz}`, ox, oz, y + 1, land, rM); mark(ox, oz); grow(ox, land, oz); }
         }
@@ -1965,7 +1971,7 @@ class Part {
     this._colsOp(cutB, COND.IF_NATURAL);
     this._colsOp(surfC, COND.IF_NATURAL, true);
     this._colsOp(retC, COND.IF_NATURAL);
-    if (guardC && !guardC.empty) { this._colsOp(guardC, COND.IF_NATURAL); this._colsOp(railC, COND.IF_AIR_OR_FLUID); }
+    if (guardC && !guardC.empty) { this._colsOp(guardC, COND.IF_NATURAL); this._colsOp(railC, COND.IF_AIR_OR_FLUID); this._colsOp(litC, COND.IF_AIR_OR_FLUID); }
     if (register) {
       if (!PART_ID.test(id)) throw new Error(`part ${this.id}: route id '${id}' must match ${PART_ID}`);
       this.region.paths.push({ id, stage: this.stage, part: this.id, kind: 'graded', box });
