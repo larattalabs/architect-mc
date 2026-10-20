@@ -128,9 +128,17 @@ final class UmtSim {
 	private long clock = 1_000_000L;
 
 	UmtSim(UmtOps.Scenario sc, Path dir) throws IOException {
+		this(sc, dir, w -> {
+		});
+	}
+
+	/** {@code prep}: changes to the generated world before anything (a targeted property's ground). */
+	UmtSim(UmtOps.Scenario sc, Path dir, java.util.function.Consumer<UmtWorld> prep) throws IOException {
 		this.sc = sc;
 		this.dir = dir;
 		this.initial = UmtWorld.generate(sc.worldSeed());
+		prep.accept(initial);
+		initial.autosave();
 		this.world = initial.copy();
 		world.autosave();
 		Files.createDirectories(dir);
@@ -194,6 +202,7 @@ final class UmtSim {
 			}
 			case UmtOps.Drift d -> drift(d);
 			case UmtOps.Edit e -> edit(e);
+			case UmtOps.Noise n -> noise(n);
 			case UmtOps.Autosave a -> world.autosave();
 			case UmtOps.Restart r -> restart(false);
 		}
@@ -204,6 +213,12 @@ final class UmtSim {
 	}
 
 	/** The end: every standing record removed (one by one, last placed first), two clean restarts, then the checks. */
+	/** The end of a targeted property: everything removed and settled, the checks; the violations. */
+	List<String> end() throws Exception {
+		finish();
+		return violations;
+	}
+
 	void finish() throws Exception {
 		trace.add("finish");
 		for (int round = 0; round < 3; round++) {
@@ -248,10 +263,26 @@ final class UmtSim {
 			violations.add((e.startsWith("[F1] ") ? "[F1] " : "") + "journal entry left after everything was removed and settled: " + e.replace("[F1] ", ""));
 		}
 		Map<String, List<String>> byTag = new java.util.TreeMap<>();
+		int noise = 0;
 		for (String c : world.diff(initial, tainted::contains)) {
 			String[] xyz = c.substring(0, c.indexOf(':')).split(",");
 			long p = BlockPos.asLong(Integer.parseInt(xyz[0]), Integer.parseInt(xyz[1]), Integer.parseInt(xyz[2]));
+			if (noiseInjected.contains(p)) {
+				noise++; // N1: the world's own, never an undo miss
+				if (noiseCell(p)) {
+					NOISE_STATS[0].incrementAndGet(); // the in-game rule (kind, unwritten, away from the plan) names it noise
+				} else {
+					NOISE_STATS[1].incrementAndGet(); // noise the rule can't tell from a miss: a plan came near it later
+				}
+				continue;
+			}
+			if (noiseCell(p)) {
+				NOISE_STATS[2].incrementAndGet(); // a real difference the in-game rule would hide as noise
+			}
 			byTag.computeIfAbsent(tag(p), k -> new ArrayList<>()).add(c);
+		}
+		if (noise > 0) {
+			trace.add("  " + noise + " noise cell(s) (N1) left out of the comparison");
 		}
 		byTag.forEach((t, d) -> violations.add(t + "the world is not the world before everything (" + d.size() + " cell(s)): " + d.subList(0, Math.min(12,
 			d.size()))));
@@ -284,12 +315,21 @@ final class UmtSim {
 
 	/** Positions some entry wrote as a dirt path (its after), or that were a dirt path before anything. */
 	final LongOpenHashSet pathAfter = new LongOpenHashSet();
+	/** N1 cells the world changed by itself (ground truth, left out of the comparison). */
+	final LongOpenHashSet noiseInjected = new LongOpenHashSet();
+	/** Over the JVM: injected noise the in-game rule names noise, injected noise it doesn't, real differences it would hide. */
+	static final java.util.concurrent.atomic.AtomicLong[] NOISE_STATS = {new java.util.concurrent.atomic.AtomicLong(), new java.util.concurrent.atomic.AtomicLong(),
+		new java.util.concurrent.atomic.AtomicLong()};
+	/** Every cell a plan ever wrote (an entry's cell), for the noise rule. */
+	final LongOpenHashSet everWritten = new LongOpenHashSet();
 	/** Positions some entry wrote a gravity block at, and the cells below them. */
 	final LongOpenHashSet fallAfter = new LongOpenHashSet();
 	/** The evidence a pending record was last kept on (KEEP at a start). */
 	final Map<String, Sites.Evidence> kept = new LinkedHashMap<>();
 	/** Sites a group reactivation brought back although their own cells did not show them (F6). */
 	final java.util.Set<String> phantom = new java.util.HashSet<>();
+	/** Sites that ever shared a cell with another site's entry (stacked: F1's ground). */
+	final java.util.Set<String> stacked = new java.util.HashSet<>();
 	/** Sites whose rollback was kept unsettled (F5). */
 	final java.util.Set<String> f5 = new java.util.HashSet<>();
 
@@ -461,6 +501,35 @@ final class UmtSim {
 			meta.add("ext", ext);
 			masked.add(BlockPos.asLong(mx, b.minY() + 1, mz));
 		}
+		placeDesign(rec, design, data, masked, meta, c);
+	}
+
+	/** A site of exactly {@code design} (a targeted property's): placed through P1-P8, no crash. */
+	Rec site(Anchors.Bounds box, Map<Long, BlockState> design, int group) throws Exception {
+		Rec rec = new Rec("s" + nextRec++, Kind.SITE, group, box, nextRec);
+		JsonObject meta = new JsonObject();
+		meta.addProperty("id", rec.id);
+		placeDesign(rec, design, Map.of(), new LongOpenHashSet(), meta, null);
+		return rec;
+	}
+
+	/** A road or tile of exactly {@code target} (a targeted property's), no crash. */
+	Rec cells(Kind kind, int group, Map<Long, BlockState> target) throws Exception {
+		Rec rec = new Rec((kind == Kind.ROAD ? "r" : "t") + nextRec++, kind, group, new Anchors.Bounds(0, 0, 0, 0, 0, 0), nextRec);
+		Map<Long, BlockState> t = new LinkedHashMap<>(target);
+		if (kind == Kind.TILE) {
+			t.entrySet().removeIf(e -> ownedByOthers(e.getKey(), rec) || world.get(e.getKey()) == e.getValue());
+			dependents(rec, t);
+		}
+		placeTarget(rec, t, null);
+		return rec;
+	}
+
+	private void placeDesign(Rec rec, Map<Long, BlockState> design, Map<Long, CompoundTag> data, LongOpenHashSet masked, JsonObject meta, @Nullable Crash c)
+		throws Exception {
+		Anchors.Bounds b = rec.box;
+		design.keySet().forEach(k -> everWritten.add(k.longValue()));
+		markStacked(rec, design.keySet());
 		// P1: the capture (WorldJournal.capture's values: the cell as the journal keeps it)
 		WorldJournal.Captured before = WorldJournal.empty(b);
 		fill(before);
@@ -621,31 +690,18 @@ final class UmtSim {
 			}
 			// TileCheck: cells owned by anything but this region's own tiles are skipped; no-op cells too
 			target.entrySet().removeIf(e -> !UmtWorld.inArena(e.getKey()) || ownedByOthers(e.getKey(), rec) || world.get(e.getKey()) == e.getValue());
-			// TileCheck stage 3: what stands on a changed cell goes too, but a supported gravity block (keepsGravity)
-			Map<Long, BlockState> deps = new LinkedHashMap<>();
-			for (var e : List.copyOf(target.entrySet())) {
-				long q = e.getKey();
-				for (int y = BlockPos.getY(q) + 1; y <= UmtWorld.Y1; y++) {
-					long a = BlockPos.asLong(BlockPos.getX(q), y, BlockPos.getZ(q));
-					BlockState us = world.get(a);
-					if (!TileCheck.dependent(us)) {
-						break;
-					}
-					if (y == BlockPos.getY(q) + 1 && keepsGravity(us, world.get(q), e.getValue())) {
-						break;
-					}
-					if (target.containsKey(a) || ownedByOthers(a, rec)) {
-						break;
-					}
-					deps.put(a, Blocks.AIR.defaultBlockState());
-				}
-			}
-			target.putAll(deps);
+			dependents(rec, target);
 		}
 		target.entrySet().removeIf(e -> !UmtWorld.inArena(e.getKey()));
 		if (target.isEmpty()) {
 			return;
 		}
+		placeTarget(rec, target, c);
+	}
+
+	private void placeTarget(Rec rec, Map<Long, BlockState> target, @Nullable Crash c) throws Exception {
+		target.keySet().forEach(k -> everWritten.add(k.longValue()));
+		markStacked(rec, target.keySet());
 		JournalStore s = store;
 		long layer = s.newLayer();
 		String eid = s.newId();
@@ -699,11 +755,40 @@ final class UmtSim {
 		trace.add("  placed " + rec.id + " " + cells.size() + " cell(s)");
 	}
 
-	/** The gravity rule the tile writer applies (production {@code TileCheck.keepsGravity}); a test may swap it to show a seed goes red. */
-	static java.util.function.BiPredicate<BlockState[], BlockState> gravityRule = (a, n) -> TileCheck.keepsGravity(a[0], a[1], n);
+	/** TileCheck stage 3 (its loop modelled, its rules real): what stands on a changed cell goes too, but a supported gravity block. */
+	void dependents(Rec rec, Map<Long, BlockState> target) {
+		Map<Long, BlockState> deps = new LinkedHashMap<>();
+		for (var e : List.copyOf(target.entrySet())) {
+			long q = e.getKey();
+			for (int y = BlockPos.getY(q) + 1; y <= UmtWorld.Y1; y++) {
+				long a = BlockPos.asLong(BlockPos.getX(q), y, BlockPos.getZ(q));
+				BlockState us = world.get(a);
+				if (!TileCheck.dependent(us)) {
+					break;
+				}
+				if (y == BlockPos.getY(q) + 1 && keepsGravity(us, world.get(q), e.getValue())) {
+					break;
+				}
+				if (target.containsKey(a) || ownedByOthers(a, rec)) {
+					break;
+				}
+				deps.put(a, Blocks.AIR.defaultBlockState());
+			}
+		}
+		target.putAll(deps);
+	}
+
+	private void markStacked(Rec rec, java.util.Collection<Long> cells) throws IOException {
+		for (long p : cells) {
+			for (WorldJournal.Layer l : WorldJournal.stack(UmtWorld.DIM_ID, p)) {
+				stacked.add(l.meta().site());
+				stacked.add(rec.id);
+			}
+		}
+	}
 
 	private static boolean keepsGravity(BlockState above, BlockState now, BlockState next) {
-		return gravityRule.test(new BlockState[] {above, now}, next);
+		return TileCheck.keepsGravity(above, now, next); // production
 	}
 
 	/** TileCheck.owners: a cell of an active entry other than this region's own tile entries (leaves aside). */
@@ -847,6 +932,12 @@ final class UmtSim {
 			world.tick();
 			SiteJournal.writeCells(world, r.cells());
 			SiteJournal.fixHalves(world, r.halves());
+			for (SiteJournal.CellWrite w : r.cells()) {
+				var f = WorldJournal.state(w.value()).getFluidState();
+				if (!f.isEmpty() && !f.isSource()) {
+					UmtVanilla.fired("V9"); // writeCells queued it with FluidRearm (production); UMT has no fluid ticks to run
+				}
+			}
 		} finally {
 			world.restoring = null;
 		}
@@ -925,9 +1016,43 @@ final class UmtSim {
 				}
 			}
 			if (to != null) {
+				UmtVanilla.fired(s.getBlock() instanceof WeatheringCopper || dev.larattalabs.architect.journal.Copper.inChain(s.getBlock()) ? "V6" : s
+					.getFluidState().isEmpty() && !s.isAir() ? "V7" : "V8");
 				world.natural(p, to);
 				drifted.add(p);
 				trace.add("  drift " + BlockPos.of(p).toShortString() + " " + s + " -> " + to);
+				return;
+			}
+		}
+	}
+
+	/** N1: whether a difference at {@code p} is the world's own noise: a decor kind, at a cell no plan wrote, away from every written cell. */
+	boolean noiseCell(long p) {
+		if (!UmtVanilla.decor(initial.get(p)) && !UmtVanilla.decor(world.get(p))) {
+			return false;
+		}
+		for (int dx = -1; dx <= 1; dx++) {
+			for (int dy = -1; dy <= 1; dy++) {
+				for (int dz = -1; dz <= 1; dz++) {
+					if (everWritten.contains(BlockPos.offset(p, dx, dy, dz))) {
+						return false;
+					}
+				}
+			}
+		}
+		return true;
+	}
+
+	void noise(UmtOps.Noise n) {
+		Random r = new Random(n.seed());
+		for (int tries = 0; tries < 40; tries++) {
+			long p = BlockPos.asLong(UmtWorld.X0 + r.nextInt(UmtWorld.X1 - UmtWorld.X0 + 1), UmtWorld.GROUND + 1, UmtWorld.Z0 + r.nextInt(UmtWorld.Z1
+				- UmtWorld.Z0 + 1));
+			if (UmtVanilla.decor(world.get(p)) && noiseCell(p)) {
+				UmtVanilla.fired("N1");
+				world.natural(p, Blocks.AIR.defaultBlockState());
+				noiseInjected.add(p);
+				trace.add("  noise " + BlockPos.of(p).toShortString());
 				return;
 			}
 		}
@@ -1119,7 +1244,7 @@ final class UmtSim {
 				for (long q : reverted) {
 					lost |= x.box.contains(BlockPos.getX(q), BlockPos.getY(q), BlockPos.getZ(q));
 				}
-				if ((g.startsWith("u:rollback-") || lost) && Boolean.FALSE.equals(ev.stands()) && f5.add(x.id)) {
+				if ((g.startsWith("u:rollback-") || lost && !stacked.contains(x.id)) && Boolean.FALSE.equals(ev.stands()) && f5.add(x.id)) {
 					violations.add("[F5] " + (g.startsWith("u:rollback-") ? "a rolled-back placement " : "a removed site ") + x.id + " is kept unsettled on " + ev
 						+ ": the writes of its restore were lost to a crash before the world saved (its job had ended), so it is neither restored nor "
 						+ "standing, and the settle keeps it so at every start");
@@ -1164,7 +1289,7 @@ final class UmtSim {
 					// Groups.Removal.fromJson keeps its undo group as committed; Groups.tick: pendAll, then the writes
 					String ug = j.undo;
 					boolean committed = j.sites.stream().anyMatch(id -> !SiteJournal.undone(id, ug).isEmpty());
-					if (!committed) {
+					if (!committed && j.sites.stream().anyMatch(id -> !SiteJournal.active(id).isEmpty())) {
 						violations.add("[F4] a resumed group removal of " + j.sites + " found its undo group " + ug + " not in the journal (the R2 commit never "
 							+ "reached the disk, Groups.committed saved the removal before it did): it marks the records pending and writes nothing; the "
 							+ "removal ends as done with every cell unrestored");

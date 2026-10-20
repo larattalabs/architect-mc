@@ -127,6 +127,21 @@ final class UmtWorld implements BlockGetter, SiteJournal.CellTarget {
 		for (int x = X0 + 18; x < X0 + 22; x++) {
 			w.states.put(BlockPos.asLong(x, GROUND, fz + 2), Blocks.FARMLAND.defaultBlockState());
 		}
+		// decor on the grass (V5, N1): short grass, poppies, leaf litter, a brown mushroom
+		for (int x = X0; x <= X1; x++) {
+			for (int z = Z0; z <= Z1; z++) {
+				long g = BlockPos.asLong(x, GROUND, z);
+				long a = BlockPos.asLong(x, GROUND + 1, z);
+				if (w.states.get(g).is(Blocks.GRASS_BLOCK) && w.states.get(a).isAir() && r.nextInt(14) == 0) {
+					w.states.put(a, switch (r.nextInt(4)) {
+						case 0 -> Blocks.SHORT_GRASS.defaultBlockState();
+						case 1 -> Blocks.POPPY.defaultBlockState();
+						case 2 -> Blocks.LEAF_LITTER.defaultBlockState();
+						default -> Blocks.BROWN_MUSHROOM.defaultBlockState();
+					});
+				}
+			}
+		}
 		// a chest with items (block entity data)
 		long chest = BlockPos.asLong(X0 + 20 + r.nextInt(6), GROUND + 1, Z0 + 20 + r.nextInt(6));
 		w.states.put(chest, Blocks.CHEST.defaultBlockState());
@@ -241,6 +256,28 @@ final class UmtWorld implements BlockGetter, SiteJournal.CellTarget {
 
 	// ------------------------------------------------------------------ writes
 
+	/** Sets a cell before anything (a targeted property's ground): no update, the record as given. */
+	void put0(long p, BlockState s, @Nullable CompoundTag data, @Nullable Pt rec) {
+		put(p, s, data);
+		if (rec != null) {
+			pt.put(p, rec);
+		} else {
+			pt.remove(p);
+		}
+	}
+
+	/** Flat ground over [x0, x1] x [z0, z1]: stone, dirt, grass at GROUND, air above (no decor, no records). */
+	void flat(int x0, int z0, int x1, int z1) {
+		for (int x = x0; x <= x1; x++) {
+			for (int z = z0; z <= z1; z++) {
+				for (int y = Y0; y <= Y1; y++) {
+					put0(BlockPos.asLong(x, y, z), y < GROUND - 2 ? STONE : y < GROUND ? Blocks.DIRT.defaultBlockState() : y == GROUND ? Blocks.GRASS_BLOCK
+						.defaultBlockState() : AIR, null, null);
+				}
+			}
+		}
+	}
+
 	/** An Architect write ({@code Placed.set} / a template cell): V1, V2, V4. */
 	void write(long p, BlockState s, @Nullable CompoundTag data, int flags) {
 		BlockState old = get(p);
@@ -249,6 +286,7 @@ final class UmtWorld implements BlockGetter, SiteJournal.CellTarget {
 		}
 		put(p, s, data);
 		if (old != s) {
+			UmtVanilla.fired("V1");
 			var e = restoring == null ? null : restoring.get(p);
 			if (e != null && !s.isAir() && s.getBlock() == e.block()) {
 				pt.put(p, e.pt());
@@ -256,18 +294,19 @@ final class UmtWorld implements BlockGetter, SiteJournal.CellTarget {
 				pt.remove(p);
 			}
 		}
-		updates(p, s, flags);
+		updates(p, old, s, flags);
 	}
 
 	/** A player's change: places {@code s} with a record ({@code rec}), or mines (air, no record). */
 	void player(long p, BlockState s, @Nullable Pt rec, @Nullable CompoundTag data) {
+		BlockState old = get(p);
 		put(p, s, data);
 		if (rec != null && !s.isAir()) {
 			pt.put(p, rec);
 		} else {
 			pt.remove(p);
 		}
-		updates(p, s, Block.UPDATE_ALL);
+		updates(p, old, s, Block.UPDATE_ALL);
 		tick();
 	}
 
@@ -292,23 +331,42 @@ final class UmtWorld implements BlockGetter, SiteJournal.CellTarget {
 		}
 	}
 
-	private void updates(long p, BlockState s, int flags) {
+	private int depth;
+
+	/** V1-V5: what a write of {@code s} over {@code old} at {@code p} sets off (UmtVanilla). */
+	private void updates(long p, BlockState old, BlockState s, int flags) {
 		if ((flags & Block.UPDATE_SKIP_ON_PLACE) == 0 && s.getBlock() instanceof FallingBlock) {
 			schedule(p); // V2
 		}
-		if ((flags & Block.UPDATE_KNOWN_SHAPE) != 0) {
+		if ((flags & Block.UPDATE_KNOWN_SHAPE) != 0 || depth > 64) {
 			return;
 		}
-		for (Direction d : Direction.values()) {
-			long n = BlockPos.offset(p, d);
-			if (UpdateMask.masked(n)) {
-				continue; // (4e) no shape update into a covered position
+		depth++;
+		try {
+			for (Direction d : Direction.values()) {
+				long n = BlockPos.offset(p, d);
+				if (UpdateMask.masked(n)) {
+					continue; // (4e) no shape update into a covered position
+				}
+				BlockState ns = get(n);
+				if (ns.getBlock() instanceof FallingBlock || d == Direction.DOWN && turnsToDirt(ns, s)) {
+					schedule(n); // V2, V3
+				} else if (d == Direction.UP && UmtVanilla.decor(ns) && !UmtVanilla.supports(ns, s)) {
+					UmtVanilla.fired("V5");
+					natural(n, AIR); // V5: it breaks (its drop is not modelled)
+					updates(n, ns, AIR, Block.UPDATE_ALL);
+				} else if (UmtVanilla.connects(ns) && connectable(old) != connectable(s)) {
+					UmtVanilla.fired("V4");
+					updates(n, ns, ns, Block.UPDATE_ALL); // V4: it reshapes and updates its own neighbours
+				}
 			}
-			BlockState ns = get(n);
-			if (ns.getBlock() instanceof FallingBlock || d == Direction.DOWN && turnsToDirt(ns, s)) {
-				schedule(n); // V1
-			}
+		} finally {
+			depth--;
 		}
+	}
+
+	private static boolean connectable(BlockState s) {
+		return s.isSolid() || UmtVanilla.connects(s);
 	}
 
 	private void schedule(long p) {
@@ -328,19 +386,22 @@ final class UmtWorld implements BlockGetter, SiteJournal.CellTarget {
 			long p = ticks.removeFirstLong();
 			BlockState s = get(p);
 			if (s.getBlock() instanceof FallingBlock && FallingBlock.isFree(get(BlockPos.offset(p, Direction.DOWN)))) {
+				UmtVanilla.fired("V2");
 				long q = p;
 				while (BlockPos.getY(q) > Y0 && FallingBlock.isFree(get(BlockPos.offset(q, Direction.DOWN)))) {
 					q = BlockPos.offset(q, Direction.DOWN);
 				}
 				natural(p, AIR);
-				updates(p, AIR, Block.UPDATE_ALL);
+				updates(p, s, AIR, Block.UPDATE_ALL);
+				BlockState was = get(q);
 				natural(q, s);
 				pt.remove(q);
-				updates(q, s, Block.UPDATE_ALL);
+				updates(q, was, s, Block.UPDATE_ALL);
 			} else if (turnsToDirt(s, get(BlockPos.offset(p, Direction.UP)))) {
+				UmtVanilla.fired("V3");
 				natural(p, Blocks.DIRT.defaultBlockState());
 				pt.remove(p);
-				updates(p, Blocks.DIRT.defaultBlockState(), Block.UPDATE_ALL);
+				updates(p, s, Blocks.DIRT.defaultBlockState(), Block.UPDATE_ALL);
 			}
 		}
 	}

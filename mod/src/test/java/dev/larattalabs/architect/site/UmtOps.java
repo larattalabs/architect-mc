@@ -36,7 +36,7 @@ final class UmtOps {
 		}
 	}
 
-	sealed interface Op permits Place, Remove, RemoveGroup, Drift, Edit, Autosave, Restart {
+	sealed interface Op permits Place, Remove, RemoveGroup, Drift, Edit, Noise, Autosave, Restart {
 	}
 
 	/** Places a change of {@code kind} over [x, x+w) x [z, z+d), {@code h} high; {@code group} 0 is none. */
@@ -57,6 +57,10 @@ final class UmtOps {
 
 	/** A player changes a cell of a standing placement (waxes, mines, places a block of their own). */
 	record Edit(int ordinal, long seed) implements Op {
+	}
+
+	/** World noise (UmtVanilla N1): a decor cell no plan wrote, away from every plan, goes (a mushroom popped, leaf litter trampled). */
+	record Noise(long seed) implements Op {
 	}
 
 	/** The world autosaves (a crash after it keeps the world as it is now). */
@@ -117,7 +121,9 @@ final class UmtOps {
 				ops.add(new RemoveGroup(1 + r.nextInt(3), crash(r, g, false)));
 			} else if (k < 76 && g.drift()) {
 				ops.add(new Drift(r.nextInt(8), r.nextLong()));
-			} else if (k < 84 && g.edits()) {
+			} else if (k < 80 && g.drift()) {
+				ops.add(new Noise(r.nextLong()));
+			} else if (k < 86 && g.edits()) {
 				ops.add(new Edit(r.nextInt(8), r.nextLong()));
 			} else if (k < 92) {
 				ops.add(new Autosave());
