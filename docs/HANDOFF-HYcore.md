@@ -11,6 +11,10 @@ kit 0.37.0, catalogue 8 (VOC releases first as 1.35.0; the coordinator renumbers
   region through `r._hydrology`.
 - HY-a bumped no versions; versions are HY-core's (all seven constants and catalogue 8 are set on this branch).
 - HY-a is merged into `hy/core` (origin/slice/HY-a f3967b36).
+- **origin/main v0.37.1 is merged into `hy/core`** (kit 0.35.1 on main: hk3's even-width rope/tunnel fix with v33/v34 in H's
+  UNCHANGED_EXCEPTIONS, the guard reader and apijars over 0.37.0, hb-unchanged retired, host-stamped base worlds). HY keeps its
+  placeholders (kit 0.37.0, API 1.36.0, mod 0.39.0); VOC releases first as v0.38.0. The crossings_demo_flat, links_demo and
+  links_demo_flat goldens are re-cut for kit 0.37.0 (only the IR's kitVersion; irShas 0e9c3219, 01bc72a4, 8ab69970).
 
 ## The frozen interface (round 1)
 
