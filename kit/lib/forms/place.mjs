@@ -22,6 +22,8 @@ export const TREE_CLEAR = 8;
 /** Bodies, zones, forms and the form's own other sites keep this far (F1's gap). */
 export const FORM_GAP = 2;
 const STEP = 2;
+/** Other seeds a site tries when its own shape fits nowhere (§3.1: fewer, moved; a smaller crown first). */
+export const RETRIES = 3;
 
 /** A bitmap over the claim (one byte a column). */
 function grid(claim) {
@@ -129,40 +131,46 @@ export function pickSites({ env, F, loc, area, want, shapeOf, grow, roughAt, max
   const own = grid(claim);
   const a0 = { minX: Math.max(claim.minX, area.minX), minZ: Math.max(claim.minZ, area.minZ), maxX: Math.min(claim.maxX, area.maxX), maxZ: Math.min(claim.maxZ, area.maxZ) };
   let tried = 0;
+  // each site k tries its own shape first, then up to RETRIES other seeds of the same species (a smaller crown, another spread) before it
+  // gives up: the first shape that fits anywhere within the locator wins (deterministic: the same order every plan)
   for (let k = 0; k < want; k++) {
-    const sh = shapeOf(k);
-    const rel = runsRect(sh.columns);
-    const cands = [];
-    for (let z = a0.minZ; z <= a0.maxZ; z += STEP) for (let x = a0.minX; x <= a0.maxX; x += STEP) {
-      const rect = { minX: rel.minX + x, minZ: rel.minZ + z, maxX: rel.maxX + x, maxZ: rel.maxZ + z };
-      if (rect.minX < claim.minX || rect.maxX > claim.maxX || rect.minZ < claim.minZ || rect.maxZ > claim.maxZ) continue;
-      if (!loc.valid(rect)) continue;
-      const mv = loc.move(rect);
-      if (mv > maxMove) continue;
-      const aim = loc.aim ?? [(claim.minX + claim.maxX) >> 1, (claim.minZ + claim.maxZ) >> 1];
-      cands.push([mv * 4096 + Math.max(Math.abs(x - aim[0]), Math.abs(z - aim[1])), x, z, mv]);
-    }
-    cands.sort((p, q) => p[0] - q[0] || p[2] - q[2] || p[1] - q[1]);
-    let got = null;
-    for (const [, x, z, mv] of cands) {
-      tried++;
+    let placed = false;
+    for (let a = 0; a <= RETRIES && !placed; a++) {
+      const sh = shapeOf(k, a);
+      const rel = runsRect(sh.columns);
+      const cands = [];
+      for (let z = a0.minZ; z <= a0.maxZ; z += STEP) for (let x = a0.minX; x <= a0.maxX; x += STEP) {
+        const rect = { minX: rel.minX + x, minZ: rel.minZ + z, maxX: rel.maxX + x, maxZ: rel.maxZ + z };
+        if (rect.minX < claim.minX || rect.maxX > claim.maxX || rect.minZ < claim.minZ || rect.maxZ > claim.maxZ) continue;
+        if (!loc.valid(rect)) continue;
+        const mv = loc.move(rect);
+        if (mv > maxMove) continue;
+        const aim = loc.aim ?? [(claim.minX + claim.maxX) >> 1, (claim.minZ + claim.maxZ) >> 1];
+        cands.push([mv * 4096 + Math.max(Math.abs(x - aim[0]), Math.abs(z - aim[1])), x, z, mv]);
+      }
+      cands.sort((p, q) => p[0] - q[0] || p[2] - q[2] || p[1] - q[1]);
+      let got = null;
+      for (const [, x, z, mv] of cands) {
+        tried++;
+        let ok = true;
+        eachColumn(sh.columns, (cx, cz) => { if (ok && (F.canopy.has(cx + x, cz + z) || own.has(cx + x, cz + z))) ok = false; });
+        if (!ok) continue;
+        eachColumn(sh.foot, (cx, cz) => { if (ok && F.foot.has(cx + x, cz + z)) ok = false; });
+        if (!ok) continue;
+        if (roughAt(x, z, sh.reach) > 3) continue;
+        got = { x, z, mv };
+        break;
+      }
+      if (!got) continue;
+      const gen = grow(k, [got.x, env.S.groundAt(got.x, got.z), got.z], a);
+      // the real form's mask (the same columns as the flat one but for ground-following roots): checked again, then taken
       let ok = true;
-      eachColumn(sh.columns, (cx, cz) => { if (ok && (F.canopy.has(cx + x, cz + z) || own.has(cx + x, cz + z))) ok = false; });
+      eachColumn(gen.columns, (cx, cz) => { if (ok && (F.canopy.has(cx, cz) || own.has(cx, cz))) ok = false; });
       if (!ok) continue;
-      eachColumn(sh.foot, (cx, cz) => { if (ok && F.foot.has(cx + x, cz + z)) ok = false; });
-      if (!ok) continue;
-      if (roughAt(x, z, sh.reach) > 3) continue;
-      got = { x, z, mv };
-      break;
+      eachColumn(gen.columns, (cx, cz) => { for (let dx = -FORM_GAP; dx <= FORM_GAP; dx++) for (let dz = -FORM_GAP; dz <= FORM_GAP; dz++) own.set(cx + dx, cz + dz); });
+      sites.push({ at: [got.x, env.S.groundAt(got.x, got.z), got.z], gen, move: got.mv, k, retry: a });
+      placed = true;
     }
-    if (!got) continue;
-    const gen = grow(k, [got.x, env.S.groundAt(got.x, got.z), got.z]);
-    // the real form's mask (the same columns as the flat one but for ground-following roots): checked again, then taken
-    let ok = true;
-    eachColumn(gen.columns, (cx, cz) => { if (ok && (F.canopy.has(cx, cz) || own.has(cx, cz))) ok = false; });
-    if (!ok) continue;
-    eachColumn(gen.columns, (cx, cz) => { for (let dx = -FORM_GAP; dx <= FORM_GAP; dx++) for (let dz = -FORM_GAP; dz <= FORM_GAP; dz++) own.set(cx + dx, cz + dz); });
-    sites.push({ at: [got.x, env.S.groundAt(got.x, got.z), got.z], gen, move: got.mv, k });
   }
   return { sites, tried };
 }

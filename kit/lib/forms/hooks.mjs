@@ -88,18 +88,20 @@ export function f3Emit(C, p) {
     const tMove = C.tolOf(part, 'move'), tCount = C.tolOf(part, 'count');
     const preset = part.preset ?? G.preset;
     const height = part.height === undefined ? undefined : Array.isArray(part.height) ? part.height : [part.height, part.height];
-    const params = (k, at) => ({ preset, at, seed: fnv64(r.ctx.seed, G.generator, `${id}_${k + 1}`).hex, ...(height ? { height } : {}), ...(part.roots !== undefined ? { roots: part.roots } : {}) });
+    // (retry a: another seed of the site's species when its own shape fits nowhere; a = 0 is the site's own seed)
+    const params = (k, at, a = 0) => ({ preset, at, seed: fnv64(r.ctx.seed, G.generator, a ? `${id}_${k + 1}_r${a}` : `${id}_${k + 1}`).hex, ...(height ? { height } : {}), ...(part.roots !== undefined ? { roots: part.roots } : {}) });
     const shapes = new Map();
-    const shapeOf = (k) => {
-      if (!shapes.has(k)) {
-        const g = G.grow(params(k, [0, 64, 0]));
+    const shapeOf = (k, a = 0) => {
+      const sk = `${k}/${a}`;
+      if (!shapes.has(sk)) {
+        const g = G.grow(params(k, [0, 64, 0], a));
         const foot = new Map();
         for (const [key, s] of g.cells) { const [x, y, z] = key.split(',').map(Number); if (y <= 65) foot.set(key, s); }
-        shapes.set(k, { columns: g.columns, foot: columnRuns(foot), reach: Math.ceil(g.stats.trunk ?? 2) + 2 });
+        shapes.set(sk, { columns: g.columns, foot: columnRuns(foot), reach: Math.ceil(g.stats.trunk ?? 2) + 2 });
       }
-      return shapes.get(k);
+      return shapes.get(sk);
     };
-    const grow = (k, at) => G.grow(params(k, at), { groundAt: (x, z) => env.S.groundAt(x, z), _unsafe: unsafe.leafNotPersistent || unsafe.mushroomFaces ? { leafNotPersistent: !!unsafe.leafNotPersistent, mushroomFaces: !!unsafe.mushroomFaces } : null });
+    const grow = (k, at, a = 0) => G.grow(params(k, at, a), { groundAt: (x, z) => env.S.groundAt(x, z), _unsafe: unsafe.leafNotPersistent || unsafe.mushroomFaces ? { leafNotPersistent: !!unsafe.leafNotPersistent, mushroomFaces: !!unsafe.mushroomFaces } : null });
     const area = open ? open.rect : loc.areaFor ? loc.areaFor(48, 48, tMove.ceiling) : env.claim;
     const roughAt = (x, z, reach) => C.rectStats(env, { minX: x - reach, minZ: z - reach, maxX: x + reach, maxZ: z + reach }).rough;
     let { sites, tried } = pickSites({ env, F, loc, area, want, shapeOf, grow, roughAt, maxMove: tMove.ceiling });
@@ -135,6 +137,8 @@ export function f3Emit(C, p) {
     f.rect = rect;
     C.res.set(p.id, f);
     const notes = sites.length < want ? [`${sites.length} of ${want} placed: no other site is dry, level and clear (natural trees 8, bodies, zones, lots and forms 2)`] : [];
+    const retried = sites.filter((q) => q.retry);
+    if (retried.length) notes.push(`${retried.length} grown from another seed of the species (its own shape fit nowhere within the locator)`);
     const a = { class: j.klass, deviations: j.deviations, notes, reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${j.failed.what} ${j.failed.value} past its limit`, evidence: { what: j.failed.what, value: j.failed.value } }] : [] };
     if (j.klass === 'refused') { C.rollback(cp); C.geom.delete(p.id); }
     C.ans(p, a);
