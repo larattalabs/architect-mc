@@ -754,3 +754,9 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   a body's cells. Next after HY, ahead of the copper undo.
 - **6ct1-scenario-relief's falling-water cells** have now failed on D2, H-b, VOC-b, HY-b and HY-core. Investigate the root cause
   (T1's falling-water note) instead of re-running.
+
+## Queued from the HY release (coordinator, 2026-10-20)
+
+- **Two cheap tests from the HY integration verifier:**
+  - a Java test running PlanChecks' sample cache with two guards on one volume sha;
+  - an in-game stale check on a 2+ reach course with one cell changed in a single reach, confirming only that reach is named.
