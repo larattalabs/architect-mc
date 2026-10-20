@@ -4943,7 +4943,7 @@ Two configurations, each in a fresh world of fixed seed `mega6` (normal worldgen
 - **Spend:** within the $25 cap; the claude login only (environment log); the estimate within ±50% for each run.
 - **Regressions:** 6a items 6 and 9, and 6b's fixtures.
 
-## Phase 6d (outline, recommended to wait)
+## Phase 6d (outline, recommended to wait; SUPERSEDED 2026-10-20 by "Batch 6d" and the 6d slice sections at the end)
 
 - **Region delta (A5B N7):** re-plan, then diff the IRs by part id. Changed parts' tiles are re-evaluated **against the
   same frozen heightfield**, and the new cells are written as a new CELL layer per tile.
@@ -19498,3 +19498,646 @@ The verifier reviews the diff and **re-runs items 7, 8, 10 and 12**. **Steward's
 
 - **N-D3-1:** today's 3-wide join look inside the town.
 - **N-D3-2:** the join's lamps skip spots within 6 of a town lamp.
+
+## Batch 6d: region evolution. Summary for one Steward review round (DRAFT, 2026-10-20)
+
+Phase 6d is **region evolution**: changing a region after it stands, exactly and undoably, without re-laying what already
+stands. It replaces the old outline "Phase 6d (outline, recommended to wait)" (marked superseded where it stands), and it takes
+every note that deferred to 6d:
+- the outline's region deltas by part (A5B N7);
+- D3 §11's D-S2 (lots added to a standing district, `growDistrict`, `architect_mc:land.v` 2);
+- V's "additions to a realised village" and "per-lot deltas inside a region";
+- plan/0's "a revision of a realised plan" row (P0 §5: "changes to built parts are 6d (`unsupported`)");
+- 0b's "a source's new version applied to its COPY and SITE followers, by recipe" (Steward round 3, "updates follow the source");
+- PT's S-PT-1 (to 6d "with replanning on land change") and SETTLEMENTS §14;
+- the C12 joint 7a/6d gate's `Regions.adopt`.
+
+Written over main f3f41d43 (v0.40.0: API 1.37.0, mod 0.40.0, kit 0.38.0, catalogue 9), with FL, F3, S3, RS and D3 assumed to land as
+frozen (their placeholders: API 1.38.0-1.42.0, mod up to 0.45.0, kit up to 0.43.0, catalogue 11). Nothing here is built or run. Code
+facts are read from the code at f3f41d43 and marked "from code"; every number marked "predicted" is the builder's to measure.
+
+**Order against 7a.** SETTLEMENTS ("Agreed with Steward, 2026-10-09") put 6d right after 7a, as 7a's follow-on slices. This batch
+is drafted alongside 7a (a sibling drafts 7a on `docs/7a`). 6d needs nothing from 7a except in AD (§AD 0), and 7a's link pass reads
+the effective IR that RV defines (§RV 4). The coordinator decides which lands first; the slices below assume either order.
+
+| Slice | What | API / versions (placeholders after D3's 1.42.0; the coordinator renumbers) | Steward check | Size |
+|---|---|---|---|---|
+| **RV** | Region revisions, the core: a revision IR (the standing IR plus added, changed and removed parts), the tile delta against the frozen heights and the journal, revision entries in the region's group, LIFO `undoRevision`, the effective IR every consumer reads, and the plan/0 path (`revision.parentArtifact`, per-part answers, the revision artifact, `realiseApproved`) | API **1.43.0**, mod **0.46.0**, kit **0.44.0**, catalogue **12** | **RC check before release** (GATES policy 4: it changes what a region's removal undoes, which Steward's give-up and history read); the verifier re-runs the undo, removal and crash items | 6-7 days of work, 3.5-4 elapsed in two lanes (RV-a kit, RV-b mod) |
+| **GR** | Growing a standing region (D-S2): new lots on free frontage of the standing streets, then a street extended from an extendable end, for V towns, plain districts, outposts and along districts; `growDistrict`; `architect_mc:land` v 2 | API **1.44.0**, mod **0.47.0**, kit **0.45.0**, catalogue **13** | **RC** (with RV's, one RC if they ship together): Steward's district growth and undo of each building | 4.5-5.5 days of work, 3 elapsed (GR-a streets, GR-b along districts) |
+| **FS** | Updates follow the source: `Library.followers`, `Designs.follow` / `followAll` re-apply each COPY's recipe to the source's new version ($0), then the existing `outdated` and `applyDelta` per lot | API **1.45.0**, mod **0.48.0**, kit unchanged, catalogue unchanged | none before release (existing delta paths; GATES policy 4); Steward checks after | 2-2.5 days, one builder |
+| **LC** | Land change: `Regions.landCheck` (what changed in a standing region, by part and lot, the player's cells apart) and "replan the stages not yet placed" for a region held `DRIFTED` | API **1.46.0**, mod **0.49.0**, kit unchanged, catalogue unchanged | none before release (a report and an opt-in call); Steward checks after | 2.5-3 days, one builder |
+| **AD** | Adopting a VillageLayout settlement as a region, the 6d half of the C12 joint 7a/6d gate: `Regions.adopt` writes no cell; then a GR growth, a lot delta and one exact `Regions.remove` | API **1.47.0**, mod **0.50.0**, kit **0.46.0**, catalogue unchanged | **RC** (it moves Steward's standing sites into a region; Steward's migration and its fallback) | 3-3.5 days, one builder, after GR (and after 7a's link pass if the joint gate runs as one) |
+
+**Not drafted as slices, recommended deferred** (each with an S-question):
+- **The pad delta under standing lots** (5b D7, the outline's third bullet). RV refuses `COVERED` and names the lots; the caller removes the
+  lot, revises, and places it again (§RV 5.3). Writing under a cover rewrites a BOX entry's `before` and needs its own invariant work,
+  and no Steward flow needs it today (S-RV-5).
+- **Sites-level deltas for 4e roads and cell sites** (phase 6 "Deferred to phase 6"). No consumer uses standalone roads or cell sites
+  for evolution; region roads are added by revisions (RV, GR). Changing or removing a standing road is refused in 6d (S-RV-6).
+
+**Build order and parallelism** (at most 3 gate runs on the machine at once, GATES policy 6):
+1. **Day 0: RV-a, RV-b and FS start together.** FS shares no module with RV (sidecar `variants.ts`, `versions.ts`, `Library`/`Designs`
+   in Java). RV-a (kit) and RV-b (mod and sidecar) freeze **RV's shared interface** at the end of their first day (§RV 13).
+2. **GR-a starts on RV's frozen interface** (day 1-2). It is pure kit until its in-game items, so it takes no gate slot until RV
+   has merged into its branch. GR-b (along districts) follows GR-a's street-extension interface.
+3. **Gate slots:** RV's slice tier and FS's slice tier first; GR's after RV merges. LC and AD later (one slot each).
+4. **Releases:**
+   - **Batch 6d-1: RV + GR (+ FS if ready), one release tier, one tag, one RC** (S-RV-10). RV can release alone with its own RC if
+     GR runs late: RV alone already answers plan/0 revisions that add or remove parts.
+   - **FS** may release with batch 6d-1 or alone (no RC).
+   - **Batch 6d-2: LC and AD**, after 6d-1. AD's RC is its own; LC needs none.
+5. **Versions:** each slice takes one minor in the table's order. If the coordinator batches, the batch takes the last slice's
+   numbers (house rule: the second of two slices claiming a number takes the next).
+
+**Rules for every 6d slice** (from the batches before):
+- **Never edit `kit/regions/plan_v0.mjs`** (its source sha is every IR's `programSha`). New behaviour goes in new modules
+  (`kit/lib/region/revise.mjs`, `kit/lib/region/grow.mjs`) called from `compile.mjs` and the programs' entry points.
+- **Byte identity first:** a region that is never revised, a plan with no `revision.parentArtifact`, and every program run without
+  `params.grow` give today's IR, tiles and answers for their recorded kitVersion (D2's kitVersion-only golden rule). Steward sets no
+  `revision` member today: a search of steward-mc (main 6d54540) finds `parentArtifact` only in its copy of the schema
+  (`schema/plan-0.json`), and no fixture or prompt writes `"revision"`. So the 59 asks' answers don't move.
+- **Every new path goes through `Regions.checkPlan` then `realiseApproved` in game, including one Steward-shaped plan per slice**,
+  and through `Regions.planRevision` then `Regions.realise` on Steward-shaped requests (the D3 rule).
+- **Exactness** is judged on flat worlds (E-flat, hash). The natural round reads frozen inputs and classes E-normal by kind at
+  unwritten cells away from the plan, with D2's narrowed classes, F2's `distant` and VOC's `farfluid` exactly, never widened.
+- **KC binds every new writer:** a body's cells are its own; the later writer keeps clear (S-KC-1), watch cells strict (S-KC-2).
+  A revision is always the later writer.
+- **D3 binds every revision of a town or a district:** the held set, the footprint, the bodies, the `reach` cells and the hold
+  columns of every beside region are hard to a revision (§RV 5.2); a PARTIAL town is a valid town (D3's Steward finding).
+- **Fixture numbers:** the plan fixtures are named `v8x_6d_*` here; the coordinator numbers them after D3's.
+- **Kit bump:** re-cut the kitVersion-carrying goldens by `kit/tools/region.mjs plan` over their committed inputs, as KC did.
+
+**Totals:** about 18-21.5 days of work; about 9-10 elapsed with RV's two lanes and FS in parallel, then GR, then LC and AD, plus
+Steward's RC rounds.
+
+**The questions, in one place:** S-RV-1..10, S-GR-1..7, S-FS-1..4, S-LC-1..3, S-AD-1..4 (Steward); N-GR-1, N-GR-2, N-FS-1,
+N-LC-1 (Noah, taste or product, each with a default). They are listed at the end of each slice.
+
+## Phase 6d slice RV: region revisions, the core (DRAFT for Steward review)
+
+A standing region can be **revised**: parts added, changed or removed, written as new journal layers over the region's own cells, undone
+last-in-first-out, and removed with the region exactly. Every later reader sees the region as revised. The plan/0 path answers a
+revision of a realised plan part by part and realises it through `realiseApproved`. This is the outline's "region delta (A5B N7)",
+redesigned on the facts in §0.
+
+**RV changes what `Regions.remove` undoes** (a region's group now holds its revisions), and Steward's history and give-up read
+removals. So Steward's RC check comes before release (GATES policy 4's exception), and the verifier re-runs the undo, removal and crash
+items (policy 3).
+
+- **Branch:** `slice/RV`, worktree `../architect-mc-RV` (lanes RV-a and RV-b, §13). **Spend:** $0, sim and stub only.
+- **Scope:**
+  - the revision IR and the part diff (§2);
+  - the tile delta against the frozen heights and the journal (§3);
+  - revisions in the region record, the queue and the group (§4), and the effective IR (§4.3);
+  - keep-clear: covered, held and protected cells (§5);
+  - undo and removal in every order (§6), crash and resume (§7), survival (§8);
+  - the plan/0 path (§9) and the API (§11);
+  - byte identity (§10) and the gate (§14).
+- **Not in scope:**
+  - growing a street, and lots on free frontage (GR; RV adds lots only where a revision's own part supplies their pads);
+  - changing or removing a standing road (S-RV-6), and changing a standing lot's box (S-RV-5);
+  - writing under a standing lot (the pad delta under a cover, deferred, S-RV-5);
+  - re-planning against changed land (LC);
+  - typed links (7a).
+- **Depends on:** 6a (frozen heights, tile items, region undo), 5b (deltas, D5 LIFO, D6 KEEP), C36 (artifact pins and tombstones),
+  KC, D3 (the held set, hold columns, `reach`; RV builds after D3 merges), RS (§8 only).
+
+### Binding answers carried over
+
+- **5b D3, D5, D6, D7:** a delta is plan against plan on the pre-change terrain; undo is LIFO; a player's edit is kept (`KEEP`) and
+  reported; covered cells refuse `COVERED`. RV applies each to regions.
+- **6a D3:** the pre-region heightfield is frozen at first touch and surface-relative ops always resolve against it. A revision is
+  evaluated against the same frozen heights; columns no tile has touched yet are frozen at the revision's first touch (6a's rule,
+  unchanged).
+- **6a D7 and phase 6 "invariant (iii) narrowed":** a region never puts CELL over BOX. A revision keeps it: it never writes a cell
+  that a lot, a delta, a road or another owner's entry holds above the region's own cells (§5.1).
+- **Journal (`journal/Journal.java` :32-44, :258-390, from code):** cells at one position stack by layer; undo takes entries out
+  top-down; a cell under one that stays hands its `before` down ("ownership passes down"). A CELL cell restores only if the world
+  still holds its `after`. RV relies on both (§6).
+- **D3, Steward's finding:** only in-flight regions (`PREPARING`, `PLACING`, `REMOVING`) refuse `OVERLAP_BUSY`. `PLACED`, `PARTIAL`, and
+  `FAILED` with cells standing can be revised.
+- **COMPOSITION §2.7:** "a shipped op's semantics never change". A standing part is never re-evaluated to a different result by a
+  newer kit; RV checks it (§3.4).
+
+### 0. Facts (main f3f41d43, from code unless marked)
+
+**Why "re-plan, then diff by part id" does not work.** The outline proposed re-running the program and diffing the two IRs by part id.
+On today's programs that diff is everything:
+- **Parts aggregate lots.** A village has one `pads` part holding every lot's pad ops, and one `verges`, `lanes` and `street` part
+  (`village.mjs` :541-601). One more lot rewrites all four.
+- **The layout is a global search.** `layoutStreet` (`village.mjs` :101-138) picks the orientation and street offset by the lot
+  count and score, so one more lot can move every lot. The street span follows the outer lots (`streetCheck` :320-342), so it moves
+  `streetY` and every junction's y.
+- **Ids are ordinals.** Junctions are `${rid}_j${k}` numbered along the street (:619-623); plan_v0 zone prefixes are `''`, `z2_`, ...
+  by emission order (`compile.mjs` :1071).
+- **The seed follows the params.** `fnv64(programId, canonical(params), canonical(claim))` (`plan.mjs` :187-191); PlanChecks passes a
+  null seed (`PlanChecks.java` :302). Any edit changes every `ctx.rng` stream (props, lamps).
+- So **RV never re-plans the standing parts.** A revision is the standing IR, kept byte for byte, plus explicit edits (§2).
+
+**What a region is, on disk and in the journal.**
+- `<world>/architect-regions/<regionId>/`: `region.json` (RegionRec), `ir.json`, `heights/<tx>.<tz>.bin` (frozen heights),
+  `after/<tx>.<tz>.bin` (the per-stage drift baseline) (`RegionStore.java` :14-50).
+- RegionRec (`RegionRec.java` :18-63) holds identity (`planId`, `irSha`, owner, ext, claim), the batch (`groupId`, `batchId`, state),
+  per-stage progress counts, `lots` (`stage, entry, siteId, state`), drift, `beside`, `buildHits`. **It stores no tile list and no road
+  ids:** tiles exist only as per-stage counts.
+- Each tile is its own cell site: `InfraPlace.beginTile` (:453-462) makes Infra `c<N>` of kind `cells:architect:terrain` or
+  `cells:architect:path`, one CELL journal entry. Region roads are 4e road sites `r<N>` (CELL, kind `road`); lots are building sites
+  `s<N>` (BOX), `layer = true` over the pads. All join one ordinary group `g<N>` (`Batches.queueRegion` :271-302, `Sites.java`
+  :2297-2303). **There is no `region:<id>` group;** the batch ext carries `architect_mc:region`.
+- `Regions.remove` (`RegionsImpl.java` :2127-2225) cancels a running batch, then `Groups.removeGroup` (last placed first, the owner rule
+  and covered policy), then `finishRemoval` (REMOVED, tombstone, `PlanChecks.regionRemoved`, `danglingJoins`).
+- **Stack depth:** `SiteJournal.MAX_DEPTH = 8` active non-guard entries per cell, refused `LAYER_DEPTH` (`SiteJournal.java` :57-58).
+- **Tile checks skip held cells.** `TileCheck` (:36-42) skips cells any site, delta, road or other owner's entry holds, and layers only
+  over the region's own earlier tile entries. A revision must not inherit that skip: a skipped cell would half-apply a change (§5.1).
+
+**Lots of a region today.**
+- `Sites.checkDelta` / `applyDelta` / `versionOf` work on a region's lot sites like any site (`SitesImpl.java` :611-660; PALETTE and
+  IRR's mask are the only region additions). So per-lot deltas inside a region exist already (V's deferral is met).
+- `Sites.remove(lotSiteId)` removes one lot alone (`SitesImpl.java` :214-250), but nothing in `region/` hears it: RegionRec keeps the
+  lot `placed` with a stale site id. RV fixes that (§4.4).
+
+**Plans and artifacts.**
+- `revision {n, parent, parentArtifact, reason}` is in `kit/schemas/plan.json` (:66, :203-210) and read by nothing (kit, mod,
+  sidecar). The catalogue has no revision entry; P0 §5's row says changes to built parts are 6d.
+- `realiseApproved` (`PlanChecks.java` :901-988) checks the artifact, the IR sha, the lots, PALETTE, the protection fingerprint, tunnel
+  rock, then a re-survey of every column in the artifact's tiles (`terrainDiff` :1185-1222), then `realise(planId)`.
+- A tile's sha depends on survey columns within 8 of the tile (the 80x80 window, `survey.mjs` :15-16).
+
+**Corrections to the old docs.** SETTLEMENTS §14 names a `SITE_DRIFTED` reason: there is none (`Reason.java` :98-118 has `DRIFTED`
+only). The 49 Reasons end `..., ARTIFACT_STALE, ARTIFACT_UNAPPROVED, PLAYER_BUILD, ADOPT_REFUSED, PALETTE`; RV adds none.
+
+### 1. The rule in one line
+
+**A revision writes, in one new layer per touched tile, exactly the cells where the revised IR's evaluation on the frozen heights
+differs from what the region holds now, never a cell anything else holds above the region, and its undo puts the region back as it was
+before it.**
+
+### 2. The revision IR
+
+#### 2.1 Shape
+
+A revision IR is a full region IR (the effective IR after it) with one added member:
+
+```json
+"revision": {
+  "n": 3,
+  "base": "<irSha of revision 0, the realised plan's IR>",
+  "parent": "<irSha of revision n-1>",
+  "edits": [
+    {"op": "add", "part": "rv3_pond"},
+    {"op": "change", "part": "relief_east", "was": "<sha of the part's canonical JSON before>"},
+    {"op": "remove", "part": "spire_2", "was": "<sha>"}
+  ],
+  "lots": {"add": ["inn"], "remove": []},
+  "roads": {"add": []},
+  "graph": {"nodes": ["lot:inn"], "edges": ["lane_inn"]},
+  "dirty": {"<stage>": {"terrain": ["tx,tz", ...], "path": [...]}},
+  "stages": ["rv3:terrain", "rv3:lots"],
+  "seed": "<fnv64(base seed, n)>"
+}
+```
+
+- **Kept parts** (every part not named in `edits`) are byte-identical to the parent's, in the parent's order. Kept lots, roads, paths,
+  anchors, graph nodes and graph edges likewise.
+- **Added parts** take ids with the reserved prefix `rv<n>_` when the revision's author doesn't name them (plan/0 keeps the plan's own
+  ids, §9). Part ids stay unique (M14).
+- **Changed parts** keep their id; `was` is the parent part's sha, so a revision built on a stale parent fails (§2.3).
+- **Removed parts** are gone from the IR.
+- **Stages:** a revision's new writes run in its own stages, named `rv<n>:<stage>` for each stage of the parent its edits touch, in the
+  parent's order. They are appended after the parent's stages. The IR's stage list is the parent's plus these.
+- **Lots:** added lots are new entries in `ir.lots`, their pads in an added or changed part. A lot may be removed only if its site is
+  already gone (§4.4); its pad cells are then the part's to change. A standing lot's box never changes (S-RV-5).
+- **Roads:** added roads are new `ir.roads` entries (4e road items, 6a D8). A standing road is never changed or removed in 6d (S-RV-6).
+- **Graph:** nodes and edges may be added; a standing node may gain edges (an end junction that a new lane or street meets). No
+  standing node or edge is removed or moved.
+- **`dirty`:** the tiles of every added, changed or removed part's op bounds, before and after (the parent's and the revision's),
+  plus each tile's 8-column neighbours where a surface-relative op reads them (the tile window). Computed by the kit, checked by the
+  mod (§3.2).
+- **`seed`:** added and changed parts draw their random streams from `fnv64(base seed, n)` keyed by part id, so kept parts never see
+  a changed stream, and the same revision gives the same IR.
+- **`kitVersion`** is the revising kit's. The kept parts' ops are those the base kit emitted; COMPOSITION §2.7's rule makes their
+  evaluation unchanged (§3.4 checks it per tile).
+
+#### 2.2 Who writes the edits
+
+- **`Regions.planRevision(regionId, RevisionRequest)`** (§11): the caller names the program and its edits:
+  - `edits.parts`: added and changed parts as region-program calls, through a revision program (`kit/regions/revise.mjs`, bundled,
+    deterministic, `catalogue = false`) that takes `params.parts: [{op, id, call}]` where `call` is one of the region primitives the
+    kit already exposes to programs (forms, relief, terrace, carve, pond and the plan/0 form kinds), and `remove: [partId]`;
+  - GR adds `params.grow` (GR §2).
+- **`Regions.checkPlan` of a plan with `revision.parentArtifact`** (§9): the compiler writes the edits from the plan's parts.
+- Programs other than `revise.mjs` and GR's growth never run in a revision. The standing program never re-runs.
+
+#### 2.3 The kit side (`kit/lib/region/revise.mjs`, RV-a)
+
+`reviseIR(parentIR, edits, ctx)`:
+1. Checks `was` for every changed and removed part against the parent. A mismatch is `REVISION_PARENT` (refused, §12).
+2. Builds the added and changed parts with the revision seed, against `ctx.standing` (§5.2's obstacles: the parent's footprint, its
+   lot boxes plus 1, its bodies' hard and watch sets, the held set, every beside region's `reach` and hold columns).
+3. Assembles the revision IR (§2.1), computes `dirty`, re-computes the IR's `tiles`, `budget` and `requires` over the whole.
+4. Runs `check` on the whole revised IR (every M rule over the virtual world of all parts), plus **`M29:revision`** (new; error):
+   - a kept part, lot, road, node or edge differs from the parent's;
+   - a standing road or a standing lot box is changed or removed;
+   - an added or changed part writes a cell of a standing lot box, a lot box plus 1 of a lot whose site stands, or a held column (§5);
+   - an edit names a part that isn't in the parent;
+   - a stage not prefixed `rv<n>:` gains a part.
+5. Broken variants, each caught: `_unsafe.rewriteKept` (a kept part's op changed), `_unsafe.underLot` (a pad change under a standing
+   lot), `_unsafe.ignoreHeld`, `_unsafe.removeRoad`.
+
+### 3. The tile delta (RV-b; the mod computes, the sidecar evaluates)
+
+#### 3.1 Inputs
+
+- The revision IR and its `dirty` tiles.
+- The frozen heights (`heights/`). A dirty tile whose window needs columns that were never frozen gets them frozen now, before the
+  tile's first journal commit (6a D3, unchanged code path). They are sampled from the world at that moment, which is the land the
+  region never touched there.
+- The journal: for every cell of a dirty tile, the stack at that position.
+
+#### 3.2 Per cell
+
+For each dirty tile and set, the sidecar evaluates the revision IR's tile (`evalTile`, unchanged) to its cell list `N` (the revised
+region's intended blocks). For every cell `c` in `N`, plus every cell of that tile the region holds now:
+
+- **`region(c)`**: the topmost active entry at `c` that belongs to the region's group and is a tile, revision or road entry of it.
+- **`base(c)`**: the `before` of the region's lowest active entry at `c` (the land before the region), or the world now if the region
+  holds nothing at `c`.
+- **`current(c)`**: `region(c)`'s `after`, or `base(c)` if the region holds nothing at `c`.
+- **`target(c)`**: `N(c)` if the revised IR writes `c`; else `base(c)`.
+- **Held above:** if any active entry above `region(c)` at `c` is not the region's tile, revision or road entry (a lot site, a lot's
+  delta, a guard excluded, another site, another region, an adopt entry), and `target(c) != current(c)`: the revision **refuses**
+  (§5.1). Nothing is skipped.
+- **The player's or the world's change:** if the world at `c` isn't `current(c)` (StillOurs, the 5b D6 test, with CU's and F3's rows),
+  the cell is **kept**: not written, listed in the revision's `kept` (at most 2,000 listed, the count exact), with PT's record when
+  there is one.
+- **Otherwise,** if `target(c) != current(c)`, the cell is written: before `current(c)` (equal to the world), after `target(c)`.
+
+Cells with `target(c) == current(c)` are never written, so a revision that adds a pond writes the pond and its shore and nothing
+else, even though its dirty tiles were evaluated whole.
+
+#### 3.3 The entries
+
+- **One CELL entry per (revision, dirty tile, set)**, kind `architect:terrain` or `architect:path` as today (so 6a D8's walk-surface
+  marks and 4e's approach rule see revised paths), with meta `{revision: n, region, tile, set}`. It is its own cell site `c<N>` through
+  `InfraPlace.beginTile`, as a tile is, in the region's group, stage `rv<n>:<stage>`.
+- Its layer is a new layer (`JournalStore.newLayer()`), so it is above every region cell at its positions.
+- A tile entry over 1M cells is split by section rows (6a D4).
+- **Depth:** before the first write, the mod counts each written cell's stack; a cell that would exceed `MAX_DEPTH` 8 refuses the
+  revision `LAYER_DEPTH` with the columns (at most 16 listed). There is no fold (S-RV-2): a column a revision rewrites gains one
+  layer; a column it doesn't touch gains nothing. D3's contact columns already hold depth 2; the gate records the deepest column over a
+  12-revision sequence (item 9).
+- **Added lots and roads** are queued in the revision's stages as a realise queues them (lot items `layer = true` over their pads,
+  road items after the stage's tiles, lots after roads).
+
+#### 3.4 The kept-part check
+
+Before writing, for each dirty tile the mod compares the revised evaluation `N` with the region's journal at cells only kept parts
+write (the kit marks them per tile: `keptCells`, a bitset in the tile frame): each such cell's `current(c)` must equal `N(c)` unless the
+cell is kept (§3.2) or held. A difference means the revising kit evaluates a standing op differently (a broken COMPOSITION §2.7
+promise): the revision refuses `PLAN_STALE {why: kept_differs, part, cells}` and writes nothing. Expected: never; item 2 shows 0 on
+every pinned fixture.
+
+### 4. Revisions in the region
+
+#### 4.1 The record
+
+RegionRec gains (persisted, additive):
+- `revision` (int, 0 for the realised plan) and `baseIrSha`;
+- `revisions: [{n, planId, irSha, parentIrSha, state, createdAt, stages, lots: {add, remove}, roads: {add}, cells, kept, opKey, opHash,
+  artifact?}]` with `state` one of `PLANNED`, `PLACING`, `PLACED`, `PARTIAL`, `FAILED`, `UNDOING`, `UNDONE`;
+- `irSha` is the effective IR's (the latest revision not `UNDONE`).
+
+Files: `rev/<n>/ir.json` per revision; `ir.json` stays revision 0. The effective IR is `rev/<k>/ir.json` for the top standing
+revision `k`, else `ir.json`. A cap of **64 revisions** per region (`REGION_LIMIT`), so the record stays small.
+
+#### 4.2 The queue and the states
+
+- A revision realises through the region's own batch: its stages are appended to the region's group (`g<N>`) as new StageRecs, and
+  `Batches.queueRegion` takes them as it takes a region's stages. The region goes `PLACING` while a revision writes, and back to its
+  standing state (`PLACED` or `PARTIAL`) when the revision ends.
+- **Which regions can be revised:** `PLACED`, `PARTIAL`, and `FAILED` with cells standing (D3's rule). `PREPARING`, `PLACING` and
+  `REMOVING` refuse `OVERLAP_BUSY` naming the state. `PLANNED`, `PREPARED` and `REMOVED` refuse `NOT_ALLOWED`.
+- **One revision at a time:** a revision planned while another is `PLANNED` and unrealised is allowed (it names its parent); realising
+  one whose parent isn't the region's effective IR refuses `ARTIFACT_STALE {why: parent_moved}` (plan/0) or `PLAN_STALE {why:
+  parent_moved}` (`planRevision`), and nothing is written.
+- **A revision that fails or ends partial** is recorded `FAILED` or `PARTIAL` like a region; its cells stand; `undoRevision` takes it
+  away (§6).
+
+#### 4.3 The effective IR: every reader
+
+Every reader of a region's IR reads the effective IR from RV on. Each is listed, and the gate checks each (item 12):
+- `RegionsImpl.view` (`RegionView.irSha`, `lots`, `stages`), `Regions.get`, `list`;
+- the beside data and `besidePorts` (D1, D2), D3's footprint, bodies, held set, `reach` obstacles and `architect_mc:land`;
+- plan/0's `standing` and `regions` inputs to the compiler (`compile.mjs` :146-155) and C38's `wall.around {feature: {region}}`;
+- the protection fingerprint (a region's claim is unchanged by a revision, so the fingerprint is too);
+- `Drift.checkStage` (a revision stage's baseline is the `after/` shards, written for revision stages as for any stage);
+- previews and `Regions.previews` (the region ghost shows the effective IR);
+- `architect_mc:fluids` rows (a body added by a revision reports as the region's, with `revision: n`);
+- C36's artifact pins and tombstones (§9.5);
+- 7a's link pass and `nav.json` when they land (named for the sibling draft on `docs/7a`).
+
+#### 4.4 Lots removed alone
+
+`Sites.remove` of a region's lot site now updates the region: the lot's state becomes `removed` (with `removedAt`) in `RegionRec.lots`
+and `RegionView.lots`. Its pad stays (the region's). A revision may then change that pad or remove the lot from the IR. A later
+`realise`-style refill of a removed lot is a revision that re-adds a lot with the same box (it gets a new site). Nothing else about
+`Sites.remove` changes.
+
+### 5. Keep-clear
+
+#### 5.1 Covered and held cells: refuse, never skip
+
+- **Covered:** a cell whose target differs and which a lot site, its deltas, or any other site holds above the region (§3.2) refuses
+  the revision **`COVERED`**, naming the sites (at most 16) and the cells (at most 16 listed, the count exact). This is 5b D7's
+  refusal, applied to regions, at plan time (the kit sees the held set, `M29:revision`) and again at realise (the mod sees the journal).
+- **The caller's remedy:** remove the covering lot (`Sites.remove`, §4.4), revise, and place a lot again (in the revision as an added
+  lot, or by `Sites.place` later). The pad delta under a standing lot stays deferred (S-RV-5).
+- **Held by others:** a target cell in a column that another owner's region, a beside region's `reach` or hold column, a PT build or a
+  Steward addition holds refuses `OVERLAP`, naming the holder. Through `realiseApproved` it answers `ARTIFACT_STALE`.
+- **Protected:** a written cell in the owner's C17 area refuses `PROTECTED` (the region's claim is checked today; a revision adds
+  its dirty cells to the check). Nothing is written.
+
+#### 5.2 What the kit keeps off at plan time
+
+`ctx.standing` for a revision (sent by the mod, recorded in the revision's sidecar plan directory as D3's reach inputs are, so a
+revision can be replayed offline):
+- the parent's footprint (lots plus 1, roads plus 1, paths, path-set parts), its bodies' hard and watch sets (KC), its stage graph;
+- `held`: every column in the region's claim that holds an active journal cell of an entry outside the region's group (D3 §5.1's
+  reader, scoped to the claim);
+- every beside region's `reach` runs and hold columns;
+- the owner's C17 areas.
+
+Added parts route and place around all of it. A body a revision adds keeps clear of everything standing (KC: the revision is the later
+writer). A revision that changes or removes a body: removing a body drains it first (H's drain-then-restore, the same code as a body's
+removal with its region), then the tile delta restores the land.
+
+### 6. Undo and removal
+
+#### 6.1 `undoRevision`
+
+```java
+default CompletableFuture<RemoveResult> undoRevision(String regionId, int toRevision, String actor)
+```
+
+- Undoes revisions `toRevision + 1` .. top, top first, each as one group-stage removal of its own entries (its tile entries, its lots
+  and their deltas, its roads). `toRevision = top - 1` undoes one. `toRevision = 0` leaves the realised plan.
+- **LIFO only:** there is no way to undo a middle revision alone (5b D5). A revision `UNDONE` is never re-done; re-planning it makes a
+  new revision with a new `n`.
+- **Its own lots go with it:** an added lot's site, with every delta Steward applied to it, is removed as part of the revision's undo
+  (the cascade covers only the revision's own lots). A covering site that isn't the revision's refuses `COVERED`, naming it.
+- **Refusals:** an in-flight region `OVERLAP_BUSY`; a `toRevision` not below the top, or a revision already undone, `NOT_ALLOWED`;
+  in survival as §8.
+- The region's state after: its standing state over the effective IR; `RegionView.revision` is the new top.
+
+#### 6.2 Why it is exact
+
+- A revision's cells are on new layers above every region cell at their positions, and below nothing at the time they are written
+  (§3.2 refuses otherwise).
+- **Undone while on top:** each cell restores `before` = `current(c)` at the revision's time, which is what the region held before it.
+  A CELL cell restores only if the world still holds its `after`; a player's block over it stays, and its PT record with it (5b D6, PT).
+- **Undone after something was placed over it** (a Steward site on a cell a revision wrote, later): the journal hands the revision's
+  `before` down to that site's cell, and the world isn't written there. When that site is removed, it restores the region's earlier
+  block. That is the journal's rule, unchanged, and the order-independence the journal already promises.
+- **`Regions.remove` with revisions standing** removes the whole group last placed first: the revisions' entries before the region's,
+  then the region's. Every cell ends at `base(c)`, the land before the region, because every revision entry's `before` chain ends in
+  the region's own `before`, and the region's `before` is the land.
+- **Revision layers and D3's hold columns:** a revision never writes a column a beside district holds on top (§5.1), so a district's
+  hold cells stay above every town cell in their columns, and D3's §4 orders still hold.
+
+#### 6.3 Removal, every order (the gate's rows)
+
+| Case | What happens | Bar (§14) |
+|---|---|---|
+| **The top revision undone** | its entries undone; the region as it was before it | 0 changed cells against the world before the revision (ARWD diff over the claim); E-flat 0 over the dirty tiles against that world |
+| **Undo to 0 after 5 revisions** | each undone, top first | the world before revision 1, cell for cell |
+| **A middle revision** | refused `NOT_ALLOWED`, nothing written | hash unchanged |
+| **`Regions.remove` with revisions standing** | the group undone last placed first | E-flat 0 over the claim against the world before the region |
+| **A revision's lot with Steward's `applyDelta` on it, then `undoRevision`** | the lot and its delta removed, then the revision's cells | as the first row |
+| **A Steward site placed over a revision's cell, then `undoRevision`, then the site removed** | the revision undone (that cell handed down); the site's removal restores the region's earlier block | the world before the revision, cell for cell, after both |
+| **The same, the site removed first** | the site's removal restores the revision's block; then the undo restores the earlier one | as above |
+| **A player's block on a revision cell** | kept at the undo, reported, PT record intact | the block stands; every other cell as the first row |
+| **The region removed while a revision is `PLACING`** | the batch cancelled, then the group removed (today's path) | E-flat 0 over the claim; a save, leave and reopen between |
+| **A revision of a town with a beside district, then each removal order** | D3's rows, with the revision: the revision never writes a district column; undoing it or removing the town leaves the district's join as D3 says | D3 §4.2's bars, with the revision in place |
+
+### 7. Crash and resume
+
+- A revision's queue state is the region's (tile keys and the IR hash, 6a D5); a restart resumes it as a region resumes.
+- Kill points (DevBridge `dev.kill`): after the revision record is written and before its first tile; between two tiles of one
+  revision stage; between its tiles and its lots; during `undoRevision` between two entries. Each restart ends in a state whose undo or
+  continuation is exact (item 10).
+- `realiseByKey` and `planRevision`'s opKey (`opKey`, `opHash` per revision) find the revision after a restart; the same key and
+  request return the same revision.
+
+### 8. Survival (RS)
+
+- A revision in a survival world builds as RS builds a region: land free, built blocks construction targets from the owner's
+  stockpile, waits as RS's (`SITE_WAITING`, `ITEM_WAITING` with region and part ids; part ids are the revision's).
+- **`undoRevision` in survival** is a journal undo with RS's refunds only when the revision replaced **no paid cell** (every cell it
+  wrote over was land or never built: a growth, a new pond on natural ground). Then its undo is a removal: its own paid standing
+  blocks are refunded once per key (`rev:<region>:<n>:<cell-run>`), and the land comes back free.
+- A revision that replaced paid cells (a changed path over a built road surface, a removed paid part) is **not** undoable in survival:
+  `NOT_ALLOWED {why: survival_replaced_paid}`, as 5b D8's construction deltas (a free undo after refunds would duplicate items). The
+  remedy is a forward revision (paid). `Regions.remove` of the whole region refunds as RS, unchanged.
+- The check reports, per revision, `survival.undoable` so Steward knows before it builds (S-RV-7).
+
+### 9. The plan/0 path
+
+#### 9.1 A revision of a realised plan
+
+A plan with `revision: {n, parent, parentArtifact}` where `parentArtifact` names an artifact a standing region was realised from (its
+own or a revision's) is checked **as a revision of that region**:
+- The region is found through C36's artifact record (the artifact is kept while its region stands). An artifact with no standing
+  region, or another owner's: the check is refused `NO_FEATURE {why: parent}` and nothing else runs.
+- **The parent must be the region's effective artifact.** If a later revision exists, the check answers every part as usual but the
+  overall state is `NEEDS_REPAIR` with `parent_moved` and the current artifact's sha, so Steward re-bases. No artifact is approvable
+  from a stale parent.
+- `revision.n` must be the region's top revision plus 1; otherwise `parent_moved` too.
+- A plan without `parentArtifact` is today's plan, byte for byte (§10).
+
+#### 9.2 Per-part answers
+
+Parts are matched to the parent artifact's `$.parts[].part` ids (plan/0 R: "a revision that keeps a part keeps its id"):
+
+| Part in the revision plan | Answer | Catalogue |
+|---|---|---|
+| same id, same canonical part JSON | `fits`, `standing: true`, the parent's geometry and cost 0 | `revision.keep` (supported) |
+| a new id | checked against the standing region as obstacles (§5.2): every usual answer (`fits`, `adjusted`, `refused`, `unsupported`, ...) | `revision.add` (supported) |
+| an id gone from the plan, a form or a non-street connector, nothing covering its cells | `removed`, a new answer class (additive), with the cells it frees | `revision.remove` (supported) |
+| an id gone, a zone, a street or a road | `refused NOT_ALLOWED {why: remove_zone | remove_road}` (S-RV-6) | — |
+| same id, a zone whose `program.lots` only gains lots | `unsupported {block: revision.grow}` until GR, then GR's answer per added lot | `revision.grow` (reserved, until GR) |
+| same id, any other change | `unsupported {block: revision.change}` | `revision.change` (reserved, until a later slice) |
+
+- `removed` is the only new answer class. Steward's reader treats an unknown class as `incomplete` today; S-RV-4 asks whether it
+  prefers `fits` with `removed: true` instead.
+- Added parts may be placed beside or inside the standing region's claim, never outside it (the claim is the region's, S-RV-8).
+  A new zone inside the claim with its own lots is an added part; its lots join the region.
+- Dependencies (`dependency.after`) may name standing parts: a standing part is satisfied.
+
+#### 9.3 The revision artifact
+
+- `region` gains `revisionOf: {region, n, parentArtifact, parentIrSha}` and `dirty` (the revision IR's dirty tiles). `tiles` lists
+  the dirty tiles' shas only.
+- `inputs.surveySha` is the sha of a survey of the dirty tiles' windows (resolution 1, loaded chunks), and `inputs.held` the held
+  set's sha (§5.2).
+- `$.lots[]` lists the revision's added lots only, with C36's members.
+- Pinning, approval and the cost are as today; the cost counts the revision's writes only.
+
+#### 9.4 `realiseApproved` of a revision artifact
+
+Today's checks, then:
+- the parent is still the region's effective IR, else `ARTIFACT_STALE {why: parent_moved}`;
+- the held set over the dirty tiles is unchanged, else `ARTIFACT_STALE {why: held}` (naming the new holder);
+- `terrainDiff` over the **dirty tiles only** (land changed elsewhere in the claim doesn't make a revision stale);
+- then the revision is realised (§4.2) under the call's opKey; one stale retry under a second key works as for a plan.
+
+#### 9.5 Pins and tombstones (C36)
+
+- A revision's artifact is kept by the region while the revision stands; `undoRevision` tombstones it unless a pin holds it.
+- `Regions.remove` tombstones the region's artifact and every revision's.
+- A tombstoned parent can't be revised (§9.1's refusal).
+
+### 10. Byte identity
+
+- **Unrevised regions, plans without `parentArtifact`, and programs without `params.grow`** give today's IRs, tiles, answers and
+  journal entries (D2's kitVersion-only golden rule). Pinned: `scenarios/goldens/*`, plan fixtures `valid/*` and the 59 asks'
+  answers (Steward writes no `revision`, §batch), tile goldens S1, S2, S3, S7 and mega_bench, D3's pinned set.
+- **The catalogue** gains `revision.keep`, `revision.add`, `revision.remove` (supported) and `revision.grow`, `revision.change`
+  (reserved): catalogue 12. No existing entry changes state.
+- **`RegionView`** gains trailing members (old constructors kept): `int revision`, `List<RevisionView> revisions`.
+- **KIT_VERSION** moves (new output for new cases), so old IRs go `PLAN_STALE` on a new realise and Steward re-checks, as every kit
+  bump. A standing region realised under an older kit can still be revised: its kept parts are checked per tile (§3.4).
+
+### 11. API (binary compatible)
+
+```java
+// Regions (defaults throw UnsupportedOperationException; feature "regionRevisions")
+default CompletableFuture<RegionPlan> planRevision(String regionId, RevisionRequest r)
+default CompletableFuture<RemoveResult> undoRevision(String regionId, int toRevision, String actor)
+
+record RevisionRequest(String program /* "revise" or the region's own program with params.grow (GR) */,
+    com.google.gson.JsonObject params, @Nullable String opKey, @Nullable String actor)
+record RevisionView(int n, String planId, String irSha, String state, long createdAt, List<String> stages,
+    List<String> lotsAdded, List<String> lotsRemoved, long cells, long kept, @Nullable String artifact,
+    boolean survivalUndoable)
+```
+
+- `Regions.realise(planId, ...)` of a revision plan realises the revision (no new method); `realiseByKey` finds it.
+- `RegionPlan` of a revision carries `revisionOf` (trailing, nullable).
+- **No new Reason, no new event.** Refusals: `COVERED`, `OVERLAP`, `OVERLAP_BUSY`, `PROTECTED`, `LAYER_DEPTH`, `REGION_LIMIT`,
+  `NOT_ALLOWED`, `PLAN_STALE`, `ARTIFACT_STALE`. The region's existing events carry revision stages (`stage` = `rv<n>:<stage>`).
+- **Features:** `regionRevisions`, `planRevisions` (plan/0); sidecar `region.revise`, `plan.revision`.
+- api-compat clean against the three previous apitest jars; apijars on them.
+
+### 12. Refusals at plan time (the kit's codes)
+
+| Code | When |
+|---|---|
+| `REVISION_PARENT` | a `was` sha doesn't match, or a named part isn't in the parent |
+| `COVERED` | an edit changes a cell under a standing lot or site (§5.1) |
+| `OVERLAP` | an edit needs a held column, a beside region's reach or hold column (§5.1) |
+| `NO_ROOM` | an added part finds no place (its own kind, as today) |
+| `NOT_ALLOWED` | a standing road or lot box changed or removed |
+
+`Regions.planRevision` fails with the matching Reason; plan/0 answers per part (§9.2).
+
+### 13. Size, split and the shared interface
+
+About **6-7 days** of work, **3.5-4 elapsed**, in two lanes with a frozen interface at the end of day 1:
+- **RV-a, kit (2.5-3 days):** `revise.mjs` (`reviseIR`, the seed, `dirty`, `keptCells`), `kit/regions/revise.mjs`, `M29:revision` and
+  the broken variants, the plan/0 compiler's revision mode (§9.1-9.3: matching, answers, `removed`, the catalogue entries), the
+  revision artifact; items 1, 2, 17.
+- **RV-b, mod and sidecar (3.5-4 days):** the revision record and files, the effective IR and its readers (§4.3), the tile delta
+  (§3.2-3.4) with the held, covered, depth and kept tests, the queue and stages, §4.4's lot reconcile, `undoRevision`, crash points,
+  survival, `realiseApproved`'s revision branch, the API and api-compat; the driver `tools/gate6drv.mjs`.
+- **Shared:** items 3-16, then Steward's RC.
+
+**The shared interface** (frozen at the end of day 1):
+- the revision IR member (§2.1) and the `rv<n>_` / `rv<n>:` naming;
+- the tile frame's `keptCells` bitset;
+- `ctx.standing` for a revision (§5.2) and its recorded files;
+- the revision artifact's `region.revisionOf`, `dirty`, `inputs.held`;
+- the answer class `removed`;
+- the driver's step names (`rv-unit`, `rv-ingame`, `rv-natural`).
+
+### 14. Gate (slice tier, $0)
+
+**Fixtures** (S7 flat unless named; the coordinator numbers the plan fixtures):
+- **`rv_town`:** a `flat_village` of 6 lots realised through `checkPlan` then `realiseApproved` (plan v1's shape: pending parts
+  `required: false`, `ew` with rotate off, lot ext), 4 lots built with stub blueprints, 2 pads empty, W's lanterns, a farm pond (H).
+  Plus a Steward-style addition (`Sites.place` with Steward's ext) and a PT player build in the claim.
+- **`rv_town_beside`:** `rv_town` with a D3 district beside it, its join reaching a street end over a pad-filled dip (D3's contact
+  columns).
+- **`rv_partial`:** `rv_town` with one lot failed (PARTIAL).
+- Plan fixtures: `v8x_6d_rv_add` (a revision adding a pond and a relief form inside the claim), `v8x_6d_rv_remove` (removing a form),
+  `v8x_6d_rv_mixed` (an add, a remove and a kept zone), `v8x_6d_rv_change` (a changed form: `unsupported revision.change`), and the
+  broken variants (§2.3).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | `reviseIR` row by row: kept parts byte-identical, ids and stages, `dirty` (with windows), the seed, `keptCells`; `M29:revision` on every rule; 300 seeded synthetic revisions on synthetic regions: deterministic, no kept part changed, no write under a lot box or a held column; the tile-delta rule (§3.2) on a synthetic journal: target, current, base, kept and held cases; the broken variants caught |
+| 2 | Byte identity | §10's pinned set: the same IRs (kitVersion rule), answers and tile shas; the kept-part check (§3.4) over every pinned fixture's tiles: 0 differences |
+| 3 | Add, plan/0 | on `rv_town`: `v8x_6d_rv_add` through `checkPlan` (kept parts `fits standing`, the pond and form `fits`) then `realiseApproved`; the cells written equal the revised IR's evaluation where it differs from the region (ARWD diff), 0 elsewhere; KC: the pond keeps clear of the standing farm pond (0 cells in its hard or watch set) |
+| 4 | Remove, plan/0 | `v8x_6d_rv_remove`: the form's cells come back to the land before the region (E-flat 0 over its columns against the world before the region), 0 changed cells elsewhere |
+| 5 | Steward's shapes | `Regions.planRevision(revise)` with an opKey, `Regions.realise`, `realiseByKey` after a restart; through `checkPlan` (`v8x_6d_rv_mixed` written as Steward's plan writer would: the kept plan with `revision {n: 1, parent, parentArtifact}` and one new part) then `realiseApproved`, with one stale retry under a second key across a restart |
+| 6 | Covered and held (nothing written) | a revision changing a pad under a built lot: `COVERED` naming the site (plan time and, with the kit's check bypassed by `_unsafe.underLot`, realise time); a revision through the Steward addition's column: `OVERLAP` naming it; through the PT build: `OVERLAP` (`PLAYER_BUILD` evidence); through a C17 area: `PROTECTED`; each with 0 changed cells (hash) |
+| 7 | Undo, every order (verifier re-runs) | §6.3's rows 1-8, each with its bar |
+| 8 | Remove (verifier re-runs) | after items 3-5: `Regions.remove` with 3 revisions standing: E-flat 0 over the claim against the world before the region; the artifact and every revision's tombstoned |
+| 9 | Depth and history | 12 revisions on `rv_town`, each adding a form that overlaps the last: the deepest column recorded (expected at most 8 with D3's contact columns), a 13th over the deepest column `LAYER_DEPTH` with nothing written; undo to 0, top first: the world before revision 1 |
+| 10 | Crash (verifier re-runs) | §7's four kill points, each restarted: the revision continues or undoes, then `Regions.remove`: E-flat 0 |
+| 11 | States | `rv_partial` revised (accepted); a region `PLACING` refused `OVERLAP_BUSY`; `REMOVED` refused `NOT_ALLOWED`; a stale parent (two revisions planned on one parent, the second realised after the first): `ARTIFACT_STALE parent_moved` / `PLAN_STALE parent_moved`, nothing written |
+| 12 | The effective IR | after item 3: `RegionView.irSha` and `lots`, `besidePorts`, D3's held set and footprint, plan/0's `standing` input, C38's `wall.around {feature: {region}}` ring (keeps off the revision's pond), the previews and `architect_mc:fluids` each read the revised IR (one assertion per reader in §4.3) |
+| 13 | D3 orders | on `rv_town_beside`: a revision of the town next to the district's join (never writing a join or hold column: depth recorded), then D3 §4.2's removal orders with the revision standing and after `undoRevision` |
+| 14 | Lots removed alone | `Sites.remove` of a built lot: `RegionView.lots` says `removed`; a revision then changes its pad and re-adds a lot with the same box (a new site); undo of that revision; region removal exact |
+| 15 | Survival (only if RS has merged) | an additive revision (a pond on natural ground, a lot with its pad) in a survival world: built from the stockpile; `undoRevision` refunds its standing paid blocks once per key; a revision that replaces a road surface: `survival.undoable` false and `undoRevision` `NOT_ALLOWED` |
+| 16 | Natural round | S3's pinned claim: a V town, a revision adding a terrace form; plan, realise, save, leave, reopen; undo and remove; E-normal 0 unclassified under D2's narrowed classes and VOC's `farfluid` |
+| 17 | Determinism | revision IR sha over 3 plans; tile shas with 1 and 4 workers; macOS and Linux CI |
+| 18 | Unchanged, API, spend | d-unit, d-ingame, d2-ingame, d3-ingame, kc-ingame, k1a-ingame, fl-ingame, pt-ingame item 14, rs-ingame; api-compat clean; apijars; $0.00 |
+
+**Tier:** slice plus `region/**`, `journal/**`, `site/**` and `api/**`: the units and apijars; d-ingame, d2-ingame, d3-ingame;
+kc-ingame, k1a-ingame, fl-ingame; 4d-all and 6a-eflat; RV's own `rv-unit`, `rv-ingame`, `rv-natural` (driver `tools/gate6drv.mjs`,
+chain `6drv`, impact rule "6d RV").
+
+The verifier reviews the diff and **re-runs items 7, 8 and 10**. **Steward's RC check** follows on the release candidate (S-RV-10).
+
+### Steward's recorded asks: expected answers
+
+- **The 59 asks:** unchanged (none writes `revision`; §10).
+- **Plan v1's Start re-check, stale retry and the waiting-part offer** don't send `parentArtifact`, so they answer as today.
+- **Life layer stages** (COMPOSITION §3, "Steward maps each stage ... to a geometric plan, or a revision of one"): a stage that adds
+  forms, connectors or a new zone inside the claim to a realised settlement can now be checked and built as a revision (`revision.add`).
+  A stage that adds lots to a standing zone waits for GR (`unsupported revision.grow`), and one that changes a built part answers
+  `unsupported revision.change`.
+
+### Open questions for Steward
+
+- **S-RV-1. A revision is the region's, not a new region.** Growth and changes are revisions of the standing region (one region, one
+  group, one `Regions.remove`), not new regions beside it. Waiting-part offers (C38, a wall round the town) stay their own regions as
+  today (S-RV-9). Is that the model you want for "Life" stages? Default: yes.
+- **S-RV-2. History.** Every standing revision can be undone, LIFO, back to the realised plan (no fold; at most 64 revisions; a column
+  past depth 8 refuses `LAYER_DEPTH`). Is unbounded LIFO what your "undo of each building" needs, or do you want an older revision
+  folded into the base after some count (it then goes only with the whole region)? Default: no fold.
+- **S-RV-3. Stale parents.** A revision planned on a parent that has since been revised answers `NEEDS_REPAIR parent_moved` with the
+  current artifact (plan/0), and `ARTIFACT_STALE parent_moved` at realise. Fine for your re-check? Default: yes.
+- **S-RV-4. The `removed` answer.** A new answer class for a part a revision drops (with the cells it frees). Or `fits` with
+  `removed: true`, so your reader needs no new class? Default: the new class `removed`.
+- **S-RV-5. Writing under a standing lot (the pad delta under a cover).** Deferred: a revision under a built lot refuses `COVERED`
+  naming the lots, and the remedy is to remove the lot, revise, and place it again. Does any flow you plan need a pad change under a
+  standing building (re-grading a yard, sinking a house)? Default: deferred until you ask.
+- **S-RV-6. Standing roads and zones.** In 6d a revision never moves or removes a standing road, street or zone (`NOT_ALLOWED`), and
+  never changes a standing lot's box. Streets only grow (GR). Default: as proposed.
+- **S-RV-7. Survival undo.** An additive revision undoes in survival with refunds; one that replaced paid cells can't be undone
+  (`NOT_ALLOWED survival_replaced_paid`), only removed with the region or answered by a forward revision. The check tells you
+  (`survival.undoable`). Fine? Default: yes.
+- **S-RV-8. Inside the claim.** A revision's parts stay inside the standing region's claim. Building past it is a new district (D1-D3).
+  Default: yes.
+- **S-RV-9. Offers as revisions?** Should C38's waiting-part offer become a revision of the town instead of its own region? It would
+  then go with the town's removal and join its undo history. Default: no change (own region), revisit after RV ships.
+- **S-RV-10. The RC.** RV changes what `Regions.remove` undoes. Will you run on the RC: a revision through `checkPlan` and
+  `realiseApproved` on a Steward-built V town, `undoRevision`, the town removed with a revision standing, a lot removed alone and its
+  `RegionView.lots` state, and (with GR) a district grown by two buildings undone one at a time? Default: yes.
+
+### Deferred
+
+- The pad delta under standing lots (S-RV-5). Changing or removing standing roads, zones and lot boxes (S-RV-6).
+- `revision.change` for zones and connectors beyond add and remove (a later slice, once Steward has an ask that needs it).
+- Folding old revisions (S-RV-2). Revisions past the claim (S-RV-8).
