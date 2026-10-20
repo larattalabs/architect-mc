@@ -1,0 +1,43 @@
+{
+ "about": "(6c F3 §10.1) s01_steward_glade: Steward-shaped (as Steward's plan writer writes a plan: a zone with labels, purpose, lots with roles and briefs, forms with labels): a hamlet with a well, an old giant oak near the hamlet, a farm pond beside it with coral in it (a form.coral part inside the pond), and two giant red mushrooms at the hamlet's edge. In game through Regions.checkPlan's two-plan flow and realiseApproved (item 3).",
+ "on": "flat",
+ "volume": {},
+ "covers": [
+  "form.giant_tree",
+  "form.giant_mushroom",
+  "form.coral",
+  "form.pond"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "steward_glade",
+  "zones": [
+   {
+    "id": "hamlet",
+    "kind": "standard",
+    "required": true,
+    "label": "Glade Hamlet",
+    "purpose": "home_base",
+    "where": { "near": { "anchor": "stone", "within": 16 } },
+    "size": { "preset": "M" },
+    "program": {
+     "layout": "street",
+     "shared": "well",
+     "lots": [
+      { "id": "cottage_1", "type": "cottage", "role": "glade_home", "label": "glade cottage", "size": [9, 9], "villager": "dwelling", "brief": "Low timber cottage under the old oak's shade, mossy roof." },
+      { "id": "cottage_2", "type": "cottage", "role": "glade_home", "label": "glade cottage", "size": [9, 9], "villager": "dwelling", "brief": "Low timber cottage under the old oak's shade, mossy roof." },
+      { "id": "cottage_3", "type": "cottage", "role": "glade_home", "label": "glade cottage", "size": [9, 9], "villager": "dwelling", "brief": "Low timber cottage with a herb garden." },
+      { "id": "hall_1", "type": "tavern", "role": "glade_hall", "label": "glade hall", "size": [13, 11], "landmark": true, "placement": "central", "brief": "The hamlet's gathering hall beside the well." }
+     ]
+    },
+    "notes": "A quiet hamlet in a glade: the old oak is its landmark."
+   }
+  ],
+  "forms": [
+   { "id": "old_oak", "kind": "giant_tree", "required": true, "label": "the old oak by the well", "preset": "oak", "where": { "near": { "feature": { "part": "hamlet" }, "within": 12 } } },
+   { "id": "farm_pond", "kind": "pond", "label": "the farm pond", "where": { "near": { "feature": { "part": "hamlet" }, "within": 10 } }, "size": { "w": 11, "d": 9 }, "depth": 3 },
+   { "id": "pond_coral", "kind": "coral", "label": "coral in the farm pond", "preset": "mixed", "cover": 0.3, "where": { "inside": { "part": "farm_pond" } } },
+   { "id": "edge_caps", "kind": "giant_mushroom", "label": "mushrooms at the hamlet's edge", "preset": "red", "count": 2, "where": { "near": { "feature": { "part": "hamlet" }, "within": 24 } } }
+  ]
+ }
+}
