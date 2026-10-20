@@ -790,6 +790,18 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
     - `RegionHash.classify` is unchanged.
   - Replayed over the 8 recorded failures that still have plan dirs: every `none` becomes `farfluid`, and `live` is untouched.
 
+- ~~**s2-unit's M27:role (rubble = cobblestone)**~~ **Fixed (branch `fix/voc-natural`, 2026-10-20): the role data was wrong.**
+  - **Cause:** VOC-b's `kit/vocab/roles.json` put `rubble` in the terrain row (`natural`: ROCK, SOIL, LOOSE, SNOW, ICE). But
+    the kit's own default rubble is cobblestone (`program.mjs` `DEFAULT_MACRO_ROLES`; CONTRACT "the rustic default ... rubble is
+    cobblestone"), and cobblestone has no voxel class, before VOC or after. So any bible that names rubble = cobblestone
+    (S2's g6c_s2_outpost) trips M27:role.
+  - **Not new since v0.38.0:** S2 feasibility passes on 5c61b6c7 (main before VOC) and fails on 0d665136 (v0.38.0) and on
+    every later head. No VOC run selected s2-unit, and no run before KC's had VOC in it.
+  - **Not the same cause as voc-natural.** The stonecutter putting cobblestone in the `stone` family is not involved:
+    `natural` reads the voxel class (`v`), not `fam`.
+  - **Fix:** `rubble` gets its own row, `all: [cube]` (a carve's lining and boulders, written as a full block). rock, surface
+    and subsurface keep `natural`. `fitsRole` and M27:role are unchanged.
+
 ## Queued from slice KC (builder, 2026-10-20)
 
 - **The rope row's OVERLAP and its nearest-landing wouldFit are not exercised.** k04's base already routes round the fountain, so
