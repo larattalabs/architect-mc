@@ -1,9 +1,9 @@
 {
-  "about": "an outline the plan requires (FL)",
+  "about": "an outline the plan requires (FL) (6c FL: shipped; the fixture now answers fits)",
   "on": "s7",
   "expect": {
     "part": "town",
-    "block": "sketch.outline"
+    "class": "fits"
   },
   "plan": {
     "schemaVersion": "plan/0",

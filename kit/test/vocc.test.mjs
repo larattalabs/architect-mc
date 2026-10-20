@@ -272,11 +272,13 @@ test('a non-required rule\'s answers never block; an upper bound of 0 without a 
 
 // ------------------------------------------------------------------ item 2: the catalogue
 
-test('item 2: catalogue 9 is the golden; its diff from catalogue-hy.json (HY\'s 8) is exactly the one flip, its limits and note folded in', () => {
-  const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
-  assert.deepEqual(planCatalogue(), golden);
+test('item 2: catalogue 9 (archived as catalogue-vocc.json by 6c FL); its diff from catalogue-hy.json (HY\'s 8) is exactly the one flip, its limits and note folded in', () => {
+  // ((6c FL) moved by name: catalogue 9 was the golden until FL's catalogue 10; it is archived as fixtures/plan/catalogue-vocc.json, and
+  // plan-p0's item 9 holds the golden to planCatalogue())
+  const golden = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-vocc.json'), 'utf8'));
   assert.equal(golden.catalogueVersion, 9);
-  assert.equal(golden.api, PLAN_API);
+  assert.equal(golden.api, '1.37.0');
+  void PLAN_API; void planCatalogue;
   const hy = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-hy.json'), 'utf8'));
   assert.equal(hy.catalogueVersion, 8);
   const d = diffCatalogues(hy, golden, { pending: [{ part: 'copper_only', block: 'rule.palette' }] });

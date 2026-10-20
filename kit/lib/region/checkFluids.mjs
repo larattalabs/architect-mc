@@ -245,6 +245,8 @@ const EARLY_FORMS = Object.freeze(['relief', 'terrace', 'rock_spire', 'ice_spike
  *   a zone (its lots, pads, streets, props) or a relief, terrace or spike in an H body's sets
  *                                          the body's part (resolved after them): NO_ROOM {kind: clear}; a farm pond (its zone's) is
  *                                          never refused here (its zone is the writer's too: the region check names it)
+ *   (6c FL, §5) a zone whose locator names the body's part (around, near, adjacent, inside: placed after the body's reservation)
+ *                                          the zone, the later part: OVERLAP {kind: body}
  *   any other writer                       the writer (placed after the body's footprint): OVERLAP {kind: body}
  * Never a part asked `architect_mc:unsafe` (a broken variant the checker must catch), never a writer the plan does not name, never a
  * part `already` refused. Pure.
@@ -255,6 +257,8 @@ export function clearRefusals({ findings, plan, courses = new Set(), already = {
   const unsafe = (id) => !!byId.get(id)?.ext?.['architect_mc:unsafe'];
   const early = (id) => { const q = byId.get(id); return !!q && (q._family === 'zones' || (q._family === 'forms' && EARLY_FORMS.includes(q.kind))); };
   const wall = (id) => { const q = byId.get(id); return !!q && (q.kind === 'wall' || q.kind === 'gate'); };
+  // ((6c FL, §5) the plan parts a zone's locator names: a zone depending on a body is placed after it)
+  const dependsOn = (zid, pid) => { const q = byId.get(zid); return !!q && q._family === 'zones' && whereNames(q.where).includes(pid); };
   const fresh = {};
   for (const q of findings ?? []) {
     const w = q.writerPart;
@@ -263,7 +267,7 @@ export function clearRefusals({ findings, plan, courses = new Set(), already = {
     if (courses.has(q.body) && wall(w) && q.part) {
       target = q.part;
       reason = { code: 'UNREACHABLE', message: `wall ${w}, planned before it, stands in ${q.count} cell(s) of its reach ${q.body}'s ${q.set === 'watch' ? 'watched reach' : q.set} (a course crosses a wall only under a water gate)`, evidence: { kind: 'wall', wall: w, why: 'clear', body: q.body, set: q.set, cells: q.cells.slice(0, 16) } };
-    } else if (early(w)) {
+    } else if (early(w) && !(q.part && dependsOn(w, q.part))) {
       if (!q.part || !byId.has(q.part) || byId.get(q.part)._family === 'zones') continue;
       target = q.part;
       reason = { code: 'NO_ROOM', message: `its body ${q.body} is placed after ${w}, which writes ${q.count} cell(s) of its ${q.set === 'watch' ? 'watched reach' : q.set}: the body keeps clear of what was placed before it`, evidence: { kind: 'clear', body: q.body, writer: w, set: q.set, cells: q.cells.slice(0, 16) } };
@@ -275,6 +279,13 @@ export function clearRefusals({ findings, plan, courses = new Set(), already = {
     fresh[target] = reason;
   }
   return fresh;
+}
+
+/** (6c FL) The plan parts a locator names (inside.part, adjacent.to.part, near/around/along feature.part). */
+function whereNames(where) {
+  if (!where || typeof where !== 'object') return [];
+  const lk = Object.keys(where)[0], b = where[lk] ?? {};
+  return [b.part, b.to?.part, b.feature?.part].filter((x) => typeof x === 'string');
 }
 
 /**

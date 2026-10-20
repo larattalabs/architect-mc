@@ -1,9 +1,9 @@
 {
-  "about": "a reserved layout",
+  "about": "a reserved layout (6c FL: shipped; the fixture now answers fits)",
   "on": "s7",
   "expect": {
     "part": "ring",
-    "block": "layout.ring"
+    "class": "fits"
   },
   "plan": {
     "schemaVersion": "plan/0",

@@ -44,6 +44,9 @@ import { registerBody, release as releaseKeep, reserve, spanOf } from '../fluids
 import { FLUIDS_STAGE } from '../fluids/kinds.mjs';
 // (6c VOC-c) rule.palette's lenient read (the measure runs after the IR: kit/lib/region/plan.mjs)
 import { readPaletteRule } from './palette.mjs';
+// (6c FL) free layouts: ring, spiral, grid, organic, around and outlines (free.mjs resolves, frontage.mjs emits)
+import { isFreeZone, resolveFreeZone, freeGeometry, aroundSites, bodyKeepRects, whereParts } from './free.mjs';
+import { emitFree } from '../region/frontage.mjs';
 
 /** §7's caps (each a request may only lower). */
 export const BUDGET_DEFAULTS = Object.freeze({ maxNodes: 2_000_000, maxEdges: 128, maxCells: 20_000_000, maxMs: 120_000, maxHeapMb: 2048 });
@@ -440,7 +443,7 @@ function sizeDev(asked, w, d) {
  * Resolve a zone: its rect, and (village zones) the street layout evaluated in it. Returns an answer draft `{klass, rect, layout,
  * deviations, reasons, wouldFit, unplaced}`. `obstacles`: rects the zone must keep `ZONE_GAP` from (the overlap pass).
  */
-export function resolveZone(env, z, geomOf, { obstacles = [] } = {}) {
+export function resolveZone(env, z, geomOf, { obstacles = [], keep = null } = {}) {
   const zone = z.part;
   const program = zone.program;
   // N-P0-1: a whole-claim template
@@ -463,7 +466,9 @@ export function resolveZone(env, z, geomOf, { obstacles = [] } = {}) {
     if (!tries.some((t) => t.w === w && t.d === d)) tries.push({ w, d, asked: null, shrunk: pct });
   }
   const obs = obstacles.map((o) => grow(o, ZONE_GAP));
-  const keepOut = (env.ctx.keepOut ?? []);
+  // ((6c FL, KC §5) a zone whose locator names an H body is placed after it and keeps clear of its footprint; every other zone as before)
+  const bodyDeps = keep ? whereParts(zone.where).filter((id) => keep.some((r) => r.part === id)) : [];
+  const keepOut = bodyDeps.length ? [...(env.ctx.keepOut ?? []), ...bodyKeepRects(keep, bodyDeps)] : (env.ctx.keepOut ?? []);
   const forced = orientationOf(zone);
   const evalAt = (cand, orientation = forced) => {
     const L = layoutStreet({ claim: { ...env.claim, ...cand.rect }, survey: env.S, specs, rules: STREET_RULES, shared, keepOut, ...(orientation === 'auto' ? {} : { orientation }) });
@@ -586,8 +591,9 @@ function resolveTerrace(env, f, geomOf, zoneIds, obstacles) {
 }
 
 /** Spikes: `count` sites (dry, off zones, forms and keep-out, 8 apart) within the locator's area, best first. */
-function resolveSpikes(env, f, geomOf, taken = []) {
+function resolveSpikes(env, f, geomOf, taken = [], keep = []) {
   const part = f.part, p = f;
+  if (part.where?.around) return resolveSpikesAround(env, f, geomOf, taken, keep);
   const loc = locatorOf(env, part.where, geomOf, { within0: 24 });
   if (loc.error) return { klass: loc.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: loc.error.code, message: loc.error.message, evidence: { locator: Object.keys(part.where ?? {})[0] ?? null, ...(loc.error.evidence ?? {}) } }] };
   const want = part.count ?? 1;
@@ -613,6 +619,38 @@ function resolveSpikes(env, f, geomOf, taken = []) {
   const j = judge([{ what: 'move', value: move, ...tMove }, { what: 'count', value: want - sites.length, ...tCount }]);
   const notes = part.keepNatural ? ['keepNatural: v0 keeps the spikes off water and frozen columns of the survey (no frozen volume is read)'] : [];
   return { klass: j.klass, sites: sites.map((s) => centre(s.rect)), footprints: sites.map((s) => rectArr(s.rect)), rect: sites.reduce((a, s) => ({ minX: Math.min(a.minX, s.rect.minX), minZ: Math.min(a.minZ, s.rect.minZ), maxX: Math.max(a.maxX, s.rect.maxX), maxZ: Math.max(a.maxZ, s.rect.maxZ) }), sites[0].rect), deviations: j.deviations, reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${j.failed.what} ${j.failed.value} past its limit`, evidence: { what: j.failed.what, value: j.failed.value } }] : [], notes };
+}
+
+/**
+ * (6c FL, §4.1) Spikes round a feature: `count` sites in the ring's band (free.mjs aroundSites), evenly by angle when count is at least
+ * 3 (closed: false leaves the gap), each dry, level (rough at most 3), unfrozen, off the footprint + 2 and the zones and forms placed
+ * before it (+ 2). fits when every site places; adjusted (count) within the count tolerance; else NO_ROOM.
+ */
+function resolveSpikesAround(env, f, geomOf, taken, keep) {
+  const part = f.part, p = f;
+  const want = part.count ?? 1;
+  const tCount = tolOf(part, 'count');
+  const pr = p.kind === 'ice_spike' ? ICE_PRESETS[part.preset ?? 'classic'] : ROCK_PRESETS[part.preset ?? 'pinnacle'];
+  const hMax = Array.isArray(part.height) ? part.height[1] : part.height ?? pr.height[1];
+  const reach = p.kind === 'ice_spike' ? pr.spread + pr.radius[1] + Math.ceil(pr.lean * hMax) + 2 : pr.radius[1] + pr.ledge[1] + pr.warp + 4;
+  const foot = 2 * reach + 1;
+  const obs = taken.map((t) => grow(t, 2));
+  const kr = bodyKeepRects(keep).map(arrRect);
+  const fit = (q) => {
+    if (obs.some((o) => meets(q, o)) || kr.some((o) => meets(grow(q, 2), o))) return false;
+    const st = rectStats(env, q);
+    if (st.blocked || st.water > 0 || st.rough > 3) return false;
+    const [x, zz] = centre(q);
+    return !env.S.frozenAt(x, zz);
+  };
+  const a = aroundSites(env, part, geomOf, keep, { foot, count: want, fit });
+  if (a.error) return { klass: a.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: a.error.code, message: a.error.message, evidence: { locator: 'around' } }] };
+  const sites = a.sites;
+  if (!sites.length) return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `no dry, level site for the form round ${a.footprint.what} in the band [${a.ring.join(', ')}]`, evidence: { footprint: foot, ring: a.ring } }] };
+  const j = judge([{ what: 'count', value: want - sites.length, ...tCount }]);
+  return { klass: j.klass, sites: sites.map((s) => s.centre), footprints: sites.map((s) => rectArr(s.rect)), rect: sites.reduce((acc, s) => ({ minX: Math.min(acc.minX, s.rect.minX), minZ: Math.min(acc.minZ, s.rect.minZ), maxX: Math.max(acc.maxX, s.rect.maxX), maxZ: Math.max(acc.maxZ, s.rect.maxZ) }), sites[0].rect),
+    deviations: j.deviations, reasons: j.klass === 'refused' ? [{ code: j.failed.what === 'count' ? 'NO_ROOM' : 'TOLERANCE', message: `${want - sites.length} of ${want} site(s) found round ${a.footprint.what}`, evidence: { what: 'count', value: want - sites.length } }] : [],
+    notes: [`around ${a.footprint.what}: ${sites.length} site(s) in the band [${a.ring.join(', ')}]${want >= 3 ? ', evenly by angle' : ''}`] };
 }
 
 // ------------------------------------------------------------------ (D1) districts zones
@@ -765,6 +803,20 @@ function rollback(r, c) {
 const addedSince = (r, c) => ({ parts: r.parts.slice(c.parts).map((p) => p.id), lots: r.lots.slice(c.lots).map((l) => l.id), roads: r.roads.slice(c.roads).map((x) => x.id),
   paths: Object.keys(r.meta.paths).filter((k) => !(c.pathIds ?? []).includes(k)), nodes: r.graph.nodes.slice(c.nodes ?? 0).map((n) => n.id), edges: r.graph.edges.slice(c.edges ?? 0).map((e) => e.id) });
 
+/**
+ * (6c FL, S-FL-5) Mark a zone's street roads (added since checkpoint `c`, ids matching `test`) with the road ext
+ * `architect_mc:street: {zone, district?}`, so Steward's additions recognise a zone's or a district's streets without matching names.
+ * The routes between districts and the plan's connectors stay unmarked.
+ */
+function stampStreets(r, c, zone, test) {
+  for (const road of r.roads.slice(c.roads)) {
+    const d = test(road.id);
+    if (d === false || d === null || d === undefined) continue;
+    road.ext = { ...(road.ext ?? {}), 'architect_mc:street': { zone, ...(typeof d === 'string' ? { district: d } : {}) } };
+  }
+}
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // ------------------------------------------------------------------ the check
 
 /**
@@ -910,18 +962,29 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, notes: z.notes });
       continue;
     }
+    if (p.family === 'zone' && isFreeZone(p)) {
+      // (6c FL) a free layout (ring, spiral, grid, organic, around, an outline): placed clear of every zone and form before it and of every
+      // H footprint (KC §5), never cached
+      const z = resolveFreeZone(env, p, geomOf, { taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted], keep, tolOf, judge, locatorOf, sketchPoint, rng: ctx.rng ? ctx.rng(`fl:${p.id}`) : null });
+      res.set(p.id, z);
+      if (z.klass === 'fits' || z.klass === 'adjusted') { geom.set(p.id, { rect: z.rect }); zonesAccepted.push({ id: p.id, rect: z.rect }); }
+      ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, wouldFit: z.wouldFit, notes: z.notes });
+      continue;
+    }
     if (p.family === 'zone') {
+      // ((6c FL, KC §5) a street zone whose locator names an H body keeps clear of its footprint: never cached, so the cache stays exact)
+      const bodyDep = whereParts(p.part.where).some((id) => keep.some((r) => r.part === id));
       const key = cacheKey(env, p, geom);
-      const hit = env.cacheIn?.(key);
+      const hit = bodyDep ? null : env.cacheIn?.(key);
       let z;
       if (hit && hit.rect && !zonesAccepted.some((o) => meets(grow(arrRect(hit.rect), ZONE_GAP), o.rect))) {
         z = rehydrateZone(env, p, hit);
         if (z) z.cached = true;
       }
-      if (!z) z = resolveZone(env, p, geomOf);
+      if (!z) z = resolveZone(env, p, geomOf, { keep: bodyDep ? keep : null });
       // the overlap pass: a zone meeting one placed before it is placed again around them (never cached)
       if ((z.klass === 'fits' || z.klass === 'adjusted') && zonesAccepted.some((o) => meets(grow(z.rect, ZONE_GAP), o.rect))) {
-        const again = resolveZone(env, p, geomOf, { obstacles: zonesAccepted.map((o) => o.rect) });
+        const again = resolveZone(env, p, geomOf, { obstacles: zonesAccepted.map((o) => o.rect), keep: bodyDep ? keep : null });
         z = again;
         if (z.klass === 'fits' || z.klass === 'adjusted') {
           z.deviations = [...(z.deviations ?? [])];
@@ -931,7 +994,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
           // the zones placed before it hold its place: OVERLAP, naming them (what would fit stays)
           z.reasons[0] = { ...z.reasons[0], code: 'OVERLAP', evidence: { ...(z.reasons[0].evidence ?? {}), zones: zonesAccepted.map((o) => o.id) } };
         }
-      } else if ((z.klass === 'fits' || z.klass === 'adjusted') && !z.cached) env.cacheOut[key] = cacheEntry(z);
+      } else if ((z.klass === 'fits' || z.klass === 'adjusted') && !z.cached && !bodyDep) env.cacheOut[key] = cacheEntry(z);
       res.set(p.id, z);
       if (z.klass === 'fits' || z.klass === 'adjusted') { geom.set(p.id, { rect: z.rect }); zonesAccepted.push({ id: p.id, rect: z.rect }); }
       ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, wouldFit: z.wouldFit, notes: z.notes, cached: z.cached || undefined, provisional: undefined });
@@ -953,7 +1016,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       // cached), as zones are
       const taken = [...zonesAccepted.map((o) => o.rect), ...formsAccepted];
       const zoneIds = new Set(V.parts.filter((q) => q.family === 'zone').map((q) => q.id));
-      const resolveForm = (obs) => (p.kind === 'terrace' ? resolveTerrace(env, p, geomOf, zoneIds, obs) : resolveSpikes(env, p, geomOf, obs));
+      const resolveForm = (obs) => (p.kind === 'terrace' ? resolveTerrace(env, p, geomOf, zoneIds, obs) : resolveSpikes(env, p, geomOf, obs, keep));
       const ok = (x) => x.klass === 'fits' || x.klass === 'adjusted';
       const gapOf = p.kind === 'terrace' ? ZONE_GAP : 2;
       const clashes = (x) => (x.footprints ?? []).some((fp) => taken.some((o) => meets(grow(arrRect(fp), gapOf), o)));
@@ -1033,6 +1096,9 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       const layouts = Object.values(out.layouts);
       const bell0 = Object.values(out.data.bells)[0];
       zoneEmit.set(p.id, { L: { lots: layouts.flatMap((L) => L.lots), res: { bell: bell0 } }, districts: out, prefix: '' });
+      // ((6c FL, S-FL-5) each district's street (V's, prefixed by its id) and a following district's street route, marked with the district)
+      const dids = (z.ds ?? []).map((d) => d.id);
+      stampStreets(r, cp, p.id, (id) => dids.find((did) => new RegExp(`^(${escRe(did)}_street(_[we])?|route_st_${escRe(did)})(_\\d+)?$`).test(id)) ?? null);
       geom.set(p.id, { rect: z.rect, bell: bell0 });
       villages++;
       mark(p.id, addedSince(r, cp));
@@ -1070,6 +1136,32 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     }
     const prefix = villages === 0 ? '' : `z${villages + 1}_`;
     const cp = checkpoint(r);
+    if (z.free) {
+      // (6c FL) a free layout: its streets, hub, lots, lanes and graph (frontage.mjs emitFree), the hub's props, V's reservations
+      try {
+        let props = null;
+        const L = emitFree(r, z.layout, {
+          prefix, zone: p.id, stages: { ground: stageOf('ground'), street: stageOf('street'), lots: stageOf('lots') }, _unsafe: p.part.ext?.['architect_mc:unsafe'] ?? {},
+          padEdge: reliefOf.has(p.id) && reliefOf.get(p.id).some((f) => okClass(f)) ? 'blend' : 'slope',
+          planProps: ({ o, sh, res: rs, lots }) => (props = planProps(r, { o, sh, res: rs, lots, laneWidth: 2, lamps: 'street', bell: false, keepOut: ctx.keepOut ?? [], rng: ctx.rng(`props:${p.id}`) })),
+        });
+        if (props) emitProps(r, props, { stage: stageOf('props'), prefix });
+        for (const q of props?.props ?? []) propsPlanned.push(q);
+        for (const k of props?.noWalk ?? []) reserved.add(k);
+        for (const [x, zz] of [...L.res.area, ...L.res.golem]) reserved.add(`${x},${zz}`);
+        laneCells.push(...Object.values(L.laneCells).flat());
+        stampStreets(r, cp, p.id, (id) => id.startsWith(`${prefix}street_`));
+        zoneEmit.set(p.id, { L, prefix, free: true });
+        geom.set(p.id, { rect: z.rect, bell: L.res.bell });
+        villages++;
+        mark(p.id, addedSince(r, cp));
+      } catch (e) {
+        rollback(r, cp);
+        ans(p, { class: 'refused', reasons: [{ code: 'NO_ROOM', message: `the zone's layout failed: ${e.message}` }] });
+        geom.delete(p.id);
+      }
+      continue;
+    }
     try {
       const shared = z.shared;
       let props = null;
@@ -1084,6 +1176,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       for (const k of props?.noWalk ?? []) reserved.add(k);
       for (const [x, zz] of [...L.res.area, ...L.res.golem]) reserved.add(`${x},${zz}`);
       laneCells.push(...Object.values(L.laneCells).flat());
+      // ((6c FL, S-FL-5) V's street: street_w and street_e (street for a green), marked with the zone)
+      stampStreets(r, cp, p.id, (id) => new RegExp(`^${escRe(prefix)}street(_[we])?(_\\d+)?$`).test(id));
       zoneEmit.set(p.id, { L, prefix });
       geom.set(p.id, { rect: z.rect, bell: L.res.bell });
       villages++;
@@ -1101,7 +1195,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     let best = null;
     for (const [zid, e] of zoneEmit) {
       if (zid === p.id) continue;
-      const ends = e.districts ? Object.values(e.districts.ends).flat().map((x) => ({ x: x.x, z: x.z, facing: x.facing })) : (() => {
+      const ends = e.districts ? Object.values(e.districts.ends).flat().map((x) => ({ x: x.x, z: x.z, facing: x.facing })) : e.free ? freeEnds(e.L) : (() => {
         const o = e.L.orientation, sv = e.L.road.sv;
         return [[e.L.u0 - 1, -1], [e.L.u1 + 1, 1]].map(([u, sg]) => { const [x, zz] = toWorld(o, u, sv); return { x, z: zz, facing: o === 'ew' ? [sg, 0] : [0, sg] }; });
       })();
@@ -1440,6 +1534,14 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         a.provisional = styleOf(P.plan, p.part)?.pending !== undefined || lots.some((l) => !entries.get(l.id));
         continue;
       }
+      if (e?.free) {
+        // (6c FL, §6) a free layout's geometry: V's members plus layout, streets, hub and (around, outline) mask
+        const lots = e.L.lots.map((l) => ({ id: l.spec.id, box: [l.lot.box.minX, l.lot.box.minY, l.lot.box.minZ, l.lot.box.maxX, l.lot.box.maxY, l.lot.box.maxZ], entrance: l.lot.entrance, front: l.lot.front, size: [l.rect[2] - l.rect[0] + 1, l.rect[3] - l.rect[1] + 1] }));
+        a.geometry = freeGeometry(z, e, lots);
+        const entries = new Map(zoneLots(p.part).map((l) => [l.id, l.lot?.entry ?? null]));
+        a.provisional = styleOf(P.plan, p.part)?.pending !== undefined || lots.some((l) => !entries.get(l.id));
+        continue;
+      }
       const lots = e ? e.L.lots.map((l) => ({ id: l.spec.id, box: [l.lot.box.minX, l.lot.box.minY, l.lot.box.minZ, l.lot.box.maxX, l.lot.box.maxY, l.lot.box.maxZ], entrance: l.lot.entrance, front: l.lot.front, size: [l.rect[2] - l.rect[0] + 1, l.rect[3] - l.rect[1] + 1] }))
         : r.lots.map((l) => ({ id: l.id, box: [l.box.minX, l.box.minY, l.box.minZ, l.box.maxX, l.box.maxY, l.box.maxZ], entrance: r.meta.lots[l.id]?.entrance, front: l.front }));
       a.geometry = { rect: rectArr(z.rect), ...(e ? { bell: e.L.res.bell, shared: e.L.shared?.kind, orientation: e.L.orientation, unplaced: e.L.unplaced.map((u) => u.id) } : { whole: true }), lots };
@@ -1512,6 +1614,21 @@ function stubAnchors(r, env) {
 }
 
 /**
+ * (6c FL, §2.4) A free layout's street ends, start first: an open street's two ends (spiral: inner, then outer); a closed ring or a grid
+ * has none, so start is its street cell nearest the claim's centre and end the farthest. `[{x, z, facing?}]`.
+ */
+function freeEnds(L) {
+  const open = (L.ends ?? []).filter((x) => x.facing);
+  if (open.length >= 2) return open.map((x) => ({ x: x.x, z: x.z, facing: x.facing }));
+  const cells = L.streets.flatMap((st) => st.cells);
+  const cl = L.claimCentre ?? [0, 0];
+  const d = (c) => Math.max(Math.abs(c[0] - cl[0]), Math.abs(c[1] - cl[1]));
+  let a = null, b = null;
+  for (const c of cells) { if (!a || d(c) < d(a)) a = c; if (!b || d(c) > d(b)) b = c; }
+  return [{ x: a[0], z: a[1] }, { x: b[0], z: b[1] }];
+}
+
+/**
  * A route end for an endpoint: `{name, at, node?}` (a node in the pass's `nodes`, or a lot / graph id), or `{error}`.
  * `other`: the leg's other endpoint (a zone's default port is its street end nearer to it).
  */
@@ -1560,6 +1677,21 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
       const en = out.ends[did];
       const pick = port === 'start' ? en[0] : port === 'end' ? en[1] : dist([en[1].x, en[1].z]) < dist([en[0].x, en[0].z]) ? en[1] : en[0];
       return feet(pick.x, pick.z, `s_${tag}`, pick.facing);
+    }
+    if (z?.free) {
+      // (6c FL, §2.4) a free layout: its lots, bell and hub; start (the street cell nearest the claim's centre, or an open street's first
+      // end) and end (the farthest, or its last end); else the street cell nearest the leg's other end
+      const port = e.port ?? null;
+      if (port && !ZONE_PORTS.includes(port) && port !== 'hub') { const n = lotNode(port); return n ? { ...n, at: r.meta.lots[port].entrance } : { error: { code: 'NO_ROOM', message: `port ${port}: the lot was not placed`, path: where } }; }
+      if (port === 'bell' || port === 'hub') return feet(z.L.res.bell[0], z.L.res.bell[2], `b_${tag}`);
+      const ends = freeEnds(z.L);
+      let pick;
+      if (port === 'start') pick = ends[0]; else if (port === 'end') pick = ends[ends.length - 1];
+      else {
+        const op = posOf(other);
+        for (const st of z.L.streets) for (const [x, zz] of st.cells) { const d = Math.max(Math.abs(x - op[0]), Math.abs(zz - op[1])); if (!pick || d < pick.d || (d === pick.d && (x < pick.x || (x === pick.x && zz < pick.z)))) pick = { x, z: zz, d }; }
+      }
+      return feet(pick.x, pick.z, `s_${tag}`, pick.facing ?? null);
     }
     if (z) {
       const port = e.port ?? null;

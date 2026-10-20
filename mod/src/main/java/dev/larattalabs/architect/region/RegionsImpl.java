@@ -1402,6 +1402,9 @@ public final class RegionsImpl implements Regions {
 		return RegionSurvey.planSurvey(level, x0, z0, x1, z1, load);
 	}
 
+	/** (6c FL, S-FL-5) The road ext key of a plan region's street: {@code {zone, district?}}. */
+	public static final String STREET_EXT = "architect_mc:street";
+
 	private static QItem roadItem(ServerLevel level, RegionRec rec, Ir.Road road, List<String> after) {
 		List<BlockPos> pts = new ArrayList<>();
 		road.points().forEach(pt -> pts.add(new BlockPos(pt[0], pt[1], pt[2])));
@@ -1410,6 +1413,11 @@ public final class RegionsImpl implements Regions {
 		QItem q = dev.larattalabs.architect.site.RegionQueue.roadItem(level, rec.id, "road:" + road.id(), road.stage(), after, rr);
 		if (road.lamp() != null) {
 			q.spec.add("lamp", road.lamp().deepCopy()); // 6c W: the bible's lamp fixture for the street's lanterns
+		}
+		// 6c FL (S-FL-5): a plan region's street carries architect_mc:street {zone, district?} on its item (BatchView.ItemView.ext), so a
+		// caller's additions recognise a zone's or a district's streets without matching names
+		if (road.ext() != null && road.ext().has(STREET_EXT) && road.ext().get(STREET_EXT).isJsonObject()) {
+			q.ext.add(STREET_EXT, road.ext().get(STREET_EXT).deepCopy());
 		}
 		return q;
 	}

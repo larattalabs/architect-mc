@@ -81,6 +81,7 @@ public final class ApiRules {
 					case "region.irrigation" -> "farmIrrigation"; // 6c IRR: a farm lot's irrigate (its sources, lots[].irrigation, the lot mask)
 					case "reserved" -> "designReserved"; // 6c IRR: DesignRequest.reserved, kept by the design job and its checker
 					case "plan.rules" -> "rulePalette"; // 6c VOC-c: rule.palette measured (lotBlocks, the artifact's palette rows, PALETTE)
+					case "plan.layouts" -> "freeLayouts"; // 6c FL: plan/0's layout.ring, .spiral, .grid, .organic, locator.around and sketch.outline
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

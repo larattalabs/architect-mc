@@ -18,7 +18,7 @@
     "R11 required parts: a part with required true whose answer is unsupported or refused blocks approval (COMPOSITION §2.5); a required rule that can't be verified blocks readiness",
     "R12 notes and labels are free text: kept, shown, never treated as a verified requirement",
     "R13 provisional parts: a part is provisional when a lot has no library entry or its style (own or inherited from the zone or plan) is {pending}. Its cost and palette are a range; the approval artifact records each provisional part's cost range and fit box; the approval is kept while the fit stays inside the lot box and the cost inside the range, and the caller re-approves past the top of the range (rebinding when the bible exists)",
-    "R4b layout: program.lots.layout is one of street (supported), or ring, spiral, grid, organic (reserved, arriving in slice FL). A reserved layout is checked like any supported lots program and the part answers unsupported {block: layout.<name>}, never malformed. A layout is written only there: not as a connector kind (connector.ring_street, connector.grid) nor as a rule kind (rule.ring_layout, rule.layout_ring)",
+    "R4b layout: program.lots.layout is one of street, ring, spiral, grid or organic (supported; FL) or elevated (reserved until 7b). A reserved layout is checked like any supported lots program and the part answers unsupported {block: layout.<name>}, never malformed. A layout is written only there: not as a connector kind (connector.ring_street, connector.grid) nor as a rule kind (rule.ring_layout, rule.layout_ring)",
     "R4c aliases: zone kind district is a reserved alias of the program form {districts}: the part answers unsupported {block: program.districts} (never zone.district) until D1, so one idea has one block id",
     "R2a lots as places (P0, additive): where a part names a place (a locator target, a near feature, an endpoint) a lot id of a zone of this plan is accepted for a part id: it names that lot (an endpoint: its entrance), through its zone, which is then an implicit dependency (R3). A zone's port is one of its lots or bell, start or end (its street's two ends). Lot ids are unique across the plan (one region's lots)",
     "R14 anchors: names are caller-supplied positions (PlanRequest.anchors) or the built-in claim_* ones; P0 never interprets a name. Steward passes stone, player, street_w, street_e, district_<id> and stockpile; an unknown anchor name used by a part is malformed (UNKNOWN_REF)",
@@ -76,7 +76,7 @@
 
   "x-catalogue": {
     "about": "The capability catalogue that P0 ships (catalogueVersion 1). Each entry: a stable block id (never reused or renamed), the API version it arrived in (sinceApi: the API version at which the entry reached its current state and schemaVersion, always a real semver; a new or changed entry carries the branch's placeholder API version and the merge-time renumber restamps it, which tools/catalogue-since-check.mjs enforces), its own schemaVersion (bumped when its members grow, additively), its state (supported | reserved | retired) and, for reserved, the slice it waits for (until). Checks return this catalogue with every answer; a release commits it as a golden so two catalogues diff by id. Reserved entries carry their parameters through $defs/extension until supported.",
-    "catalogueVersion": 9,
+    "catalogueVersion": 10,
     "entries": [
       { "id": "zone.standard", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.standard" },
       { "id": "zone.outpost", "sinceApi": "1.29.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.outpost" },
@@ -88,10 +88,10 @@
       { "id": "program.rift_city", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template", "note": "N-P0-1: the bundled rift_city program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim." },
       { "id": "program.floating_islands", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template", "note": "N-P0-1: the bundled floating_islands program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim." },
       { "id": "layout.street", "sinceApi": "1.30.0", "schemaVersion": 2, "state": "supported", "def": "#/$defs/program.lots", "note": "C37 (sinceApi 1.30.0, a placeholder set at merge): additive orientation member (ew | ns | auto) of street layouts." },
-      { "id": "layout.ring", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
-      { "id": "layout.spiral", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
-      { "id": "layout.grid", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
-      { "id": "layout.organic", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
+      { "id": "layout.ring", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "note": "FL: a closed street round an open hub, lots outside it facing in; central and landmark lots in the hub." },
+      { "id": "layout.spiral", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "note": "FL: an open street winding out from the hub (up to 3 turns), lots on its outer side; on a hill it climbs to the summit." },
+      { "id": "layout.grid", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "note": "FL: blocks of streets (avenues along orientation, cross streets), lots back to back facing the avenues, a central plaza block." },
+      { "id": "layout.organic", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "note": "FL: 2 to 4 crooked lanes growing out of a green, lots of mixed setbacks along them." },
       { "id": "layout.elevated", "sinceApi": "1.32.0", "schemaVersion": 0, "state": "reserved", "until": "7b", "note": "Lots carried at a level above the ground (canopy huts in trees, cliff ledges): Claude can write them now and they wait as unsupported (S-K1-6)." },
       { "id": "connector.street", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
       { "id": "connector.road", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
@@ -158,7 +158,7 @@
       { "id": "locator.near", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
       { "id": "locator.adjacent", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
       { "id": "locator.along", "sinceApi": "1.29.0", "schemaVersion": 1, "state": "supported" },
-      { "id": "locator.around", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "FL", "note": "On a wall: wall.around, K1 (the wall's own member). This id stays reserved for zones and forms laid out as a ring (FL)." },
+      { "id": "locator.around", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "note": "On a wall: wall.around, K1 (the wall's own member). Zones: a ring street round the feature; forms: sites in the band." },
       { "id": "feature.water", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
       { "id": "feature.part", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
       { "id": "feature.protected", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
@@ -172,7 +172,7 @@
       { "id": "endpoint.region", "sinceApi": "1.27.0", "schemaVersion": 1, "state": "supported" },
       { "id": "endpoint.build", "sinceApi": "1.24.0", "schemaVersion": 1, "state": "supported", "note": "PT (C32): {build: id, port?: door | door_<n>}: a road ends on the door's apron (the cells outside it)." },
       { "id": "sketch.point", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
-      { "id": "sketch.outline", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
+      { "id": "sketch.outline", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "note": "polygon: the zone's mask; polyline: the street's line." },
       { "id": "dependency.after", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" }
     ]
   },
@@ -255,14 +255,14 @@
 
     "sketch": {
       "type": "object", "required": ["frame", "unit", "shape", "points"], "additionalProperties": false,
-      "description": "Optional relative sketch, never world coordinates. q64: 0..64 across the claim's x and z; block: blocks relative to frame anchor (+x east, +z south). v0 uses a point or the centroid of any shape as a soft position target (sketch.point); fitting an outline is sketch.outline (reserved, FL).",
+      "description": "Optional relative sketch, never world coordinates. q64: 0..64 across the claim's x and z; block: blocks relative to frame anchor (+x east, +z south). v0 uses a point or the centroid of any shape as a soft position target (sketch.point); with outline true the drawing itself is fitted (sketch.outline).",
       "properties": {
         "frame": { "enum": ["claim", "anchor"] },
         "anchor": { "$ref": "#/$defs/anchor" },
         "unit": { "enum": ["q64", "block"] },
         "shape": { "enum": ["point", "polyline", "polygon"] },
         "points": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer", "minimum": -512, "maximum": 512 } } },
-        "outline": { "type": "boolean", "description": "true: the outline itself is the requirement (sketch.outline, reserved until FL); false or absent: only its centroid and extent guide the fit." }
+        "outline": { "type": "boolean", "description": "true: the outline itself is the requirement (sketch.outline): a polygon is the zone's mask, a polyline the street's line; false or absent: only its centroid and extent guide the fit." }
       }
     },
 
@@ -315,7 +315,7 @@
           "side": { "enum": ["either", "left", "right", "toward_anchor", "away_from_anchor"] },
           "anchor": { "$ref": "#/$defs/anchor" },
           "distance": { "$ref": "#/$defs/intRange" } } } } },
-        { "type": "object", "required": ["around"], "additionalProperties": false, "properties": { "around": { "type": "object", "required": ["feature"], "additionalProperties": false, "properties": {
+        { "type": "object", "required": ["around"], "additionalProperties": false, "properties": { "around": { "type": "object", "required": ["feature"], "additionalProperties": false, "description": "A zone laid as a ring street round the feature (a part, water, a build or a protected area), offset into ring (default [6, 32]), lots outside facing it; closed false leaves out the arc nearest the claim's centre. A form: its sites in the band. On a wall it is the wall's own member.", "properties": {
           "feature": { "$ref": "#/$defs/feature" },
           "ring": { "$ref": "#/$defs/intRange" },
           "closed": { "type": "boolean" } } } } }
@@ -399,7 +399,7 @@
       "type": "object", "required": ["lots"], "additionalProperties": false,
       "properties": {
         "lots": { "type": "array", "minItems": 1, "maxItems": 40, "items": { "$ref": "#/$defs/lot" } },
-        "layout": { "enum": ["street", "ring", "spiral", "grid", "organic", "elevated"], "description": "How the lots are laid out. street: supported (flat_village's layout with its defaults). ring, spiral, grid and organic: reserved for slice FL, block ids layout.ring, layout.spiral, layout.grid and layout.organic; elevated (K1, reserved until 7b, layout.elevated): lots carried at a level above the ground (canopy huts in trees, cliff ledges); a lots program that names one answers unsupported {block: layout.<name>}. Write a free layout here, never as a connector kind (connector.ring_street, connector.grid) or a rule kind (rule.ring_layout)." },
+        "layout": { "enum": ["street", "ring", "spiral", "grid", "organic", "elevated"], "description": "How the lots are laid out. street (default): one straight street. ring: a closed street round a hub, lots facing in, central lots in the hub. spiral: a street winding out from the hub (up a hill to its top). grid: blocks of streets; only grid reads orientation (the avenues' axis). organic: crooked lanes from a green. Every lot is a rect with a cardinal front facing its street; elevated (K1, reserved until 7b, layout.elevated): lots carried at a level above the ground (canopy huts in trees, cliff ledges); answers unsupported {block: layout.elevated}. Write a free layout here, never as a connector kind (connector.ring_street, connector.grid) or a rule kind (rule.ring_layout)." },
         "shared": { "enum": ["square", "well", "none"] },
         "orientation": { "enum": ["ew", "ns", "auto"], "description": "Street orientation (C37, sinceApi 1.30.0): orientation \"ew\" | \"ns\" | \"auto\" (default auto: the layout picks the axis that places more lots, then scores higher, so it depends on the lot sizes). \"ew\" means the street runs east-west (along x), \"ns\" north-south (along z). \"ew\" and \"ns\" are strict: only that axis is tried, never a fallback, and lots that do not fit are unplaced as ever. If the forced axis places no lot where the other would, the part answers refused NO_ROOM (evidence.orientation names it) and wouldFit holds the same part with the other orientation." }
       }
