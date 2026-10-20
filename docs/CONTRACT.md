@@ -20141,3 +20141,285 @@ The verifier reviews the diff and **re-runs items 7, 8 and 10**. **Steward's RC 
 - The pad delta under standing lots (S-RV-5). Changing or removing standing roads, zones and lot boxes (S-RV-6).
 - `revision.change` for zones and connectors beyond add and remove (a later slice, once Steward has an ask that needs it).
 - Folding old revisions (S-RV-2). Revisions past the claim (S-RV-8).
+
+## Phase 6d slice GR: growing a standing region (D-S2, `growDistrict`) (DRAFT for Steward review)
+
+New lots are added to a standing town or district as a revision (RV): first on free frontage along its standing streets, then on a
+street extended from an end that nothing else uses. Standing lots, streets and junctions never move. This is Steward's D-S2 (steward-mc
+`docs/DISTRICTS.md` §7: "Lots added to a standing district region (its street extended), so along districts and outposts can grow"),
+V's "additions to a realised village", and Noah's Q1 for beside districts ("built at its first accepted building, then grown along
+its street"). D3 §11 reserved the feature `growDistrict`, `architect_mc:land.v` 2 and terminal street ends; GR uses all three.
+
+**GR changes what stands in a district's land and what a building's undo takes away**, which Steward's district give-up and history
+read. So Steward's RC check comes before release, shared with RV's if they ship together (S-GR-7).
+
+- **Branch:** `slice/GR`, worktree `../architect-mc-GR` (lanes GR-a and GR-b, §10). **Spend:** $0, sim and stub only.
+- **Scope:** the growth search (§2), frontage (§3), street extension (§4), along districts (§5), ids and the graph (§6), the land v 2
+  (§7), plan/0's `revision.grow` (§8), the API (§9) and the gate (§11).
+- **Not in scope:** turning or branching an extension, growth past the claim (a new district, S-RV-8), growth along FL's ring and
+  spiral ends (§2.4), re-laying standing lots, a second square.
+- **Depends on:** RV (merged first; GR's in-game items need it), D1, D2, D3 (the held set, hold columns, `reach`, `land`), FL (the
+  street flag), KC, T2 (routing, for along districts).
+
+### Binding answers carried over
+
+- **RV, all of it:** a growth is a revision: kept parts byte for byte, `rv<n>_` ids, `rv<n>:` stages, the tile delta, LIFO undo, the
+  effective IR. A growth is undone by `undoRevision`, one building at a time.
+- **D3 §11:** a district's street ends stay terminal junctions in its graph; `land.v` moves to 2 when 6d adds grown parts.
+- **D3 S-D3-1:** Steward's own street extensions in a V town are held cells to route around. GR's extensions are Architect's, in the
+  region's graph, so later districts may join them.
+- **S-FL-5:** every street road a region writes carries `architect_mc:street {zone, district?}` and keeps the `street_` stem.
+- **Steward DISTRICTS.md §4:** "a reserved beside district owns its reservation ... and keeps it once built, so its street has room
+  to grow"; `District.growable()` is true for `beside` while its street runs east-west, and Steward never routes a building into a
+  district that can't grow. GR answers which can.
+
+### 0. Facts (main f3f41d43 plus D3 as frozen, from code unless marked)
+
+- **V's street** spans its outer street lots and the square ±4, clamped to the claim margin 2 (`village.mjs` :320-328), width 5 (road 3
+  plus a verge each side), `lotGap` 3 (:23), cut/fill ±3 with steps of 1, no water (:332-340). Its height is the survey at the span's
+  midpoint (:341). Lots alternate sides outward from the square (:251, :269).
+- **One side free.** D3 measured both of its towns: each street run has lots on one side only; along the lot-free side the verge row
+  is held by `path:verges` alone and the row past it holds nothing (D3 §0). So V towns have free frontage on the lot-free side.
+- **Ends.** A street end is a `junction` node `${rid}_end` with one non-external edge (`besidePorts`, `districtsEmit.mjs` :146-170);
+  its past-end cell faces outward. Junction ids are ordinals along the street (`village.mjs` :619-623), so GR never renumbers them: new
+  junctions get new ids (§6).
+- **Districts.** A plain district and an outpost have their own V street (`districtsEmit.mjs` :191, prefix `<d>_`, lots `<d>_<k>`
+  :78). A following district's street is a T2 route along its band's middle, its lots on both sides with one-cell lanes
+  (`followEmit.mjs` :1-4, :142-189); its window is a slice of the traced boundary's spine (:40-50), which the IR doesn't keep.
+- **The join.** A district's join leaves from one of its own street ends (`ends.get(d.id)`); a town street end a D3 district joined
+  stands under D3's hold cells (stack depth 2 in the contact columns). Neither end may be extended (§4.1).
+- **Meta isn't kept.** A region keeps its IR, frozen heights and drift shards (`RegionStore.java` :14-50), not the plan's `meta`
+  (village, districts, route). GR reads the effective IR only.
+
+### 1. The rule in one line
+
+**A growth places each new lot on the cheapest free frontage of the standing streets, then on one straight extension from an end
+nobody uses, inside the claim, around everything that stands, and never moves a standing cell, lot, street or junction.**
+
+### 2. The growth search (`kit/lib/region/grow.mjs`, GR-a)
+
+#### 2.1 The request
+
+`params.grow` on a revision of a `flat_village`, `districts` or plan_v0 region (the region's own program id; RV's `planRevision`):
+
+```json
+"grow": {
+  "lots": [{"id": "smithy", "type": "smithy", "size": [9, 11], "villager": true, "ext": {}}],
+  "district": "quay",
+  "prefer": "frontage",
+  "extend": "auto"
+}
+```
+
+- `lots`: V's `LotSpec` (D1's for a district: a lot list; a count `n` gives `<d>_<k>` ids continuing the district's numbering).
+- `district`: which district of a districts region grows (required there; absent for a town).
+- `prefer`: `frontage` (default: free frontage first, then extension) or `extend` (extension first).
+- `extend`: `auto` (the cheapest extendable end), an end node id, or `none` (frontage only).
+
+#### 2.2 Order and choice
+
+1. **Specs** in V's order (`orderOf`: central, landmark, the rest, edge; then input order). A `central` or `landmark` lot in a growth
+   takes the best frontage slot nearest the square (or the district's shared space), never displacing a standing lot.
+2. **Frontage slots** (§3), cheapest first: nearest the square along the street, then the lot-free side before a gap between lots,
+   then by street id and `u`.
+3. **Then one extension** (§4), if lots remain and `extend` allows.
+4. **A lot that fits nowhere** is listed in `unplaced` with its reason (`NO_ROOM {kind: frontage | street | claim | held | body}`),
+   as V lists them. A growth with no lot placed fails `NO_ROOM` and plans nothing.
+- The search is deterministic over the effective IR, the frozen heights, the held set and the revision seed (RV §2.1).
+
+#### 2.3 Obstacles
+
+Everything RV §5.2 lists, plus: every standing lot box plus its apron (`lotGap` 3 to a new lot), every standing lane, prop, lamp and
+square cell, every beside region's `reach` and hold columns, and a beside district's land (D3's `land.union`) when the town grows.
+A town's growth never takes a district's land; a district's growth never takes town land except its own join's cells (it doesn't write
+them, §4.1).
+
+#### 2.4 Which streets grow
+
+| Region kind | Frontage | Extension |
+|---|---|---|
+| V town (`flat_village`, plan_v0 street zone) | yes | yes |
+| plain district, outpost (their V street) | yes | yes, from the end that isn't the join's |
+| along district (a following street) | yes, both sides | along the boundary (§5) |
+| FL grid (blocks of V streets) | yes | yes, from a block street's outer end |
+| FL ring, spiral, organic | yes, on straight runs of at least 9 | no (`NO_ROOM {kind: layout}`; S-GR-4) |
+
+### 3. Frontage
+
+On a straight street run along axis `a`, centre line `v = c`, side `s` (±1), the street's footprint is `|v - c| <= 2`:
+- **The lot:** its front edge on `v = c + s (2 + 1 + L)`, where `L` is the lane length (V's: the lot's apron row then the lane, at
+  least 1), facing the street. Its box plus 1 misses every obstacle (§2.3) and is at least `lotGap` from every standing lot box.
+- **The lane:** from the lot's entrance to the verge, as V's lanes, ending at the verge row `c + 2s`; it **never writes** a verge or
+  road cell (D3 §3.2's verge contact: the verge cell it meets is held by the street's road or verge only).
+- **The pad:** V's pad ops (`surfaceOps`, `PAD_MAX` 2) on the frozen heights; its batter must not reach a held column or a standing
+  lot box plus 1.
+- **Junction:** a new junction node on the street at the lane's foot (§6).
+- **Lamps:** the town's lamp rule for the new lot's apron (W), skipping spots within 6 of a standing lamp (N-D3-2's rule).
+- Slots are tried every 2 cells along each run, from the square outward.
+
+### 4. Extension
+
+#### 4.1 Which ends can be extended
+
+An end node is extendable when all hold:
+- it is a terminal junction of a street (`architect_mc:street`, or the `street_` stem before FL) with exactly one edge in the region's
+  graph, and that edge is the street's own;
+- no join, route, lane, external edge or D3 junction meets it (not the district's join end; not a town end a district joined);
+- its past-end cell and the 3 cells past it, 5 wide, hold no cell of another entry (no D3 hold cell, no site, no PT build);
+- its past-end cell lies at least 9 cells inside the claim margin along the street's axis (room for one lot).
+
+#### 4.2 The new street
+
+- **Straight**, continuing the street's line from the past-end cell, the street's width (road 3 plus verges) and its look: the same
+  road blocks, verges and W's lanterns (`lanterns: true` when the standing road has it) (N-GR-1).
+- **Length:** the lots it carries, sides alternating as V's `tryStreet` (outward from the old end), plus 4 past the last lot, clamped
+  to the claim margin 2. At most one extension per growth.
+- **Grade:** V's street check per cell (cut/fill ±3, steps of 1, no water) against the frozen heights. The extension's height starts at
+  the end node's y and may step by 1 per 4 cells (V's road rule); a run that can't meet it ends where it fails, and the lots that don't
+  fit are `unplaced` (`NO_ROOM {kind: street}`).
+- **The road:** a new 4e road item `<roadId>_g<n>` (`street_e_g2`), flag `architect_mc:street {zone, district?}`, joined end to end
+  with the standing road at the past-end cell (4e's handover; the standing road is never rewritten).
+- **The verges and lanes** as new parts (§6). The standing `verges` part is unchanged; the new verges start at the past-end cell.
+- **Lots** on both sides of the extension, V's placement on its run.
+
+### 5. Along districts (GR-b)
+
+A following district's street is a route on its boundary line. Its growth:
+- **Frontage:** new lots on both sides of the standing route where free (§3's rule with `FOLLOW_SETBACK` 3 and `FOLLOW_PAD` 6, the
+  district's own lot geometry, `followEmit.mjs` :142-189).
+- **Extension:** the boundary is traced again (`traceBoundary`, the same `follow` and side) over a fresh survey of the claim (loaded
+  chunks, resolution 1, recorded with the revision's inputs as RV §5.2's files) from the standing route's free end along the spine,
+  outside the standing band. The new band continues the standing mask; its street is a T2 route from the end node along the new
+  band's middle, and its lots are placed as D2's.
+- **Its mask grows:** `meta.districts.follow[id].mask` isn't kept, so the revision records the new band's mask as its own
+  (`revision.follow {district, mask}`), and `land` reads it (§7).
+- **Where the boundary ends** inside the claim, or turns back into the band: `NO_ROOM {kind: boundary}` for the rest.
+- An outpost grows on its own V street (§3, §4); its corridor (`architect_mc:corridor`) doesn't change.
+
+### 6. Ids, parts and the graph
+
+- **Parts:** `rv<n>_pads`, `rv<n>_lanes`, `rv<n>_props` and, for an extension, `rv<n>_verges` and `rv<n>_street` (for a district:
+  `rv<n>_<d>_pads` and so on), in `rv<n>:` stages after the parent's.
+- **Lots:** the caller's ids, unique across the region (M14).
+- **Roads:** `<roadId>_g<n>`.
+- **Graph:**
+  - frontage: a new junction `<roadId>_g<n>_j<k>` on the street at each lane's foot, splitting no standing edge: the junction is
+    recorded with `on: <roadId>` and `u` (as D3's side junction, so the standing edge isn't re-cut), plus the lane edge and the lot node;
+  - extension: a new edge from the standing end node to the new end node `<roadId>_g<n>_end`, the extension's junctions, lanes and lot
+    nodes. The standing end node gains one edge and stops being terminal; the new end is terminal, so a later district (D3) or a later
+    growth can use it.
+- **The town's square and bell** are unchanged; M22, M23 and M24 are judged on the whole revised IR (a new trading hall must sit
+  within 12 of the bell, or it is placed where it is and M23 warns as today).
+
+### 7. The land: `architect_mc:land` v 2
+
+For a districts region (D3 §6), `v` becomes 2 at the first growth:
+- each grown lot and street is a new `parts[]` entry `{kind: "grown", id: "rv<n>", district, revision: n, runs, rect, cells,
+  insideCells}`; an along district's new band is `{kind: "district", id, shape: "mask", revision: n, ...}`;
+- `union`, `outside` and `inside` are recomputed from all parts (D3's rules), so `outside` holds the grown land Steward now owns;
+- `undoRevision` recomputes `land` (the revision's parts leave; `v` stays 2);
+- every part carries `revision` (0 for the realised plan's parts), so a reader can tell which building took which land.
+- A V town gains no `land` key (D3 gives it none); its growth stays inside its claim.
+
+### 8. plan/0: `revision.grow`
+
+In a revision plan (RV §9), a zone with the same id whose `program.lots` only gains lots (every standing lot spec equal, in any order;
+no other member changed) is a growth:
+- the added lots are checked by §2 with the zone's own streets, and each gets its usual answer (`fits` with geometry, `refused
+  NO_ROOM` with `wouldFit` where a smaller size fits, or listed `unplaced` with the zone's other answers);
+- the zone answers `fits` with `standing: true` and `grown: [lot ids]`;
+- catalogue: `revision.grow` reserved -> supported (catalogue 13).
+- A districts zone (`program.districts`) gaining lots in one district grows that district.
+- A zone whose lots lose a lot answers `unsupported revision.change` (removing a lot is `Sites.remove`, RV §4.4).
+
+### 9. API, kit and versions
+
+- **No new method.** A growth is `Regions.planRevision(regionId, RevisionRequest(program = the region's program, params = {grow}))`
+  (RV §11), then `Regions.realise(planId, lotEntries)` with the new lots' blueprints, or `checkPlan` / `realiseApproved` (§8).
+- **Features:** `growDistrict` (D3's reservation; also covers towns), `planRevisionGrow`; sidecar `region.grow`.
+- **`RegionView.lots`** lists grown lots with their revision (`LotState` gains trailing `int revision`, old constructor kept).
+- **Placeholders:** API **1.44.0**, mod **0.47.0**, kit **0.45.0**, catalogue **13**.
+- **Refusals:** `NO_ROOM` (the kit), and RV's.
+- api-compat clean; apijars on the previous three.
+
+### 10. Size and split
+
+About **4.5-5.5 days** of work, **3 elapsed**:
+- **GR-a, streets (3-3.5 days):** `grow.mjs` (the search, frontage, extendable ends, the extension), ids and graph, V towns, plain
+  districts, outposts and FL grids, plan/0's `revision.grow`, `land` v 2 (`land.mjs` and `DistrictLand.java`), the mod's
+  `RegionView.lots` member; items 1-9, 12-14.
+- **GR-b, along districts (1.5-2 days, on GR-a's interface):** §5's frontage and boundary extension, the recorded mask; items 10, 11.
+- **The shared interface** (frozen at the end of GR-a's day 1): `params.grow`, the part and id names (§6), the frontage slot record
+  `{street, side, u, lot}`, the extension record `{from, road, run}`, `land` v 2's part shape.
+
+### 11. Gate (slice tier, $0)
+
+**Fixtures:**
+- **`gr_town`:** RV's `rv_town` (6 lots, 4 built, partly built; a Steward addition and a PT build by the street).
+- **`gr_beside`:** a D3 beside district (plain, its join to the town's street end) with 2 lots, realised as Steward does (a
+  `checkBeside` reservation, then `Regions.plan` with the first building's lot under `dplan`).
+- **`gr_along`:** a D2 shore district on `d3_shore` (D3's fixture), 2 lots.
+- **`gr_outpost`:** a D2 outpost (gap 40) with 2 lots.
+- Plan fixtures: `v8x_6d_gr_zone` (a revision of `rv_town`'s kept plan whose street zone gains 2 lots), `v8x_6d_gr_district`.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | frontage slots row by row (lot-free side, gaps, aprons, lane contact, never a verge cell written); extendable ends (the join end, a held end, a short end refused); extension grade and length; ids and graph (no standing node or edge changed, the new end terminal); along frontage and boundary extension; 300 seeded synthetic towns grown 1-6 lots: kept parts byte-identical, deterministic, 0 writes under a standing lot box plus 1 or a held column |
+| 2 | Byte identity | RV's pinned set unchanged; programs without `params.grow` unchanged |
+| 3 | Town frontage | `gr_town` grown by 2 lots through `planRevision` then `realise` with stub blueprints: both on the lot-free side; verge and road cells unchanged (hash); every new lot walkable to the bell (player and villager, `dev.nav.villager`) |
+| 4 | Town extension | `gr_town` grown by 6 lots (`prefer: extend`): one extension from the extendable end, its road joined to the standing road, flagged; the new end terminal; walkable as item 3 |
+| 5 | Steward's district, two buildings | `gr_beside`: building 3 then building 4, each a growth under Steward's opKeys (`dgrow:<district>:<k>`), each realised; `undoRevision` of building 4 then 3 (verifier re-runs): the world before each, cell for cell; the district's join and the town untouched (hash) |
+| 6 | plan/0 | `v8x_6d_gr_zone` through `checkPlan` (zone `fits standing`, 2 added lots `fits`) then `realiseApproved`, with one stale retry under a second key across a restart |
+| 7 | Later districts | after item 4: a D3 district beside `gr_town` joins the extension's new end (`besidePorts` on the effective IR). The district's hold cells sit over the growth's cells in the contact columns, so `undoRevision` of the growth refuses `COVERED` naming the district, and nothing is written. Once the district is removed, the undo succeeds: the world before the growth |
+| 8 | Removal (verifier re-runs) | `gr_town` with two growths and a beside district: D3's removal orders, then `Regions.remove` of the town with both growths standing: E-flat 0 over the claim against the world before the town |
+| 9 | KC and held | a growth whose cheapest slot is beside the farm pond: the lot keeps clear (0 cells in its hard or watch set); the Steward addition and the PT build never written; a growth with every slot held answers `NO_ROOM {kind: held}` with nothing planned |
+| 10 | Along district | `gr_along` grown by 3 lots: frontage first, then the boundary extension; the mask grown; walkable from every lot to the district's street end |
+| 11 | Outpost | `gr_outpost` grown by 2 lots; `architect_mc:corridor` byte-identical |
+| 12 | Land v 2 | after items 5, 10, 11: every column each district holds in the journal lies in `union`; each grown part carries its revision; after `undoRevision` the parts are gone and `union` equals the one before |
+| 13 | Survival (only if RS has merged) | item 3 in a survival world: the new lots, lanes and pads as RS targets; `undoRevision` refunds once per key (`survival.undoable` true for frontage growth) |
+| 14 | Unchanged, API, spend | RV's item 18 plus rv-ingame; api-compat clean; apijars; $0.00 |
+
+**Tier:** slice plus `region/**` and `api/**`: the units and apijars; rv-ingame, d3-ingame, d2-ingame, fl-ingame; GR's own `gr-unit`,
+`gr-ingame` (driver `tools/gate6dgr.mjs`, chain `6dgr`, impact rule "6d GR").
+
+The verifier reviews the diff and **re-runs items 5, 7 and 8**. **Steward's RC check** follows (S-GR-7).
+
+Item 7's expected answer, plainly: a growth's extension end that a later district joins is held by that district's hold cells, so the
+growth can't be undone while the district stands (`COVERED`, naming it). Removing the town still works (D3's town-first order).
+
+### Steward's recorded asks: expected answers
+
+- **D-S2:** answered. A beside district grows along its street (frontage, then extension), an along district along its boundary, an
+  outpost on its own street. `District.growable()` can be true for every kind whose street has an extendable end or free frontage;
+  Steward can ask by planning (a dry growth is `planRevision` without realise; it keeps a plan, so S-GR-6 asks whether a dry growth
+  check is wanted).
+- **The 59 asks:** unchanged (none revises).
+
+### Open questions for Steward
+
+- **S-GR-1. Frontage first.** New lots go on free frontage of the standing streets before any extension (`prefer: frontage`), so a
+  town fills in before it sprawls. Or extension first? Default: frontage first.
+- **S-GR-2. One building, one revision.** Your district's "second building extending that street" is one growth (one revision) per
+  accepted building, undone alone (LIFO). A batch of buildings may be one growth with several lots. Fine? Default: yes.
+- **S-GR-3. Opkeys.** Growth plans and realises under your keys (`dgrow:<district>:<k>`, `drealise:<district>:<k>`), found again by
+  `planByKey` and `realiseByKey` after a restart. Default: as proposed.
+- **S-GR-4. Rings and spirals.** FL rings, spirals and organic layouts grow only on free frontage of their straight runs; they never
+  extend (`NO_ROOM {kind: layout}`). Default: yes.
+- **S-GR-5. A joined end.** A district's own join end, and a town end a district joined, are never extended; and a growth whose new end a
+  later district joined can't be undone while that district stands (`COVERED`). Fine for your undo order? Default: yes.
+- **S-GR-6. A dry growth check.** Do you want a `checkGrow` (D3's dry-check style: nothing kept) before offering "build here", or is
+  `planRevision` (which keeps a plan) enough once plans can be discarded (PLAN's queued `discardPlan`)? Default: no dry check in GR;
+  `planRevision` plus `discardPlan` when it ships.
+- **S-GR-7. The RC.** With RV's (S-RV-10): a V town grown on frontage and by an extension, a beside district grown by two buildings and
+  undone one at a time, an along district grown, and the town removed with growths standing. Default: yes.
+
+### Open questions for Noah
+
+- **N-GR-1. How an extension looks.** Proposed: it continues the street's own look exactly (road, verges, W's lanterns), so a grown
+  town reads as one street. The alternative is a plainer lane-style extension. Default: the street's look.
+- **N-GR-2. Where a grown town's new lots go.** Proposed: nearest the square first, on the street's lot-free side, so the square
+  stays the centre. The alternative fills outward from the ends. Default: nearest the square.
+
+### Deferred
+
+- Turning, branching or forking extensions; a second square; extensions past the claim (S-RV-8); growth of ring and spiral ends.
