@@ -1,0 +1,25 @@
+{
+ "name": "G6C-VOC forge (free)",
+ "format": 2,
+ "scope": "settlement",
+ "prompt": "VOC look: W's g6cw_infernal as a Nether forge: blackstone, nether brick, magma accents, soul lanterns on crimson fences",
+ "roles": {
+  "path": "minecraft:blackstone",
+  "foundation": "minecraft:nether_bricks",
+  "light": "minecraft:soul_lantern",
+  "rail": "minecraft:crimson_fence",
+  "wall": "minecraft:polished_blackstone_bricks",
+  "wall_alt": "minecraft:nether_bricks",
+  "trim": "minecraft:polished_blackstone",
+  "roof": "minecraft:blackstone",
+  "floor": "minecraft:polished_blackstone",
+  "frame": "minecraft:nether_bricks",
+  "accent": "minecraft:magma_block",
+  "glass": "minecraft:glass",
+  "structure": "minecraft:nether_bricks",
+  "rock": "minecraft:stone",
+  "surface": "minecraft:grass_block",
+  "subsurface": "minecraft:dirt",
+  "rubble": "minecraft:andesite"
+ }
+}

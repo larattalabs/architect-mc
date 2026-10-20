@@ -354,6 +354,10 @@ public final class Wire4b {
 		if (Wire0a.opKey(r.opKey()) != null) {
 			o.addProperty("opKey", r.opKey());
 		}
+		// 6c VOC: only when set (a request without one keeps its 1.10.0 bytes, so an opKey's body hash doesn't move)
+		if (r.rarity() != null) {
+			o.add("rarity", r.rarity().toJson());
+		}
 		return o;
 	}
 

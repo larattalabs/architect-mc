@@ -8,7 +8,8 @@
 // --profile massing: the request was a massing (the sidecar must say massing: true; a massing sidecar is checked with the
 // massing profile anyway). --massing <file>: the massing this design was detailed from; adds massing conformance
 // (errors: the size cap; warnings `massing: ...`) and, with --json, `conformance: { ok, errors[], issues[] }`.
-// --restraint <bible.json|name> (phase 5a): warnings `restraint: ...` against the bible's restraint (lib/bible.mjs restraintOf).
+// --restraint <bible.json|name> (phase 5a): warnings `restraint: ...` against the bible's restraint (lib/bible.mjs restraintOf); (6c VOC-b)
+// and `rarity: ...` / `coherence: ...` against its `rarity` when it carries one (lib/vocab/budget.mjs styleOf; metrics.rarity always).
 // Exit code 0 = OK, 1 = the check failed, 2 = bad usage / unreadable files.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,6 +18,7 @@ import { checkFiles, parseMax } from './lib/check.mjs';
 import { readMassingArg } from './lib/massing.mjs';
 import { BUILDING_TYPES, TYPE_RE } from './lib/kit.mjs';
 import { readBibleArg, restraintOf } from './lib/bible.mjs';
+import { styleOf } from './lib/vocab/budget.mjs';
 
 const USAGE = 'usage: node kit/check.mjs <file.nbt> <sidecar.json> [--max x,y,z] [--type <t>] [--profile massing] [--massing <massing.blueprint.json>] [--imported] [--restraint <bible.json>] [--json]';
 
@@ -35,7 +37,7 @@ export function parseCheckArgs(argv) {
       o.profile = 'massing';
     } else if (a === '--massing') o.massing = readMassingArg(val());
     else if (a === '--imported') o.imported = true;
-    else if (a === '--restraint') o.restraint = restraintOf(readBibleArg(val()));
+    else if (a === '--restraint') { const b = readBibleArg(val()); o.restraint = restraintOf(b); o.style = styleOf(b); }
     else if (a === '--json') o.json = true;
     else if (a.startsWith('-')) throw new Error(`unknown option ${a}`);
     else o.files.push(path.resolve(a));
@@ -72,7 +74,7 @@ function main() {
       return;
     }
   }
-  const result = checkFiles(nbt, sidecar, { max: o.max, type: o.type, imported: o.imported, ...(o.profile ? { profile: o.profile } : {}), ...(o.massing ? { massing: o.massing } : {}), ...(o.restraint ? { restraint: o.restraint } : {}) });
+  const result = checkFiles(nbt, sidecar, { max: o.max, type: o.type, imported: o.imported, ...(o.profile ? { profile: o.profile } : {}), ...(o.massing ? { massing: o.massing } : {}), ...(o.restraint ? { restraint: o.restraint } : {}), ...(o.style ? { style: o.style } : {}) });
   report(result, { json: o.json, nbt, sidecar });
   process.exitCode = result.ok ? 0 : 1;
 }

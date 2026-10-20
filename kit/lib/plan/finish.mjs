@@ -9,6 +9,9 @@ import { windowFromSurvey } from '../region/survey.mjs';
 import { encodePng } from '../png.mjs';
 import { planCatalogue, PLAN_API } from './catalogue.mjs';
 import { PROVISIONAL_BAND } from './compile.mjs';
+// (6c VOC-b) the answers' cost.rarity and cost.creativeOnly (docs/CONTRACT.md "Phase 6c slice VOC" §4.4)
+import { measureRarity } from '../vocab/budget.mjs';
+import { tierOf } from '../vocab.mjs';
 
 export const ARTIFACT_FORMAT = 'plan-artifact/0';
 export const CHECK_FORMAT = 'plan-check/0';
@@ -103,6 +106,13 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
     a.cost = { cells: c.removed + c.placed, removed: c.removed, added: c.placed, tiles: tilesOf(a.part) };
     // (7a K1) a wall's, gate's or rope bridge's exact bill of materials (its emitted cells by C26's block-to-item rules: kit/lib/connectors/bom.mjs)
     if (pc.links?.bom?.[a.part]) a.cost.bom = { ...pc.links.bom[a.part] };
+    // (6c VOC) cost.rarity: present only when the plan's bible carries `rarity`, or the part writes a precious block that isn't the style's
+    // own; cost.creativeOnly: only when the part writes a creative-only block (regions stay INSTANT: information for the caller)
+    if (pc.vocabCells) {
+      const v = vocabCostOf(a.part, pc, res.meta?.vocab);
+      if (v.rarity) a.cost.rarity = v.rarity;
+      if (v.creativeOnly) a.cost.creativeOnly = v.creativeOnly;
+    }
   }
   // ---- provisional parts: a lot with no library entry, a pending style (R13): the lot's cost band and fit box
   const lots = [];
@@ -162,6 +172,27 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
   // meta.wetAsked): the game's check plans twice for its water columns
   const check = { ...base, overall, parts: answers, cost, catalogue, preview, artifactSha, notes, ...((res.meta?.wet ?? []).length || res.meta?.wetAsked ? { wetAsked: true } : {}) };
   return { check, artifact, artifactSha, classMap: classMap.png, cacheOut: pc.hit || overall === 'INCOMPLETE' ? cacheOnlyAnswered(pc.cacheOut, answers) : pc.cacheOut };
+}
+
+/**
+ * (6c VOC) A plan part's cost members from the compile pass's per-IR-part cells (meta.planCheck.vocabCells): the IR parts it owns (a shared
+ * route part counts for each of its connectors). Returns {rarity?, creativeOnly?}.
+ */
+export function vocabCostOf(pid, pc, vocab) {
+  const hist = {}, creative = {};
+  for (const [irPart, owner] of Object.entries(pc.partOf ?? {})) {
+    if (!(owner === pid || (owner && owner.startsWith('routes:') && owner.slice(7).split(',').includes(pid)))) continue;
+    const c = pc.vocabCells[irPart];
+    if (!c) continue;
+    for (const [b, n] of Object.entries(c.hist)) hist[b] = (hist[b] ?? 0) + n;
+    for (const [b, n] of Object.entries(c.creative)) creative[b] = (creative[b] ?? 0) + n;
+  }
+  const style = { opted: !!vocab?.opted, rarity: vocab?.rarity, own: new Set(vocab?.own ?? []) };
+  const out = {};
+  const foreignPrecious = Object.keys(hist).some((b) => tierOf(b) === 'precious' && !style.own.has(b));
+  if (style.opted || foreignPrecious) out.rarity = measureRarity(hist, style, 'region');
+  if (Object.keys(creative).length) out.creativeOnly = Object.fromEntries(Object.entries(creative).sort());
+  return out;
 }
 
 /** An INCOMPLETE check keeps only what its answered parts produced (nothing cached as fits for a part that has no answer). */

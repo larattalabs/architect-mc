@@ -22,6 +22,8 @@ import {
 import { BUILDING_TYPES, CORE_ROLES, DEFAULT_PROFILE, fullBlockOf, PORT_KINDS, TYPE_RE, isPresetType, parseProfile, resolvePalette, stoneFamilyOf, woodFamilyOf } from './kit.mjs';
 import { checkConformance } from './massing.mjs';
 import { CREATIVE_ONLY } from './vocab/survival.mjs';
+// (6c VOC-b) the `state` and `hazard` errors, `metrics.rarity` and `metrics.drift`, and the opt-in `rarity`/`coherence` warnings
+import { HAZARD, driftsWhere, fireReachOf, hazardKindOf, isLogName, isPairOf, isWaterlogged, measureRarity, pairOffset, rarityWarnings, styleOf, waterReachOffsets } from './vocab/budget.mjs';
 
 const DIRS6 = [['east', 1, 0, 0], ['west', -1, 0, 0], ['up', 0, 1, 0], ['down', 0, -1, 0], ['south', 0, 0, 1], ['north', 0, 0, -1]];
 const OPP = { east: 'west', west: 'east', up: 'down', down: 'up', south: 'north', north: 'south' };
@@ -406,6 +408,9 @@ export function checkStructure(sidecar, structure, opts = {}) {
     if (dark.length) inherited(`light: ${dark.length} standable interior cell(s) get no block light (mobs spawn there at night), e.g. ${dark.slice(0, 6).join('; ')}`);
   }
 
+  // ---- (6c VOC-b) state and hazard: errors (an imported structure's are warnings, as the other inherited rules)
+  for (const m of vocabErrors(g)) inherited(m);
+
   // ================================================================ rules new in Architect: warnings in phase 1
   const ctx = { g, sidecar, anchors, interior: w, outside, doors: doors.doors, outsideDoors, imported, open, prof, rule, isMassing };
   for (const rule of NEW_RULES) {
@@ -416,6 +421,16 @@ export function checkStructure(sidecar, structure, opts = {}) {
   let metrics = null;
   try { metrics = computeMetrics(g, sidecar, outside); } catch (e) { warn(`checker: metrics failed: ${e.message}`); }
   if (opts.restraint) warnings.push(...restraintWarnings(metrics, opts.restraint));
+  // ---- (6c VOC-b) rarity and drift in the metrics; budget overruns are warnings only with a bible that carries `rarity` (opts.style:
+  // vocab/budget.mjs styleOf); without one they are measured at the defaults into metrics.rarity.over and never warned
+  if (metrics) {
+    try {
+      const v = vocabMetrics(g, opts.style ?? styleOf(null));
+      metrics.rarity = v.rarity;
+      metrics.drift = v.drift;
+      if (opts.style?.opted) warnings.push(...rarityWarnings(v.rarity));
+    } catch (e) { warn(`checker: vocabulary metrics failed: ${e.message}`); }
+  }
 
   // ---- massing conformance (phase 4c): the size cap is an error, the rest warnings
   let conformance;
@@ -1130,4 +1145,79 @@ export function restraintWarnings(metrics, restraint) {
   const max = DETAIL_NOISE_MAX[restraint.detailDensity];
   if (max !== undefined && metrics.detailNoise > max) out.push(`restraint: detailNoise ${metrics.detailNoise} is over ${max}, the most the bible's detailDensity '${restraint.detailDensity}' allows (neighbouring facade blocks change too often: use larger runs of one material)`);
   return out;
+}
+
+// ==================================================================== (6c VOC-b) the vocabulary rules (docs/CONTRACT.md VOC §5.1)
+
+const isAirName = (n) => n === 'minecraft:air' || n === 'minecraft:cave_air' || n === 'minecraft:void_air';
+const isWaterCell = (c) => !!c && (c.name === 'minecraft:water' || c.name === 'minecraft:bubble_column');
+const short = (n) => n.replace('minecraft:', '');
+const vSample = (l) => `${l.slice(0, 6).join('; ')}${l.length > 6 ? ` (+${l.length - 6})` : ''}`;
+
+/**
+ * `state` (a waterlogged=true cell not under water: it makes a source and floods; half of a two-part block without its pair: it pops)
+ * and `hazard` (a fire source within M20's reach of a flammable cell; concrete powder, a sponge within their hazards.json reach of the
+ * design's water): errors, as messages.
+ */
+export function vocabErrors(g) {
+  const out = [];
+  const logged = [], halves = new Map();
+  const fires = [], water = [], powder = new Map();
+  for (const [k, c] of g.cells) {
+    if (isAirName(c.name)) continue;
+    const [x, y, z] = unfmt(k);
+    if (isWaterlogged(c)) {
+      // under water: a water block above or beside it (in the design)
+      const wet = [[0, 1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]].some(([dx, dy, dz]) => isWaterCell(g.at(x + dx, y + dy, z + dz)));
+      if (!wet) logged.push(k);
+    }
+    const off = pairOffset(c);
+    if (off && !isPairOf(c, g.at(x + off[0], y + off[1], z + off[2]))) {
+      const l = halves.get(c.name) ?? [];
+      l.push(k);
+      halves.set(c.name, l);
+    }
+    const hk = hazardKindOf(c.name);
+    if (hk === 'fire' || hk === 'soul_fire' || hk === 'lava') fires.push([x, y, z, c.name, hk]);
+    else if (hk === 'concrete_powder' || hk === 'sponge') powder.set(k, hk);
+    if (isWaterCell(c) || isWaterlogged(c)) water.push([x, y, z]);
+  }
+  if (logged.length) out.push(`state: ${logged.length} waterlogged cell(s) not under water (each makes a water source and floods): ${vSample(logged)}`);
+  for (const [n, l] of [...halves].sort(([a], [b]) => (a < b ? -1 : 1))) out.push(`state: ${l.length} ${short(n)} half(s) without the other half (it pops off when placed): ${vSample(l)}`);
+  // fire: a flammable cell within the fire reach (hazards.json's row for the source: fire, soul fire, lava; M20's)
+  const burn = new Set();
+  for (const [x, y, z, n, hk] of fires) {
+    const R = fireReachOf(hk);
+    for (let dx = -R.side; dx <= R.side; dx++) for (let dz = -R.side; dz <= R.side; dz++) for (let dy = -R.below; dy <= R.above; dy++) {
+      const q = g.at(x + dx, y + dy, z + dz);
+      if (q && BLOCKS[q.name]?.fl) burn.add(`${short(n)}>${fmt(x + dx, y + dy, z + dz)}`);
+    }
+  }
+  if (burn.size) out.push(`hazard: ${burn.size} flammable cell(s) within the fire reach of fire or lava (kit/vocab/hazards.json): it burns: ${vSample([...burn].sort())}`);
+  // concrete powder and sponges by the design's water
+  const wetSet = new Set(water.map(([x, y, z]) => fmt(x, y, z)));
+  const byKind = new Map();
+  for (const [k, kind] of powder) {
+    const [x, y, z] = unfmt(k);
+    if (waterReachOffsets(HAZARD[kind].reach).some(([dx, dy, dz]) => wetSet.has(fmt(x + dx, y + dy, z + dz)))) {
+      const l = byKind.get(kind) ?? [];
+      l.push(k);
+      byKind.set(kind, l);
+    }
+  }
+  for (const [kind, l] of [...byKind].sort()) out.push(`hazard: ${l.length} ${kind === 'sponge' ? 'sponge(s)' : 'concrete powder cell(s)'} within reach of the design's water (${kind === 'sponge' ? 'it drains the water and turns wet' : 'it sets into concrete'}): ${vSample(l)}`);
+  return out;
+}
+
+/** `metrics.rarity` (vocab/budget.mjs measureRarity over the non-air cells) and `metrics.drift` ({block: cells} that random-tick into another block). */
+export function vocabMetrics(g, style) {
+  const hist = {};
+  const drift = {};
+  for (const [k, c] of g.cells) {
+    if (isAirName(c.name) || !BLOCKS[c.name]) continue;
+    hist[c.name] = (hist[c.name] ?? 0) + 1;
+    const [x, y, z] = unfmt(k);
+    if (driftsWhere(c, (dx, dy, dz) => { const q = g.at(x + dx, y + dy, z + dz); return !!q && isLogName(q.name); })) drift[c.name] = (drift[c.name] ?? 0) + 1;
+  }
+  return { rarity: measureRarity(hist, style, 'building'), drift: Object.fromEntries(Object.entries(drift).sort()) };
 }

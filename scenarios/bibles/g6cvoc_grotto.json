@@ -1,0 +1,32 @@
+{
+ "name": "G6C-VOC grotto",
+ "format": 2,
+ "scope": "settlement",
+ "prompt": "VOC look: an amethyst grotto: calcite and tuff walls, amethyst trim",
+ "roles": {
+  "wall": "minecraft:calcite",
+  "wall_alt": "minecraft:tuff",
+  "trim": "minecraft:amethyst_block",
+  "roof": "minecraft:tuff",
+  "floor": "minecraft:polished_tuff",
+  "frame": "minecraft:tuff_bricks",
+  "accent": "minecraft:amethyst_block",
+  "light": "minecraft:lantern",
+  "glass": "minecraft:glass",
+  "foundation": "minecraft:tuff_bricks",
+  "path": "minecraft:polished_tuff",
+  "rail": "minecraft:tuff_wall",
+  "structure": "minecraft:tuff_bricks",
+  "rock": "minecraft:stone",
+  "surface": "minecraft:grass_block",
+  "subsurface": "minecraft:dirt",
+  "rubble": "minecraft:andesite"
+ },
+ "rarity": {
+  "allow": [
+   "minecraft:amethyst_block",
+   "minecraft:amethyst_cluster"
+  ],
+  "rareShareMax": 0.06
+ }
+}

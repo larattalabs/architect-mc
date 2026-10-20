@@ -44,7 +44,9 @@ test('catalogue 7: the golden, and the T3 -> H diff is exactly the three flips, 
   for (const x of golden.entries) assert.ok(x.until !== 'H' && !/until H\b/.test(x.note ?? ''), x.id);
   // the reason codes LEAK and FIRE are appended (additive output)
   const codes = PLAN_SCHEMA.$defs.reason.properties.code.enum;
-  assert.deepEqual(codes.slice(-2), ['LEAK', 'FIRE']);
+  assert.deepEqual(codes.slice(codes.indexOf('LEAK'), codes.indexOf('LEAK') + 2), ['LEAK', 'FIRE']);
+  // ((6c VOC-b) VOCAB after them)
+  assert.equal(codes.indexOf('VOCAB'), codes.indexOf('FIRE') + 1);
 });
 
 test('the schema: the H defs, waterDepth, farmPond, R21\'s path form, an odd basin, a lava pit 1..2 deep', () => {

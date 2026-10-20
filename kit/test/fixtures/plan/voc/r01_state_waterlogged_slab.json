@@ -1,0 +1,95 @@
+{
+  "about": "(6c VOC-b, \u00a78) refused VOCAB (M27:state): the bible's path pattern names a waterlogged slab, written in air (it makes a source and floods)",
+  "on": "flat",
+  "style": {
+    "name": "G6C-VOC modern",
+    "format": 2,
+    "scope": "settlement",
+    "prompt": "VOC look (CONTRACT 6c VOC \u00a78): a white-concrete modern town: white and light-grey concrete, black stained glass, a glazed-terracotta plaza",
+    "roles": {
+      "wall": "minecraft:white_concrete",
+      "wall_alt": "minecraft:light_gray_concrete",
+      "trim": "minecraft:light_gray_concrete",
+      "roof": "minecraft:light_gray_concrete",
+      "floor": "minecraft:polished_andesite",
+      "frame": "minecraft:black_concrete",
+      "accent": "minecraft:black_concrete",
+      "light": "minecraft:lantern",
+      "glass": "minecraft:black_stained_glass",
+      "foundation": "minecraft:stone_bricks",
+      "path": "minecraft:polished_andesite",
+      "rail": "minecraft:andesite_wall",
+      "structure": "minecraft:white_concrete",
+      "rock": "minecraft:stone",
+      "surface": "minecraft:grass_block",
+      "subsurface": "minecraft:dirt",
+      "rubble": "minecraft:andesite"
+    },
+    "patterns": {
+      "path": {
+        "mix": [
+          {
+            "w": 3,
+            "mat": "path"
+          },
+          {
+            "w": 1,
+            "mat": "minecraft:stone_brick_slab[type=bottom,waterlogged=true]"
+          }
+        ],
+        "seedLabel": "r01"
+      }
+    },
+    "rarity": {
+      "colours": [
+        "white",
+        "light_gray",
+        "black"
+      ],
+      "preciousMax": 1
+    }
+  },
+  "expect": {
+    "part": "village",
+    "code": "VOCAB",
+    "rule": "M27:state"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "voc_r01",
+    "zones": [
+      {
+        "id": "village",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "h1",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h2",
+                "type": "cottage",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        },
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 24
+          }
+        }
+      }
+    ]
+  }
+}

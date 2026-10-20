@@ -386,9 +386,12 @@ export function gapUnder(survey, x, y, z) {
  * in the frozen ground, a 1-deep gap gets the `foundation` role under it and a deeper one takes the `subsurface` role as its top
  * (never a falling block). A top that doesn't fall, or a cell with nothing under it to fill, writes exactly as before.
  */
-export function surfaceOps(part, cells, role, { walk = true, subsurface = 'subsurface', _noGravityRule = false } = {}) {
+export function surfaceOps(part, cells, role, { walk = true, subsurface = 'subsurface', _noGravityRule = false, painted = false } = {}) {
   const r = part.region;
   const top = r.material(role, `${part.id}: surface`), sub = r.material(subsurface, `${part.id}: subsurface`);
+  // (6c VOC-b) `painted` (the square): a bible pattern for the role paints the top (MP's role patterns; a plan whose bible has none for
+  // the role writes exactly as before: the top is the role's block)
+  const topMat = painted && Object.prototype.hasOwnProperty.call(r.rolePatterns ?? {}, role) ? r.paint(role, `${part.id}: surface`) : top;
   const lev = cells.filter((c) => c[1] !== null), fol = cells.filter((c) => c[1] === null);
   const ops = [];
   // the gravity rule: the cells whose top would stand over a gap, by the fix they need
@@ -405,11 +408,11 @@ export function surfaceOps(part, cells, role, { walk = true, subsurface = 'subsu
   if (lev.length) {
     // fill from the ground up to y - 1, the top at y, cleared from y + 1 to the column's top (at least 2 above the ground)
     ops.push({ from: { surface: 0 }, to: { abs: 0 }, cols: lev.flatMap(([x, y, z]) => [x, z, 1, y - 1, 0]), materials: [sub], walk: false });
-    ops.push({ from: { abs: 0 }, to: { abs: 0 }, cols: lev.flatMap(([x, y, z]) => [x, z, y, y, 0]), materials: [top], walk });
+    ops.push({ from: { abs: 0 }, to: { abs: 0 }, cols: lev.flatMap(([x, y, z]) => [x, z, y, y, 0]), materials: [topMat], walk });
     ops.push({ from: { abs: 0 }, to: { max: [{ height: 0 }, { surface: 2 }] }, cols: lev.flatMap(([x, y, z]) => [x, z, y + 1, 0, 0]), materials: [null], walk: false });
   }
   if (fol.length) {
-    ops.push({ from: { surface: 0 }, to: { surface: 0 }, cols: fol.flatMap(([x, , z]) => [x, z, 0, 0, 0]), materials: [top], walk });
+    ops.push({ from: { surface: 0 }, to: { surface: 0 }, cols: fol.flatMap(([x, , z]) => [x, z, 0, 0, 0]), materials: [topMat], walk });
     ops.push({ from: { surface: 1 }, to: { max: [{ height: 0 }, { surface: 2 }] }, cols: fol.flatMap(([x, , z]) => [x, z, 0, 0, 0]), materials: [null], walk: false });
   }
   if (under.length) {
@@ -469,8 +472,8 @@ export function square(r, sh, { stage = 'ground', o, noWalk = new Set(), noGravi
     const [x, z] = toWorld(o, u, v);
     (noWalk.has(`${x},${z}`) ? still : cells).push([x, sh.y, z]);
   }
-  surfaceOps(p, cells, sh.kind === 'square' ? 'path' : 'surface', { _noGravityRule: noGravityRule });
-  if (still.length) surfaceOps(p, still, sh.kind === 'square' ? 'path' : 'surface', { walk: false, _noGravityRule: noGravityRule });
+  surfaceOps(p, cells, sh.kind === 'square' ? 'path' : 'surface', { _noGravityRule: noGravityRule, painted: sh.kind === 'square' });
+  if (still.length) surfaceOps(p, still, sh.kind === 'square' ? 'path' : 'surface', { walk: false, _noGravityRule: noGravityRule, painted: sh.kind === 'square' });
   (r.meta.parts[p.id] ??= {}).kind = 'path';
   return p;
 }
