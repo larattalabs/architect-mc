@@ -78,6 +78,7 @@ public final class ApiRules {
 					case "region.hydrology" -> "hydrologyPass"; // 6c HY: the hydrology pass (flow and wet fields, data.courses)
 					case "region.courses" -> "regionCourses"; // 6c HY: courses, mill races and ditches (channel.course, .race, .ditch)
 					case "region.waterGates" -> "waterGates"; // 6c HY: a course under a wall behind a grate (wall.water_gate)
+					case "plan.rules" -> "rulePalette"; // 6c VOC-c: rule.palette measured (lotBlocks, the artifact's palette rows, PALETTE)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

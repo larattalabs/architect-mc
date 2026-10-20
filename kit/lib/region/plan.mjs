@@ -25,7 +25,7 @@ import { lintFluidState } from '../fluids/body.mjs';
 import { fluidsError } from '../fluids/place.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.37.0';
+export const KIT_VERSION = '0.40.0';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -310,6 +310,10 @@ export function opBounds(op, blobs, bytesOf = null) {
  * @param {object} [o.rarity] (6c VOC) the bible's rarity member (lib/vocab/rarity.mjs): ctx.rarity (its defaults filled in) and the plan
  *   meta's `vocab` (the style's own blocks, the resolved roles; the region checker's M26 and M27 read it)
  * @param {object} [o.vocabRefuse] (6c VOC) plan parts refused before they emit ({part: reason}): the compile pass's second plan
+ * @param {object} [o.lotBlocks] (6c VOC-c) the bound lots' block histograms {lot: {block: n}} (the mod's, at check time): a palette rule
+ *   measures a lot from its entry's blocks
+ * @param {object[]} [o.paletteExclude] (6c VOC-c) [{rule, blocks, scope}]: the palette re-plan's swaps ("no X"), applied to the region's ops
+ *   before its IR is assembled (kit/lib/plan/palette.mjs applyPaletteExclude)
  * @param {string} [o.kitVersion] / [o.node] recorded in the IR (defaults: KIT_VERSION, this Node's major)
  * @returns {Promise<{ir, irJson, irSha, notes: string[], stats}>}
  */
@@ -419,6 +423,13 @@ export async function planRegion(o) {
   const budgetCap = r.budgetCells ?? LIMITS.budgetDefault;
   if (budgetCap > LIMITS.budgetHard) throw new Error(`budget ${budgetCap} is over the hard cap ${LIMITS.budgetHard}`);
 
+  // (6c VOC-c) "no X": the palette re-plan swaps the excluded family in the ops of the parts in its rules' scope (only when asked: every
+  // other plan's ops are untouched)
+  let paletteSwaps = null;
+  if (Array.isArray(o.paletteExclude) && o.paletteExclude.length && r.meta.planCheck && !r.meta.planCheck.malformed) {
+    const { applyPaletteExclude } = await import('../plan/palette.mjs');
+    paletteSwaps = applyPaletteExclude(r, o.paletteExclude, r.meta.planCheck.partOf ?? {}, roles).swaps;
+  }
   const { sideBytes, irBlobs, blobs, parts, tilesOut } = assembleParts(r, claim);
   // the IR's y range: the request's for now; tightened after the budget pass (below)
   const irClaim = { ...claim };
@@ -523,7 +534,10 @@ export async function planRegion(o) {
     const errs = VOCAB_ERROR_STATES.test(irJson);
     // (the answers' cost.rarity and cost.creativeOnly, finish.mjs: only with an opted-in bible or a precious or creative-only block)
     const cost = vocabStyle.opted || COST_STATES.test(irJson);
-    if (errs || cost) {
+    // (6c VOC-c) a plan with a palette rule is always scanned: the rule is measured over the scan's cells
+    const pal = Array.isArray(r.meta.planCheck.palette) && r.meta.planCheck.palette.length ? r.meta.planCheck.palette : null;
+    let palette = null;
+    if (errs || cost || pal) {
       const { buildVirtual } = await import('./vworld.mjs');
       const irObj = JSON.parse(irJson);
       const built = buildVirtual({ ir: irObj, survey, filled: survey, blobs: (sha) => sideBytes.get(sha), volumes: (o.volumes ?? []).map((x) => x.decoded ?? x) });
@@ -533,13 +547,26 @@ export async function planRegion(o) {
       const unsafe = new Set(['zones', 'forms', 'connectors', 'links'].flatMap((k) => (Array.isArray(plan[k]) ? plan[k] : [])).filter((q) => q?.ext?.['architect_mc:unsafe']).map((q) => q.id));
       if (errs) v = vocabRefusals({ ir: irObj, vw: built.vw, meta, partOf: r.meta.planCheck.partOf ?? {}, roles, scan, skip: unsafe });
       if (cost) meta.planCheck.vocabCells = vocabCells(irObj, scan);
+      if (pal) {
+        const { palettePass } = await import('../plan/palette.mjs');
+        palette = palettePass({ pc: meta.planCheck, ir: irObj, hist: scan.hist, lotBlocks: o.lotBlocks ?? {}, excludes: o.paletteExclude ?? [], from: o._paletteFrom ?? {}, swaps: paletteSwaps ?? {} });
+      }
     }
     meta.planCheck.vocab = { ms: Math.round(performance.now() - t), scanned: !!v, found: v?.found ?? [], refused: Object.keys(o.vocabRefuse ?? {}).sort(), pass: (o._vocabPass ?? 0) + 1 };
     const fresh = v ? Object.fromEntries(Object.entries(v.refuse).filter(([id]) => !(o.vocabRefuse ?? {})[id])) : {};
-    if (Object.keys(fresh).length && (o._vocabPass ?? 0) < 3) {
-      const again = await planRegion({ ...o, vocabRefuse: { ...(o.vocabRefuse ?? {}), ...fresh }, _vocabPass: (o._vocabPass ?? 0) + 1 });
+    // (6c VOC-c) "no X" asks the same re-plan (one counter for both: at most 3 passes in all), with its family excluded
+    const want = palette?.want ?? [];
+    if ((Object.keys(fresh).length || want.length) && (o._vocabPass ?? 0) < 3) {
+      const again = await planRegion({ ...o, vocabRefuse: { ...(o.vocabRefuse ?? {}), ...fresh }, ...(want.length ? { paletteExclude: [...(o.paletteExclude ?? []), ...want], _paletteFrom: { ...(o._paletteFrom ?? {}), ...palette.from } } : {}), _vocabPass: (o._vocabPass ?? 0) + 1 });
       again.meta.planCheck.vocab.first = meta.planCheck.vocab;
       return again;
+    }
+    if (palette) {
+      // the answers in place of the compile's placeholders; the artifact's rows and the measures for finish.mjs and the evidence
+      meta.planCheck.answers = meta.planCheck.answers.map((a) => palette.answers[a.part] ?? a);
+      meta.planCheck.paletteRows = palette.rows;
+      meta.planCheck.paletteMeasures = palette.measures;
+      if (paletteSwaps && Object.keys(paletteSwaps).length) meta.planCheck.paletteSwaps = paletteSwaps;
     }
   }
   return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes };

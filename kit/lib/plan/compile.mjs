@@ -41,6 +41,8 @@ export const LINK_KINDS = Object.freeze([...K1_KINDS, ...T3_KINDS]);
 // (6c H) water bodies and wet structures: the generators behind one dispatcher (lib/fluids/hooks.mjs), the stage name from a leaf
 import { asksFarmPond, dropOverflows, emitOrder, fluidAnswer, fluidEmit, fluidFallbackClearance, fluidFarmPonds, fluidPassInput, fluidResolve, fluidStageWanted, isHPart, wetBridgeFallback } from '../fluids/hooks.mjs';
 import { FLUIDS_STAGE } from '../fluids/kinds.mjs';
+// (6c VOC-c) rule.palette's lenient read (the measure runs after the IR: kit/lib/region/plan.mjs)
+import { readPaletteRule } from './palette.mjs';
 
 /** §7's caps (each a request may only lower). */
 export const BUDGET_DEFAULTS = Object.freeze({ maxNodes: 2_000_000, maxEdges: 128, maxCells: 20_000_000, maxMs: 120_000, maxHeapMb: 2048 });
@@ -828,6 +830,14 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     else if (p.verdict === 'unsupported') ans(p, { class: 'unsupported', reasons: [{ code: 'UNSUPPORTED', message: p.reason.message, block: p.block, until: p.reason.until ?? undefined, path: p.reason.path }].map(clean) });
   }
   const byId = V.byId;
+  // (6c VOC-c) a palette rule is measured on the plan's output (kit/lib/region/plan.mjs, after the IR: kit/lib/plan/palette.mjs); here it
+  // holds its place in the answers and its lenient read is recorded (only in a plan that has one: every other record is unchanged)
+  const paletteRules = [];
+  for (const p of V.parts) {
+    if (p.verdict !== 'compile' || p.block !== 'rule.palette' || answers.has(p.id)) continue;
+    paletteRules.push({ part: p.id, required: p.required, scope: Array.isArray(p.part.scope) ? [...p.part.scope] : null, read: readPaletteRule(p.part) });
+    ans(p, { class: 'fits', notes: ['measured after the plan (VOC-c)'] });
+  }
   // (6c VOC, §5.2) the compile pass's refusals (the second plan): a part whose emitted cells broke M27:state, M27:convert or M20 (a) on
   // the first plan is refused before it resolves, so it writes nothing (kit/lib/region/plan.mjs)
   for (const [id, why] of Object.entries(ctx.vocabRefuse ?? {}).sort(([a], [b]) => (a < b ? -1 : 1))) {
@@ -1407,6 +1417,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     styles: Object.fromEntries(V.parts.filter((p) => p.family === 'zone' || p.family === 'connector').map((p) => [p.id, styleOf(P.plan, p.part) ?? null])),
     cacheOut: hit ? {} : env.cacheOut, protectedRects: env.protectedAreas.map((a) => rectArr(a.rect)),
     ...(K ? { links: K.record } : {}),
+    ...(paletteRules.length ? { palette: paletteRules } : {}),
     anchors: Object.fromEntries([...env.anchors.entries()].map(([k, v]) => [k, [v[0], env.S.groundAt(v[0], v[1]) + 1, v[1]]])),
   } };
 }

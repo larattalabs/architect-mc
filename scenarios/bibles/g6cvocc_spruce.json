@@ -1,0 +1,25 @@
+{
+ "name": "G6C-VOCc spruce",
+ "format": 2,
+ "scope": "settlement",
+ "prompt": "VOC-c: a spruce village (\"no wood\" re-plans it: rule.palette {family: wood, share: [0, 0]}): spruce planks and logs, spruce fences, plank paths over stone-brick structure",
+ "roles": {
+  "wall": "minecraft:spruce_planks",
+  "wall_alt": "minecraft:stripped_spruce_log",
+  "trim": "minecraft:spruce_planks",
+  "roof": "minecraft:spruce_planks",
+  "floor": "minecraft:spruce_planks",
+  "frame": "minecraft:spruce_log",
+  "accent": "minecraft:spruce_planks",
+  "light": "minecraft:lantern",
+  "glass": "minecraft:glass_pane",
+  "foundation": "minecraft:cobblestone",
+  "path": "minecraft:spruce_planks",
+  "rail": "minecraft:spruce_fence",
+  "structure": "minecraft:stone_bricks",
+  "rock": "minecraft:stone",
+  "surface": "minecraft:grass_block",
+  "subsurface": "minecraft:dirt",
+  "rubble": "minecraft:cobblestone"
+ }
+}

@@ -1,5 +1,5 @@
 {
- "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; second half) (H: form.pond and form.waterfall left it when they shipped)",
+ "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; second half) (H: form.pond and form.waterfall left it when they shipped); VOC-c: rule.palette left the list when it shipped (r_palette stays in the plan: a palette rule with no family answers refused NO_FEATURE)",
  "on": "s7",
  "expect": {
   "all": [
@@ -38,10 +38,6 @@
    {
     "part": "f_mast",
     "block": "form.mast"
-   },
-   {
-    "part": "r_palette",
-    "block": "rule.palette"
    },
    {
     "part": "r_shape",

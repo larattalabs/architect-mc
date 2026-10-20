@@ -88,12 +88,14 @@ class RegionFluidsHYTest {
 
 	@Test
 	void versionsKindsAndFeatures() {
-		assertEquals("1.36.0", ArchitectApi.VERSION);
-		assertEquals("0.37.0", IrStale.KIT_VERSION);
+		// ((6c VOC-c) a later slice moves both: HY's own are the floor)
+		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.36.0") >= 0, ArchitectApi.VERSION);
+		assertTrue(IrStale.semverCompare(IrStale.KIT_VERSION, "0.37.0") >= 0, IrStale.KIT_VERSION);
 		assertEquals("courses", IrStale.KINDS_FORMAT2.get(IrStale.KINDS_FORMAT2.size() - 1), "appended at the end");
 		assertTrue(ApiRules.features(2, List.of("region.hydrology", "region.courses", "region.waterGates")).containsAll(List.of("hydrologyPass", "regionCourses", "waterGates")));
 		assertFalse(ApiRules.features(2, List.of("region.fluids")).contains("regionCourses"), "an H helper has no courses");
 		// a course IR needs `courses`: a 0.37.0 helper (or this mod's list without it) refuses it PLAN_STALE
 		assertNull(IrStale.reason(PlanStaleTest.ir(2, IrStale.KIT_VERSION, "fluid", "courses"), null));
 	}
+
 }

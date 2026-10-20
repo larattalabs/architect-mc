@@ -310,6 +310,11 @@ public final class PlanChecks {
 		extra.addProperty("heapMb", Math.max(64, budget.maxHeapMb()));
 		// (6c D2) the claim's biome grid (4x4, loaded chunks): a zone along a biome edge reads it
 		extra.add("biomes", BiomeGrid.sample(level, c.minX(), c.minZ(), c.maxX(), c.maxZ()));
+		// (6c VOC-c) a plan with a palette rule: the block histograms of the lots whose entry it names (the kit measures them at check time)
+		JsonObject lotBlocks = PaletteRules.lotBlocks(r.plan());
+		if (lotBlocks.size() > 0) {
+			extra.add("lotBlocks", lotBlocks);
+		}
 		CompletableFuture<PlanCheck> out = new CompletableFuture<>();
 		RegionsImpl.progress(s, null, "planning");
 		// (6c T3, Steward's S-T3-6) load: "generate" lets the survey and the tunnels' volume pass load (and generate) their chunks
@@ -848,7 +853,7 @@ public final class PlanChecks {
 	}
 
 	/** The artifact sha a region record was realised from (its ext's {@link #EXT_ARTIFACT}), or null. */
-	private static @Nullable String artifactOf(RegionRec rec) {
+	static @Nullable String artifactOf(RegionRec rec) {
 		return rec.ext != null && rec.ext.get(EXT_ARTIFACT) instanceof JsonElement e && e.isJsonPrimitive() && SHA.matcher(e.getAsString()).matches()
 			? e.getAsString() : null;
 	}
@@ -917,8 +922,14 @@ public final class PlanChecks {
 			}
 		}
 		lots.putAll(r.lotEntries());
+		// (6c VOC-c, §4) the palette rules over the lots bound now (the artifact's parts' counts plus each bound lot's template): a required
+		// rule outside its share refuses PALETTE below; every rule's measure goes to the realise's ext (architect_mc:palette)
+		dev.larattalabs.architect.api.PaletteCheck pal = PaletteRules.measure(body, lots, (lot, entry) -> PaletteRules.placed(entry));
 		JsonObject ext = r.ext().deepCopy();
 		ext.addProperty(EXT_ARTIFACT, sha);
+		if (!pal.rules().isEmpty()) {
+			ext.add(PaletteRules.EXT_PALETTE, PaletteRules.extRows(pal));
+		}
 		RealiseRequest rr = new RealiseRequest(planId, r.mode(), r.actor(), lots, null, true, null, false, ext, 0, r.opKey());
 		// a keyed realise that already exists (C20): the realise's own key rule answers (the region, or OP_KEY_CONFLICT); its land has
 		// changed by its own writes, so the stale checks below are for a new realise only
@@ -932,6 +943,11 @@ public final class PlanChecks {
 		String lotWhy = lotProblem(body, r.lotEntries());
 		if (lotWhy != null) {
 			return refused(Reason.ARTIFACT_STALE, lotWhy);
+		}
+		// (6c VOC-c, §4) a required palette rule the bound lots break: nothing is written
+		String[] palWhy = PaletteRules.refusal(pal);
+		if (palWhy != null) {
+			return CompletableFuture.failedFuture(new RegionsImpl.RegionException(Reason.PALETTE, palWhy[0], palWhy[1]));
 		}
 		// (2) the protection over the claim, then the terrain under the plan's tiles
 		Protection prot = protection(p.dimension(), p.owner(), new int[] {x0, z0, x1, z1});

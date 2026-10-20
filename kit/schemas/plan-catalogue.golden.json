@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 8,
- "api": "1.36.0",
- "kitVersion": "0.37.0",
+ "catalogueVersion": 9,
+ "api": "1.39.0",
+ "kitVersion": "0.40.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -713,10 +713,24 @@
   },
   {
    "id": "rule.palette",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "RC"
+   "sinceApi": "1.39.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "groups": [
+     "wood"
+    ],
+    "share": [
+     0,
+     1
+    ],
+    "exempt": [
+     "terrain",
+     "support"
+    ],
+    "scope": 32
+   },
+   "note": "measured over parts and bound lots; required rules are checked again at realise"
   },
   {
    "id": "rule.shape",
