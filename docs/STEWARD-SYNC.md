@@ -41,9 +41,8 @@ release and after each sync. Contracts and as-builts stay in `docs/CONTRACT.md`;
 3. **Released 2026-10-20:** HY, v0.39.0, API 1.36.0 (Steward RC passed): channel.course / race / ditch, wall.water_gate, per-reach `architect_mc:fluids` rows.
 3b. **Released 2026-10-20:** v0.39.1 patch (kit 0.37.1): KC, parts keep clear of fluid bodies (OVERLAP {kind: body}, M25:clear), plus the
    relief undo fix (restored flowing water gets a fluid tick). Old IRs go PLAN_STALE.
-4. Copper-weathering undo (Steward's pre-release check). Built; waits for the CU/IRR/VOC-c RC.
-5. Farm irrigation (`irrigate` on a farm lot; member name to be confirmed in its contract).
-6. VOC-c, `rule.palette` (Steward RC).
+4. **Released 2026-10-20:** v0.40.0 (API 1.37.0, kit 0.38.0, catalogue 9, Steward RC passed): CU copper undo, IRR farm irrigation
+   (`irrigate`, `$.lots[].irrigation`, `DesignRequest.reserved`), VOC-c `rule.palette` (`Regions.checkPalette`, `Reason.PALETTE`).
 7. FL, F3, S3, RS, then the 6c close-out; then 7a-7c.
 
 ### Open asks either way
