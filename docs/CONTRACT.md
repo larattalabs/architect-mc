@@ -18764,3 +18764,653 @@ About **7.5-9.5 days** of work, **5.5-6.5 elapsed**, in two halves with a frozen
   day).
 - **N-RS-3:** the free boundary as proposed.
 - **N-RS-4:** ice caps are free.
+
+
+## Phase 6c slice D3: districts beside a standing region town (DRAFT for Steward review)
+
+A district region beside a standing region town joins the town's street network wherever that network runs inside the town's
+claim: at a street end, continuing the street's line, or at a street's side, as a T junction. The district reports the land it
+takes. A dry beside check answers what a beside plan would answer, and keeps nothing. These are Steward round 11's asks (steward-mc
+`docs/ARCHITECT-ASKS.md` "Round 11", design in `docs/DISTRICTS.md` at b53f08e): D-S1, D-S3 and D-S4. D-S2 is reserved for 6d
+(§11). PLAN "Queued from D1": "The beside join needs a standing street end in the seam". Over v0.40.0 (API 1.37.0, mod 0.40.0,
+kit 0.38.0, catalogue 9) plus FL, F3, S3 and RS (frozen and building; placeholders in §12).
+
+**D3 changes what stands in a town's claim when either region is removed**, and Steward's district give-up reads those removals.
+So Steward's RC check comes before release (GATES policy 4's exception), and the verifier re-runs the removal items (policy 3).
+
+- **Branch:** `slice/D3`, worktree `../architect-mc-D3` (D3-a and D3-b lanes, §13). **Spend:** $0, sim and stub only.
+- **Scope:**
+  - the join's reach into the town's claim (§2);
+  - the street network and the junction geometry (§3);
+  - ownership and undo in both removal orders (§4);
+  - keep-clear against the town's bodies, footprint and held cells (§5);
+  - the land ext for every kind (§6);
+  - the dry beside check (§7);
+  - plan/0's `endpoint.region` (§8);
+  - later plans beside or around the town (§9);
+  - byte identity (§10);
+  - the API (§12) and the gate (§14).
+- **Not in scope:**
+  - writing into the town's footprint or changing the town region (its record, IR, graph and ext stay as they are);
+  - extending a standing street, and lots added to a standing district (D-S2, 6d);
+  - joining through a K1 wall's gate (7a, S-D3-5);
+  - typed links between regions (7a, S-D-2);
+  - discarding unrealised plans (queued, §7.3).
+- **Depends on:**
+  - D1 and D2 (beside, the seam, `besidePorts`, the join, `join_external`, outposts, `architect_mc:corridor`, following masks);
+  - FL (the `architect_mc:street` road flag, S-FL-5, and FL streets as standing networks);
+  - KC (the footprint registry, `M25:clear`), T2 (routing) and 6a's tree rule;
+  - RS (only for §14 item 16's survival row).
+  - D3 builds after FL merges.
+
+### Binding answers carried over
+
+- **S-D-2 (D1):** the join is the new region's. Its cells, its undo and `join_external` are its own; the standing region writes
+  nothing. D3 keeps this inside the town's claim too.
+- **D1 §3 as built:** the district's claim may overlap the town's only in a seam of at most 16 columns, and never over its
+  footprint (lots, 4e roads across their width plus 1, paths, path-set parts). Unchanged: D-S1 keeps it for the district's own
+  claim.
+- **D1 §3 as built:** removing the standing region first is allowed. Every region beside it gets `architect_mc:beside.dangling:
+  true, since`. Unchanged.
+- **D2 C27:** the district and its join are one region, undone as one operation. **D2 outposts:** the corridor is the join's and
+  tree edges' footprint grown by 2, in `architect_mc:corridor {runs, cells, rect}`, undone with the outpost.
+- **S-FL-5:** every street road a region writes carries `architect_mc:street: {zone, district?}` in its road ext and keeps the
+  `street_` key stem.
+- **S-KC-1, S-KC-2:** the later writer keeps clear of a body; a body's cells are its own.
+- **Journal (`journal/Journal.java`, the class comment):**
+  - every change is an entry of cells; the cells of active entries at one position form a stack ordered by layer;
+  - undo takes entries out top-down. A cell under a newer one changes nothing in the world, and ownership passes down;
+  - overlapping changes undo in any order with no holes and no resurrected blocks.
+  - D3 relies on this only as the backstop (§4.3).
+- **Steward's design (DISTRICTS.md §4, Noah's Q1-Q3):**
+  - the district stays when the town is undone first, and Steward shows "its road to the town is gone";
+  - Steward judges no seam;
+  - north and south districts of a region town are square districts until this join exists.
+
+### 0. Facts (main e2c568cd)
+
+**Why every district fails `NO_JOIN` beside a town that isn't full:**
+- V's street spans its outer street lots ±4, clamped to the claim margin (`village.mjs` `streetCheck` :320-328). The ends sit
+  wherever the lots end.
+- `besidePorts` (`districtsEmit.mjs` :146) takes the standing graph's terminal junctions, axis-aligned only. The join keeps those
+  whose past-end cell lies inside the district's own claim (:340). None does unless the town's street reaches within 16 columns of
+  its claim edge, so the plan fails `NO_JOIN: no street end of region ... lies inside this claim` (:341).
+- The same rule holds on plan/0's `endpoint.region` (`compile.mjs` :1588): "the cell past a standing region's street end inside
+  the claim", else `NO_FEATURE`.
+
+**Claim-scoped plumbing.** Everything a region does is scoped by its claim rect:
+- the plan survey (`RegionsImpl` plan, `Columns` over the claim);
+- `Prepare.chunksOf(ir.claim())` (:800);
+- `Drift.check` (the plan survey's columns);
+- the realise checks: `protectedClaim(... ir.claim() ...)` and other owners' regions over the claim (:1176-1189);
+- the route pass's grid (`passes/route.mjs`: the claim, its margin);
+- `besideData`'s footprint, kept only within `SEAM_MAX + 8` of the claim (`beside.mjs`).
+
+A join that runs inside another claim needs each of these widened explicitly (§2.3).
+
+**What the town writes outside its footprint.** The footprint covers lots, roads plus 1, paths and path-set parts. It doesn't
+cover:
+- the props set (lamps over lot aprons, W's lanterns where they stand off the verge, the square's props);
+- trunks felled by 6a's tree rule;
+- the pads' batter where it leaves the lot box;
+- H and IRR bodies (a farm pond, a fountain, irrigation runs);
+- other sites in the town's claim: Steward's additions, players' builds (PT), other districts' joins.
+
+So routing around the footprint alone can put a join on a lamp column or a felled trunk's column. In the seam path that has
+not happened in D1's fixtures, and the journal keeps it exact if it does. But D3's reach is a much larger area (§5.1).
+
+**How region cells are journaled.** Region tiles are `LAYER` items (`RegionsImpl` :1350, :1458): a tile may write over cells
+other entries hold, and the journal stacks them. Removal is by group (`finishRemoval`, :2197). The standing region's removal calls
+`danglingJoins` (:2236).
+
+**Plans are never discarded today.** Each `Regions.plan` keeps:
+- `<world>/architect-regions/plans/<planId>.json` (the IR inline) and `<planId>.survey.bin`, plus `<planId>.key.json` with an
+  opKey (RegionStore; loaded lazily by `planRec`, :270);
+- the sidecar's `<data>/regions/plans/<planId>/` (program copy, survey, params, IR, blobs, previews).
+
+Nothing prunes either one. C36 sweeps check artifacts only (`PlanChecks` :853-875). Measured in the gate saves: 0.4-0.9 MB per
+plan in the mod alone (`G6A EFlat Stage`: 8 plans, 4.0 MB; `G6A MegaB`: 4 plans, 2.3 MB).
+
+**Street flags.** Before FL, a street road is known only by its `street_` stem (`road:street_w`, `road:<district>_street_e`).
+After FL, by `architect_mc:street` in the road ext as well. A town realised before FL has no flag.
+
+### 1. The rule in one line
+
+**The district's join may enter the town's claim and route over land nobody holds, around the town's footprint, bodies and held
+cells, to the cheapest point of the town's street network:**
+- a street end, continuing its line;
+- or a street's side, a T that meets the verge and never writes it.
+
+The town's cells are never written. Each region owns only what it wrote, so removing either one, in either order, is exact by
+construction (§4).
+
+### 2. The join's reach
+
+#### 2.1 When reach is used (byte identity first)
+
+The join search runs in two steps:
+1. **The seam step, as today.** D1's ports (terminal junctions whose past-end cell lies in the district's claim) and D1's dry
+   routes inside the claim. If one routes, it is the join, and the plan is today's byte for byte (§10).
+2. **The reach step**, only when the seam step has no port or no dry route: §2.2's candidates, routed over the reach frame
+   (§2.3). If none routes, the plan fails `NO_JOIN` with the kind named (§2.5).
+
+A plan that fit before D3 never changes. A plan that failed `NO_JOIN` can now fit.
+
+#### 2.2 Candidates and the choice
+
+- **Street ends:** every terminal junction of the street network (§3.1), anywhere in the town's claim. The end node sits at the
+  past-end cell, facing outward along the street (D1's `q.end`, `q.dir`).
+- **Street sides:** on each straight street run, for each side, the junction points of §3.2, at most one every 4 cells along the
+  run, plus the point nearest each district end's projection on the run.
+- **District ends:** as D1, each placed district's street ends (`ends.get(d.id)`), and for an outpost its end as D2.
+- **Choice:** the cheapest dry route (T2 cost) over every district end and candidate pair. "Nearest" in D-S1 is read as
+  cheapest, not shortest. Ties go to a street end before a side, then by road id, then by the junction's `(x, z)`.
+- **Bounds:**
+  - pairs are tried in order of their 10-a-cell lower bound, and a pair is skipped once its bound can't win (D1's prune);
+  - at most 48 dry routes in the reach step, each at most 2M expansions (D2's cap);
+  - past the 48, the step stops with what it has. If it has nothing, it fails `NO_JOIN {kind: budget}`.
+- **The chosen join** is routed as D1's `join` edge (`route_join`, width `DISTRICT_ROUTE_WIDTH` 3, the districts' path role and
+  route lamps), in the same route pass as the district's other edges.
+
+#### 2.3 The reach frame, and what the mod widens
+
+- **The reach frame** is the district's claim plus the town's claim:
+  - The claim margin applies only on the union's outer edge.
+  - Only the join edge uses the reach frame. The route pass gains a per-edge `frame` member (additive; absent means the claim).
+- **The district's claim** stays its request claim. The seam rule judges it alone.
+- **`reach`** is a new IR member, present only when the reach step chose the join:
+  `{standing, runs, rect, cells, heldSha, surveySha}`. It holds the join's written columns outside the district's claim, as row
+  runs `[x0, z, x1, z]` (D2's corridor format).
+- **The mod treats `reach` as claimed land for writing and checking, never for overlap:**
+  - **Survey:** when `beside` is set, the mod samples a second survey over the town's claim at resolution 1, loaded chunks only
+    (`besideReach.survey`). The plan's own survey is unchanged.
+  - **Prepare:** `chunksOf(claim)` plus the chunks of `reach`.
+  - **Tiles:** the join's cells outside the claim go in the tiles that hold them, as any cell. A tile item's box is the tile.
+  - **Drift:** the region-start check also samples every `reach` column against `besideReach.survey`, with the same bars.
+  - **Protection:** `protectedClaim` also tests the `reach` runs against the owner's C17 areas. A hit refuses `PROTECTED`, and
+    nothing is written.
+  - **Other owners:** a `reach` column inside another owner's region refuses `OVERLAP_OWNED`. The town can't be such a region
+    (beside already requires the same owner), but a third region can.
+  - **The seam:** `reach` cells are never counted as claim for the seam rule or for later plans' claim overlap. §9 says how
+    later plans see them.
+- **The kit's write lint** (the realise lint and `check`) allows a write outside the district's claim only on `reach` cells, and
+  only by `route_join`'s part and its lamps. Anything else outside the claim is an error (`M28:beside`, §5.3).
+
+#### 2.4 The inputs, and when they're recorded
+
+The sidecar's `region.plan` gains `besideReach: {survey, held}`. The kit CLI gains `--beside-reach <f>`, and the plan gets
+`ctx.besideReach`:
+- `survey`: the town claim's columns, as above;
+- `held`: §5.1's held columns, as row runs.
+
+`ctx.beside` and its `beside: {id, sha}` record are unchanged. The reach inputs are separate, and the IR records them only when
+the reach step ran (`reach.heldSha`, `reach.surveySha`), so a seam-step plan's IR is unchanged (§10).
+
+Determinism: the same survey, held runs, standing IR and seed give the same IR (kit unit, §14 item 17).
+
+#### 2.5 Refusals (the plan fails; nothing is planned)
+
+The `NO_JOIN:` prefix stays. The kind is the message's first word in brackets, for example `NO_JOIN: [route] ...`.
+
+| Kind | When |
+|---|---|
+| `apart` | The district's claim neither overlaps nor touches the town's claim, so the reach frame isn't one area. |
+| `street` | The standing graph has no street run (§3.1). |
+| `wall` | Every candidate is enclosed by the town's held wall columns (a K1 `wall.around`; S-D3-5). |
+| `route` | No candidate routes within the grade, the obstacles and the caps. |
+| `budget` | §2.2's 48 dry routes ran out with nothing. |
+
+Today's two `NO_JOIN` messages read as before whenever the reach step isn't reached. It is reached only when the seam step would
+have failed with one of them.
+
+### 3. The street network and the junction geometry
+
+#### 3.1 What counts as the town's street network
+
+- **Streets:** the standing graph's `road` edges whose road item carries `architect_mc:street`, or, for an IR without the flag
+  (pre-FL), whose road id has the `street_` stem after its prefix. This covers:
+  - V's `street_w`/`street_e`;
+  - D1 and D2 district streets (`<d>_street_*`, `st_<d>`);
+  - FL's ring, spiral, grid and organic streets.
+- **Excluded:**
+  - routes between districts (`d_a__b`), the town's own `join`, lanes, paths and squares;
+  - external edges;
+  - anything Steward laid itself. Steward's additions and street extensions aren't in the town's graph (DISTRICTS.md §4), so the
+    join never targets them. Their cells are held cells (§5.1), so it routes around them.
+- **Straight runs:** a street's axis-aligned segments of at least 9 cells. A diagonal or turning piece (an organic lane, a ring's
+  corner) offers no side point. D1 already skips diagonal ends.
+
+#### 3.2 The T junction (a street's side)
+
+On a straight run along axis `a` (x or z), the street's centre line is `v = c`. With V's street (road 3 plus a verge each side,
+FL's too), the footprint covers `|v - c| <= 2`. For a point `u` along the run and a side `s` (±1):
+- **The end cell `E = (u, c + 3s)`**, the first cell outside the footprint. The join's end node stands there, facing `s` (away
+  from the street).
+- **The landing strip:** cells `(u + k, c + 3s)` for `|k| <= 2`. Every one must be outside every lot box plus 1, every footprint
+  item and every body's hard and watch columns (§5.2), and must not be held (§5.1). That is the join's width 3 plus 1 each side.
+- **The verge contact:** cells `(u + k, c + 2s)` for `|k| <= 1`. Each must be held by the street's own road or verge only: no
+  lamp post, prop, lane or other site in that column. The join **never writes** a verge or road cell.
+- **Height:** E's floor is within 1 of the verge's surface at `(u, c + 2s)`, read from `besideReach.survey`. A candidate that
+  can't meet it is dropped, never graded into the verge.
+- **Clearance along the run:** `u` is at least 3 cells from the run's ends and from any other junction node of the street, so a
+  T never sits on a corner or an existing junction.
+- **The lead:** the join's last 3 cells run straight along `s` (the route pass gains an end `lead: n`, additive; absent means
+  none). The T reads as a road meeting the street square on.
+
+**What V allows.** V's lots line both sides of its street with `lotGap` 3, so the gap between two lots' aprons is 1 column, and
+no T fits between them. In a V town, a T fits only where one side of the street has no lots for 5 or more columns:
+- a one-sided run;
+- a stretch the layout skipped (`tryStreetSkipping`);
+- FL grids' and D districts' open runs.
+
+Elsewhere the street end is the only point, and a district north or south of an east-west village joins at the nearer end and
+turns. Steward's Q3 (north and south districts) is met either way: the join reaches. §14 item 4 builds a fixture where a T is
+the cheapest.
+
+#### 3.3 The street end
+
+As D1:
+- the end node at the past-end cell, facing the street's direction, now anywhere in the town's claim;
+- the join's first 3 cells continue the street's line (the `lead`), then it may turn;
+- the past-end cell and the lead's cells obey §3.2's landing strip rules (outside lots plus 1, unheld, clear of bodies).
+
+#### 3.4 The graph
+
+The district's graph gets `join_external` as D1:
+- **At a street end:** `to: <town>:<node>.<port>`, as today.
+- **At a side:** `to: <town>:<roadId>`, with `junction: {kind: "side", at: [x, y, z], side: "n"|"s"|"e"|"w", u}`.
+- Both kinds carry `junction.kind`. The D1 shape (an end) gains `junction: {kind: "end", at}` only on reach-step plans (§10).
+- The town's graph is never edited. 7a types these edges (S-D-2). S-D3-2 asks Steward whether the side form reads well.
+
+### 4. Ownership and undo
+
+#### 4.1 Who owns what
+
+- **The district region owns every cell it writes:** its districts, streets, lots' pads, routes, lamps, and the join's cells
+  inside and outside the town's claim. They are its tile entries in the journal, in its group. Its record names `beside`, and
+  its ext carries `architect_mc:beside`, `architect_mc:land` (§6) and, for an outpost, `architect_mc:corridor`.
+- **The town region owns what it wrote, and nothing new.** D3 adds nothing to its record, IR, graph, journal or ext.
+- **Cell-disjointness:** a reach join's cells, and every cell in their columns, are cells no active journal entry held when the
+  plan was made (§5.1), and none holds at realise (§4.4). So inside the town's claim the two regions never share a cell: every
+  journal stack on a reach column has depth 1, the district's.
+- **Why columns, not cells:** the join's support (the fill under its surface) and its headroom (felled trunks over it) are in
+  the same columns. If the town held any cell of a join column, removing the town could restore a fill to air under the join,
+  or a trunk over it. Excluding whole held columns means the town's undo never writes a join column.
+
+#### 4.2 Removal, every order
+
+| Case | What happens | Bar (§14) |
+|---|---|---|
+| **The district removed, the town standing** | The district's entries are undone: the join's cells and every other cell it wrote come back as they were before it. The town is untouched; its street ends or verge are as they were. | 0 changed cells over the town's claim except the join's own columns, which equal the world before the district; E-flat 0 over the district's claim plus `reach` |
+| **The town removed, the district standing** | The town's entries are undone: its held cells come back as they were before it. No join column is touched (§4.1). The district gets `architect_mc:beside {dangling: true, since}` as D1, and `architect_mc:land.standingRemoved: since` (§6). The join stands, supported and walkable, from the district to where the street was. | E-flat 0 over the town's claim minus the `reach` columns, against the world before the town; the `reach` columns equal the world after the district; M3 0 over the join; the join walkable to its junction cell |
+| **Then the district** | The district's undo puts the land before both back. | E-flat 0 over both claims and `reach` (the world before the town) |
+| **The district, then the town** | Each is undone alone, as in the first row. | E-flat 0 over both claims |
+| **The town removed while the district realises** | Allowed, as D1. The district's tiles and the town's undo touch disjoint columns, so they don't interact. The district finishes, its `dangling` is set when the town's removal finishes, then either order as above. | as above, plus a save, leave and reopen between |
+| **A district beside a removed town** | A seam-step plan beside a town that's gone refuses `OTHER` as D1 (`beside: no standing region`). A reach plan whose town goes before its realise refuses `OVERLAP_BUSY` (§4.4), and nothing is written. | §14 item 11 |
+
+The coordinator's two orders, plainly:
+- **The town first:** the join stays, the district's, until the district is removed. Removing the town never removes or trims
+  it.
+- **The district first:** the town is exactly as it was before the district.
+- In both orders, after both removals the world equals the world before the town.
+
+#### 4.3 The backstop
+
+D3 doesn't rely on the journal's layering, but it is there. A seam-step join (unchanged from D1) may share a cell with the town,
+for example a lamp column in the seam, which D1 never checked. Its journal stack is then two deep, and the journal's
+"ownership passes down" keeps both orders exact. §14 item 9 records the stack depth over every join cell. On reach cells it must
+be 1. On seam-step joins it is recorded, and a shared cell is listed as a finding (§10), never silently changed.
+
+#### 4.4 The re-check at realise
+
+`Regions.realise` and `realiseApproved` of a plan with `reach` re-check, before any write:
+- **The town stands and is `PLACED`.** Not `PLACING`, `PARTIAL` or `REMOVING`: refused `OVERLAP_BUSY`, naming the state. Not
+  standing: `OVERLAP_BUSY` with "region X was removed; re-plan".
+- **The held set over `reach` is unchanged.** A column held since the plan (a site placed on the path, a player's build) refuses
+  `OVERLAP`, naming the site and the column.
+- **The C17 areas and other owners** as in §2.3.
+
+Through `realiseApproved`, every one of these answers `ARTIFACT_STALE` (its "the land under the plan changed" meaning), so
+Steward's stale retry re-checks.
+
+A town that is `PLACED` with empty lot pads (a partly built town) is the normal case: its lots are reserved boxes (footprint),
+whatever stands in them.
+
+### 5. Keep-clear
+
+#### 5.1 Held columns
+
+`held` is every column in the town's claim, plus the district's claim's seam, that holds an active journal cell of any entry at
+any y. That covers:
+- the town's group: its tiles, lots, roads, lamps, props, pads, felled trunks and bodies;
+- every other site and region: Steward's additions, players' tracked builds (PT), another district's join.
+
+The mod reads it from the journal (as VolumeSurvey's `OWNED` does, guard leaves excluded) at plan time, as row runs. Guard
+leaves aren't world writes.
+
+To the reach step, held columns are hard. They also join the route's keep-out, so 6a's tree rule keeps the join from felling a
+trunk whose logs reach a held column (`route.mjs` :460).
+
+#### 5.2 The town's footprint and bodies
+
+- **Footprint:** `besideData`'s lots plus 1, roads plus 1, paths and ways are hard over the whole town claim in the reach step.
+  D1 keeps them only within `SEAM_MAX + 8` of the claim, and the seam step keeps that.
+- **Bodies:** the town IR's `fluid` ops give each body's `hard` set (cells, ice, shell, lining, weir, grate, spill, joins) and
+  `watch` set (KC §2). The reach step treats every column of either as hard. A drained body (in `architect_mc:fluids`) is still
+  the town's: its columns are held.
+- **Natural water** in the town's claim is handled as any route handles it today (T2/T3's street fallback), unchanged.
+
+#### 5.3 The checker
+
+- **`M28:beside`** (new, in `check`): an error for any write outside the district's claim that is not a `reach` cell of
+  `route_join`, and for any `reach` cell that is held, in the town's footprint, or in a town body's hard or watch set. The
+  standing data comes from `ctx.besideReach` and `ctx.beside`.
+- **`M25:clear`** gains foreign bodies: the town's bodies are judged as the plan's own, so a join write into one is
+  `M25:clear {body: <town>:<id>}`.
+- **Broken variants:** `_unsafe.ignoreHeld` (the reach step without the held set), `_unsafe.writeVerge` (a T graded into the
+  verge) and `_unsafe.wideReach` (a non-join write outside the claim). Each must be caught.
+
+### 6. The land (D-S3): `architect_mc:land`, every kind
+
+Every districts region (beside a town or not; plain, along, outpost, end or side join) gets one ext key at realise. The mod
+computes it from the IR in `region/DistrictLand.java`. The kit's `kit/lib/region/land.mjs` is the reference, and the two are
+unit-checked equal on every fixture. It is not in the IR, so IRs are unchanged (§10).
+
+```json
+"architect_mc:land": {
+  "v": 1,
+  "standing": "rg12", "standingClaim": [x0, z0, x1, z1], "standingRemoved": null,
+  "outside": {"runs": [[x0, z, x1, z], ...], "rect": [x0, z0, x1, z1], "cells": 0},
+  "inside":  {"runs": [...], "rect": [...], "cells": 0},
+  "union":   {"runs": [...], "rect": [...], "cells": 0},
+  "parts": [
+    {"kind": "district", "id": "quay", "shape": "mask", "runs": [...], "rect": [...], "cells": 0, "insideCells": 0},
+    {"kind": "join", "id": "join", "district": "quay", "junction": "end", "runs": [...], "rect": [...], "cells": 0, "insideCells": 0},
+    {"kind": "route", "id": "d_a__b", "runs": [...], "rect": [...], "cells": 0, "insideCells": 0},
+    {"kind": "corridor", "id": "camp", "runs": [...], "rect": [...], "cells": 0, "insideCells": 0},
+    {"kind": "extra", "id": "written", "runs": [...], "rect": [...], "cells": 0, "insideCells": 0}
+  ]
+}
+```
+
+- **Parts, each unclipped:**
+  - `district`: each placed district's shape. A following district's mask (D2's `meta.districts.follow[id].mask`,
+    `shape: "mask"`). A plain district's or an outpost's candidate rect as runs (`shape: "rect"`).
+  - `join`: the join's written columns, the reach and the claim part together, for **every** kind (plain, along and outpost),
+    with its junction kind.
+  - `route`: each other route's written columns (edges between districts). A following district's own street is inside its
+    mask.
+  - `corridor`: an outpost's corridor, exactly `architect_mc:corridor`'s runs for that district (D2's footprint grown by 2).
+  - `extra`: the region's written columns that fall in no other part: lamps, a pad's batter past a mask, a lane's end.
+- **`union`:** every part's cells, except corridor cells that lie in the town's claim and aren't written. The corridor's margin
+  never claims town land.
+- **`outside` = union minus the town's claim.** That is the land Steward owns, exactly. For an along district it holds the mask
+  and the join's cells up to the town's claim edge. For an outpost it holds the corridor and the join outside the town.
+- **`inside` = union inside the town's claim:** the join's reach cells, and any of the district's seam cells. That is town land
+  already (Steward, DISTRICTS.md §4), and Steward's additions there must avoid it.
+- **Written columns** mean every column of the IR's parts (`columns` ops' cells, `bounds` ops' rects), lots' boxes, and the
+  route parts' cells.
+- **The bar:** every column the district region holds in the journal lies in `union` (§14 item 14).
+- **After the town's removal:** `standingRemoved` is set to its time. `inside` and `outside` keep their geometry, since the cells
+  are still the district's (S-D3-3).
+- **`architect_mc:corridor` is unchanged**, byte for byte. Its runs stay its own key, for D2's readers.
+- **The request envelope is never in `land`.** Its only role is the plan's search frame.
+
+The land is also in the dry check's verdict (§7), for the request as checked, and in `RegionPlan`'s plan data (`meta.districts`'s
+`land`, computed by the mod when the plan returns; not in the IR).
+
+### 7. The dry beside check (D-S4)
+
+#### 7.1 The call
+
+```java
+// Regions (default throws UnsupportedOperationException; feature "besideCheck")
+default CompletableFuture<BesideVerdict> checkBeside(RegionPlanRequest r)
+
+record BesideVerdict(boolean fits, @Nullable Reason reason, @Nullable String code, String message,
+    @Nullable BesideJoin join, @Nullable com.google.gson.JsonObject land, long ms)
+record BesideJoin(String region, String kind /* "end" | "side" */, String step /* "seam" | "reach" */, String road,
+    @Nullable String node, net.minecraft.core.BlockPos at, net.minecraft.core.Direction facing, int cells, int insideCells)
+```
+
+- **The request:** a full `RegionPlanRequest` with `beside` set, as Steward would plan it. It may be the `districts` program with
+  one placeholder lot, or any program that reads `beside`. Without `beside`, the call refuses `NOT_ALLOWED`.
+- **What it runs:** exactly `Regions.plan`'s path:
+  - the beside checks (standing, dimension, owner, the seam);
+  - both surveys, the held set, the kit's plan and `check`, in the sidecar;
+  - but with **`dry: true`**.
+- **What it keeps: nothing.**
+  - no plan id, no `PlanRec`, no `plans/` file, survey or key file, no opKey registry entry (an opKey in the request is ignored
+    and noted);
+  - the sidecar runs the kit in a temporary directory it deletes when the call ends, success or failure;
+  - no blob is published;
+  - no world write, ticket or prepare.
+- **The answer:**
+  - `fits` true with the join and the land;
+  - or false with the `Reason` and message `Regions.plan` would have failed with, and `code` the kit's named word (`NO_JOIN`,
+    `NO_ROOM`, `NO_EDGE`, `PROTECTED`, `OVERLAP`) with its bracketed kind.
+  - `ms` is the run's time. It is recorded, not judged.
+- **Cost:** $0. Same time as a plan (seconds). It shares the plan queue and its concurrency.
+
+#### 7.2 What its verdict means
+
+- It is **a snapshot**: the same request planned now gives the same answer (§14 item 12's parity).
+- A placeholder district's join and land are the placeholder's. The real first building, with its own lot, plans again and may
+  place the district elsewhere in the request claim.
+- Town additions and new held cells after the check can make the real plan fail. Steward's founding then hears the real plan's
+  reason.
+
+#### 7.3 Discarding plans (what exists, and what is queued)
+
+- **Today:** nothing discards or prunes a region plan, in the mod or the sidecar (§0). Every unrealised plan stays on disk at
+  0.4-0.9 MB in the mod plus its sidecar directory. Plan v1's Start re-checks go through `checkPlan` (C36 sweeps those), but
+  every `Regions.plan` stays: V builds, stale retries, and Steward's placeholder plans if it used them.
+- **D3 doesn't add a discard.** The dry check removes the reason to make a throwaway plan.
+- **Proposed for PLAN's queue (not D3; the coordinator files it):**
+  - `Regions.discardPlan(planId)`: refused while a prepare or realise holds it, or a region names it;
+  - a world-start sweep of unrealised plans with no region, no prepare and no opKey used within 7 days.
+  - Steward isn't blocked on it.
+
+### 8. plan/0: `endpoint.region`
+
+`endpoint.region {region, port?}` has the same reach (§2):
+- the seam step first, as D1 (the cell past the named or nearest street end inside the check's claim);
+- then the reach step over the check's claim plus that standing region's claim, to an end or a side (§3).
+
+The mod sends `besideReach` for each region an endpoint names (at most 2 per check; a third answers
+`refused NO_FEATURE {why: reach}`).
+
+Otherwise unchanged:
+- the leg's external edge as §3.4;
+- the artifact's IR `reach` member, which `realiseApproved` handles as §2.3 and §4.4;
+- the answer's geometry gains `junction` on the leg.
+
+No catalogue id or state moves: `endpoint.region` stays `supported`. A check that answered `NO_FEATURE` only because no street
+end lay in its claim can now answer `ready`, and the answer notes `reach: true`. Steward's 59 recorded asks don't use
+`endpoint.region` (D1's gap table), so their answers don't change (§10).
+
+### 9. Later plans beside or around the town
+
+A district's `reach` cells lie in the town's claim but belong to the district. Every later plan sees them as that region's land.
+The `standing` and `regions` data a plan gets (`compile.mjs` :146-155) gain each standing region's `reach` runs, and these are
+hard wherever that region's claim is:
+- **C38's offer `wall.around {feature: {region: town}}`:** the ring keeps off the district's join (a wall grid obstacle). It
+  searches past it, or answers `NO_ROOM {kind: region}` (S-D3-6). Gating the join is 7a's.
+- **A second district beside the same town:** it joins the town's streets only, never another district's join. That join's
+  columns are held (§5.1), so the second routes around them.
+- **A district beside the district** (`beside` = a district region) works as D1/D3 with that district as the town. Its streets
+  are flagged.
+
+### 10. Byte identity
+
+- **A plan whose seam step finds a join** gives today's IR, but for its recorded kitVersion (D2's kitVersion-only golden rule).
+  The reach inputs aren't recorded, `beside.sha` covers `ctx.beside` only as today, there is no `reach` member, and no `junction`
+  member on its `join_external`.
+- **Pinned:**
+  - `scenarios/goldens/districts_demo.json`;
+  - d-ingame's beside village plan;
+  - d2-ingame's outpost, quay, crest and oasis plans;
+  - plan fixtures `valid/v17`-`v23`, which give the same answers and IRs;
+  - the 59 asks' answers;
+  - tile goldens S1, S2, S7 and mega_bench.
+- **`architect_mc:corridor` and `architect_mc:beside`** are byte-identical for these regions. `architect_mc:land` is new (an
+  added key).
+- **One possible exception, named rather than hidden:** a seam-step join of a pinned fixture that writes a held column (§4.3).
+  The builder checks each pinned fixture's join against its held set. If any meets one, it is a D1 defect: the builder reports
+  it, the join is re-routed in that fixture only, and its golden is replaced with the reason. Expected: none; the
+  builder confirms it in item 2.
+- **`KIT_VERSION`** moves (new output for new cases).
+
+### 11. D-S2 (reserved, 6d)
+
+Lots added to a standing district region, with its street extended, are 6d's. D3 only reserves:
+- the feature name `growDistrict`;
+- that `architect_mc:land.v` moves to 2 when 6d adds the grown parts;
+- that a district's street ends stay terminal junctions in its graph, so 6d can extend from them.
+
+Nothing else here constrains 6d.
+
+### 12. API, kit and versions
+
+- **Placeholders** (the coordinator renumbers): after RS, API **1.42.0**, with mod and kit the next minors after RS's (0.45.0 and
+  0.43.0 if FL, F3, S3 and RS each take one). Catalogue unchanged.
+- **API (binary compatible):**
+  - `Regions.checkBeside` (a default that throws);
+  - the records `BesideVerdict` and `BesideJoin`;
+  - no new Reason and no new event;
+  - `RegionView` unchanged: the land, beside and corridor are ext keys (Architect's).
+- **Features:**
+  - `besideReach` (the join's reach and T junctions);
+  - `besideCheck` (the dry check);
+  - `districtLand` (`architect_mc:land`);
+  - sidecar `region.plan.dry`, `region.plan.besideReach`.
+- **IR (additive):**
+  - `reach` (reach-step plans only);
+  - `meta.districts.join.step` and `.junction` (reach only);
+  - `join_external.junction` (reach only).
+- **Kit:**
+  - the route pass's per-edge `frame` and end `lead` (absent means today);
+  - `besidePorts` gains a sibling, `besideSides`;
+  - `kit/lib/region/land.mjs`;
+  - `M28:beside`, and `M25:clear`'s foreign bodies.
+- **Refusals used:**
+  - plan: `NO_JOIN` with its kinds;
+  - realise: `PROTECTED`, `OVERLAP`, `OVERLAP_OWNED`, `OVERLAP_BUSY`;
+  - `realiseApproved`: `ARTIFACT_STALE`;
+  - the dry check: `NOT_ALLOWED`.
+- **api-compat** clean against the three previous apitest jars; apijars on them.
+
+### 13. Size and split
+
+About **5-6 days** of work, **3.5-4 elapsed**, in two lanes with a frozen interface (the `reach` IR member, `besideReach`'s
+wire, the land record) at the end of day 1:
+- **D3-a, kit (2.5-3 days):**
+  - the two-step search, the candidates, the T and end geometry, the route pass's `frame` and `lead`;
+  - the held and body obstacles, `M28:beside`, `M25:clear`'s foreign bodies and the broken variants;
+  - plan/0's `endpoint.region` reach;
+  - `land.mjs`;
+  - §9's `reach` obstacles in `compile.mjs`;
+  - the unit and byte-identity items (1, 2, 17).
+- **D3-b, mod and sidecar (2.5-3 days):**
+  - the held set from the journal, the reach survey, `reach`'s consumers (prepare, drift, protection, other owners);
+  - the realise re-check (§4.4), `DistrictLand.java` and `standingRemoved`;
+  - `checkBeside` and the sidecar's dry mode;
+  - the API records and api-compat;
+  - the driver `tools/gate6cd3.mjs` and the in-game items.
+- **Shared:** items 3-16, then Steward's RC.
+
+### 14. Gate (slice tier, $0)
+
+The lessons bind:
+- **every new path goes through `checkPlan` then `realiseApproved` in game, and through `Regions.plan` then `Regions.realise`,
+  on Steward-shaped requests**;
+- exactness is judged on flat worlds (E-flat, hash);
+- the natural round reads frozen inputs and classes E-normal by kind at unwritten cells away from the plan (D2's narrowed
+  classes, S3 §6);
+- KC is measured.
+
+**Fixtures** (S7 flat unless named; the coordinator numbers the plan fixtures):
+- **`d3_town`:** a `flat_village` with 8 street lots, its street ends 24 or more columns inside its claim. **Partly built:**
+  `PLACED`, 4 lots with stub buildings, 4 empty pads, W's lanterns. Plus a Steward-style addition (a `Sites.place` with Steward's
+  ext, in the claim beside the street) and a PT player build.
+- **`d3_gap_town`:** a `flat_village` planned around a C17 area beside its street's north side, so one side has a lot gap of 7
+  or more. The area is removed after the town realises.
+- **`d3_pond_town`:** `d3_town` with a farm pond (H's `farmPond`) and a fountain (`form.fountain`) where the cheapest join would
+  pass.
+- **`d3_walled`:** `d3_town` with C38's `wall.around {feature: {region}}` realised round it.
+- **`d3_shore`:** a flat fixture with a placed water strip outside `d3_town`'s claim, for an along district. S3's pinned claim
+  (natural) is used for item 15.
+- Plan fixtures:
+  - `valid/v7x_d3_endpoint_reach` (a zone and a route `endpoint.region` to `d3_town`'s street);
+  - `v7x_d3_district_side`;
+  - the three broken variants (§5.3).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | §3.2's geometry row by row on synthetic streets: the strip, verge contacts with and without a lamp, heights, corners and existing junctions, diagonal runs skipped, the `lead`; the two-step order; candidate thinning, the prune and the 48 cap; held and body columns hard; `M28:beside`; `land.mjs` equals `DistrictLand.java` on every fixture; 300 seeded synthetic towns: every chosen join's reach cells unheld, outside the footprint and bodies, deterministic; the broken variants caught |
+| 2 | Byte identity | §10's pinned set: the same IRs (kitVersion rule), answers and tile shas; `architect_mc:corridor` and `beside` byte-identical; each pinned seam-step join checked against its held set (expected 0 held cells; any found, listed) |
+| 3 | Reach, an end | on `d3_town`, a plain district east: `Regions.plan` (beside) then `Regions.realise`. The join enters the town's claim and continues the street's line for 3 cells; walkable for player and villager (kit and `dev.nav.villager`) from every district lot to the town's bell and back |
+| 4 | Reach, a side | on `d3_gap_town`, a district north: the join is a T into the gap; the verge and road cells unchanged (hash); walkable as item 3 |
+| 5 | Along and outpost | on `d3_shore`, a shore district; on `d3_town`, an outpost with gap 40; both joined through the town's claim; `land.outside` holds each one's join cells outside the town's claim, the outpost's corridor equals `architect_mc:corridor` |
+| 6 | Steward's shapes | on `d3_town`: `checkBeside` with one placeholder lot (Steward's params, DISTRICTS.md §2) fits. Then `Regions.plan` with the real lot under a `dplan` opKey, `Regions.realise` with a stub blueprint under `drealise`, `realiseByKey` after a restart, and the land read. Through `checkPlan` (`v7x_d3_endpoint_reach` in plan v1's shape: pending parts `required: false`, `ew` with rotate off, lot ext) then `realiseApproved`, with one stale retry under a second key across a restart |
+| 7 | District removed first (verifier re-runs) | after item 3, 4, 5 and 6's regions: 0 changed cells over the town's claim (ARWD diff), except the join's columns, which equal the world before the district; E-flat 0 over the district's claim plus `reach` |
+| 8 | Town removed first (verifier re-runs) | the same set rebuilt: removing the town gives E-flat 0 over its claim minus `reach` (against the world before it), the `reach` columns unchanged, M3 0 over the join, `dangling` and `standingRemoved` set, the join walkable to its junction cell. Then removing the district gives E-flat 0 over both claims (the world before the town) |
+| 9 | Ownership | over every reach cell, journal stack depth 1 (the district's) before either removal; the seam-step joins' depths recorded |
+| 10 | Mid-realise (verifier re-runs) | the town removed while item 3's district is `PLACING` its routes stage; both finish; a save, leave and reopen; then the district removed: E-flat 0 over both claims |
+| 11 | Refusals, nothing written | claims apart: `NO_JOIN [apart]`; `d3_walled`: `NO_JOIN [wall]`; the town `PLACING` at realise: `OVERLAP_BUSY`; a site placed on the join's path after the plan: `OVERLAP` naming it, and `ARTIFACT_STALE` through `realiseApproved`; a C17 area over `reach`: `PROTECTED`; each with 0 changed cells (hash) |
+| 12 | Dry check (verifier re-runs) | over items 3-6 and 11's plan-time cases, `checkBeside`'s verdict equals `Regions.plan`'s outcome (fits, Reason, code and kind, join, land); the mod's `plans/` and the sidecar's plan directory listed before and after: no new file; no opKey entry; no `PlanRec`; the world hash unchanged |
+| 13 | KC and later plans | `d3_pond_town`: the join keeps clear (0 cells in any body's hard or watch set, `M25:clear` 0, every body settled after); C38's offer round `d3_town` with a standing district: 0 wall cells in the join's columns; a second district beside: its join avoids the first's |
+| 14 | Land | for every district of items 3-6: every column the district holds in the journal lies in `union`; `outside` misses the town's claim; `inside` equals the held reach and seam columns; the corridor part equals `architect_mc:corridor` |
+| 15 | Natural round | S3's pinned claim: a V town, then a shore district beside it joined through its claim; plan, realise, save, leave, reopen; the same IR (or D2's replay rule); removal in both orders; E-normal 0 unclassified under D2's narrowed classes |
+| 16 | Survival (only if RS has merged first) | item 3 in a survival world: the join is a route target fed from the stockpile; removal in both orders refunds the paid cells standing, once per key; otherwise this row moves to RS's RC note |
+| 17 | Determinism | IR sha over 3 plans; tile shas with 1 and 4 workers; macOS and Linux CI |
+| 18 | Unchanged, API, spend | d-unit, d-ingame, d2-ingame, 6cd-scenario-districts, kc-ingame, k1a-ingame, fl-ingame, pt-ingame item 14; api-compat clean; apijars; $0.00 |
+
+**Tier:** slice plus `region/**`, `journal/**` and `api/**`:
+- the units and apijars;
+- d-unit, d-ingame and d2-ingame;
+- kc-ingame, k1a-ingame and fl-ingame;
+- 4d-all and 6a-eflat;
+- D3's own `d3-unit`, `d3-ingame`, `d3-natural` (driver `tools/gate6cd3.mjs`, chain `6cd3`, impact rule "6c D3").
+
+The verifier reviews the diff and **re-runs items 7, 8, 10 and 12**. **Steward's RC check** follows on the release candidate
+(S-D3-7).
+
+### Open questions for Steward
+
+- **S-D3-1. The street network.** Joins target streets only: flagged roads, or the `street_` stem before FL. They never target
+  routes between districts, lanes, paths or the town's own join, and never Steward's own street extensions. Is that the network
+  you mean? Default: streets only.
+- **S-D3-2. The side junction in the graph.** A side T's `join_external` is `to: <town>:<roadId>` with `junction {kind: side, at,
+  side, u}`. An end keeps D1's `<town>:<node>.<port>`, and on reach plans gains `junction {kind: end, at}`. Fine for your
+  reading, or do you want a node id for sides? Default: as proposed.
+- **S-D3-3. The join's land after the town is removed.** `inside` keeps its geometry and `standingRemoved` is set. The cells are
+  still the district's. Will you take them into the district's land then, or leave them unowned on the Claim tab? Default:
+  Architect reports both; Steward decides.
+- **S-D3-4. The dry check with a placeholder.** `checkBeside` runs the full plan path on your placeholder request and keeps
+  nothing. Its join and land are the placeholder's, and an opKey is ignored. Is that enough for founding, given the real first
+  building plans again? Default: yes.
+- **S-D3-5. Walled towns.** A town with a wall round it answers `NO_JOIN [wall]`. Joining through a standing gate is 7a's (typed
+  connectors). Fine until then? Default: yes.
+- **S-D3-6. A wall round the town after a district.** C38's offer keeps its ring off the district's join (it searches past it,
+  or `NO_ROOM {kind: region}`). It doesn't gate the join. Fine? Default: yes.
+- **S-D3-7. The RC.** D3 changes what stands in a town's claim at removal, which your give-up rule reads. Will you run on the RC:
+  a `d3_town`-like V town, a beside reservation with `checkBeside`, its first building, undo of each in both orders, and an
+  along district? Default: yes.
+- **S-D3-8. Cheapest, not shortest.** "The nearest point" is read as the cheapest route (T2 cost), ties to the street end.
+  Fine? Default: yes.
+
+### Open questions for Noah
+
+- **N-D3-1. How the join looks inside the town.** Proposed: as today's join, a 3-wide road in the districts' path role with route
+  lamps, so a district reads as a road leading out of the town. The alternative is that a join continuing a street end takes the
+  street's own look (road 3 plus verges, W's lanterns) for its first stretch. Default: as today's join.
+- **N-D3-2. Lamps near the town's.** Proposed: the join's route lamps skip spots within 6 of a town lamp, so the town's light
+  isn't doubled where they meet. The alternative keeps the route's spacing everywhere. Default: skip within 6.
+
+### Deferred
+
+- Joining through a K1 gate, and typed links between regions (7a).
+- Growing a district (D-S2) and extending a standing street (6d).
+- `Regions.discardPlan` and the plan sweep (proposed for PLAN's queue, §7.3).
+- Side junctions on diagonal and turning streets.
