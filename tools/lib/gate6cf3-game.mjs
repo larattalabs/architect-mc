@@ -170,6 +170,8 @@ export async function realiseF3(ctx, tag, fx, o = {}) {
     const c = o.site;
     await L.tp((c[0] + c[2]) / 2, 200, (c[1] + c[3]) / 2);
     await L.call('dev.waitChunks', { timeoutMs: 120_000 }, 180_000).catch(() => null);
+    // (the fresh copy's chunks run their own fluids first: a stream starting to flow; the control settles the same 20 s)
+    await L.settle(20_000);
     W = { claim: c, dx: 0, dz: 0, off: 0 };
   } else ({ W } = await buildWorld(ctx, fx));
   const wp = await B.worldPlan(ctx, fx, W);
