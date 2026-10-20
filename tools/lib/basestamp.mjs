@@ -20,9 +20,22 @@ export function minecraftVersion(root = ROOT) {
   try { return /^minecraft_version=(.+)$/m.exec(fs.readFileSync(path.join(root, 'mod', 'gradle.properties'), 'utf8'))?.[1].trim() ?? 'unknown'; } catch { return 'unknown'; }
 }
 
-/** What creates a base world: the open options and rules the drivers' base steps use (mode creative, cheats, spawn tp). */
-export function baseRecipe({ preset, seed }, { minecraft = minecraftVersion() } = {}) {
-  return { v: BASE_RECIPE_VERSION, minecraft, mode: 'creative', cheats: true, preset, seed: String(seed), rules: preset === 'flat' ? 'exact' : 'default', spawn: [0.5, 200, 0.5] };
+/**
+ * (housekeeping 3) The host a driver's world opens on: 'server' when the runner gave it the headless server's launch script
+ * (tools/lib/hosts.mjs: GATE6B_CLIENT_SCRIPT / GATE6A_CLIENT_SCRIPT = tools/run-headless-server.mjs), else 'client'.
+ */
+export function gateHost(env = process.env) {
+  return /headless/.test(`${env.GATE6B_CLIENT_SCRIPT ?? ''} ${env.GATE6A_CLIENT_SCRIPT ?? ''}`) ? 'server' : 'client';
+}
+
+/**
+ * What creates a base world: the open options and rules the drivers' base steps use (mode creative, cheats, spawn tp), and the host
+ * (housekeeping 3): a base the headless server made records its data packs and allowCommands 0 in level.dat, and a client reusing it
+ * in the same run dir read S1's pinned survey as 572271bd (magma and bubble columns) instead of the golden's 3e5bd5b7 (w-ingame item
+ * 7, failing "on both hosts" after a headless run had made the base), so a base made by the other host is stale.
+ */
+export function baseRecipe({ preset, seed }, { minecraft = minecraftVersion(), host = gateHost() } = {}) {
+  return { v: BASE_RECIPE_VERSION, minecraft, host, mode: 'creative', cheats: true, preset, seed: String(seed), rules: preset === 'flat' ? 'exact' : 'default', spawn: [0.5, 200, 0.5] };
 }
 export const recipeHash = (recipe) => crypto.createHash('sha256').update(JSON.stringify(recipe)).digest('hex').slice(0, 16);
 

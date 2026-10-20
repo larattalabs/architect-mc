@@ -12,7 +12,7 @@
 // Each floor cell holds `height` clear cells over it (deckY + 1 .. deckY + height). A floor cell is a **bore** cell when at least
 // `cover` (2) site-solid cells lie over its void in every lane's column (counted up to the surface), else a **cut** cell: open
 // above, its lanes carved to the surface. The longest bore run must hold at least 4 cells (else NO_COVER).
-import { deckY, isSlab, lateral, rightOf, SITE_SOLID } from './ropeGeom.mjs';
+import { deckY, isSlab, latOn, rightOf, SITE_SOLID } from './ropeGeom.mjs';
 import { shapeOf } from './style.mjs';
 import { bomOf } from './bom.mjs';
 import { fixtureFor, lightLevel } from '../region/fixtures.mjs';
@@ -56,7 +56,7 @@ const N6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]
  * whether it is a bore cell by that measure; `run` the longest bore run. `groundAt(x, z)`: the land's surface block y.
  */
 export function surfaceCover(groundAt, a, dir, L, rise, width, height, cover = TUNNEL.cover) {
-  const [x0, y0, z0] = a, [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo, hi } = lateral(width);
+  const [x0, y0, z0] = a, [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo, hi } = latOn(width, dir);
   const ys = floorProfile(L, y0, rise);
   const cv = new Array(L + 1).fill(0), bore = new Array(L + 1).fill(false);
   let run = 0, best = 0, bestAt = -1;
@@ -159,7 +159,7 @@ export function tunnelGeom(land, a, dir, L, rise, opts = {}) {
   const coverNeed = Number.isInteger(u.cover) ? u.cover : TUNNEL.cover;
   const buffer = Number.isInteger(u.fluidBuffer) ? u.fluidBuffer : TUNNEL.fluidBuffer;
   const lenMin = Math.max(TUNNEL.lengthMin, opts.length?.min ?? TUNNEL.lengthMin), lenMax = Math.min(TUNNEL.lengthMax, opts.length?.max ?? TUNNEL.lengthMax);
-  const [x0, y0, z0] = a, [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo, hi } = lateral(width);
+  const [x0, y0, z0] = a, [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo, hi } = latOn(width, dir);
   const at = (i, v) => [x0 + dx * i + rx * v, z0 + dz * i + rz * v];
   // ---- NO_COVER from the survey first (§6): no line with surface cover needs the rock read
   const sc = surfaceCover(land.groundAt, a, dir, L, rise, width, height, coverNeed);

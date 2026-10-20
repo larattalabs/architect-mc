@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { baseRecipe, recipeHash, baseStatus, baseCurrent, writeStamp, readStamp, quarantineBase, STAMP_FILE } from '../../tools/lib/basestamp.mjs';
+import { baseRecipe, recipeHash, baseStatus, baseCurrent, writeStamp, readStamp, quarantineBase, gateHost, STAMP_FILE } from '../../tools/lib/basestamp.mjs';
 
 const MC = { minecraft: '26.3' };
 function run() {
@@ -24,6 +24,12 @@ test('recipe hash: depends on preset, seed, Minecraft version and the recipe ver
   assert.notEqual(h(spec), h({ preset: 'flat', seed: '2026100906' }));
   assert.notEqual(h(spec), h({ preset: 'normal', seed: '1' }));
   assert.notEqual(h(spec), h(spec, { minecraft: '26.4' }));
+  // (housekeeping 3) the host that made it: a headless server's base is another recipe than a client's
+  assert.notEqual(h(spec, { ...MC, host: 'client' }), h(spec, { ...MC, host: 'server' }));
+  assert.equal(gateHost({}), 'client');
+  assert.equal(gateHost({ GATE6B_CLIENT_SCRIPT: 'tools/run-headless-server.mjs' }), 'server');
+  assert.equal(gateHost({ GATE6A_CLIENT_SCRIPT: 'tools/run-headless-server.mjs' }), 'server');
+  assert.equal(gateHost({ GATE6B_CLIENT_SCRIPT: 'tools/run-gate6b-client.sh' }), 'client');
 });
 
 test('status: missing, unstamped (a world from before stamps), current and stale', () => {

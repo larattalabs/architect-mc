@@ -16,6 +16,8 @@
 //                           from each swimmer to a bank); the lava pit with fire ticks and random ticks 300: 0 fire in the claim
 //            ha-exact       item 5 (bodies): the same plan realised under the exact rules, settled, Regions.remove: E-flat 0 with fluid
 //                           cells compared by state; journal cells per part
+//            ha-farm        (housekeeping 3) the farm ponds through realiseApproved: v49 and Steward's farm hamlet (fixtures/plan/h/
+//                           farm_hamlet.json), exact rules: PLACED, every farm pond's census equal to its prediction, M25 0, E-flat 0
 //   natural  ha-natural     S3: a pond on the river's bank and a lip-existing waterfall into a pond: census, villagers, E-normal undo
 //   cold     ha-cold        item 4: the frozen site 2026101102: an ice-capped pond (every capped cell ice after a stand at default
 //                           rules) and its uncapped twin (it freezes on its own: the probe, recorded; its undo leaves no water or ice
@@ -441,6 +443,41 @@ async function haExact(ctx) {
   return { check: run.check, realise: run.realise, exact: { ...exact, list: exact.list.slice(0, 20) }, journal: { written: run.realise.cells, restored: exact.restored } };
 }
 
+/**
+ * (housekeeping 3; PLAN "Queued from the H RCs") The farm ponds through realiseApproved: v49 (two farms, `villager: farm`) and Steward's
+ * farm hamlet (fixtures/plan/h/farm_hamlet.json: a template zone, a lot typed `farm` with no `villager`), each on a fresh flat world at
+ * exact rules: Regions.checkPlan's two-plan flow (READY), realiseApproved PLACED after its bodies settle, every farm pond's census equal
+ * to its prediction, M25 0, then Regions.remove: E-flat 0 with fluid cells by state. The two farm-pond bugs of the H RCs (a type-implied
+ * farm lot, nested guard runs) reached Steward because no step realised such a plan. Pond, moat, quay and wet-pier bridge bodies go
+ * through realiseApproved in ha-exact (water_demo: ponds, the lava pit, the fountain, the waterfall, the moat) and hb-flat.
+ */
+async function haFarm(ctx) {
+  const { L, check, json } = ctx;
+  const out = {};
+  const fx = (dir, f) => JSON.parse(fs.readFileSync(path.join(ctx.KIT, 'test', 'fixtures', 'plan', dir, f), 'utf8')).plan;
+  const c = { minX: FLAT_CLAIM[0], minZ: FLAT_CLAIM[1], maxX: FLAT_CLAIM[2], maxZ: FLAT_CLAIM[3] };
+  const cx = (c.minX + c.maxX) >> 1, cz = (c.minZ + c.maxZ) >> 1;
+  const anchors = { stone: [cx, 65, cz], player: [cx - 24, 65, cz - 24], stockpile: [cx + 12, 65, cz + 12], street_w: [c.minX + 8, 65, cz], street_e: [c.maxX - 8, 65, cz] };
+  for (const [tag, plan, want] of [['farm-v49', fx('valid', 'v49_farm_pond.json'), 2], ['farm-hamlet', fx('h', 'farm_hamlet.json'), 1]]) {
+    await L.fresh(`G6B Ha ${tag}`, FLAT);
+    await L.setRules('exact');
+    const run = await realiseRun(ctx, tag, { claim: FLAT_CLAIM, plan, anchors, rules: 'exact' });
+    const o = out[tag] = { check: run.check, realise: run.realise ?? null };
+    if (!run.R) { check(false, `${tag}: not realised (${json(run.check)})`); continue; }
+    const ponds = (run.R.meta.waters ?? []).filter((w) => w.kind === 'farm_pond');
+    check(ponds.length === want && run.bodies.length >= want, `${tag}: ${ponds.length} farm pond(s) planned (want ${want}), ${run.bodies.length} fluid bod${run.bodies.length === 1 ? 'y' : 'ies'} realised`);
+    o.bodies = {};
+    for (const b of run.bodies) o.bodies[b.id] = await census(ctx, b, run.before, run.bodies);
+    check(run.bodies.length > 0 && Object.values(o.bodies).every((x) => x.ok), `${tag}: PLACED, every farm pond settled with its census equal to the prediction: ${json(Object.fromEntries(Object.entries(o.bodies).map(([k, x]) => [k, `${x.sources}/${x.sourcesWant}s ${x.flowing}/${x.flowingWant}f ${x.mismatch.length}m ${x.outsideCount}x`])))}`);
+    const m25 = run.R.rep.findings.filter((f) => /^M25|^M20|^M17/.test(f.rule));
+    check(!m25.length, `${tag}: M25, M20 and M17 0 on the realised world (${m25.map((f) => `${f.rule} ${f.message}`).join('; ').slice(0, 300) || 'none'})`);
+    const exact = await removeRun(ctx, tag, run, { kind: 'E-flat' });
+    o.exact = { ...exact, list: exact.list.slice(0, 20) };
+    await L.leaveWorld();
+  }
+  return out;
+}
+
 async function haNatural(ctx) {
   const { L, check, json } = ctx;
   const S3 = JSON.parse(fs.readFileSync(path.join(ctx.root, 'scenarios', 's3_monastery.json'), 'utf8')).fixture.claim;
@@ -567,7 +604,7 @@ async function haLook(ctx) {
 
 export const items = {
   unit: [{ name: 'ha-kit', run: haKit }, { name: 'ha-unchanged', run: haUnchanged }, { name: 'ha-asks', run: haAsks }],
-  ingame: [{ name: 'ha-flat', run: haFlat }, { name: 'ha-exact', run: haExact }],
+  ingame: [{ name: 'ha-flat', run: haFlat }, { name: 'ha-exact', run: haExact }, { name: 'ha-farm', run: haFarm }],
   crash: [],
   probe: [],
   natural: [{ name: 'ha-natural', run: haNatural }],
