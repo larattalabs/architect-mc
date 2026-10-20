@@ -84,7 +84,7 @@ test('the fluid op\'s course members: requires courses only with one; joins spli
   const ir = (o) => ({ parts: [{ id: 'p', ops: [o] }] });
   assert.ok(!walkKinds(ir(h)).includes('courses'));
   assert.ok(walkKinds(ir({ op: 'fluid', after: ['x'] })).includes('courses'));
-  assert.equal(KINDS_FORMAT2.at(-1), 'courses');
+  assert.equal(KINDS_FORMAT2[KINDS_FORMAT2.indexOf('volume:fluids') + 1], 'courses'); // ((6c F3-c) coralDecor appended after it)
   assert.equal(staleReason({ format: 2, requires: ['fluid', 'courses'] }), null, 'this kit reads it');
   assert.match(staleReason({ format: 2, requires: ['fluid', 'courses-v2'] }) ?? '', /courses-v2/, 'an unknown kind is refused');
   assert.equal(reachId('stream', 3), 'stream_r3');

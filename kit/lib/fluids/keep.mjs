@@ -36,13 +36,14 @@ export function reserve(store, { part, body = null, rects, y0, y1 }) {
 
 /**
  * Register an emitted body (r.fluidBody's record, or the IR op's sets): its exact hard and watch sets replace its part's reservation.
- * `b`: {id, part, cells, ice, shell, lining, weir, grate, spill, watch, planJoins | joins}. Returns the record.
+ * `b`: {id, part, cells, ice, shell, lining, weir, grate, spill, watch, planJoins | joins, decor ((6c F3-c) the coral: body and bed
+ * cells, already in cells and shell)}. Returns the record.
  */
 export function registerBody(store, b, part = b.part ?? null) {
   release(store, part, 'reserved');
   const hard = new Map();
   const add = (set, list) => { for (const c of list ?? []) { if (!Array.isArray(c) || c.length < 3) continue; const k = k3(c[0], c[1], c[2]); if (!hard.has(k)) hard.set(k, set); } };
-  for (const s of ['cells', 'ice', 'shell', 'lining', 'weir', 'grate', 'spill']) add(s, b[s]);
+  for (const s of ['cells', 'ice', 'shell', 'lining', 'weir', 'grate', 'spill', 'decor']) add(s, b[s]);
   for (const j of b.joins ?? []) if (j && !Array.isArray(j) && Array.isArray(j.cells)) add('joins', j.cells);
   for (const j of b.planJoins ?? []) add('joins', j.cells);
   const watch = new Set();

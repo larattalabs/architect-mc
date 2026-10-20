@@ -8,7 +8,7 @@
 // plan has either, so every other plan's report is unchanged. A body without a frozen volume over its box is a finding (M25:shell
 // "no volume"), never a pass (§9).
 import { simulate } from '../fluids/sim.mjs';
-import { FLUID_OP, fromRuns, isCourseOp, splitJoins } from '../fluids/body.mjs';
+import { FLUID_OP, decorCellsOf, fromRuns, isCourseOp, splitJoins } from '../fluids/body.mjs';
 import { VC, classAt } from './volume.mjs';
 import { F_WRITTEN } from './vworld.mjs';
 import { kindOf } from '../fluids/world.mjs';
@@ -29,6 +29,7 @@ const D6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]
 /**
  * The bodies of an IR (its `fluid` ops), with their IR part index. (6c HY) A course's op adds `lining` (cells), `after` (ids), `planJoins`
  * ([{body, cells}]: joins into other bodies of the plan) and `grate` (cells); `joins` stays the natural joins' cells; `course` is true.
+ * (6c F3-c) `decor`: the cells of the op's decor set (the coral grown in the body: body cells and bed cells), empty for any other body.
  */
 export function bodiesOf(ir) {
   const out = [];
@@ -37,7 +38,8 @@ export function bodiesOf(ir) {
       if (o.op !== FLUID_OP) continue;
       const j = splitJoins(o.joins);
       out.push({ id: o.id, part: o.part ?? null, irPart: p.id, pi, fluid: o.fluid, level: o.level, cells: fromRuns(o.cells), shell: fromRuns(o.shell), spill: fromRuns(o.spill), joins: fromRuns(j.natural), watch: fromRuns(o.watch), ice: fromRuns(o.ice), predicted: o.predicted ?? [], settleTicks: o.settleTicks,
-        lining: fromRuns(o.lining), after: Array.isArray(o.after) ? o.after : [], planJoins: j.plan.map((q) => ({ body: q.body, cells: fromRuns(q.cells) })), grate: fromRuns(o.grate), course: isCourseOp(o) });
+        lining: fromRuns(o.lining), after: Array.isArray(o.after) ? o.after : [], planJoins: j.plan.map((q) => ({ body: q.body, cells: fromRuns(q.cells) })), grate: fromRuns(o.grate), course: isCourseOp(o),
+        decor: decorCellsOf(o.decor).map((c) => [c[0], c[1], c[2]]) });
     }
   });
   return out;
@@ -118,7 +120,8 @@ function courseRules({ bodies, sim, world, findings, finding }) {
 }
 
 /** (6c KC, §5) The hard sets of a body, in the order a finding names them (the weir rides in `lining`). */
-export const CLEAR_SETS = Object.freeze(['cells', 'ice', 'shell', 'lining', 'grate', 'spill']);
+// ((6c F3-c) `decor` too: the coral is the body's own cells (§3.4), each a body or bed cell already; named so a finding says decor)
+export const CLEAR_SETS = Object.freeze(['cells', 'ice', 'shell', 'lining', 'grate', 'spill', 'decor']);
 
 /**
  * (6c KC, §5, S-KC-2) The cells exempt from `M25:clear`'s watch clause, by name. One kind only: a registered water gate's lintel and
@@ -321,10 +324,20 @@ export function fluidRules({ ir, vw, meta, vols, want, findings, metrics, findin
   const stageOfPart = (pi) => (pi < 0 ? -1 : ir.stages.indexOf(ir.parts[pi]?.stage));
   const planPartOf = (pi) => (pi < 0 ? null : meta?.planCheck?.partOf?.[ir.parts[pi]?.id] ?? null);
   const planned = !!(meta?.planCheck && !meta.planCheck.malformed && meta.planCheck.partOf);
+  // ((6c F3-c, §3.4) a bed cell of the body's own decor (a coral block over its shell) is written by the body's own op in the fluids
+  // stage, after its shell's stage: still a shell cell, judged by its block)
+  const decorOf = new Map();
+  const ownDecor = (b0, x, y, z, pi) => {
+    const b = bodies.find((q) => q.id === b0.id);
+    if (!b?.decor?.length) return false;
+    let s = decorOf.get(b.id);
+    if (!s) { s = new Set(b.decor.map((c) => k3(...c))); decorOf.set(b.id, s); }
+    return s.has(k3(x, y, z)) && ir.parts[pi]?.id === b.irPart;
+  };
   const shellCheck = (x, y, z, b) => {
     if (!(vw.flags(x, y, z) & F_WRITTEN)) return 'not written';
     const pi = vw.partAt(x, y, z);
-    if (fluidsStage >= 0 && stageOfPart(pi) >= fluidsStage) return 'not written before the fluids stage';
+    if (fluidsStage >= 0 && stageOfPart(pi) >= fluidsStage && !ownDecor(b, x, y, z, pi)) return 'not written before the fluids stage';
     const i = vw.get(x, y, z);
     if (!P.fs[i]) return 'not fluid-stopping';
     if (P.gravity[i]) return 'a gravity block';
@@ -369,7 +382,7 @@ export function fluidRules({ ir, vw, meta, vols, want, findings, metrics, findin
   }
   bodies.forEach((b, i) => {
     const s = sim.bodies[i];
-    per.push({ id: b.id, part: b.part, fluid: b.fluid, cells: b.cells.length, shell: b.shell.length, spill: b.spill.length, joins: b.joins.length, watch: b.watch.length, reached: s.reached.length, breach: s.breach?.length ?? 0, settleTicks: b.settleTicks, predicted: b.predicted.length, predictedNow: s.predicted.length });
+    per.push({ id: b.id, part: b.part, fluid: b.fluid, cells: b.cells.length, shell: b.shell.length, spill: b.spill.length, joins: b.joins.length, watch: b.watch.length, reached: s.reached.length, breach: s.breach?.length ?? 0, settleTicks: b.settleTicks, predicted: b.predicted.length, predictedNow: s.predicted.length, ...(b.decor.length ? { decor: b.decor.length } : {}) });
   });
   // ---- M25:wet: the plan meta's wet writes (piers, harbour walls, quays) through natural water
   const wetBad = [];

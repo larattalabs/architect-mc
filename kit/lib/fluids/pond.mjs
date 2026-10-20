@@ -25,6 +25,7 @@ import { isFlammable } from '../blocks.mjs';
 import { localWorld } from './body.mjs';
 import { inferVillager } from '../params.mjs';
 import { overflowsOn } from './hooks.mjs';
+import { coralRequests } from '../forms/coral.mjs';
 import { keptColumn } from './keep.mjs';
 import { F_WRITTEN } from '../region/vworld.mjs';
 import {
@@ -165,7 +166,7 @@ export function emitPond(r, o) {
   // ((6c HY, §1.5) a course leaving the pond: its overflows open side shell cells at the surface; only when there are any, so an H pond's
   // body is as before)
   const ov = Array.isArray(o.overflow) && o.overflow.length ? { overflow: o.overflow, raised: true } : {};
-  const rec = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: o.kind ?? 'pond', fluid, stage: o.stage, level, shellRole, ice: o.ice ?? null, outlets: exits, _unsafe: o._unsafe ?? null, ...ov });
+  const rec = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: o.kind ?? 'pond', fluid, stage: o.stage, level, shellRole, ice: o.ice ?? null, outlets: exits, _unsafe: o._unsafe ?? null, ...ov, ...(Array.isArray(o.decor) && o.decor.length ? { decor: o.decor } : {}) });
   return Object.assign(rec, { rect: o.rect, level, depth, cols: cols.length, rim, shellStates: shellStatesOf(rec, shellRole) });
 }
 
@@ -327,7 +328,7 @@ export function emit(K, p, res) {
       ice = dec.ice; notes.push(...dec.notes);
     }
     // ((6c KC) the broken variant `ownerUnknown` (ext architect_mc:unsafe): a body op with no part; M25:clear and M25:shell name it)
-    const rec = emitPond(r, { id: bodyId(p.id), part: p.part.ext?.['architect_mc:unsafe']?.ownerUnknown === true ? null : p.id, kind: 'pond', rect: res.water, shape, depth: sp.depth, edge: sp.edge, fluid: sp.fluid, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice, overflow: overflowsOn(K, p.id) });
+    const rec = emitPond(r, { id: bodyId(p.id), part: p.part.ext?.['architect_mc:unsafe']?.ownerUnknown === true ? null : p.id, kind: 'pond', rect: res.water, shape, depth: sp.depth, edge: sp.edge, fluid: sp.fluid, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice, overflow: overflowsOn(K, p.id), decor: coralRequests(K, p.id) });
     leakCheck(r, env, rec);
     if (sp.fluid === 'lava') mixCheck(r, rec);
     res.emitted = { bodies: [rec], notes };
