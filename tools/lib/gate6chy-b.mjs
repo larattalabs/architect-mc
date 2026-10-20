@@ -177,7 +177,26 @@ export async function realiseFixture(ctx, tag, fx, o = {}) {
   // (development: HYB_BYPASS names fixtures realised with the containment check off, so a body that would drain stands for the census)
   const bypass = (process.env.HYB_BYPASS ?? '').split(',').includes(tag);
   if (bypass) await L.call('dev.fluid.bypass', { on: true }, 10_000);
-  const r = await core.realiseApproved(ctx, sha);
+  // (development: HYB_WATCH names fixtures whose spill cells are censused every 2 s while the realise runs, logged)
+  let watched = null;
+  if ((process.env.HYB_WATCH ?? '').split(',').includes(tag)) {
+    const rr = await L.call('dev.region.realiseApproved', { sha }, 300_000);
+    await sleep(3000);
+    const g = await core.regionOf(ctx, rr.region).catch(() => null);
+    const cells = (g?.bodies ?? []).flatMap((b) => b.predicted.map((q) => q.slice(0, 3)));
+    if (cells.length) {
+      const bx = core.boxAround(cells, 1);
+      for (let i = 0; i < 25; i++) {
+        const c = await L.call('dev.fluid.census', { box: bx }, 60_000);
+        const st = await L.call('dev.fluid.state', { region: rr.region }, 10_000).catch(() => ({}));
+        ctx.log(`  watch ${i}: ${json(c.fluids.filter(([x, y, z]) => cells.some((q) => Math.abs(q[0] - x) <= 1 && Math.abs(q[2] - z) <= 1 && Math.abs(q[1] - y) <= 1)))} ticks ${c.ticks.length} bodies ${json((st.bodies ?? []).map((b) => [b.id, b.state, b.writtenAt]))}`);
+        await sleep(2000);
+      }
+    }
+    await L.waitRegion(rr.region, 3_600_000);
+    watched = await core.regionOf(ctx, rr.region);
+  }
+  const r = watched ?? await core.realiseApproved(ctx, sha);
   if (bypass) await L.call('dev.fluid.bypass', { on: false }, 10_000);
   if (r.refused) { check(false, `item 9 (${tag}): realiseApproved refused (${json(r.refused)})`); await L.leaveWorld(); return out; }
   const fl = r.fluids;
