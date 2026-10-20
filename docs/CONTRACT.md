@@ -16965,7 +16965,7 @@ are quoted from that branch; anything its release changes wins over them. Nothin
 | Slice | What | API / versions (placeholders after 1.37.0; the coordinator renumbers) | Steward check | Size |
 |---|---|---|---|---|
 | **FL** | Free layouts: `layout.ring`, `layout.spiral`, `layout.grid`, `layout.organic`, `locator.around` (zones and forms) and `sketch.outline` reserved -> supported; one frontage engine (lots along a street line) under ring, spiral and organic; grid as blocks of V streets | API **1.38.0**, mod **0.41.0**, kit **0.39.0**, catalogue **10** | none before release (plan answers and lot layouts only, GATES policy 4); Steward checks after (S-FL-6 asks whether it wants an RC because plan v1 builds these zones whole) | 5.5-6 days of work, about 3 elapsed (FL-core, then three in parallel) |
-| **F3** | Forms II: `form.giant_tree` reserved -> supported; `form.giant_mushroom`, `form.coral`, `form.roots`, `form.stalactites` added supported; M18 and M19; StillOurs learns the new blocks' drift (leaf distance, mushroom faces, dripstone thickness, coral death); the forest-heavy `mega_bench` variant the 6c close-out needs | API **1.39.0**, mod **0.42.0**, kit **0.40.0**, catalogue **11** | none before release by default; the verifier re-runs undo (S-F3-5 asks Steward) | 5.5-6 days of work, about 3 elapsed (F3-a, then two in parallel) |
+| **F3** | Forms II: `form.giant_tree` reserved -> supported; `form.giant_mushroom`, `form.coral`, `form.roots`, `form.stalactites` added supported; M18 and M19; StillOurs learns the new blocks' drift (leaf distance, mushroom faces, dripstone thickness, coral death); the forest-heavy `mega_bench` variant the 6c close-out needs | API **1.39.0**, mod **0.42.0**, kit **0.40.0**, catalogue **11** | **RC check before release** (GATES policy 4): coral changes the fluids stage (a body's `decor` set, its census, drain-then-restore) and StillOurs' new rows reach deltas, PT2's counts and survival `matches` for any block of those kinds; the verifier re-runs undo | 5.5-6 days of work, about 3 elapsed (F3-a, then two in parallel) |
 
 **Build order and parallelism.**
 1. **FL-core and F3-a start together.** They share no module: FL lives in `kit/lib/plan/compile.mjs`'s zone dispatcher plus new
@@ -16979,10 +16979,12 @@ are quoted from that branch; anything its release changes wins over them. Nothin
 3. **The joint fixture** (`around_my_tree` as a ring round a giant oak at the hub, §FL 9 and §F3 9) runs once both are merged:
    on the integration branch, not in either slice's gate.
 - **Releases:** FL and F3 can be **one batch** (one release tier, one tag, one publish: GATES policy 5), or FL alone first if F3
-  runs late; the agreed order (FL before F3) holds either way. Neither changes removal, world stop or accounting behaviour that
-  Steward relies on today, so **neither needs Steward's RC by GATES policy 4** (F3's StillOurs rows touch only blocks Steward's
-  region parts never wrote before F3, and lots are BOX entries, restored exactly whatever the block). Each asks Steward whether it
-  wants one anyway (S-FL-6, S-F3-5).
+  runs late; the agreed order (FL before F3) holds either way. **FL needs no RC** by GATES policy 4 (plan answers
+  and lot layouts only; S-FL-6 asks whether Steward wants one anyway). **F3 needs Steward's RC** (S-F3-5): its coral writes a new
+  set in the fluids stage and changes a body's census and drain-then-restore (as H, HY and IRR did), and StillOurs' new volatile
+  and canonical rows are global (`WorldJournal.same` wraps `holds`), so they reach deltas and `versionOf`, PT2's adopt counts and
+  survival `matches` for any mushroom block, pointed dripstone or coral, Steward's lot designs included (as CU's rows did). One RC
+  covers both slices if they ship together.
 - **Rules for both slices** (from HY-a, KC and the CU batch's as-builts):
   - **Never edit `kit/regions/plan_v0.mjs`** (its source sha is every IR's `programSha`). New layouts and forms are new modules;
     `village.mjs` `layoutStreet`/`streetLayout` and D2's `followEmit.mjs` stay byte for byte.
@@ -17219,8 +17221,10 @@ strict (S-KC-2).
 
 **The backstop changes in one place.** `clearRefusals` today refuses the **body** for any zone writer in its sets. FL makes "later"
 follow the plan's dependency order: **when the zone depends on the body (directly or through its locator), the zone is the later part
-and is refused `OVERLAP {kind: body}`; otherwise the body is refused as today.** No committed fixture is predicted to change by it
-(no committed zone depends on a body); §8 measures it.
+and is refused `OVERLAP {kind: body}`; otherwise the body is refused as today.** **Checked:** none of the 187 committed plans
+(integrate/batch-cu, every fixture dir and the asks) has a zone whose `where` targets an H part, so no committed answer is predicted
+to change by it; §8 measures it. The footprint becomes an obstacle for **street** zones `near` or `adjacent` a body too (the same
+dependency), not only for FL's.
 
 ### 6. Answers, geometry and Steward's flow
 
@@ -17361,27 +17365,32 @@ verifier reviews the diff and the evidence and **re-runs items 6 and 7** (realis
 
 - **S-FL-1. Orientation on free layouts.** `grid` reads `orientation` for its avenues; ring, spiral and organic note it and ignore
   it. Your Start re-check sets `ew` with rotate off on street zones: will it skip that on ring, spiral and organic zones (it is
-  harmless either way), and keep it on grids (east-west avenues for additions)?
+  harmless either way), and keep it on grids (east-west avenues for additions)? Default: Architect notes and ignores it on ring,
+  spiral and organic; nothing for Steward to change.
 - **S-FL-2. Layouts under `around`.** Proposed: `around` lays a ring round the feature; `street` or `ring` read as that ring, and
   `grid`, `spiral` or `organic` with `around` answer `adjusted {what: layout, got: ring}`. Or should the others fill the annulus
-  (a grid round a lake), at more cost?
+  (a grid round a lake), at more cost? Default: the ring.
 - **S-FL-3. Hints.** `placement: central` puts a lot in the ring's hub (the council tent, the warden's hall); `edge` outside;
   `near_water` and `high_ground` as V scores them. For "around my oak", will your plan writer pass the tree as an anchor
-  (`near {anchor: oak, within: 0}`) so the ring centres on it, with `shared: none` keeping the hub unwritten?
+  (`near {anchor: oak, within: 0}`) so the ring centres on it, with `shared: none` keeping the hub unwritten? Default: yes to
+  both; Architect reads the hints as V does, plus central -> the hub.
 - **S-FL-4. The waiting zones.** around_my_tree, nomad_camp, grid_city and organic_hamlet waited as whole required zones. After FL
   they answer. Will Steward re-compose (or re-check) those plans rather than use the C38 offer, which fits one part round a
-  standing town?
+  standing town? Default: Architect changes nothing in C38 (`planCatalogue()` shows the flips); Steward re-checks a plan whose
+  only waiting part was its zone and offers it as a fresh build.
 - **S-FL-5. Street keys.** Free layouts' streets are keyed `road:<prefix>street_<name>` (`street_ring`, `street_a1`, ...). Your
   additions recognise `road:street_*` today and not D1's `road:<district>_street_*`. Is the `street_` stem enough, or do you want
-  the zone's streets listed in the geometry (they are, §6) and read from there?
+  the zone's streets listed in the geometry (they are, §6) and read from there? Default: the `street_` stem, and the geometry lists
+  them too.
 - **S-FL-6. RC.** FL changes plan answers and lot layouts, not removal or accounting, so GATES policy 4 needs no RC. Plan v1 will
-  build these zones whole (four fronts in one zone, lots in a hub). Do you want an RC check of `s01_steward_grove` anyway?
+  build these zones whole (four fronts in one zone, lots in a hub). Do you want an RC check of `s01_steward_grove` anyway? Default: no RC; you
+  check after release (or in F3's RC round if the two ship together).
 - **S-FL-7. Spiral and outline.** No recorded plan names `layout.spiral` or `sketch.outline` today. Proposed: ship both (each a
   small user of the frontage engine and the mask). The alternative re-points them to a later slice with a note and saves about
-  1 day. Ship, or re-point?
+  1 day. Ship, or re-point? Default: ship.
 - **S-FL-8. Prompt size.** FL adds no member; the compact plan/0 grows by descriptions only (predicted under 1,500 characters).
   With F3's four defs the two may pass 80,000 (the bound), against the jobs' 120,000 cap. Is 84,000 within your plan writer's
-  budget?
+  budget? Default: 84,000.
 
 ### Open questions for Noah
 
@@ -17522,8 +17531,11 @@ S-F3-3 asks whether Steward's `load` rule for tunnel plans extends here.
 **3.4 Coral is its body's.** `form.coral` must name a plan body: `where: {inside: {part: <form.pond | form.fountain | form.quay |
 channel.moat>}}`; anything else answers `refused NO_FEATURE {why: no plan water}` (natural water is the seabed slice's).
 - It **compiles into the body**: its cells are a new body set `decor` (the body's own writes, `part` = the body's part), written in
-  the fluids stage's body order after the bed and before the water: coral blocks replace bed cells (shell-grade: full blocks),
-  plants, fans, wall fans and sea pickles (all waterlogged) stand in water cells at least 2 below the surface.
+  the fluids stage's body order **after the body's water stands** (bed, then water, then decor), so no live coral ever waits dry for
+  its water (vanilla's death tick): coral blocks replace bed cells (shell-grade full blocks, solid to solid), plants, fans, wall fans
+  and sea pickles (all waterlogged) replace water cells at least 2 below the surface. Removal: drain, then decor and bed restored.
+- **Light under ice:** four waterlogged sea pickles give light 15. In a body with N-H-4's ice cap (a freezing biome) pickles are 1
+  per cluster (light 6), and M17 guards the cap; a frozen-site case is in `f3/` (`c01_cold_coral`).
 - **H's census and prediction** count a waterlogged decor cell as a source cell (as HY's grate bars are); `predicted` includes
   them. The flow model treats them as sources; the breach as H's.
 - KC's registry records `decor` in the body's hard set; `M25:clear`'s water check passes them (waterlogged, the body's own part).
@@ -17585,7 +17597,9 @@ What vanilla changes on our blocks without anyone placing anything, so that undo
   `requires: ['coralDecor']`: an older mod refuses it `PLAN_STALE`).
 - **Placeholders:** API 1.39.0, mod 0.42.0, `KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` 0.40.0, catalogue 11.
   Features `formsTrees`, `formsCave`, `formsWater` (as the old draft), sidecar `FEATURES` `plan.forms2`. **Java:** `StillOurs`,
-  `Coral`, `IrStale.KINDS_FORMAT2`, `PlanChecks.hasVolume`; api-compat clean (no public type changes).
+  `Coral`, `IrStale.KINDS_FORMAT2`, `PlanChecks.hasVolume`, and **`RegionFluids`** (F3-c: the `decor` set written after the water,
+  waterlogged decor counted as sources by the census and the escape guard, decor and bed restored after the drain); api-compat
+  clean (no public type changes). F3-c runs the engine tag.
 
 ### 8. Byte identity
 
@@ -17616,7 +17630,8 @@ hamlet; houses inside them are 7b), hidden_village (stalactites and hanging root
   with a giant oak in its hub: FL's, added when FL is in), `v77_f3_nether` (crimson and warped giants, shroomlight light).
 - `f3/`: `r01_coral_dry` (coral not inside a body: `NO_FEATURE`), `r02_no_ceiling` (stalactites over solid ground: `NO_FEATURE`),
   `r03_tree_near_natural` (a site within 8 of natural leaves: moved, `adjusted`), `r04_tree_in_pond_band` (a tree whose only site meets
-  a pond's footprint: `NO_ROOM`, the pond untouched), `r05_volume_cap` (`VOLUME`), and **`s01_steward_glade`** (Steward-shaped: a
+  a pond's footprint: `NO_ROOM`, the pond untouched), `r05_volume_cap` (`VOLUME`), `c01_cold_coral` (a coral pond on the frozen site 2026101102 under its
+  ice cap: 1 pickle per cluster, M17 0), and **`s01_steward_glade`** (Steward-shaped: a
   hamlet zone, a giant oak `near` its well, a coral pond `farmPond`-style beside it, two giant mushrooms at its edge, written as the
   plan writer would).
 - **Broken variants:** `_unsafe.leafNotPersistent` (M18), `_unsafe.liveCoralDry` (M19), `_unsafe.coralOtherPart` and
@@ -17636,7 +17651,7 @@ cells/s, IR under 4 MB, blobs under 16 MB).
 |---|---|---|
 | 1 | Bounded ops (property, 200 seeds per generator and preset) | 100% of ops at most 32 primitives; forms over 400 ops baked |
 | 2 | Plan answers | every valid fixture `fits`; every `f3/r*` its code with `wouldFit`s re-checked alone; §9's bar on the 59 asks |
-| 3 | **Every new kind through `realiseApproved`, flat** | in game, through `Regions.checkPlan` (the two-plan flow where a volume or a body asks for it) and `realiseApproved` with the artifact: v72, v73, v74, v75, v77 and `s01_steward_glade`, each READY, PLACED, the realised cells equal the virtual ones by state (leaves' `distance` and `persistent`, mushroom faces, dripstone thickness), coral ponds' census equal to `predicted` with decor, then `Regions.remove`: **E-flat 0** |
+| 3 | **Every new kind through `realiseApproved`, flat** | in game, through `Regions.checkPlan` (the two-plan flow where a volume or a body asks for it) and `realiseApproved` with the artifact: v72, v73, v74, v75, v77 and `s01_steward_glade`, each READY, PLACED, the realised cells equal the virtual ones by state (leaves' `distance` and `persistent`, mushroom faces, dripstone thickness), coral ponds' census equal to `predicted` with decor and **M19 0 on the dump straight after the settle**, then `Regions.remove`: **E-flat 0** |
 | 4 | Decay and death (the stand) | after a 2-minute stand at default random ticks: 0 written leaf cells changed (re-surveyed), M18 0; 0 live coral turned dead, M19 0; 0 pointed dripstone grown; the realised M3 0 floating (branches on trunks, stalactites on ceilings) |
 | 5 | **Natural round** | `grove_demo` on its forest site through the same flow: removal E-normal 0 unclassified, with D2's narrowed classes (`decay` of a natural non-persistent leaf, `flow`, `live`, each at unwritten cells and `far`/`deep` from the plan) and VOC's `farfluid`, reused exactly; **0 classified cells within 8 of a form's columns**; a no-region control run first |
 | 6 | **Undo with drift** (verifier re-runs) | v73 with its pond drained by removal: every coral cell restored (dead ones counted ours, `Coral.canonical`); a leaf, a mushroom face and a dripstone tip changed by a player-like `/setblock` neighbour before removal: each still ours and restored, E-flat 0; a player-placed block (PT record) on a form cell: kept, reported |
@@ -17654,7 +17669,7 @@ map's steps for `kit/lib/forms/**`, `kit/lib/region/**`, `checkFluids.mjs`, `jou
 F2's scatter steps, H's `h-unit`/`h-ingame`/`ha-ingame`, KC's `kc-unit`/`kc-ingame`, CU's `cu-ingame`, PT2's `pt2-ingame`, 6a's
 `6a-forest`), and F3's own `f3-unit`, `f3-ingame`, `f3-natural`, `f3-forest`, `f3-look` (driver `tools/gate6cf3.mjs`, chain `6cf3`,
 impact rule "6c F3"). The verifier reviews the diff and the evidence and **re-runs items 3, 4 and 6** (realise, the stand, undo with
-drift). No Steward RC by default (S-F3-5).
+drift). **Steward's RC check before release** (S-F3-5).
 
 ### 11. Build order, the split and the shared interface
 
@@ -17688,19 +17703,23 @@ drift). No Steward RC by default (S-F3-5).
 
 - **S-F3-1. Coral as a part.** Proposed: `form.coral` is its own part whose `where` names a plan pond, fountain, quay or moat, and
   compiles into that body's own cells. The alternative is a member on the body (`coral: {preset, cover}` on `form.pond`), with no
-  new id. A part keeps "one id per idea" and lets your plan writer add coral without rewriting the pond. Which?
+  new id. A part keeps "one id per idea" and lets your plan writer add coral without rewriting the pond. Which? Default: the part.
 - **S-F3-2. Four new ids.** `form.giant_mushroom`, `form.coral`, `form.roots`, `form.stalactites` beside `form.giant_tree`, each its
   own lean def (about 3,000-4,500 characters together in the compact plan/0). Or one `form.giant_tree` with mushroom presets and the
-  cave forms as members? Proposed: the five ids.
+  cave forms as members? Default: the five ids.
 - **S-F3-3. Volumes for cave forms.** Stalactites and ceiling roots take the two-plan flow with a frozen volume, like a tunnel. Your
-  rule bounds `load` (512) whenever a plan holds a tunnel; will you apply it to plans holding `form.stalactites` or `form.roots` too?
+  rule bounds `load` (512) whenever a plan holds a tunnel; will you apply it to plans holding `form.stalactites` or `form.roots` too? Default: yes; Architect answers `refused VOLUME` past
+  the caps either way.
 - **S-F3-4. No streets under canopies.** A canopy's columns are hard for streets, paths, walls and lots (K5 for lots). Fine for v1,
-  or do you need roads that pass under a giant tree (a later member, with headroom 4 and W's lamps under it)?
-- **S-F3-5. RC.** F3 changes `StillOurs` only for blocks your region parts never wrote before F3 (lots are BOX entries, restored
-  exactly), so GATES policy 4 asks no RC; the verifier re-runs the undo items. Do you want a pre-release check of
-  `s01_steward_glade` anyway?
+  or do you need roads that pass under a giant tree (a later member, with headroom 4 and W's lamps under it)? Default: hard for v1.
+- **S-F3-5. RC.** Proposed: **an RC check before release.** F3-c changes the fluids stage (decor, census, drain-then-restore), and
+  StillOurs' new rows are global: they reach deltas and `versionOf`, PT2's adopt counts and survival `matches` for any mushroom
+  block, dripstone or coral, in your lot designs too (CU's precedent). Will you check `s01_steward_glade` (realise, removal, and a
+  `versionOf` of a lot whose entry holds mushroom blocks) on the RC? (The narrower alternative, the new rows only for region CELL
+  entries, would leave lot paths as today; not proposed.) Default: the RC, one round with FL's if they ship together.
 - **S-F3-6. Forms near your builds.** A giant tree keeps 8 off natural trees and its canopy off lot boxes + 1. Should it also keep
-  off player builds by more than PT's keep-out + 1 (shade on a player's farm)?
+  off player builds by more than PT's keep-out + 1 (shade on a player's farm)? Default: no; PT's keep-out + 1, and the canopy's
+  columns off the build's rect + 1.
 
 ### Open questions for Noah
 
