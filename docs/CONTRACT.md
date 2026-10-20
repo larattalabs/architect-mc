@@ -20311,6 +20311,8 @@ A following district's street is a route on its boundary line. Its growth:
   - extension: a new edge from the standing end node to the new end node `<roadId>_g<n>_end`, the extension's junctions, lanes and lot
     nodes. The standing end node gains one edge and stops being terminal; the new end is terminal, so a later district (D3) or a later
     growth can use it.
+- **Byte identity:** a program run without `params.grow` is unchanged (item 2); a growth's kept parts are RV's (byte for byte, checked
+  per tile, RV §3.4). `KIT_VERSION` moves.
 - **The town's square and bell** are unchanged; M22, M23 and M24 are judged on the whole revised IR (a new trading hall must sit
   within 12 of the bell, or it is placed where it is and M23 warns as today).
 
@@ -20381,6 +20383,7 @@ About **4.5-5.5 days** of work, **3 elapsed**:
 | 12 | Land v 2 | after items 5, 10, 11: every column each district holds in the journal lies in `union`; each grown part carries its revision; after `undoRevision` the parts are gone and `union` equals the one before |
 | 13 | Survival (only if RS has merged) | item 3 in a survival world: the new lots, lanes and pads as RS targets; `undoRevision` refunds once per key (`survival.undoable` true for frontage growth) |
 | 14 | Unchanged, API, spend | RV's item 18 plus rv-ingame; api-compat clean; apijars; $0.00 |
+| 15 | Natural round | S3's pinned claim: D3's item 15 town and shore district, the district grown by 2 lots (frontage and the boundary extension); plan, realise, save, leave, reopen; `undoRevision`, then removal in both orders; E-normal 0 unclassified under D2's narrowed classes and VOC's `farfluid` |
 
 **Tier:** slice plus `region/**` and `api/**`: the units and apijars; rv-ingame, d3-ingame, d2-ingame, fl-ingame; GR's own `gr-unit`,
 `gr-ingame` (driver `tools/gate6dgr.mjs`, chain `6dgr`, impact rule "6d GR").
@@ -20512,7 +20515,15 @@ unaffected (a lot is BOX above its pads).
 - **Survival:** a construction delta (5b D8, Y1's stockpile), unchanged.
 - **Revert:** `Sites.revert(siteId, oldVersion)` as 5b (LIFO; in survival a paid forward delta).
 
-### 5. Gate (slice tier, $0)
+### 5. Byte identity, KC and Steward's asks
+
+- **Byte identity:** no IR, tile, plan answer or blueprint changes for anything not followed; a followed copy's blocks equal a fresh
+  copy made by the same recipe from the new source version (item 1). Kit unchanged, so no `PLAN_STALE`.
+- **KC:** FS adds no region writer; a lot's delta stays inside its lot box (5b), which bodies already keep clear of (H's `M25:keep`).
+- **Steward's asks:** round 3's "updates follow the source" is answered for COPY (C1's copies); SITE waits for 7b. The 59 asks are
+  unaffected (no plan path changes).
+
+### 6. Gate (slice tier, $0)
 
 | # | Check | Bar |
 |---|---|---|
@@ -20623,7 +20634,16 @@ default CompletableFuture<RegionPlan> replanStages(String regionId, @Nullable St
 - Through `realiseApproved`: a region realised from an artifact gets a new artifact for the replan (`revisionOf`, RV §9.3), so
   Steward approves the changed stages before they run (S-LC-2).
 
-### 4. Gate (slice tier, $0)
+### 4. Byte identity, KC and Steward's asks
+
+- **Byte identity:** a region that never calls `replanStages` is unchanged; a replan keeps every placed part byte for byte (§3's
+  rule). Plain plans don't get `routePrefer` (only `replanStages` passes it), so no plan answer moves. Kit unchanged.
+- **KC:** the replanned stages are the region's own program; its bodies keep clear as at plan time, and the held set is hard.
+- **World classes:** item 3's natural twin classes E-normal by D2's narrowed classes at unwritten cells only (no new class).
+- **Steward's asks:** S-PT-1 ("C17 areas are enough until 6d's replanning") is answered by the report plus the stage replan; plan
+  v1's stale retry is unchanged. The 59 asks are unaffected.
+
+### 5. Gate (slice tier, $0)
 
 | # | Check | Bar |
 |---|---|---|
@@ -20707,6 +20727,9 @@ record AdoptRegionRequest(String owner, ResourceKey<Level> dimension, BoundingBo
   so no tile). `budget` 0.
 - Its street ends are terminal junctions, so GR can extend them and D3 can join them.
 - Its IR is revision 0; its frozen heights are taken at first touch by a later revision (6a D3).
+- **Its artifact:** adopt writes a synthesized plan/0 artifact for the region (C36-kept, `region.adopted: true`, no tiles, its lots in
+  `$.lots[]` with C36's members and the sites' ext), so a plan/0 revision can name it as `parentArtifact` (RV §9) and Steward's plan
+  writer can grow the adopted village as any region.
 
 #### 2.3 Group membership
 
@@ -20728,13 +20751,18 @@ record AdoptRegionRequest(String owner, ResourceKey<Level> dimension, BoundingBo
 |---|---|---|
 | 1 | Unit | `adopted_village` IRs from 20 synthetic VillageLayout settlements: lots, roads and graph as V's for the same geometry; no parts |
 | 2 | Adopt | a Steward-shaped VillageLayout settlement (Steward's own `VillageLayout` code path driven through its test hook, or the recorded site set of Steward's e2e village), adopted: 0 changed cells (hash), 0 journal entries written; `RegionView` lists its lots and street |
-| 3 | A 6d addition | a GR growth of one lot on its street (frontage), realised |
+| 3 | A 6d addition | a GR growth of one lot on its street (frontage): through `checkPlan` of a revision plan naming the adopted artifact (Steward's plan writer shape: the adopted zone with one more lot) then `realiseApproved` |
 | 4 | A 6d delta | `applyDelta` on one adopted lot (a stub v2) |
 | 5 | Remove (verifier re-runs) | `Regions.remove`: E-flat 0 over the claim against the world before the settlement |
 | 6 | Un-adopt | a second settlement adopted then un-adopted: memberships as before, Steward's own undo of one of its sites still works |
 | 7 | Joint row (with 7a) | once 7a's link pass lands: its link pass over the adopted region, then rows 3-5 again (run on the integration branch) |
 
 **Size:** 3-3.5 days, one builder. **Placeholders:** API **1.47.0**, mod **0.50.0**, kit **0.46.0**, catalogue unchanged.
+
+### Byte identity, KC and Steward's asks
+
+- Adoption writes nothing (hash, item 2); `adopted_village` is a new program, so no existing IR moves. KC: no writer. The 59 asks are
+  unaffected. C12's joint gate is answered on the 6d side by rows 2-6; its 7a row waits for 7a.
 
 ### Open questions for Steward
 
