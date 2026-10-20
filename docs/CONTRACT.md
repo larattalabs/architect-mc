@@ -16005,3 +16005,929 @@ https://claude.ai/artifact/TZ2mx1GntGXBW3xEqukCRq. No gate-verifier has reviewed
 PlanChecks' sample cache, the grate's bill); its in-game evidence is the run above.
 
 Not merged, not tagged.
+
+## Batch KC, CU, IRR, VOC-c: summary for one Steward review round (DRAFT, 2026-10-20)
+
+Four small slices drafted together for one Steward review round. Each has its own section below, marked "(DRAFT for Steward
+review)". They are written over HY (API 1.36.0, mod 0.39.0, kit 0.37.0, catalogue 8), which is integrating and lands first.
+**Where the HY facts come from:** the HY sections and as-builts on `origin/slice/HY-a`, `origin/hy/core`, `origin/slice/HY-b`,
+`origin/slice/HY-c` and `origin/docs/hy`, plus the local `integrate/hy` (bb60e193, not pushed when this was drafted; no "HY batch
+as integrated" row yet). Anything HY's integration changes wins over the facts quoted here.
+
+| Slice | What | API / versions (placeholders; the coordinator renumbers) | Steward check | Size |
+|---|---|---|---|---|
+| **KC** | Parts keep clear of fluid bodies (safety): a body's footprint is hard for every writer placed after it, a body keeps clear of every writer placed before it, and a new error `M25:clear` catches any write into a body's cells | **patch** v0.39.1, kit 0.37.1, API 1.36.0 unchanged (no Java, no new member); 1.37.0 only if the coordinator wants a feature string | none before release (plan answers only, GATES policy 4); Steward re-checks after (old IRs go PLAN_STALE) | 1-1.5 days |
+| **CU** | Copper weathering and undo: weathered, waxed and scraped copper of the same shape stays ours for undo, removal, deltas and refunds; the refund pays the standing block's items, to the stockpile | 1.37.0, mod 0.40.0 (kit unchanged) | **pre-release check** (removal and accounting); the verifier re-runs undo and accounting | 1-1.5 days |
+| **IRR** | Farm irrigation: `irrigate: true` on a farm lot (or its zone) puts one contained source per 9x9 of its field, as H bodies, in cells the lot design leaves open | 1.38.0, mod 0.41.0, kit 0.38.0, catalogue unchanged (a member, like `farmPond`) | **RC check** (a body inside a lot box, a new realise order between the lot's entry and the fluids stage, and a removal path) | 2-2.5 days |
+| **VOC-c** | `rule.palette` measured: reserved to supported, measured over parts and over lots from their bound entries, and a `realiseApproved` refusal when an approved entry breaks a required rule | 1.39.0, mod 0.42.0, kit 0.39.0, catalogue next (9 after HY's 8) | **RC check** (a new `realiseApproved` refusal) | 1.5-2 days |
+
+**Build order and parallelism.**
+1. **KC first, alone**, because it is a safety fix: a READY plan today can pour a wall through a fountain. It is kit only and
+   small, so it ships as a patch straight after HY.
+2. **CU and VOC-c in parallel with KC or right after it.** CU is Java only (`StillOurs`, the refund), and VOC-c is mostly kit
+   plus one Java refusal in `PlanChecks`. Neither shares files with KC. VOC-c's Java (`PlanChecks.realiseApproved`,
+   `lotProblem`) and CU's Java (`StillOurs`, the removal's refund) don't overlap either.
+3. **IRR after KC and CU** (it needs CU's S-CU-3 for its farmland edges, §3 of IRR; it registers its bodies with KC's footprint registry and is judged by `M25:clear`; its own lot-box exception is to `M25:keep` and K5). It can
+   start on KC's frozen interface (the registry's shape, end of KC's first half-day).
+- **Releases:** KC as its own patch. Then CU, IRR and VOC-c as one batch with one release tier; CU's pre-release check and IRR's
+  and VOC-c's RC checks can be one Steward round on one release candidate. If the agreed order (STEWARD-SYNC: copper, then
+  irrigation, then VOC-c) must hold for releases, CU can release alone first and IRR plus VOC-c after.
+- **Rules for every slice here** (from HY-a's as-built): **never edit `kit/regions/plan_v0.mjs`**. Its source sha is every IR's
+  `programSha`, so one edit moves all 193 committed fixtures. New fixture numbers start at **v61** (HY uses v50-v60 beside VOC's
+  v50 and v51): KC v61, IRR v62-v63, VOC-c v64-v65.
+- **Totals:** about 6-7 days of work; about 3.5-4 days elapsed with KC and CU/VOC-c in parallel and IRR after KC.
+
+## Phase 6c slice KC: parts keep clear of fluid bodies (FROZEN 2026-10-20, Steward reviewed)
+
+A safety fix. Every part and connector that writes cells keeps clear of the plan's fluid bodies, or is refused, and the checker
+catches any write into a body as an error. PLAN "Queued (coordinator, 2026-10-20): priority" and "Queued from the VOC batch":
+v51's wall through the fountain. Over HY (API 1.36.0, mod 0.39.0, kit 0.37.0, catalogue 8).
+
+- **Branch:** `slice/KC`, worktree `../architect-mc-KC`. **Spend:** $0, sim and stub only.
+- **Scope:** the footprint registry (§2), the order rule (§3), every writer's rule (§4), `M25:clear` (§5), the answers (§6),
+  byte identity (§8) and the gate (§10).
+- **Not in scope:** natural water (walls' harbour fallback, wet writes, tunnels' `fluidBuffer` to natural water: unchanged);
+  bodies keeping clear of lots, builds and keep-out (H's `M25:keep`, unchanged); the relief falling-water anomaly (its own PLAN
+  item); v44's waterfall bill (its own PLAN item).
+- **Depends on:** H, HY (courses, water gates), K1, T3, P0 (all on main once HY lands).
+
+### 0. Facts (HY as integrating; main 0d665136 plus `integrate/hy`)
+
+**The v51 defect.** `valid/v51_voc_forge` is a flat village zone `forge`, a `form.fountain` `fount` (basin 5, spout 3) and a
+`connector.wall` `forge_wall` `{around: {feature: {part: forge}}, ring: [4, 8]}`. The wall's ring writes over the fountain's last
+basin row (5 water cells at y 65, z 2058) and five of its rim cells. The plan is READY, the realised world equals the virtual one,
+and voc-ingame lists the fountain's polished blackstone 18 billed against 13 standing (recorded, not judged).
+
+**Why, in the compile order** (`kit/lib/plan/compile.mjs`):
+- Step 2 resolves every part: zones, lots, forms, **and H parts** (a pond's or fountain's rect is known in `res`/`geom`).
+- Step 3 emits zones (with their props and lamps, `planProps`/`emitProps`), relief, terraces and spikes (`r.forms`).
+- Then `planWalls(K)` (line 1118): wall lines and rings are searched over `wallGrid` (`connectors/wall.mjs:99-117`), whose
+  obstacles are zones, lots + 1, `r.forms`' bounds, regions, builds, standing areas, keep-out, kept columns, and, with `wet`,
+  "the plan's own water" from `r._fluidBodies`' cells and shells.
+- **Only after that** the farm ponds (`fluidFarmPonds`, line 1123) and every H part (`fluidEmit`, line 1130) emit their bodies.
+  So at wall time `r._fluidBodies` is empty and the wall's plan-water term (`wall.mjs:116`) sees nothing. A fountain, pond,
+  waterfall or quay is not in `r.forms` either, so the ring passes straight through it.
+- HY-c relies on this order: a course emits after `planWalls` so it can find the walls it crosses and register a water gate
+  (HY-c as built, "Where the crossing is decided"). HY-b's router keeps off "the forms' and other channels' footprints" but not
+  walls; a course meeting a wall without a water gate answers `UNREACHABLE wall` at emit.
+- Routes (step 4) already see emitted bodies: `fluidPassInput` hands the route pass the bodies' water (FLAG_WATER, `planWater`
+  1) and shells (2), so streets fall back to T3's bridge over plan water. Links (walls, gates, rope bridges, tunnels; step 5) are
+  emitted after the bodies but were *planned* before them.
+
+**Why the checker passed it.** `checkFluids.mjs` `shellCheck` returns "another part's" only when both the body's `part` and the
+cell's plan part are known (`b.part && own && own !== b.part`), and there is no rule at all for a body's *water* cells holding
+another part's block: the sim reads them as solid and finds nothing to leak. Which of the two let v51 through (an unset
+`o.part`, or a wall IR part missing from `meta.planCheck.partOf`) is the builder's first finding.
+
+**The harbour trap.** `line.mjs:60` marks plan water as `OB.WATER`, and `wall.mjs:373` sends any `WATER` failure to
+`wetWallFallback`, which builds a harbour wall in the water. A body's footprint fed to the wall grid as `WATER` would turn v51's
+ring into a harbour wall through the fountain. KC must not do that (§4, `k03`).
+
+**The body's cell sets** (`r.fluidBody`, the `fluid` op): `cells`, `ice`, `shell`, `spill`, `joins`, `watch`, and HY's `lining`,
+`weir` (as lining runs), `grate`. `watch` is the single breach's reach outside the cells and spill, computed **at emit over the
+draft world**, before link-stage writers exist; the checker's `simulate(..., {breach: true})` runs again on the **final** virtual
+world.
+
+### 1. The rule in one line
+
+**A body's cells are its own.** No other part writes a cell of a body's water, ice, shell, lining, weir, grate or spill, nor a
+non-shell-grade block into its watch cells (§2). The one legal crossing of a wall over plan water stays HY-c's water gate.
+
+### 2. The footprint registry (kit, plan time)
+
+`kit/lib/fluids/keep.mjs` (new), one record per body, filled in two steps:
+- **At resolve (step 2):** each H part registers a **reserved footprint**, the columns and y-span it will own:
+  its resolved rect grown by its shell (1) and, for a fountain, its apron; a waterfall its header pool, curtain and basin; a moat
+  its ring; a quay its basin. Each generator gains a pure `footprint(res)` export beside its `resolve`. A course's footprint is
+  not known at resolve (it routes at emit, after the walls): courses register at emit only (§3). **Farm ponds** are sited in
+  `fluidFarmPonds`, after `planWalls`: they register when sited and keep clear of the walls already planned (§4).
+- **At emit:** the body's exact sets replace the reservation: `hard` = cells ∪ ice ∪ shell ∪ lining ∪ weir ∪ grate ∪ spill ∪
+  plan joins; `watch` = the op's watch.
+- **Rollback:** the registry rides `checkpoint`/`rollback` (as `_fluidBodies` and `_overflows` do), so a body that fails frees its
+  footprint.
+- **Read by** every writer in §4 through one query, `keptBy(x, y, z) -> {body, part, set} | null`, and by the 2.5D grids through
+  `keptColumns() -> [[x, z, body]]`.
+
+### 3. The order rule: whoever is placed later keeps clear
+
+There is no single "bodies first" pass: walls must be planned before courses (HY-c), and moats ring walls. So:
+- **A writer placed after a body's footprint is registered treats it as hard.** That covers every level body against walls,
+  links, routes, lamps, tunnels and later bodies, because their footprints are registered at step 2.
+- **A body placed after a writer keeps clear of that writer's cells.** That covers courses (emitted after `planWalls`), farm
+  ponds (after the zones' props and lamps) and moats (resolved around their wall).
+- **Ties:** none are possible: each writer has one position in compile.mjs's order, and §4's table fixes it.
+- **The backstop** is `M25:clear` over the final virtual world (§5). Generators that keep clear by construction never meet it;
+  the rule exists so that the next writer added without a row in §4 cannot pass silently.
+
+### 4. Every writer's rule
+
+| Writer | Placed (vs H resolve in step 2 and H emit in step 3) | Plan water today | KC rule | Refused as | `wouldFit` (re-checked alone) |
+|---|---|---|---|---|---|
+| Zones, lots, lot pads, lanes, square (step 2-3) | before | n/a (bodies keep off lot box + 1 by `M25:keep`) | unchanged: the body keeps clear (H's `M25:keep`) | the body: H's `LEAK` / `NO_ROOM` | H's |
+| Zone props and lamps (`planProps`, step 3) | before | none | **farm ponds** keep off every prop, lamp and lane cell (`farmSite` already refuses F_WRITTEN columns; KC adds the props' planned cells, which emit in the `props` stage after the pond is sited) | the zone's farm pond: not added, note "farmPond: no dry, clear site" (as today for a wet claim) | n/a |
+| Relief, terraces, spikes (step 3) | before | n/a | the body keeps clear (H forms resolve "clear of the zones and forms resolved before it") | the body | H's |
+| **Walls: lines and rings** (`planWalls`) | **after resolve, before emit** | none (the defect) | the reserved footprints enter `wallGrid` as a **new obstacle class `OB.BODY`**, never `OB.WATER`, so they never trigger the harbour fallback; a ring searches round them inside its `ring` band | `OVERLAP {kind: "body", body, part}` when no ring or line in the band avoids every footprint | the wall with its `ring` widened by the body's depth, or the body moved (`where` widened) |
+| Walls' gates, auto gates, posterns (K1a) | after resolve | none | a gate stands on its wall's cells, so it inherits the wall's rule; a gate jamb on a footprint cell is `OVERLAP body` | `OVERLAP {kind: "body"}` | the gate one position along |
+| **Moat** (`channel.moat`, around a wall or zone) | resolved around its target | its own | unchanged: the moat is the later one and keeps clear of the wall's planned cells (H-a); KC adds the test that its berm wall is `fs` only (§5's watch clause) | H's | H's |
+| **Courses** (HY-b, emit after `planWalls`) | after walls | router keeps off forms' and channels' footprints | the router also takes **every planned wall's cells** (K.walls, not only those it crosses) and every registered footprint as hard, except the straight run where `waterGate` registers a crossing | HY's `UNREACHABLE {kind: wall}` (unchanged), or `UNREACHABLE blocked` | HY's |
+| **Water gates** (HY-c) | course emit | the wall stands on a lintel over the reach | **the only legal wall-over-water crossing.** The wall writes no cell of the course (as built); `M25:clear` exempts exactly the registered crossing's lintel and frame cells in the reach's watch set, and nothing in its hard set | HY-c's `UNREACHABLE {kind: wall, why}` | HY-c's |
+| Farm ponds (`fluidFarmPonds`) | after walls | `farmSite` refuses F_WRITTEN columns | also refuses the planned (not yet emitted) wall cells and props' cells (above) | note, not added | n/a |
+| **Routes: streets, roads, paths** (step 4) | after emit | water and shell as `planWater` 1 and 2; T3's bridge fallback, clearance 1 | unchanged, plus the lining, weir and spill as shell (2) where HY-b's `passInput` does not already add them (it does for courses and ditches only) | `ROUTE_WATER` -> bridge (T3) | T3's |
+| Route lanterns and lamp posts (`lanterns: true`, `light.mjs`) | after emit | HY-b: `light.mjs` skips course spill | a lamp, lantern or post never on a hard cell and never a non-shell-grade block in a watch cell | the lamp is skipped (lighting still judged by M5) | n/a |
+| Bridges (T3 fallback and `bridge.*`) | after emit | piers dry over plan water; never on lining or weir (HY §8.1) | deck, piers and abutments off every hard cell; a deck over a body at clearance at least 1 over its surface (already) | T3's `ROUTE_WATER` / `NO_ROOM` | T3's |
+| Rope bridges (K1b) | planned before emit, emitted in links | none | landings, anchors and posts off every footprint (registered at step 2) | `OVERLAP {kind: "body"}` | the span to the nearest clear landing |
+| Tunnels (T3b) | planned before emit | `fluidBuffer` 2 to natural water, ice and lava | the buffer counts every footprint and hard cell too (HY §8.2 says so for courses; KC makes it every body) | T3's `WATER` (`within 2 of the bore`) | T3's |
+| Wet writes (piers, harbour walls, quays' wet columns) | H-b | natural water only | a wet write into a plan body's hard set is `M25:clear`; none is expected (they stand in natural water) | the part: `OVERLAP body` | H-b's |
+| Scatter, stamps, brushes (programs) | any | n/a | a program's op over a body is `M25:clear` at check; programs are not plan parts, so this is a region error, not an answer | check error | n/a |
+
+**Codes.** No new reason code. The new `evidence.kind` is `body` on `OVERLAP` (`{kind: "body", body, part, cells (<=16)}`). The
+reason is the writer's (the body was there first). For the bodies that keep clear, H's and HY's answers stand unchanged.
+
+### 5. `M25:clear` (the checker, an error)
+
+In `checkFluids.mjs`, for every IR with a `fluid` op, over the final virtual world:
+- **hard:** every cell of a body's `cells`, `ice`, `shell`, `lining`, `grate` and `spill` whose last writer is a part other than
+  the body's own is a finding, `M25:clear`, with the body, the writer's IR part and plan part, the set and up to 16 cells. A
+  *water or ice* cell holding any written block is one too, whoever wrote it (the body owns it outright).
+- **watch: strict.** A cell of the op's `watch` (computed at emit, over the draft world) written by any other part is
+  `M25:clear` with `set: "watch"`, whatever the block.
+  - **Named exception, one only:** the registered water gate's lintel and frame cells (HY-c) in its reach's watch set.
+  - **Predicted to meet it:** a wall on a moat's berm (the moat's inner breach reach is computed before the wall emits) and a
+    harbour wall beside a quay. §8's watch count measures it on every committed fixture; if it holds, S-KC-2 asks whether to
+    allow shell-grade writes there instead (the checker's breach on the final world, `M25:keep`, would then be the measure).
+- **Errors, not warnings.** A plan with `M25:clear` is not READY; the writer's part is refused `OVERLAP {kind: "body"}` (it was
+  placed later), or, for a program op, the region's check fails.
+- `shellCheck`'s "another part's" is fixed so that a missing part id is a finding (`"owner unknown"`), never a pass.
+- **The mod:** nothing new. The live check already refuses a shell cell the region doesn't own (group level); the plan check is
+  where another part of the same region is caught.
+
+### 6. Answers and Steward
+
+- A plan READY today whose writers never touch a body: byte-identical (§8).
+- **v51:** the ring keeps clear of the fountain. Predicted answer: `forge_wall` `adjusted` (a deviation: ring at the band's far
+  side), fountain unchanged; the builder confirms and records the before and after.
+- **S-K1-6 binds:** a pending part newly refused is a repair for Steward's plan writer, never a build stop. **S-K1-7 binds:**
+  `evidence.kind: "body"` is unknown to Steward today and passes through.
+- **KIT_VERSION** moves (0.37.1): kit output changes for some inputs, so `IrStale` marks older IRs stale and an approved artifact
+  whose IR changes answers `PLAN_STALE`; Steward re-checks, as at v0.37.1.
+
+### 7. Steward's recorded plans (the asks claim): expected answers
+
+Predicted, not run. The builder commits the before and after tables (`fixtures/plan/kc/asks-before.md`, `-after.md`).
+
+| Plan / part | Expected | Why |
+|---|---|---|
+| every recorded plan without a body | unchanged | no body, no `M25:clear`, no new obstacle |
+| redstone_gate / moat (`channel.moat` round its wall) | unchanged | the moat is placed after the wall and keeps clear of it (H-a); the wall's berm cells are shell-grade |
+| hidden_village / waterfall_curtain | unchanged, unless a wall or route in that plan meets it (the builder names any) | its footprint registered at step 2 |
+| farm plans with `farmPond` (the hamlet) | unchanged | farm ponds already refuse written columns; props' cells are predicted clear |
+
+**Bar:** 0 `malformed`; no recorded part changes class unless named in the after table with the body it met.
+
+### 8. Byte identity
+
+- **Bar:** every committed fixture (all of `kit/test/fixtures/plan`, the 59 asks included) re-plans byte-identical (answers and
+  IR, but its kitVersion), **except by name**: `valid/v51_voc_forge`, and every other fixture the builder finds where a writer
+  met a body, each named with the body and writer in the as-built. The obstacle class may move a search even off the chosen
+  path (caps, tie order), so this is measured, not argued.
+- **Count, recorded:** committed fixtures where another part writes a cell of an op's watch set (shell-grade or not), so
+  Steward and the coordinator see how often §5's watch clause is met.
+- All scenario and kit tile goldens unchanged except those named.
+
+### 9. API, wire and versions
+
+- **Placeholders:** mod 0.39.1 (a patch over HY), `KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` 0.37.1, API 1.36.0
+  unchanged, catalogue unchanged (no id moves). If the coordinator wants Steward to detect it, a feature string `bodiesKept`
+  (`region.fluids`) makes it a minor (1.37.0); the draft proposes the patch.
+- **No Java change.** api-compat clean by construction; apijars unchanged.
+- **Wire:** `OVERLAP` evidence `kind: "body"`; the check's `metrics.M25.clear {hard, watch, exempt}` counts.
+
+### 10. Gate (slice tier, $0)
+
+**Fixtures** (`fixtures/plan/kc/`, and `valid/v61_kc_*`):
+- `k01_forge` (v51's plan, kept as a refusal-free regression: the ring keeps clear);
+- `k02_ring_tight` (ring [4, 4] round a zone whose band holds a pond: `OVERLAP body`, `wouldFit` the wider ring);
+- `k03_harbour_trap` (a wall line whose only straight leg crosses a pond on a claim with natural water: never a harbour wall over
+  plan water; `OVERLAP body` or a line round it);
+- `k04_rope_landing` (a rope bridge whose nearest landing is a fountain's apron);
+- `k05_tunnel_buffer` (a bore within 2 of a pond's shell: T3's `WATER`);
+- `k06_lamp` (a street lamp candidate on a pond's rim: skipped, M5 still clean);
+- `k07_course_wall` (a course alongside, not across, a wall: kept clear; and across it: HY-c's water gate, the one legal crossing);
+- `k08_farm_props` (a farm pond whose first site holds a planned prop: the next side or the note);
+- `v61_kc_village` (a walled village with a fountain, a pond, a moat, a course with a water gate and a bridged road: READY,
+  `M25:clear` 0, in game).
+- **Broken variants** (each caught by `M25:clear`): `_unsafe.wallThroughBody` (the old wall grid, with the footprints left out),
+  `_unsafe.lampOnRim`, `_unsafe.slabInWatch` (a non-shell-grade block in a watch cell), `_unsafe.ownerUnknown` (a body op with no
+  `part`).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the registry (resolve, emit, rollback); every §4 row's rule on its fixture; `OVERLAP {kind: body}` with re-checked `wouldFit`s; `M25:clear` on every broken variant and 0 on every valid fixture; `OB.BODY` never reaches `wetWallFallback` |
+| 2 | Byte identity | §8's bar; the watch count recorded |
+| 3 | Recorded plans | §7's bar on the 59 asks in kit CI |
+| 4 | v51 in game | `v51_voc_forge` through Regions.checkPlan's two-plan flow and `realiseApproved`: READY, PLACED, the fountain's census equal to its prediction, 0 wall cells in its sets, voc-ingame's fountain bill equal to its standing blocks (18 = 18, judged now), Regions.remove E-flat 0 |
+| 5 | v61 in game | the same round on `v61_kc_village`: every body settled and census-exact, the water gate's grate and lintel as HY-c's, E-flat 0 |
+| 6 | Unchanged goldens | water_demo, hydro_demo_flat, links_demo(_flat), crossings_demo(_flat) and the rest of H's and HY's unchanged list |
+| 7 | API | api-compat clean; $0.00 |
+
+**Tier:** slice: the units; the impact map's steps for `kit/lib/connectors/**`, `kit/lib/fluids/**`, `checkFluids.mjs`; H's and
+HY's kit and in-game steps (`h-unit`, `ha-ingame`, `hy-unit`, `hy-ingame`), K1a's and K1b's units, T3b's unit, `voc-ingame`
+(item 4), and KC's own `kc-unit`, `kc-ingame` (driver `tools/gate6ckc.mjs`). The verifier reviews the diff and the evidence and
+**re-runs items 4 and 5** (realise and removal). No Steward check before release (plan answers only, GATES policy 4); Steward
+re-checks after release (old IRs PLAN_STALE).
+
+### 11. Size and split
+
+One owner, about **1-1.5 days**: the registry and generator `footprint` exports (0.25 day), the wall grid's `OB.BODY` and the
+rope, tunnel, lamp and farm-pond reads (0.5 day), `M25:clear` and the `shellCheck` fix (0.25 day), fixtures, byte identity and the
+two in-game rounds (0.5 day). No split: the files are few and shared.
+
+### Steward's review (2026-10-20, at f79a03e7): binding, and it overrides the sections above where they differ
+
+- **S-KC-1.** The later part moves, never the body.
+- **S-KC-2.** Watch cells are strict for now. Solid berm cells are allowed only where a shape needs them, named in its section.
+- **S-KC-3.** A patch with no RC. Steward checks it after release.
+
+### Open questions for Steward
+
+- **S-KC-1. Who moves.** The later-placed part keeps clear or is refused `OVERLAP {kind: "body"}` (a wall's ring searched round a
+  fountain; a rope landing moved). The body never moves for a later writer. Fine for your plan writer's repairs (S-K1-6), or
+  would you rather the body be re-sited when the writer is required and the body isn't?
+- **S-KC-2. Watch cells.** Proposed default: **strict** (no other part writes a watch cell; HY-c's lintel the one exception).
+  If the builder's watch count (§8) shows committed plans meeting it (the predicted case: a wall on a moat's berm), the
+  alternative is to allow **shell-grade** writes there (`fs`, not `g`, no block entity), which only shrink the breach, with the
+  checker's breach on the final world (`M25:keep`) as the measure. Strict, or the shell-grade allowance if the count shows it?
+- **S-KC-3. Old approvals.** KC bumps the kit, so artifacts approved on 0.39.0 answer `PLAN_STALE` and you re-check (as at
+  v0.37.1). Any plan you hold that was READY only because a wall crossed a body will come back `adjusted` or with an `OVERLAP
+  body` repair. Acceptable as a patch with no RC check?
+
+### Open questions for Noah
+
+None: KC is a safety fix with no taste call.
+
+## Phase 6c slice CU: copper weathering and undo (FROZEN 2026-10-20, Steward reviewed)
+
+Weathered, waxed and scraped copper stays ours. Undo, site removal, deltas, the survival build's "still built" test and the
+refund all treat a copper block at any stage of its own chain as the block we wrote. PLAN "Queued (coordinator, 2026-10-19):
+Copper weathering and undo"; VOC §10 ("Queued, not built here"). Over HY (and KC, which shares no file with it).
+
+- **Branch:** `slice/CU`, worktree `../architect-mc-CU`. **Spend:** $0.
+- **Scope:** the copper equivalence in `StillOurs` (§2); every block-only "still ours" test (§3); the refund (§4); which other
+  drift kinds count as ours (§5); the gate (§8).
+- **Not in scope:** changing the E-normal classifier (no new world class); leaf decay, sapling growth, snow and ice (§5, kept as
+  today); `palette()` over generated families (VOC §10's second item).
+- **Touches removal and survival accounting:** the verifier re-runs undo and accounting, and **Steward's pre-release check**
+  comes before release (GATES policies 3 and 4).
+
+### 0. Facts (main 0d665136; HY changes none of these files except RegionFluids, which only calls `WorldJournal.holds`)
+
+**"Still ours"** is `journal/StillOurs.holds(now, nowNbt, after, afterNbt)` (StillOurs.java:76-102):
+- `fluidHolds` (a water source or ice cap holds any water, ice, frosted ice or air; lava likewise), fluid in cleared air;
+- the `spread` set (dirt, grass_block, mycelium, podzol) is interchangeable;
+- otherwise the **same block**, every property equal except the volatile ones (`open`, `powered`, `lit`, `waterlogged`, `age`,
+  `moisture`, `distance`, ...; connections on walls, fences and bars; `shape` on stairs and rails; `level` on composters and
+  cauldrons), the block entity's presence equal, an empty container still empty.
+- **No copper rule anywhere in mod/.** A weathering step (`copper_block` -> `exposed_copper`), waxing (`waxed_copper_block`) and
+  scraping are block-id changes, so each fails "same block".
+
+**Who asks it:**
+- `Journal.planUndo` (Journal.java:258-389): a **BOX** entry on top always restores (`ours = true`, :324); a **CELL** entry
+  restores only when `world.holds` / `match.same` (:329), else the cell is counted `Stats.changed` and reported `kept`.
+- **Region tiles are CELL entries** (`InfraPlace`, `RegionKinds`: `architect:terrain`, `architect:path`); **lots are BOX sites**
+  (RegionsImpl.java:1430-1452). So copper written by a region part (a wall's trim, a copper lantern or lamp, a bridge's rail,
+  a prop, a grate) that weathers is left standing by `Regions.remove`. A lot's building restores its box exactly whatever the
+  copper did.
+- Deltas: `DeltaPlanner.outcome` and its shape-neighbour test via `WorldJournal.same`: a weathered site cell becomes an "edited"
+  Kept cell (`Edits.KEEP`) and can trip `PLAYER_EDITS`.
+- PT2's adopted-site edit count (SiteDeltas.java:399), the startup settle's revert and lost-write votes (SiteDeltas.java:1625,
+  1699), `Sites.foreignBlockEntities` (:833) and the removal blockers' `journalOwn` (:1741): a weathered **copper chest** or
+  **copper golem statue** (block entities) fails `journalOwn` today.
+- **Block-only tests that bypass StillOurs:** `Builder.Run.matches` (Builder.java:404-409; rescan's `built`, finish, the swap's
+  `holdsOld`, deconstruct's `asPlaced`), `RoadBuilder.refundOf` (via `matches`), `Sites.evidence` (:2482-2485).
+- PT (`Placed.java:341, 600-603`): a cell that stays a block keeps its player-placed record through weathering; an undo
+  restores the record only for cells it writes.
+
+**The survival refund** (`survival/Refunds.classify`, Refunds.java:33-41, with `asPlaced = r.matches(now, qi)`):
+- `REFUND` pays the queued target's cost (`r.cost.get(qi)`: the plan's block);
+- `PLAYER_DROP` pays `Cells.cost(now)` (the current block) as a drop at the site, never to the stockpile;
+- `NONE` for air, the snapshot's block, or `Refunds.natural` (water, lava, fire, snow, ice, short grass, leaves, soil to soil).
+- **Today a weathered copper cell fails `matches`, so it is a `PLAYER_DROP`:** the player's own copper comes back as a drop of
+  the weathered item, never credited to the stockpile, and the BOX restore then removes the block anyway.
+- VOC item 11 binds the principle: "the survival deconstruct refund equals the items of the blocks standing" (C29: "refunded
+  what actually stood").
+
+**The table.** `kit/tools/VocabDump.java` reads vanilla's `WeatheringCopper.NEXT_BY_BLOCK` and `HoneycombItem.WAXABLES` into
+`blocks.mjs`'s `wx {next?, waxed?}`: 60 rows, 15 forms x 4 stages (block, chiseled, cut, cut slab, cut stairs, bars, bulb, chain,
+chest, door, golem statue, grate, lantern, trapdoor, lightning rod), all waxable. The `copper` family is 120 blocks (VOC-a).
+`copper_ore`, `raw_copper_block` and `copper_torch` are outside the chain.
+
+**What VOC's probe measured** (voc-natural item 9, `tools/lib/gate6cvoc-b.mjs:404-489`, recorded, never judged): 157 of 157
+unwaxed copper cells of `voc_copper_hall` weathered under `dev.vocab.tick`; after `Regions.remove`, 134-148 cells inside the
+hall's lot box + 1 differed from the snapshot, **all classed `growth`** (VOCb2: kept 134, `{growth 134, live 1}`; VOCb-verify
+138; another run 0 and 157 growth; another 148). **Reading:** the hall is a lot, so its box is a BOX entry and is restored
+exactly; `growth` is RegionHash's plants and grass spread, never a copper block. The figure the PLAN quotes is most likely
+grass regrowing on the restored pad, not copper left standing. The driver kept only counts, not the cell list. **The real
+exposure is the CELL paths and block-only tests above**, which no probe has measured yet (§8 item 1 measures them first).
+
+### 1. The rule
+
+**A copper block is ours while it stays in its own chain.** Two states are the same "copper" when they have the same **form**
+(block, cut, stairs, slab, door, ...) at any weathering stage, waxed or not. Shape-defining properties still compare as today
+(`facing`, `half`, `type`, `axis`); volatile ones stay volatile. A player record wins (§2.3).
+
+### 2. `StillOurs` (Java)
+
+**2.1 The canonical form.** `Copper.canonical(Block) -> Block`: unwax (`HoneycombItem.WAX_OFF_BY_BLOCK`), then the chain's first
+stage (`WeatheringCopper.getFirst`). Read from vanilla at class load, never a hand table, so a new copper form in a later
+Minecraft version joins by itself. A unit test pins the 60 rows against `blocks.mjs`'s `wx` table (the kit's own dump), so the
+two never disagree silently.
+
+**2.2 `holds`.** Before "same block": if `canonical(now) == canonical(after)` and both are in the chain, compare as the same block
+(the properties of the two states, the block entity's presence, the empty-container rule for the copper chest). Everything
+else is unchanged.
+
+**2.3 Player records first.** `holds` itself stays pure (no PT lookup). Every caller that already consults PT's records keeps
+doing so first: a cell PT records as player-placed after our entry is the player's, whatever its block. A player who mined our
+copper and placed their own oxidized block there is not ours. A player who waxed or scraped our block in place is (no
+placement is recorded: the block is still the one we wrote).
+
+**2.4 `WorldJournal.same` and `holds`** (the wrappers, WorldJournal.java:393-410) apply the same canonical rule in their block
+pre-filter, so every StillOurs caller in §0 gets it at once.
+
+### 3. The block-only tests
+
+Each gets the canonical comparison, so a weathered cell counts exactly as StillOurs counts it:
+- `Builder.Run.matches` (rescan's `built`, finish, the swap's `holdsOld`, deconstruct's `asPlaced`): **without this a survival
+  build that weathers while it waits re-queues and charges a copper cell again.** That is also fixed.
+- `RoadBuilder.refundOf` (through `matches`).
+- `Sites.evidence`'s block-id test (the startup settle's evidence).
+- `Journal.reactivate`'s plain `equals` is left: it compares recorded values, not the world.
+
+### 4. Refunds: what the refund pays
+
+**Proposed: the current block, as a `REFUND`.** A weathered, waxed or scraped copper cell whose canonical form matches the
+queued target is `asPlaced`, so it is a `REFUND` (credited to the stockpile like any other), and it pays the items of the block
+**standing** (`Cells.cost(now)`: an `oxidized_copper`, a `waxed_exposed_cut_copper_stairs`). That is VOC item 11's and C29's
+rule ("refunded what actually stood"): the refund never mints an unweathered block the world no longer holds, and a player's
+honeycomb comes back inside the waxed block.
+- The ledger's charge stays the original block's (the plan's), so the stockpile records `charged copper_block, refunded
+  oxidized_copper` for that cell. Accounting tests compare per-item, so they see it.
+- The alternative (pay the original block) is S-CU-2.
+- Delta refunds (CONTRACT "refund removed or changed cells only if paid and still ours") follow from §2: a weathered cell is
+  still ours, so a delta that removes it refunds it (the standing block's items).
+- PT2 adopted sites: the "snapshot block equals the current block" rule (Builder.java:1854-1856) compares canonically, so an
+  adopted copper roof that weathered after adoption is still NONE (it was the player's to begin with).
+
+### 5. The other drift kinds (VOC's `metrics.drift`)
+
+VOC's `drifts(state)` lists unwaxed copper, farmland, ice, snow, saplings and propagules, and non-persistent leaves.
+
+| Drift | Becomes | Ours after CU? | Why |
+|---|---|---|---|
+| copper (weathering, waxing, scraping) | another stage of its chain | **yes** | §1 |
+| farmland drying or trampled | dirt | **yes, proposed** (farmland joins the `spread` set, both ways) | the same kind of drift as grass to dirt, which is ours today; a field undo then restores it |
+| non-persistent leaves decaying | air | no (as today) | air is also what a player's mining leaves; undo can't tell them apart |
+| sapling or propagule growing | a tree | no (as today) | a tree is new blocks over many cells; it is growth |
+| snow layers, ice melting (not a body's ice) | other layers, water | no (as today) | M17's concern; a body's ice is H's `fluidHolds` |
+
+Farmland is S-CU-3. Everything else stays as today and is recorded in §8 item 5.
+
+### 6. API and versions
+
+- **Placeholders:** mod 0.40.0, API 1.37.0 (one feature string, `weatheringOurs` under `journal`, so Steward can tell which
+  removal it gets; no record, method or enum changes), kit unchanged (no kit output moves: the dump already exists).
+- **Behaviour:** fewer `kept` cells in `Removed` / `RemoveResult` / `keptCells` after a region or site removal over copper; a
+  weathered copper refund moves from `PLAYER_DROP` (at the site) to `REFUND` (to the stockpile).
+- api-compat clean; apijars over the HY jar and the two before it.
+
+### 7. Steward's side
+
+Nothing to write: Steward reads `kept` counts and refund rows already. **What changes for Steward:** a removal of a region with
+copper parts that weathered now comes back with fewer kept cells, and a survival removal credits the stockpile with the
+weathered items instead of dropping them. Steward's pre-release check (S-CU-4) confirms both on its own copper build.
+
+### 8. Gate (slice tier plus the engine tag, $0)
+
+**Fixtures:** `voc_copper_hall` (VOC's), and a new `kit/regions/cu_demo.mjs` (`catalogue = false`): a region with copper
+parts written as CELL tiles (a copper-trimmed wall, copper lanterns on posts, a cut-copper bridge rail, a copper grate, a copper
+chest on a prop, a copper golem statue), every chain form at least once, plus a waxed twin of each.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | **The measure first (before any fix, recorded):** voc-natural's probe re-run with the cell list kept (`diff2.list` saved), and the same probe on `cu_demo` | which cells stood after `Regions.remove`, by class and block; expected: the hall's box exact (BOX), `cu_demo`'s weathered CELL tiles standing. The PLAN's 134-138 figure is re-read against the list and corrected in PLAN |
+| 2 | Unit (`StillOursCopperTest`) | the canonical form over all 60 rows equal to `blocks.mjs`'s `wx`; every stage, waxed and scraped state holds against the written one; a different form never holds (cut stairs against cut slab); facing and half still compare; the copper chest's empty-container rule; farmland and dirt (if S-CU-3 holds) |
+| 3 | Undo, region (verifier re-runs) | `cu_demo` realised, every copper cell ticked through every stage (`dev.vocab.tick`), half of them waxed and a quarter scraped (a dev hook, `dev.copper.use {at, item: honeycomb \| axe}`), then `Regions.remove`: E-flat 0, `keptCells` 0 |
+| 4 | Site removal blockers and the builder (verifier re-runs) | a site's BOX entry restores whatever the copper did, so only what can fail there is judged: a weathered and a waxed copper chest and golem statue (block entities) don't block the site's removal (`journalOwn`), and the survival builder's `matches` treats a weathered cell as built (no re-queue) |
+| 5 | Drift kinds (recorded) | the other kinds of §5 on `cu_demo`'s field corner (farmland, leaves, a sapling, snow): which cells stood after removal, matching §5's table |
+| 6 | Player records first | a player mines one of our copper cells and places their own `oxidized_copper` there (PT records it): removal leaves it standing (`kept` 1), and PT's record survives |
+| 7 | Deltas | a weathered cell under a version delta (`versionOf`): not an "edited" Kept cell, no `PLAYER_EDITS`; the delta replaces it and refunds it |
+| 8 | **Survival accounting** (verifier re-runs) | a survival copper build (y-ingame's stockpile flow): (a) weathering while the build waits: no cell re-queued, no copper charged twice; (b) deconstruct after weathering: every copper cell a `REFUND` to the stockpile paying the standing block's items, 0 `PLAYER_DROP` for our copper, one charge and one refund per cell, the charged and refunded items differing exactly by each cell's recorded weathering, waxing or scraping steps (named per cell); (c) a delta refund of a weathered cell; c29-ingame and pt2-survival unchanged |
+| 9 | Regression | the journal and survival units (`StillOursFluidsTest`, `JournalTest`, `JournalPropertyTest`, `RefundsAndBitsTest`, `DeltaPropertyTest`); h-ingame's removal (fluidHolds unchanged); 6a-eflat; voc-survival item 11 |
+| 10 | API, spend | api-compat clean, apijars; $0.00 |
+
+**Tier:** slice plus the engine tag (`journal/**`, `survival/**`, `site/**`, `delta/**`): unit-mod, 4e-orders, 4e-crash, 6a-eflat,
+4e-megalite, 4d-all, 5b-village, y-ingame, c29-ingame, pt2-survival, pt-ingame, voc-natural, voc-survival, and CU's own
+`cu-unit`, `cu-ingame` (driver `tools/gate6ccu.mjs`). The verifier reviews the diff and **re-runs items 3, 4, 6, 7 and 8**.
+**Steward's pre-release check** follows, on the release candidate.
+
+### 9. Size and split
+
+One owner, about **1-1.5 days**: the canonical form, `holds` and the wrappers (0.25 day); the block-only tests and the refund
+(0.25 day); the dev hook, `cu_demo` and items 1-8 (0.5-1 day, mostly the survival round). No split.
+
+### Steward's review (2026-10-20, at f79a03e7): binding, and it overrides the sections above where they differ
+
+- **S-CU-1.** Ours means the block we wrote, at any weathering or wax stage. A player record wins.
+- **S-CU-2.** The refund pays the standing block, what's actually there (matches vanilla scraping, can't dupe).
+- **S-CU-3.** Farmland and dirt are interchangeable when we wrote either (trampling).
+- **S-CU-4.** Steward runs its pre-release check.
+
+### Open questions for Steward
+
+- **S-CU-1. What counts as ours.** Weathered, waxed and scraped copper of the same form is ours (undo restores the cell, removal
+  doesn't keep it, a delta replaces it). A player's own placed block at that cell stays the player's. Is that what your history
+  and claims expect?
+- **S-CU-2. What the refund pays.** Proposed: the standing block's items, credited to the stockpile (VOC item 11, C29). The
+  alternative pays the original block (the plan's) and loses the honeycomb of a waxed cell. Which does your ledger want?
+- **S-CU-3. Farmland.** Proposed: farmland and dirt join the interchangeable set (a dried field is ours, as grass to dirt is
+  today). It matters for IRR's farms. Fine, or keep farmland strict?
+- **S-CU-4. The pre-release check.** CU changes removal and survival accounting. Will you run your copper build's removal and a
+  survival removal on the release candidate?
+
+### Open questions for Noah
+
+- **N-CU-1. Leaves, saplings, snow.** Proposed: they stay "not ours" after they drift (a decayed leaf is air, which a player's
+  mining also leaves; a grown tree is new blocks). The alternative treats a decayed leaf cell as ours and restores what stood
+  before it, which would also restore over a player's mining. Default: as today.
+
+### Coordinator decisions (2026-10-20, on Noah's behalf)
+
+- **N-CU-1:** as proposed. Leaves, saplings and snow stay "not ours" after they drift.
+
+
+## Phase 6c slice IRR: farm irrigation (FROZEN 2026-10-20, Steward reviewed)
+
+Working farms: a water source in every 9x9 of a farm lot's field, so all of its farmland is hydrated. Each source is an H body
+(contained, drained first on undo), and the region owns it, not the lot design: **lot designs never own fluids** (Steward's
+S-HY-2, binding). Set by one Architect member on the farm lot. PLAN "Queued (coordinator, 2026-10-19): Farm irrigation".
+Over HY and KC.
+
+- **Branch:** `slice/IRR`, worktree `../architect-mc-IRR`. **Spend:** $0.
+- **Scope:** the member (§1), the field and its grid (§2), the source body (§3), the lot box exception and its order (§4), the
+  lot design's side (§5), villagers and crops (§6), survival (§7), the gate (§10).
+- **Not in scope:** crops (the lot design's, or the villagers'); water anywhere else in a lot box; mechanisms (hoppers, water
+  streams for harvest); terraced or multi-level fields (one level per lot); district lots in Steward's own districts (D2, not
+  started on Steward's side); survival building (RS).
+- **Depends on:** H (bodies, the farm pond's lot detection), HY (one frozen volume per part shared by its bodies' guards, the
+  ordered fluids stage), KC (the footprint registry and `M25:clear`).
+
+### 0. Facts (main plus HY)
+
+- **No field exists anywhere.** No kit op, template or sidecar brief writes farmland or crops; a farm lot's field comes only from
+  the library entry bound to the lot (`asks/farm_village` notes "no field part exists in the catalogue"). `BuildKind.FARM`
+  classifies existing builds only.
+- **The lot box:** `r.lot` (`program.mjs:2013-2097`) cuts air over the footprint from `floorY` to the box top, writes the pad's
+  top at `floorY - 1` (role `surface`), its foundation and a 1-column apron. The box starts at `floorY`, so **the pad's top is the
+  region's and stands just under the box.** A lot's entry is fitted into the box (`LotFitting.fit`) and placed as a **LAYER, BOX
+  site item after the stage's tiles and roads** (RegionsImpl.java:1277-1300, 1430-1452); with no entry the lot is a pad.
+- **K5:** "a region never writes CELL over BOX; region tiles skip cells that site entries own" (SETTLEMENTS §8.4). H's
+  `M25:keep` keeps every body clear of a lot box + 1 in x, y and z (`checkFluids.mjs:61`, `place.mjs:395`).
+- **The farm pond (H-a)** is the template for detection: `farmPondZones` (`pond.mjs:400-413`) reads a lot's `farmPond` or its
+  zone's, and a lot is a farm when `(l.villager ?? inferVillager(l.type)) === 'farm'` (`params.mjs:72-79`: farm, field, barn,
+  orchard, pasture, garden). It reads `program.lots` and `params.lots` only; Java's `PlanChecks.farmPond` reads district lots too
+  (a mismatch IRR fixes for its own member). The pond stands 4 columns outside the box; it is never capped (a freezing biome gets
+  none); its stage is `lots`; its guards go to `K.record.guards`. Its shell is not billed.
+- **HY:** ditches run outside lot boxes and "hydrate nothing" (§7.6, as built: water 4 from the box). Courses keep off lot boxes
+  + 3.
+- **Vanilla 26.3** (assumed, probed in §10 item 9): farmland is hydrated by water within 4 horizontally, at its own level or one
+  above (`FarmBlock.isNearWater`: `pos.offset(-4, 0, -4)` to `pos.offset(4, 1, 4)`); a source at the centre of a 9x9 hydrates
+  all 80 cells around it. A source on farmland's level in a 1x1 hole is the vanilla farm.
+
+### 1. The member: `irrigate: true`
+
+- **On a lot** (`$defs.lot`, beside `farmPond`) and on `zone.standard` (every farm lot of the zone), exactly as `farmPond`:
+  `irrigate: true` asks, `false` on a lot overrides its zone, absent is off. Added to `validateLots`' allowlist (the compiler's,
+  never the layout's lot). No catalogue id (a member, as `farmPond`); a catalogue note on `form.pond` is not needed.
+- **Read from every place a lot can be** (`program.lots`, `params.lots`, `program.districts[].lots`), kit and Java alike.
+- On a lot that is not a farm: the zone's note `irrigate: <lot> is not a farm lot`, nothing written (as `farmPond`).
+- **Why a boolean:** the grid is vanilla's one useful pattern (a source per 9x9). A later pattern (rows, a centre channel) would
+  be a string value then; `true` stays its meaning. The alternative name `irrigation: "9x9"` is N-IRR-1.
+- With both `farmPond` and `irrigate`, both are placed (the pond outside the box, the sources inside); they don't interact.
+
+### 2. The field and the grid
+
+- **The field** is the lot's footprint less a 1-column border (the design's fence or path) and less the front row (the entrance
+  side), at the pad's level: farmland level `floorY`.
+- **The grid:** sources along each axis, `n = ceil(L / 9)` for a field side of `L`, spaced evenly (ties toward the back-left
+  corner, integer), so **every field column is within 4 of a source** in both axes (Chebyshev). A 13 x 11 farm (v49's f1) gets
+  2 x 1 sources; a 9 x 9 field 1; a 64 x 64 lot (field 62 x 61) 7 x 7.
+- A field side under 3 asks nothing (`irrigate: <lot>'s field is too small`, a note).
+- **Level:** the field must be level (the pad is). A lot on a terraced or sloped pad keeps its pad level, so this always holds.
+
+### 3. The source body
+
+Each source is an H body, `<lot>_irr_<i>_<j>` (kind `irrigation`, a new `waters[].kind`), from `r.fluidBody`:
+- **cells:** the one source at `(x, floorY, z)`; open top.
+- **shell:** the bed under it (`floorY - 1`, the pad's own cell, rewritten by IRR's part in the bible's `fluids.bed`, which must
+  differ from the pad's surface block, H-a's reading) and the 4 side cells at `floorY`, written by IRR's part as **`farmland[moisture=7]`**
+  (`fs`, not `g`; farmland is where the field starts, so the design's grid meets it).
+- **The edges must survive until the water arrives.** The shells are written in `ground` and the sources only in the last stage;
+  dry farmland with no crop turns to dirt on a random tick, and the live check would then find a shell that no longer holds and
+  skip the source (`uncontained`). Two guards: the edges are written at `moisture=7` (volatile in StillOurs), and **IRR depends
+  on CU's S-CU-3** (farmland and dirt interchangeable in StillOurs), so a dried edge still holds. If Steward declines S-CU-3, IRR
+  writes the edges as `dirt` instead (vanilla hydrates the field around them all the same; only the four edge cells are not
+  farmland) and says so in the lot's note.
+- **No notch** (1 deep: a mob steps out). M25:trap and M25:exit hold by construction; the gate measures them.
+- **Ice:** a freezing biome caps sources (N-H-4), which stops hydration. **Proposed:** the lot gets no irrigation and a note
+  (`irrigate: the biome freezes the sources`), as the farm pond does. Lit fields (a lamp in the design) are not counted on.
+- **One frozen volume per lot,** shared by its sources' guards (HY batch's rule under the 16-volume limit): the box's footprint
+  from `floorY - 2` to `floorY + 2`.
+- **Stage:** the shells in `ground` (before the lot item); the sources in `fluids` (last), as every body.
+- **KC:** each source registers its footprint at resolve (step 2); every later writer keeps clear; `M25:clear` judges it.
+
+### 4. The lot box exception, and the realise order
+
+IRR is the first region write inside a lot box. The exception is narrow and named:
+- **The irrigation cells** of a lot are the sources, their side shells and the cell above each source (`floorY + 1`, kept open).
+  They are recorded on the lot (`lots[].irrigation {cells: runs, sources: n}` in the IR and the plan-check artifact).
+- **K5, amended:** a region never writes in a lot box, **except its own lot's irrigation cells**. `M25:keep` and the M1 lot-box
+  rule exempt exactly those cells for exactly that lot's irrigation bodies; every other lot, build and keep-out stays kept.
+- **The breach.** A single breach of a side shell lets the source run into the field (at most 7 over farmland, washing crops).
+  **Proposed:** the breach may reach **its own lot's box** (the field), never another lot, build, protected area or keep-out.
+  A breach is a player's act (breaking farmland beside the water), as in any vanilla farm (S-IRR-3).
+- **The lot's site never writes an irrigation cell.** `LotFitting.fit` takes the lot's irrigation cells as a mask: the entry's
+  blocks there are dropped (reported `irrigationDropped: n` on the lot's site ext). The site's BOX entry then excludes those
+  cells, so the lot's own removal, an undo, a `versionOf` replacement ("add a floor"), PT2's adopt and Steward's claim and
+  release never touch them. The region owns them until the region is removed.
+- **Realise order:** region tiles (the shells, `ground`), then the lot items (masked), then the fluids stage (the sources). The
+  live check at the fluids stage needs each shell to hold the region's own top entry, which the mask guarantees.
+- **Removal:** the region's removal drains the sources first (H's drain), then the shells go back to their befores. A lot removed
+  alone leaves the sources standing in the region (the field around them is the site's and goes); the sources stay contained by
+  their own shells. Removing the region with the lot still standing drains the sources and restores the shells; the lot's
+  design keeps its cells.
+
+### 5. The lot design's side
+
+- **The brief:** the plan-check artifact's `lots[]` gains `irrigation {cells, sources}`, and the lot's design request carries
+  it (`fitBox` plus `reserved`), so the design leaves those cells and lays farmland on the field's level around them. The mask in
+  §4 is the guarantee; the brief is what makes the design look right.
+- **`Entry.cells()`** (C37b) and `lotProblem`: an entry's cells at irrigation cells are not counted (they are dropped), so the
+  pre-check's count is the count placed.
+- **Sidecar:** the lot design prompt gains one line when `reserved` is present ("these cells are water and its edge, keep them;
+  farmland around them is hydrated"). Not tuned against eval briefs.
+
+### 6. Villagers, crops and the farm pond
+
+- **Villager farmers** till, plant and harvest farmland with a composter in reach; the sources and their farmland don't change
+  their job. Paths never cross a 1x1 hole (vanilla avoids water).
+- **Crops:** the design's or the villagers'. The side shells are farmland, so a crop above them is the design's to write (the
+  cell above a side shell is not reserved; above the source is).
+- **`farmPond`** is unchanged and independent (decorative, outside the box; S-H-2).
+- **HY's ditches** stay outside the box and hydrate nothing; IRR is the in-field block S-H-2 deferred.
+
+### 7. Survival, API and wire
+
+- **Survival:** INSTANT only (N-K1-3; regions refuse survival worlds today). `cost.bom` on the zone's answer: water free (N-H-1),
+  the bed blocks and the farmland priced as `dirt` (vocab survival map). RS builds it later.
+- **Plan check:** `PlanChecks.hasH` gains `irrigate` (any depth, districts included), so the plan takes the two-plan flow.
+- **API** (placeholders): API 1.38.0, mod 0.41.0, kit 0.38.0. Feature `farmIrrigation` (`region.fluids`). Additive: the lot def's
+  `irrigate`; the artifact's and IR's `lots[].irrigation`; `siteplan.waters[].kind` `irrigation`; the realise report's
+  `architect_mc:fluids` rows (one per source); the lot site's ext `irrigationDropped`. `LotFitting`'s mask is internal.
+  api-compat clean.
+- **Catalogue:** unchanged (a member). `plan/0`'s def gains the member, so Steward's plan writer sees it there.
+- **Byte identity:** every plan without `irrigate` is byte-identical (the member is absent; `plan_v0.mjs` is not edited).
+
+### 8. Steward's recorded plans: expected answers
+
+| Plan | Expected | Why |
+|---|---|---|
+| every recorded plan | unchanged | none writes `irrigate` (the member doesn't exist yet) |
+| farm_village, the hamlet | unchanged; with `irrigate: true` added by hand (fixture `irr/s01`): READY, 1-2 sources per farm lot | §2's grid |
+
+**Bar:** 0 `malformed`; no recorded answer changes.
+
+### 9. Fixtures
+
+- `valid/v62_irr_farm` (v49's farms with `irrigate: true`: 2 + 1 sources), `valid/v63_irr_large` (a 40 x 40 farm lot: 5 x 5),
+  `irr/s01` (Steward's hamlet with `irrigate` on its zone, a bound field entry from the library with farmland and crops),
+  `irr/r01_not_farm` (note), `irr/r02_cold` (note), `irr/r03_small` (note), `irr/d01` (a district farm lot).
+- Broken variants: `_unsafe.irrUnmasked` (the lot item writes over a side shell: the live check refuses the source, PARTIAL;
+  `M25:clear` at plan time if the entry is in the plan), `_unsafe.irrNoBed` (`M25:shell`), `_unsafe.irrBreachOut` (a source by
+  the box's edge whose breach leaves the lot: `M25:keep`).
+
+### 10. Gate (slice tier plus the engine tag, $0)
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | detection (lot, zone, `false` override, type-implied farms, district lots, kit and Java agree); the grid (every field column within 4 of a source on 20 sizes from 3 to 62); the mask; the notes; `M25:keep`'s exemption only for the own lot; the broken variants caught |
+| 2 | Containment, world | v62 and v63 through Regions.checkPlan's two-plan flow and **`realiseApproved`** (with a bound field entry): READY, PLACED, every source settled and census-exact, the entry's dropped count equal to the irrigation cells it covered |
+| 3 | Hydration | after 2 minutes at default rules, every farmland cell of the field `moisture=7` (counted); the probe's control (the same field without `irrigate`): dry |
+| 4 | Single breach | one side shell broken: the water stays in its own lot's box, reaches no other lot, build or keep-out; then `Regions.remove`: 0 fluid cells the snapshot didn't hold |
+| 5 | **Undo, every path** (verifier re-runs) | (a) `Regions.remove` with the lot standing: sources drained first, shells restored, the lot's design untouched, E-flat 0 outside the lot's site cells; (b) the lot's site removed alone: the sources stand, contained, the site's cells restored, no irrigation cell touched; (c) a `versionOf` replacement of the lot's entry: the mask holds, sources unchanged; (d) PT2 adopt of the lot: irrigation cells excluded; (e) then the region removed: E-flat 0 |
+| 6 | Crash | H's FL1 and FL2 kill points with `+save` on v62: settle at start completes or undoes, 0 fluid outside declared cells |
+| 7 | Villagers | 3 farmer villagers on v62's field for 5 minutes at default rules: 0 drowned, 0 stuck in a source, they harvest and replant (recorded), `dev.nav.villager` round every source |
+| 8 | Byte identity, recorded plans | every committed fixture without `irrigate` byte-identical; §8's bar on the 59 asks |
+| 9 | Probe (recorded) | vanilla's hydration reach on 26.3: a source at the centre of 9x9, 11x11 and at a corner, farmland one above and one below |
+| 10 | API, spend | api-compat clean, apijars; $0.00 |
+
+**Tier:** slice plus the engine tag (`region/**`, the fluids stage, `PlanChecks`, `LotFitting`, `site/**`): units, api-compat,
+H's `h-unit`, `ha-ingame` (its `ha-farm`), HY's `hy-unit`, KC's `kc-unit`, `4e-megalite`, `pt2-ingame`, and IRR's own `irr-unit`,
+`irr-ingame` (driver `tools/gate6cirr.mjs`). The verifier reviews the diff and **re-runs items 4, 5 and 6** (removal and crash).
+**Steward's RC check before release** (GATES policy 4): a region writes in a lot box for the first time, the lot's site gains a
+mask, and its removal and replacement paths change.
+
+### 11. Size and split
+
+One owner, about **2-2.5 days**: the member, detection and grid (0.5 day); the body, the volume and KC's registry (0.25 day);
+the mask in `LotFitting` and the site's BOX entry, the K5/M25 exemption (0.5 day); the design brief line and the artifact
+member (0.25 day); items 2-7, mostly the undo paths (1 day). No split: the mask and the body must meet in one owner's tests.
+
+### Steward's review (2026-10-20, at f79a03e7): binding, and it overrides the sections above where they differ
+
+- **S-IRR-1.** The writer sets `irrigate` only for a working or automated farm the card asks for. Homely farms keep `farmPond`.
+- **S-IRR-2. Reserved cells.**
+  - The reserved cells go on the artifact's `$.lots[].irrigation`, as world cells plus lot-relative cells.
+  - `DesignRequest` gains a typed nullable trailing `reserved` (cells the design must leave as given), honoured by the design job and
+    checked by the design's checker. The brief line stays as well.
+  - Steward passes both.
+- **S-IRR-3.** A breach may flood its own field. It's reported in `architect_mc:fluids` as that body's row.
+- **S-IRR-4. Changed from the draft:** removing the lot removes its irrigation sources with it, drain-first and exact. No
+  orphan water is left. The sources belong to the farm.
+- **S-IRR-5.** Steward runs the RC check.
+
+### Open questions for Steward
+
+- **S-IRR-1. The member.** `irrigate: true` on a farm lot, or on a zone for all its farm lots, exactly like `farmPond`. Will your
+  plan writer set it on "working" or "automated" farms only when the card asks (as with races and ditches, S-HY-2)?
+- **S-IRR-2. The reserved cells.** The artifact's `lots[].irrigation.cells` are cells your lot design must leave (the sources,
+  their farmland edges, the air above each source); the realise drops any entry block there anyway and reports the count. Can
+  your design request carry `reserved`, or should Architect's design job read it from the artifact itself?
+- **S-IRR-3. The breach.** Proposed: a broken farmland edge may flood its own field (as in any vanilla farm), never another lot.
+  Acceptable, or must the sources be breach-proof (2-thick edges, which costs farmland)?
+- **S-IRR-4. Lot removal alone.** Releasing or replacing a farm lot's building leaves its sources standing (the region's) until
+  the region is removed. Fine for `/steward builds` release and adopt?
+- **S-IRR-5. The RC check.** A region writes in a lot box for the first time. Will you check v62 and your hamlet on the release
+  candidate?
+
+### Open questions for Noah
+
+- **N-IRR-1. The name.** Proposed: `irrigate: true`. The alternative `irrigation: "9x9"` names the pattern, leaving room for
+  others. Default: `irrigate: true`.
+- **N-IRR-2. The look.** Proposed: open 1x1 sources on a clay bed (the bible's `fluids.bed`), flush with the field. The
+  alternative covers each with a slab or a lily pad so players can walk over (a slab is waterloggable; a lily pad is a block on
+  the water, outside the body). Default: open.
+
+### Coordinator decisions (2026-10-20, on Noah's behalf; Noah can overrule at the look step)
+
+- **N-IRR-1:** `irrigate: true`, mirroring `farmPond`. A pattern string can be added later; `true` keeps its meaning.
+- **N-IRR-2:** open 1x1 sources, the vanilla farm look.
+
+
+## Phase 6c slice VOC-c: `rule.palette` measured (FROZEN 2026-10-20, Steward reviewed)
+
+"Only copper" and "no wood": `rule.palette` goes from reserved to supported. The plan check measures a family's share over the
+parts in the rule's scope and over the lots in scope, using their bound entries, and `realiseApproved` refuses a required rule
+that an approved entry breaks. Steward's S-VOC-2 (binding: "its own slice after VOC-a and VOC-b ... 'Only copper' and 'no
+wood' are the target asks"); PLAN "Queued (coordinator, 2026-10-19): VOC-c". Over HY (catalogue 8) and whatever else of this
+batch merges first.
+
+- **Branch:** `slice/VOCc`, worktree `../architect-mc-VOCc`. **Spend:** $0.
+- **Scope:** the strict def and its lenient read (§1); the measure (§2); the plan-time answers and the re-plan for an upper bound
+  of 0 (§3); lots from bound entries and the `realiseApproved` refusal (§4); the catalogue (§5); how the plan writer and Claude
+  learn it (§6); the gate (§9).
+- **Not in scope:** every other `rule.*` (RC); `gradient` and colour rules ("bright at centre", "family colours"); a palette as a
+  design constraint inside Architect's own design jobs (§6, a note only); `palette()` over generated families (VOC §10).
+- **Steward's RC check before release** (a new `realiseApproved` refusal, GATES policy 4).
+
+### 0. Facts (main 0d665136 plus HY)
+
+- **Catalogue:** `rule.palette` is `{sinceApi 1.23.0, schemaVersion 0, state reserved, until RC}` (`plan-catalogue.golden.json:628`),
+  no limits, no note. HY's catalogue 8 leaves every `rule.*` as it is, and **HY already archived catalogue 7 as
+  `catalogue-h.json`**, so VOC §11's sketch ("catalogue 8, archive 7") is stale: VOC-c archives HY's 8.
+- **The def** (`plan.json:836`, x-state reserved): `{family: string, share: [a, b] in 0..1, exempt: [terrain | support]}` over
+  `rule.common` (`id`, `kind`, `required`, `scope` <= 32 part ids, absent = the whole plan). R11: "a required rule that can't be
+  verified blocks readiness". Reserved kinds answer `unsupported {block, until}` (`schema.mjs:420-432`); `overallOf` makes a
+  required unsupported part `REQUIRED_BLOCKED` (`finish.mjs:40-46`).
+- **`partAnswer` is closed** (`additionalProperties: false`, plan.json:891-910): a measured value needs an additive member.
+- **No rule is enforced anywhere today.**
+- **Families** (`kit/lib/vocab.mjs` `familyOf`; generated `fam` in `blocks.mjs`): 450, 83 with more than one member. `copper` is 120
+  blocks (every stage, waxed or not, of 15 forms); `stone` 23 (cobblestone included). **There is no `wood` family:** each wood is
+  its own (`oak`'s 18 members: planks, logs, wood, stripped, doors, signs, ...; leaves and saplings outside). The hand lists
+  `WOODS` (13, `kit.mjs:107`) and the vanilla tags (`blocks.mjs` `hasTag`/`tagBlocks`) exist. Mind the name clash:
+  `blocks.mjs:2653` also exports a `familyOf` (the Java family).
+- **Measured cells** (VOC as built): written, not air, not a fluid source, not a common natural block. Per-part histograms come from
+  `vocabCells` (`checkVocab.mjs:237`), built today only when the bible opts in or a precious or creative-only block is written.
+  A realised world's lot children are skipped (`checkVocab.mjs:90`).
+- **Lots and entries:** a plan lot's `entry` (`id` or `id@version`; absent = provisional) goes to the artifact's `lots[]`
+  (`finish.mjs:117-135`). **The kit never reads a library entry during a check**, so no cost or rarity covers a lot's building.
+  Java's `Library.Entry.cells()` is a non-air count (C37b); no API gives an entry's block histogram.
+- **`realiseApproved`** (`PlanChecks.java:883-959`): entries merge (the artifact's, then `r.lotEntries()`); `lotProblem`
+  (:1211-1245) checks **provisional** lots only (exists, fits the fitBox, `cells` within `costRange`). Codes today:
+  `NOT_LOADED`, `ARTIFACT_UNAPPROVED`, `ARTIFACT_STALE`. `Reason` ends at `ADOPT_REFUSED` (Reason.java:93-111).
+- **`vocab/1`** (`kit/schemas/vocab-1.json`, systemRef `vocab/1` with `#compact`; `sidecar/src/jobs/systemrefs.ts:45`): families,
+  tiers, colours, survival; the word "palette" appears nowhere. Steward hasn't adopted it yet ("`vocab/1` for the plan writer
+  once VOC-c lands", STEWARD-SYNC). Architect's own design prompts don't use it.
+- **Steward's recorded palette rules (7):**
+
+| Ask / rule | required | Members | Today |
+|---|---|---|---|
+| one_block / copper_only | yes, scope `reach` | `params {family: copper, share: [1, 1], exempt: [terrain, support], gradient}` | unsupported (required: the plan is REQUIRED_BLOCKED) |
+| mage_exiles / shared_stone_base | no | `params {family: stone, exempt: [terrain, support]}` | unsupported |
+| hidden_village / mossy_palette | no | top-level `family: moss_stone_spruce_oak` (no such family) | unsupported |
+| rival_families / family_colours | no, scope `estates` | top-level `family: family_colours`, `exempt` | unsupported |
+| old_new_town / two_styles | **yes** | prose only | unsupported (REQUIRED_BLOCKED) |
+| desert_jungle_wall / two_faced_palette | no, scope `town` | prose only | unsupported |
+| row_houses / plain_palette | no, scope `row` | prose only | unsupported |
+
+### 1. The def (strict, additive) and its lenient read
+
+```
+rule.palette: {id, kind: "palette", required?, scope?, label?, notes?,
+               family: string,                 // a vocab/1 family, or a group (§1.1)
+               share?: [min, max],             // the family's share of measured cells; default [1, 1] ("only")
+               exempt?: ["terrain" | "support"],  // default both
+               params?}
+```
+- **"Only copper"** is `{family: copper}` (share defaults to [1, 1]). **"No wood"** is `{family: wood, share: [0, 0]}`. "Mostly
+  stone" is `{family: stone, share: [0.6, 1]}`.
+- **Lenient read (S-K1-3):** `family`, `share` and `exempt` are read from `params` when the top level doesn't give them (Steward
+  writes both). `gradient`, `colours`, `material` and other `params` keys are noted ("noted, not read"), never read.
+
+**1.1 Groups.** A `family` value may name a **group**, a fixed union of families, listed in `vocab/1` (§6):
+- `wood`: the 13 woods of `WOODS` (`kit.mjs:107`: oak, spruce, birch, jungle, acacia, dark_oak, mangrove, cherry, pale_oak,
+  poplar, bamboo, crimson, warped), every member of their families; leaves and saplings are outside those families already,
+  and logs written as a tree are terrain (exempt).
+- No other group in VOC-c. A group is a closed list in the kit (`kit/lib/vocab/groups.mjs`), generated into `vocab/1`; a new
+  group is a later additive change (N-VOCc-1).
+
+### 2. The measure
+
+- **Cells:** VOC's measured cells (written, not air, not a fluid source, not a common natural block), less the exempt ones:
+  - `terrain`: cells written in the role `terrain` and by terrain ops (brushes, scatter, relief, a zone's ground and pads'
+    batter), **not by stage**: H's and HY's forms emit in `ground` and `forms` too, and a body's shell, a fountain's rim, a
+    terrace's walls and every other part's cells **count**;
+  - `support`: foundations, footings, piers and pads (the roles `foundation` and `support`, and a lot's pad).
+- **Over parts:** the IR parts whose plan part is in `scope` (or all, with no scope), from `vocabCells`, which now runs whenever
+  the plan holds a `rule.palette`.
+- **Over lots:** the lots of the zones and districts in scope, from their **bound entries** (§4). A provisional lot is not
+  measured at check time (§3).
+- **The share:** `family cells / measured cells`, by cell count, parts and bound lots together. Integer counts, exact.
+- **Recorded per rule:** `{cells, family, share, parts: {id: [family, cells]}, lots: {id: [family, cells]}, pendingLots: [ids]}`.
+
+### 3. Answers at plan time
+
+- **A rule whose family resolves**, measured within `share` over parts and bound lots: `fits`, with the new optional
+  `partAnswer.measured` member (above, capped at 16 parts and 16 lots, the worst first).
+- **An upper bound of 0** ("no wood"): the compile pass **plans again with the family excluded** from every role chain of the
+  parts in scope (a new `ctx.paletteExclude`, a set of block ids; VOC-a's re-plan loop pattern, at most 3 passes in all; note
+  that VOC-a's `ctx.vocabRefuse` refuses whole parts, so it is not reused), and materials fall to the next block of their role's
+  chain. If it then measures 0: `adjusted`,
+  with the substitutions as deviations. If a part still writes the family (a role with no other block): `refused VOCAB`
+  (`evidence {rule, block, cells}`, VOC's code), naming the part.
+- **A share missed with no fix** (only copper, and a stone wall in scope): `refused TOLERANCE {kind: "palette", family, share,
+  measured, worst: [parts and lots]}`; `wouldFit`: the rule with `share` widened to the measured value, re-checked alone.
+- **An unknown family or group** (`moss_stone_spruce_oak`, `family_colours`): `refused NO_FEATURE {kind: "family", family}`;
+  `wouldFit`: the nearest family by name if one resolves, else the rule with `required: false`.
+- **No family at all** (the prose rules): `refused NO_FEATURE {kind: "family"}`, note "palette guidance only: give a family to
+  measure it"; `wouldFit`: the rule with `required: false` (a non-required rule never blocks).
+- **Provisional lots in scope.** A required rule can't be verified for a lot without an entry. **R11 is amended:** such a rule
+  answers by the parts and bound lots, lists `pendingLots`, and is **verified at `realiseApproved`** for each lot the realise
+  binds (§4). Without that, every required palette rule over a provisional village would block readiness forever.
+- S-K1-6 and S-K1-7 bind: a newly refused pending part is a repair; unknown codes and kinds pass through.
+
+### 4. Lots from bound entries, and the `realiseApproved` refusal (Java)
+
+- **The artifact carries what Java needs, so Java needs no vocabulary:** each rule with lots in scope becomes
+  `palette: [{rule, required, lots: [ids], blocks: [ids in the family], natural: [ids not measured], share: [a, b]}]` in the
+  plan-check artifact (sorted, deduplicated; `natural` is VOC's common-natural list). The plan check's sha covers it.
+- **At check time,** for a lot whose entry is named in the plan, the mod reads the entry's blueprint and passes its block
+  histogram to the kit with the check request (`lotBlocks: {lot: {block: n}}`), so §2 measures it then. Its counts become part
+  of the artifact.
+- **At `realiseApproved`,** after `lotProblem` and before the protection check: for every **required** palette rule, each lot it
+  binds now (named in the artifact or supplied in `lotEntries`) is measured from its blueprint (non-air, not in `natural`, the
+  pad excluded), and the rule's share is recomputed from the artifact's parts count plus every bound lot. A share outside
+  `share` refuses the realise:
+  - **code `PALETTE`** (a new `Reason`, appended at the end of the enum; `$defs/reason.code` gains it), with evidence `{rule, lot,
+    entry, family, share, measured, cells}`, naming the worst lot.
+  - Nothing is written. The caller re-binds a lot (another entry) or drops `required`.
+- A non-required rule never refuses; the realise report notes its measured share (`architect_mc:palette` ext rows).
+- A lot entry replaced later (`versionOf`, "add a floor") is a site operation, not a realise: it is not re-judged (S-VOCc-3).
+
+### 5. Catalogue next (9 after HY's 8; the coordinator sets the number)
+
+| Id | Before | VOC-c | limits / note |
+|---|---|---|---|
+| `rule.palette` | reserved, `until: RC` | **supported**, schemaVersion 1 | `{groups: ["wood"], share: [0, 1], exempt: ["terrain", "support"], scope: 32}`; note "measured over parts and bound lots; required rules are checked again at realise" |
+
+- Every other `rule.*` unchanged (still `until: RC`).
+- **Archive:** HY's catalogue 8 as `fixtures/plan/catalogue-hy.json`. The diff from it is exactly the one flip with its limits
+  and note (`diffCatalogues` folds a note into a flip). Any test that holds the golden unchanged (VOC's `voc-unit` item 5, K1's and
+  T3's foundation tests) is re-pointed by name.
+- If IRR or KC merges between HY and VOC-c, neither touches the catalogue (KC: none; IRR: a member), so the number holds.
+
+### 6. How the plan writer and Claude learn it
+
+- **The plan writer (Steward)** reads the live catalogue (`planCatalogue()`) and `plan/0#compact`: the flip, the limits and the
+  def's description tell it the shape. `vocab/1` tells it the family and group names.
+- **`vocab/1` gains** (additive; the systemRef name stays `vocab/1`, its content and cache key change once):
+  - `groups: {wood: [families]}` in both forms;
+  - `compact.palette`: one note: "`rule.palette {family, share}` measures a family's share of written blocks; `family` is a
+    family or group named here; 'only X' is share [1, 1], 'no X' is share [0, 0]".
+- **Claude in Architect's design jobs** does not see palette rules in VOC-c. A lot design for a palette-scoped zone gets the rule
+  only through its brief (Steward's text). The artifact's `palette` rows let Steward put "copper only" into a lot's brief; a
+  design that misses it is caught at `realiseApproved` (§4). A design job that takes the rule itself is a later step (noted).
+- **Byte identity:** every plan without a `rule.palette` re-plans byte-identical (answers and IR, but kitVersion); plans with one
+  change their rule's answer only (named: the 7 asks above and `extension/e15_*`, which lists the reserved rules).
+
+### 7. Steward's recorded plans: expected answers
+
+Predicted, not run; the builder commits before and after tables (`fixtures/plan/vocc/`).
+
+| Ask / rule | Expected | Overall |
+|---|---|---|
+| one_block / copper_only (required) | measured over `reach`'s parts: `fits` if every written non-natural, non-exempt block is copper, else `refused TOLERANCE` with the worst parts (the builder records which); lots provisional: `pendingLots` | was REQUIRED_BLOCKED; READY if it fits |
+| mage_exiles / shared_stone_base | measured, share defaults [1, 1] read from params' absence: likely `refused TOLERANCE` (towers keep their own palettes), not required | unchanged class of the plan |
+| hidden_village / mossy_palette | `refused NO_FEATURE {kind: family}`, `wouldFit` `required: false` (already false) | unchanged |
+| rival_families / family_colours | `refused NO_FEATURE {kind: family}` | unchanged |
+| old_new_town / two_styles (required) | `refused NO_FEATURE {kind: family}`, `wouldFit` `required: false` | stays REQUIRED_BLOCKED until Steward's writer repairs it |
+| desert_jungle_wall, row_houses (prose) | `refused NO_FEATURE {kind: family}` | unchanged |
+
+**Bar:** 0 `malformed`; no answer outside the palette rules changes; `until: RC` no longer named for `rule.palette`.
+
+### 8. API and versions
+
+- **Placeholders:** API 1.39.0, mod 0.42.0, kit 0.39.0, catalogue next. Feature `rulePalette` (`plan.rules`).
+- Additive: `Reason.PALETTE` (appended); `$defs/reason.code` `PALETTE`; `partAnswer.measured`; the artifact's `palette` rows;
+  the check request's `lotBlocks`; `vocab/1`'s `groups` and `compact.palette`; the realise ext `architect_mc:palette`.
+  api-compat clean (an appended enum value).
+
+### 9. Gate (slice tier, $0)
+
+**Fixtures:** `valid/v64_vocc_copper` (a copper-only reach: walls, lamps and a fountain's rim in a copper bible, one bound lot
+whose entry is all copper), `valid/v65_vocc_nowood` (a village with `{family: wood, share: [0, 0]}` in a spruce bible: re-planned
+to stone, `adjusted`), `vocc/r01_share` (`TOLERANCE`), `vocc/r02_family` (`NO_FEATURE`), `vocc/r03_entry` (a required rule and a
+provisional lot whose bound entry is oak: `realiseApproved` refuses `PALETTE`), `vocc/r04_lenient` (params-only members).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the def and lenient read; groups; the measure (hand counts on a fixture, exempt terrain and support); `paletteExclude` re-plan for share [0, 0]; every refusal with its evidence and re-checked `wouldFit`; the artifact's `palette` rows sorted and stable |
+| 2 | Catalogue | the golden equals catalogue next; the diff against `catalogue-hy.json` is exactly §5's |
+| 3 | Recorded plans | §7's bar on the 59 asks |
+| 4 | Byte identity | every committed fixture without a palette rule byte-identical; the named exceptions only |
+| 5 | **`realiseApproved`, in game** (verifier re-runs) | v64 through Regions.checkPlan's two-plan flow and `realiseApproved` with its copper entry: PLACED; `vocc/r03_entry` with the oak entry: refused `PALETTE`, nothing written (E-flat 0 against the snapshot), evidence naming the lot; then the same plan with a copper entry bound: PLACED; a non-required rule never refuses (its ext row recorded) |
+| 6 | Java measure equals the kit's | for each in-game entry, the realise's measured counts equal the kit's for the same blueprint at check time |
+| 7 | `vocab/1` | the systemRef's `groups` and `compact.palette` present in both forms; the sidecar test that the ref list is append-only still passes |
+| 8 | Determinism | 3 checks of each fixture identical; macOS and Linux CI |
+| 9 | API, spend | api-compat clean, apijars; $0.00 |
+
+**Tier:** slice: the units, api-compat, the impact map's VOC steps (`voc-unit` amended, `voc-registry`, `voc-ingame`), P0's
+units, and VOC-c's own `vocc-unit`, `vocc-ingame` (items in `tools/lib/gate6cvoc-c.mjs`, run by `tools/gate6cvoc.mjs`). The
+verifier reviews the diff and re-runs item 5. **Steward's RC check before release:** a new `realiseApproved` refusal.
+
+### 10. Size and split
+
+One owner, about **1.5-2 days**: the def, groups and measure (0.5 day); the answers and the `paletteExclude` re-plan (0.25 day);
+the artifact rows, `lotBlocks` and the Java refusal (0.5 day); the catalogue, `vocab/1` and fixtures (0.25 day); the in-game round
+(0.25-0.5 day). If smaller is wanted: plan-time only (parts and named entries), with the `realiseApproved` refusal deferred,
+saves about half a day and the RC check, but then "only copper" over provisional lots is never enforced.
+
+### Steward's review (2026-10-20, at f79a03e7): binding, and it overrides the sections above where they differ
+
+- **S-VOCc-1.** The shape as drafted.
+- **S-VOCc-2. Both checks.**
+  - The `realiseApproved` refusal stays as the safety net.
+  - Add a cheap pre-check: `Library.Entry` (or the views Steward reads) exposes the entry's measured block histogram by family,
+    or a call checks an entry against a `rule.palette`. Steward can then drop or redesign one lot instead of the whole village
+    refusing.
+- **S-VOCc-3. Re-judged after `versionOf`.** A later change that breaks a settlement's palette rule is a `checkDelta` finding,
+  or a refusal for a required rule.
+- **S-VOCc-4.** Prose-only rules answer `NO_FEATURE`, which Steward offers to Claude as a repair.
+- **S-VOCc-5.** Steward runs the RC check.
+
+### Open questions for Steward
+
+- **S-VOCc-1. The shape.** `{family, share?, exempt?}`, `share` defaulting to [1, 1] ("only"); "no X" is `share: [0, 0]`; members
+  read from `params` too. Will your plan writer write "only copper" as `{family: copper}` and "no wood" as `{family: wood,
+  share: [0, 0]}`?
+- **S-VOCc-2. Provisional lots.** A required rule over lots without entries is verified at `realiseApproved`, which refuses
+  `PALETTE` naming the lot (R11 amended). Can your builder re-bind a lot (another entry, or a re-design with the rule in its
+  brief) on that refusal, or do you want the check to refuse earlier (at `Entry.cells()` pre-check time, through a new
+  `palette` field in the pre-check)?
+- **S-VOCc-3. After the realise.** A lot replaced later (`versionOf`, "add a floor") is not re-judged against the rule. Fine?
+- **S-VOCc-4. Prose rules.** A palette rule with no family answers `refused NO_FEATURE {kind: family}` with `required: false` as
+  the repair. `old_new_town`'s required `two_styles` then stays blocked until your writer repairs it (as today). Is that the
+  repair you want, or should a prose rule answer `fits` as guidance?
+- **S-VOCc-5. The RC check.** Will you check `vocc/r03_entry`'s refusal and a copper-only reach on the release candidate?
+
+### Open questions for Noah
+
+- **N-VOCc-1. Groups.** Proposed: one group, `wood` (the 13 woods, leaves and saplings out). Others (`metal`, `glass`, `nether`)
+  come when an ask needs them. Default: `wood` only.
+- **N-VOCc-2. What "no wood" swaps to.** Proposed: VOC-a's role chain (the next block of the role, usually stone or the style's
+  `structure`). The alternative refuses and lets Steward pick a bible. Default: the role chain.
+
+### Coordinator decisions (2026-10-20, on Noah's behalf)
+
+- **N-VOCc-1:** one group for now, `wood`. Other groups are later additive changes.
+- **N-VOCc-2:** as proposed. "No wood" swaps each wood block for the next block in VOC-a's material chain.
+
