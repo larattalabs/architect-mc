@@ -260,13 +260,18 @@ async function liveChecks(ctx, o) {
   await L.cmd(`/fill ${cx} ${cy} ${cz} ${cx + 10} ${cy} ${cz + 7} minecraft:farmland[moisture=0]`);
   await L.cmd(`/fill ${cx} ${cy + 1} ${cz} ${cx + 10} ${cy + 1} ${cz + 7} minecraft:wheat`);
   const control = []; for (let x = cx; x <= cx + 10; x++) for (let z = cz; z <= cz + 7; z++) control.push([x, cy, z]);
+  // (hydration is a random tick's doing: each cell's first comes after 68 s on average at the default speed 3, so after 2 minutes
+  // about 1 in 6 cells has had none yet; counted at 2 minutes (recorded), then every minute until all are moist (at most 10 minutes))
   const t0 = Date.now();
   await L.settle(120_000);
-  const wet = await countBlock(ctx, field, 'minecraft:farmland[moisture=7]');
+  const moist2 = await countBlock(ctx, field, 'minecraft:farmland[moisture=7]');
+  let wet = moist2;
+  while (wet < field.length && Date.now() - t0 < 600_000) { await L.settle(60_000); wet = await countBlock(ctx, field, 'minecraft:farmland[moisture=7]'); }
   const farm = await countBlock(ctx, field, 'minecraft:farmland');
   const cWet = await countBlock(ctx, control, 'minecraft:farmland[moisture=7]');
-  const out = { hydration: { field: field.length, farmland: farm, moist7: wet, control: control.length, controlMoist7: cWet, seconds: (Date.now() - t0) / 1000 } };
-  check(farm === field.length && wet === field.length, `item 3 (v62 f1): after 2 minutes at default rules every farmland cell of the field is moisture=7 (${wet}/${field.length}, farmland ${farm})`);
+  const out = { hydration: { field: field.length, farmland: farm, moist7At2min: moist2, moist7: wet, control: control.length, controlMoist7: cWet, seconds: (Date.now() - t0) / 1000 } };
+  check(true, `item 3 (recorded): after 2 minutes at default rules ${moist2} of ${field.length} field cells moisture=7 (a random tick each; vanilla)`);
+  check(farm === field.length && wet === field.length, `item 3 (v62 f1): every farmland cell of the field moisture=7 at default rules (${wet}/${field.length} after ${Math.round((Date.now() - t0) / 1000)} s, farmland ${farm})`);
   check(cWet === 0, `item 3 (the control): the same field without irrigation is dry (${cWet} of ${control.length} moisture=7)`);
   // crops on the moist farmland (the design's wheat, on the field and on the sources' farmland sides)
   const crops = await countBlock(ctx, field.map(([x, y, z]) => [x, y + 1, z]), 'minecraft:wheat');
@@ -533,7 +538,7 @@ export async function probe(ctx) {
     if (dy < 0) await L.cmd(`/setblock ${wx} ${y} ${wz} minecraft:air`);
     out[tag] = { x0, z0, n, water: [wx, y + dy, wz] };
   }
-  await L.settle(120_000);
+  await L.settle(300_000); // (5 minutes: about 1 cell in 80 has had no random tick yet)
   for (const [tag, x0, z0, n] of plots) {
     let wet = 0, cells = 0, far = [];
     for (let x = x0; x < x0 + n; x++) for (let z = z0; z < z0 + n; z++) {
@@ -543,7 +548,7 @@ export async function probe(ctx) {
     }
     Object.assign(out[tag], { cells, wet, dry: far });
   }
-  check(true, `item 9 (recorded): vanilla's hydration reach on 26.3 after 2 minutes: ${ctx.json(Object.fromEntries(Object.entries(out).map(([k, v]) => [k, `${v.wet}/${v.cells}`])))}`, out);
+  check(true, `item 9 (recorded): vanilla's hydration reach on 26.3 after 5 minutes at default rules: ${ctx.json(Object.fromEntries(Object.entries(out).map(([k, v]) => [k, `${v.wet}/${v.cells}`])))}`, out);
   await L.leaveWorld();
   return out;
 }
