@@ -854,3 +854,10 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
 - **IRR's breach fix, in game: a foreign flow beside the breach.** The `spare` case puts the pond and the well under the flow, so
   the prune by a foreign *flowing* feeder (a player's flow meeting the breach's at a higher amount) is unit-tested only
   (RegionFluidsBreachTest). Add an irr-ingame case with a player's source on the ground beside the trench's exit.
+
+## 6c scenario approvals (SETTLEMENTS §16.3: green = every bar passes and Noah approves the gallery page)
+
+| Scenario | Approved | Evidence | Gallery | Recorded |
+|---|---|---|---|---|
+| S2, the ice-spike outpost (v0.31.0) | Noah, in chat with the coordinator, 2026-10-14T04:39:12Z | `932dafe971f1` | https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG (section S2) | here by slice S3 (2026-10-20), from `artifacts/scenarios/6c/s2/approvals.json` (CONTRACT S3 §9 item 9) |
+| S3 v1, the terraced monastery | pending (Noah) | | | |
