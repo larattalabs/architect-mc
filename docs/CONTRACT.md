@@ -19498,3 +19498,1627 @@ The verifier reviews the diff and **re-runs items 7, 8, 10 and 12**. **Steward's
 
 - **N-D3-1:** today's 3-wide join look inside the town.
 - **N-D3-2:** the join's lamps skip spots within 6 of a town lamp.
+
+## Batch 7a: the rest of the connector set. Summary for Steward review (DRAFT, 2026-10-20)
+
+Phase 7a's connectors after K1, which shipped 7a's walls, gates and rope bridges early. This draft covers:
+- every catalogue entry still reserved `until: 7a` (10 ids, checked against `kit/schemas/plan.json` at f3f41d43);
+- `wall.along` (`until: K2`);
+- the K1 and D3 deferrals that name 7a: lots on a wall's line (S-K1-2, FL's out-of-scope note), wall walks, and a district
+  joining through a standing gate (S-D3-5);
+- M16, which H and HY both left to 7a.
+
+Each slice has its own section below, marked "(DRAFT for Steward review)". Nothing here is built or run. Every "predicted" number
+is the builder's to measure.
+
+**Written over** main f3f41d43 (v0.40.0 + D3's frozen contract: API 1.37.0, mod 0.40.0, kit 0.38.0, catalogue 9). FL, F3, S3, RS
+and D3 are frozen and building, and this draft assumes they land as frozen. A sibling is drafting 6d on `docs/6d` (not pushed
+when this was written). So every version below is symbolic, ⟨6d⟩ + n, and **the coordinator sets the numbers** at merge.
+Anything those slices' as-builts change wins over the facts quoted here.
+
+### The 7a ledger: every id and promise, and where it goes
+
+| Id or promise | Today | In this batch | Slice |
+|---|---|---|---|
+| `connector.stair` | reserved (7a) | supported: a T2 route under a stair profile | **CL** |
+| `connector.switchback` | reserved (7a) | supported: a T2 route under a switchback profile (stairs off, hairpins) | **CL** |
+| `connector.ladder` | reserved (7a) | supported: a T2 route under a ladder profile, to 48 with rest landings | **CL** |
+| `connector.rock_stair` | reserved (7a) | supported: a stair flight carved into rising ground (T3b's bore, inclined) | **RK** |
+| `connector.lift` | reserved (7a) | supported: a bubble column against a face, an H body | **LF** |
+| `connector.catwalk` | reserved (7a) | supported: a bracketed deck along a face (the face form); between structures waits for 7b | **CW** |
+| `connector.stairs_around` | reserved (7a) | supported: a spiral stair round a spire, spike, giant tree or giant mushroom to a lookout | **SA** |
+| `connector.span_bridge` | reserved (7a) | a supported alias of `connector.bridge` (S-7a-3) | foundation |
+| `connector.branch_walk` | reserved (7a) | re-reserved `until: 7b`: every endpoint it serves is a canopy lot (`layout.elevated`) (S-7a-4) | foundation |
+| `connector.rail` | reserved (7a) | re-reserved `until: CR`, Steward's "carts and rails come later" (S-HY-3); a sketch is below (S-7a-5) | foundation (sketch §CR) |
+| `wall.along` | reserved (K2) | supported | **K2** |
+| Wall walks (`castle_city`'s `wall_walk`; K1 "Not in scope") | params noted | a `walk` member on `connector.wall` | **K2** |
+| Towers and gatehouses as lots on the wall's line (S-K1-2's `join` deviations; FL "Not in scope") | `adjusted`, lots beside the wall | the named lots are sited on the line; a gatehouse is a through lot | **K3** |
+| A district joins through a standing gate (S-D3-5; D3 `NO_JOIN [wall]`) | refused | the join crosses a standing gate without writing it | **GJ** |
+| Typed links between regions (S-D-2: "7a types these edges") | `join_external` is `type: road` | a gate join's edge is typed (`crossing {type: gate, lands}`); the rest is the nav slice (ledger row below) | **GJ** (part) |
+| M16, flood behaviour (H §2.5, HY "Deferred": "M16 proper stays 7a's") | the single breach only | M16 as a warning: barriers thinner than 2 under a surface | **FB** |
+| The behavioural villager test (SETTLEMENTS, Steward's A7 review: "a bed across a ladder shaft unreachable, a stair route reachable") | not run | a hard gate item | **CL** |
+| Each kind's survival row (RS "Not in scope": "each gets its survival row in its own slice") | INSTANT only | each slice's §Survival, in RS §7.2's form | every slice |
+
+**What SETTLEMENTS' 7a also lists, and where this draft proposes it goes** (N-7a-1 asks Noah to confirm the scope):
+
+| SETTLEMENTS 7a item | Proposed home | Why |
+|---|---|---|
+| Site analysis and affordances (§6), site lots, freeze-before-lots' general form | 7b, with site-aware design | Every consumer is a site lot or an elevated lot (`layout.elevated`, `tunnel.under`, canopy rope bridges), which are 7b's. The narrow freeze shipped in 6a |
+| The link pass after lot designs, IR v2 (`region.link`, `lotEntries`, `fits`), door-aligned lanes | 7b (K1 already said so for `region.link` and elevated ports) | Needs designed ports in buildings |
+| `seconds`, `risk`, `nav.json`, `Regions.nav`, the `steward` mover (§15) | its own nav slice when Steward's villager/steward phase asks | No consumer yet; S-7a-6 asks |
+| M8 promoted to an error | the 7a batch's release tier, measured first | Promotion can turn READY plans not READY; FB records the counts; S-7a-7 asks |
+| M15 (structural sense: cantilever, necks) | 7c (composites), except CW's own bracket rule `M10:catwalk` | Only catwalks cantilever in this batch |
+| S4 (ravine town v1) and S1 re-run with rope bridges | 7b (S4 needs ledge and span lots); S1 re-run with the 6c close-out or 7b's S1 v2 | No site lots in this batch |
+| Villager reachability judged in S2's and S3's scenarios ("recorded in 6c, judged from 7a") | judged from the first 7a batch's release tier | CL's behavioural test proves the mover first |
+| C3 (plain villages in 7a) | done: V's `flat_village` and plan/0 lay out flat claims with lots, connectors, paths and props | nothing left in 7a |
+| C12 (VillageLayout retires behind a joint 7a/6d gate) | 6d's (Steward-side migration) | 7a adds no migration |
+| Bible format 3's `connectors` block (preferred types, limits) | 7c (K1, T3) | 7a extends format 2's role keys only |
+
+### The slices
+
+| Slice | What | API / versions (symbolic; the coordinator numbers) | Steward check | Size |
+|---|---|---|---|---|
+| **7a/foundation** | The shared interface, frozen first: kind lists (a leaf module), the compile hook table, the route pass's edge profiles and rows 9-11 as inert stubs, defs, codes, wire shapes, bible keys, P0's reserved example moved, the alias and the two re-reservations | none alone (merged by the slices) | none | 0.5-0.75 day |
+| **CL** climbs | `connector.stair`, `connector.switchback`, `connector.ladder` over T2's own moves; the behavioural villager test | ⟨6d⟩+1 minor, catalogue ⟨6d⟩+1 | none before release (plan answers and routes only, GATES policy 4) | 1.5 days |
+| **K2** walls II | `wall.along`; wall walks | next minor | none | 1.75-2 days |
+| **CW** catwalks | `connector.catwalk`, face form: route row 10 | next minor | none | 1.25 days |
+| **RK** rock stairs | `connector.rock_stair`: route row 11 on T3b's bore, the two-plan flow, the stale rock | next minor (Java: `hasVolume`) | none (as T3b) | 1.5 days |
+| **LF** lifts | `connector.lift`: route row 9, a bubble column as an H body, a StillOurs row | next minor (Java) | **RC** (a global StillOurs row; a new body in the fluids stage's census and drain) | 2 days |
+| **SA** spirals | `connector.stairs_around` round a form part to a lookout | next minor | none | 1.25 days |
+| **K3** wall lots | towers and gatehouses as lots on a wall's line; gatehouse passages; closure at bind | next minor (Java: the bind's closure check, artifact ports) | **RC** (Steward designs and binds these lots; a new `realiseApproved` refusal) | 2.5 days |
+| **GJ** gate joins | a district beside a walled town joins through a standing gate | next minor (Java: the reach over a wall region) | **RC** (removal in both orders, as D3) | 1.5 days |
+| **FB** flood behaviour | M16 as a warning | kit patch (or a minor with a feature string) | none | 0.75 day |
+
+### Build order and parallelism
+
+- **Gating.** 7a's merge waits for the 6c close-out (CONTRACT "Coordinator decisions ... 2026-10-10": "The 6c close-out ...
+  gates 7a's merge, not its start"; STEWARD-SYNC "Agreed order" item 7). The task that produced this draft places 7a's numbers
+  after the 6d batch. **Order conflict for the coordinator:** SETTLEMENTS "Agreed with Steward (2026-10-09)" says "6d ... lands
+  right after 7a, as 7a's follow-on slices". This draft follows the newer instruction (7a after 6d) and does not edit
+  STEWARD-SYNC or SETTLEMENTS.
+- **The foundation first, alone** (one owner, `7a/foundation`, about half a day, frozen before any slice branches), as K1's and
+  T3's were.
+- **Batch 7a-1: CL, K2, CW in parallel** (three lanes; kit only; none shares a module but the foundation's tables). One release,
+  no RC.
+- **Batch 7a-2: RK, LF, SA in parallel.** SA after F3 merges (its hosts include F3's trees and mushrooms; with F3 late, SA ships
+  F1's hosts and F3's join as a follow-up row). RK and LF touch `PlanChecks.java` in different methods (RK `hasVolume`; LF none:
+  its Java is StillOurs and the census). One release, **one Steward RC** (LF's).
+- **Batch 7a-3: K3, GJ, FB.** GJ after D3 merges. K3 after K2 (wall walks end at tower lots). FB any time (kit only; it judges
+  LF's lift doors, so after LF for its exception list, or with a stub list). One release, **one Steward RC** covering K3 and GJ.
+- **At most 3 gate runs machine-wide** (GATES policy 6). FL, F3, S3, RS and D3 hold slots while they build, so 7a's lanes take
+  turns at the slice tier; the batches above are sized to three lanes.
+- **Totals:** about 15 days of work; about 6-7 elapsed with three lanes and the foundation first.
+
+### Rules for every slice here
+
+From the FL/F3, KC, CU and D3 batches' as-builts; they bind each slice below:
+- **Never edit `kit/regions/plan_v0.mjs`** (its source sha is every IR's `programSha`). New kinds are new modules.
+- **Fixture numbers:** the coordinator assigns them; each slice names its `valid/` fixtures `v7a_<slice>_<name>` as placeholders
+  (renumbered at merge, names kept). Slice-local fixtures live in `fixtures/plan/<slice>/`, unnumbered.
+- **The compact plan/0** has an 84,000-character bound (S-FL-8). The foundation adds every 7a def at once, so **the foundation
+  measures** the delta and states it; the slices add descriptions only.
+- **Every new kind goes through `Regions.checkPlan` and then `realiseApproved` in game**, never `checkPlan` alone, **including one
+  Steward-shaped plan per slice** in plan v1's shape (pending parts `required: false`, every street zone `orientation: "ew"` with
+  rotate off, lot ext; STEWARD-SYNC "Plan v1").
+- **Villagers across** every villager-legal kind (vanilla `dev.nav.villager` both ways) is a **hard bar**: the slice doesn't pass
+  without it. Player-only kinds prove a bot player across instead, and a villager edge asking for one answers `MOVER`.
+- **E-normal world classes** by kind, only at unwritten cells, only away from the plan (D2's `far`/`deep`, F2's `distant`, VOC's
+  `farfluid`); never widened. A natural-site failure is first run against a no-region control.
+- **KC binds every new writer:** a body's cells are its own; whoever is placed later keeps clear (S-KC-1); watch cells strict
+  (S-KC-2). Each slice names its rows for KC's §4 table.
+- **Byte identity:** every new move is opt-in per edge, every new member is absent by default, and `auto`'s move set does not
+  grow in this batch (S-7a-1). So **every committed fixture without the slice's new parts re-plans byte-identical** (answers and
+  IR, kitVersion normalised), the 59 asks included, **except by name**. It is measured, not argued.
+- **Kit bump:** re-cut the kitVersion-carrying goldens (links_demo, links_demo_flat, crossings_demo_flat) by
+  `kit/tools/region.mjs plan` over their committed inputs, as KC did.
+- **Survival:** each kind's row in RS §7.2's form (free, paid, path) plus an exact `cost.bom` (C26's `bomFull` over the emitted
+  cells). The survival build of one fixture runs only if RS has merged; otherwise the row moves to the batch's RC note.
+- **S-K1-6, S-K1-7 bind:** a pending part newly refused is a repair for Steward's plan writer, never a build stop; unknown codes,
+  kinds and members pass through.
+
+### Steward's recorded plans: what waits on a 7a id today, and the batch's predicted answers
+
+The asks claim (`plan-helpers.mjs asksSurvey`) is 320 x 320 of flat grass at y 64 with a lake and a stream: no hill, no cliff, no
+form to climb. So every recorded climb finds nothing to climb.
+
+| Plan / part | Waits on today (`hy/asks-gap-after.txt`) | After the batch (predicted) | Slice |
+|---|---|---|---|
+| old_new_town / quarter_stair (required) | `unsupported {connector.stair, until 7a}` | `refused NO_CLIMB`, `wouldFit` a `path` (fits alone) | CL |
+| sky_monastery / long_stair (required) | `unsupported {connector.stair}` | `refused NO_CLIMB`, `wouldFit` a `path` to `gatehouse_1`. The climb it means (up to `sky_island`) waits on `form.floating_island` (N-P0-1) and a free-standing stair, noted | CL |
+| hidden_village / cave_ladders (optional) | `unsupported {connector.ladder}` | `refused NO_CLIMB`, `wouldFit` a `path` | CL |
+| treetop_village / storehouse_lift (optional) | `unsupported {connector.lift}` | `refused NO_CLIMB`, `wouldFit` a `path`. The raised storehouse wants `layout.elevated` (7b), noted | LF |
+| upside_down / winch_lift (required) | `unsupported {connector.lift}` | `refused NO_CLIMB`, `wouldFit` a `path` | LF |
+| mining_town / rail_1 (required) | `unsupported {connector.rail, until 7a}` | `unsupported {connector.rail, until CR}` (only `until` moves) | foundation |
+| castle_city / curtain_wall | `adjusted` (4 corner lots and `gate_lot` as `join` deviations; `wall_walk` noted) | `fits`, provisional: towers on the corners, the gatehouse on the gate run, the walk on the wall | K2, K3 |
+| walled_town / town_wall | `adjusted` (`gateLots` noted as joins) | `fits`, provisional: 4 gatehouses at the 4 gates | K3 |
+| metropolis / city_wall | `fits` (towers and gate lots noted) | `fits`, provisional, or `refused OUT_OF_CLAIM` as before | K3 |
+| camp_to_city / city_wall | `adjusted` | `fits` or `adjusted` (move), provisional; or `refused OUT_OF_CLAIM` as before | K3 |
+| redstone_gate / curtain_wall, main_gate | `adjusted`; `refused NO_ROOM` | `fits` provisional; `main_gate` `fits` as the gatehouse's passage | K3 |
+| border_fort / fort_wall | `adjusted` | `fits` provisional (`anchors` read as lots on the edge) | K3 |
+| desert_jungle_wall / great_wall | `fits`, provisional (a joined lot) | unchanged class; `gatehouse_1` becomes a through lot (its passage reserved) | K3 |
+
+**The bar for the batch (each slice's item 3):** 0 `malformed`; no recorded part changes class except the rows above; each
+`NO_CLIMB` carries a `path` `wouldFit` that answers `fits` re-checked alone; the before and after gap tables committed per slice.
+After the batch the gap table loses `connector.stair` 2, `connector.lift` 2 and `connector.ladder` 1, and `connector.rail` 1
+keeps its row with `until: CR`.
+
+**On refusing what the flat claim can't climb.** Two precedents pull apart. S-K1-6 (treetop's rope bridges) refused `NO_GAP` with a
+`path` repair. S-T3-4 (secret tunnels) kept the part `unsupported {tunnel.under}` rather than offer a lossy repair. This draft
+follows S-K1-6: a stair, ladder or lift between two points with no rise has no shape it is waiting for, so it is refused with the
+honest repair. S-7a-2 asks.
+
+### Batch-level open questions for Steward
+
+- **S-7a-1. `auto` does not grow in this batch.** S-K1-5 accepted that `auto` grows. CL's profiles, CW's catwalk, RK's rock stair and
+  LF's lift are all opt-in per explicit part, and `auto` gets none of them, so every `auto` answer and v34/v38 stay byte-identical.
+  Growing `auto` with the villager-legal ones (catwalk, rock stair) would be a later, measured change. Default: no growth now.
+- **S-7a-2. Nothing to climb.** A `stair`, `switchback`, `ladder`, `lift` or `rock_stair` whose ends rise less than 2 (4 for a lift)
+  answers `refused NO_CLIMB` with a `path` `wouldFit`, as S-K1-6. The alternative is S-T3-4's `unsupported` with no repair. Default:
+  refused with the repair.
+- **S-7a-3. `span_bridge` is a supported alias of `connector.bridge`.** SETTLEMENTS §8.2 defines it as 6a's `bridge` "for gaps with a
+  floor within 24", which T3's beam already is (`pierDepth` 24). A part of kind `span_bridge` is checked against `connector.bridge`'s
+  def and answers with block `connector.bridge`, noted. R4c's `aliasOf` precedent is a *reserved* alias, so this is a new x-rule
+  (R4d, a supported alias). The alternative is `retired` with `replacedBy`, which leaves any recorded `span_bridge` `unsupported` for
+  good. Default: the supported alias.
+- **S-7a-4. `branch_walk` moves to 7b.** A deck along a giant tree's branches only joins canopy lots, which are `layout.elevated`
+  (7b), and it needs F3's branch skeleton exported in `ir.forms[]` (F3 keeps it internal). Default: `until: 7b`, with that note.
+- **S-7a-5. Rails wait (`until: CR`).** You said "carts and rails come later" (S-HY-3, 2026-10-19). `connector.rail` has no design in
+  SETTLEMENTS §8.2 (only its reservation), carts are entities the journal can't undo, and powered rails need redstone. Default:
+  re-reserve `until: CR` (a named later slice, as `until: mechanism` for drawbridges); §CR below sketches it so your plan writer
+  knows the shape. mining_town's `rail_1` keeps waiting.
+- **S-7a-6. The nav slice.** `seconds`, `risk`, `nav.json` and the `steward` mover (SETTLEMENTS §15) have no consumer yet. Default:
+  their own slice when your villager or steward phase asks; GJ types only the gate join's edge.
+- **S-7a-7. M8 as an error.** FB records how many committed plans would lose READY if M8 (fall protection) became an error. Default:
+  decide at the batch's release tier with those counts.
+
+### Batch-level open questions for Noah
+
+- **N-7a-1. Scope.** This batch is the connector set only. Affordances, site lots, the link pass, nav and S4 move to 7b (or a later
+  slice) as the table above says. Default: yes.
+- Each slice's look questions are in its own section; the coordinator answers them on Noah's behalf until the gallery step.
+
+## Phase 7a foundation: the shared interface (DRAFT for Steward review)
+
+One owner, frozen before any 7a slice branches, as `k1/foundation` and `t3/foundation` were. It changes no answer by itself: every
+row it adds is inert, and every def it adds is read only once its kind's catalogue entry flips (R4). The slices merge it; it never
+merges to main alone.
+
+- **Branch:** `7a/foundation`, worktree `../architect-mc-7aF`. **Spend:** $0.
+- **Depends on:** main after the 6c close-out and 6d (versions symbolic, §6).
+
+### 0. Facts (main f3f41d43)
+
+- **The catalogue** (`kit/schemas/plan.json` `x-catalogue`, golden `kit/schemas/plan-catalogue.golden.json`, catalogue 9, api
+  1.37.0, kit 0.38.0): exactly ten entries are `reserved`, `until: "7a"`, schemaVersion 0: `connector.ladder`, `stair`, `rail`,
+  `catwalk`, `rock_stair`, `switchback`, `lift`, `branch_walk`, `span_bridge`, `stairs_around`; plus `wall.along` (`until: "K2"`,
+  with its `where.along` def already in `$defs/wallWhere`: `{feature, side, anchor, distance}`). Entry members include `aliasOf`
+  (R4c: a *reserved* alias, `zone.district`), `replacedBy` and `retiredInApi` (`lib/plan/catalogue.mjs:18`).
+- **P0's reserved example is `connector.catwalk`:** P0 item 2's "required unsupported -> REQUIRED_BLOCKED" example,
+  `extension/e02_wall_draft` and `e15_every_reserved_a/b` use it (K1 §11 step 3; T3 item 16).
+- **The route pass** (`kit/lib/region/passes/route.mjs`):
+  - built-in moves 0 walk, 1 stair (flights of 2..8 rising or falling 1 a cell, then 2 flat cells, `COST.flight 60 + stair 40` a
+    cell, :380), 2 hairpin (a flat landing holding both lanes, `COST.hairpin 40`, :388-405), 3 ladder (one step to the adjacent
+    column of a cliff 2..`LADDER_MAX` 24, only on edges whose movers lack `villager`, `COST.ladder 80 + ladderPer 25` a rung,
+    :410-417), 4 an earlier edge's walk;
+  - `SPECIAL_MOVES` (:80-85): gate 5, rope 6, bridge 7, tunnel 8, with the hooks `init/active/needsFlag/blocks/expand/cells/commit`
+    and optional `prune`, `fail`, `crossesWater`; **one shared flag bit**; `onceOf(edge)` (:88) reads `edge.once` (any string) or
+    K1b's `spanOnce`;
+  - each row's `init` returns null when no edge lists it in `spans`, which keeps the pass byte for byte T2's.
+- **The compiler's connector hooks** (`kit/lib/plan/compile.mjs`) are per-kind `if` chains over leaf kind lists: K1's
+  `ROPE_KINDS`/`WALL_KINDS` (:31-33), T3's `connectors/t3kinds.mjs` (a leaf module: K1's integration lesson, an import cycle left
+  `ROPE_KINDS` uninitialised), `LINK_KINDS` (:40). Call sites: resolve before routing (:1243-1246), leg options (:1263), the pass
+  inputs (:1290), the fail answers (:1340-1352), the answers (:1385-1389), the links emission (`emitWalls`, `emitRopes`,
+  `emitBridges`, `emitTunnels`, :1393-1401).
+- **The check's two-plan flow** is gated in Java on a part's kind: `PlanChecks.hasTunnel` (:366-370; F3 widens it to `hasVolume`
+  for its cave forms), plus H's `hasH` and `wetAsked` (:452). The artifact's `guards` come from `planCheck.links.guards`
+  (`finish.mjs:167`), any part.
+- **S-F3-3 binds:** a catalogue entry whose check needs a frozen volume carries `limits.volume: true` (or the note F3's builder
+  chose), so Steward passes `LOAD_BOUNDED(512)` without a hard-coded list.
+- **The compact plan/0** bound is 84,000 characters (S-FL-8); FL and F3 measure their deltas as they land.
+
+### 1. The kinds, as a leaf module
+
+`kit/lib/connectors/kinds7a.mjs` (no imports):
+
+```
+CLIMB_KINDS   = ['stair', 'switchback', 'ladder']        // CL: T2's own moves under an edge profile
+ROCK_KINDS    = ['rock_stair']                           // RK: route row 11
+LIFT_KINDS    = ['lift']                                 // LF: route row 9
+CATWALK_KINDS = ['catwalk']                              // CW: route row 10
+SPIRAL_KINDS  = ['stairs_around']                        // SA: a hosted generator plus an ordinary leg to its foot
+ALIAS_KINDS   = { span_bridge: 'bridge' }                // compiled as T3's bridge (S-7a-3)
+KINDS_7A      = [...CLIMB_KINDS, ...ROCK_KINDS, ...LIFT_KINDS, ...CATWALK_KINDS, ...SPIRAL_KINDS]
+```
+
+`LINK_KINDS` gains `KINDS_7A` (they get the links stage), so the compiler reads them the way it reads T3's.
+
+### 2. The compile hook table
+
+So that five slices don't each add an `if` to the same six call sites, the foundation adds **one table**,
+`kit/lib/connectors/hooks7a.mjs`, and one loop at each call site:
+
+```
+HOOKS_7A = [ { kinds: CLIMB_KINDS,  mod: './climb.mjs' },     // CL
+             { kinds: ROCK_KINDS,   mod: './rockStair.mjs' }, // RK
+             { kinds: LIFT_KINDS,   mod: './lift.mjs' },      // LF
+             { kinds: CATWALK_KINDS, mod: './catwalk.mjs' },  // CW
+             { kinds: SPIRAL_KINDS, mod: './spiral.mjs' } ]   // SA
+each module exports: resolve(K, p) -> stop | null      (before routing: R18-style self-loops, movers, NO_CLIMB, params)
+                     leg(K, p) -> legOptions | null    (the edge's `profile`, `spans`, `once`, per-row options in `edge.t7`)
+                     passInput(K) -> object | null     (the pass-level input of its row; null without such parts)
+                     failAnswer(K, leg, meta) -> answer (its typed refusal from the row's `fail` or the profile's post-check)
+                     answer(K, p, legs) -> extra       (merged by mergeExtras, as T3's)
+                     emit(K)                           (the links stage, under a checkpoint per part)
+                     bom(K, p) -> cost.bom             (C26's bomFull over the emitted cells)
+                     survival(K, p) -> RS target spec  (§Survival of the slice)
+```
+
+- The foundation ships each module as an **inert stub with its final name** (T3's lesson: no throwing placeholder): `resolve`
+  returns null, `leg` null, `emit` nothing. Each slice owns exactly its module and its row file.
+- **Order at each call site:** K1's, then T3's (as today), then `HOOKS_7A` in table order. **Links emission order** is frozen:
+  walls and gates (K1, including K2's walks and K3's wall lots), ropes, bridges, tunnels (T3), then climbs' fittings (CL: stair
+  rails, ladder landings, top gates), rock stairs (RK), catwalks (CW), spirals (SA), lifts (LF: the shell in `links`, the water
+  through H's `fluid` op in the fluids stage, as a moat's). Each part emits under its own checkpoint.
+- `span_bridge` (ALIAS_KINDS) is rewritten to `bridge` in `schema.mjs` before dispatch, with a note "span_bridge is
+  connector.bridge (R4d)"; nothing downstream sees the alias.
+
+### 3. The route pass: edge profiles and rows 9-11
+
+**3.1 Edge profiles over the built-in moves (CL owns the values).** Explicit stairs, switchbacks and ladders are T2's own moves
+under a per-edge cost profile, not new rows: duplicating the stair and ladder moves would be two codes for one idea.
+
+```
+edge.profile: 'stair' | 'switchback' | 'ladder'   (absent: COST as today, byte for byte)
+PROFILES[name] = { stairs: bool, ladders: bool, ladderMax: int, cost: {flight, stair, hairpin, ladder, ladderPer, grade} }
+```
+
+- The pass merges `PROFILES[edge.profile].cost` over `COST` for that edge's search only; `stairs`, `ladders` and `ladderMax`
+  override the pass's for that edge. The foundation freezes the names and the shape with the values set equal to `COST` (so the
+  stub changes nothing); CL sets the values.
+- **No new flag semantics.** "The connector really climbed" is a post-check on the routed segments in CL's `failAnswer`/`answer`
+  (S-7a-2), not an A* constraint, so `onceOf` and the one flag bit are untouched.
+
+**3.2 Rows 9-11, appended to `SPECIAL_MOVES`** after tunnel, in this order, each in its own file with the K1/T3 hooks:
+
+| Code | Row | File (owner) | Opt-in (`spans`) | `once` | Cost (pass units, a straight cell 10) | `fail` order |
+|---|---|---|---|---|---|---|
+| 9 | `lift` | `moves/lift.mjs` (LF) | `['lift']` | `'lift'` | 300 + 10 a cell of rise (+ 100 with `down`) | NO_CLIMB, SPAN, ANCHOR, HEADROOM, WATER, PROTECTED |
+| 10 | `catwalk` | `moves/catwalk.mjs` (CW) | `['catwalk']` | `'catwalk'` | 200 + 25 a deck cell + 20 a bracket | NO_GAP, ANCHOR, HEADROOM, SPAN, WATER, PROTECTED |
+| 11 | `rock_stair` | `moves/rockStair.mjs` (RK) | `['rock_stair']` | `'rock_stair'` | 400 + 40 a step + 30 a landing cell | NO_CLIMB, SPAN, ANCHOR, WATER, PROTECTED, VOLUME |
+
+- Each row's `init` returns null unless an edge lists it, so a plan without such a part plans byte for byte as before. The
+  foundation's stubs return null always.
+- An edge's 7a options ride in `edge.t7` (`{lift: {...}, catwalk: {...}, rock_stair: {...}}`, opaque to the pass), the pass-level
+  inputs in `intent.lift`, `intent.catwalk`, `intent.rockStair`, as T3's `edge.t3` and `intent.bridge`.
+- A `once` edge keeps T3's approach rule: it walks at most `approach` (default 16) at each end.
+- **Ties:** a state's moves relax walk, stair, hairpin, ladder, then gate, rope, bridge, tunnel, lift, catwalk, rock_stair. The heap's
+  tie key is unchanged.
+- **`auto` lists none of rows 9-11** (S-7a-1).
+
+### 4. plan/0: defs, codes, the alias, the re-reservations
+
+- **Defs** (strict, additive; each validates every recorded shape: `connector.routed`'s members plus the kind's own). The slices'
+  sections give the members; the foundation adds all five defs at once and **measures the compact plan/0** (predicted
+  2,500-3,500 characters; over 84,000 the bound moves, with Steward's word).
+- **Reason code** appended to `$defs/reason.code`: **`NO_CLIMB`** (the ends rise less than the kind's minimum; `evidence {rise,
+  need}`). Every other refusal reuses K1's and T3's codes. Deviation `what: climb` (a climb connector that routed without
+  climbing, CL).
+- **x-rules** (additive; numbered after any that FL, F3, RS or D3 add, the next free, shown here as R25-R27): **R25** a supported alias (`aliasOf` on a supported entry): the part is checked against the target's def
+  and answers with the target's block id, noted (S-7a-3); **R26** climbs, rock stairs, lifts and catwalks are routed connectors
+  (`from`, `to`; `via` read leniently as R19: the first leg, the rest noted, never `malformed`); **R27** `stairs_around` names its
+  host in `around.feature.part` (a form part of kind `rock_spire`, `ice_spike`, `giant_tree` or `giant_mushroom`); another part
+  answers `refused NO_FEATURE {why: host}`.
+- **Catalogue entries the foundation changes** (if Steward agrees; each flip of a 7a kind is its own slice's):
+
+  | Id | Before | Foundation |
+  |---|---|---|
+  | `connector.span_bridge` | reserved (7a) | supported, `aliasOf: connector.bridge`, schemaVersion 1 (S-7a-3) |
+  | `connector.branch_walk` | reserved (7a) | reserved, `until: 7b`, note "a deck along a giant tree's branches between canopy lots: needs `layout.elevated` and F3's branch skeleton" (S-7a-4) |
+  | `connector.rail` | reserved (7a) | reserved, `until: CR`, note "minecart track between stations; carts and rails come later (S-HY-3)" (S-7a-5) |
+
+- **P0's reserved example moves** off `connector.catwalk` (CW flips it) to **`connector.tube`** (`until: UW`, the longest-lived
+  reservation): P0 item 2's example, `e02_wall_draft`, and `e15_every_reserved_a/b` (which drop catwalk, ladder, stair, switchback,
+  lift, rock_stair and stairs_around as their slices flip them). K1 step 3's and T3 item 16's precedent.
+- **Archive:** the catalogue golden before the batch as `fixtures/plan/catalogue-pre7a.json` (the name the coordinator picks if 6d
+  archives its own); each slice's diff test reads it.
+
+### 5. Wire shapes and bible keys (additive)
+
+- **siteplan/1** gains `climbs: [{id, part, kind, flights, hairpins, ladders: [{at, rungs, landings}]}]`, `rockStairs: [{id, part,
+  steps, landings, carved, lined}]`, `lifts: [{id, part, foot, top, rise, down}]`, `catwalks: [{id, part, cells, brackets}]`,
+  `spirals: [{id, part, host, rise, turns, top}]`; `walls[]` gains `walk` (K2) and `lots` (K3).
+- **Graph edges** take `type: <kind>` (P0: "7a's edge `type` is the connector `kind`") with a `crossing` in S-T3-8's shape:
+  `{type: stair|switchback, rise, flights|hairpins}`, `{type: ladder, rise, landings}`, `{type: lift, rise, down}`, `{type:
+  catwalk, length, brackets}`, `{type: rock_stair, rise, steps, cover}`, `{type: stairs_around, host, rise, turns}`; each edge
+  carries `movers`.
+- **Bible format 2 `connectors`** gains role-name keys (role names only, as K1 §6): `stair {tread, rail}`, `switchback
+  {retaining}`, `ladder {ladder, landing, rail, gate}`, `rock_stair {tread, lining, portal}`, `lift {shell, base, door, cap}`,
+  `catwalk {deck, bracket, rail}`, `stairs_around {tread, rail, deck}`, and `wall {walk, parapet}` (K2). Each slice states its
+  defaults.
+
+### 6. Versions and features
+
+- **Symbolic.** The batch's first API is ⟨6d⟩ + 1 with the mod and kit to match; catalogue ⟨6d⟩ + 1 for batch 7a-1, then one
+  per later batch. `sinceApi` on new or changed entries is set by the coordinator at merge (PLAN "Catalogue `sinceApi`
+  placeholders"). The foundation adds no feature string; each slice adds its own (§ each).
+- **No Java** in the foundation.
+
+### 7. Gate (the foundation's own, kit only)
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Inert | every committed fixture (every dir, the 59 asks) plans byte-identical to main (answers, IR, kitVersion normalised) with the stubs in |
+| 2 | Catalogue | the golden equals `planCatalogue()`; the diff against `catalogue-pre7a.json` is exactly §4's three entries (or none, if Steward declines S-7a-3 to S-7a-5) |
+| 3 | P0 unbroken | P0's tests on `connector.tube` as the reserved example; K1's and T3's unit steps pass |
+| 4 | Alias | a `span_bridge` part answers as the same `bridge` part would, block `connector.bridge`, with the note |
+| 5 | Size | the compact plan/0 measured and recorded |
+
+### Open questions
+
+S-7a-1 to S-7a-5 (batch level) decide §3.2's `auto` row and §4's table.
+
+## Phase 7a slice CL: climbs, stairs, switchbacks and ladders (DRAFT for Steward review)
+
+`connector.stair`, `connector.switchback` and `connector.ladder` reserved -> supported. Each is a routed connector whose search is
+T2's own, under a per-edge cost profile (foundation §3.1), plus the fittings T2 doesn't lay (stair rails, ladder rest landings and
+the top gate), the post-check that it climbed, and the behavioural villager test SETTLEMENTS' Steward review asked for.
+
+- **Branch:** `slice/CL`, worktree `../architect-mc-CL`. **Spend:** $0.
+- **Scope:** the three kinds' defs and answers; the profile values; fittings; `NO_CLIMB`; the behavioural villager test; KC rows;
+  survival rows; the gate.
+- **Not in scope:** shafts bored into rock for ladders (a vertical bore needs RK's volume path; a later row), free-standing stair or
+  ladder towers (no ground to climb: a stair up to a floating island waits for N-P0-1's island), `auto` using the profiles (S-7a-1).
+- **Depends on:** the foundation, T2 (moves 1-3), W (lamps), K1 (`variant()`, the rail role), KC.
+
+### 0. Facts
+
+- T2's stair flights rise or fall 1 a cell for 2..8 cells, then 2 flat cells, within 45 degrees of the heading (`route.mjs` :380);
+  output `stair` primitives on their ground (`_routeRun` columns elsewhere). Hairpins need a flat landing `max(hairpinLanding,
+  width)` deep holding both lanes. Ladders: one step to the adjacent column of a cliff 2..24 high, only on edges whose movers lack
+  `villager` (S-T2-2), emitted as `ladderCols {x, z, y0, y1, facing}` with `minecraft:ladder` on the face.
+- The route's retaining columns go where the land beside stands over 2 higher (T2 as built, §2 output). M8 is a warning; T2's gate
+  measured 0 walk windows over the grade.
+- Vanilla 26.3 (A7 review, verified statically): villagers never climb ladders or scaffolding; they walk stairs blocks and half
+  slabs (K1b's probe). A fence gate stops villagers.
+- `route_demo`'s chapel-lookout edge is player-only (ladders allowed); S3's terrain needed none, so ladders were proved on the
+  synthetic cliff only.
+
+### 1. The plan
+
+```
+connector.stair:      connector.routed's members (kind "stair"), plus width?: 1..5 (default 2), rails?: "drops" | "both" | "none",
+                      lamps?, style?, params?
+connector.switchback: connector.routed's members (kind "switchback"), plus width?: 1..5 (default 2), landing?: 3..7, retaining?:
+                      "plain" | "none", lamps?, style?, params?
+connector.ladder:     connector.routed's members (kind "ladder"; movers, if given, must not include villager), plus
+                      rest?: 8..24 (rungs between rest landings, default 24), top?: "gate" | "open", style?, params?
+```
+
+- `params` is read leniently (S-K1-3): `width`, `lamps`/`torches`, `material` only as a note; every other key listed by name.
+- Grade: the part's `tolerance.grade` (hard 0.25 by default) is the walk grade between flights and on switchback runs.
+
+### 2. The profiles (CL's values in the foundation's `PROFILES`)
+
+| Profile | stairs | ladders | ladderMax | Costs changed (everything else is `COST`) | Effect |
+|---|---|---|---|---|---|
+| `stair` | on | off | - | flight 20, stair 12, grade 18 | the climb goes up in flights rather than winding at the grade |
+| `switchback` | **off** | off | - | hairpin 16, landing 1, grade 6 | it zigzags on hairpins rather than detouring round the slope |
+| `ladder` | on | **on** | **48** | ladder 30, ladderPer 10 | it climbs the face rather than walking round |
+
+The builder may tune these within CL (recorded in the as-built); they never touch an edge without the profile.
+
+### 3. The fittings and the climbed check
+
+- **Climbed (post-check).** From the survey, before routing: the ends' rise `|y1 - y0| < 2` answers **`refused NO_CLIMB`** with
+  `evidence {rise, need: 2}` and a `path` `wouldFit` between the same ends (re-checked alone). After routing, a route whose
+  segments hold no flight (stair), no hairpin (switchback) or no ladder (ladder) answers **`adjusted`**, deviation `{what: climb,
+  value: walk, rise}`, note "the land's grade needed no <kind>" (a gentle rise walked within the grade).
+- **Stair rails.** Every stair tread or landing cell beside a drop over 3 (the fill side of a flight on a slope) gets the rail role
+  at surface + 1 (a wall block where the role has one, else its fence): M8 by construction. `rails: both` rails every edge cell;
+  `none` leaves M8's warning standing (noted).
+- **Switchback retaining.** T2's retaining columns, in the bible's `connectors.switchback.retaining` role (default `structure`, then
+  `foundation`), capped with the trim's slab: the look of a terraced path. `retaining: none` keeps T2's.
+- **Ladder rest landings.** A climb of more than `rest` rungs is laid as flights of at most `rest`: at each break a **rest
+  landing**, a 2 x 1 ledge on two brackets against the face (deck in `connectors.ladder.landing`, default the `floor` role's slab),
+  railed on its open sides, and the next flight starts in the adjacent face column. The search sees one ladder move of rise up to 48
+  at a face that holds at least two face columns; the landings are the emitter's.
+- **The face.** Every ladder cell needs a sturdy face cell behind it: ROCK, SOIL or a full block the plan writes that M3 grounds
+  (a volume's classes where the plan holds one, else the survey's, K1b's rule). Sand, gravel, ice, leaves or air answer `ANCHOR`,
+  naming the cells.
+- **The top.** The cliff-top walk cell beside the ladder's top stands over a drop: the rail role runs 2 cells either side along the
+  edge, with a fence gate (the rail role's gate) in the ladder's own cell (`top: gate`, default; SETTLEMENTS §8.2 "a trapdoor or
+  gate at the top edge"). `top: open` leaves the gap and M8 notes it.
+- **Lamps:** W's `lightCover` over every walk, tread and landing cell (M5 0); a ladder's rest landings each get one.
+
+### 4. Movers and answers
+
+- Movers inferred as T2 (S-T2-1). A **ladder** is player-only: a ladder part whose ends infer villagers, or whose `movers` include
+  `villager`, answers `refused MOVER` with a `stair` `wouldFit` where one fits alone, else a `path`'s.
+- Answers carry `geometry.climbs[{leg, rise, flights, hairpins, ladders: [{at, rungs, landings}]}]`, the graph edge `type: <kind>`
+  with its `crossing`, `cost.bom`.
+
+### 5. KC rows
+
+| Writer | Placed | KC rule | Refused as |
+|---|---|---|---|
+| Stair and switchback treads, landings, rails, retaining | routes (step 4), after every body's emit | as streets: water and shell as `planWater` 1 and 2; never a body's hard cell; a rail in a watch cell is skipped | `ROUTE_WATER` -> T3's fallback (a stair or switchback is a path for it) |
+| Ladders, rest landings, top gates | routes | the face may be a body's shell only if the body is not the plan's (never: a plan body's shell is hard) | `OVERLAP {kind: body}` |
+
+### 6. Survival (RS §7.2's form)
+
+| Kind | Free | Paid | Path |
+|---|---|---|---|
+| Stairs, switchbacks | the walk's cut, `freeCell` dirt path | treads, rails, retaining blocks, lamps | a target per tile with paid cells (as streets) |
+| Ladders | none | ladders, landings, brackets, rails, the gate | targets; the rungs bottom up (each needs its face) |
+
+### 7. Byte identity
+
+`profile` absent means `COST` and the pass's flags. Every fixture without a CL part re-plans byte-identical; the asks' changes are
+the three named rows (§9).
+
+### 8. API
+
+- Features `climbConnectors` (sidecar `region.climbs`). No new record or method. IR unchanged (stairs, columns, ladder columns).
+- api-compat clean against the previous three apitest jars.
+
+### 9. Steward's recorded plans (the asks claim): expected answers
+
+| Plan / part | Expected | Why |
+|---|---|---|
+| old_new_town / quarter_stair (required) | `refused NO_CLIMB`, `wouldFit` `path` | `stone` and `claim_n` stand on the same flat grass (the town's `hill_street` street already fits there) |
+| sky_monastery / long_stair (required) | `refused NO_CLIMB`, `wouldFit` `path` | `gatehouse_1` is a ground lot of `cloister`; the island it means is `form.floating_island` (unsupported until N-P0-1), noted |
+| hidden_village / cave_ladders (optional) | `refused NO_CLIMB`, `wouldFit` `path` | `cabin_1` and `tower_1` are lots of one flat zone; "cave-wall homes" want `layout.elevated` (7b), noted |
+
+**Bar (item 3):** 0 `malformed`; these three change class and no other part does; each `wouldFit` `fits` alone; gap tables
+`fixtures/plan/cl/asks-gap-{before,after}.txt` (connector.stair 2 -> 0, connector.ladder 1 -> 0).
+
+### 10. Gate (slice tier, $0)
+
+**Fixtures:** `v7a_cl_stair` (S3's pinned claim: a stair from the valley floor to the shoulder, 2 wide, villager); `v7a_cl_switch`
+(the seeded 1:2 slope, `synthSlope`: a switchback); `v7a_cl_ladder` (the synthetic cliff: a 30-high face, one rest landing; and a
+16-high one); `climbs_demo` (bundled, `catalogue = false`): flat (a ridge 1:2 and a 36-high cliff raised in stage `ground`, routed
+through the pass's base: T1's lesson) and natural (S3's pinned claim). Refusals: `NO_CLIMB` (flat ends), `MOVER` (a villager
+ladder), `ANCHOR` (a sand face), `SPAN` (a 49-high ladder), `UNREACHABLE` (a keep-out across every line).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the profiles change only their edges; the post-check (`NO_CLIMB`, the `climb` deviation); rest landings at every `rest`; the top gate; the face rule; every refusal fixture's code with evidence and its `wouldFit` re-checked alone |
+| 2 | Byte identity | every committed fixture without a CL part byte-identical; named exceptions none expected |
+| 3 | Recorded plans | §9's bar on the 59 asks in kit CI |
+| 4 | In game, Steward-shaped | `v7a_cl_stair` in plan v1's shape through `Regions.checkPlan` (READY) then `realiseApproved` (PLACED); the realised world equals the virtual one; Regions.remove E-flat 0 on the flat round |
+| 5 | Villagers (hard bar) | vanilla `dev.nav.villager` both ways on every stair and switchback edge of `climbs_demo` flat and natural: 100% found; kit `villager` and `player` movers 100% |
+| 6 | The behavioural villager test (hard bar) | on `climbs_demo` flat: a bed lot reached only by the ladder: `dev.nav.villager` finds no path (0 of 3 tries) while the bot player climbs it; the same bed reached by a stair route: found both ways |
+| 7 | Geometry, realised | flights rise 1 a cell, at most 8, then 2 flat; walk windows within the grade (M2:grade 0); M8 0 on stairs and landings (rails); hairpins with their landings; every ladder cell against a sturdy face; rest landings at most `rest` apart; the top gate in place; M5 0 dark walk, tread and landing cells; M3 0 |
+| 8 | Player across | a bot player up and down every ladder: the top reached, the rest landings stood on. If the headless bot can't climb yet, a new hook `dev.climb` (DEVBRIDGE changelog) drives it, as T3a added `dev.t3.boat` |
+| 9 | KC | a stair beside a fountain: 0 cells in its hard or watch sets, M25:clear 0 |
+| 10 | Exact undo | E-flat 0 on `climbs_demo` flat; natural E-normal 0 unclassified under the narrowed classes |
+| 11 | Survival (if RS merged) | `v7a_cl_stair` in a survival world: treads and rails from the stockpile, the cut free; BOM equals `bomFull`; removal refunds once per key |
+| 12 | Catalogue | the three flips, nothing else, against the foundation's archive |
+| 13 | Determinism | 3 checks identical (answers, artifact shas); tiles 1 = 4 workers; macOS and Linux CI |
+| 14 | Look (recorded) | stairs, a switchback and a ladder with its landing in three bibles: Noah's call (N-CL-1) |
+| 15 | API, spend | api-compat clean; apijars; $0.00 |
+
+**Tier:** slice: the units, apijars, the impact steps for `kit/lib/region/passes/**` and `kit/lib/connectors/**`, t2-unit,
+t2-ingame, k1a-unit, k1b-unit, and CL's own `cl-unit`, `cl-ingame`, `cl-natural` (driver `tools/gate7acl.mjs`). The verifier reviews
+the diff and re-runs item 10 (undo).
+
+### 11. Size
+
+One owner, **about 1.5 days**: profiles and the post-check (0.25), fittings (0.5), `climbs_demo` and fixtures (0.25), the in-game
+rounds and the villager test (0.5).
+
+### Open questions for Steward
+
+- **S-CL-1. A walked climb is `adjusted`.** A stair whose ends rise 2 or more but whose cheapest route stays within the grade
+  without a flight answers `adjusted` (deviation `climb: walk`). Fine, or should it lay flights anyway?
+  Default: `adjusted`, because forcing flights onto a gentle slope would cut steps into land that doesn't need them.
+- **S-CL-2. Ladders are player-only.** A villager edge asking for a ladder answers `MOVER`, with a stair or a path as the repair.
+  Default: yes (A7: villagers don't climb).
+
+### Open questions for Noah
+
+- **N-CL-1. How climbs look.** Proposed:
+  - stairs 2 wide in the `path` role's stairs, rails only beside drops;
+  - switchbacks with `structure` retaining walls capped in `trim`;
+  - ladders with a rest landing every 24 and a fence gate at the top.
+  The look step shows them in three bibles.
+
+## Phase 7a slice K2: walls along a boundary, and wall walks (DRAFT for Steward review)
+
+`wall.along` reserved (`until: K2`) -> supported: D2's boundary spine plus an offset, through K1's line code. And a `walk` member
+on `connector.wall`: a railed, lit walk along the wall's top with stairs up from the inside. Both are K1 extensions in K1a's files.
+
+- **Branch:** `slice/K2` (or `slice/K2-a` along, `slice/K2-b` walks, §10), worktree `../architect-mc-K2`. **Spend:** $0.
+- **Scope:** `wall.along` (§2), wall walks (§3), their answers, KC rows, survival rows, the gate.
+- **Not in scope:** towers and gatehouses as lots (K3); walks into tower lots at height (an elevated port, 7b); walls in water
+  beyond H's harbour fallback (unchanged); villagers on walks (player-only).
+- **Depends on:** the foundation, K1a (`line.mjs`, `wall.mjs`, `checkWalls.mjs`), D2 (`boundary.mjs`), KC, W.
+
+### 0. Facts
+
+- `$defs/wallWhere`'s third branch already holds `along: {feature, side?: either|left|right|toward_anchor|away_from_anchor, anchor?,
+  distance?: intRange}` (plan.json :509); today it answers `unsupported {wall.along, until: K2}` (K1 §10's refusal fixture).
+- `kit/lib/region/boundary.mjs`: `traceBoundary(cols, claim, follow, {biomes, near, minLength = 16})` (:255) over `biomeEdgeCells`
+  (:136), `shoreCells` (:161, land beside water of `minArea` 64), `ridgeCells` (:203, `minRise` 8, radius 12); `pieces` (:60),
+  `spineOf` (:88: the longest piece ordered into a 4-connected spine), `normalAt(spine, i, k = 4)` (:282). D2's following
+  districts measure their band along the normal by Chebyshev distance (D2 as built: an axis-snapped normal put a diagonal river's
+  street at half its depth).
+- K1a's top: the standable surface within 2 plus `height`, smoothed to runs of 3, raised under each gate's lintel; the cap course
+  is wall blocks on the outer course every other cell (merlons) and bottom slabs elsewhere; thickness 1-3 (default 2), on the
+  outside of a ring. `corners: tower` raises 3 x 3 stubs 3 above the wall.
+- Recorded: `castle_city / curtain_wall` carries `params.wall_walk: true` (noted "not read" today). No recorded wall uses `along`.
+
+### 1. The plan
+
+```
+connector.wall (K1's def, additive):
+  where.along: {feature: {biome_edge} | {ridge} | {water}, side?, anchor?, distance?: intRange (default [2, 8])}   // wall.along
+  walk?: boolean | { width?: 1..2 (default 1), access?: "stair" | "ladder" | "auto" (default auto), every?: 16..128 (default 64),
+                     lamps?: "every" | "none" }
+```
+
+- `params.wall_walk: true` is read as `walk: true` (lenient, S-K1-3), so castle_city's note goes.
+- A walk needs `thickness >= walk.width + 1` (the outer course is the parapet). With `walk` and no `thickness`, thickness is
+  `walk.width + 1` (noted); a given thickness too thin answers `refused NO_ROOM {why: walk}` with the thicker wall as `wouldFit`.
+
+### 2. `wall.along`
+
+- **The spine:** `traceBoundary` with the part's feature (`biome_edge {between}`, `ridge {minRise}`, `water` as a shore), `near` =
+  the anchor when given, `minLength` 16. No spine: `refused NO_FEATURE {why: boundary}` (D2's `NO_EDGE` meaning).
+- **The side:** `left`/`right` of the spine's direction (its first cell to its last), `toward_anchor`/`away_from_anchor`, or
+  `either` (default): the side with more clear cells in the band. A shore's side is always the land.
+- **The line:** each spine cell's normal (`normalAt`), offset by the smallest clear distance in `distance` (Chebyshev, D2's
+  measure), taken per run of 8 spine cells as K1a's rings take it per side, joined at run ends by L legs, then the 4-connected
+  supercover (nothing passes a diagonal corner). Clear means K1a's obstacle classes (lots and aprons, zones, forms by their
+  column masks (F3 §3.2), kept columns, keep-out, other regions, builds, water and lava, the claim margin) plus KC's `OB.BODY`.
+- **Open wall.** A `wall.along` is never closed: its free ends end in a post 1 higher (K1a), clipped at the claim margin. `closed`
+  is noted, not read.
+- **Gates:** auto at every crossing of a walk network or a plan route (K1a). `gates.min` defaults to **0** on an along wall (people
+  walk round its ends); a given `gates.min` places them evenly along it, ties by position.
+- **Answers:** `fits`; `adjusted` with a `move` deviation where a run took an offset outside `distance` (soft, `tolerance.move`);
+  `refused OUT_OF_CLAIM`, `PROTECTED`, `WATER`, `OVERLAP {kind: body}` (KC) or `NO_ROOM`, naming the class that blocks every
+  offset (K1a's rule). The geometry gives the spine window used and each run's offset.
+
+### 3. Wall walks
+
+- **The walk surface** is the body's top course on the inner `walk.width` cells (a full block of the cap role; its slab where the
+  body steps), at the wall's top `yT` (so the wall stands `height + 1` with the parapet).
+- **The parapet:** the outer course's top is a **continuous** wall-block course at `yT + 1` (M8's 1.5 barrier on every walk cell),
+  with K1a's merlons at `yT + 2` every other cell when `crenels` is on. The crenel gaps sit above a continuous barrier, so M8 holds.
+- **The inner edge:** the rail role at `yT + 1` (a wall block where the role has one, else its fence) wherever the inside ground
+  is more than 3 below; else open.
+- **Over gates:** the gate's lintel carries the walk (K1a raises the top under each lintel; the walk runs at the raised top, with
+  half-block steps where it changes level, within one half block a cell: walkable).
+- **Corner towers** (`corners: tower`): a 1-wide, 2-high passage through each stub at walk level, so the walk goes round a ring.
+- **Access:** at each gate, a flight up the inner face on each side (rise 1 a cell, `yT - ground` steps, 1 wide, railed on its open
+  side, along the wall), where the inside band (the flight's cells plus 1) is clear of lots + 1, streets and props; else a ladder
+  on the inner face (player-only; `access: stair` refuses `NO_ROOM {why: access}` instead). `every` adds an access along runs
+  longer than it. A wall with no gate gets one access at the run nearest the zone's street end.
+- **Lamps:** W's fixture on the parapet's inner face at least every `floor(12 * level / 15)` walk cells (M5 0 dark walk cells;
+  soul lanterns where M17 needs).
+- **Movers:** player only. The walk is a graph edge `type: wall_walk` per run between accesses, movers `['player']`.
+- **Dead ends:** an open wall's free end, or (K3) a lot on the line, ends the walk with a rail across it (M8), noted.
+
+### 4. KC rows
+
+| Writer | Placed | KC rule | Refused as |
+|---|---|---|---|
+| `wall.along` lines | `planWalls` (after resolve, before emit) | footprints are `OB.BODY` (never `OB.WATER`, so never the harbour fallback): KC's wall row unchanged | `OVERLAP {kind: body}` |
+| Walks, parapets, access flights, ladders | with the wall (links) | the wall's rule; an access flight's cells are hard against footprints; a lamp in a watch cell is skipped | `OVERLAP {kind: body}` / `NO_ROOM {why: access}` |
+
+### 5. Survival
+
+| Kind | Free | Paid | Path |
+|---|---|---|---|
+| `wall.along` | as K1a: the footprint's cuts | body, cap, crenels, posts, gates | K1a's targets |
+| Walks | none | walk surface, parapet, rails, access flights, ladders, lamps | the wall's targets; the walk after the body under it (bottom up) |
+
+### 6. Byte identity
+
+A wall without `where.along` and without `walk` (or `params.wall_walk`) emits byte for byte as K1a. **Named:** castle_city's
+answer (its walk is read: notes and geometry change). No `valid/` fixture uses either.
+
+### 7. API
+
+Features `wallAlong` and `wallWalks` (sidecar `region.walls.along`, `region.walls.walk`). siteplan `walls[]` gains `walk: {width,
+runs, accesses}` and an along wall's `spine`. Graph edges `type: wall_walk`. No Java.
+
+### 8. Steward's recorded plans
+
+| Plan / part | Expected | Why |
+|---|---|---|
+| castle_city / curtain_wall | `adjusted` as today (K3 changes it), `wall_walk` read: the walk laid round the ring, accesses at its gate | the corner lots and `gate_lot` stay K1's `join` deviations until K3 |
+| every other recorded wall | unchanged | no `along`, no walk |
+
+**Bar:** 0 `malformed`; only castle_city's answer changes, by its walk.
+
+### 9. Gate (slice tier, $0)
+
+**Fixtures:** `v7a_k2_along_shore` (S3's pinned river: a wall along its shore, distance [3, 6], two auto gates where routes cross);
+`v7a_k2_along_edge` (a synthetic two-biome claim: a wall along the edge, `gates.min` 2); `v7a_k2_walk` (v30's walled village with
+`walk: true`, `corners: tower`); refusals: no boundary (`NO_FEATURE`), every offset blocked (`NO_ROOM` naming the class), a thin
+walk wall (`NO_ROOM {why: walk}` with its `wouldFit`), an access with no room and `access: stair`.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | spine, side, per-run offsets, the supercover; open ends; gates.min 0 and n; walk surface, parapet, inner rail, gate crossings, tower passages, accesses; every refusal with evidence and re-checked `wouldFit` |
+| 2 | Byte identity | §6's bar; every K1 fixture (v30-v34) and the K1 and T3 batch tests unchanged |
+| 3 | Recorded plans | §8's bar |
+| 4 | In game, Steward-shaped | `v7a_k2_walk` in plan v1's shape through `checkPlan` then `realiseApproved`; `v7a_k2_along_shore` the same on S3's claim |
+| 5 | Closure and crossing (K1 item 1-3's bars) | on `v7a_k2_walk`: closure 0 leaks, every node across with gates open; 0 route cells under wall cells; villagers through the gates, vanilla, both ways (hard bar) |
+| 6 | Walk, realised | a bot player round the whole walk: every walk cell visited, up and down every access; M8 0 on walk cells (the parapet course continuous, re-read); M5 0 dark walk cells; M3 0 |
+| 7 | Along, realised | every line cell within `distance` of the spine (or the recorded deviation); 0 cells in water; the free ends' posts |
+| 8 | KC | an along wall past a pond: kept clear (M25:clear 0) |
+| 9 | Exact undo | E-flat 0 (flat rounds); S3 natural E-normal 0 unclassified |
+| 10 | Survival (if RS merged) | `v7a_k2_walk` in survival: the walk built after its body, BOM exact, refunds once |
+| 11 | Catalogue | `wall.along` reserved -> supported, nothing else |
+| 12 | Determinism, API, spend | 3 checks identical; tiles 1 = 4; api-compat; $0.00 |
+| 13 | Look (recorded) | an along wall on S3's river and a walled village's walk in three bibles: Noah's call (N-K2-1) |
+
+**Tier:** slice: the units, apijars, k1a-unit, k1a-ingame, kc-unit, d2's units (boundary), and K2's own `k2-unit`, `k2-ingame`,
+`k2-natural` (driver `tools/gate7ak2.mjs`). The verifier re-runs item 9.
+
+### 10. Size and split
+
+**About 1.75-2 days**: `wall.along` 0.75-1 (the spine, offsets, open ends, along-wall gates), walks 1 (surface, parapet, gates,
+towers, accesses, lamps). One owner by default; if the coordinator wants two lanes, K2-a (along) and K2-b (walks) touch different
+functions of `wall.mjs` and merge cleanly.
+
+### Open questions for Steward
+
+- **S-K2-1. Along walls are open and take no gate by default.** Auto gates at crossings only; `gates.min` adds more. Fine?
+  Default: yes.
+- **S-K2-2. Walks are player-only** (villagers never use them), one wide, with an access at each gate. Fine? Default: yes.
+
+### Open questions for Noah
+
+- **N-K2-1. How walks look.** Proposed: a 1-wide walk on a thickness-2 wall, a continuous wall-block parapet with merlons above,
+  a fence rail on the inside, lanterns on the parapet, stairs up the inside face at each gate. Default as proposed.
+
+## Phase 7a slice CW: catwalks along a face (DRAFT for Steward review)
+
+`connector.catwalk` reserved -> supported, in its **face form**: a deck shelf on brackets along a cliff or a steep bank, railed on
+the open side, where a walk would otherwise cut deep into the face or go a long way round. SETTLEMENTS §8.2's second form, a deck
+"between structures", needs ports in buildings at height and waits for 7b.
+
+- **Branch:** `slice/CW`, worktree `../architect-mc-CW`. **Spend:** $0.
+- **Scope:** route row 10 (foundation §3.2), the deck, brackets, rails, head room, lamps, `M10:catwalk`, answers, KC and survival
+  rows, the gate.
+- **Not in scope:** decks between buildings or to elevated lots (7b); decks over water (H's wet writes are not used: a catwalk
+  over water answers `WATER`); bends inside one run (a catwalk is straight runs joined by walks); `auto` (S-7a-1).
+- **Depends on:** the foundation, T2, K1b's span diagnosis pattern, W, KC.
+
+### 0. Facts
+
+- T2's walk cuts up to `maxCut` (default 6) and fills up to `maxFill`, with retaining columns beside a cut over 2; a face steeper
+  than that is an obstacle the walk goes round, or a ladder on a player-only edge.
+- K1b's anchors read a frozen volume's classes where the plan holds one, else the 2.5D survey (soil to 3 under the ground, rock
+  below); trees count 64 high (no trunk heights in the pass).
+- M15 (cantilever over 4 from a support) is not built; M3 is face connectivity.
+- No recorded plan asks for a catwalk (P0's reserved example moves off it: foundation §4).
+
+### 1. The plan
+
+```
+connector.catwalk: connector.routed's members (kind "catwalk"), plus width?: 1..2 (default 2 on a villager edge, 1 player-only),
+                   length?: {min?, max?} (3..32), approach?: 0..32, lamps?, style?, params?
+```
+
+`params` lenient (S-K1-3). R26 (foundation): `via` read leniently.
+
+### 2. The geometry (`connectors/catwalkGeom.mjs`, pure)
+
+- **A run** is a straight cardinal line of `n` deck cells (3..32) at one surface height `y` (level: a catwalk doesn't climb; a
+  route climbs on the walks at its ends), from a start walk cell to a landing walk cell.
+- **The face:** for every deck cell, the cell on the face side (left or right of the heading, chosen per run) is site-solid at `y`
+  and at `y + 1` (ROCK, SOIL, or a full block the plan writes that M3 grounds), and stands at least to `y + 2`. Else `ANCHOR {why:
+  face}`, naming the columns.
+- **The drop:** at least one deck cell's open side (the deck's outer edge cell) stands over ground at least 2 below `y`; else
+  there is nothing to shelf: `NO_GAP`, with a `path` `wouldFit` (re-checked alone).
+- **Deck:** the deck role (`connectors.catwalk.deck`, default `floor`, then `path`) in full blocks across `width`, the inner lane
+  against the face. Every deck cell is face-adjacent to the face or to an inner deck cell (M3 through the face).
+- **Brackets:** under the outer deck edge at least every 4 cells and at both ends: an upside-down stair of the bracket role (default
+  `frame`) facing the face, on a strut down to the face (a wall block of the bracket role) when the face below is site-solid within
+  2. The deck's outer edge is never more than 2 from the face (width 1-2): within M15's 4.
+- **Rails:** the rail role on the open edge at `y + 1` (M8's 1.5) and across both ends where they meet a drop.
+- **Head room:** 2 clear over every deck cell and its rail (an overhang lower answers `HEADROOM`).
+- **Lamps:** W's fixture on rail posts at least every `floor(12 * level / 15)` cells (M5 0).
+- **Never written:** the face itself (a catwalk cuts nothing), water or ice (`WATER`), keep-out, builds, kept columns, other regions,
+  lot boxes and aprons (`PROTECTED` or `NO_ROOM`).
+
+### 3. Routing (row 10)
+
+- From a walk cell on a cardinal heading, the row tries runs of `n` = 3..32 (or the part's `length`) in ascending length, the face
+  on the left, then the right, landing on a walk cell at `y`. A run is tried only when the cell ahead is not walkable at grade
+  (its ground differs from `y` by more than the walk's cut or fill would allow) and its first cell's face holds.
+- `once: 'catwalk'`: an explicit catwalk uses exactly one run and walks at most `approach` (default 16) at each end.
+- **Cost:** 200 + 25 a deck cell + 20 a bracket, so a walk round that is not much longer wins.
+- **`fail`:** from the reached near cells and every candidate run landing within `approach` of the goal, the candidate nearest the
+  goal names the first failing check: NO_GAP, ANCHOR, HEADROOM, SPAN, WATER, PROTECTED; UNREACHABLE if one passes (K1b's method).
+- **Movers:** inferred (S-T2-1); a villager catwalk is at least 2 wide (`MOVER` otherwise).
+
+### 4. Checker
+
+`M10:catwalk` (new sub-finding, warning): every deck cell level, face-adjacent per §2; brackets at most 4 apart; the outer edge at
+most 2 from the face; rails on the open edge (M8); head room (M6); M5 on deck cells; M3 0.
+
+### 5. KC rows
+
+| Writer | Placed | KC rule | Refused as |
+|---|---|---|---|
+| Catwalk deck, brackets, rails, lamps | routes (step 4), emitted in links | off every body's hard cells; a lamp in a watch cell skipped; never over a body's water (the deck is not a bridge) | `OVERLAP {kind: body}` / `WATER` |
+
+### 6. Survival
+
+| Kind | Free | Paid | Path |
+|---|---|---|---|
+| Catwalks | none | deck, brackets, struts, rails, lamps | targets; brackets before the deck cells they carry |
+
+### 7. Byte identity, API
+
+- Row 10 is off unless an edge lists it: every fixture without a catwalk byte-identical; no recorded part changes.
+- Feature `catwalks` (sidecar `region.catwalks`); siteplan `catwalks[]`; graph `type: catwalk` with `crossing {type, length,
+  brackets}`. No Java.
+
+### 8. Gate (slice tier, $0)
+
+**Fixtures:** `v7a_cw_cliff` (a synthetic 20-high cliff with a path along its foot blocked by a keep-out, so the cheapest route is a
+catwalk along the face 8 above the foot, 2 wide, villager); `catwalks_demo` flat (the cliff raised in stage `ground`) and natural (a
+pinned cliff site, found by `find-site` with a face of at least 24 x 8 of rock and no water within 8, recorded in
+`scenarios/sites/`); refusals `NO_GAP` (flat), `ANCHOR` (a sand face, a frozen volume), `HEADROOM` (an overhang 1 over the deck),
+`SPAN` (33), `MOVER` (1 wide on a villager edge).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the run search, both faces, every refusal with evidence and its `wouldFit`; `M10:catwalk` on the broken variants (`_unsafe.noBrackets`, `_unsafe.noRails`, `_unsafe.wideDeck` 3 from the face) |
+| 2 | Byte identity | every fixture without a catwalk unchanged |
+| 3 | In game, Steward-shaped | `v7a_cw_cliff` in plan v1's shape through `checkPlan` then `realiseApproved`; re-read equals the virtual world |
+| 4 | Villagers (hard bar) | vanilla `dev.nav.villager` both ways along the 2-wide catwalk (flat and natural); kit movers 100% |
+| 5 | Geometry, realised | §4's bars re-read from the world: M10:catwalk 0, M8 0, M6 0, M5 0 dark deck cells, M3 0; 0 face cells written |
+| 6 | KC | a catwalk past a waterfall's basin: kept clear, M25:clear 0 |
+| 7 | Exact undo | E-flat 0; natural E-normal 0 unclassified |
+| 8 | Survival (if RS merged) | brackets before deck cells; BOM exact |
+| 9 | Catalogue, determinism, API | the flip only; 3 checks identical; api-compat; $0.00 |
+| 10 | Look (recorded) | the catwalk from below and on it, three bibles: N-CW-1 |
+
+**Tier:** slice: the units, apijars, t2-unit, k1b-unit, CW's `cw-unit`, `cw-ingame`, `cw-natural` (driver `tools/gate7acw.mjs`).
+The verifier re-runs item 7.
+
+### 9. Size
+
+One owner, **about 1.25 days**: geometry and the row (0.5), the checker and fixtures (0.25), the pinned site and the rounds (0.5).
+
+### Open questions for Steward
+
+- **S-CW-1. The face form now, between structures in 7b.** A catwalk here runs along a face between two ground walk cells; decks
+  between buildings wait for ports at height (7b). Is the face form worth shipping now, or would you rather `connector.catwalk`
+  wait for 7b whole? Default: ship the face form (it shortens cliff paths T2 can't cut).
+
+### Open questions for Noah
+
+- **N-CW-1. How catwalks look.** Proposed: a 2-wide plank deck (`floor`), upside-down stair brackets with wall-block struts in
+  `frame`, fence rails, lanterns on the rail posts. Default as proposed.
+
+## Phase 7a slice RK: rock stairs (DRAFT for Steward review)
+
+`connector.rock_stair` reserved -> supported: a straight stair flight carved into rising ground, open where the ground over it is
+thin and bored where it is thick, lined where soil or sand shows, lit, with T3b's 2-cell fluid buffer read from a frozen volume.
+It is T3b's tunnel inclined: the same shell, lining, sealing, gravity rule, guards and stale rock, with a stair floor.
+
+- **Branch:** `slice/RK`, worktree `../architect-mc-RK`. **Spend:** $0.
+- **Scope:** route row 11 (foundation §3.2), the flight geometry on `tunnelGeom`, the volume corridor and the two-plan flow, the
+  artifact's guards, answers, KC and survival rows, the gate.
+- **Not in scope:** spiral or turning rock stairs (one straight flight per run; a route chains runs with walks), vertical shafts,
+  stairs under flat ground (`tunnel.under`, 7b), `auto` (S-7a-1).
+- **Depends on:** the foundation, T3b (`tunnelGeom.mjs`, `checkTunnels.mjs`, the volume pass, `guards`, `load`), F3 (`hasVolume`),
+  KC.
+
+### 0. Facts
+
+- T3b's `tunnelGeom.mjs` (pure): floor cells between a start walk cell and a landing; each floor cell is bore where 2+ site-solid
+  cells lie over the roof in every lane, else cut; the shell is the void's face neighbours, lined where SOIL/LOOSE/ICE/SNOW/LOG/
+  LEAVES/PLANT, sealed where AIR, rock raw; falling blocks over the void lined (a fixed point); portals at every bore run's ends;
+  lamps every `min(floor(12 * level / 15), 2 (level - width - height + 1))`; the fluid buffer 2 (Chebyshev, 3D) against WATER, LAVA,
+  ICE and (KC) every body's hard cells; PROTECTED by class.
+- The corridor (T3 §6): the rect of the ends dilated by `approach + width + 3`, y from the lower end's feet - 16 to the highest
+  ground + 1; caps 4M cells an edge, 16M a plan; `load: "generate"` (S-T3-6).
+- `PlanChecks.hasTunnel` (:366-370; F3 widens it to `hasVolume`) gates the two-plan flow; `realiseApproved`'s `tunnelRock` compares
+  each guard's volume box classes (`ARTIFACT_STALE` naming the part and up to 16 cells).
+- S-F3-3: a kind needing a volume carries `limits.volume: true`.
+
+### 1. The plan
+
+```
+connector.rock_stair: connector.routed's members (kind "rock_stair"), plus width?: 1..3 (default 2), height?: 2..4 (default 3),
+                      rise?: {min?, max?} (2..48), landing?: 4..12 (steps between landings, default 8), approach?: 0..32,
+                      lining?: "exposed" | "all", portal?: "plain" | "arch", lamps?, style?, params?
+```
+
+### 2. The flight (`connectors/rockStairGeom.mjs`, over `tunnelGeom`)
+
+- **A flight** is a straight cardinal run from a start walk cell `y0` to a landing walk cell `y0 + rise`, `2 <= rise <= 48`: steps
+  rise 1 a cell, with a 2-cell flat landing after every `landing` steps (default 8: SETTLEMENTS §8.2 "landings every 8"). Its
+  floor profile replaces the tunnel's level profile; every other part of `tunnelGeom` applies to the void over it (`height` clear
+  over each tread's walking surface).
+- **Carved, not built:** every tread and landing stands on site-solid ground (the cell under each tread is ROCK, SOIL or the plan's
+  own grounded fill of at most 1). A tread over air or deeper fill answers `ANCHOR {why: tread}`: a stair standing on fill is a
+  built stair (CL's), not a rock stair.
+- **Cut and bore** per tread as T3b: cut where fewer than 2 site-solid cells lie over the roof (open above, walls lined to the
+  ground with parapets where a side stands 2 or more over the tread: M8), bore where 2 or more. Unlike a tunnel, **a rock stair
+  needs no bore**: an all-cut flight is a stair cut into the hillside and lined. So there is no `NO_COVER`.
+- **Treads:** the tread role's stairs blocks (`connectors.rock_stair.tread`, default the lining role's stairs, then `structure`'s),
+  facing up the flight; landings in its full block or slab.
+- **Portals** at every bore run's ends (T3b's), lamps (T3b's rule, plus one at each landing), the fluid buffer (2), protected
+  classes, the shell and gravity lining: all `tunnelGeom`'s, unchanged.
+- **Classes** from the frozen volume over the corridor (§3) and the plan's own written cells (a ridge raised in `ground`), as T3b.
+
+### 3. Volumes, the check and the stale rock
+
+- **The corridor** per explicit rock stair edge: T3 §6's box, with y from the lower end's feet - 16 to the higher end's ground + 1.
+  The same caps. Over a cap: `incomplete VOLUME`.
+- **Java (the only Java here):** `PlanChecks.hasVolume` (F3's name for `hasTunnel`) also counts a `connectors[]` part of kind
+  `rock_stair`, so its check plans twice; `realiseApproved`'s guard check is per part already (`guards` from `planCheck.links`), so
+  it covers a rock stair's guards with its message "rock_stair <part>: ..." (the prefix generalised from "tunnel ").
+- **Catalogue:** `limits.volume: true` (S-F3-3), so Steward passes `LOAD_BOUNDED(512)` for a plan with one.
+
+### 4. Routing (row 11)
+
+- From a walk cell on a cardinal heading, flights of `rise` 2..48 (or the part's `rise`) ascending (or descending), in ascending
+  rise, landing on a walk cell at `y0 ± rise` at the flight's end. A candidate is tried only inside a volume the plan holds (T3b's
+  grid fast check: classes, fluids within 2, protected face-neighbours, the tread rule); the chosen flight is re-checked by the
+  geometry at emission.
+- `once: 'rock_stair'`, `approach` (default 16) at each end.
+- **Cost:** 400 + 40 a step + 30 a landing cell.
+- **`fail`:** NO_CLIMB (the ends rise less than 2), SPAN, ANCHOR, WATER, PROTECTED, VOLUME; UNREACHABLE if a candidate passes.
+- **Movers:** inferred; villagers walk stairs blocks (a 1-wide one included, as T3's 1-wide bore).
+
+### 5. Checker
+
+`M3:tunnel`, `M3:gravity`, `M4:tunnel` and M6 run on rock stairs unchanged (the void and shell are a tunnel's); new
+`M10:rock_stair` (warning): every tread rises 1 from the last, landings every `landing` steps and flat, every tread on site-solid.
+
+### 6. KC rows, survival
+
+| Writer | Placed | KC rule | Refused as |
+|---|---|---|---|
+| Rock stair carve, lining, treads, portals, lamps | planned with the routes, emitted in links | T3b's: the fluid buffer counts every body's hard cells | `WATER {kind: body}` |
+
+| Kind | Free | Paid | Path |
+|---|---|---|---|
+| Rock stairs | the carve (`carved`), held | treads, lining, seal, portals, lamps | as T3b's tunnels: the part held, carved flight by flight behind its lining (RS §6.3) |
+
+### 7. Byte identity, API
+
+- Row 11 is off unless an edge lists it, and only a plan with a rock stair part asks volumes: every other fixture byte-identical, its
+  check planned once.
+- Feature `rockStairs` (sidecar `region.rockStairs`); siteplan `rockStairs[]`; graph `type: rock_stair`, `crossing {type, rise,
+  steps, cover}`. Java: `hasVolume`, the guard message prefix. api-compat clean.
+
+### 8. Gate (slice tier, $0)
+
+**Fixtures:** `v7a_rk_ridge` (crossings_demo's flat ridge, 12 high, with its sand band: a 2-wide rock stair up its flank, part cut
+and part bored); `v7a_rk_hill` (T3b's pinned `tunnel_hill`, natural); refusals `NO_CLIMB`, `SPAN` (49), `ANCHOR` (a tread over a
+ravine), `WATER` (a pocket 2 from the bore; at 3 it fits), `PROTECTED` (under a build), `incomplete VOLUME` (over the cap; and with
+`load: "generate"` turning an unloaded corridor into a fit).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the flight profile, landings, cut and bore per tread, the tread rule, every refusal with evidence |
+| 2 | Byte identity | every fixture without a rock stair unchanged, its check planned once (no volume asked) |
+| 3 | Check with volumes | `checkPlan` of `v7a_rk_hill` in game: "read N frozen volumes", answers equal the kit's for the same volume shas; an unloaded corridor `incomplete VOLUME` (INCOMPLETE), and with `load: "generate"` READY |
+| 4 | In game, Steward-shaped | `v7a_rk_ridge` in plan v1's shape through `checkPlan` then `realiseApproved` |
+| 5 | Realised | re-read: every tread rises 1, landings flat; cover where bored; every shell cell solid; sand band lined (0 falling-block entities through a 60 s stand); 0 fluid cells within 2 of the void; M3 0, M4 0, M5 0 dark treads, M6 0 |
+| 6 | Villagers (hard bar) | vanilla `dev.nav.villager` up and down every rock stair both ways (the 1-wide one included); kit movers 100% |
+| 7 | Stale rock | approve, then `/setblock` air in one shell cell, and separately water 2 from the void: `ARTIFACT_STALE` naming the rock stair and the cell; with neither, it realises |
+| 8 | Exact undo | E-flat 0 (flat ridge); natural E-normal 0 mismatches within 6 of the written cells (T3b's rule) |
+| 9 | Survival (if RS merged) | carved flight by flight behind its lining; BOM exact |
+| 10 | Catalogue, determinism, API | the flip with `limits.volume: true`; 3 checks identical with the same volume shas; api-compat; $0.00 |
+| 11 | Look (recorded) | the flight's portal, its cut part and its interior: N-RK-1 |
+
+**Tier:** slice: the units, apijars, t3b-unit, t3b-ingame, kc-unit, RK's `rk-unit`, `rk-ingame`, `rk-natural` (driver
+`tools/gate7ark.mjs`). The verifier re-runs items 7 and 8.
+
+### 9. Size
+
+One owner, **about 1.5 days**: the flight over `tunnelGeom` and the row (0.75), the Java trigger and guard prefix (0.25), the
+rounds (0.5). Most of the risk is T3b's and already proven.
+
+### Open questions for Steward
+
+- **S-RK-1. `load` for rock stairs.** With `limits.volume: true` you pass `LOAD_BOUNDED(512)` as for tunnels (S-F3-3). Fine?
+  Default: yes.
+
+### Open questions for Noah
+
+- **N-RK-1. How rock stairs look.** Proposed: raw rock walls lined only where soil or sand shows, stone-brick treads, arched
+  portals, lanterns at each landing. Default as proposed.
+
+## Phase 7a slice LF: lifts, bubble columns against a face (DRAFT for Steward review)
+
+`connector.lift` reserved -> supported: SETTLEMENTS §8.2's bubble column, a 1 x 1 water shaft over soul sand (up) or magma (down)
+that carries a player between the foot of a face and its top. It is an H body: contained by construction, M25-checked, census-exact,
+drained first on removal. Player-only.
+
+**LF changes the fluids stage and adds a global StillOurs row**, so Steward's RC check comes before release (GATES policy 4), as
+H's, IRR's and F3's did; the verifier re-runs the realise, removal and accounting items (policy 3).
+
+- **Branch:** `slice/LF`, worktree `../architect-mc-LF`. **Spend:** $0.
+- **Scope:** route row 9 (foundation §3.2), the column, its shell, airlock and exit, the fluids-stage write and census, the
+  StillOurs row, M25 on lifts, answers, KC and survival rows, the gate.
+- **Not in scope:** free-standing lift towers (no face: a lift needs ground at its top), lifts into lots or at height (7b's ports),
+  rope winches and other mechanisms (a "winch lift" in a card maps to this block, noted; moving parts are `until: mechanism`'s),
+  `auto` (S-7a-1).
+- **Depends on:** the foundation, H (bodies, the `fluids` stage, M25, census, settle, drain-first undo, guards), KC (the registry:
+  a lift registers at emit, as courses), RS (survival row), W.
+
+### 0. Facts
+
+- H's body model (§1.1): sources only, written in the `fluids` stage (appended last only when the plan has a body); the shell is
+  every face-neighbour of `cells` up to `level + 1`, written by the body's own part in an earlier stage, fluid-stopping (`fs`) and
+  not gravity (`g`); doors, signs, ladders and full blocks are `fs` (H §2.2).
+- M25 (H §2.1): `leak`, `convert`, `mix`, `shell`, `keep`, `wet`, `trap`, `exit`; the single breach (§2.5): raised bodies must pass it
+  explicitly, sized by their generators. KC: the breach reach is the body's watch, strict (S-KC-2): no other part writes there.
+- Realise (H §3): sources in (y, x, z) order, one forced fluid tick per source and neighbour, settled = no tick in the watch box and
+  the census equal to `predicted`; the escape guard drains a body that leaks. Undo (§4.1): the body's sources and watched cells
+  first, then the solids after one settle bound.
+- **`StillOurs.fluidHolds`** (`journal/StillOurs.java`): a cell written as a water source is still ours as any water state, ice,
+  frosted ice or air. **A bubble column is none of those**, so a written source that vanilla turned into `bubble_column` would read
+  as not ours. H §1.2: a wet write never replaces a bubble-column cell.
+- Vanilla 26.3 (to be probed, item 1): water over soul sand becomes `bubble_column[drag=false]` (up), over magma
+  `bubble_column[drag=true]` (down), on a scheduled tick from the base; a written `bubble_column` state over its base stays;
+  players ride up and are launched over an open top; drowned spawn in dark water in river and ocean biomes; doors hold water open
+  or closed.
+- Recorded: `treetop_village / storehouse_lift` (barn_1 to stone, "winch and rope lift"), `upside_down / winch_lift` (village to
+  stone, "rope lift"). Both on the flat asks claim.
+
+### 1. The plan
+
+```
+connector.lift: connector.routed's members (kind "lift"; movers, if given, must not include villager), plus
+                rise?: {min?, max?} (4..64), down?: boolean (a second column with a magma base), approach?: 0..32, style?, params?
+```
+
+### 2. The column (`connectors/liftGeom.mjs`, pure)
+
+- **Siting:** a lift stands at the foot of a **face**: a cardinal line where the ground rises at least 4 (`rise` 4..64) within one
+  cell. The **shaft** is the low column cell against the face; the **top** walk cell is the face column's top, beside the shaft.
+- **The shaft:** soul sand at the foot's ground level `y0`, then `bubble_column[drag=false]` from `y0 + 1` up to `yT - 1`, where `yT`
+  is the face's top ground. Written directly as bubble-column cells in the fluids stage (no tick needed to form them); their fluid
+  is a water source, so H's model holds (sources only, `level` 0).
+- **The shell, 2 thick on every open side** (the shell role, `connectors.lift.shell`, default `structure`; shell blocks `fs`, not
+  `g`), from `y0` to `yT`; on the face side the face itself where its two cells behind the shaft are site-solid at every y, else
+  written as shell (`ALWAYS_OURS`). **Two layers mean a single breach reaches nothing outside**, so the lift passes H §2.5 by
+  construction and its watch is its own vestibule only (KC's strict watch holds, and FB's M16 finds no thin barrier).
+- **The airlock:** the entry is through both layers on the approach side at `y0 + 1`: two wooden doors in series (the frame's wood,
+  K1's door rule), the approach walk cell outside. A door holds water open or shut (`fs`), so the inner door holds the column and
+  the outer door holds a breach of the inner one.
+- **The exit:** the shaft's top cell `yT - 1` is open above; its rim at `yT` is the face's ground on the face side and shell on the
+  other three, with the rail role at `yT + 1` on those three (M8). The rider is launched over the rim and steps onto the top walk
+  cell; 3 cells clear over the shaft top (head room for the launch, `HEADROOM` otherwise).
+- **Light:** the bible light family's full block (a sea lantern by default) in the inner shell layer at least every 6 cells up, so
+  no shaft cell is at block light 0 (drowned); W's lamps at the foot and the top (M5 0 on the walk cells).
+- **`down: true`:** a second shaft beside the first, sharing its middle shell layer, over a magma block (`drag=true`), entered from
+  the top through a gap in the rim (railed either side) and left at the bottom through its own airlock.
+- **Never written:** water or ice outside the shaft, lot boxes and aprons, keep-out, builds, kept columns, other regions.
+
+### 3. Routing (row 9)
+
+- From a walk cell on a cardinal heading, 3 cells out from a face (the airlock's two layers between it and the shaft), the row
+  tries the face's rise (4..64, or the part's `rise`) and lands on the top walk cell; down columns the other way.
+- `once: 'lift'`; `approach` (default 16) at each end. **Cost:** 300 + 10 a cell of rise (+ 100 with `down`).
+- **`fail`:** NO_CLIMB (no face rising 4 within `approach`), SPAN (rise outside the limits), ANCHOR (the face's cells behind the
+  shaft neither site-solid nor writable), HEADROOM, WATER, PROTECTED; UNREACHABLE if a candidate passes.
+- **Movers:** player-only. A lift whose ends infer villagers, or whose `movers` include `villager`, answers `refused MOVER` with a
+  `stair` (CL) `wouldFit` where one fits alone, else a `path`'s.
+
+### 4. Fluids, the census, undo and the Java row
+
+- **Registered at emit** with KC's registry as a body (`registerBody`: hard = shaft ∪ shell ∪ base; watch = the airlock's
+  vestibule), as courses are. A lift is placed after every route and wall, so it keeps clear of their cells by construction (S-KC-1:
+  the later part moves): its siting obstacles include every planned cell.
+- **The fluids stage** writes its bubble-column cells after every solid (H's barrier), in (y, x, z) order. **The census** counts a
+  `bubble_column` cell as a water source of the body (as HY's grate bars and F3's waterlogged decor are counted). `predicted`
+  includes them. No spill: the top is open, and a source doesn't rise.
+- **StillOurs (Java, global):** a cell written as `bubble_column` is still ours as any `bubble_column` state (either `drag`), as a
+  water source, or as air; and a cell written as a water source is still ours as a `bubble_column`. This is a `fluidHolds` row, so it
+  reaches deltas, `versionOf`, PT2's adopt counts and survival `matches` for any bubble column (the RC trigger, as F3's rows).
+- **Undo:** H §4.1 unchanged: the shaft's cells first (back to their before states), then after one settle bound the shell, doors
+  and base. Exactness under H's rules (fluid cells compared exactly).
+- **Guards:** a lift needs no frozen volume (2.5D: the face's classes from the survey, a volume's where the plan holds one).
+
+### 5. Checker
+
+M25 runs on lifts unchanged (leak, shell, keep, trap, exit, the breach). New `M10:lift` (warning): the base under the shaft, the
+shell 2 thick on the open sides at every y, both airlock doors, the rim and rails, the light every 6, the 3 clear over the top.
+
+### 6. KC rows, survival
+
+| Writer | Placed | KC rule | Refused as |
+|---|---|---|---|
+| Lift shaft, shell, base, doors, rails, lamps | links (after routes and walls), its water in the fluids stage | a body registered at emit; it keeps clear of every earlier writer (siting); later writers (apron lamps) keep clear of it | `NO_ROOM {why: clear}` for the lift, as a course |
+
+| Kind | Free | Paid | Path |
+|---|---|---|---|
+| Lifts | the bubble-column cells (water, N-H-1) | soul sand, magma, shell, doors, rails, lights | the shell's targets, bottom up; then the body when every paid cell is built and still ours (RS §7.3's barrier) |
+
+### 7. Byte identity, API
+
+- Row 9 is off unless an edge lists it, and a plan without a lift has no new body: every other fixture byte-identical.
+- Feature `liftConnectors` (sidecar `region.lifts`); siteplan `lifts[]`; the `architect_mc:fluids` rows gain lifts (H's shape
+  `{part, body, state, reason, at}`); graph `type: lift`, movers `['player']`, `crossing {type, rise, down}`. Java: the StillOurs row.
+
+### 8. Steward's recorded plans
+
+| Plan / part | Expected | Why |
+|---|---|---|
+| treetop_village / storehouse_lift (optional) | `refused NO_CLIMB`, `wouldFit` `path` | flat claim; the raised storehouse wants `layout.elevated` (7b), noted |
+| upside_down / winch_lift (required) | `refused NO_CLIMB`, `wouldFit` `path` | flat claim; "rope lift" read as this block, noted |
+
+**Bar:** 0 `malformed`; these two change class and no other part does; both `wouldFit`s `fits` alone; gap tables in
+`fixtures/plan/lf/` (connector.lift 2 -> 0).
+
+### 9. Gate (slice tier, $0)
+
+**Fixtures:** `v7a_lf_cliff` (the synthetic 30-high cliff: an up lift with `down: true`, approached by a path); `lifts_demo` flat
+(cliffs of 8 and 48 raised in stage `ground`) and natural (CW's pinned cliff site); refusals `NO_CLIMB`, `SPAN` (65), `ANCHOR` (a
+face of sand with no room for a written shell), `HEADROOM` (an overhang 2 over the top), `MOVER` (a villager lift).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Probe (headless) | command-built: water over soul sand and magma forms the columns; a written `bubble_column` over its base stays; a bot player rides up 8, 30 and 48 and is launched over a rim at `yT`, and stepping toward the face lands on the top cell; down columns carry it to the airlock; a door holds a column open and shut; drowned spawn in a dark column in a river biome and not in a lit one (the light-every-6 rule rests on it) |
+| 2 | Unit | siting, the shell's two layers, the airlock, rim and rails, light spacing, the down column; every refusal with evidence; the single breach reaches nothing outside; `M10:lift` on broken variants (`_unsafe.oneLayer`: M25 breach reach outside; `_unsafe.oneDoor`; `_unsafe.noLight`) |
+| 3 | Byte identity | every fixture without a lift unchanged |
+| 4 | In game, Steward-shaped | `v7a_lf_cliff` in plan v1's shape through `checkPlan` then `realiseApproved`; PLACED only when the lift's body has settled; the census exact (every shaft cell a bubble column, 0 fluid elsewhere in its watch box) |
+| 5 | Player across (hard bar) | a bot player from the approach through the airlock, up to the top cell, and down the down column back to the approach: 100% of rides arrive (5 each); kit `player` mover across; kit `villager` refused (the airlock is not a villager route) |
+| 6 | Containment | M25 0; a 2-minute stand at default rules: 0 fluid cells outside the shaft; a breach probe (`/setblock` air at one inner shell cell): the water stops at the outer layer |
+| 7 | KC | a lift beside a pond: kept clear, M25:clear 0 |
+| 8 | Exact undo (verifier re-runs) | `Regions.remove`: E-flat 0 on `lifts_demo` flat, fluid cells compared exactly; natural E-normal 0 within 6 of any lift cell |
+| 9 | StillOurs (verifier re-runs) | Java unit: every bubble-column state of a written cell holds; a player's block in a shaft cell does not; deltas and PT2's counts over a realised lift unchanged by the column's own drag ticks |
+| 10 | Survival (if RS merged; verifier re-runs) | the shell bottom up, the column written after its last paid cell; soul sand and magma from the stockpile, water free; BOM exact; removal refunds once per key |
+| 11 | Catalogue, determinism, API | the flip only; 3 checks identical; api-compat; apijars; $0.00 |
+| 12 | Look (recorded) | the lift tower from the approach and the top, three bibles: N-LF-1 |
+
+**Tier:** slice plus `journal/**` and `region/**`: the units, apijars, h-unit, h-ingame, ha-ingame, kc-unit, cu's StillOurs tests,
+LF's `lf-unit`, `lf-probe`, `lf-ingame`, `lf-natural` (driver `tools/gate7alf.mjs`). The verifier re-runs items 8, 9 and 10.
+**Steward's RC** follows on the release candidate (S-LF-2).
+
+### 10. Size
+
+One owner, **about 2 days**: the probe (0.25), geometry and the row (0.5), the fluids stage, census and StillOurs row (0.5), M25 on
+lifts and fixtures (0.25), the rounds (0.5).
+
+### Open questions for Steward
+
+- **S-LF-1. A lift is a bubble column, player-only.** "Winch", "rope" and "elevator" in a card map to it (noted), at the foot of a
+  face rising 4 to 64. Villager edges get `MOVER` with a stair repair. Fine? Default: yes.
+- **S-LF-2. The RC.** The StillOurs row is global, and the census counts bubble columns. Will you run on the RC a lift realised and
+  removed, a delta and a PT2 adopt over a standing lift, and (with RS) a survival lift? Default: yes.
+
+### Open questions for Noah
+
+- **N-LF-1. How lifts look.** Proposed: a 5 x 3 tower against the face in `structure`, two oak doors as the airlock, sea lanterns in
+  the inner layer, a railed rim at the top. The alternative is glass in both layers so riders see out (glass is `fs`). Default: solid, as
+  proposed.
+
+## Phase 7a slice SA: spiral stairs round a form (DRAFT for Steward review)
+
+`connector.stairs_around` reserved -> supported: a spiral stair round a rock spire, an ice spike, a giant tree's trunk or a giant
+mushroom's stem, from the ground to a railed lookout at the top (a spire or spike) or just under the canopy or cap (a tree or
+mushroom). It is a hosted generator, not a route move: the stair is fixed by its host, and an ordinary path leg joins `from` to its
+foot.
+
+- **Branch:** `slice/SA`, worktree `../architect-mc-SA`. **Spend:** $0.
+- **Scope:** the def and R27 (foundation §4), the spiral generator (its own hug: 6a's `spiral` keeps a fixed radius, which a
+  tapering host defeats), the top platforms, the foot leg,
+  answers, KC and survival rows, the gate.
+- **Not in scope:** stairs round lots or buildings (a building's own stair is its design's), bridges from the top to other hosts
+  (rope bridges between canopy lots: 7b with `layout.elevated`), branch walks (`until: 7b`, S-7a-4).
+- **Depends on:** the foundation, F1 (`rock_spire`, `ice_spike`), F3 (`giant_tree`, `giant_mushroom`: their column masks, F3 §3.2;
+  SA ships F1's hosts if F3 is late, and F3's as a follow-up row), 6a's `stair` (its tread emission), W, KC.
+
+### 0. Facts
+
+- 6a's `stair(path, {width, rise, landingEvery, carve, railing, spiral, material, ...})` (`program.mjs` :1386); `spiral: {center:
+  [x, z], radius, top, bottom, start}` (:1405) lays a helix of treads of a fixed radius.
+- F1's spires and spikes are tapering columns (F1 as built: `rockSpire`, ice spikes in packed and blue ice); F3's giant trees have a
+  trunk `capsuleChain` tapering with height and leaves in lobes; a form registers its column mask in `ir.forms[]` (F3 §3.2) and its
+  cells are written in stage `ground` (forms are early writers).
+- M17: no ice or snow within reach of block light over 11, so lamps by an ice spike are soul lanterns (light 10).
+- No recorded plan asks for one.
+
+### 1. The plan
+
+```
+connector.stairs_around: {id, kind: "stairs_around", required?, label?, notes?, ext?, style?, tolerance?,
+                          from: endpoint, around: {feature: {part: <form id>}}, top?: "summit" | "canopy" | {y: int},
+                          width?: 1..2 (default 1), rails?: "outer" | "none", lamps?, movers?, params?}
+```
+
+- R27: the host is a form part of kind `rock_spire`, `ice_spike`, `giant_tree` or `giant_mushroom`, an implicit dependency (R3);
+  another part answers `refused NO_FEATURE {why: host}`. `top` defaults to `summit` on a spire or spike and `canopy` on a tree or
+  mushroom.
+
+### 2. The spiral (`connectors/spiralGeom.mjs`, pure)
+
+- **The hug:** at each level `y`, the host's cross-section is read from its written cells (the region's own, known after stage
+  `ground`); the tread ring is the set of cells face-adjacent to that cross-section, outside it. The spiral walks that ring
+  counter-clockwise (ties by position from `from`'s side), rising 1 a step (stairs blocks of the tread role, facing up the spiral),
+  with a 2-cell flat landing every 8 steps; at a level where the cross-section shrinks, the ring steps inward, a landing taking the
+  step. Every tread is face-adjacent to a host cell or to the tread below it (M3 through the host).
+- **Width** 1 (default) or 2; the outer edge stays within 2 of the host (M15's 4 by construction).
+- **Rails:** the rail role on the outer edge at tread + 1 (M8) wherever the outside drops more than 3.
+- **Head room:** 2 clear over every tread (a branch or a cap lower answers `HEADROOM`, naming the cells).
+- **The top:**
+  - `summit`: a railed deck (the deck role's slab, `connectors.stairs_around.deck`, default `floor`) over the host's top
+    cross-section grown by 1, at the summit + 1;
+  - `canopy`: a ring deck round the trunk or stem 1 wide, 3 below the lowest leaf or cap cell, railed;
+  - `{y}`: a ring deck at that level.
+  The top is a graph node `kind: lookout` (player-only by S-T2-1, unless `movers` says otherwise).
+- **Rise:** 4..64 from the foot (`SPAN` otherwise). **Lamps:** W's fixture on the rails every `floor(12 * level / 15)` treads (M5
+  0); soul lanterns within reach of ice (M17).
+- **Never written:** a host cell (a stair never cuts its host), water, keep-out, builds, lot boxes and aprons.
+
+### 3. The foot leg
+
+The foot is the first tread's ground cell on the side facing `from`. `from` joins it by an ordinary T2 path leg (width 1, the
+part's movers), routed in step 4 with the other connectors; its route answers as a path's. The spiral emits in links (foundation's
+order). A foot with no route answers the leg's code (`UNREACHABLE`).
+
+### 4. Movers
+
+Inferred: the top is a lookout, so the edge is player-only unless `movers` names villagers; a villager spiral needs width 2 (a
+1-wide turning stair is too tight for the kit's villager mover, and vanilla's is probed in item 4).
+
+### 5. Checker
+
+`M10:spiral` (warning): every tread rises 1 from the last (landings flat), is face-adjacent to the host or the tread below, the
+outer edge within 2 of the host, rails where the outside drops over 3, head room 2; the top deck railed; M5 0; M3 0.
+
+### 6. KC rows, survival
+
+| Writer | Placed | KC rule | Refused as |
+|---|---|---|---|
+| Spiral treads, landings, rails, top deck, lamps | links | off every body's hard cells; a lamp in a watch cell skipped | `OVERLAP {kind: body}` |
+
+| Kind | Free | Paid | Path |
+|---|---|---|---|
+| Spiral stairs | none | treads, landings, rails, deck, lamps | targets, bottom up (each tread on the one below or the host) |
+
+### 7. Byte identity, API
+
+A plan without a spiral is unchanged (no new row; the generator runs only for such parts). Feature `spiralStairs` (sidecar
+`region.spirals`); siteplan `spirals[]`; graph `type: stairs_around` from the foot node to the lookout, `crossing {type, host,
+rise, turns}`. No Java.
+
+### 8. Gate (slice tier, $0)
+
+**Fixtures:** `v7a_sa_spire` (forms_demo's rock spire, 32 high: a spiral to a summit lookout, from the zone's street); `v7a_sa_spike`
+(an ice spike, soul lanterns); `v7a_sa_tree` (an F3 giant oak, 40 high: to the canopy ring; F3's follow-up row if F3 is late);
+refusals `NO_FEATURE {why: host}` (a zone as host), `SPAN` (a 3-high spire), `HEADROOM` (a mushroom cap 1 over the ring),
+`MOVER` (a 1-wide villager spiral).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the hug on tapering and stepped cross-sections, landings, the three tops, every refusal with evidence; `M10:spiral` on broken variants (`_unsafe.floating`, `_unsafe.noRails`) |
+| 2 | Byte identity | every fixture without a spiral unchanged |
+| 3 | In game, Steward-shaped | `v7a_sa_spire` in plan v1's shape through `checkPlan` then `realiseApproved` |
+| 4 | Movers | a bot player from the street to the lookout and back on every fixture: 100%; a width-2 villager spiral: vanilla `dev.nav.villager` both ways (hard bar for that fixture) |
+| 5 | Realised | every tread on the formula and attached (M3 0), rails, head room, M5 0 dark treads; 0 host cells changed (hash of the host's cells before and after); M17 0 by the spike |
+| 6 | KC | a spiral beside a fountain: kept clear, M25:clear 0 |
+| 7 | Exact undo | E-flat 0; the host intact after removal |
+| 8 | Survival (if RS merged) | bottom up; BOM exact |
+| 9 | Catalogue, determinism, API | the flip only; 3 checks identical; api-compat; $0.00 |
+| 10 | Look (recorded) | the spire, spike and tree spirals: N-SA-1 |
+
+**Tier:** slice: the units, apijars, f1-unit, f3-unit (when merged), SA's `sa-unit`, `sa-ingame` (driver `tools/gate7asa.mjs`).
+The verifier re-runs item 7.
+
+### 9. Size
+
+One owner, **about 1.25 days**: the hug and tops (0.5), the leg and answers (0.25), fixtures and the rounds (0.5).
+
+### Open questions for Steward
+
+- **S-SA-1. The top is a lookout, player-only.** A spiral's top node is `kind: lookout`; villager spirals only on request and 2
+  wide. Fine? Default: yes.
+
+### Open questions for Noah
+
+- **N-SA-1. How spirals look.** Proposed: 1-wide stairs in the tread role (`structure`'s stairs; the host's wood on a tree), fence
+  rails, a slab lookout deck, soul lanterns by ice. Default as proposed.
+
+## Phase 7a slice K3: towers and gatehouses as lots on a wall's line (DRAFT for Steward review)
+
+The lots a recorded wall names (towers, corner lots, gatehouses, `joins`, `anchors`) are sited **on the wall's line** instead of
+beside it: a tower at a ring's corner, a gatehouse straddling a gate run with a passage through it. The wall ends at each lot's box
+(K1's joined lot, K5 intact), routes cross the wall through a gatehouse's passage, and the closure is checked again when the lot's
+design binds. This is S-K1-2's `join` deviation retired, and FL's "lots on a wall's line: deferred to 7a".
+
+**K3 changes what Steward designs and binds** (a gatehouse's passage, closed outer faces) and adds a `realiseApproved` refusal, so
+Steward's RC check comes before release (GATES policy 4); the verifier re-runs the bind and removal items.
+
+- **Branch:** `slice/K3` (or `slice/K3-a` kit and `slice/K3-b` mod, §11), worktree `../architect-mc-K3`. **Spend:** $0.
+- **Scope:** reading the named lots (§1), withholding them from their zone (§2), siting on the line (§3), passages and routing (§4),
+  closure at plan and at bind (§5), the artifact and Steward's design inputs (§6), answers, KC, survival, the gate.
+- **Not in scope:** generated (undesigned) gatehouses (K1's gate frames stay the undesigned form); walks entering towers at height
+  (7b's ports; K2's walk ends at a tower's box); lots on a `wall.along` line (open walls take run lots only if asked: §3, no recorded
+  case); moving lots of another zone onto a wall.
+- **Depends on:** the foundation, K1a (lines, gates, the gate row, `checkWalls`), K2 (walk ends), V and FL (zone layout, lanes),
+  P0 (the artifact, `lotProblem`), IRR (`DesignRequest.reserved`, `$.lots[]` reserved cells), C37b (`Entry.cells`), KC.
+
+### 0. Facts
+
+- K1 §3 `wall.line`: a leg ending on a lot ends at the face of its box, the next leg starts from the opposite face; the lot is a
+  **joined lot** and the closure is `provisional`, "re-checked when the lot's entry binds (P0 §6 step 3: the entry's fit inside the
+  box, and its passage)". Only `wall.line` does this today; rings never take lots.
+- S-K1-2 (binding): tower, gatehouse and corner lots left beside the wall make the part `adjusted` with a `join` deviation per lot.
+- Compile order (`compile.mjs`): zones and their lots (step 2-3: V's `layoutStreet` or FL's frontage), then `planWalls` (rings round
+  the zone's rect at the smallest clear offset in `ring`, default [4, 12]), then routes (step 4) with the gate move, then gates by
+  crossing, auto gates and `gates.min` (first where a zone street end faces the ring).
+- The design kit's **`gatehouse` profile**: "a passage through the building, front to back, at least 3 wide and 3 tall"; `tower`:
+  "height >= 2 x the smaller footprint side; >= 3 floor levels reachable" (CONTRACT, design checker profiles).
+- IRR (S-IRR-2): reserved cells on the artifact's `$.lots[]` as world plus lot-relative cells, `DesignRequest.reserved` honoured by
+  the design job and its checker, and the realise drops any entry block there and reports the count.
+- `PlanChecks.lotProblem` (:1251) checks a bound entry against the lot's `fitBox` (either rotation) and `Entry.cells` against
+  `costRange`; `realiseApproved` refuses on it.
+- Recorded walls naming lots (§9): castle_city (`gate_lot`, `corner_lots` x4), walled_town (`gateLots` x4), metropolis (`gates` as
+  lot ids x2, `towers` x3), camp_to_city (`gate`, `towers` x2), redstone_gate (`joins`: three towers and a gatehouse), border_fort
+  (`anchors` on a `wall.edge`), desert_jungle_wall (`via` a gatehouse lot on a `wall.line`).
+
+### 1. The plan: which lots go on the line
+
+```
+connector.wall (additive): lots?: [{lot: <lot id>, at?: "corner" | "gate" | "run", near?: endpoint}]   (at most 16)
+```
+
+- **Lenient mapping** (S-K1-3), read when `lots` is absent: `corner_lots` -> corner; `towers` -> corner, then run (past the
+  corners); `gate_lot`, `gateLots`, `gate` (a lot id) and `gates` (an array of lot ids, which also sets `gates.min` to its length)
+  -> gate; `joins` and `anchors` -> by the lot's type (`tower`, `watchtower` -> corner or run; `gatehouse` -> gate), else by its id
+  stem (`tower_*`, `gatehouse_*`), else run. Every mapped key moves from "not read" to read; others stay listed.
+- A named lot must be a lot of the wall's own target zone (`around`/`inside`), or a `via` lot of a `wall.line` (K1). Another lot
+  answers the wall `adjusted` with K1's `join` deviation for it (unchanged), noted why.
+- `at: corner` on a `wall.edge` or `wall.around` only; `wall.line` takes gate and run lots (its ends are free); `wall.along` takes
+  run and gate lots.
+
+### 2. Withheld from the zone
+
+- In step 2, the zone lays out its lots **without** the named ones (V's street, FL's frontage): they take no street frontage. The
+  zone's `count` tolerance counts a withheld lot as placed once it is sited on the line (§3).
+- A withheld lot that can't be sited goes back to its zone: the zone is laid out again with it (one more pass, its cache key
+  includes the withheld set), and the wall keeps K1's `join` deviation for it. So nothing gets worse than today.
+
+### 3. Siting on the line
+
+After `planWalls` has the line (and before routing):
+- **The band.** With named lots, the ring's offset range starts at `max(ring.min, ceil(depth / 2) + 2)` for the deepest named lot,
+  so a lot straddling the line clears the zone's lots + 1 (noted when it raises `ring.min`; `adjusted` with a `move` deviation past
+  `tolerance.move`).
+- **Corners:** a corner lot's box is centred on the ring's corner cell (its footprint as specified, rotated so its front faces the
+  zone's centre). Ties: corners clockwise from the north-west.
+- **Gates:** a gate lot's box straddles a straight run of at least its width + 2, centred on the line, its **front facing out** and
+  its **back facing in**; the run is the one `gates.min` would choose first (facing a zone street end), then `near`, then evenly,
+  ties by perimeter position. The wall's gate there **is** the lot's passage (§4).
+- **Runs:** run lots evenly along the remaining runs, centred on the line, front facing in.
+- **The cut.** The line's cells inside each box are dropped; the wall's legs end at the box's faces (K1's joined lot), with K1's
+  end posts. K5 holds: no wall cell in a box.
+- **Clear:** each box (+ its apron) keeps K1a's obstacle classes, KC's `OB.BODY`, the claim margin, and other named lots (gap 2).
+  A lot that fits nowhere on the line goes back to its zone (§2).
+
+### 4. Passages and routing
+
+- **A gatehouse's passage** is the box's centre line front to back, `pw` wide (the widest crossing walk, at least 3) and 3 high over
+  the box's floor row, with a **port** at each face: `front` (outside) and `back` (inside), each the cell just outside the box at the
+  floor's feet y (K1 §3's port rule).
+- **The passage move** (K3's addition to K1a's gate row, `moves/gate.mjs`): a gatehouse's passage is an **open gate** (cost 0) from
+  its front port cell to its back port cell. The move writes nothing in the box; its segment is `{kind: passage, lot}`. Routes still
+  open auto gates elsewhere (60) where the passage is too far, as K1.
+- **Inside:** a lane (V's, 1 wide, the zone's lane role) from the zone's nearest street end or side to the back port, routed with the
+  connectors in step 4 as the wall's own edge, outside every box.
+- **Doors** are the design's (villagers open wooden doors; a passage with a fence gate is player-only, and a villager route through
+  it answers `MOVER` at bind, §5).
+
+### 5. Closure, at plan and at bind
+
+- **At plan** (`M2:wall`): a named lot's box is an unknown opening, so the closure is `provisional` (K1), with each box listed; a
+  passage counts as a gate opening (blocked in the closed test, open in the across test).
+- **At bind** (`realiseApproved`, Java, `lotProblem` extended): for each lot on a wall, the bound entry's `Entry.cells` on the box's
+  **outer faces** (the faces outside the ring, between the two leg ends), from the floor row + 1 to + 3, must be impassable (a
+  full-collision block, a pane, a fence, a wall block; not air, a door, an open trapdoor or a fence gate), except the passage. A
+  gatehouse's passage cells must be open (the realise drops any entry block there, IRR's rule, and reports the count) and its floor
+  row standable.
+- A failure is a `lotProblem` ("lot <id> on wall <wall>: the design leaves the wall open at ... (n cells)"), refused through
+  `realiseApproved`'s existing lot refusal; nothing is written. Steward's design loop repairs it (S-K1-6's spirit).
+
+### 6. The artifact and Steward's design inputs
+
+- `$.lots[]` (additive) gains `onWall: {wall, at, outerFaces: {cells (lot-relative)}, passage?: {width, height, cells (world and
+  lot-relative), front, back}}`, and `ports: [{name: front|back, at}]` for a gatehouse.
+- **Steward passes** the passage as `DesignRequest.reserved` (IRR's member, unchanged) and the lot's type as `gatehouse` (its
+  profile already demands a front-to-back passage); for a tower, type `tower`. The outer faces are a brief line ("keep the faces
+  outside the wall closed at ground level"); a typed member for them is S-K3-2.
+
+### 7. KC rows, survival
+
+| Writer | Placed | KC rule | Refused as |
+|---|---|---|---|
+| Wall lots (boxes on the line) | after `planWalls`, before emit | lots + 1 are hard for bodies (M25:keep, unchanged); a box never on a footprint | back to the zone (§2) |
+| The inner lane | routes | as streets | as streets |
+
+Survival: the lots are lots (Steward's construction sites, unchanged); the wall's targets lose the cells inside boxes.
+
+### 8. Byte identity, API
+
+- A wall naming no lot (no `lots`, none of the mapped params) is K1's byte for byte. **Named:** the recorded walls in §9 (asks, not
+  `valid/`). Every `valid/` and K1/K2 fixture unchanged.
+- Features `wallLots` (sidecar `region.walls.lots`). siteplan `walls[]` gains `lots: [{lot, at, box, passage?}]`; graph nodes for
+  the passage ports, edges `type: passage`. Java: `lotProblem`'s closure and passage checks, the artifact's `onWall` read. api-compat
+  clean.
+
+### 9. Steward's recorded plans (the asks claim): expected answers
+
+| Plan / part | Expected | Why |
+|---|---|---|
+| castle_city / curtain_wall | `fits`, provisional (4 corner towers, the gatehouse at the gate run; K2's walk on) | `corner_lots`, `gate_lot` read |
+| walled_town / town_wall | `fits`, provisional (4 gatehouses at the 4 gates) | `gateLots` read, `gates: 4` |
+| metropolis / city_wall (optional) | `fits` provisional, or `refused OUT_OF_CLAIM` as before | `gates` (2 lot ids) and `towers` (3) read |
+| camp_to_city / city_wall | `fits` or `adjusted` (move), provisional; or `refused OUT_OF_CLAIM` as before | `gate`, `towers` read; ring 24-30 |
+| redstone_gate / curtain_wall | `fits` or `adjusted` (the ring raised past [2, 4] for the gatehouse's depth), provisional | `joins` read by type |
+| redstone_gate / main_gate (optional) | `fits`: the gate is `gatehouse_1`'s passage | its `from {part: fortress, port: gatehouse_1}` resolves to the passage |
+| border_fort / fort_wall | `fits` provisional | `anchors` read |
+| desert_jungle_wall / great_wall | `fits` provisional (unchanged class); `gatehouse_1` a through lot with its passage | a `wall.line` via a gatehouse lot |
+
+**Bar:** 0 `malformed`; only these parts change, each with its before and after in `fixtures/plan/k3/`; no `join` deviation left
+on a lot the wall could site.
+
+### 10. Gate (slice tier, $0)
+
+**Fixtures:** `v7a_k3_castle` (a zone with 4 tower lots and a gatehouse, `wall.around` with `lots`, a road from `claim_e` through
+the gatehouse; castle_city's shape); `v7a_k3_line` (desert_jungle_wall's shape); stub designs: a tower and a gatehouse blueprint
+with the passage (fixture library entries), a gatehouse without its passage, a tower with an outward door.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the mapping of every recorded param; withholding and the fallback; siting at corners, gates and runs; the band's offset; the cut; the passage move; M2:wall provisional with the boxes; the artifact's `onWall` |
+| 2 | Byte identity | §8's bar |
+| 3 | Recorded plans | §9's bar |
+| 4 | In game, Steward-shaped | `v7a_k3_castle` in plan v1's shape through `checkPlan` (READY, provisional closure), the stub entries bound, then `realiseApproved` (PLACED) |
+| 5 | Closure, realised | with the entries bound and realised: 0 inside-to-outside paths for player and villager (kit) with the passage blocked; 100% across with it open |
+| 6 | Villagers (hard bar) | vanilla `dev.nav.villager` from every inside lot out through the gatehouse's passage and back: 100% |
+| 7 | Bind refusals, nothing written | the gatehouse without a passage, the tower with an outward door: each refused through `realiseApproved` naming the lot and the cells; 0 cells changed (hash) |
+| 8 | Exact undo (verifier re-runs) | `Regions.remove` after item 4: E-flat 0 over the claim (the lots removed with the region, as lots) |
+| 9 | KC | the castle with a fountain in its band: the band raised past it or the lot back in the zone; M25:clear 0 |
+| 10 | Determinism, API | 3 checks identical; tiles 1 = 4; api-compat; apijars; $0.00 |
+| 11 | Look (recorded) | the castle walled with its towers and gatehouse in three bibles: N-K3-1 |
+
+**Tier:** slice plus `region/**` and `api/**`: the units, apijars, k1a-unit, k1a-ingame, k2-unit, fl's and v's units, K3's `k3-unit`,
+`k3-ingame` (driver `tools/gate7ak3.mjs`). The verifier re-runs items 7 and 8. **Steward's RC** follows (S-K3-3).
+
+### 11. Size and split
+
+**About 2.5 days**: the mapping, withholding and siting (1), the passage move and lanes (0.5), the artifact and the bind check in
+Java (0.5), the stub designs and the rounds (0.5). If split: **K3-a** (kit: §1-§5's plan side, items 1-3, 5, 9) and **K3-b** (mod:
+the bind check, the artifact read, items 4, 6-8) against a frozen `onWall` shape at the end of K3-a's first half-day.
+
+### Open questions for Steward
+
+- **S-K3-1. The named lots are the zone's, sited on the line.** A lot a wall names is withheld from the zone's street and placed
+  on the wall (a tower at a corner, a gatehouse straddling a gate); one that can't be sited goes back to the zone with K1's `join`
+  deviation. Fine? Default: yes.
+- **S-K3-2. Closed outer faces at bind.** The bound design must keep the box's faces outside the wall impassable at ground level
+  (doors face in), and a gatehouse must leave its reserved passage open. Today that is a brief line plus the bind check; a typed
+  `DesignRequest` member for closed faces would let your designer's checker catch it first. Want it now? Default: the brief line
+  and the bind check; the member later if designs miss it.
+- **S-K3-3. The RC.** Will you run on the RC: castle_city's shape designed and bound (towers and a gatehouse), a bind refusal and its
+  repair, villagers through the gatehouse, and the region's removal? Default: yes.
+
+### Open questions for Noah
+
+- **N-K3-1. Where wall lots go.** Proposed: towers on the corners (front facing in), gatehouses on the run facing the main street,
+  the wall raised under nothing (the lots carry their own height). Default as proposed; the look step shows a castle in three
+  bibles.
+
+## Phase 7a slice GJ: a district joins a walled town through a standing gate (DRAFT for Steward review)
+
+D3 answers `NO_JOIN [wall]` when every candidate in a town's claim is enclosed by the town's wall (S-D3-5: "walled towns answer
+`NO_JOIN [wall]`, with gates joining in 7a"). GJ lets the join pass through one of the wall's **standing** gates: it routes to the
+gate's outside cell, crosses the gate's walk without writing it, and continues inside to D3's street end or side. The standing
+town and its wall write nothing and their graphs aren't edited (S-D-2). The join's external edge is typed with the gate it crosses,
+the part of S-D-2's "7a types these edges" that has a consumer now.
+
+**GJ changes what stands in a walled town's claim at removal, in every order**, so Steward's RC comes before release (GATES policy
+4, as D3), and the verifier re-runs the removal and dry-check items (policy 3). All facts about D3 below are from its frozen
+contract; **D3's as-built wins** where it differs.
+
+- **Branch:** `slice/GJ`, worktree `../architect-mc-GJ`. **Spend:** $0.
+- **Scope:** gate candidates (§2), the gate traverse (§3), the reach over a wall region (§4), the graph (§5), ownership and undo
+  (§6), the realise re-check (§7), the dry check (§8), byte identity, the gate.
+- **Not in scope:** opening a new gate in a standing wall (that writes the town's or the wall region's cells: 6d's delta); joining
+  through a sealed wall (`gates: 0` or `closed` with no gate: still `NO_JOIN [wall]`); a postern (a tunnel under the wall, T3) as a
+  join; `seconds`, `risk` and nav (S-7a-6).
+- **Depends on:** D3 (merged first), K1a (gates in `meta.walls`), K3 (a gatehouse passage is a gate here too, if merged), KC.
+
+### 0. Facts (D3's frozen contract, main f3f41d43)
+
+- D3's join search: the seam step, then the reach step over the reach frame (the district's claim plus the town's claim); candidates
+  are street ends (continuing the line) and T sides; the join never writes a town-held column except D3's contact columns, where it
+  **holds** the town's terrain cells (the `hold` op). Refusal kinds `apart`, `street`, `wall`, `route`, `budget` (D3 §2.5); `wall`
+  is "every candidate is enclosed by the town's held wall columns (a K1 `wall.around`; S-D3-5)".
+- D3 §9: C38's `wall.around {feature: {region}}` offer is a separate one-part plan (its own region, the same owner) whose ring keeps
+  off a district's join and never gates it (S-D3-6). `d3_walled` is `d3_town` with that wall realised round it.
+- A standing wall's gates are in its IR's `meta.walls[].gates: [{id, at, width, door, auto}]` with the wall's `line` (`siteplan.mjs`
+  :142); K1a's gate is a walk through the wall's depth at the crossing's y, `width` x `height` clear, jambs and lintel, an optional
+  wooden double door or a fence gate; the gate's walk cells are the wall part's.
+- D3 sends `besideReach` (a resolution-1 survey and the held runs) for the beside region, and for at most 2 regions an endpoint
+  names.
+
+### 1. The rule in one line
+
+**Where D3 would answer `NO_JOIN [wall]`, the join may cross the wall at one standing gate: outside to the gate's outer cell,
+through the gate's walk without writing it, then from its inner cell to D3's cheapest street end or side.**
+
+### 2. Gate candidates (a third step)
+
+- **When:** only when D3's reach step ends `NO_JOIN [wall]`. A plan that D3 answers otherwise is unchanged byte for byte.
+- **Which gates:** every gate of every standing wall enclosing the candidates (the town's own walls, and any wall region round the
+  town: §4) that is **open**: `door` none or a wooden door (villagers open them); a fence gate is player-only, so a villager join
+  through it is skipped (named in the refusal if nothing else routes). K3's gatehouse passages are gates here too.
+- **The two cells:** the gate's **outer** and **inner** cells, each the walk cell just past the wall's depth on the gate's axis (the
+  line's normal at `at`), at the gate's walk y. Both must be land nobody holds (D3 §5.1), within 1 of the gate's walk surface.
+- **The choice:** the cheapest (T2 cost) of: a district end to an outer cell, plus the gate's traverse (0), plus the inner cell to a
+  D3 candidate (a street end or side inside the ring). Ties: the gate nearest the district, then the gate id. D3's bounds (48 dry
+  routes, 2M expansions each) cover both legs together.
+- **Refusal:** no gate routes: `NO_JOIN [wall]` as today, its message listing the gates tried and why each failed (sealed, fence
+  gate, held outer or inner cell, route).
+
+### 3. The traverse
+
+- The gate's walk cells through the wall's depth are **traversed, never written, never held**: the join's route is two runs (outside
+  and inside) joined by a traverse segment `{kind: gate, gate, region}` over the gate's cells. The kit's write lint (D3 §2.3,
+  `M28:beside`) gains the rule that a join writes no gate cell.
+- **The inner run** is inside the town's claim (D3's reach frame), and stays clear of the town's footprint, bodies and held cells
+  (D3 §5); its end at a street end or side is D3's (§3.2-3.4, contact columns included).
+- **Clearance:** the gate's opening must be at least the join's width (3) wide and 3 high; a narrower gate (a 1- or 2-wide K1 gate
+  or a 2-wide double door) is used with the join narrowed to the gate's width across the traverse and one cell each side (noted), as
+  long as it is at least 1 and villager-legal.
+
+### 4. A wall that is its own region
+
+- When the enclosing wall is a C38 wall region (not the town's own part), the join's reach frame also takes that region's claim,
+  and the mod sends its `besideReach` (D3's at most 2 per check: the town and the wall region). Its gates, footprint and held cells
+  are read as the town's are.
+- The district's `reach` IR member (D3 §2.3) covers its cells in both claims; `land.outside` and `inside` (D3 §6) count both.
+
+### 5. The graph (S-D-2, typed)
+
+`join_external` gains, on gate joins only: `via: "<region>:<gate id>"`, `junction {kind: "gate", gate, at, then: <D3's end or
+side junction>}`, and `crossing {type: "gate", lands: <gate id>}` (S-T3-8's shape). Its `type` stays `road` (the district's join is a
+road); the typing is the crossing. Plans D3 joins without a gate keep D3's shapes.
+
+### 6. Ownership and undo
+
+- **The district owns** both runs and its contact columns' holds (D3 §4.1); it owns nothing in the gate.
+- **District removed first:** its runs and holds go (D3 item 7's bar); the gate is untouched (its cells were never the district's).
+- **Town (or wall region) removed first:** the wall and its gate go with it; the gap where the gate stood is the town's restore (the
+  world before the town). The join's two runs stay, `dangling` and `standingRemoved` set (D3 §4.2); the join is walkable across the
+  gap only if the restored ground is (recorded, not judged: a natural round's ground may differ).
+- **Then the district:** E-flat 0 over every claim (the world before the town).
+
+### 7. The realise re-check (D3 §4.4, extended)
+
+At `Regions.realise` and `realiseApproved`, the gate must still stand as planned: every traverse cell held by the wall's part with
+the block type the plan read (a door's `open`/`powered` volatile), its opening clear. Else `ARTIFACT_STALE` naming the gate (a
+player walled it up, the wall region was removed), nothing written.
+
+### 8. The dry check
+
+`checkBeside` (D3 §7) answers gate joins with the same verdict as `Regions.plan` (fits, the gate used, the land), keeping nothing.
+
+### 9. Byte identity, API
+
+- **Pinned:** every D3 pinned plan (D3 §10) and every plan D3 answers with anything but `NO_JOIN [wall]`: unchanged. `d3_walled`
+  changes by name (it now joins through its gate).
+- Features `gateJoins` (sidecar `region.plan.gateJoin`). No new record; `BesideJoin` (D3) gains nothing (the junction is in the IR and
+  the land). Java: the reach frame over a wall region (the second `besideReach`), the re-check's gate rule. api-compat clean.
+
+### 10. Steward's recorded plans
+
+None use `beside` or `endpoint.region` (D1's gap table): unchanged.
+
+### 11. Gate (slice tier, $0)
+
+**Fixtures:** `d3_walled` (D3's) with its C38 wall's gates (two auto gates on the street ends, one `gates.min` gate); `gj_town_wall`
+(`d3_town` with a K1 `wall.around` as the town's own part, a gate with a wooden door); `gj_fence` (the only gate a fence gate);
+`gj_sealed` (`gates: 0`). Plan fixture `v7a_gj_endpoint` (an `endpoint.region` route to the walled town's street).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the third step's order; gate candidates and their cells; the traverse (no gate cell written or held, `M28:beside` on a broken variant that writes one); narrowing at a narrow gate; the refusal's list; determinism over 100 seeded walled towns |
+| 2 | Byte identity | D3's pinned set and every non-`[wall]` answer unchanged |
+| 3 | Join through a gate | on `d3_walled` and `gj_town_wall`: `Regions.plan` (beside) then `Regions.realise`; the join reaches the street through the gate; the gate's cells unchanged (hash) |
+| 4 | Villagers (hard bar) | vanilla `dev.nav.villager` from every district lot to the town's bell and back, through the gate (its door opened by them): 100%; kit movers 100% |
+| 5 | Steward's shapes | `checkBeside` then the real plan under `dplan`, `realiseByKey` after a restart (D3 item 6's flow); `v7a_gj_endpoint` through `checkPlan` then `realiseApproved` |
+| 6 | District removed first (verifier re-runs) | 0 changed cells over the town's and the wall region's claims but the join's own columns, which equal the world before the district |
+| 7 | Town or wall region removed first (verifier re-runs) | the gate gone with its region (E-flat 0 over that claim minus the district's held columns); the join's runs standing, `dangling` set; then the district removed: E-flat 0 over every claim |
+| 8 | Refusals, nothing written | `gj_sealed`: `NO_JOIN [wall]`; `gj_fence` with a villager join: `NO_JOIN [wall]` naming the fence gate; the gate walled up after the plan: `ARTIFACT_STALE` naming it; each 0 changed cells |
+| 9 | Dry check (verifier re-runs) | `checkBeside` equals `Regions.plan` on items 3 and 8; no file, opKey or `PlanRec` kept |
+| 10 | KC | a fountain inside the ring on the cheapest inner run: kept clear, M25:clear 0 |
+| 11 | Determinism, API | IR sha over 3 plans; tiles 1 = 4; api-compat; apijars; $0.00 |
+
+**Tier:** slice plus `region/**`, `journal/**`, `api/**`: the units, apijars, d3-unit, d3-ingame, d-ingame, k1a-ingame, GJ's
+`gj-unit`, `gj-ingame` (driver `tools/gate7agj.mjs`). The verifier re-runs items 6, 7 and 9. **Steward's RC** follows (S-GJ-2).
+
+### 12. Size
+
+**About 1.5 days**: the third step and the traverse (0.75, kit), the wall region's reach and the re-check (0.25, mod), the rounds
+(0.5).
+
+### Open questions for Steward
+
+- **S-GJ-1. Through a standing gate only.** The join never opens a new gate (that is a delta to the town or its wall: 6d); a
+  sealed wall still answers `NO_JOIN [wall]`. Fine? Default: yes.
+- **S-GJ-2. The RC.** Will you run on the RC: a walled V town with a C38 wall, a district joined through its gate, undo in both
+  orders and after a restart, and the wall region removed first? Default: yes.
+
+### Open questions for Noah
+
+None: GJ has no new look (D3's join look, N-D3-1).
+
+## Phase 7a slice FB: flood behaviour, M16 (DRAFT for Steward review)
+
+SETTLEMENTS §11's **M16**, which H (§2.5: "M16 proper (barrier thickness under a water surface) stays 7a's") and HY ("Deferred")
+left here. H's single breach asks "what floods if one shell cell opens"; M16 asks the static question beside it: **is any walk cell
+or lot below a body's surface separated from its water by a barrier thinner than 2?** A warning, measured on every committed plan.
+
+- **Branch:** `slice/FB`, worktree `../architect-mc-FB`. **Spend:** $0. Kit only.
+- **Scope:** the rule, its metrics, the count on committed fixtures, the gate. **Not in scope:** promoting M16 (or M8) to an error
+  (S-7a-7); natural water (a basin the plan doesn't touch).
+- **Depends on:** H, HY (bodies, shells, linings, weirs, grates, watch sets), KC, LF (its airlock is the rule's first designed
+  two-layer barrier).
+
+### 1. The rule (`checkFluids.mjs`, warning)
+
+For each plan body with surface `level`: every walk cell (any network's, the graph's) or lot box cell at a y below `level` whose
+shortest path to a body water cell, through non-fluid cells, crosses **fewer than 2** solid cells is `M16`, naming the body, the
+walk or lot cells (up to 16) and the barrier cells. Doors, panes and grates count as 1. A sunk body (H §2.5) passes trivially when
+no such cell lies within 2 of its shell.
+
+### 2. Designed exceptions
+
+None by default. HY's water gates (the grate is in the course, with water on both sides) are not barriers between water and a walk
+cell; LF's airlock is 2 doors thick. Any committed fixture the count finds is listed by name with its body and cells.
+
+### 3. Gate
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the rule on synthetic bodies: a 1-thick rim over a lower path (found), 2-thick (not), a door (1), a sunk pond (not) |
+| 2 | Count (recorded) | every committed fixture and the 59 asks: M16 findings per fixture, and how many M8 findings each has (for S-7a-7) |
+| 3 | Byte identity | IRs and answers unchanged (a warning adds a finding, not a refusal); READY unchanged everywhere |
+
+**Tier:** slice: the units, h-unit, hy-unit, kc-unit, FB's `fb-unit`. **Size:** about 0.75 day. **Versions:** a kit patch (or a
+minor with a feature string `floodCheck`, the coordinator's call). No RC.
+
+### Open questions for Steward
+
+- **S-FB-1.** M16 is a warning in this batch; its counts go with the batch's release report. Fine? Default: yes.
+
+## connector.rail: carts and rails (sketch, not built in 7a; slice CR, `until: CR`)
+
+Recorded as the shape the plan writer should expect, so the reservation's meaning is clear (S-7a-5). Nothing here is frozen.
+
+- **Facts:** SETTLEMENTS §8.2 has no rail row; only P0's reservation exists. mining_town's `rail_1` (required) runs from
+  `rail_station_1` to `mine_head_1`. Rails' `shape` and `powered` are already volatile (`StillOurs` :50, :31). Minecarts are
+  entities: the journal writes and undoes blocks, not entities. Powered rails need a power source (a redstone block under, or a
+  torch). Villagers and rails: to be probed (a level crossing in a street).
+- **Design outline:**
+  - a rail line searched like `wall.line` (its own network): cardinal runs, ascending 1 a cell only on straight runs, curves on
+    the level, at most 1:1;
+  - powered rails every 8 on rises and at each station, on redstone blocks;
+  - stations at lot ports (a stop against a block);
+  - level crossings where a walk network meets it (the rail laid in the walk's surface; no gate);
+  - fall protection on embankments (M8), lamps along it (M5);
+  - no carts placed (entities aren't journaled; the player brings carts);
+  - survival: rails, powered rails and redstone paid, cuts free.
+- **Probes before a contract:** a villager crossing rails in a street; a cart's speed over the powered spacing; undo with a cart
+  standing on the track (the cart left as the player's entity, the rails restored).
+- **Size if scheduled:** about 2 days, plus an RC (redstone blocks next to Steward's lots).
