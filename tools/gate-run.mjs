@@ -258,6 +258,17 @@ function select() {
       info.notes.push(`${s} needs ${dep}: added`);
     }
   }
+  // (gate waits, 2026-10-20) a step whose every assertion another step also runs (`supersededBy`, docs/GATES.md "Duplicates") is
+  // dropped when that step is in the run too; alone (e.g. the change tier's scenario step) it runs as before
+  info.superseded = {};
+  for (const s of [...want]) {
+    const by = cfg.steps[s].supersededBy;
+    if (by && want.has(by) && !Object.entries(cfg.steps).some(([id, x]) => x.after === s && want.has(id))) {
+      want.delete(s);
+      info.superseded[s] = by;
+      info.notes.push(`${s}: dropped, ${by} runs every assertion it runs (supersededBy)`);
+    }
+  }
   return { ids: ORDER.filter((s) => want.has(s)), info };
 }
 
