@@ -17077,3 +17077,100 @@ catalogue 8, and the batch's frozen contracts). Additive. $0.
 | Gate (slice tier, $0) | `artifacts/gate-runs-VOCc/20261020-074255-slice` (3 shards, ports 8918-8923, head 633f1a79, 74 steps): **67 PASS, 7 FAIL**. Re-run at 0ec9b9d6 (`20261020-100816-change`): `sim-jobs` (a reused sidecar on its shard), `6cf2-scenario-scatter`, `4d-all` (group/stage undo under load 60+) and `vocc-ingame` (the slice run's one FAIL was the gate's own: removing v65's first region swept its unpinned artifact, C36; the driver now pins it) **PASS**; `6b-nudges` PASS in `20261020-103718-change` (side by side with main, both PASS: a chunk-budget timing flake). Not VOC-c's: `voc-natural` (item 9's E-normal mismatches, 0 unclassified) FAILs on main 773eae51 too (`gate-runs-VOCc-main/20261020-102550-change`); `6ct1-scenario-relief` ("the undo's own" falling water, the documented intermittent; main's relief-flow fix edf879f4 is merged in since). VOC-c's own: **vocc-unit 8/0** (vocc.test 16/0; the touched suites 46/0; item 3 the asks tables; item 4 222 of 231 unchanged, the 9 named exceptions only; sidecar 26/0; PaletteRulesTest etc. 14/0; api-compat `--gate6cvocc` 4/4), **vocc-ingame 23/0** (item 6: the mod's histograms equal the kit's, the check-time and realise counts 144/144; v64 READY, PLACED, the pre-check ok and with an oak hall not ok, the ext row, the delta to an oak version 2 refused PALETTE by checkDelta and applyDelta (written 0), E-flat 0; r03 READY with the hall pending, realiseApproved with the oak cabin refused PALETTE `{rule copper_only, lot hall, entry vocc_oak_cabin, family copper, share [1,1], measured 0.949, cells 2823}`, nothing written (E-flat 0), then PLACED with the copper cabin, E-flat 0; v65 adjusted with 7 swaps, PLACED with oak lots (the non-required rule never refuses; its ext row fits false) and with copper lots (no wood in the 3057 plan cells outside the lots), E-flat 0 each). Also PASS: unit-kit, unit-mod, unit-sidecar, apijars, voc-unit 17/0, hy-unit 10/0, voc-ingame 46/0, hy-ingame 133/0, p0-unit and the rest of the impact map. Before the run: kit 632/0, sidecar 755/0, mod 718/0, `gen-vocab --check` clean. **gate-verifier: PASS** at 0ec9b9d6: its own `vocc-ingame` re-run `artifacts/gate-runs-VOCc-verify/20261020-104112-change` (all checks passed), `vocc.test` 16/0, the diff reviewed (refusal before any write, palette-gated paths, API additive); no blocking defect (noted: a `revert` breaking a required rule is refused too, consistent with S-VOCc-3). Then origin/main (edf879f4, the relief-flow fix) merged in cleanly; vocc.test 16/0 after. Spend $0.00. |
 
 **Placeholders to renumber at merge:** API `1.39.0` (`ArchitectApi.VERSION`, `PLAN_API`, the golden's `api`, `rule.palette`'s `sinceApi` in plan.json and the golden, `Reason.PALETTE`'s comment, "Since 1.39.0" on `PaletteCheck`, `Regions.checkPalette`, `RegionRefused(reason, message, detail)`, `Reason`'s javadoc); mod `0.42.0`; kit `0.40.0` (`KIT_VERSION`, `EVAL_KIT_VERSION`, `IrStale.KIT_VERSION`, the golden's `kitVersion`); `catalogueVersion` 9 (CU and IRR touch no catalogue entry). `api-compat --gate6cvocc` reuses CU's 0.39.0 build (`artifacts/gate6c-cu/v0390`). **Steward's RC check** (S-VOCc-5) is still to come on the batch's release candidate: r03's refusal and a copper-only reach.
+
+### CU/IRR/VOC-c batch as integrated (CU + IRR + VOC-c as v0.40.0: API 1.37.0, mod 0.40.0, kit 0.38.0, catalogue 9; branch `integrate/batch-cu`, recorded 2026-10-20; RC1 for Steward's RC check)
+
+`slice/IRR` (96ba5b45, which already holds `slice/CU` afef8035) and then `slice/VOC-c` (42852367) were merged `--no-ff` over
+origin/main b5667a19 (v0.39.1 plus voc-natural's `farfluid` class and the rubble role fix). IRR merged clean. VOC-c's conflicts were
+versions and lists: each kept both sides and no test was dropped. No throwing stub was found: the compile's palette placeholders are
+filled by the region pass, and `Regions.checkPalette`'s default throw is the API's binary-compatibility pattern (`RegionsImpl`
+implements it). `kit/regions/plan_v0.mjs` is unedited (equal to origin/main).
+
+| Where | Resolution |
+|---|---|
+| Versions | Every slice placeholder (CU 1.37.0; IRR 1.38.0 / mod 0.41.0 / kit 0.39.0; VOC-c 1.39.0 / mod 0.42.0 / kit 0.40.0) set to the batch's: `ArchitectApi.VERSION` 1.37.0, `mod_version` 0.40.0, `PLAN_API` 1.37.0, the catalogue golden's header (catalogueVersion 9, api 1.37.0, kitVersion 0.38.0), `KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` 0.38.0, `rule.palette`'s sinceApi 1.37.0 (plan.json and the golden), "Since 1.37.0" on `DesignRequest.reserved` and its constructor, `withReserved`, `Limits.RESERVED_CELLS_MAX`, `PaletteCheck`, `Regions.checkPalette`, `RegionRefused(reason, message, detail)` and `Reason.PALETTE`. `ArchitectApi.features()` documents `weatheringOurs`, `farmIrrigation`, `designReserved` and `rulePalette`, each since 1.37.0. `tools/catalogue-since-check.mjs`: every sinceApi at or below the catalogue api. The slices' own version tests already read "at least" (CU's, ApiIrrTest's, PaletteRulesTest's and RegionFluidsHYTest's floors); none needed changing. |
+| Catalogue 9 | VOC-c's: `rule.palette` supported; HY's 8 archived as `fixtures/plan/catalogue-hy.json` (vocc.test's item 2: the one flip). CU and IRR touch no catalogue entry. |
+| Features | sidecar `FEATURES` and its two snapshot tests: IRR's `region.irrigation`, `reserved`, then VOC-c's `plan.rules`; `ApiRules` maps them to `farmIrrigation`, `designReserved`, `rulePalette`. |
+| compile.mjs | IRR's `irrigation` and VOC-c's `palette` members of the plan check both kept. |
+| devserver, DEVBRIDGE, gate-chains | `SliceVoccDev` and `SliceCuDev` both generated headless; both DEVBRIDGE entries; both impact rules. |
+| api-compat | `--gate6cvocc` reuses CU's jars (as VOC-c's as built says); new `--gate6cbatchcu` (below). |
+| HY item 12, IRR item 8, KC's identity | The named exceptions of each other slice: HY's list holds KC's v51 and VOC-c's 9; IRR's item 8 and KC's byte identity name VOC-c's 9 (the 7 asks with a palette rule, extension/e05 and e16), judged by VOC-c's own item 4. |
+
+**Fixed in the integration (found by the merged tree's tests):**
+- **VOC-c's wall-and-fountain fixtures met KC.** KC (main v0.39.1) refuses a wall ring that meets a fluid body's footprint. VOC-c
+  was cut before KC, and its `valid/v64_vocc_copper`, `vocc/r01_share`, `r02_family`, `r03_entry` and `r04_lenient` put the reach's
+  fountain inside the wall's [4, 8] ring: NEEDS_REPAIR on the merged tree (`reach_wall` OVERLAP {kind: body, w_fount}). Their ring
+  is widened to [4, 17], the repair KC made to v51; each keeps its answer (v64, r03, r04 READY; r01 TOLERANCE; r02 the three
+  NO_FEATURE). vocc.test 16/0.
+- **The compact plan/0's size test.** With catalogue 9 (IRR's `irrigate`, VOC-c's strict `rule.palette` def) the compact form is
+  76,652 characters; each slice alone stayed under 76,000. The bound goes to 80,000 (the jobs' system cap is 120,000).
+
+**IRR's breach sweep (the verifier's finding 2, fixed before the RC; safety).** The removal drain followed every same-fluid cell
+connected to an irrigation body within its lot's box grown by 8, sources included, so a breach's flow that joined a pond or a
+player's water there took them too: only the watch sets' water from before the realise was spared.
+- **The fix** (`RegionFluids.breachFlow` -> `breachTake`, pure). The drain now judges the breach's flow before it writes anything
+  (once the source is air, its flow has no feeder left to tell it from anyone else's water). It takes the flowing water connected
+  to the body's cells, shell and watch, inside the same bounds: never a source (a pond's, a player's bucket, a waterlogged block),
+  never water there before the realise, never another body's cell. Then every cell with a feeder outside that set is dropped, and
+  what it fed after it: a feeder is the same fluid over the cell or beside it at a higher amount, and the body's own sources count
+  as inside. What remains is the flow only this body's source can have made.
+- **Deviation from "cells recorded as escaped", stated.** The coordinator asked for the sweep to be limited to cells recorded as
+  escaped from the body, as H's strays fix is. A breach comes after the body settled, when no census runs, so nothing records the
+  flow as it runs. The record is made at the drain from the fluid levels instead, and used for that one pass, never saved: a later
+  drain (a resumed removal, the region's after the lot's) would otherwise take what a player poured there since. A periodic shell
+  check that re-opens a census would record it as it runs, at a per-tick cost, and would record a player's water that touches the
+  flow as escaped. **Limit:** where a foreign flow meets the breach's flow the joint cells are spared, so a few cells of joint
+  water can stay outside the lot after its removal (queued in PLAN).
+- **Tests.** `RegionFluidsBreachTest` (7): a bare flow with its falling column and spread, all taken; a foreign source joining it
+  (the joint cells and everything downstream of them spared); a pond; a waterlogged neighbour; water from before and another
+  body's cells; the source already drained (a resumed removal: the flow still taken); the box. In game, irr-ingame's new section
+  `spare`: v62 with its field entries; a 2 x 2 pond and a player's 1 x 1 well sunk one under the ground just outside f2's box on the
+  side nearest its source (placed after the realise: before it, the plan check would plan round them); the source's side broken and
+  a trench dug through the field to the box edge, so the flow (7 cells, 3 outside the box) runs over both and touches them. f2's
+  site removed: the pond 4/4 sources, the well a source, 0 water in f2's box, 0 flow cells left outside; then `Regions.remove`:
+  REMOVED, the pond and the well still standing, **E-flat over f2's own box 0** (its own snapshot: the world round it was changed
+  on purpose). **Against the pre-fix sweep** (the batch's head with c97519cf's RegionFluids, a local commit never pushed:
+  `artifacts/gate-runs-int-cu-prefix/20261020-173522-change`): the same case FAILS, the pond 0/4 and the well taken at the lot's
+  removal; with the fix (`artifacts/gate-runs-int-cu/20261020-173522-change`, head c170b161) it passes 4/0.
+
+**Goldens re-cut for kit 0.38.0:** `kit/tools/region.mjs plan` over each golden's committed survey, params, seed, claim and roles
+(crossings_demo_flat with its frozen volume by `--volumes`, the file named by its ARVX sha 9a00f18a) writes an ir.json
+byte-identical to the committed one but kitVersion; tile shas and cells unchanged (scenario-goldens): links_demo 97837bed ->
+019e8b23, links_demo_flat bfb24b3a -> 824d4e8a, crossings_demo_flat be814438 -> 52ecb292. No other golden carries the current
+kitVersion.
+
+**api-compat `--gate6cbatchcu`** over v0.39.1: the 0.39.1, 0.39.0 and 0.38.0 apitest jars (API 1.36.0, 1.36.0, 1.35.0) and the
+0.39.1 mod jar's 1.36.0 surface. v0.39.1 was built from its tag (59464f67, sidecar bundled) into
+`artifacts/gate6c-batchcu/v0391` with its tools/; 0.39.0 is CU's (`gate6c-cu/v0390`), 0.38.0 HY's. **All 4 checks clean.**
+
+**Tests (the code at c170b161; later commits are gate tools and docs only):**
+- kit `node --test kit/test/*.test.mjs`: **663 pass, 0 fail** (vocc.test 16/0 with the widened rings).
+- sidecar `npm test`: **758 of 758** pass, 46 files; `npm run build`: the bundle built.
+- mod `./gradlew build --offline`: **741 tests, 0 failures** (RegionFluidsBreachTest 7 among them).
+- `gen-vocab.mjs --check`: every file up to date (1286 blocks, 450 families, 35 creative-only).
+- api-compat `--gate6cbatchcu`: **4/4 clean** (0.39.1, 0.39.0, 0.38.0 jars; the 0.39.1 surface).
+
+**Post-merge in-game run** (`node tools/gate-run.mjs change --since origin/main --only cu-ingame,cu-survival,irr-ingame,irr-crash,vocc-ingame,voc-natural,kc-ingame,h-ingame,hy-ingame --shards 3 --ports 8948:8949,8950:8951,8952:8953`,
+a fresh run dir `../architect-mc-int-cu-run`): `artifacts/gate-runs-int-cu/20261020-174207-change`, head 9b72e12f, **9 of 9 PASS**:
+h-ingame 60/0, voc-natural 4/0 (passing now with `farfluid`), vocc-ingame 23/0, cu-ingame 9/0, cu-survival 10/0, hy-ingame 133/0,
+kc-ingame 16/0, irr-ingame 66/0 (the new `spare` case 4/0; the bare-pad breach 73 cells, 8 outside the box, region removal E-flat 0),
+irr-crash 6/0. Timing recorded, not judged.
+
+**The slices' offline items on the merged tree** (`artifacts/gate-runs-int-cu/20261020-174028-change`): voc-unit 17/0, vocc-unit 8/0,
+cu-unit 3/0, hy-unit 10/0, irr-unit 250/0 (item 8 with VOC-c's named exceptions), kc-unit FAIL 2: its item 3 compared the asks'
+tables with VOC-c's 7 palette lines in them, and e05 was named although VOC-c rewrote that fixture itself (planned alike on both
+kits). Both fixed in the gate (33f4f6bd: item 3 reads the tables without the palette lines, as HY-b's does; e05 unnamed); re-run
+`artifacts/gate-runs-int-cu/20261020-183332-change`: **kc-unit 308/0**.
+
+**RC1:** `artifacts/rc/architect-mc-0.40.0-rc1.jar` (sha256 `7d319c6814b5fc46941f1cde5e4b1865af0a90329740a6c460067bea8c1445d6`) and
+`architect-mc-0.40.0-rc1-sources.jar` (`25a5a14be8ca9f2bf2123e8f7e53e3c0cf001454273c2649504fbd94e406644d`), built by
+`./gradlew build --offline` from the branch (sidecar bundled, BUNDLE.json modVersion 0.40.0). The bundled kit equals the tree's
+`kit/` file for file (721 files; only `kit/.gitignore` is not bundled), KIT_VERSION 0.38.0; the bundled `dist/main.mjs` and
+`region-worker.mjs` equal the tree's build.
+
+**Steward's RC check (still to come):**
+- CU: undo, removal and refunds over weathered copper; a player's record wins over still ours.
+- IRR: `$.lots[].irrigation`, `DesignRequest.reserved`, the breach rows, a lot's removal taking its sources (and, since the fix,
+  only its own flow).
+- VOC-c: `rule.palette` answers, `Reason.PALETTE` at realise, `Regions.checkPalette`, the re-judge after a versionOf (S-VOCc-5:
+  r03's refusal and a copper-only reach).
