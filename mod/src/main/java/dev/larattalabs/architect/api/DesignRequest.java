@@ -95,7 +95,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	}
 
 	/** The most reserved cells a request carries. */
-	public static final int MAX_RESERVED = 65536;
+	public static final int MAX_RESERVED = Limits.RESERVED_CELLS_MAX;
 
 	/** The 1.11.0 constructor (no reserved). */
 	public DesignRequest(String type, String style, @Nullable String materials, List<String> features, BlockSize maxSize, @Nullable String name,
