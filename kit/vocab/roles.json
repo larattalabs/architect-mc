@@ -1,0 +1,58 @@
+{
+ "format": 1,
+ "note": "Role fitness (docs/CONTRACT.md Phase 6c slice VOC §2.3): one predicate per role over the generated facts. It never changes which block a generator writes; it only reports (M27:role, validateBible's warnings). A row's block fits when every check in `all` holds and, if given, at least one in `any`; `every` applies to every role, a role with no row included. K1, T3 and H's slots resolve to roles and take their role's predicate. The checks are evaluated by kit/lib/vocab.mjs fitsRole() on the block's default state.",
+ "checks": {
+  "cube": "a full collision cube (blocks.mjs collision 'full')",
+  "notGravity": "not a falling block (blocks.mjs g)",
+  "notFitting": "not a fitting (ft)",
+  "stairsSlab": "the block (or the full block behind a stairs or slab id) has stairs and slab variants (kit.mjs variant())",
+  "floor": "an entity can stand on it (blocks.mjs isFloor)",
+  "emits": "emits light (L > 0) in its default state or a lit state",
+  "glass": "lets light through (optics C) and is a full block or a pane",
+  "thin": "thin collision (a fence, wall, pane or bars)",
+  "tall": "a collision box 1.5 high",
+  "natural": "a natural voxel class (ROCK, SOIL, LOOSE, SNOW, ICE)",
+  "obtainable": "its survival class is not none"
+ },
+ "rows": [
+  {
+   "roles": ["wall", "wall_alt", "trim", "floor", "frame", "foundation", "structure"],
+   "all": ["cube", "notGravity", "notFitting"],
+   "why": "a gravity or partial block in a load role falls or leaks light"
+  },
+  {
+   "roles": ["roof"],
+   "all": ["notGravity", "stairsSlab"],
+   "why": "a roof is laid in its stairs and slabs (palette() already demands them), and a falling roof falls"
+  },
+  {
+   "roles": ["path"],
+   "all": ["floor", "notGravity"],
+   "why": "W's finding: gravel paths leave gravity blocks over gaps"
+  },
+  {
+   "roles": ["light"],
+   "all": ["emits"],
+   "why": "a light gives light (the bible frame test already catches a dark light)"
+  },
+  {
+   "roles": ["glass"],
+   "all": ["glass"],
+   "why": "a window lets light through"
+  },
+  {
+   "roles": ["rail"],
+   "any": ["thin", "tall"],
+   "why": "M8's barrier: a rail stops a fall and is not walked over"
+  },
+  {
+   "roles": ["rock", "surface", "subsurface", "rubble"],
+   "all": ["natural"],
+   "why": "terrain ops write them as ground"
+  }
+ ],
+ "every": {
+  "all": ["obtainable"],
+  "why": "a creative-only role can't build in survival"
+ }
+}

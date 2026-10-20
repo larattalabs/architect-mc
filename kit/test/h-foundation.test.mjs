@@ -38,8 +38,8 @@ test('catalogue 7: the golden, and the T3 -> H diff is exactly the three flips, 
   assert.deepEqual(e['connector.channel'].limits, { width: [1, 7], depth: [1, 4], forms: ['moat'] });
   assert.equal(e['channel.course'].until, 'HY');
   assert.match(e['connector.channel'].note, /channel\.course.*HY/);
-  // the new, flipped and re-limited entries carry the branch's API placeholder (a real semver; the merge restamps it)
-  for (const id of ['form.pond', 'form.waterfall', 'form.fountain', 'form.quay', 'connector.channel', 'channel.moat', 'channel.course', 'connector.wall', 'connector.bridge']) assert.equal(e[id].sinceApi, PLAN_API, id);
+  // the new, flipped and re-limited entries carry H's release, 1.34.0 (6c VOC: a later API bump moves PLAN_API, not these stamps)
+  for (const id of ['form.pond', 'form.waterfall', 'form.fountain', 'form.quay', 'connector.channel', 'channel.moat', 'channel.course', 'connector.wall', 'connector.bridge']) assert.equal(e[id].sinceApi, '1.34.0', id);
   // no catalogue entry or note waits for H any more
   for (const x of golden.entries) assert.ok(x.until !== 'H' && !/until H\b/.test(x.note ?? ''), x.id);
   // the reason codes LEAK and FIRE are appended (additive output)

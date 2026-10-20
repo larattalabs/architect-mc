@@ -54,7 +54,7 @@ describe('systemRefs: expansion from the kit', () => {
     expect(a).toBe(b);
     expect(a.indexOf('(plan/0)')).toBeLessThan(a.indexOf('(mask/1)'));
     expect(a.indexOf('(mask/1)')).toBeLessThan(a.indexOf('(pattern/1)')); // the registry's order: append-only
-    expect(SYSTEM_REF_DOCS.map((d) => d.id)).toEqual(['plan/0', 'siteplan/1', 'mask/1', 'pattern/1']);
+    expect(SYSTEM_REF_DOCS.map((d) => d.id)).toEqual(['plan/0', 'siteplan/1', 'mask/1', 'pattern/1', 'vocab/1']);
     expect(await expandSystemRefs(KIT, ['plan/0'])).toBe(await expandSystemRefs(KIT, ['plan/0']));
     expect(a).not.toContain(KIT); // no path of this machine
     expect(a).not.toMatch(/\d{4}-\d\d-\d\dT\d/); // no timestamp
@@ -99,6 +99,38 @@ describe('systemRefs: expansion from the kit', () => {
     // cap (120,000) is the real limit; this keeps the compact form well under it. (6c H) 66,000 -> 76,000 with catalogue 7 (the pond,
     // fountain, waterfall, quay and channel defs, waterDepth, farmPond, R21-R23, four ids)
     expect(compact.length).toBeLessThan(76_000);
+  });
+});
+
+describe('(6c VOC) vocab/1: the block vocabulary', () => {
+  it('the full form holds every block (family, colour, tier, survival class, fitting) and nothing of the compact form', async () => {
+    const t = await expandSystemRefs(KIT, ['vocab/1']);
+    expect(t.startsWith("## Architect's block vocabulary (vocab/1)\n\n{")).toBe(true);
+    const d = JSON.parse(t.split('\n\n')[1]!) as { vocab: number; blocks: Record<string, { fam: string; sv: string; t?: string; col?: string }>; compact?: unknown };
+    expect(d.vocab).toBe(1);
+    expect(d.compact).toBeUndefined();
+    const B = (await import(path.join(KIT, 'lib', 'blocks.mjs'))).BLOCKS as Record<string, { fam: string; sv: string; t?: string; col?: string }>;
+    expect(Object.keys(d.blocks).length).toBe(Object.keys(B).length);
+    expect(d.blocks.copper_block).toMatchObject({ fam: 'copper', t: 'uncommon', sv: 'craft' });
+    expect(d.blocks.beacon).toMatchObject({ t: 'precious' });
+    expect(d.blocks.red_concrete).toMatchObject({ fam: 'concrete', col: 'red', t: 'uncommon' });
+    expect(d.blocks.bedrock).toMatchObject({ sv: 'none' });
+    for (const [b, v] of Object.entries(d.blocks)) expect(v.fam).toBe(B[`minecraft:${b}`]!.fam); // the running kit's own table
+  });
+
+  it('#compact groups the same facts and is much shorter', async () => {
+    const full = await expandSystemRefs(KIT, ['vocab/1']);
+    const compact = await expandSystemRefs(KIT, ['vocab/1#compact']);
+    expect(compact.startsWith("## Architect's block vocabulary (vocab/1), compact\n\n{")).toBe(true);
+    const c = JSON.parse(compact.split('\n\n')[1]!) as { blocks?: unknown; compact: { families: Record<string, string[]>; tiers: Record<string, { families: string[]; blocks: string[] }>; dyed: string[]; survival: Record<string, string[]> } };
+    expect(c.blocks).toBeUndefined();
+    expect(c.compact.families.copper).toContain('cut_copper_stairs');
+    expect(c.compact.tiers.precious!.blocks).toContain('beacon');
+    expect(c.compact.dyed).toEqual(expect.arrayContaining(['concrete', 'wool', 'terracotta', 'stained_glass']));
+    expect(c.compact.survival.none).toContain('bedrock');
+    expect(compact.length).toBeLessThan(full.length / 2);
+    expect(compact.length).toBeLessThan(40_000);
+    expect(await expandSystemRefs(KIT, ['vocab/1#compact', 'plan/0#compact'])).toBe(await expandSystemRefs(KIT, ['plan/0#compact', 'vocab/1#compact']));
   });
 });
 

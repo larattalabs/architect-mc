@@ -21,6 +21,7 @@ import {
 } from './blocks.mjs';
 import { BUILDING_TYPES, CORE_ROLES, DEFAULT_PROFILE, fullBlockOf, PORT_KINDS, TYPE_RE, isPresetType, parseProfile, resolvePalette, stoneFamilyOf, woodFamilyOf } from './kit.mjs';
 import { checkConformance } from './massing.mjs';
+import { CREATIVE_ONLY } from './vocab/survival.mjs';
 
 const DIRS6 = [['east', 1, 0, 0], ['west', -1, 0, 0], ['up', 0, 1, 0], ['down', 0, -1, 0], ['south', 0, 0, 1], ['north', 0, 0, -1]];
 const OPP = { east: 'west', west: 'east', up: 'down', down: 'up', south: 'north', north: 'south' };
@@ -697,15 +698,10 @@ function paletteFamilies({ g, sidecar }) {
 }
 
 /**
- * Blocks survival can't build (docs/CONTRACT.md phase 3 "Materials", the obtainability map): a survival world refuses to
- * place a design that uses one. Keep in sync with creativeOnly in mod/src/main/resources/data/architect_mc/survival_items.json.
+ * Blocks survival can't build (docs/CONTRACT.md phase 3 "Materials", the obtainability map): a survival world refuses to place a design
+ * that uses one. (6c VOC) Generated with the mod's survival_items.json from one source, kit/lib/vocab/survival.mjs (gen-vocab.mjs).
  */
-export const SURVIVAL_CREATIVE_ONLY = new Set(['bedrock', 'barrier', 'light', 'structure_block', 'structure_void', 'jigsaw', 'test_block',
-  'test_instance_block', 'command_block', 'chain_command_block', 'repeating_command_block', 'spawner', 'trial_spawner', 'vault',
-  'budding_amethyst', 'reinforced_deepslate', 'end_portal_frame', 'end_portal', 'end_gateway', 'nether_portal', 'petrified_oak_slab',
-  'infested_stone', 'infested_cobblestone', 'infested_stone_bricks', 'infested_mossy_stone_bricks', 'infested_cracked_stone_bricks',
-  'infested_chiseled_stone_bricks', 'infested_deepslate', 'suspicious_sand', 'suspicious_gravel', 'frogspawn', 'chorus_plant', 'player_head',
-  'player_wall_head'].map((b) => `minecraft:${b}`));
+export const SURVIVAL_CREATIVE_ONLY = CREATIVE_ONLY;
 
 /** Survival (phase 3: a warning): the design uses blocks survival can't build, so a survival world refuses to place it. */
 function survival({ g, sidecar }) {

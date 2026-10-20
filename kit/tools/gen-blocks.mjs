@@ -88,7 +88,9 @@ async function main() {
   console.error(`${Object.keys(report).length} blocks in the report, ${Object.keys(dump).length} dumped (work dir ${work})`);
   if (o['dump-only']) return;
   const { generate, voxelClasses } = await import('./classify.mjs');
-  const src = generate(report, dump, fs.readFileSync(TEMPLATE, 'utf8'), tags);
+  // (6c VOC) the vocabulary section is gen-vocab.mjs's: kept as it is (run `node kit/tools/gen-vocab.mjs` to rewrite it)
+  const { carryVocab } = await import('./gen-vocab.mjs');
+  const src = carryVocab(generate(report, dump, fs.readFileSync(TEMPLATE, 'utf8'), tags), fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : '');
   fs.writeFileSync(OUT, src);
   const vc = voxelClasses(report, dump, tags);
   fs.writeFileSync(VOXEL_OUT, `${JSON.stringify(vc, null, 1)}\n`);

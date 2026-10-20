@@ -1,0 +1,218 @@
+{
+ "format": 1,
+ "note": "Survival overrides (docs/CONTRACT.md Phase 6c slice VOC §2.4, §3). The generated class (kit/vocab/edges.json) is a lower bound from the data: craft (a recipe from obtainable items makes the block's item), drop (a block loot table yields it), silk (only with silk touch), loot (any other loot table, or a villager trade), none (nothing yields it). costs: the block-to-item special cases (a placed block charged as another item, [] for nothing), which make the class cost. classes: the class corrected, with why and evidence (a block, a #tag or a name ending in *). obtain: items gameplay yields that no data names (code), which the generator adds before the recipe fixpoint. mod: Architect's own blocks, listed in the mod's creativeOnly only. creativeOnly is every block whose final class is none: the phase 3 list of 35, plus 26.3 additions each listed in the contract's as-built.",
+ "costs": [
+  {
+   "block": "minecraft:dirt_path",
+   "item": "minecraft:dirt",
+   "why": "a shovel makes it from dirt (or grass): placing one costs the dirt"
+  },
+  {
+   "block": "minecraft:farmland",
+   "item": "minecraft:dirt",
+   "why": "a hoe makes it from dirt: placing one costs the dirt"
+  },
+  {
+   "block": "minecraft:grass_block",
+   "item": "minecraft:dirt",
+   "why": "grass spreads onto dirt; only silk touch keeps a grass block, so a placed one costs dirt"
+  },
+  {
+   "block": "minecraft:attached_melon_stem",
+   "item": "minecraft:melon_seeds",
+   "why": "a melon stem grown from melon seeds; it has no item"
+  },
+  {
+   "block": "minecraft:attached_pumpkin_stem",
+   "item": "minecraft:pumpkin_seeds",
+   "why": "a pumpkin stem grown from pumpkin seeds; it has no item"
+  },
+  {
+   "block": "minecraft:melon_stem",
+   "item": "minecraft:melon_seeds",
+   "why": "planted from melon seeds"
+  },
+  {
+   "block": "minecraft:pumpkin_stem",
+   "item": "minecraft:pumpkin_seeds",
+   "why": "planted from pumpkin seeds"
+  },
+  {
+   "block": "minecraft:cave_vines_plant",
+   "item": "minecraft:glow_berries",
+   "why": "cave vines planted from glow berries; it has no item"
+  },
+  {
+   "block": "minecraft:cave_vines",
+   "item": "minecraft:glow_berries",
+   "why": "planted from glow berries"
+  },
+  {
+   "block": "minecraft:kelp_plant",
+   "item": "minecraft:kelp",
+   "why": "kelp grows from kelp; it has no item"
+  },
+  {
+   "block": "minecraft:twisting_vines_plant",
+   "item": "minecraft:twisting_vines",
+   "why": "grows from twisting vines; it has no item"
+  },
+  {
+   "block": "minecraft:weeping_vines_plant",
+   "item": "minecraft:weeping_vines",
+   "why": "grows from weeping vines; it has no item"
+  },
+  {
+   "block": "minecraft:big_dripleaf_stem",
+   "item": "minecraft:big_dripleaf",
+   "why": "grows from a big dripleaf; it has no item"
+  },
+  {
+   "block": "minecraft:bamboo_sapling",
+   "item": "minecraft:bamboo",
+   "why": "bamboo shoots planted from bamboo; it has no item"
+  },
+  {
+   "block": "minecraft:tall_seagrass",
+   "item": "minecraft:seagrass",
+   "why": "bone meal on seagrass; it has no item"
+  },
+  {
+   "block": "minecraft:water_cauldron",
+   "item": "minecraft:cauldron",
+   "why": "a cauldron with water poured in"
+  },
+  {
+   "block": "minecraft:lava_cauldron",
+   "item": "minecraft:cauldron",
+   "why": "a cauldron with lava poured in"
+  },
+  {
+   "block": "minecraft:powder_snow_cauldron",
+   "item": "minecraft:cauldron",
+   "why": "a cauldron with powder snow poured in"
+  },
+  {
+   "block": "minecraft:redstone_wire",
+   "item": "minecraft:redstone",
+   "why": "placed from redstone dust"
+  },
+  {
+   "block": "minecraft:tripwire",
+   "item": "minecraft:string",
+   "why": "placed from string"
+  },
+  {
+   "block": "minecraft:fire",
+   "item": [],
+   "why": "lit, never placed from an item: costs nothing"
+  },
+  {
+   "block": "minecraft:soul_fire",
+   "item": [],
+   "why": "lit on soul sand or soil, never placed from an item: costs nothing"
+  },
+  {
+   "block": "minecraft:water",
+   "item": [],
+   "why": "poured from a bucket that is given back: costs nothing (N-H-1 prices a source separately)"
+  },
+  {
+   "block": "minecraft:lava",
+   "item": [],
+   "why": "poured from a bucket that is given back: costs nothing (N-H-1 prices a source separately)"
+  },
+  {
+   "block": "minecraft:bubble_column",
+   "item": [],
+   "why": "made by water over magma or soul sand: costs nothing"
+  },
+  {
+   "block": "minecraft:moving_piston",
+   "item": [],
+   "why": "a piston in motion: costs nothing"
+  },
+  {
+   "block": "minecraft:piston_head",
+   "item": [],
+   "why": "part of an extended piston (the piston is charged): costs nothing"
+  },
+  {
+   "block": "minecraft:frosted_ice",
+   "item": [],
+   "why": "made by frost walker boots, melts on its own: costs nothing"
+  }
+ ],
+ "classes": [
+  {
+   "block": "minecraft:air",
+   "sv": "cost",
+   "why": "air: placing it costs nothing",
+   "evidence": "survival placement writes air for free (bom.mjs NONE)"
+  },
+  {
+   "block": "minecraft:cave_air",
+   "sv": "cost",
+   "why": "air: placing it costs nothing",
+   "evidence": "survival placement writes air for free (bom.mjs NONE)"
+  },
+  {
+   "block": "minecraft:void_air",
+   "sv": "cost",
+   "why": "air: placing it costs nothing",
+   "evidence": "survival placement writes air for free (bom.mjs NONE)"
+  },
+  {
+   "block": "#minecraft:candle_cakes",
+   "sv": "cost",
+   "why": "a cake with a candle put on it: costs the cake and the candle, though the block has no item",
+   "evidence": "vanilla CakeBlock.useItemOn places the candle cake from a candle on a whole cake"
+  },
+  {
+   "block": "minecraft:potted_*",
+   "sv": "cost",
+   "why": "a flower pot with a plant put in it: costs the pot and the plant (SurvivalItems.java charges both), though the block has no item",
+   "evidence": "vanilla FlowerPotBlock.useItemOn; SurvivalItems.java potted rule"
+  },
+  {
+   "block": "minecraft:player_head",
+   "sv": "none",
+   "why": "unobtainable although it drops itself: its only source is a player killed by a charged creeper",
+   "evidence": "CONTRACT VOC §2.4; phase 3 creativeOnly"
+  },
+  {
+   "block": "minecraft:player_wall_head",
+   "sv": "none",
+   "why": "the wall form of player_head (its item): unobtainable as player_head is",
+   "evidence": "CONTRACT VOC §2.4; phase 3 creativeOnly"
+  },
+  {
+   "block": "minecraft:petrified_oak_slab",
+   "sv": "none",
+   "why": "unobtainable although it drops itself: no recipe, loot table, trade or worldgen makes it",
+   "evidence": "CONTRACT VOC §2.4; phase 3 creativeOnly"
+  }
+ ],
+ "obtain": [
+  {
+   "item": "minecraft:nether_star",
+   "sv": "loot",
+   "why": "the Wither drops it when it dies (WitherBoss code, not a loot table)",
+   "evidence": "26.3 WitherBoss.dropCustomDeathLoot spawns a nether_star; no loot table names it"
+  },
+  {
+   "item": "minecraft:powder_snow_bucket",
+   "sv": "drop",
+   "why": "a bucket scoops powder snow up, as mining would drop it (PowderSnowBlock.pickupBlock, not a loot table)",
+   "evidence": "26.3 PowderSnowBlock implements BucketPickup; powder_snow loot table is empty"
+  }
+ ],
+ "mod": [
+  {
+   "block": "architect_mc:construction_crate",
+   "sv": "none",
+   "why": "Architect's own construction crate: placed by the mod for a survival site, never by a design",
+   "evidence": "phase 3 creativeOnly (survival_items.json)"
+  }
+ ]
+}

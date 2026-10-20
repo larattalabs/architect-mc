@@ -1,0 +1,347 @@
+{
+ "format": 1,
+ "note": "Raw-material tiers (docs/CONTRACT.md Phase 6c slice VOC §2.2, N-VOC-3 as drafted). A block's tier is the highest tier among the raw inputs of its cheapest recipe path (fewest raw items, ties by recipe id; cooking recipes count, the fuel does not); a path stops at an item this table names. A block no recipe makes takes its own item's row, else its family's (fam:<family>), else the highest of its tags' rows. Anything this table does not reach is common. Keys: an item (minecraft:x), an item or block tag (#minecraft:x), or a generated family (fam:x). The tier is a taste call (N-VOC-3); every row says why.",
+ "tiers": [
+  "common",
+  "uncommon",
+  "rare",
+  "precious"
+ ],
+ "rows": [
+  {
+   "key": "#minecraft:copper_ores",
+   "tier": "uncommon",
+   "why": "an ore block holding copper, kept whole only with silk touch"
+  },
+  {
+   "key": "#minecraft:crimson_stems",
+   "tier": "uncommon",
+   "why": "N-VOC-3: crimson wood grows only in the Nether"
+  },
+  {
+   "key": "#minecraft:diamond_ores",
+   "tier": "precious",
+   "why": "an ore block holding a diamond, kept whole only with silk touch"
+  },
+  {
+   "key": "#minecraft:dyes",
+   "tier": "uncommon",
+   "why": "N-VOC-3: every dye, so every coloured block (concrete, stained glass, dyed terracotta and wool) is uncommon"
+  },
+  {
+   "key": "#minecraft:emerald_ores",
+   "tier": "precious",
+   "why": "an ore block holding an emerald, kept whole only with silk touch; the rarest ore"
+  },
+  {
+   "key": "#minecraft:gold_ores",
+   "tier": "rare",
+   "why": "an ore block holding gold, kept whole only with silk touch"
+  },
+  {
+   "key": "#minecraft:iron_ores",
+   "tier": "uncommon",
+   "why": "an ore block holding iron, kept whole only with silk touch"
+  },
+  {
+   "key": "#minecraft:warped_stems",
+   "tier": "uncommon",
+   "why": "N-VOC-3: warped wood grows only in the Nether"
+  },
+  {
+   "key": "fam:concrete",
+   "tier": "uncommon",
+   "why": "concrete is concrete powder (a dye) set by water: no recipe makes it, so its family row stands for the dye"
+  },
+  {
+   "key": "minecraft:amethyst_cluster",
+   "tier": "rare",
+   "why": "grows only on budding amethyst in a geode; no recipe makes it"
+  },
+  {
+   "key": "minecraft:amethyst_shard",
+   "tier": "rare",
+   "why": "N-VOC-3: amethyst comes only from geodes; amethyst blocks and tinted glass are made from shards"
+  },
+  {
+   "key": "minecraft:ancient_debris",
+   "tier": "precious",
+   "why": "the only source of netherite scrap; as a block it is the raw find itself"
+  },
+  {
+   "key": "minecraft:basalt",
+   "tier": "uncommon",
+   "why": "N-VOC-3: the Nether's common stone"
+  },
+  {
+   "key": "minecraft:blackstone",
+   "tier": "uncommon",
+   "why": "N-VOC-3: the Nether's common stone"
+  },
+  {
+   "key": "minecraft:blaze_rod",
+   "tier": "rare",
+   "why": "N-VOC-3: only from blazes in Nether fortresses; end rods, brewing stands and copper bulbs need one"
+  },
+  {
+   "key": "minecraft:blue_ice",
+   "tier": "uncommon",
+   "why": "N-VOC-3: from icebergs, or nine packed ice"
+  },
+  {
+   "key": "minecraft:chorus_flower",
+   "tier": "rare",
+   "why": "grows only in the End"
+  },
+  {
+   "key": "minecraft:chorus_fruit",
+   "tier": "rare",
+   "why": "N-VOC-3: grows only in the End; purpur and end rods are made from it"
+  },
+  {
+   "key": "minecraft:copper_ingot",
+   "tier": "uncommon",
+   "why": "N-VOC-3: copper is uncommon; every copper block, cut copper and copper fitting is too"
+  },
+  {
+   "key": "minecraft:crimson_nylium",
+   "tier": "uncommon",
+   "why": "the Nether's forest floor"
+  },
+  {
+   "key": "minecraft:crying_obsidian",
+   "tier": "rare",
+   "why": "N-VOC-3: from bastions, ruined portals and bartering"
+  },
+  {
+   "key": "minecraft:diamond",
+   "tier": "precious",
+   "why": "N-VOC-3: a diamond is precious; every block a diamond goes into (a diamond block, a jukebox, an enchanting table) is too"
+  },
+  {
+   "key": "minecraft:dragon_egg",
+   "tier": "precious",
+   "why": "N-VOC-3: one per world, after the first dragon fight"
+  },
+  {
+   "key": "minecraft:echo_shard",
+   "tier": "precious",
+   "why": "N-VOC-3: only in ancient city chests"
+  },
+  {
+   "key": "minecraft:emerald",
+   "tier": "precious",
+   "why": "N-VOC-3: villagers trade for emeralds; an emerald block is nine of them"
+  },
+  {
+   "key": "minecraft:end_stone",
+   "tier": "rare",
+   "why": "N-VOC-3: the End's ground; end stone bricks are made from it"
+  },
+  {
+   "key": "minecraft:ender_pearl",
+   "tier": "rare",
+   "why": "N-VOC-3: only from endermen and trades; an ender chest needs an eye of ender"
+  },
+  {
+   "key": "minecraft:ghast_tear",
+   "tier": "rare",
+   "why": "N-VOC-3: only from ghasts"
+  },
+  {
+   "key": "minecraft:gilded_blackstone",
+   "tier": "rare",
+   "why": "blackstone flecked with gold, found only in bastions; no recipe makes it"
+  },
+  {
+   "key": "minecraft:glowstone_dust",
+   "tier": "uncommon",
+   "why": "N-VOC-3: from the Nether's glowstone; a glowstone block is four"
+  },
+  {
+   "key": "minecraft:gold_ingot",
+   "tier": "rare",
+   "why": "N-VOC-3: gold is rare; gold blocks, light pressure plates and gold-made blocks are too"
+  },
+  {
+   "key": "minecraft:heart_of_the_sea",
+   "tier": "precious",
+   "why": "N-VOC-3: one per buried treasure chest; a conduit is made from one"
+  },
+  {
+   "key": "minecraft:heavy_core",
+   "tier": "precious",
+   "why": "N-VOC-3: only from an ominous vault, rarely"
+  },
+  {
+   "key": "minecraft:iron_ingot",
+   "tier": "uncommon",
+   "why": "N-VOC-3: iron is uncommon; lanterns, chains, iron bars, cauldrons and iron blocks are too"
+  },
+  {
+   "key": "minecraft:large_amethyst_bud",
+   "tier": "rare",
+   "why": "grows only on budding amethyst in a geode; no recipe makes it"
+  },
+  {
+   "key": "minecraft:magma_block",
+   "tier": "uncommon",
+   "why": "N-VOC-3: mined in the Nether (its recipe, from blaze-made magma cream, is not how it is found)"
+  },
+  {
+   "key": "minecraft:medium_amethyst_bud",
+   "tier": "rare",
+   "why": "grows only on budding amethyst in a geode; no recipe makes it"
+  },
+  {
+   "key": "minecraft:mud",
+   "tier": "uncommon",
+   "why": "N-VOC-3: dirt made wet with a water bottle, or found in mangrove swamps; packed mud and mud bricks are made from it"
+  },
+  {
+   "key": "minecraft:nether_brick",
+   "tier": "uncommon",
+   "why": "N-VOC-3: smelted from netherrack; nether bricks and their fences are made from it"
+  },
+  {
+   "key": "minecraft:nether_quartz_ore",
+   "tier": "rare",
+   "why": "an ore block holding quartz, kept whole only with silk touch"
+  },
+  {
+   "key": "minecraft:nether_star",
+   "tier": "precious",
+   "why": "N-VOC-3: dropped only by the Wither; a beacon is made from one"
+  },
+  {
+   "key": "minecraft:nether_wart",
+   "tier": "uncommon",
+   "why": "grows only on soul sand, found in Nether fortresses; nether wart blocks and red nether bricks need it"
+  },
+  {
+   "key": "minecraft:netherite_ingot",
+   "tier": "precious",
+   "why": "N-VOC-3: four netherite scrap and four gold; a netherite block and a lodestone are made from it"
+  },
+  {
+   "key": "minecraft:netherite_scrap",
+   "tier": "precious",
+   "why": "N-VOC-3: smelted from ancient debris, the rarest Nether find"
+  },
+  {
+   "key": "minecraft:netherrack",
+   "tier": "uncommon",
+   "why": "N-VOC-3: the Nether's common ground"
+  },
+  {
+   "key": "minecraft:obsidian",
+   "tier": "uncommon",
+   "why": "N-VOC-3: needs a diamond pickaxe and lava meeting water"
+  },
+  {
+   "key": "minecraft:packed_ice",
+   "tier": "uncommon",
+   "why": "N-VOC-3: from icebergs and ice spikes (or nine ice); blue ice is nine of it"
+  },
+  {
+   "key": "minecraft:prismarine_crystals",
+   "tier": "rare",
+   "why": "N-VOC-3: only from guardians; a sea lantern is made from crystals"
+  },
+  {
+   "key": "minecraft:prismarine_shard",
+   "tier": "rare",
+   "why": "N-VOC-3: only from guardians (ocean monuments); prismarine blocks are made from shards"
+  },
+  {
+   "key": "minecraft:quartz",
+   "tier": "rare",
+   "why": "N-VOC-3: Nether quartz; quartz blocks, pillars and bricks are made from it"
+  },
+  {
+   "key": "minecraft:raw_copper",
+   "tier": "uncommon",
+   "why": "copper before smelting; a raw copper block is nine"
+  },
+  {
+   "key": "minecraft:raw_gold",
+   "tier": "rare",
+   "why": "gold before smelting; a raw gold block is nine"
+  },
+  {
+   "key": "minecraft:raw_iron",
+   "tier": "uncommon",
+   "why": "iron before smelting; a raw iron block is nine"
+  },
+  {
+   "key": "minecraft:sculk",
+   "tier": "rare",
+   "why": "N-VOC-3: the deep dark's block (silk touch only)"
+  },
+  {
+   "key": "minecraft:sculk_catalyst",
+   "tier": "rare",
+   "why": "N-VOC-3: the deep dark's block"
+  },
+  {
+   "key": "minecraft:sculk_sensor",
+   "tier": "rare",
+   "why": "N-VOC-3: the deep dark's block; a calibrated sensor is made from one"
+  },
+  {
+   "key": "minecraft:sculk_shrieker",
+   "tier": "rare",
+   "why": "N-VOC-3: the deep dark's block"
+  },
+  {
+   "key": "minecraft:sculk_vein",
+   "tier": "rare",
+   "why": "N-VOC-3: the deep dark's block"
+  },
+  {
+   "key": "minecraft:shroomlight",
+   "tier": "uncommon",
+   "why": "grows on huge Nether fungi; no recipe makes it"
+  },
+  {
+   "key": "minecraft:shulker_shell",
+   "tier": "rare",
+   "why": "N-VOC-3: only from shulkers in End cities; every shulker box is made from two"
+  },
+  {
+   "key": "minecraft:small_amethyst_bud",
+   "tier": "rare",
+   "why": "grows only on budding amethyst in a geode; no recipe makes it"
+  },
+  {
+   "key": "minecraft:soul_sand",
+   "tier": "uncommon",
+   "why": "N-VOC-3: the Nether's soul sand valleys"
+  },
+  {
+   "key": "minecraft:soul_soil",
+   "tier": "uncommon",
+   "why": "N-VOC-3: the Nether's soul sand valleys"
+  },
+  {
+   "key": "minecraft:sponge",
+   "tier": "rare",
+   "why": "N-VOC-3: only from elder guardians in ocean monuments"
+  },
+  {
+   "key": "minecraft:warped_nylium",
+   "tier": "uncommon",
+   "why": "the Nether's forest floor"
+  },
+  {
+   "key": "minecraft:warped_wart_block",
+   "tier": "uncommon",
+   "why": "the warped forest's leaves; no recipe makes it"
+  },
+  {
+   "key": "minecraft:wet_sponge",
+   "tier": "rare",
+   "why": "a sponge that has soaked up water (the same find)"
+  }
+ ]
+}

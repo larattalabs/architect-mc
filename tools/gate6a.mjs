@@ -743,9 +743,9 @@ steps.heap = async () => {
 
 steps.apijars = async () => {
   const runs = [
-    // (housekeeping 3, over v0.37.0) the unchanged 0.37.0, 0.36.1 and 0.36.0 jars (API 1.34.0, 1.33.0, 1.33.0), each with its tag's
-    // tools/apitest.mjs, each built from its tag into artifacts/gate6c-h/ (v0370 by housekeeping 3, v0361 by the H batch, v0360 by H-core)
-    { api: '1.34.0', key: '0370', dir: path.join(MAIN, 'artifacts', 'gate6c-h', 'v0370'), jar: 'architect_apitest-0.37.0.jar', world: 'G6A Jar0370' },
+    // (6c VOC, over v0.37.0) the unchanged 0.37.0, 0.36.1 and 0.36.0 jars (API 1.34.0, 1.33.0, 1.33.0), each with its tag's
+    // tools/apitest.mjs, each built from its tag (0.37.0 in artifacts/gate6c-voc/, the other two H's in artifacts/gate6c-h/)
+    { api: '1.34.0', key: '0370', dir: path.join(MAIN, 'artifacts', 'gate6c-voc', 'v0370'), jar: 'architect_apitest-0.37.0.jar', world: 'G6A Jar0370' },
     { api: '1.33.0', key: '0361', dir: path.join(MAIN, 'artifacts', 'gate6c-h', 'v0361'), jar: 'architect_apitest-0.36.1.jar', world: 'G6A Jar0361' },
     { api: '1.33.0', key: '0360', dir: path.join(MAIN, 'artifacts', 'gate6c-h', 'v0360'), jar: 'architect_apitest-0.36.0.jar', world: 'G6A Jar0360' },
   ];
