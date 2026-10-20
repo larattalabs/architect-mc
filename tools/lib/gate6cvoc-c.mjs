@@ -10,6 +10,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const j = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
@@ -20,8 +21,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * rule's answer only), extension/e16 (its r_palette left the reserved list: refused NO_FEATURE now) and extension/e05 (its reserved rule is
  * rule.shape's draft now: a palette rule is supported). New VOC-c fixtures have no counterpart on the base.
  */
+const t0 = new Set(['extension/e16_every_reserved_b.json']); // ((6c FL) FL's movers appended, none listed twice)
 export const UNCHANGED_EXCEPTIONS = Object.freeze(['asks/desert_jungle_wall.json', 'asks/hidden_village.json', 'asks/mage_exiles.json', 'asks/old_new_town.json',
-  'asks/one_block.json', 'asks/rival_families.json', 'asks/row_houses.json', 'extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json']);
+  'asks/one_block.json', 'asks/rival_families.json', 'asks/row_houses.json', 'extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json', ...FL_MOVED.filter((n) => !t0.has(n))]);
 
 function nodeTest(root, files, timeout = 3_600_000) {
   const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
@@ -112,7 +114,7 @@ export async function unchanged(root, mainDir) {
       };
       let a, b;
       try { a = await runOn(hNew, plan); b = await runOn(hOld, oldPlan); } catch (e) { out.fixtures[name] = { error: String(e.message).slice(0, 200) }; continue; }
-      const norm = (r) => (r.res?.irJson ?? '').replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"');
+      const norm = (r) => normIrJson(r.res?.irJson);
       const answers = (r) => JSON.stringify(r.check?.parts ?? r.check?.malformed ?? null);
       const eq = { answers: answers(a) === answers(b), ir: sha256(norm(a)) === sha256(norm(b)), overall: a.check?.overall === b.check?.overall };
       out.fixtures[name] = eq;

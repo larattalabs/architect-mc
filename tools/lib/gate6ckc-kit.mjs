@@ -10,11 +10,14 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
 /** §8's named exceptions: fixture -> why it moves (the body and the writer that met it). */
 export const EXCEPT = Object.freeze({
+  // ((6c FL) the fixtures FL moves by name (its own item 4 judges them)
+  ...Object.fromEntries(FL_MOVED.map((n) => [n, 'FL: a free layout or outline shipped (layout.ring, .grid, .organic, sketch.outline; the e15 list)'])),
   'valid/v51_voc_forge.json': 'forge_wall (connector.wall) wrote 5 water, 5 rim and 24 watch cells of w_fount (form.fountain): now refused OVERLAP {kind: body}, wouldFit ring [4, 17]',
   // ((the CU/IRR/VOC-c batch) VOC-c's named exceptions: rule.palette supported; its own item 4 judges them. e05 is not one here: VOC-c
   // rewrote the fixture itself, so the base and this head plan the same file alike)
@@ -64,7 +67,7 @@ export async function unchanged(root, { check, log = console.log, only = null } 
   const { buildVirtual } = await K('region/vworld.mjs');
   const { fillMissing } = await K('region/plan.mjs');
   const { asColumns } = await K('region/pack.mjs');
-  const norm = (r) => r.res.irJson.replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"');
+  const norm = (r) => normIrJson(r.res?.irJson);
   const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(norm(r)), first: r.first && r.first !== r ? sha256(norm(r.first)) : null });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {}, watch: [], hard: [] };
   for (const [name, fx] of fixtures(root)) {

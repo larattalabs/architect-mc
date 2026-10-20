@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 
 /**
  * Item 11's named exceptions: the fixtures that may differ from origin/main; every other fixture must not. (The H batch's T3a r06 and
@@ -12,7 +13,7 @@ import { pathToFileURL } from 'node:url';
  * column onto the route's side (lo/hi -1..0, not 0..1) and their answers' cell counts and IRs differ; the overall answers are the same.
  */
 // ((6c HY) h/r08_course (a course: HY-b's v51) and extension/e15 (channel.course left the reserved list) by name, though this loop reads neither dir)
-export const UNCHANGED_EXCEPTIONS = Object.freeze(['valid/v33_rope_bridge.json', 'valid/v34_auto.json', 'h/r08_course.json', 'extension/e15_every_reserved_a.json']);
+export const UNCHANGED_EXCEPTIONS = Object.freeze(['valid/v33_rope_bridge.json', 'valid/v34_auto.json', 'h/r08_course.json', 'extension/e15_every_reserved_a.json', ...FL_MOVED.filter((n) => n !== 'extension/e15_every_reserved_a.json')]);
 /** Fixtures the comparison skips by name: refused/k1a_r01 runs the two-plan harness (its `volume`; H-b re-answers it WATER deep). */
 export const UNCHANGED_SKIPPED = Object.freeze(['refused/k1a_r01_wall_water.json']);
 
@@ -49,7 +50,7 @@ export async function unchanged(root) {
       const runOn = async (h) => { const s = sv(h); return h.checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...h.stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}) }); };
       let a, b;
       try { a = await runOn(hNew); b = await runOn(hOld); } catch (e) { out.fixtures[`${dir}/${f}`] = { error: String(e.message).slice(0, 200) }; continue; }
-      const norm = (r) => r.res.irJson.replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"');
+      const norm = (r) => normIrJson(r.res?.irJson);
       const answers = (r) => JSON.stringify(r.check.parts);
       const eq = { answers: answers(a) === answers(b), ir: sha256(norm(a)) === sha256(norm(b)), overall: a.check.overall === b.check.overall };
       out.fixtures[`${dir}/${f}`] = eq;

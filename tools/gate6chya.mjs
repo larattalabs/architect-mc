@@ -13,6 +13,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './lib/fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'artifacts', 'gate6c-hy', 'hya');
@@ -51,7 +52,7 @@ async function unchanged() {
     const o = { survey: s.bytes, claim: s.claim, anchors: { ...h.stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], regions: fx.regions ?? [], builds: fx.builds ?? [], keepOut: fx.keepOut ?? [], budget: fx.budget ?? {}, ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}) };
     return h.checkPlanVolumes(fx.plan, { volume: fx.volume ?? {}, ...o });
   };
-  const norm = (r) => r.res.irJson.replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"');
+  const norm = (r) => normIrJson(r.res?.irJson);
   const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(norm(r)), first: r.first && r.first !== r ? sha256(norm(r.first)) : null, passes: (r.res.meta.passes ?? []).map((p) => p.name) });
   const all = fixtures(ROOT);
   for (const [name, fx] of all) {
@@ -63,7 +64,8 @@ async function unchanged() {
     const same = !!a && !!b && a.answers === b.answers && a.overall === b.overall && a.ir === b.ir && a.first === b.first;
     const bothErr = !a && !b;
     out.fixtures[name] = { course, existsOld, same, ...(err ? { err } : {}), ...(a ? { passesHead: a.passes } : {}), ...(a && b && !same ? { head: a, main: b } : {}) };
-    if (!course) check(same || (bothErr && err), `${name}: ${same ? 'byte-identical (answers, overall, IR)' : bothErr ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, main: b })}`}`);
+    if (!course && FL_MOVED.includes(name)) console.log(`note ${name}: FL's named mover (its own item 4 judges it): ${same ? 'identical' : 'differs'}`);
+    else if (!course) check(same || (bothErr && err), `${name}: ${same ? 'byte-identical (answers, overall, IR)' : bothErr ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, main: b })}`}`);
     else console.log(`note ${name}: a course part (excepted): ${same ? 'identical' : 'differs'}; hydrology ran: ${!!a?.passes.includes('hydrology')}`);
     if (!course && a) check(!a.passes.includes('hydrology'), `${name}: the hydrology pass did not run`);
   }
