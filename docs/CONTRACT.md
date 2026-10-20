@@ -17133,6 +17133,13 @@ player's water there took them too: only the watch sets' water from before the r
   `artifacts/gate-runs-int-cu-prefix/20261020-173522-change`): the same case FAILS, the pond 0/4 and the well taken at the lot's
   removal; with the fix (`artifacts/gate-runs-int-cu/20261020-173522-change`, head c170b161) it passes 4/0.
 
+- **Verifier (the fix only; gate-verifier, scoped):** **PASS** at 4354ddca: the diff c97519cf..c170b161 reviewed (never a source,
+  a before cell or another body's cell; judged before any drain write; nothing saved, recomputed per drain; growth capped at 65536,
+  the prune linear) and its own run `artifacts/gate-runs-int-cu-verify/20261020-184822-change` (ports 8954/8955): irr-ingame
+  (`spare` and `pad`) 6/0, irr-crash 6/0 (FL1, FL2, FL6 + save). Non-blocking: pruning by a foreign *flowing* feeder beside the
+  flow is unit-tested only (the in-game case has foreign sources under the flow); two breached bodies whose flows meet depend on
+  drain order (spares, never takes foreign water).
+
 **Goldens re-cut for kit 0.38.0:** `kit/tools/region.mjs plan` over each golden's committed survey, params, seed, claim and roles
 (crossings_demo_flat with its frozen volume by `--volumes`, the file named by its ARVX sha 9a00f18a) writes an ir.json
 byte-identical to the committed one but kitVersion; tile shas and cells unchanged (scenario-goldens): links_demo 97837bed ->

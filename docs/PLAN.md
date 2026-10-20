@@ -851,3 +851,6 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
   (a breach comes after the body settled, when no census runs). Water where a foreign flow (a pond, a player's water) meets the
   breach's flow is spared, so a few cells of joint water can stay outside the lot after its removal. A periodic shell check that
   re-opens a census on a breach would record the flow as it runs, at a per-tick cost; only if Steward's worlds show such cells.
+- **IRR's breach fix, in game: a foreign flow beside the breach.** The `spare` case puts the pond and the well under the flow, so
+  the prune by a foreign *flowing* feeder (a player's flow meeting the breach's at a higher amount) is unit-tested only
+  (RegionFluidsBreachTest). Add an irr-ingame case with a player's source on the ground beside the trench's exit.
