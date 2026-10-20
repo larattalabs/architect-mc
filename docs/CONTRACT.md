@@ -20427,3 +20427,321 @@ still works (D3's town-first order, `dangling`).
 ### Deferred
 
 - Turning, branching or forking extensions; a second square; extensions past the claim (S-RV-8); growth of ring and spiral ends.
+
+## Phase 6d slice FS: updates follow the source (DRAFT for Steward review)
+
+When a source design gets a new version, each of its copies can be re-made from that version by its own recipe, at $0, and then each
+lot that stands at the old copy is updated by the existing delta path. This is 0b's deferral ("a source's new version applied to its
+COPY and SITE followers, by recipe"; CONTRACT 0b §2.4: "That is 6d's update path, so there's no migration") and Steward round 3's
+"updates follow the source" ("a new version of a source design is offered to its variants and site-adapted copies as one update,
+applied per lot, keeping each lot's adaptation").
+
+FS uses only existing placement paths (`outdated`, `checkDelta`, `applyDelta`, `revert`), so it needs no RC (GATES policy 4); the
+verifier re-runs the delta and revert items (policy 3).
+
+- **Branch:** `slice/FS`, worktree `../architect-mc-FS`. **Spend:** $0 (no Claude call: a recipe is deterministic kit work).
+- **Scope:** `Library.followers`, `Designs.follow` and `followAll`, the sidecar's follow job, the copy's next version, and the per-lot
+  update through the existing delta path; region lots included.
+- **Not in scope:** SITE followers (7b's `fitToSite` adaptations: `follow` of a SITE entry answers `NOT_ALLOWED {why: until_7b}`);
+  VARIANT and RESKIN entries (they don't follow, 0b §2.4); copies of an adopted entry (PT2's N-PT2-2: its own ask); applying deltas
+  automatically.
+- **Depends on:** 0b (copies, `Derivation`), 5b (deltas), C13 (`versionOf`), PT2 (adopted entries refuse), RV only for item 6's region.
+
+### 0. Facts (main f3f41d43, from code)
+
+- `Library.Derivation(source, sourceVersion, Kind {VARIANT, RESKIN, COPY, SITE}, recipe)` (`Library.java` :281-299); its javadoc says
+  "Only COPY and SITE follow their source (6d)".
+- A COPY's recipe is written by `variants.ts` :624 (`recipeRecord` :47-49): `{shift, param, values, mirror, roles, bible, group,
+  itemKey, archetype, ordinal, attempt, levers?, changed?, bar?}`. It is chosen by `kit/tools/copy-recipe.mjs` (`chooseRecipe` in
+  `lib/variation.mjs`), up to `COPY_RECIPES` 3 attempts (`variants.ts` :365, :582).
+- **Nothing re-applies a recipe to a later source version.** The only reader of `derivation.recipe` is `checkChangeable`, which refuses
+  `versionOf` and polish of a COPY (`VERSION_REFUSED copy`, `versions.ts` :188-192).
+- New versions carry `derivation` forward (`polish.ts` :969, `sidecar.ts` :1009).
+- `Sites.outdated` lists standing sites whose pinned version is below their entry's head (`SiteDeltas.java` :1499-1512), building sites
+  only, region lots included (RV §0).
+- Deltas refuse a frame change (5b D2, `FRAME_CHANGED`).
+
+### 1. The rule in one line
+
+**A copy follows its source by re-running its own recorded recipe on the source's new version, exactly, and becomes its own next
+version only if that result still passes everything a copy had to pass; each lot then updates by the ordinary delta.**
+
+### 2. Followers
+
+```java
+// Library (default throws; feature "followSource")
+default List<Follower> followers(String sourceEntryId)
+record Follower(String entryId, Library.Derivation.Kind kind, int sourceVersion, int headVersion, int sourceHead, boolean behind)
+```
+
+- Every entry whose head's `derivation.source` is the source, any kind, with `behind` true for a COPY whose `sourceVersion` is below
+  the source's head. VARIANT and RESKIN are listed (never `behind`), so a caller sees the family.
+
+### 3. Following
+
+```java
+// Designs (defaults throw; feature "followSource")
+default CompletableFuture<FollowResult> follow(String copyEntryId, int toSourceVersion /* 0 = head */, @Nullable String opKey)
+default CompletableFuture<List<FollowResult>> followAll(String sourceEntryId, int toSourceVersion, @Nullable String opKey)
+record FollowResult(String entryId, boolean followed, int fromVersion, int newVersion, int sourceVersion,
+    @Nullable String refused /* null | frame | check | bar | fit | bible_gone | source_gone */, String message)
+```
+
+- **The job** (sidecar `entry.follow`): load the source at `toSourceVersion`, apply the copy's recipe exactly (its `shift`, `param`,
+  `values`, `mirror`, `roles` and bible pin; `attempt` fixed, no new choice), build the copy, then:
+  - the pristine-kit check (as `VariantRunner` runs it for every copy);
+  - the 0b variation bar against the source's new version (2 of 3 levers, at least 10% of cells changed), so a follower is still a
+    copy and not the source;
+  - the frame: front and the entrance's feet row equal to the copy's head (else `frame`: its lots couldn't take the delta);
+  - the copy's own size bounds (the archetype's `max`, the lot's fit box if the group recorded one: `fit`).
+- **Installed** as the copy's head + 1, `by: 'follow'`, `derivation.sourceVersion` = the new source version, recipe unchanged;
+  `ENTRY_VERSIONED` fires as for any version.
+- **Refused** (any check failing): nothing installs; `FollowResult.refused` names why; the copy stays at its version. No fallback
+  design is made (N-FS-1).
+- **opKey:** the same key and request return the same result; `followAll` keys each follower `<key>:<entryId>`.
+- `versionOf` and polish of a COPY stay refused (`VERSION_REFUSED copy`): following is how a copy changes.
+- An entry whose source is gone (deleted, never GC'd while pinned) refuses `source_gone`.
+
+### 4. The lots
+
+Nothing new. The caller lists `Sites.outdated()` (the followed copies' lots now show `headVersion` above their pin) and runs
+`checkDelta` then `applyDelta` per lot, keeping the player's edits (`KEEP`) as 5b. Each lot's own adaptation is its copy's recipe,
+so "keeping each lot's adaptation" holds by construction. A region's lot updates as any lot (RV §0); a lot under a revision's cells is
+unaffected (a lot is BOX above its pads).
+
+- **Survival:** a construction delta (5b D8, Y1's stockpile), unchanged.
+- **Revert:** `Sites.revert(siteId, oldVersion)` as 5b (LIFO; in survival a paid forward delta).
+
+### 5. Gate (slice tier, $0)
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit (sidecar, kit) | the follow job on the bundled cabin and tavern sources: a recipe re-applied to v2 gives the same blocks as a fresh copy made with that recipe from v2 (byte-identical NBT); each refusal (frame, check, bar, fit, source_gone); opKey replay |
+| 2 | Followers | a group with an archetype and 3 copies, plus a VARIANT: `followers` lists 4; `behind` true for the 3 copies after the source's `versionOf` (stub) |
+| 3 | followAll | the 3 copies followed: 3 new versions, each passing the check and the bar; `ENTRY_VERSIONED` 3 times |
+| 4 | Lots (verifier re-runs) | the 3 copies placed as lots of a `flat_village` realised through `checkPlan` then `realiseApproved` (Steward's plan v1 shape); `outdated` lists them; `applyDelta` on each, a player's block on one lot kept (`KEEP`); `revert` of each to the old version: the world before the delta, cell for cell |
+| 5 | Refused | a source v3 with a moved front: every follower `frame`, nothing installed, lots unchanged |
+| 6 | With RV | one lot's site removed alone (RV §4.4), the region revised to re-add it at the new copy version; then `Regions.remove`: E-flat 0 |
+| 7 | Unchanged, API, spend | 0b's copy units, 5b's delta suite, pt2-ingame's adopt items; api-compat clean; apijars; $0.00 |
+
+**Tier:** slice plus `sidecar/**` and `api/**`: the units, apijars, 5b-deltas; FS's own `fs-unit`, `fs-ingame` (driver
+`tools/gate6dfs.mjs`). The verifier re-runs item 4.
+
+**Size:** 2-2.5 days, one builder (the sidecar job 1 day; the Java surface and api-compat 0.5; the gate 1).
+
+**Placeholders:** API **1.45.0**, mod **0.48.0**, kit unchanged (the recipe tool is reused as is), catalogue unchanged.
+
+### Open questions for Steward
+
+- **S-FS-1. Who triggers.** Steward calls `followAll` after it hears `ENTRY_VERSIONED` on a source (or finds a `behind` follower at
+  world load), shows "3 buildings can take the new design", and applies per lot. Architect never applies by itself. Default: yes.
+- **S-FS-2. All or some.** `followAll` follows every copy; a copy that fails is listed and left. Do you want `follow` per copy only?
+  Default: both.
+- **S-FS-3. Variants.** VARIANT and RESKIN entries never follow (they were made to differ). Fine? Default: yes.
+- **S-FS-4. SITE copies.** 7b's site-adapted entries follow in 7b, with their fit parameters. Until then `NOT_ALLOWED until_7b`.
+  Default: yes.
+
+### Open questions for Noah
+
+- **N-FS-1. When a copy can't follow.** Proposed: it stays at its version, says why, and nothing is spent. The alternative designs a
+  fresh copy with Claude (paid). Default: stays, $0.
+
+### Deferred
+
+- SITE followers (7b). Copies of an adopted entry (PT2's N-PT2-2, its own ask). Automatic application.
+
+## Phase 6d slice LC: land change in a standing region (DRAFT for Steward review)
+
+A standing region can say what has changed in it since it was built, part by part and lot by lot, with the player's cells apart. And a
+region held `DRIFTED` before a later stage can re-plan just the stages not yet placed, keeping everything placed. This is
+SETTLEMENTS §14 ("incremental replanning on land change"), PT's S-PT-1 ("to 6d with replanning on land change"), and §14's "drift at
+realise ... offer replan affected stages".
+
+LC adds a read-only report and an opt-in call on a waiting region; it changes no removal, so no RC (GATES policy 4).
+
+- **Branch:** `slice/LC`, worktree `../architect-mc-LC`. **Spend:** $0.
+- **Scope:** `Regions.landCheck` (§2), `Regions.replanStages` (§3), the stage wait's action, and wiring T2's route hysteresis
+  (`routePrefer`) through the mod for the first time.
+- **Not in scope:** SETTLEMENTS §14's incremental passes over dirty tiles with old fields as boundary conditions (a kit rewrite of
+  every pass; later, if a measured need appears, S-LC-3); re-fitting damaged buildings (C13's `versionOf` does that); repairing damage
+  automatically.
+- **Depends on:** RV (the effective IR, revisions as the repair path), PT (player records), CU and F3's StillOurs rows, T2.
+
+### 0. Facts (main f3f41d43, from code)
+
+- `Drift.check` at realise and `Drift.checkStage` before each later stage (`Drift.java` :17-36, :56+): a failed stage shows as
+  `drift["held: ..."]`, surfaced as `waiting = DRIFTED` (`RegionsImpl.java` :1852-1857). There is no `SITE_DRIFTED` reason
+  (SETTLEMENTS §14 names one; it doesn't exist).
+- Frozen heights exist only for columns a written tile touched (6a D3); unplaced stages' tiles may have none.
+- `ctx.routePrefer` (T2's hysteresis: cells of an earlier route cost a third, `route.mjs` :328-340, `program.mjs` :360-371) is set only
+  by gate tools (`gate6ct2.mjs`, `scenario-route.mjs`); the mod and sidecar never pass it.
+- PT keeps who placed a cell per chunk (`Placed`, `Sites.playerPlaced`), and the journal keeps a `Pt` per cell (`journal/Pt.java`).
+
+### 1. The rule in one line
+
+**A land check reads, never writes; a stage re-plan changes only stages that have written nothing, and refuses if any placed part
+would come out different.**
+
+### 2. `landCheck`
+
+```java
+// Regions (default throws; feature "landCheck")
+default CompletableFuture<LandReport> landCheck(String regionId, @Nullable String part /* null: every part */)
+record LandReport(String region, int revision, List<PartLand> parts, List<LotLand> lots, long cellsChecked, long ms)
+record PartLand(String part, long cells, long changed, long player, long natural, Map<String, Long> kinds, List<BlockPos> sample)
+record LotLand(String lot, String siteId, String state, double standing /* Reconcile's score */, long changed, long player)
+```
+
+- For each cell the region holds on top (tile, revision and road entries): the world against the entry's `after` (StillOurs, with CU's
+  and F3's rows). Changed cells are split by PT's record: `player` (a player placed what's there), `natural` (air, fluid, leaves, snow,
+  grown plants: the volatile kinds), else counted by block kind in `kinds`.
+- Lots: each lot site's `Reconcile` standing score (`STANDING` 0.8, `RESTORED` 0.9, as world start) and its changed and player cells.
+- Bounded: at most 4M cells per call, over ticks at the queue's budget (recorded); a larger region answers per part.
+- $0, read-only, no ticket (unloaded chunks are counted `unloaded`, not loaded).
+- **Use:** Steward shows "the east field was dug up (120 cells, by players)"; a repair is a revision (RV) or a lot delta (5b).
+
+### 3. `replanStages`
+
+```java
+// Regions (default throws; feature "replanStages")
+default CompletableFuture<RegionPlan> replanStages(String regionId, @Nullable String opKey)
+```
+
+- **When:** the region is `PLACING`, waiting `DRIFTED` at a stage gate (no tile of that stage or later written), or `PARTIAL` with
+  stages never started.
+- **What runs:** the region's program again with the same params and seed, over the claim, with:
+  - the frozen heights where they exist (placed tiles' windows), and a fresh resolution-1 survey elsewhere (loaded chunks);
+  - `ctx.routePrefer` from the effective IR's route and road cells (T2's hysteresis), so routes stay where they were where the land
+    allows;
+  - the held set as obstacles (RV §5.2).
+- **The acceptance rule:** every part, lot, road, node and edge of the **placed** stages comes out byte-identical. If any differs, the
+  call refuses `DRIFTED {why: placed_parts_changed, parts}` and nothing changes (the region keeps waiting; the caller may `force` as
+  today, or remove it).
+- **When accepted:** the region's IR for the unplaced stages is replaced by the new one (a revision `n` with `kind: replan`, RV §4.1,
+  writing nothing until its stages run; the one revision allowed while the region is `PLACING`, since it touches only stages that
+  haven't started), `Drift.checkStage` re-baselines, and the queue continues. Undo and removal are RV's.
+- Through `realiseApproved`: a region realised from an artifact gets a new artifact for the replan (`revisionOf`, RV §9.3), so
+  Steward approves the changed stages before they run (S-LC-2).
+
+### 4. Gate (slice tier, $0)
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the classification (player, natural, kinds) on a synthetic journal; the acceptance rule on synthetic IRs (a placed part changed: refused) |
+| 2 | Land check | `rv_town` (RV's fixture): a player digs 40 cells of the square and places 12 blocks on a lane; a creeper-like removal of 20 pad cells (DevBridge); `landCheck` reports each part's counts exactly (against a driver-side diff); 0 cells written (hash) |
+| 3 | Replan, accepted | a 3-stage region whose stage 3's tiles are dug by the driver while stage 2 places: `DRIFTED` at stage 3's gate; `replanStages` accepted; stage 3 placed against the new land; then `Regions.remove`: E-flat 0 (verifier re-runs) |
+| 4 | Replan, refused | the same, with stage 2's ground changed too: refused `placed_parts_changed`, nothing changed |
+| 5 | Steward's shape | the plan v1 path: a region from `realiseApproved` held `DRIFTED`; `replanStages` gives a revision artifact; `realiseApproved` of it continues |
+| 6 | Unchanged, API, spend | rv-ingame, 6a drift items; api-compat; apijars; $0.00 |
+
+**Size:** 2.5-3 days, one builder. **Placeholders:** API **1.46.0**, mod **0.49.0**, kit unchanged (the kit already takes
+`routePrefer`), catalogue unchanged.
+
+### Open questions for Steward
+
+- **S-LC-1. The report's grain.** Per part and per lot, with player cells apart and a sample of positions (at most 16). Enough for the
+  card, or do you need cell lists? Default: counts and samples.
+- **S-LC-2. Approving a replan.** A replanned region from an approved artifact gets a new artifact, and its changed stages wait for
+  `realiseApproved` of it. Or should a replan whose changed parts are only terrain under no lot continue without a new approval?
+  Default: a new approval.
+- **S-LC-3. Incremental passes.** SETTLEMENTS §14's dirty-tile passes (fields re-run over changed tiles with old values as boundaries)
+  are not in LC: the stage replan re-runs the program whole and accepts only if placed parts are unchanged. Is that enough for your
+  phase 3? Default: yes, until a measured case needs more.
+
+### Open questions for Noah
+
+- **N-LC-1. Damage in the card.** Proposed: Architect reports damage only when asked (`landCheck`), and Steward decides whether to
+  mention it. The alternative is an event per damaged part. Default: on request only.
+
+## Phase 6d slice AD: adopting a VillageLayout settlement as a region, the 6d half of C12 (DRAFT for Steward review)
+
+An existing Steward settlement built by VillageLayout (its own street road and lot sites, placed before regions) becomes a region
+record **without writing a cell**, so it can grow (GR), revise (RV) and be removed as one region. This is the 6d half of the C12 joint
+7a/6d gate (CONTRACT V §10: "The joint 7a/6d gate adds `Regions.adopt` ... then the gate runs a 6d addition (a lot, or the square), a
+6d `applyDelta` on one lot, and one exact `Regions.remove` of everything"). The 7a half (the link pass and `nav.json` over adopted lots)
+is drafted on `docs/7a`; the two meet at the adopted region's effective IR (§2) and the joint gate's last row (§4).
+
+AD moves Steward's standing sites into a region's group, which Steward's history and migration read: **RC check** before release.
+
+- **Branch:** `slice/AD`, worktree `../architect-mc-AD`. **Spend:** $0.
+- **Scope:** `Regions.adopt` (§2), the synthesized IR (§2.2), group membership (§2.3), un-adopt (§3), the gate's 6d rows (§4).
+- **Not in scope:** the link pass, `nav.json` and typed links (7a); Steward deleting VillageLayout (after the joint gate and region
+  survival, C12); adopting another owner's sites; adopting road networks that aren't one straight street.
+- **Depends on:** RV, GR, PT2 (its adopt patterns: an entry with before == after), V (the `street` layout geometry, CONTRACT V §10).
+
+### 0. Facts (main f3f41d43, from code)
+
+- `Sites.adopt` adopts a player's build as a site (PT2, `Adopt.java`), writing one `adopt` journal entry with before == after; it has
+  no region references. There is no `Regions.adopt`.
+- A V region's lots are sites `s<N>` and its street a road site `r<N>` in one group `g<N>` (RV §0); VillageLayout's are the same kinds
+  of sites in Steward's batches' groups.
+- V's `street` layout is VillageLayout's geometry; `kit/REGIONS.md` records the mapping (CONTRACT V §10).
+
+### 1. The rule in one line
+
+**Adoption writes no block and no journal cell; it records which standing sites a region is made of and an IR that describes them,
+and from then on the region's revisions and removal treat them as its own.**
+
+### 2. `Regions.adopt`
+
+```java
+// Regions (default throws; feature "regionAdopt")
+default CompletableFuture<RegionView> adopt(AdoptRegionRequest r)
+record AdoptRegionRequest(String owner, ResourceKey<Level> dimension, BoundingBox claim, String layout /* "village_layout" */,
+    com.google.gson.JsonObject geometry /* {streetZ, xLo, xHi} or {streetX, zLo, zHi} */, List<String> roadSiteIds,
+    Map<String, String> lots /* lotId -> siteId */, @Nullable String opKey, com.google.gson.JsonObject ext)
+```
+
+#### 2.1 Checks
+
+- Every site is the owner's, standing, inside the claim, in no other region; the roads are 4e roads along the given street line; every
+  lot site's box faces the street. Else `NOT_ALLOWED` naming the site.
+- The claim overlaps no other region of any owner beyond D1's seam rule, and no C17 area of another owner.
+- No write, ticket or prepare.
+
+#### 2.2 The synthesized IR
+
+- Program `adopted_village` (kit, bundled, deterministic, `catalogue = false`): from `geometry`, the road sites' recorded specs and the
+  lot boxes, it emits `ir.lots` (each `{id, box, front, entrance, adopted: siteId}`), `ir.roads` (each `{id: street_*, adopted:
+  roadSiteId}`, flagged `architect_mc:street`), the graph (V's: lot nodes, junctions along the street, ends), and **no parts** (no ops,
+  so no tile). `budget` 0.
+- Its street ends are terminal junctions, so GR can extend them and D3 can join them.
+- Its IR is revision 0; its frozen heights are taken at first touch by a later revision (6a D3).
+
+#### 2.3 Group membership
+
+- The region gets a new group `g<N>`. Each adopted site's membership moves to it (`Site.Member(group, batchId, itemKey)`), its old
+  membership recorded in the region record (`adopted.from`) so un-adopt can restore it.
+- One `adopt` journal entry per site is **not** written (the sites' own entries stand); the region record and the membership change
+  are one atomic save.
+
+### 3. Un-adopt and removal
+
+- **`Regions.remove`** of an adopted region removes its group: every adopted site and road, plus every revision's cells, last placed
+  first. That is exact as RV §6.2 (the sites' own entries restore their land).
+- **`Regions.unadopt(regionId)`** (default throws): allowed only with no revision standing; restores each site's old membership and
+  deletes the region record. No cell is written.
+
+### 4. Gate (slice tier, $0): the 6d rows of the joint gate
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | `adopted_village` IRs from 20 synthetic VillageLayout settlements: lots, roads and graph as V's for the same geometry; no parts |
+| 2 | Adopt | a Steward-shaped VillageLayout settlement (Steward's own `VillageLayout` code path driven through its test hook, or the recorded site set of Steward's e2e village), adopted: 0 changed cells (hash), 0 journal entries written; `RegionView` lists its lots and street |
+| 3 | A 6d addition | a GR growth of one lot on its street (frontage), realised |
+| 4 | A 6d delta | `applyDelta` on one adopted lot (a stub v2) |
+| 5 | Remove (verifier re-runs) | `Regions.remove`: E-flat 0 over the claim against the world before the settlement |
+| 6 | Un-adopt | a second settlement adopted then un-adopted: memberships as before, Steward's own undo of one of its sites still works |
+| 7 | Joint row (with 7a) | once 7a's link pass lands: its link pass over the adopted region, then rows 3-5 again (run on the integration branch) |
+
+**Size:** 3-3.5 days, one builder. **Placeholders:** API **1.47.0**, mod **0.50.0**, kit **0.46.0**, catalogue unchanged.
+
+### Open questions for Steward
+
+- **S-AD-1. Still needed?** With RS shipped, Supplied builds take regions; old saves still hold VillageLayout settlements. Do you still
+  want to migrate them (C12), or keep the legacy path for old saves until they're rebuilt? Default: yes, migrate on load as C12 says.
+- **S-AD-2. The geometry.** You send `{streetZ, xLo, xHi}` (or the north-south form) and the lot-to-site map; Architect checks the
+  rest. Enough? Default: yes.
+- **S-AD-3. Your history.** After adoption, undo of a building inside the adopted village is `Sites.remove` of its lot (RV §4.4) or
+  `undoRevision` of a growth; the settlement's founding entry becomes `Regions.remove`. Workable? Default: yes.
+- **S-AD-4. The joint gate.** Run the 6d rows on AD's slice gate, and the joint row once 7a's link pass is in? Default: yes.
