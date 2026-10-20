@@ -1,0 +1,62 @@
+{
+ "about": "(\u00a77.1) from stands lower than to: refused UNREACHABLE uphill, the swapped course as the wouldFit (never swapped silently)",
+ "terrain": {
+  "W": 240,
+  "D": 160,
+  "x0": 1000,
+  "z0": 2000,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1000,
+    "x1": 1059,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 72
+   },
+   {
+    "x0": 1060,
+    "x1": 1100,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 68
+   }
+  ]
+ },
+ "anchors": {
+  "low": [
+   1200,
+   64,
+   2082
+  ],
+  "high": [
+   1020,
+   72,
+   2080
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "brook",
+  "class": "refused",
+  "code": "UNREACHABLE",
+  "kind": "uphill",
+  "wouldFit": true
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_r01",
+  "connectors": [
+   {
+    "id": "brook",
+    "kind": "channel",
+    "from": {
+     "anchor": "low"
+    },
+    "to": {
+     "anchor": "high"
+    }
+   }
+  ]
+ }
+}

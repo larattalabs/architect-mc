@@ -1,5 +1,0 @@
-{
-  "about": "(6c HY) HY-core's placeholder for P0 item 9's coverage: the course ids whose valid/ fixtures (v50 stream, v51 canal (h/r08_course re-answered), v52-v57, v59 riffles) land with slice HY-b, and channel.aqueduct, reserved but answered by the compiler only (a valley past a course's fill: HY-b's refusal fixture). HY-b deletes this file when they do.",
-  "ids": ["channel.course", "channel.race", "channel.ditch"],
-  "reserved": ["channel.aqueduct"]
-}

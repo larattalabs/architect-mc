@@ -1,0 +1,138 @@
+{
+ "about": "(\u00a77.5) a race asked to pass the south side of a mill lot in a village of six lots (port s), where the neighbouring lots leave no room: no wheel fall fits there: refused NO_ROOM, the plain course (no lot in via) the wouldFit",
+ "terrain": {
+  "W": 240,
+  "D": 160,
+  "x0": 1000,
+  "z0": 2000,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1000,
+    "x1": 1059,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 72
+   },
+   {
+    "x0": 1060,
+    "x1": 1100,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 68
+   }
+  ]
+ },
+ "anchors": {
+  "head": [
+   1020,
+   72,
+   2080
+  ],
+  "tail": [
+   1200,
+   64,
+   2082
+  ],
+  "mills": [
+   1080,
+   68,
+   2060
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "race",
+  "class": "refused",
+  "code": "NO_ROOM",
+  "wouldFit": true
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_r10",
+  "zones": [
+   {
+    "id": "millz",
+    "program": {
+     "template": "flat_village",
+     "params": {
+      "lots": [
+       {
+        "id": "mill1",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "h1",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "h2",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "h3",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "h4",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "h5",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       }
+      ]
+     }
+    },
+    "where": {
+     "near": {
+      "anchor": "mills",
+      "within": 4
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "race",
+    "kind": "channel",
+    "from": {
+     "anchor": "head"
+    },
+    "via": [
+     {
+      "part": "mill1",
+      "port": "s"
+     }
+    ],
+    "to": {
+     "anchor": "tail"
+    }
+   }
+  ]
+ }
+}

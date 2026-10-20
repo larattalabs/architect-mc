@@ -1,0 +1,56 @@
+{
+ "about": "(6c HY-b, \u00a78.1, \u00a714) a level canal from the claim's north edge to its south edge (it seals the claim, as a closed moat does): the road from the west to the east street end crosses it on T3's bridge fallback at clearance 1 (here, not in valid/: the road answers adjusted, as h/v45b)",
+ "on": "flat",
+ "anchors": {
+  "n": [
+   1150,
+   64,
+   2004
+  ],
+  "s": [
+   1150,
+   64,
+   2155
+  ]
+ },
+ "volume": {},
+ "covers": [
+  "connector.channel",
+  "channel.course",
+  "connector.road"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_v57b",
+  "connectors": [
+   {
+    "id": "canal",
+    "kind": "channel",
+    "look": "built",
+    "flow": "level",
+    "from": {
+     "anchor": "n"
+    },
+    "to": {
+     "anchor": "s"
+    }
+   },
+   {
+    "id": "road",
+    "kind": "road",
+    "from": {
+     "anchor": "street_w"
+    },
+    "to": {
+     "anchor": "street_e"
+    }
+   }
+  ]
+ },
+ "expect": {
+  "part": "road",
+  "class": "adjusted",
+  "crossing": true,
+  "clearance": 1
+ }
+}

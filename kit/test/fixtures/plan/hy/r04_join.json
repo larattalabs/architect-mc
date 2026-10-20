@@ -1,0 +1,73 @@
+{
+ "about": "(\u00a77.4) a brook to a pond on the plain, far from the hill: it reaches the pond with no drop over its rim: refused WATER join, a terminal pool the wouldFit",
+ "terrain": {
+  "W": 240,
+  "D": 160,
+  "x0": 1000,
+  "z0": 2000,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1000,
+    "x1": 1059,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 72
+   },
+   {
+    "x0": 1060,
+    "x1": 1100,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 68
+   }
+  ]
+ },
+ "anchors": {
+  "a": [
+   1020,
+   72,
+   2080
+  ],
+  "pz": [
+   1180,
+   64,
+   2080
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "brook",
+  "class": "refused",
+  "code": "WATER",
+  "kind": "join"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_r04",
+  "forms": [
+   {
+    "id": "pond",
+    "kind": "pond",
+    "where": {
+     "near": {
+      "anchor": "pz",
+      "within": 2
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "brook",
+    "kind": "channel",
+    "from": {
+     "anchor": "a"
+    },
+    "to": {
+     "part": "pond"
+    }
+   }
+  ]
+ }
+}

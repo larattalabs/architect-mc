@@ -1,0 +1,37 @@
+{
+ "about": "(6c HY-b, \u00a714 natural, N-HY-1: S3's pinned claim as a site only, S3's scenario unchanged) a spring on the slope above the river falling by pools into it (a fall join). No weir head stands on S3: its river runs between cliffs (no bank holds a level canal within cut 6), the northern pond freezes and the north-western one flows in game (WATER flowing, \u00a71.6, as built); the weir head is item 9's v52",
+ "on": "s3",
+ "anchors": {
+  "spring": [
+   3665,
+   75,
+   -882
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "brook",
+  "class": "fits"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_n01",
+  "connectors": [
+   {
+    "id": "brook",
+    "kind": "channel",
+    "from": {
+     "anchor": "spring"
+    },
+    "to": {
+     "feature": {
+      "water": {
+       "pick": "nearest",
+       "to": "spring"
+      }
+     }
+    }
+   }
+  ]
+ }
+}

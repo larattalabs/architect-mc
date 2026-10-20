@@ -1,0 +1,131 @@
+{
+ "about": "(6c HY-b, \u00a77.4, \u00a714) v45b's walled village in its moat and its road bridged over the moat, with a stream from the hill to the north falling over the moat's rim (a moat fed by a course) (here, not in valid/: the road answers adjusted, as h/v45b)",
+ "terrain": {
+  "W": 240,
+  "D": 160,
+  "x0": 1000,
+  "z0": 2000,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1000,
+    "x1": 1239,
+    "z0": 2000,
+    "z1": 2041,
+    "y": 68
+   }
+  ]
+ },
+ "anchors": {
+  "spring": [
+   1120,
+   68,
+   2008
+  ]
+ },
+ "volume": {},
+ "covers": [
+  "connector.channel",
+  "channel.course",
+  "channel.moat"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_v57",
+  "zones": [
+   {
+    "id": "town",
+    "program": {
+     "template": "flat_village",
+     "params": {
+      "lots": [
+       {
+        "id": "h1",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "h2",
+        "type": "cottage",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "h3",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       }
+      ]
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "town_wall",
+    "kind": "wall",
+    "where": {
+     "around": {
+      "feature": {
+       "part": "town"
+      },
+      "ring": [
+       4,
+       8
+      ]
+     }
+    },
+    "height": 6
+   },
+   {
+    "id": "moat",
+    "kind": "channel",
+    "where": {
+     "around": {
+      "feature": {
+       "part": "town"
+      },
+      "ring": [
+       6,
+       16
+      ]
+     }
+    }
+   },
+   {
+    "id": "brook",
+    "kind": "channel",
+    "from": {
+     "anchor": "spring"
+    },
+    "to": {
+     "part": "moat"
+    }
+   },
+   {
+    "id": "in",
+    "kind": "road",
+    "from": {
+     "anchor": "claim_e"
+    },
+    "to": {
+     "part": "town"
+    }
+   }
+  ]
+ },
+ "expect": {
+  "part": "in",
+  "class": "adjusted",
+  "crossing": true,
+  "clearance": 1
+ }
+}

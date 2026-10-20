@@ -151,7 +151,10 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
   const inBox = (x, z) => boxes.some((b) => x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ);
   const kept = (x, z) => keepOut.some((k) => x >= k[0] && x <= k[2] && z >= k[1] && z <= k[3]);
   const entrances = new Set(ir.lots.map((l) => { const e = r.meta.lots[l.id]?.entrance; return e ? `${e[0]},${e[2]}` : ''; }));
-  const colOk = (x, z) => vw.inClaim(x, z) && !inBox(x, z) && !lanes.has(`${x},${z}`) && !reserved.has(`${x},${z}`) && !kept(x, z) && !entrances.has(`${x},${z}`);
+  // ((6c HY) a course's flowing water (its lips, falls and riffles: spill the plan never writes, so the draft holds air there) is no
+  // place for a lamp; only a course's or ditch's bodies, so every other plan's lamps stand as before)
+  const spillCols = new Set((r._fluidBodies ?? []).filter((b) => b.kind === 'course' || b.kind === 'ditch').flatMap((b) => b.spill.map((c) => `${c[0]},${c[2]}`)));
+  const colOk = (x, z) => vw.inClaim(x, z) && !inBox(x, z) && !lanes.has(`${x},${z}`) && !reserved.has(`${x},${z}`) && !kept(x, z) && !entrances.has(`${x},${z}`) && !spillCols.has(`${x},${z}`);
   const standY = (x, z, h) => {
     const [lo, hi] = vw.colRange(x, z);
     // the column's top floor: supported (solid, not a fluid), not a walk cell, with air for the fixture above it

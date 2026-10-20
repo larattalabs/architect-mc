@@ -271,6 +271,8 @@ export const FLUID_SLOTS = Object.freeze(['bed', 'rim', 'coping', 'spout', 'quay
 export const FLUID_DEFAULTS = Object.freeze({
   bed: ['subsurface', 'foundation'], rim: ['surface'], coping: ['trim', 'structure'], spout: ['structure'], quay: ['path', 'structure'], mooring: ['frame'],
 });
+/** (6c HY, §11) A course's roles: its lining and its weir (role names), its grate (a fixed block: iron bars; the name is noted only). */
+export const HY_SLOTS = Object.freeze(['lining', 'weir', 'grate']);
 /** The slots that line a body: their block must stop fluid and never fall (§2.2). */
 const SHELL_SLOTS = new Set(['bed', 'rim', 'coping', 'spout']);
 
@@ -279,7 +281,8 @@ export function fluidsError(f, roles = null) {
   if (f === undefined) return null;
   if (!f || typeof f !== 'object' || Array.isArray(f)) return `fluids must be an object { ${FLUID_SLOTS.join('?, ')}? }`;
   for (const [k, v] of Object.entries(f)) {
-    if (!FLUID_SLOTS.includes(k)) return `fluids: unknown slot '${k}' (one of ${FLUID_SLOTS.join(', ')})`;
+    // ((6c HY, §11) a course's lining, weir and grate: read by course.mjs, H's slots unchanged)
+    if (!FLUID_SLOTS.includes(k) && !HY_SLOTS.includes(k)) return `fluids: unknown slot '${k}' (one of ${[...FLUID_SLOTS, ...HY_SLOTS].join(', ')})`;
     if (typeof v !== 'string' || !/^[a-z][a-z0-9_]{0,31}$/.test(v)) return `fluids.${k} must be a role name`;
     if (roles && !roles[v]) return `fluids.${k}: '${v}' is not a role of this bible`;
   }

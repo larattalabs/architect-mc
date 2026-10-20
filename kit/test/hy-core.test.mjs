@@ -61,19 +61,16 @@ test('R24: a channel\'s path forms (moat, course, race with a lot in via, ditch)
   assert.match(two.reason.message, /R24/);
 });
 
-test('the stubs: a course, race or ditch answers refused UNREACHABLE until HYb, never throws; h/r08 too; r.course lays nothing', async () => {
+test('(HY-b) the generators: a from/to channel is a course that fits; h/r08 is valid/v51_canal; r.course never throws', async () => {
   const sv = flatSurvey();
   const o = { survey: sv.bytes, claim: sv.claim, anchors: stewardAnchors(sv.claim) };
   const plan = { schemaVersion: 'plan/0', zones: [], forms: [], rules: [], connectors: [{ id: 'canal', kind: 'channel', from: { anchor: 'street_w' }, to: { anchor: 'street_e' } }] };
   const r = await checkPlanLocal(plan, o);
-  const a = r.check.parts[0];
-  assert.deepEqual([a.class, a.reasons[0].code, a.reasons[0].until], ['refused', 'UNREACHABLE', 'HYb']);
-  assert.ok(Object.keys(a.reasons[0].evidence).length);
-  const r08 = JSON.parse(fs.readFileSync(path.join(FIX, 'h', 'r08_course.json'), 'utf8'));
-  assert.deepEqual([r08.expect.class, r08.expect.code, r08.expect.until], ['refused', 'UNREACHABLE', 'HYb']);
+  assert.equal(r.check.parts[0].class, 'fits', JSON.stringify(r.check.parts[0].reasons));
+  assert.ok(!fs.existsSync(path.join(FIX, 'h', 'r08_course.json')) && fs.existsSync(path.join(FIX, 'valid', 'v51_canal.json')));
   const { course } = await import('../lib/fluids/course.mjs');
-  const rec = course({}, [[0, 0], [5, 0]], { id: 'c' });
-  assert.deepEqual([rec.bodies, rec.refused.until], [[], 'HYb']);
+  const rec = course({}, [[0, 0]], { id: 'c' });
+  assert.deepEqual([rec.bodies, rec.refused?.code], [[], 'UNREACHABLE']);
 });
 
 test('the fluid op\'s course members: requires courses only with one; joins split; reachId; the write order', () => {
@@ -99,7 +96,7 @@ test('the fluid op\'s course members: requires courses only with one; joins spli
 test('the overflow hook: registered on a part that accepts it, read by its generator, dropped with the course; the emit order', () => {
   const parts = [{ id: 'pond', family: 'form', kind: 'pond', part: {} }, { id: 'stream', family: 'connector', kind: 'channel', part: { from: { part: 'pond' }, to: { anchor: 'a' } } }, { id: 'tower', family: 'form', kind: 'tower', part: {} }];
   const C = { plan: { zones: [] }, byId: new Map(parts.map((p) => [p.id, p])), overflows: [] };
-  assert.equal(registerOverflow(C, { from: 'pond', course: 'stream', cells: [[0, 1, 0]], lining: [], into: { body: 'stream_r1', cells: [[0, 0, 2]] } }), false, 'H-a\'s pond does not accept an overflow until HY-b says so');
+  assert.equal(registerOverflow(C, { from: 'pond', course: 'stream', cells: [[0, 1, 0]], lining: [], into: { body: 'stream_r1', cells: [[0, 0, 2]] } }), true, '(HY-b) a pond accepts an overflow');
   assert.equal(registerOverflow(C, { from: 'stream', course: 'other', cells: [], into: { body: 'other_r1', cells: [] } }), true, 'a course accepts one (a branch)');
   assert.equal(registerOverflow(C, { from: 'tower', course: 'stream', into: { body: 'stream_r1' } }), false, 'no H part: a dry end');
   assert.deepEqual(overflowsOn(C, 'stream').map((o) => o.course), ['other']);
@@ -107,7 +104,7 @@ test('the overflow hook: registered on a part that accepts it, read by its gener
   assert.deepEqual(order.map((p) => p.id), ['other', 'stream'], 'the feeder emits after the course it feeds');
   assert.deepEqual(emitOrder(parts, []), parts, 'no overflow: plan order');
   assert.equal(dropOverflows(C.overflows, 'other'), 1);
-  assert.equal(C.overflows.length, 0);
+  assert.equal(C.overflows.length, 1, '(HY-b) the pond\'s overflow to the stream stays');
   const K = {};
   registerCrossing(K, { course: 'stream', body: 'stream_r2', wall: 'w', cells: [[1, 2]], level: 64, lintel: 65, grate: [[1, 64, 2]] });
   assert.equal(crossingsOf(K).length, 1);

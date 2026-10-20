@@ -1,0 +1,17 @@
+{
+ "about": "(6c HY-b, §14 item 9) a Steward-shaped plan, written as Steward's plan writer would (S-HY-2: a race and ditches only when the card asks): a farm hamlet whose mill lot is served by a mill race from the hill and whose wheat field has an irrigation ditch along it",
+ "terrain": {"W": 240, "D": 160, "x0": 1000, "z0": 2000, "y": 64, "bands": [{"x0": 1000, "x1": 1059, "z0": 2000, "z1": 2159, "y": 72}, {"x0": 1060, "x1": 1100, "z0": 2000, "z1": 2159, "y": 68}]},
+ "anchors": {"millpond": [1020, 72, 2050], "tailrace": [1225, 64, 2050], "hamlet_at": [1150, 64, 2090]},
+ "volume": {},
+ "expect": {"part": "mill_race", "class": "fits"},
+ "plan": {"schemaVersion": "plan/0", "planId": "steward_millfarm", "zones": [{"id": "hamlet", "kind": "standard", "required": true, "label": "Mill Farm", "purpose": "farming",
+   "where": {"near": {"anchor": "hamlet_at", "within": 8}},
+   "program": {"template": "flat_village", "params": {"lots": [
+    {"id": "mill_1", "type": "shop", "role": "water_mill", "label": "water mill", "size": [9, 9], "brief": "A mill house by the race; its wheel faces the water."},
+    {"id": "farm_1", "type": "farm", "role": "wheat_field", "label": "wheat field", "size": [13, 9], "brief": "Wheat rows beside the ditch."},
+    {"id": "cottage_1", "type": "cottage", "role": "farmhouse", "label": "farmhouse", "size": [9, 9], "brief": "The miller's home."}]}}}],
+  "connectors": [
+   {"id": "mill_race", "kind": "channel", "label": "mill race", "notes": "the race that turns the mill's wheel", "from": {"anchor": "millpond"}, "via": [{"part": "mill_1"}], "to": {"anchor": "tailrace"}},
+   {"id": "field_ditch", "kind": "channel", "label": "irrigation ditch", "where": {"along": {"feature": {"part": "farm_1"}}}}
+  ]}
+}

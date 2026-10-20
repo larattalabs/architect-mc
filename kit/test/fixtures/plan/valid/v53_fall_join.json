@@ -1,0 +1,50 @@
+{
+ "about": "(6c HY-b, \u00a71.6, \u00a714) a brook from a spring falling into a lake (a fall join into natural sources at least 2 deep). The asks lake is flush with its banks (a fall needs a drop), so the lake here lies 4 under its banks, as a real lake does",
+ "terrain": {
+  "W": 240,
+  "D": 160,
+  "x0": 1000,
+  "z0": 2000,
+  "y": 66,
+  "bands": [
+   {
+    "x0": 1150,
+    "x1": 1239,
+    "z0": 2040,
+    "z1": 2120,
+    "y": 58,
+    "water": 4
+   }
+  ]
+ },
+ "anchors": {
+  "spring": [
+   1030,
+   66,
+   2080
+  ]
+ },
+ "volume": {},
+ "covers": [
+  "connector.channel",
+  "channel.course"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "hyb_v53",
+  "connectors": [
+   {
+    "id": "brook",
+    "kind": "channel",
+    "from": {
+     "anchor": "spring"
+    },
+    "to": {
+     "feature": {
+      "water": {}
+     }
+    }
+   }
+  ]
+ }
+}
