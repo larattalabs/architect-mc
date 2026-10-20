@@ -19499,11 +19499,11 @@ The verifier reviews the diff and **re-runs items 7, 8, 10 and 12**. **Steward's
 - **N-D3-1:** today's 3-wide join look inside the town.
 - **N-D3-2:** the join's lamps skip spots within 6 of a town lamp.
 
-## Batch 6d: region evolution. Summary for one Steward review round (DRAFT, 2026-10-20)
+## Batch 6d: region evolution, growth first. Summary for one Steward review round (DRAFT v3, 2026-10-20)
 
-Phase 6d is **region evolution**: changing a region after it stands, exactly and undoably, without re-laying what already
-stands. It replaces the old outline "Phase 6d (outline, recommended to wait)" (marked superseded where it stands), and it takes
-every note that deferred to 6d:
+Phase 6d is **region evolution**: growing and changing a region after it stands, exactly and undoably, without re-laying what stands.
+It replaces the old outline "Phase 6d (outline, recommended to wait)" (marked superseded where it stands), and takes every note that
+deferred to 6d:
 - the outline's region deltas by part (A5B N7);
 - D3 §11's D-S2 (lots added to a standing district, `growDistrict`, `architect_mc:land.v` 2);
 - V's "additions to a realised village" and "per-lot deltas inside a region";
@@ -19512,70 +19512,51 @@ every note that deferred to 6d:
 - PT's S-PT-1 (to 6d "with replanning on land change") and SETTLEMENTS §14;
 - the C12 joint 7a/6d gate's `Regions.adopt`.
 
+**Noah's decision (2026-10-20, option A, after GPT-6.1's second pass):** 6d ships **growth** first: RV is additive only (v3), with GR on it.
+Removing and changing standing parts is recorded in "6d later: full revisions (RV2)" at the end, not a slice yet.
+
 Written over main f3f41d43 (v0.40.0: API 1.37.0, mod 0.40.0, kit 0.38.0, catalogue 9), with FL, F3, S3, RS and D3 assumed to land as
-frozen (their placeholders: API 1.38.0-1.42.0, mod up to 0.45.0, kit up to 0.43.0, catalogue 11). Nothing here is built or run. Code
-facts are read from the code at f3f41d43 and marked "from code"; every number marked "predicted" is the builder's to measure.
+frozen (placeholders up to API 1.42.0, mod 0.45.0, kit 0.43.0, catalogue 11), and RP (realised provenance, `feat/realised-provenance`)
+before RV. Nothing here is built or run; code facts are marked "from code"; numbers marked "predicted" are the builder's to measure.
 
-**Order against 7a.** SETTLEMENTS ("Agreed with Steward, 2026-10-09") put 6d right after 7a, as 7a's follow-on slices. This batch
-is drafted alongside 7a (a sibling drafts 7a on `docs/7a`). 6d needs nothing from 7a except in AD (§AD 0), and 7a's link pass reads
-the effective IR that RV defines (§RV 4). The coordinator decides which lands first; the slices below assume either order.
+**The order (coordinator, 2026-10-20), replacing SETTLEMENTS' "6d right after 7a":**
+1. the 6c close-out;
+2. D3, and 7a-1 (on `docs/7a`);
+3. **6d growth: RV v3, then GR** (one batch, one RC);
+4. 7a-2 and 7a-3;
+5. **FS, LC and AD** (AD's joint row needs 7a's link pass, which has landed by then).
 
-| Slice | What | API / versions (placeholders after D3's 1.42.0; the coordinator renumbers) | Steward check | Size |
+| Slice | What | API / versions (placeholders after D3's 1.42.0; 7a-1 may take one first; the coordinator renumbers) | Steward check | Size |
 |---|---|---|---|---|
-| **RV** | Region revisions, the core: a revision IR (the standing IR plus added, changed and removed parts), the realised record per tile, the composed-intent patch with befores captured at the write, the head with its durable order and recovery, LIFO `undoRevision` with a whole-suffix preflight, revision-scoped fluids, additive-only survival, the effective IR every consumer reads, and the plan/0 path (`revision.parentArtifact`, per-part answers, the revision artifact, `realiseApproved`) | API **1.43.0**, mod **0.46.0**, kit **0.44.0**, catalogue **12** | **RC check before release** (GATES policy 4: it changes what a region's removal undoes, which Steward's give-up and history read); the verifier re-runs the undo, removal, crash, survival and fluid items | 9-10.5 days of work, 5-5.5 elapsed in four lanes (RV-a kit; RV-b mod foundation; RV-c undo and fluids; RV-d readers, paths and survival), the interface frozen at the end of RV-b's day 2 |
-| **GR** | Growing a standing region (D-S2): new lots on free frontage of the standing streets, then a street extended from an extendable end, for V towns, plain districts, outposts and along districts; `growDistrict`; `architect_mc:land` v 2 | API **1.44.0**, mod **0.47.0**, kit **0.45.0**, catalogue **13** | **RC** (with RV's, one RC if they ship together): Steward's district growth and undo of each building | 4.5-5.5 days of work, 3 elapsed (GR-a streets, GR-b along districts) |
-| **FS** | Updates follow the source: `Library.followers`, `Designs.follow` / `followAll` re-apply each COPY's recipe to the source's new version ($0), then the existing `outdated` and `applyDelta` per lot | API **1.45.0**, mod **0.48.0**, kit unchanged, catalogue unchanged | none before release (existing delta paths; GATES policy 4); Steward checks after | 2-2.5 days, one builder |
-| **LC** | Land change, the report: `Regions.landCheck` (what changed in a standing region, by part and lot; only PT-recorded placements attributed). The stage re-plan is deferred | API **1.46.0**, mod **0.49.0**, kit unchanged, catalogue unchanged | none before release (read-only); Steward checks after | 1.5-2 days, one builder |
-| **AD** | Adopting a VillageLayout settlement as a region, the 6d half of the C12 joint 7a/6d gate: `Regions.adopt` writes no cell; then a GR growth, a lot delta and one exact `Regions.remove` | API **1.47.0**, mod **0.50.0**, kit **0.46.0**, catalogue unchanged | **RC** (it moves Steward's standing sites into a region; Steward's migration and its fallback) | 3.5-4 days, one builder, after GR (and after 7a's link pass if the joint gate runs as one) |
+| **RV v3** | Additive revisions: new parts, lots, refills, street extensions and bodies as new stages evaluated alone and layered over the region; same-tick check and write; stage/set and history hashes over RP's realised record; the head, the operation manifest and idempotent recovery; LIFO `undoRevision` (whole-suffix preflight, then a committed operation); added bodies' drain; additive survival; the effective IR; the plan/0 path | API **1.43.0**, mod **0.46.0**, kit **0.44.0**, catalogue **12** | **RC** (removal and accounting; GATES policy 4); the verifier re-runs undo, removal, crash, survival and fluid items | 7.5-8.5 days of work, 4.5 elapsed in four lanes (RV-a kit 2; RV-b mod foundation 2.5-3; RV-c undo and fluids 1.5-2; RV-d readers and paths 1.5), the interface frozen at the end of RV-b's day 2 |
+| **GR** | Growing a standing region (D-S2): new lots on free frontage, then a street extended from a free end, for V towns, plain districts, outposts and along districts; `growDistrict`; `land` v 2 | API **1.44.0**, mod **0.47.0**, kit **0.45.0**, catalogue **13** | **RC**, shared with RV's (one batch) | 4.5-5.5 days of work, 3 elapsed (GR-a streets, GR-b along districts) |
+| **FS** | Updates follow the source: `followers`, `follow`, a frozen, persisted `followAll` with CAS installs ($0), then the existing `outdated` and `applyDelta` | API **1.45.0**, mod **0.48.0**, kit and catalogue unchanged | none before release; Steward checks after | 2-2.5 days, one builder |
+| **LC** | Land change, the report: `Regions.landCheck` (only PT-recorded placements attributed); the stage re-plan deferred | API **1.46.0**, mod **0.49.0**, kit and catalogue unchanged | none (read-only) | 1.5-2 days, one builder |
+| **AD** | Adopting a VillageLayout settlement (the 6d half of C12): no cell written; `Meta.group`, head record copies, `architect-sites.json` and the region record moved by an intent file; safe un-adopt | API **1.47.0**, mod **0.50.0**, kit **0.46.0**, catalogue unchanged | **RC** | 4-4.5 days, one builder |
 
-**Not drafted as slices, recommended deferred** (each with an S-question):
-- **The pad delta under standing lots** (5b D7, the outline's third bullet). RV refuses `COVERED` and names the lots; the caller removes the
-  lot, revises, and places it again (§RV 5.3). Writing under a cover rewrites a BOX entry's `before` and needs its own invariant work,
-  and no Steward flow needs it today (S-RV-5).
-- **Sites-level deltas for 4e roads and cell sites** (phase 6 "Deferred to phase 6"). No consumer uses standalone roads or cell sites
-  for evolution; region roads are added by revisions (RV, GR). Changing or removing a standing road is refused in 6d (S-RV-6).
+**Not drafted as slices, recommended deferred:** RV2 (full revisions, the design record at the end); the pad delta under standing lots
+(5b D7; S-RV-5); Sites-level deltas for 4e roads and cell sites (no consumer; standing roads are never changed in 6d).
 
-**Build order and parallelism** (at most 3 gate runs on the machine at once, GATES policy 6):
-1. **Day 0: RV-a, RV-b and FS start together.** FS shares no module with RV (sidecar `variants.ts`, `versions.ts`, `Library`/`Designs`
-   in Java). **RV's interface is frozen only at the end of RV-b's day 2** (§RV 13: the realised record, the patch record, the head
-   record and the busy state carry the invariants, so they settle first); RV-c and RV-d start on it.
-2. **GR-a starts on RV's frozen interface** (day 2-3). It is pure kit until its in-game items, so it takes no gate slot until RV
-   has merged into its branch. GR-b (along districts) follows GR-a's street-extension interface.
-3. **Gate slots:** RV's slice tier and FS's slice tier first; GR's after RV merges. LC and AD later (one slot each).
-4. **Releases:**
-   - **Batch 6d-1: RV + GR (+ FS if ready), one release tier, one tag, one RC** (S-RV-10). RV can release alone with its own RC if
-     GR runs late: RV alone already answers plan/0 revisions that add or remove parts.
-   - **FS** may release with batch 6d-1 or alone (no RC).
-   - **Batch 6d-2: LC and AD**, after 6d-1. AD's RC is its own; LC needs none.
-   - **Gate slots with RV's four lanes:** RV-b and FS take the first two; RV-c and RV-d share the third once RV-b's in-game items are
-     green (they run items on RV-b's branch merged into theirs); GR waits for RV's merge.
-5. **Versions:** each slice takes one minor in the table's order. If the coordinator batches, the batch takes the last slice's
-   numbers (house rule: the second of two slices claiming a number takes the next).
+**Build order and parallelism** (at most 3 gate runs at once, GATES policy 6):
+1. **6d growth:** RV-a and RV-b start together (RP merged first). RV's interface freezes at the end of RV-b's day 2; RV-c and RV-d start on
+   it. GR-a starts on the same interface (pure kit until its in-game items). Slots: RV-b first, then RV-c and RV-d sharing one, GR after
+   RV merges. **One batch, one release, one Steward RC** (S-RV-10, S-GR-7).
+2. **Later batch:** FS (independent; can start any time, its own slot), LC (after RV), AD (after GR and 7a's link pass).
 
-**Rules for every 6d slice** (from the batches before):
-- **Never edit `kit/regions/plan_v0.mjs`** (its source sha is every IR's `programSha`). New behaviour goes in new modules
-  (`kit/lib/region/revise.mjs`, `kit/lib/region/grow.mjs`) called from `compile.mjs` and the programs' entry points.
-- **Byte identity first:** a region that is never revised, a plan with no `revision.parentArtifact`, and every program run without
-  `params.grow` give today's IR, tiles and answers for their recorded kitVersion (D2's kitVersion-only golden rule). Steward sets no
-  `revision` member today: a search of steward-mc (main 6d54540) finds `parentArtifact` only in its copy of the schema
-  (`schema/plan-0.json`), and no fixture or prompt writes `"revision"`. So the 59 asks' answers don't move.
-- **Every new path goes through `Regions.checkPlan` then `realiseApproved` in game, including one Steward-shaped plan per slice**,
-  and through `Regions.planRevision` then `Regions.realise` on Steward-shaped requests (the D3 rule).
-- **Exactness** is judged on flat worlds (E-flat, hash). The natural round reads frozen inputs and classes E-normal by kind at
-  unwritten cells away from the plan, with D2's narrowed classes, F2's `distant` and VOC's `farfluid` exactly, never widened.
-- **KC binds every new writer:** a body's cells are its own; the later writer keeps clear (S-KC-1), watch cells strict (S-KC-2).
-  A revision is always the later writer.
-- **D3 binds every revision of a town or a district:** the held set, the footprint, the bodies, the `reach` cells and the hold
-  columns of every beside region are hard to a revision (§RV 5.2); a PARTIAL town is a valid town (D3's Steward finding).
-- **Fixture numbers:** the plan fixtures are named `v8x_6d_*` here; the coordinator numbers them after D3's.
-- **Kit bump:** re-cut the kitVersion-carrying goldens by `kit/tools/region.mjs plan` over their committed inputs, as KC did.
+**Rules for every 6d slice:** never edit `kit/regions/plan_v0.mjs`; byte identity first (Steward sets no plan `revision`: steward-mc
+6d54540 has `parentArtifact` only in its schema copy, so the 59 asks don't move); every new path through `checkPlan` then `realiseApproved`
+in game with a Steward-shaped plan, and through `planRevision` then `realise`; exactness on flat worlds; the natural round with D2's
+narrowed classes and VOC's `farfluid` exactly; KC binds every new writer (a revision is the later writer); D3 binds every revision of a town
+or district; fixtures `v8x_6d_*`, numbered by the coordinator; re-cut kitVersion goldens on a kit bump.
 
-**Totals:** about 20-24 days of work; about 11-12 elapsed with RV's two lanes and FS in parallel, then GR, then LC and AD, plus
-Steward's RC rounds.
+**Totals:** 6d growth (RV v3 + GR) about 12-14 days of work, about 7 elapsed, plus Steward's RC. The later batch (FS, LC, AD) about 7.5-9
+days of work, about 4.5 elapsed with FS in parallel.
 
 ### Review responses (GPT-6.1, read-only review of this draft, 2026-10-20; verdict "keep the architecture, revise RV")
 
 Each finding was checked against the code before it was taken. Where the code disagrees, the response says so.
+These rows answer the first pass with RV v2; RV v3 (additive) supersedes v2's composed-intent patch, kept-intent check and `removed`
+class, and the second-pass table below says what v3 does instead. Rows 3, 4, 7, 9 and 10 carry into v3 unchanged in substance.
 
 | # | Finding | Checked against | Response |
 |---|---|---|---|
@@ -19586,15 +19567,28 @@ Each finding was checked against the code before it was taken. Where the code di
 | 5 | Survival accounting and target transitions | RS's frozen text (requests start at `PLACED`; "built" is `done`) | **Taken, as the review's first version.** RV §8: additive revisions only; a patch over a paid or unbuilt target is refused; undo cancels the revision's unbuilt targets first, then refunds once per key |
 | 6 | Revision-scoped fluid lifecycle | `Groups.java` :587 (the drain gate runs only when `r.stage == null`) | **Taken.** RV §7: added bodies only; changing or removing a standing body refused; the suffix drain before the undo, saved per body, resumable |
 | 7 | D3 side joins onto grown roads | D3 §3.5 (`to: <town>:<roadId>`) | **Taken.** RV §6.4 tracks nodes, roads, ports and reach or hold columns; GR item 7b gates a side join onto an extension road |
-| 8 | AD must migrate journal-group ownership | `Journal.java` :176 (`Entry(id, kind, site, ...)`: entries name a site, not a group), `SiteGroupRec.java` :55 | **Partly.** Journal entries carry no group, so nothing in the journal moves. Membership and the groups' stage lists do, with the region record: AD §2.3 now gives a three-file order with an intent file, roll-forward or roll-back recovery, and a crash row (6b) |
+| 8 | AD must migrate journal-group ownership | `JournalStore.java` :89 (`Meta.group`), `Sites.java` :2587 (reconcile from head meta), :3022 (one save) | **Taken (the first response was wrong:** it read the pure `Journal.Entry`, not the persisted `JournalStore.Meta`, which carries `group`). AD §2.3 v2 moves `Meta.group` and the head record copies by a metadata-only `regroup`, saves sites, infra and groups in the one `architect-sites.json`, and recovers forward or back from an intent file |
 | 9 | `rid` vs position; limits | `plan.mjs` :31, :421 (64 stages), `SiteJournal.java` :57 (depth 8) | **Taken.** RV §2.1 separates a monotonic `rid` from `position`; §12 states the depth, revision and stage limits as product limits; added parts reuse stage names so most revisions add no IR stage |
 | 10 | Removed-lot refill identity and rollback; `Sites.place` outside the group | RV v1 §4.4 | **Taken.** RV §4.6: `lots.refill` re-activates the lot id, saves its previous state, joins the new site to the region's group; undo restores `removed`; a hand placement is named as not a refill |
 | 11 | LC attribution; FS followAll replay | `Placed.java` :296 (a record clears when a cell becomes air: removals carry no actor) | **Taken.** LC v2 attributes only PT-recorded placements, reports removals unattributed, and ships the report alone (the replan deferred, S-LC-4). FS §3: `followAll` freezes its source version and follower set in a saved operation, installs by CAS, and treats already-followed as a no-op |
 | gates | an independent oracle; partial terrain; unfinished survival; side joins; fluid undo; competing plans; exact depth; the survival road fixture | — | **Taken.** RV §14: the twin-world oracle; `rv_partial_tile`, `rv_legacy`; items 9 (exact depth), 11 (heads), 13 (side joins), 15 (survival over a paid lamp, not a road, since RV never changes roads), 19 (fluids); GR item 7b |
 | freeze | Don't freeze RV's interface on day 1; resize | — | **Taken.** RV §13: four lanes, the interface frozen at the end of RV-b's day 2, 9-10.5 days of work |
 
-**The questions, in one place:** S-RV-1..12, S-GR-1..7, S-FS-1..4, S-LC-1..4, S-AD-1..4 (Steward); N-GR-1, N-GR-2, N-FS-1,
-N-LC-1 (Noah, taste or product, each with a default). They are listed at the end of each slice.
+### Review responses, second pass (GPT-6.1, at d973792a; Noah's option A)
+
+| # | Finding | Response |
+|---|---|---|
+| B1 | Realised codes don't take part in composition (skipped winners hide removed writers; extras never enter the patch) | **Removed by scope:** v3 never removes or changes a standing writer, so an added stage is evaluated alone and layered (RV §3.1); RV §3.5 lists what remains (an added part over skipped, written or extra cells) with the answer for each; fixture `rv_layers` exercises it. Recorded as RV2 problems 4 and 5 |
+| B2 | Per-stage/set hashes compared with a composed intent | **Taken:** RV §3.4 defines `tileSha(stage, set, key)` (compared only with the same stage, set and key) and `historySha(key)` over the region's entries at a tile in layer order (compared only with itself, at accept); no composed intent hash in v3 |
+| B3 | No recovery across publication and queue creation, nor between removal and the finish | **Taken:** RV §4.3 writes an operation manifest before accept, publishes `effective.json` then `region.json`, and installs items by key idempotently; §4.4's undo manifest has phases and finishes idempotently when every site is already undone |
+| S4 | Undo preflight vs `Groups` refusals after a drain; same-operation resume; conditional source restore | **Taken:** preflight runs `Groups`' own player and placing checks dry; removal uses `Covered.KEEP` (no cover refusal); after the commit point the operation is never abandoned, a same-target call resumes it; sources return only where containment is intact (RV §4.4, §7) |
+| S5 | AD's journal-header claim false; one shared sites file; infra membership; safe un-adopt | **Taken** (row 8 above corrected): AD §2.3-§3 v2 |
+| S6 | The oracle could pass an omitted patch | **Taken:** RV §14's oracle enumerates expected transitions itself (the checker's virtual world over a snapshot, the journal dump, C31's felling) and compares the whole claim plus 8 |
+| S7 | No write-time revalidation in the write loop | **Confirmed** (`InfraJob.java` :395-420 writes without re-checking) **and taken:** revision tiles check and write each section in the same tick (RV §3.3); gate item 20 races a site and a player block |
+| nit | "RV's two lanes" in the totals | fixed (this summary) |
+
+**The questions, in one place:** S-RV-1..3, 5..13, S-GR-1..7, S-FS-1..4, S-LC-1..4, S-AD-1..4 (Steward); N-GR-1, N-GR-2, N-FS-1, N-LC-1
+(Noah, taste or product, each with a default). They are listed at the end of each slice.
 
 ## Phase 6d slice RV: region revisions, additive v1 (DRAFT v3 for Steward review, narrowed by Noah after GPT-6.1's second pass)
 
