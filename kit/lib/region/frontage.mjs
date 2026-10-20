@@ -449,6 +449,45 @@ export function spokes(F, h, max = 4) {
 
 // ------------------------------------------------------------------ emission
 
+/**
+ * A street piece of `n` centre cells cut where its lanterns would stand beside a guarded cell (an entrance's or a spoke's street cell):
+ * RoadPlan's lanterns (the default: the first 6 out, then every 12; a bible's fixture: its own `first` and `every`), each either placed
+ * (the spacing restarts) or not (the next half a spacing on), give every index a lantern may take; a piece whose first may meet a guard
+ * (within 1) ends 2 to 4 cells before it and the next one starts there. Returns `[[from, to]]` (inclusive, consecutive pieces share their
+ * end cell).
+ */
+export function lanternPieces(n, guarded, lamp = null) {
+  const every = lamp ? lamp.every : 12, first = lamp ? lamp.first : 6;
+  const possible = (s, upto) => {
+    // the indices (from s, up to `upto`) a lantern may take, over every placed / not placed outcome
+    let states = new Set([every - first]);
+    const out = [];
+    for (let i = s + 1; i < Math.min(upto, s + n); i++) {
+      const next = new Set();
+      let hit = false;
+      for (const v of states) { const w = v + 1; if (w + 1e-9 >= every) { hit = true; next.add(0); next.add(every / 2); } else next.add(w); }
+      if (hit) out.push(i);
+      states = next;
+    }
+    return out;
+  };
+  const conflict = (i) => guarded(i - 1) || guarded(i) || guarded(i + 1);
+  const out = [];
+  let s = 0;
+  for (let guard = 0; guard < n && s < n - 1; guard++) {
+    const c = possible(s, n - 1).find(conflict);
+    if (c === undefined) { out.push([s, n - 1]); return out; }
+    // the next piece starts so that its first possible lantern lies past the guard (and the piece left is at least 3 cells)
+    let t = Math.max(s + 2, c + 2 - Math.ceil(first));
+    if (t >= c) t = Math.max(s + 2, c - 1);
+    if (t >= n - 1) { out.push([s, n - 1]); return out; }
+    out.push([s, t]);
+    s = t;
+  }
+  if (!out.length || out[out.length - 1][1] !== n - 1) out.push([s, n - 1]);
+  return out;
+}
+
 /** The cardinal a world step faces ([1, 0]: east). */
 const facingOf = (dx, dz) => (dx > 0 ? 'east' : dx < 0 ? 'west' : dz > 0 ? 'south' : 'north');
 
@@ -548,9 +587,19 @@ export function emitFree(r, L, { stages = {}, prefix = '', padEdge = null, maxHe
   for (const st of L.streets) {
     const n = st.cells.length;
     const rid = `${prefix}street_${st.name}`;
-    const pieces = st.closed ? [[rid, 0, n >> 1], [`${rid}_b`, n >> 1, n]] : [[rid, 0, n - 1]];
+    // the street's entrances and spokes (the lots' street cells, the spokes' ends): no lantern stands beside them (a lantern's post
+    // there would close the door's cell: the road item is cut into pieces whose lanterns miss them, RoadPlan's spacing)
+    const guard = new Set();
+    for (const l of lotOut) if (l.street === st.name) guard.add(l.at);
+    for (const sp of L.spokes ?? []) { let bi = -1, bd = Infinity; st.cells.forEach((c, i) => { const d = Math.max(Math.abs(c[0] - sp.to[0]), Math.abs(c[1] - sp.to[1])); if (d < bd) { bd = d; bi = i; } }); if (bd <= 2) guard.add(bi); }
+    const base = st.closed ? [[rid, 0, n >> 1], [`${rid}_b`, n >> 1, n]] : [[rid, 0, n - 1]];
+    const pieces = [];
+    for (const [id, a, b] of base) {
+      const cut = lanternPieces(b - a + 1, (i) => guard.has((a + i) % n), lamp);
+      cut.forEach(([p0, p1], k) => pieces.push([k ? `${id}_p${k + 1}` : id, a + p0, a + p1]));
+    }
     for (const [id, a, b] of pieces) {
-      const cells = st.closed ? [...st.cells.slice(a, b + 1 > n ? n : b + 1), ...(b === n ? [st.cells[0]] : [])] : st.cells.slice(a, b + 1);
+      const cells = st.closed ? Array.from({ length: b - a + 1 }, (_, i) => st.cells[(a + i) % n]) : st.cells.slice(a, b + 1);
       const pts = cornersOf(cells);
       const why = street._groundRoadProblem(pts.map((q) => [q[0], null, q[1]]));
       if (why) throw new Error(`free layout: the street (${id}) can't be a ground road: ${why}`);
