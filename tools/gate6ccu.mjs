@@ -379,7 +379,7 @@ steps.ingame = async () => {
       const post = await cellsOf([x - 2, y - 1, z - 2, x + 12, y + 8, z + 14]);
       const differ = [...pre].filter(([k, s]) => post.get(k) !== s).map(([k, s]) => `${k} ${s} -> ${post.get(k)}`);
       out.item4 = { site, blockEntities: beNow.map((c) => `${c.at.join(',')} ${idOf(c.state)}`), weather: w, waxed: ws.waxed.length, scraped: ws.scraped.length, remove: { removed: rm.removed, blockers: rm.blockers, kept: rm.kept }, differ: differ.slice(0, 12) };
-      check(be.length === 4 && beNow.some((c) => /^oxidized_/.test(idOf(c.state))) && beNow.some((c) => waxed(c.state)), `item 4: the site's ${be.length} copper chests and golem statues now ${json(beNow.map((c) => idOf(c.state)))}`, out.item4.blockEntities);
+      check(be.length === 4 && beNow.some((c) => oxidized(c.state)) && beNow.some((c) => waxed(c.state)) && beNow.some((c, i) => idOf(c.state) !== idOf(be[i]?.state)), `item 4: the site's ${be.length} copper chests and golem statues now ${json(beNow.map((c) => idOf(c.state)))}`, out.item4.blockEntities);
       check(rm.removed && (rm.blockers ?? []).length === 0 && differ.length === 0, `item 4: the site's removal is not blocked by its weathered, waxed or scraped copper block entities (blockers ${json(rm.blockers)}), and its box comes back exactly (${differ.length} cells differ)`, out.item4.remove);
     }
   }
@@ -475,6 +475,8 @@ steps.survival = async () => {
   st = await siteState(site);
   const ps1 = await pstate();
   const sb = box6((await api('sites')).all.find((s) => s.id === site)?.restoreBox ?? '');
+  // the plan's cells (dev.site.cells answers while the site builds: here, waiting on the rod)
+  const targets1 = Object.fromEntries(Object.entries(await call('dev.site.cells', { site })).filter(([k]) => /^-?\d+,-?\d+,-?\d+$/.test(k)));
   const built = await copperCells(await cellsOf(sb));
   const w = await weatherAll(built);
   await settle(10_000); // the builder's rescans
@@ -490,7 +492,6 @@ steps.survival = async () => {
   const charged = minus(ps3.ledger.consumed, L0.consumed);
   out.a.built = { state: st3?.state, charged };
   check(st3?.state === 'built' && same(charged, bill), `item 8a: the ${hold} fed, the site BUILT; charged exactly the bill once (${sum(charged)} items, ${json(minus(charged, bill))} over)`, out.a.built);
-  const targets1 = await call('dev.site.cells', { site });
   /** Every cell refunded a block other than its plan's: {pos, target (the plan's state: the standing state's properties), standing}. */
   const perCell = [];
   const withId = (state, id) => String(state).replace(/^minecraft:[a-z0-9_]+/, `minecraft:${id}`);
@@ -526,11 +527,13 @@ steps.survival = async () => {
     const w2 = await weatherAll(cells);
     const ws = await waxAndScrape(await copperCells(await cellsOf(sb)));
     const now = await cellsOf(sb);
-    const targets = await call('dev.site.cells', { site });
+    const targets = Object.fromEntries(Object.entries(await call('dev.site.cells', { site })).filter(([k]) => /^-?\d+,-?\d+,-?\d+$/.test(k)));
+    // (diagnostics) the plan's cells before the delta that the site no longer queues after it, and what stands there
+    const goneKeys = new Set([[X + 5, y + 1, Z + 5], [X + 6, y + 1, Z + 5], [X + 7, y + 1, Z + 5], [X + 8, y + 2, Z + 3]].map((g) => g.join(',')));
+    out.unqueued = Object.entries(targets1).filter(([k]) => !(k in targets) && !goneKeys.has(k)).map(([k, t]) => ({ pos: k, target: t, standing: now.get(k) ?? null }));
     const standing = [];
     const perCell = [];
     for (const [pos, tid] of Object.entries(targets ?? {})) {
-      if (pos === '__proto__') continue;
       const s = now.get(pos);
       if (!s || /^minecraft:(air|cave_air)/.test(s)) continue;
       standing.push(s);
