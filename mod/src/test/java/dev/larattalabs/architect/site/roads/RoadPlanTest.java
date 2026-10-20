@@ -69,4 +69,36 @@ class RoadPlanTest {
 		RoadPlan.Lamp soul = new RoadPlan.Lamp(new int[] {0, 0}, new int[] {0, 1}, 1, 4, 8);
 		assertTrue(lanterns(RoadPlan.plan(XS, YS, ZS, 3, true, false, world(RoadPlan.DIRT), NONE, null, false, null, soul)) > lanterns(d));
 	}
+
+	/** Flat dirt; the verge rows at y 63 of kind {@code north} (z = -2) and {@code south} (z = +2). */
+	private static RoadPlan.World verges(int north, int south) {
+		return (x, y, z) -> y == 63 && z == -2 ? north : y == 63 && z == 2 ? south : y <= 63 ? RoadPlan.DIRT : RoadPlan.AIR;
+	}
+
+	/**
+	 * fix/lamp-path: a lantern post never stands on a dirt path (a lane's beside the road, ours or not, or a village's). Vanilla turns a
+	 * dirt path under a solid block to dirt on the first shape update that reaches it (the farm hamlet's lane at the entrance), outside
+	 * the journal, and the removal kept the dirt. The post takes the other side of the road; with a path on both, none.
+	 */
+	@Test
+	void noPostOnADirtPath() {
+		RoadPlan.Lamp gibbet = new RoadPlan.Lamp(new int[] {0, 0, 0, 1, 1}, new int[] {0, 1, 2, 2, 1}, 4, 6, 12);
+		RoadPlan.OwnFoot ours = (x, y, z) -> true; // the lane is the road owner's own (a region's): still no post on it
+		for (RoadPlan.Lamp lamp : new RoadPlan.Lamp[] {null, gibbet}) {
+			int both = lanterns(RoadPlan.plan(XS, YS, ZS, 3, true, false, verges(RoadPlan.DIRT, RoadPlan.DIRT), NONE, null, false, ours, lamp));
+			assertTrue(both >= 4, "dirt verges: posts (" + both + ")");
+			for (int[] sides : new int[][] {{RoadPlan.PATH, RoadPlan.DIRT}, {RoadPlan.DIRT, RoadPlan.PATH}}) {
+				RoadPlan.World w = verges(sides[0], sides[1]);
+				RoadPlan.Plan p = RoadPlan.plan(XS, YS, ZS, 3, true, false, w, NONE, null, false, ours, lamp);
+				assertEquals(both, lanterns(p), "a path on one side: every post on the other");
+				for (RoadPlan.Op o : p.ops()) {
+					if (o.block() == RoadPlan.Block.FENCE || o.block() == RoadPlan.Block.LANTERN || o.block() == RoadPlan.Block.LAMP) {
+						assertTrue(w.at(o.x(), o.y() - 1, o.z()) != RoadPlan.PATH, "no lamp cell over the dirt path: " + o);
+					}
+				}
+			}
+			assertEquals(0, lanterns(RoadPlan.plan(XS, YS, ZS, 3, true, false, verges(RoadPlan.PATH, RoadPlan.PATH), NONE, null, false, ours, lamp)),
+				"a path on both sides: no post");
+		}
+	}
 }

@@ -841,7 +841,8 @@ public final class RoadPlan {
 	 * AgentCraft's lanterns: a fence post with a lantern beside the walkway, the first 6 blocks out, then every 12. 6c W: the
 	 * post's foot may also be a built cell the road's own owner placed ({@code ownFoot}: a region's verge in packed mud, stone
 	 * bricks or planks); with a {@code lamp} the bible's fixture stands there instead, at its own spacing, every cell open, off the
-	 * walkway and unowned.
+	 * walkway and unowned. Never over a dirt path (a lane's, the road's own, a village's): vanilla turns it to dirt under a solid
+	 * block, outside the journal (fix/lamp-path).
 	 */
 	private static void lanterns(List<int[]> line, int[] t, boolean[] keep, int width, Map<Long, Col> walk, World w, Owned owned, @Nullable Protect protect,
 		@Nullable OwnFoot ownFoot, @Nullable Lamp lamp, List<Op> ops, List<Integer> out, Map<String, Integer> skipped) {
@@ -871,7 +872,10 @@ public final class RoadPlan {
 				for (int dy : new int[] {0, 1, -1}) {
 					int y = t[i] + dy;
 					int below = w.at(qx, y - 1, qz);
-					boolean foot = ground(below) || below == BUILT && ownFoot != null && ownFoot.own(qx, y - 1, qz);
+					// never on a dirt path (fix/lamp-path): vanilla turns a dirt path under a solid block (the post) to dirt on the first
+					// shape update that reaches it, outside the journal, so the removal would keep the dirt (a lane's path we wrote, now
+					// not ours) or never restore it (a village's path the road never wrote)
+					boolean foot = below != PATH && (ground(below) || below == BUILT && ownFoot != null && ownFoot.own(qx, y - 1, qz));
 					if (!foot) {
 						continue;
 					}
@@ -903,7 +907,7 @@ public final class RoadPlan {
 						int kind = w.at(cx, cy, cz);
 						before[k] = kind;
 						ok = open(kind) && kind != STACK && (lamp.along()[k] == 0 || !walk.containsKey(key(cx, cz))) && owned.at(cx, cy, cz) == null
-							&& (protect == null || protect.at(cx, cz) == null);
+							&& (protect == null || protect.at(cx, cz) == null) && w.at(cx, cy - 1, cz) != PATH; // (no fixture cell over a dirt path)
 					}
 					if (!ok) {
 						continue;

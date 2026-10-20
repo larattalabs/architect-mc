@@ -842,11 +842,20 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
 - **CU: the stale `M27:drift` text.** The kit's warning over copper ("an undo keeps a changed cell") is wrong since CU (undo and
   removal restore weathered copper). The kit was frozen by CU's contract; reword it in the next kit slice (kit output changes: a
   kitVersion bump and the named fixtures).
-- **Possible main bug: a road lantern post turns the lane's dirt_path to dirt, and removal leaves it.** Seen once on Steward's
-  farm hamlet (main's own `farm_hamlet`, with a lot entry bound, no irrigation: control h0, E-flat 1; IRR as built "Pre-existing,
-  found here" (1)), not again since. dirt_path and dirt are not interchangeable in `StillOurs`, so a lamp post that turns the path
-  under it to dirt (vanilla: a solid block over dirt_path) leaves a kept cell. Reproduce on main (h-ingame's hamlet, several seeds);
-  if real, either the lamp keeps off the path or the path cell under a written block is journaled as dirt.
+- ~~**Possible main bug: a road lantern post turns the lane's dirt_path to dirt, and removal leaves it.**~~ **Fixed on
+  `fix/lamp-path`.** Not intermittent: it tracked IRR's field fixture. Every failing run (s01 at 55b8e277, 0aa3ded1, c3a4ef62; h0 at
+  af13e28f) was before 3bce48c6, which moved the field's composter off its front-row dirt_path; every run since passed. The chain:
+  `RoadPlan.lanterns` took a dirt path as a post's foot (`ground()` includes PATH), so street_e's post stood on lane_farm_1's path at
+  9617,66,9091 (road writes skip side effects, so the path survived). The composter over the field's own path at 9616,67,9091, written
+  by the lot with shape updates, turned that path to dirt; dirt is sturdy, so the post reconnected west; the post's state change sent a
+  shape update down to the lane's path, which vanilla ticked to dirt outside the journal. The lane's entry still said dirt_path, so the
+  undo kept the dirt (E-flat 1, the lot's own cell came back with its box). Fix: (1) a road's lamp never stands on (or has a cell
+  over) a dirt path (`RoadPlan.lanterns`; a village path the road never wrote can't be restored any other way); (2) the journal's
+  ownership (`WorldJournal.holds`/`same`, with PT's player record first via `cuEquivalent`) treats a cell written as dirt_path and now
+  dirt (or grass spread onto it) as ours (`StillOurs.pathTurned`; `StillOurs.holds`, the builder's test, unchanged). Tests:
+  RoadPlanTest.noPostOnADirtPath, PathTurnedTest, irr-ingame's `lp` case. **Left:** the kit's street-lantern light model
+  (`light.mjs` roadLights) still takes a path as a foot (a kit slice: kitVersion bump); kit props stand on the square's dirt_path
+  paving, now covered by (2).
 - **IRR's breach fix, its stated limit.** The drain's record of a breach is made at the drain from the fluid levels, not by a census
   (a breach comes after the body settled, when no census runs). Water where a foreign flow (a pond, a player's water) meets the
   breach's flow is spared, so a few cells of joint water can stay outside the lot after its removal. A periodic shell check that
