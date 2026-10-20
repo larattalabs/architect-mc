@@ -214,6 +214,8 @@ node tools/release-version.mjs --check                                          
   just written) over its committed survey, params, seed, claim (with its y), roles and keepOut. Its frozen volumes go in by
   `--volumes`, each copied to a file named by its **ARVX sha** (`ir.volumes[].sha`, crossings_demo_flat's 9a00f18a), not the blob
   sha it is stored under (fb508da2): without them the re-plan silently drops the tunnels.
+  The IR also records the planning Node's major (`node`, "24" in game); the re-plan passes the golden's own by `--node` (new on
+  `region.mjs plan`), so a coordinator or CI on another Node (CI runs 22) re-cuts and checks it alike.
 - **Verifies** each re-cut before writing it: the IR may differ from the committed one in `kitVersion` (and `programSha`, which
   is the program file's sha and is reported when it moves) only, checked by a full JSON walk; the blobs byte for byte; the tile
   shas (`tools/scenarios.mjs` `tileShas`, 1 worker = 4 shuffled) and cells exactly the header's. Only the header's `irSha` and

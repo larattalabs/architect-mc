@@ -23,7 +23,7 @@
 // Goldens (chore 2): each tracked golden is re-planned by `kit/tools/region.mjs plan` (a fresh process, after the constants are
 // written) over its committed survey, params, seed, claim, roles and keepOut, with its frozen volumes passed by --volumes under
 // their ARVX sha (the IR's volumes[].sha, not the blob sha they are stored under: without them crossings_demo_flat drops its
-// tunnels). The re-cut must differ from the committed IR in kitVersion (and programSha) only; its blobs byte for byte, its tile
+// tunnels), and with --node set to the Node major the golden records (the IR's `node`), so any Node re-cuts it alike. The re-cut must differ from the committed IR in kitVersion (and programSha) only; its blobs byte for byte, its tile
 // shas (1 = 4 workers) and cells equal the golden header's. Anything else fails, and every file the run wrote is put back.
 // Exit 0 ok, 1 a mismatch or a refused re-cut, 2 usage.
 import fs from 'node:fs';
@@ -223,6 +223,8 @@ export function replanGolden(root, name, { paramsOver = null, noVolumes = false,
     '--survey', path.join(gDir, 'survey.bin'), '--seed', String(ir.seed), '--claim', [c.minX, c.minZ, c.maxX, c.maxZ, c.minY, c.maxY].join(','),
     '--keep-out', path.join(inDir, 'keep-out.json'), '--out', out, '--blobs-out', path.join(out, 'blobs'), '--json'];
   if (vols.length && !noVolumes) args.push('--volumes', volDir);
+  // the IR records the planning Node's major (in game: the sidecar's); the re-cut keeps the golden's, whatever node runs this
+  if (typeof ir.node === 'string' && /^\d{1,3}$/.test(ir.node)) args.push('--node', ir.node);
   const r = spawnSync(process.execPath, args, { encoding: 'utf8', maxBuffer: 64 << 20 });
   if (r.status !== 0) throw new Refused(`${name}: kit/tools/region.mjs plan exit ${r.status}: ${errLines(r.stderr || r.stdout)}`);
   fs.copyFileSync(path.join(gDir, 'survey.bin'), path.join(out, 'survey.bin'));
