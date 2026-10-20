@@ -2443,11 +2443,12 @@ public final class Sites {
 	}
 
 	/** {@link #evidence} for a road or cell site (CELL entries with {@code after}: no template). */
-	static Evidence evidence(@Nullable ServerLevel level, String siteId, String group) {
+	static Evidence evidence(net.minecraft.world.level.@Nullable BlockGetter level, String siteId, String group) {
 		return evidence(level, siteId, null, group);
 	}
 
-	private static Evidence evidence(@Nullable ServerLevel level, String siteId, @Nullable Site b, String group) {
+	/** (UMT seam) Reads the world only through {@code level}'s block states: the server's level, or the tester's in-memory world. */
+	private static Evidence evidence(net.minecraft.world.level.@Nullable BlockGetter level, String siteId, @Nullable Site b, String group) {
 		JournalStore js = WorldJournal.storeOrNull();
 		if (level == null || js == null) {
 			return new Evidence(null, null, false);

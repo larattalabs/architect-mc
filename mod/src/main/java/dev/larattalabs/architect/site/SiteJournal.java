@@ -307,9 +307,18 @@ public final class SiteJournal {
 	static Placing begin(ServerLevel level, String siteId, String kind, @Nullable String group, Anchors.Bounds box, List<Integer> held, long[] cut,
 		JsonObject meta, int[] ring, WorldJournal.@Nullable Captured captured) throws Sites.SiteException {
 		requireAvailable();
-		JournalStore s = store();
 		WorldJournal.Captured before = captured != null ? captured : WorldJournal.capture(level, box);
-		String dim = Sites.dimensionId(level);
+		return begin(level, Sites.dimensionId(level), siteId, kind, group, box, held, cut, meta, ring, before);
+	}
+
+	/**
+	 * {@link #begin} with the capture made and the dimension named: {@code level} is read only for the held leaves and the cut halves
+	 * (none: it may be null; the UMT seam, docs/UMT.md).
+	 */
+	static Placing begin(@Nullable ServerLevel level, String dim, String siteId, String kind, @Nullable String group, Anchors.Bounds box, List<Integer> held,
+		long[] cut, JsonObject meta, int[] ring, WorldJournal.Captured before) throws Sites.SiteException {
+		requireAvailable();
+		JournalStore s = store();
 		long layer = s.newLayer();
 		String id = s.newId();
 		long now = System.currentTimeMillis();
@@ -970,32 +979,81 @@ public final class SiteJournal {
 		return r;
 	}
 
+	/**
+	 * (UMT seam, docs/UMT.md) Where an undo's cell writes go: the level ({@link #levelTarget}), or the undo model tester's in-memory
+	 * world. {@link #writeCells} and {@link #fixHalves} write only through it.
+	 */
+	interface CellTarget {
+		BlockState get(BlockPos p);
+
+		/** An Architect write of one cell ({@code Placed.set}). */
+		void set(BlockPos p, BlockState s, int flags);
+
+		/** The block entity data of a cell just written (none there: nothing). */
+		void loadNbt(BlockPos p, CompoundTag nbt);
+
+		net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension();
+	}
+
+	/** The level as a {@link CellTarget}. */
+	static CellTarget levelTarget(ServerLevel level) {
+		return new CellTarget() {
+			@Override
+			public BlockState get(BlockPos p) {
+				return level.getBlockState(p);
+			}
+
+			@Override
+			public void set(BlockPos p, BlockState s, int flags) {
+				dev.larattalabs.architect.placed.Placed.set(level, p, s, flags);
+			}
+
+			@Override
+			public void loadNbt(BlockPos p, CompoundTag nbt) {
+				BlockEntity be = level.getBlockEntity(p);
+				if (be != null) {
+					be.loadWithComponents(TagValueInput.create(ProblemReporter.DISCARDING, level.registryAccess(), nbt));
+					be.setChanged();
+				}
+			}
+
+			@Override
+			public net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension() {
+				return level.dimension();
+			}
+		};
+	}
+
 	/** Puts back the two-block halves a restore wrote that the world does not hold any more (quietly). */
 	static void fixHalves(ServerLevel level, List<CellWrite> halves) {
+		fixHalves(levelTarget(level), halves);
+	}
+
+	static void fixHalves(CellTarget level, List<CellWrite> halves) {
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 		for (CellWrite c : halves) {
 			m.set(Journal.x(c.pos()), Journal.y(c.pos()), Journal.z(c.pos()));
 			BlockState want = WorldJournal.state(c.value());
-			if (level.getBlockState(m) != want) {
-				dev.larattalabs.architect.placed.Placed.set(level, m, want, c.flags());
+			if (level.get(m) != want) {
+				level.set(m, want, c.flags());
 			}
 		}
 	}
 
 	/** Writes CELL undo cells (lowest first): the state with its kind's flags, then the block entity data. */
 	static void writeCells(ServerLevel level, List<CellWrite> cells) {
+		writeCells(levelTarget(level), cells);
+	}
+
+	static void writeCells(CellTarget level, List<CellWrite> cells) {
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 		for (CellWrite c : cells) {
 			m.set(Journal.x(c.pos()), Journal.y(c.pos()), Journal.z(c.pos()));
 			BlockState st = WorldJournal.state(c.value());
-			dev.larattalabs.architect.placed.Placed.set(level, m, st, c.flags());
-			FluidRearm.wrote(level, m.asLong(), st); // (relief falling water) flowing fluid wakes once the restores are done
+			level.set(m, st, c.flags());
+			FluidRearm.wrote(level.dimension(), m.asLong(), st); // (relief falling water) flowing fluid wakes once the restores are done
 			if (c.value().nbt() != null) {
-				BlockEntity be = level.getBlockEntity(m);
-				if (be != null) {
-					be.loadWithComponents(TagValueInput.create(ProblemReporter.DISCARDING, level.registryAccess(), c.value().nbt()));
-					be.setChanged();
-				}
+				level.loadNbt(m, c.value().nbt());
 			}
 		}
 	}

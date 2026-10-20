@@ -1135,8 +1135,34 @@ public final class RegionFluids {
 		return drain(level, st, b, bs, strays, new LongOpenHashSet());
 	}
 
+	/** (UMT seam, docs/UMT.md) Where a drain reads and writes cells: the level, or the undo model tester's in-memory world. */
+	interface DrainTarget {
+		BlockState get(BlockPos p);
+
+		/** An Architect write of one cell ({@code Placed.set}). */
+		void set(BlockPos p, BlockState s, int flags);
+	}
+
 	/** {@code others}: cells another standing body plans, left alone (the escape guard drains one body of several). */
 	static int drain(ServerLevel level, Regional st, Body b, BodyState bs, boolean strays, LongOpenHashSet others) {
+		return drain(new DrainTarget() {
+			@Override
+			public BlockState get(BlockPos p) {
+				return level.getBlockState(p);
+			}
+
+			@Override
+			public void set(BlockPos p, BlockState s, int flags) {
+				dev.larattalabs.architect.placed.Placed.set(level, p, s, flags);
+			}
+		}, level, st, b, bs, strays, others);
+	}
+
+	/**
+	 * {@link #drain(ServerLevel, Regional, Body, BodyState, boolean, LongOpenHashSet)} through {@code t}; {@code level} is read only by
+	 * an irrigation body's breach judgement (none: it may be null).
+	 */
+	static int drain(DrainTarget t, @Nullable ServerLevel level, Regional st, Body b, BodyState bs, boolean strays, LongOpenHashSet others) {
 		int n = 0;
 		Fluid src = b.source();
 		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
@@ -1147,7 +1173,7 @@ public final class RegionFluids {
 		for (long[] a : new long[][] {b.ice, b.cells}) {
 			for (long p : a) {
 				BlockPos bp = BlockPos.of(p);
-				BlockState now = level.getBlockState(bp);
+				BlockState now = t.get(bp);
 				// ((6c HY) a grate cell goes back too, whether its bars still hold the water or not)
 				if (now.getFluidState().isEmpty() && !now.is(Blocks.ICE) && !now.is(Blocks.FROSTED_ICE) && !(grate.contains(p) && now.is(Blocks.IRON_BARS))) {
 					continue;
@@ -1155,7 +1181,7 @@ public final class RegionFluids {
 				String before = bs.before.get(p);
 				BlockState to = before == null ? Blocks.AIR.defaultBlockState() : parse(before);
 				if (now != to) {
-					dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+					t.set(bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
 					n++;
 				}
 			}
@@ -1163,7 +1189,7 @@ public final class RegionFluids {
 		for (long[] a : new long[][] {b.spill, b.watch}) {
 			for (long p : a) {
 				BlockPos bp = BlockPos.of(p);
-				BlockState now = level.getBlockState(bp);
+				BlockState now = t.get(bp);
 				FluidState f = now.getFluidState();
 				if (f.isEmpty() || others.contains(p)) {
 					continue;
@@ -1173,7 +1199,7 @@ public final class RegionFluids {
 				if (now == was) {
 					continue; // as it was before (a natural cell, its level included): not the body's doing
 				}
-				dev.larattalabs.architect.placed.Placed.set(level, bp, was, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+				t.set(bp, was, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
 				n++;
 			}
 		}
@@ -1184,12 +1210,12 @@ public final class RegionFluids {
 					continue;
 				}
 				BlockPos bp = BlockPos.of(p);
-				BlockState now = level.getBlockState(bp);
+				BlockState now = t.get(bp);
 				if (now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(src)) {
 					// a cell another body recorded (its breached shell cell, its watched cell) goes back to that record, not to air: that body's
 					// own drain, later in the removal, finds no fluid there any more
 					String was = beforeAny(st, p);
-					dev.larattalabs.architect.placed.Placed.set(level, bp, was == null ? Blocks.AIR.defaultBlockState() : parse(was), Block.UPDATE_CLIENTS
+					t.set(bp, was == null ? Blocks.AIR.defaultBlockState() : parse(was), Block.UPDATE_CLIENTS
 						| Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
 					n++;
 				}

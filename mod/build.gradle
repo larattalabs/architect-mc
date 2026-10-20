@@ -108,7 +108,10 @@ dependencies {
 }
 
 test {
-	useJUnitPlatform()
+	useJUnitPlatform {
+		// UMT (docs/UMT.md): the findings' repros, the long fuzz and exploration run by their own tasks, never in build
+		excludeTags "umt-findings", "umt-long", "umt-explore"
+	}
 	// -Darvx.write=true rewrites the ARVX fixtures (src/test/resources/arvx, ArvxTest)
 	systemProperty "arvx.write", providers.systemProperty("arvx.write").getOrElse("false")
 	// -Dmirror.write=true rewrites kit/test/fixtures/mirror-oracle.json (MirrorOracleTest, slice 0b)
@@ -402,3 +405,25 @@ if (System.getenv("ARCHITECT_HEADLESS") == "1" || project.hasProperty("headless"
 		headlessLaunch.configure { dependsOn(tasks.getByName("runServer").taskDependencies) }
 	}
 }
+
+// UMT, the undo model tester (docs/UMT.md): the long fuzz (nightly, release), the findings' repros, exploration
+def umtTask = { String name, String tag, String desc ->
+	tasks.register(name, Test) {
+		description = desc
+		group = "verification"
+		testClassesDirs = sourceSets.test.output.classesDirs
+		classpath = sourceSets.test.runtimeClasspath
+		useJUnitPlatform { includeTags tag }
+		// every -Dumt.* property reaches the tests (umt.seeds, umt.explore, umt.unknown, umt.strict)
+		System.getProperties().each { k, v -> if (k.toString().startsWith("umt.")) systemProperty k.toString(), v.toString() }
+		outputs.upToDateWhen { false }
+		testLogging {
+			events "failed"
+			exceptionFormat "full"
+			showStandardStreams = true
+		}
+	}
+}
+umtTask("umtLong", "umt-long", "UMT long fuzz: -Dumt.seeds=<count> (default 5000) per property")
+umtTask("umtFindings", "umt-findings", "UMT findings: the minimal repros of the bugs the fuzzer found (expected to fail until fixed)")
+umtTask("umtExplore", "umt-explore", "UMT exploration: -Dumt.explore=<PLAIN|CRASH|DRIFT|ALL|FINDINGS>:<from>:<count>")
