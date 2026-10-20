@@ -701,7 +701,11 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   removal. It is on main today. Its own slice, with verifier re-runs and Steward's pre-release check. **Evidence (VOC-b's
   drift probe, voc-natural):** under `dev.vocab.tick` 157 of 157 unwaxed copper cells of voc_copper_hall weathered, and after
   `Regions.remove` 134-138 of them remained standing (classified `growth`; VOC-b's runs and the verifier's re-run). Still queued
-  after the VOC batch (v0.38.0).
+  after the VOC batch (v0.38.0). **Corrected by CU's item 1 (2026-10-20, the cell list kept):** none of those cells was copper.
+  The hall is a lot, a BOX entry, restored exactly; the 147 cells that differed after the removal were all outside its lot box
+  (124 grass_block->dirt, 5 dirt->grass, 8 amethyst buds: `growth`; 9 water/lava flowed into air; 1 bee nest), and the probe printed
+  the growth count when no cell in the box differed. The real exposure was copper written as CELL tiles (cu_demo: all 28 weathered
+  cells and a door half kept). Slice CU.
 - **v0.37.1 bumps the kit to 0.35.1** (hk3's even-width rope bridge and tunnel fix changes kit output for v33/v34-style plans, so IrStale marks older IRs stale). The VOC and HY branches (kit placeholders 0.36.0 and 0.37.0) must merge main after this lands. Kit version sequence: 0.35.1 → VOC 0.36.0 → HY 0.37.0.
 
 ## Queued from the VOC batch (integration, 2026-10-20)
