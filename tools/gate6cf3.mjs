@@ -220,25 +220,28 @@ async function driftGrove(r, { g, after, norm }) {
     const [x, y, z] = leaf[0].split(',').map(Number);
     const d = Number(/distance=(\d)/.exec(leaf[1])[1]);
     const nd = d === 1 ? 2 : d - 1;
-    await L.cmd(`/setblock ${x} ${y} ${z} ${leaf[1].replace(/distance=\d/, `distance=${nd}`)}`);
-    out.leaf = { at: [x, y, z], from: d, to: nd };
+    await L.cmd(`/setblock ${x} ${y} ${z} ${leaf[1].replace(/distance=\d/, `distance=${nd}`)} strict`);
+    const dl = await G.dumpOf(ctx, [x, y, z, x, y, z], 'f3-v72-leaf');
+    out.leaf = { at: [x, y, z], from: d, to: nd, now: dl.stateAt(x, y, z) };
+    check(new RegExp(`distance=${nd}`).test(out.leaf.now ?? '') && /persistent=true/.test(out.leaf.now ?? ''), `item 6 (v72): a leaf of the oak at ${x} ${y} ${z} drifted (distance ${d} -> ${nd}, a /setblock strict of its own block as a neighbour's update leaves it): ${out.leaf.now}`, out.leaf);
   }
   // a mushroom face: a player places a red mushroom block beside a cap cell (its face turns false), then breaks it again
   const cap = [...red.cells].find(([k, s]) => /mushroom_block/.test(s) && (() => { const [x, y, z] = k.split(',').map(Number); return air(x + 1, y, z) && /east=true/.test(s); })());
   if (cap) {
     const [x, y, z] = cap[0].split(',').map(Number);
-    const pu = await L.call('dev.pt.uses', { ops: [{ item: 'minecraft:red_mushroom_block', at: [x + 1, y, z], on: [x, y, z], face: 'east', placer: 'F3Player' }] }, 120_000);
+    const capBlock = cap[1].replace(/\[.*$/, '');
+    const pu = await L.call('dev.pt.uses', { ops: [{ item: capBlock, at: [x + 1, y, z], on: [x, y, z], face: 'east', placer: 'F3Player' }] }, 120_000);
     const br = await L.call('dev.pt.breaks', { at: [[x + 1, y, z]], placer: 'F3Player' }, 120_000);
     const d = await G.dumpOf(ctx, [x, y, z, x, y, z], 'f3-v72-cap');
     out.face = { at: [x, y, z], placed: pu.results?.[0]?.state ?? null, broken: br.broken, now: d.stateAt(x, y, z) };
-    check(/east=false/.test(out.face.now ?? '') && out.face.placed, `item 6 (v72): a player placed a red mushroom block beside our cap at ${x} ${y} ${z} and broke it again: the cap's east face is false now (${out.face.now})`, out.face);
+    check(/east=false/.test(out.face.now ?? '') && out.face.placed, `item 6 (v72): a player placed a ${capBlock.replace('minecraft:', '')} beside our cap at ${x} ${y} ${z} and broke it again: the cap's east face is false now (${out.face.now})`, out.face);
   }
   // a player's block on a form cell: the player mines one of the oak's outer trunk logs and places stone there (PT records it)
-  const log0 = [...oak.cells].find(([k, s]) => /oak_log/.test(s) && (() => { const [x, y, z] = k.split(',').map(Number); return air(x + 1, y, z) && y > 66 && y < 70; })());
+  const log0 = [...oak.cells].find(([k, s]) => /oak_log/.test(s) && (() => { const [x, y, z] = k.split(',').map(Number); return air(x + 1, y, z) && y > 66 && y < 70 && /oak_(log|wood)/.test(oak.cells.get(`${x - 1},${y},${z}`) ?? ''); })());
   if (log0) {
     const [x, y, z] = log0[0].split(',').map(Number);
     const br = await L.call('dev.pt.breaks', { at: [[x, y, z]], placer: 'F3Player' }, 120_000);
-    const pu = await L.call('dev.pt.uses', { ops: [{ item: 'minecraft:stone', at: [x, y, z], on: [x + 1, y, z], face: 'west', placer: 'F3Player' }] }, 120_000);
+    const pu = await L.call('dev.pt.uses', { ops: [{ item: 'minecraft:stone', at: [x, y, z], on: [x - 1, y, z], face: 'east', placer: 'F3Player' }] }, 120_000);
     const rec = await L.call('dev.pt.at', { at: [x, y, z] });
     out.player = { at: [x, y, z], broken: br.broken, placed: pu.results?.[0]?.state ?? null, record: rec };
     check(br.broken === 1 && /stone/.test(out.player.placed ?? '') && !!rec.placer, `item 6 (v72): a player mined the oak's trunk log at ${x} ${y} ${z} and placed stone there (PT recorded ${rec.placer ?? 'nothing'})`, out.player);
@@ -252,10 +255,12 @@ async function driftCave(r, { g, after }) {
   const tip = [...g.cells].find(([k, s]) => /pointed_dripstone/.test(s) && /thickness=tip,/.test(s) && /vertical_direction=down/.test(s));
   if (!tip) return { tip: null };
   const [x, y, z] = tip[0].split(',').map(Number);
-  await L.cmd(`/setblock ${x} ${y} ${z} ${tip[1].replace('thickness=tip,', 'thickness=frustum,')}`);
+  await L.cmd(`/setblock ${x} ${y} ${z} ${tip[1].replace('thickness=tip,', 'thickness=frustum,')} strict`);
   const d = await G.dumpOf(ctx, [x, y, z, x, y, z], 'f3-v75-tip');
   void after;
-  return { tip: { at: [x, y, z], now: d.stateAt(x, y, z) } };
+  const now = d.stateAt(x, y, z);
+  check(/thickness=frustum/.test(now ?? ''), `item 6 (v75): a stalactite tip at ${x} ${y} ${z} drifted to frustum (a /setblock strict of its own block): ${now}`);
+  return { tip: { at: [x, y, z], now } };
 }
 
 // ------------------------------------------------------------------ natural (item 5)

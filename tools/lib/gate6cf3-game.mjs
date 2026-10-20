@@ -221,6 +221,7 @@ export async function realiseF3(ctx, tag, fx, o = {}) {
   check(st.faceOff === 0 && st.dripOff === 0 && st.M18.distanceOff === 0 && st.M18.decaying === 0 && st.M19.dead === 0,
     `item 8 (${tag}): on the realised world, vanilla's rule recomputed: ${st.faces} mushroom cells' faces (${st.faceOff} off), ${st.drips} dripstone thicknesses (${st.dripOff} off), ${st.M18.leaves} leaves' distance (${st.M18.distanceOff} off); M18 ${st.M18.decaying}, M19 ${st.M19.dead} (of ${st.M19.corals} coral)`, st.sample);
   // the realised M3: no floating cell of a grown form (the dump-backed world over the plan's virtual world)
+  let written = null;
   {
     const { dumpWorld, buildVirtual } = await ctx.imp('lib/region/vworld.mjs');
     const { checkRegion } = await ctx.imp('lib/region/check.mjs');
@@ -230,6 +231,10 @@ export async function realiseF3(ctx, tag, fx, o = {}) {
     const vdir = path.join(dir, 'volumes');
     const volumes = fs.existsSync(vdir) ? fs.readdirSync(vdir).map((f) => decodeArvx(fs.readFileSync(path.join(vdir, f)))) : [];
     const { vw: virtual } = buildVirtual({ ir: r.ir, survey: fs.readFileSync(path.join(dir, 'survey.bin')), blobs, volumes });
+    // (the region's written cells: after a stand at default random ticks the world's own drift at unwritten cells is classified, never
+    // at a written one)
+    written = new Set();
+    virtual.eachWritten((x, y, z) => written.add(`${x},${y},${z}`));
     const claim = { ...r.ir.claim };
     const world = dumpWorld(before.d, after.d, claim, { virtual, lots: r.ir.lots ?? [] });
     const rep = checkRegion({ ir: r.ir, survey: fs.readFileSync(path.join(dir, 'survey.bin')), blobs, volumes, world, rules: ['M3'] });
@@ -299,8 +304,18 @@ export async function realiseF3(ctx, tag, fx, o = {}) {
   } else {
     const keep = typeof o.expectKept === 'function' ? o.expectKept(out.drift) : o.expectKept ?? [];
     const left = list.map((m) => m.pos);
-    out.undo = { state: rm.state, kept: rm.kept, mismatches: df.mismatches, classes: df.classes ?? {}, left: left.slice(0, 12) };
-    check(rm.state === 'REMOVED' && df.mismatches === keep.length && keep.every((k) => left.includes(k)), `item ${o.drift ? 6 : 3} (${tag}): Regions.remove restores the box exactly under the exact rules: E-flat ${df.mismatches}${keep.length ? ` (the player's ${keep.length} cell(s) kept: ${keep.join(' ')})` : ''}, kept ${rm.kept ?? 'n/a'} (${rm.seconds} s)`, list.slice(0, 8));
+    if (!o.stand) {
+      out.undo = { state: rm.state, kept: rm.kept, mismatches: df.mismatches, classes: df.classes ?? {}, left: left.slice(0, 12) };
+      check(rm.state === 'REMOVED' && df.mismatches === keep.length && keep.every((k) => left.includes(k)), `item ${o.drift ? 6 : 3} (${tag}): Regions.remove restores the box exactly under the exact rules: E-flat ${df.mismatches}${keep.length ? ` (the player's ${keep.length} cell(s) kept: ${keep.join(' ')})` : ''}, kept ${rm.kept ?? 'n/a'} (${rm.seconds} s)`, list.slice(0, 8));
+    } else {
+      // after a stand at default random ticks: every written cell restored exactly (E-flat over the region's cells: 0, but the player's
+      // kept ones), and every mismatch at an unwritten cell the world's own (classified: grass spreading, a sapling, a sheep), none unexplained
+      const atWritten = list.filter((m) => written?.has(m.pos) && !keep.includes(m.pos));
+      const unexplained = list.filter((m) => !written?.has(m.pos) && !keep.includes(m.pos) && !['growth', 'grazed', 'live'].includes(m.class));
+      out.undo = { state: rm.state, kept: rm.kept, mismatches: df.mismatches, classes: df.classes ?? {}, atWritten: atWritten.slice(0, 12), nWritten: atWritten.length, unexplained: unexplained.slice(0, 12), keptLeft: keep.filter((k) => left.includes(k)) };
+      check(rm.state === 'REMOVED' && atWritten.length === 0 && unexplained.length === 0 && keep.every((k) => left.includes(k)),
+        `item ${o.drift ? 6 : 4} (${tag}): Regions.remove after the stand${o.drift ? ' and the drift' : ''}: E-flat over the region's ${written?.size ?? '?'} written cells ${atWritten.length}${keep.length ? ` (the player's ${keep.length} cell(s) kept: ${keep.join(' ')})` : ''}; ${df.mismatches - atWritten.length - keep.length} unwritten cell(s) the world's own drift ${JSON.stringify(df.classes ?? {})}, ${unexplained.length} unexplained; kept ${rm.kept ?? 'n/a'} (${rm.seconds} s)`, { atWritten: atWritten.slice(0, 6), unexplained: unexplained.slice(0, 6) });
+    }
   }
   await L.leaveWorld();
   return out;
