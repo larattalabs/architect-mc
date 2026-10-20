@@ -15919,7 +15919,9 @@ Taste and product calls only, each with a proposed default.
 `origin/hy/core` (8b505a95: HY-core with HY-a merged in), `slice/HY-b` (1aa9b931) and `slice/HY-c` (94e027a9) were merged `--no-ff`
 over origin/main v0.38.0 (VOC, 0d665136), in that order. VOC merged after HY's slices were cut, so the conflicts were VOC's: every
 one kept both sides and no test was dropped. No throwing stub or `hy-pending-*.json` survives (`hy-pending-c.json` gave way to v58;
-r.course's and course.mjs's `until: 'HYb'` strings are unreachable references, never answered). `kit/regions/plan_v0.mjs` is
+course.mjs's `stubRefusal` is a kept reference nothing calls; r.course's "not loaded" fallback (`until: 'HYb'`) is unreachable through the
+plan CLI and the sidecar, whose `tools/region.mjs` loads the compiler and with it course.mjs; only a direct `planRegion` import that never
+loads course.mjs would answer it). `kit/regions/plan_v0.mjs` is
 unedited (equal to origin/main). HANDOFF-HYcore is retired and HY-core's Verifier row written.
 
 | Where | Resolution |
@@ -15968,11 +15970,15 @@ tools/; 0.37.1 and 0.37.0 are VOC's. All 4 checks clean. (apijars still runs VOC
 - mod `./gradlew build --offline`: **713 tests, 0 failures**.
 - `gen-vocab.mjs --check`: every file up to date (1286 blocks, 450 families, 35 creative-only).
 - api-compat `--gate6chy`: **4/4 clean** (0.38.0, 0.37.1, 0.37.0 jars; the 0.38.0 surface).
+- Item 12's byte identity against v0.38.0 (0d665136, a detached worktree; IRs with kitVersion normalised, answers and overall):
+  **200 of 201** pre-existing plan fixtures identical, VOC's (`voc/*`, `v50_voc_village`, `v51_voc_forge`) included; the one differing
+  is `extension/e15_every_reserved_a`, the named exception; `h/r08` is `valid/v51_canal` now; 30 HY fixtures new.
 - Plan fixtures before/after the join: 229 of 230 identical (r11 by design), v58 new; after the shared volume, every course fixture's
   multi-reach course asks one volume (v50 3 reaches, v54 4, v58 4 on s7 / 2 on its terrace, v60 5, s01's race 4, hy/n01 3, c01 2 + 2).
 
 **In game:** `node tools/gate-run.mjs change --since origin/main --only hy-ingame,hy-crash,hy-cold,h-ingame,voc-ingame,t3a-ingame,k1a-ingame`
-(3 shards, ports 8948-8953, run worktrees `../architect-mc-int-hy-run[-s2|-s3]`), `artifacts/gate-runs-HY-int/20261020-045515-change`
+(3 shards, ports 8948-8953, run worktrees `../architect-mc-int-hy-run[-s2|-s3]`; HY-c has no in-game step of its own: its water-gate
+items and v58's run in hy-ingame's halves), `artifacts/gate-runs-HY-int/20261020-045515-change`
 at bb60e193: **7 PASS** in 32m21s: **hy-ingame 133/0** (HY-core's items, §10's ARTIFACT_STALE naming stream_r2, HY-b's item 9
 fixtures, item 10's walks and the swept stand, item 18 (c), HY-c's water gate, and **v58**: READY through the two-plan flow, 2
 guards flat, PLACED with brook_r2 and brook_r1 settled downstream first, census exact (346 and 50 + 8 flowing), the water gate over
@@ -15993,5 +15999,9 @@ outside bank and from water to water round through a walk gate, 0 cells through 
   reason, at}`; water gates (a course through a wall: the grate, the lintel, walk gates only for walkers); ARTIFACT_STALE per reach,
   now with a course's reaches on one shared volume (in game §10 ran on hy_core_demo's per-body volumes; the shared case is the kit
   test and PlanChecks' per-guard runs).
+
+Galleries (the look, recorded): HY-b https://claude.ai/artifact/UKsZ2AFT3Xogm8eFeu9X7f, HY-c
+https://claude.ai/artifact/TZ2mx1GntGXBW3xEqukCRq. No gate-verifier has reviewed the integration's own code (the join, the shared volume,
+PlanChecks' sample cache, the grate's bill); its in-game evidence is the run above.
 
 Not merged, not tagged.

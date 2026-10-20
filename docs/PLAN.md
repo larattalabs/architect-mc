@@ -735,6 +735,14 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 - **Fixture numbers:** VOC's `valid/v50_voc_village` and `v51_voc_forge` share their numbers with HY's `v50_stream` and `v51_canal`.
   Tests that pick fixtures by number filter by kind (hy-b.test's item 2 reads only channel fixtures). Renumber one family at a quiet
   moment, or keep the kind in every filter.
+- **apijars over v0.38.0 before release.** api-compat `--gate6chy` runs the 0.38.0, 0.37.1 and 0.37.0 jars (v0.38.0 built from its tag
+  into `artifacts/gate6c-hy/v0380`); `gate6a.mjs` apijars still runs VOC's set (0.37.1, 0.37.0, 0.36.1). Add 0.38.0 (with its base
+  world) at the release tier.
+- **HY-b's own uncrossed-wall refusal has no fixture now.** `hy/r11_wall` became the sealed-ring case once courses take water gates;
+  HY-b's emit check (a wall within 1 of a reach, or over a step, with no crossing registered: UNREACHABLE wall) needs a fixture that
+  reaches it (e.g. a wall line alongside a course).
+- **HY-a's pinned shas on Linux.** `hy-a.test`'s flow/wet/courses shas were verified on macOS only (a pushed branch runs no CI): the
+  PR or the merge's CI must show them on Linux.
 - **`GATE6CHY_SKIP_CORE`** (HY-b's development switch: runs only the halves' items of an in-game step) is kept; no gate chain sets
   it, and a step run with it records `core: skipped (GATE6CHY_SKIP_CORE)` in its output.
 
