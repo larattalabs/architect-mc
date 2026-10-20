@@ -484,6 +484,9 @@ const natural = [{
     const inHall = (diff2.list ?? []).filter((m) => { const [x, y, z] = String(m.pos).split(',').map(Number); return x >= b2[0] && x <= b2[3] && y >= b2[1] && y <= b2[4] && z >= b2[2] && z <= b2[5]; });
     const kept = inHall.length || (diff2.classes?.growth ?? 0);
     out.drift = { cells: cells.length, weathered: weathered.size, rounds: 'n 50 per call', removed: rm2.removed, kept, mismatches: diff2.mismatches, classes: diff2.classes ?? null };
+    // (6c CU §8 item 1) the cell list itself, so the kept figure can be read cell by cell: the hall's lot box (b2), the weathered cells,
+    // and every cell the diff listed (position, class, states)
+    fs.writeFileSync(path.join(ctx.OUT, 'vocb-v50n-drift-remove.json'), `${JSON.stringify({ ...out.drift, hallBox: b2, copperCells: cells, weatheredCells: [...weathered], list: diff2.list ?? [] }, null, 1)}\n`);
     check(true, `item 9 (drift probe, recorded): ${weathered.size} of ${cells.length} unwaxed copper cells of the hall weathered under dev.vocab.tick; after Regions.remove an undo kept ${kept} weathered cell(s) standing (StillOurs needs the same block: the queued §10 item's evidence; ${diff2.mismatches} mismatches ${j(diff2.classes ?? {})})`, out.drift);
     return out;
   },
