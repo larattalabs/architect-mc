@@ -804,6 +804,13 @@ public final class Builder {
 		// the queued cells: what the instant placement wrote that is not air (template, foundation fill, approach)
 		List<BlockPos> cells = new ArrayList<>();
 		Set<Long> seen = new HashSet<>();
+		// (6c IRR / RS) a lot's irrigation cells (LotMask) were never the site's: the instant placement dropped them, so they are never
+		// queued (else the conversion clears the region's banks and beds to air, and a survival region's target there never finishes)
+		Site rec0 = Sites.get(id);
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet masked = rec0 == null ? null : LotMask.cells(rec0.ext());
+		if (masked != null) {
+			masked.forEach((long q) -> seen.add(q));
+		}
 		GhostModel m = built.grid().ghost(built.turns());
 		BlockState[] tstates = built.grid().states();
 		for (int i = 0; i < m.count(); i++) {

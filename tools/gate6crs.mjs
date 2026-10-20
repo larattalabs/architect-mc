@@ -282,7 +282,7 @@ steps.item5 = async () => {
   const out = {};
   for (const [tag, name] of [['rs02', 'rs02_walled'], ['rs03', 'rs03_water'], ['rs04', 'rs04_tunnel'], ['village', 'survival_village']]) {
     if (process.env.RS_ONLY && !process.env.RS_ONLY.split(',').includes(tag)) continue; // (development: one fixture)
-    try { out[tag] = await buildOne(tag, name); } catch (e) { check(false, `item 5 (${tag}): ${String(e.message).slice(0, 300)}`); out[tag] = { error: String(e.stack ?? e) }; }
+    try { out[tag] = await buildOne(tag, name, { remove: !process.env.RS_KEEP }); } catch (e) { check(false, `item 5 (${tag}): ${String(e.message).slice(0, 300)}`); out[tag] = { error: String(e.stack ?? e) }; }
   }
   return out;
 };
@@ -390,20 +390,18 @@ steps.item6 = async () => {
     const ck = await G.check(ctx, 'rs06', s);
     const crates = await G.pile(ctx, s, 4);
     const region = await G.realise(ctx, ck.check.artifactSha);
-    // feed everything but the terrace's bill: the road waits for it
-    const stepsBom = (ck.check.parts.find((a) => a.part === 'steps')?.cost?.survival?.bom) ?? {};
-    let sawWait = null, roadEarly = false;
-    const f1 = await G.feed(ctx, region, { timeoutMs: 600_000, until: (st, rs) => {
-      const w = (st.unfinished ?? []).find((it) => it.key.startsWith('road:route') && it.reason === 'SITE_BUSY');
-      if (w) sawWait = w;
+    // fed in full: the terrace's target builds at the builder's pace while the road over it waits SITE_BUSY, nothing of it written
+    let sawWait = null, roadEarly = false, stepsSeen = false;
+    const f = await G.feed(ctx, region, { timeoutMs: 1_800_000, until: (st, rs) => {
+      const w = (st.unfinished ?? []).find((it) => String(it.key).startsWith('road:') && it.reason === 'SITE_BUSY');
+      if (w && !sawWait) sawWait = w;
       const steps0 = (rs.build?.parts ?? []).find((p) => p.part === 'steps');
-      const roads = (rs.build?.parts ?? []).filter((p) => p.part.startsWith('route'));
-      if (steps0 && steps0.state !== 'built' && roads.some((p) => p.built > 0)) roadEarly = true;
-      return !!sawWait && !!steps0;
-    }, extra: async () => G.minus({}, stepsBom) });
-    void f1;
-    check(!!sawWait && !roadEarly, `item 6 (rs06): the road over the terrace waits SITE_BUSY while the terrace's target builds (${json(sawWait)}), nothing of it written before`);
-    const f = await G.feed(ctx, region, { timeoutMs: 1_200_000 });
+      if (steps0) stepsSeen = true;
+      // the road item off the unfinished list (put down) while the terrace's target is not BUILT: written early
+      if (steps0 && steps0.state !== 'built' && !(st.unfinished ?? []).some((it) => String(it.key).startsWith('road:'))) roadEarly = true;
+      return st.view.state === 'PLACED' && rs.build?.done;
+    } });
+    check(!!sawWait && stepsSeen && !roadEarly, `item 6 (rs06): the road over the terrace waits SITE_BUSY while the terrace's target builds (${json(sawWait)}), nothing of it written before`);
     const d = await G.twinDiff(ctx, T.box, T.file, crates);
     check(f.last.rs.build?.done && d.mismatches === 0, `item 6 (rs06): then the terrace built, the road and its lamps written: done ${f.last.rs.build?.done}, equal to the INSTANT twin (${d.mismatches} differ)`, d.list);
     out.rs06 = { wait: sawWait, early: roadEarly, twin: d.mismatches };

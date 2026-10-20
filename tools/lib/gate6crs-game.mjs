@@ -102,8 +102,8 @@ export async function snap(ctx, box, name) {
   await ctx.L.call('dev.region.hash', { box, mode: 'snap', file }, 3_600_000);
   return file;
 }
-export async function diff(ctx, box, file) {
-  const r = await ctx.L.call('dev.region.hash', { box, mode: 'diff', file }, 3_600_000);
+export async function diff(ctx, box, file, limit = 20000) {
+  const r = await ctx.L.call('dev.region.hash', { box, mode: 'diff', file, limit }, 3_600_000);
   return { mismatches: r.mismatches, classes: r.classes ?? {}, list: r.list ?? [] };
 }
 
@@ -228,6 +228,7 @@ export async function twinDiff(ctx, box, file, crates) {
   const d = await diff(ctx, box, file);
   const crateCells = new Set(crates.map((c) => c.join(',')));
   const rest = d.list.filter((m) => !crateCells.has(m.pos) && !String(m.now).startsWith('architect_mc:construction_crate'));
+  fs.writeFileSync(`${file}.diff.json`, `${JSON.stringify(rest)}\n`); // the whole list, for the evidence
   return { mismatches: d.mismatches - (d.list.length - rest.length), list: rest.slice(0, 16), all: d.mismatches };
 }
 
