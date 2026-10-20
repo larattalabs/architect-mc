@@ -748,10 +748,7 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 
 ## Queued (coordinator, 2026-10-20): priority
 
-- **Walls and other parts don't keep clear of fluid bodies (safety).** In v51 the forge wall runs through the fountain's basin,
-  overwriting 5 water cells and 5 rim cells, and the plan is still READY. Every connector and part that writes cells must treat
-  a body's shell, water and watch cells as hard (as plan water already is for routes), or refuse. M25 must catch any write into
-  a body's cells. Next after HY, ahead of the copper undo.
+- ~~**Walls and other parts don't keep clear of fluid bodies (safety).**~~ **Slice KC (v0.39.1, CONTRACT "KC as built").**
 - **6ct1-scenario-relief's falling-water cells** have now failed on D2, H-b, VOC-b, HY-b and HY-core. Investigate the root cause
   (T1's falling-water note) instead of re-running.
 
@@ -773,3 +770,16 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   column refills by +10 s. Older passes with these cells came only from T1's `flow` class, before H narrowed it.
   Not covered: HY-b's run also had 13 unwritten cells beside the stream (grass turned to flowing water) that were still dry
   after the realise; a re-tick can't undo a spread like that. No class added.
+
+## Queued from slice KC (builder, 2026-10-20)
+
+- **The rope row's OVERLAP and its nearest-landing wouldFit are not exercised.** k04's base already routes round the fountain, so
+  the rope bridge relies on the backstop (`OVERLAP {kind: body}` with no wouldFit). Bridges likewise. A fixture whose only landing
+  is in a body's watch would show it.
+- **Courses don't route round planned walls.** A course routes at resolve, before the walls; a wall alongside it refuses it at emit
+  (HY's UNREACHABLE wall) or by the backstop. Re-routing at emit with the walls as hard (but the water gate's straight run) is the
+  contract's fuller reading.
+- **A M25:clear finding with no plan part to refuse leaves the plan READY** (the apron lamps' `__lamps__`, a body with no part):
+  the region check names it as an error. Only broken variants reach it today.
+- **The strict watch makes a raised fountain's apron (7 past its basin) hard for every later writer.** If Steward's plans meet it
+  often, S-KC-2's shell-grade allowance is the lever.
