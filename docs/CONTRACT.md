@@ -17235,7 +17235,7 @@ are quoted from that branch; anything its release changes wins over them. Nothin
 - **Totals:** about 11-12 days of work; about 4 elapsed with the cores in parallel and three lanes each after (at most 3 gate runs on
   the machine at once, GATES policy 6: the six lanes take turns at the slice tier).
 
-## Phase 6c slice FL: free layouts (DRAFT for Steward review)
+## Phase 6c slice FL: free layouts (FROZEN 2026-10-20, Steward reviewed)
 
 Lots laid out other than along one straight street: a **ring** round an open hub, a **spiral**, a **grid** of blocks, and an
 **organic** web of crooked lanes; a zone (or a form) laid **around** a feature; and a zone fitted to a sketched **outline**.
@@ -17590,6 +17590,16 @@ verifier reviews the diff and the evidence and **re-runs items 6 and 7** (realis
   **S-K1-7** (unknown codes and kinds pass through: `what: layout` and `what: outline` are new deviation values).
 - **S-D-1, S-D-2:** districts on survey candidates; Steward proposes, Architect lays out. FL adds no district behaviour.
 
+### Steward's review (2026-10-20, at c70902e6): binding, and it overrides the sections above where they differ
+
+- **S-FL-1, 2, 3, 6, 7:** as drafted. Orientation is read only on grids. Other layouts under `around` are read as a ring.
+  Central and landmark lots go in the hub. No RC. Spiral and outline ship (`spiral_town` is among the asks).
+- **S-FL-4:** nothing needed. A layout that waited is a re-plan, never an offer.
+- **S-FL-5. Added:** keep the `street_` key stem, and mark every street road a region writes (V, D1/D2 districts, FL layouts)
+  in its road ext as `architect_mc:street: {zone, district?}`, so Steward's additions recognise district streets without name
+  matching. Additive; old regions keep their keys.
+- **S-FL-8:** the compact plan/0 bound is 84,000.
+
 ### Open questions for Steward
 
 - **S-FL-1. Orientation on free layouts.** `grid` reads `orientation` for its avenues; ring, spiral and organic note it and ignore
@@ -17636,7 +17646,7 @@ verifier reviews the diff and the evidence and **re-runs items 6 and 7** (realis
 - **N-FL-2:** ring lots face inward, onto the ring street.
 
 
-## Phase 6c slice F3: forms II, trees, mushrooms, coral, roots and stalactites (DRAFT for Steward review)
+## Phase 6c slice F3: forms II, trees, mushrooms, coral, roots and stalactites (FROZEN 2026-10-20, Steward reviewed)
 
 The rest of SETTLEMENTS §9.2's generator library as **plan forms**: giant trees, giant mushrooms, coral, roots and stalactites,
 with **M18** (leaf decay) and **M19** (dead coral) from §11, and the **forest-heavy `mega_bench` variant** the 6c close-out
@@ -17934,6 +17944,14 @@ drift). **Steward's RC check before release** (S-F3-5).
 - **CU:** StillOurs reads canonical chains from vanilla, never a hand table; a player's record wins.
 - **S-K1-3, S-K1-6, S-K1-7:** lenient params, a newly refused pending part is a repair, unknown codes pass through.
 
+### Steward's review (2026-10-20, at c70902e6): binding, and it overrides the sections above where they differ
+
+- **S-F3-1, 2, 4, 5, 6:** as drafted. `form.coral` is its own part attached to its body; five ids; streets under canopies are
+  hard for v1; Steward's RC; no extra margin.
+- **S-F3-3. Added:** every catalogue entry whose check needs a frozen volume gains `"limits": {..., "volume": true}` (or a
+  catalogue note, if limits is the wrong place; the builder picks one and records it). Steward then passes `LOAD_BOUNDED(512)`
+  for any plan holding such a part, without a hard-coded id list. That covers tunnel, stalactites, roots and any cave form.
+
 ### Open questions for Steward
 
 - **S-F3-1. Coral as a part.** Proposed: `form.coral` is its own part whose `where` names a plan pond, fountain, quay or moat, and
@@ -18003,7 +18021,7 @@ their numbers below are assumptions (one minor each).
 - **Totals:** about 12-15.5 days of work; about 6.5-7.5 days elapsed with the halves in parallel, plus Noah's gallery approval and
   Steward's RC round.
 
-## Phase 6c slice S3: the mountainside monastery v1, terraced, goes green (DRAFT for Steward review)
+## Phase 6c slice S3: the mountainside monastery v1, terraced, goes green (FROZEN 2026-10-20, Steward reviewed)
 
 The second 6c scenario goes green, as S2 did: a monastery terraced into S3's pinned mountainside, with retaining walls and
 switchback paths, built by a bundled program, golden on macOS and Linux, and approved by Noah on the gallery. New since the old
@@ -18252,6 +18270,12 @@ About **4.5-6 days**, split by default:
   (0.5-1 day).
 - The approval may lag the merge (S2's did); the close-out waits for it, the release does not.
 
+### Steward's review (2026-10-20, at c70902e6): binding, and it overrides the sections above where they differ
+
+- **S-S3-1:** `terraces` answers "terraces inside zones", with the defaults. Steward's writer moves to the zone member.
+- **S-S3-2:** `terraced_hill` stays until it's re-recorded.
+- **S-S3-3:** no RC.
+
 ### Open questions for Steward
 
 - **S-S3-1. Terraced zones.** The member `terraces` lays a zone (or a district) down the slope as steps, one lot per level, with
@@ -18281,7 +18305,7 @@ About **4.5-6 days**, split by default:
 - **N-S3-3:** the gardens fountain is on.
 
 
-## Phase 6c slice RS: regions in survival, the terrain half (DRAFT for Steward review)
+## Phase 6c slice RS: regions in survival, the terrain half (FROZEN 2026-10-20, Steward reviewed)
 
 A region realises in a survival-toggle world: the land it shapes is free, and everything it builds is a construction target fed
 from the owner's stockpile, in the region's own order, with waits, partial progress, exact refunds on removal and a resume after
@@ -18684,6 +18708,16 @@ About **7.5-9.5 days** of work, **5.5-6.5 elapsed**, in two halves with a frozen
 - **RS-b, the hard kinds (2.5-3 days, on RS-a's interface):** tunnels' ring order, the bodies' barrier, lava's charge and scoop, ice
   caps, courses and water gates, irrigation, brushes; items 4-6's water and tunnel rows.
 - **Shared:** the gate (items 5-14) and one RC. RS-b merges into RS-a's branch; one release.
+
+### Steward's review (2026-10-20, at c70902e6): binding, and it overrides the sections above where they differ
+
+- **S-RS-1. Added:**
+  - `RegionView.build` gains `done: boolean` and `percent` (paid cells built / paid cells), cheap to poll.
+  - Every region construction wait raises the existing `SITE_WAITING` / `ITEM_WAITING` events with the region id and the part
+    id, so Steward's material requests and "it needs X" messages work unchanged.
+- **S-RS-2, 4, 5, 6, 7:** as drafted.
+- **S-RS-3:** no new state. PLACED as drafted, and `build.done` says when it's fully built. Steward starts the stockpile
+  requests at PLACED and reports "built" on `done`.
 
 ### Open questions for Steward
 
