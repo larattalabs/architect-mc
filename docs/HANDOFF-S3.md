@@ -49,13 +49,21 @@ Done (committed):
 Offline on the pre-settle S3 survey (scratchpad/s3-build/an.mjs): 12/13 lots (orchard dropped), virtual M5 0.4%, M8 100%, M3 0,
 lookout path fits, spire_1 refused NO_ROOM (spire_2 placed), fountain adjusted (2-thick coping).
 
-In flight: in-game natural dev run (chain 6cs3-dev, ports 8924/8925, run dir ../architect-mc-S3-run, out scratchpad/s3-build/runs).
-Dev runs 1-3 failed before the realise: (1) finish.mjs crash (fixed), (2)/(3) a plan past 120 s (the settled survey's pair routes;
-fixed: memo, dedupe, caps; offline 23 s). The settled (post-90 s) survey of run 3 is scratchpad/s3-build/repro-surveys/settled.bin
-(+ biomes.json): offline there 11 lots (orchard, herb_garden dropped), virtual M5 0.07%, M8 100%, M3 0.
-Added since: gate6cs3.mjs (unit, identity, feasibility, plan, apicompat, report), tools/lib/gate6cs3-game.mjs (item 4), chain
-steps s3-unit, s3-plan, 6c-scenario-s3 (release always), impact rule "6c S3", gallery S3 section, s3Classify.
+Dev runs 1-3 failed before the realise (finish.mjs crash; plans past 120 s: fixed). Run 4 (20261020-220539) realised: 11/11
+PLACED, checker clean, realised M5 0.72% (under 1%: the M5 risk is met, no blocker), fountain census OK. It failed on realised M8
+(15 open, all relief floors beside natural caves/overhangs the survey can't show), 3 floating relief cells (a cut onto a thin cave
+ceiling) and 14 grass->dirt cells under the fountain coping.
+Fixed since (offline on run 4's settled survey + a volume built from its before dump, scratchpad/s3-build/an.mjs VOLDUMP=):
+- footing (journalled subsurface under the bodies' solid cells);
+- walk volume (the program asks the claim's volume, ground -12..+8, ~5M cells) so the draft world sees caves; underpin (rock under
+  relief/route cells over a natural void, <= 24 deep);
+- every route pass merged into meta.route (the checker's grade/villager rows saw only the lookout's); the lookout at the zone grade;
+- a guarded route pass (terraced plans only) treats earlier passes' runs as obstacles (the lookout cut stairs across cloister_t6).
+Offline now: M8 0 unguarded, M5 0, no M3, no M2:grade, 13/13 nodes; M6 (head room) warnings recorded.
 
-Next: realised M5 from that run; re-pin planSurvey from its raw/plan/survey.bin; gate6cs3.mjs (unit, feasibility, plan, apicompat,
-report) + chain steps (s3-unit, s3-plan, 6c-scenario-s3) + impact rule; item 4 driver; flat variant run; golden; gallery;
-full kit + sidecar suites; byte identity over all fixtures; verifier; as built.
+In flight: dev run 5 (chain 6cs3-dev, ports 8924/8925, run dir ../architect-mc-S3-run, out scratchpad/s3-build/runs, log
+scratchpad/s3-build/run-dev5.log), full kit suite (scratchpad/s3-build/kit-suite3.log).
+
+Next: clean natural run; flat run (6c-scenario-s3); re-pin planSurvey from the clean run's raw/plan/survey.bin (+ feasibility);
+golden; gate6cs3 unit/identity/feasibility; s3-plan in game; slice tier; gallery (read the 6c artifact first, republish to its URL);
+verifier; as built; queue in PLAN "district routes ignore protected areas" (fixed for terraced only); retire this file.
