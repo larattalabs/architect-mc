@@ -25,6 +25,25 @@ export const ITEM6 = Object.freeze([['v66', 'valid/v66_fl_ring.json'], ['v67', '
 
 const json = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
 
+/** Regions.remove as the gate's owner; waits for the region to finish going: {state, seconds, ...}. */
+async function removeWait(ctx, region) {
+  const L = ctx.L;
+  const t0 = Date.now();
+  const r = await L.call('dev.region.remove', { region, requester: OWNER }, 3_600_000);
+  if (r?.refused) return { ...r, seconds: (Date.now() - t0) / 1000, state: `REFUSED ${r.refused}` };
+  for (let i = 0; i < 2400; i++) {
+    const st = await L.call('dev.region.state', { region }, 60_000).catch(() => null);
+    const s = st?.view?.state;
+    if (!s || s === 'REMOVED') return { ...r, seconds: (Date.now() - t0) / 1000, state: s ?? 'REMOVED' };
+    if (s === 'PARTIAL' || s === 'FAILED') return { ...r, seconds: (Date.now() - t0) / 1000, state: s };
+    await sleep(500);
+  }
+  throw new Error(`removal of ${region} did not finish`);
+}
+
+/** The flat base's own ground (no terrain built: a flat fixture stands on the world as it is, as H-a's ponds do). */
+export const FLAT_SITE = Object.freeze({ X0: 9500, Z0: 9000 });
+
 /** The plan's own files (the helper's plan dir): ir, meta, survey, blobs. */
 function planFiles(L, planId) {
   const dir = path.join(L.SIDECAR_DATA, 'regions', 'plans', planId);
@@ -53,7 +72,21 @@ async function walks(ctx, lots, bell) {
     const there = await L.call('dev.nav.villager', { from: bell, to: e, range: 512 }, 180_000).catch((x) => ({ error: String(x.message ?? x) }));
     const back = await L.call('dev.nav.villager', { from: e, to: bell, range: 512 }, 180_000).catch((x) => ({ error: String(x.message ?? x) }));
     out.n++;
-    if (there.canReach && back.canReach) out.ok++; else out.bad.push({ lot: l.id, entrance: e, there: !!there.canReach, back: !!back.canReach, end: there.end ?? null });
+    if (there.canReach && back.canReach) { out.ok++; continue; }
+    // (a miss: what stands round the entrance, for the record: a 5 x 4 x 5 dump's blocks)
+    let around = null;
+    try {
+      const f = path.join(ctx.OUT, `fl-walk-${l.id}.arwd.gz`);
+      const box = [e[0] - 2, e[1] - 1, e[2] - 2, e[0] + 2, e[1] + 2, e[2] + 2];
+      await L.call('dev.region.dump', { box, light: false, file: f }, 120_000);
+      const { decodeArwd } = await ctx.imp('lib/region/vworld.mjs');
+      const zlib = await import('node:zlib');
+      const raw = fs.readFileSync(f);
+      const d = await decodeArwd(raw[0] === 0x1f && raw[1] === 0x8b ? zlib.gunzipSync(raw) : raw);
+      around = [];
+      for (let x = box[0]; x <= box[3]; x++) for (let y = box[1]; y <= box[4]; y++) for (let z = box[2]; z <= box[5]; z++) { const s = d.palette[d.cells[d.at(x, y, z)]]; if (!/:(air|cave_air)$/.test(s)) around.push([x, y, z, s]); }
+    } catch (x) { around = String(x.message ?? x); }
+    out.bad.push({ lot: l.id, entrance: e, bell, there: !!there.canReach, back: !!back.canReach, end: there.end ?? null, nodes: there.nodes ?? null, around });
   }
   return out;
 }
@@ -82,11 +115,16 @@ export async function realiseFl(ctx, tag, fx, o = {}) {
   await L.cmd('/weather clear');
   await L.cmd('/time set 6000');
   let W;
-  if (o.site) {
-    const c = o.site;
+  // a flat fixture (on: flat, no terrain of its own) stands on the flat base as it is: its claim at FLAT_SITE, the fixture's own y moved
+  // onto the world's ground (gate-built terrain is /fill'd blocks, which a body's shell may not take, H's LEAK: unwritable)
+  const flatSite = !o.site && !fx.terrain && (fx.on === 'flat' || !fx.on);
+  if (o.site || flatSite) {
+    const T = flatSite ? B.terrainOf(fx) : null;
+    const c = o.site ?? [FLAT_SITE.X0, FLAT_SITE.Z0, FLAT_SITE.X0 + T.W - 1, FLAT_SITE.Z0 + T.D - 1];
     await L.tp((c[0] + c[2]) / 2, 200, (c[1] + c[3]) / 2);
     await L.call('dev.waitChunks', { timeoutMs: 120_000 }, 180_000).catch(() => null);
-    W = { claim: c, dx: 0, dz: 0, off: 0 };
+    const g = flatSite ? await core.groundOf(ctx, c) : null;
+    W = { claim: c, dx: flatSite ? c[0] - T.x0 : 0, dz: flatSite ? c[1] - T.z0 : 0, off: flatSite ? g - T.y : 0 };
   } else W = await B.buildTerrain(ctx, B.terrainOf(fx));
   // the box's heights from the site's own survey
   const sv = path.join(ctx.OUT, `fl-${tag}-survey.bin`);
@@ -127,7 +165,7 @@ export async function realiseFl(ctx, tag, fx, o = {}) {
   out.realise = { state: r.view.state, lots: lotsView.length, placed: placed.length, states: [...new Set(lotsView.map((l) => l.state))] };
   check(r.view.state === 'PLACED' && lotsView.length > 0 && placed.length === lotsView.length, `item ${o.item ?? 6} (${tag}): realised from the approved artifact: ${r.view.state}, every lot's site standing (${placed.length} of ${lotsView.length}, stub entries bound)`, lotsView.filter((l) => !placed.includes(l)).slice(0, 6));
   // (S-FL-5) the street roads' batch items carry architect_mc:street {zone}
-  const items = await L.call('dev.region.items', { region: r.region }, 30_000).catch((e) => ({ error: String(e.message ?? e), items: [] }));
+  const items = await L.call('dev.region.items', { region: r.region, owner: OWNER }, 30_000).catch((e) => ({ error: String(e.message ?? e), items: [] }));
   const streetItems = (items.items ?? []).filter((i) => /^road:(z\d+_)?street_/.test(i.key) || /^road:\w+_street(_[we])?(_\d+)?$/.test(i.key));
   const zoneIds = new Set(zones.map((a) => a.part));
   const marked = streetItems.filter((i) => zoneIds.has(i.ext?.['architect_mc:street']?.zone));
@@ -157,9 +195,9 @@ export async function realiseFl(ctx, tag, fx, o = {}) {
     check(m5.light && m5.walkCells > 0 && m5.share < 0.01, `item ${o.item ?? 6} (${tag}): M5 under 1% on the walk cells (streets, verges, lanes, the hub): ${(100 * m5.share).toFixed(2)}% (${m5.dark} of ${m5.walkCells} dark and spawnable)`, out.M5.sample);
   }
   if (o.after) out.after = await o.after(r, { W, ck, box, anchors });
-  if (o.noUndo) { await core.removeWait(ctx, r.region).catch(() => null); await L.leaveWorld(); return out; }
+  if (o.noUndo) { await removeWait(ctx, r.region).catch(() => null); await L.leaveWorld(); return out; }
   await L.cmd('/kill @e[type=!minecraft:player]');
-  const rm = await core.removeWait(ctx, r.region);
+  const rm = await removeWait(ctx, r.region);
   await sleep(3000);
   if (o.normal) {
     const files = planFiles(L, r.view.planId);
