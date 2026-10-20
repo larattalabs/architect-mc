@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Fails if a plan-catalogue entry's `sinceApi` is not a real semver, or names a version newer than the catalogue's own API
 // (PLAN_API). A new or changed entry on a slice carries the placeholder "NEXT" (docs/GATES.md "Release versions"), which
-// tools/release-version.mjs stamps at merge: NEXT is allowed only off a release context (tools/lib/release-context.mjs: not main,
+// tools/release-version.mjs stamps at merge: NEXT is allowed only off a release context (tools/release-context.mjs: not main,
 // integrate/*, release/* or a v* tag). Run by kit/test/catalogue-since.test.mjs, so the kit tests catch an unstamped "P0"/slice-name
 // placeholder, and NEXT on a release branch. Also checks that the committed golden carries the same values.
 // Usage: node tools/catalogue-since-check.mjs   (exit 1 with the offending ids)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { releaseContext } from './lib/release-context.mjs';
+import { releaseContext } from './release-context.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SEMVER = /^(\d{1,4})\.(\d{1,5})\.(\d{1,6})$/;

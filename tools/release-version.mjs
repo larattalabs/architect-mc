@@ -62,7 +62,7 @@ export const TARGETS = [
 const SINCE_JSON = ['kit/schemas/plan.json', 'kit/schemas/plan-catalogue.golden.json'];
 const JAVA_DIRS = ['mod/src/main/java', 'mod/src/client/java'];
 const SINCE_JSON_RE = /("sinceApi": ")(NEXT|\d+\.\d+\.\d+)(")/g;
-const SINCE_JAVA_RE = /(@since |\b[Ss]ince )(NEXT\b|\d+\.\d+\.\d+)/g;
+const SINCE_JAVA_RE = /(@since |\b[Ss]ince )(NEXT\b|\d+\.\d+\.\d+)()/g; // (an empty group 3: both have pre, value, post)
 
 class Usage extends Error {}
 class Refused extends Error {}
@@ -224,16 +224,28 @@ export function replanGolden(root, name, { paramsOver = null, noVolumes = false,
     '--keep-out', path.join(inDir, 'keep-out.json'), '--out', out, '--blobs-out', path.join(out, 'blobs'), '--json'];
   if (vols.length && !noVolumes) args.push('--volumes', volDir);
   const r = spawnSync(process.execPath, args, { encoding: 'utf8', maxBuffer: 64 << 20 });
-  if (r.status !== 0) throw new Refused(`${name}: kit/tools/region.mjs plan exit ${r.status}: ${(r.stderr || r.stdout).trim().split('\n').slice(-3).join(' | ')}`);
+  if (r.status !== 0) throw new Refused(`${name}: kit/tools/region.mjs plan exit ${r.status}: ${errLines(r.stderr || r.stdout)}`);
   fs.copyFileSync(path.join(gDir, 'survey.bin'), path.join(out, 'survey.bin'));
   return { dir: out, tmp: t, args: args.slice(1) };
+}
+
+/** A child's error, without its stack frames. */
+const errLines = (text) => String(text).split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('at ') && !/^Node\.js v/.test(l)).slice(0, 4).join(' | ');
+
+/** Run an ES module's source in a fresh node (a temp file, not --input-type: worker threads inherit execArgv). */
+function runModule(code) {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'reltool-js-'));
+  try {
+    fs.writeFileSync(path.join(d, 'run.mjs'), code);
+    return spawnSync(process.execPath, [path.join(d, 'run.mjs')], { encoding: 'utf8', maxBuffer: 64 << 20 });
+  } finally { fs.rmSync(d, { recursive: true, force: true }); }
 }
 
 /** tileShas (tools/scenarios.mjs, 1 worker = 4 workers shuffled) of a plan dir, in a fresh process of the tree's own tools. */
 export function tileShasOf(root, planDir) {
   const code = `const { tileShas } = await import(${JSON.stringify(pathToFileURL(path.join(root, 'tools', 'scenarios.mjs')).href)}); const r = await tileShas(${JSON.stringify(planDir)}); console.log(JSON.stringify({ irSha: r.irSha, tiles: r.tiles, cells: r.cells, workersSame: r.workersSame }));`;
-  const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8', maxBuffer: 64 << 20 });
-  if (r.status !== 0) throw new Refused(`tileShas ${planDir}: exit ${r.status}: ${r.stderr.trim().split('\n').slice(-3).join(' | ')}`);
+  const r = runModule(code);
+  if (r.status !== 0) throw new Refused(`tileShas ${planDir}: exit ${r.status}: ${errLines(r.stderr)}`);
   return JSON.parse(r.stdout.trim().split('\n').pop());
 }
 
@@ -282,8 +294,8 @@ function catalogueProblems(root, { lenient }) {
     if (text !== want) p.push('kit/schemas/plan-catalogue.golden.json is not planCatalogue() (regenerate it: JSON.stringify(planCatalogue(), null, 1))');
     for (const x of sinceApiProblems(planCatalogue(), { allowNext: ${lenient} })) p.push('catalogue ' + x);
     console.log(JSON.stringify(p));`;
-  const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8' });
-  if (r.status !== 0) return [`the catalogue check failed to run: ${r.stderr.trim().split('\n').slice(-2).join(' | ')}`];
+  const r = runModule(code);
+  if (r.status !== 0) return [`the catalogue check failed to run: ${errLines(r.stderr)}`];
   return JSON.parse(r.stdout.trim().split('\n').pop());
 }
 
@@ -355,8 +367,8 @@ export function setVersions(root, { api, mod, kit, catalogue = null, goldens = t
     }
     // 2. the placeholders: NEXT, and legacy semver stamps above the last tag's API
     const above = T ? T.api : null;
-    const stampText = (rel, text, re) => text.split('\n').map((l, i) => l.replace(new RegExp(re.source, 'g'), (m, pre, v) => {
-      if (v === PLACEHOLDER || (above && SEMVER.test(v) && cmp(v, above) > 0 && v !== api)) { stamped.push({ file: rel, line: i + 1, from: v, to: api }); return `${pre}${api}`; }
+    const stampText = (rel, text, re) => text.split('\n').map((l, i) => l.replace(new RegExp(re.source, 'g'), (m, pre, v, post) => {
+      if (v === PLACEHOLDER || (above && SEMVER.test(v) && cmp(v, above) > 0 && v !== api)) { stamped.push({ file: rel, line: i + 1, from: v, to: api }); return `${pre}${api}${post}`; }
       return m;
     })).join('\n');
     for (const f of SINCE_JSON) texts.set(f, stampText(f, texts.get(f) ?? rd(root, f), SINCE_JSON_RE));
