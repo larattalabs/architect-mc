@@ -15888,7 +15888,7 @@ as integrated" row yet). Anything HY's integration changes wins over the facts q
   v50 and v51): KC v61, IRR v62-v63, VOC-c v64-v65.
 - **Totals:** about 6-7 days of work; about 3.5-4 days elapsed with KC and CU/VOC-c in parallel and IRR after KC.
 
-## Phase 6c slice KC: parts keep clear of fluid bodies (DRAFT for Steward review)
+## Phase 6c slice KC: parts keep clear of fluid bodies (FROZEN 2026-10-20, Steward reviewed)
 
 A safety fix. Every part and connector that writes cells keeps clear of the plan's fluid bodies, or is refused, and the checker
 catches any write into a body as an error. PLAN "Queued (coordinator, 2026-10-20): priority" and "Queued from the VOC batch":
@@ -16093,6 +16093,12 @@ One owner, about **1-1.5 days**: the registry and generator `footprint` exports 
 rope, tunnel, lamp and farm-pond reads (0.5 day), `M25:clear` and the `shellCheck` fix (0.25 day), fixtures, byte identity and the
 two in-game rounds (0.5 day). No split: the files are few and shared.
 
+### Steward's review (2026-10-20, at f79a03e7): binding, and it overrides the sections above where they differ
+
+- **S-KC-1.** The later part moves, never the body.
+- **S-KC-2.** Watch cells are strict for now. Solid berm cells are allowed only where a shape needs them, named in its section.
+- **S-KC-3.** A patch with no RC. Steward checks it after release.
+
 ### Open questions for Steward
 
 - **S-KC-1. Who moves.** The later-placed part keeps clear or is refused `OVERLAP {kind: "body"}` (a wall's ring searched round a
@@ -16110,7 +16116,7 @@ two in-game rounds (0.5 day). No split: the files are few and shared.
 
 None: KC is a safety fix with no taste call.
 
-## Phase 6c slice CU: copper weathering and undo (DRAFT for Steward review)
+## Phase 6c slice CU: copper weathering and undo (FROZEN 2026-10-20, Steward reviewed)
 
 Weathered, waxed and scraped copper stays ours. Undo, site removal, deltas, the survival build's "still built" test and the
 refund all treat a copper block at any stage of its own chain as the block we wrote. PLAN "Queued (coordinator, 2026-10-19):
@@ -16280,6 +16286,13 @@ chest on a prop, a copper golem statue), every chain form at least once, plus a 
 One owner, about **1-1.5 days**: the canonical form, `holds` and the wrappers (0.25 day); the block-only tests and the refund
 (0.25 day); the dev hook, `cu_demo` and items 1-8 (0.5-1 day, mostly the survival round). No split.
 
+### Steward's review (2026-10-20, at f79a03e7): binding, and it overrides the sections above where they differ
+
+- **S-CU-1.** Ours means the block we wrote, at any weathering or wax stage. A player record wins.
+- **S-CU-2.** The refund pays the standing block, what's actually there (matches vanilla scraping, can't dupe).
+- **S-CU-3.** Farmland and dirt are interchangeable when we wrote either (trampling).
+- **S-CU-4.** Steward runs its pre-release check.
+
 ### Open questions for Steward
 
 - **S-CU-1. What counts as ours.** Weathered, waxed and scraped copper of the same form is ours (undo restores the cell, removal
@@ -16303,7 +16316,7 @@ One owner, about **1-1.5 days**: the canonical form, `holds` and the wrappers (0
 - **N-CU-1:** as proposed. Leaves, saplings and snow stay "not ours" after they drift.
 
 
-## Phase 6c slice IRR: farm irrigation (DRAFT for Steward review)
+## Phase 6c slice IRR: farm irrigation (FROZEN 2026-10-20, Steward reviewed)
 
 Working farms: a water source in every 9x9 of a farm lot's field, so all of its farmland is hydrated. Each source is an H body
 (contained, drained first on undo), and the region owns it, not the lot design: **lot designs never own fluids** (Steward's
@@ -16480,6 +16493,19 @@ One owner, about **2-2.5 days**: the member, detection and grid (0.5 day); the b
 the mask in `LotFitting` and the site's BOX entry, the K5/M25 exemption (0.5 day); the design brief line and the artifact
 member (0.25 day); items 2-7, mostly the undo paths (1 day). No split: the mask and the body must meet in one owner's tests.
 
+### Steward's review (2026-10-20, at f79a03e7): binding, and it overrides the sections above where they differ
+
+- **S-IRR-1.** The writer sets `irrigate` only for a working or automated farm the card asks for. Homely farms keep `farmPond`.
+- **S-IRR-2. Reserved cells.**
+  - The reserved cells go on the artifact's `$.lots[].irrigation`, as world cells plus lot-relative cells.
+  - `DesignRequest` gains a typed nullable trailing `reserved` (cells the design must leave as given), honoured by the design job and
+    checked by the design's checker. The brief line stays as well.
+  - Steward passes both.
+- **S-IRR-3.** A breach may flood its own field. It's reported in `architect_mc:fluids` as that body's row.
+- **S-IRR-4. Changed from the draft:** removing the lot removes its irrigation sources with it, drain-first and exact. No
+  orphan water is left. The sources belong to the farm.
+- **S-IRR-5.** Steward runs the RC check.
+
 ### Open questions for Steward
 
 - **S-IRR-1. The member.** `irrigate: true` on a farm lot, or on a zone for all its farm lots, exactly like `farmPond`. Will your
@@ -16508,7 +16534,7 @@ member (0.25 day); items 2-7, mostly the undo paths (1 day). No split: the mask 
 - **N-IRR-2:** open 1x1 sources, the vanilla farm look.
 
 
-## Phase 6c slice VOC-c: `rule.palette` measured (DRAFT for Steward review)
+## Phase 6c slice VOC-c: `rule.palette` measured (FROZEN 2026-10-20, Steward reviewed)
 
 "Only copper" and "no wood": `rule.palette` goes from reserved to supported. The plan check measures a family's share over the
 parts in the rule's scope and over the lots in scope, using their bound entries, and `realiseApproved` refuses a required rule
@@ -16715,6 +16741,19 @@ One owner, about **1.5-2 days**: the def, groups and measure (0.5 day); the answ
 the artifact rows, `lotBlocks` and the Java refusal (0.5 day); the catalogue, `vocab/1` and fixtures (0.25 day); the in-game round
 (0.25-0.5 day). If smaller is wanted: plan-time only (parts and named entries), with the `realiseApproved` refusal deferred,
 saves about half a day and the RC check, but then "only copper" over provisional lots is never enforced.
+
+### Steward's review (2026-10-20, at f79a03e7): binding, and it overrides the sections above where they differ
+
+- **S-VOCc-1.** The shape as drafted.
+- **S-VOCc-2. Both checks.**
+  - The `realiseApproved` refusal stays as the safety net.
+  - Add a cheap pre-check: `Library.Entry` (or the views Steward reads) exposes the entry's measured block histogram by family,
+    or a call checks an entry against a `rule.palette`. Steward can then drop or redesign one lot instead of the whole village
+    refusing.
+- **S-VOCc-3. Re-judged after `versionOf`.** A later change that breaks a settlement's palette rule is a `checkDelta` finding,
+  or a refusal for a required rule.
+- **S-VOCc-4.** Prose-only rules answer `NO_FEATURE`, which Steward offers to Claude as a repair.
+- **S-VOCc-5.** Steward runs the RC check.
 
 ### Open questions for Steward
 
