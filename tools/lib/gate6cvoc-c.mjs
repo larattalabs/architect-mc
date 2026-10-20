@@ -332,6 +332,8 @@ const ingame = [{
       out.v65preOak = pre;
       check(pre.paletteOk === true && pre.rules?.[0]?.fits === false && pre.rules[0].required === false, `item 5 (v65): the pre-check with every lot bound to the oak cabin: the non-required no_wood measures ${pre.rules?.[0]?.measured} (outside [0, 0]) but the check is ok: a non-required rule never refuses`, pre);
       // a non-required rule never refuses: realised with every lot bound to the oak cabin (wood in the lots), its ext row records the miss
+      // (the artifact pinned: removing the oak region would otherwise sweep it, C36, before the copper realise below)
+      await L.call('dev.region.pinArtifact', { sha: k65.c.check.artifactSha, owner: OWNER });
       const oakRun = await realise(ctx, k65.c.check.artifactSha, lots);
       out.v65oak = { ...oakRun, record: undefined };
       if (oakRun.region) {
@@ -370,6 +372,7 @@ const ingame = [{
         });
         out.v65world = { written, woodCells, first };
         check(written > 0 && woodCells === 0, `item 5 (v65): the realised world holds no wood block in the ${written} cells the plan writes outside its lots`, first);
+        await L.call('dev.region.pinArtifact', { sha: k65.c.check.artifactSha, owner: OWNER, on: false });
         const rm = await removeRegion(ctx, rr.region);
         const d = await diffSnap(ctx, s);
         out.v65remove = { removed: rm.removed, mismatches: d.mismatches };
