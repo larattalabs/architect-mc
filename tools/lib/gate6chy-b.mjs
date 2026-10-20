@@ -408,26 +408,31 @@ async function lookShots(ctx, tag, r) {
     shots.push({ name, what, eye, at, file: path.relative(OUT, file) });
   };
   const box = (cells) => { const xs = cells.map((c) => c[0]), ys = cells.map((c) => c[1]), zs = cells.map((c) => c[2]); return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys), z0: Math.min(...zs), z1: Math.max(...zs) }; };
-  // per part: an overview from the south-east, high
+  // per part: an overview over its middle (a long course: its first 80 cells), then each step and its weir, from close by
   const parts = [...new Set(r.bodies.map((b) => b.part))];
   for (const part of parts) {
     const bs = r.bodies.filter((b) => b.part === part);
     const B = box(bs.flatMap((b) => [...b.cells, ...b.shell]));
     const at = [(B.x0 + B.x1) / 2, B.y1, (B.z0 + B.z1) / 2];
-    const span = Math.max(B.x1 - B.x0, B.z1 - B.z0, 12);
-    await shot(`${tag}_${part}`, [at[0] + span * 0.35, B.y1 + span * 0.45, at[2] + span * 0.55], at, `${part}: the whole`);
-    // each step (a body's spill: a lip, a fall's column, a riffle), from beside it
+    const span = Math.min(70, Math.max(B.x1 - B.x0, B.z1 - B.z0, 12));
+    await shot(`${tag}_${part}`, [at[0] + span * 0.45, B.y1 + span * 0.4, at[2] + span * 0.45], at, `${part}: the whole`);
+    // each step (a body's spill: a lip, a fall's column, a riffle), from downstream, looking back up at it
     let k = 0;
     for (const b of bs) {
       if (!b.spill.length || k >= 3) continue;
       const S = box(b.spill);
-      const sa = [(S.x0 + S.x1) / 2 + 0.5, (S.y0 + S.y1) / 2, (S.z0 + S.z1) / 2 + 0.5];
-      const along = S.x1 - S.x0 >= S.z1 - S.z0;
-      await shot(`${tag}_${part}_step${++k}`, along ? [sa[0] + 3, S.y1 + 5, sa[2] + 10] : [sa[0] + 10, S.y1 + 5, sa[2] + 3], sa, `${part}: ${b.id}'s step (its lip, fall or riffle)`);
+      const top = b.spill.filter((c) => c[1] === S.y1), low = b.spill.filter((c) => c[1] === S.y0);
+      const mean = (a, i) => a.reduce((t, c) => t + c[i], 0) / a.length;
+      let dx = mean(low, 0) - mean(top, 0), dz = mean(low, 2) - mean(top, 2);
+      if (Math.abs(dx) + Math.abs(dz) < 0.5) { dx = (S.x1 - S.x0) >= (S.z1 - S.z0) ? 1 : 0; dz = dx ? 0 : 1; }
+      const n = Math.hypot(dx, dz) || 1;
+      dx /= n; dz /= n;
+      const sa = [mean(b.spill, 0) + 0.5, (S.y0 + S.y1) / 2, mean(b.spill, 2) + 0.5];
+      await shot(`${tag}_${part}_step${++k}`, [sa[0] + dx * 9 - dz * 4, S.y1 + 4, sa[2] + dz * 9 + dx * 4], sa, `${part}: ${b.id}'s step (its lip, fall or riffle), from downstream`);
     }
-    // a weir (a lining course facing natural water)
-    const weirB = bs.find((b) => b.lining.length && b.joins.length === 0 && b.planJoins.length === 0 && !b.spill.length);
-    if (weirB) { const Wb = box(weirB.lining); const wa = [(Wb.x0 + Wb.x1) / 2 + 0.5, Wb.y1, (Wb.z0 + Wb.z1) / 2 + 0.5]; await shot(`${tag}_${part}_weir`, [wa[0] - 8, Wb.y1 + 6, wa[2] + 8], wa, `${part}: the weir head`); }
+    // a weir (a lining course facing natural water, on a body with no spill of its own)
+    const weirB = bs.find((b) => b.lining.length && !b.spill.length && b.joins.length === 0);
+    if (weirB) { const Wb = box(weirB.lining); const wa = [(Wb.x0 + Wb.x1) / 2 + 0.5, Wb.y1, (Wb.z0 + Wb.z1) / 2 + 0.5]; await shot(`${tag}_${part}_weir`, [wa[0] - 7, Wb.y1 + 5, wa[2] + 7], wa, `${part}: the weir head`); }
   }
   return shots;
 }
