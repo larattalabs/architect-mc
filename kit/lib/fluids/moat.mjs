@@ -315,3 +315,8 @@ export function planWaterClearance(K, l) {
   if (rectSurvey(K.env, box).water) return null;
   return inp.water.some(([x, z]) => x >= box.minX && x <= box.maxX && z >= box.minZ && z <= box.maxZ) ? 1 : null;
 }
+
+/** (6c KC, §2) The footprint this part reserves at resolve (keep.mjs): its ring and berm bands. Pure: [[x0, z0, x1, z1]]. */
+export function footprint(res) {
+  return Array.isArray(res?.footprints) ? res.footprints.map((q) => [...q]) : [];
+}

@@ -39,7 +39,8 @@ import { emitTunnels, tunnelAnswer, tunnelAutoLeg, tunnelFailAnswer, tunnelLeg, 
 /** (6c T3) The connector kinds that get the `links` stage and the K context: K1's and T3's. */
 export const LINK_KINDS = Object.freeze([...K1_KINDS, ...T3_KINDS]);
 // (6c H) water bodies and wet structures: the generators behind one dispatcher (lib/fluids/hooks.mjs), the stage name from a leaf
-import { asksFarmPond, dropOverflows, emitOrder, fluidAnswer, fluidEmit, fluidFallbackClearance, fluidFarmPonds, fluidPassInput, fluidResolve, fluidStageWanted, isHPart, wetBridgeFallback } from '../fluids/hooks.mjs';
+import { asksFarmPond, dropOverflows, emitOrder, fluidAnswer, fluidEmit, fluidFallbackClearance, fluidFarmPonds, fluidFootprint, fluidPassInput, fluidResolve, fluidStageWanted, isHPart, wetBridgeFallback } from '../fluids/hooks.mjs';
+import { registerBody, release as releaseKeep, reserve, spanOf } from '../fluids/keep.mjs';
 import { FLUIDS_STAGE } from '../fluids/kinds.mjs';
 
 /** §7's caps (each a request may only lower). */
@@ -732,6 +733,8 @@ function checkpoint(r) {
     // ((6c HY, §7.7) the overflow registrations, by length (a part that rolls back during its emit drops what it registered there), and
     // meta.courses (siteplan's courses rows))
     overflows: r._overflows?.length ?? null, courses: r.meta.courses?.length ?? null,
+    // ((6c KC) the footprint registry, by copy (an emit replaces a reservation in place))
+    keep: Array.isArray(r._keep) ? [...r._keep] : null,
   };
 }
 /** (6c H) Truncate a record list to its checkpointed length, or drop it where the checkpoint had none. */
@@ -754,6 +757,7 @@ function rollback(r, c) {
   if (c.fluid) { restoreList(r, '_fluidBodies', c.fluid.bodies); for (const k of ['waters', 'quays', 'wet']) restoreList(r.meta, k, c.fluid[k]); }
   if (c.overflows !== undefined && Array.isArray(r._overflows) && c.overflows !== null) r._overflows.length = c.overflows;
   if (c.courses !== undefined) restoreList(r.meta, 'courses', c.courses);
+  if (c.keep && Array.isArray(r._keep)) { r._keep.length = 0; r._keep.push(...c.keep); }
 }
 /** The region parts (and lots) added since a checkpoint. */
 const addedSince = (r, c) => ({ parts: r.parts.slice(c.parts).map((p) => p.id), lots: r.lots.slice(c.lots).map((l) => l.id), roads: r.roads.slice(c.roads).map((x) => x.id),
@@ -785,6 +789,9 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   // (6c HY, §1.5, §7.7) the overflow registrations: a course registers one on the plan body it leaves in step 2 (hooks.mjs registerOverflow),
   // the body's generator reads it in step 3; empty for every plan without a course (step 3's order is then plan order)
   const overflows = [];
+  // (6c KC, §2) the footprint registry (fluids/keep.mjs): H parts reserve at resolve, bodies register at emit; empty for every plan
+  // without an H part
+  const keep = [];
   const res = new Map(); // id -> resolution
   const geom = new Map(); // id -> {rect}
   const notes = [];
@@ -834,6 +841,12 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     const p = byId.get(id);
     if (p && !answers.has(id)) ans(p, { class: 'refused', reasons: [why] });
   }
+  // (6c KC, §5) the backstop's refusals (the replan): a part that wrote a body's cells is refused OVERLAP {kind: "body"} before it
+  // resolves, so it writes nothing
+  for (const [id, why] of Object.entries(ctx.clearRefuse ?? {}).sort(([a], [b]) => (a < b ? -1 : 1))) {
+    const p = byId.get(id);
+    if (p && !answers.has(id)) ans(p, { class: 'refused', reasons: [why] });
+  }
   const order = V.order.map((id) => byId.get(id));
   const zonesAccepted = []; // {id, rect}
   const formsAccepted = []; // footprint rects of the forms placed so far
@@ -863,6 +876,9 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       if (f.klass === 'fits' || f.klass === 'adjusted') {
         if (f.rect) geom.set(p.id, { rect: f.rect });
         for (const fp of f.footprints ?? []) formsAccepted.push(arrRect(fp));
+        // ((6c KC, §2) its footprint reserved: every writer placed after it keeps clear)
+        const kfp = fluidFootprint(C, p, f);
+        if (kfp) reserve(keep, { part: p.id, body: `w_${p.id}`.slice(0, 40), rects: kfp, ...spanOf(env.S, kfp) });
       }
       ans(p, { class: f.klass, reasons: f.reasons, deviations: f.deviations, wouldFit: f.wouldFit, notes: f.notes });
       continue;
@@ -979,6 +995,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   if (!r) { r = makeRegion(null); r.stages(stagesWanted); }
   // ((6c HY) the overflow store rides on the region for checkpoint/rollback; a plan without a course has none)
   if (overflows.length) Object.defineProperty(r, '_overflows', { value: overflows, enumerable: false, writable: true, configurable: true });
+  // ((6c KC) the footprint registry rides on the region for checkpoint/rollback, always (an empty one for a plan without an H part))
+  Object.defineProperty(r, '_keep', { value: keep, enumerable: false, writable: true, configurable: true });
   // (6c HY-a) plan_v0 declares no `hydrology` (editing plan_v0.mjs would move every plan's programSha, so every IR): the check
   // registers the pass it ran through the region's own entry point, past r.pass's declaration check
   if (env.hydro) r._hydrology({ _ran: env.hydro });
@@ -1147,7 +1165,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   const makeK = () => ({
     env, ctx, r, plan: P.plan, V, order, byId, k1Parts, geom, res, zoneEmit, lotZone, answers, ans, depState, okClass, timeUp, stageOf, notes, partOf, tolOf, judge,
     checkpoint: () => checkpoint(r), rollback: (c) => rollback(r, c), addedSince: (c) => addedSince(r, c), mark, endpointNode: (e, other, conn, where) => endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where),
-    record: {}, routed: [], overflows,
+    record: {}, routed: [], overflows, keep,
   });
   let K = k1Parts.length ? makeK() : null;
   if (K) planWalls(K);
@@ -1161,12 +1179,13 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     const fp = fluidFarmPonds(ensureK());
     for (const [zid, ns] of fp.notes) { const a = answers.get(zid); if (a) a.notes = [...(a.notes ?? []), ...ns]; }
     for (const q of fp.ponds) if (q.body.volume && q.body.guardRuns) (K.record.guards ??= []).push({ part: q.zone, body: q.body.id, kind: 'body', fluids: true, volume: q.body.volume, runs: q.body.guardRuns.flat() });
+    for (const q of fp.ponds) registerBody(keep, q.body, q.zone);
   }
   // ---- (6c H) step 3 for H parts: water bodies, moats and quays, before the routes (the route pass sees their water), each under a
   // checkpoint; a generator refuses by throwing 'CODE: message'
   // ((6c HY, §7.7) a part an overflow feeds emits after the course that registered it: emitOrder, plan order when there is none; a
   // course that no longer fits drops its overflows before its feeder emits)
-  for (const p of order) if (isHPart(p) && !okClass(p.id)) dropOverflows(overflows, p.id);
+  for (const p of order) if (isHPart(p) && !okClass(p.id)) { dropOverflows(overflows, p.id); releaseKeep(keep, p.id); }
   for (const p of emitOrder(order.filter(isHPart), overflows)) {
     if (!isHPart(p) || !okClass(p.id)) continue;
     const cp = checkpoint(r);
@@ -1174,12 +1193,15 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     try {
       fluidEmit(ensureK(), p, res.get(p.id));
       mark(p.id, addedSince(r, cp));
+      // ((6c KC, §2) its bodies' exact sets replace its reservation)
+      for (const b of (r._fluidBodies ?? []).slice(bodies0)) registerBody(keep, b, p.id);
       // (§10) the approval guards: each body's shell, buffer and joins, each wet column, over the frozen volume it was planned on
       for (const b of (r._fluidBodies ?? []).slice(bodies0)) if (b.volume && b.guardRuns) (K.record.guards ??= []).push({ part: p.id, body: b.id, kind: 'body', fluids: true, volume: b.volume, runs: b.guardRuns.flat() });
       for (const w of (r.meta.wet ?? []).slice(wet0)) if (w.volume && w.columns) (K.record.guards ??= []).push({ part: p.id, body: w.id, kind: 'wet', fluids: true, volume: w.volume, runs: w.columns.flat() });
     } catch (e) {
       rollback(r, cp);
       dropOverflows(overflows, p.id); // ((6c HY) a course refused here takes its overflows with it, before its feeder emits)
+      releaseKeep(keep, p.id); // ((6c KC) and frees its footprint)
       const m = /^([A-Z_]{3,20}): /.exec(String(e.message));
       // ((H-a) a generator's refusal may carry its evidence and a wouldFit on the error)
       ans(p, { class: 'refused', reasons: [{ code: m ? m[1] : 'NO_ROOM', message: String(e.message), ...(e.evidence ? { evidence: e.evidence } : {}) }], ...(e.wouldFit ? { wouldFit: e.wouldFit } : {}) });

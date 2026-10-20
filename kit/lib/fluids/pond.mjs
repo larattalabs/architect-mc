@@ -532,3 +532,8 @@ export function wetWell(r, well, { stage = 'props', id = null } = {}) {
 }
 
 void centre; void gap; void arrRect;
+
+/** (6c KC, §2) The footprint this part reserves at resolve (keep.mjs): its rect grown by its shell and a keep of 2 (lava: its fire keep). Pure: [[x0, z0, x1, z1]]. */
+export function footprint(res) {
+  return Array.isArray(res?.footprints) ? res.footprints.map((q) => [...q]) : [];
+}

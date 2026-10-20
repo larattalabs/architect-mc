@@ -325,3 +325,8 @@ export function answer(K, p, res) {
   if (!res?.out) return null;
   return { geometry: { rect: [res.rect.minX, res.rect.minZ, res.rect.maxX, res.rect.maxZ], quays: [res.out] } };
 }
+
+/** (6c KC, §2) The footprint this part reserves at resolve (keep.mjs): its basin. Pure: [[x0, z0, x1, z1]]. */
+export function footprint(res) {
+  return Array.isArray(res?.footprints) ? res.footprints.map((q) => [...q]) : [];
+}
