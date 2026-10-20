@@ -97,6 +97,7 @@ public final class Placement {
 		ServerLifecycleEvents.SERVER_STOPPING.register(s -> save(s, true));
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			JOBS.clear();
+			FluidRearm.clear();
 			Batches.reset();
 			Groups.reset(s);
 			STATS.reset();
@@ -157,6 +158,8 @@ public final class Placement {
 				runJobs(srv);
 			}
 			syncGhosts(srv);
+			// (relief falling water) a restore's flowing fluid gets its tick once nothing is restoring any more
+			FluidRearm.tick(srv, Groups.removing() || JOBS.stream().anyMatch(j -> j instanceof RestoreJob || j instanceof DeltaJob));
 		} catch (RuntimeException e) {
 			Architect.LOGGER.error("Placement tick failed", e);
 		}
