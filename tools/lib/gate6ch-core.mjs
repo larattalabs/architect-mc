@@ -21,6 +21,13 @@ export const UNCHANGED_SKIPPED = Object.freeze(['refused/k1a_r01_wall_water.json
  * but its kitVersion (the main checkout's kit in a detached worktree beside this one). `ok`: n >= 40 and only the named exceptions
  * differ (`excepted`: those that do).
  */
+/**
+ * (gate waits, 2026-10-20) The comparison's per-fixture results by `${root}|${mainHead}`: H-a's item 11 (gate6ch-a.mjs haUnchanged)
+ * runs the very same loop over the same fixtures against the same origin/main, so inside one h-unit it reads them from here instead
+ * of planning all 61 fixtures twice more. Its own check, exceptions and bar are unchanged.
+ */
+export const unchangedRuns = new Map();
+
 export async function unchanged(root) {
   const { createHash } = await import('node:crypto');
   const sha256 = (s) => createHash('sha256').update(s).digest('hex');
@@ -57,6 +64,7 @@ export async function unchanged(root) {
     }
   }
   out.same = same; out.n = Object.keys(out.fixtures).length; out.skipped = skipped;
+  unchangedRuns.set(`${root}|${mainHead}`, { fixtures: { ...out.fixtures }, same, skipped });
   const differing = Object.entries(out.fixtures).filter(([, v]) => !(v.answers && v.ir && v.overall));
   out.excepted = differing.map(([k]) => k).filter((k) => UNCHANGED_EXCEPTIONS.includes(k));
   out.differ = differing.filter(([k]) => !UNCHANGED_EXCEPTIONS.includes(k)).map(([k, v]) => [k, v]);

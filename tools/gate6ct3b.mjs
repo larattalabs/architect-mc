@@ -38,6 +38,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { kitReuse } from './lib/kit-reuse.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-T3b-run');
@@ -104,6 +105,8 @@ steps.base = async () => {
 
 // ------------------------------------------------------------------ offline
 
+/** (gate waits, 2026-10-20) The kit suite once per gate run (tools/lib/kit-reuse.mjs): pass/fail-only kit files take this run's unit-kit results when exact. */
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 function nodeTest(files, timeout = 3_600_000) {
   const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
   const t = `${r.stdout}${r.stderr}`;
@@ -113,13 +116,13 @@ function nodeTest(files, timeout = 3_600_000) {
 
 steps.unit = async () => {
   const out = {};
-  out.t3b = nodeTest(['kit/test/tunnel-t3b.test.mjs', 'kit/test/plan-t3b.test.mjs']);
+  out.t3b = kitOnce(['kit/test/tunnel-t3b.test.mjs', 'kit/test/plan-t3b.test.mjs']);
   check(out.t3b.code === 0 && out.t3b.fail === 0 && out.t3b.pass >= 19, `items 2, 4, 7, 8, 11, 12 (kit, tunnels): the floor profile, the survey-first cover, the corridor box, the geometry's checks in order (NO_COVER, SPAN, TOO_STEEP, WATER, PROTECTED, VOLUME), the lining, cave sealing, falling-block lining and the fluid buffer (a pocket 2 from the bore and lava 1 from it refused, at 3 fits); the two-plan flow (the first plan asks one corridor and answers incomplete VOLUME); v37 (fits, M3:tunnel, M4:tunnel, M5, M6, M8 clean, both movers through); the refusal fixtures; the broken variants (noLining, noLamps, fluidBuffer 0, cover 1, the postern ignored); §9's recorded tunnels; v40's postern; v38b's auto tunnel; determinism: ${out.t3b.pass} pass, ${out.t3b.fail} fail`, out.t3b.failing);
-  out.p0 = nodeTest(['kit/test/plan-p0.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/plan-p0-det-1.test.mjs', 'kit/test/plan-p0-det-2.test.mjs', 'kit/test/plan-p0-det-3.test.mjs', 'kit/test/plan-p0-asks.test.mjs', 'kit/test/k1-foundation.test.mjs', 'kit/test/t3-foundation.test.mjs', 'kit/test/plan-k1-batch.test.mjs']);
+  out.p0 = kitOnce(['kit/test/plan-p0.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/plan-p0-det-1.test.mjs', 'kit/test/plan-p0-det-2.test.mjs', 'kit/test/plan-p0-det-3.test.mjs', 'kit/test/plan-p0-asks.test.mjs', 'kit/test/k1-foundation.test.mjs', 'kit/test/t3-foundation.test.mjs', 'kit/test/plan-k1-batch.test.mjs']);
   check(out.p0.code === 0 && out.p0.fail === 0, `item 16: P0's tests after T3 (v37, v38b, v40 fit; e17 answers tunnel.under; item 9's coverage without t3-pending-b.json), the K1 foundation and batch tests: ${out.p0.pass} pass, ${out.p0.fail} fail`, out.p0.failing);
-  out.goldens = nodeTest(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/region-lint.test.mjs', 'kit/test/relief-t1.test.mjs', 'kit/test/route-t2.test.mjs', 'kit/test/rope-k1b.test.mjs', 'kit/test/plan-k1b.test.mjs', 'kit/test/plan-k1a.test.mjs']);
+  out.goldens = kitOnce(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/region-lint.test.mjs', 'kit/test/relief-t1.test.mjs', 'kit/test/route-t2.test.mjs', 'kit/test/rope-k1b.test.mjs', 'kit/test/plan-k1b.test.mjs', 'kit/test/plan-k1a.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 13: the tile goldens that must not move (S1, S7, S2, mega_bench, relief_demo, route_demo, forms_demo, scatter_demo, districts_demo, links_demo); T2's routes (its water test unchanged); K1's tests; the lint (the tunnel files on the plan path): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
-  out.kit = nodeTest(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
+  out.kit = kitOnce(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   // item 14 (recorded): v37's check time with and without the volume pass (the kit's in-process two-plan flow)
   {
