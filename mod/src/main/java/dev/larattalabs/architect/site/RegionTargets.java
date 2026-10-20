@@ -745,8 +745,9 @@ public final class RegionTargets {
 				r.markBuilt(q, true);
 				continue;
 			}
+			// bottom up: a solid cell below first (a cut below is cleared after the paid cells over it, §6.4: never waited for)
 			int below = r.queuePos(p.below());
-			if (below >= 0 && !r.built.get(below) || r.support[q] >= 0 && !r.built.get(r.support[q])) {
+			if (below >= 0 && !r.built.get(below) && !r.target[below].isAir() || r.support[q] >= 0 && !r.built.get(r.support[q])) {
 				continue;
 			}
 			int[] d = pl.deps == null ? null : pl.deps[q];
@@ -1066,8 +1067,10 @@ public final class RegionTargets {
 			var tm = t.member();
 			var ti = tm == null || tm.itemKey() == null ? null : b.item(tm.itemKey());
 			int ts = ti == null ? -1 : stages.indexOf(ti.stage);
-			boolean earlier = ts >= 0 && (ts < si || ts == si && pathTile && ti != null && "tile".equals(ti.itemKind) && ti.spec != null && "terrain".equals(ti.spec
-				.get("set").getAsString()));
+			// an earlier stage's, or one this item is queued after (a road after its stage's tiles, a path tile after its terrain tiles): in
+			// survival "after" means built, not put down (else a road writes over a target's unbuilt cells)
+			boolean earlier = ts >= 0 && (ts < si || ts == si && ti != null && (i.after.contains(ti.key) || pathTile && "tile".equals(ti.itemKind)
+				&& ti.spec != null && "terrain".equals(ti.spec.get("set").getAsString())));
 			if (!earlier || !meets(t.box(), roi)) {
 				continue;
 			}

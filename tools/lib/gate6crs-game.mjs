@@ -82,7 +82,8 @@ export async function site(ctx, tag, fx, { creative = false, rules = 'exact' } =
   await L.fresh(world, creative ? FLAT : SURV);
   await L.setRules(rules);
   await L.cmd('/weather clear');
-  const W = await B.buildTerrain(ctx, B.terrainOf(fx));
+  const T = B.terrainOf(fx);
+  const W = await B.buildTerrain(ctx, T);
   for (const b of fx.sand ?? []) {
     const box = [b[0] + W.dx, b[1] + W.off, b[2] + W.dz, b[3] + W.dx, b[4] + W.off, b[5] + W.dz];
     await L.cmd(`/fill ${box.join(' ')} minecraft:sand`);
@@ -90,7 +91,7 @@ export async function site(ctx, tag, fx, { creative = false, rules = 'exact' } =
   const wp = await B.worldPlan(ctx, fx, W);
   if (fx.game && ctx.subst) wp.plan = JSON.parse(JSON.stringify(wp.plan).replaceAll('${region}', ctx.subst.region ?? ''));
   await L.settle(1500);
-  return { W, wp, world };
+  return { W, wp, world, T };
 }
 
 /** The snapshot box of a site: the claim and 8 round it, 8 under its lowest ground to 40 over its highest. */
@@ -115,7 +116,8 @@ export async function check(ctx, tag, s) {
 
 /** The owner's stockpile: `n` crates in a row west of the claim's north-west corner, on the ground. */
 export async function pile(ctx, s, n = 3) {
-  const y = s.W.minY + 1;
+  const y = s.W.off + (s.T?.y ?? 64) + 1; // over the base's grass (terrainOf's y), outside the claim's bands
+  if (s.T?.bands?.some((b) => b.x0 <= s.W.claim[0] - s.W.dx - 6 && s.W.claim[0] - s.W.dx - 6 + 2 * n <= b.x1 && b.z0 <= s.W.claim[1] - s.W.dz - 6 && s.W.claim[1] - s.W.dz - 6 <= b.z1)) throw new Error('pile: a band under the crates');
   const crates = Array.from({ length: n }, (_, k) => [s.W.claim[0] - 6 + 2 * k, y, s.W.claim[1] - 6]);
   const c = await ctx.L.call('dev.stockpile.create', { owner: OWNER, crates }, 120_000);
   if (c.refused) throw new Error(`createStockpile refused: ${JSON.stringify(c.refused)}`);

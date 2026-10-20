@@ -287,6 +287,141 @@ steps.item5 = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ item 6: half fed (the half-built safety)
+
+/** The kit's checker over the world as it stands (a dump of the box against the pre-realise dump): its M3, M4, M8 and gravity. */
+async function standing(tag, ck, box, beforeFile) {
+  const { decodeArwd, dumpWorld } = await imp('lib/region/vworld.mjs');
+  const { checkRegion } = await imp('lib/region/check.mjs');
+  const planDir = path.join(L.SIDECAR_DATA, 'regions', 'plans', ck.check.checkId);
+  const ir = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8'));
+  const meta = JSON.parse(fs.readFileSync(path.join(planDir, 'meta.json'), 'utf8'));
+  const blobs = (sha) => { const f = path.join(planDir, 'blobs', `${sha}.bin`); return fs.existsSync(f) ? fs.readFileSync(f) : null; };
+  const afterFile = path.join(OUT, `rs-${tag}-half.arwd.gz`);
+  await L.call('dev.region.dump', { box, file: afterFile }, 1_800_000);
+  const before = await decodeArwd(fs.readFileSync(beforeFile));
+  const after = await decodeArwd(fs.readFileSync(afterFile));
+  const world = dumpWorld(before, after, ir.claim, { lots: ir.lots });
+  const rep = checkRegion({ ir, meta, world, prefix: false, blobs });
+  const m = rep.metrics ?? {};
+  const find = (re) => (rep.findings ?? []).filter((f) => re.test(f.rule)).reduce((a, f) => a + (f.count ?? 1), 0);
+  return { M3: m.M3?.floatingCells ?? null, M4: m.M4?.breaches ?? null, M8: m.M8 ? m.M8.unguarded : null, gravity: find(/^M3:gravity/), spurs: find(/^M3:floating_spur/) };
+}
+
+/** No cut open without its paid neighbours (a bore cell without its lining, a terrace's cut without its wall): over every target's cells. */
+async function openCuts(region) {
+  const cells = await L.call('dev.rs.cells', { region }, 300_000);
+  const at = new Map();
+  for (const t of cells.targets ?? []) for (const c of t.cells ?? []) at.set(`${c[0]},${c[1]},${c[2]}`, c[3]);
+  const bad = [];
+  for (const [k, f] of at) {
+    if (!((f & 1) && (f & 2) && (f & 4))) continue; // a held cut, built (open)
+    const [x, y, z] = k.split(',').map(Number);
+    for (let dy = 0; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+      const g = at.get(`${x + dx},${y + dy},${z + dz}`);
+      if (g !== undefined && !(g & 1) && !(g & 2)) bad.push(`${k} (its paid neighbour ${x + dx},${y + dy},${z + dz} unbuilt)`);
+    }
+  }
+  return { cells: at.size, open: [...at.values()].filter((f) => (f & 1) && (f & 2) && (f & 4)).length, bad };
+}
+
+/** No run started without its whole bill: a started, unfinished run's remaining bill is held by the stockpile (stock covers it). */
+async function runsSafe(region) {
+  const rs = await G.rsState(ctx, region);
+  const ps = await G.pileState(ctx);
+  const bad = [];
+  let started = 0;
+  for (const t of rs.targets ?? []) {
+    const cur = (t.runList ?? [])[t.currentRun];
+    if (!cur) continue;
+    const startedUnfinished = (t.runList ?? []).filter((r) => r.started && r !== cur);
+    void startedUnfinished;
+    if (cur.started && t.built < t.cells) {
+      started++;
+      for (const [it, n] of Object.entries(t.reserving ?? {})) if ((ps.stock?.[it] ?? 0) < n) bad.push(`${t.target} run ${t.currentRun} started with ${it} ${ps.stock?.[it] ?? 0} < its ${n}`);
+    }
+  }
+  return { targets: (rs.targets ?? []).length, started, bad };
+}
+
+steps.item6 = async () => {
+  await ensure();
+  const out = {};
+  for (const [tag, name] of [['rs04', 'rs04_tunnel'], ['rs02', 'rs02_walled']]) {
+    if (process.env.RS_ONLY && !process.env.RS_ONLY.split(',').includes(tag)) continue;
+    const fx = G.fixture(ctx, name);
+    const entries = entriesOf(fx);
+    const s = await G.site(ctx, `${tag} half`, fx);
+    if (Object.keys(entries).length) await G.designs(ctx);
+    const box = G.boxOf(s.W);
+    const beforeFile = path.join(OUT, `rs-${tag}-half-before.arwd.gz`);
+    await L.call('dev.region.dump', { box, file: beforeFile }, 1_800_000);
+    const ck = await G.check(ctx, `${tag}-half`, s);
+    await G.pile(ctx, s, 4);
+    const region = await G.realise(ctx, ck.check.artifactSha, entries);
+    // half of each item's whole bill, once (the check's cost.bom), then the builder runs until nothing moves
+    await G.waitFor(ctx, region, (st, rs) => (rs.targets ?? []).length > 0, { timeoutMs: 300_000 });
+    const half = {};
+    for (const [it, n] of Object.entries(ck.check.cost.bom ?? {})) if (Math.floor(n / 2) > 0) half[it] = Math.floor(n / 2);
+    const acc = (await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: half, exact: false }, 120_000)).accepted ?? {};
+    let last = -1, still = 0;
+    for (let k = 0; k < 120 && still < 4; k++) {
+      await sleep(4000);
+      const rs = await G.rsState(ctx, region);
+      const built = (rs.targets ?? []).reduce((a, t) => a + t.built, 0);
+      still = built === last ? still + 1 : 0;
+      last = built;
+    }
+    const runs = await runsSafe(region);
+    const cuts = await openCuts(region);
+    const sm = await standing(`${tag}`, ck, box, beforeFile);
+    const rs = await G.rsState(ctx, region);
+    out[tag] = { fed: acc, runs, cuts: { cells: cuts.cells, open: cuts.open, bad: cuts.bad.slice(0, 8) }, standing: sm, build: rs.build && { percent: rs.build.percent, parts: rs.build.parts.map((p) => [p.part, p.state, p.built, p.cells]) } };
+    check(runs.bad.length === 0, `item 6 (${tag}, half fed ${sum(acc)} items): no run started without its whole bill (${runs.started} run(s) under way, each with its remaining bill in stock)`, runs.bad.slice(0, 6));
+    check(cuts.bad.length === 0, `item 6 (${tag}): no cut open without its lining or wall: ${cuts.open} open cut(s) of ${cuts.cells} target cells, every paid neighbour above and beside built`, cuts.bad.slice(0, 6));
+    check(sm.M3 === 0 && (sm.M4 ?? 0) === 0 && (sm.M8 ?? 0) === 0 && sm.gravity === 0, `item 6 (${tag}): the world as it stands half built: M3 ${sm.M3} floating, M4 ${sm.M4}, M8 ${sm.M8} unguarded, ${sm.gravity} gravity`, sm);
+    await G.remove(ctx, region);
+  }
+  // rs06: the road over the held terrace waits for the terrace's target, then equals its twin
+  if (!process.env.RS_ONLY || process.env.RS_ONLY.split(',').includes('rs06')) {
+    const fx = G.fixture(ctx, 'rs06_over_held');
+    const T = await G.twin(ctx, 'rs06', fx);
+    const s = await G.site(ctx, 'rs06', fx);
+    const ck = await G.check(ctx, 'rs06', s);
+    const crates = await G.pile(ctx, s, 4);
+    const region = await G.realise(ctx, ck.check.artifactSha);
+    // feed everything but the terrace's bill: the road waits for it
+    const stepsBom = (ck.check.parts.find((a) => a.part === 'steps')?.cost?.survival?.bom) ?? {};
+    let sawWait = null, roadEarly = false;
+    const f1 = await G.feed(ctx, region, { timeoutMs: 600_000, until: (st, rs) => {
+      const w = (st.unfinished ?? []).find((it) => it.key.startsWith('road:route') && it.reason === 'SITE_BUSY');
+      if (w) sawWait = w;
+      const steps0 = (rs.build?.parts ?? []).find((p) => p.part === 'steps');
+      const roads = (rs.build?.parts ?? []).filter((p) => p.part.startsWith('route'));
+      if (steps0 && steps0.state !== 'built' && roads.some((p) => p.built > 0)) roadEarly = true;
+      return !!sawWait && !!steps0;
+    }, extra: async () => G.minus({}, stepsBom) });
+    void f1;
+    check(!!sawWait && !roadEarly, `item 6 (rs06): the road over the terrace waits SITE_BUSY while the terrace's target builds (${json(sawWait)}), nothing of it written before`);
+    const f = await G.feed(ctx, region, { timeoutMs: 1_200_000 });
+    const d = await G.twinDiff(ctx, T.box, T.file, crates);
+    check(f.last.rs.build?.done && d.mismatches === 0, `item 6 (rs06): then the terrace built, the road and its lamps written: done ${f.last.rs.build?.done}, equal to the INSTANT twin (${d.mismatches} differ)`, d.list);
+    out.rs06 = { wait: sawWait, early: roadEarly, twin: d.mismatches };
+    await G.remove(ctx, region);
+  }
+  return out;
+};
+
+// (development) one fixture checked in game, survival or creative (RS_FIXTURE, RS_CREATIVE=1): its answers
+steps.checkonly = async () => {
+  await ensure();
+  const fx = G.fixture(ctx, process.env.RS_FIXTURE);
+  const s = await G.site(ctx, 'checkonly', fx, { creative: process.env.RS_CREATIVE === '1' });
+  const ck = await G.check(ctx, 'checkonly', s);
+  for (const a of ck.check?.parts ?? []) log(`  ${a.part} ${a.class} ${a.reasons?.[0]?.code ?? ''} ${(a.reasons?.[0]?.message ?? '').slice(0, 300)}`);
+  return { overall: ck.check?.overall };
+};
+
 // ------------------------------------------------------------------ dispatch
 
 steps.report = async () => {
