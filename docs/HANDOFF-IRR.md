@@ -14,8 +14,15 @@ the lot drains and removes its sources, exactly).
   DesignRequest.reserved, ApiRules features), sidecar (Reserved schema, brief line, checker args, sim --leave-reserved), tests
   (kit irr.test 9/0, ApiIrrTest, LotMaskTest, PlanChecksHTest, sidecar reserved.test), gate driver tools/gate6cirr.mjs.
 - Offline: kit suite 633/0 (+irr 9); byte identity 245/245 vs the merge base, no exception; api-compat --gate6cirr 4/4.
-- In game: first irr-ingame run (artifacts/gate-runs-IRR/20261020-115507-6cirr) found driver bugs (setRules('default') leaves
-  random ticks 0; v2 installed before the realise; the dropped count's frame order; the bed check) - fixed, rerun pending.
+- In game: chain 6cirr PASS at the head before the look fix (artifacts/gate-runs-IRR/20261020-125524-6cirr: irr-unit 250/0,
+  irr-ingame, irr-crash FL1/FL2/FL6). Look: 20261020-132544-6cirr-look; gallery https://claude.ai/artifact/6sWvhGKWw3XECVaWvrw3Me.
+- Slice tier running: artifacts/gate-runs-IRR/20261020-133341-slice (3 shards, 8912-8917).
+
+## Next
+
+1. Read the slice SUMMARY.md; fix or explain failures (compare pre-existing ones against CU's and KC's runs).
+2. Gate-verifier over origin/main..HEAD; it re-runs breach, undo, lot removal and crash (chain 6cirr, ports 8914-8917).
+3. Gate rows into CONTRACT "IRR as built"; retire this file; push.
 
 ## Plan (decisions)
 
@@ -45,6 +52,4 @@ Java:
 
 Gate: `tools/gate6cirr.mjs` (irr-unit, irr-ingame, irr-crash), fixtures v62, v63, irr/*.
 
-## Next
 
-Everything above.
