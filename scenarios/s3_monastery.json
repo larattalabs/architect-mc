@@ -116,7 +116,7 @@
     },
     "planSurvey": {
       "sha": "cc52144b8f732491cf6d498d4fdd181ec7d43f838e06f0eebe8ee3d03ac66b14",
-      "kitVersion": "0.41.0",
+      "kitVersion": "0.38.0",
       "resolution": 1,
       "columns": 36864,
       "water": 4155,

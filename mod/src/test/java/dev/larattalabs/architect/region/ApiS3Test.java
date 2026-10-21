@@ -10,16 +10,16 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
- * Phase 6c slice S3 (docs/CONTRACT.md "Phase 6c slice S3" §5): API 1.40.0 (placeholder; the coordinator renumbers) with no new records,
+ * Phase 6c slice S3 (docs/CONTRACT.md "Phase 6c slice S3" §5): API NEXT (set at merge by tools/release-version.mjs) with no new records,
  * methods, reasons or IR kinds; the features {@code terracedZones} (an S3 helper, {@code region.terracedZones}: plan/0's {@code terraces}
  * member) and {@code scenarioS3} ({@code region.monastery}: its kit bundles the {@code terraced_monastery} program).
  */
 class ApiS3Test {
 	@Test
 	void version() {
-		// later slices bump both; S3's placeholders (API 1.40.0, kit 0.41.0) are the floor
-		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.40.0") >= 0, ArchitectApi.VERSION);
-		assertTrue(IrStale.semverCompare(IrStale.KIT_VERSION, "0.41.0") >= 0, IrStale.KIT_VERSION);
+		// (versions are set at merge: at least the v0.40.0 tag's API and kit)
+		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.37.0") >= 0, ArchitectApi.VERSION);
+		assertTrue(IrStale.semverCompare(IrStale.KIT_VERSION, "0.38.0") >= 0, IrStale.KIT_VERSION);
 	}
 
 	@Test

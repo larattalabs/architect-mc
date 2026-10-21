@@ -53,6 +53,8 @@ function tempTree() {
   for (const f of ['tools/scenarios.mjs', 'tools/lib/scenario-eval-worker.mjs', 'tools/catalogue-since-check.mjs', 'tools/release-context.mjs', 'mod/gradle.properties',
     'mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java', 'mod/src/main/java/dev/larattalabs/architect/region/IrStale.java']) cp(f);
   for (const g of ['links_demo_flat', 'crossings_demo_flat']) { cp(`scenarios/goldens/${g}`); cp(`scenarios/goldens/${g}.json`); }
+  // (the tree's own placeholders, when this runs on a slice branch that stamped NEXT: counted, so the planted ones are judged alone)
+  const base = findPlaceholders(t).length;
   // a slice's placeholders: one catalogue entry (plan.json, then the golden regenerated as a slice does) and javadoc
   const pj = path.join(t, 'kit/schemas/plan.json');
   const s = fs.readFileSync(pj, 'utf8');
@@ -61,7 +63,7 @@ function tempTree() {
   fs.writeFileSync(pj, s.replace(first[0], `${first[1]}NEXT${first[4]}`));
   const java = path.join(t, 'mod/src/main/java/dev/larattalabs/architect/api/SliceThing.java');
   fs.writeFileSync(java, `/** A new member. Since NEXT. */\ninterface SliceThing {\n\t/** @since NEXT */\n\tint NEXT = 1;\n\t/** (since ${LEGACY}, an in-flight slice's own guess) */\n\tint OLD = 2;\n\t/** Since 1.0.0. */\n\tint KEPT = 3;\n}\n`);
-  return { t, entry: first[2] };
+  return { t, entry: first[2], base };
 }
 const regenGolden = async (t) => {
   const { planCatalogue } = await import(`${path.join(t, 'kit/lib/plan/catalogue.mjs')}?${Date.now()}`);
@@ -75,20 +77,20 @@ const snapshot = (t) => {
 };
 
 test('set: every constant, the NEXT and legacy stamps, the goldens re-cut (kitVersion and irSha only), then consistent', async () => {
-  const { t, entry } = tempTree();
+  const { t, entry, base } = tempTree();
   try {
     await regenGolden(t);
     // a slice tree: lenient passes, strict names every placeholder
     assert.deepEqual(checkTree(t, { lenient: true, tag: TAG }).problems, []);
     const strict = checkTree(t, { tag: TAG, goldens: false }).problems;
-    assert.equal(strict.filter((p) => p.startsWith('placeholder NEXT')).length, 4, strict.join('\n')); // plan.json, the golden, 2 javadoc
+    assert.equal(strict.filter((p) => p.startsWith('placeholder NEXT')).length, 4 + base, strict.join('\n')); // plan.json, the golden, 2 javadoc (+ the tree's own)
     assert.ok(strict.some((p) => new RegExp(`^catalogue ${esc(entry)}: sinceApi "NEXT"`).test(p)));
     const before = { links: JSON.parse(fs.readFileSync(path.join(t, 'scenarios/goldens/links_demo_flat.json'), 'utf8')), linksIr: fs.readFileSync(path.join(t, 'scenarios/goldens/links_demo_flat/ir.json'), 'utf8') };
 
     const s = setVersions(t, { ...NEW, tag: TAG });
     const v = Object.fromEntries(readVersions(t).map((x) => [x.id, x.value]));
     assert.deepEqual(v, { 'ArchitectApi.VERSION': NEW.api, PLAN_API: NEW.api, 'golden api': NEW.api, mod_version: NEW.mod, KIT_VERSION: NEW.kit, EVAL_KIT_VERSION: NEW.kit, 'IrStale.KIT_VERSION': NEW.kit, 'golden kitVersion': NEW.kit, catalogueVersion: NEW.catalogue, 'golden catalogueVersion': NEW.catalogue });
-    assert.deepEqual(s.stamped.map((x) => [path.basename(x.file), x.from, x.to]), [['plan.json', 'NEXT', NEW.api], ['plan-catalogue.golden.json', 'NEXT', NEW.api], ['SliceThing.java', 'NEXT', NEW.api], ['SliceThing.java', 'NEXT', NEW.api], ['SliceThing.java', LEGACY, NEW.api]]);
+    assert.deepEqual(s.stamped.filter((x) => ['plan.json', 'plan-catalogue.golden.json', 'SliceThing.java'].includes(path.basename(x.file))).map((x) => [path.basename(x.file), x.from, x.to]), [['plan.json', 'NEXT', NEW.api], ['plan-catalogue.golden.json', 'NEXT', NEW.api], ['SliceThing.java', 'NEXT', NEW.api], ['SliceThing.java', 'NEXT', NEW.api], ['SliceThing.java', LEGACY, NEW.api]]);
     const j = fs.readFileSync(path.join(t, 'mod/src/main/java/dev/larattalabs/architect/api/SliceThing.java'), 'utf8');
     assert.ok(j.includes(`Since ${NEW.api}. */`) && j.includes(`@since ${NEW.api} */`) && j.includes('int NEXT = 1;') && j.includes(`since ${NEW.api}, an in-flight`) && j.includes('Since 1.0.0.'), j);
     assert.deepEqual(findPlaceholders(t), []);

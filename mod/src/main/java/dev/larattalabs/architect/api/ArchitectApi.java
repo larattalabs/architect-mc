@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.40.0";
+	String VERSION = "1.37.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -124,7 +124,7 @@ public interface ArchitectApi {
 	 * Since 1.37.0 (6c VOC-c), a VOC-c helper ({@code plan.rules}) adds {@code "rulePalette"}: plan/0's {@code rule.palette} is
 	 * measured over the parts and the bound lots in its scope, {@link Regions#checkPalette} pre-checks an artifact's lot entries, and
 	 * {@link Regions#realiseApproved} and a lot's delta refuse {@link Reason#PALETTE} when a required rule is broken.
-	 * Since 1.40.0 (6c S3), an S3 helper ({@code region.terracedZones}) adds {@code "terracedZones"}: plan/0's {@code terraces: {rise, retain,
+	 * Since NEXT (6c S3), an S3 helper ({@code region.terracedZones}) adds {@code "terracedZones"}: plan/0's {@code terraces: {rise, retain,
 	 * stairs}} on a standard zone or a district lays its lots down the slope as levels {@code rise} apart (each lot with its apron on its own
 	 * level, rims over 2 retained by a wall with a rail, or blended by the relief), joined by routes between the lots' junctions instead of
 	 * a street; and ({@code region.monastery}) {@code "scenarioS3"} (the bundled {@code terraced_monastery} program, S3's terraced mountainside
