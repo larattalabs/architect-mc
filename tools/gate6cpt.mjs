@@ -1069,14 +1069,16 @@ steps.plan = async () => {
   const pc = await call('dev.region.checkPlan', { owner: OWNER, claim: pclaim, plan: { schemaVersion: 'plan/0',
     zones: [{ id: 'town', program: { lots: lots3 }, where: { near: { feature: { build: { kind: 'house' } }, within: 24 } } },
       { id: 'yard', program: { lots: [{ id: 'y1', type: 'cottage', size: [9, 9] }] }, where: { adjacent: { to: { build: bid }, gap: [1, 8] } } },
-      { id: 'ring', program: { lots: [{ id: 'r1', type: 'cottage', size: [9, 9] }] }, where: { around: { feature: { build: { id: bid } } } } }],
+      // ((6c FL) `zring`: parts resolve in topological order, ties by id; the around zone now places (locator.around supported), so its
+      // id sorts after town and yard and they are placed as before; the ring then fits round the build or answers a refusal with a code)
+      { id: 'zring', program: { lots: [{ id: 'r1', type: 'cottage', size: [9, 9] }] }, where: { around: { feature: { build: { id: bid } } } } }],
     connectors: [{ id: 'lane', kind: 'road', from: { part: 'town' }, to: { build: bid, port: 'door' } }] } }, 900_000);
   const parts = Object.fromEntries((pc.check?.parts ?? []).map((p) => [p.part, p]));
   const B = live.find((b) => b.id === bid)?.bounds;
   const off = (r) => B && r && (r[2] < B[0] - 1 || r[0] > B[3] + 1 || r[3] < B[2] - 1 || r[1] > B[5] + 1);
   const ok2 = (p) => ['fits', 'adjusted'].includes(p?.class);
-  check(ok2(parts.town) && ok2(parts.yard) && ok2(parts.lane) && off(parts.town?.geometry?.rect) && off(parts.yard?.geometry?.rect) && parts.ring && !['unsupported', 'malformed'].includes(parts.ring.class) && (ok2(parts.ring) ? off(parts.ring.geometry?.rect) || parts.ring.geometry?.layout === 'ring' : !!parts.ring.reasons?.[0]?.code),
-    `item 14: Regions.checkPlan in game: near {build kind house} ${parts.town?.class} ${json(parts.town?.geometry?.rect)}, adjacent {to {build ${bid}}} ${parts.yard?.class} ${json(parts.yard?.geometry?.rect)} (both off the build), the road to its door ${parts.lane?.class}, around ${parts.ring?.class} ${parts.ring?.block}`, pc.check ?? pc);
+  check(ok2(parts.town) && ok2(parts.yard) && ok2(parts.lane) && off(parts.town?.geometry?.rect) && off(parts.yard?.geometry?.rect) && parts.zring && !['unsupported', 'malformed'].includes(parts.zring.class) && (ok2(parts.zring) ? off(parts.zring.geometry?.rect) || parts.zring.geometry?.layout === 'ring' : !!parts.zring.reasons?.[0]?.code),
+    `item 14: Regions.checkPlan in game: near {build kind house} ${parts.town?.class} ${json(parts.town?.geometry?.rect)}, adjacent {to {build ${bid}}} ${parts.yard?.class} ${json(parts.yard?.geometry?.rect)} (both off the build), the road to its door ${parts.lane?.class}, around ${parts.zring?.class} ${parts.zring?.block} ${parts.zring?.reasons?.[0]?.code ?? ''}`, pc.check ?? pc);
   const h0 = await khash(cabinBox(X, y, Z));
   const road = await call('dev.road.place', { points: [[ep.end[0], gy, ep.end[2] - 16], [ep.end[0], gy, ep.end[2]]], width: 1, owner: OWNER }, 300_000);
   const end = await ptAt([ep.end[0], gy, ep.end[2]]);
