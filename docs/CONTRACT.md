@@ -21290,10 +21290,13 @@ in `Realised` and `RealisedRecords`.
   NOOP. The second record keeps the first when its entry is ACTIVE: `Realised.mergePrior` lists that entry's site after the new one in `site`
   (comma-separated, newest first; `Tile.sites()`), keeps every cell the first attempt WROTE as WRITTEN, and keeps its extras; a
   second attempt with nothing to write then has no NO_ENTRY flag (the first attempt's entry is the tile's). Status and verify run
-  over every listed entry. This deviates from §3.1's single entry per tile; RV reads `sites()`. A first attempt left **PLACING**
-  (RG4+save: its job gone, the item run again) is not merged: it is no committed write. `verify` counts such entries as
-  `placingLeftover` (recorded). **Finding for the coordinator (main's behaviour, not RP's):** after RG4+save the region ends PLACED
-  with that PLACING tile entry still standing beside the re-run's entry; seen in rp-crash (`20261021-024130-change`).
+  over every listed entry. This deviates from §3.1's single entry per tile; RV reads `sites()`. A first attempt still **PLACING**
+  (RG4+save: its job resumed from the start while the queue also ran the item again) is merged too: its job commits it later, and
+  the record reads `placing` until then. **Finding for the coordinator (main's behaviour, not RP's):** after RG4+save (and at times
+  K4+save) the region's tile is written twice, by the resumed job and by the re-run item, two entries layered; the region can report
+  PLACED while the first is still PLACING. `verify` counts PLACING tile entries no record names as `placingLeftover`.
+- **A reused site id.** A record written at RP1 names a cell site whose commit never happened; after the restart the counter can give
+  that id to another tile. A site counts for a record only while its Infra's spec `tile` is the record's tile (`ownedBy`).
 - Kill points: `RP1` (the record written, the PLACING commit not submitted) and `RP2` (a tile with nothing to write: the record
   written, the item not placed); both take `+save`.
 

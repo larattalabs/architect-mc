@@ -91,8 +91,10 @@ public final class RealisedRecords {
 			List<String> standing = new ArrayList<>();
 			for (String s : was.sites()) {
 				JournalStore.Meta m = mainEntry(s);
-				// only a committed attempt: a PLACING leftover (its job gone, the item running again) is not the tile's write
-				if (!s.equals(site) && m != null && m.status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE) {
+				// an earlier attempt of THIS tile (a cell site id can be reused after a crash) that committed, or is still being written
+				// by its resumed job (it commits later; the record reads placing until then)
+				if (!s.equals(site) && m != null && ownedBy(s, String.join("|", t)) && (m.status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE
+					|| m.status() == dev.larattalabs.architect.journal.Journal.Status.PLACING)) {
 					standing.add(s);
 				}
 			}
@@ -127,8 +129,9 @@ public final class RealisedRecords {
 			return "committed";
 		}
 		String worst = "committed";
+		String tile = String.join("|", l.rec().id, rec.stage(), rec.set(), rec.key());
 		for (String s : rec.sites()) {
-			JournalStore.Meta m = mainEntry(s);
+			JournalStore.Meta m = ownedBy(s, tile) ? mainEntry(s) : null; // a reused id: this record's entry never was
 			String st = m == null ? "stale" : switch (m.status()) {
 				case ACTIVE -> "committed";
 				case PLACING -> "placing";
@@ -139,6 +142,15 @@ public final class RealisedRecords {
 			}
 		}
 		return worst;
+	}
+
+	/**
+	 * Whether cell site {@code site} is the tile {@code tile} ({@code region|stage|set|key}, its spec's {@code tile}): a site id named
+	 * by a record whose commit never happened can be given to another tile after a restart. Before its record exists (P4), yes.
+	 */
+	static boolean ownedBy(String site, String tile) {
+		Infra i = Infras.get(site);
+		return i == null || !i.spec().has("tile") || tile.equals(i.spec().get("tile").getAsString());
 	}
 
 	private static JournalStore.@Nullable Meta mainEntry(String site) {
