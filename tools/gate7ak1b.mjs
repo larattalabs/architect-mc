@@ -31,6 +31,7 @@ import { kitReuse } from './lib/kit-reuse.mjs';
 import crypto from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './lib/fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-K1b-run');
@@ -138,6 +139,8 @@ steps.unchanged = async () => {
   for (const f of names) {
     const fx = JSON.parse(fs.readFileSync(path.join(fixDir, f), 'utf8'));
     if ((fx.plan.connectors ?? []).some((c) => ['wall', 'gate', 'rope_bridge', 'auto'].includes(c.kind))) { k1++; continue; }
+    // ((6c FL) a fixture the base does not have (FL's v66-v71), or one FL moves by name: FL's own item 4 judges them)
+    if (!fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', 'valid', f)) || FL_MOVED.includes(`valid/${f}`)) continue;
     // ((6c T3) a bridge or tunnel fixture, on its own terrain: T3's gate judges it (tools/gate6ct3a.mjs unchanged))
     if (fx.terrain || (fx.plan.connectors ?? []).some((c) => ['bridge', 'tunnel'].includes(c.kind))) continue;
     // ((6c F3) a fixture new on this branch (F3's v72-v77: kinds origin/main holds reserved or lacks) has no base to equal)
@@ -145,7 +148,7 @@ steps.unchanged = async () => {
     const sv = (h) => (fx.on === 'asks' ? h.asksSurvey() : fx.on === 'flat' ? h.flatSurvey() : h.goldenSurvey(fx.on));
     const runOn = async (h) => { const s = sv(h); return h.checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...h.stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}) }); };
     const a = await runOn(hNew), b = await runOn(hOld);
-    const norm = (r) => r.res.irJson.replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"');
+    const norm = (r) => normIrJson(r.res?.irJson);
     const answers = (r) => JSON.stringify(r.check.parts);
     const eq = { answers: answers(a) === answers(b), ir: sha256(norm(a)) === sha256(norm(b)), overall: a.check.overall === b.check.overall };
     out.fixtures[f] = eq;

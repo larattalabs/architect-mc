@@ -10,11 +10,14 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
 /** §8's named exceptions: fixture -> why it moves (the body and the writer that met it). */
 export const EXCEPT = Object.freeze({
+  // ((6c FL) the fixtures FL moves by name (its own item 4 judges them)
+  ...Object.fromEntries(FL_MOVED.map((n) => [n, 'FL: a free layout or outline shipped (layout.ring, .grid, .organic, sketch.outline; the e15 list)'])),
   'valid/v51_voc_forge.json': 'forge_wall (connector.wall) wrote 5 water, 5 rim and 24 watch cells of w_fount (form.fountain): now refused OVERLAP {kind: body}, wouldFit ring [4, 17]',
   // ((the CU/IRR/VOC-c batch) VOC-c's named exceptions: rule.palette supported; its own item 4 judges them. e05 is not one here: VOC-c
   // rewrote the fixture itself, so the base and this head plan the same file alike)
@@ -64,7 +67,7 @@ export async function unchanged(root, { check, log = console.log, only = null } 
   const { buildVirtual } = await K('region/vworld.mjs');
   const { fillMissing } = await K('region/plan.mjs');
   const { asColumns } = await K('region/pack.mjs');
-  const norm = (r) => r.res.irJson.replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"');
+  const norm = (r) => normIrJson(r.res?.irJson);
   const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(norm(r)), first: r.first && r.first !== r ? sha256(norm(r.first)) : null });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {}, watch: [], hard: [] };
   for (const [name, fx] of fixtures(root)) {
@@ -96,7 +99,7 @@ export async function unchanged(root, { check, log = console.log, only = null } 
         const cols = fillMissing(asColumns(s.bytes)).columns;
         const { vw } = buildVirtual({ ir, survey: cols, filled: cols, blobs: (sha) => r.res.blobs.get(sha) ?? null, volumes: r.volumes.map((v) => v.decoded ?? v) });
         const sc = clearScan({ ir, vw, meta: r.res.meta });
-        const broken = /^kc\/u\d/.test(name) || /^irr\/u01_/.test(name) || /^f3\/u0[14]_/.test(name); // ((6c IRR) irrigation's M25:clear variant, u01, too; (6c F3) treeInPond u01 and coralOtherPart u04)
+        const broken = /^kc\/u\d/.test(name) || /^irr\/u01_/.test(name) || /^f3\/u0[14]_/.test(name) || /^fl\/u03_/.test(name); // ((6c IRR) irrigation's M25:clear variant, u01, too; (6c F3) treeInPond u01 and coralOtherPart u04; (6c FL) zoneIgnoresBody, u03)
         (out.headCensus ??= {})[name] = sc.counts;
         if (broken) check(sc.counts.hard + sc.counts.watch > 0, `${name} (a broken variant): M25:clear catches it on this head (${JSON.stringify(sc.counts)})`);
         else check(sc.counts.hard + sc.counts.watch === 0, `${name}: M25:clear 0 on this head (${JSON.stringify(sc.counts)})`);

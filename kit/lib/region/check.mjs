@@ -406,6 +406,24 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
     for (const l of ir.lots ?? []) if (!inside(l.box.minX, l.box.minZ) || !inside(l.box.maxX, l.box.maxZ)) findings.push(finding('M1', l.part, l.stage, 1, [[l.box.minX, l.box.minY, l.box.minZ]], `lot ${l.id} leaves the claim`));
     for (const p of ir.paths ?? []) if (!inside(p.box.minX, p.box.minZ) || !inside(p.box.maxX, p.box.maxZ)) findings.push(finding('M1', p.part, p.stage, 1, [[p.box.minX, p.box.minY, p.box.minZ]], `path ${p.id} leaves the claim`));
     for (const [n, a] of Object.entries(ir.anchors ?? {})) if (!inside(a[0], a[2])) findings.push(finding('M1', null, null, 1, [a], `anchor ${n} is outside the claim`));
+    // ((6c FL) K5 for road items, which no op writes: a road's cells (its centre line and width) inside a lot box; a street is laid off
+    // every lot box + 1, as V lays it, so this fires only on a broken layout (FL's lotOnStreet))
+    if ((ir.lots ?? []).length && (ir.roads ?? []).length) {
+      for (const rd of ir.roads) {
+        const { cells } = centreCells(rd.points.map((p) => [p[0], p[2]]));
+        const offs = crossOffsets(rd.width ?? 3);
+        const hit = [];
+        for (let i = 0; i < cells.length; i++) {
+          const a = cells[Math.max(0, i - 1)], b = cells[Math.min(cells.length - 1, i + 1)];
+          const r = rightOf(segmentAxis([a.x, a.z], [b.x, b.z]));
+          for (const k of offs) {
+            const x = cells[i].x + r[0] * k, z = cells[i].z + r[1] * k;
+            for (const l of ir.lots) if (x >= l.box.minX && x <= l.box.maxX && z >= l.box.minZ && z <= l.box.maxZ) { hit.push([x, l.box.minY, z]); break; }
+          }
+        }
+        if (hit.length) findings.push(finding('M1', rd.part ?? null, rd.stage, hit.length, hit, `${hit.length} cell(s) of road ${rd.id} fall inside a lot box (no road crosses a lot)`));
+      }
+    }
   });
 
   // ---- M2 reachability (player mover)

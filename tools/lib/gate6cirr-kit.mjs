@@ -11,9 +11,10 @@ import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { UNCHANGED_EXCEPTIONS as VOCC_EXCEPTIONS } from './gate6cvoc-c.mjs';
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 
 /** (The CU/IRR/VOC-c batch) VOC-c's named exceptions (rule.palette supported: the 7 asks with a palette rule, extension/e05 and e16): its own item 4 holds them. */
-export const LATER_EXCEPTIONS = VOCC_EXCEPTIONS;
+export const LATER_EXCEPTIONS = [...VOCC_EXCEPTIONS, ...FL_MOVED.filter((n) => !VOCC_EXCEPTIONS.includes(n))];
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -31,7 +32,7 @@ export async function unchanged(root, { check, log = console.log, only = null } 
   const { dir: mainDir, base } = baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
   const [hNew, hOld] = [await H(root), await H(mainDir)];
-  const norm = (r) => r.res.irJson.replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"');
+  const norm = (r) => normIrJson(r.res?.irJson);
   const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(norm(r)), first: r.first && r.first !== r ? sha256(norm(r.first)) : null });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {}, added: [] };
   for (const [name, fx] of fixtures(root)) {

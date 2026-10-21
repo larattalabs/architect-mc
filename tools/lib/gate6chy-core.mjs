@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 
 /**
  * Item 12's named exceptions: fixtures HY re-answers by name. h/r08_course is a course (now HY-b's v51, the stub's UNREACHABLE until HYb
@@ -16,7 +17,7 @@ import { pathToFileURL } from 'node:url';
 // reserved list) and e05 (its reserved rule is rule.shape's draft now); tools/lib/gate6cvoc-c.mjs UNCHANGED_EXCEPTIONS)
 export const UNCHANGED_EXCEPTIONS = Object.freeze(['h/r08_course.json', 'extension/e15_every_reserved_a.json', 'valid/v51_voc_forge.json', 'asks/desert_jungle_wall.json',
   'asks/hidden_village.json', 'asks/mage_exiles.json', 'asks/old_new_town.json', 'asks/one_block.json', 'asks/rival_families.json', 'asks/row_houses.json',
-  'extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json']);
+  'extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json', ...FL_MOVED.filter((n) => n !== 'extension/e15_every_reserved_a.json')]);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const k3 = (c) => `${c[0]},${c[1]},${c[2]}`;

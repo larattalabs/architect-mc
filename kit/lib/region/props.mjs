@@ -52,7 +52,7 @@ export function propCells(kind, r, at, o = {}) {
  * inside the space and meets no reserved column (the bell area, the golem space, the square lots' lanes, the street's entries,
  * another prop) and no keep-out. Returns `{props: [{kind, id, cells, foot}], noWalk: Set<"x,z">}`.
  */
-export function planProps(r, { o, sh, res, lots, laneWidth = 2, lamps = 'street', bell = false, keepOut = [], rng, wellWater = false }) {
+export function planProps(r, { o, sh, res, lots, laneWidth = 2, lamps = 'street', bell = false, keepOut = [], rng, wellWater = false, lampGap = 0 }) {
   const reserved = new Set();
   const key = (x, z) => `${x},${z}`;
   for (const [x, z] of res.area) reserved.add(key(x, z));
@@ -79,6 +79,12 @@ export function planProps(r, { o, sh, res, lots, laneWidth = 2, lamps = 'street'
     if ((counts[kind] ?? 0) >= max) return false;
     const at = toWorld(o, u, v);
     const p = propCells(kind, r, at, o2);
+    // ((6c FL) `lampGap`: a free zone's lamps stand at least that far apart (Chebyshev, light to light); 0, every other caller: no rule)
+    if (kind === 'lamp' && lampGap > 0) {
+      const li = (cs) => cs.find((c) => /(lantern|torch|end_rod|glowstone|shroomlight|froglight|campfire|redstone_lamp)/.test(c[3]) && !/_fence|_wall/.test(c[3])) ?? cs[cs.length - 1];
+      const a = li(p.cells);
+      if (props.some((q) => q.kind === 'lamp' && (() => { const b = li(q.cells); return Math.max(Math.abs(a[0] - b[0]), Math.abs(a[2] - b[2])) < lampGap; })())) return false;
+    }
     // a prop's footprint, plus one column around it, stays clear of the reserved columns (beside walk cells, not on them)
     for (const [x, z] of p.foot) if (!inside(x, z) || reserved.has(key(x, z)) || kept(x, z)) return false;
     // beside walk cells: one 4-neighbour of the footprint stays a walk cell of the space (kept from later props)

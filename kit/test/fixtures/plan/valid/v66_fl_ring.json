@@ -1,0 +1,137 @@
+{
+  "about": "(6c FL, §10) nomad_camp's shape: a ring of 11 lots round a square hub, the council tent and the gathering fire (central) in the hub facing the street, the corral (edge) outside; a road from the claim's south edge to the zone's start",
+  "on": "flat",
+  "covers": [
+    "layout.ring"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "fl_v66",
+    "zones": [
+      {
+        "id": "camp",
+        "program": {
+          "layout": "ring",
+          "lots": [
+            {
+              "id": "tent_hall_1",
+              "type": "tent_hall",
+              "role": "council",
+              "size": [
+                17,
+                15
+              ],
+              "landmark": true,
+              "placement": "central"
+            },
+            {
+              "id": "tent_1",
+              "type": "tent",
+              "role": "family",
+              "size": [
+                13,
+                11
+              ]
+            },
+            {
+              "id": "tent_2",
+              "type": "tent",
+              "role": "family",
+              "size": [
+                13,
+                11
+              ]
+            },
+            {
+              "id": "tent_3",
+              "type": "tent",
+              "role": "family",
+              "size": [
+                13,
+                11
+              ]
+            },
+            {
+              "id": "tent_4",
+              "type": "tent",
+              "role": "family",
+              "size": [
+                13,
+                11
+              ]
+            },
+            {
+              "id": "campfire_circle_1",
+              "type": "campfire_circle",
+              "role": "gathering",
+              "size": [
+                9,
+                9
+              ],
+              "placement": "central"
+            },
+            {
+              "id": "corral_1",
+              "type": "corral",
+              "role": "corral",
+              "size": [
+                13,
+                11
+              ],
+              "placement": "edge"
+            },
+            {
+              "id": "wagon_1",
+              "type": "wagon",
+              "role": "supply",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "wagon_2",
+              "type": "wagon",
+              "role": "supply",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "shop_1",
+              "type": "shop",
+              "role": "trader",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "cookhouse_1",
+              "type": "cookhouse",
+              "role": "cooking",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "in_road",
+        "kind": "road",
+        "from": {
+          "anchor": "claim_s"
+        },
+        "to": {
+          "part": "camp",
+          "port": "start"
+        }
+      }
+    ]
+  }
+}

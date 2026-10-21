@@ -29,6 +29,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import { kitReuse } from './kit-reuse.mjs';
 
 const OWNER = 'test:ha';
@@ -96,7 +97,7 @@ async function haUnchanged(ctx) {
       const runOn = async (h) => { const s = sv(h); return h.checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...h.stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}) }); };
       let a, b;
       try { a = await runOn(hNew); b = await runOn(hOld); } catch (e) { out.fixtures[`${dir}/${f}`] = { error: String(e.message).slice(0, 200) }; continue; }
-      const norm = (r) => r.res.irJson.replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"');
+      const norm = (r) => normIrJson(r.res?.irJson);
       const eq = { answers: JSON.stringify(a.check.parts) === JSON.stringify(b.check.parts), ir: sha256(norm(a)) === sha256(norm(b)), overall: a.check.overall === b.check.overall };
       out.fixtures[`${dir}/${f}`] = eq;
       if (eq.answers && eq.ir && eq.overall) same++;

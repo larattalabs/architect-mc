@@ -6,6 +6,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -68,16 +69,16 @@ export function baseTree(root) {
  * (6c VOC-c) What later slices change by name (each slice's own identity item holds the rest): the 7 asks with a palette rule and
  * extension/e05 and e16 (rule.palette supported, VOC-c), and the catalogue entries they flip (rule.palette; the catalogueVersion moves).
  */
-export const LATER_EXCEPTIONS = Object.freeze({ fixtures: ['extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json'],
-  asks: ['desert_jungle_wall.json', 'hidden_village.json', 'mage_exiles.json', 'old_new_town.json', 'one_block.json', 'rival_families.json', 'row_houses.json'],
-  catalogue: ['rule.palette'] });
+export const LATER_EXCEPTIONS = Object.freeze({ fixtures: ['extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json', ...FL_MOVED.filter((n) => !n.startsWith('asks/'))],
+  asks: ['desert_jungle_wall.json', 'hidden_village.json', 'mage_exiles.json', 'old_new_town.json', 'one_block.json', 'rival_families.json', 'row_houses.json', ...FL_MOVED_ASKS],
+  catalogue: ['rule.palette', 'layout.ring', 'layout.spiral', 'layout.grid', 'layout.organic', 'locator.around', 'sketch.outline'] });
 
 export async function unchanged(root) {
   const { dir: mainDir, base } = baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
   const [hNew, hOld] = [await H(root), await H(mainDir)];
   const out = { base, fixtures: {}, asks: {}, examples: {}, palettes: {}, goldens: {} };
-  const norm = (r) => r.res.irJson.replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"');
+  const norm = (r) => normIrJson(r.res?.irJson);
   const cmpRun = (a, b) => ({ answers: JSON.stringify(a.check.parts) === JSON.stringify(b.check.parts), ir: sha256(norm(a)) === sha256(norm(b)), overall: a.check.overall === b.check.overall });
   // the committed plan fixtures
   for (const d of ['valid', 'k1a', 'rope', 'refused', 't3a', 't3b', 'tunnel', 'h', 'extension']) {

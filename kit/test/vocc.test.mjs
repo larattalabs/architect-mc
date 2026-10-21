@@ -272,8 +272,9 @@ test('a non-required rule\'s answers never block; an upper bound of 0 without a 
 
 // ------------------------------------------------------------------ item 2: the catalogue
 
-test('item 2: catalogue 9 (archived as catalogue-vocc.json by 6c F3) against catalogue-hy.json (HY\'s 8) is exactly the one flip, its limits and note folded in', () => {
-  // ((6c F3) catalogue 9 is archived as fixtures/plan/catalogue-vocc.json; the golden is F3's catalogue now: forms-f3.test.mjs)
+test('item 2: catalogue 9 (archived as catalogue-vocc.json by 6c FL and F3) against catalogue-hy.json (HY\'s 8) is exactly the one flip, its limits and note folded in', () => {
+  // ((6c FL, F3) catalogue 9 was the golden until the batch's catalogue 11 (FL's six flips and F3's forms); it is archived as
+  // fixtures/plan/catalogue-vocc.json, and plan-p0's item 9 holds the golden to planCatalogue())
   const golden = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-vocc.json'), 'utf8'));
   assert.equal(golden.catalogueVersion, 9);
   assert.equal(golden.api, '1.37.0');

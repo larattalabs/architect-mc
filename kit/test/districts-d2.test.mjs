@@ -156,7 +156,8 @@ test('plan/0 (D2): zone.outpost, locator.along, feature.biome_edge, feature.ridg
   const { planCatalogue } = await import('../lib/plan/catalogue.mjs');
   const c = planCatalogue();
   for (const id of ['zone.outpost', 'locator.along', 'feature.biome_edge', 'feature.ridge']) assert.equal(c.entries.find((e) => e.id === id).state, 'supported', id);
-  assert.equal(c.entries.find((e) => e.id === 'locator.around').state, 'reserved');
+  // ((6c FL) moved by name: locator.around is supported since FL)
+  assert.equal(c.entries.find((e) => e.id === 'locator.around').state, 'supported');
   void ROOT; void fs;
 });
 

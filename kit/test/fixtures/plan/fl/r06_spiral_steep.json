@@ -1,0 +1,150 @@
+{
+  "about": "(6c FL, §3.2) a spiral on a hill too steep for a ground road (a stepped pillar: 9 up every 3 cells round a 17 x 17 top): NO_ROOM {why: grade}, wouldFit the ring (at the hill's foot), re-checked alone",
+  "terrain": {
+    "W": 240,
+    "D": 160,
+    "x0": 1000,
+    "z0": 2000,
+    "y": 64,
+    "bands": [
+      {
+        "x0": 1084,
+        "z0": 2044,
+        "x1": 1154,
+        "z1": 2114,
+        "y": 73
+      },
+      {
+        "x0": 1087,
+        "z0": 2047,
+        "x1": 1151,
+        "z1": 2111,
+        "y": 82
+      },
+      {
+        "x0": 1090,
+        "z0": 2050,
+        "x1": 1148,
+        "z1": 2108,
+        "y": 91
+      },
+      {
+        "x0": 1093,
+        "z0": 2053,
+        "x1": 1145,
+        "z1": 2105,
+        "y": 100
+      },
+      {
+        "x0": 1096,
+        "z0": 2056,
+        "x1": 1142,
+        "z1": 2102,
+        "y": 109
+      },
+      {
+        "x0": 1099,
+        "z0": 2059,
+        "x1": 1139,
+        "z1": 2099,
+        "y": 118
+      },
+      {
+        "x0": 1102,
+        "z0": 2062,
+        "x1": 1136,
+        "z1": 2096,
+        "y": 127
+      },
+      {
+        "x0": 1105,
+        "z0": 2065,
+        "x1": 1133,
+        "z1": 2093,
+        "y": 136
+      },
+      {
+        "x0": 1108,
+        "z0": 2068,
+        "x1": 1130,
+        "z1": 2090,
+        "y": 145
+      },
+      {
+        "x0": 1111,
+        "z0": 2071,
+        "x1": 1127,
+        "z1": 2087,
+        "y": 154
+      }
+    ]
+  },
+  "expect": {
+    "part": "steep",
+    "class": "refused",
+    "code": "NO_ROOM",
+    "why": "grade"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "fl_r06",
+    "zones": [
+      {
+        "id": "steep",
+        "program": {
+          "layout": "spiral",
+          "lots": [
+            {
+              "id": "c1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c2",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c3",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c4",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c5",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c6",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

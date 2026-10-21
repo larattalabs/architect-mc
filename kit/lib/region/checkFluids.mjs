@@ -13,6 +13,7 @@ import { VC, classAt } from './volume.mjs';
 import { F_WRITTEN } from './vworld.mjs';
 import { kindOf } from '../fluids/world.mjs';
 import { irFields } from '../fluids/irrfield.mjs';
+import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
 
 export { kindOf } from '../fluids/world.mjs';
 
@@ -234,6 +235,30 @@ export function clearScan({ ir, vw, meta, bodies = bodiesOf(ir) }) {
       hit('watch', c, wid, o.why, o.writerPart);
       counts.watch++;
     }
+    // ((6c FL, §5) a zone's street (a road item, which no op shows: its ext names it, S-FL-5) over a body's hard columns: the street's
+    // writer is the zone; only streets so marked are read, so a plan without one is as before)
+    const hardCols = new Map();
+    for (const set of CLEAR_SETS) for (const c of b[set] ?? []) { const kk = `${c[0]},${c[2]}`; if (!hardCols.has(kk)) hardCols.set(kk, [set, c]); }
+    for (const rd of ir.roads ?? []) {
+      const zone = rd.ext?.['architect_mc:street']?.zone;
+      if (!zone || partners.some((q) => q.part && q.part === zone)) continue;
+      const pts = rd.points.map((q) => [q[0], q[2]]);
+      const { cells } = centreCells(pts);
+      const offs = crossOffsets(rd.width ?? 3);
+      const seen = new Set();
+      for (const cc of cells) {
+        const a2 = pts[Math.min(cc.seg, pts.length - 1)], b2 = pts[Math.min(cc.seg + 1, pts.length - 1)];
+        const rr = rightOf(segmentAxis(a2, b2));
+        for (const k of offs) {
+          const kk = `${cc.x + rr[0] * k},${cc.z + rr[1] * k}`;
+          if (seen.has(kk) || !hardCols.has(kk)) continue;
+          seen.add(kk);
+          const [set, c] = hardCols.get(kk);
+          hit(set, c, rd.part ?? `road:${rd.id}`, "a zone's street", zone);
+          counts.hard++;
+        }
+      }
+    }
     findings.push(...groups.values());
   }
   return { findings, counts };
@@ -248,6 +273,8 @@ const EARLY_FORMS = Object.freeze(['relief', 'terrace', 'rock_spire', 'ice_spike
  *   a zone (its lots, pads, streets, props) or a relief, terrace or spike in an H body's sets
  *                                          the body's part (resolved after them): NO_ROOM {kind: clear}; a farm pond (its zone's) is
  *                                          never refused here (its zone is the writer's too: the region check names it)
+ *   (6c FL, §5) a zone whose locator names the body's part (around, near, adjacent, inside: placed after the body's reservation)
+ *                                          the zone, the later part: OVERLAP {kind: body}
  *   any other writer                       the writer (placed after the body's footprint): OVERLAP {kind: body}
  * Never a part asked `architect_mc:unsafe` (a broken variant the checker must catch), never a writer the plan does not name, never a
  * part `already` refused. Pure.
@@ -258,6 +285,8 @@ export function clearRefusals({ findings, plan, courses = new Set(), already = {
   const unsafe = (id) => !!byId.get(id)?.ext?.['architect_mc:unsafe'];
   const early = (id) => { const q = byId.get(id); return !!q && (q._family === 'zones' || (q._family === 'forms' && EARLY_FORMS.includes(q.kind))); };
   const wall = (id) => { const q = byId.get(id); return !!q && (q.kind === 'wall' || q.kind === 'gate'); };
+  // ((6c FL, §5) the plan parts a zone's locator names: a zone depending on a body is placed after it)
+  const dependsOn = (zid, pid) => { const q = byId.get(zid); return !!q && q._family === 'zones' && whereNames(q.where).includes(pid); };
   const fresh = {};
   for (const q of findings ?? []) {
     const w = q.writerPart;
@@ -266,7 +295,7 @@ export function clearRefusals({ findings, plan, courses = new Set(), already = {
     if (courses.has(q.body) && wall(w) && q.part) {
       target = q.part;
       reason = { code: 'UNREACHABLE', message: `wall ${w}, planned before it, stands in ${q.count} cell(s) of its reach ${q.body}'s ${q.set === 'watch' ? 'watched reach' : q.set} (a course crosses a wall only under a water gate)`, evidence: { kind: 'wall', wall: w, why: 'clear', body: q.body, set: q.set, cells: q.cells.slice(0, 16) } };
-    } else if (early(w)) {
+    } else if (early(w) && !(q.part && dependsOn(w, q.part))) {
       if (!q.part || !byId.has(q.part) || byId.get(q.part)._family === 'zones') continue;
       target = q.part;
       reason = { code: 'NO_ROOM', message: `its body ${q.body} is placed after ${w}, which writes ${q.count} cell(s) of its ${q.set === 'watch' ? 'watched reach' : q.set}: the body keeps clear of what was placed before it`, evidence: { kind: 'clear', body: q.body, writer: w, set: q.set, cells: q.cells.slice(0, 16) } };
@@ -278,6 +307,13 @@ export function clearRefusals({ findings, plan, courses = new Set(), already = {
     fresh[target] = reason;
   }
   return fresh;
+}
+
+/** (6c FL) The plan parts a locator names (inside.part, adjacent.to.part, near/around/along feature.part). */
+function whereNames(where) {
+  if (!where || typeof where !== 'object') return [];
+  const lk = Object.keys(where)[0], b = where[lk] ?? {};
+  return [b.part, b.to?.part, b.feature?.part].filter((x) => typeof x === 'string');
 }
 
 /**

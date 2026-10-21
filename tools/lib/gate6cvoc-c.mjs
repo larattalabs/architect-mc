@@ -10,6 +10,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson, flAsksFilter } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const j = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
@@ -20,8 +21,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * rule's answer only), extension/e16 (its r_palette left the reserved list: refused NO_FEATURE now) and extension/e05 (its reserved rule is
  * rule.shape's draft now: a palette rule is supported). New VOC-c fixtures have no counterpart on the base.
  */
+const t0 = new Set(['extension/e16_every_reserved_b.json']); // ((6c FL) FL's movers appended, none listed twice)
 export const UNCHANGED_EXCEPTIONS = Object.freeze(['asks/desert_jungle_wall.json', 'asks/hidden_village.json', 'asks/mage_exiles.json', 'asks/old_new_town.json',
-  'asks/one_block.json', 'asks/rival_families.json', 'asks/row_houses.json', 'extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json']);
+  'asks/one_block.json', 'asks/rival_families.json', 'asks/row_houses.json', 'extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json', ...FL_MOVED.filter((n) => !t0.has(n))]);
 
 function nodeTest(root, files, timeout = 3_600_000) {
   const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
@@ -112,7 +114,7 @@ export async function unchanged(root, mainDir) {
       };
       let a, b;
       try { a = await runOn(hNew, plan); b = await runOn(hOld, oldPlan); } catch (e) { out.fixtures[name] = { error: String(e.message).slice(0, 200) }; continue; }
-      const norm = (r) => (r.res?.irJson ?? '').replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"');
+      const norm = (r) => normIrJson(r.res?.irJson);
       const answers = (r) => JSON.stringify(r.check?.parts ?? r.check?.malformed ?? null);
       const eq = { answers: answers(a) === answers(b), ir: sha256(norm(a)) === sha256(norm(b)), overall: a.check?.overall === b.check?.overall };
       out.fixtures[name] = eq;
@@ -149,11 +151,13 @@ const unit = [
       fs.writeFileSync(path.join(OUT, 'vocc-asks-after.txt'), after.text);
       const cb = fs.readFileSync(path.join(root, 'kit', 'test', 'fixtures', 'plan', 'vocc', 'asks-before.txt'), 'utf8');
       const ca = fs.readFileSync(path.join(root, 'kit', 'test', 'fixtures', 'plan', 'vocc', 'asks-after.txt'), 'utf8');
-      const bl = before.text.split('\n'), al = after.text.split('\n');
+      // ((6c FL) FL's five free asks and the tally are FL's (its item 8: tools/lib/fl-norm.mjs flAsksFilter); and the base may be VOC-c's own
+      // after table once VOC-c is on main)
+      const bl = flAsksFilter(before.text).split('\n'), al = flAsksFilter(after.text).split('\n');
       const moved = al.map((l, i) => [l, bl[i]]).filter(([x, y]) => x !== y && !/^# /.test(x ?? '')).map(([x, y]) => `${y} -> ${x}`);
       const nonPalette = moved.filter((m) => !/ rule\.palette /.test(m) && !/^[a-z_]+ [A-Z_]+ -> /.test(m));
       const overallMoved = moved.filter((m) => /^[a-z_]+ [A-Z_]+ -> /.test(m));
-      check(before.text === cb && after.text === ca, `item 3: the asks' tables equal the committed ones (before at the base ${base.slice(0, 8)}, after at HEAD)`, { moved });
+      check((flAsksFilter(before.text) === flAsksFilter(cb) || flAsksFilter(before.text) === flAsksFilter(ca)) && flAsksFilter(after.text) === flAsksFilter(ca), `item 3: the asks' tables equal the committed ones (before at the base ${base.slice(0, 8)}, after at HEAD; FL's five free asks aside)`, { moved });
       check(after.malformed === 0 && nonPalette.length === 0 && overallMoved.length === 0 && !/until RC/.test(after.text.split('\n').filter((l) => /rule\.palette/.test(l)).join('\n')), `item 3: 0 malformed; only the 7 palette rules' answers moved (${moved.length}: ${moved.join('; ')}); no ask's overall moved`, { nonPalette, overallMoved });
       return { moved, base };
     },

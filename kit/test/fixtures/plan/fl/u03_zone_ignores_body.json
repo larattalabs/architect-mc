@@ -1,0 +1,78 @@
+{
+  "about": "(6c FL, broken variant zoneIgnoresBody) the ring zone's mask without the pond's footprint: M25:clear finds the zone's writes in the body's sets; the backstop (the variant aside) refuses the zone, never the body",
+  "on": "flat",
+  "volume": {},
+  "expect": {
+    "finding": "M25:clear"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "fl_u03",
+    "forms": [
+      {
+        "id": "pond",
+        "kind": "pond",
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 8
+          }
+        },
+        "size": {
+          "w": 13,
+          "d": 11
+        },
+        "depth": 3
+      }
+    ],
+    "zones": [
+      {
+        "id": "shore",
+        "ext": {
+          "architect_mc:unsafe": {
+            "zoneIgnoresBody": true
+          }
+        },
+        "where": {
+          "around": {
+            "feature": {
+              "part": "pond"
+            },
+            "ring": [
+              1,
+              2
+            ]
+          }
+        },
+        "program": {
+          "lots": [
+            {
+              "id": "c1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c2",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c3",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

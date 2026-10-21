@@ -105,7 +105,7 @@ function roadLights(vw, ir, fixtureOf) {
  * `reserved`: "x,z" columns no lamp may take (the bell area, golem space, the props' own); `laneCells`: the lanes' cells
  * (door paths). Returns `{lamps: [{lot, at, cells}], perLot, before, after, targets, capped}`.
  */
-export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved = new Set(), laneCells = [], maxPerLot = LAMPS_PER_LOT, share = COVER_SHARE, extra = [], extraCap = {}, part = 'props_apron', _drop = null, _format1 = false } = {}) {
+export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved = new Set(), laneCells = [], maxPerLot = LAMPS_PER_LOT, share = COVER_SHARE, extra = [], extraCap = {}, part = 'props_apron', _drop = null, _format1 = false, lampGap = 0 } = {}) {
   const { ir, blobs } = draftIR(r);
   // (6c S2) a draft with side blobs (a relief pass's fields, a frozen volume, a baked form) is a format-2 IR (the kinds it walks, the
   // plan's seed and keep-out, as scatterPlan's draft), and its virtual world reads the volumes the plan used (the kept natural cells are there, not air); a draft without side blobs
@@ -143,6 +143,7 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
   vw.eachWritten((x, y, z, idx) => { const e = P.emit[idx]; if (e > 0) sources.push([x, y, z, e]); });
   sources.push(...roadLights(vw, ir, (lamp) => (lamp ? { level: fixture.level } : DEFAULT_FIXTURE)));
   const base = lightFrom(vw, sources, opaque);
+  const lights0 = lampGap > 0 ? sources.filter((q) => q[3] >= 10).map((q) => [q[0], q[1], q[2]]) : [];
   const dark = new Set();
   targets.forEach((t, i) => { if (!((base.get(`${t[0]},${t[1]},${t[2]}`) ?? 0) > 0)) dark.add(i); });
   const before = { targets: targets.length, dark: dark.size, share: targets.length ? dark.size / targets.length : 0 };
@@ -232,6 +233,8 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
     for (const c of cands) {
       if (taken.has(c) || perLot[c.lot] >= capOf(c.lot)) continue;
       if (c.foot.some(([x, z]) => chosen.some((o) => o.foot.some(([ox, oz]) => Math.abs(ox - x) + Math.abs(oz - z) <= 1)))) continue; // never side by side
+      // ((6c FL) `lampGap`: no lamp within that far (Chebyshev) of another light, the region's own or one chosen here; 0: no rule)
+      if (lampGap > 0 && [...lights0, ...chosen.map((o) => o.lightAt)].some((q) => Math.max(Math.abs(q[0] - c.lightAt[0]), Math.abs(q[2] - c.lightAt[2])) < lampGap)) continue;
       let g = 0;
       for (const i of c.reach) if (dark.has(i)) g++;
       if (g > gain) { gain = g; best = c; }

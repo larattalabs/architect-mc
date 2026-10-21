@@ -139,6 +139,11 @@ public interface ArchitectApi {
 	 * level, rims over 2 retained by a wall with a rail, or blended by the relief), joined by routes between the lots' junctions instead of
 	 * a street; and ({@code region.monastery}) {@code "scenarioS3"} (the bundled {@code terraced_monastery} program, S3's terraced mountainside
 	 * monastery). No new record, method, reason or IR kind; old IRs are {@code PLAN_STALE} by the kit version, as every kit bump.
+	 * Since NEXT (6c FL), an FL helper ({@code plan.layouts}) adds {@code "freeLayouts"}: plan/0's {@code layout.ring},
+	 * {@code layout.spiral}, {@code layout.grid}, {@code layout.organic}, {@code locator.around} (zones and forms) and
+	 * {@code sketch.outline} are compiled (lots stay axis-aligned rects with a cardinal front, their streets ordinary roads); every
+	 * street road a plan region writes carries the road ext {@code architect_mc:street: {zone, district?}} (S-FL-5), on its
+	 * batch item.
 	 */
 	Set<String> features();
 }

@@ -36,18 +36,19 @@ test('PT §10: feature.build, target {build}, endpoint.build validate; malformed
   assert.deepEqual(ok('endpoint', { build: 'build-12', port: 'door' }), []);
   assert.deepEqual(ok('endpoint', { build: 'build-12', port: 'door_2' }), []);
   assert.ok(ok('endpoint', { build: 'build-12', port: 'gate' }).length > 0);
-  // around stays the reserved locator (it parses; the check answers unsupported locator.around until FL)
+  // around parses (6c FL: locator.around is supported, a ring round the build)
   assert.deepEqual(ok('where', { around: { feature: { build: { id: 'build-12' } } } }), []);
 });
 
-test('PT §10: the catalogue has feature.build and endpoint.build supported (additive), locator.around reserved', () => {
+test('PT §10: the catalogue has feature.build and endpoint.build supported (additive), locator.around supported (6c FL)', () => {
   const e = Object.fromEntries(plan['x-catalogue'].entries.map((x) => [x.id, x]));
   for (const id of ['feature.build', 'endpoint.build']) {
     assert.equal(e[id]?.state, 'supported', id);
     assert.match(e[id].sinceApi, /^\d+\.\d+\.\d+$/, `${id}: a version (PT's placeholder)`);
     assert.deepEqual(validateSpec(plan.$defs.catalogueEntry, e[id], '$', plan), [], id);
   }
-  assert.equal(e['locator.around'].state, 'reserved');
+  // ((6c FL) moved by name: locator.around was reserved until FL, now supported (a zone or form round a build, p01))
+  assert.equal(e['locator.around'].state, 'supported');
   assert.equal(new Set(plan['x-catalogue'].entries.map((x) => x.id)).size, plan['x-catalogue'].entries.length, 'ids are unique');
 });
 
