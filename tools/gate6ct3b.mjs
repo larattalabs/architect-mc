@@ -736,6 +736,7 @@ steps.look = async () => {
  * only with T3B_WRITE_FIXTURE=1; else into OUT/tunnel_hill-plan, and reports whether it equals the committed one (the survey's sha).
  */
 steps.fixture = async () => {
+  await ensure();
   const f = hill();
   const out = {};
   await L.fresh('G6B T3b Hill Fixture', BASE);
