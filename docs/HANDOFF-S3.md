@@ -67,9 +67,17 @@ on cloister_t6, 3 open rims (relief cut unwalled ring cells: now pinned at their
 rails over grass (parapet cond 0 now), 1 grass spread under a cherry trunk the fountain room felled (grass journalled under felled
 trunks within 8 of a body). Offline on run 5's survey + its before dump: all clean.
 
-In flight: dev run 6 (log scratchpad/s3-build/run-dev6.log, GATE_SLOTS=6), kit suite (kit-suite4.log), identity (identity2.log).
+Since run 6: lamps drop to a solid foot or are left out; floating decor trimmed; an empty walk run no longer registers (its
+-Infinity box refused the plan); the flat hill by vanilla /fill (a realised s3_hill made it OWNED land). Scenario run
+20261021-024127-6cs3-scn: flat and natural pass every bar but the golden (none yet) and the gallery. Golden cut from that natural run
+(re-cut at kit 0.38.0); planSurvey re-pinned (cc52144b, previousSha kept) + feasibility record; gate6cs3 feasibility passes.
+Merged origin/main (release tool): versions reverted to main's (API 1.37.0 / mod 0.40.0 / kit 0.38.0; S3 javadoc `Since NEXT`), the
+release tool re-plans goldens with their biomes/bible, its set test counts a tree's own placeholders. Kit 682/0, sidecar check ok,
+mod build ok, identity 262/262 + 59 asks. Item 4 (chain 6cs3-item4, 20261021-034205): PASS natural (after Steward's repair drops a
+refused optional spire) and flat.
 
-Next: clean natural run; flat run (6c-scenario-s3); re-pin planSurvey from the clean run's raw/plan/survey.bin (+ feasibility);
-golden; gate6cs3 unit/feasibility; s3-plan in game; slice tier (regressions matter: the mod's ice change); gallery (read the 6c
-artifact first, republish to its URL); verifier; as built (record the ice fix); queue in PLAN "district routes ignore protected
-areas" (fixed for terraced only); retire this file.
+In flight: slice tier (log scratchpad/s3-build/run-slice1.log, 3 shards 8924-8929, GATE_SLOTS=6).
+
+Next: slice results; gallery from the slice run's S3 natural/flat dirs (copy into the main checkout's artifacts/scenarios/6c/s3/,
+SCENARIOS_ART there, `node tools/scenarios.mjs gallery --phase 6c`, read https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG first,
+republish to it); gate-verifier (re-runs item 4); CONTRACT "S3 as built"; retire this file; push; report.
