@@ -37,11 +37,11 @@ to the server's pid; `stop` releases it. Item 16's rows run through the runner, 
   tests fail on them: the coordinator renumbers)
 - [x] kit + mod ring order; the survival tunnel whole in its lining's stage; the hanging-lantern deadlock fixed (RS-a's 95.3% stop);
   farmland built then dried to dirt stays built (only a cell already built: the verifier's catch)
-- [x] driver rows green on the merged head: unit, rs04, rs04half, rs04crash, rs03stop, ice, lava, brush (artifacts/gate6c-rsb/REPORT.md)
-- [ ] item 16 + Builder impact steps on the merged head via the runner (a first run on fc7867da: unit-mod, y, c29, pt2-survival, h,
-  cu-survival, ha PASS; hy, kc, irr pending)
+- [x] driver rows green on the merged head: unit, rs04, rs04half, rs04crash, rs03stop (fixed: a real mid-build stop), ice, lava, brush (artifacts/gate6c-rsb/REPORT.md)
+- [x] item 16 + Builder impact steps on the merged head via the runner: 10/10 PASS on 6132469a (artifacts/gate-runs-rsb/
+  20261021-072147-slice: unit-mod 753/0, y, c29, pt2-survival, h, cu-survival, ha, hy, kc, irr); also 10/10 earlier on fc7867da
 - [x] "RS-b as built" (docs/CONTRACT.md, after "RS-a as built")
-- [ ] gate-verifier again (its first pass: every in-game item PASS; FAIL only on the farmland rule, since fixed); push; report
+- [x] gate-verifier: PASS (second round, after the farmland rule and rs03stop fixes); branch pushed; ready to merge
 
 ## Lessons from the run
 

@@ -18920,7 +18920,7 @@ grid is snowy plains; the driver sets the claim's biome with `/fillbiome`.
 | item 8, rs03 | The per-item sum constant at 30+ checkpoints: feed, build, bodies (lava charged, a bucket back), the withdrawal, the removal under way. |
 | item 9 lava rows | 10 sources, 5 buckets kept: 5 scooped (5 buckets became 5 lava buckets), 5 drained without credit; the sum then differs by exactly the drained term; a second removal credits nothing; E-flat 0. |
 | item 13, brush | A concrete-pattern and a PLAYER_BLOCKS stroke refused NOT_ALLOWED; a natural stroke writes 31 cells, the stock unchanged and nothing outstanding; removed with E-flat 0. |
-| item 16 | Through `tools/gate-run.mjs` (`artifacts/gate-runs-rsb/`): `unit-mod`, `h-ingame`, `ha-ingame`, `hy-ingame`, `kc-ingame`, `irr-ingame`, and for the `Builder.matches` change `cu-survival`, `y-ingame`, `c29-ingame`, `pt2-survival`. |
+| item 16 | 10/10 PASS on 6132469a through `tools/gate-run.mjs` (`artifacts/gate-runs-rsb/20261021-072147-slice`): `unit-mod`, `h-ingame`, `ha-ingame`, `hy-ingame`, `kc-ingame`, `irr-ingame`, and for the `Builder.matches` change `cu-survival`, `y-ingame`, `c29-ingame`, `pt2-survival`. |
 
 **Notes for RS-a and the RC:**
 - Versions: RS's placeholders (API 1.41.0, mod 0.44.0, kit 0.42.0) are kept. Against main's new `tools/release-version.mjs` four
