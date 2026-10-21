@@ -803,17 +803,18 @@ public final class RegionTargets {
 	/**
 	 * (§9, item 9) At a survival region's removal, before its refunds are counted: a target cell holding a player's block (neither the
 	 * plan's block, nor what stood there before, nor air or a fluid), still the target's in the journal, drops that block's items at its
-	 * cell and goes back to its before, as a lot's player block drops (Y1's PLAYER_DROP). Returns the cells. Server thread.
+	 * cell and goes back to its before, as a lot's player block drops (Y1's PLAYER_DROP). Returns those cells. Server thread.
 	 */
-	static int dropPlayerBlocks(ServerLevel level, Infra t) {
+	static it.unimi.dsi.fastutil.longs.LongOpenHashSet dropPlayerBlocks(ServerLevel level, Infra t) {
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet out = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
 		if (!is(t)) {
-			return 0;
+			return out;
 		}
 		MinecraftServer srv = level.getServer();
 		Builder.Run r = RoadBuilder.run(srv, t);
 		Plan pl = r == null ? null : planOf(srv, t);
 		if (r == null || pl == null) {
-			return 0;
+			return out;
 		}
 		Cells before = beforeOf(t, pl);
 		int n = 0;
@@ -833,12 +834,13 @@ public final class RegionTargets {
 			Builder.dropItems(level, p, items, null);
 			dev.larattalabs.architect.placed.Placed.set(level, p, was != null ? was : net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),
 				Sites.CELL_FLAGS);
+			out.add(p.asLong());
 			n++;
 		}
 		if (n > 0) {
 			Architect.LOGGER.info("Region target {}: {} player block(s) dropped at their cells before its removal", t.id(), n);
 		}
-		return n;
+		return out; // (its refund skips them: a soil cell back at its before would read as built)
 	}
 
 	/** The target entry's before over its box (read once per plan). */

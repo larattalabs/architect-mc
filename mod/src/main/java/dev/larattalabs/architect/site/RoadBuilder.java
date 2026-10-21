@@ -622,11 +622,19 @@ public final class RoadBuilder {
 
 	/** 6c Y: what a construction road's removal refunds: the cost of its paid cells standing as built (loading its chunks). */
 	static Map<String, Integer> refundOf(ServerLevel level, Infra road) {
+		return refundOf(level, road, null);
+	}
+
+	/** {@link #refundOf}, less the cells in {@code skip} (6c RS: a region target's player blocks, dropped and put back at their before). */
+	static Map<String, Integer> refundOf(ServerLevel level, Infra road, it.unimi.dsi.fastutil.longs.@Nullable LongOpenHashSet skip) {
 		Map<String, Integer> refund = new TreeMap<>();
 		Builder.Run r = road.construction() == null ? null : run(level.getServer(), road);
 		if (r != null) {
 			r.rescan(level, true);
 			for (int q = r.built.nextSetBit(0); q >= 0; q = r.built.nextSetBit(q + 1)) {
+				if (skip != null && skip.contains(r.pos(q).asLong())) {
+					continue;
+				}
 				// (6c CU, S-CU-2) the block standing: a weathered, waxed or scraped copper cell pays what is there
 				r.refundCost(level.getBlockState(r.pos(q)), q).forEach(x -> refund.merge(x.item(), x.count(), Integer::sum));
 			}
