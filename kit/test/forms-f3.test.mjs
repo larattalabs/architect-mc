@@ -124,13 +124,16 @@ test('item 9: catalogue 11 is the golden; against catalogue 9 (catalogue-vocc.js
   const prev = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-vocc.json'), 'utf8'));
   assert.equal(prev.catalogueVersion, 9);
   const d = diffCatalogues(prev, golden);
-  assert.deepEqual(d.reservedToSupported, ['form.giant_tree']);
+  // ((batch v0.41.0) FL's six flips and locator.around's note are fl.test.mjs item 5's)
+  const FL = ['layout.grid', 'layout.organic', 'layout.ring', 'layout.spiral', 'locator.around', 'sketch.outline'];
+  const f3 = (xs) => xs.filter((x) => !FL.includes(x.id ?? x));
+  assert.deepEqual(f3(d.reservedToSupported), ['form.giant_tree']);
   assert.deepEqual(d.added.map((a) => a.id ?? a).sort(), ['form.coral', 'form.giant_mushroom', 'form.roots', 'form.stalactites']);
-  assert.deepEqual(d.schemaVersionBumps, [{ id: 'form.giant_tree', from: 0, to: 1 }]);
+  assert.deepEqual(f3(d.schemaVersionBumps), [{ id: 'form.giant_tree', from: 0, to: 1 }]);
   // S-F3-3: the volume flag on every entry whose check needs a frozen volume under the ground (the tunnel's corridor, the cave forms)
   assert.deepEqual(d.limitsChanged.map((x) => x.id ?? x), ['connector.tunnel']);
   assert.deepEqual(golden.entries.filter((e) => e.limits?.volume === true).map((e) => e.id).sort(), ['connector.tunnel', 'form.roots', 'form.stalactites']);
-  assert.deepEqual([d.removed, d.retired, d.otherStateChanges, d.untilChanged, d.notesChanged], [[], [], [], [], []]);
+  assert.deepEqual([d.removed, d.retired, d.otherStateChanges, d.untilChanged, f3(d.notesChanged)], [[], [], [], [], []]);
   for (const id of ['form.giant_tree', 'form.giant_mushroom', 'form.coral', 'form.roots', 'form.stalactites']) {
     const e = golden.entries.find((x) => x.id === id);
     assert.equal(e.state, 'supported', id);

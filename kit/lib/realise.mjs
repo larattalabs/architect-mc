@@ -38,7 +38,7 @@ export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'ma
 // (6c HY) 'courses': a fluid op with a course's members (after, lining or grate non-empty, or a join into a plan body: kit/lib/fluids/
 // body.mjs isCourseOp): a mod or kit before HY would write the course out of order (no `after`), so it refuses the plan PLAN_STALE. The
 // evaluator writes a `grate` cell as iron_bars[waterlogged=true] over its source.
-// (6c RS) 'survival': a survival IR (the member `survival`: its target groups, kit/REGIONS.md "Kit 0.42.0"): its tiles are ARTL version 2
+// (6c RS) 'survival': a survival IR (the member `survival`: its target groups, docs/CONTRACT.md slice RS; kit 0.39.0): its tiles are ARTL version 2
 // (each cell's class and group) and its ops carry `free`; a mod or kit before RS would write every cell at once, for free, so it refuses the
 // plan PLAN_STALE.
 // (6c F3-c) 'coralDecor': a fluid op with a `decor` set (kit/lib/fluids/body.mjs: [{state, cells: runs}], the coral grown in the body):
@@ -62,7 +62,7 @@ export const MEMBERS_FORMAT2 = ['anchors', 'biomes', 'blobs', 'blockTags', 'budg
 // members from kit 0.16.0, in format 1 and 2; the evaluator ignores them. An older kit refuses such a plan PLAN_STALE by the
 // kitVersion bump.
 /** (6b) The running kit's version (kept equal to lib/region/plan.mjs KIT_VERSION by a test). */
-export const EVAL_KIT_VERSION = '0.42.0';
+export const EVAL_KIT_VERSION = '0.39.0';
 
 /** Compare two semver strings (major.minor.patch, numeric): -1, 0, 1. */
 export function semverCompare(a, b) {

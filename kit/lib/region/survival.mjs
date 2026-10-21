@@ -5,7 +5,7 @@ import { COSTS, CREATIVE_ONLY, FREE_NATURAL } from './survivalData.mjs';
 
 export { CREATIVE_ONLY, FREE_NATURAL };
 
-/** Cell classes in ARTL v2 (kit/REGIONS.md "Kit 0.42.0"): written in the free pass, held free in a target, paid in a target. */
+/** Cell classes in ARTL v2 (docs/CONTRACT.md slice RS; kit 0.39.0): written in the free pass, held free in a target, paid in a target. */
 export const CLASS_FREE = 0;
 export const CLASS_HELD = 1;
 export const CLASS_PAID = 2;

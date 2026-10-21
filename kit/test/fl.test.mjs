@@ -103,17 +103,19 @@ test('item 3: KC: a zone around a pond (v67) and around a fountain (r03): 0 M25:
 
 // ------------------------------------------------------------------ item 5: catalogue 10
 
-test('item 5: the golden equals catalogue 10; its diff from catalogue-vocc.json (9) is exactly the six flips (locator.around\'s note kept and extended); no until FL left', () => {
+test('item 5: the golden equals catalogue 11 (the batch: FL and F3); its diff from catalogue-vocc.json (9), F3\'s entries aside, is exactly the six flips (locator.around\'s note kept and extended); no until FL left', () => {
   const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
   assert.deepEqual(planCatalogue(), golden);
-  assert.equal(golden.catalogueVersion, 10);
+  assert.equal(golden.catalogueVersion, 11); // ((batch v0.41.0) FL's 10 and F3's 11 together: 11)
   assert.equal(golden.api, PLAN_API);
   const nine = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-vocc.json'), 'utf8'));
   const d = diffCatalogues(nine, golden, { pending: [{ part: 'grove', block: 'layout.ring' }] });
   const six = ['layout.grid', 'layout.organic', 'layout.ring', 'layout.spiral', 'locator.around', 'sketch.outline'];
-  assert.deepEqual(d.reservedToSupported, six);
-  assert.deepEqual(d.schemaVersionBumps.map((x) => x.id).sort(), six);
-  assert.deepEqual([d.added, d.removed, d.retired, d.otherStateChanges, d.untilChanged, d.limitsChanged], [[], [], [], [], [], []]);
+  // ((batch v0.41.0) F3's flip, its four added forms and the tunnel's volume flag are forms-f3.test.mjs item 9's)
+  const fl = (xs) => xs.filter((x) => { const id = x.id ?? x; return !/^form\./.test(id) && id !== 'connector.tunnel'; });
+  assert.deepEqual(fl(d.reservedToSupported), six);
+  assert.deepEqual(fl(d.schemaVersionBumps).map((x) => x.id).sort(), six);
+  assert.deepEqual([fl(d.added), d.removed, d.retired, d.otherStateChanges, d.untilChanged, fl(d.limitsChanged)], [[], [], [], [], [], []]);
   assert.deepEqual(d.notesChanged.map((x) => x.id), ['locator.around']);
   assert.match(golden.entries.find((e) => e.id === 'locator.around').note, /^On a wall: wall\.around.*Zones: a ring street round the feature; forms: sites in the band\./);
   assert.deepEqual(d.recheck, [{ part: 'grove', block: 'layout.ring' }]);

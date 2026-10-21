@@ -2,8 +2,8 @@
  "scenario": "links_demo",
  "version": 0,
  "note": "tile shas of the IR over its own plan survey, 1 worker = 4 workers shuffled; inputs in goldens/links_demo/ (written by tools/gate7ak1b.mjs natural)",
- "irSha": "f0d4df177999b36c771695a99ca80ca8df9d7c53e4d2595844395ddd4c3a0de7",
- "kitVersion": "0.40.0",
+ "irSha": "a6b64b93c09705d958444e77dd5cf5f218e60253d42e0ccebe422a188c54364a",
+ "kitVersion": "0.39.0",
  "cells": 151293,
  "tiles": {
   "ground|terrain|-15,-1": "76a834661c9d3c3badc1bde0d46ef35eba9a38dd18a6e6b041202fa7e12f920c",

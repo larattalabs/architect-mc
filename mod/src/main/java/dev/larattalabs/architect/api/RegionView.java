@@ -28,7 +28,7 @@ public record RegionView(String id, String planId, String irSha, @Nullable Strin
 	}
 
 	/**
-	 * The 1.27.0 constructor: no build (since 1.41.0, 6c RS: a survival region's {@link RegionBuild}, its targets' progress per part; null for
+	 * The 1.27.0 constructor: no build (since 1.38.0, 6c RS: a survival region's {@link RegionBuild}, its targets' progress per part; null for
 	 * a creative region).
 	 */
 	public RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,

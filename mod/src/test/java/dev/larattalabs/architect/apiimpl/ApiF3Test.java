@@ -14,15 +14,15 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
- * API 1.39.0 (6c slice F3, a placeholder the coordinator sets at merge; docs/CONTRACT.md "Phase 6c slice F3" §7): a forms-II helper's
+ * API 1.38.0 (6c slice F3, released in the batch v0.41.0; docs/CONTRACT.md "Phase 6c slice F3" §7): a forms-II helper's
  * {@code plan.forms2} gives {@code "formsTrees"}, {@code "formsCave"} and {@code "formsWater"}; no public type changes; the versions;
  * the cave forms make a check plan twice (PlanChecks.hasCaveForm, as a tunnel does).
  */
 class ApiF3Test {
 	@Test
 	void versionsAndFeatures() {
-		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.39.0") >= 0, ArchitectApi.VERSION);
-		assertTrue(IrStale.semverCompare(IrStale.KIT_VERSION, "0.40.0") >= 0, IrStale.KIT_VERSION);
+		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.38.0") >= 0, ArchitectApi.VERSION);
+		assertTrue(IrStale.semverCompare(IrStale.KIT_VERSION, "0.39.0") >= 0, IrStale.KIT_VERSION);
 		Set<String> f = ApiRules.features(2, List.of("region.fluids", "plan.forms2"));
 		assertTrue(f.contains("formsTrees") && f.contains("formsCave") && f.contains("formsWater"), f.toString());
 		Set<String> g = ApiRules.features(2, List.of("region.fluids", "plan.rules"));

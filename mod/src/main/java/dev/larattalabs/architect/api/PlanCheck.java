@@ -24,7 +24,7 @@ public record PlanCheck(String checkId, String planSha, String surveySha, String
 	}
 
 	/**
-	 * The 1.24.0 constructor: checked in creative (since 1.41.0, 6c RS: {@code survival}, the check ran in a survival world: each part's
+	 * The 1.24.0 constructor: checked in creative (since 1.38.0, 6c RS: {@code survival}, the check ran in a survival world: each part's
 	 * {@code cost.survival}, the plan's {@code cost.bom}, the artifact checked in survival).
 	 */
 	public PlanCheck(String checkId, String planSha, String surveySha, String kitVersion, String schemaVersion, Overall overall, List<JsonObject> parts,

@@ -1,7 +1,7 @@
 {
  "catalogueVersion": 11,
- "api": "1.41.0",
- "kitVersion": "0.42.0",
+ "api": "1.38.0",
+ "kitVersion": "0.39.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -75,28 +75,28 @@
   },
   {
    "id": "layout.ring",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.38.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "FL: a closed street round an open hub, lots outside it facing in; central and landmark lots in the hub."
   },
   {
    "id": "layout.spiral",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.38.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "FL: an open street winding out from the hub (up to 3 turns), lots on its outer side; on a hill it climbs to the summit."
   },
   {
    "id": "layout.grid",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.38.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "FL: blocks of streets (avenues along orientation, cross streets), lots back to back facing the avenues, a central plaza block."
   },
   {
    "id": "layout.organic",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.38.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "FL: 2 to 4 crooked lanes growing out of a green, lots of mixed setbacks along them."
@@ -624,7 +624,7 @@
   },
   {
    "id": "form.giant_tree",
-   "sinceApi": "1.39.0",
+   "sinceApi": "1.38.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -653,7 +653,7 @@
   },
   {
    "id": "form.giant_mushroom",
-   "sinceApi": "1.39.0",
+   "sinceApi": "1.38.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -673,7 +673,7 @@
   },
   {
    "id": "form.coral",
-   "sinceApi": "1.39.0",
+   "sinceApi": "1.38.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -698,7 +698,7 @@
   },
   {
    "id": "form.roots",
-   "sinceApi": "1.39.0",
+   "sinceApi": "1.38.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -719,7 +719,7 @@
   },
   {
    "id": "form.stalactites",
-   "sinceApi": "1.39.0",
+   "sinceApi": "1.38.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -912,7 +912,7 @@
   },
   {
    "id": "locator.around",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.38.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "On a wall: wall.around, K1 (the wall's own member). Zones: a ring street round the feature; forms: sites in the band."
@@ -1000,7 +1000,7 @@
   },
   {
    "id": "sketch.outline",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.38.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "polygon: the zone's mask; polyline: the street's line."

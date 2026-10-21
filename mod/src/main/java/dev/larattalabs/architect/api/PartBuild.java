@@ -3,7 +3,7 @@ package dev.larattalabs.architect.api;
 import java.util.List;
 
 /**
- * One plan part of a survival region's build ({@link RegionBuild#parts}). Since 1.41.0.
+ * One plan part of a survival region's build ({@link RegionBuild#parts}). Since 1.38.0.
  *
  * @param part the plan part id (a bundled program's IR part; a shared route's first connector; {@code __lamps__} for the route lamps)
  * @param state {@code waiting} (nothing built yet), {@code building} or {@code built}
