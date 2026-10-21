@@ -9,7 +9,7 @@
 //                          stair site. Then the stair site removed: E-flat 0 over the whole box, nothing kept.
 //   rmcrash  (h-rmcrash)   the same world, the removal halted at FL3+save (drained, before the solids: the resumed drain runs again),
 //                          K6+save (R2 committed, the records not yet pending), R2q+save (R2 durable, the queue file not saved after it)
-//                          and RG6+save (mid-R4: the region's group undo mid-write); each reopened and the removal asked again: REMOVED,
+//                          and K7+save (mid-R4: a region cell site's restore halted after its first 64 cells; RG6 fires only in a template site's restore); each reopened and the removal asked again: REMOVED,
 //                          E-flat 0 outside the stair cell, the stair kept, and after the stair site goes E-flat 0.
 import { CLAIM, OWNER, censusOf, crashAt, demoBox, diff, freshFlat, planDemo, realiseWait, snap } from './gate6ch-core.mjs';
 
@@ -138,7 +138,7 @@ export async function holders(ctx) {
 /** The holder case through the removal's crash windows (finding 2 with the drain's holders). */
 export async function rmcrash(ctx) {
   const out = {};
-  for (const point of ['FL3+save', 'K6+save', 'R2q+save', 'RG6+save']) {
+  for (const point of ['FL3+save', 'K6+save', 'R2q+save', 'K7+save']) {
     const tag = point.replace('+save', '');
     const world = `G6B H Hold ${tag}`;
     ctx.log(`-- ${point}`);
