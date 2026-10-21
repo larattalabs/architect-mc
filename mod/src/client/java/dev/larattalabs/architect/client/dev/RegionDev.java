@@ -254,6 +254,35 @@ public final class RegionDev {
 				String region = Fields.of(req).nonBlank("region");
 				return ServerTasks.callOnServer(s -> RegionsImpl.devState(region));
 			});
+		DevBridge.register("dev.region.realised", 600_000, "{region, layer?: 0, tile?: \"stage|set|tx,tz\", cells?: false, verify?: false, world?: true} - (RP) "
+			+ "the region's realised record: per tile its status (committed|placing|pending|undone|stale), codes, extras, bytes and shas, "
+			+ "sites.json (roads, lots, bodies); tile: that one record (cells: its code and extra lists); verify: the record against the "
+			+ "journal and (world) the world, chunks loaded", (req, mc) -> {
+				String region = req.get("region").getAsString();
+				int layer = req.has("layer") ? req.get("layer").getAsInt() : 0;
+				boolean cells = req.has("cells") && req.get("cells").getAsBoolean();
+				boolean verify = req.has("verify") && req.get("verify").getAsBoolean();
+				boolean world = !req.has("world") || req.get("world").getAsBoolean();
+				String tile = req.has("tile") ? req.get("tile").getAsString() : null;
+				return ServerTasks.callOnServer(s -> {
+					var l = RegionsImpl.live(region);
+					if (l == null) {
+						throw new IllegalArgumentException("no live region " + region);
+					}
+					return dev.larattalabs.architect.site.RealisedRecords.dev(l, l.level(s), layer, tile, cells, verify, world);
+				});
+			});
+		DevBridge.register("dev.region.realised.audit", 10_000, "{on?: true, dir?} - (RP) arm the realised audit: each region tile, right after its "
+			+ "commit, re-read from the world against its intent per code, and each region's whole record at its batch's end, as JSON lines "
+			+ "in dir (default <world>/../rp-audit); on: false disarms -> {dir}", (req, mc) -> ServerTasks.callOnServer(s -> {
+				boolean on = !req.has("on") || req.get("on").getAsBoolean();
+				java.nio.file.Path dir = req.has("dir") ? java.nio.file.Path.of(req.get("dir").getAsString()) : s.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT)
+					.toAbsolutePath().normalize().getParent().resolve("rp-audit");
+				dev.larattalabs.architect.site.RealisedRecords.audit(on ? dir : null);
+				JsonObject o = new JsonObject();
+				o.addProperty("dir", on ? dir.toString() : null);
+				return o;
+			}));
 		DevBridge.register("dev.region.list", 10_000, "{} - phase 6a: every region (RegionView)", (req, mc) -> ServerTasks.callOnServer(s -> {
 			JsonObject o = new JsonObject();
 			JsonArray a = new JsonArray();

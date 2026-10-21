@@ -52,14 +52,15 @@ final class TileCheck {
 	static final int MAX_FLOOD = 20_000;
 	private static final int[][] FLUID_NB = {{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}, {0, 1, 0}};
 
-	private record Prep(long[] pos, Value[] values, BlockState[] states, byte[] cond, boolean[] walk, int clipped) {
+	/** (RP) {@code src}: each prepared cell's index in the checked tile; {@code fcode}: per checked-tile cell, CLIP for a clipped one. */
+	private record Prep(long[] pos, Value[] values, BlockState[] states, byte[] cond, boolean[] walk, int clipped, int[] src, byte[] fcode) {
 	}
 
 	/** The check's result: a 4e check plus the tile's extras; (6c PT) the builds whose cells it kept, for the region's findings. */
 	record Result(InfraPlace.Check check, long[] leafPos, Value[] leafBefore, Value[] leafAfter, long[] walk, Map<String, Long> skipped,
-		List<dev.larattalabs.architect.api.BuildHit> builds) {
+		List<dev.larattalabs.architect.api.BuildHit> builds, dev.larattalabs.architect.region.Realised.@Nullable Draft draft) {
 		Result(InfraPlace.Check check, long[] leafPos, Value[] leafBefore, Value[] leafAfter, long[] walk, Map<String, Long> skipped) {
-			this(check, leafPos, leafBefore, leafAfter, walk, skipped, List.of());
+			this(check, leafPos, leafBefore, leafAfter, walk, skipped, List.of(), null);
 		}
 	}
 
@@ -118,9 +119,20 @@ final class TileCheck {
 	private final List<Value> addedVals = new ArrayList<>();
 	private final LongOpenHashSet held = new LongOpenHashSet();
 	private final LongArrayList leafPos = new LongArrayList();
+	private final IntArrayList leafCause = new IntArrayList();
 	private final List<Value> leafBefore = new ArrayList<>();
 	private final List<Value> leafAfter = new ArrayList<>();
 	private @Nullable CompletableFuture<Result> assembled;
+	/** (RP) The tile as evaluated (before the fluids gate's filter): the realised record is over its cells. Null: no record. */
+	private Packed.@Nullable Tile original;
+	/** (RP) The checked tile (filtered). */
+	private final Packed.Tile checked;
+	/** (RP) Each prepared cell's code ({@link dev.larattalabs.architect.region.Realised}). */
+	private byte[] code = new byte[0];
+	/** (RP) A written cell or extra -> the prepared index of the intended cell whose write caused it. */
+	private final it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap causeOf = new it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap();
+	/** (RP) The kind of each {@link #added} cell (TREE, DEPENDENT, DEPENDENT_WET). */
+	private final it.unimi.dsi.fastutil.bytes.ByteArrayList addedKind = new it.unimi.dsi.fastutil.bytes.ByteArrayList();
 
 	TileCheck(Packed.Tile tile, String regionGroup, String dim, int[] claim, Anchors.Bounds window) {
 		this(tile, regionGroup, null, dim, claim, window);
@@ -152,7 +164,15 @@ final class TileCheck {
 		this.dim = dim;
 		this.claim = claim.clone();
 		this.window = window;
+		this.checked = tile;
+		this.causeOf.defaultReturnValue(-1);
 		this.prep = CompletableFuture.supplyAsync(() -> prepare(tile, claim));
+	}
+
+	/** (RP) Records the tile's realised draft over {@code t}, the tile as evaluated ({@code tile} is it after the fluids gate). */
+	TileCheck provenance(Packed.@Nullable Tile t) {
+		this.original = t;
+		return this;
 	}
 
 	/** (6c H §4.4) With the tile's frozen heights (the natural water surface for dependents cleared under it). */
@@ -186,6 +206,7 @@ final class TileCheck {
 		int[] idx = new int[n];
 		int k = 0;
 		int clipped = 0;
+		byte[] fcode = new byte[n];
 		for (int i = 0; i < n; i++) {
 			long p = t.pos()[i];
 			int x = BlockPos.getX(p);
@@ -193,6 +214,7 @@ final class TileCheck {
 			int z = BlockPos.getZ(p);
 			if (x < claim[0] || y < claim[1] || z < claim[2] || x > claim[3] || y > claim[4] || z > claim[5]) {
 				clipped++; // REGION_LIMIT: the mod never trusts the evaluator for the claim
+				fcode[i] = dev.larattalabs.architect.region.Realised.CLIP;
 				continue;
 			}
 			idx[k++] = i;
@@ -226,7 +248,7 @@ final class TileCheck {
 			cs[j] = t.cond()[i];
 			ws[j] = t.walk()[i];
 		}
-		return new Prep(ps, vs, ss, cs, ws, clipped);
+		return new Prep(ps, vs, ss, cs, ws, clipped, order, fcode);
 	}
 
 	/** Works until {@code deadline}: the result once done, else null. Server thread. */
@@ -258,6 +280,7 @@ final class TileCheck {
 				return result = refused(dev.larattalabs.architect.api.Reason.JOURNAL_UNAVAILABLE, "the journal could not be read");
 			}
 			keep = new boolean[p.pos().length];
+			code = new byte[p.pos().length];
 			if (p.clipped() > 0) {
 				skipped.merge("claim", (long) p.clipped(), Long::sum);
 			}
@@ -328,35 +351,57 @@ final class TileCheck {
 				return false;
 			}
 			boolean ok;
-			String bd = others.contains(q) ? null : dev.larattalabs.architect.placed.Placed.build(level, chunk, x, BlockPos.getY(q), z);
-			if (others.contains(q)) {
-				ok = false;
-				skipped.merge("owned", 1L, Long::sum);
-			} else if (bd != null && !consent.allows(bd)) {
-				// (6c PT §7) a player's build cell: skipped as `build`, whatever the condition, the stroke or force
-				ok = false;
-				skipped.merge("player_build", 1L, Long::sum);
-				skipped.merge("player_build." + bd, 1L, Long::sum);
-				buildHits.add(level, bd, q);
-			} else {
-				BlockState s = chunk.getBlockState(m.set(x, BlockPos.getY(q), z));
-				boolean incidental = dev.larattalabs.architect.placed.Placed.naturalForWrites(level, chunk, x, BlockPos.getY(q), z, consent);
-				if (brushRefuses(s)) {
+			// (RP) every branch's decision through Realised.decide, in the same order: ownership, a build, the world's state
+			boolean owned = others.contains(q);
+			String bd = owned ? null : dev.larattalabs.architect.placed.Placed.build(level, chunk, x, BlockPos.getY(q), z);
+			boolean buildKept = bd != null && !consent.allows(bd);
+			BlockState s = null;
+			boolean unbreakable = false;
+			boolean condPasses = true;
+			boolean same = false;
+			if (!owned && !buildKept) {
+				s = chunk.getBlockState(m.set(x, BlockPos.getY(q), z));
+				unbreakable = brushRefuses(s);
+				if (!unbreakable) {
+					boolean incidental = dev.larattalabs.architect.placed.Placed.naturalForWrites(level, chunk, x, BlockPos.getY(q), z, consent);
+					condPasses = CellCond.passes(p.cond()[cursor], s, ours.contains(q)) || (playerBlocks && strokeMayClear(p.cond()[cursor])) || (incidental
+						&& CellCond.passesIncidental(p.cond()[cursor], s));
+					same = condPasses && s == p.states()[cursor];
+				}
+			}
+			byte c = dev.larattalabs.architect.region.Realised.decide(owned, buildKept, unbreakable, condPasses, same);
+			code[cursor] = c;
+			switch (c) {
+				case dev.larattalabs.architect.region.Realised.HELD -> {
+					ok = false;
+					skipped.merge("owned", 1L, Long::sum);
+				}
+				case dev.larattalabs.architect.region.Realised.BUILD -> {
+					// (6c PT §7) a player's build cell: skipped as `build`, whatever the condition, the stroke or force
+					ok = false;
+					skipped.merge("player_build", 1L, Long::sum);
+					skipped.merge("player_build." + bd, 1L, Long::sum);
+					buildHits.add(level, bd, q);
+				}
+				case dev.larattalabs.architect.region.Realised.UNBREAKABLE -> {
 					ok = false;
 					skipped.merge("unbreakable", 1L, Long::sum);
-				} else if (!CellCond.passes(p.cond()[cursor], s, ours.contains(q)) && !(playerBlocks && strokeMayClear(p.cond()[cursor])) && !(incidental
-					&& CellCond.passesIncidental(p.cond()[cursor], s))) {
+				}
+				case dev.larattalabs.architect.region.Realised.COND -> {
 					ok = false;
 					skipped.merge("condition", 1L, Long::sum);
-				} else if (s == p.states()[cursor]) {
+				}
+				case dev.larattalabs.architect.region.Realised.NOOP -> {
 					ok = false;
 					skipped.merge("same", 1L, Long::sum);
-				} else {
+				}
+				default -> {
 					ok = true;
 					if (treeLog(s)) {
 						logs.add(q);
 					}
 					target.put(q, p.states()[cursor]);
+					causeOf.put(q, cursor);
 				}
 			}
 			keep[cursor] = ok;
@@ -427,6 +472,7 @@ final class TileCheck {
 			for (int i = 0; i < drop.size(); i++) {
 				int c = drop.getInt(i);
 				keep[c] = false;
+				code[c] = dev.larattalabs.architect.region.Realised.FLUID_EDGE;
 				target.remove(p.pos()[c]);
 				dropped.add(p.pos()[c]);
 			}
@@ -453,6 +499,7 @@ final class TileCheck {
 				return false;
 			}
 			long q = flood.poll();
+			int qc = causeOf.get(q);
 			int x = BlockPos.getX(q);
 			int y = BlockPos.getY(q);
 			int z = BlockPos.getZ(q);
@@ -489,8 +536,10 @@ final class TileCheck {
 						}
 						flood.add(np);
 						removedLogs.add(np);
+						causeOf.putIfAbsent(np, qc);
 						if (!target.containsKey(np)) {
 							added.add(np);
+							addedKind.add(dev.larattalabs.architect.region.Realised.TREE);
 							addedVals.add(air);
 							target.put(np, airState);
 							trees++;
@@ -554,6 +603,7 @@ final class TileCheck {
 				return false;
 			}
 			long q = cleared[cursor++];
+			int qc = causeOf.get(q);
 			int x = BlockPos.getX(q);
 			int z = BlockPos.getZ(q);
 			for (int y = BlockPos.getY(q) + 1; y <= claim[4]; y++) {
@@ -580,6 +630,8 @@ final class TileCheck {
 					wetDeps++;
 				}
 				added.add(u);
+				addedKind.add(wet ? dev.larattalabs.architect.region.Realised.DEPENDENT_WET : dev.larattalabs.architect.region.Realised.DEPENDENT);
+				causeOf.putIfAbsent(u, qc);
 				addedVals.add(wet ? water : air);
 				target.put(u, wet ? Blocks.WATER.defaultBlockState() : Blocks.AIR.defaultBlockState());
 				deps++;
@@ -641,6 +693,7 @@ final class TileCheck {
 						if (s.getBlock() instanceof LeavesBlock && !s.getValue(LeavesBlock.PERSISTENT)) {
 							held.add(np);
 							leafPos.add(np);
+							leafCause.add(causeOf.get(q));
 							leafBefore.add(WorldJournal.value(s));
 							leafAfter.add(WorldJournal.value(s.setValue(LeavesBlock.PERSISTENT, true)));
 						}
@@ -685,20 +738,25 @@ final class TileCheck {
 		for (int c = 0; c < p.pos().length; c++) {
 			if (keep[c] && supportKept.contains(p.pos()[c])) {
 				keep[c] = false;
+				code[c] = dev.larattalabs.architect.region.Realised.BUILD_SUPPORT;
 			}
 		}
 		LongArrayList a2 = new LongArrayList();
 		List<Value> v2 = new ArrayList<>();
+		it.unimi.dsi.fastutil.bytes.ByteArrayList k2 = new it.unimi.dsi.fastutil.bytes.ByteArrayList();
 		for (int i = 0; i < added.size(); i++) {
 			if (!supportKept.contains(added.getLong(i))) {
 				a2.add(added.getLong(i));
 				v2.add(addedVals.get(i));
+				k2.add(addedKind.getByte(i));
 			}
 		}
 		added.clear();
 		added.addAll(a2);
 		addedVals.clear();
 		addedVals.addAll(v2);
+		addedKind.clear();
+		addedKind.addAll(k2);
 	}
 
 	private boolean holdsBuild(ServerLevel level, BlockPos.MutableBlockPos m, int x, int y, int z) {
@@ -847,7 +905,34 @@ final class TileCheck {
 		}
 		InfraPlace.Check c = new InfraPlace.Check(List.of(), notes, ps, vs, box, hits, spec);
 		return new Result(c, leafPos.toLongArray(), leafBefore.toArray(new Value[0]), leafAfter.toArray(new Value[0]), w, Map.copyOf(skipped),
-			buildHits.list(8));
+			buildHits.list(8), draft(p));
+	}
+
+	/**
+	 * (RP) The realised draft (off the server thread, once every stage decided): each checked cell's code (kept cells WRITTEN), the
+	 * extras with their cause (a prepared index, turned into the checked tile's index), over the unfiltered tile. Null without
+	 * {@link #provenance}.
+	 */
+	private dev.larattalabs.architect.region.Realised.@Nullable Draft draft(Prep p) {
+		Packed.Tile o = original;
+		if (o == null) {
+			return null;
+		}
+		byte[] fcode = p.fcode().clone();
+		for (int j = 0; j < p.pos().length; j++) {
+			fcode[p.src()[j]] = keep[j] ? dev.larattalabs.architect.region.Realised.WRITTEN : code[j];
+		}
+		List<dev.larattalabs.architect.region.Realised.Extra> ex = new ArrayList<>(added.size() + leafPos.size());
+		for (int i = 0; i < added.size(); i++) {
+			int cj = causeOf.get(added.getLong(i));
+			ex.add(new dev.larattalabs.architect.region.Realised.Extra(addedKind.getByte(i), added.getLong(i), cj >= 0 ? p.src()[cj] : -1));
+		}
+		for (int i = 0; i < leafPos.size(); i++) {
+			int cj = leafCause.getInt(i);
+			ex.add(new dev.larattalabs.architect.region.Realised.Extra(dev.larattalabs.architect.region.Realised.LEAF, leafPos.getLong(i), cj >= 0 ? p.src()[cj]
+				: -1));
+		}
+		return dev.larattalabs.architect.region.Realised.draft(o, checked, fcode, ex);
 	}
 
 	/** A block that stands on the one under it and breaks or falls without it. */

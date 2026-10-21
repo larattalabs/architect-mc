@@ -990,6 +990,7 @@ export const RegionTileMsg = z.object({
   data: Base64(MAX_TILE_FRAME_BYTES).describe('base64 of a slice of gzipPinned(payload), at most 1 MB of gzip bytes'),
   count: z.number().int().nonnegative().describe('cells in the tile'),
   sha: Sha256Hex.describe('SHA-256 of the whole UNCOMPRESSED ARTL payload'),
+  writers: z.string().optional().describe("(RP) on the last frame of a realise tile: base64 of gzipPinned(ARWR v1), the kit's encodeWriters (each cell's winning op and the ops it overwrote); the mod records it in the tile's realised record"),
 });
 export const RegionTileErrorMsg = z.object({
   ...envelope('region.tile.error'),

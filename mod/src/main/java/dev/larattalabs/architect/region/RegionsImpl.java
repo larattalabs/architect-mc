@@ -1687,6 +1687,7 @@ public final class RegionsImpl implements Regions {
 		if ("tile".equals(i.itemKind) && i.status == QItem.Status.FAILED) {
 			rec.skip("failedTiles", 1);
 		}
+		dev.larattalabs.architect.site.RealisedRecords.itemDone(l, b, i); // (RP)
 		dirty(l);
 	}
 
@@ -1783,6 +1784,7 @@ public final class RegionsImpl implements Regions {
 			"genTerrainAtStart").getAsLong() : 0));
 		l.rec().generatedWhileHeld = GenCounter.whileHeld();
 		save(l);
+		dev.larattalabs.architect.site.RealisedRecords.batchDone(l); // (RP) the dev audit only
 		List<String> gl = GENERATED.get(region);
 		if (gl != null && !gl.isEmpty()) {
 			com.google.gson.JsonArray a = new com.google.gson.JsonArray();

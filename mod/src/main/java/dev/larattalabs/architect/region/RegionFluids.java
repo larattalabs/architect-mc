@@ -1915,6 +1915,38 @@ public final class RegionFluids {
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Region {}: fluids.json could not be saved: {}", l.rec().id, e.toString());
 		}
+		if (st.removal == null) {
+			Realised.bodies(l.world(), l.rec().id, realisedRows(st)); // (RP) the realise's body outcomes, after fluids.json (a removal's drains aren't)
+		}
+	}
+
+	/** (RP) Each body that left {@code pending}: its part, state and the flags that decided it (the realised record's rows). Pure. */
+	static Map<String, JsonObject> realisedRows(Regional st) {
+		Map<String, JsonObject> out = new LinkedHashMap<>();
+		for (Body b : st.bodies) {
+			BodyState bs = st.states.get(b.id);
+			if (bs == null || "pending".equals(bs.state)) {
+				continue;
+			}
+			JsonObject r = new JsonObject();
+			if (b.part != null) {
+				r.addProperty("part", b.part);
+			}
+			r.addProperty("state", bs.state);
+			if (bs.reason != null) {
+				r.addProperty("reason", bs.reason);
+			}
+			r.addProperty("uncontained", bs.uncontained);
+			r.addProperty("held", bs.held);
+			r.addProperty("lotRemoved", bs.lotRemoved);
+			r.addProperty("escaped", bs.escaped);
+			r.addProperty("sources", bs.sources);
+			r.addProperty("spill", bs.spill);
+			r.addProperty("settledAt", bs.settledAt);
+			r.addProperty("writtenAt", bs.writtenAt);
+			out.put(b.id, r);
+		}
+		return out;
 	}
 
 	static void load(RegionsImpl.Live l, Regional st) {

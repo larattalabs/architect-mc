@@ -98,6 +98,7 @@ parentPort.on('message', async (m) => {
     const bm = blobMaps.get(m.irSha);
     const blobOpt = bm ? { blobs: (sha) => bm.get(sha) } : {};
     let r;
+    let wr;
     if (m.preview) {
       const survey = surveys.get(m.surveyId);
       if (!survey) throw new Error(`the worker has no survey ${m.surveyId}`);
@@ -120,7 +121,14 @@ parentPort.on('message', async (m) => {
       r = await realise.evalTile(ir, m.key, window, { ...(m.set !== undefined ? { set: m.set } : {}), ...blobOpt });
     } else {
       const heights = Buffer.from(m.heights.buffer, m.heights.byteOffset, m.heights.byteLength);
-      r = await realise.evalTile(ir, m.key, heights, { stage: m.stage, set: m.set, ...blobOpt });
+      // (RP) a realise tile also names its writers (the kit's encodeWriters; an older kit without it: none)
+      const rp = typeof realise.encodeWriters === 'function';
+      r = await realise.evalTile(ir, m.key, heights, { stage: m.stage, set: m.set, ...blobOpt, ...(rp ? { writers: true } : {}) });
+      if (rp) {
+        const wb = gzipPinned(realise.encodeWriters(ir, r));
+        wr = new Uint8Array(wb.byteLength);
+        wr.set(wb);
+      }
     }
     if (!r || !(r.payload instanceof Uint8Array)) throw new Error('evalTile returned no payload');
     const sha = crypto.createHash('sha256').update(r.payload).digest('hex');
@@ -129,7 +137,7 @@ parentPort.on('message', async (m) => {
     // an exact-size copy: a pooled Buffer would transfer (and detach) its whole pool
     const gz = new Uint8Array(gzBuf.byteLength);
     gz.set(gzBuf);
-    parentPort.postMessage({ type: 'done', id: m.id, gz, count: Number(r.count) || 0, sha, ms: Math.round(performance.now() - t0) }, [gz.buffer]);
+    parentPort.postMessage({ type: 'done', id: m.id, gz, ...(wr ? { wr } : {}), count: Number(r.count) || 0, sha, ms: Math.round(performance.now() - t0) }, wr ? [gz.buffer, wr.buffer] : [gz.buffer]);
   } catch (e) {
     parentPort.postMessage({ type: 'fail', id: m.id, message: message(e) });
   }

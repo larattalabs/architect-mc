@@ -23070,3 +23070,176 @@ ship without U3: "release requires certified" with no replay leaves obligations 
 | 9 | migration can't treat unknown as durable; moves need new obligations | agreed | legacy entries are certified only after a clean stop (§3.1, §3.7); a move's reactivation opens an obligation |
 | 10 | the gate can approve its own decisions | agreed | an independent oracle; snapshot, enqueue and completion separated; the named cases are properties or generator branches (§5.1) |
 | nit | "at most one autosave interval" | agreed | removed; the ~10 s figure is stated as an expectation, conditional on saves completing |
+
+## Slice RP: realised provenance (the patch v0.40.1; as built)
+
+**Why now.** RV (6d) needs, per region tile, what was realised against what was intended (RV DRAFT v2 §3.1-§3.3, §3.7 on
+`docs/6d`). Regions realised before the record exists never have it, so RP ships the recording alone, as a patch: the readers, the
+patch logic and §3.7's derivation stay with 6d. The coordinator's second review of RV (GPT-6.1) asked for a richer format than §3.1:
+every intended writer of a cell with its outcome, extras with their cause, two named hashes, and layering. RP records all of it.
+Branch `feat/realised-provenance`; API unchanged (1.37.0), mod 0.40.1, kit version unchanged (an additive option, no output moves),
+catalogue unchanged.
+
+### 1. What is recorded, and where
+
+| Path | Recorded | Where it is written |
+|---|---|---|
+| A region tile (INSTANT, every stage and set; brush strokes; C36 `realiseApproved` tiles, which take the same path) | `realised/L0/<stage>.<set>.<tx>.<tz>.bin` (ARPR v1, §2) | `RegionItems.tryStartTile`, after `TileCheck` decided every cell, through `InfraPlace.beginTile`'s new `BeforeCommit` hook: with the cell site id, **before** the PLACING commit is submitted. A tile with nothing to write: before its item is marked placed |
+| A road (4e road sites of a region batch) | `realised/L0/sites.json` `roads.<roadId>`: `{site, cells, skipped: [{from, to, reason, at}], state, at}` (a partial road's skipped spans, 6c 0c) | `Batches.tryStartInfra` right after `beginRoad` (state `placing`); `RegionsImpl.itemDone` (`placed` / `failed` + reason). A start lost to a crash between its commit and its record leaves `spans: "unknown"` |
+| A lot (BOX entries) | `sites.json` `lots.<lotId>`: `{site, entry, state, reason?, at}`, at the lot level | `RegionsImpl.itemDone` |
+| A fluid body (the fluids stage) | `sites.json` `bodies.<bodyId>`: `{part, state (written / settled / drained), reason, uncontained, held, lotRemoved, escaped, sources, spill, settledAt, writtenAt}` | `RegionFluids.save`, right after `fluids.json` in the same call, only rows that changed, and never once a removal began (a removal's drains are not the realise's outcome) |
+
+Nothing reaches `region.json`, `ir.json`, plans, artifacts, `RegionView` or the API (the gate checks the view and the IR).
+
+### 2. The tile record: ARPR v1
+
+Little endian, LEB128 varints (`region/Realised.java` `encode`/`decode`):
+
+```
+"ARPR" u8 version(1) u8 flags            flags: 1 NO_ENTRY (nothing written: no journal entry, site ""), 2 DERIVED (RV §3.7; never RP),
+                                                4 WRITERS present, 8 WRITERS_DEFLATED
+varint layer                             0 = the realise; RV's revision rid later (§4)
+str stage, str set, str key, str site    str = varint length + UTF-8; site = the tile's cell site cN
+32 B tileSha                             §3
+32 B chainSha                            §3
+varint nCells                            = the tile's payload cell count (evalTile's ARTL v1, before the fluids gate's filter)
+varint nRuns; per run: u8 code, varint length          the code of every intended cell, in payload order
+varint nExtras; per extra (ascending BlockPos.asLong):
+  u8 kind, zigzag varint position delta (from 0), varint cause + 1 (0: unknown)
+varint nWriters + raw-deflated ARWR v1   the kit's writers (§2.2), deflated (flag 8 WRITERS_DEFLATED); 0 when the helper sent none
+u32 CRC32 of every byte before it
+```
+
+#### 2.1 Codes (u8, append only)
+
+| Code | Name | Meaning (who decides) |
+|---|---|---|
+| 0 | `WRITTEN` | the tile entry wrote the intended state (TileCheck kept it; the entry writes every kept cell unconditionally) |
+| 1 | `NOOP` | the world already held it (condition passed, same state) |
+| 2 | `HELD` | another entry held the cell: any site, delta, road, cell site or another owner's region (TileCheck `others`) |
+| 3 | `BUILD` | a player's build cell, not consented (6c PT). The coordinator's "PLAYER" |
+| 4 | `COND` | the cell's condition failed. Tested before "same", so a COND cell can already hold its intent (counted by the audit, never failed) |
+| 5 | `FLUID` | the fluids stage's body gate (`RegionFluids.filter`, RegionItems :179) left it out: its body uncontained, held or its lot removed |
+| 6 | `CLIP` | outside the claim (the mod never trusts the evaluator for it) |
+| 7 | `UNFINISHED` | **RS**: a survival target's cell put down, not built yet (§5). RP never writes it |
+| 8 | `KEPT` | reserved for RV §3.4 |
+| 9 | `UNKNOWN` | reserved for RV §3.7 (a derived record) |
+| 10 | `FLUID_EDGE` | E-normal: an air write a fluid in or beside the cell would flow into (TileCheck stage 1). Not `FLUID`: RV §3.3 reads FLUID as "something stood there" |
+| 11 | `UNBREAKABLE` | a brush stroke never writes an unbreakable block |
+| 12 | `BUILD_SUPPORT` | the cell holds up a player's build cell (a torch, door, sand): `player_build.support` |
+
+The decision order is TileCheck's, unchanged: ownership, a build, then the world's state (unbreakable, condition, same). TileCheck now
+calls `Realised.decide` for every cell it reads and does exactly what each branch did before (the same `skipped` keys, the same build
+hits, the same targets); `RealisedTest` pins `decide`. A tile **without a record** is unfinished (never written, failed, a stage not
+reached, or realised before v0.40.1).
+
+#### 2.2 Every writer of a cell (the coordinator's item 1)
+
+- **Across stages and sets:** one record per (stage, set, key), so a cell written by several writers has a record and a code in each.
+  A later writer skipped by its condition can no longer hide an earlier writer's write: both records stand.
+- **Within one stage and set:** the kit composes the ops into one payload (the last op wins), so the mod never sees a losing op.
+  `evalTile(..., {writers: true})` (new, `kit/lib/realise.mjs`) tracks, at every buffer write, the op it overwrote; `encodeWriters`
+  packs ARWR v1: an op table (IR part id, the op's ordinal in its part, its IR-wide index, cond), the winning op of every payload
+  cell (run-length), and per cell with losers the ops it overwrote, oldest first. The sidecar's worker evaluates every realise tile
+  with it and sends `writers` (gzip, base64) on the tile's last frame; the payload and its sha never change (kit `rp.test` checks
+  this on region_small against a reference that evaluates each op alone). A loser's outcome is "superseded within the tile": its
+  write never reached the world, and the cell's code is the winner's.
+- **Extras with their cause (item 2):** each extra carries the payload index of the intended cell whose write caused it (TileCheck
+  keeps the cause through the flood: a felled trunk's logs and the leaves held on them are caused by the intended log cell the
+  tile wrote; a dependent by the changed cell under it, itself possibly a trunk log). Its part, stage and op are that cell's: the
+  record's stage and set, and the winner in the writers. Kinds: 0 `TREE`, 1 `DEPENDENT`, 2 `DEPENDENT_WET` (written as a water source
+  under a natural water surface), 3 `LEAF` (held persistent; the tile's `leaves` entry). An intended cell the tile skipped (COND, say)
+  can still be felled as part of a trunk: it then has its skip code and is also an extra (the extra is what was written).
+
+### 3. The hashes (item 3), not interchangeable
+
+- **`tileSha`**: SHA-256 of one (stage, set, key)'s **uncompressed ARTL v1 payload** as `evalTile` returns it (unfiltered by the
+  fluids gate) = `TileStream`'s sha = the artifact's tile sha (C36, `dev.region.tileShas`).
+- **`chainSha`**: SHA-256 over the UTF-8 lines `<stage>\t<set>\t<tileSha hex>\n`, one per (stage, set) the IR lists the key under, in
+  write order (the IR's stages in order, terrain before path), up to and including this record's; a writer before it with no record
+  contributes `-`. Computed at the write from the IR's tile lists and the earlier records.
+- **`composedSha(key)`**: the `chainSha` of the key's **last** writer. It names the composed intent over every stage and set of the
+  key (it is a hash of the writers' intents in their order, not of a composed cell map). A tile sha says nothing about the other
+  writers of its key; a composed sha says nothing about any one payload. `dev.region.realised` lists `composedSha` per key.
+
+### 4. Layering (item 4)
+
+Files are keyed by region, layer and tile: `realised/L<layer>/...`; the realise is layer 0. A revision writes `L<rid>` with its own
+records and `sites.json` and never rewrites a lower layer (`RealisedTest`). The header carries the layer too.
+
+### 5. For RS (`slice/RS`)
+
+RS's tile item writes the free-pass entry and puts down targets (tile x group). At put-down, before the record is written, RS marks
+the target cells `UNFINISHED` on the draft: `Realised.withCodes(res.draft(), cellIndexes, Realised.UNFINISHED)` (the indexes are the
+payload indexes of the tile as evaluated, `TileStream.Tile.cells()`; RS's partition has them). When a target builds cells, it calls
+`Realised.mark(world, region, 0, stage, set, key, cellIndexes, Realised.WRITTEN)` (rewrites the file: fsync, rename; server thread).
+A target cancelled or refunded leaves `UNFINISHED`. RP's validity rule (§6) reads the free-pass entry; RS should keep a record's
+`site` = the free-pass entry's cell site. Merge note: RP touches `RegionItems.tryStartTile`, `TileCheck` (cells, fluids, trees,
+dependents, supports, leaves, assemble), `InfraPlace.beginTile`, `RegionFluids.save`, `TileStream.onMessage`: small hooks, the logic
+in `Realised` and `RealisedRecords`.
+
+### 6. Durability and validity
+
+- The tile record is written (fsync, rename: `RegionStore.write`) on the server thread before the PLACING commit is submitted, and its
+  bytes are built off the server thread (TileCheck's assemble stage). A record whose write fails fails the tile (nothing commits).
+- **Valid** (`RealisedRecords.status`): `committed` when its site's tile entry is ACTIVE, or (no entry) its item is PLACED (or the
+  batch is gone); `placing` while that entry is PLACING; `pending` (no entry, item not placed); `undone`; `stale` (its entry is gone:
+  written before a commit that never happened). A stale or pending record is overwritten when the item runs again (the same path).
+  A failed tile's record is deleted at its item's end.
+- **A tile that runs twice.** A crash after a tile's commit and before its item is marked placed (RG4, K4 with `+save`) leaves its
+  entry ACTIVE, and the queue runs the item again (main's behaviour, unchanged): the second attempt layers over the first, mostly
+  NOOP. The second record keeps the first when its entry is ACTIVE: `Realised.mergePrior` lists that entry's site after the new one in `site`
+  (comma-separated, newest first; `Tile.sites()`), keeps every cell the first attempt WROTE as WRITTEN, and keeps its extras; a
+  second attempt with nothing to write then has no NO_ENTRY flag (the first attempt's entry is the tile's). Status and verify run
+  over every listed entry. This deviates from §3.1's single entry per tile; RV reads `sites()`. A first attempt left **PLACING** is
+  not merged: nothing resumes it, so it is no write of the tile. **Finding for the coordinator (main's behaviour, not RP's):** after
+  RG4+save the restart logs "0 job(s) to resume" (the tile's job was never saved, but its Infra record was, so the Sites check does
+  not release it either); the item runs again and writes a second entry, and the first stays PLACING beside it while the region
+  reports PLACED (rp-crash, `20261021-035819-change`, region rg4: c1 PLACING, c2 ACTIVE). Its cells hold its planned `after` where
+  the halt wrote them; a later rollback would write its `before` there under the re-run's entry. `verify` counts such entries as
+  `placingLeftover` (recorded, not judged).
+- **A reused site id.** A record written at RP1 names a cell site whose commit never happened; after the restart the counter can give
+  that id to another tile. A site counts for a record only while its Infra's spec `tile` is the record's tile (`ownedBy`).
+- Kill points: `RP1` (the record written, the PLACING commit not submitted) and `RP2` (a tile with nothing to write: the record
+  written, the item not placed); both take `+save`.
+
+### 7. Readers
+
+- `dev.region.realised {region, layer?, tile?, cells?, verify?, world?}` (`RegionDev`, generated headless): per tile its status, codes,
+  extras by kind, sizes, shas and writers summary (`cells`: the code list, the extras with causes, the writers in base64);
+  `sites.json`; `composedSha` per key; `verify`: every record against the journal (WRITTEN + TREE/DEPENDENT extras = the entry's
+  cells, the extras among them, LEAF = the leaves entry) and the world (each entry cell no later entry covers holds its write,
+  StillOurs), every ACTIVE tile entry of the group has a record, the lots against RegionRec.
+- `dev.region.realised.audit {on?, dir?}` and the env `ARCHITECT_RP_AUDIT=<dir>`: each tile, right after its commit, re-read from the
+  world against its intent per code, and each region verified at its batch's end, as JSON lines.
+- Java: `Realised.read/decode/composedSha/sites`, `RealisedRecords.status/verify/summary`.
+
+### 8. Sizes (measured)
+
+- **The six impact steps' regions** (h, hy, k1a, t3a, irr, cu ingame; run `20261021-030029-change`, the audit over every region they
+  realised): 523 tiles in 62 regions, 540,611 intended cells (about 1,000 per tile: these gates' regions are small). Per tile on the
+  record's bytes: mean 196 B, p50 169, p90 303, max 550; **per 1000 tiles 196 kB**; per region mean 1.65 kB (max 5.9 kB). The raw
+  writers were 101 kB of the 102 kB before deflate; deflated they are most of each record.
+- **Large tiles (offline, the kit):** mega_bench on a 1000 x 1000 synthetic claim, 320 tiles of 29,417 cells on average and 14,552
+  cells per tile with losers: the writers are 57.8 kB per tile raw, **1.0 kB deflated** (the largest tile, 311,384 cells: 864 kB raw,
+  3.2 kB deflated). The codes run-length to a few hundred bytes; extras 2-6 B each.
+- `sites.json`: a few hundred bytes per road, lot or body.
+- **On disk** each tile is its own file, so APFS rounds each up to a 4 KiB block: about 4 MB per 1000 tiles on disk against 0.2-1 MB
+  logical. RV can pack a region's layer into one file later without changing the record's bytes.
+
+### 9. Gate evidence ($0, headless; ports 8936-8941; `artifacts/gate-runs-RP/`)
+
+- **rp-unit** (`scratchpad/rp/unit2`, HEAD): RealisedTest 16 + TileGravityTest 4, 0 failures; kit rp.test 2/0; api-compat clean
+  against the 0.40.0 apitest jar and the 0.40.0 mod surface (`artifacts/gate6c-f3/v0400`, built from the tag) and `--gate6cbatchcu`.
+  Whole suites at 5e614008: kit 665/0, mod `./gradlew build` 757 tests / 0 failures, sidecar `npm run check` 758/0.
+- **The six impact steps** at 5e614008 with `ARCHITECT_RP_AUDIT` (`20261021-030029-change`): h-ingame 60/0, hy-ingame 133/0,
+  k1a-ingame 19/0, t3a-ingame 23/0, irr-ingame 66/0, cu-ingame 9/0: their outcomes unchanged. The audit: **523/523 tiles** re-read
+  right after their commit match their record (WRITTEN 271,621, NOOP 266,002, COND 2,858, FLUID 121 (h's and irr's gated bodies),
+  HELD 9; 2,717 COND cells already held their intent: counted, not failed), and **every region of those six steps** verified at its
+  batch's end (journal and world); the two that failed were rp-crash's RP1+save and RG4+save regions, fixed after (below). Bodies
+  recorded: 180 settled, 16 drained; 9 regions recorded lots, 26 roads.
+- **rp-ingame** and **rp-crash** at HEAD (`20261021-041842-change`): rp-ingame 17/0 (every code where it belongs, TREE 4 / LEAF 65 /
+  DEPENDENT 25 with their causes, 55 losers, a no-entry tile, the shas and writers equal to the kit's own evaluation, the chain and
+  composed hashes, the independent re-read: 382 cells and 94 extras, 0 wrong); rp-crash 14/0 (RP1+save, RP2+save, K2+save, RG4+save,
+  K4+save, RP1: every region PLACED and its record verified, every record committed, 0 unrecorded; RG4+save's PLACING leftover
+  recorded). Earlier runs found the two crash bugs §6 now handles (a reused site id after RP1; a tile written twice after RG4/K4).
