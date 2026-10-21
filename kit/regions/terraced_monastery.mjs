@@ -23,7 +23,7 @@ import { fixtureFor } from '../lib/region/fixtures.mjs';
 import { lampSpots } from '../lib/region/passes/route.mjs';
 import { levelBands } from '../lib/region/passes/districts.mjs';
 import { draftIR } from '../lib/region/plan.mjs';
-import { buildVirtual } from '../lib/region/vworld.mjs';
+import { buildVirtual, F_WALK } from '../lib/region/vworld.mjs';
 import { walkKinds } from '../lib/realise.mjs';
 import { walkGraph } from '../lib/region/check.mjs';
 import { classAt, VC } from '../lib/region/volume.mjs';
@@ -329,6 +329,9 @@ function footing(r, ctx, { stage }) {
   return (cols.length + trunks.length) / 5;
 }
 
+/** How far a lamp post goes down to a solid foot the plan left open under it (cells); deeper, it is left out. */
+export const LAMP_DROP = 4;
+
 /** How far (columns) from a body's cells a felled trunk's soil is written (H §4.5: no change within 6 of a body). */
 export const FELL_NEAR = 8;
 
@@ -453,18 +456,41 @@ export default function terracedMonastery(ctx) {
   for (const q of keepOut) for (let x = q[0]; x <= q[2]; x++) for (let z = q[1]; z <= q[3]; z++) reserved.add(`${x},${z}`);
   const cover = lightCover(r, { fixture: { ...fixture, level: fixture.level - 2 }, stage: decor, reserved, keepOut, extra, extraCap, maxPerLot: 40, share: 0.001, part: 'mon_lamps' });
   cover.fixture.level = fixture.level;
-  // a post on a natural snow layer (the frozen volume reads SNOW over the survey's ground) goes down into it (S2)
-  const vol = (ctx.volumes ?? []).find((v) => v.decoded) ?? null;
-  const sunk = new Set();
-  if (vol) for (const l of cover.lamps) {
-    const [x, y, z] = l.at;
-    if (classAt(vol.decoded, x, y - 1, z) === VC.SNOW && y - 1 > S.groundAt(x, z)) { for (const [cx2, , cz2] of l.cells) sunk.add(`${cx2},${cz2}`); l.at = [x, y - 1, z]; }
+  // a post on a natural snow layer (the frozen volume reads SNOW over the survey's ground) goes down into it (S2); a post whose foot the
+  // plan itself left open goes down to the first solid cell (at most LAMP_DROP), else (or onto a walk floor: a route's head room) it is
+  // left out
+  const wv = walkVolumeOf(r, ctx) ?? (ctx.volumes ?? []).find((v) => v.decoded)?.decoded ?? null;
+  const shift = new Map(), dropped = new Set();
+  let sunkN = 0;
+  {
+    const { vw } = draftWorld(r, ctx);
+    const P = vw.pal;
+    const own = new Set(cover.lamps.flatMap((l) => l.cells.map(([x, y, z]) => `${x},${y},${z}`)));
+    for (const l of cover.lamps) {
+      const [x, y, z] = l.at;
+      let d = 0;
+      if (wv && classAt(wv, x, y - 1, z) === VC.SNOW && y - 1 > S.groundAt(x, z) && !(vw.flags(x, y - 1, z) & 1)) { d = 1; sunkN++; }
+      while (d <= LAMP_DROP && !own.has(`${x},${y - 1 - d},${z}`) && P.passable[vw.get(x, y - 1 - d, z)] && !P.water[vw.get(x, y - 1 - d, z)]) d++;
+      // (deeper than LAMP_DROP, or down onto a walk floor (a route's head room): left out)
+      if (d > LAMP_DROP || (d && (vw.flags(x, y - 1 - d, z) & F_WALK))) { for (const [cx, , cz] of l.cells) dropped.add(`${cx},${cz}`); continue; }
+      if (d) { for (const [cx, , cz] of l.cells) shift.set(`${cx},${cz}`, d); l.at = [x, y - d, z]; }
+    }
   }
-  if (sunk.size) {
+  if (shift.size || dropped.size) {
     const lp = r.parts.find((q) => q.id === 'mon_lamps');
-    for (const op of lp.ops) for (let i = 0; i < op.cols.length; i += 5) if (sunk.has(`${op.cols[i]},${op.cols[i + 1]}`)) { op.cols[i + 2]--; op.cols[i + 3]--; }
+    for (const op of lp.ops) {
+      const out = [];
+      for (let i = 0; i < op.cols.length; i += 5) {
+        const k = `${op.cols[i]},${op.cols[i + 1]}`;
+        if (dropped.has(k)) continue;
+        const d = shift.get(k) ?? 0;
+        out.push(op.cols[i], op.cols[i + 1], op.cols[i + 2] - d, op.cols[i + 3] - d, op.cols[i + 4]);
+      }
+      op.cols = out;
+    }
   }
-  info2.lamps = { fixture: cover.fixture, count: cover.lamps.length, before: cover.before, after: cover.after, capped: cover.capped, sunk: sunk.size };
+  const sunk = { size: sunkN, moved: shift.size, dropped: dropped.size };
+  info2.lamps = { fixture: cover.fixture, count: cover.lamps.length, before: cover.before, after: cover.after, capped: cover.capped, sunk: sunk.size, moved: sunk.moved, dropped: sunk.dropped };
 
   // ---- the spring's columns: nothing of the plan is written there (the program's own check; the broken variant is caught here)
   if (keepOut.length) {
