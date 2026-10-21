@@ -61,9 +61,15 @@ Fixed since (offline on run 4's settled survey + a volume built from its before 
 - a guarded route pass (terraced plans only) treats earlier passes' runs as obstacles (the lookout cut stairs across cloister_t6).
 Offline now: M8 0 unguarded, M5 0, no M3, no M2:grade, 13/13 nodes; M6 (head room) warnings recorded.
 
-In flight: dev run 5 (chain 6cs3-dev, ports 8924/8925, run dir ../architect-mc-S3-run, out scratchpad/s3-build/runs, log
-scratchpad/s3-build/run-dev5.log), full kit suite (scratchpad/s3-build/kit-suite3.log).
+Run 5 (20261021-000420, 23 s plan, 11/11 PLACED, M5 0.46%): the realise kept generated packed ice under routes (the mod's
+TerrainFit.natural lacked ice while the kit's ICE class is natural: fixed in the mod, ice/packed/blue), the lookout's stair railings
+on cloister_t6, 3 open rims (relief cut unwalled ring cells: now pinned at their ground), 4 M8 at top snow layers, 3 floating brink
+rails over grass (parapet cond 0 now), 1 grass spread under a cherry trunk the fountain room felled (grass journalled under felled
+trunks within 8 of a body). Offline on run 5's survey + its before dump: all clean.
+
+In flight: dev run 6 (log scratchpad/s3-build/run-dev6.log, GATE_SLOTS=6), kit suite (kit-suite4.log), identity (identity2.log).
 
 Next: clean natural run; flat run (6c-scenario-s3); re-pin planSurvey from the clean run's raw/plan/survey.bin (+ feasibility);
-golden; gate6cs3 unit/identity/feasibility; s3-plan in game; slice tier; gallery (read the 6c artifact first, republish to its URL);
-verifier; as built; queue in PLAN "district routes ignore protected areas" (fixed for terraced only); retire this file.
+golden; gate6cs3 unit/feasibility; s3-plan in game; slice tier (regressions matter: the mod's ice change); gallery (read the 6c
+artifact first, republish to its URL); verifier; as built (record the ice fix); queue in PLAN "district routes ignore protected
+areas" (fixed for terraced only); retire this file.
