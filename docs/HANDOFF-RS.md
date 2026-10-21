@@ -92,39 +92,39 @@ RS-b builds:
 1. **Tunnels ring by ring** (§6.4, rs04): today a bore's target orders bottom up with every carve after its paid neighbours above and
    beside within 1 (`RegionTargets` queue order + `firstUnsafeCut`, the unit test's carveFirst caught). RS-b: rings (a ring's lining, then
    its carve) along the bore's axis, runs cut per ring within the quarter cap; prove no bore cell open without its lining half fed.
+   **Found (RS-a's run, 22:15):** rs04 in survival stops at 95.3%: target c3 (the bore's lining, 520/662) deadlocks at run 9, a
+   hanging lantern (9645,68,9079) under a roof cell (9645,69,9079): the roof waits for the cell below it (the lantern, bottom up), the
+   lantern waits for its support (the roof), the held cut under them waits for its paid neighbours above. Ring order must place a
+   hanging block after its support (support before bottom-up), and a cut's deps must not include cells that wait on it.
 2. **Item 5's rs04 row** (build, twin 0, E-flat 0) and **item 6's rs04 row** (half fed: runs whole, M3/M4/M8/gravity 0, no open cut).
 3. **Ice caps in game** (N-RS-4: free; a cold-biome body, not in any RS fixture yet).
-4. **Item 8** (conservation through bodies: lava charged, bucket back, at 10+ checkpoints on rs03) and **item 9's lava rows** (scooped with
-   a bucket, drained without: keep fewer buckets than sources in stock before the removal).
+4. **Item 8 on rs03** (conservation through bodies: lava charged, bucket back, at 10+ checkpoints; RS-a's item 8 is on rs02, and its
+   item 9 rs03 row already holds the sum through the bodies) and **item 9's "drained without a bucket" row** (keep fewer buckets than
+   lava sources in stock before the removal: the rest drained, nothing credited for them).
 5. **Brushes in survival in game** (item 13's last row: a concrete-pattern stroke refused NOT_ALLOWED, a natural stroke free via
    `dev.brush`).
-6. RS-b's rows of item 16 that touch bodies: `hy-ingame`, `irr-ingame`, `h-ingame`, `ha-ingame`, `kc-ingame` (survival unchanged
-   elsewhere; creative unchanged).
+6. Item 16's body steps again after its changes: `hy-ingame`, `irr-ingame`, `h-ingame`, `ha-ingame`, `kc-ingame` (RS-a ran them on its
+   head: see "RS-a as built").
+7. Item 11's "clean stop mid body wait" row (a stop while the fluids stage waits for its barriers: resumes, the bodies settle).
 
-## Status (2026-10-20 evening)
+## RS-a: done (2026-10-21)
 
-- [x] RS-a kit: survival IR, evaluator v2, check answers, FREE_EXCEPT; kit/test/rs.test.mjs (9 pass)
-- [x] fixtures kit/test/fixtures/plan/rs/: rs01_land, rs02_walled, rs03_water, rs04_tunnel, rs05_offer (game: the region id), rs06_over_held
-  (a 4e road over a held terrace), rs07_big_tile (a zigzag wall 12 high in one world tile), survival_village, u_spawner
-- [x] RS-a mod: mode, flags fix, decode v2, targets (InfraJob extras), runs, feed reservation, stage waits (SITE_BUSY), fluids barrier
-  and charge, scoop, RegionView.build, free-drop hook, rescan at start, dev hooks dev.rs.*; RegionTargetsTest (6 pass); mod unit suite green
-- [x] latent bug: reproduced on the base (artifacts/gate6c-rs/latent-base.json: every item FAILED "survival was switched on after this
-  was queued"), fixed (PLACED on this head)
-- [x] in-game smoke (scratchpad/rs-build/smoke-game.mjs, headless on 8930/8931, run worktree ../architect-mc-RS-run): rs01 in survival
-  built from the stockpile, equal to its INSTANT twin cell for cell (bar the crates), removed: E-flat 0, the refund exactly the bill
-- [ ] the gate driver tools/gate6crs.mjs (rs-unit, rs-ingame, rs-survival, rs-crash), chains, impact rule
-- [ ] RS-b specifics: tunnels ring order (today: courses bottom up, a carve after its lining), bodies, courses, irrigation in game
-- [ ] gate runs, verifier, "RS as built", HANDOFF retired
+RS-a is gated on `slice/RS` and its as-built is in docs/CONTRACT.md "RS-a as built". **`rs/core` (4ad93e64) is older than `slice/RS`:**
+RS-b merges `slice/RS` (or main, once RS-a has merged) before it starts. RS-a changed after `rs/core`: stage waits honour `after` deps
+(a road waits for the targets it is queued after), a paid cell never waits on a cut below, a region target's player block drops at its
+removal (`RegionTargets.dropPlayerBlocks`, the refund skips it), a BUILT target's soil cells stand as built (`Builder.Run.soilSame`,
+off once it leaves), mined free cells are remembered and put back before the removal (`RegionFreeDrops.restoreMined`), item 3 compares
+the region's whole bill, items 6b-15 in the driver, the asks tables.
 
-## Notes for the as-built
+RS-a's own runs showed, for RS-b: rs03's lava pit charged 10 lava buckets and 8 iron bars at the gate and scooped them back at the
+removal with buckets in stock (item 9's rs03 row, conservation exact at 29 points); the "drained without a bucket" row is not run.
 
-- Rock spires' default material rule ages their surface to cobblestone (no voxel class): a spire is a held part (its stone cells build
-  with its cobblestone). The relief and the pads are the free pass; the terrace is held whole.
-- A shared route part (routes:a,b) builds with its first connector (rs02: the rope's group holds the road's cells).
-- A region's construction road writes with CELL_FLAGS (as its tiles), else a dirt path under a lantern post turned to dirt (C16's builder).
-- Ad-hoc servers claim a gate slot (scratchpad/rs-build/slot.mjs) by the host's pid.
+Ports: RS-a used 8930-8935 (ad-hoc server 8930/8931, runner shards 8932-8935). Gate evidence: `../architect-mc/artifacts/gate6c-rs/`.
 
-## Next step (RS-a)
+## Follow-ups for whoever holds RS next
 
-Gate RS-a's items: 3, 4, 5 (rs02, rs03, survival_village), 6 (rs02, rs06), 6b, 7, 10, 11, 12, 13 (bar brushes), 14, 15, 16 (RS-a rows), 17;
-the verifier on 5, 9 (no lava rows), 10, 11; "RS-a as built"; merge origin/main's provenance change and fill it from the targets.
+- **Realised provenance (RP, ARPR v1, patch 0.40.1):** once 0.40.1 is on main, merge main and wire the targets into it: at put-down mark
+  each target's queued cells `Realised.withCodes(draft, cells, UNFINISHED)`; when a target cell is built, `Realised.mark(..., WRITTEN)`
+  (RP's as-built §5 in CONTRACT.md on that branch).
+- Item 14 (rs02 on S3's natural claim in survival, E-normal by S3 §6's classes) once S3 has merged.
+- The gate3 survival and Hardcore steps (a GUI p3 client) were not run for RS-a.

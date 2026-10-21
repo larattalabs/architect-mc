@@ -744,6 +744,9 @@ public final class RegionTargets {
 			return null;
 		}
 		Builder.Run r = new Builder.Run(RoadBuilder.probe(i), target);
+		// a BUILT target's paid dirt cell that grass grew over (or a grass cell gone to dirt under a block) still stands as built: the land's own
+		// change (its audit and refund count it); while it builds, a cell is built only as planned (it pays)
+		r.soilSame = i.construction() != null && !i.construction().building() && !Groups.leaving(i.id());
 		JsonObject rs = spec(i);
 		r.name = "part " + (rs.has("part") ? rs.get("part").getAsString() : "?") + " of region " + (rs.has("region") ? rs.get("region").getAsString() : "?");
 		BitSet held = CellBits.fromBase64(rs.has("held") ? rs.get("held").getAsString() : "");
@@ -986,6 +989,7 @@ public final class RegionTargets {
 		}
 		Construction c = t.construction();
 		if (r.built.cardinality() == r.size()) {
+			r.soilSame = true;
 			RoadBuilder.complete(srv, level, t, r, null);
 			return;
 		}
@@ -1080,6 +1084,7 @@ public final class RegionTargets {
 		if (r.built.cardinality() == r.size()) {
 			Infra now = Infras.get(t.id());
 			if (now != null) {
+				r.soilSame = true;
 				RoadBuilder.complete(srv, level, now, r, null);
 			}
 		}
@@ -1126,6 +1131,57 @@ public final class RegionTargets {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * (§9, item 9) At a survival region's removal, before its refunds are counted: a target cell holding a player's block (neither the
+	 * plan's block, nor what stood there before, nor air or a fluid), still the target's in the journal, drops that block's items at its
+	 * cell and goes back to its before, as a lot's player block drops (Y1's PLAYER_DROP). Returns those cells. Server thread.
+	 */
+	static it.unimi.dsi.fastutil.longs.LongOpenHashSet dropPlayerBlocks(ServerLevel level, Infra t) {
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet out = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+		if (!is(t)) {
+			return out;
+		}
+		MinecraftServer srv = level.getServer();
+		Builder.Run r = RoadBuilder.run(srv, t);
+		Plan pl = r == null ? null : planOf(srv, t);
+		if (r == null || pl == null) {
+			return out;
+		}
+		Cells before = beforeOf(t, pl);
+		int n = 0;
+		for (int q = 0; q < r.size(); q++) {
+			BlockPos p = r.pos(q);
+			BlockState now = level.getBlockState(p);
+			if (now.isAir() || !now.getFluidState().isEmpty() || r.matches(now, q)) {
+				continue;
+			}
+			int k = r.queue[q];
+			BlockState was = before != null && k >= 0 && k < before.size() ? before.states[k] : null;
+			if (was != null && now.is(was.getBlock()) || !SiteJournal.isOwnedBy(t.dimension(), p.asLong(), t.id())) {
+				continue;
+			}
+			Map<String, Integer> items = new TreeMap<>();
+			Cells.cost(now).forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
+			Builder.dropItems(level, p, items, null);
+			dev.larattalabs.architect.placed.Placed.set(level, p, was != null ? was : net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),
+				Sites.CELL_FLAGS);
+			out.add(p.asLong());
+			n++;
+		}
+		if (n > 0) {
+			Architect.LOGGER.info("Region target {}: {} player block(s) dropped at their cells before its removal", t.id(), n);
+		}
+		return out; // (its refund skips them: a soil cell back at its before would read as built)
+	}
+
+	/** (§9) Its removal counted its refund: from now on a soil cell is built only as planned (a cell back at its before is no paid block). */
+	static void leaving(MinecraftServer srv, Infra t) {
+		Builder.Run r = is(t) ? RoadBuilder.run(srv, t) : null;
+		if (r != null) {
+			r.soilSame = false;
+		}
 	}
 
 	/** The target entry's before over its box (read once per plan). */

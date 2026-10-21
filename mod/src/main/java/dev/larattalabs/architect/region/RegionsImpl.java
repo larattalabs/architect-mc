@@ -2214,6 +2214,10 @@ public final class RegionsImpl implements Regions {
 			return CompletableFuture.failedFuture(new IllegalArgumentException("no region " + regionId));
 		}
 		return onServer(s, () -> {
+			ServerLevel lv = l.level(s);
+			if (lv != null && l.rec().survival()) {
+				dev.larattalabs.architect.site.RegionFreeDrops.restoreMined(lv, l); // (6c RS §9) mined free cells back first
+			}
 			QBatch b = Batches.get(l.rec().batchId);
 			if (b != null && b.running()) {
 				return ArchitectApi.get().sites(s).cancelBatch(b.id).thenCompose(x -> removeGroup(s, l, o));

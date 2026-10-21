@@ -38,7 +38,7 @@ export async function survivalBase(ctx) {
 
 // ------------------------------------------------------------------ the lot designs
 
-/** rs_hut (7x5x9: planks, cobblestone floor, a door, glass, a torch) and rs_shed (cobblestone, a door, a lantern): small bills. */
+/** rs_hut (7x5x9: planks, cobblestone floor, a door, glass, a torch, one copper block in its back wall: item 9's weathered cell) and rs_shed (cobblestone, a door, a lantern): small bills. */
 export async function designs(ctx) {
   const { Blueprint, palette } = await ctx.imp('lib/kit.mjs');
   const { writeBlueprint } = await ctx.imp('lib/write.mjs');
@@ -47,7 +47,7 @@ export async function designs(ctx) {
     const X = 6, Z = 4, H = 4;
     const bp = new Blueprint({ id, name: id, description: `RS ${id}`, type: 'custom', profile: ['door', 'lit'], size: [X + 1, H + 1, Z + 5], origin: [0, 0, 0], groundY: 1, front: 'south', palette: p, approach: false, interior: [1, 1, 1, X - 1, H - 1, Z - 1] });
     bp.part('main', () => bp.room([0, 0, 0, X, H, Z], { wall, floor: 'minecraft:cobblestone', ceiling: 'minecraft:oak_planks', corners: 'minecraft:oak_log' }));
-    bp.part('openings', () => { bp.door(3, 1, Z, 'south'); bp.set(1, 2, Z, 'minecraft:glass_pane'); bp.set(5, 2, Z, 'minecraft:glass_pane'); bp.set(3, 3, 1, 'minecraft:wall_torch', { facing: 'south' }); });
+    bp.part('openings', () => { bp.door(3, 1, Z, 'south'); bp.set(1, 2, Z, 'minecraft:glass_pane'); bp.set(5, 2, Z, 'minecraft:glass_pane'); bp.set(3, 3, 1, 'minecraft:wall_torch', { facing: 'south' }); if (id === 'rs_hut') bp.set(3, 3, 0, 'minecraft:copper_block'); });
     bp.part('approach', () => bp.floor(2, Z + 1, 4, Z + 4, 0, 'minecraft:gravel'));
     bp.spot('entrance', 3, Z + 1, 180);
     bp.spot('spawn', 3, Z + 3, 180);
@@ -285,6 +285,7 @@ export function billsOf(ck, rs) {
   for (const k of Object.keys(region)) if (!region[k]) delete region[k];
   let all = {};
   for (const t of rs.targets ?? []) all = plus(all, t.bom);
+  all = plus(all, rs.record?.charged); // what the fluids gate charged (a lava bucket per lava source, a grate's iron bars)
   want.__region__ = region;
   got.__region__ = all;
   return { want, got };

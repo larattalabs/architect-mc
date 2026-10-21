@@ -35,23 +35,73 @@ public final class RegionFreeDrops {
 		if (level.isClientSide() || !(level instanceof ServerLevel sl) || player.isCreative() || player.isSpectator()) {
 			return true;
 		}
-		if (!freeWrite(sl, pos)) {
+		RegionsImpl.Live l = freeWriteOf(sl, pos);
+		if (l == null) {
 			return true;
 		}
 		sl.destroyBlock(pos, false, player);
 		BROKEN.incrementAndGet();
+		// (§9, item 15) remembered: the removal puts the region's write back first, so its undo restores the land as it was
+		com.google.gson.JsonArray mined = l.rec().survival.getAsJsonArray("mined");
+		if (mined == null) {
+			mined = new com.google.gson.JsonArray();
+			l.rec().survival.add("mined", mined);
+		}
+		mined.add(pos.asLong());
+		RegionsImpl.saveRec(l);
 		return false;
 	}
 
 	/** Whether the cell is a survival region's free write still standing (its free pass, or a target's held cell). */
 	public static boolean freeWrite(ServerLevel level, BlockPos pos) {
+		return freeWriteOf(level, pos) != null;
+	}
+
+	/**
+	 * (§9) At a survival region's removal: each free cell a player mined (no drop) that is still air under the region's write gets that
+	 * write back, so the undo restores what stood before. Server thread.
+	 */
+	public static void restoreMined(ServerLevel level, RegionsImpl.Live l) {
+		if (l.rec().survival == null || !(l.rec().survival.get("mined") instanceof com.google.gson.JsonArray mined)) {
+			return;
+		}
+		String dim = Sites.dimensionId(level);
+		int n = 0;
+		for (var e : mined) {
+			long p = e.getAsLong();
+			BlockPos bp = BlockPos.of(p);
+			if (!level.getBlockState(bp).isAir()) {
+				continue;
+			}
+			try {
+				List<WorldJournal.Layer> st = WorldJournal.stack(dim, p);
+				WorldJournal.Layer top = st.isEmpty() ? null : st.get(st.size() - 1);
+				Infra i = top == null ? null : Infras.get(top.meta().site());
+				if (i == null || !java.util.Objects.equals(i.group(), l.rec().groupId) || top.cell().after() == null) {
+					continue;
+				}
+				dev.larattalabs.architect.placed.Placed.set(level, bp, WorldJournal.state(top.cell().after()), Sites.CELL_FLAGS);
+				n++;
+			} catch (IOException x) {
+				// unreadable: left as mined
+			}
+		}
+		l.rec().survival.remove("mined");
+		RegionsImpl.saveRec(l);
+		if (n > 0) {
+			dev.larattalabs.architect.Architect.LOGGER.info("Region {}: {} mined free cell(s) put back before its removal", l.rec().id, n);
+		}
+	}
+
+	/** The survival region whose free write stands at the cell (its free pass, or a target's held cell), or null. */
+	static RegionsImpl.@Nullable Live freeWriteOf(ServerLevel level, BlockPos pos) {
 		String dim = Sites.dimensionId(level);
 		long p = pos.asLong();
 		List<WorldJournal.Layer> st;
 		try {
 			st = WorldJournal.stack(dim, p);
 		} catch (IOException e) {
-			return false;
+			return null;
 		}
 		WorldJournal.Layer top = null;
 		for (int k = st.size() - 1; k >= 0; k--) {
@@ -61,28 +111,28 @@ public final class RegionFreeDrops {
 			}
 		}
 		if (top == null || top.cell().after() == null) {
-			return false;
+			return null;
 		}
 		Infra i = Infras.get(top.meta().site());
 		if (i == null || i.road() || i.group() == null) {
-			return false;
+			return null;
 		}
 		SiteGroupRec g = Sites.group(i.group());
 		if (g == null || !g.ext().has(RegionItems.EXT_REGION)) {
-			return false;
+			return null;
 		}
 		var l = RegionsImpl.live(g.ext().get(RegionItems.EXT_REGION).getAsString());
 		if (l == null || !l.rec().survival()) {
-			return false;
+			return null;
 		}
 		if (RegionTargets.is(i)) {
 			Builder.Run r = RoadBuilder.run(level.getServer(), i);
 			RegionTargets.Plan pl = r == null ? null : RegionTargets.planOf(level.getServer(), i);
 			int q = r == null ? -1 : r.queuePos(pos);
 			if (q < 0 || pl == null || !pl.held.get(q)) {
-				return false; // a paid cell: vanilla drops
+				return null; // a paid cell: vanilla drops
 			}
 		}
-		return WorldJournal.holds(level, p, top.cell().after());
+		return WorldJournal.holds(level, p, top.cell().after()) ? l : null;
 	}
 }
