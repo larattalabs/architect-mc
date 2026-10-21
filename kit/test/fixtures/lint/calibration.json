@@ -1,5 +1,5 @@
 {
- "$comment": "The P2 lints' calibration (tools/gate-lint.mjs record; docs/GATES.md \"Fast checks (P2)\"). tools/lib/p2-trim.mjs: valid only for this Minecraft version and with every probe passing; else the -smoke steps run the full in-game rows and the lint steps FAIL until a release run passes them again.",
+ "$comment": "The P2 lints' calibration (tools/gate-lint.mjs record; docs/GATES.md \"Fast checks (P2)\"). tools/lib/p2-trim.mjs: valid only for this Minecraft version and with every probe passing; else the -smoke steps run the full in-game rows (the lint steps WARN) until a release run passes them again.",
  "minecraft": "26.3",
  "pass": true,
  "date": "2026-10-21",

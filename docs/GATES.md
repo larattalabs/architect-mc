@@ -405,6 +405,94 @@ side (about half).
 (memory fine: no swap, 0.03-2.7 M free pages). The unit floor slowed most, so 6 concurrent runs look like too many for timing
 comparisons; functional results were unaffected (no new failure, no timing bar judged).
 
+## Fast checks (P2): the structure and look lints (2026-10-21)
+
+Noah approved P2 of docs/FAST-CHECKS.md: slow in-game re-reads replaced by instant, repeatable checks where that is trustworthy.
+Three pieces: a SMOKE row that keeps the lints honest, the two lints at the unit tier, and calibration probes at release. Branch
+`feat/lint-p2`.
+
+### The precondition: realised == virtual, per writer kind (SMOKE, slice tier)
+
+`tools/lib/realised-virtual.mjs` diffs the realised dump against the plan's virtual world cell by cell. It counts by writer kind
+(`kit/lib/lint/writers.mjs`): ground, relief, street, route, forms, lots, props, scatter, walls, bridges (beam, arch, slab), rope,
+tunnels and fluids.
+- A differing cell is classed `kept` (the cell holds what it held before the realise), `road` (a 4e road's band on natural ground),
+  `plant` (the world's plant broke), `child` (a lot entry's foundation row or its approach path), `grass` (dirt and grass swapped
+  by random ticks) or `fluid` (a fluid flowed into a cleared cell). Anything else is `differ`, and the row gates `differ` = 0.
+- The 4e street lanterns: the lint's model of `RoadPlan.lanterns` (`kit/lib/lint/roads.mjs`) against the realised light blocks,
+  both ways. On S7 and districts_demo, natural and flat, the posts are equal cell for cell.
+- Where the row runs: every scenario run (`realisedVirtual` row), t3a-ingame (bridges), t3b-ingame (tunnels), k1b-ingame (rope,
+  slab decks) and H-b's wet runs in h-ingame. Walls keep gate7ak1's own row. Fluid bodies and courses belong to the water lint
+  (P3).
+- Measured on this branch (`artifacts/gate-runs-lintp2/20261021-213356-change`): 0 differing cells in every run. That covers
+  forms 14,166, scatter 6,380, route_demo flat 975,790 cells, s2, s1, relief, districts, s7, bridges beam 394 and arch 324,
+  tunnels 1,276, rope 727, walls 7,018 and 3,346.
+
+### The lints (unit tier: `lint-structure`, `lint-look`)
+
+`node tools/lint.mjs structure|look|mutations|list`. The rules and what each stands in for are in docs/FAST-CHECKS.md ("P2 as
+built"). The inputs are committed fixtures only, never a live seed:
+- the natural surveys S1, S2, S3, S7 and tunnel_hill (`kit/test/fixtures/lint/surveys.json`; the loader is
+  `kit/lib/lint/vworld-fixtures.mjs`, shared with P3);
+- the scenario goldens' inputs, re-planned by the checkout's kit;
+- the plan/0 corpus;
+- the historical fixtures (`kit/test/fixtures/lint/hist`);
+- FL's judged gallery (`kit/test/fixtures/lint/fl`).
+
+Plans are cached per kit content in `<main checkout>/artifacts/lint-cache/` (untracked; a miss only costs the plan).
+- **Runtime** on this box at load 40-58: structure 50 s warm, 3.6 min cold (49 cases on 9 jobs); look 2 s; mutations about 10
+  min cold.
+- **Baseline.** `kit/test/fixtures/lint/baseline.json` lists known findings with their reason and an exact count. A count that
+  moves FAILs. Today it holds S1's links under two lot corners and main's pre-FL lamp spacing (S7, districts_demo); the FL
+  entries go when FL merges.
+- `lint-mutations` runs when the lints or the code they mutate change, and at release.
+
+### What moved out of the slice tier (the -smoke twins)
+
+A `-smoke` step is its full step's slice-tier twin. It has `supersededBy` the full step, the impact rules name it, and release
+runs the full step. `tools/lib/p2-trim.mjs` lets a twin skip a group only when both hold:
+- `GATE_P2_SMOKE=1` is set;
+- the calibration record holds.
+
+| step | skipped at the slice tier | where it is checked instead |
+|---|---|---|
+| `w-ingame-smoke` | `pathbibles`: four S7-flat realises over four path bibles, walk M5 0 and equal lantern counts | lint case `pathbibles`: the four bibles planned by the kit, the lanterns laid, walk M5 0.00% and counts 7 = 7 = 7 = 7 |
+| `d2-ingame-smoke` | the crest round (realise, reload, undo), the NO_ROOM, NO_EDGE and PROTECTED refusal requests | lint case `d2:crest` (S3's pinned survey: 43/46 street cells within 4 of the crest, as in game; NO_EDGE named); `p0:refused` and `p0:tunnel` (PROTECTED) |
+
+The other P2-marked rows in FAST-CHECKS are covered by a lint case but stay in game. They cost about 0 s next to the dumps the
+SMOKE row reads, or they are interleaved with a SMOKE or KEEP group. `tools/lint-coverage.json` lists all 53 rows with their
+status, lint case and rules.
+
+Measured at the same load (`20261021-224114-change`): w-ingame 8.1 min against w-ingame-smoke 4.1 min, d2-ingame 3.0 against
+d2-ingame-smoke 1.6.
+
+### Calibration (release tier: `p2-calibration`)
+
+`tools/gate-lint.mjs` runs the probes and writes the record. Together they take about 2.5 min.
+- **light:** each lamp fixture over grass. The game's block light must equal the kit's in every open cell within 15: 97k cells.
+- **t3a-probe:** vanilla villagers across command-built beam and arch decks, a holed deck refused.
+- **k1b-probe:** the same across slab decks.
+- **voc-registry.**
+
+`record`, run with CALIBRATION_WRITE=1 at release, writes `kit/test/fixtures/lint/calibration.json`: the Minecraft version, each
+probe's verdict, the head. Commit it.
+
+**The rule:** when the record names another Minecraft version, or any probe failed, every -smoke twin runs its full in-game rows
+and the lint steps print WARN. The P2 rows are back in game until a release run passes the probes again. A Minecraft update must
+run `p2-calibration` before any slice relies on the lints. First record: 2026-10-21, 26.3, every probe PASS.
+
+### Slice wall time
+
+The 12 FAST-CHECKS slices, replayed with the gate-waits medians as the before (`scratchpad/replay-p2.mjs`, local, the "Gate
+waits" method):
+- **Wall time:** the median is 104.0 → 103.7 min with a warm cache, and 104.6 min with a cold one (+0.6).
+- **Step-minutes:** 311 → 311.
+- **The 11 slices that ran w-ingame or d2-ingame:** 104.0 → 102.9 min wall, 311 → 308 step-minutes.
+
+As FAST-CHECKS projected, P2's slice time is small. Its value is the coverage itself:
+- the structure and look rules run on every slice's unit floor, on plans no camera saw;
+- the release tier now runs w-ingame and d2-ingame in full.
+
 ## Headless gates
 
 A gate step can run on a **headless server** instead of a dev client. The server is a dedicated Minecraft 26.3 server with

@@ -5,7 +5,7 @@
 // kit's decks: t3a-probe, k1b-probe) and the block registry (voc-registry). Each probe's verdict goes into the calibration record
 // kit/test/fixtures/lint/calibration.json (Minecraft version, per probe pass, run, date) with `record` (CALIBRATION_WRITE=1, the
 // release tier's last step). tools/lib/p2-trim.mjs reads it: a probe that failed, or a record for another Minecraft version, sends
-// every trimmed P2 row back in game (the -smoke steps run the full in-game assertions) and FAILs the lint steps until recalibrated.
+// every trimmed P2 row back in game (the -smoke steps run the full in-game assertions; the lint steps WARN) until recalibrated.
 //
 //   node tools/gate-lint.mjs light     each lamp fixture (fixtures.mjs: lantern post, soul lantern post, torch post, end rod, bollard,
 //                                      hanging lantern) set over grass on a flat world by commands, the box dumped with its block
@@ -136,7 +136,7 @@ steps.record = async () => {
   };
   const missing = Object.entries(probes).filter(([, v]) => !v).map(([k]) => k);
   const pass = !missing.length && Object.values(probes).every((v) => v.pass);
-  const rec = { $comment: 'The P2 lints\' calibration (tools/gate-lint.mjs record; docs/GATES.md "Fast checks (P2)"). tools/lib/p2-trim.mjs: valid only for this Minecraft version and with every probe passing; else the -smoke steps run the full in-game rows and the lint steps FAIL until a release run passes them again.', minecraft, pass, date: new Date().toISOString().slice(0, 10), head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), probes, ...(missing.length ? { missing } : {}) };
+  const rec = { $comment: 'The P2 lints\' calibration (tools/gate-lint.mjs record; docs/GATES.md "Fast checks (P2)"). tools/lib/p2-trim.mjs: valid only for this Minecraft version and with every probe passing; else the -smoke steps run the full in-game rows (the lint steps WARN) until a release run passes them again.', minecraft, pass, date: new Date().toISOString().slice(0, 10), head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), probes, ...(missing.length ? { missing } : {}) };
   check(!missing.length, `record: every probe ran (${missing.length ? `missing ${missing.join(', ')}` : Object.keys(probes).join(', ')})`);
   check(pass, `record: every probe passes on Minecraft ${minecraft} (${Object.entries(probes).map(([k, v]) => `${k} ${v ? (v.pass ? 'PASS' : 'FAIL') : 'missing'}`).join(', ')})`);
   if (process.env.CALIBRATION_WRITE === '1') { fs.writeFileSync(CAL, `${JSON.stringify(rec, null, 1)}\n`); log(`  wrote ${path.relative(root, CAL)} (commit it)`); }
