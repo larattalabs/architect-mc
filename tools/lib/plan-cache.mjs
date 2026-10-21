@@ -55,7 +55,7 @@ export function savePlanCache() {
  * `trees` from treesOf (null: run, don't cache); `input`: the plan and every option the run reads. -> {answers, ir, overall, cached}.
  */
 export async function planSide(root, trees, input, run) {
-  const key = trees ? sha256(JSON.stringify([process.version, input])) : null;
+  const key = trees ? sha256(JSON.stringify([process.version, process.env.ARCHITECT_BIG_REGIONS ?? null, input])) : null;
   const s = trees ? store(root, trees) : null;
   if (key && s.data[key]) return { ...s.data[key], cached: true };
   const r = await run();
