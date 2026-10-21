@@ -154,6 +154,7 @@ function structureCases() {
   for (const name of FLATS) out.push({ id: `g:${name}-flat`, covers: SCEN[name], run: async () => { const c = await goldenCase(name, { flat: true }); const r = await structure(c, M5BAR[`${name}-flat`] ?? { m5: null }); return { ok: [summary(r.rep)], fails: r.fails, recorded: r.recorded }; } });
   // the pinned plan fixtures the scenarios don't hold (T3b's natural hill): linted as committed
   out.push({ id: 'fx:tunnel_hill', covers: ['t3b-natural (the hill bore re-read: cover, shell, M3/M4:tunnel)'], run: async () => { const { loadFixture } = await kimp('lib/lint/vworld-fixtures.mjs'); const F = loadFixture('tunnel_hill'); const r = await structure({ ...F, name: 'tunnel_hill' }, { m5: null }); return { ok: [`${summary(r.rep)}; tunnels ${JSON.stringify(r.rep.metrics.tunnels ?? null).slice(0, 160)}`], fails: r.fails, recorded: r.recorded }; } });
+  out.push({ id: 'd2:crest', covers: ['d2-ingame #7', 'd2-ingame #9 (the crest instance)', 'd2-ingame #5', 'd2-ingame #12'], run: d2Crest });
   out.push({ id: 'pathbibles', covers: ['w-ingame #8', 'w-ingame #9'], run: pathBibles });
   for (const [dir, n] of [['kc', 1], ['irr', 1], ['rope', 1], ['tunnel', 2], ['t3a', 2], ['k1a', 1], ['refused', 1], ['voc', 1], ['vocc', 1], ['h', 2], ['hy', 3], ['valid', 6]]) {
     for (let k = 0; k < n; k++) out.push({ id: `p0:${dir}${n > 1 ? `/${k + 1}` : ''}`, covers: P0COVERS[dir] ?? [], run: () => corpus(dir, k, n) });
@@ -209,6 +210,38 @@ async function corpus(dir, k, n) {
   }
   if (!res.fails.length) res.ok.unshift(`${files.length} fixture(s) of plan/${dir} clean (broken variants caught, refusals as expected)`);
   return res;
+}
+
+// ------------------------------------------------------------------ D2's crest on S3's pinned survey (d2-ingame boundary's crest round)
+
+async function d2Crest() {
+  const { loadFixture } = await kimp('lib/lint/vworld-fixtures.mjs');
+  const { planRegion } = await kimp('lib/region/plan.mjs');
+  const F = loadFixture('s3');
+  const claim = { ...F.ir.claim, minY: -64, maxY: 319 };
+  const spec = { districts: [{ id: 'crest', size: [64, 20], follow: { ridge: { minRise: 8 } }, lots: [{ id: 'crest_1', type: 'cottage', size: [7, 7] }] }] };
+  const res = await cachedPlan({ d2: 'crest', spec, surveySha: F.surveySha }, () => planRegion({ programFile: path.join(KIT, 'regions', 'districts.mjs'), params: { spec }, survey: F.survey, seed: '1', claim, roles: {}, keepOut: [] }));
+  const out = { ok: [], fails: [], recorded: [] };
+  const f = res.meta.districts?.follow?.crest;
+  if (!f) return { fails: ['the crest district did not plan'] };
+  const near = (p, cells) => { let b = Infinity; for (const q of cells) b = Math.min(b, Math.max(Math.abs(p[0] - q[0]), Math.abs(p[1] - q[1]))); return b; };
+  const ds = f.street.map(([x, , z]) => near([x, z], f.boundary));
+  const on = ds.filter((v) => v <= 4).length;
+  (on >= ds.length * 0.8 ? out.ok : out.fails).push(`ridge: the street on the ridge line (${on}/${ds.length} street cells within 4 of the crest; in game 43/46)`);
+  const lots = res.meta.districts.lots?.crest ?? [];
+  (lots.length >= 1 ? out.ok : out.fails).push(`crest: ${lots.length} lot(s), its shape a ${f.maskCells}-cell mask in ${JSON.stringify(f.rect)}`);
+  // (as the round in game: the plan's errors and the lint's own rules gate; its reach is a district without an entrance anchor here)
+  const r = await structure({ name: 'd2:crest', ir: res.ir, meta: res.meta, survey: F.survey, blobs: (sha) => res.blobs.get(sha) ?? null, volumes: [], protected: [], builds: [] }, { m5: null, corpus: true });
+  out.fails.push(...r.fails);
+  out.ok.push(summary(r.rep));
+  // the refusal set, named: no ridge on a flat claim (NO_EDGE), no biome grid for a biome edge (NO_EDGE)
+  const flat = await flatSurveyBytes(F.ir.claim);
+  for (const [why, sp, sv, want] of [['a ridge on a flat claim', spec, flat, /NO_EDGE: no ridge/], ['a biome edge with no biome grid', { districts: [{ id: 'oasis', size: [96, 24], follow: { biome_edge: { between: ['desert', 'jungle'] } }, lots: 2 }] }, F.survey, /NO_EDGE/]]) {
+    let msg = null;
+    try { await planRegion({ programFile: path.join(KIT, 'regions', 'districts.mjs'), params: { spec: sp }, survey: sv, seed: '1', claim, roles: {}, keepOut: [] }); } catch (e) { msg = e.message; }
+    (want.test(msg ?? '') ? out.ok : out.fails).push(`${why}: refused ${msg ? msg.slice(0, 90) : 'nothing (planned)'}`);
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ S7's path bibles (w-ingame item 5)

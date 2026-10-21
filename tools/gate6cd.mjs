@@ -522,7 +522,9 @@ steps.outpost = async () => {
   check(cor && cor.cells > 100 && Array.isArray(cor.rect), `outpost: its corridor reported as settlement land on the region's view (architect_mc:corridor: ${cor?.cells} cells in ${json(cor?.rect)}), the IR's corridor ${Object.keys(r.files.ir.corridor ?? {})}`);
   check(r.sameIr, `outpost: stable across a reload (the same request planned after the world was saved and reopened: IR ${r.plan.irSha?.slice(0, 12)} = ${String(r.again).slice(0, 12)})`);
   check(r.exact, `outpost: one undo (Regions.remove) restores the world over its claim exactly, its corridor included (${r.restored} cells)`);
-  // refused, named: an outpost that can't keep its gap
+  // refused, named: an outpost that can't keep its gap (the refusal set: the structure lint's, at the slice tier)
+  const P2 = await import('./lib/p2-trim.mjs');
+  if (P2.p2Trim(log, 'd2 outpost: the NO_ROOM refusal')) { await undo(ra); await leaveWorld(); spendZero(); return out; }
   const nr = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'camp', size: [40, 40], lots: 2, outpost: { gap: 400 } }] } }, claim: B, beside: ra, check: false });
   out.refused = nr.refused ?? null;
   check(/NO_ROOM/.test(nr.refused ?? ''), `outpost: a gap no candidate keeps refuses, named (${nr.refused})`);
@@ -548,7 +550,12 @@ steps.boundary = async () => {
   const mask = (runs) => runs.flatMap(([x0, z, x1]) => Array.from({ length: x1 - x0 + 1 }, (_, i) => [x0 + i, z]));
   // ---- the shore (S3's river) and the ridge (S3's crest), on S3's pinned claim
   await tp(Math.floor((S3[0] + S3[2]) / 2), 200, Math.floor((S3[1] + S3[3]) / 2));
-  for (const [id, follow, size, lots] of [['quay', { shore: { minArea: 64 } }, [64, 24], 2], ['crest', { ridge: { minRise: 8 } }, [64, 20], 1]]) {
+  // (fast checks P2) the crest round's ridge geometry is the structure lint's (districts on S3's pinned survey); at the slice tier
+  // (`d2-ingame-smoke`) the quay round stays the one natural district realised, the crest round runs at release
+  const P2 = await import('./lib/p2-trim.mjs');
+  const rounds = [['quay', { shore: { minArea: 64 } }, [64, 24], 2], ['crest', { ridge: { minRise: 8 } }, [64, 20], 1]];
+  const trimCrest = P2.p2Trim(log, 'd2 boundary: the crest round (ridge street on the crest, its realise and undo)');
+  for (const [id, follow, size, lots] of trimCrest ? rounds.slice(0, 1) : rounds) {
     const r = await d2Round(id, world, S3, { id, size, follow, lots: Array.from({ length: lots }, (_, i) => ({ id: `${id}_${i + 1}`, type: 'cottage', size: [7, 7] })) }, { natural: true });
     const f = r.files.meta.districts.follow[id];
     const cols = decodeColumns(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', r.plan.planId, 'survey.bin')));
@@ -592,7 +599,8 @@ steps.boundary = async () => {
   out.oasis = { state: r.state, rect: f.rect, mask: f.maskCells, boundary: f.boundary.length, far1, desertCells: desert.length, far2, lots: r.files.meta.districts.lots.oasis, sameIr: r.sameIr, replay: r.replay, exact: r.exact, enormal: r.enormal, biomes: r.files.ir.biomes };
   check(r.state === 'PLACED' && far1 === 0 && far2 === 0, `biome edge: the district's shape follows the desert/jungle edge within 4 cells over its ${f.boundary.length}-cell length (${far1} boundary cells and ${far2} desert cells past 4; ${r.files.meta.districts.lots.oasis.length} lot(s))`);
   check(r.sameIr && r.exact, `biome edge: stable across a reload, one undo restores the claim (${r.restored} cells; E-normal ${r.enormal?.mismatches} ${json(r.enormal?.classes ?? {})}, unclassified ${r.enormal?.classes?.none ?? 0}, world classes by rule ${json(r.enormal?.worldBy ?? {})}, the undo's own ${r.enormal?.undoOwn} (cap ${r.enormal?.cap}))`);
-  // refused, named: no such edge; protected over the band
+  // refused, named: no such edge; protected over the band (the refusal set: the structure lint's, at the slice tier)
+  if (P2.p2Trim(log, 'd2 boundary: the NO_EDGE and PROTECTED refusals')) { await leaveWorld(); spendZero(); return out; }
   const nr = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'oasis', size: [96, 24], follow: { biome_edge: { between: ['desert', 'mushroom'] } }, lots: 2 }] } }, claim: C, check: false });
   check(/NO_EDGE: no mushroom/.test(nr.refused ?? ''), `biome edge: no such edge refused, named (${nr.refused})`);
   const api = async (a) => { const x = await cmd(`/apitest ${a}`); return (x.messages ?? []).find((mm) => mm.startsWith('{')) ?? null; };
