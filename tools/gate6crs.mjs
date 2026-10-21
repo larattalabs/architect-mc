@@ -126,10 +126,22 @@ steps.unit = async () => {
   fs.writeFileSync(path.join(OUT, 'rs-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
   out.tiles = await U.creativeTiles(root, { check, log });
   out.asks = await U.asksTables(root, { check, log, OUT });
-  // item 17
-  const ac = spawnSync(process.execPath, ['tools/api-compat.mjs'], { cwd: root, encoding: 'utf8', timeout: 900_000, env: { ...process.env, PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
-  out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').filter((l) => /^(ok|FAIL)/.test(l)) };
-  check(ac.status === 0, `item 17: api-compat clean against the archived apitest jars (RegionView gains a trailing build, PlanCheck a trailing survival: the old constructors kept; RegionBuild, PartBuild new); $0.00`, out.apicompat.tail);
+  // item 17: the unchanged apitest jars of 0.40.0 (the base), 0.39.1 and 0.39.0 against this build, and 0.40.0's whole surface
+  const jars = process.env.RS_JARS ?? path.join(path.resolve(root, '..', 'architect-mc'), 'artifacts');
+  const env = { ...process.env, PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` };
+  out.apicompat = {};
+  let acOk = true;
+  for (const [dir, ver] of [['gate6c-fl/v0400', '0.40.0'], ['gate6c-batchcu/v0391', '0.39.1'], ['gate6c-kc/v0390', '0.39.0']]) {
+    const jar = path.join(jars, dir, `architect_apitest-${ver}.jar`);
+    const r = spawnSync(process.execPath, ['tools/api-compat.mjs', jar], { cwd: root, encoding: 'utf8', timeout: 900_000, env });
+    out.apicompat[ver] = `${r.stdout}${r.stderr}`.trim().split('\n').pop();
+    acOk &&= r.status === 0 && fs.existsSync(jar);
+  }
+  const sj = path.join(jars, 'gate6c-fl', 'v0400', 'architect_mc-0.40.0.jar');
+  const sr = spawnSync(process.execPath, ['tools/api-compat.mjs', '--surface', sj], { cwd: root, encoding: 'utf8', timeout: 900_000, env });
+  out.apicompat.surface = `${sr.stdout}${sr.stderr}`.trim().split('\n').pop();
+  acOk &&= sr.status === 0;
+  check(acOk, `item 17: api-compat clean against the archived 0.40.0, 0.39.1 and 0.39.0 apitest jars and 0.40.0's surface (RegionView gains a trailing build, PlanCheck a trailing survival: the old constructors kept; RegionBuild, PartBuild new); $0.00`, out.apicompat);
   spendZero();
   return out;
 };
