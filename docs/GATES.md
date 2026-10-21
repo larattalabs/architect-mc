@@ -405,6 +405,48 @@ side (about half).
 (memory fine: no swap, 0.03-2.7 M free pages). The unit floor slowed most, so 6 concurrent runs look like too many for timing
 comparisons; functional results were unaffected (no new failure, no timing bar judged).
 
+## P3: the water and survival ledger lints (2026-10-21)
+
+Noah approved replacing slow in-game checks with instant, repeatable ones wherever that's trustworthy (docs/FAST-CHECKS.md, phase P3).
+Branch feat/lint-p3 built the two P3 lints, their calibration probes and the cutover. What each lint proves, the mutation evidence and
+the row-by-row cutover are in docs/FAST-CHECKS.md ("4. Water lint" and "5. Survival ledger lint", their "As built", and "P3 cutover").
+
+### Steps and tiers
+
+| step | what | tier |
+|---|---|---|
+| `water-lint` | `node --test kit/lint/*.lint.mjs`: the fluid corpus (9 shards in parallel), the lint's own rules, the drain cases | slice always; change through the impact rules "P3 water lint" and "P3 cutover"; release |
+| `p3-lint` | gradle `LedgerLintTest` + `RegionFluidsLintTest`: the survival ledger lint and the water lint's Java half (the real `RegionFluids.breachTake` and `drain`) | slice always; change through "P3 water lint" and "P3 survival ledger lint"; release |
+| `p3-lint-long` | the ledger fuzz over 20000 fresh seeds | release |
+| `<step>-smoke` (h-ingame, h-probe, hy-ingame, hy-crash, hy-cold, irr-ingame, kc-ingame, voc-survival, y-ingame, c29-ingame) | the full step with `GATE_P3=smoke` (y and c29: without the subcommands the lint took): the SMOKE remainder | slice and change, through the impact rules (they name the `-smoke` ids) |
+| the full ids | everything, as before | release (`tiers.release.always`), named chains, by hand |
+| `p3-probe-water` | `tools/p3-probe.mjs water` (waits for the full h-ingame, hy-ingame, h-probe of the same run): h_core_demo's census per body (0 diff), its settles within the bounds, every body's breach in its recorded reach; hy_core_demo's census; the riffle table; the fire-reach posts within M20's FIRE_REACH | release |
+| `p3-probe-ledger` | `tools/p3-probe.mjs ledger` (waits for the full y-ingame and cu-survival): the store run's ledger at each event against the model's; weathering charged nothing; the measured refund == the Java model's refund of the same standing blocks (`LedgerProbeTest`) | release |
+
+`supersededBy`: a `-smoke` id is dropped when its full id is in the same run. The smoke drivers log every group they leave out as
+`P3 smoke: <what> left to <rule or probe>` (neither an ok nor a FAIL line).
+
+### The rule: a probe mismatch sends the P3 rows back in game
+
+A lint is trusted only while its calibration probe passes on the current Minecraft version. When `p3-probe-water` or
+`p3-probe-ledger` fails (at release, or when a Minecraft update runs the probes first):
+1. `node tools/p3-mode.mjs ingame`, and commit it: the impact rules name the full ids again, so every P3 row runs in game at the slice
+   tier. `node tools/p3-mode.mjs --check` prints the mode.
+2. Fix the lint or its model (the failing probe line names the body, the cell or the item), until the probe passes on a release run.
+3. `node tools/p3-mode.mjs smoke`, and commit it.
+
+The probe's own FAIL line says so. Only the impact rules' lists change; the release tier always runs the full ids.
+
+### Mutation evidence
+
+`node tools/p3-mutants.mjs [--only id,...]` puts each historical bug back into the production code in a scratch worktree at HEAD and
+runs the lint there; every mutant must go red and the baseline green. It writes `artifacts/p3-mutants/<stamp>.json` (untracked). Not a
+gate step (a compile per mutant); run it when a lint or the code under it changes.
+
+### Measured
+
+(filled in below when the runs end)
+
 ## Headless gates
 
 A gate step can run on a **headless server** instead of a dev client. The server is a dedicated Minecraft 26.3 server with

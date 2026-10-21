@@ -130,6 +130,11 @@ first follow-up (see "Calibration").
 | N1 | noise | mushrooms pop off, leaf litter is trampled | 4d intermittent "back exactly" |
 | N2 | noise | an entity in a box makes removal wait | 4d bee |
 
+**Shared with the survival ledger lint (P3, docs/FAST-CHECKS.md "5. Survival ledger lint").** The ledger lint applies the same rows
+(V6 weathering, waxing and scraping; V7 farmland drying; V10 a door opened) to its targets and gives every row a ledger decision in
+`LedgerLintTest.DECISIONS` (no charge, refund the standing block, free, or not modelled and why). `everyVanillaRowHasALedgerDecision`
+fails when a row is added here without one, so a new vanilla behaviour is decided for the ledger too.
+
 **Noise rule (N1), the in-game hash's ignore list.** A difference is the world's own when all three hold:
 - the cell is a decor kind (`TileCheck.dependent`, gravity aside);
 - no plan ever wrote the cell;
