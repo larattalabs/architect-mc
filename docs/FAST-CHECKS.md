@@ -392,13 +392,14 @@ baseline until FL merges.
 
 ### Row status, against the 53 P2-marked rows below
 
-- **Trimmed at the slice tier (5 rows):**
-  - w-ingame #8 and #9 (pathbibles);
-  - d2-ingame #5, #7 and #12 (the crest round and the refusals).
+- **Trimmed at the slice tier (3 rows):**
+  - w-ingame #8 and #9: pathbibles keeps one bible in game, packed_mud, the built verge that keeps the lint's RoadPlan model honest;
+    the other three are the lint's;
+  - d2-ingame #7: the crest round. With it go one of three instances of #9, #10 and #11 at the slice tier.
   The full steps run at release.
-- **Covered by a lint case and kept in game (40 rows).** They cost about 0 s beside the SMOKE row's dumps, or are interleaved
-  with SMOKE or KEEP groups: the scenarios' G-REAL rows, the connector re-reads, d, t2, v, vocc and voc. Trimming them would
-  save nothing.
+- **Covered by a lint case and kept in game (42 rows).** They cost about 0 s beside the SMOKE row's dumps, take seconds (d2's
+  refusals), or are interleaved with SMOKE or KEEP groups: the scenarios' G-REAL rows, the connector re-reads, d, t2, v, vocc and
+  voc. Trimming them would save nothing.
 - **SMOKE (8 rows):** kept, including the realised == virtual rows for forms and scatter.
 - **Without a committed fixture, still in game:** d2 #8 (the biome edge needs the desert/jungle site's biome grid), b-ingame #10
   (no brush fixture), t3a-natural and t3a-frozen #4 (the river crossings are no goldens), and the mod's PALETTE code.

@@ -179,7 +179,7 @@
     "M5",
     "walkDark"
    ],
-   "why": "w-ingame-smoke skips `pathbibles`; w-ingame runs it at release"
+   "why": "w-ingame-smoke runs pathbibles with packed_mud only (the built verge: RoadPlan's own-foot branch, and the realised == virtual row on a built verge); the other three bibles are the lint's; w-ingame runs all four at release"
   },
   "w-ingame #9": {
    "status": "trimmed",
@@ -187,7 +187,7 @@
    "rules": [
     "lanterns"
    ],
-   "why": "with #8"
+   "why": "with #8: packed_mud's count against the lint's 7 in game; the four-way equality is the lint's"
   },
   "b-ingame #10": {
    "status": "covered-kept",
@@ -260,12 +260,12 @@
    "why": ""
   },
   "d2-ingame #5": {
-   "status": "trimmed",
-   "lint": "d2:crest refusal set (NO_EDGE) + the kit's outpost tests (NO_ROOM)",
+   "status": "covered-kept",
+   "lint": "(the outpost NO_ROOM request stays in d2-ingame-smoke)",
    "rules": [
     "refusal set"
    ],
-   "why": "d2-ingame-smoke skips the NO_ROOM request"
+   "why": "seconds: kept in the twin"
   },
   "d2-ingame #6": {
    "status": "covered-kept",
@@ -279,7 +279,7 @@
    "rules": [
     "ridge geometry"
    ],
-   "why": "d2-ingame-smoke skips the crest round (its realise, reload, undo: the quay round is the instance)"
+   "why": "d2-ingame-smoke skips the crest round. With it go one instance each of #9 (SMOKE: a district placed; 3 -> 2 at the slice: quay and biome edge) and the KEEP rows #10 (stable across reload) and #11 (one undo restores the claim): 3 -> 2 instances at the slice tier, all 3 at release"
   },
   "d2-ingame #8": {
    "status": "covered-kept",
@@ -288,12 +288,12 @@
    "why": "stays in game: the oasis round runs in d2-ingame-smoke"
   },
   "d2-ingame #12": {
-   "status": "trimmed",
-   "lint": "d2:crest refusal set (NO_EDGE for no edge / no biome grid); PROTECTED: p0:refused k1a_r02, p0:tunnel tn06",
+   "status": "covered-kept",
+   "lint": "d2:crest (NO_EDGE named); PROTECTED over a districts band stays in game",
    "rules": [
     "refusal set"
    ],
-   "why": "d2-ingame-smoke skips the two refusal requests"
+   "why": "seconds: kept in the twin (the lint's PROTECTED cases are walls and tunnels, not a districts band)"
   },
   "voc-ingame #5": {
    "status": "covered-kept",

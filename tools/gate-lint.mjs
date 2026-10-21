@@ -12,7 +12,9 @@
 //                                      light, against the kit's light over the same blocks (check.mjs's propagation: emission, cost,
 //                                      opacity): every cell of every lamp's 15-box equal
 //   node tools/gate-lint.mjs record    the calibration record from this run's probe results (light.json here; t3a-probe, k1b-probe,
-//                                      voc-registry from their own evidence dirs under the run's OUT): written with CALIBRATION_WRITE=1
+//                                      voc-registry from their own evidence dirs under the run's OUT): always as the latest verdict
+//                                      (<main checkout>/artifacts/lint-calibration-latest.json, which the trims read at once: a failed
+//                                      probe stops them); as the committed record too with CALIBRATION_WRITE=1
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -139,6 +141,13 @@ steps.record = async () => {
   const rec = { $comment: 'The P2 lints\' calibration (tools/gate-lint.mjs record; docs/GATES.md "Fast checks (P2)"). tools/lib/p2-trim.mjs: valid only for this Minecraft version and with every probe passing; else the -smoke steps run the full in-game rows (the lint steps WARN) until a release run passes them again.', minecraft, pass, date: new Date().toISOString().slice(0, 10), head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), probes, ...(missing.length ? { missing } : {}) };
   check(!missing.length, `record: every probe ran (${missing.length ? `missing ${missing.join(', ')}` : Object.keys(probes).join(', ')})`);
   check(pass, `record: every probe passes on Minecraft ${minecraft} (${Object.entries(probes).map(([k, v]) => `${k} ${v ? (v.pass ? 'PASS' : 'FAIL') : 'missing'}`).join(', ')})`);
+  rec.at = new Date().toISOString();
+  // every run's verdict, written where the trims read it at once (untracked): a release whose probe fails sends the P2 rows back in
+  // game from then on, before anyone commits a record (tools/lib/p2-trim.mjs LATEST)
+  const { LATEST } = await import('./lib/p2-trim.mjs');
+  fs.mkdirSync(path.dirname(LATEST), { recursive: true });
+  fs.writeFileSync(LATEST, `${JSON.stringify(rec, null, 1)}\n`);
+  log(`  wrote ${LATEST}`);
   if (process.env.CALIBRATION_WRITE === '1') { fs.writeFileSync(CAL, `${JSON.stringify(rec, null, 1)}\n`); log(`  wrote ${path.relative(root, CAL)} (commit it)`); }
   L.write('calibration.json', rec);
   return rec;

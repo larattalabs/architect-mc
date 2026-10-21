@@ -110,8 +110,13 @@ export function describeRealised(r) {
   return (r.lanterns?.model || r.lanterns?.realised ? `street lanterns model ${r.lanterns.model} / realised ${r.lanterns.realised} (${r.lanterns.differ} differ); ` : '') + Object.entries(r.byKind).sort().map(([k, v]) => `${k} ${v.written}/${v.differ}${CLASSES.some((c) => v[c]) ? ` (${CLASSES.filter((c) => v[c]).map((c) => `${c} ${v[c]}`).join(', ')})` : ''}${Object.keys(v.sub).length ? ` [${Object.entries(v.sub).map(([s, n]) => `${s} ${n}`).join(', ')}]` : ''}`).join('; ');
 }
 
-/** The SMOKE row's verdict: every kind's `differ` 0 (`kinds`: the kinds this run must have written, at least one cell each). */
-export function realisedOk(r, kinds = []) {
+/**
+ * The SMOKE row's verdict: every kind's `differ` 0 (`kinds`: the kinds this run must have written, at least one cell each). `strict`
+ * (a flat preset world, nothing built by commands): only `child` may differ, since on flat ground a `road` difference means vworld's
+ * 4e road model left RoadPlan's walkway (as on a curve) and `kept`/`grass`/`fluid`/`plant` have no natural cell to come from.
+ */
+export function realisedOk(r, kinds = [], { strict = false } = {}) {
   const missing = kinds.filter((k) => !(r.byKind[k]?.written > 0));
-  return { pass: r.differ === 0 && missing.length === 0 && r.written > 0, missing };
+  const loose = strict ? CLASSES.filter((c) => c !== 'child').reduce((a, c) => a + (r[c] ?? 0), 0) : 0;
+  return { pass: r.differ === 0 && loose === 0 && missing.length === 0 && r.written > 0, missing, loose };
 }

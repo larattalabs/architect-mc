@@ -282,7 +282,7 @@ async function realiseAndRead(tag, { planDir, claim, box, start, standMs = 120_0
     const RV = await import('./lib/realised-virtual.mjs');
     const rv = await RV.realisedVsVirtual(planDir, after, before, { lots: false });
     out.realisedVirtual = { written: rv.written, differ: rv.differ, byKind: rv.byKind, first: rv.first };
-    check(RV.realisedOk(rv, out.R.meta?.tunnels?.length ? ['tunnels'] : []).pass, `P2 SMOKE (${tag}): realised == virtual per writer kind, ${rv.differ} of ${rv.written} differ: ${RV.describeRealised(rv)}${rv.first.length ? ` first ${JSON.stringify(rv.first.slice(0, 3))}` : ''}`);
+    check(RV.realisedOk(rv, out.R.meta?.tunnels?.length ? ['tunnels'] : [], { strict: tag === 'flat' }).pass, `P2 SMOKE (${tag}${tag === 'flat' ? ', strict' : ''}): realised == virtual per writer kind, ${rv.differ} of ${rv.written} differ: ${RV.describeRealised(rv)}${rv.first.length ? ` first ${JSON.stringify(rv.first.slice(0, 3))}` : ''}`);
   }
   return out;
 }

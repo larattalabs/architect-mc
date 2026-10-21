@@ -385,7 +385,7 @@ async function crossRun(tag, claim, { kind, golden }) {
     const RV = await import('./lib/realised-virtual.mjs');
     const rv = await RV.realisedVsVirtual(planDir, after, before, { lots: false });
     out.realisedVirtual = { written: rv.written, differ: rv.differ, byKind: rv.byKind, first: rv.first };
-    check(RV.realisedOk(rv, ['bridges']).pass, `P2 SMOKE (${tag}): realised == virtual per writer kind, ${rv.differ} of ${rv.written} differ: ${RV.describeRealised(rv)}${rv.first.length ? ` first ${json(rv.first.slice(0, 3))}` : ''}`);
+    check(RV.realisedOk(rv, ['bridges'], { strict: flat }).pass, `P2 SMOKE (${tag}${flat ? ', strict' : ''}): realised == virtual per writer kind, ${rv.differ} of ${rv.written} differ: ${RV.describeRealised(rv)}${rv.first.length ? ` first ${json(rv.first.slice(0, 3))}` : ''}`);
   }
   // (frozen) nothing written in the ice: every ice cell under a bridge's box has the same state before and after the realise
   if (kind === 'frozen') {

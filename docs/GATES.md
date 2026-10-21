@@ -456,15 +456,20 @@ runs the full step. `tools/lib/p2-trim.mjs` lets a twin skip a group only when b
 
 | step | skipped at the slice tier | where it is checked instead |
 |---|---|---|
-| `w-ingame-smoke` | `pathbibles`: four S7-flat realises over four path bibles, walk M5 0 and equal lantern counts | lint case `pathbibles`: the four bibles planned by the kit, the lanterns laid, walk M5 0.00% and counts 7 = 7 = 7 = 7 |
-| `d2-ingame-smoke` | the crest round (realise, reload, undo), the NO_ROOM, NO_EDGE and PROTECTED refusal requests | lint case `d2:crest` (S3's pinned survey: 43/46 street cells within 4 of the crest, as in game; NO_EDGE named); `p0:refused` and `p0:tunnel` (PROTECTED) |
+| `w-ingame-smoke` | 3 of pathbibles' 4 S7-flat realises. packed_mud stays: its built verge is the one RoadPlan branch (the owner's own foot) that the lint's lantern model must keep honest in game. | lint case `pathbibles`: the four bibles planned by the kit, the lanterns laid, walk M5 0.00%, counts 7 = 7 = 7 = 7. In game, packed_mud's count is checked against the lint's 7. |
+| `d2-ingame-smoke` | the crest round (its realise, reload and undo) | lint case `d2:crest`: S3's pinned survey, 43/46 street cells within 4 of the crest, as in game. The outpost, the quay, the biome edge and every refusal stay in game. |
+
+With the crest round, one instance each of d2's #9 (SMOKE) and its KEEP rows #10 (stable across a reload) and #11 (one undo
+restores the claim) leave the slice tier. Two instances remain there, the quay's and the biome edge's, and all three run at
+release.
 
 The other P2-marked rows in FAST-CHECKS are covered by a lint case but stay in game. They cost about 0 s next to the dumps the
 SMOKE row reads, or they are interleaved with a SMOKE or KEEP group. `tools/lint-coverage.json` lists all 53 rows with their
 status, lint case and rules.
 
-Measured at the same load (`20261021-224114-change`): w-ingame 8.1 min against w-ingame-smoke 4.1 min, d2-ingame 3.0 against
-d2-ingame-smoke 1.6.
+Measured at the same load (`20261021-224114-change`, all four bibles and the refusals skipped): w-ingame 8.1 min against
+w-ingame-smoke 4.1 min, and d2-ingame 3.0 against d2-ingame-smoke 1.6. With packed_mud and the refusals kept, the twins measure
+about 5.1 and 1.8 min (`20261021-2311xx-change` below).
 
 ### Calibration (release tier: `p2-calibration`)
 

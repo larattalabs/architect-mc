@@ -308,7 +308,7 @@ async function linksRun(tag, claim, { flat, golden }) {
     const RV = await import('./lib/realised-virtual.mjs');
     const rv = await RV.realisedVsVirtual(planDir, after, before, { lots: false });
     out.realisedVirtual = { written: rv.written, differ: rv.differ, byKind: rv.byKind, first: rv.first };
-    check(RV.realisedOk(rv, R.meta?.ropes?.length ? ['rope'] : []).pass, `P2 SMOKE (${tag}): realised == virtual per writer kind, ${rv.differ} of ${rv.written} differ: ${RV.describeRealised(rv)}${rv.first.length ? ` first ${json(rv.first.slice(0, 3))}` : ''}`);
+    check(RV.realisedOk(rv, R.meta?.ropes?.length ? ['rope'] : [], { strict: !!flat }).pass, `P2 SMOKE (${tag}${flat ? ', strict' : ''}): realised == virtual per writer kind, ${rv.differ} of ${rv.written} differ: ${RV.describeRealised(rv)}${rv.first.length ? ` first ${json(rv.first.slice(0, 3))}` : ''}`);
   }
   await cmd('/kill @e[type=!minecraft:player]');
   out.nav = await nav(R.meta);
