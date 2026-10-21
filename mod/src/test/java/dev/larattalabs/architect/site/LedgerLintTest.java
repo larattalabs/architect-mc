@@ -387,23 +387,32 @@ class LedgerLintTest {
 		assertTrue(returned.isEmpty());
 	}
 
-	/** Y1 overflow and gone: a refund beyond capacity overflows to the ground; a crate gone drops the least whole stacks. */
+	/**
+	 * Y1 overflow and gone: a refund into a full stockpile overflows to the ground (refundOverflow, outside the identity), never past capacity;
+	 * a crate gone drops the least whole stacks that bring the stock within the new capacity.
+	 */
 	@Test
 	void capacityOverflowAndACrateGone() {
 		LedgerSim s = new LedgerSim();
-		s.crates = 2;
-		LedgerSim.Tgt t = s.place("t", "hut");
-		s.place("u", "hut2");
-		fill(s);
-		feedUntilQuiet(s, 60);
-		// fill the stockpile with what nothing needs: withdrawals aside, nothing takes it
 		s.crates = 1;
+		LedgerSim.Tgt t = s.place("t", "hut");
+		fill(s);
+		feedUntilQuiet(s, 40);
+		assertEquals(t.run.size(), t.run.built.cardinality());
+		// paused targets still need their bills: the stock fills to capacity with what they need
+		for (int i = 0; i < 24; i++) {
+			s.place("u" + i, i % 2 == 0 ? "hut" : "shed").paused = true;
+		}
+		fill(s);
+		s.checkpoint("filled");
+		assertEquals(s.cap(), s.ledger.usedStacks(LedgerSim::maxStack), "the stockpile is full");
 		s.removeStart(t);
 		s.removeEnd(t, false);
-		s.checkpoint("refund into one crate");
+		s.checkpoint("a refund into a full stockpile");
+		assertFalse(s.ledger.refundOverflow().isEmpty(), "the refund overflowed");
 		s.crates = 3;
-		s.insert(PLANKS, 64 * 40);
-		s.checkpoint("planks");
+		fill(s);
+		s.checkpoint("three crates");
 		s.crateGone();
 		s.checkpoint("crate gone");
 		clean(s);

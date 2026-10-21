@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import * as P3 from './p3-tier.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const k3 = (c) => `${c[0]},${c[1]},${c[2]}`;
@@ -672,7 +673,10 @@ export async function ingame(ctx) {
     const o = await realiseIrr(ctx, 'v62a', fx('valid/v62_irr_farm.json'), { entries: E62, fields: F });
     if (o.r) {
       out.v62 = await placedChecks(ctx, 'v62', o, F, E62);
-      out.v62.breach = await breach(ctx, o, 'f2');
+      // (P3 smoke: item 4's one broken side is the water lint's W3:irr over every irrigation body; the in-game breach drains stay in
+      // 'spare' (a foreign flow meeting the breach) and 'pad')
+      if (P3.smoke) P3.skipped(ctx.log, "item 4: one farmland side of f2 broken", "the water lint W3:irr (every side of every irrigation body; irr/u03 caught)");
+      else out.v62.breach = await breach(ctx, o, 'f2');
       out.v62.versionOf = await versionOf(ctx, o, F);
       out.v62.ownership = await ownership(ctx, o);
       out.v62.removeLot = await removeLot(ctx, o, 'f2');
@@ -715,8 +719,11 @@ export async function ingame(ctx) {
     else check(false, `(lamp-path) farm_hamlet: not realised (${json(o.parts)} ${json(o.refused ?? null)})`);
     await L.leaveWorld();
   }
+  // (P3 smoke: Steward's hamlet only; v63 and d01 repeat item 2 over lot kinds: the water lint and irr.test hold them offline)
+  if (P3.smoke) P3.skipped(ctx.log, 'item 2: v63 (40 x 40) and d01 (a district lot)', 'the water lint (valid/v63, irr/d01: containment, census == prediction, the breach sweep) and irr.test');
   for (const [tag, rel, entries] of [['v63', 'valid/v63_irr_large.json', { big: 'g6c_irr_field_40x40' }], ['s01', 'irr/s01_hamlet.json', {}], ['d01', 'irr/d01_district.json', { field_1: 'g6c_irr_field_13x11' }]]) {
     if (!want(tag)) continue;
+    if (P3.smoke && tag !== 's01') continue;
     const o = await realiseIrr(ctx, tag, fx(rel), { entries, fields: F });
     if (o.r) {
       out[tag] = await placedChecks(ctx, tag, o, F, entries);
