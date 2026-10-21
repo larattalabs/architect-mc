@@ -6,7 +6,7 @@
 //     sets a face false next to its own block, so this is its fixed point);
 //   - pointed dripstone: `thickness` as SpeleothemBlock.calculateSpeleothemThickness (tip_merge where two opposing tips meet).
 // Plus the form's 2.5D column mask (§3.2) and its connected trim. Plan time only; pure and deterministic.
-import { hasTag, info, qualify } from '../blocks.mjs';
+import { BLOCKS, hasTag, qualify } from '../blocks.mjs';
 
 export const AIR = 'minecraft:air';
 const DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
@@ -23,12 +23,16 @@ export function isLog(s) {
   if (v === undefined) { v = hasTag(n, 'minecraft:logs'); logMemo.set(n, v); }
   return v;
 }
-/** Whether a state is a LeavesBlock (it has `distance` and `persistent`). */
+/**
+ * Whether a state is a LeavesBlock (it has `distance` and `persistent`). A block the vanilla table doesn't list (a mod's, such as
+ * Architect's construction crate in a survival stockpile read back from the world) is not leaves: the checker's M18 pass reads every
+ * written cell (batch v0.41.0: RS's half-built check met the crates).
+ */
 const leafMemo = new Map();
 export function isLeaves(s) {
   const n = nameOf(s);
   let v = leafMemo.get(n);
-  if (v === undefined) { const i = info(qualify(n)); v = 'distance' in i.props && 'persistent' in i.props; leafMemo.set(n, v); }
+  if (v === undefined) { const i = BLOCKS[qualify(n)]; v = !!i && 'distance' in i.props && 'persistent' in i.props; leafMemo.set(n, v); }
   return v;
 }
 /** The huge mushroom blocks (HugeMushroomBlock: six boolean faces). */
