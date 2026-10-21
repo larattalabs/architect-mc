@@ -23243,3 +23243,49 @@ in `Realised` and `RealisedRecords`.
   composed hashes, the independent re-read: 382 cells and 94 extras, 0 wrong); rp-crash 14/0 (RP1+save, RP2+save, K2+save, RG4+save,
   K4+save, RP1: every region PLACED and its record verified, every record committed, 0 unrecorded; RG4+save's PLACING leftover
   recorded). Earlier runs found the two crash bugs §6 now handles (a reused site id after RP1; a tile written twice after RG4/K4).
+
+## Patch v0.40.1 as integrated (undo hardening A + UMT, drain holders, lamp path, RP; API 1.37.0, mod 0.40.1, kit 0.38.0, catalogue 9; branch `release/0.40.1`, recorded 2026-10-21)
+
+**What the patch does, in plain words:**
+- **Undo hardening A** (`fix/undo-a` 18dc8277). Removals and restarts after a crash no longer leave builds stuck or half back:
+  - F1: two stacked sites removed top first now both settle after a restart.
+  - F4: a group removal killed inside its undo commit is planned again instead of ending as done with nothing written; a single
+    large or road removal has the same guard (R1q).
+  - F6: a restart after a crash mid group removal no longer brings back members that were already removed; the removal finishes
+    them (roll forward).
+- **UMT, the undo model tester** (`docs/UMT.md`). The real journal, undo, settle and evidence code run against an in-memory world,
+  offline: targeted properties, a CI fuzz with a pinned baseline, a long fuzz at release, and a repro per open finding.
+- **Lamp path** (`fix/lamp-path`, inside undo-a). No road lamp on a dirt path, and a journaled dirt path that turned to dirt still
+  counts as ours, so the removal puts the grass back.
+- **Drain holders** (`fix/drain-holders` 4c3aee4a). Removing a region (or an irrigated lot) no longer drains away a later site's
+  waterlogged block standing in one of its water sources: the drain leaves cells another journal entry holds on top. A group
+  removal stopped between its undo commit and the queue save resumes from the journal.
+- **RP, realised provenance** (`feat/realised-provenance` 7eccaddd). Each realised tile writes a record (ARPR v1) of what
+  happened to every cell and why (written, already there, held, a player's build, a failed condition, a fluid gate), readable and
+  verifiable through `dev.region.realised`. See "Slice RP" above.
+- **Two fixes made at integration:**
+  - **RegionHash diff with `exclude`.** The gate's region diff skipped an excluded cell without reading that cell's snapshot entry,
+    so every later cell was compared with the one before it. It now reads the entry first; a snap holds every cell of the box,
+    excluded or not (no gate passes `exclude` to snap or diff today, so no stored snap changes meaning). `RegionHashExcludeTest`
+    fails with the old order. The ticket moved to a holder class (`RegionHash.Ticket`) so the cell code loads in unit tests.
+  - **UMT's DRAIN repro now uses the production holders.** `UmtDrain.drain` takes the region's dimension and group and asks
+    `RegionFluids.Holders` over the UMT's journal, as `removalGate` does. The repro passes and moved to `UmtPropertiesTest`
+    (`docs/UMT.md`: DRAIN fixed). The UMT CI pin is unchanged (no fuzz generator uses the drain).
+
+**Merges** (`--no-ff` over origin/main 39051928, in this order): `fix/undo-a`, then `fix/drain-holders` (only its test and gate
+commits were new: 602aecd8's holders gates without `exclude` and with the stair's cell filtered, h-holders back on the no-lava
+`h_core_demo`, the HANDOFF file deleted), both clean; then `feat/realised-provenance`, one conflict:
+
+| Where | Resolution |
+|---|---|
+| `JournalDev` `dev.journal.killAt` | Both sides added kill points. Kept the union: undo-a's `R2q`, `R1q` (each with or without `+save`) and `GW`, and RP's `RP1`, `RP2`; the description lists them all. RP's regex form (`(...)(\+save)?`) was kept, so `D1`-`D6` also take `+save` (RP's side; undo-a allowed it on D7 and D8 only). |
+| `mod/gradle.properties` | Both sides set `mod_version=0.40.1`: identical, merged clean. |
+| `RegionFluids`, `tools/gate-chains.json`, `docs/DEVBRIDGE.md` | Changed on both sides in different places (undo-a's drain target and holders; RP's realised body rows, its gate steps, chain `6crp` and impact rule): merged clean, both kept. |
+
+**Versions:** `node tools/release-version.mjs --api 1.37.0 --mod 0.40.1 --kit 0.38.0`: every constant already at those values, 0
+placeholders stamped, the three kit-tracking goldens re-plan byte for byte; `--check` consistent. API 1.37.0 and kit 0.38.0 are
+v0.40.0's (no API member or plan output changed: RP's kit change is an opt-in `writers` option on `evalTile`, off by default,
+the payload and its sha unchanged); catalogue 9 unchanged.
+
+**Deferred to undo hardening B** (PLAN.md, top): after RG4+save the tile re-runs and its first entry stays PLACING (RP's
+`placingLeftover`).
