@@ -210,12 +210,6 @@ export async function buildFx(ctx, G, tag, name, { crates = 4, fraction = 0.5, c
   if (out.bodies.length) check(out.bodies.every((b) => b.state === 'settled'), `(${tag}): every body settled with its census after its barrier (${json(out.bodies)})`);
   if (C) await C.point('built');
   const bills = G.billsOf(ck, rs);
-  // (the region whole: the targets' bills plus what the bodies charge when they are written, a lava bucket per source and a grate's
-  // iron bars (RegionFluids' charges, not a target's bill): the check's cost.bom counts both)
-  const charged = {};
-  for (const a of ck.check?.parts ?? []) for (const [it, n] of Object.entries(a.cost?.survival?.charged ?? {})) charged[it] = (charged[it] ?? 0) + n;
-  bills.got.__region__ = G.plus(bills.got.__region__, charged);
-  bills.charged = charged;
   const differ = Object.keys({ ...bills.want, ...bills.got }).filter((p) => p in bills.want && !G.same(bills.want[p], bills.got[p]));
   out.bills = { ...bills, differ };
   check(differ.length === 0, `item 3 (${tag}): the check's cost.survival.bom against the targets' bills put down: ${differ.length ? `${differ.length} part(s) differ: ${differ.map((p) => `${p} ${json(G.minus(bills.want[p], bills.got[p]))}`).join('; ')}` : 'equal, item for item, for every part and the region whole'}`, bills);

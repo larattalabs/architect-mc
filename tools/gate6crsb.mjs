@@ -335,9 +335,14 @@ steps.rs03stop = async () => {
   await stopClient();
   await startClient(s.world, { backend: 'sim' });
   await ensure();
-  await L.settle(5000);
+  // (the targets rescan their cells as their chunks load: wait, feeding nothing, until the build reads as before or a minute passes)
+  let rs1 = null;
+  for (let k = 0; k < 30; k++) {
+    await L.settle(2000);
+    rs1 = await G.rsState(ctx, region);
+    if (rs1.build?.percent === rs0.build?.percent) break;
+  }
   const p1 = await C.point('after the restart');
-  const rs1 = await G.rsState(ctx, region);
   out.resumed = { percent: rs1.build?.percent, targets: (rs1.targets ?? []).length };
   check(G.exact(p0) && G.exact(p1) && rs1.build?.percent === rs0.build?.percent, `item 11 (rs03): a clean stop and a restart: the build resumes where it stood (${rs0.build?.percent}% -> ${rs1.build?.percent}%), the per-item sum exact before and after (${json(p0.diff)}, ${json(p1.diff)})`);
   const f2 = await R.feed(ctx, G, region, { cons: C, fraction: 0.5 });
