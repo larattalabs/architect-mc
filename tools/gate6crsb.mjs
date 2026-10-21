@@ -109,7 +109,10 @@ steps.start = async () => {
   execFileSync('git', ['-C', L.RUN, 'checkout', '-q', '--detach', head]);
   execFileSync('npm', ['run', 'build'], { cwd: path.join(L.RUN, 'sidecar'), stdio: 'ignore' });
   await startClient(process.argv[3] ?? 'G6B RSb Lobby', { backend: 'sim' });
-  const pids = L.clientPids();
+  // (the slot held by the headless host, which outlives a server it relaunches; else the server)
+  let pids = [];
+  try { pids = execFileSync('pgrep', ['-f', `${path.basename(L.RUN)}/tools/run-headless-server.mjs`]).toString().trim().split(/\s+/).filter(Boolean).map(Number); } catch { pids = []; }
+  if (!pids.length) pids = L.clientPids();
   if (pids.length) withMutex(() => fs.writeFileSync(path.join(SLOTS, `slot-${slot}.json`), JSON.stringify({ pid: pids[0], worktree: root, chain: 'rs-b (headless server)', startedAt: new Date().toISOString() })));
   spendZero();
   return { head, slot, pids };
