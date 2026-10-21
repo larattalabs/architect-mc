@@ -19,6 +19,8 @@
 //                                  without (exact both ways), one credit; E-flat 0
 //     rs04crash                    item 11's tunnel row: rs04 half built, an autosave, kill -9 and a cold start: the targets resume from
 //                                  the world, the rest fed: built, no bore cell open on the way, equal to its twin, E-flat 0
+//     rs03stop                     item 11's body row: rs03 half built (its bodies waiting for their barriers), a clean stop and a
+//                                  restart: resumed, PLACED and built, every body settled, the sum exact, twin 0, E-flat 0
 //     brush                        item 13's last row: a concrete-pattern stroke refused NOT_ALLOWED, a natural stroke free (0 items)
 //     report                       REPORT.md over the step JSONs
 //   Item 16's rows (hy-ingame, irr-ingame, h-ingame, ha-ingame, kc-ingame) run through tools/gate-run.mjs (HANDOFF-RSb.md has the line).
@@ -74,7 +76,7 @@ function spendZero() {
 // ------------------------------------------------------------------ the machine slot (docs/GATES.md "Slot lock"), held by the server's pid
 
 const SLOTS = path.resolve(process.env.GATE_SLOTS_DIR ?? path.resolve(root, '..', '.gate-slots'));
-const NSLOTS = Number(process.env.GATE_SLOTS ?? 3);
+const NSLOTS = Number(process.env.GATE_SLOTS ?? (() => { try { return JSON.parse(fs.readFileSync(path.join(root, 'tools', 'gate-chains.json'), 'utf8')).slots?.max; } catch { return null; } })() ?? 3);
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 const readSlot = (i) => { try { return JSON.parse(fs.readFileSync(path.join(SLOTS, `slot-${i}.json`), 'utf8')); } catch { return null; } };
 function withMutex(fn) {
@@ -306,6 +308,56 @@ steps.rs04crash = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ rs03: a clean stop while the bodies wait (item 11's body row)
+
+steps.rs03stop = async () => {
+  await ensure();
+  const fx = G.fixture(ctx, 'rs03_water');
+  const entries = R.entriesOf(fx);
+  const T = await R.twin(ctx, G, 'rs03s', fx, entries);
+  const s = await G.site(ctx, 'rs03 stop', fx);
+  await G.designs(ctx);
+  const box = G.boxOf(s.W);
+  const pre = await G.snap(ctx, box, 'rsb-rs03s-pre');
+  const ck = await G.check(ctx, 'rs03-stop', s);
+  const crateAt = await G.pile(ctx, s, 4);
+  const C = new G.Conservation(ctx, box);
+  await C.start();
+  const region = await G.realise(ctx, ck.check.artifactSha, entries);
+  // fed in waves until about half the paid cells stand: the fluids stage then waits for its barriers (every target BUILT)
+  const f1 = await R.feed(ctx, G, region, { cons: C, fraction: 0.25, until: (st, rs) => (rs.build?.percent ?? 0) >= 50 && !rs.build?.done });
+  const st0 = f1.last.st, rs0 = f1.last.rs;
+  const bodies0 = R.bodiesOf(st0);
+  const out = { region, world: s.world, before: { state: st0.view.state, waiting: st0.view.waiting ?? null, percent: rs0.build?.percent, bodies: bodies0 } };
+  check(st0.view.state === 'PLACING' && !bodies0.some((b) => b.state === 'settled'), `item 11 (rs03): mid-build, the bodies wait for their barriers: ${st0.view.state}, ${rs0.build?.percent}% built, waiting ${json(st0.view.waiting ?? null).slice(0, 200)}, bodies ${json(bodies0).slice(0, 300)}`);
+  const p0 = await C.point('before the stop');
+  // the clean stop (the server saves and quits), then the same world again
+  await stopClient();
+  await startClient(s.world, { backend: 'sim' });
+  await ensure();
+  await L.settle(5000);
+  const p1 = await C.point('after the restart');
+  const rs1 = await G.rsState(ctx, region);
+  out.resumed = { percent: rs1.build?.percent, targets: (rs1.targets ?? []).length };
+  check(G.exact(p0) && G.exact(p1) && rs1.build?.percent === rs0.build?.percent, `item 11 (rs03): a clean stop and a restart: the build resumes where it stood (${rs0.build?.percent}% -> ${rs1.build?.percent}%), the per-item sum exact before and after (${json(p0.diff)}, ${json(p1.diff)})`);
+  const f2 = await R.feed(ctx, G, region, { cons: C, fraction: 0.5 });
+  const st = f2.last.st, rs = f2.last.rs;
+  out.after = { state: st.view.state, build: rs.build && { done: rs.build.done, percent: rs.build.percent }, bodies: R.bodiesOf(st) };
+  check(st.view.state === 'PLACED' && rs.build?.done && out.after.bodies.length > 0 && out.after.bodies.every((b) => b.state === 'settled'), `item 11 (rs03): resumed to PLACED and built, every body settled after its barrier (${json(out.after.bodies).slice(0, 300)})`);
+  const p2 = await C.point('built');
+  const d = await G.twinDiff(ctx, T.box, T.file, crateAt);
+  out.twin = d.mismatches;
+  check(d.mismatches === 0 && G.exact(p2), `item 11 (rs03): equal to its INSTANT twin (${d.mismatches} differ), the sum exact (${json(p2.diff)})`, d.list);
+  await G.remove(ctx, region);
+  const p3 = await C.point('removed');
+  const e = await G.diff(ctx, box, pre);
+  const ef = e.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
+  out.eflat = ef.length;
+  out.conservation = C.points;
+  check(ef.length === 0 && G.exact(p3), `item 11 (rs03): removed: E-flat ${ef.length}, the sum exact (every bucket scooped back: ${json(p3.diff)})`, ef.slice(0, 8));
+  return out;
+};
+
 // ------------------------------------------------------------------ ice caps (N-RS-4)
 
 steps.ice = async () => {
@@ -440,7 +492,7 @@ steps.brush = async () => {
 // ------------------------------------------------------------------ dispatch
 
 steps.report = async () => {
-  const files = fs.readdirSync(OUT).filter((f) => /^(unit|rs04|rs04half|rs04crash|ice|lava|brush)\.json$/.test(f)).sort();
+  const files = fs.readdirSync(OUT).filter((f) => /^(unit|rs04|rs04half|rs04crash|rs03stop|ice|lava|brush)\.json$/.test(f)).sort();
   const lines = ['# Slice RS-b gate report', '', `${new Date().toISOString()} · head ${execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim()}`, ''];
   let fail = 0;
   for (const f of files) {
@@ -458,7 +510,7 @@ steps.report = async () => {
   return { files, fail };
 };
 
-const groups = { ingame: ['rs04', 'rs04half', 'ice', 'lava', 'brush'], crash: ['rs04crash'] };
+const groups = { ingame: ['rs04', 'rs04half', 'ice', 'lava', 'brush'], crash: ['rs04crash', 'rs03stop'] };
 const name = process.argv[2];
 if (!name || (!steps[name] && !groups[name])) {
   console.error(`usage: node tools/gate6crsb.mjs ${[...Object.keys(steps), ...Object.keys(groups)].join('|')}`);
