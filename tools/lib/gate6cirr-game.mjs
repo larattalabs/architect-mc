@@ -567,7 +567,7 @@ export async function holders(ctx) {
   const d1 = await L.call('dev.region.hash', { box: o.box, mode: 'diff', file: o.file, exclude: [ex] }, 4 * 3_600_000);
   out.regionRemoved = { state: rm.state, stair: st.v, mismatches: d1.mismatches, sample: (d1.list ?? []).slice(0, 12) };
   check(rm.state === 'REMOVED' && st.ok && d1.mismatches === 0, `irr-holders: then Regions.remove: ${rm.state}, the stair still stands (${st.v}), E-flat ${d1.mismatches} outside its cell`, out.regionRemoved.sample);
-  const g = await apitest(ctx, `remove ${placed.siteId} - noforce`, `remove:${placed.siteId}:-:noforce`);
+  const g = await apitest(ctx, `remove ${placed.siteId} - force`, `remove:${placed.siteId}:-:force`); // (force: its owner is not the player)
   await sleep(2000);
   const d2 = await core.diff(ctx, o.box, o.file);
   out.stairRemoved = { result: g, mismatches: d2.mismatches, sample: d2.sample };
