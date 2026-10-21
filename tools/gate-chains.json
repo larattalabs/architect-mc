@@ -188,7 +188,7 @@
     "6cirr": ["irr-unit", "irr-ingame", "irr-crash"],
     "6cirr-look": ["irr-look"]
   },
-  "slots": { "$comment": "Machine-wide gate-run slots (docs/GATES.md): at most max runs at once; --slots N overrides.", "max": 6 },
+  "slots": { "$comment": "Machine-wide gate-run slots (docs/GATES.md): at most max runs at once; --slots N overrides.", "max": 4 },
   "shards": {
     "$comment": "--shards N (at most max). Each shard has its own run worktree (shard 1: --run-dir/GATE_RUN_DIR; shard k: <run dir>-s<k>, or --run-dirs) and port pair (--ports S:D,S:D,... / GATE_PORTS; no default for shards 2..: name them, several agents share the machine). 8892-8895 are never a shard's: the gates' old-version clients and eval sidecars use them.",
     "max": 3
