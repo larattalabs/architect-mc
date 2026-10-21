@@ -950,4 +950,14 @@ Top first. Not fixed in v0.40.1.
 | Scenario | Approved | Evidence | Gallery | Recorded |
 |---|---|---|---|---|
 | S2, the ice-spike outpost (v0.31.0) | Noah, in chat with the coordinator, 2026-10-14T04:39:12Z | `932dafe971f1` | https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG (section S2) | here by slice S3 (2026-10-20), from `artifacts/scenarios/6c/s2/approvals.json` (CONTRACT S3 §9 item 9) |
-| S3 v1, the terraced monastery | pending (Noah) | `39d6ddb1bbf3` (natural run 20261021-041532, slice tier 20261021-040412) | https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG (section S3 v1) | |
+| S3 v1, the terraced monastery | Noah, in chat with the coordinator, 2026-10-21 (bar 16) | `39d6ddb1bbf3` (natural run 20261021-041532, slice tier 20261021-040412) | https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG (section S3 v1) | here at the batch v0.41.0 integration (2026-10-21) |
+
+## Queued from RS (moved from HANDOFF-RS.md and HANDOFF-RSb.md at the batch v0.41.0 integration, 2026-10-21)
+
+- **RS item 14: rs02 on S3's natural claim in survival** (E-normal by S3 §6's classes). It waited for S3, which is in this batch;
+  `tools/gate6crs.mjs` lists it as not built (the `survival` group's comment).
+- **The gate3 survival and Hardcore steps** (a GUI p3 client) were not run for RS-a. A Hardcore world now realises regions in
+  survival (mode by world); "Hardcore unchanged" needs gate3's hardcore step green on a release with RS.
+- Done here, no longer queued: RP's provenance for survival targets (HANDOFF-RS "Follow-ups", HANDOFF-RSb "Open"). Each target's
+  cells are UNFINISHED at put-down and WRITTEN, with the target's site listed, once it is built (CONTRACT "Batch v0.41.0 as
+  integrated").
