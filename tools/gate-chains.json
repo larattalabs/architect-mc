@@ -189,7 +189,7 @@
     "6chy": ["hy-unit", "hy-ingame", "hy-crash", "hy-natural", "hy-cold"],
     "6chy-look": ["6chy-look"],
     "6ckc": ["kc-unit", "kc-ingame"],
-    "6cs3-dev": ["6c-scenario-s3-dev"],
+    "6cs3-dev": ["6c-scenario-s3-dev"], "6cs3-scn": ["6c-scenario-s3"],
     "6cs3": ["s3-unit", "s3-plan", "6c-scenario-s3"],
     "6cirr": ["irr-unit", "irr-ingame", "irr-crash"],
     "6cirr-look": ["irr-look"]
