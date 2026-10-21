@@ -196,6 +196,10 @@ So in game, the rule leaves some noise to fail the hash, but never hides a miss.
   | farmland out of `StillOurs.spread` (pre-S-CU-3) | `p3_farmlandAndDirtAreInterchangeable`, fuzz `p3` and `all` |
   | `lit` out of `StillOurs.VOLATILE` | `p3_volatilePropertiesStayOursAndAFacingIsThePlayers` |
   | fix/lamp-path's `pathTurned` applied | `UmtFindingsTest.lp_*` turns green, and the fuzz's [LP] count drops to 0 |
+- **The in-game groups P1 moved off the slice tier** (`UmtGateMovesTest`, docs/GATES.md "Fast checks P1"): 4e-orders' 24 orders,
+  the group removal and 6 orders with L over gate4e's layered fixture (exact, no leak, settled at the next start); 4e-crash's K1,
+  K2, K4, K5, K6 and K8 (the state after the start, then an exact removal); 4d's and 6a's stage undos and one lot's undo; c30's
+  staged group placed and removed 12 times.
 - **The R2-R4 crash window:**
   - after a durable R2 (K6), mid-R4 (K7) and after R4 (R5), single and group, a region among them: exact
     (`r2r4_killAfterTheDurableUndoAndMidWritesRecovers`);
