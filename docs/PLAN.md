@@ -874,6 +874,8 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
 
 ## Queued (coordinator, 2026-10-20)
 
+- **pt2-ingame item 13 fails on main:** VOC-c appended `Reason.PALETTE` after `ADOPT_REFUSED`, so the check that
+  ADOPT_REFUSED is the last Reason is stale. Make the check order-independent. Fix in the 6c close-out.
 - **Stale asks tables after VOC-c** (found by the release-tool run): h-unit and ha-unit fail H-a item 10, and vocc-unit fails
   VOC-c item 3, because `rule.palette` became supported. Re-cut the tables (vocc's "after" table already matches) and fold them
   into the 6c close-out with Steward's 12 re-recorded asks.
