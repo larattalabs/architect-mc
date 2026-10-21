@@ -297,13 +297,17 @@ steps.natural = async () => {
 async function groveGolden(name, survey, claim) {
   const { planRegion } = await imp('lib/region/plan.mjs');
   const { tileShas } = await import('./scenarios.mjs');
-  const p = await planRegion({ programFile: path.join(KIT, 'regions', 'grove_demo.mjs'), params: {}, survey, claim, roles: {}, node: 'golden' });
+  const p = await planRegion({ programFile: path.join(KIT, 'regions', 'grove_demo.mjs'), params: {}, survey, claim, roles: {}, node: process.versions.node.split('.')[0] });
+  // (the IR records the Node major, as the other goldens: tools/release-version.mjs re-plans with it)
   const dir = path.join(root, 'scenarios', 'goldens', name);
   fs.mkdirSync(path.join(dir, 'blobs'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'ir.json'), p.irJson);
   fs.writeFileSync(path.join(dir, 'survey.bin'), survey);
   fs.writeFileSync(path.join(dir, 'meta.json'), `${JSON.stringify(p.meta, null, 1)}\n`);
-  for (const [k, b] of p.blobs) fs.writeFileSync(path.join(dir, 'blobs', `${k}.bin`), b);
+  // only the blobs the IR names (tools/release-version.mjs compares the set); a stale one left from an earlier cut is removed
+  const named = new Set(Object.values(p.ir.blobs ?? {}).map((b) => b.sha).filter(Boolean));
+  for (const f of fs.readdirSync(path.join(dir, 'blobs'))) if (!named.has(f.replace(/\.bin$/, ''))) fs.unlinkSync(path.join(dir, 'blobs', f));
+  for (const [k, b] of p.blobs) if (named.has(k)) fs.writeFileSync(path.join(dir, 'blobs', `${k}.bin`), b);
   const t = await tileShas(dir);
   fs.writeFileSync(path.join(root, 'scenarios', 'goldens', `${name}.json`), `${JSON.stringify({ scenario: 'grove_demo', variant: name.endsWith('_flat') ? 'flat' : 'natural', version: 0, note: `tile shas of grove_demo planned by the kit over ${name.endsWith('_flat') ? 'its flat claim' : 'its forest site\'s own survey (the f3-natural check\'s)'}, 1 worker = 4 workers shuffled; inputs in goldens/${name}/`, irSha: t.irSha, kitVersion: p.ir.kitVersion, cells: t.cells, tiles: t.tiles }, null, 1)}\n`);
   check(t.workersSame, `golden: ${name} cut: IR ${t.irSha.slice(0, 12)}, ${Object.keys(t.tiles).length} tiles, ${t.cells} cells, 1 worker = 4 workers shuffled`);

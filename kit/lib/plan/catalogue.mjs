@@ -5,7 +5,7 @@
 import { PLAN_SCHEMA, SCHEMA_VERSION } from './schema.mjs';
 import { KIT_VERSION } from '../region/plan.mjs';
 
-/** The Java API this kit's catalogue belongs to (6c F3's placeholder 1.39.0, set at merge; a mod test holds it to ArchitectApi.VERSION). */
+/** The Java API this kit's catalogue belongs to (6c F3's placeholder 1.39.0; set at merge by tools/release-version.mjs; a mod test holds it to ArchitectApi.VERSION). */
 export const PLAN_API = '1.39.0';
 
 /** The catalogue as checks return it. */
