@@ -244,6 +244,151 @@ class UmtPropertiesTest {
 		}
 	}
 
+	/**
+	 * (F1, fixed) Two stacked sites removed upper first, then lower, then a start: the upper's undo wrote the lower's blocks, and the
+	 * lower's undo has since written the ground there. Sites.evidence reads the later undo of the cell's holder below, so the upper
+	 * settles as restored: no record and no journal entry is left, and the world is exact. Also with a lot over a site and a site over
+	 * a tile (a BOX entry over a CELL one).
+	 */
+	@Test
+	void f1_aStackedPairRemovedTopDownSettles() throws Exception {
+		for (int variant = 0; variant < 3; variant++) {
+			try (UmtCase c = UmtCase.of(w -> {
+			})) {
+				UmtSim.Rec lower = variant == 2 ? c.sim.cells(UmtOps.Kind.TILE, 0, cells(p(1, G, 1), Blocks.COBBLESTONE, p(2, G, 2), Blocks.COBBLESTONE, p(3, G,
+					3), Blocks.DIRT_PATH)) : c.site(0, G, 0, 5, G + 2, 5, Blocks.STONE_BRICKS.defaultBlockState(), Map.of(), 0);
+				UmtSim.Rec upper = c.site(1, G, 1, 4, G + 3, 4, Blocks.OAK_PLANKS.defaultBlockState(), Map.of(), variant == 1 ? 1 : 0);
+				c.sim.remove(upper, null);
+				if (lower.kind == UmtOps.Kind.TILE) {
+					c.sim.removeGroup(List.of(lower), null);
+				} else {
+					c.sim.remove(lower, null);
+				}
+				c.sim.restart(false);
+				assertTrue(c.sim.recs.isEmpty(), "variant " + variant + ": pending records left: " + c.sim.recs.values() + "; kept on " + c.sim.kept + "\n"
+					+ c.sim.report());
+				assertTrue(c.sim.store.index().entries().isEmpty(), "variant " + variant + ": journal entries left: " + c.sim.store.index().entries().keySet());
+				exact(c.sim.end());
+			}
+		}
+	}
+
+	/**
+	 * (F4, fixed) A kill inside a group removal's R2 commit (the K8 window: files written, index not): Groups.committed had saved the
+	 * removal with its undo group. Groups.Removal.fromJson finds that group in no journal entry and plans the removal again, so the
+	 * resumed removal restores every member and the end is exact. Each I/O step of the commit (the last, after the index: durable, the saved
+	 * group kept), with and without an autosave.
+	 */
+	@Test
+	void f4_aGroupRemovalKilledInsideR2IsPlannedAgain() throws Exception {
+		for (String step : new String[] {"write", "move", "index", "committed"}) {
+			for (boolean save : new boolean[] {false, true}) {
+				try (UmtCase c = UmtCase.of(w -> {
+				})) {
+					UmtSim.Rec t = c.sim.cells(UmtOps.Kind.TILE, 1, cells(p(1, G, 1), Blocks.COBBLESTONE, p(2, G, 1), Blocks.DIRT_PATH));
+					UmtSim.Rec s = c.site(3, G, 3, 5, G + 2, 5, Blocks.OAK_PLANKS.defaultBlockState(), Map.of(), 1);
+					try {
+						c.sim.removeGroup(List.of(t, s), new UmtOps.Crash("R2", step, 0, save));
+					} catch (UmtSim.Halt h) {
+						c.sim.restart(true);
+					}
+					List<String> v = new ArrayList<>(c.sim.end().stream().filter(x -> !x.startsWith("[UC] ")).toList());
+					if (!v.isEmpty()) {
+						v.add(0, "R2 " + step + " save " + save + "\n" + c.sim.report());
+					}
+					exact(v);
+				}
+			}
+		}
+	}
+
+	/**
+	 * (F6 hazard, crash-safety review) An unclean stop during a group removal's writes, the world back at an autosave before the
+	 * removal: a member already written (out of the saved removal's sites, so the settle judges it) shows its blocks again and settles
+	 * RECOVER. Its reactivation must not take back the members the resumed removal is still writing (the removal would write their
+	 * restore over ACTIVE entries); the members stay pending while the removal is persisted, and a RECOVER takes back only the members
+	 * whose own evidence stands. Three side-by-side members (a tile among them), the stop at each member.
+	 */
+	@Test
+	void f6_aRecoverNeverReactivatesMembersOfAResumingRemoval() throws Exception {
+		for (int n = 0; n < 3; n++) {
+			for (boolean tileFirst : new boolean[] {false, true}) {
+				try (UmtCase c = UmtCase.of(w -> {
+				})) {
+					List<UmtSim.Rec> members = new ArrayList<>();
+					UmtSim.Rec t = null;
+					if (tileFirst) {
+						t = c.sim.cells(UmtOps.Kind.TILE, 1, cells(p(6, G, 6), Blocks.COBBLESTONE, p(7, G, 6), Blocks.DIRT_PATH));
+					}
+					members.add(c.site(0, G, 0, 1, G + 2, 1, Blocks.OAK_PLANKS.defaultBlockState(), Map.of(), 1));
+					members.add(c.site(3, G, 0, 4, G + 2, 1, Blocks.STONE_BRICKS.defaultBlockState(), Map.of(), 1));
+					if (!tileFirst) {
+						t = c.sim.cells(UmtOps.Kind.TILE, 1, cells(p(6, G, 6), Blocks.COBBLESTONE, p(7, G, 6), Blocks.DIRT_PATH));
+					}
+					members.add(t);
+					c.sim.world.autosave();
+					try {
+						c.sim.removeGroup(members, new UmtOps.Crash("K7", null, n, false));
+					} catch (UmtSim.Halt h) {
+						String g = SiteJournal.lastGroup(members.get(0).id);
+						c.sim.restart(true);
+						// the resumed removal kept its undo group: no member was taken back and planned again under another group
+						for (UmtSim.Rec m : members) {
+							String now = SiteJournal.lastGroup(m.id);
+							assertTrue(now == null || now.equals(g), "K7 n " + n + " tileFirst " + tileFirst + ": " + m.id + " was taken back from " + g
+								+ " while its removal was queued (now " + now + ")\n" + c.sim.report());
+						}
+					}
+					List<String> v = new ArrayList<>(c.sim.end().stream().filter(x -> !x.startsWith("[UC] ")).toList());
+					if (!v.isEmpty()) {
+						v.add(0, "K7 n " + n + " tileFirst " + tileFirst + "\n" + c.sim.report());
+					}
+					exact(v);
+				}
+			}
+		}
+	}
+
+	/**
+	 * (F6, fixed; was UmtFindingsTest's repro) Sites.reconcile settles each pending site on its own evidence; a RECOVER takes back
+	 * only the members whose own evidence stands (Sites.recoverScope), so a member whose cells show it removed is not brought back.
+	 */
+	@Test
+	void f6_oneMembersRecoverTakesBackOnlyStandingMembers() throws Exception {
+		UmtRunner.Result r = UmtRunner.run(new UmtOps.Scenario(1991L, List.of(new UmtOps.Place(UmtOps.Kind.SITE, 27, 26, 9, 3, 3, 5368466833381451274L, 1,
+			null), new UmtOps.Restart(), new UmtOps.Place(UmtOps.Kind.TILE, 28, 29, 7, 7, 6, -4780181343283276411L, 1, null), new UmtOps.RemoveGroup(1, null),
+			new UmtOps.Place(UmtOps.Kind.LOT, 23, 28, 9, 5, 6, 3259127719780762313L, 0, null), new UmtOps.Place(UmtOps.Kind.LOT, 26, 16, 2, 4, 6,
+				-2838765659432227269L, 2, new UmtOps.Crash("P3", "index", 20, false))), UmtOps.Gen.ALL));
+		assertTrue(r.violations().stream().noneMatch(v -> v.startsWith("[F6]")), r.report());
+	}
+
+	/** (F4) Groups.Removal.fromJson, production: a saved undo group the journal has is kept; one it never got is dropped (planned again). */
+	@Test
+	void f4_aSavedRemovalFollowsTheJournalsCommit() throws Exception {
+		try (UmtCase c = UmtCase.of(w -> {
+		})) {
+			UmtSim.Rec s = c.site(1, G, 1, 3, G + 2, 3, Blocks.OAK_PLANKS.defaultBlockState(), Map.of(), 1);
+			c.sim.removeGroup(List.of(s), null);
+			String committed = SiteJournal.lastGroup(s.id);
+			assertNotNull(committed, "the group removal's undo is in the journal");
+			for (String undo : new String[] {committed, "u:group-never:1"}) {
+				com.google.gson.JsonObject o = com.google.gson.JsonParser.parseString("{\"group\":\"g\",\"sites\":[\"" + s.id + "\"],\"force\":false,"
+					+ "\"started\":true,\"waited\":0,\"refund\":{},\"undo\":\"" + undo + "\",\"undoSites\":[\"" + s.id + "\"],\"handed\":{\"" + s.id
+					+ "\":3},\"restoredCells\":7}").getAsJsonObject();
+				Groups.Removal r = Groups.Removal.fromJson(o);
+				if (undo.equals(committed)) {
+					assertEquals(committed, r.undo);
+					assertEquals(List.of(s.id), r.undoSites);
+					assertEquals(7, r.restoredCells);
+				} else {
+					assertEquals(null, r.undo, "an undo group the journal never got is planned again");
+					assertTrue(r.undoSites.isEmpty() && r.handed.isEmpty() && r.restoredCells == 0);
+					assertEquals(List.of(s.id), r.sites, "its sites stay to be removed");
+				}
+			}
+		}
+	}
+
 	// ------------------------------------------------------------------ P5: accounting
 
 	/**

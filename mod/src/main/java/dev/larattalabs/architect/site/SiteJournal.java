@@ -1084,8 +1084,17 @@ public final class SiteJournal {
 	 * was handed ({@link Sections#reactivate}).
 	 */
 	static void reactivate(String group) throws IOException {
+		reactivate(group, null);
+	}
+
+	/**
+	 * {@link #reactivate(String)} of only the group's entries whose site is in {@code sites} (null: all). (F6) The settle takes back
+	 * only the members whose own cells show them; the others stay undone and settle on their own evidence.
+	 */
+	static void reactivate(String group, @Nullable Set<String> sites) throws IOException {
 		JournalStore s = WorldJournal.store();
-		List<JournalStore.Meta> members = s.find(m -> m.status() == Status.UNDONE && group.equals(m.undoGroup()));
+		List<JournalStore.Meta> members = s.find(m -> m.status() == Status.UNDONE && group.equals(m.undoGroup()) && (sites == null || sites.contains(m
+			.site())));
 		if (members.isEmpty()) {
 			return;
 		}
@@ -1110,7 +1119,9 @@ public final class SiteJournal {
 			}
 			slices.put(k, l);
 		}
-		Map<String, Map<Long, List<Cell>>> back = Sections.reactivate(sections, slices::get, group);
+		Set<String> ids = new java.util.HashSet<>();
+		members.forEach(m -> ids.add(m.id()));
+		Map<String, Map<Long, List<Cell>>> back = Sections.reactivate(sections, slices::get, group, ids::contains);
 		JournalStore.Txn t = s.begin().label("settle:reactivate:" + group);
 		for (var e : back.entrySet()) {
 			List<SectionCells> secs = new ArrayList<>();

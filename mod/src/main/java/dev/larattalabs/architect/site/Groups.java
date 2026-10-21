@@ -153,6 +153,17 @@ public final class Groups {
 				o.getAsJsonObject("handed").entrySet().forEach(e -> r.handed.put(e.getKey(), e.getValue().getAsInt()));
 				r.restoredCells = o.has("restoredCells") ? o.get("restoredCells").getAsInt() : 0;
 				r.keptCells = o.has("keptCells") ? o.get("keptCells").getAsInt() : 0;
+				if (!undoCommitted(r.undo)) {
+					// (F4) committed() saves the removal as its R2 commit is submitted, before it is durable: a stop inside that commit (K8)
+					// leaves an undo group the journal never got. As RestoreJob.fromJson does: not in the journal, so planned again (R1)
+					Architect.LOGGER.info("Group removal {}: its undo {} never reached the world journal (the game stopped inside the commit); it is "
+						+ "planned again", r.group, r.undo);
+					r.undo = null;
+					r.undoSites.clear();
+					r.handed = new TreeMap<>();
+					r.restoredCells = 0;
+					r.keptCells = 0;
+				}
 			}
 			if (o.has("dec")) {
 				o.getAsJsonObject("dec").entrySet().forEach(e -> {
@@ -167,6 +178,12 @@ public final class Groups {
 				o.getAsJsonObject("credit").entrySet().forEach(e -> r.decCredit.put(e.getKey(), Credit.fromJson(e.getValue().getAsJsonObject())));
 			}
 			return r;
+		}
+
+		/** Whether undo group {@code undo} reached the world journal (any entry of it, undone or settled since but kept). */
+		static boolean undoCommitted(String undo) {
+			var js = dev.larattalabs.architect.journal.WorldJournal.storeOrNull();
+			return js != null && !js.find(m -> undo.equals(m.undoGroup())).isEmpty();
 		}
 	}
 
@@ -631,6 +648,7 @@ public final class Groups {
 			// a road or cell site of the group: its cells over ticks
 			r.current = id;
 			Placement.add(server, RestoreJob.writing(id, r.undo, Map.of()));
+			killAfterAMember(r);
 			return;
 		}
 		ServerLevel level = s == null ? null : Sites.levelOf(server, s);
@@ -659,6 +677,17 @@ public final class Groups {
 		}
 		r.current = id;
 		Placement.add(server, RestoreJob.writing(id, r.undo, handedHere));
+		killAfterAMember(r);
+	}
+
+	/**
+	 * TEST kill point GW (F6 hazard, 4e-crash): a member's restore is written (out of the saved removal's sites) and the next member's
+	 * job is saved; nothing of the next is written yet. With no autosave since the removal began, the written member's blocks come back.
+	 */
+	private static void killAfterAMember(Removal r) {
+		if (r.sites.size() < r.undoSites.size()) {
+			dev.larattalabs.architect.journal.WorldJournal.kill("GW");
+		}
 	}
 
 	/** Sites whose undo writes were done in this session (a reload writes again only those not done). */

@@ -543,8 +543,25 @@ async function removeInOrder(world, ids, order, h0, label) {
     const ref = await hash(FIX_BOX, [], true);
     results[`${label} ${order.join('')} diff`] = { ok: false, data: diff(ref.list, now.list, 30) };
   }
+  const settled = refused ? true : await settledAtStart('G4E Ord', `${label} ${order.join('')}`);
   await leaveWorld();
-  return ok;
+  return ok && settled;
+}
+
+/**
+ * (undo hardening A, F1) The next world start settles every removal: no record left pending and no journal entry left. A stacked
+ * pair removed top-down (an upper site's undo wrote the lower's blocks, which the lower's removal then rewrote) used to stay pending
+ * at every start.
+ */
+async function settledAtStart(world, label) {
+  await leaveWorld();
+  await openWorld(world);
+  const st = await call('dev.sites.state');
+  const j = await journal();
+  const pending = (st.pending ?? []).map((p) => p.site?.id ?? p.id);
+  const entries = (j.entries ?? []).map((e) => `${e.id}:${e.site}:${e.status}`);
+  return check(pending.length === 0 && entries.length === 0, `${label}: the next start settles every removal (${pending.length} pending, ${entries.length} entries)`,
+    { pending, entries, reports: st.reports });
 }
 
 steps.orders = async () => {
@@ -561,6 +578,7 @@ steps.orders = async () => {
   const g = await result(await api(`sgremove ${b.done.group}`), 600_000);
   const hg = await hash(FIX_BOX);
   check(g.removed === true && hg.sha256 === h0, `orders: the group removal of all four is exact (${JSON.stringify(g).slice(0, 160)})`, { g, h: hg.sha256, h0 });
+  await settledAtStart('G4E Ord', 'orders group');
   await leaveWorld();
   // L: 6 random orders of five
   const idsL = { ...b.ids, L: b.L.siteId };
@@ -1825,6 +1843,54 @@ steps.crash = async () => {
       { before: r.disk.orphans, after: r.after.orphans });
     await finalExact('K8', pre);
     out.K8 = r;
+  }
+  // (undo hardening A, F4) K8 inside a GROUP removal's R2 commit (R hands down to L, layered over its edge): Groups.committed had saved
+  // the removal with its undo group; at the start Removal.fromJson finds the group in no entry and plans the removal again
+  const members = Object.values(ids);
+  r = await killRun('K8', 'G4E OrdBaseL', () => api(`sgremove ${ctx.orders.group}`), pre);
+  if (r) {
+    for (let i = 0; i < 180 && (await sites()).some((x) => members.includes(x.id)); i++) await sleep(1000);
+    const all = (await sites()).map((x) => x.id);
+    const j = await journal();
+    const live = (j.entries ?? []).filter((e) => members.includes(e.site) && e.status !== 'UNDONE');
+    check(!all.some((x) => members.includes(x)) && all.includes(ctx.orders.L) && live.length === 0,
+      `crash K8 group: the resumed group removal was planned again and took the four down, L stands (${JSON.stringify(all)}; ${live.length} member entries not undone)`,
+      { all, live, entries: j.entries });
+    await finalExact('K8-group', pre);
+    out.K8group = r;
+  }
+  // (undo hardening A, F6 hazard) GW: a group removal wrote its first member, saved the next one's job, then the JVM halted with no
+  // save since the removal began: the written member's blocks are back. The start must not take back the members the resumed removal
+  // is still writing (it keeps the written one pending until the removal ends); the start after that settles the group (a final removal is exact)
+  r = await killRun('GW', 'G4E OrdBase', async () => {
+    await cmd('/architect budget 1');
+    return api(`sgremove ${ctx.orders.group}`);
+  }, pre);
+  if (r) {
+    for (let i = 0; i < 180 && (await sites()).length; i++) await sleep(1000);
+    const left = (await sites()).map((x) => x.id);
+    const j1 = await journal();
+    const notUndone = (j1.entries ?? []).filter((e) => members.includes(e.site) && e.status !== 'UNDONE');
+    const st1 = await call('dev.sites.state');
+    const pend1 = (st1.pending ?? []).map((p) => p.site?.id);
+    check(left.length === 0 && notUndone.length === 0, `crash GW: the resumed removal finished, no member taken back meanwhile (${left.length} standing, `
+      + `${notUndone.length} member entries not undone; pending ${JSON.stringify(pend1)})`, { left, notUndone, pend1, reports: st1.reports });
+    await cmd('/architect budget 4');
+    await stopClient();
+    await startClient('G4E Crash');
+    await tp(48.5, 80, 30.5);
+    await settle(3000);
+    const back = (await sites()).map((x) => x.id);
+    const j2 = await journal();
+    const st2 = await call('dev.sites.state');
+    const pend2 = (st2.pending ?? []).map((p) => p.site?.id);
+    const stray = (j2.entries ?? []).filter((e) => !back.includes(e.site));
+    // the written member stands (its writes were lost); members stacked with it come back with it (Sites.recoverScope: the pad under
+    // all four ties them), so this checks the settle is consistent, not which came back
+    check(back.length >= 1 && pend2.length === 0 && stray.length === 0, `crash GW: the next start settles the group: ${JSON.stringify(back)} stand again, nothing `
+      + `pending, no entry without a record (${stray.length})`, { back, pend2, stray, reports: st2.reports });
+    await finalExact('GW', pre);
+    out.GW = r;
   }
   // K3, clean: a clean stop mid-placement resumes from the cursor
   await leaveWorld();

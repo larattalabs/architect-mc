@@ -99,8 +99,10 @@ delegates to:
   RoadPlan, the kit and IRR are not run.
 - Block entities are opaque NBT. There are no entities.
 
-- The F6 detection: which other group members a RECOVER brings back is worked out in `UmtSim` (a copy of the scope of
-  `SiteJournal.reactivate(group)`, to name the finding). The reactivation itself is real.
+- The F6 guard: `UmtSim` checks each member a RECOVER takes back (production `Sites.recoverScope`) against that member's own
+  evidence, to name the residual F6. The scope and the reactivation are real.
+- The order of the settle loop: sites and lots first, then roads, tiles and cell sites, each in the order they went pending (by
+  their undo's time), as `Sites.reconcile` and `Infras.pendingAll` run them.
 
 ## The vanilla table
 
@@ -197,34 +199,34 @@ So in game, the rule leaves some noise to fail the hash, but never hides a miss.
 - **The R2-R4 crash window:**
   - after a durable R2 (K6), mid-R4 (K7) and after R4 (R5), single and group, a region among them: exact
     (`r2r4_killAfterTheDurableUndoAndMidWritesRecovers`);
-  - inside R2: finding F4.
+  - inside R2 (the K8 window, group removal): planned again, exact (`f4_aGroupRemovalKilledInsideR2IsPlannedAgain`; F4, fixed).
 
 ## Findings
 
-Each finding has a repro in `UmtFindingsTest` (`./gradlew umtFindings`, failing until fixed) and a tag in the fuzz.
+Each open finding has a repro in `UmtFindingsTest` (`./gradlew umtFindings`, failing until fixed) and a tag in the fuzz. A fixed
+finding's repro moves to `UmtPropertiesTest` (F1, F4 and F6 in undo hardening A, patch 0.40.1).
 
 | id | what | where | reach |
 |---|---|---|---|
-| F1 | two stacked sites, removed upper first, then lower, then a start: the upper's evidence compares the world with its own undo's written values, which the lower's removal has since rewritten. Neither restored nor standing: KEEP at every start, so its record and entries never go. The world is exact | `Sites.evidence`, `Reconcile.decide` | common (any stacked pair removed top-down in one session) |
+| F1 | **fixed (undo hardening A).** Two stacked sites, removed upper first, then lower, then a start: the upper's evidence compared the world with its own undo's written values, which the lower's removal had since rewritten: neither restored nor standing, KEEP at every start. Now `Sites.evidence` reads, per cell, the latest later undo of another group by an entry under the cell (the cell's holder below) and expects what it wrote (`f1_aStackedPairRemovedTopDownSettles`; 4e-orders settles after every order). It relies on the settle order (the upper, undone first, settles first); one CI seed (ALL 207) still shows the mark, where a crash lost a resumed restore's writes (F5's mechanism, untagged there because the site is stacked) | `Sites.evidence` | was common |
 | F2 | worldgen sand hanging over air inside a box falls when the removal writes it back (its tick is held, then released) | `Sites.restoreQuietly`/RestoreJob with `TickDeferral.release` | needs hanging sand in a box |
 | F3 | a gravity block resting on a site box's top or side cell falls into the box when the site writes under it; the undo can't bring it back (it was no entry's cell) | sites have no dependents stage (tiles do, TileCheck) | gravel or sand ledges at a box edge; the 4d noise |
-| F4 | `Groups.committed` saves the removal's undo group before R2 is durable. A kill inside R2 (the K8 window) leaves a saved removal naming a group the journal never got. Resumed: every member pending, `SiteJournal.restore` finds nothing, nothing is written, the removal ends as done; the members stand again only at the next start | `Groups.committed`, `Groups.tick` after a load (RestoreJob.fromJson checks the journal; Removal.fromJson does not) | a kill during a group removal's R2 commit |
+| F4 | **fixed (undo hardening A).** `Groups.committed` saves the removal's undo group before R2 is durable; a kill inside R2 (K8) left a saved removal naming a group the journal never got, and the resumed removal ended as done with nothing written. Now `Groups.Removal.fromJson` drops an undo group no journal entry has, as `RestoreJob.fromJson` does, and the removal is planned again (`f4_*`; 4e-crash K8 group) | `Groups.Removal.fromJson` | was a kill during a group removal's R2 commit |
 | F5 | a restore (or a rollback) whose job ended, then a crash before the world saved: the world is half-restored, the settle finds it neither restored nor standing, KEEP forever, the half-written blocks stay | settle on evidence | two events inside one autosave interval |
-| F6 | settling one pending site RECOVER reactivates the whole undo group (`SiteJournal.reactivate(group)`): another member whose own evidence says restored comes back as standing | `Sites.reconcile` + `SiteJournal.reactivate` | a crash that loses part of a group removal |
+| F6 | **fixed for side-by-side members (undo hardening A); open for stacked ones.** Settling one pending site RECOVER reactivated the whole undo group: a member whose own evidence says removed came back as standing, and (crash-safety review) after an unclean stop mid group removal, members the resumed removal was still writing went ACTIVE under it. Now `Sites.recoverScope`: no RECOVER while the group's removal is queued (KEEP until it ends), and a RECOVER takes back the site, the members whose evidence stands, every member sharing a cell with those (stacked members must come back together: reactivating one of a stacked pair alone leaves befores naming the other's blocks) and the crate (`f6_*`; 4e-crash GW). Residual: a removed member stacked with a recovered one still comes back (2 CI seeds); undo-c's roll-forward removes reactivation of removals | `Sites.recoverScope`, `SiteJournal.reactivate(group, sites)` | a crash that loses part of a group removal |
 | F7 | two pending sites recovered at one start, the lower first: its hand-downs to the upper are skipped (the upper is still UNDONE, `Journal.reactivate`), so after the upper is recovered too its before is the ground. Removing the upper then cuts the lower | `Journal.reactivate`'s "receiver not active" skip; sites settle before roads | a crash that loses two stacked removals |
 | LP | (fix/lamp-path) a journaled dirt path under a later solid write turns to dirt; the path's entry no longer counts it as its own | `StillOurs`/`WorldJournal.holds` (the fix adds `pathTurned`) | known, fix pending |
 | DRAIN | (the coordinator's item 2) the region drain overwrites a later separate site's waterlogged block at a body source cell, before any journal hand-down | `RegionFluids.drain`'s first loop: no holder check | a waterlogged block placed by a later site on a body cell |
 | F8 | a plant, carpet or leaf litter standing on a cell a site or delta changes, but outside its box, breaks (V5); no entry has its cell, so the removal can't bring it back | sites and deltas have no dependents stage (tiles do) | a box edge under decor; the 4d leaf_litter noise when the litter sat next to the plan |
 | UC | (open: unsaved chunks) a crash loses world writes the journal recorded; for example a recovered site whose delta's writes were lost (repro `uc_aRecoveredSiteLostItsDeltasWrites`, re-minimised from CI seed 130 after the old seed-2115 repro went stale), or a covered release of a site whose blocks the world still shows | journal durable ahead of the world | crashes within an autosave interval |
 
-F1, F4 and DRAIN reproduce against production code with only glue modelled. F5, F6, F7 and UC need a crash that loses world writes,
+F1, F4 and DRAIN reproduced against production code with only glue modelled. F5, F6, F7 and UC need a crash that loses world writes,
 which is the unsaved-chunks question; their mechanisms are in production code, and their reach depends on the autosave interval.
 F2, F3 and F8 rest on modelled vanilla rules (V2, V5); confirm them in game.
 
 UMT settles region tiles through the roads-and-cell-sites loop of `Sites.reconcile`. Region records may settle elsewhere
-(`RegionsImpl`), which could change F5, F6 and F7 for tiles. No in-game gate removes two stacked sites one by one, restarts, and checks
-the journal is empty: 4e-orders checks the world after each order, but never a settle. So nothing in game contradicts F1. Adding that
-check to 4e-orders confirms it in game.
+(`RegionsImpl`), which could change F5, F6 and F7 for tiles. 4e-orders now restarts after every removal order and checks that the
+start settles everything (no pending record, no journal entry): F1's in-game check.
 
 ## Calibration
 

@@ -215,6 +215,12 @@ public final class Sections {
 	 * cells per section; the group's entries themselves become ACTIVE again (the caller drops their undo records).
 	 */
 	public static Map<String, Map<Long, List<Cell>>> reactivate(SortedSet<Long> sections, Function<Long, Collection<Entry>> slices, String group) {
+		return reactivate(sections, slices, group, id -> true);
+	}
+
+	/** {@link #reactivate} of only the group's entries {@code member} accepts (by id; {@link Journal#reactivate(Collection, String, java.util.function.Predicate)}). */
+	public static Map<String, Map<Long, List<Cell>>> reactivate(SortedSet<Long> sections, Function<Long, Collection<Entry>> slices, String group,
+		java.util.function.Predicate<String> member) {
 		Map<String, Map<Long, List<Cell>>> out = new LinkedHashMap<>();
 		for (long section : sections) {
 			Collection<Entry> loaded = slices.apply(section);
@@ -224,7 +230,7 @@ public final class Sections {
 					members.add(e.id());
 				}
 			}
-			for (var t : Journal.reactivate(loaded, group).entrySet()) {
+			for (var t : Journal.reactivate(loaded, group, member).entrySet()) {
 				if (!members.contains(t.getKey())) {
 					out.computeIfAbsent(t.getKey(), k -> new TreeMap<>()).put(section, t.getValue().cells());
 				}

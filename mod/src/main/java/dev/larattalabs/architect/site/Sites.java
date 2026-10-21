@@ -11,6 +11,7 @@ import dev.larattalabs.architect.apiimpl.ApiEvents;
 import dev.larattalabs.architect.apiimpl.ApiRules;
 import dev.larattalabs.architect.journal.Journal;
 import dev.larattalabs.architect.journal.JournalStore;
+import dev.larattalabs.architect.journal.SectionCells;
 import dev.larattalabs.architect.journal.WorldJournal;
 import dev.larattalabs.architect.placement.Anchor;
 import dev.larattalabs.architect.placement.Anchors;
@@ -2492,9 +2493,14 @@ public final class Sites {
 						gs.writtenMap().forEach(wrote::putIfAbsent);
 					}
 				}
+				List<SectionCells> below = laterBelow(js, main, group, k);
 				for (int i = 0; i < sc.size(); i++) {
 					long pos = sc.pos(i);
 					Journal.Value w = sc.written(i) != null ? sc.written(i) : wrote.get(pos);
+					Journal.Value lw = laterWrite(below, sc.index(i), sc.layer(i));
+					if (lw != null) {
+						w = lw; // (F1) the cell's holder below was undone since and wrote it: its value is the restored one now
+					}
 					BlockState before = WorldJournal.state(w != null ? w : sc.before(i));
 					Journal.Value av = sc.after(i);
 					BlockState after = av != null ? WorldJournal.state(av) : template.get(pos);
@@ -2547,6 +2553,121 @@ public final class Sites {
 			return Reconcile.Action.RELEASE;
 		}
 		return Boolean.TRUE.equals(ev.stands()) ? Reconcile.Action.RECOVER : Reconcile.Action.KEEP;
+	}
+
+	/**
+	 * (F1, UMT) The sections {@code key} of the entries of other undo groups undone at or after {@code main}, latest undo first (ties:
+	 * the lowest layer first). Where one of them sits under {@code main}'s cell and its undo wrote that cell, {@code main}'s own undo
+	 * was there first: {@code main} wrote the holder's {@code after} (its {@code before} came from that holder), and the holder's
+	 * later undo replaced it. Removing a stacked pair top-down then reads as restored, not as neither restored nor standing.
+	 */
+	private static List<SectionCells> laterBelow(JournalStore js, JournalStore.Meta main, String group, long key) throws IOException {
+		List<JournalStore.Meta> later = new ArrayList<>();
+		for (String id : js.inSection(main.dimension(), key)) {
+			JournalStore.Meta m = js.meta(id);
+			if (m != null && m.status() == Journal.Status.UNDONE && m.undoGroup() != null && !m.undoGroup().equals(group) && m.undoneAt() >= main
+				.undoneAt()) {
+				later.add(m);
+			}
+		}
+		if (later.isEmpty()) {
+			return List.of();
+		}
+		later.sort(java.util.Comparator.comparingLong(JournalStore.Meta::undoneAt).reversed().thenComparingLong(JournalStore.Meta::layer));
+		List<SectionCells> out = new ArrayList<>(later.size());
+		for (JournalStore.Meta m : later) {
+			SectionCells s = js.section(m.id(), key);
+			if (s != null && s.hasUndo()) {
+				out.add(s);
+			}
+		}
+		return out;
+	}
+
+	/** (F1) What the latest of {@code below} with a cell under {@code layer} at section index {@code idx} wrote there, or null. */
+	private static Journal.@Nullable Value laterWrite(List<SectionCells> below, int idx, long layer) {
+		for (SectionCells s : below) {
+			int j = s.find(idx);
+			if (j >= 0 && s.layer(j) < layer) {
+				Journal.Value w = s.written(j);
+				if (w != null) {
+					return w;
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * (F6) What a RECOVER of {@code siteId} takes back of its undo group {@code group}: the site and the other members whose own
+	 * evidence stands, each with every member that shares a cell with it (transitively: stacked members come back together, as a whole
+	 * group's reactivation keeps their befores and hand-downs consistent; taking back one of a stacked pair alone would leave its
+	 * before naming the other's blocks), and the group's crate. A member that shares no cell with them and whose cells show it removed
+	 * stays undone and settles on its own evidence. Null while the group's removal is still in the queue (a member in
+	 * {@code jobSites} has entries in the group): the resumed removal writes those members' restores, so none of the group is taken
+	 * back until it ends.
+	 */
+	static @Nullable Set<String> recoverScope(net.minecraft.world.level.@Nullable BlockGetter level, String siteId, String group, Set<String> jobSites) {
+		JournalStore js = WorldJournal.storeOrNull();
+		if (js == null) {
+			return null;
+		}
+		List<JournalStore.Meta> members = js.find(m -> m.status() == Journal.Status.UNDONE && group.equals(m.undoGroup()));
+		Map<String, Map<Long, long[]>> masks = new java.util.LinkedHashMap<>(); // site -> section -> 4096-bit mask of its cells
+		for (JournalStore.Meta m : members) {
+			if (jobSites.contains(m.site())) {
+				return null;
+			}
+			Map<Long, long[]> ms = masks.computeIfAbsent(m.site(), k -> new java.util.HashMap<>());
+			for (long k : m.sections()) {
+				try {
+					SectionCells sc = js.section(m.id(), k);
+					if (sc != null) {
+						long[] add = sc.mask();
+						long[] cur = ms.get(k);
+						if (cur != null) {
+							for (int w = 0; w < 64; w++) {
+								add[w] |= cur[w];
+							}
+						}
+						ms.put(k, add);
+					}
+				} catch (IOException e) {
+					return Set.copyOf(masks.keySet()); // unreadable: the whole group, as before
+				}
+			}
+		}
+		java.util.ArrayDeque<String> todo = new java.util.ArrayDeque<>();
+		Set<String> scope = new java.util.LinkedHashSet<>();
+		scope.add(siteId);
+		todo.add(siteId);
+		for (String o : masks.keySet()) {
+			if (o.startsWith(SiteGroupRec.CRATE_PREFIX) || !o.equals(siteId) && Boolean.TRUE.equals(evidence(level, o, group).stands())) {
+				if (scope.add(o)) {
+					todo.add(o);
+				}
+			}
+		}
+		while (!todo.isEmpty()) {
+			Map<Long, long[]> a = masks.getOrDefault(todo.poll(), Map.of());
+			for (var e : masks.entrySet()) {
+				if (scope.contains(e.getKey())) {
+					continue;
+				}
+				boolean shares = false;
+				for (var sec : a.entrySet()) {
+					long[] b = e.getValue().get(sec.getKey());
+					for (int w = 0; b != null && w < 64 && !shares; w++) {
+						shares = (sec.getValue()[w] & b[w]) != 0;
+					}
+				}
+				if (shares) {
+					scope.add(e.getKey());
+					todo.add(e.getKey());
+				}
+			}
+		}
+		return scope;
 	}
 
 	/**
@@ -2716,6 +2837,12 @@ public final class Sites {
 			Evidence ev = evidence(server, gone, group);
 			Site current = map.get(gone.id());
 			Reconcile.Action action = settleSite(ev, moved, current != null, current == null ? null : standsNow.get(gone.id()));
+			Set<String> scope = action == Reconcile.Action.RECOVER ? recoverScope(levelOf(server, gone), gone.id(), group, jobSites) : null;
+			if (action == Reconcile.Action.RECOVER && scope == null) {
+				report(gone.id(), false, gone.id() + " shows its blocks again, but its group's removal is still in the queue: it is settled once that "
+					+ "removal ends");
+				action = Reconcile.Action.KEEP;
+			}
 			Architect.LOGGER.info("Sites check: {} site of {} at {} (stands {}, restored {}, covered {}): {}", p.why(), gone.id(), Anchors.str(gone.restoreBox()),
 				ev.stands(), ev.restored(), ev.covered(), action);
 			List<String> groupIds = SiteJournal.undone(gone.id(), group).stream().map(JournalStore.Meta::id).toList();
@@ -2727,7 +2854,7 @@ public final class Sites {
 				}
 				case RECOVER -> {
 					try {
-						SiteJournal.reactivate(group);
+						SiteJournal.reactivate(group, scope);
 					} catch (IOException e) {
 						report(gone.id(), true, "could not bring " + gone.id() + " back (" + e.getMessage() + ")");
 						continue;
@@ -2781,12 +2908,18 @@ public final class Sites {
 			Architect.LOGGER.info("Sites check: removed {} at {} (stands {}, restored {}, covered {})", gone.id(), Anchors.str(gone.box()), ev.stands(),
 				ev.restored(), ev.covered());
 			Reconcile.Action action = settleInfra(ev);
+			Set<String> scope = action == Reconcile.Action.RECOVER ? recoverScope(levelOf(server, gone.dimension()), gone.id(), group, jobSites) : null;
+			if (action == Reconcile.Action.RECOVER && scope == null) {
+				report(gone.id(), false, gone.id() + " shows its blocks again, but its group's removal is still in the queue: it is settled once that "
+					+ "removal ends");
+				action = Reconcile.Action.KEEP;
+			}
 			if (action == Reconcile.Action.RELEASE) {
 				SiteJournal.releaseGroup(groupIds);
 				Infras.drop(server, gone.id());
 			} else if (action == Reconcile.Action.RECOVER) {
 				try {
-					SiteJournal.reactivate(group);
+					SiteJournal.reactivate(group, scope);
 					Infras.recover(server, gone.id());
 					report(gone.id(), false, gone.id() + "'s removal was not saved before the game stopped: it stands again (remove it again)");
 				} catch (IOException e) {

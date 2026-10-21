@@ -251,17 +251,19 @@ final class UmtSim {
 	private void checks() {
 		for (Rec x : recs.values()) {
 			Sites.Evidence ev = kept.get(x.id);
-			boolean f1 = ev != null && Boolean.FALSE.equals(ev.restored()) && Boolean.FALSE.equals(ev.stands());
-			violations.add((f1 ? "[F1] " : "") + "record left after everything was removed and settled: " + x + (ev != null ? " (kept on " + ev + ")" : ""));
+			// neither restored nor standing: F1's mark, unless the restore's writes were lost to a crash (F5's, tagged there)
+			boolean f1 = ev != null && Boolean.FALSE.equals(ev.restored()) && Boolean.FALSE.equals(ev.stands()) && !f5.contains(x.id);
+			violations.add((f1 ? "[F1] " : f5.contains(x.id) ? "[F5] " : "") + "record left after everything was removed and settled: " + x + (ev != null ? " (kept on " + ev + ")" : ""));
 		}
 		List<String> entries = new ArrayList<>();
 		store.index().entries().values().forEach(m -> {
 			Sites.Evidence ev = kept.get(m.site());
-			boolean f1 = ev != null && Boolean.FALSE.equals(ev.restored()) && Boolean.FALSE.equals(ev.stands());
-			entries.add((f1 ? "[F1] " : "") + m.id() + " " + m.kind() + " " + m.site() + " " + m.status());
+			boolean f1 = ev != null && Boolean.FALSE.equals(ev.restored()) && Boolean.FALSE.equals(ev.stands()) && !f5.contains(m.site());
+			entries.add((f1 ? "[F1] " : f5.contains(m.site()) ? "[F5] " : "") + m.id() + " " + m.kind() + " " + m.site() + " " + m.status());
 		});
 		for (String e : entries) {
-			violations.add((e.startsWith("[F1] ") ? "[F1] " : "") + "journal entry left after everything was removed and settled: " + e.replace("[F1] ", ""));
+			String t = e.startsWith("[F1] ") ? "[F1] " : e.startsWith("[F5] ") ? "[F5] " : "";
+			violations.add(t + "journal entry left after everything was removed and settled: " + e.substring(t.length()));
 		}
 		Map<String, List<String>> byTag = new java.util.TreeMap<>();
 		int noise = 0;
@@ -1280,8 +1282,19 @@ final class UmtSim {
 				x.pending = true;
 			}
 		}
-		// pending records settle on the evidence (production Sites.evidence and Reconcile.decide); a job's site waits for its job
-		for (Rec x : List.copyOf(recs.values())) {
+		// pending records settle on the evidence (production Sites.evidence and Reconcile.decide); a job's site waits for its job.
+		// In Sites.reconcile's order: sites first, then roads and cell sites (Infras.pendingAll), each in the order they went pending
+		// (Sites.markPending appends; R3 follows its undo, so by the undo's time)
+		List<Rec> settleOrder = new ArrayList<>(recs.values());
+		settleOrder.sort(java.util.Comparator.comparingInt((Rec r) -> r.kind == Kind.SITE || r.kind == Kind.LOT ? 0 : 1).thenComparingLong(r -> {
+			String lg = r.pending ? SiteJournal.lastGroup(r.id) : null;
+			long at = Long.MAX_VALUE;
+			for (JournalStore.Meta m : lg == null ? List.<JournalStore.Meta>of() : SiteJournal.undone(r.id, lg)) {
+				at = Math.min(at, m.undoneAt());
+			}
+			return at;
+		}));
+		for (Rec x : settleOrder) {
 			if (!x.pending || jobSites.contains(x.id)) {
 				continue;
 			}
@@ -1304,31 +1317,33 @@ final class UmtSim {
 			List<String> groupIds = SiteJournal.undone(x.id, g).stream().map(JournalStore.Meta::id).toList();
 			boolean release;
 			boolean recover;
-			if (x.kind == Kind.SITE || x.kind == Kind.LOT) {
-				Reconcile.Action a = Sites.settleSite(ev, false, false, null); // production (a removal: not moved, no current record)
-				release = a == Reconcile.Action.RELEASE;
-				recover = a == Reconcile.Action.RECOVER;
-				trace.add("  settle " + x.id + " " + g + ": " + ev + " -> " + a);
-			} else {
-				Reconcile.Action a = Sites.settleInfra(ev); // production
-				release = a == Reconcile.Action.RELEASE;
-				recover = a == Reconcile.Action.RECOVER;
-				trace.add("  settle " + x.id + " " + g + ": " + ev + " -> " + (release ? "RELEASE" : recover ? "RECOVER" : "KEEP"));
+			Reconcile.Action a = x.kind == Kind.SITE || x.kind == Kind.LOT ? Sites.settleSite(ev, false, false, null) // production (a removal: not moved,
+				: Sites.settleInfra(ev); // no current record)
+			// (F6) production: a RECOVER takes back the site, the members whose own evidence stands and the crate; none while the group's
+			// removal is still in the queue (KEEP until it ends)
+			java.util.Set<String> scope = a == Reconcile.Action.RECOVER ? Sites.recoverScope(world, x.id, g, jobSites) : null;
+			if (a == Reconcile.Action.RECOVER && scope == null) {
+				a = Reconcile.Action.KEEP;
+				trace.add("  settle " + x.id + ": its group's removal is still in the queue");
 			}
+			release = a == Reconcile.Action.RELEASE;
+			recover = a == Reconcile.Action.RECOVER;
+			trace.add("  settle " + x.id + " " + g + ": " + ev + " -> " + a + (scope != null ? " " + scope : ""));
 			if (release) {
 				SiteJournal.releaseGroup(groupIds);
 				store.flush();
 				recs.remove(x.id);
 			} else if (recover) {
-				// SiteJournal.reactivate takes back the whole undo group: other sites' members too, whatever their own evidence says
-				for (JournalStore.Meta m : store.find(mm -> mm.status() == Status.UNDONE && g.equals(mm.undoGroup()) && !mm.site().equals(x.id))) {
+				// [F6] guard: a member taken back although its own cells don't show it
+				for (JournalStore.Meta m : store.find(mm -> mm.status() == Status.UNDONE && g.equals(mm.undoGroup()) && !mm.site().equals(x.id) && scope
+					.contains(mm.site()) && !mm.site().startsWith(SiteGroupRec.CRATE_PREFIX))) {
 					Sites.Evidence other = Sites.evidence(world, m.site(), g);
 					if (!Boolean.TRUE.equals(other.stands()) && phantom.add(m.site())) {
-						violations.add("[F6] settling " + x.id + " (stands) reactivated its whole undo group " + g + ": " + m.site() + " comes back too on "
-							+ other + " (its own cells don't show it)");
+						violations.add("[F6] settling " + x.id + " (stands) reactivated " + m.site() + " of its undo group " + g + " on " + other
+							+ " (its own cells don't show it)");
 					}
 				}
-				SiteJournal.reactivate(g);
+				SiteJournal.reactivate(g, scope);
 				store.flush();
 				x.pending = false;
 				recoveredNow.add(x.id);
@@ -1372,6 +1387,23 @@ final class UmtSim {
 		// removals in the queue resume
 		for (Job j : List.copyOf(jobs)) {
 			if (j.group) {
+				if (j.undo != null) {
+					// the saved removal loads through production Groups.Removal.fromJson (F4: an undo group the journal never got, a stop
+					// inside R2, is dropped there and the removal is planned again)
+					com.google.gson.JsonObject saved = new com.google.gson.JsonObject();
+					saved.addProperty("group", "umt");
+					com.google.gson.JsonArray ss = new com.google.gson.JsonArray();
+					j.sites.forEach(ss::add);
+					saved.add("sites", ss);
+					saved.addProperty("force", false);
+					saved.addProperty("started", true);
+					saved.addProperty("waited", 0L);
+					saved.add("refund", new com.google.gson.JsonObject());
+					saved.addProperty("undo", j.undo);
+					saved.add("undoSites", ss.deepCopy());
+					saved.add("handed", new com.google.gson.JsonObject());
+					j.undo = Groups.Removal.fromJson(saved).undo;
+				}
 				if (j.undo == null) {
 					// planned again from the start (R1 is not saved)
 					jobs.remove(j);
@@ -1380,7 +1412,7 @@ final class UmtSim {
 						removeGroup(members, null);
 					}
 				} else {
-					// Groups.Removal.fromJson keeps its undo group as committed; Groups.tick: pendAll, then the writes
+					// Groups.Removal.fromJson kept its undo group (it is in the journal); Groups.tick: pendAll, then the writes. [F4] stays as a guard
 					String ug = j.undo;
 					boolean committed = j.sites.stream().anyMatch(id -> !SiteJournal.undone(id, ug).isEmpty());
 					if (!committed && j.sites.stream().anyMatch(id -> !SiteJournal.active(id).isEmpty())) {

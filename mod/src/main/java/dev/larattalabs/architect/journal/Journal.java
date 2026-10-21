@@ -396,6 +396,14 @@ public final class Journal {
 	 * Returns the changed entries. Pure.
 	 */
 	public static Map<String, Entry> reactivate(Collection<Entry> loaded, String group) {
+		return reactivate(loaded, group, id -> true);
+	}
+
+	/**
+	 * {@link #reactivate} of only the group's entries {@code member} accepts (by id): the others stay undone, their hand-downs as
+	 * they are (F6: a settle takes back only the members whose own cells show them). Pure.
+	 */
+	public static Map<String, Entry> reactivate(Collection<Entry> loaded, String group, java.util.function.Predicate<String> member) {
 		Map<String, Entry> byId = new LinkedHashMap<>();
 		for (Entry e : loaded) {
 			byId.put(e.id(), e);
@@ -403,7 +411,7 @@ public final class Journal {
 		List<HandDown> all = new ArrayList<>();
 		List<String> members = new ArrayList<>();
 		for (Entry e : loaded) {
-			if (e.status() == Status.UNDONE && e.undo() != null && e.undo().group().equals(group)) {
+			if (e.status() == Status.UNDONE && e.undo() != null && e.undo().group().equals(group) && member.test(e.id())) {
 				members.add(e.id());
 				all.addAll(e.undo().handed());
 			}

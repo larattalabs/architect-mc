@@ -314,6 +314,9 @@ there is no DevBridge hook to make layers, so tests go through the API as anothe
 
 `dev.journal.killAt` takes RG1-RG6; `dev.journal.state` adds `indexBytes` and the index commit times (p50, p99, max).
 
+`dev.journal.killAt` also takes GW (undo hardening A): a group removal has written a member and saved the next member's job,
+nothing of it written yet (4e-crash's F6 kill test).
+
 ### Regions (phase 6b)
 
 | hook | arguments, result |

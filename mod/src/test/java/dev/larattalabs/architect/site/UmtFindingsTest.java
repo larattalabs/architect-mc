@@ -26,26 +26,6 @@ class UmtFindingsTest {
 	}
 
 	/**
-	 * F1: two stacked sites removed upper first, then lower, then a start: the upper's settle reads its own undo's written values,
-	 * which the lower's removal has since rewritten, so its evidence is neither restored nor standing and Reconcile keeps it pending
-	 * (KEEP) at every start: its record and journal entries never go. The world is exact.
-	 */
-	@Test
-	void f1_aStackedRemovalIsNeverSettled() throws Exception {
-		try (UmtCase c = UmtCase.of(w -> {
-		})) {
-			UmtSim.Rec lower = c.site(0, G, 0, 5, G + 2, 5, Blocks.STONE_BRICKS.defaultBlockState(), Map.of(), 0);
-			UmtSim.Rec upper = c.site(1, G, 1, 4, G + 3, 4, Blocks.OAK_PLANKS.defaultBlockState(), Map.of(), 0);
-			c.sim.remove(upper, null);
-			c.sim.remove(lower, null);
-			c.sim.restart(false);
-			c.sim.restart(false);
-			assertTrue(c.sim.recs.isEmpty(), "pending records left: " + c.sim.recs.values() + "; kept on " + c.sim.kept);
-			assertTrue(c.sim.store.index().entries().isEmpty(), "journal entries left: " + c.sim.store.index().entries().keySet());
-		}
-	}
-
-	/**
 	 * F2: worldgen sand hanging over a cave inside a site's box: the removal's template writes it back (Sites.FLAGS: its onPlace
 	 * schedules a tick; TickDeferral holds the tick and then releases it), and it falls into the cave.
 	 */
@@ -91,27 +71,6 @@ class UmtFindingsTest {
 	}
 
 	/**
-	 * F4 (the coordinator's crash window, item 1): Groups.committed saves the removal with its undo group as the R2 commit is submitted,
-	 * before it is durable. A kill inside that commit (the K8 window, before the index) leaves a saved removal that names an undo group
-	 * the journal never got. Resumed, it marks every member pending and runs RestoreJob.writing for each: SiteJournal.restore finds no
-	 * undone entry and writes nothing, and the removal ends as done; the members stand again only at the next start.
-	 */
-	@Test
-	void f4_aGroupRemovalKilledInsideR2EndsDoneWithNothingRestored() throws Exception {
-		try (UmtCase c = UmtCase.of(w -> {
-		})) {
-			UmtSim.Rec t = c.sim.cells(UmtOps.Kind.TILE, 1, cells(p(1, G, 1), Blocks.COBBLESTONE, p(2, G, 1), Blocks.DIRT_PATH));
-			UmtSim.Rec s = c.site(3, G, 3, 5, G + 2, 5, Blocks.OAK_PLANKS.defaultBlockState(), Map.of(), 1);
-			try {
-				c.sim.removeGroup(List.of(t, s), new UmtOps.Crash("R2", "index", 0, false));
-			} catch (UmtSim.Halt h) {
-				c.sim.restart(true);
-			}
-			assertTrue(c.sim.violations.stream().noneMatch(v -> v.startsWith("[F4]")), String.join("\n", c.sim.violations));
-		}
-	}
-
-	/**
 	 * F5: a removal's restore finished (its job done) but the world had not saved when the server died again: the world is back to
 	 * half-restored, the journal says UNDONE, and the settle finds the site neither restored nor standing: KEEP at every start, the
 	 * half-restored blocks stay.
@@ -122,19 +81,6 @@ class UmtFindingsTest {
 			null), new UmtOps.Remove(2, new UmtOps.Crash("K7", null, 28, true)), new UmtOps.Place(UmtOps.Kind.ROAD, 22, 29, 13, 1, 2, 8028642063678089977L,
 				0, new UmtOps.Crash("P8", null, 31, false))), UmtOps.Gen.ALL));
 		assertTrue(r.violations().isEmpty(), r.report());
-	}
-
-	/**
-	 * F6: Sites.reconcile settles each pending site on its own evidence, but SiteJournal.reactivate takes back the whole undo group: a
-	 * group member whose own cells show it removed comes back as a standing record too.
-	 */
-	@Test
-	void f6_oneMembersRecoverReactivatesTheWholeGroup() throws Exception {
-		UmtRunner.Result r = UmtRunner.run(new UmtOps.Scenario(1991L, List.of(new UmtOps.Place(UmtOps.Kind.SITE, 27, 26, 9, 3, 3, 5368466833381451274L, 1,
-			null), new UmtOps.Restart(), new UmtOps.Place(UmtOps.Kind.TILE, 28, 29, 7, 7, 6, -4780181343283276411L, 1, null), new UmtOps.RemoveGroup(1, null),
-			new UmtOps.Place(UmtOps.Kind.LOT, 23, 28, 9, 5, 6, 3259127719780762313L, 0, null), new UmtOps.Place(UmtOps.Kind.LOT, 26, 16, 2, 4, 6,
-				-2838765659432227269L, 2, new UmtOps.Crash("P3", "index", 20, false))), UmtOps.Gen.ALL));
-		assertTrue(r.violations().stream().noneMatch(v -> v.startsWith("[F6]")), r.report());
 	}
 
 	/**
