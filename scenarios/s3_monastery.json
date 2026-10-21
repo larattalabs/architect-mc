@@ -1,8 +1,83 @@
 {
   "id": "s3_monastery",
+  "short": "s3",
   "phase": "6c",
-  "version": 0,
+  "version": 1,
   "brief": "a monastery that grows down its cliff",
+  "program": "terraced_monastery",
+  "params": {},
+  "bible": "g6c_s3_monastery",
+  "bibleFixture": "bibles/g6c_s3_monastery.json",
+  "entries": {
+    "g6cs3_gatehouse_p3d7": {
+      "design": "gatehouse",
+      "values": {
+        "passage": 3,
+        "depth": 7
+      }
+    },
+    "g6cs3_cabin_w9d7": {
+      "design": "cabin",
+      "values": {
+        "width": 9,
+        "depth": 7,
+        "porch": false
+      }
+    },
+    "g6cs3_cabin_w9d7p": {
+      "design": "cabin",
+      "values": {
+        "width": 9,
+        "depth": 7,
+        "porch": true
+      }
+    },
+    "g6cs3_cabin_w7d6": {
+      "design": "cabin",
+      "values": {
+        "width": 7,
+        "depth": 6,
+        "porch": false
+      }
+    },
+    "g6cs3_cabin_w11d8": {
+      "design": "cabin",
+      "values": {
+        "width": 11,
+        "depth": 8,
+        "porch": false
+      }
+    },
+    "g6cs3_tavern_l14": {
+      "design": "tavern",
+      "values": {
+        "length": 14
+      }
+    },
+    "g6cs3_tavern_l12h": {
+      "design": "tavern",
+      "values": {
+        "length": 12,
+        "roof": "hip"
+      }
+    }
+  },
+  "entryFor": {
+    "gatehouse": "g6cs3_gatehouse_p3d7@1",
+    "guest_house": "g6cs3_cabin_w9d7@1",
+    "stable": "g6cs3_cabin_w9d7p@1",
+    "infirmary": "g6cs3_cabin_w9d7@1",
+    "herb_garden": "g6cs3_cabin_w7d6@1",
+    "orchard": "g6cs3_cabin_w7d6@1",
+    "church": "g6cs3_tavern_l14@1",
+    "cloister_range": "g6cs3_tavern_l12h@1",
+    "refectory": "g6cs3_cabin_w11d8@1",
+    "cell_1": "g6cs3_cabin_w7d6@1",
+    "cell_2": "g6cs3_cabin_w7d6@1",
+    "cell_3": "g6cs3_cabin_w7d6@1",
+    "cell_4": "g6cs3_cabin_w7d6@1"
+  },
+  "restraint": "rustic",
   "world": {
     "seed": "2026100906",
     "preset": "normal",
@@ -40,16 +115,21 @@
       "missing": 0
     },
     "planSurvey": {
-      "sha": "c375efa864f9465ab144284f39872097b4cc5c3970822c03b1253f42fe83ced3",
-      "kitVersion": "0.18.0",
+      "sha": "cc52144b8f732491cf6d498d4fdd181ec7d43f838e06f0eebe8ee3d03ac66b14",
+      "kitVersion": "0.38.0",
       "resolution": 1,
       "columns": 36864,
-      "water": 3907,
+      "water": 4155,
       "frozen": 3,
-      "previousSha": "9da130dfdc9ba4f5f48329c9615343dac23c295f091c98530b01b05301a819fd",
-      "reason": "6c W (CONTRACT W §5, gate item 7): frozen water reads as water (ARSV FROZEN with WATER, floor at the bed), so a survey with frozen columns gets new bytes; re-pinned at the same claim",
-      "note": "the bytes vary between surveys of the live world (flowing water: 3890-3934 water columns over 6 repeat surveys, each a different sha, with or without W); the FROZEN count (3) is stable and is the pin"
+      "previousSha": "c375efa864f9465ab144284f39872097b4cc5c3970822c03b1253f42fe83ced3",
+      "reason": "6c S3 (CONTRACT S3 §6): S3 plans after the 90 s settle (the spring stream starts only once a fresh copy's chunks tick), so its plan survey is the one taken after the settle: re-pinned from the golden run (scenarios/goldens/s3/survey.bin); the claim is unchanged",
+      "note": "the bytes vary between surveys of the live world (flowing water), so each run plans on its own post-settle survey; the golden and the feasibility item replay this pinned one"
     }
+  },
+  "feasibility": {
+    "rule": "CONTRACT S3 gate item 1: at least 9 lots on terrace levels of the re-pinned plan survey (planSurvey.sha, after the 90 s settle), every lot reached from the gate within grade 0.2, virtual M5 under 0.5%, the checker 0 errors and no M1-M4, the spring's columns unwritten",
+    "result": "11 lots (gate: gatehouse, guest_house, stable; gardens: infirmary; cloister: church, cloister_range, refectory, cell_1-cell_4; orchard and herb_garden have no reachable terrace), 22/22 routes, M2 13/13 nodes, virtual M5 0.00%, M8 0 open of 105, the checker 0 errors, the spring 0 cells (offline plan of terraced_monastery on goldens/s3 survey.bin = planSurvey.sha and its frozen volumes; tools/gate6cs3.mjs feasibility)",
+    "m5Risk": "T2 saw realised M5 5.25% on S3; S3 v1 realised 0.14% (golden run), virtual 0.00%"
   },
   "flat": {
     "preset": "flat",
@@ -85,5 +165,66 @@
       3700,
       -1900
     ]
-  }
+  },
+  "seed": "5638267085663388350",
+  "cams": {
+    "cam_e": [
+      3751.5,
+      203,
+      -965.5,
+      90.4,
+      46.9
+    ],
+    "cam_ground": [
+      3668.5,
+      112,
+      -922.5,
+      -176.7,
+      -6.5
+    ],
+    "cam_high": [
+      3679.5,
+      224,
+      -957.5,
+      135,
+      83.6
+    ],
+    "cam_n": [
+      3671.5,
+      181,
+      -1035.5,
+      0.4,
+      42.6
+    ],
+    "cam_s": [
+      3671.5,
+      129,
+      -885.5,
+      179.6,
+      8.5
+    ],
+    "cam_w": [
+      3604.5,
+      143,
+      -965.5,
+      -90.4,
+      21.4
+    ]
+  },
+  "lotEntries": {
+    "gatehouse": "g6cs3_gatehouse_p3d7@1",
+    "guest_house": "g6cs3_cabin_w9d7@1",
+    "stable": "g6cs3_cabin_w9d7p@1",
+    "infirmary": "g6cs3_cabin_w9d7@1",
+    "herb_garden": "g6cs3_cabin_w7d6@1",
+    "orchard": "g6cs3_cabin_w7d6@1",
+    "church": "g6cs3_tavern_l14@1",
+    "cloister_range": "g6cs3_tavern_l12h@1",
+    "refectory": "g6cs3_cabin_w11d8@1",
+    "cell_1": "g6cs3_cabin_w7d6@1",
+    "cell_2": "g6cs3_cabin_w7d6@1",
+    "cell_3": "g6cs3_cabin_w7d6@1",
+    "cell_4": "g6cs3_cabin_w7d6@1"
+  },
+  "camsNote": "cams computed offline from the plan on the pre-settle survey (scenarios/goldens/districts_demo): the plan anchors cam_* looking at its hub, as `scenarios.mjs pin` aims them"
 }

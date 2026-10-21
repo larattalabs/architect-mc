@@ -29,8 +29,8 @@ describe('(6c VOC-c) the protocol and the feature', () => {
     expect(parseClientMessage(JSON.stringify({ ...base, lotBlocks: { Hall: { 'minecraft:copper_block': 1 } } })).ok).toBe(false);
     expect(parseClientMessage(JSON.stringify({ ...base, lotBlocks: { hall: { copper_block: 1 } } })).ok).toBe(false);
   });
-  it('lists plan.rules after the earlier features (appended; 6c RS appends region.survival and 6c F3 plan.forms2 after it)', () => {
-    expect(FEATURES.indexOf('plan.rules')).toBe(FEATURES.indexOf('reserved') + 1);
+  it('lists plan.rules after the earlier features (appended; 6c RS, F3 and S3 append after it)', () => {
+    expect(FEATURES[FEATURES.indexOf('reserved') + 1]).toBe('plan.rules');
   });
 });
 

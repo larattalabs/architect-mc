@@ -175,7 +175,9 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
   const preview = { bounds, classMap: { file: 'classmap.png', scale: 4, width: classMap.width, height: classMap.height, legend: LEGEND } };
   // ---- the artifact (READY or NEEDS_REPAIR, and never after the time or memory cap)
   let artifact = null, artifactSha = null;
-  if ((overall === 'READY' || overall === 'NEEDS_REPAIR') && !pc.hit) {
+  // ((6c S3) a bundled program that compiles a fixed plan/0 itself (terraced_monastery) has no plan param: its check is recorded, but it
+  // makes no artifact (an artifact names the plan it approves; every plan_v0 check has one, as before))
+  if ((overall === 'READY' || overall === 'NEEDS_REPAIR') && !pc.hit && (inputs.plan ?? ir.params.plan) !== undefined) {
     artifact = {
       format: ARTIFACT_FORMAT, schemaVersion: 'plan/0', catalogueVersion: catalogue.catalogueVersion, kitVersion: ir.kitVersion, api: PLAN_API,
       plan: inputs.plan ?? ir.params.plan, planSha: sha256Hex(canonicalJson(inputs.plan ?? ir.params.plan)),

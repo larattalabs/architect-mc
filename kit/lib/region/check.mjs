@@ -174,7 +174,7 @@ export function lotEntrance(l) {
 
 // ------------------------------------------------------------------ M3 support
 
-function supportCheck(vw, ir, stage) {
+export function supportCheck(vw, ir, stage) {
   const P = vw.pal;
   const partId = (i) => ir.parts[i]?.id ?? null;
   const groups = (ir.floating ?? []).map((f) => new Set(f.parts.map((id) => ir.parts.findIndex((p) => p.id === id))));

@@ -134,6 +134,11 @@ public interface ArchitectApi {
 	 * creative) regions plan, check and realise in survival: the land they shape is free and written at once, everything they build is a
 	 * construction target fed from the owner's stockpile ({@link RegionView#build}), a plan answers {@code cost.survival} per part and
 	 * refuses a creative-only block {@code SURVIVAL}, and removal refunds what stands.
+	 * Since NEXT (6c S3), an S3 helper ({@code region.terracedZones}) adds {@code "terracedZones"}: plan/0's {@code terraces: {rise, retain,
+	 * stairs}} on a standard zone or a district lays its lots down the slope as levels {@code rise} apart (each lot with its apron on its own
+	 * level, rims over 2 retained by a wall with a rail, or blended by the relief), joined by routes between the lots' junctions instead of
+	 * a street; and ({@code region.monastery}) {@code "scenarioS3"} (the bundled {@code terraced_monastery} program, S3's terraced mountainside
+	 * monastery). No new record, method, reason or IR kind; old IRs are {@code PLAN_STALE} by the kit version, as every kit bump.
 	 */
 	Set<String> features();
 }
