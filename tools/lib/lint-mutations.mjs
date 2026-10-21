@@ -95,6 +95,7 @@ export async function runMutations({ only = null, json = null } = {}) {
       if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
     }
   }
+  if (json) fs.mkdirSync(path.dirname(path.resolve(json)), { recursive: true });
   if (json) fs.writeFileSync(json, `${JSON.stringify({ mutations: res }, null, 1)}\n`);
   console.log(`== mutations: ${res.length - bad} of ${res.length} historical bugs caught`);
   return bad ? 1 : 0;
