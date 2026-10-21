@@ -98,25 +98,6 @@ class UmtFindingsTest {
 	}
 
 	/**
-	 * LP (lamp on dirt path, the journal half; fix/lamp-path 52cc9606 makes it pass): a road's dirt path under a site's solid block
-	 * written just above it (Sites.FLAGS, outside the road's cells) turns to dirt (V3); the road's removal finds dirt, not its path,
-	 * leaves it, and the grass never comes back.
-	 */
-	@Test
-	void lp_aJournaledPathTurnedToDirtIsStillOurs() throws Exception {
-		try (UmtCase c = UmtCase.of(w -> {
-		})) {
-			UmtSim.Rec road = c.sim.cells(UmtOps.Kind.ROAD, 0, cells(p(2, G, 2), Blocks.DIRT_PATH, p(3, G, 2), Blocks.DIRT_PATH));
-			UmtSim.Rec post = c.site(2, G + 1, 2, 2, G + 2, 2, Blocks.AIR.defaultBlockState(), cells(p(2, G + 1, 2), Blocks.OAK_FENCE, p(2, G + 2, 2),
-				Blocks.LANTERN), 0);
-			assertEquals(Blocks.DIRT, c.at(p(2, G, 2)).getBlock(), "V3: the path under the post turned to dirt");
-			c.sim.remove(post, null);
-			c.sim.remove(road, null);
-			exact(c.sim.end());
-		}
-	}
-
-	/**
 	 * DRAIN (the coordinator's item 2): a region's body source, then a later, separate site placing a waterlogged stair over that cell.
 	 * Removing the region drains first (RegionFluids.drain, production): the cell holds a fluid (the stair is waterlogged), so it goes
 	 * back to the body's before state, overwriting the site's stair before any journal hand-down. The site stands with a hole.

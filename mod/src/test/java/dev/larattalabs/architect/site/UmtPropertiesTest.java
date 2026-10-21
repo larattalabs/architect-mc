@@ -409,6 +409,25 @@ class UmtPropertiesTest {
 		assertFalse(durable.has("planned"), durable.toString());
 	}
 
+	/**
+	 * (LP, fixed by fix/lamp-path; was UmtFindingsTest's repro) Lamp on dirt path, the journal half: a road's dirt path under a site's solid block
+	 * written just above it (Sites.FLAGS, outside the road's cells) turns to dirt (V3); the road's removal finds dirt, not its path,
+	 * leaves it, and the grass never comes back.
+	 */
+	@Test
+	void lp_aJournaledPathTurnedToDirtIsStillOurs() throws Exception {
+		try (UmtCase c = UmtCase.of(w -> {
+		})) {
+			UmtSim.Rec road = c.sim.cells(UmtOps.Kind.ROAD, 0, cells(p(2, G, 2), Blocks.DIRT_PATH, p(3, G, 2), Blocks.DIRT_PATH));
+			UmtSim.Rec post = c.site(2, G + 1, 2, 2, G + 2, 2, Blocks.AIR.defaultBlockState(), cells(p(2, G + 1, 2), Blocks.OAK_FENCE, p(2, G + 2, 2),
+				Blocks.LANTERN), 0);
+			assertEquals(Blocks.DIRT, c.at(p(2, G, 2)).getBlock(), "V3: the path under the post turned to dirt");
+			c.sim.remove(post, null);
+			c.sim.remove(road, null);
+			exact(c.sim.end());
+		}
+	}
+
 	/** (F4) Groups.Removal.fromJson, production: a saved undo group the journal has is kept; one it never got is dropped (planned again). */
 	@Test
 	void f4_aSavedRemovalFollowsTheJournalsCommit() throws Exception {
