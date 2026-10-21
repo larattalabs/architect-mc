@@ -11,7 +11,8 @@
 //     rs04                         item 5's rs04 row (build, twin 0, E-flat 0, bills) with the ring evidence every poll (no bore cell open
 //                                  without its lining; ring by ring, not course by course)
 //     rs04half                     item 6's rs04 row: half of its bill fed: no run started without its whole bill, no open cut, M3/M4/M8/
-//                                  gravity 0 over the world as it stands
+//                                  gravity 0 over the world as it stands; (batch v0.41.0) RP's record: the unbuilt targets UNFINISHED,
+//                                  then fed to build.done: every target WRITTEN and listed, dev.region.realised verify ok
 //     ice                          N-RS-4: rs08's capped pond in a freezing biome built in survival: the cap free (no ice taken), the body
 //                                  settled after its shell, equal to its twin, E-flat 0
 //     lava                         items 8 and 9 (lava rows): rs03 built with the conservation sum at 10 or more checkpoints (lava charged,
@@ -239,6 +240,15 @@ steps.rs04half = async () => {
   check(cuts.bad.length === 0 && bad.length === 0, `item 6 (rs04): no bore cell open without its lining, at the checkpoint and in ${samples} samples on the way: ${cuts.open} open cut(s) of ${cuts.cells} target cells (rings ${ring.firstOpen}..${ring.lastOpen} open, lining unbuilt from ring ${ring.firstUnbuilt})`, [...cuts.bad, ...bad].slice(0, 6));
   check(rs.build && rs.build.percent > 0 && rs.build.percent < 100, `item 6 (rs04): half built (${rs.build?.percent}% of the paid cells)`);
   check(sm.M3 === 0 && (sm.M4 ?? 0) === 0 && (sm.M8 ?? 0) === 0 && sm.gravity === 0, `item 6 (rs04): the world as it stands half built: M3 ${sm.M3} floating, M4 ${sm.M4}, M8 ${sm.M8} unguarded, ${sm.gravity} gravity (tunnel findings ${sm.tunnel}, recorded)`, sm);
+  // (batch v0.41.0, RP wiring) the tunnel targets' cells UNFINISHED in the realised record while unbuilt; then the rest fed: every
+  // target built, its cells WRITTEN and its site listed, and RP's verify agrees after build.done
+  const rpHalf = await G.rpRecord(ctx, region);
+  check(...G.rpHalf('rs04', rpHalf), rpHalf);
+  const fd = await R.feed(ctx, G, region, { timeoutMs: 2_400_000 });
+  const rpDone = await G.rpRecord(ctx, region, { verify: true });
+  const [okDone, msgDone] = G.rpDone('rs04', rpDone);
+  check(okDone && fd.last.st.view.state === 'PLACED' && fd.last.rs.build?.done, `${msgDone}; the rest fed: ${fd.last.st.view.state}, done ${fd.last.rs.build?.done}`, rpDone);
+  out.rp = { half: rpHalf, done: rpDone };
   await G.remove(ctx, region);
   return out;
 };

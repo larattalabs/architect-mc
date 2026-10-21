@@ -290,3 +290,40 @@ export function billsOf(ck, rs) {
   got.__region__ = all;
   return { want, got };
 }
+
+// ------------------------------------------------------------------ (batch v0.41.0) RP's realised record of a survival region
+
+/**
+ * The region's realised record (dev.region.realised, RP) read against its targets (dev.rs.state): UNFINISHED cells in the records, the
+ * cells of the targets not BUILT, which targets' sites the records list. With `verify`, RP's verify (journal and world) too.
+ * The wiring: a target's cells are UNFINISHED from put-down; when it is BUILT they are WRITTEN and its site is in its tile's record.
+ */
+export async function rpRecord(ctx, region, { verify = false } = {}) {
+  const rp = await ctx.L.call('dev.region.realised', { region, ...(verify ? { verify: true, world: true } : {}) }, 1_800_000);
+  const rs = await rsState(ctx, region);
+  const tiles = rp.tiles ?? [];
+  const count = (k) => tiles.reduce((a, t) => a + (t.codes?.[k] ?? 0), 0);
+  const sites = new Set(tiles.flatMap((t) => String(t.site ?? '').split(',').filter(Boolean)));
+  const targets = rs.targets ?? [];
+  const built = targets.filter((t) => t.done);
+  const open = targets.filter((t) => !t.done);
+  return {
+    tiles: tiles.length, unfinished: count('UNFINISHED'), written: count('WRITTEN'), targets: targets.length, built: built.length, open: open.length,
+    openCells: open.reduce((a, t) => a + (t.cells ?? NaN), 0), builtListed: built.filter((t) => sites.has(t.target)).length,
+    openListed: open.filter((t) => sites.has(t.target)).map((t) => t.target), statuses: [...new Set(tiles.map((t) => t.status))],
+    ...(verify ? { verify: rp.verify && { ok: rp.verify.ok, unrecorded: rp.verify.unrecorded, targetsBuilding: rp.verify.targetsBuilding, notHeld: rp.verify.notHeld, cellsChecked: rp.verify.cellsChecked, placingLeftover: rp.verify.placingLeftover, problems: (rp.verify.problems ?? []).slice(0, 10) } } : {}),
+  };
+}
+
+/** The half-built check (UNFINISHED on the unbuilt targets, WRITTEN with their site listed on the built ones); returns [ok, message]. */
+export function rpHalf(tag, r) {
+  const ok = r.tiles > 0 && r.open > 0 && r.unfinished === r.openCells && r.builtListed === r.built && r.openListed.length === 0;
+  return [ok, `RP (${tag}, half built): the realised record holds the targets' cells UNFINISHED until built: ${r.unfinished} UNFINISHED = the ${r.openCells} cells of the ${r.open} target(s) not built; ${r.builtListed} of the ${r.built} built target(s) listed as their tile's entries (their cells WRITTEN), ${r.openListed.length} unbuilt listed; ${r.tiles} tile record(s), ${r.written} WRITTEN`];
+}
+
+/** The built check (after build.done: nothing UNFINISHED, every target listed, RP's verify agrees); returns [ok, message]. */
+export function rpDone(tag, r) {
+  const v = r.verify ?? {};
+  const ok = r.tiles > 0 && r.unfinished === 0 && r.open === 0 && r.builtListed === r.built && v.ok === true && v.targetsBuilding === 0 && v.unrecorded === 0;
+  return [ok, `RP (${tag}, build.done): ${r.unfinished} UNFINISHED, ${r.builtListed} of ${r.built} built target(s) listed; dev.region.realised verify ok ${v.ok} (unrecorded ${v.unrecorded}, targets building ${v.targetsBuilding}, ${v.cellsChecked} cells checked against the world, ${v.notHeld} not held${(v.problems ?? []).length ? `; ${v.problems.join(' | ').slice(0, 400)}` : ''})`];
+}

@@ -223,8 +223,18 @@ public final class RegionItems {
 				: null;
 			if (split != null && !split.groups().isEmpty()) {
 				// (6c RS) the free pass written now; each group's held and paid cells a construction target
+				// (RP §5) the targets' cells UNFINISHED in the realised record until each target builds them (RegionTargets.realisedBuilt)
+				int[][] payload = tile.cells() == null ? null : RegionTargets.payloadIndexes(tile.cells(), split);
+				int[] unfinished = payload == null ? null : RegionTargets.allIndexes(payload);
 				job = InfraPlace.beginTileSurvival(level, dev.larattalabs.architect.site.RegionKinds.of(t[2]), c, b.owner, i.ext, member, res, String.join("|", t),
-					split, t[0]);
+					split, t[0], payload, sid -> {
+						try {
+							RealisedRecords.tile(level, r, t, tile, res, sid, unfinished);
+						} catch (java.io.IOException e) {
+							throw new Sites.SiteException(Reason.OTHER, "the tile's realised record could not be written (" + e.getMessage() + ")");
+						}
+						WorldJournal.kill("RP1"); // the record written, the PLACING commit not submitted
+					});
 			} else {
 				job = InfraPlace.beginTile(level, dev.larattalabs.architect.site.RegionKinds.of(t[2]), c, b.owner, i.ext, member, res, String.join("|", t), sid -> {
 					// (RP) the realised record, durable before the PLACING commit is submitted

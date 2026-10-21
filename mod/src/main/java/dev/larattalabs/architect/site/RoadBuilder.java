@@ -470,6 +470,9 @@ public final class RoadBuilder {
 			SiteJournal.releaseKind(SiteGroupRec.CRATE_PREFIX + group, WorldJournal.CRATE);
 			Builder.dropItems(level, at, left, null);
 		}
+		if (RegionTargets.is(road)) {
+			RegionTargets.realisedBuilt(road); // (RP) its cells WRITTEN in the tile's realised record, before it is marked BUILT
+		}
 		Infra done = road.withConstruction(c.withState(Construction.BUILT, c.crate()).withPaused(false));
 		Infras.put(srv, done);
 		Builder.sendClear(srv, r, true);

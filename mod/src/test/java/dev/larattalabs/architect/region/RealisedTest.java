@@ -222,6 +222,27 @@ class RealisedTest {
 	}
 
 	@Test
+	void rsTargetBuiltAddsItsSiteOnceAndClearsNoEntry() throws IOException {
+		// (batch v0.41.0, RS wiring) a tile with no free-pass cell: NO_ENTRY and every target cell UNFINISHED until a target builds
+		Path world = tmp;
+		Realised.Tile t0 = sample(new byte[] {Realised.UNFINISHED, Realised.UNFINISHED, Realised.UNFINISHED, Realised.NOOP}, List.of(), new byte[0], "");
+		Realised.Tile t = new Realised.Tile(0, t0.stage(), t0.set(), t0.key(), "", Realised.NO_ENTRY, t0.tileSha(), t0.chainSha(), t0.codes(), List.of(),
+			new byte[0]);
+		Realised.write(world, "r2", t);
+		assertTrue(Realised.mark(world, "r2", 0, t.stage(), t.set(), t.key(), new int[] {0, 1}, Realised.WRITTEN, "c7"));
+		Realised.Tile a = Realised.read(world, "r2", 0, t.stage(), t.set(), t.key());
+		assertEquals(List.of("c7"), a.sites());
+		assertFalse(a.noEntry(), "a built target is the tile's first entry");
+		assertArrayEquals(new byte[] {Realised.WRITTEN, Realised.WRITTEN, Realised.UNFINISHED, Realised.NOOP}, a.codes());
+		assertTrue(Realised.mark(world, "r2", 0, t.stage(), t.set(), t.key(), new int[] {2}, Realised.WRITTEN, "c8"));
+		assertTrue(Realised.mark(world, "r2", 0, t.stage(), t.set(), t.key(), new int[] {2}, Realised.WRITTEN, "c8")); // idempotent
+		Realised.Tile b = Realised.read(world, "r2", 0, t.stage(), t.set(), t.key());
+		assertEquals(List.of("c7", "c8"), b.sites());
+		assertEquals(3, b.counts()[Realised.WRITTEN]);
+		assertEquals(0, b.counts()[Realised.UNFINISHED]);
+	}
+
+	@Test
 	void aSecondAttemptKeepsTheFirstAttemptsStandingEntry() {
 		// a crash after the first attempt's commit, before its item was placed: the item runs again, the world already holds the
 		// writes (NOOP now); the record keeps them WRITTEN and lists both entries

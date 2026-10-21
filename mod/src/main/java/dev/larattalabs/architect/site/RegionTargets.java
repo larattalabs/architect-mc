@@ -669,6 +669,12 @@ public final class RegionTargets {
 	 */
 	static Infra record(MinecraftServer srv, String id, String kind, @Nullable String owner, @Nullable JsonObject ext, Site.@Nullable Member member,
 		String dimension, String regionId, Group g, String tile) {
+		return record(srv, id, kind, owner, ext, member, dimension, regionId, g, tile, null);
+	}
+
+	/** {@link #record}; (RP) {@code payload}: the group's cells as the tile's payload indexes (the spec's {@code rpCells}). */
+	static Infra record(MinecraftServer srv, String id, String kind, @Nullable String owner, @Nullable JsonObject ext, Site.@Nullable Member member,
+		String dimension, String regionId, Group g, String tile, int @Nullable [] payload) {
 		int n = g.pos().length;
 		int x0 = Integer.MAX_VALUE, y0 = Integer.MAX_VALUE, z0 = Integer.MAX_VALUE, x1 = Integer.MIN_VALUE, y1 = Integer.MIN_VALUE, z1 = Integer.MIN_VALUE;
 		BlockState[] st = new BlockState[n];
@@ -714,6 +720,9 @@ public final class RegionTargets {
 		}
 		rs.add("runs", ends);
 		rs.addProperty("capStacks", cap);
+		if (payload != null) {
+			rs.addProperty(RP_CELLS, CellBits.intsBase64(payload)); // (RP) the group's cells as the tile's payload indexes
+		}
 		if (!bores.isEmpty()) {
 			rs.addProperty("rings", true);
 		}
@@ -727,6 +736,77 @@ public final class RegionTargets {
 		x.addProperty(EXT_PART, g.part());
 		Construction c = new Construction(Construction.BUILDING, queue, Builder.JOURNAL_TARGET, null, new BitSet(), false, null);
 		return new Infra(id, Infra.CELLS + kind, owner, x, dimension, box, System.currentTimeMillis(), member, true, spec, c);
+	}
+
+	// ------------------------------------------------------------------ (RP) the realised record: UNFINISHED at put-down, WRITTEN once built
+
+	/** (RP) A target's spec member: its cells as payload indexes of the tile as evaluated ({@code TileStream.Tile.cells()}). */
+	static final String RP_CELLS = "rpCells";
+
+	/**
+	 * (RP, CONTRACT "Slice RP" §5) Each group's cells as payload indexes of {@code orig} (the tile as evaluated, before the fluids gate),
+	 * in {@code split.groups()} order. A cell not in the tile (none: groups hold tile cells only) is left out.
+	 */
+	static int[][] payloadIndexes(Packed.Tile orig, Split split) {
+		Long2IntOpenHashMap at = new Long2IntOpenHashMap(orig.size() * 2);
+		at.defaultReturnValue(-1);
+		for (int i = 0; i < orig.size(); i++) {
+			at.put(orig.pos()[i], i);
+		}
+		int[][] out = new int[split.groups().size()][];
+		for (int k = 0; k < out.length; k++) {
+			long[] gp = split.groups().get(k).pos();
+			int[] ix = new int[gp.length];
+			int n = 0;
+			for (long p : gp) {
+				int i = at.get(p);
+				if (i >= 0) {
+					ix[n++] = i;
+				}
+			}
+			out[k] = n == ix.length ? ix : java.util.Arrays.copyOf(ix, n);
+		}
+		return out;
+	}
+
+	/** (RP) Every group's payload indexes together: the cells the record marks UNFINISHED at put-down. */
+	static int[] allIndexes(int[][] byGroup) {
+		int n = 0;
+		for (int[] a : byGroup) {
+			n += a.length;
+		}
+		int[] out = new int[n];
+		int k = 0;
+		for (int[] a : byGroup) {
+			System.arraycopy(a, 0, out, k, a.length);
+			k += a.length;
+		}
+		return out;
+	}
+
+	/**
+	 * (RP) A target built (RoadBuilder.complete, before it is marked BUILT): its cells WRITTEN in the tile's realised record and its site
+	 * added to the record's entries (Realised.mark). A target put down before RP's wiring (no {@code rpCells}) or a region gone: nothing.
+	 * A failed write is logged; the record then still reads the target UNFINISHED.
+	 */
+	static void realisedBuilt(Infra t) {
+		JsonObject rs = spec(t);
+		if (rs == null || !rs.has(RP_CELLS) || !rs.has("tile")) {
+			return;
+		}
+		String[] tile = rs.get("tile").getAsString().split("\\|", -1);
+		var live = dev.larattalabs.architect.region.RegionsImpl.live(tile[0]);
+		if (tile.length != 4 || live == null) {
+			return;
+		}
+		try {
+			if (!dev.larattalabs.architect.region.Realised.mark(live.world(), tile[0], 0, tile[1], tile[2], tile[3], CellBits.intsFromBase64(rs.get(RP_CELLS)
+				.getAsString()), dev.larattalabs.architect.region.Realised.WRITTEN, t.id())) {
+				Architect.LOGGER.warn("Region target {}: built, but its tile {} has no realised record", t.id(), rs.get("tile").getAsString());
+			}
+		} catch (java.io.IOException e) {
+			Architect.LOGGER.warn("Region target {}: its realised record could not be marked built ({})", t.id(), e.toString());
+		}
 	}
 
 	static BlockState dry(BlockState s) {

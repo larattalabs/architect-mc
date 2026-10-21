@@ -11,7 +11,7 @@
 //                                       the asks before and after: fixtures/plan/rs/asks-creative.md, asks-survival.md), item 17 (api-compat)
 //     latent                            §0's latent bug: a creative-game-type world with the toggle on realises a region (PLACED)
 //     item4  .. item15                  one item each, on a fresh world copy (the verifier re-runs item5, item8, item9, item10, item11)
-//     ingame    (rs-ingame)             latent, items 4, 6, 6b, 7, 12, 13, 15
+//     ingame    (rs-ingame)             latent, items 4, 6 (with RP's record half built and after build.done), 6b, 7, 12, 13, 15
 //     survival  (rs-survival)           items 3 and 5 (build, bills), 8 (conservation), 9 (removal), 10 (mid-build removal), 14 (natural)
 //     crash     (rs-crash)              item 11
 //     report                            REPORT.md over the step JSONs
@@ -428,6 +428,15 @@ steps.item6 = async () => {
     check(runs.bad.length === 0, `item 6 (${tag}, half fed ${sum(acc)} items): no run started without its whole bill (${runs.started} run(s) under way, each with its remaining bill in stock)`, runs.bad.slice(0, 6));
     check(cuts.bad.length === 0, `item 6 (${tag}): no cut open without its lining or wall: ${cuts.open} open cut(s) of ${cuts.cells} target cells, every paid neighbour above and beside built`, cuts.bad.slice(0, 6));
     check(sm.M3 === 0 && (sm.M4 ?? 0) === 0 && sm.M8made === 0 && sm.gravity === 0, `item 6 (${tag}): the world as it stands half built: M3 ${sm.M3} floating, M4 ${sm.M4}, M8 ${sm.M8made} unguarded edge(s) the build made (${sm.M8} in all: the rest the land's own drops, unchanged since before the realise), ${sm.gravity} gravity`, sm);
+    // (batch v0.41.0, RP wiring) half built: the unbuilt targets' cells UNFINISHED in the realised record, the built ones WRITTEN with
+    // their sites listed; then the rest fed to build.done: nothing UNFINISHED and dev.region.realised verify agrees
+    const rpHalf = await G.rpRecord(ctx, region);
+    check(...G.rpHalf(tag, rpHalf), rpHalf);
+    const fd = await G.feed(ctx, region, { timeoutMs: 1_800_000 });
+    const rpDone = await G.rpRecord(ctx, region, { verify: true });
+    const [okDone, msgDone] = G.rpDone(tag, rpDone);
+    check(okDone && fd.last.st.view.state === 'PLACED' && fd.last.rs.build?.done, `${msgDone}; the rest fed: ${fd.last.st.view.state}, done ${fd.last.rs.build?.done}`, rpDone);
+    out[tag].rp = { half: rpHalf, done: rpDone };
     await G.remove(ctx, region);
   }
   // rs06: the road over the held terrace waits for the terrace's target, then equals its twin

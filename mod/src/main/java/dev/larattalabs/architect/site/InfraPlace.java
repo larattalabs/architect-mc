@@ -458,7 +458,7 @@ public final class InfraPlace {
 	/** (RP) Run with the new cell site's id after it is named and before its PLACING commit is submitted. */
 	@FunctionalInterface
 	interface BeforeCommit {
-		void run(String siteId) throws Sites.SiteException;
+		void run(@Nullable String siteId) throws Sites.SiteException;
 	}
 
 	/** {@link #beginTile}; (RP) {@code before} runs with the site id before the PLACING commit (the realised record). */
@@ -488,22 +488,29 @@ public final class InfraPlace {
 	/**
 	 * (6c RS) A survival region tile: its free-pass cells as the main entry (written now), each group with held or paid cells as a
 	 * construction target (an extra entry of the same transaction, written nothing). With no free-pass cell the first target is the main
-	 * entry (nothing written). Returns the job.
+	 * entry (nothing written). Returns the job. (RP) {@code payload}: each group's cells as the tile's payload indexes (by group, in
+	 * {@code split.groups()} order), kept in its target's spec for the realised record; {@code before} runs with the free-pass entry's
+	 * site id (null when the tile has no free-pass cell) before the PLACING commit is submitted.
 	 */
 	static InfraJob beginTileSurvival(ServerLevel level, String kind, Check c, @Nullable String owner, @Nullable JsonObject ext, Site.@Nullable Member member,
-		TileCheck.Result r, String tile, RegionTargets.Split split, String regionId) throws Sites.SiteException {
+		TileCheck.Result r, String tile, RegionTargets.Split split, String regionId, int @Nullable [][] payload, @Nullable BeforeCommit before)
+		throws Sites.SiteException {
 		SiteJournal.requireAvailable();
 		var srv = level.getServer();
 		String dim = Sites.dimensionId(level);
 		java.util.List<Infra> targets = new java.util.ArrayList<>();
-		for (RegionTargets.Group g : split.groups()) {
+		for (int k = 0; k < split.groups().size(); k++) {
+			RegionTargets.Group g = split.groups().get(k);
 			String tid = "c" + SiteJournal.store().newCells();
-			targets.add(RegionTargets.record(srv, tid, kind, owner, ext, member, dim, regionId, g, tile));
+			targets.add(RegionTargets.record(srv, tid, kind, owner, ext, member, dim, regionId, g, tile, payload == null ? null : payload[k]));
 		}
 		boolean free = split.freePos().length > 0;
 		InfraJob job;
 		if (free) {
 			String id = "c" + SiteJournal.store().newCells();
+			if (before != null) {
+				before.run(id);
+			}
 			JsonObject spec = c.spec() == null ? new JsonObject() : c.spec().deepCopy();
 			spec.addProperty("kind", kind);
 			spec.addProperty("policy", Journal.Policy.CELL.name());
@@ -514,6 +521,9 @@ public final class InfraPlace {
 			job.leafBefore = r.leafBefore();
 			job.leafAfter = r.leafAfter();
 		} else {
+			if (before != null) {
+				before.run(null); // (RP) no free-pass entry: the record has none until a target builds (Realised.mark)
+			}
 			Infra rec = targets.get(0);
 			job = new InfraJob(rec.id(), dim, kind, Journal.Policy.CELL, rec, member == null ? null : member.batchId(), member == null ? null : member.itemKey());
 			job.writeMain = false;
