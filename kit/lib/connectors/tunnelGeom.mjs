@@ -465,7 +465,11 @@ export function tunnel(r, a, b, opts = {}) {
   const slab = shapeOf(floorB, 'slab');
   const stairs = shapeOf(portalB, 'stairs');
   const part = opts.part ?? 'links';
-  const p = r.parts.find((q) => q.id === part) ?? r.part(part, { stage: opts.stage, set: 'path' });
+  // (6c RS-b) in survival the whole tunnel is written in its lining's stage (the route's, before the carve's in creative): its approach
+  // cut, its lining, its carve and its portals are then one construction target per tile, built ring by ring (a later stage's tile
+  // would wait for the earlier one whole, §6.3, and the approach's cut would stand open beside a portal not yet put down)
+  const stage = r.ctx?.survival && opts.liningStage ? opts.liningStage : opts.stage;
+  const p = r.parts.find((q) => q.id === part) ?? r.part(part, { stage, set: 'path' });
   (r.meta.parts[p.id] ??= {}).kind ??= 'path';
   const mats = [null, floorB, slab ? `${slab}[type=bottom,waterlogged=false]` : floorB, liningB, portalB, lights.hanging, lights.flush, lights.standing];
   const M = { air: 0, floor: 1, slab: 2, lining: 3, portal: 4, hanging: 5, flush: 6, post: 7 };
@@ -487,8 +491,10 @@ export function tunnel(r, a, b, opts = {}) {
   for (const [x, y, z, c] of g.voids) if (c !== 'AIR' && !lampAt.has(`${x},${y},${z}`)) air.push(x, z, y, y, M.air);
   for (const [x, y, z, kind] of g.floor) (kind === 'bed' ? solid : walk).push(x, z, y, y, kind === 'slab' && slab ? M.slab : M.floor);
   // (the lining, sealing and falling-block lining go first, in `liningStage` when the caller gives an earlier stage: every sand or
-  // gravel cell the carve would leave over air is lined before the carve, whatever order a stage's cells are written in)
-  const early = opts.liningStage && opts.liningStage !== opts.stage ? [] : solid;
+  // gravel cell the carve would leave over air is lined before the carve, whatever order a stage's cells are written in. (6c RS-b) Not
+  // in survival: the lining and the carve are one construction target there, built ring by ring, each ring's carve behind its lining
+  // (the mod's RegionTargets orders the cells; a later stage would wait for the whole lining first, §6.3))
+  const early = opts.liningStage && opts.liningStage !== opts.stage && !r.ctx?.survival ? [] : solid;
   for (const [x, y, z, why] of g.lined) (why === 'parapet' ? solid : early).push(x, z, y, y, why === 'parapet' ? matOf(parapetState(x, y, z)) : M.lining);
   for (const pt of g.portals) for (const [x, y, z, kind, facing] of pt.cells) {
     if (kind === 'arch' && stairs) solid.push(x, z, y, y, matOf(`${stairs}[facing=${facing},half=top,shape=straight,waterlogged=false]`));

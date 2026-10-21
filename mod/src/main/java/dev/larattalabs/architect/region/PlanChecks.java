@@ -227,6 +227,10 @@ public final class PlanChecks {
 			o.addProperty("bibleVersion", r.bibleVersion());
 		}
 		o.add("budget", budgetJson(b));
+		// (6c RS) a check in survival answers otherwise (its costs, its IR): its key's body says so (a creative check's hash is unchanged)
+		if (r.level() != null && RegionSurvival.on(r.level().getServer())) {
+			o.addProperty("survival", true);
+		}
 		// (6c T3) the load option only when it is not the default, so the keys of checks without it keep their hash
 		if (r.load() != null && r.load().loads()) {
 			JsonObject l = new JsonObject();
@@ -335,6 +339,10 @@ public final class PlanChecks {
 				if (planned.get("planCheck") instanceof JsonObject k && k.get("cost") instanceof JsonObject cost) {
 					cost.addProperty("chunksToGenerate", plan.budget().chunksToGenerate());
 					cost.addProperty("chunks", plan.budget().chunks());
+					// (6c RS, §3) a survival check's whole bill: the bound lots' design bills and the 4e roads' (the game's to add)
+					if (k.get("survival") instanceof JsonElement sv && sv.isJsonPrimitive() && sv.getAsBoolean()) {
+						survivalBills(level, r, plan.planId(), cost);
+					}
 				}
 				PlanCheck pc = fromPlanned(plan.planId(), planned);
 				if (!out.isCancelled()) {
@@ -358,6 +366,56 @@ public final class PlanChecks {
 			}
 		});
 		return out;
+	}
+
+	/**
+	 * (6c RS, §3) A survival check's plan bill completed by the game: each bound lot's design bill (its template's, C26's rules; the
+	 * foundation and approach its pad leaves are known only at put-down, so the note says the lots are their templates) and each 4e
+	 * road's bill (checkRoad's construction BOM over the land now), added to {@code cost.bom}; {@code cost.bomParts} names each addition.
+	 */
+	static void survivalBills(ServerLevel level, PlanRequest r, String planId, JsonObject cost) {
+		JsonObject bom = cost.get("bom") instanceof JsonObject b ? b : new JsonObject();
+		JsonObject parts = new JsonObject();
+		java.util.function.BiConsumer<String, Map<String, Integer>> add = (what, items) -> {
+			JsonObject o = new JsonObject();
+			items.forEach((k, v) -> {
+				o.addProperty(k, v);
+				bom.addProperty(k, (bom.has(k) ? bom.get(k).getAsInt() : 0) + v);
+			});
+			parts.add(what, o);
+		};
+		RegionsImpl.PlanRec p = RegionsImpl.planRec(planId);
+		int lots = 0;
+		if (p != null) {
+			Map<String, String> entries = PaletteRules.boundLots(r.plan());
+			for (var e : entries.entrySet()) {
+				String bpId = e.getValue().contains("@") ? e.getValue().substring(0, e.getValue().indexOf('@')) : e.getValue();
+				var grid = dev.larattalabs.architect.placement.TemplateGrid.of(bpId);
+				if (grid != null) {
+					add.accept("lot:" + e.getKey(), dev.larattalabs.architect.site.Builder.templateBom(grid));
+					lots++;
+				}
+			}
+			for (Ir.Road road : p.ir().roads()) {
+				List<net.minecraft.core.BlockPos> pts = new ArrayList<>();
+				road.points().forEach(pt -> pts.add(new net.minecraft.core.BlockPos(pt[0], pt[1], pt[2])));
+				try {
+					var c = dev.larattalabs.architect.site.InfraPlace.checkRoad(level, pts, road.width(), road.surface(), null, road.lanterns(), false, p.owner(),
+						true, true, null, road.lamp(), null);
+					if (c.ok()) {
+						add.accept("road:" + road.id(), dev.larattalabs.architect.site.RoadBuilder.bom(level, c.positions(), c.values()));
+					}
+				} catch (RuntimeException e) {
+					Architect.LOGGER.warn("Plan check: road {}'s bill could not be read: {}", road.id(), e.toString());
+				}
+			}
+		}
+		JsonObject sorted = new JsonObject();
+		bom.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> sorted.add(e.getKey(), e.getValue()));
+		cost.add("bom", sorted);
+		cost.add("bomParts", parts);
+		cost.addProperty("bomNote", "the regions' cells, " + lots + " bound lot" + (lots == 1 ? "" : "s") + " (their designs' template bills: the foundation and "
+			+ "approach are known when the lot is put down) and the 4e roads' bills (checkRoad's, over the land now)");
 	}
 
 	/** (6c T3) The last check's volume pass (DevBridge {@code dev.region.checkPlan}'s {@code volumePass}; gate item 14, recorded). */
@@ -569,7 +627,7 @@ public final class PlanChecks {
 		return new PlanCheck(planId, RegionsImpl.str(k, "planSha", ""), RegionsImpl.str(planned, "surveySha", RegionsImpl.str(k, "surveySha", "")),
 			RegionsImpl.str(k, "kitVersion", RegionsImpl.str(planned, "kitVersion", "")), RegionsImpl.str(k, "schemaVersion", "plan/0"), overall, parts, cost,
 			k.get("catalogue") instanceof JsonObject cat ? cat.deepCopy() : new JsonObject(), preview, k.get("artifactSha") instanceof JsonElement a
-				&& a.isJsonPrimitive() ? a.getAsString() : null, notes);
+				&& a.isJsonPrimitive() ? a.getAsString() : null, notes, k.get("survival") instanceof JsonElement sv && sv.isJsonPrimitive() && sv.getAsBoolean());
 	}
 
 	/** Keeps a finished check: the artifact (its canonical body checked against its sha) and, with a key, the check's record. */
@@ -919,6 +977,12 @@ public final class PlanChecks {
 		}
 		if (!p.irSha().equals(body.getAsJsonObject("region").get("irSha").getAsString())) {
 			return refused(Reason.ARTIFACT_STALE, "artifact " + sha.substring(0, 12) + ": its plan's IR is not the artifact's");
+		}
+		// (6c RS, §3, S-RS-5) the artifact was checked in the world's mode: a creative artifact in survival (or the reverse) is stale
+		boolean checkedSurvival = body.get("survival") instanceof JsonElement sv && sv.isJsonPrimitive() && sv.getAsBoolean();
+		if (checkedSurvival != RegionSurvival.on(s)) {
+			return refused(Reason.ARTIFACT_STALE, checkedSurvival ? "artifact " + sha.substring(0, 12) + " was checked in survival: check the plan again in creative"
+				: "artifact " + sha.substring(0, 12) + " was checked in creative: check the plan again in survival");
 		}
 		ServerLevel level = Sites.levelOf(s, p.dimension());
 		if (level == null) {

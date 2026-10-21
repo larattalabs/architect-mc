@@ -623,6 +623,15 @@ public final class Placement {
 			if (!ij.beforeRecord && !clean) {
 				boolean active = SiteJournal.main(ij.siteId) != null && SiteJournal.main(ij.siteId).status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE;
 				if (!active) {
+					// (6c RS) the extra targets wrote nothing: their entries are released and their records dropped (the main rolls back)
+					for (InfraJob.Extra e : ij.extras) {
+						try {
+							SiteJournal.release(e.record.id());
+						} catch (Sites.SiteException x) {
+							Architect.LOGGER.warn("Region target {}: its entry could not be released: {}", e.record.id(), x.getMessage());
+						}
+						Infras.drop(srv, e.record.id());
+					}
 					RestoreJob rb = new RestoreJob(ij.siteId, RestoreJob.ROLLBACK, ij.batchId, ij.itemKey);
 					rb.requeue = true;
 					rb.why = "the game stopped without saving while it was being placed";
@@ -659,6 +668,10 @@ public final class Placement {
 				boolean before = ("place".equals(k) || "infra".equals(k)) && o.has("beforeRecord") && o.get("beforeRecord").getAsBoolean();
 				if (clean || !before) {
 					out.add(o.get("siteId").getAsString());
+					// (6c RS) a region tile's extra targets: placed by the same job
+					if (o.get("extras") instanceof JsonArray x) {
+						x.forEach(xe -> out.add(xe.getAsJsonObject().getAsJsonObject("record").get("id").getAsString()));
+					}
 				}
 			}
 			for (JsonElement e : root.has("removals") ? root.getAsJsonArray("removals") : new JsonArray()) {

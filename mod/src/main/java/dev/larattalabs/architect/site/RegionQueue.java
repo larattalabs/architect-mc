@@ -18,11 +18,17 @@ public final class RegionQueue {
 
 	/** A region's ground road as a 4e road item. */
 	public static QItem roadItem(ServerLevel level, String region, String key, String stage, List<String> after, RoadRequest r) {
+		return roadItem(level, region, key, stage, after, r, false, false);
+	}
+
+	/** (6c RS) With the region's flags: {@code construction} (a survival region: a construction road), {@code survivalAtQueue} (the toggle). */
+	public static QItem roadItem(ServerLevel level, String region, String key, String stage, List<String> after, RoadRequest r, boolean construction,
+		boolean survivalAtQueue) {
 		com.google.gson.JsonObject ext = new com.google.gson.JsonObject();
 		ext.addProperty(RegionItems.EXT_REGION, region);
 		var first = r.points().get(0);
-		QItem q = new QItem(key, stage, after, "road", Sites.dimensionId(level), first.getX(), first.getY(), first.getZ(), 0, r.force(), ext, null, false,
-			false);
+		QItem q = new QItem(key, stage, after, "road", Sites.dimensionId(level), first.getX(), first.getY(), first.getZ(), 0, r.force(), ext, null, construction,
+			survivalAtQueue);
 		q.itemKind = "road";
 		q.spec = InfraSpec.road(r);
 		return q;

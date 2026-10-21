@@ -111,6 +111,11 @@ public final class Brushes {
 	 * Pure but for the actor's lookup.
 	 */
 	static @Nullable ArchitectRefused refusal(BrushRequest r, @Nullable ServerPlayer actor, boolean console) {
+		return refusal(r, actor, console, actor != null ? actor.level().getServer() : null);
+	}
+
+	/** (6c RS) {@code server}: the world's mode decides (a survival world refuses PLAYER_BLOCKS strokes). */
+	static @Nullable ArchitectRefused refusal(BrushRequest r, @Nullable ServerPlayer actor, boolean console, @Nullable MinecraftServer server) {
 		if (r.owner() == null || r.owner().isBlank()) {
 			return new ArchitectRefused(Reason.FIELD_LIMIT, "owner: required (<modid>:<thing>, or " + PLAYER_OWNER + ")");
 		}
@@ -130,8 +135,10 @@ public final class Brushes {
 		if (r.dimension() != Level.OVERWORLD) {
 			return new ArchitectRefused(Reason.NOT_ALLOWED, "brush strokes are Overworld only in this version");
 		}
-		if (dev.larattalabs.architect.survival.SurvivalWorld.on()) {
-			return new ArchitectRefused(Reason.NOT_ALLOWED, "brush strokes are refused in a survival-toggle world (until regions in survival)");
+		// (6c RS, §4.2) in a survival world a stroke is the player's tool with no stockpile: a natural-only stroke realises free; one that
+		// clears player blocks is refused (and, after its plan, one that would write a paid cell)
+		if (RegionSurvival.on(server) && r.destruction() == Destruction.PLAYER_BLOCKS) {
+			return new ArchitectRefused(Reason.NOT_ALLOWED, "in a survival world a brush stroke is natural-only: PLAYER_BLOCKS is refused");
 		}
 		// (6c PT, N-PT-5) a build's own placer may consent to PLAYER_BLOCKS on that build (it then clears only the builds the consent
 		// names; every other player block stays); B's op-only rule (N-B-1) stays for everyone else's blocks
@@ -185,7 +192,7 @@ public final class Brushes {
 		long t0 = System.currentTimeMillis();
 		return RegionsImpl.onServer(s, () -> {
 			ServerPlayer actor = r.actor() == null ? null : s.getPlayerList().getPlayer(r.actor());
-			ArchitectRefused no = refusal(r, actor, console);
+			ArchitectRefused no = refusal(r, actor, console, s);
 			if (no != null) {
 				throw no;
 			}
@@ -246,6 +253,15 @@ public final class Brushes {
 				? volume(level, new BoundingBox(vb[0], vb[1], vb[2], vb[3], vb[4], vb[5]))
 				: CompletableFuture.completedFuture(null);
 			return vol.thenCompose(v -> RegionsImpl.INSTANCE.planStroke(pr, v)).thenCompose(plan -> RegionsImpl.onServer(s, () -> {
+				// (6c RS, §4.2) a survival stroke writes only free cells: one with a paid cell (a pattern of player blocks) is refused
+				RegionsImpl.PlanRec pp = RegionsImpl.planRec(plan.planId());
+				if (pp != null && RegionSurvival.planned(pp.ir().json())) {
+					long[] c = RegionSurvival.cells(pp.ir().json());
+					if (c[1] > 0 || c[2] > 0 || !RegionSurvival.creativeOnly(pp.ir().json()).isEmpty()) {
+						throw RegionsImpl.refusal(Reason.NOT_ALLOWED, "in a survival world a brush stroke writes only natural blocks for free: this one would write "
+							+ (c[2] + c[1]) + " paid cell(s) (its pattern or material is not natural)");
+					}
+				}
 				STROKES.put(plan.planId(), rec);
 				long t1 = System.currentTimeMillis();
 				RealiseRequest rr = new RealiseRequest(plan.planId(), Mode.INSTANT, actor, Map.of(), null, true, null, true, new JsonObject());

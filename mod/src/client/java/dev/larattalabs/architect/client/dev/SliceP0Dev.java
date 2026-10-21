@@ -74,6 +74,9 @@ public final class SliceP0Dev {
 		o.addProperty("kitVersion", pc.kitVersion());
 		o.addProperty("schemaVersion", pc.schemaVersion());
 		o.addProperty("overall", pc.overall().name());
+		if (pc.survival()) {
+			o.addProperty("survival", true); // (6c RS) checked in survival
+		}
 		JsonArray parts = new JsonArray();
 		pc.parts().forEach(parts::add);
 		o.add("parts", parts);

@@ -6,7 +6,8 @@
 //   kit/vocab/edges.json                 the derived per-block edges (family links, the tier path's raw items, one survival source,
 //                                        and BlockDump/VocabDump's rt, wx, be, ff): never a recipe or a loot table (N-VOC-7)
 //   kit/lib/blocks.mjs                   its vocabulary section (`fam`, `col`, `t`, `sv`, `rt`, `wx`, `be`, `ft`, `ff`)
-//   kit/lib/vocab/survival.mjs           CREATIVE_ONLY and COSTS (check.mjs and connectors/bom.mjs import them)
+//   kit/lib/vocab/survival.mjs           CREATIVE_ONLY, COSTS and (6c RS) FREE_EXCEPT (check.mjs and connectors/bom.mjs import them)
+//   kit/lib/region/survivalData.mjs      (6c RS) the region evaluator's copy: FREE_NATURAL, CREATIVE_ONLY, COSTS (the realise lint)
 //   mod/.../architect_mc/survival_items.json  creativeOnly and costs (SurvivalItems.java reads it)
 //   kit/schemas/vocab-1.json             the vocab/1 document (the systemRef `vocab/1`, and `#compact`)
 //
@@ -28,6 +29,7 @@ export const OUT = {
   edges: path.join(ROOT, 'kit', 'vocab', 'edges.json'),
   blocks: path.join(ROOT, 'kit', 'lib', 'blocks.mjs'),
   survival: path.join(ROOT, 'kit', 'lib', 'vocab', 'survival.mjs'),
+  survivalRegion: path.join(ROOT, 'kit', 'lib', 'region', 'survivalData.mjs'),
   survivalItems: path.join(ROOT, 'mod', 'src', 'main', 'resources', 'data', 'architect_mc', 'survival_items.json'),
   doc: path.join(ROOT, 'kit', 'schemas', 'vocab-1.json'),
 };
@@ -119,10 +121,14 @@ export async function generateAll(base, edges, tables) {
   const G = await import('../lib/vocab/groups.mjs');
   const r = D.deriveVocab({ blocks: B.BLOCKS, tagBlocks: B.tagBlocks, edges, tables, hand: { STONE_FAMILIES: K.STONE_FAMILIES, WOODS: K.WOODS, woodFamilyOf: K.woodFamilyOf }, emissionOf: B.emissionOf });
   if (!base.includes(MARK)) throw new Error('blocks.mjs base has no vocabulary marker');
+  // (6c RS) the free rule's data: the voxel table's natural blocks less survival.json's `free` exceptions
+  const voxels = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'voxel_classes.json'), 'utf8')).blocks;
+  const freeExcept = D.freeExceptOf(r.fields, voxels, tables.survival.free);
   const files = {
     [OUT.edges]: edgesText(edges),
     [OUT.blocks]: base.replace(`${MARK}\n`, () => `${D.vocabSection(r.fields)}\n`),
-    [OUT.survival]: D.survivalModule(r.creativeOnly, r.costs),
+    [OUT.survival]: D.survivalModule(r.creativeOnly, r.costs, freeExcept),
+    [OUT.survivalRegion]: D.survivalRegionModule(r.fields, voxels, r.creativeOnly, r.costs, freeExcept),
     [OUT.survivalItems]: D.survivalItemsJson(r.creativeOnly, r.costs, tables.survival.mod),
     [OUT.doc]: `${JSON.stringify(D.vocabDoc(r.fields, { groups: G.GROUPS }), null, 1)}\n`,
   };

@@ -55,6 +55,16 @@ public final class RegionRec {
 	 */
 	public @Nullable String beside;
 	/**
+	 * (6c RS) A survival region's record: {@code {on: true, freeCells: {part: n}, charged: {item: n}, chargedAt, scooped}} (the free pass's
+	 * cells per part, what its bodies' writes took from the stockpile); null for a creative region. Written by the mod only.
+	 */
+	public @Nullable JsonObject survival;
+
+	/** (6c RS) Whether the region realises in survival. */
+	public boolean survival() {
+		return survival != null;
+	}
+	/**
 	 * (6c PT §6) The builds the realise's (or stroke's) consent named and the check accepted (an actor placed at least 10% or holds
 	 * permission level 2): their cells may be written. Validated once at the request; kept so a resumed region keeps it.
 	 */
@@ -231,6 +241,9 @@ public final class RegionRec {
 			o.addProperty("opKey", opKey);
 			o.addProperty("opHash", opHash);
 		}
+		if (survival != null) {
+			o.add("survival", survival.deepCopy());
+		}
 		if (beside != null) {
 			o.addProperty("beside", beside);
 		}
@@ -309,6 +322,7 @@ public final class RegionRec {
 		r.opHash = o.has("opHash") ? o.get("opHash").getAsString() : null;
 		r.brush = o.get("brush") instanceof JsonObject b ? b.deepCopy() : null;
 		r.beside = o.has("beside") && o.get("beside").isJsonPrimitive() ? o.get("beside").getAsString() : null;
+		r.survival = o.get("survival") instanceof JsonObject sv ? sv.deepCopy() : null;
 		return r;
 	}
 

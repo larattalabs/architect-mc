@@ -8,12 +8,13 @@
 // wins), which is scanned in (sy, y, z, x) order, i.e. ARTL order.
 import { COMBINATORS, compileShape, PRIMITIVES, SHAPES_FORMAT2, sdAt, shapeKinds, strataOf, yrefFn } from './sdf.mjs';
 import { compileRule, decodeField, FACING_MAX_PRIMITIVES, ruleError, ruleUsesFacing } from './material.mjs';
-import { ByteWriter, FLAG_MISSING, asColumns, sha256Hex, stateBytes, writeArtlHeader } from './region/pack.mjs';
+import { ByteWriter, FLAG_MISSING, FLAG_WATER, asColumns, sha256Hex, stateBytes, writeArtlHeader } from './region/pack.mjs';
 import { ROTATIONS, decodeVoxels, turnState, turnXZ, voxelAt, voxelsBounds } from './region/voxels.mjs';
 import { compileMask, maskError, maskUses } from './mask.mjs';
 import { compilePattern, isPattern, patternError } from './pattern.mjs';
 import { VOXEL_CLASSES, blockAt as volumeBlockAt, classAt as volumeClassAt, decodeArvx } from './region/volume.mjs';
 import { compileScatter, compileStamp, scatterTileCells, stampTileCells } from './region/scatter.mjs';
+import { CLASS_HELD, CLASS_PAID, CREATIVE_ONLY, MK_DIRT_PATH, blockName, canPay, chargedOf, freeCell, itemsOf, materialKind } from './region/survival.mjs';
 
 export const AIR = 'minecraft:air';
 export const OP_KINDS = ['shape', 'columns', 'voxels', 'relief', 'scatter', 'stamp', 'fluid'];
@@ -23,7 +24,7 @@ export const IR_FORMATS = Object.freeze([1, 2]);
 /** (6b) Every format-2 kind an IR's `requires` may name; any of them makes the IR format 2. */
 export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:array', 'shape:capsuleChain', 'shape:ellipsoid',
   'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'road:lamp', 'voxels',
-  'mask', 'pattern', 'relief', 'scatter', 'stamp', 'volume:blocks', 'fluid', 'volume:fluids', 'courses']);
+  'mask', 'pattern', 'relief', 'scatter', 'stamp', 'volume:blocks', 'fluid', 'volume:fluids', 'courses', 'survival']);
 // (6c W) 'road:lamp': a 4e road's `lamp` (the bible's lamp fixture for its lanterns; kit/lib/region/fixtures.mjs roadLamp). A mod
 // before 0.18.0 would lay its own fence and lantern, so the plan needs it (PLAN_STALE there).
 // (6c MP) `mask` (an op's mask) and `pattern` (a pattern anywhere a material goes) from kit 0.19.0
@@ -37,6 +38,9 @@ export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'ma
 // (6c HY) 'courses': a fluid op with a course's members (after, lining or grate non-empty, or a join into a plan body: kit/lib/fluids/
 // body.mjs isCourseOp): a mod or kit before HY would write the course out of order (no `after`), so it refuses the plan PLAN_STALE. The
 // evaluator writes a `grate` cell as iron_bars[waterlogged=true] over its source.
+// (6c RS) 'survival': a survival IR (the member `survival`: its target groups, kit/REGIONS.md "Kit 0.42.0"): its tiles are ARTL version 2
+// (each cell's class and group) and its ops carry `free`; a mod or kit before RS would write every cell at once, for free, so it refuses the
+// plan PLAN_STALE.
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS
@@ -50,12 +54,12 @@ export const OPS_RESERVED = [];
 /** (6b) The members a format-2 IR may have (anything else throws). */
 // ((6c H-a) `biomes`: the biome grid's sha a plan records when it reads ctx.biomes (D2), now also in format 2: a body's ice cap reads it)
 export const MEMBERS_FORMAT2 = ['anchors', 'biomes', 'blobs', 'blockTags', 'budget', 'claim', 'fields', 'floating', 'format', 'forms', 'graph', 'id', 'keepOut', 'kitVersion', 'lots', 'node', 'params',
-  'parts', 'paths', 'programSha', 'requires', 'roads', 'roles', 'rules', 'seed', 'stages', 'tiles', 'utility', 'volumes'];
+  'parts', 'paths', 'programSha', 'requires', 'roads', 'roles', 'rules', 'seed', 'stages', 'survival', 'tiles', 'utility', 'volumes'];
 // (6c V) `graph` (the settlement graph, SETTLEMENTS §8.1) and `keepOut` (the protected rects a program honoured) are known
 // members from kit 0.16.0, in format 1 and 2; the evaluator ignores them. An older kit refuses such a plan PLAN_STALE by the
 // kitVersion bump.
 /** (6b) The running kit's version (kept equal to lib/region/plan.mjs KIT_VERSION by a test). */
-export const EVAL_KIT_VERSION = '0.38.0';
+export const EVAL_KIT_VERSION = '0.42.0';
 
 /** Compare two semver strings (major.minor.patch, numeric): -1, 0, 1. */
 export function semverCompare(a, b) {
@@ -110,6 +114,7 @@ export function walkKinds(ir) {
   if (ir.volumes && Object.values(ir.volumes).some((v) => v && v.fluids === true)) k.add('volume:fluids'); // (6c H)
   if (Array.isArray(ir.forms) && ir.forms.length) k.add('forms');
   if ((ir.roads ?? []).some((r) => r.lamp)) k.add('road:lamp');
+  if (ir.survival && typeof ir.survival === 'object') k.add('survival'); // (6c RS)
   return [...k].sort();
 }
 
@@ -243,19 +248,25 @@ export function compileIR(ir, opts = {}) {
   for (const k of ['minX', 'minZ', 'maxX', 'maxZ', 'minY', 'maxY']) if (!Number.isInteger(claim?.[k])) throw new Error(`IR: claim.${k} must be an integer`);
   const mats = [];
   const matIdx = new Map();
+  // (6c RS) a survival IR: the materials each op can write (its candidate set, for its group's hold)
+  let track = null;
   const mat = (s) => {
     const st = s == null ? AIR : s;
     let i = matIdx.get(st);
     if (i === undefined) { i = mats.length; mats.push(st); matIdx.set(st, i); }
+    if (track) track.add(i);
     return i;
   };
   mat(AIR);
   const parts = [];
   const ops = [];
+  const SV = ir.survival && typeof ir.survival === 'object' ? ir.survival : null;
+  const opMats = [];
   for (const p of ir.parts ?? []) {
     const pi = parts.length;
     parts.push({ id: p.id, stage: p.stage, set: p.set ?? 'terrain' });
     for (const o of p.ops ?? []) {
+      if (SV) { track = new Set(); opMats.push(track); }
       const where = `IR part ${p.id} op ${ops.length}`;
       if (ops.length >= MAX_OPS) throw new Error(`IR: more than ${MAX_OPS} ops`);
       const cond = o.cond ?? 0;
@@ -369,9 +380,51 @@ export function compileIR(ir, opts = {}) {
     }
   }
   if (ops.length >= OP_SLOTS) throw new Error('IR: too many ops');
-  c = { claim, ops, mats, parts, matBytes: mats.map(stateBytes), isAir: mats.map((s) => s === AIR), format: ir.format };
+  track = null;
+  c = { claim, ops, mats, parts, matBytes: mats.map(stateBytes), isAir: mats.map((s) => s === AIR), format: ir.format, survival: SV ? compileSurvival(SV, ir.parts ?? [], parts, ops, mats, opMats) : null };
   compiled.set(ir, c);
   return c;
+}
+
+/**
+ * (6c RS) A survival IR's evaluation data: each IR part's group (`survival.parts`), the lot pad parts (`survival.pads`: their free cells are
+ * always the free pass), each op's `free` mark (a terrain kind wrote it; relief, scatter and stamp ops are terrain kinds by kind) and fluid
+ * flag, each material's kind, and each group's hold: a group holds its free cells (§4.3) when one of its non-pad parts has an op that can
+ * write a paid cell (from the op's candidate materials, statically).
+ */
+function compileSurvival(sv, irParts, parts, ops, mats, opMats) {
+  const groups = Array.isArray(sv.groups) ? sv.groups.map(String) : [];
+  const map = sv.parts && typeof sv.parts === 'object' ? sv.parts : {};
+  const pads = new Set(Array.isArray(sv.pads) ? sv.pads : []);
+  const groupOfPart = new Int32Array(parts.length);
+  const padPart = new Uint8Array(parts.length);
+  parts.forEach((p, i) => {
+    const g = map[p.id];
+    if (!(Number.isInteger(g) && g >= 0 && g < groups.length)) throw new Error(`IR: survival.parts has no group for part ${p.id}`);
+    groupOfPart[i] = g;
+    padPart[i] = pads.has(p.id) ? 1 : 0;
+  });
+  const opFree = new Uint8Array(ops.length), opFluid = new Uint8Array(ops.length);
+  let k = 0;
+  for (const p of irParts) for (const o of p.ops ?? []) {
+    opFree[k] = o.free === true || o.op === 'relief' || o.op === 'scatter' || o.op === 'stamp' ? 1 : 0;
+    opFluid[k] = o.op === 'fluid' ? 1 : 0;
+    k++;
+  }
+  const mk = Int8Array.from(mats.map((m) => materialKind(m)));
+  const hold = new Uint8Array(groups.length);
+  for (let i = 0; i < ops.length; i++) {
+    const pi = ops[i].part;
+    if (padPart[pi] || hold[groupOfPart[pi]]) continue;
+    for (const m of opMats[i]) if (canPay(mk[m], opFree[i], opFluid[i])) { hold[groupOfPart[pi]] = 1; break; }
+  }
+  const items = new Array(mats.length).fill(null);
+  return {
+    groups, groupOfPart, padPart, opFree, opFluid, mk, hold,
+    itemsAt: (m) => (items[m] ??= itemsOf(mats[m])),
+    charged: mats.map((m) => chargedOf(m)),
+    creative: mats.map((m) => CREATIVE_ONLY.has(blockName(m))),
+  };
 }
 
 /** Count the primitive shapes of a shape tree (array/instances count their copies). */
@@ -468,6 +521,9 @@ function reliefAt(f, x, z) {
 let BUF = new Int32Array(0);
 const SCRATCH_V = new Int32Array(4096);
 const SCRATCH_P = new Int32Array(4096);
+// (6c RS) a survival IR's ARTL v2: each cell's class and group
+const SCRATCH_C = new Uint8Array(4096);
+const SCRATCH_G = new Int32Array(4096);
 
 /**
  * Evaluate one tile. `heights`: ARSV bytes or a decoded columns object covering the tile's columns (normally its 80x80
@@ -516,6 +572,9 @@ export function evalTile(ir, key, heights, opts = {}) {
   if (BUF.length < ny * 256) BUF = new Int32Array(ny * 256);
   const buf = BUF;
   const partStats = C.parts.map(() => [0, 0]); // removed, placed
+  // (6c RS) a survival IR: per group {free, held, paid, bom, charged, creativeOnly}
+  const S = C.survival;
+  const svStats = S ? S.groups.map(() => null) : null;
   let clipped = 0, missing = 0, count = 0, removed = 0, added = 0, minY = null, maxY = null;
   const body = countOnly ? null : new ByteWriter(1 << 16);
   let sections = 0;
@@ -767,6 +826,29 @@ export function evalTile(ir, key, heights, opts = {}) {
             const m = (v - opi - 1) / OP_SLOTS;
             const o = C.ops[opi];
             if (C.isAir[m]) { removed++; partStats[o.part][0]++; } else { added++; partStats[o.part][1]++; }
+            if (S) {
+              // (6c RS, §4) the cell's class: free (the free pass), held (free, in a holding group's target) or paid
+              const g = S.groupOfPart[o.part];
+              const kind = S.mk[m];
+              let ground = 0, wet = false;
+              if (kind === MK_DIRT_PATH) {
+                const ci = sx * 16 + (p & 15) - cols.minX, cj = sz * 16 + ((p >> 4) & 15) - cols.minZ;
+                if (ci >= 0 && cj >= 0 && ci < cols.width && cj < cols.depth) { const q = ci + cj * cols.width; ground = cols.ground[q]; wet = (cols.flags[q] & FLAG_WATER) !== 0; }
+                else ground = -Infinity;
+              }
+              const free = freeCell(kind, S.opFree[opi] === 1, S.opFluid[opi] === 1, yBase + s * 16 + (p >> 8), ground, wet);
+              // a fluid op's cells are never held: the fluids gate writes them in its waves (a target writing a reach's sources after the gate
+              // cleared the reaches not yet due would let them flow early)
+              const cls = free ? (S.hold[g] && !S.padPart[o.part] && S.opFluid[opi] !== 1 ? CLASS_HELD : 0) : CLASS_PAID;
+              const st = (svStats[g] ??= { free: 0, held: 0, paid: 0, bom: new Map(), charged: new Map(), creativeOnly: new Map() });
+              if (cls === CLASS_PAID) { st.paid++; for (const [it, c] of S.itemsAt(m)) st.bom.set(it, (st.bom.get(it) ?? 0) + c); }
+              else if (cls === CLASS_HELD) st.held++;
+              else st.free++;
+              if (S.opFluid[opi] && S.charged[m]) st.charged.set(S.charged[m], (st.charged.get(S.charged[m]) ?? 0) + 1);
+              if (S.creative[m]) { const b = blockName(C.mats[m]); st.creativeOnly.set(b, (st.creativeOnly.get(b) ?? 0) + 1); }
+              SCRATCH_C[n] = cls;
+              SCRATCH_G[n] = g;
+            }
             if (opsOut) {
               if (opsN === opsOut.length) { const g = new Int32Array(opsN * 2); g.set(opsOut); opsOut = g; }
               opsOut[opsN++] = opi;
@@ -803,6 +885,15 @@ export function evalTile(ir, key, heights, opts = {}) {
             else for (let i = 0; i < n; i++) { const w = SCRATCH_V[i]; bb[L++] = w & 255; bb[L++] = w >>> 8; }
           }
           body.len = L;
+          if (S) {
+            // (6c RS) ARTL v2: the cells' classes (u8 each), then their groups (u16 LE each)
+            body.ensure(n * 3);
+            const b2 = body.buf;
+            let L2 = body.len;
+            for (let i = 0; i < n; i++) b2[L2++] = SCRATCH_C[i];
+            for (let i = 0; i < n; i++) { const w = SCRATCH_G[i]; b2[L2++] = w & 255; b2[L2++] = w >>> 8; }
+            body.len = L2;
+          }
           for (const m of pal) local[m] = -1;
         }
         if (track) track.clear();
@@ -824,9 +915,20 @@ export function evalTile(ir, key, heights, opts = {}) {
     }
   });
   const notes = { parts, clipped, missing };
+  if (S) {
+    // (6c RS) per group: free, held and paid cells, the paid cells' bill, what the bodies' writes charge, the creative-only blocks
+    const sv = {};
+    const sorted = (mp) => Object.fromEntries([...mp].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+    S.groups.forEach((gid, g) => {
+      const st = svStats[g];
+      if (!st) return;
+      sv[gid] = { free: st.free, held: st.held, paid: st.paid, bom: sorted(st.bom), ...(st.charged.size ? { charged: sorted(st.charged) } : {}), ...(st.creativeOnly.size ? { creativeOnly: sorted(st.creativeOnly) } : {}) };
+    });
+    notes.survival = sv;
+  }
   if (countOnly) return { payload: null, count, sha: null, removed, added, minY, maxY, notes };
   const w = new ByteWriter(body.len + 16);
-  writeArtlHeader(w);
+  writeArtlHeader(w, S ? 2 : 1);
   w.varint(sections);
   w.bytes(body.buf.subarray(0, body.len));
   const payload = w.result();

@@ -1,0 +1,16 @@
+{
+  "about": "(6c RS, §13) land and forms in survival: a lots zone (its pads free), a relief around it, a rock spire, and a terrace beside the zone (its cut and fill held with its paid stairs: the held-part case), on a flat claim with a plateau 8 high in its east",
+  "terrain": { "bands": [{ "x0": 1160, "z0": 2030, "x1": 1239, "z1": 2130, "y": 72 }] },
+  "covers": ["form.relief", "form.rock_spire", "form.terrace", "zone.standard"],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "rs01_land",
+    "zones": [{ "id": "town", "program": { "lots": [{ "id": "h1", "type": "cottage", "size": [9, 9] }, { "id": "h2", "type": "cottage", "size": [9, 9] }] }, "where": { "near": { "anchor": "stone", "within": 16 } } }],
+    "forms": [
+      { "id": "blend", "kind": "relief", "around": ["town"], "radius": 8 },
+      { "id": "spire", "kind": "rock_spire", "preset": "hoodoo", "where": { "near": { "anchor": "street_w", "within": 20 } } },
+      { "id": "steps", "kind": "terrace", "steps": 3, "rise": 2, "edge": "slope", "size": { "preset": "S" }, "where": { "near": { "feature": { "part": "town" }, "within": 24 } } }
+    ],
+    "dependencies": [{ "part": "blend", "after": ["town"], "why": "blend after the pads" }]
+  }
+}

@@ -540,6 +540,15 @@ public final class RegionFluids {
 		if (level == null) {
 			return false;
 		}
+		// (6c RS, §7.3) a survival region's bodies wait for their barriers: every target, road and lot of the region built first (the
+		// containment check then reads built shells, linings, weirs and grates' frames, and irrigation's lots BUILT)
+		if (l.rec().survival()) {
+			String waiting = survivalBarrier(s, l);
+			if (waiting != null) {
+				RegionItems.waitStage(b, STAGE, Reason.SITE_BUSY, waiting);
+				return false;
+			}
+		}
 		// a body is never written over an entity (§2.3): players wait, hostile mobs go, the others wait
 		for (Body body : st.bodies) {
 			AABB box = boxOf(body.cells).inflate(1);
@@ -605,6 +614,23 @@ public final class RegionFluids {
 				}
 			}
 		}
+		// (6c RS, §7.3) the bodies' write takes a lava bucket per lava source and the grates' iron bars from the owner's stockpile (the
+		// bucket comes back); until all of it is there, the stage waits, naming what it lacks
+		if (l.rec().survival() && !l.rec().survival.has("chargedAt")) {
+			Map<String, Integer> charge = chargeOf(st);
+			if (!charge.isEmpty()) {
+				if (!dev.larattalabs.architect.site.Stockpiles.charge(s, l.rec().owner, charge)) {
+					RegionItems.waitStage(b, STAGE, Reason.SITE_BUSY, "the fluid bodies wait for " + dev.larattalabs.architect.site.Stockpiles.chargeShort(l.rec()
+						.owner, charge) + " in the stockpile of " + l.rec().owner + " (a lava bucket per lava source, a grate's iron bars)");
+					return false;
+				}
+				JsonObject c = new JsonObject();
+				charge.forEach(c::addProperty);
+				l.rec().survival.add("charged", c);
+			}
+			l.rec().survival.addProperty("chargedAt", level.getGameTime());
+			RegionsImpl.saveRec(l);
+		}
 		st.phase = "writing";
 		save(l, st);
 		report(l, st);
@@ -612,6 +638,106 @@ public final class RegionFluids {
 		Architect.LOGGER.info("Region {}: fluids stage checked ({} bod{}, {} not written)", l.rec().id, st.bodies.size(), st.bodies.size() == 1 ? "y" : "ies", st
 			.states.values().stream().filter(x -> "drained".equals(x.state)).count());
 		return true;
+	}
+
+	/**
+	 * (6c RS) Why a survival region's bodies still wait for their barriers (a target, road or lot of the region still building), or null:
+	 * every one is built.
+	 */
+	static @Nullable String survivalBarrier(MinecraftServer s, RegionsImpl.Live l) {
+		String group = l.rec().groupId;
+		List<String> t = dev.larattalabs.architect.site.RegionTargets.building(group);
+		if (!t.isEmpty()) {
+			return "the fluid bodies wait for their barriers: " + t.size() + " target" + (t.size() == 1 ? "" : "s") + " of the region still building (" + String
+				.join(", ", t.subList(0, Math.min(4, t.size()))) + (t.size() > 4 ? ", ..." : "") + ")";
+		}
+		String m = dev.larattalabs.architect.site.RegionTargets.buildingMember(group);
+		return m == null ? null : "the fluid bodies wait for " + m + " (a lot or road of the region) to be built";
+	}
+
+	/**
+	 * (6c RS, the gate's conservation) What an owner's survival regions' bodies hold of the stockpile's items as they stand: per standing lava
+	 * source a lava bucket less its bucket (the charge gave the bucket back), per standing grate its iron bars. Loaded chunks only.
+	 */
+	public static Map<String, Integer> survivalStanding(MinecraftServer s, @Nullable String owner) {
+		Map<String, Integer> out = new java.util.TreeMap<>();
+		for (RegionsImpl.Live l : RegionsImpl.all()) {
+			if (!l.rec().survival() || !java.util.Objects.equals(owner, l.rec().owner) || !l.rec().survival.has("charged")) {
+				continue;
+			}
+			Regional st = of(l);
+			ServerLevel level = l.level(s);
+			if (st == null || level == null) {
+				continue;
+			}
+			for (Body b : st.bodies) {
+				BodyState bs = st.states.get(b.id);
+				if (bs.before.isEmpty()) {
+					continue;
+				}
+				if (b.lava) {
+					for (long p : b.cells) {
+						BlockPos bp = BlockPos.of(p);
+						if (!level.isLoaded(bp)) {
+							continue;
+						}
+						FluidState f = level.getBlockState(bp).getFluidState();
+						if (f.isSource() && f.getType().isSame(Fluids.LAVA)) {
+							out.merge("minecraft:lava_bucket", 1, Integer::sum);
+							out.merge("minecraft:bucket", -1, Integer::sum);
+						}
+					}
+				}
+				for (long p : b.grate) {
+					BlockPos bp = BlockPos.of(p);
+					if (level.isLoaded(bp) && level.getBlockState(bp).is(Blocks.IRON_BARS)) {
+						out.merge("minecraft:iron_bars", 1, Integer::sum);
+					}
+				}
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * (6c RS, §7.3) What an owner's survival regions' bodies will take when they are written (a lava bucket per lava source, a grate's iron
+	 * bars), per region, while not yet charged: the stockpile accepts these items and lists them as outstanding ({@code <region>:fluids}).
+	 */
+	public static Map<String, Map<String, Integer>> pendingCharges(@Nullable String owner) {
+		Map<String, Map<String, Integer>> out = new java.util.TreeMap<>();
+		for (RegionsImpl.Live l : RegionsImpl.all()) {
+			if (!l.rec().survival() || !java.util.Objects.equals(owner, l.rec().owner) || l.rec().survival.has("chargedAt")
+				|| l.rec().state == dev.larattalabs.architect.api.RegionState.REMOVING || l.rec().state == dev.larattalabs.architect.api.RegionState.REMOVED) {
+				continue;
+			}
+			Regional st = of(l);
+			if (st == null) {
+				continue;
+			}
+			Map<String, Integer> c = chargeOf(st);
+			if (!c.isEmpty()) {
+				out.put(l.rec().id + ":fluids", c);
+			}
+		}
+		return out;
+	}
+
+	/** (6c RS, §7.3) What the pending bodies' write takes: a lava bucket per lava source, an iron bars per grate cell. */
+	static Map<String, Integer> chargeOf(Regional st) {
+		Map<String, Integer> out = new java.util.TreeMap<>();
+		for (Body b : st.bodies) {
+			BodyState bs = st.states.get(b.id);
+			if (!"pending".equals(bs.state)) {
+				continue;
+			}
+			if (b.lava && b.cells.length > 0) {
+				out.merge("minecraft:lava_bucket", b.cells.length, Integer::sum);
+			}
+			if (b.grate.length > 0) {
+				out.merge("minecraft:iron_bars", b.grate.length, Integer::sum);
+			}
+		}
+		return out;
 	}
 
 	/**
@@ -780,6 +906,8 @@ public final class RegionFluids {
 		int[] state = new int[n];
 		byte[] cond = new byte[n];
 		boolean[] walk = new boolean[n];
+		byte[] cls = t.cls() == null ? null : new byte[n];
+		int[] grp = t.group() == null ? null : new int[n];
 		int k = 0;
 		for (int i = 0; i < t.size(); i++) {
 			if (drop.contains(t.pos()[i])) {
@@ -789,9 +917,13 @@ public final class RegionFluids {
 			state[k] = t.state()[i];
 			cond[k] = t.cond()[i];
 			walk[k] = t.walk()[i];
+			if (cls != null) {
+				cls[k] = t.cls()[i]; // (6c RS) a survival tile keeps its classes
+				grp[k] = t.group()[i];
+			}
 			k++;
 		}
-		return new Packed.Tile(pos, state, cond, walk, t.states(), t.stateIds(), t.sha());
+		return new Packed.Tile(pos, state, cond, walk, t.states(), t.stateIds(), t.sha(), cls, grp);
 	}
 
 	/** Whether the fluids stage's tiles may be checked ahead (the gate ran): a tile of a body not written must leave its cells first. */
@@ -1689,6 +1821,33 @@ public final class RegionFluids {
 			// (fix/drain-holders) the cells a later entry outside the group holds on top: never drained (the undo hands them down)
 			Holders held = new Holders(l.rec().dimension, group, st);
 			int n = 0;
+			// (6c RS, §9.2) a survival region's standing lava sources are scooped into its owner's stockpile (a bucket from stock each) and
+			// its standing grates refunded, once (keyed), before the drain
+			if (l.rec().survival()) {
+				int lava = 0, grates = 0;
+				for (Body b : st.bodies) {
+					BodyState bs = st.states.get(b.id);
+					if (bs.before.isEmpty()) {
+						continue;
+					}
+					if (b.lava) {
+						for (long p : b.cells) {
+							FluidState f = level.getBlockState(BlockPos.of(p)).getFluidState();
+							if (f.isSource() && f.getType().isSame(Fluids.LAVA)) {
+								lava++;
+							}
+						}
+					}
+					for (long p : b.grate) {
+						if (level.getBlockState(BlockPos.of(p)).is(Blocks.IRON_BARS)) {
+							grates++;
+						}
+					}
+				}
+				if (lava > 0 || grates > 0) {
+					dev.larattalabs.architect.site.Stockpiles.scoop(s, l.rec().owner, "region:" + l.rec().id + "@" + l.rec().createdAt + ":fluids", lava, grates);
+				}
+			}
 			// (6c HY, §4.1) the exact reverse of the write order (an H region: reverse plan order), the head first
 			int drained = 0;
 			for (int i = st.order.size() - 1; i >= 0; i--) {

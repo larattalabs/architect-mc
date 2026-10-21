@@ -18766,6 +18766,170 @@ About **7.5-9.5 days** of work, **5.5-6.5 elapsed**, in two halves with a frozen
 - **N-RS-4:** ice caps are free.
 
 
+### RS-a as built (slice/RS, 2026-10-21; RS-b builds on `rs/core`)
+
+The slice was split on Noah's word (2026-10-20 night): **RS-a**, the core, is built and gated here; **RS-b** (tunnels ring by ring and the
+bodies' gate rows) builds on branch `rs/core`, whose interface and task list are in `docs/HANDOFF-RS.md` "The split" until RS-b retires
+it. Placeholders: API 1.41.0, mod 0.44.0, kit 0.42.0, catalogue unchanged.
+
+**Kit.**
+- `planRegion({survival})` (CLI `--survival`, sidecar cap `survival`, the mod sends it when the world is survival). Ops written by terrain
+  kinds carry `free: true`; the IR gains `survival {format 1, groups, parts, pads, cells, creativeOnly?}` and `requires: ["survival"]`
+  (format 2, `KINDS_FORMAT2`/`MEMBERS_FORMAT2`, IrStale).
+- A survival IR evaluates to **ARTL v2**: per section, after the palette indexes, one class byte per cell (0 free pass, 1 held, 2 paid)
+  and a u16 group index. A creative IR stays ARTL v1, byte-identical (item 2).
+- The free rule (`kit/lib/region/survival.mjs`): a cut, a water source, any fluid op's cell, a dirt path on a dry column's surface, a
+  natural obtainable block written by a terrain op and not in `FREE_EXCEPT` (generated from `vocab/survival.json`). Else paid. A free cell
+  is **held** when its group can write a paid cell (static) and it is no pad's; **a fluid op's cell is never held** (found in game: a
+  brook target wrote an upstream reach's sources after the gate had cleared them, and the reach below escaped).
+- Groups: the plan part; a shared route part's first connector; `__lamps__` its own group (no part answer: it counts in the plan's
+  `cost.bom` only); a bundled program's IR part.
+- The check in survival: `survival: true`, per part `cost.survival {free, held, bom, creativeOnly?}`, plan `cost.bom` (the groups' bills
+  and their charges) plus `bomParts` the mod adds (bound lots' design bills, the 4e roads' `checkRoad` bills); a creative-only block
+  refuses the part `SURVIVAL {kind: creativeOnly}` and re-plans without it; the artifact `survival: true`.
+
+**Mod.**
+- Mode by world: `SurvivalWorld.on() && defaultGameType != CREATIVE`. A creative artifact in survival: `realiseApproved` refuses
+  `ARTIFACT_STALE`; a realise without a stockpile and with a bill: `NOT_ALLOWED` with the bill; a creative-only block: `CREATIVE_ONLY_BLOCK`.
+- §0's latent bug fixed: region items queue `survivalAtQueue = SurvivalWorld.on()`, `construction` = the region's mode (reproduced on the
+  base: every item FAILED; PLACED on this head).
+- **Targets** (tile x group): a fed `Infra` (`cells:architect:terrain|path`, Construction BUILDING, no crate) per group with held or paid
+  cells, an extra entry of the tile's own P3 transaction (InfraJob `extras`); the free pass is the tile's main entry. Spec
+  `regionTarget {region, part, group, tile, held, heldCells, runs, capStacks}`, ext `architect_mc:region`, `architect_mc:part`.
+- **Runs**: BuildOrder bottom up, a held cut after its paid neighbours above and beside within 1, a paid cell never waits on a cut below;
+  runs per course cut at a quarter of the stockpile's capacity in stacks; zero-bill runs join the next paid run; a held-only target waits
+  for its part's paid targets. A run starts only with its whole bill; the reservation is the current run's bill. Written with CELL_FLAGS
+  and the entry's NBT (a built target equals its INSTANT twin, items 5 and 6).
+- **Stage waits** (S-RS-1, no new Reason): a survival region item waits `SITE_BUSY` with ext `architect_mc:waitsFor {target, part}` while
+  an earlier-stage target or road in its reach, **or one it is queued `after`** (in survival "after" means built: found in game, a road
+  wrote over a span's unbuilt cells), is not BUILT; the fluids stage waits for every target, road and lot of the region.
+- **Lots**: a construction lot never queues its `LotMask` cells (`Builder.planConvert`; found in game: the conversion cleared the
+  region's irrigation banks).
+- **Removal** (C29 path): targets leave the feed at once; refunds through Groups' `decCredit` (`RoadBuilder.refundOf` for targets, the
+  standing block for copper); a player's block in a target drops at its cell and the cell goes back to its before, its refund skipped
+  (item 9); a BUILT target's soil cells (grass over its dirt, farmland gone to dirt) stand as built for its audit and refund, never while it
+  builds or after its removal counted its refund.
+- `RegionView.build` = `RegionBuild(built, done, percent, outstanding, parts)`, `PartBuild(part, state, targets, cells, built, freeCells)`;
+  `PlanCheck` gains a trailing `survival` (old constructors kept); feature `regionSurvival`. SITE_WAITING carries the region and the part
+  in the target's ext (item 7).
+- N-RS-2: `RegionFreeDrops` (PlayerBlockBreakEvents.BEFORE): a free-pass or held cell still holding the region's write drops nothing.
+- §10: targets rescan from the world; a survival region's free-pass entries are re-checked 20 ticks after start (a cell back at its
+  before is written again).
+
+**Gate** (`tools/gate6crs.mjs`, steps `rs-unit`, `rs-ingame`, `rs-survival`, `rs-crash` in `tools/gate-chains.json` with an impact rule;
+evidence `artifacts/gate6c-rs/`): all on this head (`artifacts/gate6c-rs/REPORT.md`, $0.00):
+  - **1** kit `rs.test.mjs` 9 pass; `RegionTargetsTest` 6 (carveFirst, lavaRefund, loseCredit caught); RS's neighbours 24; the mod's whole
+    unit suite and the kit's (672 pass) green. **2** 262 committed plan fixtures (the 59 asks among them) byte-identical in creative to the
+    merge base, rs02's creative tile shas equal, the asks tables committed (`fixtures/plan/rs/asks-creative.md`, `asks-survival.md`: 0
+    malformed, no class change, no SURVIVAL refusal). **17** api-compat clean against the 0.40.0, 0.39.1 and 0.39.0 apitest jars and
+    0.40.0's surface.
+  - **Latent bug**: reproduced on the base, fixed (PLACED). **4** rs01 free pass: 0 items consumed, 0 entities, the free cells equal the
+    twin's, the held terrace waits whole, E-flat 0.
+  - **3, 5** rs02, rs03, survival_village checked and realised in survival, fed in waves: every part BUILT, every body settled (rs03's 8,
+    the brook's two reaches in order, irrigation after its lot), each world equal to its INSTANT twin cell for cell (0 differ), E-flat 0
+    after removal; the bills equal per part and for the region whole (charges included).
+  - **6** rs02 half fed (half the check's bill in waves): no run started without its whole bill, no cut open, M3/M4/gravity 0 and no
+    unguarded edge the build made; rs06's road waits SITE_BUSY until the held terrace is BUILT, then 0 differ from its twin. **6b** rs07
+    (96 stacks against a 54-stack, 2-crate stockpile): 16 runs, the largest 8 stacks (cap 13), reservations at most 7 stacks, built.
+  - **7** setFeedOrder puts the wall first and it builds from its bill alone; SITE_WAITING with region, part and nextNeeded; the paused rope
+    reserves nothing, never waits; S-Y-1: 3 of 3 unloaded targets reserve nothing; RegionView.build per part, done, 100%.
+  - **8** rs02: the per-item sum exact at 21 checkpoints. **9** rs02 and rs03 removed: refunds equal the paid cells standing (a
+    weathered copper cell paid as weathered_copper; rs03's bodies scooped on their own key), a player's block drops at its cell, E-flat 0,
+    one credit per key (a second remove credits nothing), the sum exact (22 and 29 points). **10** rs02 with its wall a quarter built:
+    targets leave the feed at once, refund = paid standing (1400 items), credited once; again with a save, leave and reopen mid-removal
+    (REMOVING after the reopen) (the audit right after the reopen is recorded, not judged: it reads no pending target until its restore
+    ends). **11** a clean stop mid-wall resumes to built and its twin; kill -9 after an autosave: drift {} within the units moved; with
+    saving off, 1152 lost cells re-queued by the rescan and built.
+  - **12** a creative artifact: ARTIFACT_STALE; re-check at Start in survival (same artifact twice), pin, a restart, realiseApproved under a
+    second key (the first none), built; rs05's offer round the town in survival: READY, built, undone alone, the town 0 cells differ.
+    **13** u_spawner (through an installed bible: a game check takes its style from a bible): SURVIVAL {creativeOnly, spawner}; a program
+    plan with spawner lanes: CREATIVE_ONLY_BLOCK, nothing written; no stockpile: NOT_ALLOWED with the bill. **15** N-RS-2: a free fill
+    cell and a held spire cell broken in survival drop nothing (a natural block outside drops dirt), then the removal puts them back:
+    E-flat 0.
+  - **16** the engine tag's steps by the runner (`artifacts/gate-runs/20261021-035110-slice`, 2 shards, 1h52m): unit-mod (747), unit-kit
+    (672), apijars, t3b-unit, 4d-all, 6a-eflat, y-ingame, c29-ingame, cu-survival, pt2-survival, voc-survival, h-ingame, ha-ingame,
+    hy-ingame, irr-ingame, kc-ingame, k1a-ingame PASS; unit-sidecar failed 4 tests that pinned the feature list's last entry
+    (`plan.rules`): fixed for `region.survival` appended (88df6756), 758 of 758 pass locally after.
+  - **Verifier** (gate-verifier, independent): reviewed the diff and re-ran items 5, 8, 9, 10 and 11 at 4e639a3a: PASS
+    (`artifacts/gate6c-rs-verify/`). Its notes: item 5 checks twin 0 and E-flat 0 but no separate M25:clear count; item 4 shows the held
+    terrace waiting whole rather than "one target"; item 10's mid-removal audit point is recorded; all judged acceptable for RS-a.
+  - Not run here: item 14 (S3's natural claim, after S3 merges), the gate3 survival and Hardcore steps (a GUI p3 client; Hardcore realises
+    regions in survival by the same mode rule), RS-b's rows (HANDOFF-RS).
+
+**Notes.**
+- M8 at a half-built checkpoint is judged on the edges the build made: rs02's natural cliff beside its rope bridge's mouth is open until
+  the bridge is built, as it was before the realise (the walk graph is the plan's).
+- A natural-edge pond's rim refuses `LEAK` on a game volume (its rim cells outside the pond's own writes): rs03's pond has a built edge.
+  Not RS's; recorded for the fluids owner.
+- The gate's terrain builder (`gate6chy-b.mjs` buildTerrain) force-loads the claim; item 7 drops it before S-Y-1's probe.
+- Open for RS-b (HANDOFF-RS): rs04's deadlock (a hanging lantern under a roof cell in a bore's lining), items 5/6's rs04 rows, item 8
+  through bodies on rs03, item 9's "drained without a bucket" row, item 11's stop mid body wait, item 13's brush row, ice caps.
+- Open for after S3: item 14 (rs02 on S3's natural claim).
+
+### RS-b as built (2026-10-21, branch `slice/RS-b` over `rs/core` 4ad93e64)
+
+RS-b built the hard kinds on RS-a's frozen interface. One additive change to that interface, and two fixes in shared code, are named
+below. Evidence: `artifacts/gate6c-rsb/` (driver `tools/gate6crsb.mjs`, own ports 8942/8943 and run worktree); resume notes:
+`docs/HANDOFF-RSb.md`.
+
+**Tunnels ring by ring (§6.2, §6.4, §7.2).**
+- *Finding:* T3b writes a tunnel's lining in the `routes` stage and its carve in `links` (`liningStage`). In survival that gave a
+  tile two targets of the tunnel's part. The carve's target waited (§6.3) for the whole lining, so no ring order was possible. The
+  route's approach cut (also `routes`) stood open beside a portal not yet put down (rs04: 8 open-cut breaches across that seam).
+- *Kit, survival IRs only:* a tunnel is written whole in its lining's stage (`tunnelGeom.mjs`: part stage = `liningStage`, the
+  lining in the same part). Its approach, lining, carve, portals and lamps are one target per tile. Creative is unchanged: the
+  lining part is still in `routes` and the tunnel in `links` (item 2's byte identity).
+- *Interface, additive:* `ir.survival.bores = [{group, from, dir, box}]`, one per tunnel, present only when the plan has one. A
+  mod without RS-b ignores it.
+- *Mod:* `RegionTargets.ringOrder` serves a target whose group has bores:
+  - a cell's ring is its step along its bore's heading (the nearest bore; cells past the box take its end ring);
+  - ring k's lining builds bottom up in run k, and its carve in run k+1, after ring k+1's lining (which lies beside it within
+    1, §6.4);
+  - every cell is moved no earlier than what blocks it in `stepFed` (solid below, support, a cut's paid neighbours), so a run
+    never waits on a later one;
+  - runs go per ring, cut by the quarter cap;
+  - the spec gains `rings: true`;
+  - a bore's cut also waits for unbuilt paid cells of the same part's other targets beside it (`seamOpen`: a tile edge);
+  - targets without bores keep RS-a's course order exactly (unit-tested).
+- *Fix (shared builder step):* a hanging lantern deadlocked its roof. The roof waited for the solid cell under it, and the lantern
+  waited for its support. The below rule now skips an attachable hanging from the cell.
+
+**Fix in `Builder.Run.matches` (sites and roads too): a farmland cell the builder already built that dried to dirt stays built** (S-CU-3).
+- rs03's irrigation banks are farmland built in air. They dry to dirt (in the INSTANT twin too).
+- The target then counted them unbuilt. The builder could never write over the dirt, so the cells waited for ever and 3 dirt fell
+  out of item 8's sum.
+- Dirt costs dirt, and the refund pays the standing block, so nothing else moves.
+- Only a cell already built (in memory) keeps it: farmland planned over the ground's own dirt is still written (the verifier's catch on
+  the first version). After a restart a dried, unbuilt-in-memory cell of a target not yet BUILT reads unbuilt again; RS-a's
+  `soilSame` covers a BUILT target.
+
+**Ice caps (N-RS-4):** free as RS-a's kit made them (a fluid op's cells are class 0). `rs08_ice` is a built-edge pond whose biome
+grid is snowy plains; the driver sets the claim's biome with `/fillbiome`.
+
+**Results** (`artifacts/gate6c-rsb/REPORT.md`; after merging `origin/slice/RS` 529138d1 and `origin/main` 6e6b6c87):
+
+| Row | Result |
+|---|---|
+| unit | TunnelRingsTest 5 and RegionTargetsTest (0 failures); `kit/test/rs-b.test.mjs` and `rs.test.mjs`; the T3b tunnel tests. |
+| item 5, rs04 | Built from the stockpile in waves; every target BUILT; twin 0 differ; E-flat 0; item 3's bills equal per part and whole. |
+| ring evidence | No bore cell open without its lining in any sample of the build; in most samples a ring's carve stood open while a later ring's lining wasn't built yet (ring by ring, not course by course). |
+| item 6, rs04 | Half the bill fed (about 49% built): no run started without its whole bill; 0 open cuts without lining; M3, M4, M8 and gravity 0. |
+| item 11, rs04 | `rs04crash`: half built, autosave, `kill -9`, cold start: the targets resume from the world (664 cells as before); the rest fed with no breach; twin 0; E-flat 0. |
+| item 11, rs03 | `rs03stop`: fed in waves until half the bill stands as paid cells (2873 of 4931 items; the fluids stage waits for its barriers, no body written), a clean stop and a restart: paid standing and stock as before, the per-item sum exact; then fed to PLACED and built, every body settled, twin 0, E-flat 0, the sum exact at the end. (Its first version stopped on 100% of nothing: the verifier's catch, fixed.) |
+| ice (N-RS-4) | rs08 in survival: 35 cap cells, 35 ice standing; fed exactly the shell's bill (no ice, no water); body settled after its shell; twin 0; E-flat 0. |
+| item 8, rs03 | The per-item sum constant at 30+ checkpoints: feed, build, bodies (lava charged, a bucket back), the withdrawal, the removal under way. |
+| item 9 lava rows | 10 sources, 5 buckets kept: 5 scooped (5 buckets became 5 lava buckets), 5 drained without credit; the sum then differs by exactly the drained term; a second removal credits nothing; E-flat 0. |
+| item 13, brush | A concrete-pattern and a PLAYER_BLOCKS stroke refused NOT_ALLOWED; a natural stroke writes 31 cells, the stock unchanged and nothing outstanding; removed with E-flat 0. |
+| item 16 | 10/10 PASS on 6132469a through `tools/gate-run.mjs` (`artifacts/gate-runs-rsb/20261021-072147-slice`): `unit-mod`, `h-ingame`, `ha-ingame`, `hy-ingame`, `kc-ingame`, `irr-ingame`, and for the `Builder.matches` change `cu-survival`, `y-ingame`, `c29-ingame`, `pt2-survival`. |
+
+**Notes for RS-a and the RC:**
+- Versions: RS's placeholders (API 1.41.0, mod 0.44.0, kit 0.42.0) are kept. Against main's new `tools/release-version.mjs` four
+  tests of `kit/test/release-version.test.mjs` fail on this tree (goldens `crossings_demo_flat`, `links_demo`, `links_demo_flat` record
+  kit 0.38.0): the coordinator's renumbering at merge settles them.
+- The stockpile accepts only items its targets lack. A brush row can't stock unrelated items.
+- Provenance (RP, 0.40.1): once it is on main, tunnel target cells get `UNFINISHED` at put-down and `WRITTEN` when built. Not
+  wired here (the coordinator's instruction).
+
 ## Phase 6c slice D3: districts beside a standing region town (FROZEN 2026-10-20, Steward reviewed)
 
 A district region beside a standing region town joins the town's street network wherever that network runs inside the town's

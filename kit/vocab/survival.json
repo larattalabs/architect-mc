@@ -214,5 +214,20 @@
    "why": "Architect's own construction crate: placed by the mod for a survival site, never by a design",
    "evidence": "phase 3 creativeOnly (survival_items.json)"
   }
- ]
+ ],
+ "free": {
+  "why": "N-RS-3 (docs/CONTRACT.md \"Phase 6c slice RS\" §4.1): a natural block a terrain kind writes is free in survival, except a valuable natural block: these patterns, and any natural block of tier precious",
+  "evidence": "the coordinator's decision N-RS-3, 2026-10-20",
+  "except": [
+   "minecraft:*_ore",
+   "minecraft:ancient_debris",
+   "minecraft:amethyst_block",
+   "minecraft:budding_amethyst",
+   "minecraft:amethyst_cluster",
+   "minecraft:*_amethyst_bud",
+   "minecraft:obsidian",
+   "minecraft:crying_obsidian"
+  ],
+  "exceptTier": "precious"
+ }
 }
