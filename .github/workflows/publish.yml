@@ -31,6 +31,8 @@ jobs:
         run: |
           v=$(grep '^mod_version=' mod/gradle.properties | cut -d= -f2)
           [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != mod_version $v"; exit 1; }
+      - name: Release versions consistent, no NEXT placeholder left (docs/GATES.md "Release versions")
+        run: node tools/release-version.mjs --check
       - name: Build and publish
         working-directory: mod
         env:

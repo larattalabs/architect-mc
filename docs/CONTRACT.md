@@ -4943,7 +4943,7 @@ Two configurations, each in a fresh world of fixed seed `mega6` (normal worldgen
 - **Spend:** within the $25 cap; the claude login only (environment log); the estimate within ±50% for each run.
 - **Regressions:** 6a items 6 and 9, and 6b's fixtures.
 
-## Phase 6d (outline, recommended to wait)
+## Phase 6d (outline, recommended to wait; SUPERSEDED 2026-10-20 by "Batch 6d" and the 6d slice sections at the end)
 
 - **Region delta (A5B N7):** re-plan, then diff the IRs by part id. Changed parts' tiles are re-evaluated **against the
   same frozen heightfield**, and the new cells are written as a new CELL layer per tile.
@@ -21169,6 +21169,1907 @@ Recorded as the shape the plan writer should expect, so the reservation's meanin
 - **Probes before a contract:** a villager crossing rails in a street; a cart's speed over the powered spacing; undo with a cart
   standing on the track (the cart left as the player's entity, the rails restored).
 - **Size if scheduled:** about 2 days, plus an RC (redstone blocks next to Steward's lots).
+
+## Batch 6d: region evolution, growth first. Summary for one Steward review round (FROZEN 2026-10-20, Steward reviewed)
+
+Phase 6d is **region evolution**: growing and changing a region after it stands, exactly and undoably, without re-laying what stands.
+It replaces the old outline "Phase 6d (outline, recommended to wait)" (marked superseded where it stands), and takes every note that
+deferred to 6d:
+- the outline's region deltas by part (A5B N7);
+- D3 §11's D-S2 (lots added to a standing district, `growDistrict`, `architect_mc:land.v` 2);
+- V's "additions to a realised village" and "per-lot deltas inside a region";
+- plan/0's "a revision of a realised plan" row (P0 §5: "changes to built parts are 6d (`unsupported`)");
+- 0b's "a source's new version applied to its COPY and SITE followers, by recipe" (Steward round 3, "updates follow the source");
+- PT's S-PT-1 (to 6d "with replanning on land change") and SETTLEMENTS §14;
+- the C12 joint 7a/6d gate's `Regions.adopt`.
+
+**Noah's decision (2026-10-20, option A, after GPT-6.1's second pass):** 6d ships **growth** first: RV is additive only (v3), with GR on it.
+Removing and changing standing parts is recorded in "6d later: full revisions (RV2)" at the end, not a slice yet.
+
+Written over main f3f41d43 (v0.40.0: API 1.37.0, mod 0.40.0, kit 0.38.0, catalogue 9), with FL, F3, S3, RS and D3 assumed to land as
+frozen (placeholders up to API 1.42.0, mod 0.45.0, kit 0.43.0, catalogue 11), and RP (realised provenance, `feat/realised-provenance`)
+before RV. Nothing here is built or run; code facts are marked "from code"; numbers marked "predicted" are the builder's to measure.
+
+**The order (coordinator, 2026-10-20), replacing SETTLEMENTS' "6d right after 7a":**
+1. the 6c close-out;
+2. D3, and 7a-1 (on `docs/7a`);
+3. **6d growth: RV v3, then GR** (one batch, one RC);
+4. 7a-2 and 7a-3;
+5. **FS, LC and AD** (AD's joint row needs 7a's link pass, which has landed by then).
+
+| Slice | What | API / versions (placeholders after D3's 1.42.0; 7a-1 may take one first; the coordinator renumbers) | Steward check | Size |
+|---|---|---|---|---|
+| **RV v3** | Additive revisions: new parts, lots, refills, street extensions and bodies as new stages evaluated alone and layered over the region; same-tick check and write; stage/set and history hashes over RP's realised record; the head, the operation manifest and idempotent recovery; LIFO `undoRevision` (whole-suffix preflight, then a committed operation); added bodies' drain; additive survival; the effective IR; the plan/0 path | API **1.43.0**, mod **0.46.0**, kit **0.44.0**, catalogue **12** | **RC** (removal and accounting; GATES policy 4); the verifier re-runs undo, removal, crash, survival and fluid items | 7.5-8.5 days of work, 4.5 elapsed in four lanes (RV-a kit 2; RV-b mod foundation 2.5-3; RV-c undo and fluids 1.5-2; RV-d readers and paths 1.5), the interface frozen at the end of RV-b's day 2 |
+| **GR** | Growing a standing region (D-S2): new lots on free frontage, then a street extended from a free end, for V towns, plain districts, outposts and along districts; `growDistrict`; `land` v 2 | API **1.44.0**, mod **0.47.0**, kit **0.45.0**, catalogue **13** | **RC**, shared with RV's (one batch) | 4.5-5.5 days of work, 3 elapsed (GR-a streets, GR-b along districts) |
+| **FS** | Updates follow the source: `followers`, `follow`, a frozen, persisted `followAll` with CAS installs ($0), then the existing `outdated` and `applyDelta` | API **1.45.0**, mod **0.48.0**, kit and catalogue unchanged | none before release; Steward checks after | 2-2.5 days, one builder |
+| **LC** | Land change, the report: `Regions.landCheck` (only PT-recorded placements attributed); the stage re-plan deferred | API **1.46.0**, mod **0.49.0**, kit and catalogue unchanged | none (read-only) | 1.5-2 days, one builder |
+| **AD** | Adopting a VillageLayout settlement (the 6d half of C12): no cell written; `Meta.group`, head record copies, `architect-sites.json` and the region record moved by an intent file; safe un-adopt | API **1.47.0**, mod **0.50.0**, kit **0.46.0**, catalogue unchanged | **RC** | 4-4.5 days, one builder |
+
+**Not drafted as slices, recommended deferred:** RV2 (full revisions, the design record at the end); the pad delta under standing lots
+(5b D7; S-RV-5); Sites-level deltas for 4e roads and cell sites (no consumer; standing roads are never changed in 6d).
+
+**Build order and parallelism** (at most 3 gate runs at once, GATES policy 6):
+1. **6d growth:** RV-a and RV-b start together (RP merged first). RV's interface freezes at the end of RV-b's day 2; RV-c and RV-d start on
+   it. GR-a starts on the same interface (pure kit until its in-game items). Slots: RV-b first, then RV-c and RV-d sharing one, GR after
+   RV merges. **One batch, one release, one Steward RC** (S-RV-10, S-GR-7).
+2. **Later batch:** FS (independent; can start any time, its own slot), LC (after RV), AD (after GR and 7a's link pass).
+
+**Rules for every 6d slice:** never edit `kit/regions/plan_v0.mjs`; byte identity first (Steward sets no plan `revision`: steward-mc
+6d54540 has `parentArtifact` only in its schema copy, so the 59 asks don't move); every new path through `checkPlan` then `realiseApproved`
+in game with a Steward-shaped plan, and through `planRevision` then `realise`; exactness on flat worlds; the natural round with D2's
+narrowed classes and VOC's `farfluid` exactly; KC binds every new writer (a revision is the later writer); D3 binds every revision of a town
+or district; fixtures `v8x_6d_*`, numbered by the coordinator; re-cut kitVersion goldens on a kit bump.
+
+**Totals:** 6d growth (RV v3 + GR) about 12-14 days of work, about 7 elapsed, plus Steward's RC. The later batch (FS, LC, AD) about 7.5-9
+days of work, about 4.5 elapsed with FS in parallel.
+
+### Review responses (GPT-6.1, read-only review of this draft, 2026-10-20; verdict "keep the architecture, revise RV")
+
+Each finding was checked against the code before it was taken. Where the code disagrees, the response says so.
+These rows answer the first pass with RV v2; RV v3 (additive) supersedes v2's composed-intent patch, kept-intent check and `removed`
+class, and the second-pass table below says what v3 does instead. Rows 3, 4, 7, 9 and 10 carry into v3 unchanged in substance.
+
+| # | Finding | Checked against | Response |
+|---|---|---|---|
+| 1 | `N` isn't the full target: `evalTile` evaluates parts, roads are `ir.roads`; no winner rule | `realise.mjs` :19 (op kinds), `RegionsImpl.java` :1274-1280 (roads as 4e road sites) | **Taken.** RV §3.2: the patch is changed **intent** composed over every part writer with an explicit winner (stage, set, op order); roads and lots are never patch targets (§5.2); a cell outside the patch is never written |
+| 2 | Intent vs realised ownership (skips, no-ops, felled trees, PARTIAL) | `TileCheck.java` :36-56 (skips held, PT builds, conditions, no-ops; fells trees, holds leaves), `RegionItems.java` :179 (fluid gate) | **Taken.** RV §3.1: a realised record per tile (codes per intended cell, the extra cells, the intent sha), §3.3's per-code rules, §3.6's kept check compares two kit evaluations (never the world), §3.7 derives a record for old regions and refuses `UNKNOWN` cells, §5.4 refuses unfinished tiles |
+| 3 | `before = current(c)` is wrong under StillOurs equivalence | `SiteDeltas.java` :1013-1020 (befores captured at D1) | **Taken.** RV §3.4: the before is the world's state, block entity and PT record at the write; StillOurs only decides write or keep |
+| 4 | Head and transaction boundary undefined | RV v1 §4.1-4.2 | **Taken.** RV §4: candidate, accepted, undoing, undone and stale states; the head moves only at accept (a CAS); the durable order; the busy state; `undoRevision`'s whole-suffix preflight, then one recoverable operation |
+| 5 | Survival accounting and target transitions | RS's frozen text (requests start at `PLACED`; "built" is `done`) | **Taken, as the review's first version.** RV §8: additive revisions only; a patch over a paid or unbuilt target is refused; undo cancels the revision's unbuilt targets first, then refunds once per key |
+| 6 | Revision-scoped fluid lifecycle | `Groups.java` :587 (the drain gate runs only when `r.stage == null`) | **Taken.** RV §7: added bodies only; changing or removing a standing body refused; the suffix drain before the undo, saved per body, resumable |
+| 7 | D3 side joins onto grown roads | D3 §3.5 (`to: <town>:<roadId>`) | **Taken.** RV §6.4 tracks nodes, roads, ports and reach or hold columns; GR item 7b gates a side join onto an extension road |
+| 8 | AD must migrate journal-group ownership | `JournalStore.java` :89 (`Meta.group`), `Sites.java` :2587 (reconcile from head meta), :3022 (one save) | **Taken (the first response was wrong:** it read the pure `Journal.Entry`, not the persisted `JournalStore.Meta`, which carries `group`). AD §2.3 v2 moves `Meta.group` and the head record copies by a metadata-only `regroup`, saves sites, infra and groups in the one `architect-sites.json`, and recovers forward or back from an intent file |
+| 9 | `rid` vs position; limits | `plan.mjs` :31, :421 (64 stages), `SiteJournal.java` :57 (depth 8) | **Taken.** RV §2.1 separates a monotonic `rid` from `position`; §12 states the depth, revision and stage limits as product limits; added parts reuse stage names so most revisions add no IR stage |
+| 10 | Removed-lot refill identity and rollback; `Sites.place` outside the group | RV v1 §4.4 | **Taken.** RV §4.6: `lots.refill` re-activates the lot id, saves its previous state, joins the new site to the region's group; undo restores `removed`; a hand placement is named as not a refill |
+| 11 | LC attribution; FS followAll replay | `Placed.java` :296 (a record clears when a cell becomes air: removals carry no actor) | **Taken.** LC v2 attributes only PT-recorded placements, reports removals unattributed, and ships the report alone (the replan deferred, S-LC-4). FS §3: `followAll` freezes its source version and follower set in a saved operation, installs by CAS, and treats already-followed as a no-op |
+| gates | an independent oracle; partial terrain; unfinished survival; side joins; fluid undo; competing plans; exact depth; the survival road fixture | — | **Taken.** RV §14: the twin-world oracle; `rv_partial_tile`, `rv_legacy`; items 9 (exact depth), 11 (heads), 13 (side joins), 15 (survival over a paid lamp, not a road, since RV never changes roads), 19 (fluids); GR item 7b |
+| freeze | Don't freeze RV's interface on day 1; resize | — | **Taken.** RV §13: four lanes, the interface frozen at the end of RV-b's day 2, 9-10.5 days of work |
+
+### Review responses, second pass (GPT-6.1, at d973792a; Noah's option A)
+
+| # | Finding | Response |
+|---|---|---|
+| B1 | Realised codes don't take part in composition (skipped winners hide removed writers; extras never enter the patch) | **Removed by scope:** v3 never removes or changes a standing writer, so an added stage is evaluated alone and layered (RV §3.1); RV §3.5 lists what remains (an added part over skipped, written or extra cells) with the answer for each; fixture `rv_layers` exercises it. Recorded as RV2 problems 4 and 5 |
+| B2 | Per-stage/set hashes compared with a composed intent | **Taken:** RV §3.4 defines `tileSha(stage, set, key)` (compared only with the same stage, set and key) and `historySha(key)` over the region's entries at a tile in layer order (compared only with itself, at accept); no composed intent hash in v3 |
+| B3 | No recovery across publication and queue creation, nor between removal and the finish | **Taken:** RV §4.3 writes an operation manifest before accept, publishes `effective.json` then `region.json`, and installs items by key idempotently; §4.4's undo manifest has phases and finishes idempotently when every site is already undone |
+| S4 | Undo preflight vs `Groups` refusals after a drain; same-operation resume; conditional source restore | **Taken:** preflight runs `Groups`' own player and placing checks dry; removal uses `Covered.KEEP` (no cover refusal); after the commit point the operation is never abandoned, a same-target call resumes it; sources return only where containment is intact (RV §4.4, §7) |
+| S5 | AD's journal-header claim false; one shared sites file; infra membership; safe un-adopt | **Taken** (row 8 above corrected): AD §2.3-§3 v2 |
+| S6 | The oracle could pass an omitted patch | **Taken:** RV §14's oracle enumerates expected transitions itself (the checker's virtual world over a snapshot, the journal dump, C31's felling) and compares the whole claim plus 8 |
+| S7 | No write-time revalidation in the write loop | **Confirmed** (`InfraJob.java` :395-420 writes without re-checking) **and taken:** revision tiles check and write each section in the same tick (RV §3.3); gate item 20 races a site and a player block |
+| nit | "RV's two lanes" in the totals | fixed (this summary) |
+
+### Review responses, third pass (GPT-6.1, at cfcdf8c0; no further round: the build's gates and verifier take it from here)
+
+| # | Finding | Checked against | Response |
+|---|---|---|---|
+| 1 | An effective IR newer than the head after a crash | RV §4.3 v3 | **Taken:** head-addressed snapshots `effective/<rid>.json`, written before and never rewritten; `region.json` is authoritative and its rename the only publication (RV §2.3, §4.3) |
+| 2 | Journal `UNDONE` before R4's writes | `WorldJournal.java` :695, `Groups.java` :612-640 | **Taken:** the finish waits for the removal's own `Removed(true)`; recovery never infers completion from `UNDONE`; gate kills at `K6` and mid-R4 (RV §4.4, item 10) |
+| 3 | Preflight misses `removalBlockers` | `Groups.java` :847 | **Taken** (RV §4.4; item 6's filled chest) |
+| 4 | The drain overwrites a later holder | `RegionFluids.java` :1139-1165 | **Taken:** a holder-aware suffix drain; §15.3's exception stated; item 19 |
+| 5 | GR frontage junctions not connected in the graph | `program.mjs` :541, `check.mjs` :852 | **Taken:** two real `along` edges per frontage junction, consumers named, `graph.cut = []` gated (GR §6, item 3) |
+| 6 | Refill vs `revision.keep`; irrigated lots | `RegionFluids.java` :1440-1455 | **Taken:** plan/0 lot member `refill: true`, catalogue `revision.refill`; irrigated refills refused in v1 (S-RV-14) |
+| 7 | The oracle for non-tile writers and stage order | `vworld.mjs` :277 | **Taken:** named references for roads, lots and NBT, settled flows; stage-by-stage evaluation (RV §14) |
+| 8 | Extension roads' write loop | `InfraPlace.java` :184 | **Taken** (RV §3.3; item 20) |
+| nit | LC's references | — | fixed (LC depends on RP, RV §3.4) |
+
+**Possibly on main too (for the coordinator's queue):** finding 4 is main's behaviour: `Regions.remove`'s whole-group drain
+(`RegionFluids.drain`) writes a body's cells back without asking the journal, so a later site's block in a body cell (a Steward addition's
+waterlogged block, placed by `Sites.place` with layering) is overwritten before the journal's hand-down. Finding 2 appears **not** to be a
+gap on main: a group removal is persisted (`Groups` `toJson`/`load`, :1026-1048), resumes R3 and R4 after a load (:612-615), and
+`reconcileRemovals` acts only when no removal is running (`RegionsImpl`). Not verified from the code here: whether the `Removal` record
+with its `undo` is saved before or after the R2 journal commit, i.e. whether a kill at `K6` can reload a removal without its undo. A focused
+`K6` kill test on a plain region removal would settle it.
+
+**The questions, in one place:** S-RV-1..3, 5..14, S-GR-1..7, S-FS-1..4, S-LC-1..4, S-AD-1..4 (Steward); N-GR-1, N-GR-2, N-FS-1, N-LC-1
+(Noah, taste or product, each with a default). They are listed at the end of each slice.
+
+
+### Steward's review (2026-10-20, at 3b10e4b3): binding, and it overrides the slice sections where they differ
+
+**Four points, settled as Steward asked:**
+1. **Region state after a revision.** While a revision writes, the region reads PLACING. Afterwards it reads its own
+   pre-revision state again (PLACED, PARTIAL, FAILED with cells), whatever the revision ended as. The revision's outcome
+   (PLACED, PARTIAL, FAILED, RACED) lives only in `RevisionView`. One failed grown lot never flips a town's state. Steward's town
+   lookup and D3's standing rules keep reading region state unchanged.
+2. **A candidate waiting on designs.** GR never shrinks a lot unasked. A re-plan with the same lot sizes returns boxes of exactly
+   those sizes (the front may change), or refuses `NO_ROOM`. Candidates stay valid for as long as Steward designs, unless an
+   accepted revision moves the head (then `parent_moved`).
+3. **Grown street roads** (keyed `rv<rid>:road:…`) always carry `architect_mc:street {zone, district?}`, including in towns
+   realised before FL whose standing roads have no flag.
+4. **AD is lazy (changes S-AD-1).** A VillageLayout settlement is adopted on demand, at its first growth, not migrated on
+   load. Adoption never changes site ids, so Steward's history keeps naming them.
+
+**Answers:**
+- **RV:** as proposed. S-RV-2: Steward treats `REGION_LIMIT` like `NO_ROOM` (full, so it proposes a district). S-RV-13:
+  Steward stops laying `street#n` on region towns once GR ships. S-RV-14: a refused irrigated refill is fine.
+- **GR:** as proposed. OpKeys `dgrow`/`drealise` for districts, `vgrow:<build>`/`vgrowrealise:<build>` for towns. No dry
+  check; Steward plans at acceptance and uses `discardPlan`.
+- **FS, LC:** as proposed.
+- **AD:** S-AD-1 is lazy, per point 4. S-AD-2, S-AD-3 and S-AD-4: yes.
+- **RCs:** RV and GR share one RC.
+
+## Phase 6d slice RV: region revisions, additive v1 (FROZEN 2026-10-20, Steward reviewed)
+
+A standing region can be **grown**: parts, lots, street extensions and new fluid bodies are **added** as revisions, written as new journal
+layers over the region, undone last-in-first-out, and removed with the region exactly. Every later reader sees the region as grown. The
+plan/0 path answers a revision that adds parts to a realised plan and realises it through `realiseApproved`.
+
+**Noah's decision (2026-10-20, option A):** 6d's RV is **additive only**. A revision never removes or changes a standing part, road, lot
+box or body. Removing and changing standing parts ("full revisions") need the realised provenance to be designed against; they are
+recorded in "6d later: full revisions (RV2)" at the end, not a slice yet. v3 replaces v2's composed-intent patch: with nothing removed or
+changed, a revision is a set of **new stages evaluated alone** and layered over the region, as a later stage of a realise is (§3). Most of
+v2's composition problems disappear; §3.5 lists exactly the cases that remain.
+
+**RV changes what `Regions.remove` undoes** (the group now holds revisions), which Steward's history and give-up read: **Steward's RC check**
+before release (GATES policy 4's exception); the verifier re-runs the undo, removal, crash, survival and fluid items (policy 3).
+
+- **Branch:** `slice/RV`, worktree `../architect-mc-RV` (lanes RV-a, RV-b, RV-c, RV-d, §13). **Spend:** $0, sim and stub only.
+- **Scope:** additive revisions (§2); their stages and write (§3); the head, states, the operation manifest and recovery (§4); keep-clear
+  (§5); undo and removal (§6); added fluid bodies (§7); survival, additive (§8); plan/0 (§9); byte identity (§10); API (§11); product
+  limits (§12); the gate (§14); Steward's three questions (§15).
+- **Not in scope:** removing or changing a standing part, road, zone, lot box or body (RV2); writing under a standing lot (S-RV-5);
+  revisions over unfinished tiles or unbuilt survival targets (§5.4, §8); re-planning against changed land (LC's replan, deferred).
+- **Depends on:** 6a (frozen heights, tile items, region undo), 5b (D5 LIFO, D6 KEEP, the before capture), C36, H and IRR (drain-first),
+  KC, D3 (held set, hold columns, `reach`, end and side joins; RV builds after D3), RS (§8), **RP** (realised provenance, branch
+  `feat/realised-provenance`, building: the writers file `ARWR` v1 per stage, set and tile, and the realised record; RV writes its own tiles'
+  records through it and defines the hashes in §3.4 over it; RP's as-built wins where it differs).
+
+### Binding answers carried over
+
+- **5b D5, D6, D7:** undo is LIFO; a player's edit is kept and reported; covered cells refuse `COVERED`.
+- **5b's before capture** (`SiteDeltas.java` :1013-1020): the `before` is the world at the write (state, block entity, PT record).
+- **6a D3:** surface-relative ops resolve against the frozen heights; columns never touched are frozen at the revision's first touch.
+- **6a D7, invariant (iii):** a region never puts CELL over BOX.
+- **Journal** (`Journal.java` :32-44, :258-390): cells stack by layer; undo takes entries top-down; a cell under one that stays hands its
+  `before` down; a CELL cell restores only if the world still holds its `after`.
+- **D3, Steward's finding:** `PLACED`, `PARTIAL`, and `FAILED` with cells standing are standing regions; in-flight ones refuse
+  `OVERLAP_BUSY`.
+
+### 0. Facts (main f3f41d43, from code unless marked)
+
+- **Re-plan-and-diff fails on today's programs** (v2 §0, unchanged): parts aggregate lots (`village.mjs` :541-601), the layout is a global
+  search (:101-138), ids are ordinals (:619-623, `compile.mjs` :1071), the seed follows the params (`plan.mjs` :187-191). RV never re-plans.
+- **A later stage is already a layer over the region.** Realise writes each stage's terrain tiles, then path tiles, then roads, then lots
+  (`RegionsImpl.java` :1254-1305). `TileCheck` (:36-56, :750-770) layers a tile over the region's own earlier tile entries (its group in
+  `JournalStore.Meta.group`) and **skips** cells others hold, PT builds, failed conditions and no-ops; it fells worldgen trees an op cuts and
+  holds their leaves.
+- **The write loop doesn't re-check.** `InfraJob` re-captures befores at P1 (:223) but its write loop (:395-420) writes each planned
+  `after` without re-running ownership or conditions.
+- **`evalTile` hashes one stage and set** (`realise.mjs` :478, :814); the artifact keeps one sha per (stage, set, tile). RP adds the
+  writers (`ARWR` v1: each cell's winning op and the ops it overwrote, `encodeWriters`).
+- **Removal:** `Groups` waits for players (up to 10 minutes), refuses `COVERED` under `REFUSE`, and fails when a dimension is unloaded or
+  the journal can't be read (`Groups.java` :755-830). The fluid drain runs only for a whole-group removal (:587, `r.stage == null`).
+- `Sites.remove(lotSiteId)` removes a lot alone (`SitesImpl.java` :214-250); RegionRec keeps it `placed` with a stale site id.
+- `revision` in `kit/schemas/plan.json` is read by nothing; Steward writes none (steward-mc 6d54540). The kit allows 64 stages per IR
+  (`plan.mjs` :31, :421); journal depth is 8 (`SiteJournal.java` :57).
+
+### 1. The rule in one line
+
+**A revision adds; its new stages are evaluated alone on the frozen heights and written as the region's next layers, checked and written in
+the same tick per section; it is published by one manifest-backed step, and undone, whole and last first, by one recoverable operation.**
+
+### 2. The revision
+
+#### 2.1 Ids and positions
+
+- `rid`: monotonic per region, never reused. Files under `rev/<rid>/`; part ids `rv<rid>_...`; stages `rv<rid>:<stage>`.
+- `position`: the place in the head chain (0 is the realised plan). After an undo to `k`, the next accepted revision takes position `k + 1`
+  with a new `rid`.
+
+#### 2.2 What a revision may add
+
+| Kind | How | Notes |
+|---|---|---|
+| Parts (forms, relief, terrace, carve, scatter, stamps) | new parts `rv<rid>_*` in the revision's stages | may write over the region's own **terrain-set** cells (as a later stage does); never over its path-set cells, roads, lot boxes plus 1, or bodies' hard and watch cells (§5.2) |
+| Lots | new `ir.lots` entries, their pads in an added part | standing lot boxes never change |
+| Refills | `lots.refill: [lotId]`: a lot in state `pad` or `removed` gets a building again | no tile; its old state is kept for undo (§4.6) |
+| Street extensions and lanes | GR's new road items, verges and lanes | the standing road is never rewritten; joined end to end (GR §4) |
+| New fluid bodies | ponds, fountains, courses in the revision's fluids stage | standing bodies are never changed (§7) |
+| Graph | new nodes and edges; a standing node may gain edges | nothing standing removed or moved |
+
+A revision that names a standing part, road, lot box or body for removal or change is refused at plan time (`M29:revision`, `NOT_ALLOWED
+{why: not_additive}`).
+
+#### 2.3 The revision IR and the effective IR
+
+- **The revision IR** (`rev/<rid>/ir.json`) is a valid region IR holding **only what the revision adds**: its parts in its own stages, its
+  lots, roads and graph additions, and `revision {rid, position, base, parent: {rid, irSha}, lots: {add, refill}, roads: {add}, graph:
+  {nodes, edges}, seed}`. Its claim, roles, anchors and budget rules are the base IR's. The kit evaluates it alone; the 64-stage limit
+  applies to it alone (a revision adds 1-4 stages).
+- **The effective IR** (`effective/<rid>.json`, written once before its revision is accepted, never rewritten; for the realised plan,
+  `ir.json`) is the base IR merged with every accepted revision's additions in position
+  order: parts, lots, roads, graph. It is data for readers (§4.5) and is never evaluated as one IR.
+  **`region.json` is authoritative:** readers resolve the effective IR through its head (`effective/<head rid>.json`), so a snapshot
+  for a revision that was never accepted is never read, whatever the crash order.
+- `seed`: `fnv64(base seed, rid)`, keyed by part id.
+
+#### 2.4 Who writes it
+
+- `Regions.planRevision(regionId, RevisionRequest)`, program `revise` (`kit/regions/revise.mjs`, bundled, deterministic, `catalogue =
+  false`): `params.parts: [{id, call}]` (region primitives), `params.refill: [lotId]`; GR adds `params.grow`.
+- `Regions.checkPlan` of a plan with `revision.parentArtifact` (§9).
+- The standing program never re-runs.
+
+#### 2.5 The kit side (`kit/lib/region/revise.mjs`, RV-a)
+
+`reviseIR(effectiveIR, request, ctx)` builds the revision IR against `ctx.standing` (§5.3), then runs `check` over a virtual world of the
+standing region (from the effective IR on the frozen heights) **plus** the revision, with every M rule and **`M29:revision`** (error): a
+non-additive edit; an added part reaching a standing path-set cell, road cell, lot box plus 1, body hard or watch cell, held column, or a
+beside region's `reach` or hold column. Broken variants caught: `_unsafe.removePart`, `_unsafe.underLot`, `_unsafe.ignoreHeld`,
+`_unsafe.overRoad`, `_unsafe.overPath`.
+
+### 3. Writing a revision
+
+#### 3.1 Stages
+
+The revision's stages run after every stage of the region, in the revision IR's order: terrain tiles, path tiles, roads, lots, fluids, as
+a realise orders them. Each tile is `evalTile(revisionIR, key, window, {stage: 'rv<rid>:<s>', set})` on the frozen heights, **alone**:
+standing parts are never re-evaluated.
+
+#### 3.2 Per cell
+
+For each cell the revision's tile emits, at the write (§3.3):
+- **The region's own cell below** (any tile, revision or road entry of its group, `JournalStore.Meta.group`): a terrain-set cell is layered
+  over (as a later stage); a path-set, road or lot cell refuses (§5.2; the kit already kept off, so this is the backstop).
+- **Held above or by others** (a lot site or its deltas, another site, another owner, a beside region's `reach` or hold column, a PT build):
+  refuse the revision, `COVERED` or `OVERLAP` naming the holder (§5.1). **Never skipped.**
+- **The owner's C17 area:** `PROTECTED`.
+- **Condition:** the op's condition against the live world; a failed condition leaves the cell unwritten (as a stage would), recorded
+  `COND`.
+- **No-op:** the world already holds it; unwritten, recorded `NOOP`.
+- **A player's or the world's change under a region cell** doesn't matter to an additive write: the revision's `before` is whatever stands
+  (§3.3); undo restores it.
+- **Felling:** an added op that cuts a worldgen tree fells it as `TileCheck` does (C31's limits); the felled and held cells are the
+  revision's own entry cells, recorded as extras with their cause (§3.4).
+
+#### 3.3 The write: check and write in the same tick
+
+- One CELL entry per (revision, tile, set), kind `architect:terrain` or `architect:path`, meta `{rid, region, tile, set}`, its own cell
+  site `c<N>` in the region's group (`Meta.group`), stage `rv<rid>:<s>`, on a new layer.
+- **Revalidation (new, explicit):** for revision tiles, the tile path's write loop is changed so that each section's cells are **checked
+  (ownership in the journal index, PT build, protection, condition) and written in the same server tick**. A cell that fails at the write is
+  not written and is removed from the PLACING entry before it goes `ACTIVE` (code `RACED` in the realised record). If a cell fails for a
+  holder that refuses (§3.2: covered, held, protected), the revision stops: its tiles written so far stand, the revision ends `PARTIAL`
+  with the reason, and `undoRevision` takes it away. Realise's plain tiles keep today's loop (byte identity).
+- **`before`** is the world read in that tick: the block state, its block entity and its PT record. StillOurs never supplies a before.
+- **Revision roads too:** an extension road (GR) is a 4e road item written by `InfraJob` (`InfraPlace.java` :184), whose write loop
+  doesn't re-check either; revision road jobs get the same same-tick check and write (holder, PT build, protection), with the same
+  outcomes (a refusing holder ends the revision `PARTIAL`; a player's block `RACED`).
+- **Depth:** a cell whose stack would exceed 8 refuses before any write of the revision (`LAYER_DEPTH`, columns listed), from the check;
+  a cell that crosses the bound only by a race is `RACED`.
+
+#### 3.4 The realised record and the hashes
+
+Every revision tile writes RP's realised record for its (stage, set, tile): the writers (`ARWR`), the code per emitted cell (`WRITTEN`,
+`NOOP`, `COND`, `CLIP`, `RACED`), the extras with their cause (felled log, held leaf, with the op that cut them), and the entry's layer.
+Two hashes, never compared with each other:
+- **`tileSha(stage, set, key)`**: `evalTile`'s sha for that stage and set (the artifact's per-tile sha). Compared only with the same
+  (stage, set, key) sha: the revision artifact's tiles at `realiseApproved` (§9.4), and the realised record's own at resume.
+- **`historySha(key)`**: sha256 of the canonical list, in layer order, of `[layer, stage, set, tileSha, entry status]` for every entry of
+  the region's group at tile `key` (tiles, revisions, roads). Recorded for each dirty key in the candidate when it is planned, and compared
+  with the region's current `historySha(key)` at accept: a difference means the region's history at that tile moved since the plan
+  (another revision, an undo, a lot removed): `PLAN_STALE` / `ARTIFACT_STALE {why: history}`.
+- Like is compared with like: a stage-and-set sha with its own stage and set; a history with a history.
+
+#### 3.5 What remains of v2's composition questions (and the answer for each)
+
+| Case | v1 additive answer |
+|---|---|
+| An added part over a cell a standing part **skipped** because another site held it | that site still holds it: refuse (`COVERED`/`OVERLAP`); if it has gone, the added write lands as any write |
+| An added part over a cell a standing part skipped by **condition** or as a **no-op** | the region holds nothing there (or held it as a no-op): the added op's own condition decides |
+| An added part over a standing part's **written** terrain cell | layered over (a later stage); undo restores the standing cell |
+| An added part over a standing **extra** (a felled log's air, a held leaf) | the region's cell: layered over; undo restores the extra's state |
+| An added part over a **path-set** cell, road cell or lot box plus 1 | refused (plan and write) |
+| Two added parts on one cell | the later op in the revision IR's order wins (`evalTile`'s own order, as in any IR) |
+| A standing part removed or changed, a skipped winner hiding a removed writer, extras of a removed part | not possible in v1 (RV2) |
+
+#### 3.6 Lots and roads
+
+Added lots and roads queue in the revision's stages as a realise's (roads after the stage's tiles, lots after roads), with item keys
+`rv<rid>:road:<id>`, `rv<rid>:lot:<id>`. Refills (§4.6) queue a lot item only.
+
+### 4. The head, the manifest and recovery
+
+#### 4.1 States
+
+| State | Meaning | Head? |
+|---|---|---|
+| `CANDIDATE` | planned, not realised; any number may exist on one parent | no |
+| `ACCEPTED` | published as the head; its manifest says what to install | yes |
+| `PLACING`, `PLACED`, `PARTIAL`, `FAILED` | as a region's | yes |
+| `UNDOING` | inside an undo operation | yes, until it ends |
+| `UNDONE` | taken away | no |
+| `STALE` | a candidate whose parent is no longer the head | no |
+
+- **The head** is the accepted revision with the highest position (or the realised plan). The effective IR is the head's. Planning never
+  moves it.
+- **Busy** (`RegionView.busy`: `revising <rid>` or `undoing <opId>`): other revisions, `undoRevision` with a **different** target, D3 beside
+  plans and realises and C38 offers refuse `OVERLAP_BUSY`; the region reads `PLACING` while revising. `Regions.remove` still cancels and
+  removes (today's path for a placing region). **The same-operation exception:** `undoRevision` with the same target as the running
+  undo returns that operation's future (it never starts a second one).
+
+#### 4.2 Competing candidates
+
+Realising a candidate accepts it by compare-and-set on the head (parent equals head) and on `historySha` of its dirty keys (§3.4), under the
+region's lock; the other candidates on that parent go `STALE`, and their realise refuses `PLAN_STALE` / `ARTIFACT_STALE {why:
+parent_moved}`, nothing written.
+
+#### 4.3 Realise: the manifest, then publication
+
+1. **Files:** `rev/<rid>/ir.json`.
+2. **Manifest:** `rev/<rid>/op.json`: `{op: "realise", rid, items: [every item key the revision installs, in order: tiles
+   `rv<rid>:<s>:<set>:<key>`, roads, lots, the fluids stage], state: "prepared"}` (fsync, rename).
+3. **Accept** (the publication point): under the lock, the CAS (§4.2); `effective/<rid>.json` (fsync, rename; head-addressed, so writing
+   it publishes nothing); then `region.json` with the revision `ACCEPTED`, the new head, `busy: revising` and the manifest's path (one
+   atomic rename). **That rename is the only publication.**
+4. **Install:** the revision's StageRecs on the region's group and its items on the region's batch, by key, then the manifest's `state:
+   "installed"`.
+5. **Write:** tiles (§3.3), roads, lots, fluids, as a realise.
+6. **End:** the revision `PLACED`, `PARTIAL` or `FAILED`; `busy` cleared; the manifest `state: "done"`.
+
+**Recovery (idempotent, at world start and on any resume):** for a region whose `busy` names a realise manifest:
+- `region.json` decides: if its head names a revision whose `effective/<rid>.json` is missing (it can't be, by the order, but a lost file
+  is checked), the snapshot is rebuilt from the base and the accepted revisions before any reader runs; a snapshot whose rid isn't
+  accepted in `region.json` (a crash between writing it and the rename) is an orphan, never read, deleted with its candidate's sweep;
+- every manifest item key is looked up: an item already on the batch is left; one already placed (a site, cell site or road whose member
+  `itemKey` is that key) is skipped; one in neither is installed. So step 4 can be repeated any number of times;
+- then the batch resumes (6a's resume), and step 6 runs when every item is done;
+- a manifest with no accepted revision in `region.json` (a crash before step 3) is a candidate: left, or swept after 7 days.
+
+#### 4.4 `undoRevision`: preflight, then one operation
+
+```java
+default CompletableFuture<RemoveResult> undoRevision(String regionId, int toPosition, String actor)
+```
+
+1. **Preflight** over the whole suffix (positions `toPosition + 1` .. head), under the lock, before any write; any failure refuses with
+   every reason found and nothing written:
+   - busy with another operation: `OVERLAP_BUSY`; `toPosition` not below the head: `NOT_ALLOWED`;
+   - **dependencies** (§6.4): a standing beside region targeting a node, road or port the suffix added, or with `reach` or hold cells on
+     suffix cells: `NOT_ALLOWED {why: joined, region}`;
+   - survival (§8) and fluids (§7) barriers;
+   - **`Groups`' own checks, dry:** the suffix's members not placing, no player in a member's box (the scan `Groups` runs, :772-790),
+     and **`Sites.removalBlockers`** for every suffix site (`Groups.java` :847: filled containers, dropped items, the owner's tagged
+     entities, pets). Either refuses here (`OCCUPIED`, or `NOT_ALLOWED {why: blockers, site}` with `Sites.blockersMessage`), before
+     anything drains. A blocker that appears after the commit point is waited on or reported by `Groups` as today, and the operation
+     stays `UNDOING` (never abandoned).
+   - Covered sites are not a refusal: the removal runs with `Covered.KEEP`, so a later site over a suffix cell or lot gets the `before`
+     handed down (§6.2).
+2. **Manifest:** `rev/op-<opId>.json` `{op: "undo", toPosition, rids, sites: [the suffix's members in removal order], phase: "drain"}`;
+   then `region.json` with each suffix revision `UNDOING` and `busy: undoing <opId>` (one save).
+3. **Drain** the suffix's bodies (§7); the manifest's `phase: "remove"`.
+4. **Remove:** one group-stage removal of the manifest's sites, top position first, `Covered.KEEP` (unchanged `Groups` code, its persisted
+   cursor). Its own waits apply (a player who walks in after the preflight is waited for, up to 10 minutes, as today).
+5. **Finish**, only when the group-stage removal itself **ends `Removed(true)`** (after `Groups`' R4 writes and every credit and refund,
+   `Groups.java` :617-626), recorded first as the manifest's `phase: "removed"`: each revision `UNDONE`, the head at `toPosition` (the
+   effective IR is the older snapshot, already on disk), artifacts tombstoned (§9.5), `busy` cleared, then the manifest `phase: "done"`
+   and deleted.
+
+**After the commit point (step 2) the operation is never abandoned and never refused.** If step 4 ends `false` (a player stayed 10
+minutes, an unloaded dimension, an unreadable journal), the operation stays `UNDOING` with its reason in `RegionView`; calling
+`undoRevision` with the same target resumes it (the same-operation exception), and a world start resumes it.
+
+**Recovery (idempotent):** a manifest in `drain` resumes the drain (per body, §7). In `remove`, **journal `UNDONE` is never taken as
+completion:** WorldJournal's R2 commit marks entries `UNDONE` (`WorldJournal.java` :695) before `Groups` moves records pending and
+writes R4 (`Groups.java` :612-640). So: a persisted `Groups` removal for the suffix resumes (its R3 "after a load" path and R4 cursor);
+with none running, the suffix is complete only if no suffix site has a record, a pending record or a pending infra record
+(`Sites.pendingRecord`, `Infras.pending`) and every credit key is spent; otherwise a removal is started for what remains (a site
+whose entries are already `UNDONE` but still pending goes straight to R4, as `Groups` does after a load). In `removed`, step 5 runs.
+In `done`, the file is deleted.
+
+#### 4.5 The effective IR: every reader
+
+From RV on every reader reads `effective.json`, and item 12 asserts each: `RegionsImpl.view`, `get`, `list`; the beside data and
+`besidePorts`; D3's footprint, bodies, held set, `reach`, `architect_mc:land`; plan/0's `standing` and `regions` inputs and C38's
+`wall.around {feature: {region}}`; `Drift.checkStage`; previews; `architect_mc:fluids`; C36's pins; and, when they land, 7a's link pass and
+`nav.json` (named for `docs/7a`).
+
+#### 4.6 Lots: removed alone, and refills
+
+- `Sites.remove` of a region's lot site marks the lot `removed` (old site id, `removedAt`) in RegionRec and `RegionView.lots`. Its pad stays.
+- **A refill** (`lots.refill`) gives a lot in state `removed` or `pad` a building: a revision with no tile, one lot item in its lot stage,
+  the new site in the region's group. Its record keeps the lot's previous state (`{state, siteId?, removedAt?}`); undo removes the new site
+  and restores that state exactly.
+- `Sites.place` into the box by hand is not a refill (the site isn't the region's).
+- **Irrigated lots (v1: refused).** Removing an irrigated lot drains its sources and sets `lotRemoved` for good (`RegionFluids.java`
+  :1440-1455), and a refill queues a lot item only. So a refill of a lot whose irrigation body is `lotRemoved` refuses `NOT_ALLOWED {why:
+  irrigated}`; an unirrigated refill of the same box is S-RV-14's question. Reactivating its sources (and rolling them back on undo) is a
+  later member.
+
+### 5. Keep-clear
+
+#### 5.1 Held cells: refuse, never skip
+
+At plan time (the kit, on `ctx.standing`) and at the write (§3.3): a lot site or its deltas above a target cell `COVERED`; another site,
+another owner, a beside region's `reach` or hold column, a PT build or a Steward addition `OVERLAP` (`PLAYER_BUILD` evidence for a build);
+the owner's C17 area `PROTECTED`. Through `realiseApproved` each answers `ARTIFACT_STALE`.
+
+#### 5.2 What an added part never writes
+
+The region's path-set cells and road cells (walk surfaces and 4e roads), every lot box plus 1, and every body's hard and watch cells (KC:
+the revision is the later writer). Refused `OVERLAP {kind: path | road | body}` / `COVERED`.
+
+#### 5.3 `ctx.standing`
+
+Sent by the mod and recorded in the revision's sidecar plan directory (offline replay): the effective IR's footprint (lots plus 1, roads
+plus 1, paths, path-set parts), bodies' hard and watch sets, `held` (D3 §5.1's reader over the claim), beside regions' `reach` and hold
+columns, the owner's C17 areas, and the region's unfinished tiles.
+
+#### 5.4 Unfinished work
+
+A revision whose tiles meet a tile of the region with no realised record and no written entry (never written, a failed tile item, a stage
+not reached) refuses `NOT_ALLOWED {why: unfinished, tiles}`. A `PARTIAL` region whose failures are lots only can be revised.
+
+### 6. Undo and removal
+
+#### 6.1 Undo
+
+Whole revisions, top first (§4.4); a middle revision is never undone alone (5b D5); its own lots and refills go with it.
+
+#### 6.2 Why it is exact, and its stated exceptions
+
+A revision's cells sit on new layers, each `before` the world at its write. Undone while on top, each restores its `before`. Under a later
+site, the `before` is handed down (`Covered.KEEP`) and restored when that site goes. `Regions.remove` takes everything last placed first, so
+every cell ends at the land before the region. **Exceptions:** a cell a player changed is kept by policy, with its PT record; and an undo
+blocked by a dependency, survival, fluids or a player present refuses at preflight.
+
+#### 6.3 Removal, every order (the gate's rows)
+
+| Case | Bar (§14) |
+|---|---|
+| The head undone | the world just before it, cell for cell (the oracle, §14) |
+| Undo to 0 after 5 revisions, one operation | the world before revision 1 |
+| Undo, then a new revision (a new `rid`, the freed position) | its files apart; its undo exact |
+| `Regions.remove` with revisions standing | E-flat 0 over the claim against the world before the region |
+| A revision's lot with Steward's `applyDelta`, then undo | as the first row |
+| A Steward site over a revision cell; undo; then the site removed (and the reverse order) | the world before the revision after both |
+| A player's block on a revision cell | kept, reported, PT intact |
+| Weathered copper under a revision (CU) | the exact weathered state after undo |
+| The region removed while a revision is `PLACING` | the batch cancelled, the group removed; E-flat 0; save, leave, reopen between |
+| A town revision with a beside district, each removal order | D3 §4.2's bars |
+| A refill undone | the lot back to `removed` with its old site id; its new site gone |
+
+#### 6.4 Dependencies
+
+`dependents` per region: each standing beside region's targets in this region (end-join nodes and ports, side-join roads) and the columns
+its `reach` and hold cells cover, refreshed when a beside region is realised or removed. Preflight refuses an undo whose suffix added any of
+them. `Regions.remove` of the town is unaffected (D3's `dangling`).
+
+### 7. Added fluid bodies
+
+- A revision may add bodies (pond, fountain, course), written in its fluids stage with H's settle and census, recorded in `fluids.json`
+  with `rid`. Standing bodies are never changed (`M29:revision`); an added body keeps clear of every standing body (KC).
+- **Preflight:** an added body that feeds or is fed by a body outside the suffix (HY's closure) refuses `NOT_ALLOWED {why: upstream,
+  body}`.
+- **Drain (§4.4 step 3):** exactly the suffix's bodies, by H's drain-first protocol scoped to them (census and escaped cells, sources),
+  each body's `drained: <opId>` saved in `fluids.json`; a restart resumes the drain.
+- **Holder-aware (new):** H's drain (`RegionFluids.drain`, :1139-1165) writes any fluid or ice cell of a body back to its `before`
+  without asking the journal. A suffix drain first reads each body cell's stack: a cell held above the revision's entry by any entry
+  outside the suffix (a later Steward site's waterlogged stair over an added pond source, a player's build) is **not drained**; it is
+  listed (`kept`), and the journal's hand-down at step 4 gives that holder the cell's `before`. The body's other cells drain as before.
+  That is the one exception to §15.3's "Steward's sites interleave freely": a Steward block standing in an added body's cell keeps its
+  water when the body is undone.
+- **The operation is never abandoned after its commit point** (§4.4), so drained bodies are never left behind by a refusal: the removal
+  completes, or waits and resumes. Only `Regions.remove` of the whole region (which drains everything anyway) can supersede it.
+- **If a superseding removal fails** (`Regions.remove` ends `false`) and the region still stands with drained suffix bodies: their sources
+  are rewritten **only where containment is intact** (every cell of the body's shell and lining still holds its journal `after`); a body
+  whose containment is broken stays drained and is reported (`architect_mc:fluids` row, `drained: true, why: containment`).
+- `Groups.java` :587's gate gains the suffix case.
+
+### 8. Survival (RS), additive
+
+- A revision builds as RS builds: land free, its built blocks construction targets from the stockpile, RS's waits, the revision's part ids.
+- **Refused** (plan and write): a target cell over a paid built block of the region, or over an RS target not yet built (`NOT_ALLOWED
+  {why: survival_paid | survival_unfinished}`). Additive revisions on land or on the region's free terrain cells are allowed.
+- **`undoRevision`:** the suffix's unbuilt targets are cancelled first (RS's cancellation, reservations released), then its built paid
+  blocks are refunded once per key (`rev:<region>:<rid>:<entry>`), then the land comes back free. A partly built revision with outstanding
+  reservations undoes the same way (gate item 15).
+- **Whole-region removal:** RS's rule; each paid block has one owner (additive), so one refund.
+
+### 9. The plan/0 path
+
+#### 9.1 A revision of a realised plan
+
+A plan with `revision.parentArtifact` naming the artifact of a standing region (its own or an accepted revision's) is checked as a
+candidate: the region found through C36 (`NO_FEATURE {why: parent}` if none, or another owner's); a parent that isn't the head's answers
+`NEEDS_REPAIR parent_moved` with the head's artifact; `revision.n` is Steward's own counter, recorded only. A plan without `parentArtifact`
+is today's, byte for byte.
+
+#### 9.2 Per-part answers
+
+Matched against the parent artifact's own `plan` member, only against parts the parent **built** (a part in `dropped`, or answered
+`unsupported` or `blocked`, is checked as added):
+
+| Part in the revision plan | Answer | Catalogue |
+|---|---|---|
+| same id, same canonical JSON as the parent's plan | `fits`, `standing: true`, cost 0 | `revision.keep` (supported) |
+| a new id, or one the parent didn't build | checked against the standing region (§5.3): every usual answer | `revision.add` (supported) |
+| same zone, a lot spec equal to the parent's but for a new optional member `refill: true` (and its entry), the lot `removed` or `pad` | the lot answers `fits` with `refill: true`; the zone `fits standing` | `revision.refill` (supported) |
+| same id, a zone whose `program.lots` only gains lots | GR's answer per added lot (`unsupported revision.grow` until GR) | `revision.grow` (reserved, until GR) |
+| an id gone from the plan, or the same id changed (an entry-only change without `refill: true` included) | `unsupported {block: revision.change}` (RV2) | `revision.change` (reserved, until RV2) |
+
+No `removed` class in v1. `refill` is an additive optional member of a lot spec in plan/0 (allowed within plan/0); it means "build
+this lot again" and is the only way a revision plan asks for a refill, so an entry change alone is never read as one.
+
+#### 9.3 The revision artifact
+
+`region.revisionOf {region, parentRid, parentArtifact, parentIrSha}`, `dirty`, `historySha` per dirty key; `tiles` are the revision IR's own
+(stage, set, key) shas; `inputs.surveySha` (the dirty windows), `inputs.held`; `$.lots[]` the added and refilled lots. The cost counts the
+revision.
+
+#### 9.4 `realiseApproved` of a revision artifact
+
+Today's checks, then the head and `historySha` CAS (§4.2), the held set over the dirty tiles, `terrainDiff` over the dirty tiles only, then
+§4.3 under the call's opKey; one stale retry under a second key works as for a plan.
+
+#### 9.5 Pins and tombstones (C36)
+
+A revision's artifact is kept while it is at or below the head; undo tombstones undone revisions' (unless pinned); `Regions.remove`
+tombstones all.
+
+### 10. Byte identity
+
+Unrevised regions, plans without `parentArtifact` and programs without `params.grow` give today's IRs, tiles, answers and journal entries;
+realise's plain tiles keep today's write loop (§3.3's revalidation is for revision tiles only). Pinned: `scenarios/goldens/*`, plan fixtures
+`valid/*`, the 59 asks, tile goldens S1, S2, S3, S7 and mega_bench, D3's pinned set. Catalogue 12: `revision.keep`, `revision.add`, `revision.refill`
+(supported), `revision.grow`, `revision.change` (reserved). `RegionView` gains trailing `int position`, `@Nullable String busy`,
+`List<RevisionView> revisions`. KIT_VERSION moves.
+
+### 11. API (binary compatible)
+
+```java
+// Regions (defaults throw; feature "regionRevisions")
+default CompletableFuture<RegionPlan> planRevision(String regionId, RevisionRequest r)
+default CompletableFuture<RemoveResult> undoRevision(String regionId, int toPosition, String actor)
+record RevisionRequest(String program, com.google.gson.JsonObject params, @Nullable String opKey, @Nullable String actor)
+record RevisionView(int rid, int position, int parentRid, String planId, String irSha, String state, long createdAt,
+    List<String> stages, List<String> lotsAdded, List<String> lotsRefilled, long cells, @Nullable String artifact,
+    boolean survivalAllowed, @Nullable String waiting)
+```
+
+`Regions.realise` of a revision plan realises it; `realiseByKey` finds it; `RegionPlan` gains trailing `revisionOf`. No new Reason, no new
+event. Refusals: `COVERED`, `OVERLAP`, `OVERLAP_BUSY`, `OCCUPIED`, `PROTECTED`, `LAYER_DEPTH`, `REGION_LIMIT`, `NOT_ALLOWED`, `PLAN_STALE`,
+`ARTIFACT_STALE`. Features `regionRevisions`, `planRevisions`; sidecar `region.revise`, `plan.revision`. api-compat clean; apijars.
+
+### 12. Product limits (stated)
+
+No fold in 6d (S-RV-2):
+- **Depth 8 per cell:** a cell can be written by at most 7 revisions over a region tile (6 in a D3 contact column).
+  Additive growth mostly writes new land, so this binds only where revisions keep reshaping one spot.
+- **64 accepted revisions** per region (undone ones don't count; `rid` to 9,999).
+- **64 stages per revision IR** (each revision adds 1-4); no cumulative stage limit, since the effective IR is never evaluated whole.
+- Past a limit, a settlement can still be removed whole and planned again.
+
+### 13. Size, split and the shared interface
+
+About **7.5-8.5 days** of work, **4.5 elapsed**; the interface freezes at the end of RV-b's day 2:
+- **RV-a, kit (2 days):** `revise.mjs`, `revise` program, the effective-IR merge, `M29:revision` and broken variants, plan/0's revision
+  mode and artifact (§9.1-9.3), `historySha`'s definition; items 1, 2, 17.
+- **RV-b, the mod foundation (2.5-3 days, on RP):** revision tiles through RP's realised record; the same-tick check-and-write (§3.3); the
+  revision record, states, head CAS, manifest and recovery (§4.1-4.3); `planRevision`; crash points; items 3, 6, 9-11.
+- **RV-c, undo and fluids (1.5-2 days):** §4.4's preflight, manifest and operation, dependencies, the suffix drain and its recovery;
+  items 7, 8, 13, 19.
+- **RV-d, readers and paths (1.5 days):** `effective.json` in every reader, `realiseApproved`'s branch, lots and refills, survival, API
+  and api-compat; items 4, 5, 12, 14-16.
+- **Shared:** 18, 20, then Steward's RC.
+- **Interface (end of RV-b day 2):** the revision IR member and naming; `effective.json`; the manifest formats; the states and busy; the
+  hashes; `ctx.standing`; the artifact members; the driver steps (`rv-unit`, `rv-ingame`, `rv-natural`).
+
+### 14. Gate (slice tier, $0)
+
+**The oracle (independent of the revision code).** For every in-game revision item, the driver:
+1. snapshots the claim plus 8 (every cell, block entities included) and dumps the journal's holders over it before the revision;
+2. **enumerates the expected transitions itself**: it evaluates the revision IR's tiles with the kit's **virtual world** (`vworld.mjs`, the
+   checker's path) seeded from the snapshot, applies each op's condition against the snapshot, marks the cells the dump says are held,
+   protected, path-set, road or lot (expected refusal or no write), and computes felling from the snapshot's logs by C31's rules;
+   and **evaluates stage by stage against the evolving expected world** (each stage's expected writes applied before the next stage's
+   conditions are tested), not against the original snapshot;
+3. for writers the virtual world only approximates (`vworld.mjs` :277 approximates roads and puts lots as boxes), it uses named
+   independent references:
+   - **roads:** the 4e road planner's own dry plan (`Sites.checkRoad` on the expected world before the road's stage), whose cell list
+     the road write must equal;
+   - **lots:** the placed blueprint's own placement plan (`Sites.check` for that entry, fit and rotation, on the expected world), its
+     blocks and block-entity NBT from the library entry's version as stored;
+   - **fluids:** a body's planned cells, ice and sources exactly; its settled flow is not predicted: the cells outside the plan must be
+     exactly the census's recorded flow (H's `architect_mc:fluids` row), and nothing else wet;
+4. compares **the whole claim plus 8** after the revision with the expected world: every cell, not only a mask. An omitted, extra or wrong
+   write fails, wherever it is.
+For undo, the expected world is the step-1 snapshot (whole claim plus 8).
+
+**Fixtures:** `rv_town` (a `flat_village` of 6 lots through `checkPlan` then `realiseApproved`, 4 built, 2 pads, lanterns, a farm pond, a
+weathered copper cell on a revision's path, a Steward addition and a PT build); `rv_town_beside` (with D3 districts joined at an end and by a
+side T); `rv_partial_lot`; `rv_partial_tile` (a tile item failed by fault injection); `rv_layers` (two stages where a later stage's op
+skipped by condition over an earlier stage's cell, and a felled tree); plan fixtures `v8x_6d_rv_add`, `v8x_6d_rv_pending`,
+`v8x_6d_rv_change` (`unsupported revision.change`), and the broken variants.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | `reviseIR`: only additions, ids, stages, seed; `M29:revision` per rule; the effective-IR merge; `historySha` on synthetic histories; 300 seeded synthetic additive revisions: deterministic, nothing standing changed, no write on a path-set, road, lot box plus 1 or held column; the broken variants caught |
+| 2 | Byte identity | §10's pinned set; plain tiles' write loop unchanged (journal entries byte-identical) |
+| 3 | Add (oracle) | on `rv_town` and `rv_layers`: a pond beside a road and a relief form over standing terrain and over the skipped and felled cells: the whole-world oracle; KC 0 cells in the farm pond's sets |
+| 4 | plan/0 | `v8x_6d_rv_add` through `checkPlan` then `realiseApproved` (oracle); `v8x_6d_rv_pending` built as added; `v8x_6d_rv_change` answers `unsupported revision.change` |
+| 5 | Steward's shapes | `v8x_6d_rv_add` written as Steward's plan writer would (the artifact's plan plus `revision {n, parentArtifact}`) with one stale retry under a second key across a restart; `planRevision` with an opKey, `realise`, `realiseByKey` after a restart |
+| 6 | Refusals (nothing written) | an undo whose suffix lot holds a filled chest refused `blockers` before any drain; under a built lot `COVERED`; the Steward addition, the PT build, a road, a path `OVERLAP`; a C17 area `PROTECTED`; `rv_partial_tile`'s failed tile `unfinished` (one away accepted); a non-additive request `not_additive`; each hash-unchanged |
+| 7 | Undo, every order (verifier re-runs) | §6.3's rows with the oracle |
+| 8 | Remove (verifier re-runs) | `Regions.remove` with 3 revisions standing: E-flat 0; every artifact tombstoned |
+| 9 | Depth, exact | a cell at depth 7 written by one more revision (8) succeeds; the next refuses `LAYER_DEPTH`, nothing written; the same in a D3 contact column |
+| 10 | Crash (verifier re-runs) | kills after §4.3 steps 2, 3 (between `effective/<rid>.json` and `region.json`: readers still see the old head, the snapshot an orphan), 4 (half the items installed), between tiles, between tiles and lots, and after §4.4 steps 2, 3, **right after the R2 journal commit (`K6`) and midway through R4**, and after 4 before 5: each restart reaches a state the manifest names, no item installed twice (keys), then `Regions.remove` E-flat 0 |
+| 11 | Heads | two candidates on one parent: the second `STALE`; undo then a new revision (new `rid`); a candidate never moves the head; a candidate whose dirty tile's history moved (`historySha`) refused |
+| 12 | The effective IR | one assertion per §4.5 reader |
+| 13 | D3 and dependencies | `rv_town_beside`: a revision beside both joins never writes a join or hold column; D3's orders with it standing and after undo; an undo whose suffix holds a side-joined road refuses `joined`, nothing written |
+| 14 | Lots and refills | a lot removed alone reads `removed`; refilled (by `planRevision` and by plan/0 with `refill: true`; an entry-only change answers `unsupported revision.change`); an irrigated lot's refill refused `irrigated`; the refill undone (state and old site id back); a pad lot refilled; `Regions.remove` takes refilled sites |
+| 15 | Survival (if RS merged; verifier re-runs) | an additive revision built from the stockpile, then a second left half built with reservations outstanding and undone: reservations released, built blocks refunded once; refusals over a paid lamp and an unbuilt target; whole removal conserves (items in = items out) |
+| 16 | States and busy | `rv_partial_lot` revised; a busy region refuses another revision, a different-target undo, a D3 beside plan and a C38 offer `OVERLAP_BUSY`; a same-target undo returns the running operation; `Regions.remove` while revising cancels and removes |
+| 17 | Determinism | revision IR sha over 3 plans; tile shas with 1 and 4 workers; macOS and Linux |
+| 18 | Unchanged, API, spend | d-unit, d-ingame, d2-ingame, d3-ingame, kc-ingame, k1a-ingame, fl-ingame, h-ingame, irr-ingame, pt-ingame item 14, rs-ingame, rp's own; api-compat; apijars; $0.00 |
+| 19 | Fluids (verifier re-runs) | a pond and a fountain added then undone: drained first, 0 fluid cells left, the base farm pond unchanged; a Steward site with a waterlogged stair over one of the pond's source cells: that cell kept (water and stair), the rest drained, the stair's cell handed down; a kill during the drain; a player held in a member's box after the drain (the removal waits, then completes); `Regions.remove` failing after a drain (fault injection): sources rewritten only where containment is intact, the rest reported |
+| 20 | Write-time revalidation (tiles and roads) | between a revision tile's check and its write, the driver places a Steward site on one target cell and a player block on another (the same tick boundary, DevBridge): the site's cell refuses (the revision ends `PARTIAL`, its undo exact); the player's cell `RACED`, unwritten; the same for a GR extension road's target cells |
+| 21 | Natural round | S3's pinned claim: a V town, a revision adding a terrace form; plan, realise, save, leave, reopen; undo and remove; E-normal 0 unclassified under D2's narrowed classes and VOC's `farfluid` |
+
+**Tier:** slice plus `region/**`, `journal/**`, `site/**`, `api/**`: units and apijars; d-, d2-, d3-, kc-, k1a-, fl-, h-, irr-ingame;
+4d-all; 6a-eflat; `rv-unit`, `rv-ingame`, `rv-natural` (driver `tools/gate6drv.mjs`, chain `6drv`, impact rule "6d RV"). The verifier
+re-runs items 7, 8, 10, 15 and 19. **Steward's RC** follows (S-RV-10).
+
+### 15. Steward's three questions (coordinator, 2026-10-20)
+
+**1. Steward's own street additions in a V town** (its `street#n` road pieces and batch sites, placed outside the region): **GR treats them
+as held cells; it does not migrate them.**
+- *Why:* they aren't in the region's graph or journal group, they may carry Steward's own batch history and undo entries, and migrating
+  them is AD's machinery (journal `Meta.group`, membership, recovery), which belongs to AD's slice and C12, not to growth. D3 already set the
+  rule (S-D3-1: "Steward's own street extensions are held cells to route around").
+- *What GR does:* a street end whose past-end cells Steward's own piece holds is **not extendable** (GR §4.1); GR extends the street's
+  other free end or uses frontage, and never writes a Steward piece's cells or its lots' boxes plus 1.
+- *What Steward should do:* stop laying its own `street#n` pieces on a **region** town's streets once GR ships, and grow through GR. Pieces
+  it already has stay Steward's (undone by Steward's own history). To let GR extend that end instead, undo its own pieces at that end
+  first (once no building stands on them); otherwise leave them, and GR grows elsewhere. A town Steward laid itself (VillageLayout) is AD's
+  case.
+
+**2. Refill on a lot whose building was undone** (the building removed alone, the box empty): **a refill revision** (§4.6). The lot reads
+`removed`; `planRevision(revise, {refill: [lot]})` (or plan/0 with the zone unchanged and the lot's entry given) places a new building
+on the same box, the site joins the region's group, and undoing that revision puts the lot back to `removed`. No tile is written: the pad
+is the region's and still stands. A lot never built (`pad`) refills the same way.
+
+**3. LIFO with Steward's own placements interleaved.** History: revision R1, then a Steward batch site S (a non-region site), then
+revision R2, then undo.
+- **Revisions are LIFO among themselves:** R1 can't be undone while R2 stands; `undoRevision(toPosition = 0)` takes R2 then R1 in one
+  operation.
+- **Steward's own sites interleave freely** (one exception: a Steward block in an added body's cell keeps its water, §7). S never sits under R2 (R2's write would have refused S's cells, §5.1). If S sits on R1's cells,
+  undoing R1 hands R1's `before` down to S's cells (`Covered.KEEP`): S stays standing on unchanged ground, and when S is later removed the
+  land comes back. Nothing refuses because of S.
+- **What refuses:** a beside district joined to something R2 or R1 added (`joined`); a player in a member's box (`OCCUPIED`); survival
+  barriers; an operation already running (`OVERLAP_BUSY`, unless the same target).
+- **The order Steward should use:** its own history order (undo R2, then S, then R1, last first) is always exact. Any other order that keeps
+  revisions LIFO among themselves (R2, R1, then S) is exact too. The only order that can't be done is a revision ahead of a later revision.
+
+### Steward's recorded asks: expected answers
+
+The 59 asks are unchanged (none writes `revision`). Plan v1's Start re-check, stale retry and the waiting-part offer send no
+`parentArtifact`. Life layer stages that add forms, connectors, a zone or bodies inside the claim can be built as revisions; adding lots
+to a standing zone is GR's; changing or removing a built part answers `unsupported revision.change` until RV2.
+
+### Open questions for Steward
+
+- **S-RV-1.** A revision is the region's (one group, one `Regions.remove`); offers stay their own regions. Default: yes.
+- **S-RV-2. Lifetime.** No fold in 6d; §12's limits. Enough for your settlements? Default: yes.
+- **S-RV-3. Stale parents** answer `parent_moved` and are never re-based by Architect. Default: yes.
+- **S-RV-5. Writing under a standing lot** stays deferred. Default: deferred.
+- **S-RV-6. Additive only** (Noah's decision): no removal or change of standing parts, roads, lot boxes or bodies until RV2. Does any
+  near-term flow of yours need one? Default: no.
+- **S-RV-7. Survival:** additive on land; refused over paid or unbuilt targets. Default: yes.
+- **S-RV-8. Inside the claim.** Default: yes.
+- **S-RV-9. Offers as revisions?** Default: no change.
+- **S-RV-10. The RC:** a revision through `checkPlan` and `realiseApproved` on a Steward-built V town, `undoRevision`, the town removed with
+  a revision standing, a refill and its undo, interleaved history (§15.3), and the busy window. Default: yes.
+- **S-RV-11. The base of a revision** is the parent artifact's `plan`. Default: yes.
+- **S-RV-12. Busy towns** (a minutes-long window). Default: yes.
+- **S-RV-14. Irrigated refills.** Refused in v1. Would you rather refill the box without irrigation (the farm rebuilt dry, said so)?
+  Default: refused.
+- **S-RV-13. Your street pieces** (§15.1): held, not migrated; stop laying them on region towns once GR ships. Default: yes.
+
+### Deferred
+
+RV2 (removing and changing standing parts, "6d later" below). The pad delta under standing lots. Folding. Revisions past the claim.
+Survival revisions over paid or unbuilt targets.
+
+## Phase 6d slice GR: growing a standing region (D-S2, `growDistrict`) (FROZEN 2026-10-20, Steward reviewed)
+
+New lots are added to a standing town or district as a revision (RV): first on free frontage along its standing streets, then on a
+street extended from an end that nothing else uses. Standing lots, streets and junctions never move. This is Steward's D-S2 (steward-mc
+`docs/DISTRICTS.md` §7: "Lots added to a standing district region (its street extended), so along districts and outposts can grow"),
+V's "additions to a realised village", and Noah's Q1 for beside districts ("built at its first accepted building, then grown along
+its street"). D3 §11 reserved the feature `growDistrict`, `architect_mc:land.v` 2 and terminal street ends; GR uses all three.
+
+**GR changes what stands in a district's land and what a building's undo takes away**, which Steward's district give-up and history
+read. So Steward's RC check comes before release, shared with RV's if they ship together (S-GR-7).
+
+- **Branch:** `slice/GR`, worktree `../architect-mc-GR` (lanes GR-a and GR-b, §10). **Spend:** $0, sim and stub only.
+- **Scope:** the growth search (§2), frontage (§3), street extension (§4), along districts (§5), ids and the graph (§6), the land v 2
+  (§7), plan/0's `revision.grow` (§8), the API (§9) and the gate (§11).
+- **Not in scope:** turning or branching an extension, growth past the claim (a new district, S-RV-8), growth along FL's ring and
+  spiral ends (§2.4), re-laying standing lots, a second square.
+- **Depends on:** RV (merged first; GR's in-game items need it), D1, D2, D3 (the held set, hold columns, `reach`, `land`), FL (the
+  street flag), KC, T2 (routing, for along districts).
+
+### Binding answers carried over
+
+- **RV, all of it:** a growth is a revision: additive only (RV v3), `rv<rid>_` ids, `rv<rid>:` stages evaluated alone and layered
+  over the region, the same-tick check and write, the manifest and head, LIFO undo with its suffix preflight, the effective IR. In this section `n` is the growth's `rid`. A growth is undone by `undoRevision`, one building at a time.
+- **D3 §11:** a district's street ends stay terminal junctions in its graph; `land.v` moves to 2 when 6d adds grown parts.
+- **D3 S-D3-1:** Steward's own street extensions in a V town are held cells to route around. GR's extensions are Architect's, in the
+  region's graph, so later districts may join them.
+- **S-FL-5:** every street road a region writes carries `architect_mc:street {zone, district?}` and keeps the `street_` stem.
+- **Steward DISTRICTS.md §4:** "a reserved beside district owns its reservation ... and keeps it once built, so its street has room
+  to grow"; `District.growable()` is true for `beside` while its street runs east-west, and Steward never routes a building into a
+  district that can't grow. GR answers which can.
+
+### 0. Facts (main f3f41d43 plus D3 as frozen, from code unless marked)
+
+- **V's street** spans its outer street lots and the square ±4, clamped to the claim margin 2 (`village.mjs` :320-328), width 5 (road 3
+  plus a verge each side), `lotGap` 3 (:23), cut/fill ±3 with steps of 1, no water (:332-340). Its height is the survey at the span's
+  midpoint (:341). Lots alternate sides outward from the square (:251, :269).
+- **One side free.** D3 measured both of its towns: each street run has lots on one side only; along the lot-free side the verge row
+  is held by `path:verges` alone and the row past it holds nothing (D3 §0). So V towns have free frontage on the lot-free side.
+- **Ends.** A street end is a `junction` node `${rid}_end` with one non-external edge (`besidePorts`, `districtsEmit.mjs` :146-170);
+  its past-end cell faces outward. Junction ids are ordinals along the street (`village.mjs` :619-623), so GR never renumbers them: new
+  junctions get new ids (§6).
+- **Districts.** A plain district and an outpost have their own V street (`districtsEmit.mjs` :191, prefix `<d>_`, lots `<d>_<k>`
+  :78). A following district's street is a T2 route along its band's middle, its lots on both sides with one-cell lanes
+  (`followEmit.mjs` :1-4, :142-189); its window is a slice of the traced boundary's spine (:40-50), which the IR doesn't keep.
+- **The join.** A district's join leaves from one of its own street ends (`ends.get(d.id)`); a town street end a D3 district joined
+  stands under D3's hold cells (stack depth 2 in the contact columns). Neither end may be extended (§4.1).
+- **Meta isn't kept.** A region keeps its IR, frozen heights and drift shards (`RegionStore.java` :14-50), not the plan's `meta`
+  (village, districts, route). GR reads the effective IR only.
+
+### 1. The rule in one line
+
+**A growth places each new lot on the cheapest free frontage of the standing streets, then on one straight extension from an end
+nobody uses, inside the claim, around everything that stands, and never moves a standing cell, lot, street or junction.**
+
+### 2. The growth search (`kit/lib/region/grow.mjs`, GR-a)
+
+#### 2.1 The request
+
+`params.grow` on a revision of a `flat_village`, `districts` or plan_v0 region (the region's own program id; RV's `planRevision`):
+
+```json
+"grow": {
+  "lots": [{"id": "smithy", "type": "smithy", "size": [9, 11], "villager": true, "ext": {}}],
+  "district": "quay",
+  "prefer": "frontage",
+  "extend": "auto"
+}
+```
+
+- `lots`: V's `LotSpec` (D1's for a district: a lot list; a count `n` gives `<d>_<k>` ids continuing the district's numbering).
+- `district`: which district of a districts region grows (required there; absent for a town).
+- `prefer`: `frontage` (default: free frontage first, then extension) or `extend` (extension first).
+- `extend`: `auto` (the cheapest extendable end), an end node id, or `none` (frontage only).
+
+#### 2.2 Order and choice
+
+1. **Specs** in V's order (`orderOf`: central, landmark, the rest, edge; then input order). A `central` or `landmark` lot in a growth
+   takes the best frontage slot nearest the square (or the district's shared space), never displacing a standing lot.
+2. **Frontage slots** (§3), cheapest first: nearest the square along the street, then the lot-free side before a gap between lots,
+   then by street id and `u`.
+3. **Then one extension** (§4), if lots remain and `extend` allows.
+4. **A lot that fits nowhere** is listed in `unplaced` with its reason (`NO_ROOM {kind: frontage | street | claim | held | body}`),
+   as V lists them. A growth with no lot placed fails `NO_ROOM` and plans nothing.
+- The search is deterministic over the effective IR, the frozen heights, the held set and the revision seed (RV §2.2).
+
+#### 2.3 Obstacles
+
+Everything RV §5.3 lists, plus: every standing lot box plus its apron (`lotGap` 3 to a new lot), every standing lane, prop, lamp and
+square cell, every beside region's `reach` and hold columns, and a beside district's land (D3's `land.union`) when the town grows.
+A town's growth never takes a district's land; a district's growth never takes town land except its own join's cells (it doesn't write
+them, §4.1).
+
+#### 2.4 Which streets grow
+
+| Region kind | Frontage | Extension |
+|---|---|---|
+| V town (`flat_village`, plan_v0 street zone) | yes | yes |
+| plain district, outpost (their V street) | yes | yes, from the end that isn't the join's |
+| along district (a following street) | yes, both sides | along the boundary (§5) |
+| FL grid (blocks of V streets) | yes | yes, from a block street's outer end |
+| FL ring, spiral, organic | yes, on straight runs of at least 9 | no (`NO_ROOM {kind: layout}`; S-GR-4) |
+
+### 3. Frontage
+
+On a straight street run along axis `a`, centre line `v = c`, side `s` (±1), the street's footprint is `|v - c| <= 2`:
+- **The lot:** its front edge on `v = c + s (2 + 1 + L)`, where `L` is the lane length (V's: the lot's apron row then the lane, at
+  least 1), facing the street. Its box plus 1 misses every obstacle (§2.3) and is at least `lotGap` from every standing lot box.
+- **The lane:** from the lot's entrance to the verge, as V's lanes, ending at the verge row `c + 2s`; it **never writes** a verge or
+  road cell (D3 §3.2's verge contact: the verge cell it meets is held by the street's road or verge only).
+- **The pad:** V's pad ops (`surfaceOps`, `PAD_MAX` 2) on the frozen heights; its batter must not reach a held column or a standing
+  lot box plus 1.
+- **Junction:** a new junction node on the street at the lane's foot (§6).
+- **Lamps:** the town's lamp rule for the new lot's apron (W), skipping spots within 6 of a standing lamp (N-D3-2's rule).
+- Slots are tried every 2 cells along each run, from the square outward.
+
+### 4. Extension
+
+#### 4.1 Which ends can be extended
+
+An end node is extendable when all hold:
+- it is a terminal junction of a street (`architect_mc:street`, or the `street_` stem before FL) with exactly one edge in the region's
+  graph, and that edge is the street's own;
+- no join, route, lane, external edge or D3 junction meets it (not the district's join end; not a town end a district joined);
+- its past-end cell and the 3 cells past it, 5 wide, hold no cell of another entry (no D3 hold cell, no site, no PT build);
+- its past-end cell lies at least 9 cells inside the claim margin along the street's axis (room for one lot).
+
+#### 4.2 The new street
+
+- **Straight**, continuing the street's line from the past-end cell, the street's width (road 3 plus verges) and its look: the same
+  road blocks, verges and W's lanterns (`lanterns: true` when the standing road has it) (N-GR-1).
+- **Length:** the lots it carries, sides alternating as V's `tryStreet` (outward from the old end), plus 4 past the last lot, clamped
+  to the claim margin 2. At most one extension per growth.
+- **Grade:** V's street check per cell (cut/fill ±3, steps of 1, no water) against the frozen heights. The extension's height starts at
+  the end node's y and may step by 1 per 4 cells (V's road rule); a run that can't meet it ends where it fails, and the lots that don't
+  fit are `unplaced` (`NO_ROOM {kind: street}`).
+- **The road:** a new 4e road item `<roadId>_g<n>` (`street_e_g2`), flag `architect_mc:street {zone, district?}`, joined end to end
+  with the standing road at the past-end cell (4e's handover; the standing road is never rewritten).
+- **The verges and lanes** as new parts (§6). The standing `verges` part is unchanged; the new verges start at the past-end cell.
+- **Lots** on both sides of the extension, V's placement on its run.
+
+### 5. Along districts (GR-b)
+
+A following district's street is a route on its boundary line. Its growth:
+- **Frontage:** new lots on both sides of the standing route where free (§3's rule with `FOLLOW_SETBACK` 3 and `FOLLOW_PAD` 6, the
+  district's own lot geometry, `followEmit.mjs` :142-189).
+- **Extension:** the boundary is traced again (`traceBoundary`, the same `follow` and side) over a fresh survey of the claim (loaded
+  chunks, resolution 1, recorded with the revision's inputs as RV §5.3's files) from the standing route's free end along the spine,
+  outside the standing band. The new band continues the standing mask; its street is a T2 route from the end node along the new
+  band's middle, and its lots are placed as D2's.
+- **Its mask grows:** `meta.districts.follow[id].mask` isn't kept, so the revision records the new band's mask as its own
+  (`revision.follow {district, mask}`), and `land` reads it (§7).
+- **Where the boundary ends** inside the claim, or turns back into the band: `NO_ROOM {kind: boundary}` for the rest.
+- An outpost grows on its own V street (§3, §4); its corridor (`architect_mc:corridor`) doesn't change.
+
+### 6. Ids, parts and the graph
+
+- **Parts:** `rv<n>_pads`, `rv<n>_lanes`, `rv<n>_props` and, for an extension, `rv<n>_verges` and `rv<n>_street` (for a district:
+  `rv<n>_<d>_pads` and so on), in `rv<n>:` stages after the parent's.
+- **Lots:** the caller's ids, unique across the region (M14).
+- **Dependencies (RV §6.4):** a growth whose added node, road or port a beside region now targets (a D3 end join to its new end, or a D3
+  side join `<region>:<roadId>` to its extension road) can't be undone while that region stands: `undoRevision` refuses `NOT_ALLOWED
+  {why: joined, region}` at preflight. The town's removal is unaffected (D3's `dangling`).
+- **Roads:** `<roadId>_g<n>`.
+- **Graph:**
+  - frontage: a new junction `<roadId>_g<n>_j<k>` on the street at each lane's foot. The standing edge is never cut (additive). Instead
+    the growth adds **two real edges** from the new junction to the standing junctions on either side of it along that street (type
+    `road`, `along: <roadId>`, `span: [u0, u1]`, `segments` the standing road's own cells between them, no cells written), plus the lane
+    edge and the lot node. So the graph stays connected through explicit edges (`graphNode` keeps no `on`/`u`, `program.mjs` :541, and
+    M2 walks explicit edges only, `check.mjs` :852). Consumers: M2 and `graph.cut`, siteplan and (7a) `nav.json` read `along` edges as
+    riding on the standing road; `besidePorts` ignores them (they are never terminal). Gate item 3 asserts `graph.cut = []` and every
+    grown lot's node reachable from the bell over edges, beside the walk check;
+  - extension: a new edge from the standing end node to the new end node `<roadId>_g<n>_end`, the extension's junctions, lanes and lot
+    nodes. The standing end node gains one edge and stops being terminal; the new end is terminal, so a later district (D3) or a later
+    growth can use it.
+- **Byte identity:** a program run without `params.grow` is unchanged (item 2); a growth never re-evaluates or rewrites a standing part
+  (RV §3.1, additive). `KIT_VERSION` moves.
+- **The town's square and bell** are unchanged; M22, M23 and M24 are judged on the whole revised IR (a new trading hall must sit
+  within 12 of the bell, or it is placed where it is and M23 warns as today).
+
+### 7. The land: `architect_mc:land` v 2
+
+For a districts region (D3 §6), `v` becomes 2 at the first growth:
+- each grown lot and street is a new `parts[]` entry `{kind: "grown", id: "rv<n>", district, revision: n, runs, rect, cells,
+  insideCells}`; an along district's new band is `{kind: "district", id, shape: "mask", revision: n, ...}`;
+- `union`, `outside` and `inside` are recomputed from all parts (D3's rules), so `outside` holds the grown land Steward now owns;
+- `undoRevision` recomputes `land` (the revision's parts leave; `v` stays 2);
+- every part carries `revision` (0 for the realised plan's parts), so a reader can tell which building took which land.
+- A V town gains no `land` key (D3 gives it none); its growth stays inside its claim.
+
+### 8. plan/0: `revision.grow`
+
+In a revision plan (RV §9), a zone with the same id whose `program.lots` only gains lots (every standing lot spec equal, in any order;
+no other member changed) is a growth:
+- the added lots are checked by §2 with the zone's own streets, and each gets its usual answer (`fits` with geometry, `refused
+  NO_ROOM` with `wouldFit` where a smaller size fits, or listed `unplaced` with the zone's other answers);
+- the zone answers `fits` with `standing: true` and `grown: [lot ids]`;
+- catalogue: `revision.grow` reserved -> supported (catalogue 13).
+- A districts zone (`program.districts`) gaining lots in one district grows that district.
+- A zone whose lots lose a lot answers `unsupported revision.change` (removing a lot is `Sites.remove`, RV §4.6).
+
+### 9. API, kit and versions
+
+- **No new method.** A growth is `Regions.planRevision(regionId, RevisionRequest(program = the region's program, params = {grow}))`
+  (RV §11), then `Regions.realise(planId, lotEntries)` with the new lots' blueprints, or `checkPlan` / `realiseApproved` (§8).
+- **Features:** `growDistrict` (D3's reservation; also covers towns), `planRevisionGrow`; sidecar `region.grow`.
+- **`RegionView.lots`** lists grown lots with their revision (`LotState` gains trailing `int revision`, old constructor kept).
+- **Placeholders:** API **1.44.0**, mod **0.47.0**, kit **0.45.0**, catalogue **13**.
+- **Refusals:** `NO_ROOM` (the kit), and RV's.
+- api-compat clean; apijars on the previous three.
+
+### 10. Size and split
+
+About **4.5-5.5 days** of work, **3 elapsed**:
+- **GR-a, streets (3-3.5 days):** `grow.mjs` (the search, frontage, extendable ends, the extension), ids and graph, V towns, plain
+  districts, outposts and FL grids, plan/0's `revision.grow`, `land` v 2 (`land.mjs` and `DistrictLand.java`), the mod's
+  `RegionView.lots` member; items 1-9, 12-14.
+- **GR-b, along districts (1.5-2 days, on GR-a's interface):** §5's frontage and boundary extension, the recorded mask; items 10, 11.
+- **The shared interface** (frozen at the end of GR-a's day 1): `params.grow`, the part and id names (§6), the frontage slot record
+  `{street, side, u, lot}`, the extension record `{from, road, run}`, `land` v 2's part shape.
+
+### 11. Gate (slice tier, $0)
+
+**Fixtures:**
+- **`gr_town`:** RV's `rv_town` (6 lots, 4 built, partly built; a Steward addition and a PT build by the street).
+- **`gr_beside`:** a D3 beside district (plain, its join to the town's street end) with 2 lots, realised as Steward does (a
+  `checkBeside` reservation, then `Regions.plan` with the first building's lot under `dplan`).
+- **`gr_along`:** a D2 shore district on `d3_shore` (D3's fixture), 2 lots.
+- **`gr_outpost`:** a D2 outpost (gap 40) with 2 lots.
+- Plan fixtures: `v8x_6d_gr_zone` (a revision of `rv_town`'s kept plan whose street zone gains 2 lots), `v8x_6d_gr_district`.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | frontage slots row by row (lot-free side, gaps, aprons, lane contact, never a verge cell written); extendable ends (the join end, a held end, a short end refused); extension grade and length; ids and graph (no standing node or edge changed, the new end terminal); along frontage and boundary extension; 300 seeded synthetic towns grown 1-6 lots: kept parts byte-identical, deterministic, 0 writes under a standing lot box plus 1 or a held column |
+| 2 | Byte identity | RV's pinned set unchanged; programs without `params.grow` unchanged |
+| 3 | Town frontage | `gr_town` grown by 2 lots through `planRevision` then `realise` with stub blueprints: both on the lot-free side; verge and road cells unchanged (hash); every new lot walkable to the bell (player and villager, `dev.nav.villager`) and connected in the graph (`graph.cut = []`, the lot node reachable from the bell over edges) |
+| 4 | Town extension | `gr_town` grown by 6 lots (`prefer: extend`): one extension from the extendable end, its road joined to the standing road, flagged; the new end terminal; walkable as item 3 |
+| 5 | Steward's district, two buildings | `gr_beside`: building 3 then building 4, each a growth under Steward's opKeys (`dgrow:<district>:<k>`), each realised; `undoRevision` of building 4 then 3 (verifier re-runs): the world before each, cell for cell; the district's join and the town untouched (hash) |
+| 6 | plan/0 | `v8x_6d_gr_zone` through `checkPlan` (zone `fits standing`, 2 added lots `fits`) then `realiseApproved`, with one stale retry under a second key across a restart |
+| 7 | Later districts (end join) | after item 4: a D3 district beside `gr_town` joins the extension's new end (`besidePorts` on the effective IR). `undoRevision` of the growth then refuses `NOT_ALLOWED {why: joined, region}` at preflight (RV §4.4, §6.4), and nothing is written (hash). Once the district is removed, the undo succeeds: the world before the growth |
+| 7b | Later districts (side join) | after item 4: a D3 district north of the extension joins its side by a T (`<region>:<roadId>` of `street_e_g<n>`); `undoRevision` of the growth refuses `joined` at preflight, nothing written (hash); the district removed, then the undo is exact |
+| 8 | Removal (verifier re-runs) | `gr_town` with two growths and a beside district: D3's removal orders, then `Regions.remove` of the town with both growths standing: E-flat 0 over the claim against the world before the town |
+| 9 | KC and held | a growth whose cheapest slot is beside the farm pond: the lot keeps clear (0 cells in its hard or watch set); the Steward addition and the PT build never written; a growth with every slot held answers `NO_ROOM {kind: held}` with nothing planned |
+| 10 | Along district | `gr_along` grown by 3 lots: frontage first, then the boundary extension; the mask grown; walkable from every lot to the district's street end |
+| 11 | Outpost | `gr_outpost` grown by 2 lots; `architect_mc:corridor` byte-identical |
+| 12 | Land v 2 | after items 5, 10, 11: every column each district holds in the journal lies in `union`; each grown part carries its revision; after `undoRevision` the parts are gone and `union` equals the one before |
+| 13 | Survival (only if RS has merged) | item 3 in a survival world: the new lots, lanes and pads as RS targets; `undoRevision` refunds once per key (`survival.allowed` true for frontage growth on land; a growth over a paid or unbuilt target refused, RV §8) |
+| 14 | Unchanged, API, spend | RV's item 18 plus rv-ingame; api-compat clean; apijars; $0.00 |
+| 15 | Natural round | S3's pinned claim: D3's item 15 town and shore district, the district grown by 2 lots (frontage and the boundary extension); plan, realise, save, leave, reopen; `undoRevision`, then removal in both orders; E-normal 0 unclassified under D2's narrowed classes and VOC's `farfluid` |
+
+**Tier:** slice plus `region/**` and `api/**`: the units and apijars; rv-ingame, d3-ingame, d2-ingame, fl-ingame; GR's own `gr-unit`,
+`gr-ingame` (driver `tools/gate6dgr.mjs`, chain `6dgr`, impact rule "6d GR").
+
+The verifier reviews the diff and **re-runs items 5, 7, 7b and 8**. **Steward's RC check** follows (S-GR-7).
+
+Items 7 and 7b's expected answer, plainly: a growth whose new end, extension road or frontage junction a later district joined (end or
+side) can't be undone while that district stands (`NOT_ALLOWED joined`, naming it), since its join would point at something gone. Removing the town
+still works (D3's town-first order, `dangling`).
+
+### Steward's recorded asks: expected answers
+
+- **D-S2:** answered. A beside district grows along its street (frontage, then extension), an along district along its boundary, an
+  outpost on its own street. `District.growable()` can be true for every kind whose street has an extendable end or free frontage;
+  Steward can ask by planning (a dry growth is `planRevision` without realise; it keeps a plan, so S-GR-6 asks whether a dry growth
+  check is wanted).
+- **The 59 asks:** unchanged (none revises).
+
+### Open questions for Steward
+
+- **S-GR-1. Frontage first.** New lots go on free frontage of the standing streets before any extension (`prefer: frontage`), so a
+  town fills in before it sprawls. Or extension first? Default: frontage first.
+- **S-GR-2. One building, one revision.** Your district's "second building extending that street" is one growth (one revision) per
+  accepted building, undone alone (LIFO). A batch of buildings may be one growth with several lots. Fine? Default: yes.
+- **S-GR-3. Opkeys.** Growth plans and realises under your keys (`dgrow:<district>:<k>`, `drealise:<district>:<k>`), found again by
+  `planByKey` and `realiseByKey` after a restart. Default: as proposed.
+- **S-GR-4. Rings and spirals.** FL rings, spirals and organic layouts grow only on free frontage of their straight runs; they never
+  extend (`NO_ROOM {kind: layout}`). Default: yes.
+- **S-GR-5. A joined end.** A district's own join end, and a town end a district joined, are never extended; and a growth whose new end or
+  extension road a later district joined (end or side) can't be undone while that district stands (`NOT_ALLOWED joined`). Fine for your undo order? Default: yes.
+- **S-GR-6. A dry growth check.** Do you want a `checkGrow` (D3's dry-check style: nothing kept) before offering "build here", or is
+  `planRevision` (which keeps a plan) enough once plans can be discarded (PLAN's queued `discardPlan`)? Default: no dry check in GR;
+  `planRevision` plus `discardPlan` when it ships.
+- **S-GR-7. The RC.** With RV's (S-RV-10): a V town grown on frontage and by an extension, a beside district grown by two buildings and
+  undone one at a time, an along district grown, and the town removed with growths standing. Default: yes.
+
+### Open questions for Noah
+
+- **N-GR-1. How an extension looks.** Proposed: it continues the street's own look exactly (road, verges, W's lanterns), so a grown
+  town reads as one street. The alternative is a plainer lane-style extension. Default: the street's look.
+- **N-GR-2. Where a grown town's new lots go.** Proposed: nearest the square first, on the street's lot-free side, so the square
+  stays the centre. The alternative fills outward from the ends. Default: nearest the square.
+
+### Deferred
+
+- Turning, branching or forking extensions; a second square; extensions past the claim (S-RV-8); growth of ring and spiral ends.
+
+### Coordinator decisions (2026-10-20, on Noah's behalf)
+
+- **N-GR-1:** an extension keeps the street's own look.
+- **N-GR-2:** new lots go nearest the square first.
+
+
+## Phase 6d slice FS: updates follow the source (FROZEN 2026-10-20, Steward reviewed)
+
+When a source design gets a new version, each of its copies can be re-made from that version by its own recipe, at $0, and then each
+lot that stands at the old copy is updated by the existing delta path. This is 0b's deferral ("a source's new version applied to its
+COPY and SITE followers, by recipe"; CONTRACT 0b §2.4: "That is 6d's update path, so there's no migration") and Steward round 3's
+"updates follow the source" ("a new version of a source design is offered to its variants and site-adapted copies as one update,
+applied per lot, keeping each lot's adaptation").
+
+FS uses only existing placement paths (`outdated`, `checkDelta`, `applyDelta`, `revert`), so it needs no RC (GATES policy 4); the
+verifier re-runs the delta and revert items (policy 3).
+
+- **Branch:** `slice/FS`, worktree `../architect-mc-FS`. **Spend:** $0 (no Claude call: a recipe is deterministic kit work).
+- **Scope:** `Library.followers`, `Designs.follow` and `followAll`, the sidecar's follow job, the copy's next version, and the per-lot
+  update through the existing delta path; region lots included.
+- **Not in scope:** SITE followers (7b's `fitToSite` adaptations: `follow` of a SITE entry answers `NOT_ALLOWED {why: until_7b}`);
+  VARIANT and RESKIN entries (they don't follow, 0b §2.4); copies of an adopted entry (PT2's N-PT2-2: its own ask); applying deltas
+  automatically.
+- **Depends on:** 0b (copies, `Derivation`), 5b (deltas), C13 (`versionOf`), PT2 (adopted entries refuse), RV only for item 6's region.
+
+### 0. Facts (main f3f41d43, from code)
+
+- `Library.Derivation(source, sourceVersion, Kind {VARIANT, RESKIN, COPY, SITE}, recipe)` (`Library.java` :281-299); its javadoc says
+  "Only COPY and SITE follow their source (6d)".
+- A COPY's recipe is written by `variants.ts` :624 (`recipeRecord` :47-49): `{shift, param, values, mirror, roles, bible, group,
+  itemKey, archetype, ordinal, attempt, levers?, changed?, bar?}`. It is chosen by `kit/tools/copy-recipe.mjs` (`chooseRecipe` in
+  `lib/variation.mjs`), up to `COPY_RECIPES` 3 attempts (`variants.ts` :365, :582).
+- **Nothing re-applies a recipe to a later source version.** The only reader of `derivation.recipe` is `checkChangeable`, which refuses
+  `versionOf` and polish of a COPY (`VERSION_REFUSED copy`, `versions.ts` :188-192).
+- New versions carry `derivation` forward (`polish.ts` :969, `sidecar.ts` :1009).
+- `Sites.outdated` lists standing sites whose pinned version is below their entry's head (`SiteDeltas.java` :1499-1512), building sites
+  only, region lots included (RV §0).
+- Deltas refuse a frame change (5b D2, `FRAME_CHANGED`).
+
+### 1. The rule in one line
+
+**A copy follows its source by re-running its own recorded recipe on the source's new version, exactly, and becomes its own next
+version only if that result still passes everything a copy had to pass; each lot then updates by the ordinary delta.**
+
+### 2. Followers
+
+```java
+// Library (default throws; feature "followSource")
+default List<Follower> followers(String sourceEntryId)
+record Follower(String entryId, Library.Derivation.Kind kind, int sourceVersion, int headVersion, int sourceHead, boolean behind)
+```
+
+- Every entry whose head's `derivation.source` is the source, any kind, with `behind` true for a COPY whose `sourceVersion` is below
+  the source's head. VARIANT and RESKIN are listed (never `behind`), so a caller sees the family.
+
+### 3. Following
+
+```java
+// Designs (defaults throw; feature "followSource")
+default CompletableFuture<FollowResult> follow(String copyEntryId, int toSourceVersion /* 0 = head */, @Nullable String opKey)
+default CompletableFuture<List<FollowResult>> followAll(String sourceEntryId, int toSourceVersion, @Nullable String opKey)
+record FollowResult(String entryId, boolean followed, int fromVersion, int newVersion, int sourceVersion,
+    @Nullable String refused /* null | frame | check | bar | fit | bible_gone | source_gone | head_moved */, boolean alreadyFollowed,
+    String message)
+```
+
+- **The job** (sidecar `entry.follow`): load the source at `toSourceVersion`, apply the copy's recipe exactly (its `shift`, `param`,
+  `values`, `mirror`, `roles` and bible pin; `attempt` fixed, no new choice), build the copy, then:
+  - the pristine-kit check (as `VariantRunner` runs it for every copy);
+  - the 0b variation bar against the source's new version (2 of 3 levers, at least 10% of cells changed), so a follower is still a
+    copy and not the source;
+  - the frame: front and the entrance's feet row equal to the copy's head (else `frame`: its lots couldn't take the delta);
+  - the copy's own size bounds (the archetype's `max`, the lot's fit box if the group recorded one: `fit`).
+- **Installed** as the copy's head + 1, `by: 'follow'`, `derivation.sourceVersion` = the new source version, recipe unchanged;
+  `ENTRY_VERSIONED` fires as for any version.
+- **Refused** (any check failing): nothing installs; `FollowResult.refused` names why; the copy stays at its version. No fallback
+  design is made (N-FS-1).
+- **`followAll` is one persisted operation.** At its start it resolves and freezes the source version (`toSourceVersion`, or the head
+  then) and the follower set (every COPY `behind` at that moment, with each one's head version), and saves both in
+  `<data>/follows/<opKey or a generated id>.json` before following any. Followers made or versioned after that aren't in it. A
+  restart resumes the remaining followers of a saved operation; a replay with the same key returns the saved results.
+- **Installs are compare-and-set.** A follower's new version installs only if the copy's head is still the version frozen for it and its
+  `derivation.sourceVersion` is still below the target (the same lock `versions.install` takes for `versionOf`'s `base_moved`). A head
+  that moved answers `refused: head_moved`, nothing installed.
+- **Already followed is a no-op:** a copy whose head already derives from the target version (or a later one) answers `followed: false,
+  refused: null, alreadyFollowed: true` and installs nothing. So a replay, or two overlapping calls, never install twice.
+- **opKey:** `follow` keys its one result; `followAll` keys the operation (each follower inside it is recorded by entry id).
+- `versionOf` and polish of a COPY stay refused (`VERSION_REFUSED copy`): following is how a copy changes.
+- An entry whose source is gone (deleted, never GC'd while pinned) refuses `source_gone`.
+
+### 4. The lots
+
+Nothing new. The caller lists `Sites.outdated()` (the followed copies' lots now show `headVersion` above their pin) and runs
+`checkDelta` then `applyDelta` per lot, keeping the player's edits (`KEEP`) as 5b. Each lot's own adaptation is its copy's recipe,
+so "keeping each lot's adaptation" holds by construction. A region's lot updates as any lot (RV §0); a lot under a revision's cells is
+unaffected (a lot is BOX above its pads).
+
+- **Survival:** a construction delta (5b D8, Y1's stockpile), unchanged.
+- **Revert:** `Sites.revert(siteId, oldVersion)` as 5b (LIFO; in survival a paid forward delta).
+
+### 5. Byte identity, KC and Steward's asks
+
+- **Byte identity:** no IR, tile, plan answer or blueprint changes for anything not followed; a followed copy's blocks equal a fresh
+  copy made by the same recipe from the new source version (item 1). Kit unchanged, so no `PLAN_STALE`.
+- **KC:** FS adds no region writer; a lot's delta stays inside its lot box (5b), which bodies already keep clear of (H's `M25:keep`).
+- **Steward's asks:** round 3's "updates follow the source" is answered for COPY (C1's copies); SITE waits for 7b. The 59 asks are
+  unaffected (no plan path changes).
+
+### 6. Gate (slice tier, $0)
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit (sidecar, kit) | the follow job on the bundled cabin and tavern sources: a recipe re-applied to v2 gives the same blocks as a fresh copy made with that recipe from v2 (byte-identical NBT); each refusal (frame, check, bar, fit, source_gone, head_moved); opKey replay; `followAll` frozen set (a copy made mid-operation not followed; the source versioned again mid-operation: the frozen version used); already-followed no-op; a kill mid-`followAll` and its resume |
+| 2 | Followers | a group with an archetype and 3 copies, plus a VARIANT: `followers` lists 4; `behind` true for the 3 copies after the source's `versionOf` (stub) |
+| 3 | followAll | the 3 copies followed: 3 new versions, each passing the check and the bar; `ENTRY_VERSIONED` 3 times |
+| 4 | Lots (verifier re-runs) | the 3 copies placed as lots of a `flat_village` realised through `checkPlan` then `realiseApproved` (Steward's plan v1 shape); `outdated` lists them; `applyDelta` on each, a player's block on one lot kept (`KEEP`); `revert` of each to the old version: the world before the delta, cell for cell |
+| 5 | Refused | a source v3 with a moved front: every follower `frame`, nothing installed, lots unchanged |
+| 6 | With RV | one lot's site removed alone (RV §4.6), the region revised to refill it (`lots.refill`) at the new copy version; then `Regions.remove`: E-flat 0 |
+| 7 | Unchanged, API, spend | 0b's copy units, 5b's delta suite, pt2-ingame's adopt items; api-compat clean; apijars; $0.00 |
+
+**Tier:** slice plus `sidecar/**` and `api/**`: the units, apijars, 5b-deltas; FS's own `fs-unit`, `fs-ingame` (driver
+`tools/gate6dfs.mjs`). The verifier re-runs item 4.
+
+**Size:** 2-2.5 days, one builder (the sidecar job 1 day; the Java surface and api-compat 0.5; the gate 1).
+
+**Placeholders:** API **1.45.0**, mod **0.48.0**, kit unchanged (the recipe tool is reused as is), catalogue unchanged.
+
+### Open questions for Steward
+
+- **S-FS-1. Who triggers.** Steward calls `followAll` after it hears `ENTRY_VERSIONED` on a source (or finds a `behind` follower at
+  world load), shows "3 buildings can take the new design", and applies per lot. Architect never applies by itself. Default: yes.
+- **S-FS-2. All or some.** `followAll` follows every copy; a copy that fails is listed and left. Do you want `follow` per copy only?
+  Default: both.
+- **S-FS-3. Variants.** VARIANT and RESKIN entries never follow (they were made to differ). Fine? Default: yes.
+- **S-FS-4. SITE copies.** 7b's site-adapted entries follow in 7b, with their fit parameters. Until then `NOT_ALLOWED until_7b`.
+  Default: yes.
+
+### Open questions for Noah
+
+- **N-FS-1. When a copy can't follow.** Proposed: it stays at its version, says why, and nothing is spent. The alternative designs a
+  fresh copy with Claude (paid). Default: stays, $0.
+
+### Deferred
+
+- SITE followers (7b). Copies of an adopted entry (PT2's N-PT2-2, its own ask). Automatic application.
+
+### Coordinator decisions (2026-10-20, on Noah's behalf)
+
+- **N-FS-1:** a copy that can't follow stays as it is, at $0, with no paid redesign.
+
+
+## Phase 6d slice LC: land change in a standing region, the report (FROZEN 2026-10-20, Steward reviewed)
+
+A standing region can say what has changed in it since it was built, part by part and lot by lot. v2 ships **the report only**: the
+stage re-plan of v1 is deferred (GPT-6.1's review: it would mostly refuse for layout-searched programs, and no Steward case shows its
+value yet; S-LC-4). This is SETTLEMENTS §14 ("site-bound lots ... a change ... is reported") and PT's S-PT-1 ("to 6d with replanning on
+land change"), in its reporting half.
+
+LC is read-only, so no RC (GATES policy 4).
+
+- **Branch:** `slice/LC`, worktree `../architect-mc-LC`. **Spend:** $0.
+- **Scope:** `Regions.landCheck` (§2).
+- **Not in scope (deferred):** `replanStages` (re-planning the stages not yet placed for a region held `DRIFTED`), SETTLEMENTS §14's
+  incremental passes over dirty tiles, re-fitting damaged buildings (C13's `versionOf` does that), attributing removals to anyone.
+- **Depends on:** RP (the realised record and `ARWR` writers, which say which intended cells the region actually wrote, RV §3.4), RV, PT, CU and F3's StillOurs rows.
+
+### 0. Facts (main f3f41d43, from code)
+
+- PT records who **placed** a block (`Placed.Rec(placer, build)`, per chunk; `Sites.playerPlaced`). It records nothing when a block is
+  broken: a record is cleared when its cell becomes air or fluid or is replaced (`Placed.java` :296). So **who dug a cell is unknown.**
+- The journal holds each region cell's `after`; RP's realised record (RV §3.4) says which intended cells were written, skipped or no-ops.
+- `Drift.checkStage` (`Drift.java` :56+) holds a later stage `DRIFTED`; there is no `SITE_DRIFTED` reason.
+
+### 1. The rule in one line
+
+**A land check reads, never writes, and attributes only what the records prove: a block a player placed is the player's; a missing or
+changed block is just changed.**
+
+### 2. `landCheck`
+
+```java
+// Regions (default throws; feature "landCheck")
+default CompletableFuture<LandReport> landCheck(String regionId, @Nullable String part /* null: every part */)
+record LandReport(String region, int position, List<PartLand> parts, List<LotLand> lots, long cellsChecked, long unloaded, long ms)
+record PartLand(String part, long cells, long changed, long removed, long playerPlaced, long volatileChanged,
+    Map<String, Long> kinds, List<BlockPos> sample)
+record LotLand(String lot, String siteId, String state, double standing /* Reconcile's score */, long changed, long playerPlaced)
+```
+
+- **Which cells:** each cell the region holds on top (tile, revision and road entries), attributed to its part by RP's realised record
+  (the cell's writer, RV §3.4). Cells in a region realised before RV with no record are counted under part `unattributed`.
+- **The classes** (each changed cell in exactly one):
+  - `removed`: the world holds air or fluid where the region wrote a solid (who removed it is not known);
+  - `playerPlaced`: the block there now carries a PT record (a player placed it);
+  - `volatileChanged`: a volatile kind changed (leaves, snow, grown plants, fluid levels);
+  - otherwise `changed`, counted by block kind in `kinds`.
+- **Lots:** each lot site's `Reconcile` standing score (`STANDING` 0.8, `RESTORED` 0.9, as world start) and its changed and player-placed
+  cells.
+- Bounded: at most 4M cells per call, over ticks at the queue's budget; larger regions answer per part. $0, no ticket (unloaded chunks
+  counted, not loaded).
+- **Use:** Steward can show "the east field changed: 120 blocks gone, 12 placed by players" and repair with a revision (RV) or a lot
+  delta (5b). It never says who dug.
+
+### 3. Byte identity, KC and Steward's asks
+
+- Read-only: no IR, tile, answer or journal change; kit unchanged.
+- **Steward's asks:** S-PT-1's reporting half is answered; the replan half is deferred (S-LC-4). The 59 asks are unaffected.
+
+### 4. Gate (slice tier, $0)
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the classification on a synthetic journal and realised record: each class, part attribution, unattributed legacy cells |
+| 2 | Land check | `rv_town` (RV's fixture): the driver removes 40 cells of the square (as a player breaking them), places 12 blocks on a lane as a player, and removes 20 pad cells by a non-player (DevBridge); `landCheck` reports each part's `removed`, `playerPlaced` and `changed` exactly (against a driver-side diff); 0 cells written (hash) |
+| 3 | Revised region | the same after an RV revision: cells attributed to the revision's parts |
+| 4 | Unchanged, API, spend | rv-ingame; api-compat; apijars; $0.00 |
+
+**Size:** 1.5-2 days, one builder. **Placeholders:** API **1.46.0**, mod **0.49.0**, kit unchanged, catalogue unchanged.
+
+### Open questions for Steward
+
+- **S-LC-1. The report's grain.** Per part and per lot, the classes above, a sample of positions (at most 16). Enough for the card?
+  Default: yes.
+- **S-LC-2. Attribution.** Architect reports "placed by a player" only where PT recorded it, and never who removed a block. Fine?
+  Default: yes.
+- **S-LC-3. Incremental passes.** SETTLEMENTS §14's dirty-tile passes are not planned. Default: not until a measured case.
+- **S-LC-4. The stage re-plan.** Deferred: re-running the program for a region held `DRIFTED` would mostly refuse (V's street search and
+  plan_v0's zone search read the whole survey). Do you have a case where a long build drifts before a later stage? Default: deferred until
+  you show one.
+
+### Open questions for Noah
+
+- **N-LC-1. Damage in the card.** Proposed: reported only on request (`landCheck`); Steward decides whether to mention it. The alternative
+  is an event per damaged part. Default: on request only.
+
+### Deferred
+
+- `replanStages` (S-LC-4), with its acceptance rule (every placed part byte-identical), its recorded inputs (the plan's recorded params,
+  seed, `regions`, `builds`, `protected.areas` and `standing`; the new land and held set separate) and T2's `routePrefer` wiring, as v1
+  of this section drafted them.
+- Removal provenance (who broke a block): a PT extension, if Steward asks.
+
+## Phase 6d slice AD: adopting a VillageLayout settlement as a region, the 6d half of C12 (FROZEN 2026-10-20, Steward reviewed)
+
+An existing Steward settlement built by VillageLayout (its own street road and lot sites, placed before regions) becomes a region
+record **without writing a cell**, so it can grow (GR), revise (RV) and be removed as one region. This is the 6d half of the C12 joint
+7a/6d gate (CONTRACT V §10: "The joint 7a/6d gate adds `Regions.adopt` ... then the gate runs a 6d addition (a lot, or the square), a
+6d `applyDelta` on one lot, and one exact `Regions.remove` of everything"). The 7a half (the link pass and `nav.json` over adopted lots)
+is drafted on `docs/7a`; the two meet at the adopted region's effective IR (§2) and the joint gate's last row (§4).
+
+AD moves Steward's standing sites into a region's group, which Steward's history and migration read: **RC check** before release.
+
+- **Branch:** `slice/AD`, worktree `../architect-mc-AD`. **Spend:** $0.
+- **Scope:** `Regions.adopt` (§2), the synthesized IR (§2.2), group membership (§2.3), un-adopt (§3), the gate's 6d rows (§4).
+- **Not in scope:** the link pass, `nav.json` and typed links (7a); Steward deleting VillageLayout (after the joint gate and region
+  survival, C12); adopting another owner's sites; adopting road networks that aren't one straight street.
+- **Depends on:** RV, GR, PT2 (its adopt patterns: an entry with before == after), V (the `street` layout geometry, CONTRACT V §10).
+
+### 0. Facts (main f3f41d43, from code)
+
+- `Sites.adopt` adopts a player's build as a site (PT2, `Adopt.java`), writing one `adopt` journal entry with before == after; it has
+  no region references. There is no `Regions.adopt`.
+- A V region's lots are sites `s<N>` and its street a road site `r<N>` in one group `g<N>` (RV §0); VillageLayout's are the same kinds
+  of sites in Steward's batches' groups.
+- V's `street` layout is VillageLayout's geometry; `kit/REGIONS.md` records the mapping (CONTRACT V §10).
+
+### 1. The rule in one line
+
+**Adoption writes no block and no journal cell; it records which standing sites a region is made of and an IR that describes them,
+and from then on the region's revisions and removal treat them as its own.**
+
+### 2. `Regions.adopt`
+
+```java
+// Regions (default throws; feature "regionAdopt")
+default CompletableFuture<RegionView> adopt(AdoptRegionRequest r)
+record AdoptRegionRequest(String owner, ResourceKey<Level> dimension, BoundingBox claim, String layout /* "village_layout" */,
+    com.google.gson.JsonObject geometry /* {streetZ, xLo, xHi} or {streetX, zLo, zHi} */, List<String> roadSiteIds,
+    Map<String, String> lots /* lotId -> siteId */, @Nullable String opKey, com.google.gson.JsonObject ext)
+```
+
+#### 2.1 Checks
+
+- Every site is the owner's, standing, inside the claim, in no other region; the roads are 4e roads along the given street line; every
+  lot site's box faces the street. Else `NOT_ALLOWED` naming the site.
+- The claim overlaps no other region of any owner beyond D1's seam rule, and no C17 area of another owner.
+- No write, ticket or prepare.
+
+#### 2.2 The synthesized IR
+
+- Program `adopted_village` (kit, bundled, deterministic, `catalogue = false`): from `geometry`, the road sites' recorded specs and the
+  lot boxes, it emits `ir.lots` (each `{id, box, front, entrance, adopted: siteId}`), `ir.roads` (each `{id: street_*, adopted:
+  roadSiteId}`, flagged `architect_mc:street`), the graph (V's: lot nodes, junctions along the street, ends), and **no parts** (no ops,
+  so no tile). `budget` 0.
+- Its street ends are terminal junctions, so GR can extend them and D3 can join them.
+- Its IR is revision 0; its frozen heights are taken at first touch by a later revision (6a D3).
+- **Its artifact:** adopt writes a synthesized plan/0 artifact for the region (C36-kept, `region.adopted: true`, no tiles, its lots in
+  `$.lots[]` with C36's members and the sites' ext), so a plan/0 revision can name it as `parentArtifact` (RV §9) and Steward's plan
+  writer can grow the adopted village as any region.
+
+#### 2.3 Ownership: what moves, and the crash-safe order (v2, after GPT-6.1's second pass)
+
+**What says who owns a site** (from code; v1 of this section was wrong about the journal):
+- **The journal index:** every entry's `JournalStore.Meta` carries `group` (`JournalStore.java` :89), and region tile checks read it to
+  decide what is the region's own (`TileCheck.java` :758-760).
+- **The journal head's record copy:** `Sites.reconcile` rebuilds a lost site or infra record from its main entry's head `meta()` JSON
+  (`Sites.java` :2587-2600), which holds the record as it was saved, membership included.
+- **`architect-sites.json`:** site records (`Site.Member(group, batchId, itemKey)`), infra records (roads and cell sites, their `member`),
+  and every group's `SiteGroupRec` with its `StageRec` lists, all saved together by `Sites.save` (`Sites.java` :3022), one atomic file.
+- **The region record**, its own file.
+
+So adoption moves four things: each adopted entry's `Meta.group` (its site entry, deltas, crates, leaves and the road entries), each head
+record copy's membership, the one `architect-sites.json` save (sites, infra, groups), and the region record. No journal cell is written.
+
+**A metadata-only journal operation (new):** `JournalStore.regroup(entryIds, group, headMetaPatch)`: one index transaction that sets
+`Meta.group` and patches the head `meta()`'s membership for the given entries, idempotent (re-applying the same values is a no-op),
+logged like any index transaction (`label("ADOPT:<regionId>")`). It writes no section file.
+
+**The order:**
+1. **Intent:** `<world>/architect-regions/adopt-<regionId>.json`: the request, the new group id, each entry's old `Meta.group`, each site's
+   and infra's old membership (fsync, rename).
+2. **Region record** in RegionRec state `ADOPTING` (shown as `PREPARING` in `RegionView`; `RegionState` unchanged). The sites refuse deltas
+   and removal `SITE_BUSY` while it lasts.
+3. **Journal:** `regroup` of every adopted entry to the new group.
+4. **`architect-sites.json`:** the new group `g<N>` (one stage `adopted` listing the sites and infra), each site's and infra's membership,
+   and each old group's stage lists **with those sites removed** (not replaced by a saved copy), one save.
+5. **Region record** `PLACED`; then the intent deleted.
+
+**Recovery at world start** (an intent file present):
+- **No region record** (a crash in step 1-2): roll back: any `regroup` already applied is reversed from the intent's old groups (it can't
+  have been, but the check is cheap); `architect-sites.json` is untouched; the intent deleted.
+- **Region `ADOPTING`:** roll **forward** if `architect-sites.json` shows every site and infra in the new group (step 4 done): re-apply
+  `regroup` (idempotent), then step 5. Otherwise roll **back**: reverse `regroup` to each entry's old group, delete the region record, then
+  the intent.
+- `Sites.reconcile` runs after this recovery, so a rebuilt record always reads the reconciled head meta.
+
+### 3. Un-adopt and removal
+
+- **`Regions.remove`** of an adopted region removes its group (every adopted site and road plus every revision), last placed first; exact as
+  RV §6.2. The tombstoned region can't be un-adopted.
+- **`Regions.unadopt(regionId)`** (default throws), only at position 0 (no revision accepted) and in state `PLACED`:
+  - its own intent `unadopt-<regionId>.json` (the adoption's old groups, read from the region record, which keeps them);
+  - for each site: if its old group still exists, the site is **added back** to that group's current stage list (the stage named in the
+    old membership, or a stage `readopted` appended), preserving every change made to that group since; if the old group is gone, the site
+    gets a new standalone group (named in the result);
+  - `regroup` of the entries to their resulting groups; `architect-sites.json` saved; the region record deleted; the intent deleted;
+  - recovery as adoption's, mirrored (forward when the sites file shows the resulting groups, else back to the region's group).
+- No cell is written by either.
+
+### 4. Gate (slice tier, $0): the 6d rows of the joint gate
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | `adopted_village` IRs from 20 synthetic VillageLayout settlements: lots, roads and graph as V's for the same geometry; no parts |
+| 2 | Adopt | a Steward-shaped VillageLayout settlement (Steward's own `VillageLayout` code path driven through its test hook, or the recorded site set of Steward's e2e village), adopted: 0 changed cells (hash), 0 journal entries written; `RegionView` lists its lots and street |
+| 3 | A 6d addition | a GR growth of one lot on its street (frontage): through `checkPlan` of a revision plan naming the adopted artifact (Steward's plan writer shape: the adopted zone with one more lot) then `realiseApproved` |
+| 4 | A 6d delta | `applyDelta` on one adopted lot (a stub v2) |
+| 5 | Remove (verifier re-runs) | `Regions.remove`: E-flat 0 over the claim against the world before the settlement |
+| 6 | Un-adopt | a second settlement adopted then un-adopted: memberships and stage lists as before, Steward's own undo of one of its sites still works |
+| 6b | Crashes (verifier re-runs) | a kill after each of §2.3's steps 1-4, for adopt and for un-adopt, on a settlement whose sites include one with two deltas and a road: each restart rolls forward or back; every entry's `Meta.group`, every head record copy's membership, every site's and infra's membership and every group's stage lists agree (one owner per site); then `architect-sites.json` deleted and `Sites.reconcile` rebuilds every record with the same membership; 0 cells written; then `Regions.remove` or Steward's own undo exact |
+| 6c | Un-adopt keeps later changes | after adoption, Steward adds a site to one old group; un-adopt: that site stays in it, the adopted sites rejoin it, nothing else changes |
+| 7 | Joint row (with 7a) | once 7a's link pass lands: its link pass over the adopted region, then rows 3-5 again (run on the integration branch) |
+
+**Size:** 4-4.5 days, one builder. **Placeholders:** API **1.47.0**, mod **0.50.0**, kit **0.46.0**, catalogue unchanged.
+
+### Byte identity, KC and Steward's asks
+
+- Adoption writes nothing (hash, item 2); `adopted_village` is a new program, so no existing IR moves. KC: no writer. The 59 asks are
+  unaffected. C12's joint gate is answered on the 6d side by rows 2-6; its 7a row waits for 7a.
+
+### Open questions for Steward
+
+- **S-AD-1. Still needed?** With RS shipped, Supplied builds take regions; old saves still hold VillageLayout settlements. Do you still
+  want to migrate them (C12), or keep the legacy path for old saves until they're rebuilt? Default: yes, migrate on load as C12 says.
+- **S-AD-2. The geometry.** You send `{streetZ, xLo, xHi}` (or the north-south form) and the lot-to-site map; Architect checks the
+  rest. Enough? Default: yes.
+- **S-AD-3. Your history.** After adoption, undo of a building inside the adopted village is `Sites.remove` of its lot (RV §4.6) or
+  `undoRevision` of a growth; the settlement's founding entry becomes `Regions.remove`. Workable? Default: yes.
+- **S-AD-4. The joint gate.** Run the 6d rows on AD's slice gate, and the joint row once 7a's link pass is in? Default: yes.
+
+## 6d later: full revisions (RV2) (a design record, not a slice yet)
+
+RV v3 ships additive revisions only (Noah, option A, 2026-10-20). **Full revisions** (removing or changing a standing part, road, lot box
+or fluid body) were drafted as RV v1 and v2 and reviewed twice by GPT-6.1 (the coordinator's `codex-6d-review.log` and
+`codex-6d-verify.log`). This section keeps what those rounds found, what the realised provenance (RP) now records to make it solvable, and
+the open directions, so a later slice starts from them. It becomes a slice when Steward has a flow that needs it (S-RV-6).
+
+### The problems found
+
+| # | Problem | Where it bit |
+|---|---|---|
+| 1 | **Re-plan-and-diff is everything.** Parts aggregate lots, layouts are global searches, ids are ordinals, the seed follows the params. | the old outline |
+| 2 | **Tiles are parts only.** Roads and lots are separate items, so a patch built from `evalTile` alone targets road cells back to the land. | v1 |
+| 3 | **Intent isn't what stands.** Realise skips held, built, failed-condition and no-op cells, gates fluids, and fells trees and holds leaves; PARTIAL and FAILED regions have unwritten tiles. | v1, v2 |
+| 4 | **Skipped winners hide removed writers.** Stage A wrote stone; a later stage B's glass was skipped by its condition. Removing A leaves B as both the old and new intent, so a diff of intents is empty and A's stone stays. | v2 (second pass) |
+| 5 | **Extras have no intent.** Felled logs, dependents and held leaves are written by no op, so no intent diff ever includes them, and the part that caused them must be known to undo them. | v2 (second pass) |
+| 6 | **Hashes per stage and set aren't a composed hash.** Comparing a composed intent with a per-stage tile sha compares different objects. | v2 (second pass) |
+| 7 | **`before` must be the world at the write**, not the journal's `after` (StillOurs equivalence: copper, farmland, volatile states). | v1 (fixed in v2) |
+| 8 | **Head, publication and recovery** across files, journal, queue and artifacts; competing plans. | v1 (fixed in v2/v3) |
+| 9 | **Survival:** replacing a paid or unbuilt target needs cancellation, reservation release and refunds across histories. | v1, v2 |
+| 10 | **Fluids:** removing or changing a body needs a scoped drain-and-restore with containment checks. | v1, v2 |
+| 11 | **Dependencies** of other regions (end and side joins, `reach`, hold columns) on what a revision removes. | v1 (fixed in v2/v3 for undo) |
+
+v3 avoids 2-6, 9 and 10 by never removing or changing anything standing; 7, 8 and 11 are solved in v3 and carry over.
+
+### What RP records now (feat/realised-provenance, building; its as-built wins)
+
+- **Per stage, set and tile, the writers** (`ARWR` v1, `kit/lib/realise.mjs` `encodeWriters`): each emitted cell's winning op (part,
+  ordinal, op index, condition) and every op it overwrote in that tile, oldest first. The payload and its sha don't change.
+- **The realised record** per stage, set and tile (the coordinator's brief to RP): the code per emitted cell (written, no-op, held, build,
+  condition, fluid, clip), the extras with their cause (the op that cut a tree; the logs and held leaves), and the entry's layer.
+- Together they answer, for any cell, **every intended writer in write order, which one stands, why the others don't, and what extras
+  depend on which op**: the data problems 3-6 need.
+
+### Directions (open)
+
+- **Patch from provenance, not from intents.** For a removed or changed op, walk its cells in the writers files: where it stands, the
+  target is the next intended writer below it that **would have stood** (re-checked against today's world and holders), else the land;
+  where it was skipped, nothing changes unless a writer above it was skipped only because of it (a condition that read its block): those
+  cells are re-checked. Extras caused by a removed op go back to their `before`.
+- **Hash like with like:** keep per-(stage, set, tile) shas and v3's `historySha`; add a composed hash only if a consumer needs one, defined
+  over the per-stage shas in layer order.
+- **Roads and lots as first-class writers** in the same provenance (4e road planner cells recorded per road item), so a road can be moved
+  or removed by the same rule.
+- **Survival:** a replacement is a paid forward delta (5b D8) with targets cancelled or swapped per cell and one refund owner per block;
+  undo of a replacing revision stays refused (no free undo after refunds).
+- **Fluids:** removing a body reuses v3's suffix drain; changing a body is remove-then-add in one revision, with containment re-checked
+  before sources return.
+- **The oracle** stays v3's: an independent enumeration of expected transitions compared over the whole claim.
+- **Size guess:** larger than RV v3 (provenance-driven patching, road provenance, survival replacement); split at least into kit patch,
+  mod patch and survival lanes.
+
+## Undo hardening C: crash safety against unsaved world writes (PARKED 2026-10-21 by Noah; a design record, not a slice)
+
+**Parked (Noah, 2026-10-21).** After two GPT-6.1 review rounds (logs: codex-undoc-review.log and codex-undoc-verify.log), full
+crash safety against unsaved world writes is parked. This section and both reviews are the starting point when it's revisited,
+after the 6c close-out, D3 and 7a-1. No power-loss (fsync) protection for now.
+
+**Shipped instead:** the targeted fixes.
+- Group-removal R2-vs-queue-save ordering (fix/drain-holders d63a5ded).
+- Single-site removal ordering (undo hardening A).
+- F1, the stacked-removal settle.
+- F4, and the live F6 reactivation hazard.
+
+**Stated limit:** a server crash or kill with unsaved chunks can leave a build half-placed or half-restored. The world journal
+stays correct; the world can lag it.
+
+**Mitigation, queued in PLAN:** a diagnose-and-repair command.
+
+
+Noah approved undo hardening (A: the UMT findings that reproduce against production code, `fix/undo-a`; C: this section). This is a
+contract only; nothing is built. Revised after GPT-6.1's review at fb26c61c ("Review responses" at the end). It answers the findings that need a crash which loses world writes (UMT F5, F6, F7, UC) and H-core's
+queued question in PLAN.md ("a halt without a save loses an earlier stage's world writes while the journal keeps them PLACED").
+
+### 0. Facts (main 46553549, `feat/umt` 638c7136, `slice/RS`, `feat/realised-provenance`)
+
+**How Minecraft 26.3 saves** (read from the 26.3 Mojang-mapped jars' bytecode in the loom cache; no sources are on disk):
+
+- **Chunks save eagerly, one chunk at a time, not only at the autosave.** `LevelChunk.markUnsaved` (clean to dirty) adds the chunk to
+  `ChunkMap.chunksToEagerlySave`. Each tick, `ChunkMap.tick` -> `processUnloads` -> `saveChunksEagerly` saves up to 20 of them
+  (`CHUNK_SAVED_EAGERLY_PER_TICK`), while fewer than 128 writes are in flight (`MAX_ACTIVE_CHUNK_WRITES`) and only while the tick has
+  time (`hasTime`). A chunk is saved at most once per 10 s (`EAGER_CHUNK_SAVE_COOLDOWN_IN_MILLIS`). A lagging server falls behind.
+- **The bulk autosave** runs every `max(100, tickrate x 300)` ticks (6000 at 20 tps, about 5 minutes), and when the server pauses empty:
+  `MinecraftServer.autoSave` -> `saveEverything(true, false, false)` -> `saveAllChunks` -> per level `ServerLevel.save(null, flush=false,
+  skip = noSave)`. With `flush=false`, `ChunkMap.saveAllChunks` clears the cooldowns and saves every dirty loaded chunk, but it only
+  **queues** the writes.
+- **The disk write is asynchronous.** `ChunkMap.save(ChunkAccess)` (private) does `tryMarkSaved`, then a snapshot
+  (`SerializableChunkData.copyOf`) on the server thread. The NBT is encoded on the background pool, and `IOWorker.store` writes it
+  on the IO thread. `IOWorker.synchronize(flush)` (public, through `SimpleRegionStorage`) completes once every pending write has
+  reached the region file; with `flush` it also forces the region files. Region files are opened with DSYNC only when
+  `forceSynchronousWrites()` is true: a dedicated server by default, but **not** the integrated server on macOS or Linux
+  (`Options.syncChunkWrites` defaults to Windows only).
+- **Unloading saves first.** `scheduleUnload` saves the chunk before unloading it, through the same IO queue. With `/save-off`
+  (`level.noSave()`), chunks neither save eagerly nor unload.
+- **level.dat** is written synchronously at each save-all. SavedData is written on the IO pool at each save-all and joined only with
+  `flush`. There is no incremental SavedData saving.
+- **What "saved" means in the bytecode** (verified for this revision):
+  - `ChunkMap.save(ChunkAccess)` (private) runs on the server thread. It calls `tryMarkSaved` (clearing the dirty flag),
+    `SerializableChunkData.copyOf` (the snapshot), starts the encoding on the background pool, and calls `write(pos, encoded::join)`.
+    That queues the write in `IOWorker.store` before returning. The returned future completes when the region file has the bytes, or
+    fails; `save` uses it only to call `reportChunkSaveFailure`. The dirty flag is already clear by then, so a failed write leaves a
+    clean chunk with nothing on disk.
+  - `saveChunkIfNeeded` (the eager saver and `saveAllChunks(false)`) **skips** a holder that isn't `wasAccessibleSinceLastSave` and
+    `isReadyForSaving`. So neither a bulk save nor `AFTER_SAVE` proves a given chunk was queued.
+  - `processUnloads` moves a holder from `updatingChunkMap` to `pendingUnloads`. `scheduleUnload` then waits on
+    `ChunkHolder.getSaveSyncFuture()`, which means *ready to save*, not saved, and only afterwards queues the callback that calls `save`.
+    A chunk that has left `getChunkNow` may therefore still be unsaved.
+  - Only a hook at `save`'s `write` call observes a real post-write snapshot and its completion. The first draft's "no mixin" proof was
+    wrong.
+- **Architect state that a halt loses outright:**
+  - `FluidRearm`'s wake-up queue lives in memory only.
+  - `RegionFluids.removalGate` returns at once when the region's persisted `removal` is `done`.
+  - `RegionsImpl.finishRemoval` moves a removed region to its tombstone and calls `RegionFluids.forget`, so the drain's befores are
+    gone after it.
+  - `Stockpiles.save` logs a write failure and returns, so the caller can't tell whether the ledger reached disk.
+  - `StillOurs.holds` ignores volatile properties and accepts fluid/air equivalences. It compares a container only as "empty vs not
+    empty", not its contents.
+- So after a JVM halt **each chunk is at its own last save.** That is usually seconds old: within one cooldown plus the IO queue. Under
+  lag or `/save-off` it can be minutes old, and a site or tile spanning chunks can come back half new and half old. "The world goes back
+  to its last autosave" (UMT's model) is too coarse. Every rule below holds per chunk, and a majority threshold over a site's cells (90 %
+  restored, 80 % standing) will always leave some sites in between.
+- **"The world" has three clocks after a halt.** Chunks are seconds old (the eager saver). level.dat and SavedData are as old as the last
+  bulk save (minutes), so any consumer state kept in SavedData (Steward's, if it has any) has the same lag. Architect's own files
+  (`journal.json`, `architect-sites.json`, the queue file, region records) are current as of their last change. The one exception is
+  the stockpile ledger, saved at `BEFORE_SAVE`, which is as old as the bulk save.
+- **The world is never ahead of the journal.** A block write waits for its commit's future (4e "I/O thread"), so the journal always
+  holds what the world shows. The only artifact written ahead of the journal is RP's realised record, made durable before P3. It
+  records a decision, and its status is read from the journal.
+- Architect forces no save anywhere in production. The only save call is the test kill point `+save`
+  (`WorldJournal`: `saveAllChunks(true, true, true)`, then `halt`). `Stockpiles` saves its ledger on Fabric's `BEFORE_SAVE`.
+
+**What Architect does at a start today:**
+- Order: the journal first, then the record, then the blocks (4e). The journal is durable at its commit point (`journal.json`'s atomic
+  move). It does not fsync. Neither does anything else of Architect's.
+- `Sites.reconcile` (SERVER_STARTED) settles every pending site **on evidence**. `Reconcile.restored` needs 90 % of the compared cells
+  holding `before`, `Reconcile.stands` needs 80 % holding `after`, and anything between is KEEP. A CELL entry (road, cell site, region
+  tile) stands on a majority of `after`; otherwise it is released. RECOVER calls `SiteJournal.reactivate(group)`, which reactivates
+  **every** UNDONE entry of the undo group across all its sites, and reverses hand-downs only to receivers that are already active
+  (`Journal.reactivate`).
+- Pending sites settle in `pending` list order, then pending Infras (roads, cell sites, region tiles) in `Infras.pendingAll` order.
+  Nothing orders them by commit.
+- A group whose restore job is still in the queue file is left to its job (`Placement.jobSites`, K7). A job that **ended** is gone from
+  the queue file, so its group settles on evidence at the next start, whether or not the world saved its writes.
+- Two separate unclean-stop signals exist: the queue file's `clean` flag (Placement: K3 rollback and requeue) and
+  `architect-running.marker` (SiteDeltas: 5b's lost-writes rule).
+- **5b's lost-writes rule** (`SiteDeltas.lostWrites`) loops over site deltas only. 6a's text (CONTRACT, phase 6 "Crash safety") says
+  it applies to tiles too. **Nothing implements that:** an ACTIVE tile entry whose writes were lost stays ACTIVE, its region PLACED, and a
+  later removal's CELL undo keeps those cells as "not ours".
+- `Placement.load`'s "placing without a job" fallback loops over `Sites.all()` only, not over Infras.
+- **A live hazard found reading the code (F6 in the code, not only in a crash window):** after an unclean stop in a group removal,
+  members still in the resumed removal's `r.sites` are in `jobSites` and are not settled, but a member already written settles, and its
+  RECOVER reactivates the whole group, those members included. The resumed `Groups` removal then writes their `written` values over
+  entries that are ACTIVE again.
+- **RS** (`slice/RS`, `RegionTargets.rescanFree`) rolls survival free-pass tiles forward at every start: where the world holds `before`
+  and not `after`, it writes `after`. It is the only roll-forward today. It doesn't check that the entry is still on top of the cell.
+- **RP's realised record** (`feat/realised-provenance`) is written durable (fsync and rename) before the tile's P3. It records the
+  decision, not the world: after lost writes its codes still say WRITTEN. Nothing here changes it.
+- **Survival refunds** of a group removal are tallied before the undo, saved with the removal, and credited once per key when the
+  member's restore is written (Y1, `Groups.credit`). The stockpile ledger is saved in the world-save callback.
+
+### 1. What goes wrong
+
+The journal is a write-ahead log and the world's chunks are the data pages, but each chunk saves on its own clock. The settle at start
+treats the world as current. It **guesses each operation's direction** from a share of a site's cells (90 % restored, 80 % standing,
+KEEP in between), and a guess of "it stands" reverses an operation that others were built on.
+
+| finding | what the crash does | why today's settle can't fix it |
+|---|---|---|
+| F5 | a restore or rollback job ended, and its writes in unsaved chunks are lost | the job left the queue file; the evidence finds neither 90 % before nor 80 % after, so KEEP at every start, and the half-written blocks stay |
+| F6 | part of a group removal's writes are lost | one member's evidence says "stands", and `reactivate(group)` brings back members whose own cells are restored (and, in the code, members the resumed removal is still writing) |
+| F7 | two stacked removals are lost | settling the lower first skips its hand-downs to the upper, which is still UNDONE; the upper's `before` stays the ground, and removing it later cuts the lower |
+| UC | any release, a "covered" one included, of a site whose blocks the world still shows | release is decided on evidence at a start, not on the world's writes being on disk |
+| H-core | a PLACED stage's writes are lost | nothing compares an ACTIVE entry with the world; 5b's rule covers deltas only |
+
+### 2. Options weighed
+
+Every option keeps one policy: **the journal wins for committed operations, removals included** (roll forward). Evidence may name a
+conflict; it never reverses a commit. The review agreed with the policy. What it found missing is a proof that recovery always has
+the data it needs, and a correct test for "written to disk".
+
+| | design | what it needs | verdict |
+|---|---|---|---|
+| A | **Forced saves alone**: save the affected chunks at each job's end | a hook to see the write complete; still a window (mid-job, before the write completes) and a second operation can start in it | doesn't remove blockers 1, 2 or 6 by itself: a crash in the window still needs recovery, and two operations stacked inside one window still need history |
+| B | **Unbounded roll forward** (the first draft): replay every uncertified operation in commit order | retained history per cell, so recovery can go from *any* saved version to the final committed value; compaction, folding and zero-write hand-downs audited against it | correct only with a multi-version projection; the largest; hard to prove |
+| C | **Durability barrier + certified roll forward** (recommended): no operation may build on cells of an operation whose writes aren't certified on disk yet; recovery replays at most one operation per cell, in uncertified chunks only | an observation mixin on `ChunkMap.save`'s write; persisted per-chunk obligations; forced saves **on demand** to keep the barrier's wait short | removes blocker 1 by construction (depth one), 2 by observing real writes, and 6 by persisted obligations |
+| D | Evidence per cell, keeping today's direction choice | reactivation | rejected: a half-lost operation has no majority (§0), and reactivation brings back F6 and F7 |
+
+**So forced saves are part of the answer, but not on their own.** A save doesn't stop a second operation from building on unsaved
+writes, and it doesn't cover a crash before the save completes. The **barrier** removes the replay-depth problem. The forced save only
+makes the barrier's wait short: without it, a cell saved within the last 10 s waits out the cooldown, and a lagging server's eager saver
+stalls. C is B's policy with the history problem made impossible instead of solved.
+
+### 3. The design (recommended: C)
+
+#### 3.1 Obligations: what must reach the disk
+
+- An **obligation** is `(entryId, gen, chunk set)`. `gen` is the entry's generation: a new journal index counter, bumped by every commit
+  that changes the entry's status or cells (P3, P7, R2, a hand-down received, a fold, a reactivation).
+  - It is created in the commit **before** the writes: P3 for a placement, R2 for an undo, the rollback's commit for K3. P5 and R4
+    are not commits.
+  - It is persisted in the index (`journal.json`) as the set of chunks still uncertified.
+- **The chunk set** is every chunk the operation may write:
+  - the entry's sections;
+  - its leaf ring (box + 8);
+  - a BOX restore's edge-update neighbours (box + 1);
+  - for regions, the drain's cells: sources, spill, watch, predicted flow, escape and breach cells (§3.6).
+- **An entry is released only when it has no open obligation.** Its undo record (`written`, `handed`) stays until then.
+- **Legacy entries** (no obligation field) are certified only if the previous stop was clean (§3.7). After an unclean stop they get one
+  last run of today's settle, then they count as certified.
+
+#### 3.2 Certification: observing a real write
+
+- **A mixin** wraps the `write(pos, supplier)` call inside `ChunkMap.save`:
+  - At the call (server thread, after `copyOf`), it reads the chunk's **write stamp**: a per-chunk counter that Architect bumps on
+    every write of its own (the existing `LevelChunkMixin` at `setBlockState`, filtered to Architect's writers).
+  - It attaches `whenComplete` to the returned future. On success, it records that the snapshot with that stamp is on disk.
+- **When a chunk is certified.** A chunk in an obligation is certified for `gen` when a snapshot whose stamp is at or above the
+  operation's last write stamp in that chunk has completed successfully. Unloading, eager saves, bulk saves and forced saves all go
+  through `save`, so all of them count, and nothing else does.
+- **A failed write certifies nothing.** If the chunk is still loaded, Architect calls `markUnsaved()` on it again so it saves again.
+  Otherwise the obligation stays open for the next start.
+- **Stale generations don't count.** A completion for an older `gen` certifies nothing for a newer one. A placement's late
+  certification can't release the undo that followed it.
+- **Recording certifications.** They are committed in batches (index only, at most once a second), together with the releases they
+  allow.
+- **Accounting is a separate obligation** for a removal that credits refunds (§3.8). The ledger has to be written successfully, so
+  `Stockpiles.save` returns a result and its success is recorded with the ledger's generation.
+
+#### 3.3 The barrier
+
+- An operation may not **commit** (P3, R2, a delta, a fold, a move) if its cells, or the cells it hands down to, overlap a chunk with an
+  open obligation for another entry. It waits with `OVERLAP_BUSY` and the message "waiting for the world to save". No new API value.
+- So at most one operation per cell is ever uncertified, and recovery never needs older history (blocker 1). Two examples:
+  - **air, then A (stone), then B (planks).** B can't commit until A's chunks are certified, so after a crash the cell is stone or
+    planks, never air with two operations pending.
+  - **A zero-write hand-down from A's undo to B.** A's undo waits until B is certified.
+- **Forced saves on demand.** When an operation is waiting on an obligation, Architect saves that obligation's chunks through an
+  `@Invoker` on `ChunkMap.save`. It saves at most 20 a tick (the eager saver's rate), only holders that are `isReadyForSaving`, and
+  never in a level with `noSave`. Under `/save-off` waiters wait, and the status says so.
+- **A group or stage counts as one operation**, so its own members don't wait on each other.
+- **Unrelated operations never serialise:** the barrier is per chunk overlap, not global order.
+
+#### 3.4 Recovery: replay one operation per cell, in uncertified chunks only
+
+Recovery runs at **every start that finds an open obligation**. It doesn't depend on a clean or unclean stop (blocker 6). Each
+obligation's uncertified chunks are replayed per cell:
+
+| entry | pre-value | target | rule |
+|---|---|---|---|
+| placement (ACTIVE or PLACED) | `before` | `after` | **exact** compare (§3.5): the world holds `before`: write `after`; it holds `after`: post-work only; else conflict |
+| BOX undo (UNDONE) | anything | `written` | write `written` (BOX always writes, as R4) |
+| CELL undo (UNDONE) | the entry's `after` | `written` | the original plan's predicate (`WorldJournal.holds`, the same one R1 used); else conflict |
+| PLACING rollback (K3) | as today | as today | as today |
+
+- **Why StillOurs is right for a CELL undo and wrong for a placement.** A CELL undo decided at R1 with `holds`. Replaying with the same
+  predicate on an older snapshot reaches the same decision, except where the world changed between that snapshot and R1, and the crash
+  lost that change anyway. A placement's `before` has no such predicate: using StillOurs there would delete water or contents that were
+  added since (blocker 5). Placements compare exactly.
+- **Post-work runs for every cell in an uncertified chunk, whether or not a block is written** (blocker 4):
+  - `FluidRearm.wrote` for every non-source fluid cell of an undo;
+  - the PT record from the journal (the attachment lives in the chunk, so it rolled back with it);
+  - block-entity NBT written when it differs exactly;
+  - the leaf ring's distances (`restoreRing`, which is idempotent).
+- **Conflicts are reported and counted, never "kept" silently.** The gate's oracle (§5) doesn't accept them as success.
+- **Records follow the journal.** An UNDONE entry's record is pending until it is released; an ACTIVE one's is placed. **A removal
+  committed to the journal always completes.**
+- **Evidence becomes report-only** for journaled entries: the standing report, plus 4d migrated entries without `after`, which are BOX,
+  so a replay writes `written` anyway.
+- **Reactivation** is left only for a move whose new placement is still PLACING (it rolls back, so the site would otherwise be
+  nowhere). It is per undo group and newest first. It creates a new obligation, because the old place's cells must be certified again.
+- **Construction placements** aren't replayed: what is built is derived from the world, and RS's ledger drift rule stands.
+  **Construction removals** are replayed like any undo.
+- **RS's `rescanFree`** stops being a writer. Its free-pass cells are replayed placement cells; paid targets stay world-derived.
+
+#### 3.5 The recovery compare
+
+The compare is exact, over normalized state, NBT and provenance:
+- the block and every property, volatile ones included, because a placement's `before` is the world at P1, captured exactly;
+- the block-entity NBT without position keys, with container contents compared item by item;
+- the PT record.
+
+`WorldJournal.same` is not this. The compare is a new function with its own unit tests over every V-row of UMT's vanilla table.
+
+#### 3.6 Startup and regions
+
+- **The startup barrier.** At SERVER_STARTED, before anything else that acts on the world (Placement's resume, `Builder`, RS scans,
+  RegionFluids, `reconcileRemovals`, `Sites.reconcile`), every open obligation's chunk set is **reserved**. Everything overlapping it
+  waits until the replay certifies.
+- **The replay is ticked**: RestoreJob for undos, a `RedoJob` (RestoreJob's writer with the `after` side) for placements, ticketed by
+  section. Planning, decoding, tickets, post-work and the certification scan all count against `placementBudgetMs`. Outstanding tickets
+  are bounded (64 chunks).
+- **Regions drain first.** A region keeps its fluids manifest (`fluids.json`'s befores, and the bodies' cells) in its tombstone until
+  every obligation of its removal is certified. `RegionFluids.forget` moves to that point. An uncertified region undo **re-drains even
+  when `removal` is `done`**, then waits its bound, then replays the solids. The drain writes only cells no other standing entry owns,
+  and its cells are in the obligation's chunk set.
+- **Fluid placements** with an uncertified stage go through H's restart path (the live check, an idempotent drain on failure) after the
+  solids are replayed.
+
+#### 3.7 One unclean-stop signal (migration only)
+
+Obligations replace both signals for lost writes: `architect-running.marker` and the queue file's `clean` flag. The marker is read once
+more, at the first start on this version, to decide the legacy entries (§3.1). The queue file's `clean` flag stays for job cursors.
+
+#### 3.8 Accounting (a separate guarantee)
+
+- The R2 commit records the removal's credit keys and amounts with the undo. A replay credits each key the ledger lacks. "Once per key"
+  makes a credit that survived the halt a no-op.
+- A credited removal's accounting obligation clears only after a successful ledger write that has the key.
+- **Not covered:** item entities (dropped refunds, overflow, falling-block items), player inventories and entity storage. Minecraft
+  saves those separately from chunks, so they can drift. A dissolved stockpile's fallback can drift too. RS's charge and scoop paths
+  get their own audit in U5.
+
+#### 3.9 What each finding becomes
+
+| finding | outcome |
+|---|---|
+| F5 | the ended restore's obligation stays open until its chunks are certified; after a crash, its uncertified chunks are replayed |
+| F6 | no removal is reactivated; the resumed group removal is the replay (one writer) |
+| F7 | the barrier stops the second removal from committing until the first is certified; nothing is ever re-ordered |
+| UC | nothing is released with an open obligation; "covered" no longer releases |
+| H-core | an uncertified stage's chunks are replayed before the next stage may commit (the barrier) |
+| 6a tiles | tiles are entries with obligations like any other |
+| F1 (part A's) | settle no longer KEEPs on evidence; to confirm in UMT, not this section's scope |
+
+### 4. Guarantees, and the limits stated
+
+The crash model is a **JVM halt**: files and region writes completed before it survive. Power loss is out of scope (§8 Q5).
+
+| id | guarantee |
+|---|---|
+| C-I1 | **The world equals the journal's projection** in every chunk once its obligations are certified or replayed. The projection is computed by an independent oracle from the operation log, not from the replay's own labels. The only exceptions are the limit classes L1-L4, each counted. |
+| C-I2 | **Release only with no open obligation** for the entry's current `gen`. A completion for an older `gen` never certifies. |
+| C-I3 | **Depth one.** At any time, each cell has at most one entry with an open obligation (the barrier). |
+| C-I4 | **No limbo.** Every open obligation is replayed at the next start, whatever the stop, and is certified by the first successful save of its chunks after the replay. |
+| C-I5 | **One outcome per commit.** An undo group completes as a whole, and a move comes back as a whole. |
+| C-I6 | **Stacks stay chained.** After recovery, removing every standing entry, in any order, is exact. |
+| C-I7 | **No cut.** A recovery write never changes a cell that another standing entry owns. |
+| C-I8 | **No loss beyond the crash's own.** A certified chunk is never replayed. In an uncertified chunk, recovery overwrites only the operation's exact pre-value (a placement), the planner's predicate (a CELL undo), or anything (a BOX undo, as R4). |
+| C-I9 | **Idempotence.** Recovery, a crash or a clean stop inside it, then recovery again: the same world and journal as one recovery. |
+| C-I10 | **Records follow the journal.** A committed removal never reappears as a standing site. |
+| C-I11 | **Credits are recovered once** when the ledger and its keys persist together (§3.8). |
+
+**Limits, stated rather than solved:**
+- **L1. ABA inside the operation.** A player edit made *during* an operation, to a cell the operation had already written, captured by
+  a save in the middle of the operation, then lost to the halt: replay may overwrite it with the target. Once the operation's
+  post-write snapshot is on disk, that chunk is certified, so edits made after the operation are never at risk.
+- **L2. Effects outside the journal:** neighbour updates, gravity, plants losing support, falling entities and drops caused by the
+  original writes or by the replay. This is the same class as F2, F3 and F8. The replay uses the original writers' flags, so it adds no
+  new kind of effect.
+- **L3. Entities and inventories** (§3.8).
+- **L4. Conflicts.** A cell holding neither the pre-value nor the target is left alone and reported.
+
+### 5. Gate plan
+
+#### 5.1 UMT (needs `feat/umt` on main first)
+
+**The model.** Each chunk keeps its own disk copy. A save of a chunk goes through three separate events: the **snapshot** (clears
+dirty, takes the copy and stamp), the **enqueue**, and the **completion**, which can succeed or fail. Saves are:
+- eager saves of a random dirty subset;
+- delayed unload callbacks;
+- bulk saves that skip holders that aren't ready;
+- forced saves (§3.3).
+
+`restart` restores each chunk's last *completed* copy. The certification mixin is modelled at the snapshot and completion events. The
+barrier, the obligations and the replay run as production code through the existing seams.
+
+**The oracle.** An independent expected world, computed from the operation log by a separate simple interpreter (no `Journal`
+code). C-I1 compares against it. A "kept" or "conflict" label counts as a failure unless the scenario injected a player or vanilla
+change at that cell.
+
+**Properties, each expected green:**
+
+| property | covers |
+|---|---|
+| `c1_oracle` | C-I1, with the limit classes counted only where injected |
+| `c2_genCertify` | stale completions (a placement's save completing after R2) never certify the undo |
+| `c3_depthOne` | the barrier: an operation that must wait does; two unsaved placements at one cell never both exist |
+| `c4_noLimbo` | clean stop mid-recovery, repeated crashes, crashes around the certification commit and compaction |
+| `c5_group`, `c6_chained`, `c7_noCut` | C-I5, C-I6, C-I7 (a standing neighbour's cells unchanged) |
+| `c8_noLoss` | ABA edits outside the operation (never overwritten); changed container contents and added water at a placement's `before` (conflict, kept) |
+| `c9_idempotent` | crash, or clean stop, at every n inside a replay |
+| `c10_records`, `c11_credits` | records after each start; full stockpiles, overflow, a dissolved stockpile, and ledger, world and entity saves advancing independently (credits once; L3 drift counted) |
+| `c12_postWork` | a flowing cell already at its target after the crash still gets its wake-up; PT and BE NBT re-applied |
+| `c13_regionDrain` | a completed, tombstoned region removal with its drain and solid chunks saved in each combination: no water left in opened shells, E-flat 0 |
+| `c14_failedWrite` | a failed completion keeps the obligation, and the chunk saves again |
+
+The extra cases the review named are generator branches: covered hand-down then release, delta folding before certification, gravity
+next to a standing site.
+
+`UmtFindingsTest`'s F5, F6, F7 and UC repros turn green. Rebaselining the CI pin is a reviewed step.
+
+**Mutation rows:**
+
+| mutation | goes red |
+|---|---|
+| certify at the snapshot (not the completion) | `c14`, `c1` |
+| no `gen` check | `c2` |
+| no barrier | `c3`, `c1` (A then B at one cell) |
+| skip post-work on cells already at their target | `c12` |
+| StillOurs for a placement's `before` | `c8` |
+| `removalGate`'s `done` early return kept | `c13` |
+
+#### 5.2 In game (headless, $0)
+
+**Losing writes for real.** The eager saver saves a dirty chunk within seconds, so the no-save runs set `noSave` on the level under
+test before the operation (`dev.world.saveOff`, a TEST hook) and fire the kill in the tick of the named point. Today's no-save kill
+points (FL1 without `+save`) lose writes only by timing, and move to the same hook. `+save` runs `saveAllChunks(true, true, true)`, which
+ignores `noSave`.
+
+| point | where | bar after the restart |
+|---|---|---|
+| RX1 | a single removal's RestoreJob ended, uncertified | without save: replayed, exact, released after certification; with save: certified by the `+save`, nothing replayed, released |
+| RX2 | a group removal with members on both sides of a chunk boundary, some written | every member replayed, none comes back, E-flat 0 |
+| RX3 | removal A ended (uncertified), then removal B of a site stacked on it asked for | B waits (barrier) until A certifies; after a kill: A replayed, then B runs; exact |
+| RX4 | P8 of an instant site, uncertified | replayed; remove: exact |
+| RX5 | a region stage PLACED and uncertified, the next stage waiting | the next stage waits; after a kill: replayed, then the next stage, PLACED, `Regions.remove` E-flat 0 |
+| RX6 | a completed region removal with a drained fluid body, solids certified and drain cells not (and the reverse) | re-drained from the tombstone's manifest, E-flat 0, 0 water |
+| RX7 | a kill inside a replay; a clean stop inside a replay | the next start finishes it; E-flat 0 |
+| RX8 | a move whose new place is PLACING | the old place back, a new obligation, exact |
+| RX9 | `/save-off`, then a stacked operation | it waits with "waiting for the world to save"; `/save-on` releases it |
+
+Every bar ends with the **journal empty** after the final removal. 4e-crash's K6 bar changes from "stands again" to "removed". The
+existing K1-K8, RG1-RG6, FL1-FL6, x-resume and 4e-orders keep their bars.
+
+#### 5.3 Timing (recorded, not judged)
+
+Recorded per run:
+- forced-save time per chunk on the server thread (`copyOf`);
+- the barrier's waits (count and p95);
+- the replay's per-tick time;
+- the certification commit's time.
+
+### 6. Behaviour changes (Steward's pre-release check: **needed**)
+
+- **A removal committed to the journal always completes after a crash.** 4e's K6 "stands again, remove it again" becomes "removed".
+- **5b's lost-writes rule** (undo a delta whose cells mostly hold `before`) becomes a replay, so the site ends at version b.
+- **Stacked operations wait for the world to save** (§3.3): usually ticks, because the forced save runs on demand. Under `/save-off` they
+  wait until saving is back on.
+- **Releases come later**, when certified. `Sites.pending` holds a removed site until then.
+- **Steward needs an authoritative reconcile after a halt**, because its own records may lag (§0's clocks) and completion events fired
+  before the halt may be lost. Additive API (next free minor): a `RECOVERED` event (appended enum value) fired when the start's replay
+  is done, listing the sites, roads and regions it touched, plus a default method `Sites.recovering()`. Steward re-reads the views at
+  that event.
+- DevBridge, additive: `dev.journal.state` gains `gen` and `obligations`; new `dev.journal.certify`, and TEST `dev.world.saveOff`.
+
+### 7. Size and split, honestly
+
+The first draft's 2.5 to 3 days was too low. The review's blockers are real. The full design is about **8 days**, and a narrowed v1 is
+about **5 days**.
+
+| slice | what | days |
+|---|---|---|
+| U1 certification | the `ChunkMap.save` write mixin and stamps; obligations with `gen` in the index; batched certify-and-release commit; failure handling; recovery at every start with open obligations; legacy migration | 1.5 |
+| U2 barrier | commit-time barrier per chunk overlap; forced saves on demand (`@Invoker`, 20/tick, `noSave` respected); the startup reservation before every other subsystem | 1 |
+| U3 replay | RedoJob/RestoreJob over uncertified chunks; the exact compare (§3.5) and its tests; post-work; evidence report-only; K6 and 5b changed; move reactivation; `rescanFree`'s writer removed | 2 |
+| U4 regions | fluids manifest kept in the tombstone; re-drain despite `done`; drain cells in the chunk set; ownership guards on the drain | 1 |
+| U5 accounting | credit keys in R2; `Stockpiles.save` reports success; the ledger obligation; RS charge and scoop audit | 0.5 to 1 |
+| UMT | per-chunk snapshot, enqueue and completion; the independent oracle; `c1`-`c14`; the mutation rows | 1.5 to 2 |
+
+**Narrowed v1 (recommended to build first): U1 + U2 + U3 + UMT's model and oracle, about 5 days.**
+
+v1 guarantees C-I1 to C-I10 for sites, roads, cell sites and region tiles without fluid bodies, with L1-L4 stated. It covers F5, F6,
+F7, UC and H-core's question for dry regions.
+
+Its stated limits until v2:
+- **A region with a fluid body.** Its obligations still block overlapping commits and are replayed for solids. But a removal that
+  ended and was tombstoned can't re-drain, so RX6 is v2's.
+- **Credits** keep today's drift: refunds credited before a halt may be lost or kept with the ledger's last save.
+
+v2 is U4 + U5 + `c11` and `c13`, about 2 to 3 days.
+
+Not recommended: B (unbounded roll forward with retained history). It is larger (a multi-version projection, plus compaction and
+folding audits), and the barrier's cost is a short, measured wait.
+
+All slices change removal and recovery semantics, so Steward's pre-release check is needed before any of them ships. U1 must not
+ship without U3: "release requires certified" with no replay leaves obligations open forever after a crash.
+
+### 8. Open questions
+
+| # | for | question | default |
+|---|---|---|---|
+| Q1 | Steward | Is "a committed removal always completes after a crash", plus the `RECOVERED` event to reconcile from, acceptable? | yes |
+| Q2 | Steward | 5b's lost-writes rule becomes a replay (version b): acceptable? | yes |
+| Q3 | Noah | Is the barrier's wait for stacked operations (usually ticks, longer under lag, indefinite under `/save-off`) acceptable? | yes |
+| Q4 | coordinator | Ship v1 (dry regions, credits as today) and v2 separately, or wait for both? | v1 first, behind Steward's check |
+| Q5 | Noah | Power loss: fsync the journal index? It does not make chunks durable. | not now |
+| Q6 | coordinator | Is the per-chunk write stamp in `LevelChunkMixin` (Architect writes only) cheap enough? Measure it in U1; the fallback is a stamp per section. | measure |
+| Q7 | coordinator | Fix the live F6 hazard (§0) in part A (skip RECOVER for a group that still has a resumed removal) rather than wait for U3? | yes, in A |
+
+### Review responses (GPT-6.1, at fb26c61c)
+
+| # | review | verified | response |
+|---|---|---|---|
+| 1 | entries aren't a sufficient replay log (A then B at one cell; zero-write hand-downs; compaction and folding) | yes, by the logic of the on-top guard | the barrier (§3.3) makes depth one an invariant (C-I3); folds and hand-downs are commits under the barrier; no retained history needed |
+| 2 | the durability proof is wrong; checkpoints need a generation; failures must block | yes, against 26.3's bytecode (§0) | an observation mixin at `save`'s `write` call, certified on completion only (§3.2); `gen` on every obligation; a failed write certifies nothing and re-marks the chunk |
+| 3 | the drain restart skips `done` and forgotten regions | yes (`removalGate`, `finishRemoval`) | the manifest is kept in the tombstone until certified, and it re-drains despite `done` (§3.6, U4); v1 states it as a limit |
+| 4 | the target block isn't completion; neighbour effects | yes (`FluidRearm` isn't saved) | post-work on every cell of an uncertified chunk (§3.4); neighbour, gravity and plant effects are limit L2 |
+| 5 | StillOurs isn't a safe compare; ABA; C-I8 | yes (`StillOurs.holds`) | an exact compare for placements (§3.5); the planner's own predicate for CELL undos, argued in §3.4; ABA bounded by per-chunk certification and stated as L1; C-I8 rewritten |
+| 6 | a clean stop during recovery suppresses it | yes | recovery is driven by persisted obligations at every start (§3.4, §3.7) |
+| 7 | accounting is separate; entity storage; `Stockpiles.save` failures; RS | yes | §3.8, limit L3, U5 |
+| 8 | startup barrier; `rescanFree`; Steward's reconcile; budgets | agreed | §3.6; `rescanFree` stops writing; the `RECOVERED` event (§6); every phase budgeted |
+| 9 | migration can't treat unknown as durable; moves need new obligations | agreed | legacy entries are certified only after a clean stop (§3.1, §3.7); a move's reactivation opens an obligation |
+| 10 | the gate can approve its own decisions | agreed | an independent oracle; snapshot, enqueue and completion separated; the named cases are properties or generator branches (§5.1) |
+| nit | "at most one autosave interval" | agreed | removed; the ~10 s figure is stated as an expectation, conditional on saves completing |
 
 ## Slice RP: realised provenance (the patch v0.40.1; as built)
 
