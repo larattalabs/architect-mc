@@ -150,6 +150,20 @@ public final class WorldJournal {
 		return store;
 	}
 
+	/**
+	 * (UMT, test seam) Installs {@code s} as the running world's journal for {@code worldDir} without a server, as {@link #open} would
+	 * (null, null: closed). Never called by the mod itself: the undo model tester (docs/UMT.md) drives the real journal against an
+	 * in-memory world with it.
+	 */
+	public static void install(@Nullable JournalStore s, @Nullable Path worldDir) {
+		store = s;
+		world = worldDir;
+		unavailable = null;
+	}
+
+	/** (UMT, test seam) The clock an undo stamps its {@code undoneAt} with ({@link UndoPlanner}); the wall clock in the mod. */
+	public static volatile java.util.function.LongSupplier clock = System::currentTimeMillis;
+
 	/** {@code journalCacheMb} from the world settings (default 64). */
 	static int cacheMb() {
 		return dev.larattalabs.architect.survival.SurvivalWorld.journalCacheMb();
@@ -393,12 +407,23 @@ public final class WorldJournal {
 	public static boolean holds(Level level, long pos, Value after) {
 		BlockPos p = BlockPos.of(pos);
 		BlockState now = level.getBlockState(p);
+		return holds(now, () -> beNbt(level, p), after);
+	}
+
+	/**
+	 * {@link #holds(Level, long, Value)} on a block read already: {@code now}, with its block entity data read only when it has a block
+	 * entity and the block check passed ({@code nowNbt}). The level version's whole rule (UMT seam: the tester's world calls it).
+	 */
+	public static boolean holds(BlockState now, java.util.function.Supplier<@Nullable CompoundTag> nowNbt, Value after) {
 		BlockState want = state(after);
+		if (StillOurs.pathTurned(now, want)) {
+			return true; // (fix/lamp-path) our dirt path turned to dirt under a solid block, outside the journal
+		}
 		if (now.getBlock() != want.getBlock() && !(want.isAir() && !now.getFluidState().isEmpty()) && !(StillOurs.spread(now) && StillOurs.spread(want))
 			&& !StillOurs.fluidHolds(now, want) && !Copper.sameBlock(now.getBlock(), want.getBlock())) {
 			return false; // (a fluid in cleared air goes to StillOurs, phase 6a; another copper stage too, 6c CU)
 		}
-		return StillOurs.holds(now, now.hasBlockEntity() ? beNbt(level, p) : null, want, after.nbt());
+		return StillOurs.holds(now, now.hasBlockEntity() ? nowNbt.get() : null, want, after.nbt());
 	}
 
 	/**
@@ -412,7 +437,7 @@ public final class WorldJournal {
 		}
 		var f = net.minecraft.world.level.block.Blocks.FARMLAND;
 		var d = net.minecraft.world.level.block.Blocks.DIRT;
-		return Copper.sameBlock(now.getBlock(), after.getBlock()) || now.is(f) && after.is(d) || now.is(d) && after.is(f);
+		return Copper.sameBlock(now.getBlock(), after.getBlock()) || now.is(f) && after.is(d) || now.is(d) && after.is(f) || StillOurs.pathTurned(now, after);
 	}
 
 	/**
@@ -427,16 +452,30 @@ public final class WorldJournal {
 
 	/** {@link #holds} with a player's record first ({@link #playersOver}): what an undo asks of the world. */
 	public static boolean holdsOurs(Level level, long pos, Value after) {
-		if (!holds(level, pos, after)) {
+		BlockPos p = BlockPos.of(pos);
+		return holdsOurs(level.getBlockState(p), () -> beNbt(level, p), () -> dev.larattalabs.architect.placed.Placed.record(level, p) != null, after);
+	}
+
+	/**
+	 * {@link #holdsOurs(Level, long, Value)} on a block read already ({@code now}, its block entity data on demand) with the player's
+	 * record at the cell asked only when {@link #cuEquivalent} decides ({@code playerRecord}, PT's {@code Placed.record != null}).
+	 * The level version's whole rule (UMT seam).
+	 */
+	public static boolean holdsOurs(BlockState now, java.util.function.Supplier<@Nullable CompoundTag> nowNbt, java.util.function.BooleanSupplier playerRecord,
+		Value after) {
+		if (!holds(now, nowNbt, after)) {
 			return false;
 		}
-		return !playersOver(level, pos, level.getBlockState(BlockPos.of(pos)), state(after));
+		return !(cuEquivalent(now, state(after)) && playerRecord.getAsBoolean());
 	}
 
 	/** Whether a recorded value {@code v} still holds {@code after} ({@link StillOurs}). */
 	public static boolean same(Value v, Value after) {
 		if (v.equals(after)) {
 			return true;
+		}
+		if (StillOurs.pathTurned(state(v), state(after))) {
+			return true; // (fix/lamp-path)
 		}
 		return StillOurs.holds(state(v), v.nbt(), state(after), after.nbt());
 	}
@@ -530,12 +569,11 @@ public final class WorldJournal {
 	 * sections until a deadline; {@link #work} once it says done. Server thread.
 	 */
 	public static final class UndoPlanner {
-		private final ServerLevel level;
 		private final JournalStore s;
 		private final String dim;
 		private final List<String> ids;
 		private final String group;
-		private final long at = System.currentTimeMillis();
+		private final long at = clock.getAsLong();
 		private final TreeSet<Long> sections = new TreeSet<>();
 		private final java.util.Iterator<Long> next;
 		private final Set<String> undo;
@@ -544,9 +582,16 @@ public final class WorldJournal {
 		private int planned;
 
 		public UndoPlanner(ServerLevel level, Collection<String> ids, String group) throws IOException {
-			this.level = level;
+			this(level.dimension().identifier().toString(), (pos, after) -> holdsOurs(level, pos, after), ids, group);
+		}
+
+		/**
+		 * A planner for {@code dimension} that asks {@code world} whether a cell still holds an entry's {@code after} (the level
+		 * constructor's is {@link #holdsOurs}). UMT seam: the tester's in-memory world answers through the same rule.
+		 */
+		public UndoPlanner(String dimension, Journal.World world, Collection<String> ids, String group) throws IOException {
 			this.s = store();
-			this.dim = level.dimension().identifier().toString();
+			this.dim = dimension;
 			this.ids = List.copyOf(ids);
 			this.group = group;
 			for (String id : ids) {
@@ -560,7 +605,7 @@ public final class WorldJournal {
 			}
 			this.undo = new HashSet<>(ids);
 			this.next = sections.iterator();
-			this.planner = new Sections.Planner(ids, group, at, (pos, after) -> holdsOurs(level, pos, after), WorldJournal::same);
+			this.planner = new Sections.Planner(ids, group, at, world, WorldJournal::same);
 		}
 
 		private java.util.concurrent.@Nullable CompletableFuture<Void> warm;
@@ -885,6 +930,7 @@ public final class WorldJournal {
 			j.addProperty("entry", l.meta().id());
 			j.addProperty("kind", l.meta().kind());
 			j.addProperty("site", l.meta().site());
+			j.addProperty("group", l.meta().group());
 			j.addProperty("policy", l.meta().policy().name());
 			j.addProperty("status", l.meta().status().name());
 			j.addProperty("layer", l.cell().layer());

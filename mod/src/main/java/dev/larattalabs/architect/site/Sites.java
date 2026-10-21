@@ -11,6 +11,7 @@ import dev.larattalabs.architect.apiimpl.ApiEvents;
 import dev.larattalabs.architect.apiimpl.ApiRules;
 import dev.larattalabs.architect.journal.Journal;
 import dev.larattalabs.architect.journal.JournalStore;
+import dev.larattalabs.architect.journal.SectionCells;
 import dev.larattalabs.architect.journal.WorldJournal;
 import dev.larattalabs.architect.placement.Anchor;
 import dev.larattalabs.architect.placement.Anchors;
@@ -2443,11 +2444,12 @@ public final class Sites {
 	}
 
 	/** {@link #evidence} for a road or cell site (CELL entries with {@code after}: no template). */
-	static Evidence evidence(@Nullable ServerLevel level, String siteId, String group) {
+	static Evidence evidence(net.minecraft.world.level.@Nullable BlockGetter level, String siteId, String group) {
 		return evidence(level, siteId, null, group);
 	}
 
-	private static Evidence evidence(@Nullable ServerLevel level, String siteId, @Nullable Site b, String group) {
+	/** (UMT seam) Reads the world only through {@code level}'s block states: the server's level, or the tester's in-memory world. */
+	private static Evidence evidence(net.minecraft.world.level.@Nullable BlockGetter level, String siteId, @Nullable Site b, String group) {
 		JournalStore js = WorldJournal.storeOrNull();
 		if (level == null || js == null) {
 			return new Evidence(null, null, false);
@@ -2491,9 +2493,14 @@ public final class Sites {
 						gs.writtenMap().forEach(wrote::putIfAbsent);
 					}
 				}
+				List<SectionCells> below = laterBelow(js, main, group, k);
 				for (int i = 0; i < sc.size(); i++) {
 					long pos = sc.pos(i);
 					Journal.Value w = sc.written(i) != null ? sc.written(i) : wrote.get(pos);
+					Journal.Value lw = laterWrite(below, sc.index(i), sc.layer(i));
+					if (lw != null) {
+						w = lw; // (F1) the cell's holder below was undone since and wrote it: its value is the restored one now
+					}
 					BlockState before = WorldJournal.state(w != null ? w : sc.before(i));
 					Journal.Value av = sc.after(i);
 					BlockState after = av != null ? WorldJournal.state(av) : template.get(pos);
@@ -2526,6 +2533,98 @@ public final class Sites {
 			return new Evidence(!st, st, false);
 		}
 		return new Evidence(Reconcile.restored(holdBefore, total), Reconcile.stands(holdAfter, total), false);
+	}
+
+	/**
+	 * The world-start settle's decision for a pending site on its evidence ({@link #reconcile}; UMT calls it too): covered releases,
+	 * else {@link Reconcile#decide} with no overlap check.
+	 */
+	static Reconcile.Action settleSite(Evidence ev, boolean moved, boolean hasCurrent, @Nullable Boolean currentStands) {
+		return ev.covered() ? Reconcile.Action.RELEASE : Reconcile.decide(moved, ev.stands(), ev.restored(), Reconcile.Overlap.NONE, hasCurrent,
+			currentStands);
+	}
+
+	/**
+	 * The settle's decision for a pending road or cell site ({@link #reconcile}; UMT calls it too): RELEASE when covered, restored or
+	 * undecidable (no comparable cell), RECOVER when it stands, else KEEP.
+	 */
+	static Reconcile.Action settleInfra(Evidence ev) {
+		if (ev.covered() || Boolean.TRUE.equals(ev.restored()) || ev.restored() == null && ev.stands() == null) {
+			return Reconcile.Action.RELEASE;
+		}
+		return Boolean.TRUE.equals(ev.stands()) ? Reconcile.Action.RECOVER : Reconcile.Action.KEEP;
+	}
+
+	/**
+	 * (F1, UMT) The sections {@code key} of the entries of other undo groups undone at or after {@code main}, latest undo first (ties:
+	 * the lowest layer first). Where one of them sits under {@code main}'s cell and its undo wrote that cell, {@code main}'s own undo
+	 * was there first: {@code main} wrote the holder's {@code after} (its {@code before} came from that holder), and the holder's
+	 * later undo replaced it. Removing a stacked pair top-down then reads as restored, not as neither restored nor standing.
+	 */
+	private static List<SectionCells> laterBelow(JournalStore js, JournalStore.Meta main, String group, long key) throws IOException {
+		List<JournalStore.Meta> later = new ArrayList<>();
+		for (String id : js.inSection(main.dimension(), key)) {
+			JournalStore.Meta m = js.meta(id);
+			if (m != null && m.status() == Journal.Status.UNDONE && m.undoGroup() != null && !m.undoGroup().equals(group) && m.undoneAt() >= main
+				.undoneAt()) {
+				later.add(m);
+			}
+		}
+		if (later.isEmpty()) {
+			return List.of();
+		}
+		later.sort(java.util.Comparator.comparingLong(JournalStore.Meta::undoneAt).reversed().thenComparingLong(JournalStore.Meta::layer));
+		List<SectionCells> out = new ArrayList<>(later.size());
+		for (JournalStore.Meta m : later) {
+			SectionCells s = js.section(m.id(), key);
+			if (s != null && s.hasUndo()) {
+				out.add(s);
+			}
+		}
+		return out;
+	}
+
+	/** (F1) What the latest of {@code below} with a cell under {@code layer} at section index {@code idx} wrote there, or null. */
+	private static Journal.@Nullable Value laterWrite(List<SectionCells> below, int idx, long layer) {
+		for (SectionCells s : below) {
+			int j = s.find(idx);
+			if (j >= 0 && s.layer(j) < layer) {
+				Journal.Value w = s.written(j);
+				if (w != null) {
+					return w;
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * (F6) What a RECOVER of {@code siteId} takes back of its undo group {@code group}: the site, the other members whose own evidence
+	 * stands, and the group's crate. A member whose cells show it removed stays undone and settles on its own evidence (a member taken
+	 * back over one that stays undone gets the undo's written values as its befores there: {@link Journal#reactivate}). Null while the
+	 * group's removal is still in the queue (a member in {@code jobSites} has entries in the group): the resumed removal writes those
+	 * members' restores, so none of the group is taken back until it ends.
+	 */
+	static @Nullable Set<String> recoverScope(net.minecraft.world.level.@Nullable BlockGetter level, String siteId, String group, Set<String> jobSites) {
+		JournalStore js = WorldJournal.storeOrNull();
+		if (js == null) {
+			return null;
+		}
+		Set<String> others = new java.util.LinkedHashSet<>();
+		for (JournalStore.Meta m : js.find(m -> m.status() == Journal.Status.UNDONE && group.equals(m.undoGroup()))) {
+			if (jobSites.contains(m.site())) {
+				return null;
+			}
+			others.add(m.site());
+		}
+		Set<String> scope = new java.util.LinkedHashSet<>();
+		scope.add(siteId);
+		for (String o : others) {
+			if (!o.equals(siteId) && (o.startsWith(SiteGroupRec.CRATE_PREFIX) || Boolean.TRUE.equals(evidence(level, o, group).stands()))) {
+				scope.add(o);
+			}
+		}
+		return scope;
 	}
 
 	/**
@@ -2694,8 +2793,16 @@ public final class Sites {
 			}
 			Evidence ev = evidence(server, gone, group);
 			Site current = map.get(gone.id());
-			Reconcile.Action action = ev.covered() ? Reconcile.Action.RELEASE : Reconcile.decide(moved, ev.stands(), ev.restored(),
-				Reconcile.Overlap.NONE, current != null, current == null ? null : standsNow.get(gone.id()));
+			Reconcile.Action action = settleSite(ev, moved, current != null, current == null ? null : standsNow.get(gone.id()));
+			Set<String> scope = action == Reconcile.Action.RECOVER ? recoverScope(levelOf(server, gone), gone.id(), group, jobSites) : null;
+			if (action == Reconcile.Action.RECOVER && scope == null) {
+				// (F6) its restore was written, but the stop lost those writes; its group's removal is still in the queue: it writes it again
+				// (Groups.load, roll forward), never taken back meanwhile
+				report(gone.id(), false, gone.id() + " shows its blocks again (its restore's writes were lost at the stop); its group's removal, "
+					+ "still in the queue, writes it again");
+				Groups.writeAgain(gone.id());
+				action = Reconcile.Action.KEEP;
+			}
 			Architect.LOGGER.info("Sites check: {} site of {} at {} (stands {}, restored {}, covered {}): {}", p.why(), gone.id(), Anchors.str(gone.restoreBox()),
 				ev.stands(), ev.restored(), ev.covered(), action);
 			List<String> groupIds = SiteJournal.undone(gone.id(), group).stream().map(JournalStore.Meta::id).toList();
@@ -2707,7 +2814,7 @@ public final class Sites {
 				}
 				case RECOVER -> {
 					try {
-						SiteJournal.reactivate(group);
+						SiteJournal.reactivate(group, scope);
 					} catch (IOException e) {
 						report(gone.id(), true, "could not bring " + gone.id() + " back (" + e.getMessage() + ")");
 						continue;
@@ -2760,12 +2867,22 @@ public final class Sites {
 			List<String> groupIds = SiteJournal.undone(gone.id(), group).stream().map(JournalStore.Meta::id).toList();
 			Architect.LOGGER.info("Sites check: removed {} at {} (stands {}, restored {}, covered {})", gone.id(), Anchors.str(gone.box()), ev.stands(),
 				ev.restored(), ev.covered());
-			if (ev.covered() || Boolean.TRUE.equals(ev.restored()) || ev.restored() == null && ev.stands() == null) {
+			Reconcile.Action action = settleInfra(ev);
+			Set<String> scope = action == Reconcile.Action.RECOVER ? recoverScope(levelOf(server, gone.dimension()), gone.id(), group, jobSites) : null;
+			if (action == Reconcile.Action.RECOVER && scope == null) {
+				// (F6) its restore was written, but the stop lost those writes; its group's removal is still in the queue: it writes it again
+				// (Groups.load, roll forward), never taken back meanwhile
+				report(gone.id(), false, gone.id() + " shows its blocks again (its restore's writes were lost at the stop); its group's removal, "
+					+ "still in the queue, writes it again");
+				Groups.writeAgain(gone.id());
+				action = Reconcile.Action.KEEP;
+			}
+			if (action == Reconcile.Action.RELEASE) {
 				SiteJournal.releaseGroup(groupIds);
 				Infras.drop(server, gone.id());
-			} else if (Boolean.TRUE.equals(ev.stands())) {
+			} else if (action == Reconcile.Action.RECOVER) {
 				try {
-					SiteJournal.reactivate(group);
+					SiteJournal.reactivate(group, scope);
 					Infras.recover(server, gone.id());
 					report(gone.id(), false, gone.id() + "'s removal was not saved before the game stopped: it stands again (remove it again)");
 				} catch (IOException e) {

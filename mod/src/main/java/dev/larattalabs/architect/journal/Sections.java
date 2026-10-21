@@ -16,6 +16,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.function.Function;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The journal's rules one chunk section at a time (docs/CONTRACT.md "Phase 4e contract", "Per-section planning"), pure. A
@@ -212,20 +213,29 @@ public final class Sections {
 	/**
 	 * {@link Journal#reactivate} one section at a time: {@code slices} gives, per section, the group's undone entries and the
 	 * entries they handed to, sliced (undo records included). Returns, per changed entry that is not of the group, its
-	 * cells per section; the group's entries themselves become ACTIVE again (the caller drops their undo records).
+	 * cells per section; the group's entries themselves become ACTIVE again (the caller drops their undo records), and a member's own
+	 * cells are returned when their befores changed ({@link Journal#reactivate(Collection, String, java.util.function.Predicate)}).
 	 */
 	public static Map<String, Map<Long, List<Cell>>> reactivate(SortedSet<Long> sections, Function<Long, Collection<Entry>> slices, String group) {
+		return reactivate(sections, slices, group, null);
+	}
+
+	/** {@link #reactivate} of only the group's entries {@code member} accepts (by id; {@link Journal#reactivate(Collection, String, java.util.function.Predicate)}). */
+	public static Map<String, Map<Long, List<Cell>>> reactivate(SortedSet<Long> sections, Function<Long, Collection<Entry>> slices, String group,
+		java.util.function.@Nullable Predicate<String> member) {
 		Map<String, Map<Long, List<Cell>>> out = new LinkedHashMap<>();
 		for (long section : sections) {
 			Collection<Entry> loaded = slices.apply(section);
-			Set<String> members = new HashSet<>();
+			Map<String, List<Cell>> members = new java.util.HashMap<>();
 			for (Entry e : loaded) {
 				if (e.status() == Journal.Status.UNDONE && e.undo() != null && e.undo().group().equals(group)) {
-					members.add(e.id());
+					members.put(e.id(), e.cells());
 				}
 			}
-			for (var t : Journal.reactivate(loaded, group).entrySet()) {
-				if (!members.contains(t.getKey())) {
+			for (var t : Journal.reactivate(loaded, group, member).entrySet()) {
+				List<Cell> was = members.get(t.getKey());
+				// a member's cells only when their befores changed (taken back while a member under it stays undone)
+				if (was == null || !was.equals(t.getValue().cells())) {
 					out.computeIfAbsent(t.getKey(), k -> new TreeMap<>()).put(section, t.getValue().cells());
 				}
 			}

@@ -54,6 +54,15 @@ public final class Groups {
 		@Nullable String undo;
 		final List<String> undoSites = new ArrayList<>();
 		Map<String, Integer> handed = new TreeMap<>();
+		/**
+		 * (fix/drain-holders) The undo group about to be committed (R2) and its sites, saved in the queue file before the commit is
+		 * submitted: a stop after the commit reached the journal and before the queue file was saved again resumes R3/R4 under it (the
+		 * journal decides: its entries UNDONE in that group), else plans again.
+		 */
+		@Nullable String planned;
+		final List<String> plannedSites = new ArrayList<>();
+		/** The queue save holding {@link #planned}, written before the commit is submitted. */
+		transient @Nullable CompletableFuture<Void> preSave;
 		/** The cells the undo restores (its plan's stats). */
 		int restoredCells;
 		/** Phase 6a: CELL cells the undo left as they are (the world no longer held what the entry wrote: a player's block). */
@@ -107,7 +116,15 @@ public final class Groups {
 			JsonObject r = new JsonObject();
 			refund.forEach(r::addProperty);
 			o.add("refund", r);
-			if (undo != null) {
+			// (F4) an undo whose R2 commit is not durable yet is saved as planned: the load asks the journal (resumeCommitted)
+			boolean durable = undo != null && commit == null;
+			if (planned != null || undo != null && !durable) {
+				o.addProperty("planned", planned != null ? planned : undo);
+				JsonArray ps = new JsonArray();
+				(planned != null ? plannedSites : undoSites).forEach(ps::add);
+				o.add("plannedSites", ps);
+			}
+			if (durable) {
 				o.addProperty("undo", undo);
 				JsonArray us = new JsonArray();
 				undoSites.forEach(us::add);
@@ -147,12 +164,29 @@ public final class Groups {
 			r.current = o.has("current") ? o.get("current").getAsString() : null;
 			r.waited = o.get("waited").getAsLong();
 			o.getAsJsonObject("refund").entrySet().forEach(e -> r.refund.put(e.getKey(), e.getValue().getAsInt()));
+			if (o.has("planned")) {
+				r.planned = o.get("planned").getAsString();
+				o.getAsJsonArray("plannedSites").forEach(e -> r.plannedSites.add(e.getAsString()));
+			}
 			if (o.has("undo")) {
 				r.undo = o.get("undo").getAsString();
 				o.getAsJsonArray("undoSites").forEach(e -> r.undoSites.add(e.getAsString()));
 				o.getAsJsonObject("handed").entrySet().forEach(e -> r.handed.put(e.getKey(), e.getValue().getAsInt()));
 				r.restoredCells = o.has("restoredCells") ? o.get("restoredCells").getAsInt() : 0;
 				r.keptCells = o.has("keptCells") ? o.get("keptCells").getAsInt() : 0;
+				if (!undoCommitted(r.undo)) {
+					// (F4) a queue file naming an undo group the journal never got (written before toJson saved a pending commit as planned):
+					// as planned, so the journal decides (resumeCommitted: planned again)
+					Architect.LOGGER.info("Group removal {}: its undo {} is in no journal entry; the journal decides on resuming", r.group, r.undo);
+					r.planned = r.undo;
+					r.plannedSites.clear();
+					r.plannedSites.addAll(r.undoSites);
+					r.undo = null;
+					r.undoSites.clear();
+					r.handed = new TreeMap<>();
+					r.restoredCells = 0;
+					r.keptCells = 0;
+				}
 			}
 			if (o.has("dec")) {
 				o.getAsJsonObject("dec").entrySet().forEach(e -> {
@@ -167,6 +201,12 @@ public final class Groups {
 				o.getAsJsonObject("credit").entrySet().forEach(e -> r.decCredit.put(e.getKey(), Credit.fromJson(e.getValue().getAsJsonObject())));
 			}
 			return r;
+		}
+
+		/** Whether undo group {@code undo} reached the world journal (any entry of it, undone or settled since but kept). */
+		static boolean undoCommitted(String undo) {
+			var js = dev.larattalabs.architect.journal.WorldJournal.storeOrNull();
+			return js != null && !js.find(m -> undo.equals(m.undoGroup())).isEmpty();
 		}
 	}
 
@@ -631,6 +671,7 @@ public final class Groups {
 			// a road or cell site of the group: its cells over ticks
 			r.current = id;
 			Placement.add(server, RestoreJob.writing(id, r.undo, Map.of()));
+			killAfterAMember(r);
 			return;
 		}
 		ServerLevel level = s == null ? null : Sites.levelOf(server, s);
@@ -659,6 +700,17 @@ public final class Groups {
 		}
 		r.current = id;
 		Placement.add(server, RestoreJob.writing(id, r.undo, handedHere));
+		killAfterAMember(r);
+	}
+
+	/**
+	 * TEST kill point GW (F6 hazard, 4e-crash): a member's restore is written (out of the saved removal's sites) and the next member's
+	 * job is saved; nothing of the next is written yet. With no autosave since the removal began, the written member's blocks come back.
+	 */
+	private static void killAfterAMember(Removal r) {
+		if (r.sites.size() < r.undoSites.size()) {
+			dev.larattalabs.architect.journal.WorldJournal.kill("GW");
+		}
 	}
 
 	/** Sites whose undo writes were done in this session (a reload writes again only those not done). */
@@ -707,7 +759,7 @@ public final class Groups {
 						});
 						return;
 					}
-					if (!r.txn.isDone()) {
+					if (!r.txn.isDone() || !preSaved(server, r)) {
 						return;
 					}
 					Object[] built;
@@ -733,6 +785,9 @@ public final class Groups {
 						return;
 					}
 				} else {
+					if (!preSaved(server, r)) {
+						return;
+					}
 					dev.larattalabs.architect.journal.WorldJournal.kill("K5");
 					u = SiteJournal.submitUndo(r.planner.work());
 				}
@@ -743,6 +798,9 @@ public final class Groups {
 				r.txn = null;
 				end(server, r, new Removed(false, List.of(String.valueOf(e.getMessage())), Map.copyOf(r.refund)));
 			}
+			return;
+		}
+		if (r.planned != null && resumeCommitted(server, r)) {
 			return;
 		}
 		while (!r.sites.isEmpty() && Sites.get(r.sites.get(0)) == null && Infras.get(r.sites.get(0)) == null) {
@@ -901,8 +959,73 @@ public final class Groups {
 		}
 	}
 
+	/**
+	 * (fix/drain-holders) Before R2 is submitted: the undo group and its sites saved in the queue file, and that save written (over ticks;
+	 * the saver is off the server thread). Without it, a stop after the commit reached the journal and before {@link #committed}'s save
+	 * left a queue file with no undo: the load planned again, found no active entry and ended the removal false over a drained region.
+	 */
+	private static boolean preSaved(MinecraftServer server, Removal r) {
+		if (r.planned == null || !r.planned.equals(r.planGroup)) {
+			r.planned = r.planGroup;
+			r.plannedSites.clear();
+			r.plannedSites.addAll(r.planIds);
+			Placement.save(server, false);
+			r.preSave = Placement.saved();
+			return false;
+		}
+		return r.preSave == null || r.preSave.isDone();
+	}
+
+	/**
+	 * (fix/drain-holders) A load with a {@link Removal#planned} undo and no {@link Removal#undo}: the stop came between the commit's
+	 * submission and the save after it. The journal decides: entries of the planned sites UNDONE in that group mean R2 is durable, and the
+	 * removal resumes R3/R4 under it (true; its hand-down counts are not known again: the result reports none); else R2 never reached the
+	 * disk and the removal plans again (false).
+	 */
+	private static boolean resumeCommitted(MinecraftServer server, Removal r) {
+		String g = r.planned;
+		boolean durable = false;
+		List<String> ids = new ArrayList<>(r.plannedSites);
+		if (r.stage == null) {
+			ids.add(SiteGroupRec.CRATE_PREFIX + r.group);
+		}
+		for (String id : ids) {
+			for (dev.larattalabs.architect.journal.JournalStore.Meta m : SiteJournal.entries(id)) {
+				if (m.status() == Journal.Status.UNDONE && g.equals(m.undoGroup())) {
+					durable = true;
+					break;
+				}
+			}
+			if (durable) {
+				break;
+			}
+		}
+		r.planned = null;
+		if (!durable) {
+			r.plannedSites.clear();
+			Architect.LOGGER.info("Removal of group {}: its undo {} was not committed before the stop; it is planned again", r.group, g);
+			return false;
+		}
+		r.undo = g;
+		r.undoSites.clear();
+		r.undoSites.addAll(r.plannedSites);
+		r.plannedSites.clear();
+		for (String id : r.undoSites) {
+			if (!r.sites.contains(id)) {
+				r.sites.add(0, id); // (a cascaded site: taken first, as planned)
+			}
+		}
+		r.handed = new TreeMap<>();
+		r.handedAll = new TreeMap<>();
+		Placement.save(server, false);
+		Architect.LOGGER.info("Removal of group {}: its undo {} was committed before the stop; the removal resumes its writes", r.group, g);
+		return true;
+	}
+
 	/** R2 submitted: the removal waits for its commit, then marks the records pending and writes. */
 	private static void committed(MinecraftServer server, Removal r, SiteJournal.Undone u) {
+		r.planned = null;
+		r.plannedSites.clear();
 		r.undo = r.planGroup;
 		r.undoSites.clear();
 		r.undoSites.addAll(r.planIds);
@@ -911,6 +1034,17 @@ public final class Groups {
 		r.restoredCells = u.work().plan().stats().values().stream().mapToInt(Journal.Stats::restored).sum();
 		r.keptCells = u.work().plan().stats().values().stream().mapToInt(Journal.Stats::changed).sum();
 		r.commit = u.commit();
+		String k = dev.larattalabs.architect.journal.WorldJournal.armed();
+		if (k != null && k.startsWith("R2q")) {
+			// TEST (dev.journal.killAt R2q): the commit durable, the halt before the queue file below is saved (the journal's writer and
+			// the queue's saver are separate threads, so either can reach the disk first)
+			try {
+				r.commit.join();
+			} catch (RuntimeException e) {
+				// the halt below either way
+			}
+			dev.larattalabs.architect.journal.WorldJournal.kill("R2q");
+		}
 		Placement.save(server, false);
 	}
 
@@ -1040,10 +1174,45 @@ public final class Groups {
 		for (JsonElement e : a) {
 			try {
 				Removal rm = Removal.fromJson(e.getAsJsonObject());
+				writeAgainIn(rm);
 				(e.getAsJsonObject().has("stalled") ? STALLED : REMOVALS).add(rm);
 			} catch (RuntimeException ex) {
 				Architect.LOGGER.warn("Could not read a group removal {}", e, ex);
 			}
+		}
+		writeAgainDone();
+	}
+
+	/** The queue loaded: the members to write again are taken (UMT calls it after its own load). */
+	static void writeAgainDone() {
+		WRITE_AGAIN.clear();
+	}
+
+	/**
+	 * (F6, undo hardening A) Members whose restore a removal in the queue had written, but whose writes the stop lost (the world-start
+	 * settle found them standing: {@link Sites#reconcile}, which runs before the queue loads). Their removal writes them again (roll
+	 * forward) instead of the settle taking them back while the removal still writes the others.
+	 */
+	private static final java.util.Set<String> WRITE_AGAIN = new java.util.HashSet<>();
+
+	static void writeAgain(String siteId) {
+		WRITE_AGAIN.add(siteId);
+	}
+
+	/** A loaded removal takes its members in {@link #WRITE_AGAIN} back into its sites, first (they were written first). */
+	static void writeAgainIn(Removal r) {
+		if (r.undo == null) {
+			return; // planned: resumeCommitted takes back every planned site it lacks
+		}
+		List<String> again = new ArrayList<>();
+		for (String id : r.undoSites) {
+			if (WRITE_AGAIN.contains(id) && !r.sites.contains(id)) {
+				again.add(id);
+			}
+		}
+		if (!again.isEmpty()) {
+			r.sites.addAll(0, again);
+			Architect.LOGGER.info("Removal of group {}: {} written again (their restore's writes were lost at the stop)", r.group, again);
 		}
 	}
 

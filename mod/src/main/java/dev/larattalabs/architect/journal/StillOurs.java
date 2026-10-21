@@ -116,6 +116,18 @@ public final class StillOurs {
 	}
 
 	/**
+	 * (fix/lamp-path) A cell an entry wrote as a dirt path that vanilla has since turned to dirt (a solid block over it: our own lamp
+	 * post, a lot's composter, a player's block; the shape update that converts it is no write of ours, so the journal never sees it),
+	 * or that grass, mycelium or podzol has since spread onto: still the entry's. One way only (a path is never made from dirt but by a
+	 * shovel, which a player's record (PT) answers), and only for the journal's ownership ({@code WorldJournal.holds} and
+	 * {@code same}), not {@link #holds}: a builder asking whether a path is built must still see dirt as not built.
+	 */
+	public static boolean pathTurned(BlockState now, BlockState after) {
+		return after.getBlock() == net.minecraft.world.level.block.Blocks.DIRT_PATH && spread(now)
+			&& now.getBlock() != net.minecraft.world.level.block.Blocks.FARMLAND;
+	}
+
+	/**
 	 * Dirt and the blocks random ticks turn it into and back. (6c CU, S-CU-3) Farmland too: it dries or is trampled to dirt, so a cell we
 	 * wrote as farmland or as dirt is ours as either.
 	 */
