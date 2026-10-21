@@ -80,7 +80,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   }
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(DIR, '.gradle-home') };
   for (const k of Object.keys(env)) if (/^(ANTHROPIC|CLAUDE)/.test(k)) delete env[k];
-  const run = (tests) => spawnSync('./gradlew', ['--offline', '-q', 'test', ...tests.flatMap((t) => ['--tests', t])], { cwd: path.join(DIR, 'mod'), env, encoding: 'utf8', timeout: 1_200_000 });
+  const run = (tests) => spawnSync('./gradlew', ['--offline', '--no-daemon', '-q', 'test', ...tests.flatMap((t) => ['--tests', t])], { cwd: path.join(DIR, 'mod'), env, encoding: 'utf8', timeout: 1_200_000 });
   const rows = [];
   // the baseline: the tests pass unmutated
   const all = [...new Set(MUTANTS.flatMap((m) => m.tests))];
