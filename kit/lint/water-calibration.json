@@ -1,0 +1,4 @@
+{
+ "about": "The water lint's calibration (kit/lint/water.mjs W2): in-game settle ticks per probed body, keyed '<corpus name>#<body id>', written by the release-tier probe (tools/p3-probe.mjs water --record) after a passing probe; the lint fails a body whose bound is below its measured settle. Empty: no probe recorded yet on this branch.",
+ "settles": {}
+}
