@@ -350,6 +350,32 @@ class UmtPropertiesTest {
 	}
 
 	/**
+	 * (F6) A stacked pair removed as one group; the upper's writes are lost (it stands again), the lower's landed (restored). The lower
+	 * settles RELEASE, the upper RECOVER alone (Sites.recoverScope). Its before at the shared cells was the lower's block: Journal.reactivate
+	 * gives it what the group's undo wrote there, so removing the upper again puts back the ground, not the lower's bricks.
+	 */
+	@Test
+	void f6_anUpperTakenBackAloneGetsTheUndosValuesUnderIt() throws Exception {
+		try (UmtCase c = UmtCase.of(w -> {
+		})) {
+			UmtSim.Rec lower = c.site(0, G, 0, 5, G + 2, 5, Blocks.STONE_BRICKS.defaultBlockState(), Map.of(), 1);
+			UmtSim.Rec upper = c.site(5, G, 5, 7, G + 3, 7, Blocks.OAK_PLANKS.defaultBlockState(), Map.of(), 1);
+			c.sim.removeGroup(List.of(lower, upper), null);
+			for (int y = G; y <= G + 3; y++) {
+				for (int z = 5; z <= 7; z++) {
+					for (int x = 5; x <= 7; x++) {
+						c.sim.world.put0(p(x, y, z), Blocks.OAK_PLANKS.defaultBlockState(), null, null); // the upper's restore lost
+					}
+				}
+			}
+			c.sim.restart(false);
+			assertTrue(!c.sim.recs.get(upper.id).pending && !c.sim.recs.containsKey(lower.id), "the upper stands again, the lower is settled:\n" + c.sim
+				.report());
+			exact(c.sim.end());
+		}
+	}
+
+	/**
 	 * (F6, fixed; was UmtFindingsTest's repro) Sites.reconcile settles each pending site on its own evidence; a RECOVER takes back
 	 * only the members whose own evidence stands (Sites.recoverScope), so a member whose cells show it removed is not brought back.
 	 */
@@ -360,6 +386,27 @@ class UmtPropertiesTest {
 			new UmtOps.Place(UmtOps.Kind.LOT, 23, 28, 9, 5, 6, 3259127719780762313L, 0, null), new UmtOps.Place(UmtOps.Kind.LOT, 26, 16, 2, 4, 6,
 				-2838765659432227269L, 2, new UmtOps.Crash("P3", "index", 20, false))), UmtOps.Gen.ALL));
 		assertTrue(r.violations().stream().noneMatch(v -> v.startsWith("[F6]")), r.report());
+	}
+
+	/**
+	 * (F4) Groups.Removal.toJson, production: while the R2 commit is not durable (Groups.committed has submitted it), the removal's undo
+	 * group is saved as planned, so a stop inside the commit loads as planned and the journal decides; once durable, as its undo.
+	 */
+	@Test
+	void f4_aPendingCommitIsSavedAsPlanned() {
+		Groups.Removal r = new Groups.Removal("g", null, null, false);
+		r.sites.add("s1");
+		r.undo = "u:group-g:1";
+		r.undoSites.add("s1");
+		r.commit = new java.util.concurrent.CompletableFuture<>();
+		com.google.gson.JsonObject pending = r.toJson();
+		assertFalse(pending.has("undo"), "no undo while its commit is not durable: " + pending);
+		assertEquals("u:group-g:1", pending.get("planned").getAsString());
+		assertEquals("s1", pending.getAsJsonArray("plannedSites").get(0).getAsString());
+		r.commit = null; // Groups.tick: the commit completed
+		com.google.gson.JsonObject durable = r.toJson();
+		assertEquals("u:group-g:1", durable.get("undo").getAsString());
+		assertFalse(durable.has("planned"), durable.toString());
 	}
 
 	/** (F4) Groups.Removal.fromJson, production: a saved undo group the journal has is kept; one it never got is dropped (planned again). */
@@ -381,7 +428,8 @@ class UmtPropertiesTest {
 					assertEquals(List.of(s.id), r.undoSites);
 					assertEquals(7, r.restoredCells);
 				} else {
-					assertEquals(null, r.undo, "an undo group the journal never got is planned again");
+					assertEquals(null, r.undo, "an undo group the journal never got is not resumed as committed");
+					assertEquals(undo, r.planned, "it is kept as planned: the load asks the journal (resumeCommitted: planned again)");
 					assertTrue(r.undoSites.isEmpty() && r.handed.isEmpty() && r.restoredCells == 0);
 					assertEquals(List.of(s.id), r.sites, "its sites stay to be removed");
 				}

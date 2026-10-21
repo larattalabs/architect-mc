@@ -1353,7 +1353,7 @@ final class UmtSim {
 				for (long q : reverted) {
 					lost |= x.box.contains(BlockPos.getX(q), BlockPos.getY(q), BlockPos.getZ(q));
 				}
-				if ((g.startsWith("u:rollback-") || lost && !stacked.contains(x.id)) && Boolean.FALSE.equals(ev.stands()) && f5.add(x.id)) {
+				if ((g.startsWith("u:rollback-") || lost) && Boolean.FALSE.equals(ev.stands()) && f5.add(x.id)) {
 					violations.add("[F5] " + (g.startsWith("u:rollback-") ? "a rolled-back placement " : "a removed site ") + x.id + " is kept unsettled on " + ev
 						+ ": the writes of its restore were lost to a crash before the world saved (its job had ended), so it is neither restored nor "
 						+ "standing, and the settle keeps it so at every start");

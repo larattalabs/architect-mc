@@ -2599,72 +2599,29 @@ public final class Sites {
 	}
 
 	/**
-	 * (F6) What a RECOVER of {@code siteId} takes back of its undo group {@code group}: the site and the other members whose own
-	 * evidence stands, each with every member that shares a cell with it (transitively: stacked members come back together, as a whole
-	 * group's reactivation keeps their befores and hand-downs consistent; taking back one of a stacked pair alone would leave its
-	 * before naming the other's blocks), and the group's crate. A member that shares no cell with them and whose cells show it removed
-	 * stays undone and settles on its own evidence. Null while the group's removal is still in the queue (a member in
-	 * {@code jobSites} has entries in the group): the resumed removal writes those members' restores, so none of the group is taken
-	 * back until it ends.
+	 * (F6) What a RECOVER of {@code siteId} takes back of its undo group {@code group}: the site, the other members whose own evidence
+	 * stands, and the group's crate. A member whose cells show it removed stays undone and settles on its own evidence (a member taken
+	 * back over one that stays undone gets the undo's written values as its befores there: {@link Journal#reactivate}). Null while the
+	 * group's removal is still in the queue (a member in {@code jobSites} has entries in the group): the resumed removal writes those
+	 * members' restores, so none of the group is taken back until it ends.
 	 */
 	static @Nullable Set<String> recoverScope(net.minecraft.world.level.@Nullable BlockGetter level, String siteId, String group, Set<String> jobSites) {
 		JournalStore js = WorldJournal.storeOrNull();
 		if (js == null) {
 			return null;
 		}
-		List<JournalStore.Meta> members = js.find(m -> m.status() == Journal.Status.UNDONE && group.equals(m.undoGroup()));
-		Map<String, Map<Long, long[]>> masks = new java.util.LinkedHashMap<>(); // site -> section -> 4096-bit mask of its cells
-		for (JournalStore.Meta m : members) {
+		Set<String> others = new java.util.LinkedHashSet<>();
+		for (JournalStore.Meta m : js.find(m -> m.status() == Journal.Status.UNDONE && group.equals(m.undoGroup()))) {
 			if (jobSites.contains(m.site())) {
 				return null;
 			}
-			Map<Long, long[]> ms = masks.computeIfAbsent(m.site(), k -> new java.util.HashMap<>());
-			for (long k : m.sections()) {
-				try {
-					SectionCells sc = js.section(m.id(), k);
-					if (sc != null) {
-						long[] add = sc.mask();
-						long[] cur = ms.get(k);
-						if (cur != null) {
-							for (int w = 0; w < 64; w++) {
-								add[w] |= cur[w];
-							}
-						}
-						ms.put(k, add);
-					}
-				} catch (IOException e) {
-					return Set.copyOf(masks.keySet()); // unreadable: the whole group, as before
-				}
-			}
+			others.add(m.site());
 		}
-		java.util.ArrayDeque<String> todo = new java.util.ArrayDeque<>();
 		Set<String> scope = new java.util.LinkedHashSet<>();
 		scope.add(siteId);
-		todo.add(siteId);
-		for (String o : masks.keySet()) {
-			if (o.startsWith(SiteGroupRec.CRATE_PREFIX) || !o.equals(siteId) && Boolean.TRUE.equals(evidence(level, o, group).stands())) {
-				if (scope.add(o)) {
-					todo.add(o);
-				}
-			}
-		}
-		while (!todo.isEmpty()) {
-			Map<Long, long[]> a = masks.getOrDefault(todo.poll(), Map.of());
-			for (var e : masks.entrySet()) {
-				if (scope.contains(e.getKey())) {
-					continue;
-				}
-				boolean shares = false;
-				for (var sec : a.entrySet()) {
-					long[] b = e.getValue().get(sec.getKey());
-					for (int w = 0; b != null && w < 64 && !shares; w++) {
-						shares = (sec.getValue()[w] & b[w]) != 0;
-					}
-				}
-				if (shares) {
-					scope.add(e.getKey());
-					todo.add(e.getKey());
-				}
+		for (String o : others) {
+			if (!o.equals(siteId) && (o.startsWith(SiteGroupRec.CRATE_PREFIX) || Boolean.TRUE.equals(evidence(level, o, group).stands()))) {
+				scope.add(o);
 			}
 		}
 		return scope;

@@ -1124,14 +1124,19 @@ public final class SiteJournal {
 		Map<String, Map<Long, List<Cell>>> back = Sections.reactivate(sections, slices::get, group, ids::contains);
 		JournalStore.Txn t = s.begin().label("settle:reactivate:" + group);
 		for (var e : back.entrySet()) {
+			if (ids.contains(e.getKey())) {
+				continue; // a member: below, with its undo record dropped
+			}
 			List<SectionCells> secs = new ArrayList<>();
 			e.getValue().forEach((k, cells) -> secs.add(SectionCells.of(k, cells, null)));
 			t.sections(e.getKey(), secs);
 		}
 		for (JournalStore.Meta m : members) {
 			List<SectionCells> secs = new ArrayList<>();
+			Map<Long, List<Cell>> changed = back.getOrDefault(m.id(), Map.of());
 			for (long k : m.sections()) {
-				SectionCells sc = s.section(m.id(), k);
+				List<Cell> cs = changed.get(k);
+				SectionCells sc = cs != null ? SectionCells.of(k, cs, null) : s.section(m.id(), k);
 				if (sc != null) {
 					secs.add(sc.withWritten(null));
 				}

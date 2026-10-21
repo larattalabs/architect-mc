@@ -1861,7 +1861,7 @@ steps.crash = async () => {
   }
   // (undo hardening A, F6 hazard) GW: a group removal wrote its first member, saved the next one's job, then the JVM halted with no
   // save since the removal began: the written member's blocks are back. The start must not take back the members the resumed removal
-  // is still writing (it keeps the written one pending until the removal ends); the start after that settles the group (a final removal is exact)
+  // is still writing (it keeps the written one pending until the removal ends); the start after that brings back only that member (a final removal is exact)
   r = await killRun('GW', 'G4E OrdBase', async () => {
     await cmd('/architect budget 1');
     return api(`sgremove ${ctx.orders.group}`);
@@ -1885,12 +1885,27 @@ steps.crash = async () => {
     const st2 = await call('dev.sites.state');
     const pend2 = (st2.pending ?? []).map((p) => p.site?.id);
     const stray = (j2.entries ?? []).filter((e) => !back.includes(e.site));
-    // the written member stands (its writes were lost); members stacked with it come back with it (Sites.recoverScope: the pad under
-    // all four ties them), so this checks the settle is consistent, not which came back
-    check(back.length >= 1 && pend2.length === 0 && stray.length === 0, `crash GW: the next start settles the group: ${JSON.stringify(back)} stand again, nothing `
-      + `pending, no entry without a record (${stray.length})`, { back, pend2, stray, reports: st2.reports });
+    // the written member stands again alone (its writes were lost; Sites.recoverScope), its befores over the removed members the
+    // group undo's written values (Journal.reactivate), so the final removal below is exact
+    check(back.length === 1 && pend2.length === 0 && stray.length === 0, `crash GW: the next start brings back only the written member `
+      + `(${JSON.stringify(back)}), nothing pending, no entry without a record (${stray.length})`, { back, pend2, stray, reports: st2.reports });
     await finalExact('GW', pre);
     out.GW = r;
+  }
+  // (undo hardening A) R1q: a single removal job (the road R: RestoreJob) halted with its R2 commit durable and no queue save after it.
+  // RestoreJob saves its undo group before submitting R2, so the load asks the journal and writes the restore (else it planned again,
+  // found no active entry and ended, R standing until the next start's settle)
+  r = await killRun('R1q', 'G4E OrdBase', () => api(`remove ${ids.R} - noforce keep`), pre);
+  if (r) {
+    for (let i = 0; i < 120 && (await sites()).some((x) => x.id === ids.R); i++) await sleep(1000);
+    const all = (await sites()).map((x) => x.id);
+    const j = await journal();
+    const rEntries = (j.entries ?? []).filter((e) => e.site === ids.R);
+    check(!all.includes(ids.R) && rEntries.length > 0 && rEntries.every((e) => e.status === 'UNDONE'),
+      `crash R1q: the resumed removal of R wrote its restore under the committed undo (R ${all.includes(ids.R) ? 'stands' : 'gone'}, its entries `
+      + `${JSON.stringify(rEntries.map((e) => e.status))})`, { all, rEntries });
+    await finalExact('R1q', pre);
+    out.R1q = r;
   }
   // K3, clean: a clean stop mid-placement resumes from the cursor
   await leaveWorld();

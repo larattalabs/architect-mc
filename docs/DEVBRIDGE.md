@@ -314,8 +314,9 @@ there is no DevBridge hook to make layers, so tests go through the API as anothe
 
 `dev.journal.killAt` takes RG1-RG6; `dev.journal.state` adds `indexBytes` and the index commit times (p50, p99, max).
 
-`dev.journal.killAt` also takes GW (undo hardening A): a group removal has written a member and saved the next member's job,
-nothing of it written yet (4e-crash's F6 kill test).
+`dev.journal.killAt` also takes GW and R1q (undo hardening A). GW: a group removal has written a member and saved the next
+member's job, nothing of it written yet (4e-crash's F6 kill test). R1q (`+save` too): a single removal job's (RestoreJob) R2 commit
+is durable, the halt comes before any later queue save (4e-crash).
 
 ### Regions (phase 6b)
 
@@ -360,6 +361,11 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `applyDelta` with `apply`, through the public API, so a region lot's delta is judged against its palette rules -> `{verdictOk, refusals:
   [{reason, message}], notes}` or `{applied, written, refusals, notes}`; `dev.site.delta.check` and `.apply` call SiteDeltas directly and
   skip that judgement).
+
+- **2026-10-20 (fix/drain-holders, 0.40.1):** no new hook. `dev.journal.killAt` takes `+save` on K1-K8 and RG1-RG6, and `R2q`
+  (`R2q+save`): a group removal's R2 commit is durable and the queue file has not been saved after it (`Groups.committed`; the journal's
+  writer and the queue's saver are separate threads). `dev.journal.at` names each entry's `group`. apitest's `cells` step takes a full
+  block state (`minecraft:oak_stairs[waterlogged=true]`).
 
 - **2026-10-20 (6c slice IRR):** no new hook. `dev.journal.killAt` gains `FL6` (and `FL6+save`): a farm lot's site removal has
   drained its irrigation sources (`RegionFluids.drainLot`, saved) and not restored the site yet. A lot site's `ext` carries

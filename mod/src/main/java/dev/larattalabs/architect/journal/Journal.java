@@ -444,10 +444,68 @@ public final class Journal {
 			}
 			out.put(e.id(), e.withCells(cs));
 		}
+		// (F6, undo hardening A) a member taken back while a group member under it at a cell stays undone (or was released already): the
+		// world there holds what the group's undo wrote, not that member's after, so the member's before becomes the after of the highest
+		// member under it that comes back too, else what the undo wrote. A whole group taken back changes nothing here.
+		Map<Long, List<Object[]>> groupCells = new HashMap<>(); // pos -> [entry id, cell] of every group member (taken back or not)
+		for (Entry e : loaded) {
+			if (e.status() == Status.UNDONE && e.undo() != null && e.undo().group().equals(group)) {
+				for (Cell c : e.cells()) {
+					groupCells.computeIfAbsent(c.pos(), k -> new ArrayList<>()).add(new Object[] {e.id(), c});
+				}
+			}
+		}
+		Set<String> back = new HashSet<>(members);
 		for (String id : members) {
-			out.put(id, byId.get(id).reactivated());
+			Entry e = byId.get(id);
+			Map<Long, Value> w = e.undo().written();
+			List<Cell> cs = new ArrayList<>(e.cells().size());
+			boolean changed = false;
+			for (Cell c : e.cells()) {
+				Value wv = w.get(c.pos());
+				Cell nc = c;
+				if (wv != null) {
+					Cell below = null; // the highest group cell under c
+					boolean belowBack = false;
+					Cell backBelow = null; // the highest group cell under c that comes back
+					for (Object[] x : groupCells.getOrDefault(c.pos(), List.of())) {
+						Cell o = (Cell) x[1];
+						if (o.layer() >= c.layer()) {
+							continue;
+						}
+						boolean ob = back.contains((String) x[0]);
+						if (below == null || o.layer() > below.layer()) {
+							below = o;
+							belowBack = ob;
+						}
+						if (ob && (backBelow == null || o.layer() > backBelow.layer())) {
+							backBelow = o;
+						}
+					}
+					if (!(below != null && belowBack)) {
+						Value nb = backBelow != null && backBelow.after() != null ? backBelow.after() : wv;
+						if (!nb.equals(c.before())) {
+							nc = c.withBefore(nb, nb.equals(wv) && below != null ? lowest(groupCells.get(c.pos())).pt() : null);
+						}
+					}
+				}
+				changed |= nc != c;
+				cs.add(nc);
+			}
+			out.put(id, (changed ? e.withCells(cs) : e).reactivated());
 		}
 		return out;
+	}
+
+	private static Cell lowest(List<Object[]> cells) {
+		Cell low = null;
+		for (Object[] x : cells) {
+			Cell o = (Cell) x[1];
+			if (low == null || o.layer() < low.layer()) {
+				low = o;
+			}
+		}
+		return low;
 	}
 
 	/**

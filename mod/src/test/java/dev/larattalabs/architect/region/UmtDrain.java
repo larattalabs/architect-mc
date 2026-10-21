@@ -59,6 +59,6 @@ public final class UmtDrain {
 			public void set(BlockPos p, BlockState s, int flags) {
 				w.set(p, s, flags);
 			}
-		}, null, st, b, bs, true, new LongOpenHashSet());
+		}, null, st, b, bs, true, new LongOpenHashSet(), RegionFluids.NOT_HELD);
 	}
 }
