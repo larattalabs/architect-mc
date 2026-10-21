@@ -885,5 +885,7 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
   - **Repair:** re-apply the journal's committed state to cells that still hold the operation's exact before-value (never
     player-changed cells). Report the rest.
   - Plus a DevBridge hook, gated by UMT properties and one in-game kill test without `+save`.
+  - Steward ask: an API (not only a command), so its steward can say "this build came back half done; repair it?". The report is
+    readable per site or region by API (it names the cells, expected vs found), and the repair can be invoked by API.
   - Small contract first. Steward should know about it (a repair changes the world).
 - Full crash safety (Undo hardening C) is parked; see CONTRACT. No fsync for now.
