@@ -21290,11 +21290,13 @@ in `Realised` and `RealisedRecords`.
   NOOP. The second record keeps the first when its entry is ACTIVE: `Realised.mergePrior` lists that entry's site after the new one in `site`
   (comma-separated, newest first; `Tile.sites()`), keeps every cell the first attempt WROTE as WRITTEN, and keeps its extras; a
   second attempt with nothing to write then has no NO_ENTRY flag (the first attempt's entry is the tile's). Status and verify run
-  over every listed entry. This deviates from §3.1's single entry per tile; RV reads `sites()`. A first attempt still **PLACING**
-  (RG4+save: its job resumed from the start while the queue also ran the item again) is merged too: its job commits it later, and
-  the record reads `placing` until then. **Finding for the coordinator (main's behaviour, not RP's):** after RG4+save (and at times
-  K4+save) the region's tile is written twice, by the resumed job and by the re-run item, two entries layered; the region can report
-  PLACED while the first is still PLACING. `verify` counts PLACING tile entries no record names as `placingLeftover`.
+  over every listed entry. This deviates from §3.1's single entry per tile; RV reads `sites()`. A first attempt left **PLACING** is
+  not merged: nothing resumes it, so it is no write of the tile. **Finding for the coordinator (main's behaviour, not RP's):** after
+  RG4+save the restart logs "0 job(s) to resume" (the tile's job was never saved, but its Infra record was, so the Sites check does
+  not release it either); the item runs again and writes a second entry, and the first stays PLACING beside it while the region
+  reports PLACED (rp-crash, `20261021-035819-change`, region rg4: c1 PLACING, c2 ACTIVE). Its cells hold its planned `after` where
+  the halt wrote them; a later rollback would write its `before` there under the re-run's entry. `verify` counts such entries as
+  `placingLeftover` (recorded, not judged).
 - **A reused site id.** A record written at RP1 names a cell site whose commit never happened; after the restart the counter can give
   that id to another tile. A site counts for a record only while its Infra's spec `tile` is the record's tile (`ownedBy`).
 - Kill points: `RP1` (the record written, the PLACING commit not submitted) and `RP2` (a tile with nothing to write: the record

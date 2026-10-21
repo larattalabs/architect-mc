@@ -91,10 +91,9 @@ public final class RealisedRecords {
 			List<String> standing = new ArrayList<>();
 			for (String s : was.sites()) {
 				JournalStore.Meta m = mainEntry(s);
-				// an earlier attempt of THIS tile (a cell site id can be reused after a crash) that committed, or is still being written
-				// by its resumed job (it commits later; the record reads placing until then)
-				if (!s.equals(site) && m != null && ownedBy(s, String.join("|", t)) && (m.status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE
-					|| m.status() == dev.larattalabs.architect.journal.Journal.Status.PLACING)) {
+				// an earlier attempt of THIS tile (a cell site id can be reused after a crash) that committed. One left PLACING is not:
+				// nothing resumes it (main's behaviour after RG4+save: its job was never saved), so it is no write of the tile
+				if (!s.equals(site) && m != null && ownedBy(s, String.join("|", t)) && m.status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE) {
 					standing.add(s);
 				}
 			}

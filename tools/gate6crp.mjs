@@ -412,9 +412,9 @@ steps.crash = async () => {
     await L.openWorld(world);
     await L.tp(CX, 40, CZ - 10);
     const st = await L.waitRegion(rid, 3_600_000);
-    // a tile written twice after the halt (the resumed job and the re-run item) reads placing until the resumed job commits
+    // (settle: a record reads pending until its item is marked placed)
     let rv = await realised(rid, { verify: true });
-    for (let k = 0; k < 24 && Object.keys(rv.verify.status).some((x) => x !== 'committed'); k++) { await sleep(5000); rv = await realised(rid, { verify: true }); }
+    for (let k = 0; k < 6 && Object.keys(rv.verify.status).some((x) => x !== 'committed'); k++) { await sleep(5000); rv = await realised(rid, { verify: true }); }
     const v = rv.verify;
     out[tag] = { region: rid, atHalt, state: st.view.state, status: v.status, unrecorded: v.unrecorded, placingLeftover: v.placingLeftover, notHeld: v.notHeld, cellsChecked: v.cellsChecked, problems: v.problems.slice(0, 8), tiles: rv.tiles.map((t) => [t.stage, t.set, t.key, t.site, t.status]) };
     const allCommitted = Object.keys(v.status).every((s) => s === 'committed');
