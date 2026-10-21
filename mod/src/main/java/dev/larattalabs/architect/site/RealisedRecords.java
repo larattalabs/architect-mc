@@ -440,7 +440,8 @@ public final class RealisedRecords {
 	}
 
 	private static List<JournalStore.Meta> activeTileEntries(JournalStore js, String group) {
-		return js.find(m -> m.active() && group.equals(m.group()) && (m.kind().equals(RegionKinds.TERRAIN) || m.kind().equals(RegionKinds.PATH)));
+		// status ACTIVE only (Meta.active() also counts PLACING, which is on top for ownership; a leftover is counted apart)
+		return js.find(m -> m.status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE && group.equals(m.group()) && (m.kind().equals(RegionKinds.TERRAIN) || m.kind().equals(RegionKinds.PATH)));
 	}
 
 	// ------------------------------------------------------------------ the audit: each tile against its intent, right after its commit
