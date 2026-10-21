@@ -95,15 +95,26 @@ export async function planTwin(ctx, variant) {
   }
   out.protected = prot;
   // ---- Regions.checkPlan (the two-plan flow)
-  const ck = await L.call('dev.region.checkPlan', { plan, claim: c, owner: OWNER, anchors, load: 'generate', bible: BIBLE }, 1_800_000);
+  let ck = await L.call('dev.region.checkPlan', { plan, claim: c, owner: OWNER, anchors, load: 'generate', bible: BIBLE }, 1_800_000);
+  // (the spires are required: false; one with no dry, level site answers refused NO_ROOM and the plan NEEDS_REPAIR: Steward's repair
+  // drops a refused optional part and checks again. Only spires are dropped; any other refusal stays a failure)
+  const refusedOf = (k) => (k.check?.parts ?? []).filter((a) => !['fits', 'adjusted'].includes(a.class));
+  if (ck.check?.overall === 'NEEDS_REPAIR' && refusedOf(ck).length && refusedOf(ck).every((a) => /^spire_/.test(a.part) && a.class === 'refused')) {
+    const drop = refusedOf(ck).map((a) => a.part);
+    out.repaired = { dropped: drop, reasons: refusedOf(ck).map((a) => a.reasons?.[0]?.code ?? null), first: ck.check.overall };
+    fs.writeFileSync(path.join(OUT, `${tag}-check-first.json`), `${JSON.stringify(ck, null, 1)}\n`);
+    plan.forms = plan.forms.filter((f) => !drop.includes(f.id));
+    fs.writeFileSync(path.join(OUT, `${tag}-plan.json`), `${JSON.stringify({ plan, anchors, protected: prot, repaired: out.repaired }, null, 1)}\n`);
+    L.log(`  item 4 (${variant}): NEEDS_REPAIR with ${drop.join(', ')} refused; Steward's repair drops them and checks again`);
+    ck = await L.call('dev.region.checkPlan', { plan, claim: c, owner: OWNER, anchors, load: 'generate', bible: BIBLE }, 1_800_000);
+  }
   fs.writeFileSync(path.join(OUT, `${tag}-check.json`), `${JSON.stringify(ck, null, 1)}\n`);
   const parts = (ck.check?.parts ?? []).map((a) => [a.part, a.class, a.reasons?.[0]?.code ?? null]);
   out.check = { overall: ck.check?.overall ?? null, parts, refused: ck.refused ?? null, volumePass: ck.volumePass ?? null };
   const zone = (ck.check?.parts ?? []).find((a) => a.part === 'monastery');
   const lotsPlaced = zone?.geometry?.lots?.length ?? 0;
-  // (the spires are required: false; a spire with no level site answers refused NO_ROOM and the plan stays READY)
   check(ck.check?.overall === 'READY' && ['fits', 'adjusted'].includes(zone?.class) && parts.filter(([p]) => p !== 'monastery' && !/^spire_/.test(p)).every(([, k]) => k === 'fits' || k === 'adjusted'),
-    `item 4 (${variant}): Regions.checkPlan's two-plan flow on the ${variant === 'natural' ? 'settled copy of S3' : 'flat hill'}: ${ck.check?.overall}; ${json(parts)}; ${lotsPlaced} lots on terraces`);
+    `item 4 (${variant}): Regions.checkPlan's two-plan flow on the ${variant === 'natural' ? 'settled copy of S3' : 'flat hill'}: ${ck.check?.overall}${out.repaired ? ` (after Steward's repair: ${out.repaired.dropped.join(', ')} dropped, ${out.repaired.reasons.join(', ')})` : ''}; ${json(parts)}; ${lotsPlaced} lots on terraces`);
   if (ck.check?.overall !== 'READY') { await L.leaveWorld(); return out; }
   // ---- the box: the claim + 8, the survey's floor - 8 to its top + 24
   let y0 = 320, y1 = -64;
