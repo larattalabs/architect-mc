@@ -24,7 +24,7 @@ export const AUTO_DEFAULTS = {
   memPerShardGB: 5, // a headless server or client (3-4.7 GB peak) + its sidecar + gradle
   reserveGB: 8,
   planSlack: 0.05, // a shard more must save more than 5% of the wall
-  floor: 2, // when every other cap allows it, never fewer than this for a plan that wants more
+  floor: 3, // when plan, memory and ports allow it, never fewer than this: the old fixed --shards 3 (docs/GATES.md "Adaptive shards")
   portRange: [8980, 8999],
 };
 

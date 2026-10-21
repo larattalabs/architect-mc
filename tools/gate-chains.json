@@ -209,7 +209,7 @@
   "shards": {
     "$comment": "--shards N (at most max). Each shard has its own run worktree (shard 1: --run-dir/GATE_RUN_DIR; shard k: <run dir>-s<k>, or --run-dirs) and port pair (--ports S:D,S:D,... / GATE_PORTS; no default for shards 2..: name them, several agents share the machine). 8892-8895 are never a shard's: the gates' old-version clients and eval sidecars use them.",
     "max": 6,
-    "auto": { "$comment": "--shards auto (the default for slice/release with more than minSteps steps): tools/lib/shard-auto.mjs, docs/GATES.md \"Adaptive shards\".", "minSteps": 20, "machineShards": 12, "legacyShards": 3, "reserveShards": 2, "overcommit": 1.5, "cpuPerShard": 3, "memPerShardGB": 5, "reserveGB": 8, "planSlack": 0.05, "floor": 2, "portRange": [8980, 8999] }
+    "auto": { "$comment": "--shards auto (the default for slice/release with more than minSteps steps): tools/lib/shard-auto.mjs, docs/GATES.md \"Adaptive shards\".", "minSteps": 20, "machineShards": 12, "legacyShards": 3, "reserveShards": 2, "overcommit": 1.5, "cpuPerShard": 3, "memPerShardGB": 5, "reserveGB": 8, "planSlack": 0.05, "floor": 3, "portRange": [8980, 8999] }
   },
   "snapshots": {
     "$comment": "Prepared worlds a step restores (APFS clone, cp -c -R) from the snapshot store instead of regenerating; the store is the seed's saves (GATE_SNAPSHOT_DIR overrides). Restoring also undoes whatever an earlier step or run left in that world.",

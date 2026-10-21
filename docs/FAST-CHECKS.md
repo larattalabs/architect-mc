@@ -3,7 +3,7 @@
 Status: analysis for a decision (2026-10-20, main at b4ff2bd4). **Update (chore/gate-waits):** the fixed waits, P0's three pure
 duplicates and the h-unit floor are done; see docs/GATES.md "Gate waits". **Update (chore/gate-fast-p1, 2026-10-21):** P1's moves
 for the undo steps (4e-orders, 4e-crash, 4d-all, c30, 5b-chains, 6a-eflat, 6a-staged, x-resume) are done; see docs/GATES.md "Fast
-checks P1". Each row the undo model touches says its P1 status in its disposition (**P1 done**, kept in slice, covered, deferred). The look steps stay at the slice tier (Noah judges
+checks P1". Each row the undo model touches says its P1 status in its disposition (**P1 done**, kept in slice, not moved, deferred). The look steps stay at the slice tier (Noah judges
 looks per slice), so P0's "look steps -> release" rows have not moved; only their idle time went. This doc maps every in-game assertion in `tools/gate-chains.json` to its fastest trustworthy home. Those homes are the six
 fast checkers Noah approved, a smoke instance kept in game, or "stays in game". The doc then projects what each checker saves at the
 slice tier.
@@ -768,9 +768,9 @@ p50 15.7 min · in 0/12 recent full slices · 0.0 step-min per slice · after al
 |---|---|---|---|---|---|---|---|
 | 1 | uninterrupted reference realises and undoes exactly | PLACED and undoHash == h0; gives `refEnd.hash` for later compares | 9% (85 s) | 84 | SMOKE | 0.00 | needed as the golden for rows 3-4; realise+undo exactness already ALREADY-OFFLINE (OFFLINE-J `groupUndoEqualsTileByTile`). |
 | 2 | RG1: kill during prepare, resume | JVM halts during chunk generation; after restart prepare reaches DONE (256/256), no journal entry | 5% (48 s) | 46 | KEEP-INGAME | 0.00 | chunk generation + process death. |
-| 3 | RG2, RG3, RG4, K3: kill during realise, restart, resume | region resumes to PLACED, same region hash as uninterrupted, undo exact | 47% (449 s, ~112 s eac… | 437 | SMOKE · undo-model · **P1: covered** (UMT P2; the step is release-only already) | 0.00 | The journal/index state machine at each kill point is the undo-model's crash harness: fault injection at every journal and region-record I/O step (JournalStoreTest does this for the store only), reload from disk bytes, resume, com… |
+| 3 | RG2, RG3, RG4, K3: kill during realise, restart, resume | region resumes to PLACED, same region hash as uninterrupted, undo exact | 47% (449 s, ~112 s eac… | 437 | SMOKE · undo-model · **P1: not moved** (release-only step; RG points not mapped to UMT) | 0.00 | The journal/index state machine at each kill point is the undo-model's crash harness: fault injection at every journal and region-record I/O step (JournalStoreTest does this for the store only), reload from disk bytes, resume, com… |
 | 4 | RG5: sidecar killed mid-stream | waiting SIDECAR_UNAVAILABLE while gone; resumes <= 30 s after restart; same hash, undo exact | 11% (110 s) | 102 | KEEP-INGAME | 0.00 | sidecar process kill + reconnect; repeated in megaB. |
-| 5 | RG6, K7: kill during the region group undo | restart settles, region gone, world hash == h0, 0 regions left | 29% (272 s: RG6 111 +… | 270 | SMOKE · undo-model · **P1: covered** (UMT P2, r2r4; the step is release-only already) | 0.00 | undo interrupted at journal write points then settled on evidence: same fault-injection harness; must model undo commit order and "restore may be lost by halt". K7 stays in game once per release for the real halt. |
+| 5 | RG6, K7: kill during the region group undo | restart settles, region gone, world hash == h0, 0 regions left | 29% (272 s: RG6 111 +… | 270 | SMOKE · undo-model · **P1: not moved** (release-only step; RG points not mapped to UMT) | 0.00 | undo interrupted at journal write points then settled on evidence: same fault-injection harness; must model undo commit order and "restore may be lost by halt". K7 stays in game once per release for the real halt. |
 
 #### `6a-eflat`
 
