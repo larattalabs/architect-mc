@@ -885,25 +885,27 @@ steps.item12 = async () => {
 steps.item13 = async () => {
   await ensure();
   const out = {};
+  // an installed bible whose rails and lanes are spawners (the fixture's style; a game check takes its style from a bible)
+  const bdir = path.join(path.dirname(L.LIBRARY), 'bibles', 'rs_spawner', 'versions', '1');
+  fs.mkdirSync(bdir, { recursive: true });
+  fs.writeFileSync(path.join(bdir, 'bible.json'), JSON.stringify({ id: 'rs_spawner', name: 'RS spawner rails', scope: 'settlement', roles: { rail: 'minecraft:spawner', path: 'minecraft:spawner' } }));
   // a spawner prop: SURVIVAL {creativeOnly} at check
   const fx = G.fixture(ctx, 'u_spawner');
   const s = await G.site(ctx, 'spawner', fx);
-  const ck = await G.check(ctx, 'spawner', s);
+  const ck = { check: (await L.call('dev.region.checkPlan', { plan: s.wp.plan, claim: s.W.claim, owner: G.OWNER, anchors: s.wp.anchors, load: 'generate', bible: 'rs_spawner' }, 1_800_000)).check };
+  fs.writeFileSync(path.join(OUT, 'rs-spawner-check.json'), `${JSON.stringify(ck, null, 1)}\n`);
   const sv = (ck.check?.parts ?? []).flatMap((a) => (a.reasons ?? []).filter((r) => r.code === 'SURVIVAL').map((r) => [a.part, r.evidence]));
   out.check = sv;
   check(sv.some(([, e]) => e?.kind === 'creativeOnly' && Object.keys(e.blocks ?? {}).includes('minecraft:spawner')), `item 13: a spawner prop answers SURVIVAL {kind: creativeOnly} at check: ${json(sv).slice(0, 200)}`);
   // CREATIVE_ONLY_BLOCK at realise: a program plan (no plan/0 re-plan) whose bible lays its lanes in spawners
-  const bdir = path.join(path.dirname(L.LIBRARY), 'bibles', 'rs_spawner', 'versions', '1');
-  fs.mkdirSync(bdir, { recursive: true });
-  fs.writeFileSync(path.join(bdir, 'bible.json'), JSON.stringify({ id: 'rs_spawner', name: 'RS spawner lanes', scope: 'settlement', roles: { path: 'minecraft:spawner' } }));
   const claim = [s.W.claim[0], s.W.claim[1], s.W.claim[0] + 127, s.W.claim[1] + 127];
   const h0 = await L.call('dev.region.hash', { box: [claim[0], s.W.minY - 4, claim[1], claim[2], s.W.maxY + 20, claim[3]] }, 600_000);
-  const p = await L.call('dev.region.plan', { program: 'flat_village', claim, bible: 'rs_spawner', owner: G.OWNER, surveyLoad: 'generated:64', check: false }, 900_000);
+  const p = await L.call('dev.region.plan', { program: 'flat_village', params: { lots: [{ id: 'h1', type: 'house', size: [9, 9] }] }, claim, bible: 'rs_spawner', owner: G.OWNER, surveyLoad: 'generated:64', check: false }, 900_000);
   const rr = p.planId ? await L.call('dev.region.realise', { planId: p.planId }, 120_000) : null;
   await sleep(3000);
   const h1 = await L.call('dev.region.hash', { box: [claim[0], s.W.minY - 4, claim[1], claim[2], s.W.maxY + 20, claim[3]] }, 600_000);
   out.realise = { plan: p.planId ?? p.refused, refused: rr?.refused ?? rr };
-  check(rr?.refused?.reason === 'CREATIVE_ONLY_BLOCK' && h0.sha256 === h1.sha256, `item 13: CREATIVE_ONLY_BLOCK at realise, nothing written (${json(rr?.refused ?? rr ?? p.refused).slice(0, 240)}; hash ${h0.sha256 === h1.sha256 ? 'unchanged' : 'CHANGED'})`);
+  check(/^CREATIVE_ONLY_BLOCK/.test(String(rr?.refused?.reason ?? rr?.refused ?? '')) && h0.sha256 === h1.sha256, `item 13: CREATIVE_ONLY_BLOCK at realise, nothing written (${json(rr?.refused ?? rr ?? p.refused).slice(0, 240)}; hash ${h0.sha256 === h1.sha256 ? 'unchanged' : 'CHANGED'})`);
   // no stockpile: NOT_ALLOWED with the bill
   await L.call('dev.stockpile.dissolve', { owner: G.OWNER }, 60_000).catch(() => null);
   const fx2 = G.fixture(ctx, 'rs02_walled');
@@ -912,7 +914,8 @@ steps.item13 = async () => {
   const ck2 = await G.check(ctx, 'nopile', s2);
   const r2 = await L.call('dev.region.realiseApproved', { sha: ck2.check.artifactSha, lotEntries: entriesOf(fx2) }, 300_000);
   out.noPile = r2.refused ?? r2;
-  check(r2.refused?.reason === 'NOT_ALLOWED' && /stockpile/.test(r2.refused.message) && /bill/.test(r2.refused.message), `item 13: no stockpile: NOT_ALLOWED with the bill (${String(r2.refused?.message).slice(0, 200)})`);
+  const nr = String(r2.refused?.reason ? `${r2.refused.reason}: ${r2.refused.message}` : r2.refused ?? '');
+  check(/^NOT_ALLOWED/.test(nr) && /stockpile/.test(nr) && /the bill/.test(nr), `item 13: no stockpile: NOT_ALLOWED with the bill (${nr.slice(0, 200)})`);
   return out;
 };
 
