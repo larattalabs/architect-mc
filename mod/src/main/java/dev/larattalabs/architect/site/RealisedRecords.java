@@ -91,8 +91,8 @@ public final class RealisedRecords {
 			List<String> standing = new ArrayList<>();
 			for (String s : was.sites()) {
 				JournalStore.Meta m = mainEntry(s);
-				if (!s.equals(site) && m != null && (m.status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE || m.status()
-					== dev.larattalabs.architect.journal.Journal.Status.PLACING)) {
+				// only a committed attempt: a PLACING leftover (its job gone, the item running again) is not the tile's write
+				if (!s.equals(site) && m != null && m.status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE) {
 					standing.add(s);
 				}
 			}
@@ -335,6 +335,18 @@ public final class RealisedRecords {
 				}
 			}
 		}
+		// (recorded) tile entries of the group left PLACING with no record naming them: a crash's leftover the queue ran past
+		int leftover = 0;
+		if (js != null && l.rec().groupId != null) {
+			String g = l.rec().groupId;
+			for (JournalStore.Meta m : js.find(m -> m.status() == dev.larattalabs.architect.journal.Journal.Status.PLACING && g.equals(m.group()) && (m.kind()
+				.equals(RegionKinds.TERRAIN) || m.kind().equals(RegionKinds.PATH)))) {
+				if (!recordedSites.contains(m.site())) {
+					leftover++;
+				}
+			}
+		}
+		out.addProperty("placingLeftover", leftover);
 		out.addProperty("files", files);
 		out.addProperty("bytes", recBytes);
 		JsonObject so = new JsonObject();

@@ -414,9 +414,10 @@ steps.crash = async () => {
     const st = await L.waitRegion(rid, 3_600_000);
     const rv = await realised(rid, { verify: true });
     const v = rv.verify;
-    out[tag] = { region: rid, atHalt, state: st.view.state, status: v.status, unrecorded: v.unrecorded, notHeld: v.notHeld, cellsChecked: v.cellsChecked, problems: v.problems.slice(0, 8), tiles: rv.tiles.map((t) => [t.stage, t.set, t.key, t.site, t.status]) };
+    out[tag] = { region: rid, atHalt, state: st.view.state, status: v.status, unrecorded: v.unrecorded, placingLeftover: v.placingLeftover, notHeld: v.notHeld, cellsChecked: v.cellsChecked, problems: v.problems.slice(0, 8), tiles: rv.tiles.map((t) => [t.stage, t.set, t.key, t.site, t.status]) };
     const allCommitted = Object.keys(v.status).every((s) => s === 'committed');
     check(st.view.state === 'PLACED' && v.ok && allCommitted && rv.tiles.length === 5, `${point}: ${atHalt.length} record(s) on disk at the halt; after the restart the region ${st.view.state}, ${rv.tiles.length} records all committed (${json(v.status)}), unrecorded ${v.unrecorded}, the journal and the world agree over ${v.cellsChecked} cells (${v.notHeld} not held)`, v.problems);
+    if (v.placingLeftover) check(true, `${point} (recorded, main's behaviour): ${v.placingLeftover} tile entry(ies) of the group left PLACING after the restart while the item ran again; not in the record (only committed attempts are)`);
     if (point === 'RP1+save') {
       // the record of the tile that halted was written for a site whose commit never happened: rewritten for the site that did
       check(atHalt.length >= 1, `${point}: the halted tile's record was on disk before its PLACING commit (${atHalt.join(', ')})`);
