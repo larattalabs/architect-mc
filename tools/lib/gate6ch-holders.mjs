@@ -9,7 +9,7 @@
 //                          stair site. Then the stair site removed: E-flat 0 over the whole box, nothing kept.
 //   rmcrash  (h-rmcrash)   the same world, the removal halted at FL3+save (drained, before the solids: the resumed drain runs again),
 //                          K6+save (R2 committed, the records not yet pending), R2q+save (R2 durable, the queue file not saved after it)
-//                          and RG6+save (mid-R4: the region's group undo mid-write); each reopened and the removal asked again: REMOVED,
+//                          and K7+save (mid-R4: a region cell site's restore halted after its first 64 cells; RG6 fires only in a template site's restore); each reopened and the removal asked again: REMOVED,
 //                          E-flat 0 outside the stair cell, the stair kept, and after the stair site goes E-flat 0.
 import { CLAIM, OWNER, censusOf, crashAt, demoBox, diff, freshFlat, planDemo, realiseWait, snap } from './gate6ch-core.mjs';
 
@@ -110,11 +110,15 @@ async function judge(ctx, tag, s, rm) {
   const wet = [...c.fluids].filter(([k]) => k !== k3(s.cell));
   out.otherFluid = wet.slice(0, 12);
   check(wet.length === 0, `${tag}: the stair's cell is the only fluid left in the pond's watch box (${wet.length} other: ${json(wet.slice(0, 6))})`);
-  const ex = [s.cell[0], s.cell[1], s.cell[2], s.cell[0], s.cell[1], s.cell[2]];
-  const d1 = await ctx.L.call('dev.region.hash', { box: s.box, mode: 'diff', file: s.file, exclude: [ex] }, 4 * 3_600_000);
+  // (no `exclude`: RegionHash's DIFF skips an excluded cell without reading its snapshot entry, so every later cell is compared with the
+  // previous one's value; the full diff is read and the stair's cell filtered here)
+  const d1 = await ctx.L.call('dev.region.hash', { box: s.box, mode: 'diff', file: s.file }, 4 * 3_600_000);
+  const outside = (d1.list ?? []).filter((m) => m.pos !== k3(s.cell));
+  d1.mismatches = outside.length + Math.max(0, d1.mismatches - (d1.list ?? []).length);
+  d1.list = outside;
   out.eflatOutside = { mismatches: d1.mismatches, sample: (d1.list ?? []).slice(0, 12) };
   check(d1.mismatches === 0, `${tag}: E-flat ${d1.mismatches} outside the stair's cell against the world before the region`, out.eflatOutside.sample);
-  const g = await later(ctx, `remove ${s.stairSite} - noforce`, `remove:${s.stairSite}:-:noforce`);
+  const g = await later(ctx, `remove ${s.stairSite} - force`, `remove:${s.stairSite}:-:force`); // (force: its owner is not the player)
   out.stairRemoved = g;
   await sleep(2000);
   const d2 = await diff(ctx, s.box, s.file);
@@ -138,7 +142,7 @@ export async function holders(ctx) {
 /** The holder case through the removal's crash windows (finding 2 with the drain's holders). */
 export async function rmcrash(ctx) {
   const out = {};
-  for (const point of ['FL3+save', 'K6+save', 'R2q+save', 'RG6+save']) {
+  for (const point of ['FL3+save', 'K6+save', 'R2q+save', 'K7+save']) {
     const tag = point.replace('+save', '');
     const world = `G6B H Hold ${tag}`;
     ctx.log(`-- ${point}`);
