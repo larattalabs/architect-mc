@@ -17,6 +17,8 @@
 //     lava                         items 8 and 9 (lava rows): rs03 built with the conservation sum at 10 or more checkpoints (lava charged,
 //                                  a bucket back); before removal fewer buckets than sources kept in stock: scooped with a bucket, drained
 //                                  without (exact both ways), one credit; E-flat 0
+//     rs04crash                    item 11's tunnel row: rs04 half built, an autosave, kill -9 and a cold start: the targets resume from
+//                                  the world, the rest fed: built, no bore cell open on the way, equal to its twin, E-flat 0
 //     brush                        item 13's last row: a concrete-pattern stroke refused NOT_ALLOWED, a natural stroke free (0 items)
 //     report                       REPORT.md over the step JSONs
 //   Item 16's rows (hy-ingame, irr-ingame, h-ingame, ha-ingame, kc-ingame) run through tools/gate-run.mjs (HANDOFF-RSb.md has the line).
@@ -239,6 +241,71 @@ steps.rs04half = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ rs04 across a crash (item 11's tunnel row)
+
+/** The headless host's pids of this run worktree. */
+function hostPids() {
+  try { return execFileSync('pgrep', ['-f', `${path.basename(L.RUN)}/tools/run-headless-server.mjs`]).toString().trim().split(/\s+/).filter(Boolean).map(Number); } catch { return []; }
+}
+
+steps.rs04crash = async () => {
+  await ensure();
+  const fx = G.fixture(ctx, 'rs04_tunnel');
+  const T = await R.twin(ctx, G, 'rs04c', fx);
+  const s = await G.site(ctx, 'rs04 crash', fx);
+  const box = G.boxOf(s.W);
+  const pre = await G.snap(ctx, box, 'rsb-rs04c-pre');
+  const ck = await G.check(ctx, 'rs04-crash', s);
+  const crateAt = await G.pile(ctx, s, 4);
+  const region = await G.realise(ctx, ck.check.artifactSha);
+  await G.waitFor(ctx, region, (st, rs) => (rs.targets ?? []).length > 0, { timeoutMs: 300_000 });
+  const half = {};
+  for (const [it, n] of Object.entries(ck.check.cost.bom ?? {})) if (Math.floor(n / 2) > 0) half[it] = Math.floor(n / 2);
+  await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: half, exact: false }, 120_000);
+  let last = -1, still = 0;
+  for (let k = 0; k < 150 && still < 4; k++) {
+    await sleep(3000);
+    const rs = await G.rsState(ctx, region);
+    const built = (rs.targets ?? []).reduce((a, t) => a + t.built, 0);
+    still = built === last ? still + 1 : 0;
+    last = built;
+  }
+  const before = await G.rsState(ctx, region);
+  const cutsBefore = await R.openCuts(ctx, region);
+  const out = { region, world: s.world, before: { percent: before.build?.percent, built: last, open: cutsBefore.open, bad: cutsBefore.bad.length } };
+  // the autosave, then kill -9 (our own server's pid) and a cold start in the same world
+  await L.cmd('/save-all flush');
+  await L.settle(3000);
+  const pids = L.clientPids();
+  for (const pid of pids) { log(`kill -9 my server pid ${pid}`); process.kill(pid, 'SIGKILL'); }
+  for (let i = 0; i < 60 && L.clientPids().length; i++) await sleep(1000);
+  for (let i = 0; i < 30 && hostPids().length; i++) await sleep(1000);
+  for (const pid of hostPids()) { log(`stopping my headless host pid ${pid}`); process.kill(pid, 'SIGTERM'); }
+  for (let i = 0; i < 30 && hostPids().length; i++) await sleep(1000);
+  try { state.dev?.close(); } catch { /* closed */ }
+  state.dev = null;
+  await startClient(s.world, { backend: 'sim' });
+  await ensure();
+  await L.settle(5000);
+  const after = await G.rsState(ctx, region);
+  out.resumed = { percent: after.build?.percent, built: (after.targets ?? []).reduce((a, t) => a + t.built, 0), targets: (after.targets ?? []).length };
+  check(out.resumed.targets === (before.targets ?? []).length && out.resumed.built === last, `item 11 (rs04): kill -9 after an autosave, a cold start: the tunnel's targets resume from the world (${out.resumed.targets} target(s), ${out.resumed.built} cell(s) built as before the kill: ${last}; ${out.resumed.percent}%)`, out);
+  let bad = [], samples = 0, interleaved = 0;
+  const f = await R.feed(ctx, G, region, { fraction: 0.5, every: 1500, poll: async () => { const c = await R.openCuts(ctx, region); bad = bad.concat(c.bad); samples++; if (R.rings(c.at, 0).interleaved) interleaved++; } });
+  const rs = f.last.rs;
+  out.after = { state: f.last.st.view.state, build: rs.build && { built: rs.build.built, done: rs.build.done, percent: rs.build.percent }, samples, bad: bad.slice(0, 8), interleaved };
+  check(f.last.st.view.state === 'PLACED' && rs.build?.done && bad.length === 0, `item 11 (rs04): fed the rest after the restart: ${f.last.st.view.state}, done ${rs.build?.done}; still no bore cell open without its lining (${samples} samples, ${bad.length} breach(es))`, bad.slice(0, 6));
+  const d = await G.twinDiff(ctx, T.box, T.file, crateAt);
+  out.twin = d.mismatches;
+  check(d.mismatches === 0, `item 11 (rs04): resumed and built, equal to its INSTANT twin cell for cell: ${d.mismatches} differ`, d.list);
+  await G.remove(ctx, region);
+  const e = await G.diff(ctx, box, pre);
+  const ef = e.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
+  out.eflat = ef.length;
+  check(ef.length === 0, `item 11 (rs04): removed after the crash: E-flat ${ef.length}`, ef.slice(0, 8));
+  return out;
+};
+
 // ------------------------------------------------------------------ ice caps (N-RS-4)
 
 steps.ice = async () => {
@@ -373,7 +440,7 @@ steps.brush = async () => {
 // ------------------------------------------------------------------ dispatch
 
 steps.report = async () => {
-  const files = fs.readdirSync(OUT).filter((f) => /^(unit|rs04|rs04half|ice|lava|brush)\.json$/.test(f)).sort();
+  const files = fs.readdirSync(OUT).filter((f) => /^(unit|rs04|rs04half|rs04crash|ice|lava|brush)\.json$/.test(f)).sort();
   const lines = ['# Slice RS-b gate report', '', `${new Date().toISOString()} · head ${execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim()}`, ''];
   let fail = 0;
   for (const f of files) {
@@ -391,7 +458,7 @@ steps.report = async () => {
   return { files, fail };
 };
 
-const groups = { ingame: ['rs04', 'rs04half', 'ice', 'lava', 'brush'] };
+const groups = { ingame: ['rs04', 'rs04half', 'ice', 'lava', 'brush'], crash: ['rs04crash'] };
 const name = process.argv[2];
 if (!name || (!steps[name] && !groups[name])) {
   console.error(`usage: node tools/gate6crsb.mjs ${[...Object.keys(steps), ...Object.keys(groups)].join('|')}`);
