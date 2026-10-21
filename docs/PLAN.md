@@ -892,6 +892,23 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
   - Small contract first. Steward should know about it (a repair changes the world).
 - Full crash safety (Undo hardening C) is parked; see CONTRACT. No fsync for now.
 
+## Queued from slice S3 (builder, 2026-10-21)
+
+- **District routes ignore protected areas** (main, non-terraced districts): `emitDistricts` passes no keep-out of the plan's
+  protected areas, other regions or builds to its route pass, so a district's street can cross a protected rect. S3 fixed it for
+  terraced districts only (`routeKeepOut`, so byte identity holds); the fix for every district moves fixtures (re-cut them).
+- **A route pass grades from the survey, not from an earlier pass's cells.** A later pass treated earlier runs only as `prefer`
+  (x, z), so it cut its own stairs through them. S3's guarded passes make earlier runs obstacles and keep parapets, retaining
+  walls and stair railings off them; unguarded passes (every other plan) still can cross. A shared-height rule would fix both.
+- **The kit's volume classes vs the mod's natural rule.** The mod's `TerrainFit.natural` lacked generated ice (fixed in S3), while
+  the kit's ICE class is natural. Audit the rest of `NATURAL_CLASSES` against `TerrainFit.natural` (e.g. LOOSE, PLANT kinds) with a
+  drift test like `MaskPatternDriftTest`.
+- **Snow layers read as SNOW (solid) in a volume.** A top snow layer is passable in the world; S3's brink rails count it, the
+  checker's M8 doesn't. A layer/block split in ARVX (or a `top` flag) would let M8 and the walk graph agree with the world.
+- **meta.route holds only the last route pass.** S3 merges its passes into one record in its program; a kit-level `meta.routes`
+  (every pass) would let the checker's route rules and the scenario rows read all of them for any plan.
+- **The release tool's set test copied the real tree's placeholders** (fixed in S3: it counts them first).
+
 ## 6c scenario approvals (SETTLEMENTS §16.3: green = every bar passes and Noah approves the gallery page)
 
 | Scenario | Approved | Evidence | Gallery | Recorded |
