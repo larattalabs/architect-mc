@@ -873,6 +873,7 @@ public final class Groups {
 				// 6c Y: a stockpile's construction road: its paid cells standing, credited once its restore is written
 				r.decCredit.put(id, new Credit(pile.owner(), RoadBuilder.creditKey(inf), Map.copyOf(RoadBuilder.refundOf(level, inf, dropped)), RoadBuilder.dropAt(inf)
 					.asLong()));
+				RegionTargets.leaving(level.getServer(), inf);
 			}
 		}
 		String group = dev.larattalabs.architect.site.SiteJournal.group(r.stage == null ? "group-" + r.group : "stage-" + r.group + "-" + r.stage);

@@ -650,7 +650,7 @@ steps.item9 = async () => {
       await sleep(2000);
       const a = await L.call('dev.stockpile.audit', { owner: G.OWNER, min: [box[0], box[1], box[2]], max: [box[3], box[4], box[5]] }, 120_000);
       const p0 = await G.pileState(ctx);
-      pre = { copper, player: pc, paidItem, paid: a.paidStanding, entities: a.entities, keys: p0.creditedKeys, stock: p0.stock, box };
+      pre = { copper, player: pc, paidItem, paid: a.paidStanding, fluid: a.fluidStanding ?? {}, entities: a.entities, keys: p0.creditedKeys, stock: p0.stock, box };
     } });
     const p1 = await G.pileState(ctx);
     const refund = o.removed?.refund ?? {};
@@ -662,7 +662,7 @@ steps.item9 = async () => {
     const again = await L.call('dev.region.remove', { region: o.region, requester: G.OWNER }, 600_000);
     const p2 = await G.pileState(ctx);
     out[tag] = { pre, refund, credited: got, want, drops, keys: [pre.keys, p1.creditedKeys, p2.creditedKeys], eflat: o.eflat, conservation: o.conservation };
-    check(G.same(got, want) && G.same(refund, want), `item 9 (${tag}): the refund (credited, or dropped at the crates past the capacity) equals the paid cells standing, as standing blocks (the weathered copper cell ${json(pre.copper)} credited as weathered_copper): ${G.same(got, want) ? 'equal' : `differs ${json(G.minus(got, want))}`}`, { got, want });
+    check(G.same(got, want) && G.same(refund, G.minus(want, pre.fluid)), `item 9 (${tag}): the refund (credited, or dropped at the crates past the capacity) equals the paid cells standing (Regions.remove's refund the targets' and lots', the bodies' scoop and grates on their own key), as standing blocks (the weathered copper cell ${json(pre.copper)} credited as weathered_copper): ${G.same(got, want) ? 'equal' : `differs ${json(G.minus(got, want))}`}`, { got, want });
     check(((drops.items ?? drops.stacks ?? {})['minecraft:oak_planks'] ?? 0) >= 1 || JSON.stringify(drops).includes('oak_planks'), `item 9 (${tag}): the player's block at ${pre.player.join(',')} drops at its cell (${json(drops).slice(0, 200)})`);
     check(o.eflat?.mismatches === 0, `item 9 (${tag}): free cells restored, E-flat ${o.eflat?.mismatches}`);
     check(p2.creditedKeys === p1.creditedKeys && G.same(p2.stock, p1.stock) && again.removed !== false, `item 9 (${tag}): one credit per key: ${pre.keys} -> ${p1.creditedKeys} keys at the removal, ${p2.creditedKeys} after a second remove (nothing credited again)`);

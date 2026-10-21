@@ -463,7 +463,7 @@ public final class RegionTargets {
 		Builder.Run r = new Builder.Run(RoadBuilder.probe(i), target);
 		// a BUILT target's paid dirt cell that grass grew over (or a grass cell gone to dirt under a block) still stands as built: the land's own
 		// change (its audit and refund count it); while it builds, a cell is built only as planned (it pays)
-		r.soilSame = i.construction() != null && !i.construction().building();
+		r.soilSame = i.construction() != null && !i.construction().building() && !Groups.leaving(i.id());
 		JsonObject rs = spec(i);
 		r.name = "part " + (rs.has("part") ? rs.get("part").getAsString() : "?") + " of region " + (rs.has("region") ? rs.get("region").getAsString() : "?");
 		BitSet held = CellBits.fromBase64(rs.has("held") ? rs.get("held").getAsString() : "");
@@ -841,6 +841,14 @@ public final class RegionTargets {
 			Architect.LOGGER.info("Region target {}: {} player block(s) dropped at their cells before its removal", t.id(), n);
 		}
 		return out; // (its refund skips them: a soil cell back at its before would read as built)
+	}
+
+	/** (§9) Its removal counted its refund: from now on a soil cell is built only as planned (a cell back at its before is no paid block). */
+	static void leaving(MinecraftServer srv, Infra t) {
+		Builder.Run r = is(t) ? RoadBuilder.run(srv, t) : null;
+		if (r != null) {
+			r.soilSame = false;
+		}
 	}
 
 	/** The target entry's before over its box (read once per plan). */
