@@ -462,7 +462,7 @@ async function realised(tag, name, { crates = 4, entries = null, world = null } 
   const ck = await G.check(ctx, tag, s);
   const crateAt = await G.pile(ctx, s, crates);
   const region = await G.realise(ctx, ck.check.artifactSha, ent);
-  const w = await G.waitFor(ctx, region, (st, rs) => (rs.targets ?? []).length > 0 && st.view.state !== 'PLACING', { timeoutMs: 900_000 });
+  const w = await G.waitFor(ctx, region, (st, rs) => (rs.targets ?? []).length > 0, { timeoutMs: 900_000 });
   return { fx, entries: ent, s, box, pre, ck, crateAt, region, rs: w.rs, st: w.st };
 }
 
@@ -522,8 +522,12 @@ steps.item6b = async () => {
 steps.item7 = async () => {
   await ensure();
   const R = await realised('rs02o', 'rs02_walled');
+  // the later stages put down as the earlier targets they stand on are built: fed until the wall's and the rope's targets are down
+  const has = (rs, part) => (rs.build?.parts ?? []).some((p) => p.part === part && p.targets.length);
+  const f0 = await G.feed(ctx, R.region, { timeoutMs: 1_200_000, until: (st, rs) => has(rs, 'town_wall') && has(rs, 'rope') });
   await api('clear');
-  const parts = R.rs.build.parts;
+  const parts = f0.last.rs.build.parts;
+  R.rs = f0.last.rs;
   const wall = parts.find((p) => p.part === 'town_wall'), rope = parts.find((p) => p.part === 'rope');
   const tgt = new Map((R.rs.targets ?? []).map((t) => [t.target, t]));
   const wallBill = wall.targets.reduce((a, id) => G.plus(a, tgt.get(id)?.bom), {});
@@ -531,9 +535,20 @@ steps.item7 = async () => {
   const order = ord.stockpile?.feedOrder ?? [];
   check(wall.targets.every((t, k) => order[k] === t), `item 7: setFeedOrder puts rs02's wall first: ${json(order.slice(0, wall.targets.length + 2))}`);
   for (const t of rope.targets) await L.call('dev.stockpile.pause', { site: t, paused: true }, 60_000);
+  await sleep(10_000); // the wall's targets starve past WaitCalc's threshold (100 ticks): their SITE_WAITING fires
   // the wall's bill alone: with the wall first it builds whole, though every other target wants the same blocks
   await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: wallBill, exact: true }, 120_000);
-  const w = await G.waitFor(ctx, R.region, (st, rs) => (rs.build?.parts ?? []).find((p) => p.part === 'town_wall')?.state === 'built', { timeoutMs: 1_200_000, every: 3000 });
+  // (a rope target put down later is paused as it appears)
+  let w = { ok: false };
+  for (let k = 0; k < 400 && !w.ok; k++) {
+    const st = await G.regionState(ctx, R.region), rs = await G.rsState(ctx, R.region);
+    for (const t of (rs.build?.parts ?? []).find((p) => p.part === 'rope')?.targets ?? []) {
+      if (!rope.targets.includes(t)) { rope.targets.push(t); await L.call('dev.stockpile.pause', { site: t, paused: true }, 60_000); }
+    }
+    w = { st, rs, ok: (rs.build?.parts ?? []).find((p) => p.part === 'town_wall')?.state === 'built' };
+    if (!w.ok) await sleep(3000);
+  }
+  rope.built = (w.rs.build?.parts ?? []).find((p) => p.part === 'rope')?.built ?? rope.built;
   const others = (w.rs.build?.parts ?? []).filter((p) => p.part !== 'town_wall' && p.state === 'built' && (w.rs.targets ?? []).some((t) => t.part === p.part && Object.keys(t.bom ?? {}).length));
   check(w.ok, `item 7: fed only the wall's bill (${sum(wallBill)} items), the wall is BUILT first (${json((w.rs.build?.parts ?? []).map((p) => [p.part, p.state]))}); paid parts built before it: ${json(others.map((p) => p.part))}`);
   await sleep(6000);
@@ -545,23 +560,46 @@ steps.item7 = async () => {
   const ropeRes = rope.targets.map((t) => ps.targets?.[t]).filter(Boolean);
   const rs1 = await G.rsState(ctx, R.region);
   const starved = (rs1.targets ?? []).filter((t) => t.wait?.waiting && (t.wait.nextNeeded ?? []).length);
-  check(named.length > 0 && starved.length > 0, `item 7: SITE_WAITING with the region and the part per waiting target, nextNeeded named: ${named.length} event(s) over ${new Set(named.map((e) => e.id)).size} target(s), e.g. ${json(named[0] && { id: named[0].id, part: named[0].ext['architect_mc:part'], next: named[0].wait.nextNeeded.slice(0, 2) })}; ${starved.length} target(s) waiting with nextNeeded now`);
-  check(ropeEv.length === 0 && ropeRes.every((x) => x.paused && !x.reserves) && (rs1.build.parts.find((p) => p.part === 'rope')?.built ?? 0) === rope.built, `item 7: pause on the rope bridge: its ${rope.targets.length} target(s) paused, reserve nothing, never wait, nothing built (${json(ropeRes)})`);
-  // S-Y-1: a target whose whole frontier is unloaded reserves nothing; the player far away, then back
+  check(named.length > 0, `item 7: SITE_WAITING with the region and the part per waiting target, nextNeeded named: ${named.length} event(s) over ${new Set(named.map((e) => e.id)).size} target(s), e.g. ${json(named[0] && { id: named[0].id, part: named[0].ext['architect_mc:part'], next: named[0].wait.nextNeeded.slice(0, 2) })}; ${starved.length} target(s) waiting with nextNeeded now`);
+  const ropeT = (rs1.targets ?? []).filter((t) => rope.targets.includes(t.target));
+  const ropeOpen = ropeT.filter((t) => t.built < t.cells);
+  check(ropeEv.length === 0 && ropeOpen.length > 0 && ropeOpen.every((t) => t.paused) && ropeRes.every((x) => !x.reserves) && (rs1.build.parts.find((p) => p.part === 'rope')?.built ?? 0) === rope.built, `item 7: pause on the rope bridge: its ${ropeOpen.length} unfinished target(s) paused (${json(ropeT.map((t) => [t.target, t.paused, t.built]))}), reserve nothing, never wait, nothing built since`);
+  for (const t of rope.targets) await L.call('dev.stockpile.pause', { site: t, paused: false }, 60_000);
+  // fed all but the lots' glass panes: the region PLACED, its lots waiting (a lot's run reserves while its chunks are loaded)
+  const noGlass = { insert: async (site, items) => { const it = { ...items }; delete it['minecraft:glass_pane']; return Object.keys(it).length ? (await L.call('dev.crate.insert', { site, items: it, exact: true }, 120_000)).accepted ?? {} : {}; } };
+  await G.feed(ctx, R.region, { cons: noGlass, timeoutMs: 1_800_000, until: (st, rs) => st.view.state === 'PLACED' && (rs.targets ?? []).every((t) => t.built >= t.cells) });
+  // S-Y-1: a target whose whole frontier is unloaded reserves nothing; the player far away, then back (once the region is PLACED:
+  // while it places, the realise keeps its tiles' chunks loaded): a lot of it waits for its glass
   const far = [R.s.W.claim[2] + 1500, 120, R.s.W.claim[3] + 1500];
+  const r0 = Object.entries((await G.pileState(ctx)).targets ?? {}).filter(([, x]) => x.reserves).length;
+  log(`  S-Y-1: ${r0} target(s) reserving before the player leaves`);
+  await cmd('/forceload remove all'); // (the terrain builder force-loaded the claim: gate6chy-b's buildTerrain)
   await L.tp(...far);
   let unl = null;
-  for (let k = 0; k < 30 && !unl; k++) {
+  for (let k = 0; k < 60 && !unl; k++) {
     await sleep(3000);
     const p = await G.pileState(ctx);
-    const ts = Object.entries(p.targets ?? {}).filter(([id]) => (rs1.targets ?? []).some((t) => t.target === id));
+    const ts = Object.entries(p.targets ?? {}).filter(([, x]) => x.built < x.queued && !x.paused); // the owner's unfinished targets (all this region's)
     const u = ts.filter(([, x]) => !x.frontierLoaded);
     if (u.length) unl = { unloaded: u.length, reserving: u.filter(([, x]) => x.reserves).length, of: ts.length };
   }
-  check(!!unl && unl.reserving === 0, `item 7: S-Y-1's unloaded exception: with the player ${far.join(',')} away, ${json(unl)} (a target whose frontier is unloaded reserves nothing)`);
+  let tickets = null;
+  if (!unl) { // why not: the vanilla tickets on the reserving targets' chunks
+    tickets = [];
+    const p = await G.pileState(ctx);
+    for (const [id, x] of Object.entries(p.targets ?? {}).filter(([, x]) => x.reserves).slice(0, 4)) {
+      const ss = await L.call('dev.site.state', { site: id }, 30_000).catch(() => ({}));
+      const bs = JSON.stringify(ss.box ?? ss.restoreBox ?? ss.site?.box ?? ss);
+      const mm = [/minX\D+(-?\d+)/, /minY\D+(-?\d+)/, /minZ\D+(-?\d+)/].map((re) => Number((re.exec(bs) ?? [])[1] ?? 0));
+      const nc = ss.nextCells?.[0];
+      const pos = nc ? [nc.x, nc.y, nc.z] : mm;
+      tickets.push({ id, x, pos, t: await L.call('dev.stockpile.tickets', { pos }, 30_000).catch((e) => String(e)) });
+    }
+    log(`  S-Y-1 tickets: ${json(tickets).slice(0, 2500)}`);
+  }
+  check(!!unl && unl.reserving === 0 && r0 > 0, `item 7: S-Y-1's unloaded exception: ${r0} target(s) reserving with the player there; with the player ${far.join(',')} away, ${json(unl)} (a target whose frontier is unloaded reserves nothing)`);
   await L.tp(R.s.W.claim[0] + 40, 100, R.s.W.claim[1] + 40);
   await sleep(4000);
-  for (const t of rope.targets) await L.call('dev.stockpile.pause', { site: t, paused: false }, 60_000);
   const f = await G.feed(ctx, R.region, { timeoutMs: 2_400_000 });
   const v = f.last.st.view;
   check(v.state === 'PLACED' && v.build?.done && v.build?.percent === 100 && (v.build?.parts ?? []).every((p) => p.state === 'built'), `item 7: resumed and fed: RegionView.build per part ${json((v.build?.parts ?? []).map((p) => [p.part, p.state, p.built, p.cells, p.targets.length]))}, done ${v.build?.done}, ${v.build?.percent}%`);
