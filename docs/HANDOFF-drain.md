@@ -19,15 +19,17 @@ Evidence under `scratchpad/drain/` (git-ignored), runner pids in `*-fix.pid`, lo
 All with GATE_SLOTS=6.
 
 ## Results so far
-- pre (runs-pre/20261021-000459-*): FAIL as expected. h-holders: the stair is lost ("no fluid there") and E-flat is 1 after the
-  stair site goes. h-rmcrash: FL3/K6 lose the stair the same way; R2q ends PARTIAL with "nothing of group g1 is in the world journal"
-  (the window-B gap, confirmed). RG6+save never halted (RG6 fires only in a template site's restore), so ba59c7af switched it to K7+save.
-- **Open question:** pre also shows E-flat 18 OUTSIDE the stair cell. The same 18 cells appear in every case: whole columns shifted down
-  by one at x 9024/9088, z 8992/9024/9088, which is far from the pond. main's h-crash (lava variant) gets 0. Check whether post shows
-  it too. If it does, it is a test or world artifact of the no-lava h_core_demo, or an undo issue outside this fix; investigate with
-  dev.journal.at on those columns.
-- post started at 00:14 at head 5ca2bdf4, before ba59c7af, so its h-rmcrash still uses RG6+save and will fail that case; re-run
-  h-rmcrash at ba59c7af or later.
+- pre (runs-pre/20261021-000459-*): FAIL as expected. The stair is lost (FL3, K6 and the plain case). R2q ends PARTIAL with "nothing of group g1
+  is in the world journal". RG6+save never halted: it is K7+save from ba59c7af on.
+- post (runs-post/20261021-001318-*, head 5ca2bdf4) h-rmcrash: with the fix the stair is kept and waterlogged, the only fluid left; R2q ends
+  REMOVED. Two test defects remain, fixed in 3b75ed6e:
+  - The stair site's removal was refused ("c3 is owned by test:h ... pass force"): its E-flat 1 was the stair still standing. The step
+    now uses force.
+  - E-flat 18 outside the stair cell, the same 18 cells before and after the fix: 4 columns shifted by one, away from the bodies. The
+    step now uses h_core_demo's lava variant, as h-crash does (E-flat 0 on main). The artifact itself is not explained.
+  The rest of the post chain is still running (h-ingame, hy-ingame, irr-ingame, hy-crash; irr-holders also needs force, so re-run it).
+- post2 (runs-post2/, head 3b75ed6e, 8904:8905): h-holders, h-rmcrash, irr-holders. This is the run that counts for the holder steps.
+- pre2 (runs-pre2/, irr-holders @b04368a0): fails-before for drainLot. Its last check fails on the force defect regardless.
 
 ## Left
 1. Read each run's SUMMARY.md (expected: pre FAILs holders and R2q; pre2 FAILs irr-holders; post all pass).
