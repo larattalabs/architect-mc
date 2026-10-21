@@ -903,3 +903,15 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
     readable per site or region by API (it names the cells, expected vs found), and the repair can be invoked by API.
   - Small contract first. Steward should know about it (a repair changes the world).
 - Full crash safety (Undo hardening C) is parked; see CONTRACT. No fsync for now.
+
+## Undo hardening B queue (integration of patch v0.40.1, 2026-10-21)
+
+Top first. Not fixed in v0.40.1.
+
+- **A tile re-run after RG4+save leaves its first entry PLACING (found by RP's rp-crash).** After an RG4+save crash the restart
+  logs "0 job(s) to resume": the tile's Infra record was saved but its job was not, so the startup Sites check doesn't release
+  the entry. The queue then re-runs the tile and writes a second entry, while the first stays PLACING. The region still reports
+  PLACED.
+  - Seen in `artifacts/gate-runs-RP/20261021-035819-change` (rp-crash), region rg4: c1 PLACING, c2 ACTIVE.
+  - Risk: a later rollback of the leftover entry could write its befores under the re-run's entry.
+  - RP reports it as `placingLeftover` in the region's realised record (CONTRACT "Slice RP", §6), so it is visible, not fixed.
