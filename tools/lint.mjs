@@ -65,6 +65,10 @@ async function runLint(lint) {
   const list = C.cases(lint).filter((c) => !only || only.includes(c.id));
   const jobs = Number(opt('--jobs') ?? Math.max(2, Math.min(10, Math.floor(os.cpus().length / 2))));
   console.log(`${lint} lint: ${list.length} case(s), ${jobs} job(s), kit ${path.relative(process.cwd(), KITDIR) || '.'}`);
+  // the calibration (tools/lib/p2-trim.mjs): the lints run either way; uncalibrated, their P2 rows also run in game (the -smoke steps)
+  const { calibration } = await import(pathToFileURL(path.join(ROOT, 'tools', 'lib', 'p2-trim.mjs')).href);
+  const cal = calibration();
+  console.log(`${cal.valid ? 'ok  ' : 'WARN'} calibration: ${cal.why}${cal.valid ? '' : ' (the P2 rows run in game until it holds)'}`);
   const res = await pool(list.map((c) => c.id), jobs, (id) => spawnOne(lint, id));
   let fail = 0;
   for (const r of res) {
@@ -77,7 +81,7 @@ async function runLint(lint) {
   }
   const wall = Date.now() - t0;
   const summary = { lint, cases: res.length, failed: res.filter((r) => (r.fails ?? []).length).map((r) => r.id), failLines: fail, wallMs: wall, results: res };
-  if (opt('--json')) fs.writeFileSync(opt('--json'), `${JSON.stringify(summary, null, 1)}\n`);
+  if (opt('--json')) { fs.mkdirSync(path.dirname(path.resolve(opt('--json'))), { recursive: true }); fs.writeFileSync(opt('--json'), `${JSON.stringify({ ...summary, calibration: cal }, null, 1)}\n`); }
   console.log(`== ${lint} lint: ${res.length} case(s), ${summary.failed.length} failing (${fail} FAIL lines), ${(wall / 1000).toFixed(1)} s wall`);
   return fail ? 1 : 0;
 }
