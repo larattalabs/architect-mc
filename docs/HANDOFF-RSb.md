@@ -31,12 +31,22 @@ to the server's pid; `stop` releases it. Item 16's rows run through the runner, 
 - **Ice caps** (N-RS-4): free in the kit already (a fluid op's cells are class 0); `rs08_ice` (a built-edge pond, a snowy biome grid;
   the driver sets the claim to snowy plains with `/fillbiome`) proves it in game.
 
-## Status
+## Status (2026-10-21 05:50 UTC)
 
-- [x] kit + mod ring order, unit tests (`TunnelRingsTest` 5, `kit/test/rs-b.test.mjs` 4; RS-a's RegionTargetsTest, rs.test, T3b tests green)
-- [ ] in game: rs04 (item 5 row + ring evidence), rs04half (item 6 row), ice, lava (items 8, 9 lava rows), brush (item 13 row)
-- [ ] item 16 rows via the runner
-- [ ] verifier, "RS-b as built", push, report
+- [x] kit + mod ring order; the survival tunnel whole in its lining's stage (one target per tile); the hanging-lantern deadlock fixed;
+  farmland dried to dirt counts as built (Builder.Run.matches, S-CU-3: rs03 lost 3 dirt from item 8's sum)
+- [x] RS-b driver rows all green (artifacts/gate6c-rsb/REPORT.md): unit, rs04 (item 5 + ring evidence), rs04half (item 6), rs04crash
+  (item 11), ice (N-RS-4), lava (items 8, 9 lava rows), brush (item 13)
+- [ ] item 16 + the Builder change's impact steps via the runner (artifacts/gate-runs-rsb/, scratchpad/rsb/gate-run.log)
+- [x] "RS-b as built" (docs/CONTRACT.md, end of the RS section)
+- [ ] gate-verifier over origin/rs/core..HEAD; push; report
+
+## Lessons from the run
+
+- Start background processes only through a background task (run_in_background): a `&` inside a foreground call is killed when
+  the call ends (the first server died that way).
+- One driver per server: two clients on one DevBridge left the host's queue stuck (restart the server).
+- Slots: `GATE_SLOTS=6`; the driver's `start` keeps the slot with a holder across restarts; `release` frees it.
 
 ## Open / notes
 
