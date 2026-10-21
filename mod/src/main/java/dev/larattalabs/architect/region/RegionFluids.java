@@ -1452,6 +1452,7 @@ public final class RegionFluids {
 		}
 		int n = 0;
 		boolean changed = false;
+		Holders held = null; // (fix/drain-holders) as the region's removal: a later entry's block on top of a source stays
 		for (Body b : st.bodies) {
 			if (!ids.contains(b.id)) {
 				continue;
@@ -1461,7 +1462,10 @@ public final class RegionFluids {
 				continue;
 			}
 			if (!bs.before.isEmpty()) {
-				n += drain(level, st, b, bs, true, st.othersOf(b));
+				if (held == null) {
+					held = new Holders(l.rec().dimension, l.rec().groupId, st);
+				}
+				n += drain(level, st, b, bs, true, st.othersOf(b), held);
 			}
 			bs.state = "drained";
 			bs.reason = "lot removed: " + lotId + " (its sources leave with it, S-IRR-4)";
@@ -1472,7 +1476,8 @@ public final class RegionFluids {
 		if (changed) {
 			save(l, st);
 			report(l, st);
-			Architect.LOGGER.info("Region {}: lot {} removed: its irrigation sources drained ({} cell(s) written)", l.rec().id, lotId, n);
+			Architect.LOGGER.info("Region {}: lot {} removed: its irrigation sources drained ({} cell(s) written){}", l.rec().id, lotId, n, held == null || held
+				.kept().isEmpty() ? "" : "; " + held.kept().size() + " cell(s) another entry holds on top kept: " + cells(held.keptCells()));
 			WorldJournal.kill("FL6"); // (6c IRR) the lot's sources drained, its site not restored yet
 		}
 		return n;

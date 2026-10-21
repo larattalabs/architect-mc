@@ -63,6 +63,24 @@ class RegionFluidsHoldersTest {
 		assertFalse(RegionFluids.heldAt(h2, c, 9));
 	}
 
+	/**
+	 * A farm lot removed alone ({@link RegionFluids#drainLot}): the lot's site is one of the region's group, so its own cells are never held,
+	 * while a later separate site over one of the lot's irrigation sources is (irr-holders in game).
+	 */
+	@Test
+	void aLotsDrainHoldsOnlyOtherGroups() {
+		long src = p(7, 0, 0);
+		long own = p(8, 0, 0);
+		Set<String> group = Set.of("r-fluid", "lot-f2");
+		var h = RegionFluids.heldIn(List.of(entry("lot-f2", new Cell(src, 4, DIRT, AIR), new Cell(own, 4, DIRT, AIR)), entry("r-fluid", new Cell(src, 9, AIR,
+			WATER)), entry("lot-f2b", new Cell(own, 11, AIR, WATER)), entry("stair", new Cell(src, 15, WATER, STAIR))), group::contains);
+		assertTrue(RegionFluids.heldAt(h, src, 9), "the stair site over the lot's source");
+		assertTrue(RegionFluids.heldAt(h, own, 9), "lot-f2b is not the group's: held (a site of another group on top)");
+		Set<String> withB = Set.of("r-fluid", "lot-f2", "lot-f2b");
+		var h2 = RegionFluids.heldIn(List.of(entry("lot-f2", new Cell(own, 4, DIRT, AIR)), entry("lot-f2b", new Cell(own, 11, AIR, WATER))), withB::contains);
+		assertFalse(RegionFluids.heldAt(h2, own, 9), "the group's own lot entries on top: drained");
+	}
+
 	@Test
 	void whereTheRegionHasNoCellOnlyEntriesAboveTheFloorAreHeld() {
 		long later = p(4, 0, 0);
