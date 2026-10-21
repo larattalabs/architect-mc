@@ -172,6 +172,89 @@ A listed file whose every changed line (`git diff -U0` over the range) matches i
 changed line maps as usual, and so does `--files`, which has no hunks. On a throwaway commit bumping all seven, the slice went
 from 45 steps to 4.
 
+## Release versions: one command at merge (2026-10-20)
+
+Each batch integration used to spend about an hour on the same chores: set the versions in ten places, stamp the slices'
+placeholders, re-cut the goldens that record `kitVersion` (crossings_demo_flat's frozen volume by hand), and fix the tests that
+hard-coded the last version. `tools/release-version.mjs` does all of it.
+
+**Slices never set a version number.** They leave `ArchitectApi.VERSION`, `mod_version`, `PLAN_API`, the kit versions and the
+catalogue golden's header as main has them, and stamp what they add with the placeholder **`NEXT`**:
+- a new or changed catalogue entry: `"sinceApi": "NEXT"` in `kit/schemas/plan.json`, then the golden regenerated as usual
+  (`JSON.stringify(planCatalogue(), null, 1)`);
+- a new API member: `Since NEXT.` (or `since NEXT`, `@since NEXT`) in its javadoc, under `mod/src/main/java` or `mod/src/client/java`.
+  Only uppercase `NEXT` right after "since" counts, so prose and constants named `NEXT` are untouched.
+- A slice test never pins the API or kit version: it asserts "at least" its floor (`IrStale.semverCompare(ArchitectApi.VERSION,
+  "1.37.0") >= 0`, `semverCompare(KIT_VERSION, '0.38.0') >= 0`) or reads the constant. A stamp it checks is `NEXT` on the slice and
+  the released number afterwards, so check it as one of the two, or read the archived catalogue once released.
+- A slice that changes the catalogue's entries still archives the old golden (`kit/test/fixtures/plan/catalogue-<x>.json`) and
+  bumps `catalogueVersion` itself; when two slices did, the coordinator's `--catalogue` sets the batch's number.
+- `0.99.0` is the tests' "a newer kit" sentinel (PlanStaleTest, region-format2, gate6b): never use 0.99.x as a release or a dummy.
+
+`NEXT` passes the kit's checks (`tools/catalogue-since-check.mjs`, `kit/test/release-version.test.mjs`) only off a release context
+(`tools/release-context.mjs`): `ARCHITECT_RELEASE=1|0` wins; in GitHub Actions a `v*` tag or a push to main is a release, a PR is
+one when it comes from `integrate/*` or `release/*`; locally the branches main, `integrate/*` and `release/*` and a HEAD carrying a
+`v*` tag are. Slice branches and the runner's detached run worktrees are lenient.
+
+**The coordinator, at merge** (on `integrate/<batch>`, after the slices merged):
+
+```sh
+node tools/release-version.mjs --api 1.38.0 --mod 0.41.0 --kit 0.39.0 [--catalogue 10]   # set, stamp, re-cut, verify; prints a summary
+node tools/release-version.mjs --check                                                  # what CI and the publish workflow run
+```
+
+- **Sets** every version (`ArchitectApi.VERSION`, `PLAN_API`, the golden's `api`; `mod_version`; `KIT_VERSION`, `EVAL_KIT_VERSION`,
+  `IrStale.KIT_VERSION`, the golden's `kitVersion`; with `--catalogue`, `catalogueVersion` in plan.json and the golden). Each edit
+  replaces one line, anchored on `impact.versionConstants`' patterns (exactly one match per file, or it refuses), so the bump stays
+  a version-only diff. A version below the tree's is refused (`--allow-lower`).
+- **Stamps** every `NEXT` with the API version, and every legacy semver placeholder: a `sinceApi` or `Since x.y.z` above the last
+  `v*` tag's API (an in-flight slice's own guess such as 1.38.0). The summary lists each stamp by file and line.
+- **Re-cuts the goldens that track the kit**: every `scenarios/goldens/<id>.json` whose `kitVersion` is at or above the last
+  tag's kit (today crossings_demo_flat, links_demo, links_demo_flat; s1, s7 and the others keep the kit they were cut with).
+  `--goldens a,b` names them instead. Each is re-planned by `kit/tools/region.mjs plan` in a fresh process (it reads the constants
+  just written) over its committed survey, params, seed, claim (with its y), roles and keepOut. Its frozen volumes go in by
+  `--volumes`, each copied to a file named by its **ARVX sha** (`ir.volumes[].sha`, crossings_demo_flat's 9a00f18a), not the blob
+  sha it is stored under (fb508da2): without them the re-plan silently drops the tunnels.
+  The IR also records the planning Node's major (`node`, "24" in game); the re-plan passes the golden's own by `--node` (new on
+  `region.mjs plan`), so a coordinator or CI on another Node (CI runs 22) re-cuts and checks it alike.
+- **Verifies** each re-cut before writing it: the IR may differ from the committed one in `kitVersion` (and `programSha`, which
+  is the program file's sha and is reported when it moves) only, checked by a full JSON walk; the blobs byte for byte; the tile
+  shas (`tools/scenarios.mjs` `tileShas`, 1 worker = 4 shuffled) and cells exactly the header's. Only the header's `irSha` and
+  `kitVersion` lines are rewritten. Anything else fails loudly with the differing paths, and **every file the run wrote is put
+  back**, so a refused run leaves the tree as it was.
+- Finally the tree must pass the check below.
+
+**`--check`** writes nothing and fails (exit 1) on: API, kit or catalogue values that differ; the values `--api/--mod/--kit/
+--catalogue` when given; a version below the last tag's; any `NEXT` left (`--lenient` allows them: that is what the kit test
+does off a release context); a catalogue golden that is not `planCatalogue()`; a `sinceApi` above the API; a tracked golden at
+another kit than the tree's; a tracked golden whose committed inputs no longer re-plan to its `ir.json` byte for byte. Wired in:
+- `kit/test/release-version.test.mjs` runs it on the tree (part of `unit-kit` and CI's kit tests; strict on a push to main);
+- `.github/workflows/publish.yml` runs `--check` on every `v*` tag before publishing;
+- the impact rule "release versions" maps the tool, `release-context.mjs` and `catalogue-since-check.mjs` to `unit-kit`.
+
+The kit test also unit-tests the tool on a temp copy of the files it touches: the sets, the `NEXT` and legacy stamps, the re-cut
+(only `kitVersion` and `irSha` move), a planner that now plans differently (refused, every file restored byte for byte),
+crossings_demo_flat re-planned without its volume (refused: anchors, parts, budget, the volume blob and four tiles differ), the
+pure verifier, and the check's failures.
+
+**Measured (2026-10-20, scratch bump on a detached HEAD, never pushed):** `--api 1.37.9 --mod 0.40.9 --kit 0.38.9` over v0.40.0
+took **2.9 s** (8 constants, 3 goldens re-cut with their tile shas) and `--check` **1.7 s**. The diff: the 8 constant lines, each
+golden header's `irSha` and `kitVersion`, and each `ir.json` equal to the committed one with `"kitVersion":"0.38.9"`. On it the
+kit suite passed (670 tests; the tool's own test, which had pinned 0.38.0, was fixed to derive its numbers), sidecar `npm run check`
+758/758, mod `./gradlew build --offline` 742 tests, 0 failures. In game, `node tools/gate-run.mjs change --since origin/main
+--only t3a-ingame,k1b-ingame --shards 2 --ports 8936:8937,8938:8939 --run-dir ../architect-mc-reltool-run` on the scratch head
+(`artifacts/gate-runs-reltool/20261020-222009-change`): **2 PASS in 2m31s**, t3a-ingame 23/0 (item 12: the plan's IR sha and every
+tile sha equal the re-cut crossings_demo_flat) and k1b-ingame 17/0 (item 10: the same for links_demo_flat), both planned in game
+by kit 0.38.9. (A first run, `20261020-221536-change`, failed k1b-ingame with PLAN_STALE "plan needs kit 0.38.9; this is kit
+0.38.0": the source worktree's HEAD was switched back mid-run, and the drivers import the kit from the source checkout, not the
+run worktree. Keep the source HEAD still until a run ends.)
+The drivers' offline items on the same scratch head (`--only unit-kit,unit-mod,b-unit,t3a-unit,t3b-unit,k1b-unit,k1a-unit,
+p0-unit,h-unit,ha-unit,hy-unit,voc-unit,vocc-unit,cu-unit,kc-unit,irr-unit,c37-unit,c38-unit,d-unit,f2-unit,t1-unit,s2-unit,mp-unit`,
+3 shards, `artifacts/gate-runs-reltool/20261020-222622-change`, 1h24m at load 60-70): **20 PASS, 3 FAIL, none from the bump**.
+h-unit and ha-unit fail H-a's item 10 and vocc-unit VOC-c's item 3, both since VOC-c made `rule.palette` supported: H-a's
+committed asks table still has the 7 palette parts unsupported (they are refused NO_FEATURE/TOLERANCE now), and VOC-c's "before"
+table is computed at the merge base, which already holds VOC-c. Its "after" table at kit 0.38.9 equals the committed one.
+
 ### Measured
 
 Before and after, both measured on a shared, busy box:

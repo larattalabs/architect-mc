@@ -18,3 +18,5 @@ artifacts-*.log
 mod/logs/
 # 6c F2 (Noah, N-F2-1): stamps harvested from vanilla features stay local (never committed, never in the jar)
 kit/stamps/
+# agent scratch files (tools/release-version.mjs validation, etc.)
+scratchpad/
