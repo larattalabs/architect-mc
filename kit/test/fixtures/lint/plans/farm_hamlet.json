@@ -1,0 +1,42 @@
+{
+ "about": "Steward's farm hamlet (H RC2, 65d61b0b): a template zone asking farmPond, a farm lot typed `farm` (role farm) with no `villager` member, its villager use implied by its type. The farm pond must be there (S-FARM); before the fix the kit planned none and said nothing",
+ "on": "flat",
+ "volume": {},
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "farm_hamlet",
+  "zones": [
+   {
+    "id": "town",
+    "kind": "standard",
+    "required": true,
+    "farmPond": true,
+    "program": {
+     "template": "flat_village",
+     "params": {
+      "lots": [
+       {
+        "id": "farm_1",
+        "type": "farm",
+        "role": "farm",
+        "size": [
+         13,
+         14
+        ]
+       },
+       {
+        "id": "cottage_1",
+        "type": "cottage",
+        "role": "cottage",
+        "size": [
+         13,
+         14
+        ]
+       }
+      ]
+     }
+    }
+   }
+  ]
+ }
+}

@@ -27,6 +27,7 @@ const imp = (rel) => import(pathToFileURL(path.join(KIT, rel)).href);
 const parse = (st) => { const m = /^([^[]+)(?:\[(.*)\])?$/.exec(st); return { name: m[1], props: Object.fromEntries((m[2] ? m[2].split(',') : []).map((kv) => kv.split('='))) }; };
 export const sameState = (want, got) => { if (want === got) return true; const a = parse(want), c = parse(got); return a.name === c.name && Object.entries(a.props).every(([k, v]) => c.props[k] === v); };
 const APPROACH = /^minecraft:(dirt_path|gravel|cobblestone|stone_bricks|oak_planks|spruce_planks)$/;
+const LIGHT = /^minecraft:(lantern|soul_lantern|copper_lantern|torch|soul_torch|copper_torch|end_rod|glowstone|sea_lantern|shroomlight|[a-z]+_froglight)(\[|$)/;
 const GRASS = new Set(['minecraft:dirt', 'minecraft:grass_block']);
 const FLUIDISH = /^minecraft:(water|lava|cobblestone|stone|obsidian|basalt|bubble_column)$/;
 const PLANT = /(^minecraft:(short_grass|tall_grass|fern|large_fern|dandelion|poppy|blue_orchid|allium|azure_bluet|.*_tulip|oxeye_daisy|cornflower|lily_of_the_valley|sweet_berry_bush|dead_bush|snow|leaf_litter|pink_petals|wildflowers|bush|firefly_bush|short_dry_grass|tall_dry_grass|.*_sapling|.*_mushroom|moss_carpet)$)/;
@@ -76,14 +77,37 @@ export async function realisedVsVirtual(planDir, afterFile, beforeFile = null, {
     k[cls]++; tot[cls]++;
     if (cls === 'differ' && first.length < 12) first.push({ pos: [x, y, z], kind, part: F.ir.parts[part]?.id ?? null, want, got });
   });
-  return { ...tot, share: tot.written ? tot.differ / tot.written : 0, first, byKind };
+  // the 4e street lanterns (the mod lays them at realise; kit/lib/lint/roads.mjs models them for the lints): the model's light cells
+  // against the realised world's light blocks outside the lot boxes that the plan itself did not write. Both ways: a post the model
+  // places that the world lacks, and one the world holds that the model doesn't, differ.
+  const { layRoadLanterns } = await imp('lib/lint/roads.mjs');
+  const planEmit = new Set();
+  vw.eachWritten((x, y, z, idx) => { if (vw.pal.emit[idx] > 0) planEmit.add(`${x},${y},${z}`); });
+  const lant = layRoadLanterns(vw, F.ir);
+  const model = new Set(lant.lights.map(([x, y, z]) => `${x},${y},${z}`));
+  const real = new Set();
+  if ((F.ir.roads ?? []).some((r) => r.lanterns)) {
+    for (let x = b.minX; x <= b.maxX; x++) for (let z = b.minZ; z <= b.maxZ; z++) {
+      if (!roadCols.has(`${x},${z}`)) continue;
+      for (let y = b.minY; y <= b.maxY; y++) {
+        const s = d.palette[d.cells[d.at(x, y, z)]];
+        if (!LIGHT.test(s) || inLot(x, y, z) || planEmit.has(`${x},${y},${z}`)) continue;
+        real.add(`${x},${y},${z}`);
+      }
+    }
+  }
+  const lanterns = { model: model.size, realised: real.size, modelOnly: [...model].filter((k) => !real.has(k)), realisedOnly: [...real].filter((k) => !model.has(k)) };
+  lanterns.differ = lanterns.modelOnly.length + lanterns.realisedOnly.length;
+  tot.differ += lanterns.differ;
+  if (lanterns.differ && first.length < 12) first.push({ lanterns: { modelOnly: lanterns.modelOnly.slice(0, 4), realisedOnly: lanterns.realisedOnly.slice(0, 4) } });
+  return { ...tot, share: tot.written ? tot.differ / tot.written : 0, first, byKind, lanterns };
 }
 
 export const CLASSES = ['kept', 'road', 'plant', 'child', 'grass', 'fluid'];
 
 /** One line per kind for a gate log: `kind written/differ (kept k, road r, plant p)`. */
 export function describeRealised(r) {
-  return Object.entries(r.byKind).sort().map(([k, v]) => `${k} ${v.written}/${v.differ}${CLASSES.some((c) => v[c]) ? ` (${CLASSES.filter((c) => v[c]).map((c) => `${c} ${v[c]}`).join(', ')})` : ''}${Object.keys(v.sub).length ? ` [${Object.entries(v.sub).map(([s, n]) => `${s} ${n}`).join(', ')}]` : ''}`).join('; ');
+  return (r.lanterns?.model || r.lanterns?.realised ? `street lanterns model ${r.lanterns.model} / realised ${r.lanterns.realised} (${r.lanterns.differ} differ); ` : '') + Object.entries(r.byKind).sort().map(([k, v]) => `${k} ${v.written}/${v.differ}${CLASSES.some((c) => v[c]) ? ` (${CLASSES.filter((c) => v[c]).map((c) => `${c} ${v[c]}`).join(', ')})` : ''}${Object.keys(v.sub).length ? ` [${Object.entries(v.sub).map(([s, n]) => `${s} ${n}`).join(', ')}]` : ''}`).join('; ');
 }
 
 /** The SMOKE row's verdict: every kind's `differ` 0 (`kinds`: the kinds this run must have written, at least one cell each). */

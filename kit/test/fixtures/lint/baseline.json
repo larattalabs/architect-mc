@@ -1,0 +1,26 @@
+{
+ "$comment": "Known findings of the lints on committed fixtures, recorded with their reason instead of failing (tools/lib/lint-cases.mjs applyBaseline): an exact count per case and rule, so a new instance (or one fixed) shows. Each entry names who decides: a finding Noah or a slice owns stays here until fixed, then leaves.",
+ "entries": [
+  {
+   "lint": "structure",
+   "case": "s1",
+   "rule": "S-LOTS",
+   "count": 4,
+   "why": "S1 golden (floating islands): the hub's `links` walkway (stone bricks, y 168) runs 2 columns under the back corners of lot_1 and lot_2 (their pad row, y 169). In game the realised M2 reach is 16/16 (another link reaches each lot); recorded for the S1 owner, not gated"
+  },
+  {
+   "lint": "structure",
+   "case": "s1-flat",
+   "rule": "S-LOTS",
+   "count": 4,
+   "why": "as s1 (the same plan over the flat claim)"
+  },
+  {
+   "lint": "structure",
+   "case": "p0:valid/v14_floating_islands.json",
+   "rule": "S-LOTS",
+   "count": 4,
+   "why": "valid/v14 is S1's plan (floating_islands) as a plan/0 fixture: the same links walkway under lot_1's and lot_2's back corners as the s1 entry"
+  }
+ ]
+}

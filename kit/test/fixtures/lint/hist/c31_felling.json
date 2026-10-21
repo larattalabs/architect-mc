@@ -1,0 +1,96 @@
+{
+ "about": "C31 felling bounds (5cc0d7f1): a path written over a tree's trunk fells the tree, and its branch reaches into the owner's protected garden. TileCheck's felling stops at the protected area (the fix); before it, the felled logs crossed into the garden. The lint models the felling over the frozen volume's logs (S-FELL); c31-felling #1 keeps the vanilla tree in game",
+ "claim": [
+  0,
+  0,
+  63,
+  63
+ ],
+ "ground": 64,
+ "volume": {
+  "box": [
+   0,
+   60,
+   0,
+   63,
+   80,
+   63
+  ],
+  "blocks": [
+   [
+    20,
+    65,
+    20,
+    20,
+    70,
+    20,
+    "minecraft:oak_log[axis=y]"
+   ],
+   [
+    21,
+    70,
+    20,
+    27,
+    70,
+    20,
+    "minecraft:oak_log[axis=x]"
+   ]
+  ]
+ },
+ "protected": [
+  {
+   "id": "garden",
+   "rect": [
+    24,
+    16,
+    30,
+    24
+   ]
+  }
+ ],
+ "spec": {
+  "stages": [
+   "ground"
+  ],
+  "entrance": [
+   10,
+   65,
+   10
+  ],
+  "parts": [
+   {
+    "id": "path",
+    "cols": [
+     18,
+     20,
+     65,
+     65,
+     0,
+     19,
+     20,
+     65,
+     65,
+     0,
+     20,
+     20,
+     65,
+     65,
+     0,
+     21,
+     20,
+     65,
+     65,
+     0
+    ],
+    "materials": [
+     "minecraft:cobblestone"
+    ],
+    "cond": 0
+   }
+  ]
+ },
+ "mutation": {
+  "preFix": "felling:c31",
+  "expect": "S-FELL"
+ }
+}

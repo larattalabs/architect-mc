@@ -1,0 +1,66 @@
+{
+ "about": "lamp on dirt path (52cc9606, c494ddab): a 4e street with lanterns beside a dirt path the region did not write (a village's own path, in the frozen volume). RoadPlan.lanterns never stands a post on it (vanilla turns it to dirt under the post, outside the journal): the post goes to the other side. The lint's model of RoadPlan (kit/lib/lint/roads.mjs) with the pre-fix foot rule puts the post on the path and S-FOOT catches it",
+ "claim": [
+  0,
+  0,
+  63,
+  63
+ ],
+ "ground": 64,
+ "blockBase": true,
+ "volume": {
+  "box": [
+   0,
+   60,
+   0,
+   63,
+   72,
+   63
+  ],
+  "blocks": [
+   [
+    4,
+    64,
+    34,
+    60,
+    64,
+    34,
+    "minecraft:dirt_path"
+   ]
+  ]
+ },
+ "spec": {
+  "stages": [
+   "ground"
+  ],
+  "entrance": [
+   8,
+   65,
+   32
+  ],
+  "roads": [
+   {
+    "id": "street_e",
+    "part": "street",
+    "points": [
+     [
+      8,
+      65,
+      32
+     ],
+     [
+      56,
+      65,
+      32
+     ]
+    ],
+    "width": 3,
+    "lanterns": true
+   }
+  ]
+ },
+ "mutation": {
+  "preFix": "roads:lamp-path",
+  "expect": "S-FOOT"
+ }
+}
