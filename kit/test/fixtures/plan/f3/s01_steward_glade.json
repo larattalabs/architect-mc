@@ -1,6 +1,7 @@
 {
- "about": "(6c F3 §10.1) s01_steward_glade: Steward-shaped (as Steward's plan writer writes a plan: a zone with labels, purpose, lots with roles and briefs, forms with labels): a hamlet with a well, an old giant oak near the hamlet, a farm pond beside it with coral in it (a form.coral part inside the pond), and two giant red mushrooms at the hamlet's edge. In game through Regions.checkPlan's two-plan flow and realiseApproved (item 3).",
+ "about": "(6c F3 §10.1) s01_steward_glade: Steward-shaped (as Steward's plan writer writes a plan: a zone with labels, purpose, lots with roles and briefs, forms with labels): a hamlet with a well, an old giant oak near the hamlet, a farm pond beside it with coral in it (a form.coral part inside the pond), and two giant red mushrooms at the hamlet's edge. In game through Regions.checkPlan's two-plan flow and realiseApproved (item 3). (The 2x2 pit at the claim's north-west corner, in its margin, puts 6 courses of dirt under the plain in game, as v73 and KC's v61: over the flat base's own grass the farm pond's shell would stand on buried grass and refuse LEAK.)",
  "on": "flat",
+ "terrain": {"W": 240, "D": 160, "x0": 1000, "z0": 2000, "y": 64, "bands": [{"x0": 1000, "x1": 1001, "z0": 2000, "z1": 2001, "y": 58}]},
  "volume": {},
  "covers": [
   "form.giant_tree",
