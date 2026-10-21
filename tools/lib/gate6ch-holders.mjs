@@ -110,8 +110,8 @@ async function judge(ctx, tag, s, rm) {
   const wet = [...c.fluids].filter(([k]) => k !== k3(s.cell));
   out.otherFluid = wet.slice(0, 12);
   check(wet.length === 0, `${tag}: the stair's cell is the only fluid left in the pond's watch box (${wet.length} other: ${json(wet.slice(0, 6))})`);
-  // (no `exclude`: RegionHash's DIFF skips an excluded cell without reading its snapshot entry, so every later cell is compared with the
-  // previous one's value; the full diff is read and the stair's cell filtered here)
+  // (no `exclude`: before v0.40.1 RegionHash's DIFF skipped an excluded cell without reading its snapshot entry, so every later cell was
+  // compared with the previous one's value; fixed in v0.40.1, but the full diff is still read and the stair's cell filtered here)
   const d1 = await ctx.L.call('dev.region.hash', { box: s.box, mode: 'diff', file: s.file }, 4 * 3_600_000);
   const outside = (d1.list ?? []).filter((m) => m.pos !== k3(s.cell));
   d1.mismatches = outside.length + Math.max(0, d1.mismatches - (d1.list ?? []).length);

@@ -10,7 +10,7 @@ public final class RegionsMod {
 	public static void init() {
 		// ticket types register during mod init (before the registries freeze)
 		dev.larattalabs.architect.Architect.LOGGER.debug("region tickets {} {}", RegionSurvey.TICKET, Prepare.TICKET);
-		dev.larattalabs.architect.Architect.LOGGER.debug("region hash ticket {}", RegionHash.TICKET);
+		dev.larattalabs.architect.Architect.LOGGER.debug("region hash ticket {}", RegionHash.Ticket.TICKET);
 		dev.larattalabs.architect.Architect.LOGGER.debug("region fluids ticket {}", RegionFluids.Ticket.TICKET); // 6c H
 		GenCounter.init();
 		RegionsImpl.init();

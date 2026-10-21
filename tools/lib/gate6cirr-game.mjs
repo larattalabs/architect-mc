@@ -563,7 +563,7 @@ export async function holders(ctx) {
   const rm = await core.removeWait(ctx, o.r.region);
   await sleep(3000);
   st = await isStair();
-  // (no `exclude`: RegionHash's DIFF skips an excluded cell without reading its snapshot entry, desyncing every later cell; the stair's cell is filtered here)
+  // (no `exclude`: before v0.40.1 RegionHash's DIFF skipped an excluded cell without reading its snapshot entry, desyncing every later cell; fixed, but the stair's cell is still filtered here)
   const d1 = await L.call('dev.region.hash', { box: o.box, mode: 'diff', file: o.file }, 4 * 3_600_000);
   const outside = (d1.list ?? []).filter((m) => m.pos !== k3(cell));
   d1.mismatches = outside.length + Math.max(0, d1.mismatches - (d1.list ?? []).length);
