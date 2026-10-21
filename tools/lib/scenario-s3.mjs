@@ -210,9 +210,10 @@ export function s3Bars(x, generic, routeRows) {
   out.push({ ...g.determinism, label: 'S3 15 Determinism', threshold: 'IR sha identical over 3 plans; tiles 1 = 4 workers; the committed golden scenarios/goldens/s3.json holds' });
   out.push({ ...g.spend, label: 'S3 16 Spend', threshold: '$0.00' });
   out.push({ ...g.gallery, label: 'S3 16 Gallery (Noah approves this run\'s evidence.sha, section S3 v1)' });
-  // the flat variant judges bar 14 (E-flat) and bars 1-6 (CONTRACT S3 §9 item 3); its other rows are recorded
+  // the flat variant judges bar 14 (E-flat) and bars 1-6 (CONTRACT S3 §9 item 3), its golden (bar 15: scenarios/goldens/s3*) and spend;
+  // its other rows are recorded (the gallery approves the natural run)
   if (x.flat) {
-    const keep = new Set(['s3-lots', 'checker', 'reachability', 's3-grade', 'structure', 'safety', 'exactness', 'determinism', 'spend', 'gallery']);
+    const keep = new Set(['s3-lots', 'checker', 'reachability', 's3-grade', 'structure', 'safety', 'exactness', 'determinism', 'spend']);
     return out.map((r) => (keep.has(r.id) || !r.gated ? r : { ...r, gated: false, pass: null, threshold: `recorded on the flat variant (${r.threshold})` }));
   }
   return out;
