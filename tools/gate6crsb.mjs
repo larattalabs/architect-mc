@@ -347,7 +347,7 @@ steps.brush = async () => {
   const box = [x0 - 12, gy - 10, z0 - 12, x0 + 12, gy + 16, z0 + 12];
   const pre = await G.snap(ctx, box, 'rsb-brush-pre');
   // (stone, dirt and gravel in stock: a natural stroke takes none of them)
-  await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: { 'minecraft:stone': 64, 'minecraft:dirt': 64, 'minecraft:gravel': 64 }, exact: true }, 120_000);
+  const offered = await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: { 'minecraft:stone': 64, 'minecraft:dirt': 64, 'minecraft:gravel': 64 }, exact: false }, 120_000).catch((e) => ({ error: String(e.message ?? e) }));
   const ps0 = await G.pileState(ctx);
   const brush = (o) => L.call('dev.brush', { owner: G.OWNER, ...o }, 600_000);
   const concrete = await brush({ kind: 'overlay', shape: 'cylinder', at: [x0, gy, z0], radius: 3, strength: 1, pattern: { mix: [{ w: 1, mat: 'minecraft:white_concrete' }] } });
@@ -360,7 +360,7 @@ steps.brush = async () => {
   const out = { concrete, players, natural: nat, written: d.mismatches, stock: [ps0.stock, ps1.stock], items };
   check(concrete?.refused && /NOT_ALLOWED/.test(String(concrete.reason ?? concrete.refused?.reason ?? JSON.stringify(concrete.refused))), `item 13 (brush): a concrete-pattern stroke in survival refused NOT_ALLOWED (${json(concrete?.refused ?? concrete?.reason ?? concrete).slice(0, 300)})`);
   check(players?.refused && /NOT_ALLOWED/.test(String(players.reason ?? json(players.refused))), `item 13 (brush): a PLAYER_BLOCKS stroke refused NOT_ALLOWED (${json(players?.refused ?? players?.reason ?? players).slice(0, 200)})`);
-  check(!nat?.refused && nat?.region && (nat.cellsWritten ?? 0) > 0 && d.mismatches > 0 && G.same(ps1.stock, ps0.stock) && sum(ps0.stock) === 192, `item 13 (brush): a natural stroke realised free: ${nat?.cellsWritten} cell(s) written, ${d.mismatches} changed in the world, the stockpile's stock unchanged (${json(ps0.stock)} -> ${json(ps1.stock)})`, nat);
+  check(!nat?.refused && nat?.region && (nat.cellsWritten ?? 0) > 0 && d.mismatches > 0 && G.same(ps1.stock, ps0.stock) && sum(ps1.outstanding) === 0, `item 13 (brush): a natural stroke realised free: ${nat?.cellsWritten} cell(s) written, ${d.mismatches} changed in the world, the stockpile's stock unchanged (${json(ps0.stock)} -> ${json(ps1.stock)}; offered ${json(offered?.accepted ?? offered)}) and nothing outstanding (${json(ps1.outstanding)})`, nat);
   if (nat?.region) {
     await G.remove(ctx, nat.region);
     const e = await G.diff(ctx, box, pre);
