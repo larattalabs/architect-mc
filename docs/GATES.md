@@ -27,7 +27,7 @@ from each slice's own focused items, the verifier's code review and Steward's re
    default there) and Noah's CI runners paused. *Implemented:* see "Timing bars" below.
 2. **`slice` = `change` + the slice's own focused steps.** The unit suites, apijars/api-compat, the impact map's steps for the
    changed paths, and the slice's own gate steps (found by the impact rule of the slice's driver, e.g. `tools/gate6cw.mjs` ->
-   `w-unit`, `w-ingame`, `6cw-scenario-s7`). No `quick` regression suite per slice; the full regression runs once per
+   `w-unit`, `w-ingame`, `6cv-scenario-s7`). No `quick` regression suite per slice; the full regression runs once per
    batch at `release` (overnight). *Implemented:* `--plan` prints, under each step, why it runs.
 3. **The gate-verifier reviews the diff and the evidence; it does not re-run.** Exception: undo, journal, removal and
    survival-accounting code, where it re-runs those specific items (that is where review found C23's defect).
@@ -99,6 +99,7 @@ the whole kit suite (about 190 s and 950 CPU-s each) next to `unit-kit`. The cha
   world switch in the family, 0.6 min for a start or for stopping the client before a no-client step). One shard still runs
   the order exactly. The rules are unchanged: `resources` never overlap, `after` runs on its dependency's shard, and a
   `stopOnFail` step is a barrier.
+- **`supersededBy`** (step field, "Gate waits" below): the step is dropped when the named step, which runs every assertion it runs, is in the same run.
 - **`waitFor`** (new step field): the step starts only after those steps have ended (any status, any shard). It is never skipped,
   unlike `after`. The kit-suite readers wait for `unit-kit` this way.
 - **Estimates from history.** `tools/lib/gate-history.mjs` rebuilds `artifacts/gate-step-history.json` (in the main checkout) at
@@ -124,7 +125,7 @@ the whole kit suite (about 190 s and 950 CPU-s each) next to `unit-kit`. The cha
 - `unit-kit` runs the whole kit suite. When the runner sets `GATE_KIT_RESULTS` (only if `unit-kit` is in the run), it also
   writes a JUnit report there, and `GATE_KIT_TREE` is `HEAD:kit`.
 - The drivers' kit calls whose checks are pass/fail only take their files' results from that report through
-  `tools/lib/kit-reuse.mjs`. These are the whole-kit-suite checks (gate6cv, cw, cx, ct1, ct2, cs2, cd, gate7ak1, gate7ak1b),
+  `tools/lib/kit-reuse.mjs`. These are the whole-kit-suite checks (gate6cv, cw, cx, ct1, ct2, cs2, cd, gate7ak1, gate7ak1b; since "Gate waits" also gate6ch and its H halves, gate6chy, ct3a and ct3b),
   the "goldens that must not move" checks (the same drivers plus cb, cmp, cf1, cf2), and "P0's tests after" (cd, gate7ak1,
   gate7ak1b). Each prints a `kit: reused from this run's unit-kit ...` line.
 - A report is reused only when it is complete, this checkout's `kit/` is clean at that tree, and every requested file is in it
@@ -132,7 +133,7 @@ the whole kit suite (about 190 s and 950 CPU-s each) next to `unit-kit`. The cha
 - A slice's own kit tests always run: a name pattern, a pass-count threshold, the test names, or the diagnostics.
 - Without `unit-kit` in the run (`--only`, a named chain, the verifier's re-runs), or when a file failed, the driver runs the files
   itself, exactly as before. So a failing kit file fails the driver's check as before, and `unit-kit` fails too.
-- The 13 unit steps that read the report `waitFor` `unit-kit`.
+- The unit steps that read the report `waitFor` `unit-kit` (13; 18 since "Gate waits" added h-, hy-, t3a-, t3b- and ha-unit).
 - Within the suite, `--test-concurrency` doesn't help. The suite's wall time (about 190 s on a loaded box) is set by single
   files run serially in one process: `plan-p0.test.mjs` (187 s of tests), `plan-k1a` (150 s), `village` (147 s; one test of
   500 seeded claims takes 138 s). Splitting those tests is kit work, not runner work.
@@ -201,6 +202,125 @@ Before and after, both measured on a shared, busy box:
 - **Scheduler alone, replayed on recorded durations with no contention model:**
   - K1a 196 -> 118 min with s7's timeout as recorded, 144 -> 93 min with s7 at its p50;
   - K1b 160 -> 89 min.
+
+## Gate waits (2026-10-20): idle time and duplicates out
+
+Noah approved the cheap speed-ups from docs/FAST-CHECKS.md ("Fixed waits" and phase P0's duplicates). Every check still runs with
+the same assertions; only idle time and pure duplication went. The before/after numbers are in "Measured" below.
+
+### Waits that became "wait until done"
+
+- **The look steps' removal stall.** k1a-look and t3a-look left the player at the last camera, inside a site's box, so
+  `dev.region.remove` waited out its 10-minute player limit and ended PARTIAL (client log: `a player stayed in c18 for 10 minutes`,
+  3 times per k1a-look, twice per t3a-look, in every recent slice). It was not `ApiTimeouts.DESIGN_DEFAULT_MS`. The drivers now
+  teleport above the claim first; the removal finishes REMOVED in 1.5-3.6 s and its result is recorded in `look.json` (not judged).
+  The look steps stay at the slice tier: Noah judges looks per slice.
+- **Region polls.** `waitRegion` (`tools/lib/run6b.mjs`, `tools/gate6a.mjs`) slept 30 s / 60 s between polls, so every realise
+  read 30 or 60 s whatever its size. It polls at 1 s, rising by 1 s per 10 s waited to at most 5 s, and logs a line when the state
+  changes (else once a minute). Two side effects, both recorded only: a realise's `wallSeconds` and a scenario's MSPT trace window
+  no longer include up to 30/60 s of idle after the batch ended, and t3b's falling-block count is sampled more often (stricter).
+- **The scenario settle** (`tools/scenarios.mjs`, before the pristine cameras and the snapshot). It was a fixed 90 s per variant.
+  It is now `run6b.settleQuiet`: done once every chunk of the claim + 48 is loaded and ticking and **no chunk the server ticks,
+  anywhere in the level, holds a scheduled block or fluid tick** for 10 s in a row, capped at the 90 s it always waited. The new
+  hook `dev.ticks.pending` (SliceHDev, generated headless; `region/PendingTicks` over each chunk's tick containers, saved ticks
+  not yet unpacked included) reads the counts. Anything still flowing (S3's worldgen spring, the cave fluids voc-natural's
+  `farfluid` class covers) keeps it waiting to the cap, so the condition can never cut a settle short while fluids move.
+  Measured: every **flat** variant is quiet at once and settles in 10 s (saves 80 s each); every **natural** variant (S1, S2,
+  S3's relief, S7) still has fluid ticks at 86-89 s and takes the full 90 s, exactly as before. `run.json` records `settle`
+  (`reason` quiet|cap, the samples).
+- **b-ingame.** A removed brush region answers `{missing: true}`; the `/architect brush undo` wait didn't count that as done and
+  ran out its 120 s. It does now.
+- **c30-ingame.** `hashLots` settled 3 s before each of six lots after each of 12 removals; it settles once per set and hashes every
+  lot, after each removal as before.
+
+**Kept, with the reason:**
+- **pt-ingame `hyst` (60 s) and pt2 `states`.** The 60 s wait is `Builds.Rules.demoteGapMs`, the shipped demotion gap that item 6
+  asserts ("incidental after the debounce and the 60 s demotion gap"); hyst already polls for it every 5 s. Shortening it tests
+  another configuration; an injected tick clock is mod work, not a cheap wait. pt2 `states` already sets the gap to 2 s.
+- **0a-tiles' backoff** is the tile time limit and the retry pauses under test (`ARCHITECT_TEST_SLOW_TILES`), and the step ran in
+  0 of the 12 baseline slices.
+- **The natural scenario settles** stay at 90 s in effect (above): never quiet within the cap.
+- **gate6a's in-assertion sleeps** (staged's 90 s "still waits without maxWait", the sidecar-kill pauses) are the assertions'
+  own time windows.
+
+### Duplicates (`supersededBy`)
+
+- **6cw-scenario-s7 is gone.** It ran the very same S7 flat + natural pair as 6cv-scenario-s7: `--phase` only names the output
+  dir, the scenario's own phase (`6c-v`) drives it, and their 36 normalised check lines are identical (KC and IRR slices). Its one
+  unique check, `gate6cw.mjs lampsoff` (the lamps-removed variant over the realised dump), now ends 6cv-scenario-s7; the impact
+  rules that named 6cw name 6cv.
+- **A step field, `supersededBy`.** A step whose every assertion another step also runs is dropped when that step is in the same
+  run, and `--plan` says so in a note. Alone it still runs.
+  - `6b-scenario-s1-flat` → `6b-scenario-s1` (the same command, the first half; its 12 check lines equal s1's first 12 in IRR's
+    slice). It stays the change tier's cheap scenario step. Release no longer lists it beside s1.
+  - `ha-ingame`, `ha-natural`, `ha-cold`, `ha-look` → `h-ingame`, `h-natural`, `h-cold`, `6ch-look` (gate6ch runs the same H-a
+    items, `gate6ch-a.mjs` `items`, after H-core's; ha-ingame's 23 check lines are all in h-ingame's in KC's and IRR's slices).
+    Chain `6ch-a` still runs them alone.
+
+### The offline unit floor
+
+- **Kit reuse for the H, HY and T3 drivers.** gate6ch, gate6chy, gate6ct3a, gate6ct3b and the H halves re-ran the whole kit suite,
+  the goldens and P0's tests next to `unit-kit`; their pass/fail-only kit calls now go through `kit-reuse.mjs` like the other
+  drivers', and h-unit, hy-unit, t3a-unit, t3b-unit and ha-unit `waitFor` `unit-kit` (18 readers now).
+- **A content-keyed cache for "unchanged against origin/main"** (`tools/lib/plan-cache.mjs`; gate6ch-core and gate6chy-core). Each
+  side of the comparison is a pure function of the kit and scenarios trees it runs, the fixture's plan and options and Node's
+  version, so it is stored under exactly that key in `<main checkout>/artifacts/plan-cache/` (untracked). Main's side runs once
+  per main kit; this checkout's side while its `kit/` and `scenarios/` equal a cached tree. A dirty tree is never cached; a miss
+  runs as before. hy's item 12 plans 229 fixtures on both sides (16.5-25 min cold); warm it is seconds.
+- **h-unit:** H-a's item 11 takes H-core's per-fixture comparison from the same process (the identical loop and fixtures against
+  the same origin/main); its own check and bar are unchanged.
+- **h-unit and hy-unit:** the Java tests first, then api-compat in the background (its output to a file) beside the kit items;
+  the same check when it ends.
+
+### Measured
+
+Runs on this branch (`artifacts/gate-runs-gatewaits/`), all on a shared box running 6 gate runs at once (the slot limit went to 6
+during the work): load average 35-86 at step starts, median 55, peak 148; no swap. "Baseline" is each step's mean over the PASS
+samples of every full slice since 2026-10-18 (the 12 FAST-CHECKS slices and later ones; `scratchpad/gatewaits/compare.mjs`, local scratch).
+
+| step | baseline (min) | run 1 `20261021-004231-change` | run 2 `-021416-change` / `-024750-change` | slice `20261021-032653-slice` | check lines |
+|---|---|---|---|---|---|
+| k1a-look | 34.7 | 7.6 | 4.8 | 5.5 | same 6 |
+| t3a-look | 24.8 | 6.7 | 4.2 | (not in range) | same 6 |
+| h-unit | 21.7 | 12.8 (cache cold) | 5.9 | 3.8 | same 12 (item 10's FAIL is pre-existing) |
+| hy-unit | 24.9 | 32.1 (cache cold, load 60) | 5.8 | 10.3 | same 10 |
+| t3a-unit | 14.4 | 5.9 | 4.9 | | same 8 |
+| t3b-unit | 13.0 | 0.7 | 0.3 | 0.3 | same 5 |
+| 6a-staged | 6.7 | 6.2 | 4.9 | 4.5 | same 10 |
+| x-resume | 6.0 | 4.3 | 4.9 | | same 46 |
+| c30-ingame | 6.1 | 4.1 | 4.3 | | same 22 |
+| b-ingame | 4.5 | 2.4 | 3.8 | 3.5 | same 74 |
+| p0-ingame | 2.8 | 1.3 | 2.6 | 1.2 | same 46 |
+| cu-ingame | 2.4 | 1.0 | 1.2 | | same 9 |
+| t3b-ingame | 4.1 | 4.8 | 3.7 | 3.7 | same 32 |
+| 6b-scenario-s1 (+ s1-flat 3.4 dropped) | 8.5 | 6.6 | 6.6 | 6.8 | same 24 |
+| 6cv-scenario-s7 (+ 6cw 7.6 dropped) | 8.0 | 7.0 | 6.0 | 6.3 | 36 + lampsoff's 2 |
+| 6ct1-scenario-relief | 7.7 | 9.2 | 6.8 | 5.8 | same 33 |
+| 6c-scenario-s2 | 9.2 | 8.6 | 9.4 | 9.4 | same 20 |
+| w-ingame (region polls) | 13.7 | | | 6.3 | |
+| d2-ingame (region polls) | 4.3 | | | 2.3 | |
+
+"Same N" is the set of `ok`/`FAIL` lines with numbers, shas and ids masked, against the newest baseline PASS log. Other
+differences were masked values only: E-normal's class list, ids, plan ids.
+
+**The slice** (`slice --range 1c750076...819d1f79`, K1a's range as in "Gate speed", 66 steps today against 53 then; fresh run
+dirs, ports 8972-8977): **140 min wall**, 417 step-minutes, 64 PASS. The 2 FAILs are pre-existing and named: h-unit's H-a item
+10 (the asks' gap table, as in F3's slice) and pt2-ingame's item 13 (apitest apipt2's version, as in F3's and FL's slices).
+4d-all's known "group undo" intermittent failed once in the aborted first slice attempt, not in this one. Against the
+131-minute median that is no wall-time gain, and it can't be read as one: it ran at load 35-86 next to five other runs, and the
+untouched unit steps ran 2-3x their baseline (kc-unit 28.0 against 10.6, irr-unit 24.6 against 11.1, d-unit 12.9 against 4.5,
+t2-unit 12.6 against 4.3, unit-kit 9.6 against 5.5). The steps this branch changed saved 77 step-minutes in it against their
+baseline means (k1a-look 29, h-unit 18, hy-unit 15, t3b-unit 13, w-ingame 7, the dropped 6cw and s1-flat 11).
+
+**Replayed at the baseline's load** (`scratchpad/gatewaits/replay.mjs`, local scratch, not committed: the 12 FAST-CHECKS slices' recorded step times, the
+changed steps at their measured medians, the superseded steps dropped, packed longest-first on 3 shards as FAST-CHECKS'
+"Wall-time model"): median **132 -> 104 min wall** (-21%), **397 -> 311 step-minutes** per slice. The h/hy cache is cold once
+after each main kit change (hy-unit about 25 min that once); a slice whose own kit/ differs from every cached tree pays its own
+side (about half).
+
+**Under 6 runs:** the slot wait for this branch's runs was 30-47 min each; load averages ran 55 median and 86-148 at peaks
+(memory fine: no swap, 0.03-2.7 M free pages). The unit floor slowed most, so 6 concurrent runs look like too many for timing
+comparisons; functional results were unaffected (no new failure, no timing bar judged).
 
 ## Headless gates
 
@@ -404,15 +524,15 @@ its tags. Every matching rule counts. The main rules:
 | `survival/**` | unit-mod, apijars | 4d-all |
 | `sidecar/**` | unit-sidecar, sim-jobs, sim-sets, sim-massing | |
 | `sidecar/src/region*` (engine) | unit-sidecar | 6a-staged, 6a-inv3 |
-| `kit/**` | unit-kit | sim-sets, sim-massing, 4e-megalite, 6b-smoke, 6b-ghost, 6b-scenario-s1-flat |
+| `kit/**` | unit-kit | sim-sets, sim-massing, 4e-megalite, 6b-smoke, 6b-ghost, 6b-scenario-s1-flat (dropped when 6b-scenario-s1 runs too) |
 | `kit/lib/region/**`, `kit/regions/**` (engine) | unit-kit, 6a-inv3 | 6a-staged, 6a-eflat, 6b-versions, 6b-scenario-s1, 6cv-scenario-s7 |
-| `scenarios/**` | unit-kit, 6b-scenario-s1-flat | 6b-scenario-s1, 6cv-scenario-s7 |
+| `scenarios/**` | unit-kit, 6b-scenario-s1-flat | 6b-scenario-s1 (s1-flat then drops), 6cv-scenario-s7 |
 | slice V: the village components, `flat_village`, `tools/gate6cv.mjs`, S7 | v-unit | v-ingame, 6cv-scenario-s7 |
-| slice W: lamps, fixtures, gravity, FROZEN, the road code, `tools/gate6cw.mjs` | w-unit | w-ingame, 6cw-scenario-s7 |
+| slice W: lamps, fixtures, gravity, FROZEN, the road code, `tools/gate6cw.mjs` | w-unit | w-ingame, 6cv-scenario-s7 (it ends with W's lampsoff) |
 | slice B: the brush kernels and program, ARVX v2, `Brushes`/`BrushCommands`, TileCheck, the brush API, `tools/gate6cb.mjs` | b-unit | b-ingame (headless), 4e-crash |
 | slice PT: `placed/**`, the tracking mixins, the journal's `pt`, TileCheck, SiteJournal, roads, the build API, the kit's build helpers, `tools/gate6cpt.mjs` | pt-unit | pt-ingame and pt-nomod (headless) |
 | `tools/gate6b.mjs`, `tools/lib/run6b.mjs`, `tools/find-site.mjs` | 6b-smoke | the other sim 6b steps |
-| `tools/scenarios.mjs`, `tools/lib/scenario-*.mjs` | 6b-scenario-s1-flat | 6b-scenario-s1 |
+| `tools/scenarios.mjs`, `tools/lib/scenario-*.mjs` | 6b-scenario-s1-flat | 6b-scenario-s1 (s1-flat then drops) |
 | a gate driver (`tools/gate4e.mjs`, ...) | that gate's cheap steps | its longer steps |
 | any other `mod/src/main/java/**` | unit-mod | |
 
