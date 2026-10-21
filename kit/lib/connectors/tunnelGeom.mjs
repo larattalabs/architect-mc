@@ -465,7 +465,11 @@ export function tunnel(r, a, b, opts = {}) {
   const slab = shapeOf(floorB, 'slab');
   const stairs = shapeOf(portalB, 'stairs');
   const part = opts.part ?? 'links';
-  const p = r.parts.find((q) => q.id === part) ?? r.part(part, { stage: opts.stage, set: 'path' });
+  // (6c RS-b) in survival the whole tunnel is written in its lining's stage (the route's, before the carve's in creative): its approach
+  // cut, its lining, its carve and its portals are then one construction target per tile, built ring by ring (a later stage's tile
+  // would wait for the earlier one whole, §6.3, and the approach's cut would stand open beside a portal not yet put down)
+  const stage = r.ctx?.survival && opts.liningStage ? opts.liningStage : opts.stage;
+  const p = r.parts.find((q) => q.id === part) ?? r.part(part, { stage, set: 'path' });
   (r.meta.parts[p.id] ??= {}).kind ??= 'path';
   const mats = [null, floorB, slab ? `${slab}[type=bottom,waterlogged=false]` : floorB, liningB, portalB, lights.hanging, lights.flush, lights.standing];
   const M = { air: 0, floor: 1, slab: 2, lining: 3, portal: 4, hanging: 5, flush: 6, post: 7 };

@@ -62,7 +62,7 @@ async function run(name) {
     check(false, `${name}: ${String(e?.message ?? e).slice(0, 300)}`);
   }
   if (data?.keep) delete data.keep;
-  if (!['stop', 'start'].includes(name)) L.write(`${name}.json`, { step: name, seconds: (Date.now() - t0) / 1000, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), load1: os.loadavg()[0], error, results: { ...results }, data });
+  if (!['stop', 'start', 'release'].includes(name)) L.write(`${name}.json`, { step: name, seconds: (Date.now() - t0) / 1000, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), load1: os.loadavg()[0], error, results: { ...results }, data });
 }
 const ensure = async () => { if (!state.dev) await connect(); };
 function spendZero() {
@@ -83,6 +83,11 @@ function withMutex(fn) {
 }
 function claimSlot(pid) {
   return withMutex(() => {
+    // a slot this worktree already holds (its holder alive): kept across server restarts
+    for (let i = 1; i <= Math.max(NSLOTS, 6); i++) {
+      const h = readSlot(i);
+      if (h?.worktree === root && h.pid && alive(h.pid) && h.holder) return i;
+    }
     for (let i = 1; i <= NSLOTS; i++) {
       const h = readSlot(i);
       if (h?.pid && alive(h.pid)) continue;
@@ -91,9 +96,6 @@ function claimSlot(pid) {
     }
     return 0;
   });
-}
-function releaseSlots() {
-  withMutex(() => { for (let i = 1; i <= Math.max(NSLOTS, 6); i++) { const h = readSlot(i); if (h && (h.worktree === root && (!h.pid || !alive(h.pid) || h.pid === process.pid))) fs.rmSync(path.join(SLOTS, `slot-${i}.json`), { force: true }); } });
 }
 
 // ------------------------------------------------------------------ the server and the worlds
@@ -109,18 +111,26 @@ steps.start = async () => {
   execFileSync('git', ['-C', L.RUN, 'checkout', '-q', '--detach', head]);
   execFileSync('npm', ['run', 'build'], { cwd: path.join(L.RUN, 'sidecar'), stdio: 'ignore' });
   await startClient(process.argv[3] ?? 'G6B RSb Lobby', { backend: 'sim' });
-  // (the slot held by the headless host, which outlives a server it relaunches; else the server)
-  let pids = [];
-  try { pids = execFileSync('pgrep', ['-f', `${path.basename(L.RUN)}/tools/run-headless-server.mjs`]).toString().trim().split(/\s+/).filter(Boolean).map(Number); } catch { pids = []; }
-  if (!pids.length) pids = L.clientPids();
-  if (pids.length) withMutex(() => fs.writeFileSync(path.join(SLOTS, `slot-${slot}.json`), JSON.stringify({ pid: pids[0], worktree: root, chain: 'rs-b (headless server)', startedAt: new Date().toISOString() })));
+  // (the slot held by a detached holder of this worktree's, so a server restart keeps it; `release` ends it)
+  let holder = readSlot(slot);
+  if (!(holder?.holder && holder.worktree === root && alive(holder.pid))) {
+    const { spawn } = await import('node:child_process');
+    const h = spawn(process.execPath, ['-e', "process.title='rsb-slot-holder';setInterval(()=>{},3600000)"], { detached: true, stdio: 'ignore' });
+    h.unref();
+    withMutex(() => fs.writeFileSync(path.join(SLOTS, `slot-${slot}.json`), JSON.stringify({ pid: h.pid, holder: true, worktree: root, chain: 'rs-b (headless server)', startedAt: new Date().toISOString() })));
+    holder = { pid: h.pid };
+  }
+  const pids = [holder.pid];
   spendZero();
   return { head, slot, pids };
 };
 steps.stop = async () => {
   try { await connect(10_000); } catch { /* by PID below */ }
   await stopClient();
-  releaseSlots();
+};
+// the slot's holder ended (its pid is this worktree's own) and the slot freed
+steps.release = async () => {
+  withMutex(() => { for (let i = 1; i <= Math.max(NSLOTS, 6); i++) { const h = readSlot(i); if (h?.worktree === root) { if (h.holder && alive(h.pid)) process.kill(h.pid); fs.rmSync(path.join(SLOTS, `slot-${i}.json`), { force: true }); } } });
 };
 steps.base = async () => {
   await ensure();

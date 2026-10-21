@@ -32,7 +32,7 @@ function cellsOf(r, group) {
   return out;
 }
 
-test('RS-b: rs04 in survival: the bore\'s lining in its carve\'s stage (one target per tile), `bores` names its group, start, heading and box', async () => {
+test('RS-b: rs04 in survival: the whole tunnel in its lining\'s stage with the route\'s approach (one target per tile), `bores` names its group, start, heading and box', async () => {
   const r = await check(fixture('rs04_tunnel'), true);
   const ir = r.res.ir;
   assert.deepEqual(ir.survival.groups, ['bore']);
@@ -43,10 +43,12 @@ test('RS-b: rs04 in survival: the bore\'s lining in its carve\'s stage (one targ
   assert.equal(b.box.length, 6);
   assert.ok(b.box[0] <= 1104 && b.box[3] >= 1149, `the box spans the bore: ${b.box}`);
   assert.ok(!ir.parts.some((p) => p.id.endsWith('_lining')), 'no separate lining part in survival');
-  assert.equal(ir.parts.find((p) => p.id === 'links_t0').stage, 'links');
+  assert.equal(ir.parts.find((p) => p.id === 'links_t0').stage, 'routes', 'the tunnel in the routes stage in survival');
   const c = cellsOf(r, 'bore');
-  // the links stage holds the lining (paid cobblestone over and beside the carve) and the carve (held air)
-  const links = Object.values(c.links ?? {}).flat();
+  assert.deepEqual(Object.keys(c), ['routes'], 'every cell of the part in one stage');
+  assert.deepEqual(Object.keys(c.routes), ['17,32'], 'one tile: one target');
+  // the routes stage holds the approach, the lining (paid cobblestone over and beside the carve), the carve (held air) and the portals
+  const links = Object.values(c.routes ?? {}).flat();
   const carve = links.filter((x) => /air$/.test(x.state));
   const lining = links.filter((x) => x.state === 'minecraft:cobblestone');
   assert.ok(carve.length > 300 && lining.length > 200, `carve ${carve.length}, lining ${lining.length}`);
