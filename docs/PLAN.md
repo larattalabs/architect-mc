@@ -926,4 +926,4 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
 | Scenario | Approved | Evidence | Gallery | Recorded |
 |---|---|---|---|---|
 | S2, the ice-spike outpost (v0.31.0) | Noah, in chat with the coordinator, 2026-10-14T04:39:12Z | `932dafe971f1` | https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG (section S2) | here by slice S3 (2026-10-20), from `artifacts/scenarios/6c/s2/approvals.json` (CONTRACT S3 §9 item 9) |
-| S3 v1, the terraced monastery | pending (Noah) | | | |
+| S3 v1, the terraced monastery | pending (Noah) | `39d6ddb1bbf3` (natural run 20261021-041532, slice tier 20261021-040412) | https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG (section S3 v1) | |

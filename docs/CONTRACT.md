@@ -18305,6 +18305,101 @@ About **4.5-6 days**, split by default:
 - **N-S3-3:** the gardens fountain is on.
 
 
+### Phase 6c slice S3 as built (branch `slice/S3`; versions as main has them, set at merge by `tools/release-version.mjs`: S3's javadoc says `Since NEXT`; recorded 2026-10-21)
+
+**Kit.**
+- `terrace(..., {edge: 'blend'})` (`program.mjs`): pins each level into the relief as row runs `{rect, y}`, with no batters; a rim
+  standing more than 2 over the outside land is retained after the relief (`Region._retainTerrace`, the retain role). It throws
+  without the relief pass; a blend terrace the relief never pinned refuses the plan (`plan.mjs`).
+- `kit/lib/region/terraces.mjs`: `parseTerraces`, `layoutTerraces` (pure; a ladder of levels from the rect's lowest ground,
+  each lot on k0, k0-1 or k0+1 within cut and fill; trees and water kept out of a lot and its approach; junctions 4 out of each
+  front, 3 apart; cost 4(cut+fill) + 3 off-level + steepness + 40 per level step), `junctionOf`/`terraceEnds` (route ends are lot
+  junctions, no facing), `chainTerraces`, `ringOf`/`emitTerraces` (wall pads plus a retaining ring in `structure` and rails where
+  the drop is over 3; or blend pads). **Addition:** the ring's unwalled cells are pinned in the relief at their own ground, so a
+  blend round the district can't cut an unretained rim.
+- `districtsEmit.mjs`: a district with `terraces` is laid out by `layoutTerraces`. Its approaches and joins route first and are
+  verified in one dry pass as the real pass lays them (failed joins forbidden and re-joined, a failed approach drops the lot,
+  at most 4 rounds). Pair routes are memoised and deduped (at most 4 tries per pair, later tries capped). Terraced routes get
+  the plan's protected areas, regions and builds as keep-out (`routeKeepOut`), and `guard: true`. A district without `terraces`
+  is byte for byte as before.
+- `compile.mjs`: `terraces` on `zone.standard` (resolved as one terraced district on the locator's candidates) and on
+  `district`. A terraced zone's grade comes from `tolerance.grade`; dropped lots are counted and noted; geometry carries
+  `terraces`. `plan.json`: `$defs/terraces` {rise 2-6 (default 3), retain wall|blend (default wall), stairs (default true)}.
+- The route pass (`_route`, program side). A `guard: true` pass puts a parapet and rail beside a walk over a drop of more than
+  3 (a lantern every 4th) and railings on stair flights, and never lays 4e ground roads. **Additions (guarded passes only, so
+  byte identity holds):**
+  - an earlier pass's runs are obstacles (their width), except within 2 of this pass's ends;
+  - its parapets, retaining walls and stair railings stay off earlier runs (each pass grades from the survey, so S3's lookout
+    path cut stairs through `cloister_t6`).
+  - Per-edge `stairs: false`.
+- **Fix (every plan):** a walk run whose every column an earlier edge wrote builds nothing. It registered an empty path whose
+  `-Infinity` box made canonical JSON refuse the plan.
+- `finish.mjs`: a program check without a plan param makes no artifact (it crashed).
+- `check.mjs` exports `supportCheck`.
+
+**The program `terraced_monastery`** (`catalogue = false`; passes relief, route, districts, hydrology):
+- The plan (`monasteryPlan`, shared with item 4): zone `monastery` with districts gate (low band), gardens (mid), cloister (high),
+  each `terraces`, grade 0.2; the gardens fountain; 2 `rock_spire` pinnacles on the steepest shoulders (`required: false`); relief
+  round the monastery; a player-only `lookout_path` (at the zone's grade).
+- The program's own steps after `runCheck`:
+  - the **walk volume**: the claim's frozen volume, 12 under its lowest ground to 8 over its highest (~5M cells), so the draft
+    world sees caves and overhangs;
+  - the **underpin**: rock under relief and route cells over a natural void, at most 24 deep;
+  - the **footing**: subsurface under the bodies' solid cells on the natural top, and grass under trunks the plan fells within 8
+    of a body, so the journal holds them;
+  - every route pass merged into one `meta.route` (each pass overwrites it; the checker's grade and villager rows saw only the
+    lookout's);
+  - scatter;
+  - **brink rails** (5 rounds; a top snow layer counts as passable once);
+  - `lightCover` (soul lanterns, level 8 planned) with candidates beside every route run; lamp posts sink into snow or drop to
+    the first solid cell, at most 4, and are left out above a walk floor;
+  - a **trim** of rails, posts and lanterns left floating;
+  - the spring check (the program throws if any cell is written over the stream's columns).
+- Bible `g6c_s3_monastery` (format 2): stone bricks, deepslate tiles and bricks, spruce, waxed cut copper accent, soul lanterns,
+  sea-lantern spout.
+
+**Mod.** **Fix:** `TerrainFit.natural` now counts generated ice (ice, packed ice, blue ice), as the kit's voxel class ICE always
+was. Before, a route cut into a glacier kept its packed ice in the world while the plan's virtual world replaced it: realised
+grade, reachability and M5 broke on S3.
+
+**Harness.**
+- `isS3` plans after the 90 s settle. Classes: `s3Classify`, with `farfluid` moved into `scenarios.mjs`; growth, grazed and live
+  count only at unwritten cells, and nothing within 6 of a body.
+- `tools/lib/scenario-s3.mjs` holds the 16 bars (on the flat variant: bars 1-6 and 14, plus the golden and spend).
+- **Deviation: the flat variant's hill is raised with vanilla `/fill`** (`raiseHill`: `s3_hill`'s quadratic mound, 60 high, R 88,
+  11,733 commands in about 11 s). A realised `s3_hill` region made every hill cell another owner's (OWNED). The monastery's
+  natural-cell writes failed there, and its fountain met "what is not the plan's own" (M25:keep).
+- Golden `scenarios/goldens/s3` commits `biomes.json` and `bible.json`. `tools/release-version.mjs` passes them to its re-plan
+  (the golden re-plans byte for byte).
+- `planSurvey` is re-pinned to the post-settle survey (`cc52144b`, previousSha `c375efa8`), with a `feasibility` record.
+- `tools/gate6cs3.mjs` (unit, identity, feasibility, plan, apicompat, report); item 4 in `tools/lib/gate6cs3-game.mjs`; chains
+  `6cs3`, `6cs3-dev`, `6cs3-scn` and `6cs3-item4`; impact rule "6c S3".
+
+**Item 4 deviation.** `checkPlan` answers NEEDS_REPAIR, not READY, when an optional part is refused. On S3's copy, spire_1 has no
+dry, level site (NO_ROOM). The twin applies Steward's repair: it drops the refused optional spires and checks again. That plan is
+READY.
+
+**Gate** (slice tier `20261021-040412-slice`, 3 shards, head 1a6de105: 72 PASS, 5 FAIL, none S3's).
+- S3 natural, run `20261021-041532`, evidence `39d6ddb1bbf3`:
+  - 11/11 lots PLACED (orchard and herb_garden have no reachable terrace); checker clean; 13/13 nodes; 22/22 edges; villager
+    21/21, vanilla both ways;
+  - grade 0/232 windows over; 549/549 rims retained; M5 0.16% (T2's 5.25% risk met); M8 100% (125); M17 0;
+  - palette 0.996; fountain settled, census ok; E-normal 235 (growth 234, live 1, unclassified 0, the undo's own 0);
+  - golden match; $0.
+- Flat variant `20261021-040708-flat`: 10/10 PLACED, every bar 1-6 passes, E-flat 0.
+- s3-unit 276/0: identity 262/262 fixtures and the 59 asks unchanged; feasibility 11 lots, virtual M5 0.00%.
+- s3-plan 12/0: natural (after the repair) and flat. READY, PLACED, the fountain settled and its census equal,
+  realised = virtual over 20,534 and 11,792 cells, M25:clear 0, removal E-normal 0 / E-flat 0.
+- Regressions S1, S2, S7, relief_demo, route_demo and districts_demo pass.
+- The 5 failures, none caused by S3:
+  - pt2-ingame item 13 and h-unit item 10 fail on main (PLAN "Queued (coordinator, 2026-10-20)");
+  - voc-unit needs docker (OrbStack not running);
+  - apijars 0.39.1: one survival check was blocked by a bee in the site;
+  - sim-jobs: the launcher reused a running sidecar.
+- Timing recorded: plans 23-35 s in game, 78-105 s offline under load 80-108. MSPT natural 17.6 ms CPU.
+- Gallery: the 6c gallery, section S3 v1 (https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG). **S3 v1 is green only when Noah
+  approves evidence `39d6ddb1bbf3`.** The high camera sits over the cloud layer and its shots are fogged; cam_e is the overview.
+
 ## Phase 6c slice RS: regions in survival, the terrain half (FROZEN 2026-10-20, Steward reviewed)
 
 A region realises in a survival-toggle world: the land it shapes is free, and everything it builds is a construction target fed
