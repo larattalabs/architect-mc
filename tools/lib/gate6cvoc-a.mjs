@@ -71,7 +71,9 @@ export function baseTree(root) {
  */
 export const LATER_EXCEPTIONS = Object.freeze({ fixtures: ['extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json', ...FL_MOVED.filter((n) => !n.startsWith('asks/'))],
   asks: ['desert_jungle_wall.json', 'hidden_village.json', 'mage_exiles.json', 'old_new_town.json', 'one_block.json', 'rival_families.json', 'row_houses.json', ...FL_MOVED_ASKS],
-  catalogue: ['rule.palette', 'layout.ring', 'layout.spiral', 'layout.grid', 'layout.organic', 'locator.around', 'sketch.outline'] });
+  // ((batch v0.41.0) F3's catalogue changes too: form.giant_tree flipped, four forms added, the tunnel's volume flag)
+  catalogue: ['rule.palette', 'layout.ring', 'layout.spiral', 'layout.grid', 'layout.organic', 'locator.around', 'sketch.outline', 'form.giant_tree',
+    'form.giant_mushroom', 'form.coral', 'form.roots', 'form.stalactites', 'connector.tunnel'] });
 
 export async function unchanged(root) {
   const { dir: mainDir, base } = baseTree(root);
