@@ -25,7 +25,7 @@ import { levelBands } from '../lib/region/passes/districts.mjs';
 import { draftIR } from '../lib/region/plan.mjs';
 import { buildVirtual, F_WALK } from '../lib/region/vworld.mjs';
 import { walkKinds } from '../lib/realise.mjs';
-import { walkGraph } from '../lib/region/check.mjs';
+import { supportCheck, walkGraph } from '../lib/region/check.mjs';
 import { classAt, VC } from '../lib/region/volume.mjs';
 
 export const id = 'terraced_monastery';
@@ -230,6 +230,32 @@ function walkVolume(r, ctx) {
   const box = { minX: claim.minX, minY: Math.max(claim.minY, lo - WALK_VOLUME_BELOW), minZ: claim.minZ, maxX: claim.maxX, maxY: Math.min(claim.maxY, hi + WALK_VOLUME_ABOVE), maxZ: claim.maxZ };
   const v = r.needVolume(box);
   return { box: [box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ], read: !!v };
+}
+
+/** The decor a trim takes out when it floats (rails, posts, lanterns): never a structural cell. */
+const TRIM_DECOR = /(_fence|_fence_gate|lantern|torch|_wall)(\[|$)/;
+
+/**
+ * The trim: a rail, post or lantern of the plan's own that stands on nothing (M3: another part's later write took its support, as a
+ * route's head room cut under a stair railing's foot) is taken out (air, ours), up to 3 rounds (a lantern on a removed post). Returns
+ * the cells taken out.
+ */
+function trimFloating(r, ctx, { stage }) {
+  let n = 0;
+  for (let round = 0; round < 3; round++) {
+    const { ir, vw } = draftWorld(r, ctx);
+    const cols = [];
+    for (const f of supportCheck(vw, ir, null).findings) {
+      if (f.rule !== 'M3') continue;
+      for (const [x, y, z] of f.sample ?? f.cells ?? []) if (TRIM_DECOR.test(vw.pal.states[vw.get(x, y, z)] ?? '')) cols.push(x, z, y, y, 0);
+    }
+    if (!cols.length) break;
+    const part = r.parts.find((q) => q.id === 'mon_trim') ?? r.part('mon_trim', { stage });
+    (r.meta.parts['mon_trim'] ??= {}).kind = 'trim';
+    part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: [r.material('minecraft:air', 'trim')], cond: 3, walk: false });
+    n += cols.length / 5;
+  }
+  return n;
 }
 
 /** The walk volume (decoded) when the plan read it, else null. */
@@ -491,6 +517,8 @@ export default function terracedMonastery(ctx) {
   }
   const sunk = { size: sunkN, moved: shift.size, dropped: dropped.size };
   info2.lamps = { fixture: cover.fixture, count: cover.lamps.length, before: cover.before, after: cover.after, capped: cover.capped, sunk: sunk.size, moved: sunk.moved, dropped: sunk.dropped };
+
+  info2.trimmed = trimFloating(r, ctx, { stage: decor });
 
   // ---- the spring's columns: nothing of the plan is written there (the program's own check; the broken variant is caught here)
   if (keepOut.length) {

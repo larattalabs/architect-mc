@@ -436,7 +436,7 @@ async function runScenario(id) {
   T('prepare', t0);
   // (6c S3, CONTRACT S3 §6) S3's plans read a survey taken after the 90 s settle: the claim's spring stream starts only once a fresh
   // copy's chunks tick, so a survey before the settle never holds it (its columns are then no water to the plan, and a fill can bury
-  // the feeder: T1's falling-water failures). The flat variant's hill is raised first (a region of its own, kept: the base world)
+  // the feeder: T1's falling-water failures). The flat variant's hill is raised first (vanilla /fill, natural land: the base world)
   let hill = null;
   if (isS3(sc)) {
     if (flat) { t0 = Date.now(); hill = await (await import('./lib/scenario-s3.mjs')).raiseHill(L, claim, sc); T('hill', t0); }

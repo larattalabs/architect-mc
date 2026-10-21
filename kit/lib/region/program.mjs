@@ -537,7 +537,9 @@ export class Region {
             for (const q of footprintOf(cells, e.width + 2)) mark(q[0], q[1], e.id);
             return;
           }
-          rec.paths.push(p._routeRun(`${rid}_${n}`, fpOf(si), mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells, noRetain, fillTop, guardCols, noGuard }));
+          // ((6c S3) a run whose every column an earlier edge wrote builds nothing: it registered an empty path, whose box no IR can hold)
+          const fp = fpOf(si);
+          if (fp.length) rec.paths.push(p._routeRun(`${rid}_${n}`, fp, mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells, noRetain, fillTop, guardCols, noGuard }));
         } else if (g.kind === 'stair') {
           // the flight's ground (cut above, fill below), then the treads
           p._routeRun(`${rid}_${n}g`, fpOf(si), mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells, noSurface: true, register: false, noRetain, fillTop });

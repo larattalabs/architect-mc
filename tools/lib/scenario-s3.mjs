@@ -17,19 +17,53 @@ const k3 = ([x, y, z]) => `${x},${y},${z}`;
 export const HILL = Object.freeze({ height: 60, margin: 8 });
 
 /**
- * The flat variant's hill, raised first (CONTRACT S3 §9 item 3: through the relief pass's `base`, as T1's flat hill): the bundled
- * program `s3_hill` planned over the claim and realised, then kept (the monastery's region is planned on it, and its undo is judged
- * against the world with the hill). Returns {region, planId, cells, state}.
+ * The flat variant's hill, raised first (CONTRACT S3 §9 item 3), with vanilla /fill (deviation, recorded in "as built"): the contract's
+ * route, `s3_hill` realised as a region of its own, made every hill cell another owner's journal cell (OWNED), so the monastery's writes
+ * there failed their natural-cell conditions and its fountain met "what is not the plan's own" (M25:keep). The same quadratic mound
+ * (`hillAt`, kit/regions/s3_hill.mjs: `height` over the flat ground, its radius the claim's half less `margin`), grass on top, 3 dirt,
+ * stone under, as natural, unowned land. Per level, the rows' spans merged into boxes; the claim's chunks force-loaded meanwhile.
+ * Returns {cells, commands, ground, ms}.
  */
 export async function raiseHill(L, claim, sc) {
-  const p = await L.plan('s3_hill', claim, { params: { height: HILL.height, margin: HILL.margin }, surveyLoad: 'generated:64', seed: sc.seed });
-  const pr = await L.prepare(p.planId);
-  void pr;
-  const region = await L.realise(p.planId, {});
-  const st = await L.waitRegion(region, 3_600_000);
-  L.log(`  s3 flat: the hill ${region} ${st.view.state}, ${st.record?.cellsWritten ?? '?'} cells`);
-  if (st.view.state !== 'PLACED') throw new Error(`the flat variant's hill did not place (${st.view.state})`);
-  return { region, planId: p.planId, cells: st.record?.cellsWritten ?? null, state: st.view.state };
+  void sc;
+  const t0 = Date.now();
+  const { hillAt } = await import('../../kit/regions/s3_hill.mjs');
+  const [x0, z0, x1, z1] = claim;
+  const W = x1 - x0 + 1, D = z1 - z0 + 1;
+  const cx = (x0 + x1) >> 1, cz = (z0 + z1) >> 1;
+  const R = Math.max(8, (Math.min(W, D) >> 1) - HILL.margin), H = HILL.height;
+  const G = 64; // the flat base's grass (checked below)
+  const ok = await L.cmd(`/execute if block ${cx} ${G} ${cz} minecraft:grass_block`);
+  if (!ok?.success) throw new Error(`the flat variant's hill: no grass at ${cx} ${G} ${cz} (${JSON.stringify(ok?.messages ?? [])})`);
+  await L.cmd(`/forceload add ${x0} ${z0} ${x1} ${z1}`);
+  const hAt = (x, z) => hillAt(cx, cz, R, H, x, z);
+  // the span of columns at least k high in row z (the mound is convex: one span per row)
+  const span = (z, k) => { let a = null, b = null; for (let x = cx - R; x <= cx + R; x++) if (hAt(x, z) >= k) { if (a === null) a = x; b = x; } return a === null ? null : [a, b]; };
+  const boxes = (k, y, block) => {
+    const out = [];
+    let cur = null;
+    for (let z = cz - R; z <= cz + R + 1; z++) {
+      const s = z <= cz + R ? span(z, k) : null;
+      if (cur && s && s[0] === cur.a && s[1] === cur.b) { cur.z1 = z; continue; }
+      if (cur) out.push(`/fill ${cur.a} ${y} ${cur.z0} ${cur.b} ${y} ${cur.z1} ${block}`);
+      cur = s ? { a: s[0], b: s[1], z0: z, z1: z } : null;
+    }
+    return out;
+  };
+  let commands = 0, cells = 0;
+  for (let h = 1; h <= H; h++) {
+    const y = G + h;
+    const list = [...boxes(h, y, 'minecraft:grass_block'), ...boxes(h + 1, y, 'minecraft:dirt'), ...boxes(h + 4, y, 'minecraft:stone')];
+    for (let i = 0; i < list.length; i += 32) {
+      const res = await Promise.all(list.slice(i, i + 32).map((c) => L.cmd(c)));
+      for (const [j, r] of res.entries()) if (!r?.success && !/No blocks were filled|Could not set/.test((r?.messages ?? []).join(' '))) throw new Error(`the flat variant's hill: ${list[i + j]}: ${JSON.stringify(r?.messages ?? [])}`);
+    }
+    commands += list.length;
+  }
+  for (let x = cx - R; x <= cx + R; x++) for (let z = cz - R; z <= cz + R; z++) cells += hAt(x, z);
+  await L.cmd(`/forceload remove ${x0} ${z0} ${x1} ${z1}`);
+  L.log(`  s3 flat: the hill raised by /fill (${commands} commands, ${cells} cells, R ${R}, H ${H}) in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+  return { cells, commands, ground: G, ms: Date.now() - t0 };
 }
 
 /** A fluid op's sets as cells (the IR's runs [x, z, y0, y1]). */

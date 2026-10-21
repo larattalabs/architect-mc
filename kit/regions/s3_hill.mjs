@@ -1,8 +1,9 @@
 // s3_hill (6c S3, docs/CONTRACT.md "Phase 6c slice S3" §9 item 3): the flat variant's hill, not a catalogue program. On a flat claim it
 // raises a quadratic mound `height` blocks over the flat ground (its radius the claim's half less `margin`) through the relief pass's
 // `base` (T1's flat hill): one pin at its top, the mound as the land the blend meets, everything outside the band written as the base
-// (the pass's `raised` cells). The harness realises it first and keeps it: the monastery is planned on the hill and its undo is judged
-// against the world with the hill (E-flat). Integer only (the plan path's lint).
+// (the pass's `raised` cells). The harness raises the same mound (`hillAt`) with vanilla /fill (tools/lib/scenario-s3.mjs raiseHill):
+// realised as a region, its cells were another owner's (OWNED) and the monastery could not build on them. Integer only (the plan
+// path's lint).
 import { region } from '../lib/region/program.mjs';
 
 export const id = 's3_hill';

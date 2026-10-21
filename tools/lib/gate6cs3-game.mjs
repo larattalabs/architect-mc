@@ -5,7 +5,7 @@
 //            columns registered as the owner's protected area, as the program names them): READY, PLACED, the fountain settled and
 //            census-exact, the realised world equal to the virtual one over every written cell, M25:clear 0; E-normal 0 unclassified
 //            under S3's classes (tools/scenarios.mjs s3Classify);
-//   flat     the flat variant's hill raised first (s3_hill, kept) on the flat base: the same, and E-flat 0.
+//   flat     the flat variant's hill raised first (scenario-s3.mjs raiseHill: vanilla /fill of s3_hill's mound) on the flat base: the same, and E-flat 0.
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
