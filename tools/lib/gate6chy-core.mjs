@@ -28,8 +28,6 @@ const hasCourse = (plan) => (plan.connectors ?? []).some((c) => c && c.kind === 
  * (../architect-mc-HYcore-main). Fixtures with a frozen volume of their own (`volume`) run the two-plan harness on both sides.
  */
 export async function unchanged(root) {
-  const { createHash } = await import('node:crypto');
-  const sha256 = (s) => createHash('sha256').update(s).digest('hex');
   const mainDir = path.resolve(root, '..', 'architect-mc-HYcore-main');
   execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']);
   const mainHead = execFileSync('git', ['-C', root, 'rev-parse', 'origin/main']).toString().trim();
@@ -38,7 +36,9 @@ export async function unchanged(root) {
   const H = (dir) => import(pathToFileURL(path.join(dir, 'kit', 'test', 'plan-helpers.mjs')).href);
   const [hNew, hOld] = [await H(root), await H(mainDir)];
   const out = { mainHead, fixtures: {} };
-  let same = 0, skipped = 0;
+  let same = 0, skipped = 0, cached = 0;
+  const PC = await import('./plan-cache.mjs');
+  const [treesNew, treesOld] = [PC.treesOf(root), PC.treesOf(mainDir)];
   const base = path.join(root, 'kit', 'test', 'fixtures', 'plan');
   for (const dir of fs.readdirSync(base).filter((d) => fs.statSync(path.join(base, d)).isDirectory()).sort()) {
     for (const f of fs.readdirSync(path.join(base, dir)).filter((x) => x.endsWith('.json')).sort()) {
@@ -58,15 +58,21 @@ export async function unchanged(root) {
         return fx.volume !== undefined && h.checkPlanVolumes ? h.checkPlanVolumes(p, { ...o, volume: fx.volume }) : h.checkPlanLocal(p, o);
       };
       let a, b;
-      try { a = await runOn(hNew, plan); b = await runOn(hOld, oldPlan); } catch (e) { out.fixtures[name] = { error: String(e.message).slice(0, 200) }; continue; }
-      const norm = (r) => (r.res?.irJson ?? '').replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"');
-      const answers = (r) => JSON.stringify(r.check?.parts ?? r.check?.malformed ?? null);
-      const eq = { answers: answers(a) === answers(b), ir: sha256(norm(a)) === sha256(norm(b)), overall: a.check?.overall === b.check?.overall };
+      // (gate waits, 2026-10-20) each side keyed by its kit and scenarios trees, the plan and this fixture's options (tools/lib/plan-cache.mjs)
+      const opts = { ...fx, plan: undefined, answer: undefined, on };
+      try {
+        a = await PC.planSide(root, treesNew, ['hy', name, plan, opts], () => runOn(hNew, plan));
+        b = await PC.planSide(root, treesOld, ['hy', name, oldPlan, opts], () => runOn(hOld, oldPlan));
+      } catch (e) { out.fixtures[name] = { error: String(e.message).slice(0, 200) }; continue; }
+      cached += a.cached + b.cached;
+      const eq = { answers: a.answers === b.answers, ir: a.ir === b.ir, overall: a.overall === b.overall };
       out.fixtures[name] = eq;
       if (eq.answers && eq.ir && eq.overall) same++;
     }
   }
   out.same = same; out.n = Object.keys(out.fixtures).length; out.skipped = skipped;
+  out.cache = { sides: cached, of: 2 * out.n, trees: { new: treesNew, main: treesOld } };
+  PC.savePlanCache();
   const differing = Object.entries(out.fixtures).filter(([, v]) => !(v.answers && v.ir && v.overall));
   out.excepted = differing.map(([k]) => k).filter((k) => UNCHANGED_EXCEPTIONS.includes(k));
   out.differ = differing.filter(([k]) => !UNCHANGED_EXCEPTIONS.includes(k)).map(([k, v]) => [k, v]);
