@@ -31,15 +31,17 @@ to the server's pid; `stop` releases it. Item 16's rows run through the runner, 
 - **Ice caps** (N-RS-4): free in the kit already (a fluid op's cells are class 0); `rs08_ice` (a built-edge pond, a snowy biome grid;
   the driver sets the claim to snowy plains with `/fillbiome`) proves it in game.
 
-## Status (2026-10-21 05:50 UTC)
+## Status (2026-10-21 06:45 UTC)
 
-- [x] kit + mod ring order; the survival tunnel whole in its lining's stage (one target per tile); the hanging-lantern deadlock fixed;
-  farmland dried to dirt counts as built (Builder.Run.matches, S-CU-3: rs03 lost 3 dirt from item 8's sum)
-- [x] RS-b driver rows all green (artifacts/gate6c-rsb/REPORT.md): unit, rs04 (item 5 + ring evidence), rs04half (item 6), rs04crash
-  (item 11), ice (N-RS-4), lava (items 8, 9 lava rows), brush (item 13)
-- [ ] item 16 + the Builder change's impact steps via the runner (artifacts/gate-runs-rsb/, scratchpad/rsb/gate-run.log)
-- [x] "RS-b as built" (docs/CONTRACT.md, end of the RS section)
-- [ ] gate-verifier over origin/rs/core..HEAD; push; report
+- [x] merged `origin/slice/RS` (529138d1, RS-a done) and `origin/main` (6e6b6c87); RS's placeholder versions kept (4 release-version
+  tests fail on them: the coordinator renumbers)
+- [x] kit + mod ring order; the survival tunnel whole in its lining's stage; the hanging-lantern deadlock fixed (RS-a's 95.3% stop);
+  farmland built then dried to dirt stays built (only a cell already built: the verifier's catch)
+- [x] driver rows green on the merged head: unit, rs04, rs04half, rs04crash, rs03stop, ice, lava, brush (artifacts/gate6c-rsb/REPORT.md)
+- [ ] item 16 + Builder impact steps on the merged head via the runner (a first run on fc7867da: unit-mod, y, c29, pt2-survival, h,
+  cu-survival, ha PASS; hy, kc, irr pending)
+- [x] "RS-b as built" (docs/CONTRACT.md, after "RS-a as built")
+- [ ] gate-verifier again (its first pass: every in-game item PASS; FAIL only on the farmland rule, since fixed); push; report
 
 ## Lessons from the run
 

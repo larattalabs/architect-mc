@@ -18894,33 +18894,38 @@ below. Evidence: `artifacts/gate6c-rsb/` (driver `tools/gate6crsb.mjs`, own port
 - *Fix (shared builder step):* a hanging lantern deadlocked its roof. The roof waited for the solid cell under it, and the lantern
   waited for its support. The below rule now skips an attachable hanging from the cell.
 
-**Fix in `Builder.Run.matches` (sites and roads too): a farmland cell dried to dirt counts as built** (S-CU-3).
+**Fix in `Builder.Run.matches` (sites and roads too): a farmland cell the builder already built that dried to dirt stays built** (S-CU-3).
 - rs03's irrigation banks are farmland built in air. They dry to dirt (in the INSTANT twin too).
 - The target then counted them unbuilt. The builder could never write over the dirt, so the cells waited for ever and 3 dirt fell
   out of item 8's sum.
 - Dirt costs dirt, and the refund pays the standing block, so nothing else moves.
+- Only a cell already built (in memory) keeps it: farmland planned over the ground's own dirt is still written (the verifier's catch on
+  the first version). After a restart a dried, unbuilt-in-memory cell of a target not yet BUILT reads unbuilt again; RS-a's
+  `soilSame` covers a BUILT target.
 
 **Ice caps (N-RS-4):** free as RS-a's kit made them (a fluid op's cells are class 0). `rs08_ice` is a built-edge pond whose biome
 grid is snowy plains; the driver sets the claim's biome with `/fillbiome`.
 
-**Results** (`artifacts/gate6c-rsb/REPORT.md`, head fc7867da for the in-game rows):
+**Results** (`artifacts/gate6c-rsb/REPORT.md`; after merging `origin/slice/RS` 529138d1 and `origin/main` 6e6b6c87):
 
 | Row | Result |
 |---|---|
-| unit | TunnelRingsTest 5 and RegionTargetsTest 6 (0 failures). `kit/test/rs-b.test.mjs` and `rs.test.mjs` 13 pass. T3b's tunnel tests 19 pass. |
-| item 5, rs04 | Built from the stockpile (690 items, 30 waves). Every target BUILT. Twin 0 differ, E-flat 0. Item 3's bills equal per part and for the region. |
-| ring evidence | In 0 of about 31 samples was a bore cell open without its lining. In 28 samples a ring's carve stood open while a later ring's lining wasn't yet built, so the build went ring by ring, not course by course. |
-| item 6, rs04 | Half the bill fed (about 49% built). No run started without its whole bill. 0 open cuts without lining. M3, M4, M8 and gravity all 0 (tunnel findings recorded). |
-| ice (N-RS-4) | rs08 in survival: 35 cap cells, 35 ice standing. Fed exactly the shell's bill (no ice, no water). Body settled after its shell. Twin 0, E-flat 0. |
-| item 8, rs03 | The per-item sum was constant at 32 checkpoints: feed, build, bodies (lava charged, a bucket back), the withdrawal, and the removal under way. |
-| item 9 lava rows | 10 sources and 5 buckets kept: 5 scooped (5 buckets became 5 lava buckets), 5 drained without credit. After removal the sum differs by exactly the drained term. A second removal credits nothing. E-flat 0. Item 3's region bill counts the bodies' charges. |
-| item 13, brush | A concrete-pattern stroke and a PLAYER_BLOCKS stroke are each refused NOT_ALLOWED. A natural stroke writes 31 cells with the stock unchanged and nothing outstanding, and is removed with E-flat 0. |
-| item 11, rs04 | `rs04crash`: half built, autosave, `kill -9`, cold start. The targets resume from the world, the rest is fed, built with no breach, twin 0, E-flat 0. |
-| item 16 | `unit-mod`, `h-ingame`, `ha-ingame`, `hy-ingame`, `kc-ingame`, `irr-ingame`, and for the `Builder.matches` change `cu-survival`, `y-ingame`, `c29-ingame` and `pt2-survival`, through `tools/gate-run.mjs` (see HANDOFF-RSb.md for the run). |
+| unit | TunnelRingsTest 5 and RegionTargetsTest (0 failures); `kit/test/rs-b.test.mjs` and `rs.test.mjs`; the T3b tunnel tests. |
+| item 5, rs04 | Built from the stockpile in waves; every target BUILT; twin 0 differ; E-flat 0; item 3's bills equal per part and whole. |
+| ring evidence | No bore cell open without its lining in any sample of the build; in most samples a ring's carve stood open while a later ring's lining wasn't built yet (ring by ring, not course by course). |
+| item 6, rs04 | Half the bill fed (about 49% built): no run started without its whole bill; 0 open cuts without lining; M3, M4, M8 and gravity 0. |
+| item 11, rs04 | `rs04crash`: half built, autosave, `kill -9`, cold start: the targets resume from the world (664 cells as before); the rest fed with no breach; twin 0; E-flat 0. |
+| item 11, rs03 | `rs03stop`: a clean stop with every paid cell built and the bodies still waiting for their barriers (PLACING, not done); after the restart the build reads as before (once its chunks rescan), the bodies settle, twin 0, E-flat 0, the per-item sum exact throughout. |
+| ice (N-RS-4) | rs08 in survival: 35 cap cells, 35 ice standing; fed exactly the shell's bill (no ice, no water); body settled after its shell; twin 0; E-flat 0. |
+| item 8, rs03 | The per-item sum constant at 30+ checkpoints: feed, build, bodies (lava charged, a bucket back), the withdrawal, the removal under way. |
+| item 9 lava rows | 10 sources, 5 buckets kept: 5 scooped (5 buckets became 5 lava buckets), 5 drained without credit; the sum then differs by exactly the drained term; a second removal credits nothing; E-flat 0. |
+| item 13, brush | A concrete-pattern and a PLAYER_BLOCKS stroke refused NOT_ALLOWED; a natural stroke writes 31 cells, the stock unchanged and nothing outstanding; removed with E-flat 0. |
+| item 16 | Through `tools/gate-run.mjs` (`artifacts/gate-runs-rsb/`): `unit-mod`, `h-ingame`, `ha-ingame`, `hy-ingame`, `kc-ingame`, `irr-ingame`, and for the `Builder.matches` change `cu-survival`, `y-ingame`, `c29-ingame`, `pt2-survival`. |
 
 **Notes for RS-a and the RC:**
-- RS-a's `G.billsOf` region whole (`__region__`) leaves out the bodies' charges (lava buckets, grates). rs03's region row then
-  differs by `{iron_bars: 8, lava_bucket: 10}`. RS-b's driver adds `cost.survival.charged`.
+- Versions: RS's placeholders (API 1.41.0, mod 0.44.0, kit 0.42.0) are kept. Against main's new `tools/release-version.mjs` four
+  tests of `kit/test/release-version.test.mjs` fail on this tree (goldens `crossings_demo_flat`, `links_demo`, `links_demo_flat` record
+  kit 0.38.0): the coordinator's renumbering at merge settles them.
 - The stockpile accepts only items its targets lack. A brush row can't stock unrelated items.
 - Provenance (RP, 0.40.1): once it is on main, tunnel target cells get `UNFINISHED` at put-down and `WRITTEN` when built. Not
   wired here (the coordinator's instruction).
