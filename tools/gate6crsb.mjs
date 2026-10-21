@@ -101,8 +101,8 @@ steps.start = async () => {
   // a slot first, held by this driver's pid while the server boots, then handed to the server's
   let slot = 0;
   for (let k = 0; !(slot = claimSlot(process.pid)); k++) {
-    if (k % 10 === 0) log(`waiting for a free gate slot (${[1, 2, 3].map((i) => readSlot(i)?.chain ?? 'free').join(', ')})`);
-    await sleep(60_000);
+    if (k % 40 === 0) log(`waiting for a free gate slot (${[1, 2, 3].map((i) => readSlot(i)?.chain ?? 'free').join(', ')})`);
+    await sleep(15_000);
   }
   const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim();
   execFileSync('git', ['-C', L.RUN, 'checkout', '-q', '--detach', head]);
