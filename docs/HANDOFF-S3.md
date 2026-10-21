@@ -76,8 +76,11 @@ release tool re-plans goldens with their biomes/bible, its set test counts a tre
 mod build ok, identity 262/262 + 59 asks. Item 4 (chain 6cs3-item4, 20261021-034205): PASS natural (after Steward's repair drops a
 refused optional spire) and flat.
 
-In flight: slice tier (log scratchpad/s3-build/run-slice1.log, 3 shards 8924-8929, GATE_SLOTS=6).
+Slice tier 20261021-040412: 72 PASS / 5 FAIL, none S3's (pt2-ingame 13 and h-unit 10 fail on main; voc-unit needs docker;
+apijars bee flake and sim-jobs sidecar reuse both PASS on re-run 20261021-081316). Gallery republished (section S3 v1, evidence
+39d6ddb1bbf3). CONTRACT "S3 as built" written; PLAN queue and approvals row done.
 
-Next: slice results; gallery from the slice run's S3 natural/flat dirs (copy into the main checkout's artifacts/scenarios/6c/s3/,
-SCENARIOS_ART there, `node tools/scenarios.mjs gallery --phase 6c`, read https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG first,
-republish to it); gate-verifier (re-runs item 4); CONTRACT "S3 as built"; retire this file; push; report.
+In flight: gate-verifier (reviews origin/main...HEAD, recomputes the evidence sha, re-runs item 4 with chain 6cs3-item4 on
+8928/8929, out scratchpad/s3-build/verify-runs).
+
+Left: the verifier's verdict (fix anything it names); then delete this file, push, report "ready to merge".
