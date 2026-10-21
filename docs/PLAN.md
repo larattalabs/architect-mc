@@ -884,6 +884,14 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
   VOC-c item 3, because `rule.palette` became supported. Re-cut the tables (vocc's "after" table already matches) and fold them
   into the 6c close-out with Steward's 12 re-recorded asks.
 
+## RS follow-ups (coordinator, 2026-10-21; Steward's supplied-plan run on the RS jar)
+
+- Region tile and road item waits carry no build tag Steward can match. Give them the region and the part, as SITE_WAITING
+  already does, so the steward can say which part waits for what.
+- SITE_BUSY stage waits: give them a reason Steward can say ("the street waits for the walls").
+- Steward found a region builds from materials only when the world's default mode isn't creative, while its batch path needs
+  only the toggle. Write the rule into the RS contract text so callers don't have to discover it.
+
 ## Queued (coordinator, 2026-10-21; Noah: crash safety option A)
 
 - **Diagnose-and-repair command** for builds left half-placed or half-restored by a crash with unsaved chunks.
