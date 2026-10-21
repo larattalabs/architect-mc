@@ -681,6 +681,7 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   stop (cells open, shells and joins hold) and answers uncontained rather than writing into a lost shell. The general case (any
   stage's PLACED entries over chunks the halt did not save) is 6a's crash model ("journal wins" holds only with a save): decide
   whether settle at start should compare a stage's last entries with the world and re-apply them.
+  **Answered (draft):** CONTRACT "Undo hardening C" (roll forward per cell after an unclean stop; release only once durable).
 
 ## Queued from the H RCs (coordinator, 2026-10-19)
 
