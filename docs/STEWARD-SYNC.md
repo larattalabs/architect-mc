@@ -43,8 +43,13 @@ release and after each sync. Contracts and as-builts stay in `docs/CONTRACT.md`;
    relief undo fix (restored flowing water gets a fluid tick). Old IRs go PLAN_STALE.
 4. **Released 2026-10-20:** v0.40.0 (API 1.37.0, kit 0.38.0, catalogue 9, Steward RC passed): CU copper undo, IRR farm irrigation
    (`irrigate`, `$.lots[].irrigation`, `DesignRequest.reserved`), VOC-c `rule.palette` (`Regions.checkPalette`, `Reason.PALETTE`).
-5. FL, F3, S3, RS (all frozen 2026-10-20 and building). FL and S3 ship with no RC (S3 after Noah's gallery approval); F3 and RS
-   each get a Steward RC.
+5. **Integrated 2026-10-21 as the batch v0.41.0** (branch `integrate/batch-6c`; API 1.38.0, mod 0.41.0, kit 0.39.0, catalogue 11;
+   not yet released): FL (free layouts), F3 (forms II: giant trees and mushrooms, stalactites, roots, coral), S3 (terraced zones, the
+   terraced monastery), RS (regions in survival: RS-a terrain, RS-b tunnels, ice, lava, brushes), plus RS's realised provenance
+   (RP §5). Steward RC passed on F3 and on RS-a and RS-b. **Noah approved every look on 2026-10-21:** N-F3-2 (F3's forms and coral,
+   their scale), S3 bar 16 (the monastery gallery: S3 v1 is green), N-FL-1 (organic irregularity as shown, v69's straight-run share
+   0.639) and N-FL-2 (ring lots facing inward). For Steward after release: plan v1 for Supplied builds and the offer in survival
+   (RS), the four layouts and `locator.around` (FL), the grown forms (F3), `terraces` (S3).
 6. D3, districts beside a standing region town (Steward round 11: D-S1 join inside the town's claim to its street network,
    D-S3 land taken in the view ext, D-S4 dry beside check). Contract drafting; builds after FL merges. D-S2 (grow a district) is
    with 6d.

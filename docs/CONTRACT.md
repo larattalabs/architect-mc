@@ -23634,3 +23634,98 @@ CI set 28); kit 672/0; sidecar 758 (`versions.test.ts`'s fixture hook timed out 
   above): 20 PASS, 1 FAIL (h-unit item 10 only, as on main). The wider in-game steps were not re-run after the main merge (it
   brought only gate speed-ups and a dev hook); the gate-verifier re-ran 4e-orders 70/0, 4e-crash 64/0, h-holders 8/0 and h-rmcrash
   28/0 at 30a05721 (`artifacts/gate-runs-0401-verify/20261021-090204-slice`) and the UMT CI set: PASS.
+
+## Batch v0.41.0 as integrated (FL, F3, S3, RS-a, RS-b, and RS's realised provenance; 2026-10-21)
+
+Branch `integrate/batch-6c` over main v0.40.1 (6c0b1a7e). Not merged, tagged or published: the coordinator does that after Noah
+approves. **Versions:** API **1.38.0**, mod **0.41.0**, kit **0.39.0**, catalogue **11**.
+
+### What each slice does for a player
+
+- **FL, free layouts.** A town no longer has to be a street with lots along it. A plan can lay its lots round a ring with a hub (a
+  square, a green or nothing) facing in, wind them up a hill as a spiral, set them in a grid with a plaza, or scatter them as an
+  organic hamlet with irregular lanes. A zone or form can sit *around* a feature (`locator.around`), and a zone can follow a drawn
+  outline (`sketch.outline`). Every street road a plan writes says which zone (and district) it serves.
+- **F3, forms II.** Grown landscape: giant trees of every species, giant mushrooms, stalactites in a cave, roots down a bank, and coral
+  in a pond. The journal knows how these blocks drift on their own (leaf distance, mushroom faces, dripstone thickness, coral dying),
+  so undo and removal still restore exactly; a dead coral is the live coral Architect wrote.
+- **S3, the terraced monastery.** A zone or district on a slope can be laid down it as terraces: each lot on its own level, rims
+  retained by a wall with a rail (or blended by the relief), joined by stepped routes. The bundled `terraced_monastery` program is
+  S3's mountainside monastery, and S3's scenario is green (Noah approved bar 16).
+- **RS-a, regions in survival.** In a survival world a region plans, checks and realises in survival. The land it shapes (cuts, fills,
+  relief, natural blocks) is free and written at once; everything it *builds* is a construction target fed from the owner's
+  stockpile, run by run, never starting a run without its whole bill. A plan answers `cost.survival` per part and refuses a
+  creative-only block. Lava sources cost a bucket, grates their iron bars; removal refunds what stands. `RegionView.build` reports
+  progress per part.
+- **RS-b, the hard kinds in survival.** Tunnels build ring by ring (a ring's lining before its carve), so no bore cell is ever open
+  without its lining; ice caps are free; lava rows account exactly; a brush stroke of natural blocks is free, a concrete one refused.
+- **RS provenance (this integration).** RP's realised record (v0.40.1) now covers survival regions: a target's cells read
+  `UNFINISHED` from put-down and `WRITTEN` once the target is built (below).
+
+### Merges and conflict resolutions (order RS-b, F3, S3, FL; all `--no-ff`)
+
+1. **slice/RS-b @ 9e08cb98** (brings RS-a @ 529138d1). Conflicts:
+   - `RegionHash`: main's RP fix factored the per-cell switch into `cell()`; RS-b inlined a mismatch cap. Kept `cell()`, with the cap
+     reading RS-b's `j.limit`.
+   - `RegionItems.tryStartTile`: RS keeps the fluid-filtered cells in `p.cells` for its split; RP adds `.provenance(tile.cells())` and
+     the `BeforeCommit` record write. Both kept; the survival path's record is the RP wiring below.
+   - `mod_version`: the placeholder until the release tool.
+2. **slice/F3 @ d734e4a1.** Conflicts:
+   - `RegionFluids.drain`: main's fix/drain-holders added a `held` predicate and the UMT `DrainTarget` seam; F3-c added a `removal`
+     flag (the removal leaves the coral decor for the group undo). One signature now carries both. The removal gate passes
+     `removal = true`; a lot removed passes false (as F3 had it); `UmtDrain` passes `group != null` (UMT bodies have no decor).
+   - `WorldJournal` (same-stage rule): Copper, Coral, farmland/dirt and main's `pathTurned` all kept.
+   - `KINDS_FORMAT2` (kit and `IrStale`): `survival` (RS) then `coralDecor` (F3); the order tests updated for both.
+   - Sidecar `FEATURES`, `ArchitectApi.features()` javadoc, `ApiRules`, gate-chains (chains and impact rules): both sides.
+3. **slice/S3 @ dde5b2e3.** Conflicts: the IR meta (S3's `monastery` member and F3's `forest` both kept, in S3's order with
+   `forest` last as F3 had it); features (`region.terracedZones`, `region.monastery` appended); `api-compat.mjs` (both slice presets);
+   `gate6a.mjs` apijars (now the batch's three releases, below); release `always` keeps main's `umt-long` and adds
+   `6c-scenario-s3`; PLAN.md (main's undo-hardening-B queue and S3's queue both).
+4. **slice/FL @ 51ddd83e.** Conflicts: `catalogueVersion` (11, below); features (`plan.layouts` appended last); `SliceRsDev` and
+   `SliceFlDev` both registered (client, headless DevServer, devserver build); `api-compat.mjs` (FL's preset kept, and a new batch
+   preset); gate-chains (FL's chains and impact rule after main's); `gate6ckc-kit.mjs` (F3's u01/u04 and FL's u03 broken variants
+   both); `kit/test/release-version.test.mjs` (S3's counted base kept, FL's in-copy release of its stamps dropped: one approach);
+   the vocc tests, the compact plan/0 bound comment and DEVBRIDGE: both sides.
+
+Sidecar `FEATURES` now end `... 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones',
+'region.monastery', 'plan.layouts'`.
+
+### Versions
+
+`node tools/release-version.mjs --api 1.38.0 --mod 0.41.0 --kit 0.39.0 --catalogue 11 --allow-lower`:
+- `--allow-lower` because the merged tree held RS's placeholders (API 1.41.0, mod 0.44.0, kit 0.42.0), above the release.
+- **Catalogue 11, not 10.** FL bumped 9 -> 10 and F3 (frozen as catalogue 11 in the batch plan) 9 -> 11; both archived catalogue 9
+  as `catalogue-vocc.json`. The batch ships one catalogue, 11, holding FL's six flips and F3's one flip, four added forms and the
+  tunnel's volume flag; no catalogue 10 ever ships. FL's item 5 and F3's item 9 now each check their own part of the diff from 9.
+- 30 placeholders stamped (`NEXT`, and F3's and RS's legacy 1.39.0 / 1.41.0 javadoc and `sinceApi`). Six goldens re-cut and verified
+  (tiles, cells and blobs identical): `crossings_demo_flat`, `grove_demo`, `grove_demo_flat`, `links_demo`, `links_demo_flat`, `s3`.
+- `--check`: consistent, no placeholder left.
+- Tests that pinned a slice's placeholder now read the floor: `ApiF3Test` (1.38.0 / 0.39.0), sidecar `forms2.test` (`plan.forms2`
+  after `region.survival`).
+
+### RS realised provenance (RP §5), as wired
+
+- **Put-down** (`RegionItems`, survival tiles): the tile's record is written before the PLACING commit, through a `BeforeCommit` on
+  `InfraPlace.beginTileSurvival`, as the plain path does. Every target cell (its payload index in the tile as evaluated) is
+  `Realised.withCodes(draft, cells, UNFINISHED)`. The record's site is the free-pass entry; a tile with no free-pass cell has none
+  (`NO_ENTRY`) until a target builds. Before this, a survival tile wrote no record at all.
+- **Built** (`RoadBuilder.complete` -> `RegionTargets.realisedBuilt`, before the target is marked BUILT): its cells (kept in the
+  target's spec as `rpCells`) become `WRITTEN` and its site is added to the record's entries (`Realised.mark(..., WRITTEN, site)`,
+  idempotent, clears `NO_ENTRY`). RP's verify then reads the free-pass entry and every built target's entry together.
+- **Granularity: per target, not per cell.** A target's cells turn `WRITTEN` when the whole target is BUILT, so a half-built target's
+  placed cells still read `UNFINISHED`. RP §5 can be read per cell; per target was chosen because a target's journal entry is one
+  unit (the verify compares the WRITTEN count with the entry's cells), a cell placed and then broken by a player would otherwise
+  need un-marking, and one rewrite per target keeps the record's fsync off the builder's per-cell path. A cancelled or refunded
+  target leaves `UNFINISHED` (RP §5).
+- **Verify**: an ACTIVE target entry still building is counted as `targetsBuilding`, not "has no record".
+- **Gate**: rs-ingame item 6 (rs02, half fed: a built target must be listed and WRITTEN, `UNFINISHED` = the unbuilt targets' cells;
+  then fed to build.done: nothing `UNFINISHED`, `dev.region.realised verify` ok) and RS-b's rs04half (the tunnel's unbuilt targets
+  `UNFINISHED`; then build.done and verify ok). RS-b's driver joins the runner as `rsb-ingame` and `rsb-crash`. `RealisedTest`
+  covers the site-adding mark.
+
+### Other changes in the batch
+
+- apijars (`tools/gate6a.mjs`): the batch's latest three releases, 0.40.1 (`artifacts/gate6c-batch/v0401`, built here from tag
+  v0.40.1), 0.40.0 (F3's `gate6c-f3/v0400`) and 0.39.1. New `api-compat --gate6cbatch` (those three jars and the 0.40.1 surface).
+- HANDOFF-RS.md and HANDOFF-RSb.md retired: their queued work is in PLAN.md "Queued from RS".
+- Noah's approvals (2026-10-21) recorded in FL's, F3's and S3's as-built sections, PLAN.md's scenario table and STEWARD-SYNC.
