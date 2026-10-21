@@ -67,6 +67,11 @@ Resume notes for `slice/F3` (worktree `../architect-mc-F3`). The contract is doc
   fix the lede's "added when it lands". Verifier ports free at 02:45: 8896-8901.
 - "F3 as built" drafted in docs/CONTRACT.md (uncommitted until the gate evidence row is filled).
 
+- Re-run done (artifacts/gate-runs-F3/20261021-024133-change): 13 PASS, f3-look FAIL (dev.camera missing x: v73 has no grown form, so
+  the overview's bounds were Infinity). Fixed in c880ad97 (coral shots per body's decor: coral_<part>_over/_under). f3-look alone re-running
+  as PID 5761 since 04:36 UTC, ports 8918/8919, log scratchpad/f3-build/run-look-3.out, out artifacts/gate-runs-F3/<ts>-change.
+- Evidence row filled in docs/CONTRACT.md (uncommitted) except the `LOOK_TBD` token at its end: replace with the look's result, then commit.
+
 ## Left
 
 - The re-run passing; republish the gallery with the coral pond (same file path); fill the as-built's evidence row; delete this file.
