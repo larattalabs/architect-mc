@@ -140,6 +140,8 @@ steps.unchanged = async () => {
     if ((fx.plan.connectors ?? []).some((c) => ['wall', 'gate', 'rope_bridge', 'auto'].includes(c.kind))) { k1++; continue; }
     // ((6c T3) a bridge or tunnel fixture, on its own terrain: T3's gate judges it (tools/gate6ct3a.mjs unchanged))
     if (fx.terrain || (fx.plan.connectors ?? []).some((c) => ['bridge', 'tunnel'].includes(c.kind))) continue;
+    // ((6c F3) a fixture new on this branch (F3's v72-v77: kinds origin/main holds reserved or lacks) has no base to equal)
+    if (!fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', 'valid', f))) continue;
     const sv = (h) => (fx.on === 'asks' ? h.asksSurvey() : fx.on === 'flat' ? h.flatSurvey() : h.goldenSurvey(fx.on));
     const runOn = async (h) => { const s = sv(h); return h.checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...h.stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}) }); };
     const a = await runOn(hNew), b = await runOn(hOld);
