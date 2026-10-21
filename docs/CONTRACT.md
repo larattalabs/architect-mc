@@ -4943,7 +4943,7 @@ Two configurations, each in a fresh world of fixed seed `mega6` (normal worldgen
 - **Spend:** within the $25 cap; the claude login only (environment log); the estimate within ±50% for each run.
 - **Regressions:** 6a items 6 and 9, and 6b's fixtures.
 
-## Phase 6d (outline, recommended to wait)
+## Phase 6d (outline, recommended to wait; SUPERSEDED 2026-10-20 by "Batch 6d" and the 6d slice sections at the end)
 
 - **Region delta (A5B N7):** re-plan, then diff the IRs by part id. Changed parts' tiles are re-evaluated **against the
   same frozen heightfield**, and the new cells are written as a new CELL layer per tile.
@@ -17645,7 +17645,7 @@ verifier reviews the diff and the evidence and **re-runs items 6 and 7** (realis
 - **N-FL-1:** organic layouts are moderately irregular.
 - **N-FL-2:** ring lots face inward, onto the ring street.
 
-### Phase 6c slice FL as built (branch `slice/FL` over main e755d663 (v0.40.0); placeholders API 1.38.0, mod 0.41.0, kit 0.39.0, catalogue 10, feature `freeLayouts`; recorded 2026-10-20)
+### Phase 6c slice FL as built (branch `slice/FL` over main e755d663 (v0.40.0), main 7a48eb02 merged in; versions `NEXT`, set at merge; catalogue 10, feature `freeLayouts`; recorded 2026-10-21)
 
 All four sub-slices (FL-core, ring and spiral, grid, organic and outline) built on the one branch, in that order.
 
@@ -17665,8 +17665,8 @@ All four sub-slices (FL-core, ring and spiral, grid, organic and outline) built 
 | **S-FL-5 (Steward's addition)** | `compile.mjs stampStreets`: V's `street_w`/`street_e`/`street` (prefixed), each district's (`<did>_street*`) and a following district's route (`route_st_<did>_<n>`) get `architect_mc:street {zone, district?}` in their IR road's `ext`; FL's `street_*` pieces too; connectors' routes and the routes between districts none. Java: `Ir.Road` gains a trailing `ext` (the 6- and 7-argument constructors kept), `RegionsImpl.roadItem` puts it on the road's batch item ext (`BatchView.ItemView.ext`, what Steward reads). **Interpretation for the coordinator:** only plan regions' streets are marked; the standalone `flat_village` and `districts` programs (not through `compile.mjs`) stay unmarked, so S7's and the districts scenario's goldens hold. The IR of every plan with a street changes by this ext (byte identity normalises it). |
 | M1 for roads | `check.mjs`: a road's cells (its width) inside a lot box is M1 (u01 `lotOnStreet`: 6 cells). No committed result moved. |
 | Geometry (§6) | Free zones add `layout`, `streets` [{name, points, closed}], `hub` {rect, centre}, and for around and outlines `mask` (row runs); V's zones gain nothing. Ports: `start`/`end` (an open street's ends; a closed ring's or a grid's street cells nearest and farthest the claim's centre), `hub`/`bell`, a lot; otherwise the street cell nearest the leg's other end. |
-| Catalogue (§7) | Catalogue 10: the six flips (sinceApi 1.38.0, schemaVersion 1, each a note); locator.around's note keeps the wall sentence. Catalogue 9 archived as `fixtures/plan/catalogue-vocc.json`. Compact plan/0 77,607 characters (base 76,652: +955; bound 84,000, S-FL-8). `freeLayouts` / `plan.layouts`; API 1.38.0, mod 0.41.0, kit 0.39.0. Java beyond the version and the feature: `Ir.Road.ext`, `roadItem`, the dev hook `dev.region.items` (SliceFlDev); api-compat clean. |
-| Moved by name | builds-pt and districts-d2 (locator.around supported), plan-p0 item 1 (e07/e14 answer fits; e15 lost the six ids), vocc item 2 (catalogue 9 from the archive), sidecar system-refs (84,000) and the FEATURES pins, gate6cpt item 14 (the ring round the build answers). The earlier slices' identity and asks items (H, H-a, HY, HY-a, VOC-a, VOC-c, KC, IRR, T3a, K1b) normalise the street ext and name FL's movers (`tools/lib/fl-norm.mjs`). Goldens links_demo, links_demo_flat (re-planned) and crossings_demo_flat (its in-game inputs) re-cut: only kitVersion. |
+| Catalogue (§7) | Catalogue 10: the six flips (`sinceApi` `NEXT`, schemaVersion 1, each with a note); locator.around's note keeps the wall sentence. Catalogue 9 archived as `fixtures/plan/catalogue-vocc.json`. Compact plan/0 77,607 characters (base 76,652: +955; bound 84,000, S-FL-8). `freeLayouts` / `plan.layouts`. **Versions:** after main's release-version policy landed (merged here), FL sets no version number. API, mod and kit stay at main's values, the six entries and the javadoc of `freeLayouts` are stamped `NEXT`, and `catalogueVersion` is bumped to 10 by the slice. The brief's placeholders (API 1.38.0, mod 0.41.0, kit 0.39.0) become the coordinator's `tools/release-version.mjs --api ... --mod ... --kit ... --catalogue 10` at merge. The tool's own test copies the tree, so it releases a slice's `NEXT` stamps in its copy first: FL's stamps would otherwise break its count. Java beyond the version and the feature: `Ir.Road.ext`, `roadItem`, the dev hook `dev.region.items` (SliceFlDev); api-compat clean. |
+| Moved by name | builds-pt and districts-d2 (locator.around supported), plan-p0 item 1 (e07/e14 answer fits; e15 lost the six ids), vocc item 2 (catalogue 9 from the archive), sidecar system-refs (84,000) and the FEATURES pins, gate6cpt item 14 (locator.around now places a ring, and parts with no dependency between them resolve in id order, so the around zone's id became `zring`. That keeps town and yard placed exactly as before, as a kit repro shows, and the ring answers NO_ROOM in the small claim). The earlier slices' identity and asks items (H, H-a, HY, HY-a, VOC-a, VOC-c, KC, IRR, T3a, K1b) normalise the street ext and name FL's movers (`tools/lib/fl-norm.mjs`). No golden is re-cut: the kit version stays main's. The release tool re-cuts the goldens at merge. `tools/lib/plan-cache.mjs` (main's gate cache) normalises the street ext the same way, and its key gains `flnorm`. KC's head census treats `fl/u03` as a broken variant, like kc/u* and irr/u01. |
 | Steward's asks (§8) | Before and after in `fixtures/plan/fl/asks-before.md` / `asks-after.md`: the five free asks flip to fits or adjusted as predicted; ring_city/ring_town answer **blocked** (their explicit dependency on crater_lake, a form.crater that stays unsupported until 7c), not the predicted fits: the dependency, not the layout, decides. |
 | In game (item 6) | v66, v67, v68, v70, v71, Steward's grove (s01, a Steward-shaped plan) and, after the look fixes, fl/w01 (the spiral up the hill) and fl/w03 (an organic hamlet with a bare hub's pad): checkPlan, then realiseApproved: PLACED, every lot's site standing, every street's batch item carrying the ext, walks from every entrance to the hub, undo restores, removal accounted. Flat fixtures (`on: flat`) realise on the flat base as it is (a /fill pond leaked under the game's water rules; recorded). Dev hook `dev.region.items {region, owner?}` (DEVBRIDGE.md). |
 | Natural (item 7, S3's terrain) | Control drift 315 cells in 90 s. E-normal: 6 mismatches, all flow, 0 unclassified. S3's lower band chosen by the kit's own check over the game's survey: 3 of 11 lots, adjusted (the kit over the committed survey predicted 6; the game's terrain is the truth). |
@@ -18793,3 +18793,4309 @@ About **7.5-9.5 days** of work, **5.5-6.5 elapsed**, in two halves with a frozen
   day).
 - **N-RS-3:** the free boundary as proposed.
 - **N-RS-4:** ice caps are free.
+
+
+## Phase 6c slice D3: districts beside a standing region town (FROZEN 2026-10-20, Steward reviewed)
+
+A district region beside a standing region town joins the town's street network wherever that network runs inside the town's
+claim: at a street end, continuing the street's line, or at a street's side, as a T junction. The district reports the land it
+takes. A dry beside check answers what a beside plan would answer, and keeps nothing. These are Steward round 11's asks (steward-mc
+`docs/ARCHITECT-ASKS.md` "Round 11", design in `docs/DISTRICTS.md` at b53f08e): D-S1, D-S3 and D-S4. D-S2 is reserved for 6d
+(§11). PLAN "Queued from D1": "The beside join needs a standing street end in the seam". Over v0.40.0 (API 1.37.0, mod 0.40.0,
+kit 0.38.0, catalogue 9) plus FL, F3, S3 and RS (frozen and building; placeholders in §12).
+
+**D3 changes what stands in a town's claim when either region is removed**, and Steward's district give-up reads those removals.
+So Steward's RC check comes before release (GATES policy 4's exception), and the verifier re-runs the removal items (policy 3).
+
+- **Branch:** `slice/D3`, worktree `../architect-mc-D3` (D3-a and D3-b lanes, §13). **Spend:** $0, sim and stub only.
+- **Scope:**
+  - the join's reach into the town's claim (§2);
+  - the street network and the junction geometry (§3);
+  - ownership and undo in both removal orders (§4);
+  - keep-clear against the town's bodies, footprint and held cells (§5);
+  - the land ext for every kind (§6);
+  - the dry beside check (§7);
+  - plan/0's `endpoint.region` (§8);
+  - later plans beside or around the town (§9);
+  - byte identity (§10);
+  - the API (§12) and the gate (§14).
+- **Not in scope:**
+  - writing into the town's footprint or changing the town region (its record, IR, graph and ext stay as they are);
+  - extending a standing street, and lots added to a standing district (D-S2, 6d);
+  - joining through a K1 wall's gate (7a, S-D3-5);
+  - typed links between regions (7a, S-D-2);
+  - discarding unrealised plans (queued, §7.3).
+- **Depends on:**
+  - D1 and D2 (beside, the seam, `besidePorts`, the join, `join_external`, outposts, `architect_mc:corridor`, following masks);
+  - FL (the `architect_mc:street` road flag, S-FL-5, and FL streets as standing networks);
+  - KC (the footprint registry, `M25:clear`), T2 (routing) and 6a's tree rule;
+  - RS (only for §14 item 16's survival row).
+  - D3 builds after FL merges.
+
+### Binding answers carried over
+
+- **S-D-2 (D1):** the join is the new region's. Its cells, its undo and `join_external` are its own; the standing region writes
+  nothing. D3 keeps this inside the town's claim too.
+- **D1 §3 as built:** the district's claim may overlap the town's only in a seam of at most 16 columns, and never over its
+  footprint (lots, 4e roads across their width plus 1, paths, path-set parts). Unchanged: D-S1 keeps it for the district's own
+  claim.
+- **D1 §3 as built:** removing the standing region first is allowed. Every region beside it gets `architect_mc:beside.dangling:
+  true, since`. Unchanged.
+- **D2 C27:** the district and its join are one region, undone as one operation. **D2 outposts:** the corridor is the join's and
+  tree edges' footprint grown by 2, in `architect_mc:corridor {runs, cells, rect}`, undone with the outpost.
+- **S-FL-5:** every street road a region writes carries `architect_mc:street: {zone, district?}` in its road ext and keeps the
+  `street_` key stem.
+- **S-KC-1, S-KC-2:** the later writer keeps clear of a body; a body's cells are its own.
+- **Journal (`journal/Journal.java`, the class comment):**
+  - every change is an entry of cells; the cells of active entries at one position form a stack ordered by layer;
+  - undo takes entries out top-down. A cell under a newer one changes nothing in the world, and ownership passes down;
+  - overlapping changes undo in any order with no holes and no resurrected blocks.
+  - D3 relies on it in the junction's contact columns (§3.4) and as the backstop (§4.3).
+- **Steward's design (DISTRICTS.md §4, Noah's Q1-Q3):**
+  - the district stays when the town is undone first, and Steward shows "its road to the town is gone";
+  - Steward judges no seam;
+  - north and south districts of a region town are square districts until this join exists.
+- **D-S4 (Steward, through the coordinator, 2026-10-20):** Steward prefers a dry beside check over a placeholder plan. §7 is
+  that check; S-D3-4 asks only about the placeholder's meaning.
+
+### 0. Facts (main e2c568cd)
+
+**Why every district fails `NO_JOIN` beside a town that isn't full:**
+- V's street spans its outer street lots ±4, clamped to the claim margin (`village.mjs` `streetCheck` :320-328). The ends sit
+  wherever the lots end.
+- `besidePorts` (`districtsEmit.mjs` :146) takes the standing graph's terminal junctions, axis-aligned only. The join keeps those
+  whose past-end cell lies inside the district's own claim (:340). None does unless the town's street reaches within 16 columns of
+  its claim edge, so the plan fails `NO_JOIN: no street end of region ... lies inside this claim` (:341).
+- The same rule holds on plan/0's `endpoint.region` (`compile.mjs` :1588): "the cell past a standing region's street end inside
+  the claim", else `NO_FEATURE`.
+
+**Measured: what a V town writes at its street ends and sides.** A `flat_village` was planned on a flat 112 claim (5 lots, the
+d-unit beside fixture) and a flat 128 claim (3 lots). Every IR part's written columns were listed, every set included (script
+`scratchpad/d3/check-ends.mjs`, untracked).
+- **Street ends** sit 11, 36, 47 and 36 columns inside the claim. Three of the four are beyond the 16-column seam.
+- **The past-end cell and the 3 cells past it, 3 wide,** lie inside the end lot's `pads` part bounds at every end. A pad's
+  `shape` bounds are the lot box grown by 3 (its batter and fill), and that reaches the street's centre line past the end. No
+  prop, lamp, lane, path or road column lies there.
+  - On flat ground the pads' fill there writes nothing new.
+  - On sloped ground it fills or cuts up to `PAD_MAX` 2.
+  - So **the cells a street-end join needs can be the town's terrain writes.** §3.4 handles them.
+- **Sides:** each street run has lots on one side only in both towns, so the other side is free:
+  - **the lot-free side:** the verge row (|v| = 2) is held by `path:verges` alone, and the row past it (|v| = 3) holds nothing;
+  - **the lot side:** pads and lanes hold |v| = 2 and 3.
+  - The town's lamp (`props_lamp`) stands by the square, and W's lanterns are the road items' (`lanterns: true`).
+  - So **a T fits along the lot-free side** of a V street (§3.2).
+
+**Claim-scoped plumbing.** Everything a region does is scoped by its claim rect:
+- the plan survey (`RegionsImpl` plan, `Columns` over the claim);
+- `Prepare.chunksOf(ir.claim())` (:800);
+- `Drift.check` (the plan survey's columns);
+- the realise checks: `protectedClaim(... ir.claim() ...)` and other owners' regions over the claim (:1176-1189);
+- the route pass's grid (`passes/route.mjs`: the claim, its margin);
+- `besideData`'s footprint, kept only within `SEAM_MAX + 8` of the claim (`beside.mjs`).
+
+A join that runs inside another claim needs each of these widened explicitly (§2.3).
+
+**What the town writes outside its footprint.** The footprint covers lots, roads plus 1, paths and path-set parts. It doesn't
+cover:
+- the props set (lamps over lot aprons, W's lanterns where they stand off the verge, the square's props);
+- trunks felled by 6a's tree rule;
+- the pads' batter where it leaves the lot box;
+- H and IRR bodies (a farm pond, a fountain, irrigation runs);
+- other sites in the town's claim: Steward's additions, players' builds (PT), other districts' joins.
+
+So routing around the footprint alone can put a join on a lamp column or a felled trunk's column. In the seam path that has
+not happened in D1's fixtures, and the journal keeps it exact if it does. But D3's reach is a much larger area (§5.1).
+
+**How region cells are journaled.** Region tiles are `LAYER` items (`RegionsImpl` :1350, :1458): a tile may write over cells
+other entries hold, and the journal stacks them. Removal is by group (`finishRemoval`, :2197). The standing region's removal calls
+`danglingJoins` (:2236).
+
+**Plans are never discarded today.** Each `Regions.plan` keeps:
+- `<world>/architect-regions/plans/<planId>.json` (the IR inline) and `<planId>.survey.bin`, plus `<planId>.key.json` with an
+  opKey (RegionStore; loaded lazily by `planRec`, :270);
+- the sidecar's `<data>/regions/plans/<planId>/` (program copy, survey, params, IR, blobs, previews).
+
+Nothing prunes either one. C36 sweeps check artifacts only (`PlanChecks` :853-875). Measured in the gate saves: 0.4-0.9 MB per
+plan in the mod alone (`G6A EFlat Stage`: 8 plans, 4.0 MB; `G6A MegaB`: 4 plans, 2.3 MB).
+
+**Street flags.** Before FL, a street road is known only by its `street_` stem (`road:street_w`, `road:<district>_street_e`).
+After FL, by `architect_mc:street` in the road ext as well. A town realised before FL has no flag.
+
+### 1. The rule in one line
+
+**The district's join may enter the town's claim and route over land nobody holds, around the town's footprint, bodies and held
+cells, to the cheapest point of the town's street network:**
+- a street end, continuing its line;
+- or a street's side, a T that meets the verge and never writes it.
+
+Columns the town holds are never written, except one case: in the junction's few contact columns, the join may stand on the
+town's own terrain writes (pad fill and batter). There it **holds** every town cell in the column as its own top layer (§3.4).
+So no town undo ever writes a join column, and removing either region, in either order, is exact (§4).
+
+### 2. The join's reach
+
+#### 2.1 When reach is used (byte identity first)
+
+The join search runs in two steps:
+1. **The seam step, as today.** D1's ports (terminal junctions whose past-end cell lies in the district's claim) and D1's dry
+   routes inside the claim. If one routes, it is the join, and the plan is today's byte for byte (§10).
+2. **The reach step**, only when the seam step has no port or no dry route: §2.2's candidates, routed over the reach frame
+   (§2.3). If none routes, the plan fails `NO_JOIN` with the kind named (§2.5).
+
+A plan that fit before D3 never changes. A plan that failed `NO_JOIN` can now fit.
+
+#### 2.2 Candidates and the choice
+
+- **Street ends:** every terminal junction of the street network (§3.1), anywhere in the town's claim. The end node sits at the
+  past-end cell, facing outward along the street (D1's `q.end`, `q.dir`).
+- **Street sides:** on each straight street run, for each side, the junction points of §3.2, at most one every 4 cells along the
+  run, plus the point nearest each district end's projection on the run.
+- **District ends:** as D1, each placed district's street ends (`ends.get(d.id)`), and for an outpost its end as D2.
+- **Choice:** the cheapest dry route (T2 cost) over every district end and candidate pair. "Nearest" in D-S1 is read as
+  cheapest, not shortest. Ties go to a street end before a side, then by road id, then by the junction's `(x, z)`.
+- **Bounds:**
+  - pairs are tried in order of their 10-a-cell lower bound, and a pair is skipped once its bound can't win (D1's prune);
+  - at most 48 dry routes in the reach step, each at most 2M expansions (D2's cap);
+  - past the 48, the step stops with what it has. If it has nothing, it fails `NO_JOIN {kind: budget}`.
+- **The chosen join** is routed as D1's `join` edge (`route_join`, width `DISTRICT_ROUTE_WIDTH` 3, the districts' path role and
+  route lamps), in the same route pass as the district's other edges.
+
+#### 2.3 The reach frame, and what the mod widens
+
+- **The reach frame** is the district's claim plus the town's claim:
+  - The claim margin applies only on the union's outer edge.
+  - Only the join edge uses the reach frame. The route pass gains a per-edge `frame` member (additive; absent means the claim).
+- **The district's claim** stays its request claim. The seam rule judges it alone.
+- **`reach`** is a new IR member, present only when the reach step chose the join:
+  `{standing, runs, rect, cells, heldSha, surveySha}`. It holds the join's written columns outside the district's claim, as row
+  runs `[x0, z, x1, z]` (D2's corridor format).
+- **The mod treats `reach` as claimed land for writing and checking, never for overlap:**
+  - **Survey:** when `beside` is set, the mod samples a second survey over the town's claim at resolution 1, loaded chunks only
+    (`besideReach.survey`). The plan's own survey is unchanged.
+  - **Prepare:** `chunksOf(claim)` plus the chunks of `reach`.
+  - **Tiles:** the join's cells outside the claim go in the tiles that hold them, as any cell. A tile item's box is the tile.
+  - **Drift:** the region-start check also samples every `reach` column against `besideReach.survey`, with the same bars.
+  - **Protection:** `protectedClaim` also tests the `reach` runs against the owner's C17 areas. A hit refuses `PROTECTED`, and
+    nothing is written.
+  - **Other owners:** a `reach` column inside another owner's region refuses `OVERLAP_OWNED`. The town can't be such a region
+    (beside already requires the same owner), but a third region can.
+  - **The seam:** `reach` cells are never counted as claim for the seam rule or for later plans' claim overlap. §9 says how
+    later plans see them.
+- **The kit's write lint** (the realise lint and `check`) allows a write outside the district's claim only on `reach` cells, and
+  only by `route_join`'s part and its lamps. Anything else outside the claim is an error (`M28:beside`, §5.3).
+
+#### 2.4 The inputs, and when they're recorded
+
+The sidecar's `region.plan` gains `besideReach: {survey, held}`. Both are kept with the plan's other inputs in its sidecar plan
+directory (`reach-survey.bin`, `held.json`), as the survey is, so D2's offline replay (`tools/lib/d2-replay.mjs`) can re-plan a
+reach plan. The kit CLI gains `--beside-reach <f>`, and the plan gets
+`ctx.besideReach`:
+- `survey`: the town claim's columns, as above;
+- `held`: §5.1's held columns, as row runs.
+
+`ctx.beside` and its `beside: {id, sha}` record are unchanged. The reach inputs are separate, and the IR records them only when
+the reach step ran (`reach.heldSha`, `reach.surveySha`), so a seam-step plan's IR is unchanged (§10).
+
+Determinism: the same survey, held runs, standing IR and seed give the same IR (kit unit, §14 item 17).
+
+#### 2.5 Refusals (the plan fails; nothing is planned)
+
+The `NO_JOIN:` prefix stays. The kind is the message's first word in brackets, for example `NO_JOIN: [route] ...`.
+
+| Kind | When |
+|---|---|
+| `apart` | The district's claim neither overlaps nor touches the town's claim, so the reach frame isn't one area. |
+| `street` | The standing graph has no street run (§3.1). |
+| `wall` | Every candidate is enclosed by the town's held wall columns (a K1 `wall.around`; S-D3-5). |
+| `route` | No candidate routes within the grade, the obstacles and the caps. |
+| `budget` | §2.2's 48 dry routes ran out with nothing. |
+
+Today's two `NO_JOIN` messages read as before whenever the reach step isn't reached. It is reached only when the seam step would
+have failed with one of them.
+
+### 3. The street network and the junction geometry
+
+#### 3.1 What counts as the town's street network
+
+- **Streets:** the standing graph's `road` edges whose road item carries `architect_mc:street`, or, for an IR without the flag
+  (pre-FL), whose road id has the `street_` stem after its prefix. This covers:
+  - V's `street_w`/`street_e`;
+  - D1 and D2 district streets (`<d>_street_*`, `st_<d>`);
+  - FL's ring, spiral, grid and organic streets.
+- **Excluded:**
+  - routes between districts (`d_a__b`), the town's own `join`, lanes, paths and squares;
+  - external edges;
+  - anything Steward laid itself. Steward's additions and street extensions aren't in the town's graph (DISTRICTS.md §4), so the
+    join never targets them. Their cells are held cells (§5.1), so it routes around them.
+- **Straight runs:** a street's axis-aligned segments of at least 9 cells. A diagonal or turning piece (an organic lane, a ring's
+  corner) offers no side point. D1 already skips diagonal ends.
+
+#### 3.2 The T junction (a street's side)
+
+On a straight run along axis `a` (x or z), the street's centre line is `v = c`. With V's street (road 3 plus a verge each side,
+FL's too), the footprint covers `|v - c| <= 2`. For a point `u` along the run and a side `s` (±1):
+- **The end cell `E = (u, c + 3s)`**, the first cell outside the footprint. The join's end node stands there, facing `s` (away
+  from the street).
+- **The landing strip:** cells `(u + k, c + 3s)` for `|k| <= 2`. Every one must be outside every lot box plus 1, every footprint
+  item and every body's hard and watch columns (§5.2), and must not be held (§5.1). That is the join's width 3 plus 1 each side.
+- **The verge contact:** cells `(u + k, c + 2s)` for `|k| <= 1`. Each must be held by the street's own road or verge only: no
+  lamp post, prop, lane or other site in that column. The join **never writes** a verge or road cell.
+- **Height:** E's floor is within 1 of the verge's surface at `(u, c + 2s)`, read from `besideReach.survey`. A candidate that
+  can't meet it is dropped, never graded into the verge.
+- **Clearance along the run:** `u` is at least 3 cells from the run's ends and from any other junction node of the street, so a
+  T never sits on a corner or an existing junction.
+- **The lead:** the join's last 3 cells run straight along `s` (the route pass gains an end `lead: n`, additive; absent means
+  none). The T reads as a road meeting the street square on.
+
+**What V allows** (measured, §0). Between two lots on the same side, a T doesn't fit: `lotGap` 3 leaves one column between their
+aprons. But each V street run measured has lots on one side only. Along its lot-free side, the verge is held by the verges
+alone and the row past it is free, so **a T fits anywhere along that side**, away from the run's ends and junctions. A district
+north or south of an east-west village T's in from its lot-free side. From its lot side it joins at the nearer end and turns.
+Steward's Q3 (north and south districts) is met either way. §14 item 4 builds a fixture where a T from the lot side's gap is the
+cheapest.
+
+#### 3.3 The street end
+
+As D1:
+- the end node at the past-end cell, facing the street's direction, now anywhere in the town's claim;
+- the join's first 3 cells continue the street's line (the `lead`), then it may turn;
+- the past-end cell and the lead's cells are outside lots plus 1 and clear of bodies. They may be held only as §3.4 allows.
+
+#### 3.4 The contact columns
+
+- **Which columns:** the street end's past-end cell and lead (4 along the line, 3 wide), or a T's landing strip (5 along, 1
+  deep) and its lead (3 deep, 3 wide). At most 15 columns per join.
+- **What may be held there:** in those columns only, a column held by the town's `terrain` set (`pads`, the ground) and by
+  nothing else is allowed:
+  - no prop, lamp, lane, path, road, lot box, body or other site's cell;
+  - no other region's cell or other site's cell.
+  Everywhere else, held columns are hard (§5.1).
+- **The hold write:** in each allowed contact column, the join's part writes:
+  - its own cells, as any route;
+  - and **every town-held cell in the column**, at any y, with the block now in the world. This is a `hold` op (IR, additive):
+    the tile writer journals each such cell as the district's, with before and after both the town's block, even though
+    nothing changes in the world.
+  - Then every town cell in a contact column has the district's cell on top of it (stack depth 2).
+- **Why:** the town's undo then writes nothing in a contact column. Its cells there are under the district's, so ownership
+  passes down (the journal's rule). The pad fill under the join, and any cut over it, stay as they are until the district is
+  removed. The district's undo then restores, through the passed-down befores, the land as it was before the town.
+- **On flat ground** a pad's fill there often wrote nothing, so the column isn't held and no hold cell is needed.
+- **In survival (RS):** a hold cell is free and consumes nothing (the block already stands).
+
+#### 3.5 The graph
+
+The district's graph gets `join_external` as D1:
+- **At a street end:** `to: <town>:<node>.<port>`, as today.
+- **At a side:** `to: <town>:<roadId>`, with `junction: {kind: "side", at: [x, y, z], side: "n"|"s"|"e"|"w", u}`.
+- Both kinds carry `junction.kind`. The D1 shape (an end) gains `junction: {kind: "end", at}` only on reach-step plans (§10).
+- The town's graph is never edited. 7a types these edges (S-D-2). S-D3-2 asks Steward whether the side form reads well.
+
+### 4. Ownership and undo
+
+#### 4.1 Who owns what
+
+- **The district region owns every cell it writes:** its districts, streets, lots' pads, routes, lamps, and the join's cells
+  inside and outside the town's claim. They are its tile entries in the journal, in its group. Its record names `beside`, and
+  its ext carries `architect_mc:beside`, `architect_mc:land` (§6) and, for an outpost, `architect_mc:corridor`.
+- **The town region owns what it wrote, and nothing new.** D3 adds nothing to its record, IR, graph, journal or ext.
+- **Column-disjointness:** outside the contact columns, a reach join's columns are columns no active journal entry held when
+  the plan was made (§5.1), and none holds at realise (§4.4). So there the two regions never share a cell, and every journal
+  stack on such a column has depth 1, the district's.
+- **The contact columns** (§3.4) are the one shared place. There, the district is on top of every town cell (depth 2, the
+  district's cell over the town's), by the hold write.
+- **Why columns, not cells:** the join's support (the fill under its surface) and its headroom (felled trunks over it) are in
+  the same columns. If the town held a cell of a join column and the district didn't hold it on top, removing the town could
+  restore a fill to air under the join, or a trunk over it. Either the town holds nothing in the column, or the district holds
+  everything the town holds there. Either way, the town's undo never writes a join column.
+
+#### 4.2 Removal, every order
+
+| Case | What happens | Bar (§14) |
+|---|---|---|
+| **The district removed, the town standing** | The district's entries are undone: the join's cells and every other cell it wrote come back as they were before it. The town is untouched; its street ends or verge are as they were. | 0 changed cells over the town's claim except the join's own columns, which equal the world before the district; E-flat 0 over the district's claim plus `reach` |
+| **The town removed, the district standing** | The town's entries are undone: its held cells come back as they were before it, except under the district's hold cells, where ownership passes down and the world isn't written. No join column is touched (§4.1). The district gets `architect_mc:beside {dangling: true, since}` as D1, and `architect_mc:land.standingRemoved: since` (§6). The join stands, supported and walkable, from the district to where the street was. | E-flat 0 over the town's claim minus every column the district holds in the journal (its seam cells, `reach`, the contact columns), against the world before the town; those columns equal the world after the district; M3 0 over the join; the join walkable to its junction cell |
+| **Then the district** | The district's undo puts the land before both back. | E-flat 0 over both claims and `reach` (the world before the town) |
+| **The district, then the town** | Each is undone alone, as in the first row. | E-flat 0 over both claims |
+| **The town removed while the district realises** | Allowed, as D1. The district's tiles and the town's undo touch disjoint columns, so they don't interact. The district finishes, its `dangling` is set when the town's removal finishes, then either order as above. | as above, plus a save, leave and reopen between |
+| **A district beside a removed town** | Planning beside a town that's gone refuses `OTHER` as D1 (`beside: no standing region`). A reach plan whose town goes before its realise refuses `OTHER` too, with "region X was removed; re-plan" (§4.4), and nothing is written. | §14 item 11 |
+
+The coordinator's two orders, plainly:
+- **The town first:** the join stays, the district's, until the district is removed. Removing the town never removes or trims
+  it.
+- **The district first:** the town is exactly as it was before the district.
+- In both orders, after both removals the world equals the world before the town.
+
+#### 4.3 The backstop
+
+Outside the contact columns, D3 doesn't rely on the journal's layering, but it is there. A seam-step join (unchanged from D1) may share a cell with the town,
+for example a lamp column in the seam, which D1 never checked. Its journal stack is then two deep, and the journal's
+"ownership passes down" keeps both orders exact. §14 item 9 records the stack depth over every join cell. On reach cells it must
+be 1 outside the contact columns, and 2 with the district on top inside them. On seam-step joins it is recorded, and a shared cell is listed as a finding (§10), never silently changed.
+
+#### 4.4 The re-check at realise
+
+`Regions.realise` and `realiseApproved` of a plan with `reach` re-check once, when the realise first starts and before any write.
+A resumed realise (after a restart, `realiseByKey`) or a partial region's retry doesn't re-check, since its own written cells
+would read as held. The checks:
+- **The town stands and is `PLACED`.**
+  - `PLACING`, `PARTIAL` or `REMOVING`: refused `OVERLAP_BUSY`, naming the state.
+  - Gone: refused `OTHER`, "region X was removed; re-plan", as D1's plan-time answer.
+- **The held set over `reach` is unchanged.** The district's own group doesn't count. A column held since the plan (a site placed
+  on the path, a player's build), or a contact column now held by more than the town's terrain, refuses `OVERLAP`, naming the
+  site and the column.
+- **The C17 areas and other owners** as in §2.3.
+
+Through `realiseApproved`, every one of these answers `ARTIFACT_STALE` (its "the land under the plan changed" meaning), so
+Steward's stale retry re-checks.
+
+A town that is `PLACED` with empty lot pads (a partly built town) is the normal case: its lots are reserved boxes (footprint),
+whatever stands in them.
+
+### 5. Keep-clear
+
+#### 5.1 Held columns
+
+`held` is every column in the town's claim, plus the district's claim's seam, that holds an active journal cell of any entry at
+any y. That covers:
+- the town's group: its tiles, lots, roads, lamps, props, pads, felled trunks and bodies;
+- every other site and region: Steward's additions, players' tracked builds (PT), another district's join.
+
+The mod reads it from the journal (as VolumeSurvey's `OWNED` does, guard leaves excluded) at plan time, as row runs. Guard
+leaves aren't world writes.
+
+To the reach step, held columns are hard, except the contact columns §3.4 allows. They also join the route's keep-out, so
+6a's tree rule keeps the join from felling a
+trunk whose logs reach a held column (`route.mjs` :460).
+
+#### 5.2 The town's footprint and bodies
+
+- **Footprint:** `besideData`'s lots plus 1, roads plus 1, paths and ways are hard over the whole town claim in the reach step.
+  D1 keeps them only within `SEAM_MAX + 8` of the claim, and the seam step keeps that.
+- **Bodies:** the town IR's `fluid` ops give each body's `hard` set (cells, ice, shell, lining, weir, grate, spill, joins) and
+  `watch` set (KC §2). The reach step treats every column of either as hard. A drained body (in `architect_mc:fluids`) is still
+  the town's: its columns are held.
+- **Natural water** in the town's claim is handled as any route handles it today (T2/T3's street fallback), unchanged.
+
+#### 5.3 The checker
+
+- **`M28:beside`** (new, in `check`): an error for:
+  - any write outside the district's claim that is not a `reach` cell of `route_join`;
+  - any `reach` cell that is held, outside §3.4's allowed contact columns;
+  - a contact column whose town-held cells aren't all hold-written;
+  - any `reach` cell in the town's footprint, or in a town body's hard or watch set. The
+  standing data comes from `ctx.besideReach` and `ctx.beside`.
+- **`M25:clear`** gains foreign bodies: the town's bodies are judged as the plan's own, so a join write into one is
+  `M25:clear {body: <town>:<id>}`.
+- **Broken variants**, each of which must be caught:
+  - `_unsafe.ignoreHeld`: the reach step without the held set;
+  - `_unsafe.writeVerge`: a T graded into the verge;
+  - `_unsafe.wideReach`: a non-join write outside the claim;
+  - `_unsafe.noHold`: a contact column without its hold cells.
+
+### 6. The land (D-S3): `architect_mc:land`, every kind
+
+Every districts region (beside a town or not; plain, along, outpost, end or side join) gets one ext key at realise. The mod
+computes it from the IR in `region/DistrictLand.java`. The kit's `kit/lib/region/land.mjs` is the reference, and the two are
+unit-checked equal on every fixture. It is not in the IR, so IRs are unchanged (§10).
+
+```json
+"architect_mc:land": {
+  "v": 1,
+  "standing": "rg12", "standingClaim": [x0, z0, x1, z1], "standingRemoved": null,
+  "outside": {"runs": [[x0, z, x1, z], ...], "rect": [x0, z0, x1, z1], "cells": 0},
+  "inside":  {"runs": [...], "rect": [...], "cells": 0},
+  "union":   {"runs": [...], "rect": [...], "cells": 0},
+  "parts": [
+    {"kind": "district", "id": "quay", "shape": "mask", "runs": [...], "rect": [...], "cells": 0, "insideCells": 0},
+    {"kind": "join", "id": "join", "district": "quay", "junction": "end", "runs": [...], "rect": [...], "cells": 0, "insideCells": 0},
+    {"kind": "route", "id": "d_a__b", "runs": [...], "rect": [...], "cells": 0, "insideCells": 0},
+    {"kind": "corridor", "id": "camp", "runs": [...], "rect": [...], "cells": 0, "insideCells": 0},
+    {"kind": "extra", "id": "written", "runs": [...], "rect": [...], "cells": 0, "insideCells": 0}
+  ]
+}
+```
+
+- **Parts, each unclipped:**
+  - `district`: each placed district's shape. A following district's mask (D2's `meta.districts.follow[id].mask`,
+    `shape: "mask"`). A plain district's or an outpost's candidate rect as runs (`shape: "rect"`).
+  - `join`: the join's written columns, the reach and the claim part together, for **every** kind (plain, along and outpost),
+    with its junction kind.
+  - `route`: each other route's written columns (edges between districts). A following district's own street is inside its
+    mask.
+  - `corridor`: an outpost's corridor, exactly `architect_mc:corridor`'s runs for that district (D2's footprint grown by 2).
+  - `extra`: the region's written columns that fall in no other part: lamps, a pad's batter past a mask, a lane's end.
+- **`union`:** every part's cells, except corridor cells that lie in the town's claim and aren't written. The corridor's margin
+  never claims town land.
+- **`outside` = union minus the town's claim.** That is the land Steward owns, exactly. For an along district it holds the mask
+  and the join's cells up to the town's claim edge. For an outpost it holds the corridor and the join outside the town.
+- **`inside` = union inside the town's claim:** the join's reach cells, and any of the district's seam cells. That is town land
+  already (Steward, DISTRICTS.md §4), and Steward's additions there must avoid it.
+- **Written columns** mean every column of the IR's parts (`columns` ops' cells, `bounds` ops' rects), lots' boxes, and the
+  route parts' cells.
+- **The bar:** every column the district region holds in the journal lies in `union` (§14 item 14).
+- **After the town's removal:** `standingRemoved` is set to its time. `inside` and `outside` keep their geometry, since the cells
+  are still the district's (S-D3-3).
+- **`architect_mc:corridor` is unchanged**, byte for byte. Its runs stay its own key, for D2's readers.
+- **The request envelope is never in `land`.** Its only role is the plan's search frame.
+
+Before realise, the land is in the dry check's verdict (§7), for the request as checked. Nothing is added to `RegionPlan` or to the
+IR.
+
+### 7. The dry beside check (D-S4)
+
+#### 7.1 The call
+
+```java
+// Regions (default throws UnsupportedOperationException; feature "besideCheck")
+default CompletableFuture<BesideVerdict> checkBeside(RegionPlanRequest r)
+
+record BesideVerdict(boolean fits, @Nullable Reason reason, @Nullable String code, String message,
+    @Nullable BesideJoin join, @Nullable com.google.gson.JsonObject land, long ms)
+record BesideJoin(String region, String kind /* "end" | "side" */, String step /* "seam" | "reach" */, String road,
+    @Nullable String node, net.minecraft.core.BlockPos at, net.minecraft.core.Direction facing, int cells, int insideCells)
+```
+
+- **The request:** a full `RegionPlanRequest` with `beside` set, as Steward would plan it. It may be the `districts` program with
+  one placeholder lot, or any program that reads `beside`. Without `beside`, the call refuses `NOT_ALLOWED`.
+- **What it runs:** exactly `Regions.plan`'s path:
+  - the beside checks (standing, dimension, owner, the seam);
+  - both surveys, the held set, the kit's plan and `check`, in the sidecar;
+  - but with **`dry: true`**.
+- **What it keeps: nothing.**
+  - no plan id, no `PlanRec`, no `plans/` file, survey or key file, no opKey registry entry (an opKey in the request is ignored
+    and noted);
+  - the sidecar runs the kit in a temporary directory it deletes when the call ends, success or failure;
+  - no blob is published;
+  - no world write, ticket or prepare.
+- **The answer:**
+  - `fits` true with the join and the land;
+  - or false with the `Reason` and message `Regions.plan` would have failed with, and `code` the kit's named word (`NO_JOIN`,
+    `NO_ROOM`, `NO_EDGE`, `PROTECTED`, `OVERLAP`) with its bracketed kind.
+  - `ms` is the run's time. It is recorded, not judged.
+- **Cost:** $0. Same time as a plan (seconds). It shares the plan queue and its concurrency.
+
+#### 7.2 What its verdict means
+
+- It is **a snapshot**: the same request planned now gives the same answer (§14 item 12's parity).
+- A placeholder district's join and land are the placeholder's. The real first building, with its own lot, plans again and may
+  place the district elsewhere in the request claim.
+- Town additions and new held cells after the check can make the real plan fail. Steward's founding then hears the real plan's
+  reason.
+
+#### 7.3 Discarding plans (what exists, and what is queued)
+
+- **Today:** nothing discards or prunes a region plan, in the mod or the sidecar (§0). Every unrealised plan stays on disk at
+  0.4-0.9 MB in the mod plus its sidecar directory. Plan v1's Start re-checks go through `checkPlan` (C36 sweeps those), but
+  every `Regions.plan` stays: V builds, stale retries, and Steward's placeholder plans if it used them.
+- **D3 doesn't add a discard.** The dry check removes the reason to make a throwaway plan.
+- **Proposed for PLAN's queue (not D3; the coordinator files it):**
+  - `Regions.discardPlan(planId)`: refused while a prepare or realise holds it, or a region names it;
+  - a world-start sweep of unrealised plans with no region, no prepare and no opKey used within 7 days.
+  - Steward isn't blocked on it.
+
+### 8. plan/0: `endpoint.region`
+
+`endpoint.region {region, port?}` has the same reach (§2):
+- the seam step first, as D1 (the cell past the named or nearest street end inside the check's claim);
+- then the reach step over the check's claim plus that standing region's claim, to an end or a side (§3).
+
+The mod sends `besideReach` for each region an endpoint names (at most 2 per check; a third answers
+`refused NO_FEATURE {why: reach}`).
+
+Otherwise unchanged:
+- the leg's external edge as §3.5;
+- the artifact's IR `reach` member, which `realiseApproved` handles as §2.3 and §4.4;
+- the answer's geometry gains `junction` on the leg.
+
+No catalogue id or state moves: `endpoint.region` stays `supported`. A check that answered `NO_FEATURE` only because no street
+end lay in its claim can now answer `ready`, and the answer notes `reach: true`. Steward's 59 recorded asks don't use
+`endpoint.region` (D1's gap table), so their answers don't change (§10).
+
+### 9. Later plans beside or around the town
+
+A district's `reach` cells lie in the town's claim but belong to the district. Every later plan sees them as that region's land.
+The `standing` and `regions` data a plan gets (`compile.mjs` :146-155) gain each standing region's `reach` runs, and these are
+hard wherever that region's claim is:
+- **C38's offer `wall.around {feature: {region: town}}`:** the ring keeps off the district's join (a wall grid obstacle). It
+  searches past it, or answers `NO_ROOM {kind: region}` (S-D3-6). Gating the join is 7a's.
+- **A second district beside the same town:** it joins the town's streets only, never another district's join. That join's
+  columns are held (§5.1), so the second routes around them.
+- **A district beside the district** (`beside` = a district region) works as D1/D3 with that district as the town. Its streets
+  are flagged.
+
+### 10. Byte identity
+
+- **A plan whose seam step finds a join** gives today's IR, but for its recorded kitVersion (D2's kitVersion-only golden rule).
+  The reach inputs aren't recorded, `beside.sha` covers `ctx.beside` only as today, there is no `reach` member, and no `junction`
+  member on its `join_external`.
+- **Pinned:**
+  - `scenarios/goldens/districts_demo.json`;
+  - d-ingame's beside village plan;
+  - d2-ingame's outpost, quay, crest and oasis plans;
+  - plan fixtures `valid/v17`-`v23`, which give the same answers and IRs;
+  - the 59 asks' answers;
+  - tile goldens S1, S2, S7 and mega_bench.
+- **`architect_mc:corridor` and `architect_mc:beside`** are byte-identical for these regions. `architect_mc:land` is new (an
+  added key).
+- **One possible exception, named rather than hidden:** a seam-step join of a pinned fixture that writes a held column (§4.3).
+  The builder checks each pinned fixture's join against its held set. If any meets one, it is a D1 defect: the builder reports
+  it, the join is re-routed in that fixture only, and its golden is replaced with the reason. Expected: none; the
+  builder confirms it in item 2.
+- **`KIT_VERSION`** moves (new output for new cases).
+
+### 11. D-S2 (reserved, 6d)
+
+Lots added to a standing district region, with its street extended, are 6d's. D3 only reserves:
+- the feature name `growDistrict`;
+- that `architect_mc:land.v` moves to 2 when 6d adds the grown parts;
+- that a district's street ends stay terminal junctions in its graph, so 6d can extend from them.
+
+Nothing else here constrains 6d.
+
+### 12. API, kit and versions
+
+- **Placeholders** (the coordinator renumbers): after RS, API **1.42.0**, with mod and kit the next minors after RS's (0.45.0 and
+  0.43.0 if FL, F3, S3 and RS each take one). Catalogue unchanged.
+- **API (binary compatible):**
+  - `Regions.checkBeside` (a default that throws);
+  - the records `BesideVerdict` and `BesideJoin`;
+  - no new Reason and no new event;
+  - `RegionView` unchanged: the land, beside and corridor are ext keys (Architect's).
+- **Features:**
+  - `besideReach` (the join's reach and T junctions);
+  - `besideCheck` (the dry check);
+  - `districtLand` (`architect_mc:land`);
+  - sidecar `region.plan.dry`, `region.plan.besideReach`.
+- **IR (additive):**
+  - `reach` (reach-step plans only);
+  - the `hold` op (contact columns, reach only; the tile writer journals unchanged cells);
+  - `meta.districts.join.step` and `.junction` (reach only);
+  - `join_external.junction` (reach only).
+- **Kit:**
+  - the route pass's per-edge `frame` and end `lead` (absent means today);
+  - `besidePorts` gains a sibling, `besideSides`;
+  - `kit/lib/region/land.mjs`;
+  - `M28:beside`, and `M25:clear`'s foreign bodies.
+- **Refusals used:**
+  - plan: `NO_JOIN` with its kinds;
+  - realise: `PROTECTED`, `OVERLAP`, `OVERLAP_OWNED`, `OVERLAP_BUSY`;
+  - `realiseApproved`: `ARTIFACT_STALE`;
+  - the dry check: `NOT_ALLOWED`.
+- **api-compat** clean against the three previous apitest jars; apijars on them.
+
+### 13. Size and split
+
+About **5.5-6.5 days** of work, **3.5-4 elapsed**, in two lanes with a frozen interface (the `reach` IR member, `besideReach`'s
+wire, the land record) at the end of day 1:
+- **D3-a, kit (2.5-3 days):**
+  - the two-step search, the candidates, the T and end geometry, the contact columns and their hold cells, the route pass's
+    `frame` and `lead`;
+  - the held and body obstacles, `M28:beside`, `M25:clear`'s foreign bodies and the broken variants;
+  - plan/0's `endpoint.region` reach;
+  - `land.mjs`;
+  - §9's `reach` obstacles in `compile.mjs`;
+  - the unit and byte-identity items (1, 2, 17).
+- **D3-b, mod and sidecar (3-3.5 days):**
+  - the held set from the journal, the reach survey, `reach`'s consumers (prepare, drift, protection, other owners);
+  - the `hold` op in the tile writer and the journal (a cell journaled with before equal to after);
+  - the realise re-check (§4.4), `DistrictLand.java` and `standingRemoved`;
+  - `checkBeside` and the sidecar's dry mode;
+  - the API records and api-compat;
+  - the driver `tools/gate6cd3.mjs` and the in-game items.
+- **Shared:** items 3-16, then Steward's RC.
+
+### 14. Gate (slice tier, $0)
+
+The lessons bind:
+- **every new path goes through `checkPlan` then `realiseApproved` in game, and through `Regions.plan` then `Regions.realise`,
+  on Steward-shaped requests**;
+- exactness is judged on flat worlds (E-flat, hash);
+- the natural round reads frozen inputs and classes E-normal by kind at unwritten cells away from the plan (D2's narrowed
+  classes, S3 §6);
+- KC is measured.
+
+**Fixtures** (S7 flat unless named; the coordinator numbers the plan fixtures):
+- **`d3_town`:** a `flat_village` with 8 street lots, its street ends 24 or more columns inside its claim. Before the town is
+  planned, the driver digs a 2-deep dip under its east street end, so the end lot's pad fills the contact columns there (§3.4). **Partly built:**
+  `PLACED`, 4 lots with stub buildings, 4 empty pads, W's lanterns. Plus a Steward-style addition (a `Sites.place` with Steward's
+  ext, in the claim beside the street) and a PT player build.
+- **`d3_gap_town`:** a `flat_village` planned around a C17 area beside its street's north side, so one side has a lot gap of 7
+  or more. The area is removed after the town realises.
+- **`d3_pond_town`:** `d3_town` with a farm pond (H's `farmPond`) and a fountain (`form.fountain`) where the cheapest join would
+  pass.
+- **`d3_walled`:** `d3_town` with C38's `wall.around {feature: {region}}` realised round it.
+- **`d3_shore`:** a flat fixture with a placed water strip outside `d3_town`'s claim, for an along district. S3's pinned claim
+  (natural) is used for item 15.
+- Plan fixtures:
+  - `valid/v7x_d3_endpoint_reach` (a zone and a route `endpoint.region` to `d3_town`'s street);
+  - `v7x_d3_district_side`;
+  - the three broken variants (§5.3).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | §3.2-3.4's geometry row by row (contact columns with and without town pads, hold cells for every town-held cell) on synthetic streets: the strip, verge contacts with and without a lamp, heights, corners and existing junctions, diagonal runs skipped, the `lead`; the two-step order; candidate thinning, the prune and the 48 cap; held and body columns hard; `M28:beside`; `land.mjs` equals `DistrictLand.java` on every fixture; 300 seeded synthetic towns: every chosen join's reach cells unheld, outside the footprint and bodies, deterministic; the broken variants caught |
+| 2 | Byte identity | §10's pinned set: the same IRs (kitVersion rule), answers and tile shas; `architect_mc:corridor` and `beside` byte-identical; each pinned seam-step join checked against its held set (expected 0 held cells; any found, listed) |
+| 3 | Reach, an end | on `d3_town`, a plain district east: `Regions.plan` (beside) then `Regions.realise`. The join enters the town's claim and continues the street's line for 3 cells; walkable for player and villager (kit and `dev.nav.villager`) from every district lot to the town's bell and back |
+| 4 | Reach, a side | on `d3_gap_town`, a district north: the join is a T into the gap; the verge and road cells unchanged (hash); walkable as item 3 |
+| 5 | Along and outpost | on `d3_shore`, a shore district; on `d3_town`, an outpost with gap 40; both joined through the town's claim; `land.outside` holds each one's join cells outside the town's claim, the outpost's corridor equals `architect_mc:corridor` |
+| 6 | Steward's shapes | on `d3_town`: `checkBeside` with one placeholder lot (Steward's params, DISTRICTS.md §2) fits. Then `Regions.plan` with the real lot under a `dplan` opKey, `Regions.realise` with a stub blueprint under `drealise`, `realiseByKey` after a restart, and the land read. Through `checkPlan` (`v7x_d3_endpoint_reach` in plan v1's shape: pending parts `required: false`, `ew` with rotate off, lot ext) then `realiseApproved`, with one stale retry under a second key across a restart |
+| 7 | District removed first (verifier re-runs) | after item 3, 4, 5 and 6's regions: 0 changed cells over the town's claim (ARWD diff), except the join's columns, which equal the world before the district; E-flat 0 over the district's claim plus `reach` |
+| 8 | Town removed first (verifier re-runs) | the same set rebuilt, on a pad-filled town (the end lot's pad holding the contact columns): removing the town gives E-flat 0 over its claim minus every column the district holds (against the world before it); those columns unchanged, the contact columns' fill still standing, M3 0 over the join, `dangling` and `standingRemoved` set, the join walkable to its junction cell. Then removing the district gives E-flat 0 over both claims (the world before the town) |
+| 9 | Ownership | before either removal: journal stack depth 1 (the district's) on every reach column outside the contact columns; in each contact column, every town cell has the district's cell over it; the seam-step joins' depths recorded |
+| 10 | Mid-realise (verifier re-runs) | the town removed while item 3's district is `PLACING` its routes stage; both finish; a save, leave and reopen; then the district removed: E-flat 0 over both claims |
+| 11 | Refusals, nothing written | claims apart: `NO_JOIN [apart]`; `d3_walled`: `NO_JOIN [wall]`; the town `PLACING` at realise: `OVERLAP_BUSY`; a site placed on the join's path after the plan: `OVERLAP` naming it, and `ARTIFACT_STALE` through `realiseApproved`; a C17 area over `reach`: `PROTECTED`; each with 0 changed cells (hash) |
+| 12 | Dry check (verifier re-runs) | over items 3-6 and 11's plan-time cases, `checkBeside`'s verdict equals `Regions.plan`'s outcome (fits, Reason, code and kind, join, land); the mod's `plans/` and the sidecar's plan directory listed before and after: no new file; no opKey entry; no `PlanRec`; the world hash unchanged |
+| 13 | KC and later plans | `d3_pond_town`: the join keeps clear (0 cells in any body's hard or watch set, `M25:clear` 0, every body settled after); C38's offer round `d3_town` with a standing district: 0 wall cells in the join's columns; a second district beside: its join avoids the first's |
+| 14 | Land | for every district of items 3-6: every column the district holds in the journal lies in `union`; `outside` misses the town's claim; `inside` equals the held reach and seam columns; the corridor part equals `architect_mc:corridor` |
+| 15 | Natural round | S3's pinned claim: a V town, then a shore district beside it joined through its claim; plan, realise, save, leave, reopen; the same IR (or D2's replay rule); removal in both orders; E-normal 0 unclassified under D2's narrowed classes |
+| 16 | Survival (only if RS has merged first) | item 3 in a survival world: the join is a route target fed from the stockpile; removal in both orders refunds the paid cells standing, once per key; otherwise this row moves to RS's RC note |
+| 17 | Determinism | IR sha over 3 plans; tile shas with 1 and 4 workers; macOS and Linux CI |
+| 18 | Unchanged, API, spend | d-unit, d-ingame, d2-ingame, 6cd-scenario-districts, kc-ingame, k1a-ingame, fl-ingame, pt-ingame item 14; api-compat clean; apijars; $0.00 |
+
+**Tier:** slice plus `region/**`, `journal/**` and `api/**`:
+- the units and apijars;
+- d-unit, d-ingame and d2-ingame;
+- kc-ingame, k1a-ingame and fl-ingame;
+- 4d-all and 6a-eflat;
+- D3's own `d3-unit`, `d3-ingame`, `d3-natural` (driver `tools/gate6cd3.mjs`, chain `6cd3`, impact rule "6c D3").
+
+The verifier reviews the diff and **re-runs items 7, 8, 10 and 12**. **Steward's RC check** follows on the release candidate
+(S-D3-7).
+
+### Steward's review (2026-10-20, at 40262c67): binding, and it overrides the sections above where they differ
+
+- **Finding: a finished PARTIAL town is a valid beside town.** §4.4 changes. Only in-flight states refuse (`PREPARING`,
+  `PLACING`, `REMOVING`, answering `OVERLAP_BUSY`). `PLACED`, `PARTIAL`, and `FAILED` with cells standing are all accepted as a
+  beside town, consistently at plan, at `checkBeside` and at realise. A Steward town whose lot failed stays PARTIAL for good, and
+  D1's plan-time check already accepts it. `d3_town`'s fixtures gain a partial town (one lot failed), and the gate realises a
+  district beside it.
+- **S-D3-1:** streets only. Steward's own street extensions are held cells to route around.
+- **S-D3-2:** as proposed.
+- **S-D3-3:** report both, as proposed.
+- **S-D3-4:** a snapshot. The first building re-plans.
+- **S-D3-5:** walled towns answer `NO_JOIN [wall]`, with gates joining in 7a.
+- **S-D3-6:** C38's wall keeps off the join and never gates it.
+- **S-D3-7. Steward's RC covers:**
+  - a partly built V town;
+  - a beside reservation by `checkBeside`;
+  - its first building;
+  - undo in both orders and after a restart;
+  - an along district;
+  - the PARTIAL town above.
+- **S-D3-8:** cheapest route.
+
+### Open questions for Steward
+
+- **S-D3-1. The street network.** Joins target streets only: flagged roads, or the `street_` stem before FL. They never target
+  routes between districts, lanes, paths or the town's own join, and never Steward's own street extensions. Is that the network
+  you mean? Default: streets only.
+- **S-D3-2. The side junction in the graph.** A side T's `join_external` is `to: <town>:<roadId>` with `junction {kind: side, at,
+  side, u}`. An end keeps D1's `<town>:<node>.<port>`, and on reach plans gains `junction {kind: end, at}`. Fine for your
+  reading, or do you want a node id for sides? Default: as proposed.
+- **S-D3-3. The join's land after the town is removed.** `inside` keeps its geometry and `standingRemoved` is set. The cells are
+  still the district's. Will you take them into the district's land then, or leave them unowned on the Claim tab? Default:
+  Architect reports both; Steward decides.
+- **S-D3-4. What the placeholder's verdict means.** You've chosen the dry check. It runs the full plan path on your placeholder
+  request and keeps nothing. Its join and land are the placeholder's, an opKey is ignored, and the real first building plans
+  again and may land elsewhere in the request claim. Is that the meaning founding wants? Default: yes.
+- **S-D3-5. Walled towns.** A town with a wall round it answers `NO_JOIN [wall]`. Joining through a standing gate is 7a's (typed
+  connectors). Fine until then? Default: yes.
+- **S-D3-6. A wall round the town after a district.** C38's offer keeps its ring off the district's join (it searches past it,
+  or `NO_ROOM {kind: region}`). It doesn't gate the join. Fine? Default: yes.
+- **S-D3-7. The RC.** D3 changes what stands in a town's claim at removal, which your give-up rule reads. Will you run on the RC:
+  a `d3_town`-like V town, a beside reservation with `checkBeside`, its first building, undo of each in both orders, and an
+  along district? Default: yes.
+- **S-D3-8. Cheapest, not shortest.** "The nearest point" is read as the cheapest route (T2 cost), ties to the street end.
+  Fine? Default: yes.
+
+### Open questions for Noah
+
+- **N-D3-1. How the join looks inside the town.** Proposed: as today's join, a 3-wide road in the districts' path role with route
+  lamps, so a district reads as a road leading out of the town. The alternative is that a join continuing a street end takes the
+  street's own look (road 3 plus verges, W's lanterns) for its first stretch. Default: as today's join.
+- **N-D3-2. Lamps near the town's.** Proposed: the join's route lamps skip spots within 6 of a town lamp, so the town's light
+  isn't doubled where they meet. The alternative keeps the route's spacing everywhere. Default: skip within 6.
+
+### Deferred
+
+- Joining through a K1 gate, and typed links between regions (7a).
+- Growing a district (D-S2) and extending a standing street (6d).
+- `Regions.discardPlan` and the plan sweep (proposed for PLAN's queue, §7.3).
+- Side junctions on diagonal and turning streets.
+
+### Coordinator decisions (2026-10-20, on Noah's behalf)
+
+- **N-D3-1:** today's 3-wide join look inside the town.
+- **N-D3-2:** the join's lamps skip spots within 6 of a town lamp.
+
+## Batch 7a: the rest of the connector set. Summary for Steward review (DRAFT, 2026-10-20)
+
+Phase 7a's connectors after K1, which shipped 7a's walls, gates and rope bridges early. This draft covers:
+- every catalogue entry still reserved `until: 7a` (10 ids, checked against `kit/schemas/plan.json` at f3f41d43);
+- `wall.along` (`until: K2`);
+- the K1 and D3 deferrals that name 7a: lots on a wall's line (S-K1-2, FL's out-of-scope note), wall walks, and a district
+  joining through a standing gate (S-D3-5);
+- M16, which H and HY both left to 7a.
+
+Each slice has its own section below, marked "(DRAFT for Steward review)". Nothing here is built or run. Every "predicted" number
+is the builder's to measure.
+
+**Written over** main f3f41d43 (v0.40.0 + D3's frozen contract: API 1.37.0, mod 0.40.0, kit 0.38.0, catalogue 9). FL, F3, S3, RS
+and D3 are frozen and building, and this draft assumes they land as frozen. A sibling is drafting 6d on `docs/6d` (not pushed
+when this was written). So every version below is symbolic, ⟨6d⟩ + n, and **the coordinator sets the numbers** at merge.
+Anything those slices' as-builts change wins over the facts quoted here.
+
+### The 7a ledger: every id and promise, and where it goes
+
+| Id or promise | Today | In this batch | Slice |
+|---|---|---|---|
+| `connector.stair` | reserved (7a) | supported: a T2 route under a stair profile | **CL** |
+| `connector.switchback` | reserved (7a) | supported: a T2 route under a switchback profile (stairs off, hairpins) | **CL** |
+| `connector.ladder` | reserved (7a) | supported: a T2 route under a ladder profile, to 48 with rest landings | **CL** |
+| `connector.rock_stair` | reserved (7a) | supported: a stair flight carved into rising ground (T3b's bore, inclined) | **RK** |
+| `connector.lift` | reserved (7a) | supported: a bubble column against a face, an H body | **LF** |
+| `connector.catwalk` | reserved (7a) | supported: a bracketed deck along a face (the face form); between structures waits for 7b | **CW** |
+| `connector.stairs_around` | reserved (7a) | supported: a spiral stair round a spire, spike, giant tree or giant mushroom to a lookout | **SA** |
+| `connector.span_bridge` | reserved (7a) | a supported alias of `connector.bridge` (S-7a-3) | foundation |
+| `connector.branch_walk` | reserved (7a) | re-reserved `until: 7b`: every endpoint it serves is a canopy lot (`layout.elevated`) (S-7a-4) | foundation |
+| `connector.rail` | reserved (7a) | re-reserved `until: CR`, Steward's "carts and rails come later" (S-HY-3); a sketch is below (S-7a-5) | foundation (sketch §CR) |
+| `wall.along` | reserved (K2) | supported | **K2** |
+| Wall walks (`castle_city`'s `wall_walk`; K1 "Not in scope") | params noted | a `walk` member on `connector.wall` | **K2** |
+| Towers and gatehouses as lots on the wall's line (S-K1-2's `join` deviations; FL "Not in scope") | `adjusted`, lots beside the wall | the named lots are sited on the line; a gatehouse is a through lot | **K3** |
+| A district joins through a standing gate (S-D3-5; D3 `NO_JOIN [wall]`) | refused | the join crosses a standing gate without writing it | **GJ** |
+| Typed links between regions (S-D-2: "7a types these edges") | `join_external` is `type: road` | a gate join's edge is typed (`crossing {type: gate, lands}`); the rest is the nav slice (ledger row below) | **GJ** (part) |
+| M16, flood behaviour (H §2.5, HY "Deferred": "M16 proper stays 7a's") | the single breach only | M16 as a warning: barriers thinner than 2 under a surface | **FB** |
+| The behavioural villager test (SETTLEMENTS, Steward's A7 review: "a bed across a ladder shaft unreachable, a stair route reachable") | not run | a hard gate item | **CL** |
+| Each kind's survival row (RS "Not in scope": "each gets its survival row in its own slice") | INSTANT only | each slice's §Survival, in RS §7.2's form | every slice |
+
+**What SETTLEMENTS' 7a also lists, and where this draft proposes it goes** (N-7a-1 asks Noah to confirm the scope):
+
+| SETTLEMENTS 7a item | Proposed home | Why |
+|---|---|---|
+| Site analysis and affordances (§6), site lots, freeze-before-lots' general form | 7b, with site-aware design | Every consumer is a site lot or an elevated lot (`layout.elevated`, `tunnel.under`, canopy rope bridges), which are 7b's. The narrow freeze shipped in 6a |
+| The link pass after lot designs, IR v2 (`region.link`, `lotEntries`, `fits`), door-aligned lanes | 7b (K1 already said so for `region.link` and elevated ports) | Needs designed ports in buildings |
+| `seconds`, `risk`, `nav.json`, `Regions.nav`, the `steward` mover (§15) | its own nav slice when Steward's villager/steward phase asks | No consumer yet; S-7a-6 asks |
+| M8 promoted to an error | the 7a batch's release tier, measured first | Promotion can turn READY plans not READY; FB records the counts; S-7a-7 asks |
+| M15 (structural sense: cantilever, necks) | 7c (composites), except CW's own bracket rule `M10:catwalk` | Only catwalks cantilever in this batch |
+| S4 (ravine town v1) and S1 re-run with rope bridges | 7b (S4 needs ledge and span lots); S1 re-run with the 6c close-out or 7b's S1 v2 | No site lots in this batch |
+| Villager reachability judged in S2's and S3's scenarios ("recorded in 6c, judged from 7a") | judged from the first 7a batch's release tier | CL's behavioural test proves the mover first |
+| C3 (plain villages in 7a) | done: V's `flat_village` and plan/0 lay out flat claims with lots, connectors, paths and props | nothing left in 7a |
+| C12 (VillageLayout retires behind a joint 7a/6d gate) | 6d's (Steward-side migration) | 7a adds no migration |
+| Bible format 3's `connectors` block (preferred types, limits) | 7c (K1, T3) | 7a extends format 2's role keys only |
+
+### The slices
+
+| Slice | What | API / versions (symbolic; the coordinator numbers) | Steward check | Size |
+|---|---|---|---|---|
+| **7a/foundation** | The shared interface, frozen first: kind lists (a leaf module), the compile hook table, the route pass's edge profiles and rows 9-11 as inert stubs, defs, codes, wire shapes, bible keys, P0's reserved example moved, the alias and the two re-reservations | none alone (merged by the slices) | none | 0.5-0.75 day |
+| **CL** climbs | `connector.stair`, `connector.switchback`, `connector.ladder` over T2's own moves; the behavioural villager test | ⟨6d⟩+1 minor, catalogue ⟨6d⟩+1 | none before release (plan answers and routes only, GATES policy 4) | 1.5 days |
+| **K2** walls II | `wall.along`; wall walks | next minor | none | 1.75-2 days |
+| **CW** catwalks | `connector.catwalk`, face form: route row 10 | next minor | none | 1.25 days |
+| **RK** rock stairs | `connector.rock_stair`: route row 11 on T3b's bore, the two-plan flow, the stale rock | next minor (Java: `hasVolume`) | none (as T3b) | 1.5-2 days |
+| **LF** lifts | `connector.lift`: route row 9, a bubble column as an H body, a StillOurs row | next minor (Java) | **RC** (a global StillOurs row; a new body in the fluids stage's census and drain) | 2.5 days |
+| **SA** spirals | `connector.stairs_around` round a form part to a lookout | next minor | none | 1.25 days |
+| **K3** wall lots | towers and gatehouses as lots on a wall's line; gatehouse passages; closure at bind | next minor (Java: the bind's closure check, artifact ports) | **RC** (Steward designs and binds these lots; a new `realiseApproved` refusal) | 2.5 days |
+| **GJ** gate joins | a district beside a walled town joins through a standing gate | next minor (Java: the reach over a wall region) | **RC** (removal in both orders, as D3) | 1.5 days |
+| **FB** flood behaviour | M16 as a warning | kit patch (or a minor with a feature string) | none | 0.75 day |
+
+### Build order and parallelism
+
+- **Gating.** 7a's merge waits for the 6c close-out (CONTRACT "Coordinator decisions ... 2026-10-10": "The 6c close-out ...
+  gates 7a's merge, not its start"; STEWARD-SYNC "Agreed order" item 7). The task that produced this draft places 7a's numbers
+  after the 6d batch. **Order conflict for the coordinator:** SETTLEMENTS "Agreed with Steward (2026-10-09)" says "6d ... lands
+  right after 7a, as 7a's follow-on slices". This draft follows the newer instruction (7a after 6d) and does not edit
+  STEWARD-SYNC or SETTLEMENTS.
+- **The foundation first, alone** (one owner, `7a/foundation`, about half a day, frozen before any slice branches), as K1's and
+  T3's were.
+- **Batch 7a-1: CL, K2, CW in parallel** (three lanes; kit only; none shares a module but the foundation's tables). One release,
+  no RC.
+- **Batch 7a-2: RK, LF, SA in parallel.** SA after F3 merges (its hosts include F3's trees and mushrooms; with F3 late, SA ships
+  F1's hosts and F3's join as a follow-up row). RK and LF touch `PlanChecks.java` in different methods (RK `hasVolume`; LF none:
+  its Java is StillOurs and the census). One release, **one Steward RC** (LF's).
+- **Batch 7a-3: K3, GJ, FB.** GJ after D3 merges. K3 after K2 (wall walks end at tower lots). FB any time (kit only; it judges
+  LF's lift doors, so after LF for its exception list, or with a stub list). One release, **one Steward RC** covering K3 and GJ.
+- **At most 3 gate runs machine-wide** (GATES policy 6). FL, F3, S3, RS and D3 hold slots while they build, so 7a's lanes take
+  turns at the slice tier; the batches above are sized to three lanes.
+- **Totals:** about 15.5 days of work; about 6-7 elapsed with three lanes and the foundation first.
+
+### Rules for every slice here
+
+From the FL/F3, KC, CU and D3 batches' as-builts; they bind each slice below:
+- **Never edit `kit/regions/plan_v0.mjs`** (its source sha is every IR's `programSha`). New kinds are new modules.
+- **Fixture numbers:** the coordinator assigns them; each slice names its `valid/` fixtures `v7a_<slice>_<name>` as placeholders
+  (renumbered at merge, names kept). Slice-local fixtures live in `fixtures/plan/<slice>/`, unnumbered.
+- **The compact plan/0** has an 84,000-character bound (S-FL-8). The foundation adds every 7a def at once, so **the foundation
+  measures** the delta and states it; the slices add descriptions only.
+- **Every new kind goes through `Regions.checkPlan` and then `realiseApproved` in game**, never `checkPlan` alone, **including one
+  Steward-shaped plan per slice** in plan v1's shape (pending parts `required: false`, every street zone `orientation: "ew"` with
+  rotate off, lot ext; STEWARD-SYNC "Plan v1").
+- **Villagers across** every villager-legal kind (vanilla `dev.nav.villager` both ways) is a **hard bar**: the slice doesn't pass
+  without it. **Ladders, lifts and wall walks are player-only by kind** (movers fixed to `['player']`, not inferred from their ends:
+  S-7a-8); they answer `MOVER` only when a part's own `movers` names villagers, and they prove the player across instead: the kit
+  `player` mover is the judged bar, with the physics shown by a probe (a named DevBridge hook, or a client-run step) where the
+  headless bot can't move that way.
+- **E-normal world classes** by kind, only at unwritten cells, only away from the plan (D2's `far`/`deep`, F2's `distant`, VOC's
+  `farfluid`); never widened. A natural-site failure is first run against a no-region control.
+- **KC binds every new writer:** a body's cells are its own; whoever is placed later keeps clear (S-KC-1); watch cells strict
+  (S-KC-2). Each slice names its rows for KC's §4 table.
+- **Byte identity:** every new move is opt-in per edge, every new member is absent by default, and `auto`'s move set does not
+  grow in this batch (S-7a-1). So **every committed fixture without the slice's new parts re-plans byte-identical** (answers and
+  IR, kitVersion normalised), the 59 asks included, **except by name**. It is measured, not argued.
+- **Kit bump:** re-cut the kitVersion-carrying goldens (links_demo, links_demo_flat, crossings_demo_flat) by
+  `kit/tools/region.mjs plan` over their committed inputs, as KC did.
+- **Survival:** each kind's row in RS §7.2's form (free, paid, path) plus an exact `cost.bom` (C26's `bomFull` over the emitted
+  cells). The survival build of one fixture runs only if RS has merged; otherwise the row moves to the batch's RC note.
+- **S-K1-6, S-K1-7 bind:** a pending part newly refused is a repair for Steward's plan writer, never a build stop; unknown codes,
+  kinds and members pass through.
+
+### Steward's recorded plans: what waits on a 7a id today, and the batch's predicted answers
+
+The asks claim (`plan-helpers.mjs asksSurvey`) is 320 x 320 of flat grass at y 64 with a lake and a stream: no hill, no cliff, no
+form to climb. So every recorded climb finds nothing to climb.
+
+| Plan / part | Waits on today (`hy/asks-gap-after.txt`) | After the batch (predicted) | Slice |
+|---|---|---|---|
+| old_new_town / quarter_stair (required) | `unsupported {connector.stair, until 7a}` | `refused NO_CLIMB`, `wouldFit` a `path` (fits alone) | CL |
+| sky_monastery / long_stair (required) | `unsupported {connector.stair}` | `refused NO_CLIMB`, `wouldFit` a `path` to `gatehouse_1`. The climb it means (up to `sky_island`) waits on `form.floating_island` (N-P0-1) and a free-standing stair, noted | CL |
+| hidden_village / cave_ladders (optional) | `unsupported {connector.ladder}` | `refused NO_CLIMB`, `wouldFit` a `path` | CL |
+| treetop_village / storehouse_lift (optional) | `unsupported {connector.lift}` | `refused NO_CLIMB`, `wouldFit` a `path`. The raised storehouse wants `layout.elevated` (7b), noted | LF |
+| upside_down / winch_lift (required) | `unsupported {connector.lift}` | `refused NO_CLIMB`, `wouldFit` a `path` | LF |
+| mining_town / rail_1 (required) | `unsupported {connector.rail, until 7a}` | `unsupported {connector.rail, until CR}` (only `until` moves) | foundation |
+| castle_city / curtain_wall | `adjusted` (4 corner lots and `gate_lot` as `join` deviations; `wall_walk` noted) | `fits`, provisional: towers on the corners, the gatehouse on the gate run, the walk on the wall | K2, K3 |
+| the six walled zones (castle_city / castle, walled_town / town, metropolis / capital, camp_to_city / camp_city, redstone_gate / fortress, border_fort / fort) | `fits` or `adjusted` | the same class or `fits` (fewer lots on their street); each re-laid without its wall lots, its answer re-recorded | K3 |
+| walled_town / town_wall | `adjusted` (`gateLots` noted as joins) | `fits`, provisional: 4 gatehouses at the 4 gates | K3 |
+| metropolis / city_wall | `fits` (towers and gate lots noted) | `fits`, provisional, or `refused OUT_OF_CLAIM` as before | K3 |
+| camp_to_city / city_wall | `adjusted` | `fits` or `adjusted` (move), provisional; or `refused OUT_OF_CLAIM` as before | K3 |
+| redstone_gate / curtain_wall, main_gate | `adjusted`; `refused NO_ROOM` | `fits` provisional; `main_gate` `fits` as the gatehouse's passage | K3 |
+| border_fort / fort_wall | `adjusted` | `fits` provisional (`anchors` read as lots on the edge) | K3 |
+| desert_jungle_wall / great_wall | `fits`, provisional (a joined lot) | unchanged class; `gatehouse_1` becomes a through lot (its passage reserved) | K3 |
+
+**The bar for the batch (each slice's item 3):** 0 `malformed`; no recorded part changes class except the rows above; each
+`NO_CLIMB` carries a `path` `wouldFit` that answers `fits` re-checked alone; the before and after gap tables committed per slice.
+After the batch the gap table loses `connector.stair` 2, `connector.lift` 2 and `connector.ladder` 1, and `connector.rail` 1
+keeps its row with `until: CR`.
+
+**On refusing what the flat claim can't climb.** Two precedents pull apart. S-K1-6 (treetop's rope bridges) refused `NO_GAP` with a
+`path` repair. S-T3-4 (secret tunnels) kept the part `unsupported {tunnel.under}` rather than offer a lossy repair. This draft
+follows S-K1-6: a stair, ladder or lift between two points with no rise has no shape it is waiting for, so it is refused with the
+honest repair. S-7a-2 asks.
+
+### Batch-level open questions for Steward
+
+- **S-7a-1. `auto` does not grow in this batch.** S-K1-5 accepted that `auto` grows. CL's profiles, CW's catwalk, RK's rock stair and
+  LF's lift are all opt-in per explicit part, and `auto` gets none of them, so every `auto` answer and v34/v38 stay byte-identical.
+  Growing `auto` with the villager-legal ones (catwalk, rock stair) would be a later, measured change. Default: no growth now.
+- **S-7a-2. Nothing to climb.** A `stair`, `switchback`, `ladder`, `lift` or `rock_stair` whose cheapest dry route climbs less than 2
+  (CL: the route's ascent, max minus min; the rows: no face or flight rising 2, or 4 for a lift, within `approach`)
+  answers `refused NO_CLIMB` with a `path` `wouldFit`, as S-K1-6. The alternative is S-T3-4's `unsupported` with no repair. Default:
+  refused with the repair.
+- **S-7a-3. `span_bridge` is a supported alias of `connector.bridge`.** SETTLEMENTS §8.2 defines it as 6a's `bridge` "for gaps with a
+  floor within 24", which T3's beam already is (`pierDepth` 24). A part of kind `span_bridge` is checked against `connector.bridge`'s
+  def and answers with block `connector.bridge`, noted. R4c's `aliasOf` precedent is a *reserved* alias, so this is a new x-rule
+  (R4d, a supported alias). The alternative is `retired` with `replacedBy`, which leaves any recorded `span_bridge` `unsupported` for
+  good. Default: the supported alias.
+- **S-7a-4. `branch_walk` moves to 7b.** A deck along a giant tree's branches only joins canopy lots, which are `layout.elevated`
+  (7b), and it needs F3's branch skeleton exported in `ir.forms[]` (F3 keeps it internal). Default: `until: 7b`, with that note.
+- **S-7a-5. Rails wait (`until: CR`).** You said "carts and rails come later" (S-HY-3, 2026-10-19). `connector.rail` has no design in
+  SETTLEMENTS §8.2 (only its reservation), carts are entities the journal can't undo, and powered rails need redstone. Default:
+  re-reserve `until: CR` (a named later slice, as `until: mechanism` for drawbridges); §CR below sketches it so your plan writer
+  knows the shape. mining_town's `rail_1` keeps waiting.
+- **S-7a-6. The nav slice.** `seconds`, `risk`, `nav.json` and the `steward` mover (SETTLEMENTS §15) have no consumer yet. Default:
+  their own slice when your villager or steward phase asks; GJ types only the gate join's edge.
+- **S-7a-8. Player-only by kind.** A ladder, lift or wall walk carries movers `['player']` whatever its ends' lot kinds (S-T2-1's
+  inference would make almost every lift between dwellings refuse). Its ends' villager reach stays M2's job on the other routes. A
+  part whose own `movers` names villagers answers `MOVER` with a stair or path repair. Default: yes.
+- **S-7a-7. M8 as an error.** FB records how many committed plans would lose READY if M8 (fall protection) became an error. Default:
+  decide at the batch's release tier with those counts.
+
+### Batch-level open questions for Noah
+
+- **N-7a-1. Scope.** This batch is the connector set only. Affordances, site lots, the link pass, nav and S4 move to 7b (or a later
+  slice) as the table above says. Default: yes.
+- Each slice's look questions are in its own section; the coordinator answers them on Noah's behalf until the gallery step.
+
+
+### Coordinator decisions (2026-10-20, on Noah's behalf; Noah judges each look at its gallery step)
+
+- **N-7a-1:** yes. This batch is the connector set only. Affordances, site lots, the link pass, nav and S4 move to their
+  proposed homes in the ledger.
+- **N-CL-1, N-K2-1, N-CW-1, N-RK-1, N-LF-1, N-SA-1, N-K3-1:** as proposed in each slice.
+- **Order:** 7a lands before 6d, as SETTLEMENTS agreed with Steward on 2026-10-09. 6d's RV is being revised after an
+  independent review in any case.
+
+
+### Steward's review (2026-10-20, at 7e7cd2d5): binding
+
+Every batch and slice default is accepted:
+- S-7a-1 to S-7a-8.
+- S-CL-1/2, S-K2-1/2, S-CW-1, S-RK-1 (LOAD_BOUNDED(512) from `limits.volume`).
+- S-LF-1/2 (RC), S-SA-1, S-K3-1..4 (S-K3-4 checked: plan v1 reads `$.lots[]` by id and never checks the zone's rect; K3 RC).
+- S-GJ-1/2 (RC), S-FB-1.
+
+7a lands before 6d.
+
+## Phase 7a foundation: the shared interface (FROZEN 2026-10-20, Steward reviewed: every default accepted)
+
+One owner, frozen before any 7a slice branches, as `k1/foundation` and `t3/foundation` were. It changes no answer by itself: every
+row it adds is inert, and every def it adds is read only once its kind's catalogue entry flips (R4). The slices merge it; it never
+merges to main alone.
+
+- **Branch:** `7a/foundation`, worktree `../architect-mc-7aF`. **Spend:** $0.
+- **Depends on:** main after the 6c close-out and 6d (versions symbolic, §6).
+
+### 0. Facts (main f3f41d43)
+
+- **The catalogue** (`kit/schemas/plan.json` `x-catalogue`, golden `kit/schemas/plan-catalogue.golden.json`, catalogue 9, api
+  1.37.0, kit 0.38.0): exactly ten entries are `reserved`, `until: "7a"`, schemaVersion 0: `connector.ladder`, `stair`, `rail`,
+  `catwalk`, `rock_stair`, `switchback`, `lift`, `branch_walk`, `span_bridge`, `stairs_around`; plus `wall.along` (`until: "K2"`,
+  with its `where.along` def already in `$defs/wallWhere`: `{feature, side, anchor, distance}`). Entry members include `aliasOf`
+  (R4c: a *reserved* alias, `zone.district`), `replacedBy` and `retiredInApi` (`lib/plan/catalogue.mjs:18`).
+- **P0's reserved example is `connector.catwalk`:** P0 item 2's "required unsupported -> REQUIRED_BLOCKED" example,
+  `extension/e02_wall_draft` and `e15_every_reserved_a/b` use it (K1 §11 step 3; T3 item 16).
+- **The route pass** (`kit/lib/region/passes/route.mjs`):
+  - built-in moves 0 walk, 1 stair (flights of 2..8 rising or falling 1 a cell, then 2 flat cells, `COST.flight 60 + stair 40` a
+    cell, :380), 2 hairpin (a flat landing holding both lanes, `COST.hairpin 40`, :388-405), 3 ladder (one step to the adjacent
+    column of a cliff 2..`LADDER_MAX` 24, only on edges whose movers lack `villager`, `COST.ladder 80 + ladderPer 25` a rung,
+    :410-417), 4 an earlier edge's walk;
+  - `SPECIAL_MOVES` (:80-85): gate 5, rope 6, bridge 7, tunnel 8, with the hooks `init/active/needsFlag/blocks/expand/cells/commit`
+    and optional `prune`, `fail`, `crossesWater`; **one shared flag bit**; `onceOf(edge)` (:88) reads `edge.once` (any string) or
+    K1b's `spanOnce`;
+  - each row's `init` returns null when no edge lists it in `spans`, which keeps the pass byte for byte T2's.
+- **The compiler's connector hooks** (`kit/lib/plan/compile.mjs`) are per-kind `if` chains over leaf kind lists: K1's
+  `ROPE_KINDS`/`WALL_KINDS` (:31-33), T3's `connectors/t3kinds.mjs` (a leaf module: K1's integration lesson, an import cycle left
+  `ROPE_KINDS` uninitialised), `LINK_KINDS` (:40). Call sites: resolve before routing (:1243-1246), leg options (:1263), the pass
+  inputs (:1290), the fail answers (:1340-1352), the answers (:1385-1389), the links emission (`emitWalls`, `emitRopes`,
+  `emitBridges`, `emitTunnels`, :1393-1401).
+- **The check's two-plan flow** is gated in Java on a part's kind: `PlanChecks.hasTunnel` (:366-370; F3 widens it to `hasVolume`
+  for its cave forms), plus H's `hasH` and `wetAsked` (:452). The artifact's `guards` come from `planCheck.links.guards`
+  (`finish.mjs:167`), any part.
+- **S-F3-3 binds:** a catalogue entry whose check needs a frozen volume carries `limits.volume: true` (or the note F3's builder
+  chose), so Steward passes `LOAD_BOUNDED(512)` without a hard-coded list.
+- **The compact plan/0** bound is 84,000 characters (S-FL-8); FL and F3 measure their deltas as they land.
+
+### 1. The kinds, as a leaf module
+
+`kit/lib/connectors/kinds7a.mjs` (no imports):
+
+```
+CLIMB_KINDS   = ['stair', 'switchback', 'ladder']        // CL: T2's own moves under an edge profile
+ROCK_KINDS    = ['rock_stair']                           // RK: route row 11
+LIFT_KINDS    = ['lift']                                 // LF: route row 9
+CATWALK_KINDS = ['catwalk']                              // CW: route row 10
+SPIRAL_KINDS  = ['stairs_around']                        // SA: a hosted generator plus an ordinary leg to its foot
+ALIAS_KINDS   = { span_bridge: 'bridge' }                // compiled as T3's bridge (S-7a-3)
+KINDS_7A      = [...CLIMB_KINDS, ...ROCK_KINDS, ...LIFT_KINDS, ...CATWALK_KINDS, ...SPIRAL_KINDS]
+```
+
+`LINK_KINDS` gains `KINDS_7A` (they get the links stage), so the compiler reads them the way it reads T3's.
+
+### 2. The compile hook table
+
+So that five slices don't each add an `if` to the same six call sites, the foundation adds **one table**,
+`kit/lib/connectors/hooks7a.mjs`, and one loop at each call site:
+
+```
+HOOKS_7A = [ { kinds: CLIMB_KINDS,  mod: './climb.mjs' },     // CL
+             { kinds: ROCK_KINDS,   mod: './rockStair.mjs' }, // RK
+             { kinds: LIFT_KINDS,   mod: './lift.mjs' },      // LF
+             { kinds: CATWALK_KINDS, mod: './catwalk.mjs' },  // CW
+             { kinds: SPIRAL_KINDS, mod: './spiral.mjs' } ]   // SA
+each module exports: resolve(K, p) -> stop | null      (before routing: R18-style self-loops, movers, NO_CLIMB, params)
+                     leg(K, p) -> legOptions | null    (the edge's `profile`, `spans`, `once`, per-row options in `edge.t7`)
+                     passInput(K) -> object | null     (the pass-level input of its row; null without such parts)
+                     failAnswer(K, leg, meta) -> answer (its typed refusal from the row's `fail` or the profile's post-check)
+                     answer(K, p, legs) -> extra       (merged by mergeExtras, as T3's)
+                     emit(K)                           (the links stage, under a checkpoint per part)
+                     bom(K, p) -> cost.bom             (C26's bomFull over the emitted cells)
+                     survival(K, p) -> RS target spec  (§Survival of the slice)
+```
+
+- The foundation ships each module as an **inert stub with its final name** (T3's lesson: no throwing placeholder): `resolve`
+  returns null, `leg` null, `emit` nothing. Each slice owns exactly its module and its row file.
+- **Order at each call site:** K1's, then T3's (as today), then `HOOKS_7A` in table order. **Links emission order** is frozen:
+  walls and gates (K1, including K2's walks and K3's wall lots), ropes, bridges, tunnels (T3), then climbs' fittings (CL: stair
+  rails, ladder landings, top gates), rock stairs (RK), catwalks (CW), spirals (SA), lifts (LF: the shell in `links`, the water
+  through H's `fluid` op in the fluids stage, as a moat's). Each part emits under its own checkpoint.
+- `span_bridge` (ALIAS_KINDS) is rewritten to `bridge` in `schema.mjs` before dispatch, with a note "span_bridge is
+  connector.bridge (R4d)"; nothing downstream sees the alias.
+
+### 3. The route pass: edge profiles and rows 9-11
+
+**3.1 Edge profiles over the built-in moves (CL owns the values).** Explicit stairs, switchbacks and ladders are T2's own moves
+under a per-edge cost profile, not new rows: duplicating the stair and ladder moves would be two codes for one idea.
+
+```
+edge.profile: 'stair' | 'switchback' | 'ladder'   (absent: COST as today, byte for byte)
+PROFILES[name] = { stairs: bool, ladders: bool, ladderMax: int, cost: {flight, stair, hairpin, ladder, ladderPer, grade} }
+```
+
+- The pass merges `PROFILES[edge.profile].cost` over `COST` for that edge's search only; `stairs`, `ladders` and `ladderMax`
+  override the pass's for that edge. The foundation freezes the names and the shape with the values set equal to `COST` (so the
+  stub changes nothing); CL sets the values.
+- **No new flag semantics.** "The connector really climbed" is a post-check on the routed segments in CL's `failAnswer`/`answer`
+  (S-7a-2), not an A* constraint, so `onceOf` and the one flag bit are untouched.
+
+**3.2 Rows 9-11, appended to `SPECIAL_MOVES`** after tunnel, in this order, each in its own file with the K1/T3 hooks:
+
+| Code | Row | File (owner) | Opt-in (`spans`) | `once` | Cost (pass units, a straight cell 10) | `fail` order |
+|---|---|---|---|---|---|---|
+| 9 | `lift` | `moves/lift.mjs` (LF) | `['lift']` | `'lift'` | 300 + 10 a cell of rise (+ 100 with `down`) | NO_CLIMB, SPAN, ANCHOR, HEADROOM, WATER, PROTECTED |
+| 10 | `catwalk` | `moves/catwalk.mjs` (CW) | `['catwalk']` | `'catwalk'` | 200 + 25 a deck cell + 20 a bracket | NO_GAP, ANCHOR, HEADROOM, SPAN, WATER, PROTECTED |
+| 11 | `rock_stair` | `moves/rockStair.mjs` (RK) | `['rock_stair']` | `'rock_stair'` | 400 + 40 a step + 30 a landing cell | NO_CLIMB, SPAN, ANCHOR, WATER, PROTECTED, VOLUME |
+
+- Each row's `init` returns null unless an edge lists it, so a plan without such a part plans byte for byte as before. The
+  foundation's stubs return null always.
+- An edge's 7a options ride in `edge.t7` (`{lift: {...}, catwalk: {...}, rock_stair: {...}}`, opaque to the pass), the pass-level
+  inputs in `intent.lift`, `intent.catwalk`, `intent.rockStair`, as T3's `edge.t3` and `intent.bridge`.
+- A `once` edge keeps T3's approach rule: it walks at most `approach` (default 16) at each end.
+- **Ties:** a state's moves relax walk, stair, hairpin, ladder, then gate, rope, bridge, tunnel, lift, catwalk, rock_stair. The heap's
+  tie key is unchanged.
+- **`auto` lists none of rows 9-11** (S-7a-1).
+
+### 4. plan/0: defs, codes, the alias, the re-reservations
+
+- **Defs** (strict, additive; each validates every recorded shape: `connector.routed`'s members plus the kind's own). The slices'
+  sections give the members; the foundation adds all five defs at once and **measures the compact plan/0** (predicted
+  2,500-3,500 characters; over 84,000 the bound moves, with Steward's word).
+- **Reason code** appended to `$defs/reason.code`: **`NO_CLIMB`** (the ends rise less than the kind's minimum; `evidence {rise,
+  need}`). Every other refusal reuses K1's and T3's codes. Deviation `what: climb` (a climb connector that routed without
+  climbing, CL).
+- **x-rules** (additive; numbered after any that FL, F3, RS or D3 add, the next free, shown here as R25-R27): **R25** a supported alias (`aliasOf` on a supported entry): the part is checked against the target's def
+  and answers with the target's block id, noted (S-7a-3); **R26** climbs, rock stairs, lifts and catwalks are routed connectors
+  (`from`, `to`; `via` read leniently as R19: the first leg, the rest noted, never `malformed`); **R27** `stairs_around` names its
+  host in `around.feature.part` (a form part of kind `rock_spire`, `ice_spike`, `giant_tree` or `giant_mushroom`); another part
+  answers `refused NO_FEATURE {why: host}`.
+- **Catalogue entries the foundation changes** (if Steward agrees; each flip of a 7a kind is its own slice's):
+
+  | Id | Before | Foundation |
+  |---|---|---|
+  | `connector.span_bridge` | reserved (7a) | supported, `aliasOf: connector.bridge`, schemaVersion 1 (S-7a-3) |
+  | `connector.branch_walk` | reserved (7a) | reserved, `until: 7b`, note "a deck along a giant tree's branches between canopy lots: needs `layout.elevated` and F3's branch skeleton" (S-7a-4) |
+  | `connector.rail` | reserved (7a) | reserved, `until: CR`, note "minecart track between stations; carts and rails come later (S-HY-3)" (S-7a-5) |
+
+- **P0's reserved example moves** off `connector.catwalk` (CW flips it) to **`connector.tube`** (`until: UW`, the longest-lived
+  reservation): P0 item 2's example, `e02_wall_draft`, and `e15_every_reserved_a/b` (which drop catwalk, ladder, stair, switchback,
+  lift, rock_stair and stairs_around as their slices flip them). K1 step 3's and T3 item 16's precedent.
+- **Archive:** the catalogue golden before the batch as `fixtures/plan/catalogue-pre7a.json` (the name the coordinator picks if 6d
+  archives its own); each slice's diff test reads it.
+
+### 5. Wire shapes and bible keys (additive)
+
+- **siteplan/1** gains `climbs: [{id, part, kind, flights, hairpins, ladders: [{at, rungs, landings}]}]`, `rockStairs: [{id, part,
+  steps, landings, carved, lined}]`, `lifts: [{id, part, foot, top, rise, down}]`, `catwalks: [{id, part, cells, brackets}]`,
+  `spirals: [{id, part, host, rise, turns, top}]`; `walls[]` gains `walk` (K2) and `lots` (K3).
+- **Graph edges** take `type: <kind>` (P0: "7a's edge `type` is the connector `kind`") with a `crossing` in S-T3-8's shape:
+  `{type: stair|switchback, rise, flights|hairpins}`, `{type: ladder, rise, landings}`, `{type: lift, rise, down}`, `{type:
+  catwalk, length, brackets}`, `{type: rock_stair, rise, steps, cover}`, `{type: stairs_around, host, rise, turns}`; each edge
+  carries `movers`.
+- **Bible format 2 `connectors`** gains role-name keys (role names only, as K1 §6): `stair {tread, rail}`, `switchback
+  {retaining}`, `ladder {ladder, landing, rail, gate}`, `rock_stair {tread, lining, portal}`, `lift {shell, base, door, cap}`,
+  `catwalk {deck, bracket, rail}`, `stairs_around {tread, rail, deck}`, and `wall {walk, parapet}` (K2). Each slice states its
+  defaults.
+
+### 6. Versions and features
+
+- **Symbolic.** The batch's first API is ⟨6d⟩ + 1 with the mod and kit to match; catalogue ⟨6d⟩ + 1 for batch 7a-1, then one
+  per later batch. `sinceApi` on new or changed entries is set by the coordinator at merge (PLAN "Catalogue `sinceApi`
+  placeholders"). The foundation adds no feature string; each slice adds its own (§ each).
+- **No Java** in the foundation.
+
+### 7. Gate (the foundation's own, kit only)
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Inert | every committed fixture (every dir, the 59 asks) plans byte-identical to main (answers, IR, kitVersion normalised) with the stubs in |
+| 2 | Catalogue | the golden equals `planCatalogue()`; the diff against `catalogue-pre7a.json` is exactly §4's three entries (or none, if Steward declines S-7a-3 to S-7a-5) |
+| 3 | P0 unbroken | P0's tests on `connector.tube` as the reserved example; K1's and T3's unit steps pass |
+| 4 | Alias | a `span_bridge` part answers as the same `bridge` part would, block `connector.bridge`, with the note |
+| 5 | Size | the compact plan/0 measured and recorded |
+
+### Open questions
+
+S-7a-1 to S-7a-5 (batch level) decide §3.2's `auto` row and §4's table.
+
+## Phase 7a slice CL: climbs, stairs, switchbacks and ladders (FROZEN 2026-10-20, Steward reviewed: every default accepted)
+
+`connector.stair`, `connector.switchback` and `connector.ladder` reserved -> supported. Each is a routed connector whose search is
+T2's own, under a per-edge cost profile (foundation §3.1), plus the fittings T2 doesn't lay (stair rails, ladder rest landings and
+the top gate), the post-check that it climbed, and the behavioural villager test SETTLEMENTS' Steward review asked for.
+
+- **Branch:** `slice/CL`, worktree `../architect-mc-CL`. **Spend:** $0.
+- **Scope:** the three kinds' defs and answers; the profile values; fittings; `NO_CLIMB`; the behavioural villager test; KC rows;
+  survival rows; the gate.
+- **Not in scope:** shafts bored into rock for ladders (a vertical bore needs RK's volume path; a later row), free-standing stair or
+  ladder towers (no ground to climb: a stair up to a floating island waits for N-P0-1's island), `auto` using the profiles (S-7a-1).
+- **Depends on:** the foundation, T2 (moves 1-3), W (lamps), K1 (`variant()`, the rail role), KC.
+
+### 0. Facts
+
+- T2's stair flights rise or fall 1 a cell for 2..8 cells, then 2 flat cells, within 45 degrees of the heading (`route.mjs` :380);
+  output `stair` primitives on their ground (`_routeRun` columns elsewhere). Hairpins need a flat landing `max(hairpinLanding,
+  width)` deep holding both lanes. Ladders: one step to the adjacent column of a cliff 2..24 high, only on edges whose movers lack
+  `villager` (S-T2-2), emitted as `ladderCols {x, z, y0, y1, facing}` with `minecraft:ladder` on the face.
+- The route's retaining columns go where the land beside stands over 2 higher (T2 as built, §2 output). M8 is a warning; T2's gate
+  measured 0 walk windows over the grade.
+- Vanilla 26.3 (A7 review, verified statically): villagers never climb ladders or scaffolding; they walk stairs blocks and half
+  slabs (K1b's probe). A fence gate stops villagers.
+- `route_demo`'s chapel-lookout edge is player-only (ladders allowed); S3's terrain needed none, so ladders were proved on the
+  synthetic cliff only.
+
+### 1. The plan
+
+```
+connector.stair:      connector.routed's members (kind "stair"), plus width?: 1..5 (default 2), rails?: "drops" | "both" | "none",
+                      lamps?, style?, params?
+connector.switchback: connector.routed's members (kind "switchback"), plus width?: 1..5 (default 2), landing?: 3..7, retaining?:
+                      "plain" | "none", lamps?, style?, params?
+connector.ladder:     connector.routed's members (kind "ladder"; movers, if given, must not include villager), plus
+                      rest?: 8..24 (rungs between rest landings, default 24), top?: "gate" | "open", style?, params?
+```
+
+- `params` is read leniently (S-K1-3): `width`, `lamps`/`torches`, `material` only as a note; every other key listed by name.
+- Grade: the part's `tolerance.grade` (hard 0.25 by default) is the walk grade between flights and on switchback runs.
+
+### 2. The profiles (CL's values in the foundation's `PROFILES`)
+
+| Profile | stairs | ladders | ladderMax | Costs changed (everything else is `COST`) | Effect |
+|---|---|---|---|---|---|
+| `stair` | on | off | - | flight 20, stair 12, grade 18 | the climb goes up in flights rather than winding at the grade |
+| `switchback` | **off** | off | - | hairpin 16, landing 1, grade 6 | it zigzags on hairpins rather than detouring round the slope |
+| `ladder` | on | **on** | **48** | ladder 30, ladderPer 10 | it climbs the face rather than walking round |
+
+The builder may tune these within CL (recorded in the as-built); they never touch an edge without the profile.
+
+### 3. The fittings and the climbed check
+
+- **Climbed (post-check).** The connector's ends are first routed dry as a plain `path` (T2, no profile, rolled back). Its
+  **ascent** (the highest point of that route's surface minus its lowest, so a stair over a ridge, or down and up between ends
+  at one height, counts) under 2 answers **`refused NO_CLIMB`** with `evidence {ascent, need: 2}` and that path as the `wouldFit`
+  (re-checked alone). After routing, a route whose
+  segments hold no flight (stair), no hairpin (switchback) or no ladder (ladder) answers **`adjusted`**, deviation `{what: climb,
+  value: walk, rise}`, note "the land's grade needed no <kind>" (a gentle rise walked within the grade).
+- **Stair rails.** Every stair tread or landing cell beside a drop over 3 (the fill side of a flight on a slope) gets the rail role
+  at surface + 1 (a wall block where the role has one, else its fence): M8 by construction. `rails: both` rails every edge cell;
+  `none` leaves M8's warning standing (noted).
+- **Switchback retaining.** T2's retaining columns, in the bible's `connectors.switchback.retaining` role (default `structure`, then
+  `foundation`), capped with the trim's slab: the look of a terraced path. `retaining: none` keeps T2's.
+- **Ladder rest landings.** A climb of more than `rest` rungs is laid as flights of at most `rest`: at each break a **rest
+  landing**, a 2 x 1 ledge on two brackets against the face (deck in `connectors.ladder.landing`, default the `floor` role's slab),
+  railed on its open sides, and the next flight starts in the adjacent face column. The search sees one ladder move of rise up to 48
+  at a face that holds at least two face columns; the landings are the emitter's.
+- **The face.** Every ladder cell needs a sturdy face cell behind it: ROCK, SOIL or a full block the plan writes that M3 grounds
+  (a volume's classes where the plan holds one, else the survey's, K1b's rule). Sand, gravel, ice, leaves or air answer `ANCHOR`,
+  naming the cells.
+- **The top.** The cliff-top walk cell beside the ladder's top stands over a drop: the rail role runs 2 cells either side along the
+  edge, with a fence gate (the rail role's gate) in the ladder's own cell (`top: gate`, default; SETTLEMENTS §8.2 "a trapdoor or
+  gate at the top edge"). `top: open` leaves the gap and M8 notes it.
+- **Lamps:** W's `lightCover` over every walk, tread and landing cell (M5 0); a ladder's rest landings each get one.
+
+### 4. Movers and answers
+
+- Stairs and switchbacks: movers inferred as T2 (S-T2-1). A **ladder** is player-only by kind (S-7a-8): its movers are
+  `['player']` whatever its ends; a ladder part whose own `movers` include `villager` answers `refused MOVER` with a `stair`
+  `wouldFit` where one fits alone, else a `path`'s. `NO_CLIMB` is judged before `MOVER`.
+- Answers carry `geometry.climbs[{leg, rise, flights, hairpins, ladders: [{at, rungs, landings}]}]`, the graph edge `type: <kind>`
+  with its `crossing`, `cost.bom`.
+
+### 5. KC rows
+
+| Writer | Placed | KC rule | Refused as |
+|---|---|---|---|
+| Stair and switchback treads, landings, rails, retaining | routes (step 4), after every body's emit | as streets: water and shell as `planWater` 1 and 2; never a body's hard cell; a rail in a watch cell is skipped | `ROUTE_WATER` -> T3's fallback (a stair or switchback is a path for it) |
+| Ladders, rest landings, top gates | routes | the face may be a body's shell only if the body is not the plan's (never: a plan body's shell is hard) | `OVERLAP {kind: body}` |
+
+### 6. Survival (RS §7.2's form)
+
+| Kind | Free | Paid | Path |
+|---|---|---|---|
+| Stairs, switchbacks | the walk's cut, `freeCell` dirt path | treads, rails, retaining blocks, lamps | a target per tile with paid cells (as streets) |
+| Ladders | none | ladders, landings, brackets, rails, the gate | targets; the rungs bottom up (each needs its face) |
+
+### 7. Byte identity
+
+`profile` absent means `COST` and the pass's flags. Every fixture without a CL part re-plans byte-identical; the asks' changes are
+the three named rows (§9).
+
+### 8. API
+
+- Features `climbConnectors` (sidecar `region.climbs`). No new record or method. IR unchanged (stairs, columns, ladder columns).
+- api-compat clean against the previous three apitest jars.
+
+### 9. Steward's recorded plans (the asks claim): expected answers
+
+| Plan / part | Expected | Why |
+|---|---|---|
+| old_new_town / quarter_stair (required) | `refused NO_CLIMB`, `wouldFit` `path` | `stone` and `claim_n` stand on the same flat grass (the town's `hill_street` street already fits there) |
+| sky_monastery / long_stair (required) | `refused NO_CLIMB`, `wouldFit` `path` | `gatehouse_1` is a ground lot of `cloister`; the island it means is `form.floating_island` (unsupported until N-P0-1), noted |
+| hidden_village / cave_ladders (optional) | `refused NO_CLIMB`, `wouldFit` `path` | `cabin_1` and `tower_1` are lots of one flat zone; "cave-wall homes" want `layout.elevated` (7b), noted |
+
+**Bar (item 3):** 0 `malformed`; these three change class and no other part does; each `wouldFit` `fits` alone; gap tables
+`fixtures/plan/cl/asks-gap-{before,after}.txt` (connector.stair 2 -> 0, connector.ladder 1 -> 0).
+
+### 10. Gate (slice tier, $0)
+
+**Fixtures:** `v7a_cl_stair` (S3's pinned claim: a stair from the valley floor to the shoulder, 2 wide, villager); `v7a_cl_switch`
+(the seeded 1:2 slope, `synthSlope`: a switchback); `v7a_cl_ladder` (the synthetic cliff: a 30-high face, one rest landing; and a
+16-high one); `climbs_demo` (bundled, `catalogue = false`): flat (a ridge 1:2 and a 36-high cliff raised in stage `ground`, routed
+through the pass's base: T1's lesson) and natural (S3's pinned claim). Refusals: `NO_CLIMB` (flat ends), `MOVER` (a villager
+ladder), `ANCHOR` (a sand face), `SPAN` (a 49-high ladder), `UNREACHABLE` (a keep-out across every line).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the profiles change only their edges; the post-check (`NO_CLIMB`, the `climb` deviation); rest landings at every `rest`; the top gate; the face rule; every refusal fixture's code with evidence and its `wouldFit` re-checked alone |
+| 2 | Byte identity | every committed fixture without a CL part byte-identical; named exceptions none expected |
+| 3 | Recorded plans | §9's bar on the 59 asks in kit CI |
+| 4 | In game, Steward-shaped | `v7a_cl_stair` in plan v1's shape through `Regions.checkPlan` (READY) then `realiseApproved` (PLACED); the realised world equals the virtual one; Regions.remove E-flat 0 on the flat round |
+| 5 | Villagers (hard bar) | vanilla `dev.nav.villager` both ways on every stair and switchback edge of `climbs_demo` flat and natural: 100% found; kit `villager` and `player` movers 100% |
+| 6 | The behavioural villager test (hard bar) | on `climbs_demo` flat: a bed lot reached only by the ladder: `dev.nav.villager` finds no path (0 of 3 tries) while the bot player climbs it; the same bed reached by a stair route: found both ways |
+| 7 | Geometry, realised | flights rise 1 a cell, at most 8, then 2 flat; walk windows within the grade (M2:grade 0); M8 0 on stairs and landings (rails); hairpins with their landings; every ladder cell against a sturdy face; rest landings at most `rest` apart; the top gate in place; M5 0 dark walk, tread and landing cells; M3 0 |
+| 8 | Player across | **judged:** the kit `player` mover up and down every ladder, rest landings included, on the realised world re-read. **Shown:** a bot player climbing each ladder, through a new hook `dev.climb` (DEVBRIDGE changelog, as T3a added `dev.t3.boat`) or, if the server bot can't climb, a client-run step; the physics probe is recorded, and a harness gap there does not block the slice |
+| 9 | KC | a stair beside a fountain: 0 cells in its hard or watch sets, M25:clear 0 |
+| 10 | Exact undo | E-flat 0 on `climbs_demo` flat; natural E-normal 0 unclassified under the narrowed classes |
+| 11 | Survival (if RS merged) | `v7a_cl_stair` in a survival world: treads and rails from the stockpile, the cut free; BOM equals `bomFull`; removal refunds once per key |
+| 12 | Catalogue | the three flips, nothing else, against the foundation's archive |
+| 13 | Determinism | 3 checks identical (answers, artifact shas); tiles 1 = 4 workers; macOS and Linux CI |
+| 14 | Look (recorded) | stairs, a switchback and a ladder with its landing in three bibles: Noah's call (N-CL-1) |
+| 15 | API, spend | api-compat clean; apijars; $0.00 |
+
+**Tier:** slice: the units, apijars, the impact steps for `kit/lib/region/passes/**` and `kit/lib/connectors/**`, t2-unit,
+t2-ingame, k1a-unit, k1b-unit, and CL's own `cl-unit`, `cl-ingame`, `cl-natural` (driver `tools/gate7acl.mjs`). The verifier reviews
+the diff and re-runs item 10 (undo).
+
+### 11. Size
+
+One owner, **about 1.5 days**: profiles and the post-check (0.25), fittings (0.5), `climbs_demo` and fixtures (0.25), the in-game
+rounds and the villager test (0.5).
+
+### Open questions for Steward
+
+- **S-CL-1. A walked climb is `adjusted`.** A stair whose ends rise 2 or more but whose cheapest route stays within the grade
+  without a flight answers `adjusted` (deviation `climb: walk`). Fine, or should it lay flights anyway?
+  Default: `adjusted`, because forcing flights onto a gentle slope would cut steps into land that doesn't need them.
+- **S-CL-2. Ladders are player-only by kind** (S-7a-8): a ladder never refuses for its ends' lot kinds; only `movers: [..., villager]`
+  answers `MOVER`, with a stair or a path as the repair. Default: yes (A7: villagers don't climb).
+
+### Open questions for Noah
+
+- **N-CL-1. How climbs look.** Proposed:
+  - stairs 2 wide in the `path` role's stairs, rails only beside drops;
+  - switchbacks with `structure` retaining walls capped in `trim`;
+  - ladders with a rest landing every 24 and a fence gate at the top.
+  The look step shows them in three bibles.
+
+## Phase 7a slice K2: walls along a boundary, and wall walks (FROZEN 2026-10-20, Steward reviewed: every default accepted)
+
+`wall.along` reserved (`until: K2`) -> supported: D2's boundary spine plus an offset, through K1's line code. And a `walk` member
+on `connector.wall`: a railed, lit walk along the wall's top with stairs up from the inside. Both are K1 extensions in K1a's files.
+
+- **Branch:** `slice/K2` (or `slice/K2-a` along, `slice/K2-b` walks, §10), worktree `../architect-mc-K2`. **Spend:** $0.
+- **Scope:** `wall.along` (§2), wall walks (§3), their answers, KC rows, survival rows, the gate.
+- **Not in scope:** towers and gatehouses as lots (K3); walks into tower lots at height (an elevated port, 7b); walls in water
+  beyond H's harbour fallback (unchanged); villagers on walks (player-only).
+- **Depends on:** the foundation, K1a (`line.mjs`, `wall.mjs`, `checkWalls.mjs`), D2 (`boundary.mjs`), KC, W.
+
+### 0. Facts
+
+- `$defs/wallWhere`'s third branch already holds `along: {feature, side?: either|left|right|toward_anchor|away_from_anchor, anchor?,
+  distance?: intRange}` (plan.json :509); today it answers `unsupported {wall.along, until: K2}` (K1 §10's refusal fixture).
+- `kit/lib/region/boundary.mjs`: `traceBoundary(cols, claim, follow, {biomes, near, minLength = 16})` (:255) over `biomeEdgeCells`
+  (:136), `shoreCells` (:161, land beside water of `minArea` 64), `ridgeCells` (:203, `minRise` 8, radius 12); `pieces` (:60),
+  `spineOf` (:88: the longest piece ordered into a 4-connected spine), `normalAt(spine, i, k = 4)` (:282). D2's following
+  districts measure their band along the normal by Chebyshev distance (D2 as built: an axis-snapped normal put a diagonal river's
+  street at half its depth).
+- K1a's top: the standable surface within 2 plus `height`, smoothed to runs of 3, raised under each gate's lintel; the cap course
+  is wall blocks on the outer course every other cell (merlons) and bottom slabs elsewhere; thickness 1-3 (default 2), on the
+  outside of a ring. `corners: tower` raises 3 x 3 stubs 3 above the wall.
+- Recorded: `castle_city / curtain_wall` carries `params.wall_walk: true` (noted "not read" today). No recorded wall uses `along`.
+
+### 1. The plan
+
+```
+connector.wall (K1's def, additive):
+  where.along: {feature: {biome_edge} | {ridge} | {water}, side?, anchor?, distance?: intRange (default [2, 8])}   // wall.along
+  walk?: boolean | { width?: 1..2 (default 1), access?: "stair" | "ladder" | "auto" (default auto), every?: 16..128 (default 64),
+                     lamps?: "every" | "none" }
+```
+
+- `params.wall_walk: true` is read as `walk: true` (lenient, S-K1-3), so castle_city's note goes.
+- A walk needs `thickness >= walk.width + 1` (the outer course is the parapet). With `walk` and no `thickness`, thickness is
+  `walk.width + 1` (noted); a given thickness too thin answers `refused NO_ROOM {why: walk}` with the thicker wall as `wouldFit`.
+
+### 2. `wall.along`
+
+- **The spine:** `traceBoundary` with the part's feature (`biome_edge {between}`, `ridge {minRise}`, `water` as a shore), `near` =
+  the anchor when given, `minLength` 16. No spine: `refused NO_FEATURE {why: boundary}` (D2's `NO_EDGE` meaning).
+- **The side:** `left`/`right` of the spine's direction (its first cell to its last), `toward_anchor`/`away_from_anchor`, or
+  `either` (default): the side with more clear cells in the band. A shore's side is always the land.
+- **The line:** each spine cell's normal (`normalAt`), offset by the smallest clear distance in `distance` (Chebyshev, D2's
+  measure), taken per run of 8 spine cells as K1a's rings take it per side, joined at run ends by L legs, then the 4-connected
+  supercover (nothing passes a diagonal corner). Clear means K1a's obstacle classes (lots and aprons, zones, forms by their
+  column masks (F3 §3.2), kept columns, keep-out, other regions, builds, water and lava, the claim margin) plus KC's `OB.BODY`.
+- **Open wall.** A `wall.along` is never closed: its free ends end in a post 1 higher (K1a), clipped at the claim margin. `closed`
+  is noted, not read.
+- **Gates:** auto at every crossing of a walk network or a plan route (K1a). `gates.min` defaults to **0** on an along wall (people
+  walk round its ends); a given `gates.min` places them evenly along it, ties by position.
+- **Answers:** `fits`; `adjusted` with a `move` deviation where a run took an offset outside `distance` (soft, `tolerance.move`);
+  `refused OUT_OF_CLAIM`, `PROTECTED`, `WATER`, `OVERLAP {kind: body}` (KC) or `NO_ROOM`, naming the class that blocks every
+  offset (K1a's rule). The geometry gives the spine window used and each run's offset.
+
+### 3. Wall walks
+
+- **The walk surface** is the body's top course on the inner `walk.width` cells (a full block of the cap role; its slab where the
+  body steps), at the wall's top `yT` (so the wall stands `height + 1` with the parapet).
+- **The parapet:** the outer course's top is a **continuous** wall-block course at `yT + 1` (M8's 1.5 barrier on every walk cell),
+  with K1a's merlons at `yT + 2` every other cell when `crenels` is on. The crenel gaps sit above a continuous barrier, so M8 holds.
+- **The inner edge:** the rail role at `yT + 1` (a wall block where the role has one, else its fence) wherever the inside ground
+  is more than 3 below; else open.
+- **Over gates:** the gate's lintel carries the walk (K1a raises the top under each lintel; the walk runs at the raised top, with
+  half-block steps where it changes level, within one half block a cell: walkable).
+- **Corner towers** (`corners: tower`): a 1-wide, 2-high passage through each stub at walk level, so the walk goes round a ring.
+- **Access:** at each gate, a flight up the inner face on each side (rise 1 a cell, `yT - ground` steps, 1 wide, railed on its open
+  side, along the wall), where the inside band (the flight's cells plus 1) is clear of lots + 1, streets and props; else a ladder
+  on the inner face (player-only; `access: stair` refuses `NO_ROOM {why: access}` instead). `every` adds an access along runs
+  longer than it. A wall with no gate gets one access at the run nearest the zone's street end.
+- **Lamps:** W's fixture on the parapet's inner face at least every `floor(12 * level / 15)` walk cells (M5 0 dark walk cells;
+  soul lanterns where M17 needs).
+- **Movers:** player only. The walk is a graph edge `type: wall_walk` per run between accesses, movers `['player']`.
+- **Dead ends:** an open wall's free end, or (K3) a lot on the line, ends the walk with a rail across it (M8), noted.
+
+### 4. KC rows
+
+| Writer | Placed | KC rule | Refused as |
+|---|---|---|---|
+| `wall.along` lines | `planWalls` (after resolve, before emit) | footprints are `OB.BODY` (never `OB.WATER`, so never the harbour fallback): KC's wall row unchanged | `OVERLAP {kind: body}` |
+| Walks, parapets, access flights, ladders | with the wall (links) | the wall's rule; an access flight's cells are hard against footprints; a lamp in a watch cell is skipped | `OVERLAP {kind: body}` / `NO_ROOM {why: access}` |
+
+### 5. Survival
+
+| Kind | Free | Paid | Path |
+|---|---|---|---|
+| `wall.along` | as K1a: the footprint's cuts | body, cap, crenels, posts, gates | K1a's targets |
+| Walks | none | walk surface, parapet, rails, access flights, ladders, lamps | the wall's targets; the walk after the body under it (bottom up) |
+
+### 6. Byte identity
+
+A wall without `where.along` and without `walk` (or `params.wall_walk`) emits byte for byte as K1a. **Named:** castle_city's
+answer (its walk is read: notes and geometry change). No `valid/` fixture uses either.
+
+### 7. API
+
+Features `wallAlong` and `wallWalks` (sidecar `region.walls.along`, `region.walls.walk`). siteplan `walls[]` gains `walk: {width,
+runs, accesses}` and an along wall's `spine`. Graph edges `type: wall_walk`. No Java.
+
+### 8. Steward's recorded plans
+
+| Plan / part | Expected | Why |
+|---|---|---|
+| castle_city / curtain_wall | `adjusted` as today (K3 changes it), `wall_walk` read: the walk laid round the ring, accesses at its gate | the corner lots and `gate_lot` stay K1's `join` deviations until K3 |
+| every other recorded wall | unchanged | no `along`, no walk |
+
+**Bar:** 0 `malformed`; only castle_city's answer changes, by its walk.
+
+### 9. Gate (slice tier, $0)
+
+**Fixtures:** `v7a_k2_along_shore` (S3's pinned river: a wall along its shore, distance [3, 6], two auto gates where routes cross);
+`v7a_k2_along_edge` (a synthetic two-biome claim: a wall along the edge, `gates.min` 2); `v7a_k2_walk` (v30's walled village with
+`walk: true`, `corners: tower`); refusals: no boundary (`NO_FEATURE`), every offset blocked (`NO_ROOM` naming the class), a thin
+walk wall (`NO_ROOM {why: walk}` with its `wouldFit`), an access with no room and `access: stair`.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | spine, side, per-run offsets, the supercover; open ends; gates.min 0 and n; walk surface, parapet, inner rail, gate crossings, tower passages, accesses; every refusal with evidence and re-checked `wouldFit` |
+| 2 | Byte identity | §6's bar; every K1 fixture (v30-v34) and the K1 and T3 batch tests unchanged |
+| 3 | Recorded plans | §8's bar |
+| 4 | In game, Steward-shaped | `v7a_k2_walk` in plan v1's shape through `checkPlan` then `realiseApproved`; `v7a_k2_along_shore` the same on S3's claim |
+| 5 | Closure and crossing (K1 item 1-3's bars) | on `v7a_k2_walk`: closure 0 leaks, every node across with gates open; 0 route cells under wall cells; villagers through the gates, vanilla, both ways (hard bar) |
+| 6 | Walk, realised | **judged:** the kit `player` mover round the whole walk and up and down every access on the re-read world; M8 0 on walk cells (the parapet course continuous, re-read); M5 0 dark walk cells; M3 0. **Shown:** a bot player walking it (the server bot walks stairs; a ladder access by `dev.climb` or a client step) |
+| 7 | Along, realised | every line cell within `distance` of the spine (or the recorded deviation); 0 cells in water; the free ends' posts |
+| 8 | KC | an along wall past a pond: kept clear (M25:clear 0) |
+| 9 | Exact undo | E-flat 0 (flat rounds); S3 natural E-normal 0 unclassified |
+| 10 | Survival (if RS merged) | `v7a_k2_walk` in survival: the walk built after its body, BOM exact, refunds once |
+| 11 | Catalogue | `wall.along` reserved -> supported, nothing else |
+| 12 | Determinism, API, spend | 3 checks identical; tiles 1 = 4; api-compat; $0.00 |
+| 13 | Look (recorded) | an along wall on S3's river and a walled village's walk in three bibles: Noah's call (N-K2-1) |
+
+**Tier:** slice: the units, apijars, k1a-unit, k1a-ingame, kc-unit, d2's units (boundary), and K2's own `k2-unit`, `k2-ingame`,
+`k2-natural` (driver `tools/gate7ak2.mjs`). The verifier re-runs item 9.
+
+### 10. Size and split
+
+**About 1.75-2 days**: `wall.along` 0.75-1 (the spine, offsets, open ends, along-wall gates), walks 1 (surface, parapet, gates,
+towers, accesses, lamps). One owner by default; if the coordinator wants two lanes, K2-a (along) and K2-b (walks) touch different
+functions of `wall.mjs` and merge cleanly.
+
+### Open questions for Steward
+
+- **S-K2-1. Along walls are open and take no gate by default.** Auto gates at crossings only; `gates.min` adds more. Fine?
+  Default: yes.
+- **S-K2-2. Walks are player-only** (villagers never use them), one wide, with an access at each gate. Fine? Default: yes.
+
+### Open questions for Noah
+
+- **N-K2-1. How walks look.** Proposed: a 1-wide walk on a thickness-2 wall, a continuous wall-block parapet with merlons above,
+  a fence rail on the inside, lanterns on the parapet, stairs up the inside face at each gate. Default as proposed.
+
+## Phase 7a slice CW: catwalks along a face (FROZEN 2026-10-20, Steward reviewed: every default accepted)
+
+`connector.catwalk` reserved -> supported, in its **face form**: a deck shelf on brackets along a cliff or a steep bank, railed on
+the open side, where a walk would otherwise cut deep into the face or go a long way round. SETTLEMENTS §8.2's second form, a deck
+"between structures", needs ports in buildings at height and waits for 7b.
+
+- **Branch:** `slice/CW`, worktree `../architect-mc-CW`. **Spend:** $0.
+- **Scope:** route row 10 (foundation §3.2), the deck, brackets, rails, head room, lamps, `M10:catwalk`, answers, KC and survival
+  rows, the gate.
+- **Not in scope:** decks between buildings or to elevated lots (7b); decks over water (H's wet writes are not used: a catwalk
+  over water answers `WATER`); bends inside one run (a catwalk is straight runs joined by walks); `auto` (S-7a-1).
+- **Depends on:** the foundation, T2, K1b's span diagnosis pattern, W, KC.
+
+### 0. Facts
+
+- T2's walk cuts up to `maxCut` (default 6) and fills up to `maxFill`, with retaining columns beside a cut over 2; a face steeper
+  than that is an obstacle the walk goes round, or a ladder on a player-only edge.
+- K1b's anchors read a frozen volume's classes where the plan holds one, else the 2.5D survey (soil to 3 under the ground, rock
+  below); trees count 64 high (no trunk heights in the pass).
+- M15 (cantilever over 4 from a support) is not built; M3 is face connectivity.
+- No recorded plan asks for a catwalk (P0's reserved example moves off it: foundation §4).
+
+### 1. The plan
+
+```
+connector.catwalk: connector.routed's members (kind "catwalk"), plus width?: 1..2 (default 2 on a villager edge, 1 player-only),
+                   length?: {min?, max?} (3..32), approach?: 0..32, lamps?, style?, params?
+```
+
+`params` lenient (S-K1-3). R26 (foundation): `via` read leniently.
+
+### 2. The geometry (`connectors/catwalkGeom.mjs`, pure)
+
+- **A run** is a straight cardinal line of `n` deck cells (3..32) at one surface height `y` (level: a catwalk doesn't climb; a
+  route climbs on the walks at its ends), from a start walk cell to a landing walk cell.
+- **The face:** for every deck cell, the cell on the face side (left or right of the heading, chosen per run) is site-solid at `y`
+  and at `y + 1` (ROCK, SOIL, or a full block the plan writes that M3 grounds), and stands at least to `y + 2`. Else `ANCHOR {why:
+  face}`, naming the columns.
+- **The drop:** at least one deck cell's open side (the deck's outer edge cell) stands over ground at least 2 below `y`; else
+  there is nothing to shelf: `NO_GAP`, with a `path` `wouldFit` (re-checked alone).
+- **Deck:** the deck role (`connectors.catwalk.deck`, default `floor`, then `path`) in full blocks across `width`, the inner lane
+  against the face. Every deck cell is face-adjacent to the face or to an inner deck cell (M3 through the face).
+- **Brackets:** under the outer deck edge at least every 4 cells and at both ends: an upside-down stair of the bracket role (default
+  `frame`) facing the face, on a strut down to the face (a wall block of the bracket role) when the face below is site-solid within
+  2. The deck's outer edge is never more than 2 from the face (width 1-2): within M15's 4.
+- **Rails:** the rail role on the open edge at `y + 1` (M8's 1.5) and across both ends where they meet a drop.
+- **Head room:** 2 clear over every deck cell and its rail (an overhang lower answers `HEADROOM`).
+- **Lamps:** W's fixture on rail posts at least every `floor(12 * level / 15)` cells (M5 0).
+- **Never written:** the face itself (a catwalk cuts nothing), water or ice (`WATER`), keep-out, builds, kept columns, other regions,
+  lot boxes and aprons (`PROTECTED` or `NO_ROOM`).
+
+### 3. Routing (row 10)
+
+- From a walk cell on a cardinal heading, the row tries runs of `n` = 3..32 (or the part's `length`) in ascending length, the face
+  on the left, then the right, landing on a walk cell at `y`. A run is tried only when the cell ahead is not walkable at grade
+  (its ground differs from `y` by more than the walk's cut or fill would allow) and its first cell's face holds.
+- `once: 'catwalk'`: an explicit catwalk uses exactly one run and walks at most `approach` (default 16) at each end.
+- **Cost:** 200 + 25 a deck cell + 20 a bracket, so a walk round that is not much longer wins.
+- **`fail`:** from the reached near cells and every candidate run landing within `approach` of the goal, the candidate nearest the
+  goal names the first failing check: NO_GAP, ANCHOR, HEADROOM, SPAN, WATER, PROTECTED; UNREACHABLE if one passes (K1b's method).
+- **Movers:** inferred (S-T2-1); a villager catwalk is at least 2 wide (`MOVER` otherwise).
+
+### 4. Checker
+
+`M10:catwalk` (new sub-finding, warning): every deck cell level, face-adjacent per §2; brackets at most 4 apart; the outer edge at
+most 2 from the face; rails on the open edge (M8); head room (M6); M5 on deck cells; M3 0.
+
+### 5. KC rows
+
+| Writer | Placed | KC rule | Refused as |
+|---|---|---|---|
+| Catwalk deck, brackets, rails, lamps | routes (step 4), emitted in links | off every body's hard cells; a lamp in a watch cell skipped; never over a body's water (the deck is not a bridge) | `OVERLAP {kind: body}` / `WATER` |
+
+### 6. Survival
+
+| Kind | Free | Paid | Path |
+|---|---|---|---|
+| Catwalks | none | deck, brackets, struts, rails, lamps | targets; brackets before the deck cells they carry |
+
+### 7. Byte identity, API
+
+- Row 10 is off unless an edge lists it: every fixture without a catwalk byte-identical; no recorded part changes.
+- Feature `catwalks` (sidecar `region.catwalks`); siteplan `catwalks[]`; graph `type: catwalk` with `crossing {type, length,
+  brackets}`. No Java.
+
+### 8. Gate (slice tier, $0)
+
+**Fixtures:** `v7a_cw_cliff` (a synthetic 20-high cliff with a path along its foot blocked by a keep-out, so the cheapest route is a
+catwalk along the face 8 above the foot, 2 wide, villager); `catwalks_demo` flat (the cliff raised in stage `ground`) and natural (a
+pinned cliff site, found by `find-site` with a face of at least 24 x 8 of rock and no water within 8, recorded in
+`scenarios/sites/`); refusals `NO_GAP` (flat), `ANCHOR` (a sand face, a frozen volume), `HEADROOM` (an overhang 1 over the deck),
+`SPAN` (33), `MOVER` (1 wide on a villager edge).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the run search, both faces, every refusal with evidence and its `wouldFit`; `M10:catwalk` on the broken variants (`_unsafe.noBrackets`, `_unsafe.noRails`, `_unsafe.wideDeck` 3 from the face) |
+| 2 | Byte identity | every fixture without a catwalk unchanged |
+| 3 | In game, Steward-shaped | `v7a_cw_cliff` in plan v1's shape through `checkPlan` then `realiseApproved`; re-read equals the virtual world |
+| 4 | Villagers (hard bar) | vanilla `dev.nav.villager` both ways along the 2-wide catwalk (flat and natural); kit movers 100% |
+| 5 | Geometry, realised | §4's bars re-read from the world: M10:catwalk 0, M8 0, M6 0, M5 0 dark deck cells, M3 0; 0 face cells written |
+| 6 | KC | a catwalk past a waterfall's basin: kept clear, M25:clear 0 |
+| 7 | Exact undo | E-flat 0; natural E-normal 0 unclassified |
+| 8 | Survival (if RS merged) | brackets before deck cells; BOM exact |
+| 9 | Catalogue, determinism, API | the flip only; 3 checks identical; api-compat; $0.00 |
+| 10 | Look (recorded) | the catwalk from below and on it, three bibles: N-CW-1 |
+
+**Tier:** slice: the units, apijars, t2-unit, k1b-unit, CW's `cw-unit`, `cw-ingame`, `cw-natural` (driver `tools/gate7acw.mjs`).
+The verifier re-runs item 7.
+
+### 9. Size
+
+One owner, **about 1.25 days**: geometry and the row (0.5), the checker and fixtures (0.25), the pinned site and the rounds (0.5).
+
+### Open questions for Steward
+
+- **S-CW-1. The face form now, between structures in 7b.** A catwalk here runs along a face between two ground walk cells; decks
+  between buildings wait for ports at height (7b). Is the face form worth shipping now, or would you rather `connector.catwalk`
+  wait for 7b whole? Default: ship the face form (it shortens cliff paths T2 can't cut).
+
+### Open questions for Noah
+
+- **N-CW-1. How catwalks look.** Proposed: a 2-wide plank deck (`floor`), upside-down stair brackets with wall-block struts in
+  `frame`, fence rails, lanterns on the rail posts. Default as proposed.
+
+## Phase 7a slice RK: rock stairs (FROZEN 2026-10-20, Steward reviewed: every default accepted)
+
+`connector.rock_stair` reserved -> supported: a straight stair flight carved into rising ground, open where the ground over it is
+thin and bored where it is thick, lined where soil or sand shows, lit, with T3b's 2-cell fluid buffer read from a frozen volume.
+It is T3b's tunnel inclined: the same shell, lining, sealing, gravity rule, guards and stale rock, with a stair floor.
+
+- **Branch:** `slice/RK`, worktree `../architect-mc-RK`. **Spend:** $0.
+- **Scope:** route row 11 (foundation §3.2), the flight geometry on `tunnelGeom`, the volume corridor and the two-plan flow, the
+  artifact's guards, answers, KC and survival rows, the gate.
+- **Not in scope:** spiral or turning rock stairs (one straight flight per run; a route chains runs with walks), vertical shafts,
+  stairs under flat ground (`tunnel.under`, 7b), `auto` (S-7a-1).
+- **Depends on:** the foundation, T3b (`tunnelGeom.mjs`, `checkTunnels.mjs`, the volume pass, `guards`, `load`), F3 (`hasVolume`),
+  KC.
+
+### 0. Facts
+
+- T3b's `tunnelGeom.mjs` (pure): floor cells between a start walk cell and a landing; each floor cell is bore where 2+ site-solid
+  cells lie over the roof in every lane, else cut; the shell is the void's face neighbours, lined where SOIL/LOOSE/ICE/SNOW/LOG/
+  LEAVES/PLANT, sealed where AIR, rock raw; falling blocks over the void lined (a fixed point); portals at every bore run's ends;
+  lamps every `min(floor(12 * level / 15), 2 (level - width - height + 1))`; the fluid buffer 2 (Chebyshev, 3D) against WATER, LAVA,
+  ICE and (KC) every body's hard cells; PROTECTED by class.
+- The corridor (T3 §6): the rect of the ends dilated by `approach + width + 3`, y from the lower end's feet - 16 to the highest
+  ground + 1; caps 4M cells an edge, 16M a plan; `load: "generate"` (S-T3-6).
+- `PlanChecks.hasTunnel` (:366-370; F3 widens it to `hasVolume`) gates the two-plan flow; `realiseApproved`'s `tunnelRock` compares
+  each guard's volume box classes (`ARTIFACT_STALE` naming the part and up to 16 cells).
+- S-F3-3: a kind needing a volume carries `limits.volume: true`.
+
+### 1. The plan
+
+```
+connector.rock_stair: connector.routed's members (kind "rock_stair"), plus width?: 1..3 (default 2), height?: 2..4 (default 3),
+                      rise?: {min?, max?} (2..48), landing?: 4..12 (steps between landings, default 8), approach?: 0..32,
+                      lining?: "exposed" | "all", portal?: "plain" | "arch", lamps?, style?, params?
+```
+
+### 2. The flight (`connectors/rockStairGeom.mjs`, over `tunnelGeom`)
+
+- **A flight** is a straight cardinal run from a start walk cell `y0` to a landing walk cell `y0 + rise`, `2 <= rise <= 48`: steps
+  rise 1 a cell, with a 2-cell flat landing after every `landing` steps (default 8: SETTLEMENTS §8.2 "landings every 8"). Its
+  floor profile replaces the tunnel's (which steps at most half a block a cell; a stair rises a full block a cell), so the void
+  over it (`height` clear over each tread's walking surface) is a staircase of slices. **The builder re-derives `tunnelGeom`'s
+  cover, shell, portal and gravity rules per tread** against that void and tests each; they are reused, not assumed to hold.
+- **Carved, not built:** every tread and landing stands on site-solid ground (the cell under each tread is ROCK, SOIL or the plan's
+  own grounded fill of at most 1). A tread over air or deeper fill answers `ANCHOR {why: tread}`: a stair standing on fill is a
+  built stair (CL's), not a rock stair.
+- **Cut and bore** per tread as T3b: cut where fewer than 2 site-solid cells lie over the roof (open above, walls lined to the
+  ground with parapets where a side stands 2 or more over the tread: M8), bore where 2 or more. Unlike a tunnel, **a rock stair
+  needs no bore**: an all-cut flight is a stair cut into the hillside and lined. So there is no `NO_COVER`.
+- **Treads:** the tread role's stairs blocks (`connectors.rock_stair.tread`, default the lining role's stairs, then `structure`'s),
+  facing up the flight; landings in its full block or slab.
+- **Portals** at every bore run's ends (T3b's), lamps (T3b's rule, plus one at each landing), the fluid buffer (2), protected
+  classes, the shell and gravity lining: all `tunnelGeom`'s, unchanged.
+- **Classes** from the frozen volume over the corridor (§3) and the plan's own written cells (a ridge raised in `ground`), as T3b.
+
+### 3. Volumes, the check and the stale rock
+
+- **The corridor** per explicit rock stair edge: T3 §6's box, with y from the lower end's feet - 16 to the higher end's ground + 1.
+  The same caps. Over a cap: `incomplete VOLUME`.
+- **Java (the only Java here):** `PlanChecks.hasVolume` (F3's name for `hasTunnel`) also counts a `connectors[]` part of kind
+  `rock_stair`, so its check plans twice; `realiseApproved`'s guard check is per part already (`guards` from `planCheck.links`), so
+  it covers a rock stair's guards with its message "rock_stair <part>: ..." (the prefix generalised from "tunnel ").
+- **Catalogue:** `limits.volume: true` (S-F3-3), so Steward passes `LOAD_BOUNDED(512)` for a plan with one.
+
+### 4. Routing (row 11)
+
+- From a walk cell on a cardinal heading, flights of `rise` 2..48 (or the part's `rise`) ascending (or descending), in ascending
+  rise, landing on a walk cell at `y0 ± rise` at the flight's end. A candidate is tried only inside a volume the plan holds (T3b's
+  grid fast check: classes, fluids within 2, protected face-neighbours, the tread rule); the chosen flight is re-checked by the
+  geometry at emission.
+- `once: 'rock_stair'`, `approach` (default 16) at each end.
+- **Cost:** 400 + 40 a step + 30 a landing cell.
+- **`fail`:** NO_CLIMB (the ends rise less than 2), SPAN, ANCHOR, WATER, PROTECTED, VOLUME; UNREACHABLE if a candidate passes.
+- **Movers:** inferred; villagers walk stairs blocks (a 1-wide one included, as T3's 1-wide bore).
+
+### 5. Checker
+
+`M3:tunnel`, `M3:gravity`, `M4:tunnel` and M6 run on rock stairs unchanged (the void and shell are a tunnel's); new
+`M10:rock_stair` (warning): every tread rises 1 from the last, landings every `landing` steps and flat, every tread on site-solid.
+
+### 6. KC rows, survival
+
+| Writer | Placed | KC rule | Refused as |
+|---|---|---|---|
+| Rock stair carve, lining, treads, portals, lamps | planned with the routes, emitted in links | T3b's: the fluid buffer counts every body's hard cells | `WATER {kind: body}` |
+
+| Kind | Free | Paid | Path |
+|---|---|---|---|
+| Rock stairs | the carve (`carved`), held | treads, lining, seal, portals, lamps | as T3b's tunnels: the part held, carved flight by flight behind its lining (RS §6.3) |
+
+### 7. Byte identity, API
+
+- Row 11 is off unless an edge lists it, and only a plan with a rock stair part asks volumes: every other fixture byte-identical, its
+  check planned once.
+- Feature `rockStairs` (sidecar `region.rockStairs`); siteplan `rockStairs[]`; graph `type: rock_stair`, `crossing {type, rise,
+  steps, cover}`. Java: `hasVolume`, the guard message prefix. api-compat clean.
+
+### 8. Gate (slice tier, $0)
+
+**Fixtures:** `v7a_rk_ridge` (crossings_demo's flat ridge, 12 high, with its sand band: a 2-wide rock stair up its flank, part cut
+and part bored); `v7a_rk_hill` (T3b's pinned `tunnel_hill`, natural); refusals `NO_CLIMB`, `SPAN` (49), `ANCHOR` (a tread over a
+ravine), `WATER` (a pocket 2 from the bore; at 3 it fits), `PROTECTED` (under a build), `incomplete VOLUME` (over the cap; and with
+`load: "generate"` turning an unloaded corridor into a fit).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the flight profile, landings, cut and bore per tread, the tread rule, every refusal with evidence |
+| 2 | Byte identity | every fixture without a rock stair unchanged, its check planned once (no volume asked) |
+| 3 | Check with volumes | `checkPlan` of `v7a_rk_hill` in game: "read N frozen volumes", answers equal the kit's for the same volume shas; an unloaded corridor `incomplete VOLUME` (INCOMPLETE), and with `load: "generate"` READY |
+| 4 | In game, Steward-shaped | `v7a_rk_ridge` in plan v1's shape through `checkPlan` then `realiseApproved` |
+| 5 | Realised | re-read: every tread rises 1, landings flat; cover where bored; every shell cell solid; sand band lined (0 falling-block entities through a 60 s stand); 0 fluid cells within 2 of the void; M3 0, M4 0, M5 0 dark treads, M6 0 |
+| 6 | Villagers (hard bar) | vanilla `dev.nav.villager` up and down every rock stair both ways (the 1-wide one included); kit movers 100% |
+| 7 | Stale rock | approve, then `/setblock` air in one shell cell, and separately water 2 from the void: `ARTIFACT_STALE` naming the rock stair and the cell; with neither, it realises |
+| 7b | KC | a flight within 2 of a pond's shell (KC's `k05` analog): `refused WATER {kind: body}`; at 3 it fits; M25:clear 0 |
+| 8 | Exact undo | E-flat 0 (flat ridge); natural E-normal 0 mismatches within 6 of the written cells (T3b's rule) |
+| 9 | Survival (if RS merged) | carved flight by flight behind its lining; BOM exact |
+| 10 | Catalogue, determinism, API | the flip with `limits.volume: true`; 3 checks identical with the same volume shas; api-compat; $0.00 |
+| 11 | Look (recorded) | the flight's portal, its cut part and its interior: N-RK-1 |
+
+**Tier:** slice: the units, apijars, t3b-unit, t3b-ingame, kc-unit, RK's `rk-unit`, `rk-ingame`, `rk-natural` (driver
+`tools/gate7ark.mjs`). The verifier re-runs items 7 and 8.
+
+### 9. Size
+
+One owner, **about 1.5-2 days**: the flight over `tunnelGeom` and the row (0.75), re-deriving its rules per tread (0.25-0.5), the
+Java trigger and guard prefix (0.25), the rounds (0.5). The fluid buffer and the stale rock are T3b's, proven; the stepped void is
+new.
+
+### Open questions for Steward
+
+- **S-RK-1. `load` for rock stairs.** With `limits.volume: true` you pass `LOAD_BOUNDED(512)` as for tunnels (S-F3-3). Fine?
+  Default: yes.
+
+### Open questions for Noah
+
+- **N-RK-1. How rock stairs look.** Proposed: raw rock walls lined only where soil or sand shows, stone-brick treads, arched
+  portals, lanterns at each landing. Default as proposed.
+
+## Phase 7a slice LF: lifts, bubble columns against a face (FROZEN 2026-10-20, Steward reviewed: every default accepted)
+
+`connector.lift` reserved -> supported: SETTLEMENTS §8.2's bubble column, a 1 x 1 water shaft over soul sand (up) or magma (down)
+that carries a player between the foot of a face and its top. It is an H body: contained by construction, M25-checked, census-exact,
+drained first on removal. Player-only.
+
+**LF changes the fluids stage and adds a global StillOurs row**, so Steward's RC check comes before release (GATES policy 4), as
+H's, IRR's and F3's did; the verifier re-runs the realise, removal and accounting items (policy 3).
+
+- **Branch:** `slice/LF`, worktree `../architect-mc-LF`. **Spend:** $0.
+- **Scope:** route row 9 (foundation §3.2), the column, its shell, airlock and exit, the fluids-stage write and census, the
+  StillOurs row, M25 on lifts, answers, KC and survival rows, the gate.
+- **Not in scope:** free-standing lift towers (no face: a lift needs ground at its top), lifts into lots or at height (7b's ports),
+  rope winches and other mechanisms (a "winch lift" in a card maps to this block, noted; moving parts are `until: mechanism`'s),
+  `auto` (S-7a-1).
+- **Depends on:** the foundation, H (bodies, the `fluids` stage, M25, census, settle, drain-first undo, guards), KC (the registry:
+  a lift registers at emit, as courses), RS (survival row), W.
+
+### 0. Facts
+
+- H's body model (§1.1): sources only, written in the `fluids` stage (appended last only when the plan has a body); the shell is
+  every face-neighbour of `cells` up to `level + 1`, written by the body's own part in an earlier stage, fluid-stopping (`fs`) and
+  not gravity (`g`); doors, signs, ladders and full blocks are `fs` (H §2.2).
+- M25 (H §2.1): `leak`, `convert`, `mix`, `shell`, `keep`, `wet`, `trap`, `exit`; the single breach (§2.5): raised bodies must pass it
+  explicitly, sized by their generators. KC: the breach reach is the body's watch, strict (S-KC-2): no other part writes there.
+- Realise (H §3): sources in (y, x, z) order, one forced fluid tick per source and neighbour, settled = no tick in the watch box and
+  the census equal to `predicted`; the escape guard drains a body that leaks. Undo (§4.1): the body's sources and watched cells
+  first, then the solids after one settle bound.
+- **`StillOurs.fluidHolds`** (`journal/StillOurs.java`): a cell written as a water source is still ours as any water state, ice,
+  frosted ice or air. **A bubble column is none of those**, so a written source that vanilla turned into `bubble_column` would read
+  as not ours. H §1.2: a wet write never replaces a bubble-column cell.
+- Vanilla 26.3 (to be probed, item 1): water over soul sand becomes `bubble_column[drag=false]` (up), over magma
+  `bubble_column[drag=true]` (down), on a scheduled tick from the base; a written `bubble_column` state over its base stays;
+  players ride up and are launched over an open top; drowned spawn in dark water in river and ocean biomes; doors hold water open
+  or closed.
+- Recorded: `treetop_village / storehouse_lift` (barn_1 to stone, "winch and rope lift"), `upside_down / winch_lift` (village to
+  stone, "rope lift"). Both on the flat asks claim.
+
+### 1. The plan
+
+```
+connector.lift: connector.routed's members (kind "lift"; movers, if given, must not include villager), plus
+                rise?: {min?, max?} (4..64), down?: boolean (a second column with a magma base), approach?: 0..32, style?, params?
+```
+
+### 2. The column (`connectors/liftGeom.mjs`, pure)
+
+- **Siting:** a lift stands at the foot of a **face**: a cardinal line where the ground rises at least 4 (`rise` 4..64) within one
+  cell. The **shaft** is the low column cell against the face; the **top** walk cell is the face column's top, beside the shaft.
+- **The shaft:** soul sand at the foot's ground level `y0`, then `bubble_column[drag=false]` from `y0 + 1` up to `yT - 1`, where `yT`
+  is the face's top ground. Written directly as bubble-column cells in the fluids stage (no tick needed to form them); their fluid
+  is a water source, so H's model holds (sources only, `level` 0).
+- **The shell, 2 thick on every open side** (the shell role, `connectors.lift.shell`, default `structure`; shell blocks `fs`, not
+  `g`), from `y0` to `yT`; on the face side the face itself where its two cells behind the shaft are site-solid at every y, else
+  written as shell (`ALWAYS_OURS`). **Two layers mean a single breach reaches nothing outside**, so the lift passes H §2.5 by
+  construction and its watch is its own vestibule only (KC's strict watch holds, and FB's M16 finds no thin barrier).
+- **The airlock:** the entry is through both layers on the approach side at `y0 + 1`: two wooden doors in series (the frame's wood,
+  K1's door rule), the approach walk cell outside. A door holds water open or shut (`fs`), so the inner door holds the column and
+  the outer door holds a breach of the inner one.
+- **The exit:** the shaft's top cell `yT - 1` is open above; its rim at `yT` is the face's ground on the face side and shell on the
+  other three, with the rail role at `yT + 1` on those three (M8). The rider is launched over the rim and steps onto the top walk
+  cell; 3 cells clear over the shaft top (head room for the launch, `HEADROOM` otherwise).
+- **Light:** the bible light family's full block (a sea lantern by default) in the inner shell layer at least every 6 cells up, so
+  no shaft cell is at block light 0 (drowned); W's lamps at the foot and the top (M5 0 on the walk cells).
+- **`down: true`:** a second shaft beside the first, sharing its middle shell layer, over a magma block (`drag=true`), entered from
+  the top through a gap in the rim (railed either side) and left at the bottom through its own airlock.
+- **Never written:** water or ice outside the shaft, lot boxes and aprons, keep-out, builds, kept columns, other regions.
+
+### 3. Routing (row 9)
+
+- From a walk cell on a cardinal heading, 3 cells out from a face (the airlock's two layers between it and the shaft), the row
+  tries the face's rise (4..64, or the part's `rise`) and lands on the top walk cell; down columns the other way.
+- `once: 'lift'`; `approach` (default 16) at each end. **Cost:** 300 + 10 a cell of rise (+ 100 with `down`).
+- **`commit`:** a routed lift marks its tower's footprint (shaft, shell, airlock, rim) hard for every later edge of the same pass
+  and reserves it with KC's registry then (`reserve`, replaced by the exact sets at emit), so no later leg routes through its shell.
+- **`fail`:** NO_CLIMB (no face rising 4 within `approach`), SPAN (rise outside the limits), ANCHOR (the face's cells behind the
+  shaft neither site-solid nor writable), HEADROOM, WATER, PROTECTED; UNREACHABLE if a candidate passes.
+- **Movers:** player-only by kind (S-7a-8): `['player']` whatever its ends. A lift whose own `movers` include `villager` answers
+  `refused MOVER` with a `stair` (CL) `wouldFit` where one fits alone, else a `path`'s. `NO_CLIMB` is judged before `MOVER`.
+
+### 4. Fluids, the census, undo and the Java row
+
+- **Registered at emit** with KC's registry as a body (`registerBody`: hard = shaft ∪ shell ∪ base; watch = the airlock's
+  vestibule), as courses are. A lift is placed after every route and wall, so it keeps clear of their cells by construction (S-KC-1:
+  the later part moves): its siting obstacles include every planned cell.
+- **The fluids stage (Java, `RegionFluids`)** writes its bubble-column cells after every solid (H's barrier), in (y, x, z) order,
+  **as `bubble_column` states directly** (with `CELL_FLAGS`). H's forced fluid tick is adapted for them: the shaft's cells get a
+  block tick (so vanilla keeps the column over its base) instead of a fluid tick, and their face-neighbours outside the body get
+  H's fluid tick as today. **The census** (mod side, the realise report's `fluids` row) counts a `bubble_column` cell as a source of
+  the body (as HY's grate bars and F3's waterlogged decor are counted); the kit's `predicted` includes them. No spill: the top is
+  open, and a source doesn't rise.
+- **StillOurs (Java, global):** a cell written as `bubble_column` is still ours as any `bubble_column` state (either `drag`), as a
+  water source, or as air; and a cell written as a water source is still ours as a `bubble_column`. This is a `fluidHolds` row, so it
+  reaches deltas, `versionOf`, PT2's adopt counts and survival `matches` for any bubble column (the RC trigger, as F3's rows).
+- **Undo:** H §4.1 unchanged: the shaft's cells first (back to their before states), then after one settle bound the shell, doors
+  and base. Exactness under H's rules (fluid cells compared exactly).
+- **Guards:** a lift needs no frozen volume (2.5D: the face's classes from the survey, a volume's where the plan holds one).
+
+### 5. Checker
+
+M25 runs on lifts unchanged (leak, shell, keep, trap, exit, the breach). New `M10:lift` (warning): the base under the shaft, the
+shell 2 thick on the open sides at every y, both airlock doors, the rim and rails, the light every 6, the 3 clear over the top.
+
+### 6. KC rows, survival
+
+| Writer | Placed | KC rule | Refused as |
+|---|---|---|---|
+| Lift shaft, shell, base, doors, rails, lamps | links (after routes and walls), its water in the fluids stage | a body registered at emit; it keeps clear of every earlier writer (siting); later writers (apron lamps) keep clear of it | `NO_ROOM {why: clear}` for the lift, as a course |
+
+| Kind | Free | Paid | Path |
+|---|---|---|---|
+| Lifts | the bubble-column cells (water, N-H-1) | soul sand, magma, shell, doors, rails, lights | the shell's targets, bottom up; then the body when every paid cell is built and still ours (RS §7.3's barrier) |
+
+### 7. Byte identity, API
+
+- Row 9 is off unless an edge lists it, and a plan without a lift has no new body: every other fixture byte-identical.
+- Feature `liftConnectors` (sidecar `region.lifts`); siteplan `lifts[]`; the `architect_mc:fluids` rows gain lifts (H's shape
+  `{part, body, state, reason, at}`); graph `type: lift`, movers `['player']`, `crossing {type, rise, down}`. **Java:** the
+  fluids-stage write of `bubble_column` states and its ticks, the census and realise report counting them, the StillOurs row, and
+  the drain's restore of those cells.
+
+### 8. Steward's recorded plans
+
+| Plan / part | Expected | Why |
+|---|---|---|
+| treetop_village / storehouse_lift (optional) | `refused NO_CLIMB`, `wouldFit` `path` | flat claim; the raised storehouse wants `layout.elevated` (7b), noted |
+| upside_down / winch_lift (required) | `refused NO_CLIMB`, `wouldFit` `path` | flat claim; "rope lift" read as this block, noted |
+
+**Bar:** 0 `malformed`; these two change class and no other part does; both `wouldFit`s `fits` alone; gap tables in
+`fixtures/plan/lf/` (connector.lift 2 -> 0).
+
+### 9. Gate (slice tier, $0)
+
+**Fixtures:** `v7a_lf_cliff` (the synthetic 30-high cliff: an up lift with `down: true`, approached by a path); `lifts_demo` flat
+(cliffs of 8 and 48 raised in stage `ground`) and natural (CW's pinned cliff site); refusals `NO_CLIMB`, `SPAN` (65), `ANCHOR` (a
+face of sand with no room for a written shell), `HEADROOM` (an overhang 2 over the top), `MOVER` (a villager lift).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Probe | command-built: water over soul sand and magma forms the columns; a written `bubble_column` over its base stays; a door holds a column open and shut; drowned spawn in a dark column in a river biome and not in a lit one (the light-every-6 rule rests on it). **The ride:** a bot player (a new hook `dev.lift.ride`) rides up 8, 30 and 48, is launched over a rim at `yT` and, stepping toward the face, lands on the top cell, and the down column carries it to the airlock. If the server bot can't ride, a client-run step shows it, and server-side a mob and an item entity carried up and down the columns stand in for it (recorded) |
+| 2 | Unit | siting, the shell's two layers, the airlock, rim and rails, light spacing, the down column; every refusal with evidence; the single breach reaches nothing outside; `M10:lift` on broken variants (`_unsafe.oneLayer`: M25 breach reach outside; `_unsafe.oneDoor`; `_unsafe.noLight`) |
+| 3 | Byte identity | every fixture without a lift unchanged |
+| 4 | In game, Steward-shaped | `v7a_lf_cliff` in plan v1's shape through `checkPlan` then `realiseApproved`; PLACED only when the lift's body has settled; the census exact (every shaft cell a bubble column, 0 fluid elsewhere in its watch box) |
+| 5 | Player across (hard bar) | **judged:** the kit `player` mover from the approach through the airlock to the top cell and back by the down column (the kit gains the column as a move: up over soul sand, down over magma), and kit `villager` refused (not a villager route); every realised column cell a bubble column of the right drag (re-read). **Shown:** item 1's ride on the realised lift, 5 rides each way, by the bot or the client step |
+| 6 | Containment | M25 0; a 2-minute stand at default rules: 0 fluid cells outside the shaft; a breach probe (`/setblock` air at one inner shell cell): the water stops at the outer layer |
+| 7 | KC | a lift beside a pond: kept clear, M25:clear 0 |
+| 8 | Exact undo (verifier re-runs) | `Regions.remove`: E-flat 0 on `lifts_demo` flat, fluid cells compared exactly; natural E-normal 0 within 6 of any lift cell |
+| 9 | StillOurs (verifier re-runs) | Java unit: every bubble-column state of a written cell holds; a player's block in a shaft cell does not; deltas and PT2's counts over a realised lift unchanged by the column's own drag ticks |
+| 10 | Survival (if RS merged; verifier re-runs) | the shell bottom up, the column written after its last paid cell; soul sand and magma from the stockpile, water free; BOM exact; removal refunds once per key |
+| 11 | Catalogue, determinism, API | the flip only; 3 checks identical; api-compat; apijars; $0.00 |
+| 12 | Look (recorded) | the lift tower from the approach and the top, three bibles: N-LF-1 |
+
+**Tier:** slice plus `journal/**` and `region/**`: the units, apijars, h-unit, h-ingame, ha-ingame, kc-unit, cu's StillOurs tests,
+LF's `lf-unit`, `lf-probe`, `lf-ingame`, `lf-natural` (driver `tools/gate7alf.mjs`). The verifier re-runs items 8, 9 and 10.
+**Steward's RC** follows on the release candidate (S-LF-2).
+
+### 10. Size
+
+One owner, **about 2.5 days**: the probe (0.25), geometry and the row (0.5), the Java fluids-stage write, ticks, census and
+StillOurs row (1), M25 on lifts and fixtures (0.25), the rounds (0.5). If it runs long, `down` columns can follow as a patch.
+
+### Open questions for Steward
+
+- **S-LF-1. A lift is a bubble column, player-only by kind.** "Winch", "rope" and "elevator" in a card map to it (noted), at the foot
+  of a face rising 4 to 64. Only `movers` naming villagers answers `MOVER` (S-7a-8), with a stair repair. Fine? Default: yes.
+- **S-LF-2. The RC.** The StillOurs row is global, and the census counts bubble columns. Will you run on the RC a lift realised and
+  removed, a delta and a PT2 adopt over a standing lift, and (with RS) a survival lift? Default: yes.
+
+### Open questions for Noah
+
+- **N-LF-1. How lifts look.** Proposed: a 5 x 3 tower against the face in `structure`, two oak doors as the airlock, sea lanterns in
+  the inner layer, a railed rim at the top. The alternative is glass in both layers so riders see out (glass is `fs`). Default: solid, as
+  proposed.
+
+## Phase 7a slice SA: spiral stairs round a form (FROZEN 2026-10-20, Steward reviewed: every default accepted)
+
+`connector.stairs_around` reserved -> supported: a spiral stair round a rock spire, an ice spike, a giant tree's trunk or a giant
+mushroom's stem, from the ground to a railed lookout at the top (a spire or spike) or just under the canopy or cap (a tree or
+mushroom). It is a hosted generator, not a route move: the stair is fixed by its host, and an ordinary path leg joins `from` to its
+foot.
+
+- **Branch:** `slice/SA`, worktree `../architect-mc-SA`. **Spend:** $0.
+- **Scope:** the def and R27 (foundation §4), the spiral generator (its own hug: 6a's `spiral` keeps a fixed radius, which a
+  tapering host defeats), the top platforms, the foot leg,
+  answers, KC and survival rows, the gate.
+- **Not in scope:** stairs round lots or buildings (a building's own stair is its design's), bridges from the top to other hosts
+  (rope bridges between canopy lots: 7b with `layout.elevated`), branch walks (`until: 7b`, S-7a-4).
+- **Depends on:** the foundation, F1 (`rock_spire`, `ice_spike`), F3 (`giant_tree`, `giant_mushroom`: their column masks, F3 §3.2;
+  SA ships F1's hosts if F3 is late, and F3's as a follow-up row), 6a's `stair` (its tread emission), W, KC.
+
+### 0. Facts
+
+- 6a's `stair(path, {width, rise, landingEvery, carve, railing, spiral, material, ...})` (`program.mjs` :1386); `spiral: {center:
+  [x, z], radius, top, bottom, start}` (:1405) lays a helix of treads of a fixed radius.
+- F1's spires and spikes are tapering columns (F1 as built: `rockSpire`, ice spikes in packed and blue ice); F3's giant trees have a
+  trunk `capsuleChain` tapering with height and leaves in lobes; a form registers its column mask in `ir.forms[]` (F3 §3.2) and its
+  cells are written in stage `ground` (forms are early writers).
+- M17: no ice or snow within reach of block light over 11, so lamps by an ice spike are soul lanterns (light 10).
+- No recorded plan asks for one.
+
+### 1. The plan
+
+```
+connector.stairs_around: {id, kind: "stairs_around", required?, label?, notes?, ext?, style?, tolerance?,
+                          from: endpoint, around: {feature: {part: <form id>}}, top?: "summit" | "canopy" | {y: int},
+                          width?: 1..2 (default 1), rails?: "outer" | "none", lamps?, movers?, params?}
+```
+
+- R27: the host is a form part of kind `rock_spire`, `ice_spike`, `giant_tree` or `giant_mushroom`, an implicit dependency (R3);
+  another part answers `refused NO_FEATURE {why: host}`. `top` defaults to `summit` on a spire or spike and `canopy` on a tree or
+  mushroom.
+
+### 2. The spiral (`connectors/spiralGeom.mjs`, pure)
+
+- **The hug:** at each level `y`, the host's cross-section is read from its written cells (the region's own, known after stage
+  `ground`); the tread ring is the set of cells face-adjacent to that cross-section, outside it. The spiral walks that ring
+  counter-clockwise (ties by position from `from`'s side), rising 1 a step (stairs blocks of the tread role, facing up the spiral),
+  with a 2-cell flat landing every 8 steps; at a level where the cross-section shrinks, the ring steps inward, a landing taking the
+  step. Every tread is face-adjacent to a host cell or to the tread below it (M3 through the host).
+- **Width** 1 (default) or 2; the outer edge stays within 2 of the host (M15's 4 by construction).
+- **Rails:** the rail role on the outer edge at tread + 1 (M8) wherever the outside drops more than 3.
+- **Head room:** 2 clear over every tread (a branch or a cap lower answers `HEADROOM`, naming the cells).
+- **The top:**
+  - `summit`: a railed deck (the deck role's slab, `connectors.stairs_around.deck`, default `floor`) over the host's top
+    cross-section grown by 1, at the summit + 1;
+  - `canopy`: a ring deck round the trunk or stem 1 wide, 3 below the lowest leaf or cap cell, railed;
+  - `{y}`: a ring deck at that level.
+  The top is a graph node `kind: lookout` (player-only by S-T2-1, unless `movers` says otherwise).
+- **Rise:** 4..64 from the foot (`SPAN` otherwise). **Lamps:** W's fixture on the rails every `floor(12 * level / 15)` treads (M5
+  0); soul lanterns within reach of ice (M17).
+- **Never written:** a host cell (a stair never cuts its host), water, keep-out, builds, lot boxes and aprons.
+
+### 3. The foot leg
+
+The foot is the first tread's ground cell on the side facing `from`. `from` joins it by an ordinary T2 path leg (width 1, the
+part's movers), routed in step 4 with the other connectors; its route answers as a path's. The spiral emits in links (foundation's
+order). A foot with no route answers the leg's code (`UNREACHABLE`).
+
+### 4. Movers
+
+Inferred: the top is a lookout, so the edge is player-only unless `movers` names villagers; a villager spiral needs width 2 (a
+1-wide turning stair is too tight for the kit's villager mover, and vanilla's is probed in item 4).
+
+### 5. Checker
+
+`M10:spiral` (warning): every tread rises 1 from the last (landings flat), is face-adjacent to the host or the tread below, the
+outer edge within 2 of the host, rails where the outside drops over 3, head room 2; the top deck railed; M5 0; M3 0.
+
+### 6. KC rows, survival
+
+| Writer | Placed | KC rule | Refused as |
+|---|---|---|---|
+| Spiral treads, landings, rails, top deck, lamps | links | off every body's hard cells; a lamp in a watch cell skipped | `OVERLAP {kind: body}` |
+
+| Kind | Free | Paid | Path |
+|---|---|---|---|
+| Spiral stairs | none | treads, landings, rails, deck, lamps | targets, bottom up (each tread on the one below or the host) |
+
+### 7. Byte identity, API
+
+A plan without a spiral is unchanged (no new row; the generator runs only for such parts). Feature `spiralStairs` (sidecar
+`region.spirals`); siteplan `spirals[]`; graph `type: stairs_around` from the foot node to the lookout, `crossing {type, host,
+rise, turns}`. No Java.
+
+### 8. Gate (slice tier, $0)
+
+**Fixtures:** `v7a_sa_spire` (forms_demo's rock spire, 32 high: a spiral to a summit lookout, from the zone's street); `v7a_sa_spike`
+(an ice spike, soul lanterns); `v7a_sa_tree` (an F3 giant oak, 40 high: to the canopy ring; F3's follow-up row if F3 is late);
+refusals `NO_FEATURE {why: host}` (a zone as host), `SPAN` (a 3-high spire), `HEADROOM` (a mushroom cap 1 over the ring),
+`MOVER` (a 1-wide villager spiral).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the hug on tapering and stepped cross-sections, landings, the three tops, every refusal with evidence; `M10:spiral` on broken variants (`_unsafe.floating`, `_unsafe.noRails`) |
+| 2 | Byte identity | every fixture without a spiral unchanged |
+| 3 | In game, Steward-shaped | `v7a_sa_spire` in plan v1's shape through `checkPlan` then `realiseApproved` |
+| 4 | Movers | a bot player from the street to the lookout and back on every fixture: 100%; a width-2 villager spiral: vanilla `dev.nav.villager` both ways (hard bar for that fixture) |
+| 5 | Realised | every tread on the formula and attached (M3 0), rails, head room, M5 0 dark treads; 0 host cells changed (hash of the host's cells before and after); M17 0 by the spike |
+| 6 | KC | a spiral beside a fountain: kept clear, M25:clear 0 |
+| 7 | Exact undo | E-flat 0; the host intact after removal |
+| 8 | Survival (if RS merged) | bottom up; BOM exact |
+| 9 | Catalogue, determinism, API | the flip only; 3 checks identical; api-compat; $0.00 |
+| 10 | Look (recorded) | the spire, spike and tree spirals: N-SA-1 |
+
+**Tier:** slice: the units, apijars, f1-unit, f3-unit (when merged), SA's `sa-unit`, `sa-ingame` (driver `tools/gate7asa.mjs`).
+The verifier re-runs item 7.
+
+### 9. Size
+
+One owner, **about 1.25 days**: the hug and tops (0.5), the leg and answers (0.25), fixtures and the rounds (0.5).
+
+### Open questions for Steward
+
+- **S-SA-1. The top is a lookout, player-only.** A spiral's top node is `kind: lookout`; villager spirals only on request and 2
+  wide. Fine? Default: yes.
+
+### Open questions for Noah
+
+- **N-SA-1. How spirals look.** Proposed: 1-wide stairs in the tread role (`structure`'s stairs; the host's wood on a tree), fence
+  rails, a slab lookout deck, soul lanterns by ice. Default as proposed.
+
+## Phase 7a slice K3: towers and gatehouses as lots on a wall's line (FROZEN 2026-10-20, Steward reviewed: every default accepted)
+
+The lots a recorded wall names (towers, corner lots, gatehouses, `joins`, `anchors`) are sited **on the wall's line** instead of
+beside it: a tower at a ring's corner, a gatehouse straddling a gate run with a passage through it. The wall ends at each lot's box
+(K1's joined lot, K5 intact), routes cross the wall through a gatehouse's passage, and the closure is checked again when the lot's
+design binds. This is S-K1-2's `join` deviation retired, and FL's "lots on a wall's line: deferred to 7a".
+
+**K3 changes what Steward designs and binds** (a gatehouse's passage, closed outer faces) and adds a `realiseApproved` refusal, so
+Steward's RC check comes before release (GATES policy 4); the verifier re-runs the bind and removal items.
+
+- **Branch:** `slice/K3` (or `slice/K3-a` kit and `slice/K3-b` mod, §11), worktree `../architect-mc-K3`. **Spend:** $0.
+- **Scope:** reading the named lots (§1), withholding them from their zone (§2), siting on the line (§3), passages and routing (§4),
+  closure at plan and at bind (§5), the artifact and Steward's design inputs (§6), answers, KC, survival, the gate.
+- **Not in scope:** generated (undesigned) gatehouses (K1's gate frames stay the undesigned form); walks entering towers at height
+  (7b's ports; K2's walk ends at a tower's box); lots on a `wall.along` line (open walls take run lots only if asked: §3, no recorded
+  case); moving lots of another zone onto a wall.
+- **Depends on:** the foundation, K1a (lines, gates, the gate row, `checkWalls`), K2 (walk ends), V and FL (zone layout, lanes),
+  P0 (the artifact, `lotProblem`), IRR (`DesignRequest.reserved`, `$.lots[]` reserved cells), C37b (`Entry.cells`), KC.
+
+### 0. Facts
+
+- K1 §3 `wall.line`: a leg ending on a lot ends at the face of its box, the next leg starts from the opposite face; the lot is a
+  **joined lot** and the closure is `provisional`, "re-checked when the lot's entry binds (P0 §6 step 3: the entry's fit inside the
+  box, and its passage)". Only `wall.line` does this today; rings never take lots.
+- S-K1-2 (binding): tower, gatehouse and corner lots left beside the wall make the part `adjusted` with a `join` deviation per lot.
+- Compile order (`compile.mjs`): zones and their lots (step 2-3: V's `layoutStreet` or FL's frontage), then `planWalls` (rings round
+  the zone's rect at the smallest clear offset in `ring`, default [4, 12]), then routes (step 4) with the gate move, then gates by
+  crossing, auto gates and `gates.min` (first where a zone street end faces the ring).
+- The design kit's **`gatehouse` profile**: "a passage through the building, front to back, at least 3 wide and 3 tall"; `tower`:
+  "height >= 2 x the smaller footprint side; >= 3 floor levels reachable" (CONTRACT, design checker profiles).
+- IRR (S-IRR-2): reserved cells on the artifact's `$.lots[]` as world plus lot-relative cells, `DesignRequest.reserved` honoured by
+  the design job and its checker, and the realise drops any entry block there and reports the count.
+- `PlanChecks.lotProblem` (:1251) checks a bound entry against the lot's `fitBox` (either rotation) and `Entry.cells` against
+  `costRange`; `realiseApproved` refuses on it.
+- Recorded walls naming lots (§9): castle_city (`gate_lot`, `corner_lots` x4), walled_town (`gateLots` x4), metropolis (`gates` as
+  lot ids x2, `towers` x3), camp_to_city (`gate`, `towers` x2), redstone_gate (`joins`: three towers and a gatehouse), border_fort
+  (`anchors` on a `wall.edge`), desert_jungle_wall (`via` a gatehouse lot on a `wall.line`).
+
+### 1. The plan: which lots go on the line
+
+```
+connector.wall (additive): lots?: [{lot: <lot id>, at?: "corner" | "gate" | "run", near?: endpoint}]   (at most 16)
+```
+
+- **Lenient mapping** (S-K1-3), read when `lots` is absent: `corner_lots` -> corner; `towers` -> corner, then run (past the
+  corners); `gate_lot`, `gateLots`, `gate` (a lot id) and `gates` (an array of lot ids, which also sets `gates.min` to its length)
+  -> gate; `joins` and `anchors` -> by the lot's type (`tower`, `watchtower` -> corner or run; `gatehouse` -> gate), else by its id
+  stem (`tower_*`, `gatehouse_*`), else run. Every mapped key moves from "not read" to read; others stay listed.
+- A named lot must be a lot of the wall's own target zone (`around`/`inside`), or a `via` lot of a `wall.line` (K1). Another lot
+  answers the wall `adjusted` with K1's `join` deviation for it (unchanged), noted why.
+- `at: corner` on a `wall.edge` or `wall.around` only; `wall.line` takes gate and run lots (its ends are free); `wall.along` takes
+  run and gate lots.
+
+### 2. Withheld from the zone
+
+- In step 2, the zone lays out its lots **without** the named ones (V's street, FL's frontage): they take no street frontage. The
+  zone's `count` tolerance counts a withheld lot as placed once it is sited on the line (§3).
+- A withheld lot that can't be sited goes back to its zone: the zone is laid out again with it (one more pass, its cache key
+  includes the withheld set), and the wall keeps K1's `join` deviation for it. So nothing gets worse than today.
+
+### 3. Siting on the line
+
+After `planWalls` has the line (and before routing):
+- **The band.** With named lots, the ring's offset range starts at `max(ring.min, ceil(depth / 2) + 2)` for the deepest named lot,
+  so a lot straddling the line clears the zone's lots + 1 (noted when it raises `ring.min`; `adjusted` with a `move` deviation past
+  `tolerance.move`).
+- **Corners:** a corner lot's box is centred on the ring's corner cell (its footprint as specified, rotated so its front faces the
+  zone's centre). Ties: corners clockwise from the north-west.
+- **Gates:** a gate lot's box straddles a straight run of at least its width + 2, centred on the line, its **front facing out** and
+  its **back facing in**; the run is the one `gates.min` would choose first (facing a zone street end), then `near`, then evenly,
+  ties by perimeter position. The wall's gate there **is** the lot's passage (§4).
+- **Runs:** run lots evenly along the remaining runs, centred on the line, front facing in.
+- **The cut.** The line's cells inside each box are dropped; the wall's legs end at the box's faces (K1's joined lot), with K1's
+  end posts. K5 holds: no wall cell in a box.
+- **Clear:** each box (+ its apron) keeps K1a's obstacle classes, KC's `OB.BODY`, the claim margin, and other named lots (gap 2).
+  A lot that fits nowhere on the line goes back to its zone (§2).
+
+### 4. Passages and routing
+
+- **A gatehouse's passage** is the box's centre line front to back, `pw` wide (the widest crossing walk, at least 3) and 3 high over
+  the box's floor row, with a **port** at each face: `front` (outside) and `back` (inside), each the cell just outside the box at the
+  floor's feet y (K1 §3's port rule).
+- **The passage move** (K3's addition to K1a's gate row, `moves/gate.mjs`): a gatehouse's passage is an **open gate** (cost 0) from
+  its front port cell to its back port cell. The move writes nothing in the box; its segment is `{kind: passage, lot}`. Routes still
+  open auto gates elsewhere (60) where the passage is too far, as K1.
+- **Inside:** a lane (V's, 1 wide, the zone's lane role) from the zone's nearest street end or side to the back port, routed with the
+  connectors in step 4 as the wall's own edge, outside every box.
+- **Doors** are the design's (villagers open wooden doors; a passage with a fence gate is player-only, and a villager route through
+  it answers `MOVER` at bind, §5).
+
+### 5. Closure, at plan and at bind
+
+- **At plan** (`M2:wall`): a named lot's box is an unknown opening, so the closure is `provisional` (K1), with each box listed; a
+  passage counts as a gate opening (blocked in the closed test, open in the across test).
+- **At bind** (`realiseApproved`, Java, `lotProblem` extended): for each lot on a wall, the bound entry's `Entry.cells` on the box's
+  **outer faces** (the faces outside the ring, between the two leg ends), from the floor row + 1 to + 3, must be impassable (a
+  full-collision block, a pane, a fence, a wall block; not air, a door, an open trapdoor or a fence gate), except the passage. A
+  gatehouse's passage cells must be open (the realise drops any entry block there, IRR's rule, and reports the count) and its floor
+  row standable.
+- A failure is a `lotProblem` ("lot <id> on wall <wall>: the design leaves the wall open at ... (n cells)"), refused through
+  `realiseApproved`'s existing lot refusal; nothing is written. Steward's design loop repairs it (S-K1-6's spirit).
+
+### 6. The artifact and Steward's design inputs
+
+- `$.lots[]` (additive) gains `onWall: {wall, at, outerFaces: {cells (lot-relative)}, passage?: {width, height, cells (world and
+  lot-relative), front, back}}`, and `ports: [{name: front|back, at}]` for a gatehouse.
+- **Steward passes** the passage as `DesignRequest.reserved` (IRR's member, unchanged) and the lot's type as `gatehouse` (its
+  profile already demands a front-to-back passage); for a tower, type `tower`. The outer faces are a brief line ("keep the faces
+  outside the wall closed at ground level"); a typed member for them is S-K3-2.
+
+### 7. KC rows, survival
+
+| Writer | Placed | KC rule | Refused as |
+|---|---|---|---|
+| Wall lots (boxes on the line) | after `planWalls`, before emit | lots + 1 are hard for bodies (M25:keep, unchanged); a box never on a footprint | back to the zone (§2) |
+| The inner lane | routes | as streets | as streets |
+
+Survival: the lots are lots (Steward's construction sites, unchanged); the wall's targets lose the cells inside boxes.
+
+### 8. Byte identity, API
+
+- A wall naming no lot (no `lots`, none of the mapped params) is K1's byte for byte. **Named:** the recorded walls in §9 (asks, not
+  `valid/`). Every `valid/` and K1/K2 fixture unchanged.
+- Features `wallLots` (sidecar `region.walls.lots`). siteplan `walls[]` gains `lots: [{lot, at, box, passage?}]`; graph nodes for
+  the passage ports, edges `type: passage`. Java: `lotProblem`'s closure and passage checks, the artifact's `onWall` read. api-compat
+  clean.
+
+### 9. Steward's recorded plans (the asks claim): expected answers
+
+| Plan / part | Expected | Why |
+|---|---|---|
+| castle_city / curtain_wall | `fits`, provisional (4 corner towers, the gatehouse at the gate run; K2's walk on) | `corner_lots`, `gate_lot` read |
+| walled_town / town_wall | `fits`, provisional (4 gatehouses at the 4 gates) | `gateLots` read, `gates: 4` |
+| metropolis / city_wall (optional) | `fits` provisional, or `refused OUT_OF_CLAIM` as before | `gates` (2 lot ids) and `towers` (3) read |
+| camp_to_city / city_wall | `fits` or `adjusted` (move), provisional; or `refused OUT_OF_CLAIM` as before | `gate`, `towers` read; ring 24-30 |
+| redstone_gate / curtain_wall | `fits` or `adjusted` (the ring raised past [2, 4] for the gatehouse's depth), provisional | `joins` read by type |
+| redstone_gate / main_gate (optional) | `fits`: the gate is `gatehouse_1`'s passage | its `from {part: fortress, port: gatehouse_1}` resolves to the passage |
+| border_fort / fort_wall | `fits` provisional | `anchors` read |
+| desert_jungle_wall / great_wall | `fits` provisional (unchanged class); `gatehouse_1` a through lot with its passage | a `wall.line` via a gatehouse lot |
+| castle_city / castle, walled_town / town, metropolis / capital, camp_to_city / camp_city, redstone_gate / fortress, border_fort / fort | the same class as today, or `fits` where a withheld lot was the one left unplaced; geometry and lots re-recorded | each zone is laid out without its wall lots (§2), so its street, lot positions and IR move |
+| desert_jungle_wall / town | unchanged | `gatehouse_1` is a lot of the wall's `via`, not withheld from `town`'s street unless it is one of `town`'s lots (the builder records which) |
+
+**Bar:** 0 `malformed`; only these parts change (the walls and their zones), each with its before and after in `fixtures/plan/k3/`;
+no zone gets worse than its class today; no `join` deviation left on a lot the wall could site.
+
+### 10. Gate (slice tier, $0)
+
+**Fixtures:** `v7a_k3_castle` (a zone with 4 tower lots and a gatehouse, `wall.around` with `lots`, a road from `claim_e` through
+the gatehouse; castle_city's shape); `v7a_k3_line` (desert_jungle_wall's shape); stub designs: a tower and a gatehouse blueprint
+with the passage (fixture library entries), a gatehouse without its passage, a tower with an outward door.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the mapping of every recorded param; withholding and the fallback; siting at corners, gates and runs; the band's offset; the cut; the passage move; M2:wall provisional with the boxes; the artifact's `onWall` |
+| 2 | Byte identity | §8's bar |
+| 3 | Recorded plans | §9's bar |
+| 4 | In game, Steward-shaped | `v7a_k3_castle` in plan v1's shape through `checkPlan` (READY, provisional closure), the stub entries bound, then `realiseApproved` (PLACED) |
+| 5 | Closure, realised | with the entries bound and realised: 0 inside-to-outside paths for player and villager (kit) with the passage blocked; 100% across with it open |
+| 6 | Villagers (hard bar) | vanilla `dev.nav.villager` from every inside lot out through the gatehouse's passage and back: 100% |
+| 7 | Bind refusals, nothing written | the gatehouse without a passage, the tower with an outward door: each refused through `realiseApproved` naming the lot and the cells; 0 cells changed (hash) |
+| 8 | Exact undo (verifier re-runs) | `Regions.remove` after item 4: E-flat 0 over the claim (the lots removed with the region, as lots) |
+| 9 | KC | the castle with a fountain in its band: the band raised past it or the lot back in the zone; M25:clear 0 |
+| 10 | Determinism, API | 3 checks identical; tiles 1 = 4; api-compat; apijars; $0.00 |
+| 11 | Look (recorded) | the castle walled with its towers and gatehouse in three bibles: N-K3-1 |
+
+**Tier:** slice plus `region/**` and `api/**`: the units, apijars, k1a-unit, k1a-ingame, k2-unit, fl's and v's units, K3's `k3-unit`,
+`k3-ingame` (driver `tools/gate7ak3.mjs`). The verifier re-runs items 7 and 8. **Steward's RC** follows (S-K3-3).
+
+### 11. Size and split
+
+**About 2.5 days**: the mapping, withholding and siting (1), the passage move and lanes (0.5), the artifact and the bind check in
+Java (0.5), the stub designs and the rounds (0.5). If split: **K3-a** (kit: §1-§5's plan side, items 1-3, 5, 9) and **K3-b** (mod:
+the bind check, the artifact read, items 4, 6-8) against a frozen `onWall` shape at the end of K3-a's first half-day.
+
+### Open questions for Steward
+
+- **S-K3-1. The named lots are the zone's, sited on the line.** A lot a wall names is withheld from the zone's street and placed
+  on the wall (a tower at a corner, a gatehouse straddling a gate); one that can't be sited goes back to the zone with K1's `join`
+  deviation. Fine? Default: yes.
+- **S-K3-2. Closed outer faces at bind.** The bound design must keep the box's faces outside the wall impassable at ground level
+  (doors face in), and a gatehouse must leave its reserved passage open. Today that is a brief line plus the bind check; a typed
+  `DesignRequest` member for closed faces would let your designer's checker catch it first. Want it now? Default: the brief line
+  and the bind check; the member later if designs miss it.
+- **S-K3-4. A zone's lot outside its zone's rect.** A wall lot keeps its zone (`$.lots[].zone`, its tags, Steward's lot ext), but its
+  box stands on the wall's line, outside the zone's rect. Does plan v1's lot reading and tagging accept a zone lot outside the rect
+  (it reads `$.lots[]`, not the rect, as far as Architect can see)? Default: yes, with `onWall` telling you why.
+- **S-K3-3. The RC.** Will you run on the RC: castle_city's shape designed and bound (towers and a gatehouse), a bind refusal and its
+  repair, villagers through the gatehouse, and the region's removal? Default: yes.
+
+### Open questions for Noah
+
+- **N-K3-1. Where wall lots go.** Proposed: towers on the corners (front facing in), gatehouses on the run facing the main street,
+  the wall raised under nothing (the lots carry their own height). Default as proposed; the look step shows a castle in three
+  bibles.
+
+## Phase 7a slice GJ: a district joins a walled town through a standing gate (FROZEN 2026-10-20, Steward reviewed: every default accepted)
+
+D3 answers `NO_JOIN [wall]` when every candidate in a town's claim is enclosed by the town's wall (S-D3-5: "walled towns answer
+`NO_JOIN [wall]`, with gates joining in 7a"). GJ lets the join pass through one of the wall's **standing** gates: it routes to the
+gate's outside cell, crosses the gate's walk without writing it, and continues inside to D3's street end or side. The standing
+town and its wall write nothing and their graphs aren't edited (S-D-2). The join's external edge is typed with the gate it crosses,
+the part of S-D-2's "7a types these edges" that has a consumer now.
+
+**GJ changes what stands in a walled town's claim at removal, in every order**, so Steward's RC comes before release (GATES policy
+4, as D3), and the verifier re-runs the removal and dry-check items (policy 3). All facts about D3 below are from its frozen
+contract; **D3's as-built wins** where it differs.
+
+- **Branch:** `slice/GJ`, worktree `../architect-mc-GJ`. **Spend:** $0.
+- **Scope:** gate candidates (§2), the gate traverse (§3), the reach over a wall region (§4), the graph (§5), ownership and undo
+  (§6), the realise re-check (§7), the dry check (§8), byte identity, the gate.
+- **Not in scope:** opening a new gate in a standing wall (that writes the town's or the wall region's cells: 6d's delta); joining
+  through a sealed wall (`gates: 0` or `closed` with no gate: still `NO_JOIN [wall]`); a postern (a tunnel under the wall, T3) as a
+  join; `seconds`, `risk` and nav (S-7a-6).
+- **Depends on:** D3 (merged first), K1a (gates in `meta.walls`), K3 (a gatehouse passage is a gate here too, if merged), KC.
+
+### 0. Facts (D3's frozen contract, main f3f41d43)
+
+- D3's join search: the seam step, then the reach step over the reach frame (the district's claim plus the town's claim); candidates
+  are street ends (continuing the line) and T sides; the join never writes a town-held column except D3's contact columns, where it
+  **holds** the town's terrain cells (the `hold` op). Refusal kinds `apart`, `street`, `wall`, `route`, `budget` (D3 §2.5); `wall`
+  is "every candidate is enclosed by the town's held wall columns (a K1 `wall.around`; S-D3-5)".
+- D3 §9: C38's `wall.around {feature: {region}}` offer is a separate one-part plan (its own region, the same owner) whose ring keeps
+  off a district's join and never gates it (S-D3-6). `d3_walled` is `d3_town` with that wall realised round it.
+- A standing wall's gates are in its IR's `meta.walls[].gates: [{id, at, width, door, auto}]` with the wall's `line` (`siteplan.mjs`
+  :142); K1a's gate is a walk through the wall's depth at the crossing's y, `width` x `height` clear, jambs and lintel, an optional
+  wooden double door or a fence gate; the gate's walk cells are the wall part's.
+- D3 sends `besideReach` (a resolution-1 survey and the held runs) for the beside region, and for at most 2 regions an endpoint
+  names.
+
+### 1. The rule in one line
+
+**Where D3 would answer `NO_JOIN [wall]`, the join may cross the wall at one standing gate: outside to the gate's outer cell,
+through the gate's walk without writing it, then from its inner cell to D3's cheapest street end or side.**
+
+### 2. Gate candidates (a third step)
+
+- **When:** only when D3's reach step ends `NO_JOIN [wall]`. A plan that D3 answers otherwise is unchanged byte for byte.
+- **Which gates:** every gate of every standing wall enclosing the candidates (the town's own walls, and any wall region round the
+  town: §4) that is **open**: `door` none or a wooden door (villagers open them); a fence gate is player-only, so a villager join
+  through it is skipped (named in the refusal if nothing else routes). K3's gatehouse passages are gates here too.
+- **The two cells:** the gate's **outer** and **inner** cells, each the walk cell just past the wall's depth on the gate's axis (the
+  line's normal at `at`), at the gate's walk y. Both must be land nobody holds (D3 §5.1), within 1 of the gate's walk surface.
+- **The choice:** the cheapest (T2 cost) of: a district end to an outer cell, plus the gate's traverse (0), plus the inner cell to a
+  D3 candidate (a street end or side inside the ring). Ties: the gate nearest the district, then the gate id. D3's bounds (48 dry
+  routes, 2M expansions each) cover both legs together.
+- **Refusal:** no gate routes: `NO_JOIN [wall]` as today, its message listing the gates tried and why each failed (sealed, fence
+  gate, held outer or inner cell, route).
+
+### 3. The traverse
+
+- The gate's walk cells through the wall's depth are **traversed, never written, never held**: the join's route is two runs (outside
+  and inside) joined by a traverse segment `{kind: gate, gate, region}` over the gate's cells. The kit's write lint (D3 §2.3,
+  `M28:beside`) gains the rule that a join writes no gate cell.
+- **The inner run** is inside the town's claim (D3's reach frame), and stays clear of the town's footprint, bodies and held cells
+  (D3 §5); its end at a street end or side is D3's (§3.2-3.4, contact columns included).
+- **Clearance:** the gate's opening must be at least the join's width (3) wide and 3 high; a narrower gate (a 1- or 2-wide K1 gate
+  or a 2-wide double door) is used with the join narrowed to the gate's width across the traverse and one cell each side (noted), as
+  long as it is at least 1 and villager-legal.
+
+### 4. A wall that is its own region
+
+- When the enclosing wall is a C38 wall region (not the town's own part), the join's reach frame also takes that region's claim,
+  and the mod sends its `besideReach` (D3's at most 2 per check: the town and the wall region). Its gates, footprint and held cells
+  are read as the town's are.
+- The district's `reach` IR member (D3 §2.3) covers its cells in both claims; `land.outside` and `inside` (D3 §6) count both.
+
+### 5. The graph (S-D-2, typed)
+
+`join_external` gains, on gate joins only: `via: "<region>:<gate id>"`, `junction {kind: "gate", gate, at, then: <D3's end or
+side junction>}`, and `crossing {type: "gate", lands: <gate id>}` (S-T3-8's shape). Its `type` stays `road` (the district's join is a
+road); the typing is the crossing. Plans D3 joins without a gate keep D3's shapes.
+
+### 6. Ownership and undo
+
+- **The district owns** both runs and its contact columns' holds (D3 §4.1); it owns nothing in the gate.
+- **District removed first:** its runs and holds go (D3 item 7's bar); the gate is untouched (its cells were never the district's).
+- **Town (or wall region) removed first:** the wall and its gate go with it; the gap where the gate stood is the town's restore (the
+  world before the town). The join's two runs stay, `dangling` and `standingRemoved` set (D3 §4.2); the join is walkable across the
+  gap only if the restored ground is (recorded, not judged: a natural round's ground may differ).
+- **Then the district:** E-flat 0 over every claim (the world before the town).
+
+### 7. The realise re-check (D3 §4.4, extended)
+
+At `Regions.realise` and `realiseApproved`, the gate must still stand as planned: every traverse cell held by the wall's part with
+the block type the plan read (a door's `open`/`powered` volatile), its opening clear. Else `ARTIFACT_STALE` naming the gate (a
+player walled it up, the wall region was removed), nothing written.
+
+### 8. The dry check
+
+`checkBeside` (D3 §7) answers gate joins with the same verdict as `Regions.plan` (fits, the gate used, the land), keeping nothing.
+
+### 9. Byte identity, API
+
+- **Pinned:** every D3 pinned plan (D3 §10) and every plan D3 answers with anything but `NO_JOIN [wall]`: unchanged. `d3_walled`
+  changes by name (it now joins through its gate).
+- Features `gateJoins` (sidecar `region.plan.gateJoin`). No new record; `BesideJoin` (D3) gains nothing (the junction is in the IR and
+  the land). Java: the reach frame over a wall region (the second `besideReach`), the re-check's gate rule. api-compat clean.
+
+### 10. Steward's recorded plans
+
+None use `beside` or `endpoint.region` (D1's gap table): unchanged.
+
+### 11. Gate (slice tier, $0)
+
+**Fixtures:** `d3_walled` (D3's): its C38 ring crosses none of the town's roads (a V street ends inside it), so its gates are
+`gates.min`'s (facing the street ends), and D3 answers it `NO_JOIN [wall]` first; `gj_town_wall`
+(`d3_town` with a K1 `wall.around` as the town's own part, a gate with a wooden door); `gj_fence` (the only gate a fence gate);
+`gj_sealed` (`gates: 0`). Plan fixture `v7a_gj_endpoint` (an `endpoint.region` route to the walled town's street).
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the third step's order; gate candidates and their cells; the traverse (no gate cell written or held, `M28:beside` on a broken variant that writes one); narrowing at a narrow gate; the refusal's list; determinism over 100 seeded walled towns |
+| 2 | Byte identity | D3's pinned set and every non-`[wall]` answer unchanged |
+| 3 | Join through a gate | on `d3_walled` and `gj_town_wall`: `Regions.plan` (beside) then `Regions.realise`; the join reaches the street through the gate; the gate's cells unchanged (hash) |
+| 4 | Villagers (hard bar) | vanilla `dev.nav.villager` from every district lot to the town's bell and back, through the gate (its door opened by them): 100%; kit movers 100% |
+| 5 | Steward's shapes | `checkBeside` then the real plan under `dplan`, `realiseByKey` after a restart (D3 item 6's flow); `v7a_gj_endpoint` through `checkPlan` then `realiseApproved` |
+| 6 | District removed first (verifier re-runs) | 0 changed cells over the town's and the wall region's claims but the join's own columns, which equal the world before the district |
+| 7 | Town or wall region removed first (verifier re-runs) | the gate gone with its region (E-flat 0 over that claim minus the district's held columns); the join's runs standing, `dangling` set; then the district removed: E-flat 0 over every claim |
+| 8 | Refusals, nothing written | `gj_sealed`: `NO_JOIN [wall]`; `gj_fence` with a villager join: `NO_JOIN [wall]` naming the fence gate; the gate walled up after the plan: `ARTIFACT_STALE` naming it; each 0 changed cells |
+| 9 | Dry check (verifier re-runs) | `checkBeside` equals `Regions.plan` on items 3 and 8; no file, opKey or `PlanRec` kept |
+| 10 | KC | a fountain inside the ring on the cheapest inner run: kept clear, M25:clear 0 |
+| 11 | Determinism, API | IR sha over 3 plans; tiles 1 = 4; api-compat; apijars; $0.00 |
+
+**Tier:** slice plus `region/**`, `journal/**`, `api/**`: the units, apijars, d3-unit, d3-ingame, d-ingame, k1a-ingame, GJ's
+`gj-unit`, `gj-ingame` (driver `tools/gate7agj.mjs`). The verifier re-runs items 6, 7 and 9. **Steward's RC** follows (S-GJ-2).
+
+### 12. Size
+
+**About 1.5 days**: the third step and the traverse (0.75, kit), the wall region's reach and the re-check (0.25, mod), the rounds
+(0.5).
+
+### Open questions for Steward
+
+- **S-GJ-1. Through a standing gate only.** The join never opens a new gate (that is a delta to the town or its wall: 6d); a
+  sealed wall still answers `NO_JOIN [wall]`. Fine? Default: yes.
+- **S-GJ-2. The RC.** Will you run on the RC: a walled V town with a C38 wall, a district joined through its gate, undo in both
+  orders and after a restart, and the wall region removed first? Default: yes.
+
+### Open questions for Noah
+
+None: GJ has no new look (D3's join look, N-D3-1).
+
+## Phase 7a slice FB: flood behaviour, M16 (FROZEN 2026-10-20, Steward reviewed: every default accepted)
+
+SETTLEMENTS §11's **M16**, which H (§2.5: "M16 proper (barrier thickness under a water surface) stays 7a's") and HY ("Deferred")
+left here. H's single breach asks "what floods if one shell cell opens"; M16 asks the static question beside it: **is any walk cell
+or lot below a body's surface separated from its water by a barrier thinner than 2?** A warning, measured on every committed plan.
+
+- **Branch:** `slice/FB`, worktree `../architect-mc-FB`. **Spend:** $0. Kit only.
+- **Scope:** the rule, its metrics, the count on committed fixtures, the gate. **Not in scope:** promoting M16 (or M8) to an error
+  (S-7a-7); natural water (a basin the plan doesn't touch).
+- **Depends on:** H, HY (bodies, shells, linings, weirs, grates, watch sets), KC, LF (its airlock is the rule's first designed
+  two-layer barrier).
+
+### 1. The rule (`checkFluids.mjs`, warning)
+
+For each plan body with surface `level`: every walk cell (any network's, the graph's) or lot box cell at a y below `level` whose
+shortest path to a body water cell, through non-fluid cells, crosses **fewer than 2** solid cells is `M16`, naming the body, the
+walk or lot cells (up to 16) and the barrier cells. Doors, panes and grates count as 1. A sunk body (H §2.5) passes trivially when
+no such cell lies within 2 of its shell.
+
+### 2. Designed exceptions
+
+None by default. HY's water gates (the grate is in the course, with water on both sides) are not barriers between water and a walk
+cell; LF's airlock is 2 doors thick. Any committed fixture the count finds is listed by name with its body and cells.
+
+### 3. Gate
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the rule on synthetic bodies: a 1-thick rim over a lower path (found), 2-thick (not), a door (1), a sunk pond (not) |
+| 2 | Count (recorded) | every committed fixture and the 59 asks: M16 findings per fixture, and how many M8 findings each has (for S-7a-7) |
+| 3 | Byte identity | IRs and answers unchanged (a warning adds a finding, not a refusal); READY unchanged everywhere |
+
+**Tier:** slice: the units, h-unit, hy-unit, kc-unit, FB's `fb-unit`. **Size:** about 0.75 day. **Versions:** a kit patch (or a
+minor with a feature string `floodCheck`, the coordinator's call). No RC.
+
+### Open questions for Steward
+
+- **S-FB-1.** M16 is a warning in this batch; its counts go with the batch's release report. Fine? Default: yes.
+
+## connector.rail: carts and rails (sketch, not built in 7a; slice CR, `until: CR`)
+
+Recorded as the shape the plan writer should expect, so the reservation's meaning is clear (S-7a-5). Nothing here is frozen.
+
+- **Facts:** SETTLEMENTS §8.2 has no rail row; only P0's reservation exists. mining_town's `rail_1` (required) runs from
+  `rail_station_1` to `mine_head_1`. Rails' `shape` and `powered` are already volatile (`StillOurs` :50, :31). Minecarts are
+  entities: the journal writes and undoes blocks, not entities. Powered rails need a power source (a redstone block under, or a
+  torch). Villagers and rails: to be probed (a level crossing in a street).
+- **Design outline:**
+  - a rail line searched like `wall.line` (its own network): cardinal runs, ascending 1 a cell only on straight runs, curves on
+    the level, at most 1:1;
+  - powered rails every 8 on rises and at each station, on redstone blocks;
+  - stations at lot ports (a stop against a block);
+  - level crossings where a walk network meets it (the rail laid in the walk's surface; no gate);
+  - fall protection on embankments (M8), lamps along it (M5);
+  - no carts placed (entities aren't journaled; the player brings carts);
+  - survival: rails, powered rails and redstone paid, cuts free.
+- **Probes before a contract:** a villager crossing rails in a street; a cart's speed over the powered spacing; undo with a cart
+  standing on the track (the cart left as the player's entity, the rails restored).
+- **Size if scheduled:** about 2 days, plus an RC (redstone blocks next to Steward's lots).
+
+## Batch 6d: region evolution, growth first. Summary for one Steward review round (FROZEN 2026-10-20, Steward reviewed)
+
+Phase 6d is **region evolution**: growing and changing a region after it stands, exactly and undoably, without re-laying what stands.
+It replaces the old outline "Phase 6d (outline, recommended to wait)" (marked superseded where it stands), and takes every note that
+deferred to 6d:
+- the outline's region deltas by part (A5B N7);
+- D3 §11's D-S2 (lots added to a standing district, `growDistrict`, `architect_mc:land.v` 2);
+- V's "additions to a realised village" and "per-lot deltas inside a region";
+- plan/0's "a revision of a realised plan" row (P0 §5: "changes to built parts are 6d (`unsupported`)");
+- 0b's "a source's new version applied to its COPY and SITE followers, by recipe" (Steward round 3, "updates follow the source");
+- PT's S-PT-1 (to 6d "with replanning on land change") and SETTLEMENTS §14;
+- the C12 joint 7a/6d gate's `Regions.adopt`.
+
+**Noah's decision (2026-10-20, option A, after GPT-6.1's second pass):** 6d ships **growth** first: RV is additive only (v3), with GR on it.
+Removing and changing standing parts is recorded in "6d later: full revisions (RV2)" at the end, not a slice yet.
+
+Written over main f3f41d43 (v0.40.0: API 1.37.0, mod 0.40.0, kit 0.38.0, catalogue 9), with FL, F3, S3, RS and D3 assumed to land as
+frozen (placeholders up to API 1.42.0, mod 0.45.0, kit 0.43.0, catalogue 11), and RP (realised provenance, `feat/realised-provenance`)
+before RV. Nothing here is built or run; code facts are marked "from code"; numbers marked "predicted" are the builder's to measure.
+
+**The order (coordinator, 2026-10-20), replacing SETTLEMENTS' "6d right after 7a":**
+1. the 6c close-out;
+2. D3, and 7a-1 (on `docs/7a`);
+3. **6d growth: RV v3, then GR** (one batch, one RC);
+4. 7a-2 and 7a-3;
+5. **FS, LC and AD** (AD's joint row needs 7a's link pass, which has landed by then).
+
+| Slice | What | API / versions (placeholders after D3's 1.42.0; 7a-1 may take one first; the coordinator renumbers) | Steward check | Size |
+|---|---|---|---|---|
+| **RV v3** | Additive revisions: new parts, lots, refills, street extensions and bodies as new stages evaluated alone and layered over the region; same-tick check and write; stage/set and history hashes over RP's realised record; the head, the operation manifest and idempotent recovery; LIFO `undoRevision` (whole-suffix preflight, then a committed operation); added bodies' drain; additive survival; the effective IR; the plan/0 path | API **1.43.0**, mod **0.46.0**, kit **0.44.0**, catalogue **12** | **RC** (removal and accounting; GATES policy 4); the verifier re-runs undo, removal, crash, survival and fluid items | 7.5-8.5 days of work, 4.5 elapsed in four lanes (RV-a kit 2; RV-b mod foundation 2.5-3; RV-c undo and fluids 1.5-2; RV-d readers and paths 1.5), the interface frozen at the end of RV-b's day 2 |
+| **GR** | Growing a standing region (D-S2): new lots on free frontage, then a street extended from a free end, for V towns, plain districts, outposts and along districts; `growDistrict`; `land` v 2 | API **1.44.0**, mod **0.47.0**, kit **0.45.0**, catalogue **13** | **RC**, shared with RV's (one batch) | 4.5-5.5 days of work, 3 elapsed (GR-a streets, GR-b along districts) |
+| **FS** | Updates follow the source: `followers`, `follow`, a frozen, persisted `followAll` with CAS installs ($0), then the existing `outdated` and `applyDelta` | API **1.45.0**, mod **0.48.0**, kit and catalogue unchanged | none before release; Steward checks after | 2-2.5 days, one builder |
+| **LC** | Land change, the report: `Regions.landCheck` (only PT-recorded placements attributed); the stage re-plan deferred | API **1.46.0**, mod **0.49.0**, kit and catalogue unchanged | none (read-only) | 1.5-2 days, one builder |
+| **AD** | Adopting a VillageLayout settlement (the 6d half of C12): no cell written; `Meta.group`, head record copies, `architect-sites.json` and the region record moved by an intent file; safe un-adopt | API **1.47.0**, mod **0.50.0**, kit **0.46.0**, catalogue unchanged | **RC** | 4-4.5 days, one builder |
+
+**Not drafted as slices, recommended deferred:** RV2 (full revisions, the design record at the end); the pad delta under standing lots
+(5b D7; S-RV-5); Sites-level deltas for 4e roads and cell sites (no consumer; standing roads are never changed in 6d).
+
+**Build order and parallelism** (at most 3 gate runs at once, GATES policy 6):
+1. **6d growth:** RV-a and RV-b start together (RP merged first). RV's interface freezes at the end of RV-b's day 2; RV-c and RV-d start on
+   it. GR-a starts on the same interface (pure kit until its in-game items). Slots: RV-b first, then RV-c and RV-d sharing one, GR after
+   RV merges. **One batch, one release, one Steward RC** (S-RV-10, S-GR-7).
+2. **Later batch:** FS (independent; can start any time, its own slot), LC (after RV), AD (after GR and 7a's link pass).
+
+**Rules for every 6d slice:** never edit `kit/regions/plan_v0.mjs`; byte identity first (Steward sets no plan `revision`: steward-mc
+6d54540 has `parentArtifact` only in its schema copy, so the 59 asks don't move); every new path through `checkPlan` then `realiseApproved`
+in game with a Steward-shaped plan, and through `planRevision` then `realise`; exactness on flat worlds; the natural round with D2's
+narrowed classes and VOC's `farfluid` exactly; KC binds every new writer (a revision is the later writer); D3 binds every revision of a town
+or district; fixtures `v8x_6d_*`, numbered by the coordinator; re-cut kitVersion goldens on a kit bump.
+
+**Totals:** 6d growth (RV v3 + GR) about 12-14 days of work, about 7 elapsed, plus Steward's RC. The later batch (FS, LC, AD) about 7.5-9
+days of work, about 4.5 elapsed with FS in parallel.
+
+### Review responses (GPT-6.1, read-only review of this draft, 2026-10-20; verdict "keep the architecture, revise RV")
+
+Each finding was checked against the code before it was taken. Where the code disagrees, the response says so.
+These rows answer the first pass with RV v2; RV v3 (additive) supersedes v2's composed-intent patch, kept-intent check and `removed`
+class, and the second-pass table below says what v3 does instead. Rows 3, 4, 7, 9 and 10 carry into v3 unchanged in substance.
+
+| # | Finding | Checked against | Response |
+|---|---|---|---|
+| 1 | `N` isn't the full target: `evalTile` evaluates parts, roads are `ir.roads`; no winner rule | `realise.mjs` :19 (op kinds), `RegionsImpl.java` :1274-1280 (roads as 4e road sites) | **Taken.** RV §3.2: the patch is changed **intent** composed over every part writer with an explicit winner (stage, set, op order); roads and lots are never patch targets (§5.2); a cell outside the patch is never written |
+| 2 | Intent vs realised ownership (skips, no-ops, felled trees, PARTIAL) | `TileCheck.java` :36-56 (skips held, PT builds, conditions, no-ops; fells trees, holds leaves), `RegionItems.java` :179 (fluid gate) | **Taken.** RV §3.1: a realised record per tile (codes per intended cell, the extra cells, the intent sha), §3.3's per-code rules, §3.6's kept check compares two kit evaluations (never the world), §3.7 derives a record for old regions and refuses `UNKNOWN` cells, §5.4 refuses unfinished tiles |
+| 3 | `before = current(c)` is wrong under StillOurs equivalence | `SiteDeltas.java` :1013-1020 (befores captured at D1) | **Taken.** RV §3.4: the before is the world's state, block entity and PT record at the write; StillOurs only decides write or keep |
+| 4 | Head and transaction boundary undefined | RV v1 §4.1-4.2 | **Taken.** RV §4: candidate, accepted, undoing, undone and stale states; the head moves only at accept (a CAS); the durable order; the busy state; `undoRevision`'s whole-suffix preflight, then one recoverable operation |
+| 5 | Survival accounting and target transitions | RS's frozen text (requests start at `PLACED`; "built" is `done`) | **Taken, as the review's first version.** RV §8: additive revisions only; a patch over a paid or unbuilt target is refused; undo cancels the revision's unbuilt targets first, then refunds once per key |
+| 6 | Revision-scoped fluid lifecycle | `Groups.java` :587 (the drain gate runs only when `r.stage == null`) | **Taken.** RV §7: added bodies only; changing or removing a standing body refused; the suffix drain before the undo, saved per body, resumable |
+| 7 | D3 side joins onto grown roads | D3 §3.5 (`to: <town>:<roadId>`) | **Taken.** RV §6.4 tracks nodes, roads, ports and reach or hold columns; GR item 7b gates a side join onto an extension road |
+| 8 | AD must migrate journal-group ownership | `JournalStore.java` :89 (`Meta.group`), `Sites.java` :2587 (reconcile from head meta), :3022 (one save) | **Taken (the first response was wrong:** it read the pure `Journal.Entry`, not the persisted `JournalStore.Meta`, which carries `group`). AD §2.3 v2 moves `Meta.group` and the head record copies by a metadata-only `regroup`, saves sites, infra and groups in the one `architect-sites.json`, and recovers forward or back from an intent file |
+| 9 | `rid` vs position; limits | `plan.mjs` :31, :421 (64 stages), `SiteJournal.java` :57 (depth 8) | **Taken.** RV §2.1 separates a monotonic `rid` from `position`; §12 states the depth, revision and stage limits as product limits; added parts reuse stage names so most revisions add no IR stage |
+| 10 | Removed-lot refill identity and rollback; `Sites.place` outside the group | RV v1 §4.4 | **Taken.** RV §4.6: `lots.refill` re-activates the lot id, saves its previous state, joins the new site to the region's group; undo restores `removed`; a hand placement is named as not a refill |
+| 11 | LC attribution; FS followAll replay | `Placed.java` :296 (a record clears when a cell becomes air: removals carry no actor) | **Taken.** LC v2 attributes only PT-recorded placements, reports removals unattributed, and ships the report alone (the replan deferred, S-LC-4). FS §3: `followAll` freezes its source version and follower set in a saved operation, installs by CAS, and treats already-followed as a no-op |
+| gates | an independent oracle; partial terrain; unfinished survival; side joins; fluid undo; competing plans; exact depth; the survival road fixture | — | **Taken.** RV §14: the twin-world oracle; `rv_partial_tile`, `rv_legacy`; items 9 (exact depth), 11 (heads), 13 (side joins), 15 (survival over a paid lamp, not a road, since RV never changes roads), 19 (fluids); GR item 7b |
+| freeze | Don't freeze RV's interface on day 1; resize | — | **Taken.** RV §13: four lanes, the interface frozen at the end of RV-b's day 2, 9-10.5 days of work |
+
+### Review responses, second pass (GPT-6.1, at d973792a; Noah's option A)
+
+| # | Finding | Response |
+|---|---|---|
+| B1 | Realised codes don't take part in composition (skipped winners hide removed writers; extras never enter the patch) | **Removed by scope:** v3 never removes or changes a standing writer, so an added stage is evaluated alone and layered (RV §3.1); RV §3.5 lists what remains (an added part over skipped, written or extra cells) with the answer for each; fixture `rv_layers` exercises it. Recorded as RV2 problems 4 and 5 |
+| B2 | Per-stage/set hashes compared with a composed intent | **Taken:** RV §3.4 defines `tileSha(stage, set, key)` (compared only with the same stage, set and key) and `historySha(key)` over the region's entries at a tile in layer order (compared only with itself, at accept); no composed intent hash in v3 |
+| B3 | No recovery across publication and queue creation, nor between removal and the finish | **Taken:** RV §4.3 writes an operation manifest before accept, publishes `effective.json` then `region.json`, and installs items by key idempotently; §4.4's undo manifest has phases and finishes idempotently when every site is already undone |
+| S4 | Undo preflight vs `Groups` refusals after a drain; same-operation resume; conditional source restore | **Taken:** preflight runs `Groups`' own player and placing checks dry; removal uses `Covered.KEEP` (no cover refusal); after the commit point the operation is never abandoned, a same-target call resumes it; sources return only where containment is intact (RV §4.4, §7) |
+| S5 | AD's journal-header claim false; one shared sites file; infra membership; safe un-adopt | **Taken** (row 8 above corrected): AD §2.3-§3 v2 |
+| S6 | The oracle could pass an omitted patch | **Taken:** RV §14's oracle enumerates expected transitions itself (the checker's virtual world over a snapshot, the journal dump, C31's felling) and compares the whole claim plus 8 |
+| S7 | No write-time revalidation in the write loop | **Confirmed** (`InfraJob.java` :395-420 writes without re-checking) **and taken:** revision tiles check and write each section in the same tick (RV §3.3); gate item 20 races a site and a player block |
+| nit | "RV's two lanes" in the totals | fixed (this summary) |
+
+### Review responses, third pass (GPT-6.1, at cfcdf8c0; no further round: the build's gates and verifier take it from here)
+
+| # | Finding | Checked against | Response |
+|---|---|---|---|
+| 1 | An effective IR newer than the head after a crash | RV §4.3 v3 | **Taken:** head-addressed snapshots `effective/<rid>.json`, written before and never rewritten; `region.json` is authoritative and its rename the only publication (RV §2.3, §4.3) |
+| 2 | Journal `UNDONE` before R4's writes | `WorldJournal.java` :695, `Groups.java` :612-640 | **Taken:** the finish waits for the removal's own `Removed(true)`; recovery never infers completion from `UNDONE`; gate kills at `K6` and mid-R4 (RV §4.4, item 10) |
+| 3 | Preflight misses `removalBlockers` | `Groups.java` :847 | **Taken** (RV §4.4; item 6's filled chest) |
+| 4 | The drain overwrites a later holder | `RegionFluids.java` :1139-1165 | **Taken:** a holder-aware suffix drain; §15.3's exception stated; item 19 |
+| 5 | GR frontage junctions not connected in the graph | `program.mjs` :541, `check.mjs` :852 | **Taken:** two real `along` edges per frontage junction, consumers named, `graph.cut = []` gated (GR §6, item 3) |
+| 6 | Refill vs `revision.keep`; irrigated lots | `RegionFluids.java` :1440-1455 | **Taken:** plan/0 lot member `refill: true`, catalogue `revision.refill`; irrigated refills refused in v1 (S-RV-14) |
+| 7 | The oracle for non-tile writers and stage order | `vworld.mjs` :277 | **Taken:** named references for roads, lots and NBT, settled flows; stage-by-stage evaluation (RV §14) |
+| 8 | Extension roads' write loop | `InfraPlace.java` :184 | **Taken** (RV §3.3; item 20) |
+| nit | LC's references | — | fixed (LC depends on RP, RV §3.4) |
+
+**Possibly on main too (for the coordinator's queue):** finding 4 is main's behaviour: `Regions.remove`'s whole-group drain
+(`RegionFluids.drain`) writes a body's cells back without asking the journal, so a later site's block in a body cell (a Steward addition's
+waterlogged block, placed by `Sites.place` with layering) is overwritten before the journal's hand-down. Finding 2 appears **not** to be a
+gap on main: a group removal is persisted (`Groups` `toJson`/`load`, :1026-1048), resumes R3 and R4 after a load (:612-615), and
+`reconcileRemovals` acts only when no removal is running (`RegionsImpl`). Not verified from the code here: whether the `Removal` record
+with its `undo` is saved before or after the R2 journal commit, i.e. whether a kill at `K6` can reload a removal without its undo. A focused
+`K6` kill test on a plain region removal would settle it.
+
+**The questions, in one place:** S-RV-1..3, 5..14, S-GR-1..7, S-FS-1..4, S-LC-1..4, S-AD-1..4 (Steward); N-GR-1, N-GR-2, N-FS-1, N-LC-1
+(Noah, taste or product, each with a default). They are listed at the end of each slice.
+
+
+### Steward's review (2026-10-20, at 3b10e4b3): binding, and it overrides the slice sections where they differ
+
+**Four points, settled as Steward asked:**
+1. **Region state after a revision.** While a revision writes, the region reads PLACING. Afterwards it reads its own
+   pre-revision state again (PLACED, PARTIAL, FAILED with cells), whatever the revision ended as. The revision's outcome
+   (PLACED, PARTIAL, FAILED, RACED) lives only in `RevisionView`. One failed grown lot never flips a town's state. Steward's town
+   lookup and D3's standing rules keep reading region state unchanged.
+2. **A candidate waiting on designs.** GR never shrinks a lot unasked. A re-plan with the same lot sizes returns boxes of exactly
+   those sizes (the front may change), or refuses `NO_ROOM`. Candidates stay valid for as long as Steward designs, unless an
+   accepted revision moves the head (then `parent_moved`).
+3. **Grown street roads** (keyed `rv<rid>:road:…`) always carry `architect_mc:street {zone, district?}`, including in towns
+   realised before FL whose standing roads have no flag.
+4. **AD is lazy (changes S-AD-1).** A VillageLayout settlement is adopted on demand, at its first growth, not migrated on
+   load. Adoption never changes site ids, so Steward's history keeps naming them.
+
+**Answers:**
+- **RV:** as proposed. S-RV-2: Steward treats `REGION_LIMIT` like `NO_ROOM` (full, so it proposes a district). S-RV-13:
+  Steward stops laying `street#n` on region towns once GR ships. S-RV-14: a refused irrigated refill is fine.
+- **GR:** as proposed. OpKeys `dgrow`/`drealise` for districts, `vgrow:<build>`/`vgrowrealise:<build>` for towns. No dry
+  check; Steward plans at acceptance and uses `discardPlan`.
+- **FS, LC:** as proposed.
+- **AD:** S-AD-1 is lazy, per point 4. S-AD-2, S-AD-3 and S-AD-4: yes.
+- **RCs:** RV and GR share one RC.
+
+## Phase 6d slice RV: region revisions, additive v1 (FROZEN 2026-10-20, Steward reviewed)
+
+A standing region can be **grown**: parts, lots, street extensions and new fluid bodies are **added** as revisions, written as new journal
+layers over the region, undone last-in-first-out, and removed with the region exactly. Every later reader sees the region as grown. The
+plan/0 path answers a revision that adds parts to a realised plan and realises it through `realiseApproved`.
+
+**Noah's decision (2026-10-20, option A):** 6d's RV is **additive only**. A revision never removes or changes a standing part, road, lot
+box or body. Removing and changing standing parts ("full revisions") need the realised provenance to be designed against; they are
+recorded in "6d later: full revisions (RV2)" at the end, not a slice yet. v3 replaces v2's composed-intent patch: with nothing removed or
+changed, a revision is a set of **new stages evaluated alone** and layered over the region, as a later stage of a realise is (§3). Most of
+v2's composition problems disappear; §3.5 lists exactly the cases that remain.
+
+**RV changes what `Regions.remove` undoes** (the group now holds revisions), which Steward's history and give-up read: **Steward's RC check**
+before release (GATES policy 4's exception); the verifier re-runs the undo, removal, crash, survival and fluid items (policy 3).
+
+- **Branch:** `slice/RV`, worktree `../architect-mc-RV` (lanes RV-a, RV-b, RV-c, RV-d, §13). **Spend:** $0, sim and stub only.
+- **Scope:** additive revisions (§2); their stages and write (§3); the head, states, the operation manifest and recovery (§4); keep-clear
+  (§5); undo and removal (§6); added fluid bodies (§7); survival, additive (§8); plan/0 (§9); byte identity (§10); API (§11); product
+  limits (§12); the gate (§14); Steward's three questions (§15).
+- **Not in scope:** removing or changing a standing part, road, zone, lot box or body (RV2); writing under a standing lot (S-RV-5);
+  revisions over unfinished tiles or unbuilt survival targets (§5.4, §8); re-planning against changed land (LC's replan, deferred).
+- **Depends on:** 6a (frozen heights, tile items, region undo), 5b (D5 LIFO, D6 KEEP, the before capture), C36, H and IRR (drain-first),
+  KC, D3 (held set, hold columns, `reach`, end and side joins; RV builds after D3), RS (§8), **RP** (realised provenance, branch
+  `feat/realised-provenance`, building: the writers file `ARWR` v1 per stage, set and tile, and the realised record; RV writes its own tiles'
+  records through it and defines the hashes in §3.4 over it; RP's as-built wins where it differs).
+
+### Binding answers carried over
+
+- **5b D5, D6, D7:** undo is LIFO; a player's edit is kept and reported; covered cells refuse `COVERED`.
+- **5b's before capture** (`SiteDeltas.java` :1013-1020): the `before` is the world at the write (state, block entity, PT record).
+- **6a D3:** surface-relative ops resolve against the frozen heights; columns never touched are frozen at the revision's first touch.
+- **6a D7, invariant (iii):** a region never puts CELL over BOX.
+- **Journal** (`Journal.java` :32-44, :258-390): cells stack by layer; undo takes entries top-down; a cell under one that stays hands its
+  `before` down; a CELL cell restores only if the world still holds its `after`.
+- **D3, Steward's finding:** `PLACED`, `PARTIAL`, and `FAILED` with cells standing are standing regions; in-flight ones refuse
+  `OVERLAP_BUSY`.
+
+### 0. Facts (main f3f41d43, from code unless marked)
+
+- **Re-plan-and-diff fails on today's programs** (v2 §0, unchanged): parts aggregate lots (`village.mjs` :541-601), the layout is a global
+  search (:101-138), ids are ordinals (:619-623, `compile.mjs` :1071), the seed follows the params (`plan.mjs` :187-191). RV never re-plans.
+- **A later stage is already a layer over the region.** Realise writes each stage's terrain tiles, then path tiles, then roads, then lots
+  (`RegionsImpl.java` :1254-1305). `TileCheck` (:36-56, :750-770) layers a tile over the region's own earlier tile entries (its group in
+  `JournalStore.Meta.group`) and **skips** cells others hold, PT builds, failed conditions and no-ops; it fells worldgen trees an op cuts and
+  holds their leaves.
+- **The write loop doesn't re-check.** `InfraJob` re-captures befores at P1 (:223) but its write loop (:395-420) writes each planned
+  `after` without re-running ownership or conditions.
+- **`evalTile` hashes one stage and set** (`realise.mjs` :478, :814); the artifact keeps one sha per (stage, set, tile). RP adds the
+  writers (`ARWR` v1: each cell's winning op and the ops it overwrote, `encodeWriters`).
+- **Removal:** `Groups` waits for players (up to 10 minutes), refuses `COVERED` under `REFUSE`, and fails when a dimension is unloaded or
+  the journal can't be read (`Groups.java` :755-830). The fluid drain runs only for a whole-group removal (:587, `r.stage == null`).
+- `Sites.remove(lotSiteId)` removes a lot alone (`SitesImpl.java` :214-250); RegionRec keeps it `placed` with a stale site id.
+- `revision` in `kit/schemas/plan.json` is read by nothing; Steward writes none (steward-mc 6d54540). The kit allows 64 stages per IR
+  (`plan.mjs` :31, :421); journal depth is 8 (`SiteJournal.java` :57).
+
+### 1. The rule in one line
+
+**A revision adds; its new stages are evaluated alone on the frozen heights and written as the region's next layers, checked and written in
+the same tick per section; it is published by one manifest-backed step, and undone, whole and last first, by one recoverable operation.**
+
+### 2. The revision
+
+#### 2.1 Ids and positions
+
+- `rid`: monotonic per region, never reused. Files under `rev/<rid>/`; part ids `rv<rid>_...`; stages `rv<rid>:<stage>`.
+- `position`: the place in the head chain (0 is the realised plan). After an undo to `k`, the next accepted revision takes position `k + 1`
+  with a new `rid`.
+
+#### 2.2 What a revision may add
+
+| Kind | How | Notes |
+|---|---|---|
+| Parts (forms, relief, terrace, carve, scatter, stamps) | new parts `rv<rid>_*` in the revision's stages | may write over the region's own **terrain-set** cells (as a later stage does); never over its path-set cells, roads, lot boxes plus 1, or bodies' hard and watch cells (§5.2) |
+| Lots | new `ir.lots` entries, their pads in an added part | standing lot boxes never change |
+| Refills | `lots.refill: [lotId]`: a lot in state `pad` or `removed` gets a building again | no tile; its old state is kept for undo (§4.6) |
+| Street extensions and lanes | GR's new road items, verges and lanes | the standing road is never rewritten; joined end to end (GR §4) |
+| New fluid bodies | ponds, fountains, courses in the revision's fluids stage | standing bodies are never changed (§7) |
+| Graph | new nodes and edges; a standing node may gain edges | nothing standing removed or moved |
+
+A revision that names a standing part, road, lot box or body for removal or change is refused at plan time (`M29:revision`, `NOT_ALLOWED
+{why: not_additive}`).
+
+#### 2.3 The revision IR and the effective IR
+
+- **The revision IR** (`rev/<rid>/ir.json`) is a valid region IR holding **only what the revision adds**: its parts in its own stages, its
+  lots, roads and graph additions, and `revision {rid, position, base, parent: {rid, irSha}, lots: {add, refill}, roads: {add}, graph:
+  {nodes, edges}, seed}`. Its claim, roles, anchors and budget rules are the base IR's. The kit evaluates it alone; the 64-stage limit
+  applies to it alone (a revision adds 1-4 stages).
+- **The effective IR** (`effective/<rid>.json`, written once before its revision is accepted, never rewritten; for the realised plan,
+  `ir.json`) is the base IR merged with every accepted revision's additions in position
+  order: parts, lots, roads, graph. It is data for readers (§4.5) and is never evaluated as one IR.
+  **`region.json` is authoritative:** readers resolve the effective IR through its head (`effective/<head rid>.json`), so a snapshot
+  for a revision that was never accepted is never read, whatever the crash order.
+- `seed`: `fnv64(base seed, rid)`, keyed by part id.
+
+#### 2.4 Who writes it
+
+- `Regions.planRevision(regionId, RevisionRequest)`, program `revise` (`kit/regions/revise.mjs`, bundled, deterministic, `catalogue =
+  false`): `params.parts: [{id, call}]` (region primitives), `params.refill: [lotId]`; GR adds `params.grow`.
+- `Regions.checkPlan` of a plan with `revision.parentArtifact` (§9).
+- The standing program never re-runs.
+
+#### 2.5 The kit side (`kit/lib/region/revise.mjs`, RV-a)
+
+`reviseIR(effectiveIR, request, ctx)` builds the revision IR against `ctx.standing` (§5.3), then runs `check` over a virtual world of the
+standing region (from the effective IR on the frozen heights) **plus** the revision, with every M rule and **`M29:revision`** (error): a
+non-additive edit; an added part reaching a standing path-set cell, road cell, lot box plus 1, body hard or watch cell, held column, or a
+beside region's `reach` or hold column. Broken variants caught: `_unsafe.removePart`, `_unsafe.underLot`, `_unsafe.ignoreHeld`,
+`_unsafe.overRoad`, `_unsafe.overPath`.
+
+### 3. Writing a revision
+
+#### 3.1 Stages
+
+The revision's stages run after every stage of the region, in the revision IR's order: terrain tiles, path tiles, roads, lots, fluids, as
+a realise orders them. Each tile is `evalTile(revisionIR, key, window, {stage: 'rv<rid>:<s>', set})` on the frozen heights, **alone**:
+standing parts are never re-evaluated.
+
+#### 3.2 Per cell
+
+For each cell the revision's tile emits, at the write (§3.3):
+- **The region's own cell below** (any tile, revision or road entry of its group, `JournalStore.Meta.group`): a terrain-set cell is layered
+  over (as a later stage); a path-set, road or lot cell refuses (§5.2; the kit already kept off, so this is the backstop).
+- **Held above or by others** (a lot site or its deltas, another site, another owner, a beside region's `reach` or hold column, a PT build):
+  refuse the revision, `COVERED` or `OVERLAP` naming the holder (§5.1). **Never skipped.**
+- **The owner's C17 area:** `PROTECTED`.
+- **Condition:** the op's condition against the live world; a failed condition leaves the cell unwritten (as a stage would), recorded
+  `COND`.
+- **No-op:** the world already holds it; unwritten, recorded `NOOP`.
+- **A player's or the world's change under a region cell** doesn't matter to an additive write: the revision's `before` is whatever stands
+  (§3.3); undo restores it.
+- **Felling:** an added op that cuts a worldgen tree fells it as `TileCheck` does (C31's limits); the felled and held cells are the
+  revision's own entry cells, recorded as extras with their cause (§3.4).
+
+#### 3.3 The write: check and write in the same tick
+
+- One CELL entry per (revision, tile, set), kind `architect:terrain` or `architect:path`, meta `{rid, region, tile, set}`, its own cell
+  site `c<N>` in the region's group (`Meta.group`), stage `rv<rid>:<s>`, on a new layer.
+- **Revalidation (new, explicit):** for revision tiles, the tile path's write loop is changed so that each section's cells are **checked
+  (ownership in the journal index, PT build, protection, condition) and written in the same server tick**. A cell that fails at the write is
+  not written and is removed from the PLACING entry before it goes `ACTIVE` (code `RACED` in the realised record). If a cell fails for a
+  holder that refuses (§3.2: covered, held, protected), the revision stops: its tiles written so far stand, the revision ends `PARTIAL`
+  with the reason, and `undoRevision` takes it away. Realise's plain tiles keep today's loop (byte identity).
+- **`before`** is the world read in that tick: the block state, its block entity and its PT record. StillOurs never supplies a before.
+- **Revision roads too:** an extension road (GR) is a 4e road item written by `InfraJob` (`InfraPlace.java` :184), whose write loop
+  doesn't re-check either; revision road jobs get the same same-tick check and write (holder, PT build, protection), with the same
+  outcomes (a refusing holder ends the revision `PARTIAL`; a player's block `RACED`).
+- **Depth:** a cell whose stack would exceed 8 refuses before any write of the revision (`LAYER_DEPTH`, columns listed), from the check;
+  a cell that crosses the bound only by a race is `RACED`.
+
+#### 3.4 The realised record and the hashes
+
+Every revision tile writes RP's realised record for its (stage, set, tile): the writers (`ARWR`), the code per emitted cell (`WRITTEN`,
+`NOOP`, `COND`, `CLIP`, `RACED`), the extras with their cause (felled log, held leaf, with the op that cut them), and the entry's layer.
+Two hashes, never compared with each other:
+- **`tileSha(stage, set, key)`**: `evalTile`'s sha for that stage and set (the artifact's per-tile sha). Compared only with the same
+  (stage, set, key) sha: the revision artifact's tiles at `realiseApproved` (§9.4), and the realised record's own at resume.
+- **`historySha(key)`**: sha256 of the canonical list, in layer order, of `[layer, stage, set, tileSha, entry status]` for every entry of
+  the region's group at tile `key` (tiles, revisions, roads). Recorded for each dirty key in the candidate when it is planned, and compared
+  with the region's current `historySha(key)` at accept: a difference means the region's history at that tile moved since the plan
+  (another revision, an undo, a lot removed): `PLAN_STALE` / `ARTIFACT_STALE {why: history}`.
+- Like is compared with like: a stage-and-set sha with its own stage and set; a history with a history.
+
+#### 3.5 What remains of v2's composition questions (and the answer for each)
+
+| Case | v1 additive answer |
+|---|---|
+| An added part over a cell a standing part **skipped** because another site held it | that site still holds it: refuse (`COVERED`/`OVERLAP`); if it has gone, the added write lands as any write |
+| An added part over a cell a standing part skipped by **condition** or as a **no-op** | the region holds nothing there (or held it as a no-op): the added op's own condition decides |
+| An added part over a standing part's **written** terrain cell | layered over (a later stage); undo restores the standing cell |
+| An added part over a standing **extra** (a felled log's air, a held leaf) | the region's cell: layered over; undo restores the extra's state |
+| An added part over a **path-set** cell, road cell or lot box plus 1 | refused (plan and write) |
+| Two added parts on one cell | the later op in the revision IR's order wins (`evalTile`'s own order, as in any IR) |
+| A standing part removed or changed, a skipped winner hiding a removed writer, extras of a removed part | not possible in v1 (RV2) |
+
+#### 3.6 Lots and roads
+
+Added lots and roads queue in the revision's stages as a realise's (roads after the stage's tiles, lots after roads), with item keys
+`rv<rid>:road:<id>`, `rv<rid>:lot:<id>`. Refills (§4.6) queue a lot item only.
+
+### 4. The head, the manifest and recovery
+
+#### 4.1 States
+
+| State | Meaning | Head? |
+|---|---|---|
+| `CANDIDATE` | planned, not realised; any number may exist on one parent | no |
+| `ACCEPTED` | published as the head; its manifest says what to install | yes |
+| `PLACING`, `PLACED`, `PARTIAL`, `FAILED` | as a region's | yes |
+| `UNDOING` | inside an undo operation | yes, until it ends |
+| `UNDONE` | taken away | no |
+| `STALE` | a candidate whose parent is no longer the head | no |
+
+- **The head** is the accepted revision with the highest position (or the realised plan). The effective IR is the head's. Planning never
+  moves it.
+- **Busy** (`RegionView.busy`: `revising <rid>` or `undoing <opId>`): other revisions, `undoRevision` with a **different** target, D3 beside
+  plans and realises and C38 offers refuse `OVERLAP_BUSY`; the region reads `PLACING` while revising. `Regions.remove` still cancels and
+  removes (today's path for a placing region). **The same-operation exception:** `undoRevision` with the same target as the running
+  undo returns that operation's future (it never starts a second one).
+
+#### 4.2 Competing candidates
+
+Realising a candidate accepts it by compare-and-set on the head (parent equals head) and on `historySha` of its dirty keys (§3.4), under the
+region's lock; the other candidates on that parent go `STALE`, and their realise refuses `PLAN_STALE` / `ARTIFACT_STALE {why:
+parent_moved}`, nothing written.
+
+#### 4.3 Realise: the manifest, then publication
+
+1. **Files:** `rev/<rid>/ir.json`.
+2. **Manifest:** `rev/<rid>/op.json`: `{op: "realise", rid, items: [every item key the revision installs, in order: tiles
+   `rv<rid>:<s>:<set>:<key>`, roads, lots, the fluids stage], state: "prepared"}` (fsync, rename).
+3. **Accept** (the publication point): under the lock, the CAS (§4.2); `effective/<rid>.json` (fsync, rename; head-addressed, so writing
+   it publishes nothing); then `region.json` with the revision `ACCEPTED`, the new head, `busy: revising` and the manifest's path (one
+   atomic rename). **That rename is the only publication.**
+4. **Install:** the revision's StageRecs on the region's group and its items on the region's batch, by key, then the manifest's `state:
+   "installed"`.
+5. **Write:** tiles (§3.3), roads, lots, fluids, as a realise.
+6. **End:** the revision `PLACED`, `PARTIAL` or `FAILED`; `busy` cleared; the manifest `state: "done"`.
+
+**Recovery (idempotent, at world start and on any resume):** for a region whose `busy` names a realise manifest:
+- `region.json` decides: if its head names a revision whose `effective/<rid>.json` is missing (it can't be, by the order, but a lost file
+  is checked), the snapshot is rebuilt from the base and the accepted revisions before any reader runs; a snapshot whose rid isn't
+  accepted in `region.json` (a crash between writing it and the rename) is an orphan, never read, deleted with its candidate's sweep;
+- every manifest item key is looked up: an item already on the batch is left; one already placed (a site, cell site or road whose member
+  `itemKey` is that key) is skipped; one in neither is installed. So step 4 can be repeated any number of times;
+- then the batch resumes (6a's resume), and step 6 runs when every item is done;
+- a manifest with no accepted revision in `region.json` (a crash before step 3) is a candidate: left, or swept after 7 days.
+
+#### 4.4 `undoRevision`: preflight, then one operation
+
+```java
+default CompletableFuture<RemoveResult> undoRevision(String regionId, int toPosition, String actor)
+```
+
+1. **Preflight** over the whole suffix (positions `toPosition + 1` .. head), under the lock, before any write; any failure refuses with
+   every reason found and nothing written:
+   - busy with another operation: `OVERLAP_BUSY`; `toPosition` not below the head: `NOT_ALLOWED`;
+   - **dependencies** (§6.4): a standing beside region targeting a node, road or port the suffix added, or with `reach` or hold cells on
+     suffix cells: `NOT_ALLOWED {why: joined, region}`;
+   - survival (§8) and fluids (§7) barriers;
+   - **`Groups`' own checks, dry:** the suffix's members not placing, no player in a member's box (the scan `Groups` runs, :772-790),
+     and **`Sites.removalBlockers`** for every suffix site (`Groups.java` :847: filled containers, dropped items, the owner's tagged
+     entities, pets). Either refuses here (`OCCUPIED`, or `NOT_ALLOWED {why: blockers, site}` with `Sites.blockersMessage`), before
+     anything drains. A blocker that appears after the commit point is waited on or reported by `Groups` as today, and the operation
+     stays `UNDOING` (never abandoned).
+   - Covered sites are not a refusal: the removal runs with `Covered.KEEP`, so a later site over a suffix cell or lot gets the `before`
+     handed down (§6.2).
+2. **Manifest:** `rev/op-<opId>.json` `{op: "undo", toPosition, rids, sites: [the suffix's members in removal order], phase: "drain"}`;
+   then `region.json` with each suffix revision `UNDOING` and `busy: undoing <opId>` (one save).
+3. **Drain** the suffix's bodies (§7); the manifest's `phase: "remove"`.
+4. **Remove:** one group-stage removal of the manifest's sites, top position first, `Covered.KEEP` (unchanged `Groups` code, its persisted
+   cursor). Its own waits apply (a player who walks in after the preflight is waited for, up to 10 minutes, as today).
+5. **Finish**, only when the group-stage removal itself **ends `Removed(true)`** (after `Groups`' R4 writes and every credit and refund,
+   `Groups.java` :617-626), recorded first as the manifest's `phase: "removed"`: each revision `UNDONE`, the head at `toPosition` (the
+   effective IR is the older snapshot, already on disk), artifacts tombstoned (§9.5), `busy` cleared, then the manifest `phase: "done"`
+   and deleted.
+
+**After the commit point (step 2) the operation is never abandoned and never refused.** If step 4 ends `false` (a player stayed 10
+minutes, an unloaded dimension, an unreadable journal), the operation stays `UNDOING` with its reason in `RegionView`; calling
+`undoRevision` with the same target resumes it (the same-operation exception), and a world start resumes it.
+
+**Recovery (idempotent):** a manifest in `drain` resumes the drain (per body, §7). In `remove`, **journal `UNDONE` is never taken as
+completion:** WorldJournal's R2 commit marks entries `UNDONE` (`WorldJournal.java` :695) before `Groups` moves records pending and
+writes R4 (`Groups.java` :612-640). So: a persisted `Groups` removal for the suffix resumes (its R3 "after a load" path and R4 cursor);
+with none running, the suffix is complete only if no suffix site has a record, a pending record or a pending infra record
+(`Sites.pendingRecord`, `Infras.pending`) and every credit key is spent; otherwise a removal is started for what remains (a site
+whose entries are already `UNDONE` but still pending goes straight to R4, as `Groups` does after a load). In `removed`, step 5 runs.
+In `done`, the file is deleted.
+
+#### 4.5 The effective IR: every reader
+
+From RV on every reader reads `effective.json`, and item 12 asserts each: `RegionsImpl.view`, `get`, `list`; the beside data and
+`besidePorts`; D3's footprint, bodies, held set, `reach`, `architect_mc:land`; plan/0's `standing` and `regions` inputs and C38's
+`wall.around {feature: {region}}`; `Drift.checkStage`; previews; `architect_mc:fluids`; C36's pins; and, when they land, 7a's link pass and
+`nav.json` (named for `docs/7a`).
+
+#### 4.6 Lots: removed alone, and refills
+
+- `Sites.remove` of a region's lot site marks the lot `removed` (old site id, `removedAt`) in RegionRec and `RegionView.lots`. Its pad stays.
+- **A refill** (`lots.refill`) gives a lot in state `removed` or `pad` a building: a revision with no tile, one lot item in its lot stage,
+  the new site in the region's group. Its record keeps the lot's previous state (`{state, siteId?, removedAt?}`); undo removes the new site
+  and restores that state exactly.
+- `Sites.place` into the box by hand is not a refill (the site isn't the region's).
+- **Irrigated lots (v1: refused).** Removing an irrigated lot drains its sources and sets `lotRemoved` for good (`RegionFluids.java`
+  :1440-1455), and a refill queues a lot item only. So a refill of a lot whose irrigation body is `lotRemoved` refuses `NOT_ALLOWED {why:
+  irrigated}`; an unirrigated refill of the same box is S-RV-14's question. Reactivating its sources (and rolling them back on undo) is a
+  later member.
+
+### 5. Keep-clear
+
+#### 5.1 Held cells: refuse, never skip
+
+At plan time (the kit, on `ctx.standing`) and at the write (§3.3): a lot site or its deltas above a target cell `COVERED`; another site,
+another owner, a beside region's `reach` or hold column, a PT build or a Steward addition `OVERLAP` (`PLAYER_BUILD` evidence for a build);
+the owner's C17 area `PROTECTED`. Through `realiseApproved` each answers `ARTIFACT_STALE`.
+
+#### 5.2 What an added part never writes
+
+The region's path-set cells and road cells (walk surfaces and 4e roads), every lot box plus 1, and every body's hard and watch cells (KC:
+the revision is the later writer). Refused `OVERLAP {kind: path | road | body}` / `COVERED`.
+
+#### 5.3 `ctx.standing`
+
+Sent by the mod and recorded in the revision's sidecar plan directory (offline replay): the effective IR's footprint (lots plus 1, roads
+plus 1, paths, path-set parts), bodies' hard and watch sets, `held` (D3 §5.1's reader over the claim), beside regions' `reach` and hold
+columns, the owner's C17 areas, and the region's unfinished tiles.
+
+#### 5.4 Unfinished work
+
+A revision whose tiles meet a tile of the region with no realised record and no written entry (never written, a failed tile item, a stage
+not reached) refuses `NOT_ALLOWED {why: unfinished, tiles}`. A `PARTIAL` region whose failures are lots only can be revised.
+
+### 6. Undo and removal
+
+#### 6.1 Undo
+
+Whole revisions, top first (§4.4); a middle revision is never undone alone (5b D5); its own lots and refills go with it.
+
+#### 6.2 Why it is exact, and its stated exceptions
+
+A revision's cells sit on new layers, each `before` the world at its write. Undone while on top, each restores its `before`. Under a later
+site, the `before` is handed down (`Covered.KEEP`) and restored when that site goes. `Regions.remove` takes everything last placed first, so
+every cell ends at the land before the region. **Exceptions:** a cell a player changed is kept by policy, with its PT record; and an undo
+blocked by a dependency, survival, fluids or a player present refuses at preflight.
+
+#### 6.3 Removal, every order (the gate's rows)
+
+| Case | Bar (§14) |
+|---|---|
+| The head undone | the world just before it, cell for cell (the oracle, §14) |
+| Undo to 0 after 5 revisions, one operation | the world before revision 1 |
+| Undo, then a new revision (a new `rid`, the freed position) | its files apart; its undo exact |
+| `Regions.remove` with revisions standing | E-flat 0 over the claim against the world before the region |
+| A revision's lot with Steward's `applyDelta`, then undo | as the first row |
+| A Steward site over a revision cell; undo; then the site removed (and the reverse order) | the world before the revision after both |
+| A player's block on a revision cell | kept, reported, PT intact |
+| Weathered copper under a revision (CU) | the exact weathered state after undo |
+| The region removed while a revision is `PLACING` | the batch cancelled, the group removed; E-flat 0; save, leave, reopen between |
+| A town revision with a beside district, each removal order | D3 §4.2's bars |
+| A refill undone | the lot back to `removed` with its old site id; its new site gone |
+
+#### 6.4 Dependencies
+
+`dependents` per region: each standing beside region's targets in this region (end-join nodes and ports, side-join roads) and the columns
+its `reach` and hold cells cover, refreshed when a beside region is realised or removed. Preflight refuses an undo whose suffix added any of
+them. `Regions.remove` of the town is unaffected (D3's `dangling`).
+
+### 7. Added fluid bodies
+
+- A revision may add bodies (pond, fountain, course), written in its fluids stage with H's settle and census, recorded in `fluids.json`
+  with `rid`. Standing bodies are never changed (`M29:revision`); an added body keeps clear of every standing body (KC).
+- **Preflight:** an added body that feeds or is fed by a body outside the suffix (HY's closure) refuses `NOT_ALLOWED {why: upstream,
+  body}`.
+- **Drain (§4.4 step 3):** exactly the suffix's bodies, by H's drain-first protocol scoped to them (census and escaped cells, sources),
+  each body's `drained: <opId>` saved in `fluids.json`; a restart resumes the drain.
+- **Holder-aware (new):** H's drain (`RegionFluids.drain`, :1139-1165) writes any fluid or ice cell of a body back to its `before`
+  without asking the journal. A suffix drain first reads each body cell's stack: a cell held above the revision's entry by any entry
+  outside the suffix (a later Steward site's waterlogged stair over an added pond source, a player's build) is **not drained**; it is
+  listed (`kept`), and the journal's hand-down at step 4 gives that holder the cell's `before`. The body's other cells drain as before.
+  That is the one exception to §15.3's "Steward's sites interleave freely": a Steward block standing in an added body's cell keeps its
+  water when the body is undone.
+- **The operation is never abandoned after its commit point** (§4.4), so drained bodies are never left behind by a refusal: the removal
+  completes, or waits and resumes. Only `Regions.remove` of the whole region (which drains everything anyway) can supersede it.
+- **If a superseding removal fails** (`Regions.remove` ends `false`) and the region still stands with drained suffix bodies: their sources
+  are rewritten **only where containment is intact** (every cell of the body's shell and lining still holds its journal `after`); a body
+  whose containment is broken stays drained and is reported (`architect_mc:fluids` row, `drained: true, why: containment`).
+- `Groups.java` :587's gate gains the suffix case.
+
+### 8. Survival (RS), additive
+
+- A revision builds as RS builds: land free, its built blocks construction targets from the stockpile, RS's waits, the revision's part ids.
+- **Refused** (plan and write): a target cell over a paid built block of the region, or over an RS target not yet built (`NOT_ALLOWED
+  {why: survival_paid | survival_unfinished}`). Additive revisions on land or on the region's free terrain cells are allowed.
+- **`undoRevision`:** the suffix's unbuilt targets are cancelled first (RS's cancellation, reservations released), then its built paid
+  blocks are refunded once per key (`rev:<region>:<rid>:<entry>`), then the land comes back free. A partly built revision with outstanding
+  reservations undoes the same way (gate item 15).
+- **Whole-region removal:** RS's rule; each paid block has one owner (additive), so one refund.
+
+### 9. The plan/0 path
+
+#### 9.1 A revision of a realised plan
+
+A plan with `revision.parentArtifact` naming the artifact of a standing region (its own or an accepted revision's) is checked as a
+candidate: the region found through C36 (`NO_FEATURE {why: parent}` if none, or another owner's); a parent that isn't the head's answers
+`NEEDS_REPAIR parent_moved` with the head's artifact; `revision.n` is Steward's own counter, recorded only. A plan without `parentArtifact`
+is today's, byte for byte.
+
+#### 9.2 Per-part answers
+
+Matched against the parent artifact's own `plan` member, only against parts the parent **built** (a part in `dropped`, or answered
+`unsupported` or `blocked`, is checked as added):
+
+| Part in the revision plan | Answer | Catalogue |
+|---|---|---|
+| same id, same canonical JSON as the parent's plan | `fits`, `standing: true`, cost 0 | `revision.keep` (supported) |
+| a new id, or one the parent didn't build | checked against the standing region (§5.3): every usual answer | `revision.add` (supported) |
+| same zone, a lot spec equal to the parent's but for a new optional member `refill: true` (and its entry), the lot `removed` or `pad` | the lot answers `fits` with `refill: true`; the zone `fits standing` | `revision.refill` (supported) |
+| same id, a zone whose `program.lots` only gains lots | GR's answer per added lot (`unsupported revision.grow` until GR) | `revision.grow` (reserved, until GR) |
+| an id gone from the plan, or the same id changed (an entry-only change without `refill: true` included) | `unsupported {block: revision.change}` (RV2) | `revision.change` (reserved, until RV2) |
+
+No `removed` class in v1. `refill` is an additive optional member of a lot spec in plan/0 (allowed within plan/0); it means "build
+this lot again" and is the only way a revision plan asks for a refill, so an entry change alone is never read as one.
+
+#### 9.3 The revision artifact
+
+`region.revisionOf {region, parentRid, parentArtifact, parentIrSha}`, `dirty`, `historySha` per dirty key; `tiles` are the revision IR's own
+(stage, set, key) shas; `inputs.surveySha` (the dirty windows), `inputs.held`; `$.lots[]` the added and refilled lots. The cost counts the
+revision.
+
+#### 9.4 `realiseApproved` of a revision artifact
+
+Today's checks, then the head and `historySha` CAS (§4.2), the held set over the dirty tiles, `terrainDiff` over the dirty tiles only, then
+§4.3 under the call's opKey; one stale retry under a second key works as for a plan.
+
+#### 9.5 Pins and tombstones (C36)
+
+A revision's artifact is kept while it is at or below the head; undo tombstones undone revisions' (unless pinned); `Regions.remove`
+tombstones all.
+
+### 10. Byte identity
+
+Unrevised regions, plans without `parentArtifact` and programs without `params.grow` give today's IRs, tiles, answers and journal entries;
+realise's plain tiles keep today's write loop (§3.3's revalidation is for revision tiles only). Pinned: `scenarios/goldens/*`, plan fixtures
+`valid/*`, the 59 asks, tile goldens S1, S2, S3, S7 and mega_bench, D3's pinned set. Catalogue 12: `revision.keep`, `revision.add`, `revision.refill`
+(supported), `revision.grow`, `revision.change` (reserved). `RegionView` gains trailing `int position`, `@Nullable String busy`,
+`List<RevisionView> revisions`. KIT_VERSION moves.
+
+### 11. API (binary compatible)
+
+```java
+// Regions (defaults throw; feature "regionRevisions")
+default CompletableFuture<RegionPlan> planRevision(String regionId, RevisionRequest r)
+default CompletableFuture<RemoveResult> undoRevision(String regionId, int toPosition, String actor)
+record RevisionRequest(String program, com.google.gson.JsonObject params, @Nullable String opKey, @Nullable String actor)
+record RevisionView(int rid, int position, int parentRid, String planId, String irSha, String state, long createdAt,
+    List<String> stages, List<String> lotsAdded, List<String> lotsRefilled, long cells, @Nullable String artifact,
+    boolean survivalAllowed, @Nullable String waiting)
+```
+
+`Regions.realise` of a revision plan realises it; `realiseByKey` finds it; `RegionPlan` gains trailing `revisionOf`. No new Reason, no new
+event. Refusals: `COVERED`, `OVERLAP`, `OVERLAP_BUSY`, `OCCUPIED`, `PROTECTED`, `LAYER_DEPTH`, `REGION_LIMIT`, `NOT_ALLOWED`, `PLAN_STALE`,
+`ARTIFACT_STALE`. Features `regionRevisions`, `planRevisions`; sidecar `region.revise`, `plan.revision`. api-compat clean; apijars.
+
+### 12. Product limits (stated)
+
+No fold in 6d (S-RV-2):
+- **Depth 8 per cell:** a cell can be written by at most 7 revisions over a region tile (6 in a D3 contact column).
+  Additive growth mostly writes new land, so this binds only where revisions keep reshaping one spot.
+- **64 accepted revisions** per region (undone ones don't count; `rid` to 9,999).
+- **64 stages per revision IR** (each revision adds 1-4); no cumulative stage limit, since the effective IR is never evaluated whole.
+- Past a limit, a settlement can still be removed whole and planned again.
+
+### 13. Size, split and the shared interface
+
+About **7.5-8.5 days** of work, **4.5 elapsed**; the interface freezes at the end of RV-b's day 2:
+- **RV-a, kit (2 days):** `revise.mjs`, `revise` program, the effective-IR merge, `M29:revision` and broken variants, plan/0's revision
+  mode and artifact (§9.1-9.3), `historySha`'s definition; items 1, 2, 17.
+- **RV-b, the mod foundation (2.5-3 days, on RP):** revision tiles through RP's realised record; the same-tick check-and-write (§3.3); the
+  revision record, states, head CAS, manifest and recovery (§4.1-4.3); `planRevision`; crash points; items 3, 6, 9-11.
+- **RV-c, undo and fluids (1.5-2 days):** §4.4's preflight, manifest and operation, dependencies, the suffix drain and its recovery;
+  items 7, 8, 13, 19.
+- **RV-d, readers and paths (1.5 days):** `effective.json` in every reader, `realiseApproved`'s branch, lots and refills, survival, API
+  and api-compat; items 4, 5, 12, 14-16.
+- **Shared:** 18, 20, then Steward's RC.
+- **Interface (end of RV-b day 2):** the revision IR member and naming; `effective.json`; the manifest formats; the states and busy; the
+  hashes; `ctx.standing`; the artifact members; the driver steps (`rv-unit`, `rv-ingame`, `rv-natural`).
+
+### 14. Gate (slice tier, $0)
+
+**The oracle (independent of the revision code).** For every in-game revision item, the driver:
+1. snapshots the claim plus 8 (every cell, block entities included) and dumps the journal's holders over it before the revision;
+2. **enumerates the expected transitions itself**: it evaluates the revision IR's tiles with the kit's **virtual world** (`vworld.mjs`, the
+   checker's path) seeded from the snapshot, applies each op's condition against the snapshot, marks the cells the dump says are held,
+   protected, path-set, road or lot (expected refusal or no write), and computes felling from the snapshot's logs by C31's rules;
+   and **evaluates stage by stage against the evolving expected world** (each stage's expected writes applied before the next stage's
+   conditions are tested), not against the original snapshot;
+3. for writers the virtual world only approximates (`vworld.mjs` :277 approximates roads and puts lots as boxes), it uses named
+   independent references:
+   - **roads:** the 4e road planner's own dry plan (`Sites.checkRoad` on the expected world before the road's stage), whose cell list
+     the road write must equal;
+   - **lots:** the placed blueprint's own placement plan (`Sites.check` for that entry, fit and rotation, on the expected world), its
+     blocks and block-entity NBT from the library entry's version as stored;
+   - **fluids:** a body's planned cells, ice and sources exactly; its settled flow is not predicted: the cells outside the plan must be
+     exactly the census's recorded flow (H's `architect_mc:fluids` row), and nothing else wet;
+4. compares **the whole claim plus 8** after the revision with the expected world: every cell, not only a mask. An omitted, extra or wrong
+   write fails, wherever it is.
+For undo, the expected world is the step-1 snapshot (whole claim plus 8).
+
+**Fixtures:** `rv_town` (a `flat_village` of 6 lots through `checkPlan` then `realiseApproved`, 4 built, 2 pads, lanterns, a farm pond, a
+weathered copper cell on a revision's path, a Steward addition and a PT build); `rv_town_beside` (with D3 districts joined at an end and by a
+side T); `rv_partial_lot`; `rv_partial_tile` (a tile item failed by fault injection); `rv_layers` (two stages where a later stage's op
+skipped by condition over an earlier stage's cell, and a felled tree); plan fixtures `v8x_6d_rv_add`, `v8x_6d_rv_pending`,
+`v8x_6d_rv_change` (`unsupported revision.change`), and the broken variants.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | `reviseIR`: only additions, ids, stages, seed; `M29:revision` per rule; the effective-IR merge; `historySha` on synthetic histories; 300 seeded synthetic additive revisions: deterministic, nothing standing changed, no write on a path-set, road, lot box plus 1 or held column; the broken variants caught |
+| 2 | Byte identity | §10's pinned set; plain tiles' write loop unchanged (journal entries byte-identical) |
+| 3 | Add (oracle) | on `rv_town` and `rv_layers`: a pond beside a road and a relief form over standing terrain and over the skipped and felled cells: the whole-world oracle; KC 0 cells in the farm pond's sets |
+| 4 | plan/0 | `v8x_6d_rv_add` through `checkPlan` then `realiseApproved` (oracle); `v8x_6d_rv_pending` built as added; `v8x_6d_rv_change` answers `unsupported revision.change` |
+| 5 | Steward's shapes | `v8x_6d_rv_add` written as Steward's plan writer would (the artifact's plan plus `revision {n, parentArtifact}`) with one stale retry under a second key across a restart; `planRevision` with an opKey, `realise`, `realiseByKey` after a restart |
+| 6 | Refusals (nothing written) | an undo whose suffix lot holds a filled chest refused `blockers` before any drain; under a built lot `COVERED`; the Steward addition, the PT build, a road, a path `OVERLAP`; a C17 area `PROTECTED`; `rv_partial_tile`'s failed tile `unfinished` (one away accepted); a non-additive request `not_additive`; each hash-unchanged |
+| 7 | Undo, every order (verifier re-runs) | §6.3's rows with the oracle |
+| 8 | Remove (verifier re-runs) | `Regions.remove` with 3 revisions standing: E-flat 0; every artifact tombstoned |
+| 9 | Depth, exact | a cell at depth 7 written by one more revision (8) succeeds; the next refuses `LAYER_DEPTH`, nothing written; the same in a D3 contact column |
+| 10 | Crash (verifier re-runs) | kills after §4.3 steps 2, 3 (between `effective/<rid>.json` and `region.json`: readers still see the old head, the snapshot an orphan), 4 (half the items installed), between tiles, between tiles and lots, and after §4.4 steps 2, 3, **right after the R2 journal commit (`K6`) and midway through R4**, and after 4 before 5: each restart reaches a state the manifest names, no item installed twice (keys), then `Regions.remove` E-flat 0 |
+| 11 | Heads | two candidates on one parent: the second `STALE`; undo then a new revision (new `rid`); a candidate never moves the head; a candidate whose dirty tile's history moved (`historySha`) refused |
+| 12 | The effective IR | one assertion per §4.5 reader |
+| 13 | D3 and dependencies | `rv_town_beside`: a revision beside both joins never writes a join or hold column; D3's orders with it standing and after undo; an undo whose suffix holds a side-joined road refuses `joined`, nothing written |
+| 14 | Lots and refills | a lot removed alone reads `removed`; refilled (by `planRevision` and by plan/0 with `refill: true`; an entry-only change answers `unsupported revision.change`); an irrigated lot's refill refused `irrigated`; the refill undone (state and old site id back); a pad lot refilled; `Regions.remove` takes refilled sites |
+| 15 | Survival (if RS merged; verifier re-runs) | an additive revision built from the stockpile, then a second left half built with reservations outstanding and undone: reservations released, built blocks refunded once; refusals over a paid lamp and an unbuilt target; whole removal conserves (items in = items out) |
+| 16 | States and busy | `rv_partial_lot` revised; a busy region refuses another revision, a different-target undo, a D3 beside plan and a C38 offer `OVERLAP_BUSY`; a same-target undo returns the running operation; `Regions.remove` while revising cancels and removes |
+| 17 | Determinism | revision IR sha over 3 plans; tile shas with 1 and 4 workers; macOS and Linux |
+| 18 | Unchanged, API, spend | d-unit, d-ingame, d2-ingame, d3-ingame, kc-ingame, k1a-ingame, fl-ingame, h-ingame, irr-ingame, pt-ingame item 14, rs-ingame, rp's own; api-compat; apijars; $0.00 |
+| 19 | Fluids (verifier re-runs) | a pond and a fountain added then undone: drained first, 0 fluid cells left, the base farm pond unchanged; a Steward site with a waterlogged stair over one of the pond's source cells: that cell kept (water and stair), the rest drained, the stair's cell handed down; a kill during the drain; a player held in a member's box after the drain (the removal waits, then completes); `Regions.remove` failing after a drain (fault injection): sources rewritten only where containment is intact, the rest reported |
+| 20 | Write-time revalidation (tiles and roads) | between a revision tile's check and its write, the driver places a Steward site on one target cell and a player block on another (the same tick boundary, DevBridge): the site's cell refuses (the revision ends `PARTIAL`, its undo exact); the player's cell `RACED`, unwritten; the same for a GR extension road's target cells |
+| 21 | Natural round | S3's pinned claim: a V town, a revision adding a terrace form; plan, realise, save, leave, reopen; undo and remove; E-normal 0 unclassified under D2's narrowed classes and VOC's `farfluid` |
+
+**Tier:** slice plus `region/**`, `journal/**`, `site/**`, `api/**`: units and apijars; d-, d2-, d3-, kc-, k1a-, fl-, h-, irr-ingame;
+4d-all; 6a-eflat; `rv-unit`, `rv-ingame`, `rv-natural` (driver `tools/gate6drv.mjs`, chain `6drv`, impact rule "6d RV"). The verifier
+re-runs items 7, 8, 10, 15 and 19. **Steward's RC** follows (S-RV-10).
+
+### 15. Steward's three questions (coordinator, 2026-10-20)
+
+**1. Steward's own street additions in a V town** (its `street#n` road pieces and batch sites, placed outside the region): **GR treats them
+as held cells; it does not migrate them.**
+- *Why:* they aren't in the region's graph or journal group, they may carry Steward's own batch history and undo entries, and migrating
+  them is AD's machinery (journal `Meta.group`, membership, recovery), which belongs to AD's slice and C12, not to growth. D3 already set the
+  rule (S-D3-1: "Steward's own street extensions are held cells to route around").
+- *What GR does:* a street end whose past-end cells Steward's own piece holds is **not extendable** (GR §4.1); GR extends the street's
+  other free end or uses frontage, and never writes a Steward piece's cells or its lots' boxes plus 1.
+- *What Steward should do:* stop laying its own `street#n` pieces on a **region** town's streets once GR ships, and grow through GR. Pieces
+  it already has stay Steward's (undone by Steward's own history). To let GR extend that end instead, undo its own pieces at that end
+  first (once no building stands on them); otherwise leave them, and GR grows elsewhere. A town Steward laid itself (VillageLayout) is AD's
+  case.
+
+**2. Refill on a lot whose building was undone** (the building removed alone, the box empty): **a refill revision** (§4.6). The lot reads
+`removed`; `planRevision(revise, {refill: [lot]})` (or plan/0 with the zone unchanged and the lot's entry given) places a new building
+on the same box, the site joins the region's group, and undoing that revision puts the lot back to `removed`. No tile is written: the pad
+is the region's and still stands. A lot never built (`pad`) refills the same way.
+
+**3. LIFO with Steward's own placements interleaved.** History: revision R1, then a Steward batch site S (a non-region site), then
+revision R2, then undo.
+- **Revisions are LIFO among themselves:** R1 can't be undone while R2 stands; `undoRevision(toPosition = 0)` takes R2 then R1 in one
+  operation.
+- **Steward's own sites interleave freely** (one exception: a Steward block in an added body's cell keeps its water, §7). S never sits under R2 (R2's write would have refused S's cells, §5.1). If S sits on R1's cells,
+  undoing R1 hands R1's `before` down to S's cells (`Covered.KEEP`): S stays standing on unchanged ground, and when S is later removed the
+  land comes back. Nothing refuses because of S.
+- **What refuses:** a beside district joined to something R2 or R1 added (`joined`); a player in a member's box (`OCCUPIED`); survival
+  barriers; an operation already running (`OVERLAP_BUSY`, unless the same target).
+- **The order Steward should use:** its own history order (undo R2, then S, then R1, last first) is always exact. Any other order that keeps
+  revisions LIFO among themselves (R2, R1, then S) is exact too. The only order that can't be done is a revision ahead of a later revision.
+
+### Steward's recorded asks: expected answers
+
+The 59 asks are unchanged (none writes `revision`). Plan v1's Start re-check, stale retry and the waiting-part offer send no
+`parentArtifact`. Life layer stages that add forms, connectors, a zone or bodies inside the claim can be built as revisions; adding lots
+to a standing zone is GR's; changing or removing a built part answers `unsupported revision.change` until RV2.
+
+### Open questions for Steward
+
+- **S-RV-1.** A revision is the region's (one group, one `Regions.remove`); offers stay their own regions. Default: yes.
+- **S-RV-2. Lifetime.** No fold in 6d; §12's limits. Enough for your settlements? Default: yes.
+- **S-RV-3. Stale parents** answer `parent_moved` and are never re-based by Architect. Default: yes.
+- **S-RV-5. Writing under a standing lot** stays deferred. Default: deferred.
+- **S-RV-6. Additive only** (Noah's decision): no removal or change of standing parts, roads, lot boxes or bodies until RV2. Does any
+  near-term flow of yours need one? Default: no.
+- **S-RV-7. Survival:** additive on land; refused over paid or unbuilt targets. Default: yes.
+- **S-RV-8. Inside the claim.** Default: yes.
+- **S-RV-9. Offers as revisions?** Default: no change.
+- **S-RV-10. The RC:** a revision through `checkPlan` and `realiseApproved` on a Steward-built V town, `undoRevision`, the town removed with
+  a revision standing, a refill and its undo, interleaved history (§15.3), and the busy window. Default: yes.
+- **S-RV-11. The base of a revision** is the parent artifact's `plan`. Default: yes.
+- **S-RV-12. Busy towns** (a minutes-long window). Default: yes.
+- **S-RV-14. Irrigated refills.** Refused in v1. Would you rather refill the box without irrigation (the farm rebuilt dry, said so)?
+  Default: refused.
+- **S-RV-13. Your street pieces** (§15.1): held, not migrated; stop laying them on region towns once GR ships. Default: yes.
+
+### Deferred
+
+RV2 (removing and changing standing parts, "6d later" below). The pad delta under standing lots. Folding. Revisions past the claim.
+Survival revisions over paid or unbuilt targets.
+
+## Phase 6d slice GR: growing a standing region (D-S2, `growDistrict`) (FROZEN 2026-10-20, Steward reviewed)
+
+New lots are added to a standing town or district as a revision (RV): first on free frontage along its standing streets, then on a
+street extended from an end that nothing else uses. Standing lots, streets and junctions never move. This is Steward's D-S2 (steward-mc
+`docs/DISTRICTS.md` §7: "Lots added to a standing district region (its street extended), so along districts and outposts can grow"),
+V's "additions to a realised village", and Noah's Q1 for beside districts ("built at its first accepted building, then grown along
+its street"). D3 §11 reserved the feature `growDistrict`, `architect_mc:land.v` 2 and terminal street ends; GR uses all three.
+
+**GR changes what stands in a district's land and what a building's undo takes away**, which Steward's district give-up and history
+read. So Steward's RC check comes before release, shared with RV's if they ship together (S-GR-7).
+
+- **Branch:** `slice/GR`, worktree `../architect-mc-GR` (lanes GR-a and GR-b, §10). **Spend:** $0, sim and stub only.
+- **Scope:** the growth search (§2), frontage (§3), street extension (§4), along districts (§5), ids and the graph (§6), the land v 2
+  (§7), plan/0's `revision.grow` (§8), the API (§9) and the gate (§11).
+- **Not in scope:** turning or branching an extension, growth past the claim (a new district, S-RV-8), growth along FL's ring and
+  spiral ends (§2.4), re-laying standing lots, a second square.
+- **Depends on:** RV (merged first; GR's in-game items need it), D1, D2, D3 (the held set, hold columns, `reach`, `land`), FL (the
+  street flag), KC, T2 (routing, for along districts).
+
+### Binding answers carried over
+
+- **RV, all of it:** a growth is a revision: additive only (RV v3), `rv<rid>_` ids, `rv<rid>:` stages evaluated alone and layered
+  over the region, the same-tick check and write, the manifest and head, LIFO undo with its suffix preflight, the effective IR. In this section `n` is the growth's `rid`. A growth is undone by `undoRevision`, one building at a time.
+- **D3 §11:** a district's street ends stay terminal junctions in its graph; `land.v` moves to 2 when 6d adds grown parts.
+- **D3 S-D3-1:** Steward's own street extensions in a V town are held cells to route around. GR's extensions are Architect's, in the
+  region's graph, so later districts may join them.
+- **S-FL-5:** every street road a region writes carries `architect_mc:street {zone, district?}` and keeps the `street_` stem.
+- **Steward DISTRICTS.md §4:** "a reserved beside district owns its reservation ... and keeps it once built, so its street has room
+  to grow"; `District.growable()` is true for `beside` while its street runs east-west, and Steward never routes a building into a
+  district that can't grow. GR answers which can.
+
+### 0. Facts (main f3f41d43 plus D3 as frozen, from code unless marked)
+
+- **V's street** spans its outer street lots and the square ±4, clamped to the claim margin 2 (`village.mjs` :320-328), width 5 (road 3
+  plus a verge each side), `lotGap` 3 (:23), cut/fill ±3 with steps of 1, no water (:332-340). Its height is the survey at the span's
+  midpoint (:341). Lots alternate sides outward from the square (:251, :269).
+- **One side free.** D3 measured both of its towns: each street run has lots on one side only; along the lot-free side the verge row
+  is held by `path:verges` alone and the row past it holds nothing (D3 §0). So V towns have free frontage on the lot-free side.
+- **Ends.** A street end is a `junction` node `${rid}_end` with one non-external edge (`besidePorts`, `districtsEmit.mjs` :146-170);
+  its past-end cell faces outward. Junction ids are ordinals along the street (`village.mjs` :619-623), so GR never renumbers them: new
+  junctions get new ids (§6).
+- **Districts.** A plain district and an outpost have their own V street (`districtsEmit.mjs` :191, prefix `<d>_`, lots `<d>_<k>`
+  :78). A following district's street is a T2 route along its band's middle, its lots on both sides with one-cell lanes
+  (`followEmit.mjs` :1-4, :142-189); its window is a slice of the traced boundary's spine (:40-50), which the IR doesn't keep.
+- **The join.** A district's join leaves from one of its own street ends (`ends.get(d.id)`); a town street end a D3 district joined
+  stands under D3's hold cells (stack depth 2 in the contact columns). Neither end may be extended (§4.1).
+- **Meta isn't kept.** A region keeps its IR, frozen heights and drift shards (`RegionStore.java` :14-50), not the plan's `meta`
+  (village, districts, route). GR reads the effective IR only.
+
+### 1. The rule in one line
+
+**A growth places each new lot on the cheapest free frontage of the standing streets, then on one straight extension from an end
+nobody uses, inside the claim, around everything that stands, and never moves a standing cell, lot, street or junction.**
+
+### 2. The growth search (`kit/lib/region/grow.mjs`, GR-a)
+
+#### 2.1 The request
+
+`params.grow` on a revision of a `flat_village`, `districts` or plan_v0 region (the region's own program id; RV's `planRevision`):
+
+```json
+"grow": {
+  "lots": [{"id": "smithy", "type": "smithy", "size": [9, 11], "villager": true, "ext": {}}],
+  "district": "quay",
+  "prefer": "frontage",
+  "extend": "auto"
+}
+```
+
+- `lots`: V's `LotSpec` (D1's for a district: a lot list; a count `n` gives `<d>_<k>` ids continuing the district's numbering).
+- `district`: which district of a districts region grows (required there; absent for a town).
+- `prefer`: `frontage` (default: free frontage first, then extension) or `extend` (extension first).
+- `extend`: `auto` (the cheapest extendable end), an end node id, or `none` (frontage only).
+
+#### 2.2 Order and choice
+
+1. **Specs** in V's order (`orderOf`: central, landmark, the rest, edge; then input order). A `central` or `landmark` lot in a growth
+   takes the best frontage slot nearest the square (or the district's shared space), never displacing a standing lot.
+2. **Frontage slots** (§3), cheapest first: nearest the square along the street, then the lot-free side before a gap between lots,
+   then by street id and `u`.
+3. **Then one extension** (§4), if lots remain and `extend` allows.
+4. **A lot that fits nowhere** is listed in `unplaced` with its reason (`NO_ROOM {kind: frontage | street | claim | held | body}`),
+   as V lists them. A growth with no lot placed fails `NO_ROOM` and plans nothing.
+- The search is deterministic over the effective IR, the frozen heights, the held set and the revision seed (RV §2.2).
+
+#### 2.3 Obstacles
+
+Everything RV §5.3 lists, plus: every standing lot box plus its apron (`lotGap` 3 to a new lot), every standing lane, prop, lamp and
+square cell, every beside region's `reach` and hold columns, and a beside district's land (D3's `land.union`) when the town grows.
+A town's growth never takes a district's land; a district's growth never takes town land except its own join's cells (it doesn't write
+them, §4.1).
+
+#### 2.4 Which streets grow
+
+| Region kind | Frontage | Extension |
+|---|---|---|
+| V town (`flat_village`, plan_v0 street zone) | yes | yes |
+| plain district, outpost (their V street) | yes | yes, from the end that isn't the join's |
+| along district (a following street) | yes, both sides | along the boundary (§5) |
+| FL grid (blocks of V streets) | yes | yes, from a block street's outer end |
+| FL ring, spiral, organic | yes, on straight runs of at least 9 | no (`NO_ROOM {kind: layout}`; S-GR-4) |
+
+### 3. Frontage
+
+On a straight street run along axis `a`, centre line `v = c`, side `s` (±1), the street's footprint is `|v - c| <= 2`:
+- **The lot:** its front edge on `v = c + s (2 + 1 + L)`, where `L` is the lane length (V's: the lot's apron row then the lane, at
+  least 1), facing the street. Its box plus 1 misses every obstacle (§2.3) and is at least `lotGap` from every standing lot box.
+- **The lane:** from the lot's entrance to the verge, as V's lanes, ending at the verge row `c + 2s`; it **never writes** a verge or
+  road cell (D3 §3.2's verge contact: the verge cell it meets is held by the street's road or verge only).
+- **The pad:** V's pad ops (`surfaceOps`, `PAD_MAX` 2) on the frozen heights; its batter must not reach a held column or a standing
+  lot box plus 1.
+- **Junction:** a new junction node on the street at the lane's foot (§6).
+- **Lamps:** the town's lamp rule for the new lot's apron (W), skipping spots within 6 of a standing lamp (N-D3-2's rule).
+- Slots are tried every 2 cells along each run, from the square outward.
+
+### 4. Extension
+
+#### 4.1 Which ends can be extended
+
+An end node is extendable when all hold:
+- it is a terminal junction of a street (`architect_mc:street`, or the `street_` stem before FL) with exactly one edge in the region's
+  graph, and that edge is the street's own;
+- no join, route, lane, external edge or D3 junction meets it (not the district's join end; not a town end a district joined);
+- its past-end cell and the 3 cells past it, 5 wide, hold no cell of another entry (no D3 hold cell, no site, no PT build);
+- its past-end cell lies at least 9 cells inside the claim margin along the street's axis (room for one lot).
+
+#### 4.2 The new street
+
+- **Straight**, continuing the street's line from the past-end cell, the street's width (road 3 plus verges) and its look: the same
+  road blocks, verges and W's lanterns (`lanterns: true` when the standing road has it) (N-GR-1).
+- **Length:** the lots it carries, sides alternating as V's `tryStreet` (outward from the old end), plus 4 past the last lot, clamped
+  to the claim margin 2. At most one extension per growth.
+- **Grade:** V's street check per cell (cut/fill ±3, steps of 1, no water) against the frozen heights. The extension's height starts at
+  the end node's y and may step by 1 per 4 cells (V's road rule); a run that can't meet it ends where it fails, and the lots that don't
+  fit are `unplaced` (`NO_ROOM {kind: street}`).
+- **The road:** a new 4e road item `<roadId>_g<n>` (`street_e_g2`), flag `architect_mc:street {zone, district?}`, joined end to end
+  with the standing road at the past-end cell (4e's handover; the standing road is never rewritten).
+- **The verges and lanes** as new parts (§6). The standing `verges` part is unchanged; the new verges start at the past-end cell.
+- **Lots** on both sides of the extension, V's placement on its run.
+
+### 5. Along districts (GR-b)
+
+A following district's street is a route on its boundary line. Its growth:
+- **Frontage:** new lots on both sides of the standing route where free (§3's rule with `FOLLOW_SETBACK` 3 and `FOLLOW_PAD` 6, the
+  district's own lot geometry, `followEmit.mjs` :142-189).
+- **Extension:** the boundary is traced again (`traceBoundary`, the same `follow` and side) over a fresh survey of the claim (loaded
+  chunks, resolution 1, recorded with the revision's inputs as RV §5.3's files) from the standing route's free end along the spine,
+  outside the standing band. The new band continues the standing mask; its street is a T2 route from the end node along the new
+  band's middle, and its lots are placed as D2's.
+- **Its mask grows:** `meta.districts.follow[id].mask` isn't kept, so the revision records the new band's mask as its own
+  (`revision.follow {district, mask}`), and `land` reads it (§7).
+- **Where the boundary ends** inside the claim, or turns back into the band: `NO_ROOM {kind: boundary}` for the rest.
+- An outpost grows on its own V street (§3, §4); its corridor (`architect_mc:corridor`) doesn't change.
+
+### 6. Ids, parts and the graph
+
+- **Parts:** `rv<n>_pads`, `rv<n>_lanes`, `rv<n>_props` and, for an extension, `rv<n>_verges` and `rv<n>_street` (for a district:
+  `rv<n>_<d>_pads` and so on), in `rv<n>:` stages after the parent's.
+- **Lots:** the caller's ids, unique across the region (M14).
+- **Dependencies (RV §6.4):** a growth whose added node, road or port a beside region now targets (a D3 end join to its new end, or a D3
+  side join `<region>:<roadId>` to its extension road) can't be undone while that region stands: `undoRevision` refuses `NOT_ALLOWED
+  {why: joined, region}` at preflight. The town's removal is unaffected (D3's `dangling`).
+- **Roads:** `<roadId>_g<n>`.
+- **Graph:**
+  - frontage: a new junction `<roadId>_g<n>_j<k>` on the street at each lane's foot. The standing edge is never cut (additive). Instead
+    the growth adds **two real edges** from the new junction to the standing junctions on either side of it along that street (type
+    `road`, `along: <roadId>`, `span: [u0, u1]`, `segments` the standing road's own cells between them, no cells written), plus the lane
+    edge and the lot node. So the graph stays connected through explicit edges (`graphNode` keeps no `on`/`u`, `program.mjs` :541, and
+    M2 walks explicit edges only, `check.mjs` :852). Consumers: M2 and `graph.cut`, siteplan and (7a) `nav.json` read `along` edges as
+    riding on the standing road; `besidePorts` ignores them (they are never terminal). Gate item 3 asserts `graph.cut = []` and every
+    grown lot's node reachable from the bell over edges, beside the walk check;
+  - extension: a new edge from the standing end node to the new end node `<roadId>_g<n>_end`, the extension's junctions, lanes and lot
+    nodes. The standing end node gains one edge and stops being terminal; the new end is terminal, so a later district (D3) or a later
+    growth can use it.
+- **Byte identity:** a program run without `params.grow` is unchanged (item 2); a growth never re-evaluates or rewrites a standing part
+  (RV §3.1, additive). `KIT_VERSION` moves.
+- **The town's square and bell** are unchanged; M22, M23 and M24 are judged on the whole revised IR (a new trading hall must sit
+  within 12 of the bell, or it is placed where it is and M23 warns as today).
+
+### 7. The land: `architect_mc:land` v 2
+
+For a districts region (D3 §6), `v` becomes 2 at the first growth:
+- each grown lot and street is a new `parts[]` entry `{kind: "grown", id: "rv<n>", district, revision: n, runs, rect, cells,
+  insideCells}`; an along district's new band is `{kind: "district", id, shape: "mask", revision: n, ...}`;
+- `union`, `outside` and `inside` are recomputed from all parts (D3's rules), so `outside` holds the grown land Steward now owns;
+- `undoRevision` recomputes `land` (the revision's parts leave; `v` stays 2);
+- every part carries `revision` (0 for the realised plan's parts), so a reader can tell which building took which land.
+- A V town gains no `land` key (D3 gives it none); its growth stays inside its claim.
+
+### 8. plan/0: `revision.grow`
+
+In a revision plan (RV §9), a zone with the same id whose `program.lots` only gains lots (every standing lot spec equal, in any order;
+no other member changed) is a growth:
+- the added lots are checked by §2 with the zone's own streets, and each gets its usual answer (`fits` with geometry, `refused
+  NO_ROOM` with `wouldFit` where a smaller size fits, or listed `unplaced` with the zone's other answers);
+- the zone answers `fits` with `standing: true` and `grown: [lot ids]`;
+- catalogue: `revision.grow` reserved -> supported (catalogue 13).
+- A districts zone (`program.districts`) gaining lots in one district grows that district.
+- A zone whose lots lose a lot answers `unsupported revision.change` (removing a lot is `Sites.remove`, RV §4.6).
+
+### 9. API, kit and versions
+
+- **No new method.** A growth is `Regions.planRevision(regionId, RevisionRequest(program = the region's program, params = {grow}))`
+  (RV §11), then `Regions.realise(planId, lotEntries)` with the new lots' blueprints, or `checkPlan` / `realiseApproved` (§8).
+- **Features:** `growDistrict` (D3's reservation; also covers towns), `planRevisionGrow`; sidecar `region.grow`.
+- **`RegionView.lots`** lists grown lots with their revision (`LotState` gains trailing `int revision`, old constructor kept).
+- **Placeholders:** API **1.44.0**, mod **0.47.0**, kit **0.45.0**, catalogue **13**.
+- **Refusals:** `NO_ROOM` (the kit), and RV's.
+- api-compat clean; apijars on the previous three.
+
+### 10. Size and split
+
+About **4.5-5.5 days** of work, **3 elapsed**:
+- **GR-a, streets (3-3.5 days):** `grow.mjs` (the search, frontage, extendable ends, the extension), ids and graph, V towns, plain
+  districts, outposts and FL grids, plan/0's `revision.grow`, `land` v 2 (`land.mjs` and `DistrictLand.java`), the mod's
+  `RegionView.lots` member; items 1-9, 12-14.
+- **GR-b, along districts (1.5-2 days, on GR-a's interface):** §5's frontage and boundary extension, the recorded mask; items 10, 11.
+- **The shared interface** (frozen at the end of GR-a's day 1): `params.grow`, the part and id names (§6), the frontage slot record
+  `{street, side, u, lot}`, the extension record `{from, road, run}`, `land` v 2's part shape.
+
+### 11. Gate (slice tier, $0)
+
+**Fixtures:**
+- **`gr_town`:** RV's `rv_town` (6 lots, 4 built, partly built; a Steward addition and a PT build by the street).
+- **`gr_beside`:** a D3 beside district (plain, its join to the town's street end) with 2 lots, realised as Steward does (a
+  `checkBeside` reservation, then `Regions.plan` with the first building's lot under `dplan`).
+- **`gr_along`:** a D2 shore district on `d3_shore` (D3's fixture), 2 lots.
+- **`gr_outpost`:** a D2 outpost (gap 40) with 2 lots.
+- Plan fixtures: `v8x_6d_gr_zone` (a revision of `rv_town`'s kept plan whose street zone gains 2 lots), `v8x_6d_gr_district`.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | frontage slots row by row (lot-free side, gaps, aprons, lane contact, never a verge cell written); extendable ends (the join end, a held end, a short end refused); extension grade and length; ids and graph (no standing node or edge changed, the new end terminal); along frontage and boundary extension; 300 seeded synthetic towns grown 1-6 lots: kept parts byte-identical, deterministic, 0 writes under a standing lot box plus 1 or a held column |
+| 2 | Byte identity | RV's pinned set unchanged; programs without `params.grow` unchanged |
+| 3 | Town frontage | `gr_town` grown by 2 lots through `planRevision` then `realise` with stub blueprints: both on the lot-free side; verge and road cells unchanged (hash); every new lot walkable to the bell (player and villager, `dev.nav.villager`) and connected in the graph (`graph.cut = []`, the lot node reachable from the bell over edges) |
+| 4 | Town extension | `gr_town` grown by 6 lots (`prefer: extend`): one extension from the extendable end, its road joined to the standing road, flagged; the new end terminal; walkable as item 3 |
+| 5 | Steward's district, two buildings | `gr_beside`: building 3 then building 4, each a growth under Steward's opKeys (`dgrow:<district>:<k>`), each realised; `undoRevision` of building 4 then 3 (verifier re-runs): the world before each, cell for cell; the district's join and the town untouched (hash) |
+| 6 | plan/0 | `v8x_6d_gr_zone` through `checkPlan` (zone `fits standing`, 2 added lots `fits`) then `realiseApproved`, with one stale retry under a second key across a restart |
+| 7 | Later districts (end join) | after item 4: a D3 district beside `gr_town` joins the extension's new end (`besidePorts` on the effective IR). `undoRevision` of the growth then refuses `NOT_ALLOWED {why: joined, region}` at preflight (RV §4.4, §6.4), and nothing is written (hash). Once the district is removed, the undo succeeds: the world before the growth |
+| 7b | Later districts (side join) | after item 4: a D3 district north of the extension joins its side by a T (`<region>:<roadId>` of `street_e_g<n>`); `undoRevision` of the growth refuses `joined` at preflight, nothing written (hash); the district removed, then the undo is exact |
+| 8 | Removal (verifier re-runs) | `gr_town` with two growths and a beside district: D3's removal orders, then `Regions.remove` of the town with both growths standing: E-flat 0 over the claim against the world before the town |
+| 9 | KC and held | a growth whose cheapest slot is beside the farm pond: the lot keeps clear (0 cells in its hard or watch set); the Steward addition and the PT build never written; a growth with every slot held answers `NO_ROOM {kind: held}` with nothing planned |
+| 10 | Along district | `gr_along` grown by 3 lots: frontage first, then the boundary extension; the mask grown; walkable from every lot to the district's street end |
+| 11 | Outpost | `gr_outpost` grown by 2 lots; `architect_mc:corridor` byte-identical |
+| 12 | Land v 2 | after items 5, 10, 11: every column each district holds in the journal lies in `union`; each grown part carries its revision; after `undoRevision` the parts are gone and `union` equals the one before |
+| 13 | Survival (only if RS has merged) | item 3 in a survival world: the new lots, lanes and pads as RS targets; `undoRevision` refunds once per key (`survival.allowed` true for frontage growth on land; a growth over a paid or unbuilt target refused, RV §8) |
+| 14 | Unchanged, API, spend | RV's item 18 plus rv-ingame; api-compat clean; apijars; $0.00 |
+| 15 | Natural round | S3's pinned claim: D3's item 15 town and shore district, the district grown by 2 lots (frontage and the boundary extension); plan, realise, save, leave, reopen; `undoRevision`, then removal in both orders; E-normal 0 unclassified under D2's narrowed classes and VOC's `farfluid` |
+
+**Tier:** slice plus `region/**` and `api/**`: the units and apijars; rv-ingame, d3-ingame, d2-ingame, fl-ingame; GR's own `gr-unit`,
+`gr-ingame` (driver `tools/gate6dgr.mjs`, chain `6dgr`, impact rule "6d GR").
+
+The verifier reviews the diff and **re-runs items 5, 7, 7b and 8**. **Steward's RC check** follows (S-GR-7).
+
+Items 7 and 7b's expected answer, plainly: a growth whose new end, extension road or frontage junction a later district joined (end or
+side) can't be undone while that district stands (`NOT_ALLOWED joined`, naming it), since its join would point at something gone. Removing the town
+still works (D3's town-first order, `dangling`).
+
+### Steward's recorded asks: expected answers
+
+- **D-S2:** answered. A beside district grows along its street (frontage, then extension), an along district along its boundary, an
+  outpost on its own street. `District.growable()` can be true for every kind whose street has an extendable end or free frontage;
+  Steward can ask by planning (a dry growth is `planRevision` without realise; it keeps a plan, so S-GR-6 asks whether a dry growth
+  check is wanted).
+- **The 59 asks:** unchanged (none revises).
+
+### Open questions for Steward
+
+- **S-GR-1. Frontage first.** New lots go on free frontage of the standing streets before any extension (`prefer: frontage`), so a
+  town fills in before it sprawls. Or extension first? Default: frontage first.
+- **S-GR-2. One building, one revision.** Your district's "second building extending that street" is one growth (one revision) per
+  accepted building, undone alone (LIFO). A batch of buildings may be one growth with several lots. Fine? Default: yes.
+- **S-GR-3. Opkeys.** Growth plans and realises under your keys (`dgrow:<district>:<k>`, `drealise:<district>:<k>`), found again by
+  `planByKey` and `realiseByKey` after a restart. Default: as proposed.
+- **S-GR-4. Rings and spirals.** FL rings, spirals and organic layouts grow only on free frontage of their straight runs; they never
+  extend (`NO_ROOM {kind: layout}`). Default: yes.
+- **S-GR-5. A joined end.** A district's own join end, and a town end a district joined, are never extended; and a growth whose new end or
+  extension road a later district joined (end or side) can't be undone while that district stands (`NOT_ALLOWED joined`). Fine for your undo order? Default: yes.
+- **S-GR-6. A dry growth check.** Do you want a `checkGrow` (D3's dry-check style: nothing kept) before offering "build here", or is
+  `planRevision` (which keeps a plan) enough once plans can be discarded (PLAN's queued `discardPlan`)? Default: no dry check in GR;
+  `planRevision` plus `discardPlan` when it ships.
+- **S-GR-7. The RC.** With RV's (S-RV-10): a V town grown on frontage and by an extension, a beside district grown by two buildings and
+  undone one at a time, an along district grown, and the town removed with growths standing. Default: yes.
+
+### Open questions for Noah
+
+- **N-GR-1. How an extension looks.** Proposed: it continues the street's own look exactly (road, verges, W's lanterns), so a grown
+  town reads as one street. The alternative is a plainer lane-style extension. Default: the street's look.
+- **N-GR-2. Where a grown town's new lots go.** Proposed: nearest the square first, on the street's lot-free side, so the square
+  stays the centre. The alternative fills outward from the ends. Default: nearest the square.
+
+### Deferred
+
+- Turning, branching or forking extensions; a second square; extensions past the claim (S-RV-8); growth of ring and spiral ends.
+
+### Coordinator decisions (2026-10-20, on Noah's behalf)
+
+- **N-GR-1:** an extension keeps the street's own look.
+- **N-GR-2:** new lots go nearest the square first.
+
+
+## Phase 6d slice FS: updates follow the source (FROZEN 2026-10-20, Steward reviewed)
+
+When a source design gets a new version, each of its copies can be re-made from that version by its own recipe, at $0, and then each
+lot that stands at the old copy is updated by the existing delta path. This is 0b's deferral ("a source's new version applied to its
+COPY and SITE followers, by recipe"; CONTRACT 0b §2.4: "That is 6d's update path, so there's no migration") and Steward round 3's
+"updates follow the source" ("a new version of a source design is offered to its variants and site-adapted copies as one update,
+applied per lot, keeping each lot's adaptation").
+
+FS uses only existing placement paths (`outdated`, `checkDelta`, `applyDelta`, `revert`), so it needs no RC (GATES policy 4); the
+verifier re-runs the delta and revert items (policy 3).
+
+- **Branch:** `slice/FS`, worktree `../architect-mc-FS`. **Spend:** $0 (no Claude call: a recipe is deterministic kit work).
+- **Scope:** `Library.followers`, `Designs.follow` and `followAll`, the sidecar's follow job, the copy's next version, and the per-lot
+  update through the existing delta path; region lots included.
+- **Not in scope:** SITE followers (7b's `fitToSite` adaptations: `follow` of a SITE entry answers `NOT_ALLOWED {why: until_7b}`);
+  VARIANT and RESKIN entries (they don't follow, 0b §2.4); copies of an adopted entry (PT2's N-PT2-2: its own ask); applying deltas
+  automatically.
+- **Depends on:** 0b (copies, `Derivation`), 5b (deltas), C13 (`versionOf`), PT2 (adopted entries refuse), RV only for item 6's region.
+
+### 0. Facts (main f3f41d43, from code)
+
+- `Library.Derivation(source, sourceVersion, Kind {VARIANT, RESKIN, COPY, SITE}, recipe)` (`Library.java` :281-299); its javadoc says
+  "Only COPY and SITE follow their source (6d)".
+- A COPY's recipe is written by `variants.ts` :624 (`recipeRecord` :47-49): `{shift, param, values, mirror, roles, bible, group,
+  itemKey, archetype, ordinal, attempt, levers?, changed?, bar?}`. It is chosen by `kit/tools/copy-recipe.mjs` (`chooseRecipe` in
+  `lib/variation.mjs`), up to `COPY_RECIPES` 3 attempts (`variants.ts` :365, :582).
+- **Nothing re-applies a recipe to a later source version.** The only reader of `derivation.recipe` is `checkChangeable`, which refuses
+  `versionOf` and polish of a COPY (`VERSION_REFUSED copy`, `versions.ts` :188-192).
+- New versions carry `derivation` forward (`polish.ts` :969, `sidecar.ts` :1009).
+- `Sites.outdated` lists standing sites whose pinned version is below their entry's head (`SiteDeltas.java` :1499-1512), building sites
+  only, region lots included (RV §0).
+- Deltas refuse a frame change (5b D2, `FRAME_CHANGED`).
+
+### 1. The rule in one line
+
+**A copy follows its source by re-running its own recorded recipe on the source's new version, exactly, and becomes its own next
+version only if that result still passes everything a copy had to pass; each lot then updates by the ordinary delta.**
+
+### 2. Followers
+
+```java
+// Library (default throws; feature "followSource")
+default List<Follower> followers(String sourceEntryId)
+record Follower(String entryId, Library.Derivation.Kind kind, int sourceVersion, int headVersion, int sourceHead, boolean behind)
+```
+
+- Every entry whose head's `derivation.source` is the source, any kind, with `behind` true for a COPY whose `sourceVersion` is below
+  the source's head. VARIANT and RESKIN are listed (never `behind`), so a caller sees the family.
+
+### 3. Following
+
+```java
+// Designs (defaults throw; feature "followSource")
+default CompletableFuture<FollowResult> follow(String copyEntryId, int toSourceVersion /* 0 = head */, @Nullable String opKey)
+default CompletableFuture<List<FollowResult>> followAll(String sourceEntryId, int toSourceVersion, @Nullable String opKey)
+record FollowResult(String entryId, boolean followed, int fromVersion, int newVersion, int sourceVersion,
+    @Nullable String refused /* null | frame | check | bar | fit | bible_gone | source_gone | head_moved */, boolean alreadyFollowed,
+    String message)
+```
+
+- **The job** (sidecar `entry.follow`): load the source at `toSourceVersion`, apply the copy's recipe exactly (its `shift`, `param`,
+  `values`, `mirror`, `roles` and bible pin; `attempt` fixed, no new choice), build the copy, then:
+  - the pristine-kit check (as `VariantRunner` runs it for every copy);
+  - the 0b variation bar against the source's new version (2 of 3 levers, at least 10% of cells changed), so a follower is still a
+    copy and not the source;
+  - the frame: front and the entrance's feet row equal to the copy's head (else `frame`: its lots couldn't take the delta);
+  - the copy's own size bounds (the archetype's `max`, the lot's fit box if the group recorded one: `fit`).
+- **Installed** as the copy's head + 1, `by: 'follow'`, `derivation.sourceVersion` = the new source version, recipe unchanged;
+  `ENTRY_VERSIONED` fires as for any version.
+- **Refused** (any check failing): nothing installs; `FollowResult.refused` names why; the copy stays at its version. No fallback
+  design is made (N-FS-1).
+- **`followAll` is one persisted operation.** At its start it resolves and freezes the source version (`toSourceVersion`, or the head
+  then) and the follower set (every COPY `behind` at that moment, with each one's head version), and saves both in
+  `<data>/follows/<opKey or a generated id>.json` before following any. Followers made or versioned after that aren't in it. A
+  restart resumes the remaining followers of a saved operation; a replay with the same key returns the saved results.
+- **Installs are compare-and-set.** A follower's new version installs only if the copy's head is still the version frozen for it and its
+  `derivation.sourceVersion` is still below the target (the same lock `versions.install` takes for `versionOf`'s `base_moved`). A head
+  that moved answers `refused: head_moved`, nothing installed.
+- **Already followed is a no-op:** a copy whose head already derives from the target version (or a later one) answers `followed: false,
+  refused: null, alreadyFollowed: true` and installs nothing. So a replay, or two overlapping calls, never install twice.
+- **opKey:** `follow` keys its one result; `followAll` keys the operation (each follower inside it is recorded by entry id).
+- `versionOf` and polish of a COPY stay refused (`VERSION_REFUSED copy`): following is how a copy changes.
+- An entry whose source is gone (deleted, never GC'd while pinned) refuses `source_gone`.
+
+### 4. The lots
+
+Nothing new. The caller lists `Sites.outdated()` (the followed copies' lots now show `headVersion` above their pin) and runs
+`checkDelta` then `applyDelta` per lot, keeping the player's edits (`KEEP`) as 5b. Each lot's own adaptation is its copy's recipe,
+so "keeping each lot's adaptation" holds by construction. A region's lot updates as any lot (RV §0); a lot under a revision's cells is
+unaffected (a lot is BOX above its pads).
+
+- **Survival:** a construction delta (5b D8, Y1's stockpile), unchanged.
+- **Revert:** `Sites.revert(siteId, oldVersion)` as 5b (LIFO; in survival a paid forward delta).
+
+### 5. Byte identity, KC and Steward's asks
+
+- **Byte identity:** no IR, tile, plan answer or blueprint changes for anything not followed; a followed copy's blocks equal a fresh
+  copy made by the same recipe from the new source version (item 1). Kit unchanged, so no `PLAN_STALE`.
+- **KC:** FS adds no region writer; a lot's delta stays inside its lot box (5b), which bodies already keep clear of (H's `M25:keep`).
+- **Steward's asks:** round 3's "updates follow the source" is answered for COPY (C1's copies); SITE waits for 7b. The 59 asks are
+  unaffected (no plan path changes).
+
+### 6. Gate (slice tier, $0)
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit (sidecar, kit) | the follow job on the bundled cabin and tavern sources: a recipe re-applied to v2 gives the same blocks as a fresh copy made with that recipe from v2 (byte-identical NBT); each refusal (frame, check, bar, fit, source_gone, head_moved); opKey replay; `followAll` frozen set (a copy made mid-operation not followed; the source versioned again mid-operation: the frozen version used); already-followed no-op; a kill mid-`followAll` and its resume |
+| 2 | Followers | a group with an archetype and 3 copies, plus a VARIANT: `followers` lists 4; `behind` true for the 3 copies after the source's `versionOf` (stub) |
+| 3 | followAll | the 3 copies followed: 3 new versions, each passing the check and the bar; `ENTRY_VERSIONED` 3 times |
+| 4 | Lots (verifier re-runs) | the 3 copies placed as lots of a `flat_village` realised through `checkPlan` then `realiseApproved` (Steward's plan v1 shape); `outdated` lists them; `applyDelta` on each, a player's block on one lot kept (`KEEP`); `revert` of each to the old version: the world before the delta, cell for cell |
+| 5 | Refused | a source v3 with a moved front: every follower `frame`, nothing installed, lots unchanged |
+| 6 | With RV | one lot's site removed alone (RV §4.6), the region revised to refill it (`lots.refill`) at the new copy version; then `Regions.remove`: E-flat 0 |
+| 7 | Unchanged, API, spend | 0b's copy units, 5b's delta suite, pt2-ingame's adopt items; api-compat clean; apijars; $0.00 |
+
+**Tier:** slice plus `sidecar/**` and `api/**`: the units, apijars, 5b-deltas; FS's own `fs-unit`, `fs-ingame` (driver
+`tools/gate6dfs.mjs`). The verifier re-runs item 4.
+
+**Size:** 2-2.5 days, one builder (the sidecar job 1 day; the Java surface and api-compat 0.5; the gate 1).
+
+**Placeholders:** API **1.45.0**, mod **0.48.0**, kit unchanged (the recipe tool is reused as is), catalogue unchanged.
+
+### Open questions for Steward
+
+- **S-FS-1. Who triggers.** Steward calls `followAll` after it hears `ENTRY_VERSIONED` on a source (or finds a `behind` follower at
+  world load), shows "3 buildings can take the new design", and applies per lot. Architect never applies by itself. Default: yes.
+- **S-FS-2. All or some.** `followAll` follows every copy; a copy that fails is listed and left. Do you want `follow` per copy only?
+  Default: both.
+- **S-FS-3. Variants.** VARIANT and RESKIN entries never follow (they were made to differ). Fine? Default: yes.
+- **S-FS-4. SITE copies.** 7b's site-adapted entries follow in 7b, with their fit parameters. Until then `NOT_ALLOWED until_7b`.
+  Default: yes.
+
+### Open questions for Noah
+
+- **N-FS-1. When a copy can't follow.** Proposed: it stays at its version, says why, and nothing is spent. The alternative designs a
+  fresh copy with Claude (paid). Default: stays, $0.
+
+### Deferred
+
+- SITE followers (7b). Copies of an adopted entry (PT2's N-PT2-2, its own ask). Automatic application.
+
+### Coordinator decisions (2026-10-20, on Noah's behalf)
+
+- **N-FS-1:** a copy that can't follow stays as it is, at $0, with no paid redesign.
+
+
+## Phase 6d slice LC: land change in a standing region, the report (FROZEN 2026-10-20, Steward reviewed)
+
+A standing region can say what has changed in it since it was built, part by part and lot by lot. v2 ships **the report only**: the
+stage re-plan of v1 is deferred (GPT-6.1's review: it would mostly refuse for layout-searched programs, and no Steward case shows its
+value yet; S-LC-4). This is SETTLEMENTS §14 ("site-bound lots ... a change ... is reported") and PT's S-PT-1 ("to 6d with replanning on
+land change"), in its reporting half.
+
+LC is read-only, so no RC (GATES policy 4).
+
+- **Branch:** `slice/LC`, worktree `../architect-mc-LC`. **Spend:** $0.
+- **Scope:** `Regions.landCheck` (§2).
+- **Not in scope (deferred):** `replanStages` (re-planning the stages not yet placed for a region held `DRIFTED`), SETTLEMENTS §14's
+  incremental passes over dirty tiles, re-fitting damaged buildings (C13's `versionOf` does that), attributing removals to anyone.
+- **Depends on:** RP (the realised record and `ARWR` writers, which say which intended cells the region actually wrote, RV §3.4), RV, PT, CU and F3's StillOurs rows.
+
+### 0. Facts (main f3f41d43, from code)
+
+- PT records who **placed** a block (`Placed.Rec(placer, build)`, per chunk; `Sites.playerPlaced`). It records nothing when a block is
+  broken: a record is cleared when its cell becomes air or fluid or is replaced (`Placed.java` :296). So **who dug a cell is unknown.**
+- The journal holds each region cell's `after`; RP's realised record (RV §3.4) says which intended cells were written, skipped or no-ops.
+- `Drift.checkStage` (`Drift.java` :56+) holds a later stage `DRIFTED`; there is no `SITE_DRIFTED` reason.
+
+### 1. The rule in one line
+
+**A land check reads, never writes, and attributes only what the records prove: a block a player placed is the player's; a missing or
+changed block is just changed.**
+
+### 2. `landCheck`
+
+```java
+// Regions (default throws; feature "landCheck")
+default CompletableFuture<LandReport> landCheck(String regionId, @Nullable String part /* null: every part */)
+record LandReport(String region, int position, List<PartLand> parts, List<LotLand> lots, long cellsChecked, long unloaded, long ms)
+record PartLand(String part, long cells, long changed, long removed, long playerPlaced, long volatileChanged,
+    Map<String, Long> kinds, List<BlockPos> sample)
+record LotLand(String lot, String siteId, String state, double standing /* Reconcile's score */, long changed, long playerPlaced)
+```
+
+- **Which cells:** each cell the region holds on top (tile, revision and road entries), attributed to its part by RP's realised record
+  (the cell's writer, RV §3.4). Cells in a region realised before RV with no record are counted under part `unattributed`.
+- **The classes** (each changed cell in exactly one):
+  - `removed`: the world holds air or fluid where the region wrote a solid (who removed it is not known);
+  - `playerPlaced`: the block there now carries a PT record (a player placed it);
+  - `volatileChanged`: a volatile kind changed (leaves, snow, grown plants, fluid levels);
+  - otherwise `changed`, counted by block kind in `kinds`.
+- **Lots:** each lot site's `Reconcile` standing score (`STANDING` 0.8, `RESTORED` 0.9, as world start) and its changed and player-placed
+  cells.
+- Bounded: at most 4M cells per call, over ticks at the queue's budget; larger regions answer per part. $0, no ticket (unloaded chunks
+  counted, not loaded).
+- **Use:** Steward can show "the east field changed: 120 blocks gone, 12 placed by players" and repair with a revision (RV) or a lot
+  delta (5b). It never says who dug.
+
+### 3. Byte identity, KC and Steward's asks
+
+- Read-only: no IR, tile, answer or journal change; kit unchanged.
+- **Steward's asks:** S-PT-1's reporting half is answered; the replan half is deferred (S-LC-4). The 59 asks are unaffected.
+
+### 4. Gate (slice tier, $0)
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | the classification on a synthetic journal and realised record: each class, part attribution, unattributed legacy cells |
+| 2 | Land check | `rv_town` (RV's fixture): the driver removes 40 cells of the square (as a player breaking them), places 12 blocks on a lane as a player, and removes 20 pad cells by a non-player (DevBridge); `landCheck` reports each part's `removed`, `playerPlaced` and `changed` exactly (against a driver-side diff); 0 cells written (hash) |
+| 3 | Revised region | the same after an RV revision: cells attributed to the revision's parts |
+| 4 | Unchanged, API, spend | rv-ingame; api-compat; apijars; $0.00 |
+
+**Size:** 1.5-2 days, one builder. **Placeholders:** API **1.46.0**, mod **0.49.0**, kit unchanged, catalogue unchanged.
+
+### Open questions for Steward
+
+- **S-LC-1. The report's grain.** Per part and per lot, the classes above, a sample of positions (at most 16). Enough for the card?
+  Default: yes.
+- **S-LC-2. Attribution.** Architect reports "placed by a player" only where PT recorded it, and never who removed a block. Fine?
+  Default: yes.
+- **S-LC-3. Incremental passes.** SETTLEMENTS §14's dirty-tile passes are not planned. Default: not until a measured case.
+- **S-LC-4. The stage re-plan.** Deferred: re-running the program for a region held `DRIFTED` would mostly refuse (V's street search and
+  plan_v0's zone search read the whole survey). Do you have a case where a long build drifts before a later stage? Default: deferred until
+  you show one.
+
+### Open questions for Noah
+
+- **N-LC-1. Damage in the card.** Proposed: reported only on request (`landCheck`); Steward decides whether to mention it. The alternative
+  is an event per damaged part. Default: on request only.
+
+### Deferred
+
+- `replanStages` (S-LC-4), with its acceptance rule (every placed part byte-identical), its recorded inputs (the plan's recorded params,
+  seed, `regions`, `builds`, `protected.areas` and `standing`; the new land and held set separate) and T2's `routePrefer` wiring, as v1
+  of this section drafted them.
+- Removal provenance (who broke a block): a PT extension, if Steward asks.
+
+## Phase 6d slice AD: adopting a VillageLayout settlement as a region, the 6d half of C12 (FROZEN 2026-10-20, Steward reviewed)
+
+An existing Steward settlement built by VillageLayout (its own street road and lot sites, placed before regions) becomes a region
+record **without writing a cell**, so it can grow (GR), revise (RV) and be removed as one region. This is the 6d half of the C12 joint
+7a/6d gate (CONTRACT V §10: "The joint 7a/6d gate adds `Regions.adopt` ... then the gate runs a 6d addition (a lot, or the square), a
+6d `applyDelta` on one lot, and one exact `Regions.remove` of everything"). The 7a half (the link pass and `nav.json` over adopted lots)
+is drafted on `docs/7a`; the two meet at the adopted region's effective IR (§2) and the joint gate's last row (§4).
+
+AD moves Steward's standing sites into a region's group, which Steward's history and migration read: **RC check** before release.
+
+- **Branch:** `slice/AD`, worktree `../architect-mc-AD`. **Spend:** $0.
+- **Scope:** `Regions.adopt` (§2), the synthesized IR (§2.2), group membership (§2.3), un-adopt (§3), the gate's 6d rows (§4).
+- **Not in scope:** the link pass, `nav.json` and typed links (7a); Steward deleting VillageLayout (after the joint gate and region
+  survival, C12); adopting another owner's sites; adopting road networks that aren't one straight street.
+- **Depends on:** RV, GR, PT2 (its adopt patterns: an entry with before == after), V (the `street` layout geometry, CONTRACT V §10).
+
+### 0. Facts (main f3f41d43, from code)
+
+- `Sites.adopt` adopts a player's build as a site (PT2, `Adopt.java`), writing one `adopt` journal entry with before == after; it has
+  no region references. There is no `Regions.adopt`.
+- A V region's lots are sites `s<N>` and its street a road site `r<N>` in one group `g<N>` (RV §0); VillageLayout's are the same kinds
+  of sites in Steward's batches' groups.
+- V's `street` layout is VillageLayout's geometry; `kit/REGIONS.md` records the mapping (CONTRACT V §10).
+
+### 1. The rule in one line
+
+**Adoption writes no block and no journal cell; it records which standing sites a region is made of and an IR that describes them,
+and from then on the region's revisions and removal treat them as its own.**
+
+### 2. `Regions.adopt`
+
+```java
+// Regions (default throws; feature "regionAdopt")
+default CompletableFuture<RegionView> adopt(AdoptRegionRequest r)
+record AdoptRegionRequest(String owner, ResourceKey<Level> dimension, BoundingBox claim, String layout /* "village_layout" */,
+    com.google.gson.JsonObject geometry /* {streetZ, xLo, xHi} or {streetX, zLo, zHi} */, List<String> roadSiteIds,
+    Map<String, String> lots /* lotId -> siteId */, @Nullable String opKey, com.google.gson.JsonObject ext)
+```
+
+#### 2.1 Checks
+
+- Every site is the owner's, standing, inside the claim, in no other region; the roads are 4e roads along the given street line; every
+  lot site's box faces the street. Else `NOT_ALLOWED` naming the site.
+- The claim overlaps no other region of any owner beyond D1's seam rule, and no C17 area of another owner.
+- No write, ticket or prepare.
+
+#### 2.2 The synthesized IR
+
+- Program `adopted_village` (kit, bundled, deterministic, `catalogue = false`): from `geometry`, the road sites' recorded specs and the
+  lot boxes, it emits `ir.lots` (each `{id, box, front, entrance, adopted: siteId}`), `ir.roads` (each `{id: street_*, adopted:
+  roadSiteId}`, flagged `architect_mc:street`), the graph (V's: lot nodes, junctions along the street, ends), and **no parts** (no ops,
+  so no tile). `budget` 0.
+- Its street ends are terminal junctions, so GR can extend them and D3 can join them.
+- Its IR is revision 0; its frozen heights are taken at first touch by a later revision (6a D3).
+- **Its artifact:** adopt writes a synthesized plan/0 artifact for the region (C36-kept, `region.adopted: true`, no tiles, its lots in
+  `$.lots[]` with C36's members and the sites' ext), so a plan/0 revision can name it as `parentArtifact` (RV §9) and Steward's plan
+  writer can grow the adopted village as any region.
+
+#### 2.3 Ownership: what moves, and the crash-safe order (v2, after GPT-6.1's second pass)
+
+**What says who owns a site** (from code; v1 of this section was wrong about the journal):
+- **The journal index:** every entry's `JournalStore.Meta` carries `group` (`JournalStore.java` :89), and region tile checks read it to
+  decide what is the region's own (`TileCheck.java` :758-760).
+- **The journal head's record copy:** `Sites.reconcile` rebuilds a lost site or infra record from its main entry's head `meta()` JSON
+  (`Sites.java` :2587-2600), which holds the record as it was saved, membership included.
+- **`architect-sites.json`:** site records (`Site.Member(group, batchId, itemKey)`), infra records (roads and cell sites, their `member`),
+  and every group's `SiteGroupRec` with its `StageRec` lists, all saved together by `Sites.save` (`Sites.java` :3022), one atomic file.
+- **The region record**, its own file.
+
+So adoption moves four things: each adopted entry's `Meta.group` (its site entry, deltas, crates, leaves and the road entries), each head
+record copy's membership, the one `architect-sites.json` save (sites, infra, groups), and the region record. No journal cell is written.
+
+**A metadata-only journal operation (new):** `JournalStore.regroup(entryIds, group, headMetaPatch)`: one index transaction that sets
+`Meta.group` and patches the head `meta()`'s membership for the given entries, idempotent (re-applying the same values is a no-op),
+logged like any index transaction (`label("ADOPT:<regionId>")`). It writes no section file.
+
+**The order:**
+1. **Intent:** `<world>/architect-regions/adopt-<regionId>.json`: the request, the new group id, each entry's old `Meta.group`, each site's
+   and infra's old membership (fsync, rename).
+2. **Region record** in RegionRec state `ADOPTING` (shown as `PREPARING` in `RegionView`; `RegionState` unchanged). The sites refuse deltas
+   and removal `SITE_BUSY` while it lasts.
+3. **Journal:** `regroup` of every adopted entry to the new group.
+4. **`architect-sites.json`:** the new group `g<N>` (one stage `adopted` listing the sites and infra), each site's and infra's membership,
+   and each old group's stage lists **with those sites removed** (not replaced by a saved copy), one save.
+5. **Region record** `PLACED`; then the intent deleted.
+
+**Recovery at world start** (an intent file present):
+- **No region record** (a crash in step 1-2): roll back: any `regroup` already applied is reversed from the intent's old groups (it can't
+  have been, but the check is cheap); `architect-sites.json` is untouched; the intent deleted.
+- **Region `ADOPTING`:** roll **forward** if `architect-sites.json` shows every site and infra in the new group (step 4 done): re-apply
+  `regroup` (idempotent), then step 5. Otherwise roll **back**: reverse `regroup` to each entry's old group, delete the region record, then
+  the intent.
+- `Sites.reconcile` runs after this recovery, so a rebuilt record always reads the reconciled head meta.
+
+### 3. Un-adopt and removal
+
+- **`Regions.remove`** of an adopted region removes its group (every adopted site and road plus every revision), last placed first; exact as
+  RV §6.2. The tombstoned region can't be un-adopted.
+- **`Regions.unadopt(regionId)`** (default throws), only at position 0 (no revision accepted) and in state `PLACED`:
+  - its own intent `unadopt-<regionId>.json` (the adoption's old groups, read from the region record, which keeps them);
+  - for each site: if its old group still exists, the site is **added back** to that group's current stage list (the stage named in the
+    old membership, or a stage `readopted` appended), preserving every change made to that group since; if the old group is gone, the site
+    gets a new standalone group (named in the result);
+  - `regroup` of the entries to their resulting groups; `architect-sites.json` saved; the region record deleted; the intent deleted;
+  - recovery as adoption's, mirrored (forward when the sites file shows the resulting groups, else back to the region's group).
+- No cell is written by either.
+
+### 4. Gate (slice tier, $0): the 6d rows of the joint gate
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | `adopted_village` IRs from 20 synthetic VillageLayout settlements: lots, roads and graph as V's for the same geometry; no parts |
+| 2 | Adopt | a Steward-shaped VillageLayout settlement (Steward's own `VillageLayout` code path driven through its test hook, or the recorded site set of Steward's e2e village), adopted: 0 changed cells (hash), 0 journal entries written; `RegionView` lists its lots and street |
+| 3 | A 6d addition | a GR growth of one lot on its street (frontage): through `checkPlan` of a revision plan naming the adopted artifact (Steward's plan writer shape: the adopted zone with one more lot) then `realiseApproved` |
+| 4 | A 6d delta | `applyDelta` on one adopted lot (a stub v2) |
+| 5 | Remove (verifier re-runs) | `Regions.remove`: E-flat 0 over the claim against the world before the settlement |
+| 6 | Un-adopt | a second settlement adopted then un-adopted: memberships and stage lists as before, Steward's own undo of one of its sites still works |
+| 6b | Crashes (verifier re-runs) | a kill after each of §2.3's steps 1-4, for adopt and for un-adopt, on a settlement whose sites include one with two deltas and a road: each restart rolls forward or back; every entry's `Meta.group`, every head record copy's membership, every site's and infra's membership and every group's stage lists agree (one owner per site); then `architect-sites.json` deleted and `Sites.reconcile` rebuilds every record with the same membership; 0 cells written; then `Regions.remove` or Steward's own undo exact |
+| 6c | Un-adopt keeps later changes | after adoption, Steward adds a site to one old group; un-adopt: that site stays in it, the adopted sites rejoin it, nothing else changes |
+| 7 | Joint row (with 7a) | once 7a's link pass lands: its link pass over the adopted region, then rows 3-5 again (run on the integration branch) |
+
+**Size:** 4-4.5 days, one builder. **Placeholders:** API **1.47.0**, mod **0.50.0**, kit **0.46.0**, catalogue unchanged.
+
+### Byte identity, KC and Steward's asks
+
+- Adoption writes nothing (hash, item 2); `adopted_village` is a new program, so no existing IR moves. KC: no writer. The 59 asks are
+  unaffected. C12's joint gate is answered on the 6d side by rows 2-6; its 7a row waits for 7a.
+
+### Open questions for Steward
+
+- **S-AD-1. Still needed?** With RS shipped, Supplied builds take regions; old saves still hold VillageLayout settlements. Do you still
+  want to migrate them (C12), or keep the legacy path for old saves until they're rebuilt? Default: yes, migrate on load as C12 says.
+- **S-AD-2. The geometry.** You send `{streetZ, xLo, xHi}` (or the north-south form) and the lot-to-site map; Architect checks the
+  rest. Enough? Default: yes.
+- **S-AD-3. Your history.** After adoption, undo of a building inside the adopted village is `Sites.remove` of its lot (RV §4.6) or
+  `undoRevision` of a growth; the settlement's founding entry becomes `Regions.remove`. Workable? Default: yes.
+- **S-AD-4. The joint gate.** Run the 6d rows on AD's slice gate, and the joint row once 7a's link pass is in? Default: yes.
+
+## 6d later: full revisions (RV2) (a design record, not a slice yet)
+
+RV v3 ships additive revisions only (Noah, option A, 2026-10-20). **Full revisions** (removing or changing a standing part, road, lot box
+or fluid body) were drafted as RV v1 and v2 and reviewed twice by GPT-6.1 (the coordinator's `codex-6d-review.log` and
+`codex-6d-verify.log`). This section keeps what those rounds found, what the realised provenance (RP) now records to make it solvable, and
+the open directions, so a later slice starts from them. It becomes a slice when Steward has a flow that needs it (S-RV-6).
+
+### The problems found
+
+| # | Problem | Where it bit |
+|---|---|---|
+| 1 | **Re-plan-and-diff is everything.** Parts aggregate lots, layouts are global searches, ids are ordinals, the seed follows the params. | the old outline |
+| 2 | **Tiles are parts only.** Roads and lots are separate items, so a patch built from `evalTile` alone targets road cells back to the land. | v1 |
+| 3 | **Intent isn't what stands.** Realise skips held, built, failed-condition and no-op cells, gates fluids, and fells trees and holds leaves; PARTIAL and FAILED regions have unwritten tiles. | v1, v2 |
+| 4 | **Skipped winners hide removed writers.** Stage A wrote stone; a later stage B's glass was skipped by its condition. Removing A leaves B as both the old and new intent, so a diff of intents is empty and A's stone stays. | v2 (second pass) |
+| 5 | **Extras have no intent.** Felled logs, dependents and held leaves are written by no op, so no intent diff ever includes them, and the part that caused them must be known to undo them. | v2 (second pass) |
+| 6 | **Hashes per stage and set aren't a composed hash.** Comparing a composed intent with a per-stage tile sha compares different objects. | v2 (second pass) |
+| 7 | **`before` must be the world at the write**, not the journal's `after` (StillOurs equivalence: copper, farmland, volatile states). | v1 (fixed in v2) |
+| 8 | **Head, publication and recovery** across files, journal, queue and artifacts; competing plans. | v1 (fixed in v2/v3) |
+| 9 | **Survival:** replacing a paid or unbuilt target needs cancellation, reservation release and refunds across histories. | v1, v2 |
+| 10 | **Fluids:** removing or changing a body needs a scoped drain-and-restore with containment checks. | v1, v2 |
+| 11 | **Dependencies** of other regions (end and side joins, `reach`, hold columns) on what a revision removes. | v1 (fixed in v2/v3 for undo) |
+
+v3 avoids 2-6, 9 and 10 by never removing or changing anything standing; 7, 8 and 11 are solved in v3 and carry over.
+
+### What RP records now (feat/realised-provenance, building; its as-built wins)
+
+- **Per stage, set and tile, the writers** (`ARWR` v1, `kit/lib/realise.mjs` `encodeWriters`): each emitted cell's winning op (part,
+  ordinal, op index, condition) and every op it overwrote in that tile, oldest first. The payload and its sha don't change.
+- **The realised record** per stage, set and tile (the coordinator's brief to RP): the code per emitted cell (written, no-op, held, build,
+  condition, fluid, clip), the extras with their cause (the op that cut a tree; the logs and held leaves), and the entry's layer.
+- Together they answer, for any cell, **every intended writer in write order, which one stands, why the others don't, and what extras
+  depend on which op**: the data problems 3-6 need.
+
+### Directions (open)
+
+- **Patch from provenance, not from intents.** For a removed or changed op, walk its cells in the writers files: where it stands, the
+  target is the next intended writer below it that **would have stood** (re-checked against today's world and holders), else the land;
+  where it was skipped, nothing changes unless a writer above it was skipped only because of it (a condition that read its block): those
+  cells are re-checked. Extras caused by a removed op go back to their `before`.
+- **Hash like with like:** keep per-(stage, set, tile) shas and v3's `historySha`; add a composed hash only if a consumer needs one, defined
+  over the per-stage shas in layer order.
+- **Roads and lots as first-class writers** in the same provenance (4e road planner cells recorded per road item), so a road can be moved
+  or removed by the same rule.
+- **Survival:** a replacement is a paid forward delta (5b D8) with targets cancelled or swapped per cell and one refund owner per block;
+  undo of a replacing revision stays refused (no free undo after refunds).
+- **Fluids:** removing a body reuses v3's suffix drain; changing a body is remove-then-add in one revision, with containment re-checked
+  before sources return.
+- **The oracle** stays v3's: an independent enumeration of expected transitions compared over the whole claim.
+- **Size guess:** larger than RV v3 (provenance-driven patching, road provenance, survival replacement); split at least into kit patch,
+  mod patch and survival lanes.
+
+## Undo hardening C: crash safety against unsaved world writes (PARKED 2026-10-21 by Noah; a design record, not a slice)
+
+**Parked (Noah, 2026-10-21).** After two GPT-6.1 review rounds (logs: codex-undoc-review.log and codex-undoc-verify.log), full
+crash safety against unsaved world writes is parked. This section and both reviews are the starting point when it's revisited,
+after the 6c close-out, D3 and 7a-1. No power-loss (fsync) protection for now.
+
+**Shipped instead:** the targeted fixes.
+- Group-removal R2-vs-queue-save ordering (fix/drain-holders d63a5ded).
+- Single-site removal ordering (undo hardening A).
+- F1, the stacked-removal settle.
+- F4, and the live F6 reactivation hazard.
+
+**Stated limit:** a server crash or kill with unsaved chunks can leave a build half-placed or half-restored. The world journal
+stays correct; the world can lag it.
+
+**Mitigation, queued in PLAN:** a diagnose-and-repair command.
+
+
+Noah approved undo hardening (A: the UMT findings that reproduce against production code, `fix/undo-a`; C: this section). This is a
+contract only; nothing is built. Revised after GPT-6.1's review at fb26c61c ("Review responses" at the end). It answers the findings that need a crash which loses world writes (UMT F5, F6, F7, UC) and H-core's
+queued question in PLAN.md ("a halt without a save loses an earlier stage's world writes while the journal keeps them PLACED").
+
+### 0. Facts (main 46553549, `feat/umt` 638c7136, `slice/RS`, `feat/realised-provenance`)
+
+**How Minecraft 26.3 saves** (read from the 26.3 Mojang-mapped jars' bytecode in the loom cache; no sources are on disk):
+
+- **Chunks save eagerly, one chunk at a time, not only at the autosave.** `LevelChunk.markUnsaved` (clean to dirty) adds the chunk to
+  `ChunkMap.chunksToEagerlySave`. Each tick, `ChunkMap.tick` -> `processUnloads` -> `saveChunksEagerly` saves up to 20 of them
+  (`CHUNK_SAVED_EAGERLY_PER_TICK`), while fewer than 128 writes are in flight (`MAX_ACTIVE_CHUNK_WRITES`) and only while the tick has
+  time (`hasTime`). A chunk is saved at most once per 10 s (`EAGER_CHUNK_SAVE_COOLDOWN_IN_MILLIS`). A lagging server falls behind.
+- **The bulk autosave** runs every `max(100, tickrate x 300)` ticks (6000 at 20 tps, about 5 minutes), and when the server pauses empty:
+  `MinecraftServer.autoSave` -> `saveEverything(true, false, false)` -> `saveAllChunks` -> per level `ServerLevel.save(null, flush=false,
+  skip = noSave)`. With `flush=false`, `ChunkMap.saveAllChunks` clears the cooldowns and saves every dirty loaded chunk, but it only
+  **queues** the writes.
+- **The disk write is asynchronous.** `ChunkMap.save(ChunkAccess)` (private) does `tryMarkSaved`, then a snapshot
+  (`SerializableChunkData.copyOf`) on the server thread. The NBT is encoded on the background pool, and `IOWorker.store` writes it
+  on the IO thread. `IOWorker.synchronize(flush)` (public, through `SimpleRegionStorage`) completes once every pending write has
+  reached the region file; with `flush` it also forces the region files. Region files are opened with DSYNC only when
+  `forceSynchronousWrites()` is true: a dedicated server by default, but **not** the integrated server on macOS or Linux
+  (`Options.syncChunkWrites` defaults to Windows only).
+- **Unloading saves first.** `scheduleUnload` saves the chunk before unloading it, through the same IO queue. With `/save-off`
+  (`level.noSave()`), chunks neither save eagerly nor unload.
+- **level.dat** is written synchronously at each save-all. SavedData is written on the IO pool at each save-all and joined only with
+  `flush`. There is no incremental SavedData saving.
+- **What "saved" means in the bytecode** (verified for this revision):
+  - `ChunkMap.save(ChunkAccess)` (private) runs on the server thread. It calls `tryMarkSaved` (clearing the dirty flag),
+    `SerializableChunkData.copyOf` (the snapshot), starts the encoding on the background pool, and calls `write(pos, encoded::join)`.
+    That queues the write in `IOWorker.store` before returning. The returned future completes when the region file has the bytes, or
+    fails; `save` uses it only to call `reportChunkSaveFailure`. The dirty flag is already clear by then, so a failed write leaves a
+    clean chunk with nothing on disk.
+  - `saveChunkIfNeeded` (the eager saver and `saveAllChunks(false)`) **skips** a holder that isn't `wasAccessibleSinceLastSave` and
+    `isReadyForSaving`. So neither a bulk save nor `AFTER_SAVE` proves a given chunk was queued.
+  - `processUnloads` moves a holder from `updatingChunkMap` to `pendingUnloads`. `scheduleUnload` then waits on
+    `ChunkHolder.getSaveSyncFuture()`, which means *ready to save*, not saved, and only afterwards queues the callback that calls `save`.
+    A chunk that has left `getChunkNow` may therefore still be unsaved.
+  - Only a hook at `save`'s `write` call observes a real post-write snapshot and its completion. The first draft's "no mixin" proof was
+    wrong.
+- **Architect state that a halt loses outright:**
+  - `FluidRearm`'s wake-up queue lives in memory only.
+  - `RegionFluids.removalGate` returns at once when the region's persisted `removal` is `done`.
+  - `RegionsImpl.finishRemoval` moves a removed region to its tombstone and calls `RegionFluids.forget`, so the drain's befores are
+    gone after it.
+  - `Stockpiles.save` logs a write failure and returns, so the caller can't tell whether the ledger reached disk.
+  - `StillOurs.holds` ignores volatile properties and accepts fluid/air equivalences. It compares a container only as "empty vs not
+    empty", not its contents.
+- So after a JVM halt **each chunk is at its own last save.** That is usually seconds old: within one cooldown plus the IO queue. Under
+  lag or `/save-off` it can be minutes old, and a site or tile spanning chunks can come back half new and half old. "The world goes back
+  to its last autosave" (UMT's model) is too coarse. Every rule below holds per chunk, and a majority threshold over a site's cells (90 %
+  restored, 80 % standing) will always leave some sites in between.
+- **"The world" has three clocks after a halt.** Chunks are seconds old (the eager saver). level.dat and SavedData are as old as the last
+  bulk save (minutes), so any consumer state kept in SavedData (Steward's, if it has any) has the same lag. Architect's own files
+  (`journal.json`, `architect-sites.json`, the queue file, region records) are current as of their last change. The one exception is
+  the stockpile ledger, saved at `BEFORE_SAVE`, which is as old as the bulk save.
+- **The world is never ahead of the journal.** A block write waits for its commit's future (4e "I/O thread"), so the journal always
+  holds what the world shows. The only artifact written ahead of the journal is RP's realised record, made durable before P3. It
+  records a decision, and its status is read from the journal.
+- Architect forces no save anywhere in production. The only save call is the test kill point `+save`
+  (`WorldJournal`: `saveAllChunks(true, true, true)`, then `halt`). `Stockpiles` saves its ledger on Fabric's `BEFORE_SAVE`.
+
+**What Architect does at a start today:**
+- Order: the journal first, then the record, then the blocks (4e). The journal is durable at its commit point (`journal.json`'s atomic
+  move). It does not fsync. Neither does anything else of Architect's.
+- `Sites.reconcile` (SERVER_STARTED) settles every pending site **on evidence**. `Reconcile.restored` needs 90 % of the compared cells
+  holding `before`, `Reconcile.stands` needs 80 % holding `after`, and anything between is KEEP. A CELL entry (road, cell site, region
+  tile) stands on a majority of `after`; otherwise it is released. RECOVER calls `SiteJournal.reactivate(group)`, which reactivates
+  **every** UNDONE entry of the undo group across all its sites, and reverses hand-downs only to receivers that are already active
+  (`Journal.reactivate`).
+- Pending sites settle in `pending` list order, then pending Infras (roads, cell sites, region tiles) in `Infras.pendingAll` order.
+  Nothing orders them by commit.
+- A group whose restore job is still in the queue file is left to its job (`Placement.jobSites`, K7). A job that **ended** is gone from
+  the queue file, so its group settles on evidence at the next start, whether or not the world saved its writes.
+- Two separate unclean-stop signals exist: the queue file's `clean` flag (Placement: K3 rollback and requeue) and
+  `architect-running.marker` (SiteDeltas: 5b's lost-writes rule).
+- **5b's lost-writes rule** (`SiteDeltas.lostWrites`) loops over site deltas only. 6a's text (CONTRACT, phase 6 "Crash safety") says
+  it applies to tiles too. **Nothing implements that:** an ACTIVE tile entry whose writes were lost stays ACTIVE, its region PLACED, and a
+  later removal's CELL undo keeps those cells as "not ours".
+- `Placement.load`'s "placing without a job" fallback loops over `Sites.all()` only, not over Infras.
+- **A live hazard found reading the code (F6 in the code, not only in a crash window):** after an unclean stop in a group removal,
+  members still in the resumed removal's `r.sites` are in `jobSites` and are not settled, but a member already written settles, and its
+  RECOVER reactivates the whole group, those members included. The resumed `Groups` removal then writes their `written` values over
+  entries that are ACTIVE again.
+- **RS** (`slice/RS`, `RegionTargets.rescanFree`) rolls survival free-pass tiles forward at every start: where the world holds `before`
+  and not `after`, it writes `after`. It is the only roll-forward today. It doesn't check that the entry is still on top of the cell.
+- **RP's realised record** (`feat/realised-provenance`) is written durable (fsync and rename) before the tile's P3. It records the
+  decision, not the world: after lost writes its codes still say WRITTEN. Nothing here changes it.
+- **Survival refunds** of a group removal are tallied before the undo, saved with the removal, and credited once per key when the
+  member's restore is written (Y1, `Groups.credit`). The stockpile ledger is saved in the world-save callback.
+
+### 1. What goes wrong
+
+The journal is a write-ahead log and the world's chunks are the data pages, but each chunk saves on its own clock. The settle at start
+treats the world as current. It **guesses each operation's direction** from a share of a site's cells (90 % restored, 80 % standing,
+KEEP in between), and a guess of "it stands" reverses an operation that others were built on.
+
+| finding | what the crash does | why today's settle can't fix it |
+|---|---|---|
+| F5 | a restore or rollback job ended, and its writes in unsaved chunks are lost | the job left the queue file; the evidence finds neither 90 % before nor 80 % after, so KEEP at every start, and the half-written blocks stay |
+| F6 | part of a group removal's writes are lost | one member's evidence says "stands", and `reactivate(group)` brings back members whose own cells are restored (and, in the code, members the resumed removal is still writing) |
+| F7 | two stacked removals are lost | settling the lower first skips its hand-downs to the upper, which is still UNDONE; the upper's `before` stays the ground, and removing it later cuts the lower |
+| UC | any release, a "covered" one included, of a site whose blocks the world still shows | release is decided on evidence at a start, not on the world's writes being on disk |
+| H-core | a PLACED stage's writes are lost | nothing compares an ACTIVE entry with the world; 5b's rule covers deltas only |
+
+### 2. Options weighed
+
+Every option keeps one policy: **the journal wins for committed operations, removals included** (roll forward). Evidence may name a
+conflict; it never reverses a commit. The review agreed with the policy. What it found missing is a proof that recovery always has
+the data it needs, and a correct test for "written to disk".
+
+| | design | what it needs | verdict |
+|---|---|---|---|
+| A | **Forced saves alone**: save the affected chunks at each job's end | a hook to see the write complete; still a window (mid-job, before the write completes) and a second operation can start in it | doesn't remove blockers 1, 2 or 6 by itself: a crash in the window still needs recovery, and two operations stacked inside one window still need history |
+| B | **Unbounded roll forward** (the first draft): replay every uncertified operation in commit order | retained history per cell, so recovery can go from *any* saved version to the final committed value; compaction, folding and zero-write hand-downs audited against it | correct only with a multi-version projection; the largest; hard to prove |
+| C | **Durability barrier + certified roll forward** (recommended): no operation may build on cells of an operation whose writes aren't certified on disk yet; recovery replays at most one operation per cell, in uncertified chunks only | an observation mixin on `ChunkMap.save`'s write; persisted per-chunk obligations; forced saves **on demand** to keep the barrier's wait short | removes blocker 1 by construction (depth one), 2 by observing real writes, and 6 by persisted obligations |
+| D | Evidence per cell, keeping today's direction choice | reactivation | rejected: a half-lost operation has no majority (§0), and reactivation brings back F6 and F7 |
+
+**So forced saves are part of the answer, but not on their own.** A save doesn't stop a second operation from building on unsaved
+writes, and it doesn't cover a crash before the save completes. The **barrier** removes the replay-depth problem. The forced save only
+makes the barrier's wait short: without it, a cell saved within the last 10 s waits out the cooldown, and a lagging server's eager saver
+stalls. C is B's policy with the history problem made impossible instead of solved.
+
+### 3. The design (recommended: C)
+
+#### 3.1 Obligations: what must reach the disk
+
+- An **obligation** is `(entryId, gen, chunk set)`. `gen` is the entry's generation: a new journal index counter, bumped by every commit
+  that changes the entry's status or cells (P3, P7, R2, a hand-down received, a fold, a reactivation).
+  - It is created in the commit **before** the writes: P3 for a placement, R2 for an undo, the rollback's commit for K3. P5 and R4
+    are not commits.
+  - It is persisted in the index (`journal.json`) as the set of chunks still uncertified.
+- **The chunk set** is every chunk the operation may write:
+  - the entry's sections;
+  - its leaf ring (box + 8);
+  - a BOX restore's edge-update neighbours (box + 1);
+  - for regions, the drain's cells: sources, spill, watch, predicted flow, escape and breach cells (§3.6).
+- **An entry is released only when it has no open obligation.** Its undo record (`written`, `handed`) stays until then.
+- **Legacy entries** (no obligation field) are certified only if the previous stop was clean (§3.7). After an unclean stop they get one
+  last run of today's settle, then they count as certified.
+
+#### 3.2 Certification: observing a real write
+
+- **A mixin** wraps the `write(pos, supplier)` call inside `ChunkMap.save`:
+  - At the call (server thread, after `copyOf`), it reads the chunk's **write stamp**: a per-chunk counter that Architect bumps on
+    every write of its own (the existing `LevelChunkMixin` at `setBlockState`, filtered to Architect's writers).
+  - It attaches `whenComplete` to the returned future. On success, it records that the snapshot with that stamp is on disk.
+- **When a chunk is certified.** A chunk in an obligation is certified for `gen` when a snapshot whose stamp is at or above the
+  operation's last write stamp in that chunk has completed successfully. Unloading, eager saves, bulk saves and forced saves all go
+  through `save`, so all of them count, and nothing else does.
+- **A failed write certifies nothing.** If the chunk is still loaded, Architect calls `markUnsaved()` on it again so it saves again.
+  Otherwise the obligation stays open for the next start.
+- **Stale generations don't count.** A completion for an older `gen` certifies nothing for a newer one. A placement's late
+  certification can't release the undo that followed it.
+- **Recording certifications.** They are committed in batches (index only, at most once a second), together with the releases they
+  allow.
+- **Accounting is a separate obligation** for a removal that credits refunds (§3.8). The ledger has to be written successfully, so
+  `Stockpiles.save` returns a result and its success is recorded with the ledger's generation.
+
+#### 3.3 The barrier
+
+- An operation may not **commit** (P3, R2, a delta, a fold, a move) if its cells, or the cells it hands down to, overlap a chunk with an
+  open obligation for another entry. It waits with `OVERLAP_BUSY` and the message "waiting for the world to save". No new API value.
+- So at most one operation per cell is ever uncertified, and recovery never needs older history (blocker 1). Two examples:
+  - **air, then A (stone), then B (planks).** B can't commit until A's chunks are certified, so after a crash the cell is stone or
+    planks, never air with two operations pending.
+  - **A zero-write hand-down from A's undo to B.** A's undo waits until B is certified.
+- **Forced saves on demand.** When an operation is waiting on an obligation, Architect saves that obligation's chunks through an
+  `@Invoker` on `ChunkMap.save`. It saves at most 20 a tick (the eager saver's rate), only holders that are `isReadyForSaving`, and
+  never in a level with `noSave`. Under `/save-off` waiters wait, and the status says so.
+- **A group or stage counts as one operation**, so its own members don't wait on each other.
+- **Unrelated operations never serialise:** the barrier is per chunk overlap, not global order.
+
+#### 3.4 Recovery: replay one operation per cell, in uncertified chunks only
+
+Recovery runs at **every start that finds an open obligation**. It doesn't depend on a clean or unclean stop (blocker 6). Each
+obligation's uncertified chunks are replayed per cell:
+
+| entry | pre-value | target | rule |
+|---|---|---|---|
+| placement (ACTIVE or PLACED) | `before` | `after` | **exact** compare (§3.5): the world holds `before`: write `after`; it holds `after`: post-work only; else conflict |
+| BOX undo (UNDONE) | anything | `written` | write `written` (BOX always writes, as R4) |
+| CELL undo (UNDONE) | the entry's `after` | `written` | the original plan's predicate (`WorldJournal.holds`, the same one R1 used); else conflict |
+| PLACING rollback (K3) | as today | as today | as today |
+
+- **Why StillOurs is right for a CELL undo and wrong for a placement.** A CELL undo decided at R1 with `holds`. Replaying with the same
+  predicate on an older snapshot reaches the same decision, except where the world changed between that snapshot and R1, and the crash
+  lost that change anyway. A placement's `before` has no such predicate: using StillOurs there would delete water or contents that were
+  added since (blocker 5). Placements compare exactly.
+- **Post-work runs for every cell in an uncertified chunk, whether or not a block is written** (blocker 4):
+  - `FluidRearm.wrote` for every non-source fluid cell of an undo;
+  - the PT record from the journal (the attachment lives in the chunk, so it rolled back with it);
+  - block-entity NBT written when it differs exactly;
+  - the leaf ring's distances (`restoreRing`, which is idempotent).
+- **Conflicts are reported and counted, never "kept" silently.** The gate's oracle (§5) doesn't accept them as success.
+- **Records follow the journal.** An UNDONE entry's record is pending until it is released; an ACTIVE one's is placed. **A removal
+  committed to the journal always completes.**
+- **Evidence becomes report-only** for journaled entries: the standing report, plus 4d migrated entries without `after`, which are BOX,
+  so a replay writes `written` anyway.
+- **Reactivation** is left only for a move whose new placement is still PLACING (it rolls back, so the site would otherwise be
+  nowhere). It is per undo group and newest first. It creates a new obligation, because the old place's cells must be certified again.
+- **Construction placements** aren't replayed: what is built is derived from the world, and RS's ledger drift rule stands.
+  **Construction removals** are replayed like any undo.
+- **RS's `rescanFree`** stops being a writer. Its free-pass cells are replayed placement cells; paid targets stay world-derived.
+
+#### 3.5 The recovery compare
+
+The compare is exact, over normalized state, NBT and provenance:
+- the block and every property, volatile ones included, because a placement's `before` is the world at P1, captured exactly;
+- the block-entity NBT without position keys, with container contents compared item by item;
+- the PT record.
+
+`WorldJournal.same` is not this. The compare is a new function with its own unit tests over every V-row of UMT's vanilla table.
+
+#### 3.6 Startup and regions
+
+- **The startup barrier.** At SERVER_STARTED, before anything else that acts on the world (Placement's resume, `Builder`, RS scans,
+  RegionFluids, `reconcileRemovals`, `Sites.reconcile`), every open obligation's chunk set is **reserved**. Everything overlapping it
+  waits until the replay certifies.
+- **The replay is ticked**: RestoreJob for undos, a `RedoJob` (RestoreJob's writer with the `after` side) for placements, ticketed by
+  section. Planning, decoding, tickets, post-work and the certification scan all count against `placementBudgetMs`. Outstanding tickets
+  are bounded (64 chunks).
+- **Regions drain first.** A region keeps its fluids manifest (`fluids.json`'s befores, and the bodies' cells) in its tombstone until
+  every obligation of its removal is certified. `RegionFluids.forget` moves to that point. An uncertified region undo **re-drains even
+  when `removal` is `done`**, then waits its bound, then replays the solids. The drain writes only cells no other standing entry owns,
+  and its cells are in the obligation's chunk set.
+- **Fluid placements** with an uncertified stage go through H's restart path (the live check, an idempotent drain on failure) after the
+  solids are replayed.
+
+#### 3.7 One unclean-stop signal (migration only)
+
+Obligations replace both signals for lost writes: `architect-running.marker` and the queue file's `clean` flag. The marker is read once
+more, at the first start on this version, to decide the legacy entries (§3.1). The queue file's `clean` flag stays for job cursors.
+
+#### 3.8 Accounting (a separate guarantee)
+
+- The R2 commit records the removal's credit keys and amounts with the undo. A replay credits each key the ledger lacks. "Once per key"
+  makes a credit that survived the halt a no-op.
+- A credited removal's accounting obligation clears only after a successful ledger write that has the key.
+- **Not covered:** item entities (dropped refunds, overflow, falling-block items), player inventories and entity storage. Minecraft
+  saves those separately from chunks, so they can drift. A dissolved stockpile's fallback can drift too. RS's charge and scoop paths
+  get their own audit in U5.
+
+#### 3.9 What each finding becomes
+
+| finding | outcome |
+|---|---|
+| F5 | the ended restore's obligation stays open until its chunks are certified; after a crash, its uncertified chunks are replayed |
+| F6 | no removal is reactivated; the resumed group removal is the replay (one writer) |
+| F7 | the barrier stops the second removal from committing until the first is certified; nothing is ever re-ordered |
+| UC | nothing is released with an open obligation; "covered" no longer releases |
+| H-core | an uncertified stage's chunks are replayed before the next stage may commit (the barrier) |
+| 6a tiles | tiles are entries with obligations like any other |
+| F1 (part A's) | settle no longer KEEPs on evidence; to confirm in UMT, not this section's scope |
+
+### 4. Guarantees, and the limits stated
+
+The crash model is a **JVM halt**: files and region writes completed before it survive. Power loss is out of scope (§8 Q5).
+
+| id | guarantee |
+|---|---|
+| C-I1 | **The world equals the journal's projection** in every chunk once its obligations are certified or replayed. The projection is computed by an independent oracle from the operation log, not from the replay's own labels. The only exceptions are the limit classes L1-L4, each counted. |
+| C-I2 | **Release only with no open obligation** for the entry's current `gen`. A completion for an older `gen` never certifies. |
+| C-I3 | **Depth one.** At any time, each cell has at most one entry with an open obligation (the barrier). |
+| C-I4 | **No limbo.** Every open obligation is replayed at the next start, whatever the stop, and is certified by the first successful save of its chunks after the replay. |
+| C-I5 | **One outcome per commit.** An undo group completes as a whole, and a move comes back as a whole. |
+| C-I6 | **Stacks stay chained.** After recovery, removing every standing entry, in any order, is exact. |
+| C-I7 | **No cut.** A recovery write never changes a cell that another standing entry owns. |
+| C-I8 | **No loss beyond the crash's own.** A certified chunk is never replayed. In an uncertified chunk, recovery overwrites only the operation's exact pre-value (a placement), the planner's predicate (a CELL undo), or anything (a BOX undo, as R4). |
+| C-I9 | **Idempotence.** Recovery, a crash or a clean stop inside it, then recovery again: the same world and journal as one recovery. |
+| C-I10 | **Records follow the journal.** A committed removal never reappears as a standing site. |
+| C-I11 | **Credits are recovered once** when the ledger and its keys persist together (§3.8). |
+
+**Limits, stated rather than solved:**
+- **L1. ABA inside the operation.** A player edit made *during* an operation, to a cell the operation had already written, captured by
+  a save in the middle of the operation, then lost to the halt: replay may overwrite it with the target. Once the operation's
+  post-write snapshot is on disk, that chunk is certified, so edits made after the operation are never at risk.
+- **L2. Effects outside the journal:** neighbour updates, gravity, plants losing support, falling entities and drops caused by the
+  original writes or by the replay. This is the same class as F2, F3 and F8. The replay uses the original writers' flags, so it adds no
+  new kind of effect.
+- **L3. Entities and inventories** (§3.8).
+- **L4. Conflicts.** A cell holding neither the pre-value nor the target is left alone and reported.
+
+### 5. Gate plan
+
+#### 5.1 UMT (needs `feat/umt` on main first)
+
+**The model.** Each chunk keeps its own disk copy. A save of a chunk goes through three separate events: the **snapshot** (clears
+dirty, takes the copy and stamp), the **enqueue**, and the **completion**, which can succeed or fail. Saves are:
+- eager saves of a random dirty subset;
+- delayed unload callbacks;
+- bulk saves that skip holders that aren't ready;
+- forced saves (§3.3).
+
+`restart` restores each chunk's last *completed* copy. The certification mixin is modelled at the snapshot and completion events. The
+barrier, the obligations and the replay run as production code through the existing seams.
+
+**The oracle.** An independent expected world, computed from the operation log by a separate simple interpreter (no `Journal`
+code). C-I1 compares against it. A "kept" or "conflict" label counts as a failure unless the scenario injected a player or vanilla
+change at that cell.
+
+**Properties, each expected green:**
+
+| property | covers |
+|---|---|
+| `c1_oracle` | C-I1, with the limit classes counted only where injected |
+| `c2_genCertify` | stale completions (a placement's save completing after R2) never certify the undo |
+| `c3_depthOne` | the barrier: an operation that must wait does; two unsaved placements at one cell never both exist |
+| `c4_noLimbo` | clean stop mid-recovery, repeated crashes, crashes around the certification commit and compaction |
+| `c5_group`, `c6_chained`, `c7_noCut` | C-I5, C-I6, C-I7 (a standing neighbour's cells unchanged) |
+| `c8_noLoss` | ABA edits outside the operation (never overwritten); changed container contents and added water at a placement's `before` (conflict, kept) |
+| `c9_idempotent` | crash, or clean stop, at every n inside a replay |
+| `c10_records`, `c11_credits` | records after each start; full stockpiles, overflow, a dissolved stockpile, and ledger, world and entity saves advancing independently (credits once; L3 drift counted) |
+| `c12_postWork` | a flowing cell already at its target after the crash still gets its wake-up; PT and BE NBT re-applied |
+| `c13_regionDrain` | a completed, tombstoned region removal with its drain and solid chunks saved in each combination: no water left in opened shells, E-flat 0 |
+| `c14_failedWrite` | a failed completion keeps the obligation, and the chunk saves again |
+
+The extra cases the review named are generator branches: covered hand-down then release, delta folding before certification, gravity
+next to a standing site.
+
+`UmtFindingsTest`'s F5, F6, F7 and UC repros turn green. Rebaselining the CI pin is a reviewed step.
+
+**Mutation rows:**
+
+| mutation | goes red |
+|---|---|
+| certify at the snapshot (not the completion) | `c14`, `c1` |
+| no `gen` check | `c2` |
+| no barrier | `c3`, `c1` (A then B at one cell) |
+| skip post-work on cells already at their target | `c12` |
+| StillOurs for a placement's `before` | `c8` |
+| `removalGate`'s `done` early return kept | `c13` |
+
+#### 5.2 In game (headless, $0)
+
+**Losing writes for real.** The eager saver saves a dirty chunk within seconds, so the no-save runs set `noSave` on the level under
+test before the operation (`dev.world.saveOff`, a TEST hook) and fire the kill in the tick of the named point. Today's no-save kill
+points (FL1 without `+save`) lose writes only by timing, and move to the same hook. `+save` runs `saveAllChunks(true, true, true)`, which
+ignores `noSave`.
+
+| point | where | bar after the restart |
+|---|---|---|
+| RX1 | a single removal's RestoreJob ended, uncertified | without save: replayed, exact, released after certification; with save: certified by the `+save`, nothing replayed, released |
+| RX2 | a group removal with members on both sides of a chunk boundary, some written | every member replayed, none comes back, E-flat 0 |
+| RX3 | removal A ended (uncertified), then removal B of a site stacked on it asked for | B waits (barrier) until A certifies; after a kill: A replayed, then B runs; exact |
+| RX4 | P8 of an instant site, uncertified | replayed; remove: exact |
+| RX5 | a region stage PLACED and uncertified, the next stage waiting | the next stage waits; after a kill: replayed, then the next stage, PLACED, `Regions.remove` E-flat 0 |
+| RX6 | a completed region removal with a drained fluid body, solids certified and drain cells not (and the reverse) | re-drained from the tombstone's manifest, E-flat 0, 0 water |
+| RX7 | a kill inside a replay; a clean stop inside a replay | the next start finishes it; E-flat 0 |
+| RX8 | a move whose new place is PLACING | the old place back, a new obligation, exact |
+| RX9 | `/save-off`, then a stacked operation | it waits with "waiting for the world to save"; `/save-on` releases it |
+
+Every bar ends with the **journal empty** after the final removal. 4e-crash's K6 bar changes from "stands again" to "removed". The
+existing K1-K8, RG1-RG6, FL1-FL6, x-resume and 4e-orders keep their bars.
+
+#### 5.3 Timing (recorded, not judged)
+
+Recorded per run:
+- forced-save time per chunk on the server thread (`copyOf`);
+- the barrier's waits (count and p95);
+- the replay's per-tick time;
+- the certification commit's time.
+
+### 6. Behaviour changes (Steward's pre-release check: **needed**)
+
+- **A removal committed to the journal always completes after a crash.** 4e's K6 "stands again, remove it again" becomes "removed".
+- **5b's lost-writes rule** (undo a delta whose cells mostly hold `before`) becomes a replay, so the site ends at version b.
+- **Stacked operations wait for the world to save** (§3.3): usually ticks, because the forced save runs on demand. Under `/save-off` they
+  wait until saving is back on.
+- **Releases come later**, when certified. `Sites.pending` holds a removed site until then.
+- **Steward needs an authoritative reconcile after a halt**, because its own records may lag (§0's clocks) and completion events fired
+  before the halt may be lost. Additive API (next free minor): a `RECOVERED` event (appended enum value) fired when the start's replay
+  is done, listing the sites, roads and regions it touched, plus a default method `Sites.recovering()`. Steward re-reads the views at
+  that event.
+- DevBridge, additive: `dev.journal.state` gains `gen` and `obligations`; new `dev.journal.certify`, and TEST `dev.world.saveOff`.
+
+### 7. Size and split, honestly
+
+The first draft's 2.5 to 3 days was too low. The review's blockers are real. The full design is about **8 days**, and a narrowed v1 is
+about **5 days**.
+
+| slice | what | days |
+|---|---|---|
+| U1 certification | the `ChunkMap.save` write mixin and stamps; obligations with `gen` in the index; batched certify-and-release commit; failure handling; recovery at every start with open obligations; legacy migration | 1.5 |
+| U2 barrier | commit-time barrier per chunk overlap; forced saves on demand (`@Invoker`, 20/tick, `noSave` respected); the startup reservation before every other subsystem | 1 |
+| U3 replay | RedoJob/RestoreJob over uncertified chunks; the exact compare (§3.5) and its tests; post-work; evidence report-only; K6 and 5b changed; move reactivation; `rescanFree`'s writer removed | 2 |
+| U4 regions | fluids manifest kept in the tombstone; re-drain despite `done`; drain cells in the chunk set; ownership guards on the drain | 1 |
+| U5 accounting | credit keys in R2; `Stockpiles.save` reports success; the ledger obligation; RS charge and scoop audit | 0.5 to 1 |
+| UMT | per-chunk snapshot, enqueue and completion; the independent oracle; `c1`-`c14`; the mutation rows | 1.5 to 2 |
+
+**Narrowed v1 (recommended to build first): U1 + U2 + U3 + UMT's model and oracle, about 5 days.**
+
+v1 guarantees C-I1 to C-I10 for sites, roads, cell sites and region tiles without fluid bodies, with L1-L4 stated. It covers F5, F6,
+F7, UC and H-core's question for dry regions.
+
+Its stated limits until v2:
+- **A region with a fluid body.** Its obligations still block overlapping commits and are replayed for solids. But a removal that
+  ended and was tombstoned can't re-drain, so RX6 is v2's.
+- **Credits** keep today's drift: refunds credited before a halt may be lost or kept with the ledger's last save.
+
+v2 is U4 + U5 + `c11` and `c13`, about 2 to 3 days.
+
+Not recommended: B (unbounded roll forward with retained history). It is larger (a multi-version projection, plus compaction and
+folding audits), and the barrier's cost is a short, measured wait.
+
+All slices change removal and recovery semantics, so Steward's pre-release check is needed before any of them ships. U1 must not
+ship without U3: "release requires certified" with no replay leaves obligations open forever after a crash.
+
+### 8. Open questions
+
+| # | for | question | default |
+|---|---|---|---|
+| Q1 | Steward | Is "a committed removal always completes after a crash", plus the `RECOVERED` event to reconcile from, acceptable? | yes |
+| Q2 | Steward | 5b's lost-writes rule becomes a replay (version b): acceptable? | yes |
+| Q3 | Noah | Is the barrier's wait for stacked operations (usually ticks, longer under lag, indefinite under `/save-off`) acceptable? | yes |
+| Q4 | coordinator | Ship v1 (dry regions, credits as today) and v2 separately, or wait for both? | v1 first, behind Steward's check |
+| Q5 | Noah | Power loss: fsync the journal index? It does not make chunks durable. | not now |
+| Q6 | coordinator | Is the per-chunk write stamp in `LevelChunkMixin` (Architect writes only) cheap enough? Measure it in U1; the fallback is a stamp per section. | measure |
+| Q7 | coordinator | Fix the live F6 hazard (§0) in part A (skip RECOVER for a group that still has a resumed removal) rather than wait for U3? | yes, in A |
+
+### Review responses (GPT-6.1, at fb26c61c)
+
+| # | review | verified | response |
+|---|---|---|---|
+| 1 | entries aren't a sufficient replay log (A then B at one cell; zero-write hand-downs; compaction and folding) | yes, by the logic of the on-top guard | the barrier (§3.3) makes depth one an invariant (C-I3); folds and hand-downs are commits under the barrier; no retained history needed |
+| 2 | the durability proof is wrong; checkpoints need a generation; failures must block | yes, against 26.3's bytecode (§0) | an observation mixin at `save`'s `write` call, certified on completion only (§3.2); `gen` on every obligation; a failed write certifies nothing and re-marks the chunk |
+| 3 | the drain restart skips `done` and forgotten regions | yes (`removalGate`, `finishRemoval`) | the manifest is kept in the tombstone until certified, and it re-drains despite `done` (§3.6, U4); v1 states it as a limit |
+| 4 | the target block isn't completion; neighbour effects | yes (`FluidRearm` isn't saved) | post-work on every cell of an uncertified chunk (§3.4); neighbour, gravity and plant effects are limit L2 |
+| 5 | StillOurs isn't a safe compare; ABA; C-I8 | yes (`StillOurs.holds`) | an exact compare for placements (§3.5); the planner's own predicate for CELL undos, argued in §3.4; ABA bounded by per-chunk certification and stated as L1; C-I8 rewritten |
+| 6 | a clean stop during recovery suppresses it | yes | recovery is driven by persisted obligations at every start (§3.4, §3.7) |
+| 7 | accounting is separate; entity storage; `Stockpiles.save` failures; RS | yes | §3.8, limit L3, U5 |
+| 8 | startup barrier; `rescanFree`; Steward's reconcile; budgets | agreed | §3.6; `rescanFree` stops writing; the `RECOVERED` event (§6); every phase budgeted |
+| 9 | migration can't treat unknown as durable; moves need new obligations | agreed | legacy entries are certified only after a clean stop (§3.1, §3.7); a move's reactivation opens an obligation |
+| 10 | the gate can approve its own decisions | agreed | an independent oracle; snapshot, enqueue and completion separated; the named cases are properties or generator branches (§5.1) |
+| nit | "at most one autosave interval" | agreed | removed; the ~10 s figure is stated as an expectation, conditional on saves completing |

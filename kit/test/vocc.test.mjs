@@ -287,6 +287,7 @@ test('item 2: catalogue 9 (archived as catalogue-vocc.json by 6c FL); its diff f
   assert.deepEqual([d.added, d.removed, d.retired, d.otherStateChanges, d.untilChanged, d.notesChanged, d.limitsChanged], [[], [], [], [], [], [], []]);
   assert.deepEqual(d.recheck, [{ part: 'copper_only', block: 'rule.palette' }]);
   const e = golden.entries.find((x) => x.id === 'rule.palette');
+  // (release tool) VOC-c released rule.palette at API 1.37.0 (v0.40.0); a later API moves PLAN_API, not this stamp
   assert.deepEqual(e, { id: 'rule.palette', sinceApi: '1.37.0', schemaVersion: 1, state: 'supported', limits: { groups: ['wood'], share: [0, 1], exempt: ['terrain', 'support'], scope: 32 }, note: 'measured over parts and bound lots; required rules are checked again at realise' });
   for (const x of golden.entries.filter((q) => q.id.startsWith('rule.') && q.id !== 'rule.palette')) assert.equal(x.state, 'reserved', x.id);
   // every other entry as HY's

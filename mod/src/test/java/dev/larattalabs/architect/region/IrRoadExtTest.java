@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
 class IrRoadExtTest {
 	static JsonObject ir() {
 		return JsonParser.parseString("""
-			{"format": 1, "id": "plan_v0", "kitVersion": "0.39.0", "seed": "7",
+			{"format": 1, "id": "plan_v0", "kitVersion": "0.38.0", "seed": "7",
 			 "claim": {"minX": 0, "minZ": 0, "maxX": 63, "maxZ": 63, "minY": -64, "maxY": 320},
 			 "stages": ["ground", "street"], "tiles": {"ground": {"terrain": [], "path": []}, "street": {"terrain": [], "path": []}},
 			 "roads": [

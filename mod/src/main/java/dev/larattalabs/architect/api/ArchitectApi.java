@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.38.0";
+	String VERSION = "1.37.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -124,7 +124,7 @@ public interface ArchitectApi {
 	 * Since 1.37.0 (6c VOC-c), a VOC-c helper ({@code plan.rules}) adds {@code "rulePalette"}: plan/0's {@code rule.palette} is
 	 * measured over the parts and the bound lots in its scope, {@link Regions#checkPalette} pre-checks an artifact's lot entries, and
 	 * {@link Regions#realiseApproved} and a lot's delta refuse {@link Reason#PALETTE} when a required rule is broken.
-	 * Since 1.38.0 (6c FL), an FL helper ({@code plan.layouts}) adds {@code "freeLayouts"}: plan/0's {@code layout.ring},
+	 * Since NEXT (6c FL), an FL helper ({@code plan.layouts}) adds {@code "freeLayouts"}: plan/0's {@code layout.ring},
 	 * {@code layout.spiral}, {@code layout.grid}, {@code layout.organic}, {@code locator.around} (zones and forms) and
 	 * {@code sketch.outline} are compiled (lots stay axis-aligned rects with a cardinal front, their streets ordinary roads); every
 	 * street road a plan region writes carries the road ext {@code architect_mc:street: {zone, district?}} (S-FL-5), on its

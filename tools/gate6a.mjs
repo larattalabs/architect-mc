@@ -252,17 +252,26 @@ async function realise(planId, opts = {}) {
 }
 const regionState = (region) => call('dev.region.state', { region }, 60_000);
 
-/** Waits for a region's batch to end, polling once a minute (logging waits); returns the last state. */
+/**
+ * Waits for a region's batch to end; returns the last state. (gate waits, 2026-10-20) It polls 1 s at first, rising by 1 s per 10 s
+ * waited to at most 5 s (it was a fixed 60 s, so every realise read 60 s whatever its size), and logs a line when the state changes,
+ * else once a minute.
+ */
 async function waitRegion(region, timeoutMs = 3 * 3_600_000, onPoll = null) {
-  const end = Date.now() + timeoutMs;
+  const t0 = Date.now();
+  const end = t0 + timeoutMs;
   let st;
+  let last = null;
+  let lastAt = 0;
   while (Date.now() < end) {
     st = await regionState(region);
     const v = st.view;
-    log(`  ${region} ${v.state}: ${v.stages.map((s) => `${s.name} ${s.tilesDone}/${s.tilesTotal}`).join(', ')}; cells ${v.cellsWritten}; items ${JSON.stringify(st.items)}; waiting ${JSON.stringify(st.waiting)}`);
+    const line = `  ${region} ${v.state}: ${v.stages.map((s) => `${s.name} ${s.tilesDone}/${s.tilesTotal}`).join(', ')}; cells ${v.cellsWritten}; items ${JSON.stringify(st.items)}; waiting ${JSON.stringify(st.waiting)}`;
+    const done = ['PLACED', 'PARTIAL', 'FAILED'].includes(v.state) || (st.batchStatus && st.batchStatus !== 'RUNNING');
+    if (done || line !== last || Date.now() - lastAt >= 60_000) { log(line); last = line; lastAt = Date.now(); }
     if (onPoll) await onPoll(st);
-    if (['PLACED', 'PARTIAL', 'FAILED'].includes(v.state) || st.batchStatus && st.batchStatus !== 'RUNNING') return st;
-    await sleep(Math.min(60_000, Math.max(5_000, end - Date.now())));
+    if (done) return st;
+    await sleep(Math.min(Math.min(5_000, 1_000 + 1_000 * Math.floor((Date.now() - t0) / 10_000)), Math.max(1_000, end - Date.now())));
   }
   throw new Error(`region ${region} did not finish`);
 }

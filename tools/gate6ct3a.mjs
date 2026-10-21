@@ -37,6 +37,7 @@ import crypto from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './lib/fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
+import { kitReuse } from './lib/kit-reuse.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-T3a-run');
@@ -104,6 +105,8 @@ steps.base = async () => {
 
 // ------------------------------------------------------------------ offline
 
+/** (gate waits, 2026-10-20) The kit suite once per gate run (tools/lib/kit-reuse.mjs): pass/fail-only kit files take this run's unit-kit results when exact. */
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 function nodeTest(files, timeout = 3_600_000) {
   const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
   const t = `${r.stdout}${r.stderr}`;
@@ -113,13 +116,13 @@ function nodeTest(files, timeout = 3_600_000) {
 
 steps.unit = async () => {
   const out = {};
-  out.t3a = nodeTest(['kit/test/bridge-t3a.test.mjs', 'kit/test/plan-t3a.test.mjs']);
+  out.t3a = kitOnce(['kit/test/bridge-t3a.test.mjs', 'kit/test/plan-t3a.test.mjs']);
   check(out.t3a.code === 0 && out.t3a.fail === 0 && out.t3a.pass >= 14, `items 7, 8, 11, 12 (kit): the span checks in §4's order, the beam's piers and the arch's ring, clearance over water, the bridge move (exactly one span, off without spans, the wet corridor), M10:bridge, M8, M6 and M5 and the broken variants (noPiers, noRails, pierInWater, noLamps), v35, v36, v38's bridge, v39's street fallback, the refusal fixtures with their wouldFits re-checked alone, §9's bridge rows and the gap tables, determinism: ${out.t3a.pass} pass, ${out.t3a.fail} fail`, out.t3a.failing);
-  out.found = nodeTest(['kit/test/t3-foundation.test.mjs', 'kit/test/k1-foundation.test.mjs', 'kit/test/plan-p0.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/plan-p0-det-1.test.mjs', 'kit/test/plan-p0-det-2.test.mjs', 'kit/test/plan-p0-det-3.test.mjs', 'kit/test/plan-p0-asks.test.mjs', 'kit/test/plan-k1a.test.mjs', 'kit/test/plan-k1b.test.mjs', 'kit/test/rope-k1b.test.mjs', 'kit/test/plan-k1-batch.test.mjs', 'kit/test/catalogue-since.test.mjs', 'kit/test/catalogue-c38.test.mjs']);
+  out.found = kitOnce(['kit/test/t3-foundation.test.mjs', 'kit/test/k1-foundation.test.mjs', 'kit/test/plan-p0.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/plan-p0-det-1.test.mjs', 'kit/test/plan-p0-det-2.test.mjs', 'kit/test/plan-p0-det-3.test.mjs', 'kit/test/plan-p0-asks.test.mjs', 'kit/test/plan-k1a.test.mjs', 'kit/test/plan-k1b.test.mjs', 'kit/test/rope-k1b.test.mjs', 'kit/test/plan-k1-batch.test.mjs', 'kit/test/catalogue-since.test.mjs', 'kit/test/catalogue-c38.test.mjs']);
   check(out.found.code === 0 && out.found.fail === 0, `items 10, 16: catalogue 6 (the golden, the K1 -> T3 diff), P0's tests after the flips (e15 off connector.bridge/tunnel), the K1 tests and the K1 batch test: ${out.found.pass} pass, ${out.found.fail} fail`, out.found.failing);
-  out.goldens = nodeTest(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/region-lint.test.mjs', 'kit/test/relief-t1.test.mjs', 'kit/test/route-t2.test.mjs']);
+  out.goldens = kitOnce(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/region-lint.test.mjs', 'kit/test/relief-t1.test.mjs', 'kit/test/route-t2.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 13: S1, S7, S2, mega_bench, relief_demo, route_demo, forms_demo, scatter_demo, districts_demo and links_demo tile goldens (and crossings_demo's); T2's routes (its water test unchanged); the lint: ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
-  out.kit = nodeTest(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
+  out.kit = kitOnce(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   // item 10: the catalogue diff tool, K1 -> T3, on the archived catalogues ((6c H) catalogue 6 is archived as catalogue-t3.json: the
   // golden is catalogue 7 now), and T3 -> H against the golden (the exact flips and added ids)
@@ -556,7 +559,11 @@ steps.look = async () => {
     }
     check((meta.tunnels ?? []).length === 2, `look (${tag}): crossings_demo flat's two tunnels realised beside the bridges (recorded, not judged: Noah's call, N-T3-3)`);
     await call('dev.release', {}).catch(() => null);
-    await call('dev.region.remove', { region, requester: OWNER }, 3_600_000).catch(() => null);
+    // (gate waits, 2026-10-20) the last camera can leave the player inside a site's box (the tunnel shots), and the removal waits
+    // for a player to leave it (10 minutes, then PARTIAL). Above the claim it removes at once.
+    await tp((FLAT_CLAIM[0] + FLAT_CLAIM[2]) / 2, 300, (FLAT_CLAIM[1] + FLAT_CLAIM[3]) / 2);
+    const rm = await call('dev.region.remove', { region, requester: OWNER }, 3_600_000).catch((e) => ({ error: String(e?.message ?? e) }));
+    out.bibles[tag].remove = { removed: rm.removed ?? null, restored: rm.restored ?? null, seconds: rm.seconds ?? null, blockers: rm.blockers ?? null, error: rm.error ?? null };
     await leaveWorld();
   }
   fs.writeFileSync(path.join(OUT, 'look', 'look.json'), JSON.stringify(out, null, 2));

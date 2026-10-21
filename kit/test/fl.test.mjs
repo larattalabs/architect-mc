@@ -117,7 +117,7 @@ test('item 5: the golden equals catalogue 10; its diff from catalogue-vocc.json 
   assert.deepEqual(d.notesChanged.map((x) => x.id), ['locator.around']);
   assert.match(golden.entries.find((e) => e.id === 'locator.around').note, /^On a wall: wall\.around.*Zones: a ring street round the feature; forms: sites in the band\./);
   assert.deepEqual(d.recheck, [{ part: 'grove', block: 'layout.ring' }]);
-  for (const id of six) { const e = golden.entries.find((x) => x.id === id); assert.equal(e.state, 'supported'); assert.equal(e.sinceApi, PLAN_API); assert.equal(e.schemaVersion, 1); assert.ok(e.note, id); }
+  for (const id of six) { const e = golden.entries.find((x) => x.id === id); assert.equal(e.state, 'supported'); assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === PLAN_API, `${id}: sinceApi ${e.sinceApi}`); assert.equal(e.schemaVersion, 1); assert.ok(e.note, id); }
   // no until FL anywhere in the kit's schemas and code (the archived catalogues aside)
   const scan = [path.join(ROOT, 'kit', 'schemas'), path.join(ROOT, 'kit', 'lib')];
   const files = scan.flatMap((d0) => fs.readdirSync(d0, { recursive: true }).map((f) => path.join(d0, f)).filter((f) => /\.(json|mjs)$/.test(f)));

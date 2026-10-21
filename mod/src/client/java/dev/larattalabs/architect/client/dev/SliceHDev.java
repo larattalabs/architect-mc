@@ -29,6 +29,17 @@ public final class SliceHDev {
 				}
 				return ServerTasks.callAsPlayer((level, player) -> RegionFluids.censusOf(level, v[0], v[1], v[2], v[3], v[4], v[5]));
 			});
+		DevBridge.register("dev.ticks.pending", 30_000, "{box?: [minX, minZ, maxX, maxZ]} - (gate waits) the scheduled block and fluid ticks the "
+			+ "player's level holds, per loaded chunk (saved ones not yet unpacked included) -> {block, fluid (chunks the server ticks), blockAll, "
+			+ "fluidAll, chunks, tickingChunks; with a box, its chunks: boxChunks, boxLoaded, boxTicking, boxBlock, boxFluid; gameTime}", (req, mc) -> {
+				int[] box = null;
+				if (req.has("box") && !req.get("box").isJsonNull()) {
+					JsonArray b = req.getAsJsonArray("box");
+					box = new int[] { b.get(0).getAsInt(), b.get(1).getAsInt(), b.get(2).getAsInt(), b.get(3).getAsInt() };
+				}
+				int[] fb = box;
+				return ServerTasks.callAsPlayer((level, player) -> dev.larattalabs.architect.region.PendingTicks.of(level, fb));
+			});
 		DevBridge.register("dev.fluid.tick", 30_000, "{cells: [[x,y,z]], fluid?: water|lava, delay?: 1} - (6c H) schedule one fluid tick at each cell -> "
 			+ "{scheduled}", (req, mc) -> {
 				JsonArray cells = req.getAsJsonArray("cells");
