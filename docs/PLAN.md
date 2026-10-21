@@ -871,6 +871,10 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
 - A route ending on a lot its zone couldn't place answers `blocked {dependency}` (naming the lot and zone), not refused NO_ROOM.
 - `rule.palette` gains `scope: "lots" | "all"` (default "all" = today), and `exempt` accepts `ways` and `forms`.
 - Take Steward's 12 re-recorded asks (steward-mc f-strange-asks) into the asks fixtures and gap table.
+- Pond placement keeps a body's shell, spill and single-breach reach off every lot's box + 1 when it chooses a site, so it
+  lands on a free site instead of refusing LEAK (Steward's F3 RC, 2026-10-21: a pond near stone, within 40 of a town zone,
+  refused LEAK because its single-breach reach met lot cottage_1; near claim_n it fits). Main's kit does the same, so this
+  is not an F3 issue. Gate: that plan places with 0 LEAK, plus a unit test where the only lot-clear site is the one chosen.
 
 ## Queued (coordinator, 2026-10-20)
 
