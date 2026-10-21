@@ -53,12 +53,22 @@ Resume notes for `slice/F3` (worktree `../architect-mc-F3`). The contract is doc
 - In game (change runs, artifacts/gate-runs-F3/): v72, v74, v75, v77 pass items 3, 4, 6, 8 (20261020-205519-change; v72's removal check
   fixed after: dumps before/after compared at the written cells after a stand).
 
+## State (2026-10-21 02:35 UTC)
+
+- Coral lane merged (slice/F3-c); origin/main (release tool, slots 6) merged in 912242b7; kit suite 689/0; `node tools/release-version.mjs --check` consistent.
+- Slice tier artifacts/gate-runs-F3/20261020-214604-slice: 87 PASS, 10 FAIL, 4 TIMEOUT. Triage (scratchpad/f3-build/triage.txt):
+  - Pre-existing on main (PLAN "Stale asks tables after VOC-c"; VOC-c's Reason.PALETTE): h-unit (H-a item 10), vocc-unit (item 3), pt2-ingame (item 13: ADOPT_REFUSED no longer last).
+  - F3-caused, fixed: kc-unit (F3's broken variants u01/u04 are M25:clear's to catch), k1b-unit (fixtures new on the branch have no base), f3-ingame (s01 needs v73's margin pit).
+  - Flaky or load: 4d-all (gravel fell at undo, as IRR/VOC-c runs), 6cf2-scenario-scatter (a snow layer), d2-ingame (2 sunflower tops amid flow), cu-measure and 6b-nudges (sidecar link lost), t1/k1a/s2-unit (timeouts at load 60).
+- Re-run of those plus f3-unit and f3-look: `gate-run change --only ...` (scratchpad/f3-build/run-change-2.out).
+- "F3 as built" drafted in docs/CONTRACT.md (uncommitted until the gate evidence row is filled).
+
 ## Left
 
-- F3-c (coral): delegated (lane below); then s01 in game, the coral items, plan-p0 item 9 (form.coral's valid fixture).
+- The re-run passing; republish the gallery with the coral pond (same file path); fill the as-built's evidence row; delete this file.
+- Push; the gate-verifier (review origin/main..HEAD, re-run realise, undo and StillOurs items on its own ports); report ready to merge.
 - v76 (FL's around): deferred to whichever merges second.
-- The natural round (f3-natural) and its golden (F3_WRITE_GOLDEN=1), the look + gallery, the slice tier, the gate-verifier, "F3 as built".
 
 ## Lanes
 
-- F3-c (coral) on `slice/F3-c` from 95be73ef (worktree `../architect-mc-F3c`, ports 8922/8923), merged into slice/F3 by the builder.
+- F3-c (coral) on `slice/F3-c`, merged.
