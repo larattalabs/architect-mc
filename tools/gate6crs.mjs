@@ -759,14 +759,17 @@ steps.item11 = async () => {
     const entries = entriesOf(fx);
     const T = await G.twin(ctx, 'rs02k', fx, entries);
     const R = await realised('rs02k', 'rs02_walled');
-    await G.feed(ctx, R.region, { fraction: 0.5, timeoutMs: 600_000, until: (st, rs) => (rs.build?.percent ?? 0) >= 30 });
+    await G.feed(ctx, R.region, { fraction: 0.5, timeoutMs: 1_200_000, until: (st, rs) => {
+      const w = (rs.build?.parts ?? []).find((p) => p.part === 'town_wall');
+      return !!w && w.built > w.cells / 4 && w.state !== 'built';
+    } });
     const mid = (await G.rsState(ctx, R.region)).build;
     await L.leaveWorld();
     await L.openWorld(R.s.world);
     const f = await G.feed(ctx, R.region, { timeoutMs: 2_400_000 });
     const d = await G.twinDiff(ctx, T.box, T.file, R.crateAt);
     out.clean = { mid: mid && mid.percent, after: f.last.rs.build && f.last.rs.build.percent, twin: d.mismatches };
-    check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done && d.mismatches === 0, `item 11 (clean stop mid-build at ${mid?.percent?.toFixed?.(1)}%): resumed to PLACED and built, equal to its INSTANT twin (${d.mismatches} differ)`, d.list);
+    check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done && d.mismatches === 0 && !mid?.done, `item 11 (clean stop mid-build: the wall ${json((mid?.parts ?? []).find((p) => p.part === 'town_wall') && [(mid.parts.find((p) => p.part === 'town_wall')).built, (mid.parts.find((p) => p.part === 'town_wall')).cells])} built): resumed to PLACED and built, equal to its INSTANT twin (${d.mismatches} differ)`, d.list);
     // (b) kill -9 after an autosave, mid-build of the next feed: drift within the units moved since the save
     await G.remove(ctx, R.region);
   }
@@ -796,7 +799,10 @@ steps.item11 = async () => {
     try { state.dev?.close(); } catch { /* gone */ }
     state.dev = null;
     await connect(300_000);
-    await L.openWorld(R.s.world);
+    // (the host is up, its server gone: open the world again, the killed save; a session.lock left behind goes first)
+    fs.rmSync(path.join(L.SAVES, R.s.world, 'session.lock'), { force: true });
+    await L.call('dev.world.open', { name: R.s.world }, 30_000);
+    await L.waitInWorld(900_000);
     const a = await C.parts();
     const now = C.total(a);
     const drift = {};
