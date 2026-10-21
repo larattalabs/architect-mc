@@ -74,9 +74,7 @@ async function removeRegion(ctx, region) {
 async function setUp(ctx, world, tag) {
   const { L, check, json } = ctx;
   await freshFlat(ctx, world, 'exact');
-  // (the lava variant, as h-crash's: without it 18 cells of four columns away from the bodies differ from the snapshot before and
-  // after the fix alike, an artifact of the no-lava plan's world, not of the drain)
-  const d = await planDemo(ctx, { lava: true });
+  const d = await planDemo(ctx, {});
   const pond = d.bodies.find((b) => b.id === 'pond');
   const box = demoBox(d.bodies);
   const file = await snap(ctx, box, `h-holders-${tag}`);
@@ -112,8 +110,12 @@ async function judge(ctx, tag, s, rm) {
   const wet = [...c.fluids].filter(([k]) => k !== k3(s.cell));
   out.otherFluid = wet.slice(0, 12);
   check(wet.length === 0, `${tag}: the stair's cell is the only fluid left in the pond's watch box (${wet.length} other: ${json(wet.slice(0, 6))})`);
-  const ex = [s.cell[0], s.cell[1], s.cell[2], s.cell[0], s.cell[1], s.cell[2]];
-  const d1 = await ctx.L.call('dev.region.hash', { box: s.box, mode: 'diff', file: s.file, exclude: [ex] }, 4 * 3_600_000);
+  // (no `exclude`: RegionHash's DIFF skips an excluded cell without reading its snapshot entry, so every later cell is compared with the
+  // previous one's value; the full diff is read and the stair's cell filtered here)
+  const d1 = await ctx.L.call('dev.region.hash', { box: s.box, mode: 'diff', file: s.file }, 4 * 3_600_000);
+  const outside = (d1.list ?? []).filter((m) => m.pos !== k3(s.cell));
+  d1.mismatches = outside.length + Math.max(0, d1.mismatches - (d1.list ?? []).length);
+  d1.list = outside;
   out.eflatOutside = { mismatches: d1.mismatches, sample: (d1.list ?? []).slice(0, 12) };
   check(d1.mismatches === 0, `${tag}: E-flat ${d1.mismatches} outside the stair's cell against the world before the region`, out.eflatOutside.sample);
   const g = await later(ctx, `remove ${s.stairSite} - force`, `remove:${s.stairSite}:-:force`); // (force: its owner is not the player)

@@ -563,8 +563,11 @@ export async function holders(ctx) {
   const rm = await core.removeWait(ctx, o.r.region);
   await sleep(3000);
   st = await isStair();
-  const ex = [cell[0], cell[1], cell[2], cell[0], cell[1], cell[2]];
-  const d1 = await L.call('dev.region.hash', { box: o.box, mode: 'diff', file: o.file, exclude: [ex] }, 4 * 3_600_000);
+  // (no `exclude`: RegionHash's DIFF skips an excluded cell without reading its snapshot entry, desyncing every later cell; the stair's cell is filtered here)
+  const d1 = await L.call('dev.region.hash', { box: o.box, mode: 'diff', file: o.file }, 4 * 3_600_000);
+  const outside = (d1.list ?? []).filter((m) => m.pos !== k3(cell));
+  d1.mismatches = outside.length + Math.max(0, d1.mismatches - (d1.list ?? []).length);
+  d1.list = outside;
   out.regionRemoved = { state: rm.state, stair: st.v, mismatches: d1.mismatches, sample: (d1.list ?? []).slice(0, 12) };
   check(rm.state === 'REMOVED' && st.ok && d1.mismatches === 0, `irr-holders: then Regions.remove: ${rm.state}, the stair still stands (${st.v}), E-flat ${d1.mismatches} outside its cell`, out.regionRemoved.sample);
   const g = await apitest(ctx, `remove ${placed.siteId} - force`, `remove:${placed.siteId}:-:force`); // (force: its owner is not the player)
