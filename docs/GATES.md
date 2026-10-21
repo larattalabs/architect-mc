@@ -461,7 +461,7 @@ load before that load shows in the load average.
 - **A real run with auto shards** (`20261021-212419-change`): the 18 steps of the gate-waits branch's first change run
   (`--only unit-kit,b-ingame,...,6a-staged`, the same ids), ports allocated 8980-8983, recorded in the slot file. The box was busy
   (the rel0410 release, the P2/P3 agents' runs): load 58.2/62.3 at the decision, so auto took 2 shards (the floor then). **46.8 min
-  wall**, 17 PASS and h-unit's known H-a item 10 FAIL, step loads 17-84 (median 46). The same set on 3 shards from history:
+  wall**, 17 PASS and h-unit's known H-a item 10 FAIL, step loads 17-84 (median 43). The same set on 3 shards from history:
   **48 min** (`gate-runs-gatewaits/20261021-004231-change`, load median 60, hy-unit's cold cache 32 min of it) and 27 min
   (`-021416-change`, load 34, with 3 steps skipped and 4 failing fast). This run's own step times packed longest-first: 97 min
   serial, 48.8 on 2 shards, 32.5 on 3, 24.9 on 4, 16.5 on 6. So under that load the floor of 2 gave up about 15 min of this

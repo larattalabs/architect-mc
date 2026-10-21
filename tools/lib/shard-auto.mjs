@@ -96,7 +96,7 @@ export function chooseShards(ac, { probe, holders, freeRunSlots, wallFor, pairs 
   };
   let n = Math.min(...Object.values(caps));
   let bound = Object.entries(caps).filter(([, v]) => v === n).map(([k]) => k);
-  // the floor: a plan that wants 2+ gets 2 when only the load-derived caps (cpu, slots) say less; memory, ports and the plan itself
+  // the floor: a plan that wants 3+ gets 3 when only the load-derived caps (cpu, slots) say less; memory, ports and the plan itself
   // still bind
   const hard = Math.min(caps.max, caps.plan, caps.memory, caps.ports);
   if (n < ac.floor && hard >= ac.floor) {
