@@ -842,7 +842,7 @@ steps.item12 = async () => {
   await L.call('dev.survival.set', { on: true });
   const K1 = `steward.rs.${Date.now().toString(36)}.a`, K2 = `steward.rs.${Date.now().toString(36)}.b`;
   const r1 = await L.call('dev.region.realiseApproved', { sha: c0.check.artifactSha, lotEntries: entries, opKey: K1 }, 300_000);
-  check(c0.check?.survival !== true && r1.refused?.reason === 'ARTIFACT_STALE', `item 12/13: a creative artifact in survival: realiseApproved refused ARTIFACT_STALE (${json(r1.refused ?? r1).slice(0, 200)})`);
+  check(c0.check?.survival !== true && /^ARTIFACT_STALE/.test(String(r1.refused?.reason ?? r1.refused ?? '')), `item 12/13: a creative artifact in survival: realiseApproved refused ARTIFACT_STALE (${json(r1.refused ?? r1).slice(0, 200)})`);
   // re-check at Start (survival), pin, a restart, then realiseApproved under the second key
   const c1 = await L.call('dev.region.checkPlan', body, 1_800_000);
   const c2 = await L.call('dev.region.checkPlan', body, 1_800_000);
@@ -862,9 +862,11 @@ steps.item12 = async () => {
   const box = G.boxOf(s.W);
   const town = await G.snap(ctx, box, 'rs-rs12-town');
   const offer = JSON.parse(JSON.stringify(G.fixture(ctx, 'rs05_offer').plan).replaceAll('${region}', region));
-  const oc = await L.call('dev.region.checkPlan', { ...body, plan: offer }, 1_800_000);
+  // (the offer's own claim: the town's and the ring round it, 24 more each side)
+  const oclaim = [s.W.claim[0] - 24, s.W.claim[1] - 24, s.W.claim[2] + 24, s.W.claim[3] + 24];
+  const oc = await L.call('dev.region.checkPlan', { ...body, claim: oclaim, plan: offer }, 1_800_000);
   out.offer = { overall: oc.check?.overall, parts: (oc.check?.parts ?? []).map((a) => [a.part, a.class, a.reasons?.[0]?.code]) };
-  check(oc.check?.survival === true && !!oc.check?.artifactSha, `item 12 (rs05): the offer checked in survival round ${region}: ${oc.check?.overall} ${json(out.offer.parts)}`);
+  check(oc.check?.survival === true && !!oc.check?.artifactSha && (oc.check?.parts ?? []).every((a) => a.class !== 'refused'), `item 12 (rs05): the offer checked in survival round ${region}: ${oc.check?.overall} ${json(out.offer.parts)}`);
   if (oc.check?.artifactSha) {
     const or = await G.realise(ctx, oc.check.artifactSha);
     const of = await G.feed(ctx, or, { timeoutMs: 1_800_000 });
