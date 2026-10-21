@@ -815,7 +815,10 @@ steps.item11 = async () => {
     await connect(300_000);
     // (the host is up, its server gone: open the world again, the killed save; a session.lock left behind goes first)
     fs.rmSync(path.join(L.SAVES, R.s.world, 'session.lock'), { force: true });
-    await L.call('dev.world.open', { name: R.s.world }, 30_000);
+    // (the host notices its server's death on its own time: dev.world.open retried until it takes)
+    for (let k = 0; ; k++) {
+      try { await L.call('dev.world.open', { name: R.s.world }, 30_000); break; } catch (e) { if (k >= 30) throw e; await sleep(2000); }
+    }
     await L.waitInWorld(900_000);
     const a = await C.parts();
     const now = C.total(a);
