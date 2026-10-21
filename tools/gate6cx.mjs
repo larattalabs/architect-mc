@@ -43,6 +43,9 @@ const { RUN, OUT, SAVES, LIBRARY, call, check, cmd, connect, fails, leaveWorld, 
 
 refuseKeys();
 const FLAT = 'G6B Flat Base';
+// --slice: the slice tier's subset (docs/FAST-CHECKS.md P1): resume's (f), the world-start reconcile table, runs only without it (the
+// release tier's x-resume-full); RegionReconcileTest covers the table. Without the flag every assertion runs, as before.
+const SLICE = process.argv.includes('--slice');
 const SCEN = path.join(root, 'scenarios');
 const S7 = JSON.parse(fs.readFileSync(path.join(SCEN, 's7_flat_village.json'), 'utf8'));
 const json = (o) => JSON.stringify(o).replaceAll(' ', '');
@@ -615,52 +618,55 @@ steps.resume = async () => {
       check((await hashBox(min, max)) === h0, 'resume (e): the world hash equals the pre-placement one');
     }
     // ---- (f) the world-start reconcile: a stop between the group's end and the region's record (dev.region.dropRemovalEnd)
-    {
-      // (f1) the group REMOVED, the region record left REMOVING: the next start ends it REMOVED with the group's time
-      await slowOn(false);
-      const region = await L.realise(p.planId, { lots: S7.lotEntries });
-      check((await waitRegion(region, 3_600_000)).view.state === 'PLACED', `resume (f1): the region is placed (${region})`);
-      const g = (await api(`rget ${region}`)).groupId;
-      await cmd('/kill @e[type=!minecraft:player]');
-      await call('dev.region.dropRemovalEnd', { on: true });
-      const r1 = await call('dev.region.remove', { region }, 3_600_000);
-      await call('dev.region.dropRemovalEnd', { on: false });
-      const stuck = await api(`rget ${region}`);
-      const gs = await api(`sgroup ${g}`);
-      out.f1 = { region, removed: r1.removed, stuck: stuck?.state, group: gs?.state };
-      check(r1.removed === true && stuck?.state === 'REMOVING' && gs?.state === 'REMOVED', `resume (f1): the simulated stop leaves the region REMOVING with its group REMOVED (${r1.removed}, ${stuck?.state}, ${gs?.state})`);
-      await restart(W);
-      const v = await api(`rget ${region}`);
-      out.f1.after = { state: v?.state, removedAt: v?.removedAt };
-      check(v?.state === 'REMOVED' && v.removedAt === gs.removedAt, `resume (f1): after the restart the reconcile ends it REMOVED with the group's time (${v?.state}, ${v?.removedAt} vs ${gs?.removedAt})`);
-      check(!(await api('rlist')).some((x) => x.id === region), 'resume (f1): Regions.list omits it');
-      await settle(2000);
-      check((await hashBox(min, max)) === h0, 'resume (f1): the world hash equals the pre-placement one');
-      const again = await call('dev.region.remove', { region }, 600_000);
-      check(again.removed === true, 'resume (f1): a second remove answers removed=true');
-      // (f2) the group not removed (a failed restore), the region record left REMOVING: the next start ends it PARTIAL; the retry finishes
-      const region2 = await L.realise(p.planId, { lots: S7.lotEntries });
-      check((await waitRegion(region2, 3_600_000)).view.state === 'PLACED', `resume (f2): the region is placed (${region2})`);
-      const g2 = (await api(`rget ${region2}`)).groupId;
-      await cmd('/kill @e[type=!minecraft:player]');
-      await call('dev.region.dropRemovalEnd', { on: true });
-      await call('dev.undo.failRestore', { skip: 3 });
-      const r2 = await call('dev.region.remove', { region: region2 }, 3_600_000);
-      await call('dev.undo.failRestore', { skip: -1 });
-      await call('dev.region.dropRemovalEnd', { on: false });
-      const stuck2 = await api(`rget ${region2}`);
-      const gs2 = await api(`sgroup ${g2}`);
-      out.f2 = { region: region2, removed: r2.removed, stuck: stuck2?.state, group: gs2?.state };
-      check(r2.removed === false && stuck2?.state === 'REMOVING' && gs2?.state === 'ACTIVE', `resume (f2): the simulated stop leaves the region REMOVING with its group ACTIVE after the failure (${r2.removed}, ${stuck2?.state}, ${gs2?.state})`);
-      await restart(W);
-      const v2 = await api(`rget ${region2}`);
-      out.f2.after = v2?.state;
-      check(v2?.state === 'PARTIAL', `resume (f2): after the restart the reconcile ends it PARTIAL (${v2?.state})`);
-      const r3 = await call('dev.region.remove', { region: region2 }, 3_600_000);
-      await settle(5000);
-      const h3 = await hashBox(min, max);
-      check(r3.removed === true && h3 === h0, `resume (f2): the retry finishes: removed=true, world hash equal (${r3.removed}; ${h3 === h0 ? 'equal' : 'DIFFERS'})`);
-      check((await api(`rget ${region2}`))?.state === 'REMOVED', 'resume (f2): REMOVED');
+    if (SLICE) log('  resume --slice: (f) the world-start reconcile runs at release (RegionReconcileTest covers its table)');
+    else {
+      {
+        // (f1) the group REMOVED, the region record left REMOVING: the next start ends it REMOVED with the group's time
+        await slowOn(false);
+        const region = await L.realise(p.planId, { lots: S7.lotEntries });
+        check((await waitRegion(region, 3_600_000)).view.state === 'PLACED', `resume (f1): the region is placed (${region})`);
+        const g = (await api(`rget ${region}`)).groupId;
+        await cmd('/kill @e[type=!minecraft:player]');
+        await call('dev.region.dropRemovalEnd', { on: true });
+        const r1 = await call('dev.region.remove', { region }, 3_600_000);
+        await call('dev.region.dropRemovalEnd', { on: false });
+        const stuck = await api(`rget ${region}`);
+        const gs = await api(`sgroup ${g}`);
+        out.f1 = { region, removed: r1.removed, stuck: stuck?.state, group: gs?.state };
+        check(r1.removed === true && stuck?.state === 'REMOVING' && gs?.state === 'REMOVED', `resume (f1): the simulated stop leaves the region REMOVING with its group REMOVED (${r1.removed}, ${stuck?.state}, ${gs?.state})`);
+        await restart(W);
+        const v = await api(`rget ${region}`);
+        out.f1.after = { state: v?.state, removedAt: v?.removedAt };
+        check(v?.state === 'REMOVED' && v.removedAt === gs.removedAt, `resume (f1): after the restart the reconcile ends it REMOVED with the group's time (${v?.state}, ${v?.removedAt} vs ${gs?.removedAt})`);
+        check(!(await api('rlist')).some((x) => x.id === region), 'resume (f1): Regions.list omits it');
+        await settle(2000);
+        check((await hashBox(min, max)) === h0, 'resume (f1): the world hash equals the pre-placement one');
+        const again = await call('dev.region.remove', { region }, 600_000);
+        check(again.removed === true, 'resume (f1): a second remove answers removed=true');
+        // (f2) the group not removed (a failed restore), the region record left REMOVING: the next start ends it PARTIAL; the retry finishes
+        const region2 = await L.realise(p.planId, { lots: S7.lotEntries });
+        check((await waitRegion(region2, 3_600_000)).view.state === 'PLACED', `resume (f2): the region is placed (${region2})`);
+        const g2 = (await api(`rget ${region2}`)).groupId;
+        await cmd('/kill @e[type=!minecraft:player]');
+        await call('dev.region.dropRemovalEnd', { on: true });
+        await call('dev.undo.failRestore', { skip: 3 });
+        const r2 = await call('dev.region.remove', { region: region2 }, 3_600_000);
+        await call('dev.undo.failRestore', { skip: -1 });
+        await call('dev.region.dropRemovalEnd', { on: false });
+        const stuck2 = await api(`rget ${region2}`);
+        const gs2 = await api(`sgroup ${g2}`);
+        out.f2 = { region: region2, removed: r2.removed, stuck: stuck2?.state, group: gs2?.state };
+        check(r2.removed === false && stuck2?.state === 'REMOVING' && gs2?.state === 'ACTIVE', `resume (f2): the simulated stop leaves the region REMOVING with its group ACTIVE after the failure (${r2.removed}, ${stuck2?.state}, ${gs2?.state})`);
+        await restart(W);
+        const v2 = await api(`rget ${region2}`);
+        out.f2.after = v2?.state;
+        check(v2?.state === 'PARTIAL', `resume (f2): after the restart the reconcile ends it PARTIAL (${v2?.state})`);
+        const r3 = await call('dev.region.remove', { region: region2 }, 3_600_000);
+        await settle(5000);
+        const h3 = await hashBox(min, max);
+        check(r3.removed === true && h3 === h0, `resume (f2): the retry finishes: removed=true, world hash equal (${r3.removed}; ${h3 === h0 ? 'equal' : 'DIFFERS'})`);
+        check((await api(`rget ${region2}`))?.state === 'REMOVED', 'resume (f2): REMOVED');
+      }
     }
     // ---- (d) a plain site group (no region): the same through Sites.removeGroup
     {
