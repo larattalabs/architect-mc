@@ -356,6 +356,31 @@ async function runsSafe(region) {
   return { targets: (rs.targets ?? []).length, started, bad };
 }
 
+/** Half of the region's whole bill (the check's, and what the stockpile asks for its lots), fed in waves of what the targets lack. */
+async function halfFeed(region, ck, cons = null) {
+  const half = {};
+  // (the stockpile takes what its targets need now, a run at a time: fed in waves of what they lack, up to half the whole bill)
+  // the whole bill: the check's (the region's cells, its 4e roads) and the lots' designs as the stockpile asks for them
+  const whole = G.plus(ck.check.cost.bom, {});
+  for (const [it, n] of Object.entries((await G.pileState(ctx)).outstanding ?? {})) whole[it] = Math.max(whole[it] ?? 0, n);
+  for (const [it, n] of Object.entries(whole)) if (Math.floor(n / 2) > 0) half[it] = Math.floor(n / 2);
+  let acc = {};
+  for (let k = 0; k < 200; k++) {
+    const ps = await G.pileState(ctx);
+    const need = {};
+    for (const [it, n] of Object.entries(ps.outstanding ?? {})) {
+      const left = (half[it] ?? 0) - (acc[it] ?? 0);
+      const lack = Math.min(left, n - (ps.stock?.[it] ?? 0));
+      if (lack > 0) need[it] = lack;
+    }
+    if (!Object.keys(need).length) { if (k > 3) break; await sleep(4000); continue; }
+    const a = cons ? await cons.insert(`stockpile:${G.OWNER}`, need) : (await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: need, exact: true }, 120_000)).accepted ?? {};
+    acc = G.plus(acc, a);
+    await sleep(3000);
+  }
+  return { half, acc };
+}
+
 steps.item6 = async () => {
   await ensure();
   const out = {};
@@ -374,26 +399,7 @@ steps.item6 = async () => {
     // half of each item's whole bill, once (the check's cost.bom), then the builder runs until nothing moves
     // every item put down (its targets, roads and lots on the stockpile), then half of what they need, once
     await G.waitFor(ctx, region, (st, rs) => (rs.targets ?? []).length > 0, { timeoutMs: 900_000 });
-    const half = {};
-    // (the stockpile takes what its targets need now, a run at a time: fed in waves of what they lack, up to half the whole bill)
-    // the whole bill: the check's (the region's cells, its 4e roads) and the lots' designs as the stockpile asks for them
-    const whole = G.plus(ck.check.cost.bom, {});
-    for (const [it, n] of Object.entries((await G.pileState(ctx)).outstanding ?? {})) whole[it] = Math.max(whole[it] ?? 0, n);
-    for (const [it, n] of Object.entries(whole)) if (Math.floor(n / 2) > 0) half[it] = Math.floor(n / 2);
-    let acc = {};
-    for (let k = 0; k < 200; k++) {
-      const ps = await G.pileState(ctx);
-      const need = {};
-      for (const [it, n] of Object.entries(ps.outstanding ?? {})) {
-        const left = (half[it] ?? 0) - (acc[it] ?? 0);
-        const lack = Math.min(left, n - (ps.stock?.[it] ?? 0));
-        if (lack > 0) need[it] = lack;
-      }
-      if (!Object.keys(need).length) { if (k > 3) break; await sleep(4000); continue; }
-      const a = (await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: need, exact: true }, 120_000)).accepted ?? {};
-      acc = G.plus(acc, a);
-      await sleep(3000);
-    }
+    const { half, acc } = await halfFeed(region, ck);
     let last = -1, still = 0;
     for (let k = 0; k < 120 && still < 4; k++) {
       await sleep(4000);
@@ -681,10 +687,8 @@ steps.item10 = async () => {
     const R = await realised(tag, 'rs02_walled');
     const C = new G.Conservation(ctx, R.box);
     await C.start();
-    // half built: half of the bill, the builder until the paid cells built stop moving
-    const half = {};
-    for (const [it, n] of Object.entries(R.ck.check.cost.bom ?? {})) if (Math.floor(n / 2) > 0) half[it] = Math.floor(n / 2);
-    await C.insert(`stockpile:${G.OWNER}`, half);
+    // half built: half of the bill in waves (a run starts only with its whole bill), the builder until the paid cells built stop moving
+    await halfFeed(R.region, R.ck, C);
     let last = -1, still = 0, rs;
     for (let k = 0; k < 150 && still < 4; k++) {
       await sleep(4000);
@@ -697,7 +701,9 @@ steps.item10 = async () => {
     const a0 = await L.call('dev.stockpile.audit', { owner: G.OWNER }, 120_000);
     const s0 = await G.pileState(ctx);
     const ids = (rs.targets ?? []).map((t) => t.target);
-    const pend = await api(`rremove ${R.region}`);
+    const pendP = L.call('dev.region.remove', { region: R.region, requester: G.OWNER }, 3_600_000); // (not awaited: the removal runs)
+    await sleep(300);
+    const pend = { started: true };
     // at once: the targets leave the feed
     const s1 = await G.pileState(ctx);
     const leftFeed = ids.filter((id) => !s1.targets?.[id] || s1.targets[id].leaving || !(s1.feedOrder ?? []).includes(id));
@@ -707,8 +713,10 @@ steps.item10 = async () => {
       await L.openWorld(R.s.world);
       await C.point('reopened mid-removal');
     }
+    const rm = leave ? await pendP.catch((e) => ({ error: String(e) })) : await pendP;
     let v;
     for (let k = 0; k < 600; k++) { v = await api(`rget ${R.region}`).catch(() => null); if (!v || v.state !== 'REMOVING') break; await sleep(1000); }
+    out[`${tag}.rm`] = rm;
     await sleep(3000);
     const s2 = await G.pileState(ctx);
     await C.point('removed');
@@ -716,7 +724,7 @@ steps.item10 = async () => {
     const e = await G.diff(ctx, R.box, R.pre);
     const ef = e.list.filter((m) => !R.crateAt.some((c) => c.join(',') === m.pos));
     out[tag] = { pending: pend, leftFeed: leftFeed.length, of: ids.length, state: v?.state, refund: got, paid: a0.paidStanding, eflat: ef.length, points: C.points };
-    check(leftFeed.length === ids.length, `item 10 (${tag}): the removal takes the ${ids.length} targets out of the feed at once (${leftFeed.length} left it right after Regions.remove)`);
+    check(ids.length > 1 && leftFeed.length === ids.length && sum(a0.paidStanding) > 0, `item 10 (${tag}, ${sum(a0.paidStanding)} paid items standing): the removal takes the ${ids.length} targets out of the feed at once (${leftFeed.length} left it right after Regions.remove)`);
     check(G.same(got, a0.paidStanding) && (v?.state ?? 'REMOVED') === 'REMOVED', `item 10 (${tag}${leave ? ', saved, left and reopened mid-removal' : ''}): the refund equals the paid cells standing at the removal (${sum(a0.paidStanding)} items), credited once: ${G.same(got, a0.paidStanding) ? 'equal' : `differs ${json(G.minus(got, a0.paidStanding))}`}; ${v?.state ?? 'gone'}`);
     check(C.points.every(G.exact) && ef.length === 0, `item 10 (${tag}): conservation exact at ${C.points.length} points, E-flat ${ef.length}`, ef.slice(0, 6));
   }
