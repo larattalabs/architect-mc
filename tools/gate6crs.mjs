@@ -786,8 +786,10 @@ steps.item11 = async () => {
     const atSave = await C.parts();
     const totSave = C.total(atSave);
     const injAtSave = { ...C.injected };
+    const builtAtSave = (await G.rsState(ctx, R.region)).targets.reduce((a, t) => a + t.built, 0);
+    await cmd('/save-off'); // (no autosave after this one: what is built from here is lost with the kill)
     await C.insert(`stockpile:${G.OWNER}`, half);
-    await sleep(6000);
+    await G.feed(ctx, R.region, { cons: C, fraction: 0.5, timeoutMs: 600_000, until: (st, rs) => (rs.targets ?? []).reduce((a, t) => a + t.built, 0) > builtAtSave + 200 });
     const pre = await C.parts();
     const moved = {};
     for (const k of new Set([...Object.keys(pre.ledger?.consumed ?? {}), ...Object.keys(pre.ledger?.delivered ?? {})])) {
@@ -816,8 +818,8 @@ steps.item11 = async () => {
     const rs = await G.rsState(ctx, R.region);
     const builtNow = rs.targets.reduce((a, t) => a + t.built, 0);
     const f = await G.feed(ctx, R.region, { timeoutMs: 2_400_000 });
-    out.rescan = { builtPre, builtNow, rescanned: rs.rescanned, rewritten: rs.rewritten, done: f.last.rs.build?.done };
-    check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done, `item 11 (a halt without a save): the rescan re-reads the targets from the world (${builtPre} cells built before the kill, ${builtNow} after the reload: the lost cells re-queued; rescanned ${rs.rescanned}, free cells rewritten ${rs.rewritten}), fed to built: done ${f.last.rs.build?.done}`);
+    out.rescan = { builtAtSave, builtPre, builtNow, rescanned: rs.rescanned, rewritten: rs.rewritten, done: f.last.rs.build?.done };
+    check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done && builtNow < builtPre, `item 11 (a halt without a save): the rescan re-reads the targets from the world (${builtAtSave} cells built at the save, ${builtPre} before the kill, ${builtNow} after the reload: the ${builtPre - builtNow} lost cells re-queued; rescanned ${rs.rescanned}, free cells rewritten ${rs.rewritten}), fed to built: done ${f.last.rs.build?.done}`);
     await G.remove(ctx, R.region);
   }
   return out;
