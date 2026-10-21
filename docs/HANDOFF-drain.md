@@ -18,6 +18,17 @@ Evidence under `scratchpad/drain/` (git-ignored), runner pids in `*-fix.pid`, lo
   8896:8897, 8898:8899 -> runs-post/
 All with GATE_SLOTS=6.
 
+## Results so far
+- pre (runs-pre/20261021-000459-*): FAIL as expected. h-holders: the stair is lost ("no fluid there") and E-flat is 1 after the
+  stair site goes. h-rmcrash: FL3/K6 lose the stair the same way; R2q ends PARTIAL with "nothing of group g1 is in the world journal"
+  (the window-B gap, confirmed). RG6+save never halted (RG6 fires only in a template site's restore), so ba59c7af switched it to K7+save.
+- **Open question:** pre also shows E-flat 18 OUTSIDE the stair cell. The same 18 cells appear in every case: whole columns shifted down
+  by one at x 9024/9088, z 8992/9024/9088, which is far from the pond. main's h-crash (lava variant) gets 0. Check whether post shows
+  it too. If it does, it is a test or world artifact of the no-lava h_core_demo, or an undo issue outside this fix; investigate with
+  dev.journal.at on those columns.
+- post started at 00:14 at head 5ca2bdf4, before ba59c7af, so its h-rmcrash still uses RG6+save and will fail that case; re-run
+  h-rmcrash at ba59c7af or later.
+
 ## Left
 1. Read each run's SUMMARY.md (expected: pre FAILs holders and R2q; pre2 FAILs irr-holders; post all pass).
 2. gate-verifier on `git diff origin/main...fix/drain-holders` plus a re-run of h-holders, h-rmcrash (and irr-holders).
