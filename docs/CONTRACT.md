@@ -23289,3 +23289,28 @@ the payload and its sha unchanged); catalogue 9 unchanged.
 
 **Deferred to undo hardening B** (PLAN.md, top): after RG4+save the tile re-runs and its first entry stays PLACING (RP's
 `placingLeftover`).
+
+**Merged origin/main afterwards** (aa90ede7: the gate speed-ups and the dev-only `dev.ticks.pending` hook). One conflict, in
+`tools/gate-chains.json`: main's `supersededBy` on the ha-* steps and `slots.max` 4 taken, the patch's h-holders, irr-holders and
+h-rmcrash steps kept, and the release tier's `always` list is main's plus undo-a's `umt-long`.
+
+**Suites and api-compat** (at 0607314d): mod `./gradlew build --offline` 799 tests, 0 failures (RegionHashExcludeTest 2, the UMT
+CI set 28); kit 672/0; sidecar 758 (`versions.test.ts`'s fixture hook timed out once at load ~50 in the full run; 17/17 alone, and
+758/0 in both gate runs). api-compat (generic) against the 0.40.0 apitest jar (930 references) and the 0.40.0 mod jar's surface
+(2531 members), from `artifacts/gate6c-f3/v0400`: clean.
+
+**Gate** ($0, headless, `artifacts/gate-runs-0401/`):
+- `20261021-050513-slice` (tier `slice --since origin/main`, 3 shards, at 0607314d, before the main merge): 89 PASS, 4 FAIL, 1
+  TIMEOUT. Every undo, drain-holders and RP step passed: umt, 4e-orders, 4e-crash, h-ingame, h-holders, h-rmcrash 28/0,
+  irr-holders, rp-unit, rp-ingame, rp-crash, plus the impact steps. Not passing:
+  - h-unit: its Java item ran gradle in the source worktree with no gradle home yet (an offline build with an empty
+    `.gradle-home`), so gradle exited 1 with no test run; fixed by cloning the seed's `.gradle-home`, and it passes in the rerun.
+    Item 10 (H-a's asks gap table) fails on main too: the same failure in `gate-runs-gatewaits/20261021-032653-slice`,
+    `gate-runs-F3/20261020-214604-slice`, `gate-runs-FL/20261021-005342-slice` and `gate-runs-reltool/20261020-222622-change`.
+  - 6cf1-scenario-forms: the natural run's plan input differed from the golden (46 world changes in the fresh copy); the
+    release's kit and main's give the same tile shas for that plan. It passes in the rerun.
+  - pt2-ingame item 13: known on main (PLAN "pt2-ingame item 13 fails on main").
+  - 6b-volume (a second sample of the unchanged area differed; seen before in `gate-runs-IRR/20261020-133341-slice`) and
+    6b-nudges (TIMEOUT at 11 min, load ~50): both pass in the rerun.
+- `20261021-083155-slice` (after the main merge, b4ec0281; the steps whose code the merge changed, unit-mod and the failures
+  above): 20 PASS, 1 FAIL (h-unit item 10 only, as on main).
