@@ -302,6 +302,14 @@ async function linksRun(tag, claim, { flat, golden }) {
   await call('dev.region.dump', { box, file: after, light: true }, 1_800_000);
   const R = await realisedOf(planDir, before, after);
   out.item5 = await item5(tag, R);
+  // (fast checks P2, docs/FAST-CHECKS.md "Precondition for every REPLACE row") the realised world against the plan's virtual world, per
+  // writer kind: the rope bridges' (slab decks') SMOKE row that keeps the structure lint's rope re-read trustworthy
+  {
+    const RV = await import('./lib/realised-virtual.mjs');
+    const rv = await RV.realisedVsVirtual(planDir, after, before, { lots: false });
+    out.realisedVirtual = { written: rv.written, differ: rv.differ, byKind: rv.byKind, first: rv.first };
+    check(RV.realisedOk(rv, R.meta?.ropes?.length ? ['rope'] : []).pass, `P2 SMOKE (${tag}): realised == virtual per writer kind, ${rv.differ} of ${rv.written} differ: ${RV.describeRealised(rv)}${rv.first.length ? ` first ${json(rv.first.slice(0, 3))}` : ''}`);
+  }
   await cmd('/kill @e[type=!minecraft:player]');
   out.nav = await nav(R.meta);
   check(Object.keys(out.nav).length >= 1 && Object.values(out.nav).every((v) => v.there && v.back), `item 5 (${tag}, the hard bar): vanilla dev.nav.villager across every width-2 slab bridge, both ways (${json(Object.fromEntries(Object.entries(out.nav).map(([k, v]) => [k, [v.there, v.back]])))})`);

@@ -1,0 +1,57 @@
+{
+ "$comment": "The pinned natural surveys the lints (tools/lint.mjs; kit/lib/lint/vworld-fixtures.mjs) build their virtual worlds from: never a live seed (gate7ak1.mjs: the live seed drifts). Each is a plan directory (ir.json, survey.bin, meta.json, blobs/) committed in the repo; surveySha pins the survey bytes (a re-pin is an edit here, with the run it came from). minecraft: the version the survey was read on; a Minecraft update re-reads each (docs/GATES.md \"Fast checks (P2)\").",
+ "surveys": {
+  "s1": {
+   "dir": "scenarios/goldens/s1",
+   "surveySha": "3e5bd5b77e40ff849a41ccc31a7a0e54723860d9add286b68a2cb96d70e97736",
+   "claim": [
+    1664,
+    768,
+    1919,
+    1023
+   ],
+   "source": "scenario S1 natural run 20261009-233143 (scenarios/goldens/s1.json)",
+   "minecraft": "26.3",
+   "note": "S1 floating islands over the pinned seed 2026100906"
+  },
+  "s2": {
+   "dir": "scenarios/goldens/s2",
+   "surveySha": "b2db2d5539647750ad69ed15b010f1fb424ff3025feacb5268e572ae388dff32",
+   "claim": [
+    2508,
+    1588,
+    2699,
+    1779
+   ],
+   "source": "scenario S2 natural run 20261013-180928 (scenarios/goldens/s2.json)",
+   "minecraft": "26.3",
+   "note": "S2 ice spikes (frozen volume vol_1 in blobs/)"
+  },
+  "s3": {
+   "dir": "scenarios/goldens/route_demo",
+   "surveySha": "1133ea010bea3072685f1af6b52957f1d0cf138d8028006074bc85312739f047",
+   "claim": [
+    3604,
+    -1036,
+    3795,
+    -845
+   ],
+   "source": "scenario route_demo natural run 20261013-032659 (scenarios/goldens/route_demo.json); districts_demo golden holds the same bytes",
+   "minecraft": "26.3",
+   "note": "S3 monastery claim (relief_demo, route_demo, districts_demo, crossings_demo river)"
+  },
+  "s7": {
+   "dir": "scenarios/goldens/s7",
+   "surveySha": "fcddc65a3351a2348a6e9ec1b91d8731ec11e075b0a6152573d9878146d1af43",
+   "claim": [
+    1480,
+    -3128,
+    1591,
+    -3017
+   ],
+   "source": "scenario S7 natural run 20261011-214611 (scenarios/goldens/s7.json); equal to IRR slice 20261020-133341 s3/scenarios/s7 (the seed is stable on 26.3)",
+   "minecraft": "26.3",
+   "note": "S7 flat village claim, natural terrain"
+  }
+ }
+}

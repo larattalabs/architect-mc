@@ -37,6 +37,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs';
 
@@ -275,6 +276,14 @@ async function realiseAndRead(tag, { planDir, claim, box, start, standMs = 120_0
   await call('dev.region.dump', { box, file: after, light: true }, 1_800_000);
   out.R = await realisedOf(planDir, before, after);
   out.snapF = snapF;
+  // (fast checks P2, docs/FAST-CHECKS.md "Precondition for every REPLACE row") the realised world against the plan's virtual world, per
+  // writer kind: the tunnels' SMOKE row that keeps the structure lint's tunnel re-read trustworthy
+  {
+    const RV = await import('./lib/realised-virtual.mjs');
+    const rv = await RV.realisedVsVirtual(planDir, after, before, { lots: false });
+    out.realisedVirtual = { written: rv.written, differ: rv.differ, byKind: rv.byKind, first: rv.first };
+    check(RV.realisedOk(rv, out.R.meta?.tunnels?.length ? ['tunnels'] : []).pass, `P2 SMOKE (${tag}): realised == virtual per writer kind, ${rv.differ} of ${rv.written} differ: ${RV.describeRealised(rv)}${rv.first.length ? ` first ${JSON.stringify(rv.first.slice(0, 3))}` : ''}`);
+  }
   return out;
 }
 
@@ -716,6 +725,41 @@ steps.look = async () => {
   await call('dev.release', {}).catch(() => null);
   await leaveWorld();
   spendZero();
+  return out;
+};
+
+// ------------------------------------------------------------------ (fast checks P2) the hill as a committed lint fixture
+
+/**
+ * `fixture`: the pinned hill's plan directory as the structure lint reads it (kit/test/fixtures/lint/tunnel_hill: ir.json, meta.json,
+ * survey.bin and the frozen volume in blobs/), from a checkPlan on a fresh copy of the seed world. Writes into this checkout (to commit)
+ * only with T3B_WRITE_FIXTURE=1; else into OUT/tunnel_hill-plan, and reports whether it equals the committed one (the survey's sha).
+ */
+steps.fixture = async () => {
+  const f = hill();
+  const out = {};
+  await L.fresh('G6B T3b Hill Fixture', BASE);
+  await L.setRules('exact');
+  const mid = Math.round((f.line.a[0] + f.line.b[0]) / 2);
+  await tp(mid, 200, f.line.a[2]);
+  await call('dev.waitChunks', { timeoutMs: 120_000 }, 150_000).catch(() => null);
+  const c = await checkHill(f);
+  check(c.check?.overall === 'READY' && !!c.check?.checkId, `fixture: the hill's tunnel checks READY (${c.check?.overall})`);
+  if (!c.check?.checkId) { await leaveWorld(); return out; }
+  const src = sideDir(c.check.checkId);
+  const dst = process.env.T3B_WRITE_FIXTURE === '1' ? path.join(root, 'kit', 'test', 'fixtures', 'lint', 'tunnel_hill') : path.join(OUT, 'tunnel_hill-plan');
+  fs.mkdirSync(path.join(dst, 'blobs'), { recursive: true });
+  for (const n of ['ir.json', 'meta.json', 'survey.bin']) fs.copyFileSync(path.join(src, n), path.join(dst, n));
+  const ir = JSON.parse(fs.readFileSync(path.join(src, 'ir.json'), 'utf8'));
+  for (const v of Object.values(ir.volumes ?? {})) { const sha = ir.blobs?.[v.blob]?.sha; if (sha) fs.copyFileSync(path.join(src, 'blobs', `${sha}.bin`), path.join(dst, 'blobs', `${sha}.bin`)); }
+  const sha = (b) => createHash('sha256').update(b).digest('hex');
+  out.surveySha = sha(fs.readFileSync(path.join(dst, 'survey.bin')));
+  out.volumes = Object.keys(ir.volumes ?? {}).length;
+  out.dir = dst;
+  const committed = path.join(root, 'kit', 'test', 'fixtures', 'lint', 'tunnel_hill', 'survey.bin');
+  out.equalsCommitted = fs.existsSync(committed) ? sha(fs.readFileSync(committed)) === out.surveySha : null;
+  check(out.volumes >= 1, `fixture: the hill's plan dir with its survey (${out.surveySha.slice(0, 12)}) and ${out.volumes} frozen volume(s) -> ${path.relative(root, dst)}${out.equalsCommitted === null ? '' : `; equals the committed fixture: ${out.equalsCommitted}`}`);
+  await leaveWorld();
   return out;
 };
 
