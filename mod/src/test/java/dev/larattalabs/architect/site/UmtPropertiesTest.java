@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.UUID;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
+import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import org.junit.jupiter.api.Test;
 
@@ -521,6 +522,33 @@ class UmtPropertiesTest {
 			assertEquals(Blocks.AIR, c.at(flow).getBlock());
 			assertEquals(Blocks.WATER, c.at(foreign).getBlock(), "water that was there before the write stays");
 			assertEquals(Blocks.WATER, c.at(beside).getBlock(), "a player's water outside the body stays");
+		}
+	}
+
+	/**
+	 * DRAIN (the coordinator's item 2; fixed on fix/drain-holders, patch 0.40.1): a region's body source, then a later, separate site
+	 * placing a waterlogged stair over that cell. Removing the region drains first (RegionFluids.drain, production, with the production
+	 * {@code RegionFluids.Holders} over the journal as removalGate asks it): the site's entry holds the cell on top, so the drain leaves
+	 * it and the stair stands; before the fix the drain put the body's before state back over the stair.
+	 */
+	@Test
+	void drain_aLaterSitesWaterloggedBlockSurvivesTheRegionsDrain() throws Exception {
+		try (UmtCase c = UmtCase.of(w -> {
+		})) {
+			long src = p(2, G, 2);
+			BlockState grass = c.at(src);
+			UmtSim.Rec region = c.sim.cells(UmtOps.Kind.TILE, 1, cells(src, Blocks.WATER, p(3, G, 2), Blocks.WATER));
+			BlockState stair = Blocks.OAK_STAIRS.defaultBlockState().setValue(StairBlock.WATERLOGGED, true);
+			UmtSim.Rec site = c.site(1, G, 1, 2, G + 1, 2, Blocks.AIR.defaultBlockState(), cells(p(1, G, 1), Blocks.DIRT, p(2, G, 1), Blocks.DIRT, p(1, G, 2),
+				Blocks.DIRT, src, stair), 0);
+			// the region's removal: its bodies drain first (removalGate), then its group undo
+			dev.larattalabs.architect.region.UmtDrain.drain(UmtPropertiesTest.drainCells(c), new long[] {src, p(3, G, 2)}, new String[] {
+				dev.larattalabs.architect.region.UmtDrain.stateString(grass), dev.larattalabs.architect.region.UmtDrain.stateString(grass)}, new long[0],
+				new String[0], new long[0], UmtWorld.DIM_ID, UmtSim.group(region));
+			c.sim.removeGroup(List.of(region), null);
+			assertEquals(stair, c.at(src), "the later site's stair survives the region's removal");
+			c.sim.remove(site, null);
+			exact(c.sim.end());
 		}
 	}
 

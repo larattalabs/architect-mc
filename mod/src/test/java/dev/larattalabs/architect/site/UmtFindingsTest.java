@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import java.util.Map;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -95,32 +94,6 @@ class UmtFindingsTest {
 			new UmtOps.Place(UmtOps.Kind.TILE, 36, 35, 2, 3, 2, 2962523880634667676L, 3, null), new UmtOps.RemoveGroup(1, null), new UmtOps.Remove(0,
 				new UmtOps.Crash("K7", null, 23, false))), UmtOps.Gen.ALL));
 		assertTrue(r.violations().stream().noneMatch(v -> v.startsWith("[F7]")), r.report());
-	}
-
-	/**
-	 * DRAIN (the coordinator's item 2): a region's body source, then a later, separate site placing a waterlogged stair over that cell.
-	 * Removing the region drains first (RegionFluids.drain, production): the cell holds a fluid (the stair is waterlogged), so it goes
-	 * back to the body's before state, overwriting the site's stair before any journal hand-down. The site stands with a hole.
-	 */
-	@Test
-	void drain_aLaterSitesWaterloggedBlockSurvivesTheRegionsDrain() throws Exception {
-		try (UmtCase c = UmtCase.of(w -> {
-		})) {
-			long src = p(2, G, 2);
-			BlockState grass = c.at(src);
-			UmtSim.Rec region = c.sim.cells(UmtOps.Kind.TILE, 1, cells(src, Blocks.WATER, p(3, G, 2), Blocks.WATER));
-			BlockState stair = Blocks.OAK_STAIRS.defaultBlockState().setValue(StairBlock.WATERLOGGED, true);
-			UmtSim.Rec site = c.site(1, G, 1, 2, G + 1, 2, Blocks.AIR.defaultBlockState(), cells(p(1, G, 1), Blocks.DIRT, p(2, G, 1), Blocks.DIRT, p(1, G, 2),
-				Blocks.DIRT, src, stair), 0);
-			// the region's removal: its bodies drain first (removalGate), then its group undo
-			dev.larattalabs.architect.region.UmtDrain.drain(UmtPropertiesTest.drainCells(c), new long[] {src, p(3, G, 2)}, new String[] {
-				dev.larattalabs.architect.region.UmtDrain.stateString(grass), dev.larattalabs.architect.region.UmtDrain.stateString(grass)}, new long[0],
-				new String[0], new long[0]);
-			c.sim.removeGroup(List.of(region), null);
-			assertEquals(stair, c.at(src), "the later site's stair survives the region's removal");
-			c.sim.remove(site, null);
-			exact(c.sim.end());
-		}
 	}
 
 	/**

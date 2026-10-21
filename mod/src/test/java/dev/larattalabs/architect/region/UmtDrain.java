@@ -29,9 +29,18 @@ public final class UmtDrain {
 	/**
 	 * Drains a water body: {@code cells} its sources with their {@code before} states (as the stage captured them before writing),
 	 * {@code watch} its watched cells with theirs, {@code predicted} its predicted flow. As {@code removalGate} does (strays on).
-	 * Returns the cells written.
+	 * Returns the cells written. Nothing held (no journal holders asked).
 	 */
 	public static int drain(Cells w, long[] cells, String[] before, long[] watch, String[] watchBefore, long[] predicted) {
+		return drain(w, cells, before, watch, watchBefore, predicted, null, null);
+	}
+
+	/**
+	 * {@link #drain(Cells, long[], String[], long[], String[], long[])} as the region's removal drains: with {@code group}, the cells
+	 * another journal entry holds on top are left to their holder (the production {@code RegionFluids.Holders} over the installed
+	 * journal, fix/drain-holders); without it, nothing is held.
+	 */
+	public static int drain(Cells w, long[] cells, String[] before, long[] watch, String[] watchBefore, long[] predicted, String dim, String group) {
 		RegionFluids.Body b = new RegionFluids.Body();
 		b.id = "umt";
 		b.cells = cells;
@@ -48,6 +57,7 @@ public final class UmtDrain {
 		for (int i = 0; i < watch.length; i++) {
 			bs.before.put(watch[i], watchBefore[i]);
 		}
+		java.util.function.LongPredicate held = group == null ? RegionFluids.NOT_HELD : new RegionFluids.Holders(dim, group, st);
 		Function<BlockPos, BlockState> get = w::get;
 		return RegionFluids.drain(new RegionFluids.DrainTarget() {
 			@Override
@@ -59,6 +69,6 @@ public final class UmtDrain {
 			public void set(BlockPos p, BlockState s, int flags) {
 				w.set(p, s, flags);
 			}
-		}, null, st, b, bs, true, new LongOpenHashSet(), RegionFluids.NOT_HELD);
+		}, null, st, b, bs, true, new LongOpenHashSet(), held);
 	}
 }
