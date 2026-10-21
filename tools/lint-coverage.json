@@ -1,0 +1,440 @@
+{
+ "$comment": "docs/FAST-CHECKS.md's P2-marked rows (disposition structure-lint or look-lint) and where each is checked now: `trimmed` (skipped by the -smoke twin at the slice tier while the calibration holds; the full step runs at release), `covered-kept` (the lint checks it and it stays in game: trimming would save nothing), `smoke` (a SMOKE row kept in game). `lint`: the tools/lint.mjs case(s); `rules`: the rule ids. The verifier diffs this against FAST-CHECKS' tables (53 rows).",
+ "rows": {
+  "4d-all #16": {
+   "status": "covered-kept",
+   "lint": "p0:refused, p0:kc (the refusal set: OVERLAP)",
+   "rules": [
+    "S-CHECK",
+    "refusal set"
+   ],
+   "why": "4d-all is a regression step (P1 owns its trims); OVERLAP over approach strips stays in its group"
+  },
+  "6b-scenario-s1 #5": {
+   "status": "covered-kept",
+   "lint": "g:s1, g:s1-flat",
+   "rules": [
+    "M2",
+    "M3",
+    "M5",
+    "S-LOTS (baseline)"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "6b-scenario-s1 #7": {
+   "status": "covered-kept",
+   "lint": "look g:s1 (T-ORGANIC where organic)",
+   "rules": [
+    "T-ORGANIC"
+   ],
+   "why": "recorded only in game too"
+  },
+  "6cv-scenario-s7 #5": {
+   "status": "covered-kept",
+   "lint": "g:s7, g:s7-flat, look g:s7",
+   "rules": [
+    "M2",
+    "M2:villager",
+    "M5",
+    "M22-M24",
+    "S-*"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well; row 7 (props as planned) is the realised == virtual row itself"
+  },
+  "6cw-scenario-s7 #2": {
+   "status": "covered-kept",
+   "lint": "pathbibles (walk M5 0 with the lanterns); g:s7 M5",
+   "rules": [
+    "M5"
+   ],
+   "why": "now inside 6cv-scenario-s7 (gate waits); a broken-variant test of the kit light over the realised dump: kept (5 s)"
+  },
+  "6c-scenario-s2 #5": {
+   "status": "covered-kept",
+   "lint": "g:s2",
+   "rules": [
+    "M2",
+    "M3",
+    "M5",
+    "route grade (M7)"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "6c-scenario-s2 #8": {
+   "status": "covered-kept",
+   "lint": "g:s2 (M1 keep sets) + the SMOKE row (kept class)",
+   "rules": [
+    "M1"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "6cf1-scenario-forms #5": {
+   "status": "covered-kept",
+   "lint": "g:forms_demo",
+   "rules": [
+    "M3",
+    "M3:overhang"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "6cf1-scenario-forms #6": {
+   "status": "smoke",
+   "lint": "SMOKE: realisedVirtual (forms)",
+   "rules": [],
+   "why": "this is the realised == virtual row for forms"
+  },
+  "6cf1-scenario-forms #7": {
+   "status": "covered-kept",
+   "lint": "g:forms_demo (M1 keep) + SMOKE kept class",
+   "rules": [
+    "M1"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "6ct1-scenario-relief #5": {
+   "status": "covered-kept",
+   "lint": "g:relief_demo, g:relief_demo-flat",
+   "rules": [
+    "M3",
+    "relief smoothness via checker"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "6ct2-scenario-route #5": {
+   "status": "covered-kept",
+   "lint": "g:route_demo, g:route_demo-flat",
+   "rules": [
+    "M2",
+    "M2:villager",
+    "M7"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "6cd-scenario-districts #5": {
+   "status": "covered-kept",
+   "lint": "g:districts_demo, g:districts_demo-flat",
+   "rules": [
+    "M2",
+    "M2:villager",
+    "graph"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well (its 35 s is the dumps and metrics the SMOKE row and G-EX also read)"
+  },
+  "6cf2-scenario-scatter #6": {
+   "status": "covered-kept",
+   "lint": "g:scatter_demo",
+   "rules": [
+    "M3"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "6cf2-scenario-scatter #7": {
+   "status": "smoke",
+   "lint": "SMOKE: realisedVirtual (scatter; plant class recorded)",
+   "rules": [],
+   "why": "this is the realised == virtual row for scatter"
+  },
+  "sch-placement #1": {
+   "status": "smoke",
+   "lint": "SMOKE (unchanged)",
+   "rules": [],
+   "why": "sch-* are not in the P2 lints' fixtures (schematic import); unchanged"
+  },
+  "p0-natural #4": {
+   "status": "covered-kept",
+   "lint": "p0:valid (the plan check's accounting is the kit's)",
+   "rules": [
+    "S-CHECK"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "v-ingame #4": {
+   "status": "covered-kept",
+   "lint": "g:route_demo keepOut (S-KEEP), p0:refused PROTECTED",
+   "rules": [
+    "S-KEEP"
+   ],
+   "why": "the plan is needed by row 5's realise: no time to trim"
+  },
+  "v-ingame #5": {
+   "status": "smoke",
+   "lint": "SMOKE (unchanged) + S-KEEP",
+   "rules": [
+    "S-KEEP"
+   ],
+   "why": "one writer-honours-keep-out instance in game"
+  },
+  "w-ingame #3": {
+   "status": "covered-kept",
+   "lint": "g:s7 (S-KEEP), the W broken variant in w-unit",
+   "rules": [
+    "S-KEEP"
+   ],
+   "why": "inside the `frozen` group with KEEP rows (the survey read, DEEP_WATER): no time to trim"
+  },
+  "w-ingame #8": {
+   "status": "trimmed",
+   "lint": "pathbibles (four S7-flat plans by this kit with each path bible: walk M5 0.00% with the lanterns laid)",
+   "rules": [
+    "M5",
+    "walkDark"
+   ],
+   "why": "w-ingame-smoke skips `pathbibles`; w-ingame runs it at release"
+  },
+  "w-ingame #9": {
+   "status": "trimmed",
+   "lint": "pathbibles (road lantern counts equal across the four bibles: the RoadPlan model, posts equal the realised dumps on S7 flat and natural)",
+   "rules": [
+    "lanterns"
+   ],
+   "why": "with #8"
+  },
+  "b-ingame #10": {
+   "status": "covered-kept",
+   "lint": "(S3 cave carve: not a lint case; M3/M4 over the virtual world in the brush tests)",
+   "rules": [],
+   "why": "its realise is row 11's (KEEP): no time to trim; the lint has no brush fixture (stays in game)"
+  },
+  "f2-harvest #4": {
+   "status": "covered-kept",
+   "lint": "g:scatter_demo (S-KEEP over the capture boxes is the kit's harvest test)",
+   "rules": [],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "t2-ingame #2": {
+   "status": "covered-kept",
+   "lint": "g:route_demo (keepOut, every edge routed)",
+   "rules": [
+    "S-KEEP",
+    "M2"
+   ],
+   "why": "its plan is row 3's realise: no time to trim"
+  },
+  "t2-ingame #5": {
+   "status": "covered-kept",
+   "lint": "g:route_demo M2:villager",
+   "rules": [
+    "M2:villager"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "d-ingame #2": {
+   "status": "covered-kept",
+   "lint": "g:districts_demo + kit districts-d.test",
+   "rules": [
+    "S-LOTS"
+   ],
+   "why": "interleaved with the standing village (SMOKE): no time to trim"
+  },
+  "d-ingame #4": {
+   "status": "covered-kept",
+   "lint": "hist:door (claim box), S-KEEP over builds",
+   "rules": [
+    "S-KEEP",
+    "S-DOOR"
+   ],
+   "why": "interleaved"
+  },
+  "d-ingame #6": {
+   "status": "covered-kept",
+   "lint": "g:districts_demo graph",
+   "rules": [
+    "M2"
+   ],
+   "why": "interleaved"
+  },
+  "d-ingame #7": {
+   "status": "covered-kept",
+   "lint": "g:districts_demo movers, grade",
+   "rules": [
+    "M2",
+    "M2:villager",
+    "M7"
+   ],
+   "why": "interleaved"
+  },
+  "d2-ingame #2": {
+   "status": "smoke",
+   "lint": "SMOKE (unchanged): the outpost round stays in d2-ingame-smoke",
+   "rules": [],
+   "why": ""
+  },
+  "d2-ingame #5": {
+   "status": "trimmed",
+   "lint": "d2:crest refusal set (NO_EDGE) + the kit's outpost tests (NO_ROOM)",
+   "rules": [
+    "refusal set"
+   ],
+   "why": "d2-ingame-smoke skips the NO_ROOM request"
+  },
+  "d2-ingame #6": {
+   "status": "covered-kept",
+   "lint": "(the quay round stays: the one natural district realised at the slice)",
+   "rules": [],
+   "why": "the quay round is d2-ingame-smoke's SMOKE instance"
+  },
+  "d2-ingame #7": {
+   "status": "trimmed",
+   "lint": "d2:crest (S3 pinned survey: 43/46 street cells within 4 of the crest, as in game)",
+   "rules": [
+    "ridge geometry"
+   ],
+   "why": "d2-ingame-smoke skips the crest round (its realise, reload, undo: the quay round is the instance)"
+  },
+  "d2-ingame #8": {
+   "status": "covered-kept",
+   "lint": "(the biome edge needs the desert/jungle site's biome grid: not a committed fixture)",
+   "rules": [],
+   "why": "stays in game: the oasis round runs in d2-ingame-smoke"
+  },
+  "d2-ingame #12": {
+   "status": "trimmed",
+   "lint": "d2:crest refusal set (NO_EDGE for no edge / no biome grid); PROTECTED: p0:refused k1a_r02, p0:tunnel tn06",
+   "rules": [
+    "refusal set"
+   ],
+   "why": "d2-ingame-smoke skips the two refusal requests"
+  },
+  "voc-ingame #5": {
+   "status": "covered-kept",
+   "lint": "p0:voc, p0:valid (M20/M26/M27 over the plans)",
+   "rules": [
+    "M20",
+    "M26",
+    "M27"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "voc-ingame #10": {
+   "status": "covered-kept",
+   "lint": "p0:valid v50",
+   "rules": [
+    "M26"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "vocc-ingame #3": {
+   "status": "covered-kept",
+   "lint": "p0:vocc",
+   "rules": [
+    "palette rule"
+   ],
+   "why": "its artifact feeds row 4's realise: interleaved"
+  },
+  "vocc-ingame #5": {
+   "status": "smoke",
+   "lint": "SMOKE (unchanged)",
+   "rules": [],
+   "why": ""
+  },
+  "vocc-ingame #8": {
+   "status": "covered-kept",
+   "lint": "p0:vocc",
+   "rules": [
+    "palette rule"
+   ],
+   "why": "interleaved with v64's realise"
+  },
+  "vocc-ingame #9": {
+   "status": "covered-kept",
+   "lint": "(the mod's PALETTE pre-check is Java: kit palette.mjs covers the rule)",
+   "rules": [],
+   "why": "the PALETTE code is the mod's: stays in game"
+  },
+  "t3a-ingame #3": {
+   "status": "covered-kept",
+   "lint": "g:crossings_demo_flat, even:bridge",
+   "rules": [
+    "M10:bridge",
+    "M5",
+    "M6",
+    "S-LAND"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well; the SMOKE row (bridges beam/arch) added here"
+  },
+  "t3a-natural #4": {
+   "status": "covered-kept",
+   "lint": "(the S3 river crossing: crossings_demo natural is not a golden)",
+   "rules": [
+    "M10:bridge"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "t3a-frozen #4": {
+   "status": "covered-kept",
+   "lint": "(frozen river: not a fixture)",
+   "rules": [
+    "M10:bridge"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "t3b-ingame #4": {
+   "status": "covered-kept",
+   "lint": "g:crossings_demo_flat, fx:tunnel_hill, even:tunnel",
+   "rules": [
+    "M3:tunnel",
+    "M4:tunnel",
+    "S-LAND",
+    "S-GRAV"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well; the SMOKE row (tunnels) added here"
+  },
+  "t3b-pin #2": {
+   "status": "covered-kept",
+   "lint": "fx:tunnel_hill (the pinned hill as a committed fixture)",
+   "rules": [
+    "M3:tunnel"
+   ],
+   "why": "one-off step, not in a tier"
+  },
+  "k1a-natural #4": {
+   "status": "covered-kept",
+   "lint": "p0:k1a (S7) + the wall row of gate7ak1",
+   "rules": [
+    "M2:wall",
+    "M8:wall"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "k1a-target #5": {
+   "status": "covered-kept",
+   "lint": "p0:k1a (S-LOTS, S-KEEP)",
+   "rules": [
+    "S-LOTS"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well"
+  },
+  "k1b-ingame #4": {
+   "status": "covered-kept",
+   "lint": "g:links_demo, g:links_demo_flat, even:rope",
+   "rules": [
+    "M10:rope",
+    "S-LAND"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well; the SMOKE row (rope, slab decks) added here"
+  },
+  "h-ingame #23": {
+   "status": "covered-kept",
+   "lint": "p0:h (hb fixtures)",
+   "rules": [
+    "M5",
+    "M6",
+    "M8",
+    "M3"
+   ],
+   "why": "kept in game at the slice tier: it costs ~0 s beside the dumps the realised == virtual SMOKE row needs (or is interleaved with a SMOKE/KEEP group), so trimming saves nothing; the lint covers it as well; the SMOKE row (wet writes) added in gate6ch-b"
+  },
+  "kc-ingame #6": {
+   "status": "smoke",
+   "lint": "SMOKE (unchanged); p0:kc v61",
+   "rules": [],
+   "why": ""
+  },
+  "irr-ingame #1": {
+   "status": "smoke",
+   "lint": "SMOKE (unchanged); p0:irr",
+   "rules": [],
+   "why": ""
+  }
+ }
+}

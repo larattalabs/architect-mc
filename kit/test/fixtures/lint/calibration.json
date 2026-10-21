@@ -1,0 +1,33 @@
+{
+ "$comment": "The P2 lints' calibration (tools/gate-lint.mjs record; docs/GATES.md \"Fast checks (P2)\"). tools/lib/p2-trim.mjs: valid only for this Minecraft version and with every probe passing; else the -smoke steps run the full in-game rows and the lint steps FAIL until a release run passes them again.",
+ "minecraft": "26.3",
+ "pass": true,
+ "date": "2026-10-21",
+ "head": "8de0f5d7cb6f4ebb89563fe96a3ed2e8b03b5f7f",
+ "probes": {
+  "light": {
+   "pass": true,
+   "checks": 6,
+   "head": "8de0f5d7cb6f4ebb89563fe96a3ed2e8b03b5f7f",
+   "file": "gate-lint/light.json"
+  },
+  "t3a-probe": {
+   "pass": true,
+   "checks": 4,
+   "head": "8de0f5d7cb6f4ebb89563fe96a3ed2e8b03b5f7f",
+   "file": "gate6c-t3a/probe.json"
+  },
+  "k1b-probe": {
+   "pass": true,
+   "checks": 2,
+   "head": "8de0f5d7cb6f4ebb89563fe96a3ed2e8b03b5f7f",
+   "file": "gate7a-k1b/probe.json"
+  },
+  "voc-registry": {
+   "pass": true,
+   "checks": 5,
+   "head": "8de0f5d7cb6f4ebb89563fe96a3ed2e8b03b5f7f",
+   "file": "gate6c-voc/registry.json"
+  }
+ }
+}
