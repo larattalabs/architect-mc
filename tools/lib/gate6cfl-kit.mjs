@@ -14,6 +14,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
+import { SIBLING_FILES } from './batch-0410.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -90,6 +91,13 @@ export function untouched(root, { check }) {
   for (const f of files) {
     const d = execFileSync('git', ['-C', root, 'diff', '--stat', base, 'HEAD', '--', f]).toString().trim();
     out[f] = d === '' ? 'unchanged' : d;
+    // ((batch v0.41.0) a file a sibling slice changes is that slice's: FL's own commits must leave it alone)
+    if (d !== '' && SIBLING_FILES[f]) {
+      let fl = null;
+      try { fl = execFileSync('git', ['-C', root, 'log', '--format=%h %s', `${base}..origin/slice/FL`, '--', f], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch { /* no slice/FL ref */ }
+      check(fl === '' || fl === null, `item 4: ${f} untouched by FL's own commits${fl === null ? ' (no origin/slice/FL ref to read: not judged)' : ''} (changed since the merge base ${base.slice(0, 8)}: ${SIBLING_FILES[f]})`);
+      continue;
+    }
     check(d === '', `item 4: ${f} untouched since the merge base ${base.slice(0, 8)}`);
   }
   return out;

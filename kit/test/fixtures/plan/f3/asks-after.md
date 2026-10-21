@@ -1,6 +1,5 @@
-# 59 asks: adjusted 12, blocked 2, fits 62, refused 26, unsupported 30
+# 59 asks: adjusted 12, blocked 3, fits 66, refused 26, unsupported 25
 # gap table (unsupported parts per block id):
-  layout.ring              3
   rule.shape               3
   tunnel.under             3
   connector.lift           2
@@ -15,8 +14,6 @@
   form.mast                1
   form.seabed_site         1
   form.ship_hull           1
-  layout.grid              1
-  layout.organic           1
   program.districts        1
   rule.stacked_floors      1
   rule.suspended           1
@@ -25,7 +22,7 @@ arcology/tower_city zone.standard fits
 arcology/unused_placeholder zone.standard refused NO_ROOM
 arcology/stacked_floors rule.stacked_floors unsupported UNSUPPORTED until RC
 around_my_house/village zone.standard fits
-around_my_tree/grove layout.ring unsupported UNSUPPORTED until FL
+around_my_tree/grove zone.standard fits
 boom_town/boomtown zone.standard fits
 border_fort/fort zone.standard fits
 border_fort/pass_road connector.road fits
@@ -54,7 +51,7 @@ end_city_ruins/central_terrace form.terrace fits
 falls_to_ruin/hold zone.standard fits
 farm_village/hamlet zone.standard fits
 fishing_village/village zone.standard fits
-grid_city/grid_city layout.grid unsupported UNSUPPORTED until FL
+grid_city/grid_city zone.standard fits
 harbour/harbour zone.standard fits
 harvest_hamlet/hamlet zone.standard fits
 hidden_village/hollow zone.standard adjusted
@@ -78,7 +75,7 @@ no_right_angles/town zone.standard fits
 no_right_angles/no_right_angles rule.shape unsupported UNSUPPORTED until RC
 no_two_alike/village zone.standard fits
 no_two_alike/no_two_alike rule.variety unsupported UNSUPPORTED until RC
-nomad_camp/camp layout.ring unsupported UNSUPPORTED until FL
+nomad_camp/camp zone.standard fits
 old_new_town/town zone.standard fits
 old_new_town/hill_street connector.street fits
 old_new_town/quarter_stair connector.stair unsupported UNSUPPORTED until 7a
@@ -86,14 +83,14 @@ old_new_town/two_styles rule.palette refused NO_FEATURE
 one_block/reach zone.standard fits
 one_block/gentle_terraces form.terrace refused OVERLAP
 one_block/copper_only rule.palette refused TOLERANCE
-organic_hamlet/hamlet layout.organic unsupported UNSUPPORTED until FL
+organic_hamlet/hamlet zone.standard fits
 pirate_cove/cove zone.standard fits
 redstone_gate/fortress zone.standard adjusted
 redstone_gate/moat connector.channel fits
 redstone_gate/curtain_wall connector.wall adjusted
 redstone_gate/main_gate connector.gate refused NO_ROOM
 redstone_gate/drawbridge connector.drawbridge unsupported UNSUPPORTED until mechanism
-ring_city/ring_town layout.ring unsupported UNSUPPORTED until FL
+ring_city/ring_town zone.standard blocked DEPENDENCY
 ring_city/crater_lake form.crater unsupported UNSUPPORTED until 7c
 rival_families/estates zone.standard refused NO_FEATURE
 rival_families/family_colours rule.palette refused NO_FEATURE

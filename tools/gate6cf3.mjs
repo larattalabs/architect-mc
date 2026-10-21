@@ -119,7 +119,10 @@ steps.unit = async () => {
   fs.writeFileSync(path.join(OUT, 'f3-asks-after.md'), after.text);
   const lines = (t) => new Map(t.split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/')).map((l) => [l.split(' ')[0], l]));
   const lb = lines(before.text), la = lines(after.text);
-  const moved = [...la].filter(([k, v]) => lb.get(k) !== v).map(([k]) => k);
+  // ((batch v0.41.0) the five asks FL moves by name are FL's to judge)
+  const { FL_MOVED_ASKS } = await import('./lib/fl-norm.mjs');
+  const flAsk = (k) => FL_MOVED_ASKS.includes(`${k.split('/')[0]}.json`);
+  const moved = [...la].filter(([k, v]) => lb.get(k) !== v && !flAsk(k)).map(([k]) => k);
   const cb = fs.existsSync(path.join(F, 'asks-before.md')) ? fs.readFileSync(path.join(F, 'asks-before.md'), 'utf8') : null, ca = fs.existsSync(path.join(F, 'asks-after.md')) ? fs.readFileSync(path.join(F, 'asks-after.md'), 'utf8') : null;
   out.asks = { moved, malformedBefore: before.malformed, malformedAfter: after.malformed, parts: la.size, committed: before.text === cb && after.text === ca };
   check(after.malformed === 0 && moved.length === 0 && la.size > 0 && out.asks.committed, `§9: the 59 asks on the merge base and on this head (fixtures/plan/f3/asks-before.md, asks-after.md): ${after.malformed} malformed, ${moved.length} part(s) moved class of ${la.size}; no recorded plan names an F3 block`, moved);

@@ -6,8 +6,8 @@ arcology/stacked_floors rule.stacked_floors unsupported
 arcology cost.bom 54 items; survival true
 around_my_house/village zone.standard fits free 37420 held 735 paid-items 54
 around_my_house cost.bom 54 items; survival true
-around_my_tree/grove layout.ring unsupported
-around_my_tree cost.bom 0 items; survival true
+around_my_tree/grove zone.standard fits free 32245 held 1071 paid-items 0
+around_my_tree cost.bom 26 items; survival true
 boom_town/boomtown zone.standard fits free 54386 held 836 paid-items 57
 boom_town cost.bom 57 items; survival true
 border_fort/fort zone.standard fits free 46794 held 783 paid-items 54
@@ -50,8 +50,8 @@ farm_village/hamlet zone.standard fits free 41132 held 771 paid-items 54
 farm_village cost.bom 54 items; survival true
 fishing_village/village zone.standard fits free 18336 held 531 paid-items 54
 fishing_village cost.bom 54 items; survival true
-grid_city/grid_city layout.grid unsupported
-grid_city cost.bom 0 items; survival true
+grid_city/grid_city zone.standard fits free 79092 held 9069 paid-items 56
+grid_city cost.bom 190 items; survival true
 harbour/harbour zone.standard fits free 45903 held 620 paid-items 57
 harbour cost.bom 57 items; survival true
 harvest_hamlet/hamlet zone.standard fits free 26164 held 627 paid-items 54
@@ -89,8 +89,8 @@ no_right_angles cost.bom 54 items; survival true
 no_two_alike/village zone.standard fits free 39738 held 741 paid-items 54
 no_two_alike/no_two_alike rule.variety unsupported
 no_two_alike cost.bom 54 items; survival true
-nomad_camp/camp layout.ring unsupported
-nomad_camp cost.bom 0 items; survival true
+nomad_camp/camp zone.standard fits free 45903 held 1935 paid-items 54
+nomad_camp cost.bom 90 items; survival true
 old_new_town/town zone.standard fits free 61870 held 987 paid-items 54
 old_new_town/hill_street connector.street fits free 0 held 0 paid-items 0
 old_new_town/quarter_stair connector.stair unsupported
@@ -100,8 +100,8 @@ one_block/reach zone.standard fits free 39074 held 747 paid-items 54
 one_block/gentle_terraces form.terrace refused
 one_block/copper_only rule.palette refused
 one_block cost.bom 54 items; survival true
-organic_hamlet/hamlet layout.organic unsupported
-organic_hamlet cost.bom 0 items; survival true
+organic_hamlet/hamlet zone.standard fits free 43845 held 1478 paid-items 53
+organic_hamlet cost.bom 79 items; survival true
 pirate_cove/cove zone.standard fits free 54326 held 807 paid-items 54
 pirate_cove cost.bom 54 items; survival true
 redstone_gate/fortress zone.standard adjusted free 16622 held 308 paid-items 57
@@ -110,7 +110,7 @@ redstone_gate/curtain_wall connector.wall adjusted free 0 held 26 paid-items 455
 redstone_gate/main_gate connector.gate refused
 redstone_gate/drawbridge connector.drawbridge unsupported
 redstone_gate cost.bom 8471 items; survival true
-ring_city/ring_town layout.ring unsupported
+ring_city/ring_town zone.standard blocked
 ring_city/crater_lake form.crater unsupported
 ring_city cost.bom 0 items; survival true
 rival_families/estates zone.standard refused

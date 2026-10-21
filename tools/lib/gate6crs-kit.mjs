@@ -13,6 +13,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { SIBLING_MOVED, normSiblingIr, siblingAsks } from './batch-0410.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -50,7 +51,8 @@ export function baseTree(root) {
 }
 
 const norm = (s) => s.replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"');
-const sig = (r) => ({ answers: sha256(norm(JSON.stringify(r.check.parts))), overall: r.check.overall, ir: sha256(norm(r.res.irJson)), first: r.first && r.first !== r ? sha256(norm(r.first.res.irJson)) : null });
+// ((batch v0.41.0) the IR with FL's street ext normalised too; a fixture a sibling slice moves by name is that slice's to judge)
+const sig = (r) => ({ answers: sha256(norm(JSON.stringify(r.check.parts))), overall: r.check.overall, ir: sha256(normSiblingIr(r.res.irJson)), first: r.first && r.first !== r ? sha256(normSiblingIr(r.first.res.irJson)) : null });
 
 export async function unchanged(root, { check, log = console.log, only = null } = {}) {
   const { dir: mainDir, base } = baseTree(root);
@@ -66,12 +68,13 @@ export async function unchanged(root, { check, log = console.log, only = null } 
     const same = !!a && !!b && a.answers === b.answers && a.overall === b.overall && a.ir === b.ir && a.first === b.first;
     out.fixtures[name] = { existsOld, same, ...(err ? { err } : {}), ...(a && b && !same ? { head: a, base: b } : {}) };
     if (!existsOld) { log(`note ${name}: new on this branch`); continue; }
+    if (SIBLING_MOVED[name]) { out.fixtures[name].sibling = SIBLING_MOVED[name]; log(`note ${name}: ${same ? 'byte-identical' : 'differs'}; ${SIBLING_MOVED[name]}`); continue; }
     check(same || (!a && !b), `item 2: ${name}: ${same ? 'byte-identical in creative (answers, overall, IR, first plan; kitVersion normalised)' : !a && !b ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, base: b })}`}`);
   }
   const rows = Object.entries(out.fixtures).filter(([, r]) => r.existsOld);
   out.n = rows.length;
   out.same = rows.filter(([, r]) => r.same).length;
-  out.differ = rows.filter(([, r]) => !r.same).map(([k]) => k);
+  out.differ = rows.filter(([, r]) => !r.same && !r.sibling).map(([k]) => k);
   if (!only) check(out.n >= 230, `item 2: ${out.n} committed fixtures planned in creative on both trees (every dir, the 59 asks included)`);
   check(out.differ.length === 0, `item 2: ${out.same} of ${out.n} committed plan fixtures byte-identical in creative to the merge base ${base.slice(0, 10)}`);
   return out;
@@ -107,7 +110,7 @@ export async function asksTables(root, { check, OUT }) {
   const F = path.join(root, 'kit', 'test', 'fixtures', 'plan', 'rs');
   fs.writeFileSync(path.join(OUT, 'rs-asks-creative-base.md'), before.text);
   fs.writeFileSync(path.join(OUT, 'rs-asks-creative.md'), after.text);
-  check(before.text === after.text && after.malformed === 0, `item 2 (§11): the 59 asks in creative on this head equal the merge base's table, part for part (${after.malformed} malformed)`);
+  check(siblingAsks(before.text) === siblingAsks(after.text) && after.malformed === 0, `item 2 (§11): the 59 asks in creative on this head equal the merge base's table, part for part, the five asks FL moves by name aside (${after.malformed} malformed)`);
   const committed = fs.existsSync(path.join(F, 'asks-creative.md')) ? fs.readFileSync(path.join(F, 'asks-creative.md'), 'utf8') : null;
   check(committed === after.text, `item 2 (§11): fixtures/plan/rs/asks-creative.md is this table${committed === null ? ' (missing)' : ''}`);
   // survival: every part's class as in creative, its cost.survival summary

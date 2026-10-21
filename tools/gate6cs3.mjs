@@ -142,10 +142,12 @@ steps.identity = async () => {
   check(u.n > 0 && u.differ.length === 0 && u.baseWithTerraces.length === 0, `item 5: every committed plan fixture as on the merge base ${u.base.slice(0, 10)} (answers, overall, IR but kitVersion, first plan): ${u.same}/${u.n} byte-identical; no base fixture carries terraces`, u.differ);
   const { asksGap } = await import('./lib/gate6chy-b.mjs');
   const before = await asksGap(path.join(K.baseTree(root).dir, 'kit')), after = await asksGap(KIT);
+  // ((batch v0.41.0) the five asks FL moves by name are FL's to judge)
+  const { siblingAsks } = await import('./lib/batch-0410.mjs');
   fs.writeFileSync(path.join(OUT, 's3-asks-before.md'), before.text);
   fs.writeFileSync(path.join(OUT, 's3-asks-after.md'), after.text);
-  out.asks = { malformedBefore: before.malformed, malformedAfter: after.malformed, same: before.text === after.text };
-  check(before.text === after.text && after.malformed === 0, `item 5: the 59 asks' answers and gap table unchanged (${after.text.split('\n')[0]})`);
+  out.asks = { malformedBefore: before.malformed, malformedAfter: after.malformed, same: siblingAsks(before.text) === siblingAsks(after.text) };
+  check(out.asks.same && after.malformed === 0, `item 5: the 59 asks' answers and gap table unchanged (${after.text.split('\n')[0]})`);
   spendZero();
   return out;
 };

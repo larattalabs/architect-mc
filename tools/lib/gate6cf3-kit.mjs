@@ -10,6 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
+import { SIBLING_MOVED, normSiblingIr } from './batch-0410.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -33,7 +34,8 @@ export async function unchanged(root, { check, log = console.log, only = null } 
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
   const [hNew, hOld] = [await H(root), await H(mainDir)];
   const { checkRegion } = await import(pathToFileURL(path.join(root, 'kit', 'lib', 'region', 'check.mjs')).href);
-  const norm = (r) => r.res.irJson.replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"');
+  // ((batch v0.41.0) kitVersion and FL's street ext normalised; a fixture a sibling slice moves by name is that slice's to judge)
+  const norm = (r) => normSiblingIr(r.res.irJson);
   const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(norm(r)), first: r.first && r.first !== r ? sha256(norm(r.first)) : null });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {}, m18: {}, m19: {} };
   for (const [name, fx] of fixtures(root)) {
@@ -57,12 +59,13 @@ export async function unchanged(root, { check, log = console.log, only = null } 
     out.fixtures[name] = { existsOld, same, ...(ex ? { excepted: ex } : {}), ...(err ? { err } : {}), ...(a && b && !same ? { head: a, base: b } : {}) };
     if (!existsOld) { log(`note ${name}: new on this branch`); continue; }
     if (ex) { check(!same, `${name}: excepted by name (${ex}): ${same ? 'UNCHANGED (the exception did not move)' : 'differs, as named'}`); continue; }
+    if (SIBLING_MOVED[name]) { out.fixtures[name].sibling = SIBLING_MOVED[name]; log(`note ${name}: ${same ? 'byte-identical' : 'differs'}; ${SIBLING_MOVED[name]}`); continue; }
     check(same || (!a && !b), `${name}: ${same ? 'byte-identical (answers, overall, IR, first plan)' : !a && !b ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, base: b })}`}`);
   }
   const rows = Object.entries(out.fixtures).filter(([, r]) => r.existsOld);
   out.n = rows.length;
   out.same = rows.filter(([, r]) => r.same).length;
-  out.differ = rows.filter(([, r]) => !r.same && !r.excepted).map(([k]) => k);
+  out.differ = rows.filter(([, r]) => !r.same && !r.excepted && !r.sibling).map(([k]) => k);
   if (!only) check(out.n >= 230, `${out.n} committed fixtures planned (every dir, the 59 asks included)`);
   check(out.differ.length === 0, `${out.same} of ${out.n} byte-identical; the rest exactly the named exceptions (${Object.keys(EXCEPT).join(', ')})`);
   const m18 = Object.entries(out.m18).filter(([, v]) => v.count > 0), m19 = Object.entries(out.m19).filter(([, v]) => v.count > 0);
