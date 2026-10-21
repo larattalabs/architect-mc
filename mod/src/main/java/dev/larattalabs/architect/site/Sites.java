@@ -2796,8 +2796,11 @@ public final class Sites {
 			Reconcile.Action action = settleSite(ev, moved, current != null, current == null ? null : standsNow.get(gone.id()));
 			Set<String> scope = action == Reconcile.Action.RECOVER ? recoverScope(levelOf(server, gone), gone.id(), group, jobSites) : null;
 			if (action == Reconcile.Action.RECOVER && scope == null) {
-				report(gone.id(), false, gone.id() + " shows its blocks again, but its group's removal is still in the queue: it is settled once that "
-					+ "removal ends");
+				// (F6) its restore was written, but the stop lost those writes; its group's removal is still in the queue: it writes it again
+				// (Groups.load, roll forward), never taken back meanwhile
+				report(gone.id(), false, gone.id() + " shows its blocks again (its restore's writes were lost at the stop); its group's removal, "
+					+ "still in the queue, writes it again");
+				Groups.writeAgain(gone.id());
 				action = Reconcile.Action.KEEP;
 			}
 			Architect.LOGGER.info("Sites check: {} site of {} at {} (stands {}, restored {}, covered {}): {}", p.why(), gone.id(), Anchors.str(gone.restoreBox()),
@@ -2867,8 +2870,11 @@ public final class Sites {
 			Reconcile.Action action = settleInfra(ev);
 			Set<String> scope = action == Reconcile.Action.RECOVER ? recoverScope(levelOf(server, gone.dimension()), gone.id(), group, jobSites) : null;
 			if (action == Reconcile.Action.RECOVER && scope == null) {
-				report(gone.id(), false, gone.id() + " shows its blocks again, but its group's removal is still in the queue: it is settled once that "
-					+ "removal ends");
+				// (F6) its restore was written, but the stop lost those writes; its group's removal is still in the queue: it writes it again
+				// (Groups.load, roll forward), never taken back meanwhile
+				report(gone.id(), false, gone.id() + " shows its blocks again (its restore's writes were lost at the stop); its group's removal, "
+					+ "still in the queue, writes it again");
+				Groups.writeAgain(gone.id());
 				action = Reconcile.Action.KEEP;
 			}
 			if (action == Reconcile.Action.RELEASE) {

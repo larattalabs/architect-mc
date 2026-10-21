@@ -307,7 +307,8 @@ class UmtPropertiesTest {
 	 * removal: a member already written (out of the saved removal's sites, so the settle judges it) shows its blocks again and settles
 	 * RECOVER. Its reactivation must not take back the members the resumed removal is still writing (the removal would write their
 	 * restore over ACTIVE entries); the members stay pending while the removal is persisted, and a RECOVER takes back only the members
-	 * whose own evidence stands. Three side-by-side members (a tile among them), the stop at each member.
+	 * whose own evidence stands; the written member whose writes were lost is written again by the resumed removal (roll forward), so
+	 * the next start settles the whole removal. Three side-by-side members (a tile among them), the stop at each member.
 	 */
 	@Test
 	void f6_aRecoverNeverReactivatesMembersOfAResumingRemoval() throws Exception {
@@ -338,6 +339,11 @@ class UmtPropertiesTest {
 							assertTrue(now == null || now.equals(g), "K7 n " + n + " tileFirst " + tileFirst + ": " + m.id + " was taken back from " + g
 								+ " while its removal was queued (now " + now + ")\n" + c.sim.report());
 						}
+						// a written member whose writes the stop lost was written again (Groups.writeAgainIn): the next start settles every member
+						c.sim.restart(false);
+						assertTrue(c.sim.recs.isEmpty() && c.sim.store.index().entries().isEmpty(), "K7 n " + n + " tileFirst " + tileFirst
+							+ ": the next start settles the whole removal: records " + c.sim.recs.values() + ", entries " + c.sim.store.index().entries()
+								.keySet() + "\n" + c.sim.report());
 					}
 					List<String> v = new ArrayList<>(c.sim.end().stream().filter(x -> !x.startsWith("[UC] ")).toList());
 					if (!v.isEmpty()) {

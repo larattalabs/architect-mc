@@ -1174,10 +1174,45 @@ public final class Groups {
 		for (JsonElement e : a) {
 			try {
 				Removal rm = Removal.fromJson(e.getAsJsonObject());
+				writeAgainIn(rm);
 				(e.getAsJsonObject().has("stalled") ? STALLED : REMOVALS).add(rm);
 			} catch (RuntimeException ex) {
 				Architect.LOGGER.warn("Could not read a group removal {}", e, ex);
 			}
+		}
+		writeAgainDone();
+	}
+
+	/** The queue loaded: the members to write again are taken (UMT calls it after its own load). */
+	static void writeAgainDone() {
+		WRITE_AGAIN.clear();
+	}
+
+	/**
+	 * (F6, undo hardening A) Members whose restore a removal in the queue had written, but whose writes the stop lost (the world-start
+	 * settle found them standing: {@link Sites#reconcile}, which runs before the queue loads). Their removal writes them again (roll
+	 * forward) instead of the settle taking them back while the removal still writes the others.
+	 */
+	private static final java.util.Set<String> WRITE_AGAIN = new java.util.HashSet<>();
+
+	static void writeAgain(String siteId) {
+		WRITE_AGAIN.add(siteId);
+	}
+
+	/** A loaded removal takes its members in {@link #WRITE_AGAIN} back into its sites, first (they were written first). */
+	static void writeAgainIn(Removal r) {
+		if (r.undo == null) {
+			return; // planned: resumeCommitted takes back every planned site it lacks
+		}
+		List<String> again = new ArrayList<>();
+		for (String id : r.undoSites) {
+			if (WRITE_AGAIN.contains(id) && !r.sites.contains(id)) {
+				again.add(id);
+			}
+		}
+		if (!again.isEmpty()) {
+			r.sites.addAll(0, again);
+			Architect.LOGGER.info("Removal of group {}: {} written again (their restore's writes were lost at the stop)", r.group, again);
 		}
 	}
 

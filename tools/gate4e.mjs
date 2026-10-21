@@ -1861,7 +1861,7 @@ steps.crash = async () => {
   }
   // (undo hardening A, F6 hazard) GW: a group removal wrote its first member, saved the next one's job, then the JVM halted with no
   // save since the removal began: the written member's blocks are back. The start must not take back the members the resumed removal
-  // is still writing (it keeps the written one pending until the removal ends); the start after that brings back only that member (a final removal is exact)
+  // is still writing (it keeps the written one pending until the removal ends); the resumed removal writes the lost member again, and the next start settles everything (a final removal is exact)
   r = await killRun('GW', 'G4E OrdBase', async () => {
     await cmd('/architect budget 1');
     return api(`sgremove ${ctx.orders.group}`);
@@ -1885,10 +1885,11 @@ steps.crash = async () => {
     const st2 = await call('dev.sites.state');
     const pend2 = (st2.pending ?? []).map((p) => p.site?.id);
     const stray = (j2.entries ?? []).filter((e) => !back.includes(e.site));
-    // the written member stands again alone (its writes were lost; Sites.recoverScope), its befores over the removed members the
-    // group undo's written values (Journal.reactivate), so the final removal below is exact
-    check(back.length === 1 && pend2.length === 0 && stray.length === 0, `crash GW: the next start brings back only the written member `
-      + `(${JSON.stringify(back)}), nothing pending, no entry without a record (${stray.length})`, { back, pend2, stray, reports: st2.reports });
+    // the written member's writes were lost at the stop: its removal, still queued, wrote it again (roll forward, Groups.writeAgainIn), so
+    // this start settles the whole removal: nothing stands again, nothing pending, no entry left
+    const j2e = (j2.entries ?? []).map((e) => `${e.id}:${e.site}:${e.status}`);
+    check(back.length === 0 && pend2.length === 0 && j2e.length === 0, `crash GW: the next start settles the whole removal (${JSON.stringify(back)} `
+      + `stand, ${pend2.length} pending, ${j2e.length} entries)`, { back, pend2, entries: j2e, stray, reports: st2.reports });
     await finalExact('GW', pre);
     out.GW = r;
   }

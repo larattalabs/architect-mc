@@ -583,8 +583,8 @@ final class RestoreJob implements Placement.Job {
 			String g = j.group;
 			boolean undone = SiteJournal.entries(j.siteId).stream().anyMatch(m -> m.status() == Journal.Status.UNDONE && g.equals(m.undoGroup()));
 			j.phase = undone ? WRITE : PLAN;
-			if (undone && Sites.get(j.siteId) != null) {
-				j.phase = COMMIT; // R3 not done yet: the record goes pending first
+			if (undone && (Sites.get(j.siteId) != null || Infras.get(j.siteId) != null)) {
+				j.phase = COMMIT; // R3 not done yet: the record (a site's, or a road's or cell site's) goes pending first
 			}
 		}
 		if (o.has("dropsBefore")) {

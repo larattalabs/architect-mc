@@ -95,6 +95,8 @@ final class UmtSim {
 	/** A saved removal (the queue file): a single site's RestoreJob, or a Groups removal. */
 	static final class Job {
 		final List<String> sites = new ArrayList<>();
+		/** Groups: every member (the removal's undoSites), as saved. */
+		final List<String> all = new ArrayList<>();
 		/** Groups: the undo group once R2 was submitted (Groups.committed saves it before the commit is durable). RestoreJob: its group. */
 		@Nullable String undo;
 		final boolean group;
@@ -106,6 +108,7 @@ final class UmtSim {
 		Job copy() {
 			Job j = new Job(group);
 			j.sites.addAll(sites);
+			j.all.addAll(all);
 			j.undo = undo;
 			return j;
 		}
@@ -853,6 +856,7 @@ final class UmtSim {
 		sorted.sort((a, b) -> Integer.compare(b.order, a.order));
 		Job job = new Job(true);
 		sorted.forEach(m -> job.sites.add(m.id));
+		job.all.addAll(job.sites);
 		jobs.add(job);
 		String g = "u:group-" + nextGroupUndo++;
 		clock += 10;
@@ -1324,7 +1328,8 @@ final class UmtSim {
 			java.util.Set<String> scope = a == Reconcile.Action.RECOVER ? Sites.recoverScope(world, x.id, g, jobSites) : null;
 			if (a == Reconcile.Action.RECOVER && scope == null) {
 				a = Reconcile.Action.KEEP;
-				trace.add("  settle " + x.id + ": its group's removal is still in the queue");
+				Groups.writeAgain(x.id); // production: its removal writes it again
+				trace.add("  settle " + x.id + ": its group's removal is still in the queue: written again");
 			}
 			release = a == Reconcile.Action.RELEASE;
 			recover = a == Reconcile.Action.RECOVER;
@@ -1400,9 +1405,15 @@ final class UmtSim {
 					saved.addProperty("waited", 0L);
 					saved.add("refund", new com.google.gson.JsonObject());
 					saved.addProperty("undo", j.undo);
-					saved.add("undoSites", ss.deepCopy());
+					com.google.gson.JsonArray us = new com.google.gson.JsonArray();
+					(j.all.isEmpty() ? j.sites : j.all).forEach(us::add);
+					saved.add("undoSites", us);
 					saved.add("handed", new com.google.gson.JsonObject());
-					j.undo = Groups.Removal.fromJson(saved).undo;
+					Groups.Removal loaded = Groups.Removal.fromJson(saved);
+					Groups.writeAgainIn(loaded); // (F6) members whose restore's writes were lost, first
+					List<String> again = loaded.sites.stream().filter(id -> !j.sites.contains(id)).toList();
+					j.sites.addAll(0, again);
+					j.undo = loaded.undo;
 				}
 				if (j.undo == null) {
 					// planned again from the start (R1 is not saved)
@@ -1440,6 +1451,7 @@ final class UmtSim {
 				}
 			}
 		}
+		Groups.writeAgainDone();
 		world.tick();
 		if (recoveredNow.size() > 1) {
 			f7.addAll(recoveredNow);
