@@ -340,7 +340,9 @@ async function runScenario(id) {
   const box = [claim[0] - 8, ys[0] - 8, claim[1] - 8, claim[2] + 8, ys[1] + 8, claim[3] + 8];
   // the prepared chunks tick a while first (fresh chunks settle fluids and schedule their first block ticks), player at the centre
   await L.tp((claim[0] + claim[2]) / 2, sc.fixture.yRange[1], (claim[1] + claim[3]) / 2);
-  await L.settle(90_000);
+  // (gate waits, 2026-10-20) until no simulated chunk holds a scheduled block or fluid tick for 10 s and the claim's chunks (+ 48)
+  // tick, at most the 90 s it always waited (run.json `settle`)
+  const settled = await L.settleQuiet([claim[0] - 48, claim[1] - 48, claim[2] + 48, claim[3] + 48], { capMs: 90_000 });
   // the pristine cameras, then the before dump and the snap
   let before = null;
   // (6c F2) on a headless host (docs/GATES.md "Headless gates") there is no camera: a scenario without a gallery bar (F2) runs
@@ -430,7 +432,7 @@ async function runScenario(id) {
   const api = /String VERSION = "([^"]+)"/.exec(fs.readFileSync(path.join(root, 'mod', 'src', 'main', 'java', 'dev', 'larattalabs', 'architect', 'api', 'ArchitectApi.java'), 'utf8'))?.[1];
   const hello = await L.call('dev.state').catch(() => ({}));
   const run = {
-    scenario: sc.id, version: sc.version, phase, runId, variant: flat ? 'flat' : 'natural', bible: sc.bible ?? null, worldSeed: sc.world.seed, programSeed: sc.seed, claim, irSha: p2.irSha, irShas,
+    scenario: sc.id, version: sc.version, phase, runId, settle: settled, variant: flat ? 'flat' : 'natural', bible: sc.bible ?? null, worldSeed: sc.world.seed, programSeed: sc.seed, claim, irSha: p2.irSha, irShas,
     planId: p2.planId, region, state: st.view.state, cellsWritten: rec.cellsWritten, lots: sc.lotEntries,
     versions: { mod: /mod_version\s*=\s*(\S+)/.exec(gp)?.[1], api, kit: ir.kitVersion, sidecar: hello.sidecar?.version ?? hello.sidecarVersion ?? null, minecraft: /minecraft_version\s*=\s*(\S+)/.exec(gp)?.[1], node: process.versions.node.split('.')[0], head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim() },
     wallSeconds: t, prepare: pr.stats ?? null, dumps: { before: { sha: d0.sha, cells: d0.cells }, after: { sha: d1.sha, cells: d1.cells } }, snap: { cells: snap.cells }, before, shots,

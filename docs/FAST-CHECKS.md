@@ -1,7 +1,8 @@
 # Fast checks: what moves out of the game, and what it buys
 
-Status: analysis for a decision (2026-10-20, main at b4ff2bd4). Nothing here has been dropped yet. No code, gate step or tier has
-changed. This doc maps every in-game assertion in `tools/gate-chains.json` to its fastest trustworthy home. Those homes are the six
+Status: analysis for a decision (2026-10-20, main at b4ff2bd4). **Update (chore/gate-waits):** the fixed waits, P0's three pure
+duplicates and the h-unit floor are done; see docs/GATES.md "Gate waits". The look steps stay at the slice tier (Noah judges
+looks per slice), so P0's "look steps -> release" rows have not moved; only their idle time went. This doc maps every in-game assertion in `tools/gate-chains.json` to its fastest trustworthy home. Those homes are the six
 fast checkers Noah approved, a smoke instance kept in game, or "stays in game". The doc then projects what each checker saves at the
 slice tier.
 
@@ -13,6 +14,9 @@ slice tier.
 | slice step-minutes (all steps) | 392 | 326 | 292 | 276 | 259 |
 | in-game step-minutes | 306 | 232 | 193 | 178 | 162 |
 
+- **Measured after the fixed waits, the three duplicates and the unit floor (chore/gate-waits):** the same 12 slices replayed at
+  their own load give a median of **104 min** (from 132 packed) and 311 step-minutes (from 397); see docs/GATES.md "Gate waits".
+  The checker phases' savings below come on top of that, less the look-step rows (the look steps stay at the slice tier).
 - **Share of in-game slice time that can leave the game: 48%** (141 of 294 step-minutes per slice, weighted by how often each
   step runs).
   - 25% of that needs no checker (P0). It is the look steps moving to release, three pure duplicate steps, and assertions the kit
@@ -27,6 +31,8 @@ slice tier.
   after their slice. "Full set at release" for every SMOKE row therefore means adding them: every in-game step once is about 5.6 h
   wall on 3 shards, about 5.3 h once the look-step remove stalls are fixed, plus about 30 min of calibration probes.
 - **The offline unit steps become the floor.** They take 93 step-minutes per slice today (h-unit alone 26 min at p50, up to 47 min).
+  *(2026-10-20, chore/gate-waits: h-unit 21.7 -> 3.8-5.9 min, hy-unit 24.9 -> 5.8-10.3, t3b-unit 13.0 -> 0.3, t3a-unit 14.4 -> 4.9-5.9
+  with a warm cache; docs/GATES.md "Gate waits".)*
   After P3 they are 36% of the slice. They will set the critical path below about 60 min of wall time.
 
 ### Top 10 by time saved per slice (all phases)
@@ -303,30 +309,27 @@ About 162 in-game step-minutes per slice (55% of today). It is dominated by:
 - chunk loading;
 - the client UI steps (6b-ghost, 6b-nudges, 6b-commands).
 
-## Fixed waits (outside this brief, and larger than any checker)
+## Fixed waits (done 2026-10-20: docs/GATES.md "Gate waits")
 
-Several passes found that much of the in-game time is neither an assertion nor vanilla. This brief doesn't cover it, but it changes
-the ranking, so here it is. None of it has been verified beyond reading the code and the log times.
+These were found in code and log times. Noah approved fixing them with P0's duplicates; branch `chore/gate-waits` did it, and the
+measurements are in docs/GATES.md "Gate waits" / "Measured". What each turned out to be:
 
-- **`k1a-look` and `t3a-look`.** About 600 s idle after `dev.region.remove`, then `leaveWorld`, after each non-default bible: 3
-  times in k1a-look and twice in t3a-look, in 10 of 10 logs. That is 88% and 86% of those steps. It matches
-  `ApiTimeouts.DESIGN_DEFAULT_MS`, but the cause isn't confirmed. t3a-look swallows the remove result and discards the world, so
-  skipping the remove cuts it to about 200 s.
-- **Region poll floors.** `tools/lib/run6b.mjs` `waitRegion` sleeps 30 s per poll, and `tools/gate6a.mjs:256-272` sleeps 60 s.
-  - Every region realise therefore reads 30 s or 60 s whatever its size; real placement takes 1.7-12 s.
-  - It is 76% of p0-ingame, 53% of x-resume, about 42% of x-ingame and about 540 of 939 s in 6a-crash.
-  - cu-ingame's three realises are exactly 30 s each.
-- **Scenario settles.** The 90 s pre-realise settle per variant (`scenarios.mjs:343`) is 36-40% of each scenario step. The 120 s
-  stand is a further 24-32%, but that is vanilla physics and stays.
+- **`k1a-look` and `t3a-look`: not a timeout.** The last camera left the player inside a site's box, and the removal waits for a
+  player to leave (10 minutes, then PARTIAL: `a player stayed in c18 for 10 minutes` in every client log). Teleporting above the
+  claim first makes each removal take 1.5-3.6 s. k1a-look went from 34.7 min (mean of the baseline slices) to 4.8-7.6 min,
+  t3a-look from 24.8 to 4.2-6.7 min. Both stay at the slice tier (Noah judges looks per slice).
+- **Region poll floors.** `waitRegion` polls at 1 s rising to 5 s (was 30 s / 60 s). p0-ingame 2.8 -> 1.3 min, cu-ingame
+  2.3 -> 1.0, x-resume 6.0 -> 4.3, 6a-staged 6.7 -> 4.9-6.2.
+- **Scenario settles.** The 90 s settle is now a condition (no scheduled block or fluid tick in any simulated chunk for 10 s, the
+  claim's chunks ticking), capped at 90 s. Flat variants settle in 10 s; natural variants are never quiet within 90 s (fluid ticks
+  at 86-89 s on S1, S2, S3 and S7), so they keep the full 90 s. The saving is 80 s per flat variant, not the 36-40% of each
+  scenario step estimated here.
 - **Smaller ones:**
-  - b-ingame's `/architect brush undo` loop waits out 120 s (`gate6cb.mjs:450`; about 47% of the step).
-  - pt-ingame `hyst` and pt2 `states` sleep on a wall-clock debounce (119 s and 90 s). An injected tick clock would replace it.
-  - c30-ingame hashes six lots after each of 12 removals (about 60% of the step). Hashing once at the end would do.
-  - 4d-all and c30-ingame regenerate their base world (53 s) where a restore would do.
-  - 0a-tiles spends about 216 s in real-time retry backoff.
-  - 5b `hash()` settles 3 s on each of about 700 calls.
-- **Rough size:** 25-35 step-minutes per slice beyond the checker savings, so a further 8-12 min of wall. It is unmeasured until
-  someone tries it. At release, the look stalls alone are about 50 min of step time.
+  - b-ingame's brush undo wait: the removed region answers `missing`, which the loop didn't treat as done. 4.5 -> 2.3-2.4 min.
+  - c30-ingame: one 3 s settle per six-lot hash set instead of one per lot (still after each removal). 6.1 -> 4.1 min.
+  - pt-ingame `hyst`: **kept**. Its 60 s is the shipped `demoteGapMs` that item 6 asserts, and it already polls.
+  - 0a-tiles: **kept**. The backoff is the slow-tile behaviour under test, and the step ran in 0 of 12 slices.
+  - 4d-all/c30 base regeneration and 5b's per-hash 3 s settle: not touched in this pass.
 
 ## Risks and what we'd lose
 

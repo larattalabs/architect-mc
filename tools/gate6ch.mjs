@@ -35,8 +35,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { kitReuse } from './lib/kit-reuse.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-H-run');
@@ -110,6 +111,8 @@ steps.base = async () => {
 
 // ------------------------------------------------------------------ offline
 
+/** The kit suite once per gate run (tools/lib/kit-reuse.mjs): files whose checks are pass/fail only take this run's unit-kit results when exact. */
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 function nodeTest(files, timeout = 3_600_000) {
   const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
   const t = `${r.stdout}${r.stderr}`;
@@ -135,22 +138,32 @@ async function javaTests(patterns, minTests) {
 
 steps.unit = async () => {
   const out = {};
-  out.unchanged = await (await import('./lib/gate6ch-core.mjs')).unchanged(root);
-  check(out.unchanged.ok, `item 11: ${out.unchanged.same} of ${out.unchanged.n} committed valid/, K1 and T3 fixtures without an H part answer as on origin/main ${out.unchanged.mainHead.slice(0, 10)} and plan the same IR but its kitVersion; the named exceptions that differ: ${out.unchanged.excepted.join(', ') || 'none'} (wet fits); ${out.unchanged.skipped} skipped (H fixtures, and refused/k1a_r01's two-plan harness)`, out.unchanged.differ);
-  out.core = nodeTest(['kit/test/h-core.test.mjs', 'kit/test/h-foundation.test.mjs']);
-  check(out.core.code === 0 && out.core.fail === 0 && out.core.pass >= 10, `items 1, 11, 12, 14(b), 15 (kit, H-core): the fluid model (shell, runs, the lint FLUID_STATE), M25 on h_core_demo and each broken variant caught with its cells, vanilla's steady state, catalogue 7 and its diff from catalogue-t3.json, R21-R23, the codes, ARVX version 3, determinism: ${out.core.pass} pass, ${out.core.fail} fail`, out.core.failing);
-  out.p0 = nodeTest(['kit/test/plan-p0.test.mjs', 'kit/test/k1-foundation.test.mjs', 'kit/test/t3-foundation.test.mjs', 'kit/test/plan-k1-batch.test.mjs', 'kit/test/plan-t3-batch.test.mjs', 'kit/test/catalogue-since.test.mjs']);
-  check(out.p0.code === 0 && out.p0.fail === 0, `items 11, 12: P0's tests after H (e15/e16 off the flipped ids, h-pending-a/b.json), the K1 and T3 foundation and batch tests, sinceApi stamped: ${out.p0.pass} pass, ${out.p0.fail} fail`, out.p0.failing);
-  out.goldens = nodeTest(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/region-lint.test.mjs', 'kit/test/relief-t1.test.mjs', 'kit/test/route-t2.test.mjs', 'kit/test/plan-t3a.test.mjs', 'kit/test/plan-t3b.test.mjs', 'kit/test/plan-k1a.test.mjs', 'kit/test/plan-k1b.test.mjs']);
-  check(out.goldens.code === 0 && out.goldens.fail === 0, `item 16: the tile goldens that must not move (S1, S7, S2, mega_bench, relief_demo, route_demo, forms_demo, scatter_demo, districts_demo, links_demo, crossings_demo), T2's routes, the T3 and K1 plan tests: ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
-  out.kit = nodeTest(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
-  check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
+  // (gate waits, 2026-10-20) the Java tests first (they rebuild mod/build/classes), then api-compat (it only reads those classes) runs
+  // in the background beside the kit items and the halves; its check is the same, made when it ends
   out.java = await javaTests(['*ApiHTest*', '*ArvxFluidsTest*', '*StillOursFluidsTest*', '*RegionFluidsTest*', '*PlanChecksHTest*'], 5);
   check(out.java.ok, `items 3, 5, 10, 18 (Java): the features and kinds, ARVX version 3's fluid layer (the cross-language fixture), still ours for fluids, the fluids stage's census and settle, the plan check's H trigger and the fluid guards: ${out.java.tests} tests, ${out.java.failures} failures`);
-  const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6ch'], { cwd: root, encoding: 'utf8', timeout: 900_000 });
-  out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').slice(-8) };
-  check(ac.status === 0, `item 18: api-compat --gate6ch clean against the 0.36.1, 0.36.0 and 0.35.0 apitest jars and the 0.36.1 jar's 1.33.0 surface`, out.apicompat.tail);
+  const acLog = path.join(OUT, 'api-compat-gate6ch.log');
+  fs.mkdirSync(OUT, { recursive: true });
+  const acFd = fs.openSync(acLog, 'w'); // a file, not a pipe: the kit items keep this process busy for minutes at a time
+  const acDone = new Promise((resolve) => {
+    const ch = spawn(process.execPath, ['tools/api-compat.mjs', '--gate6ch'], { cwd: root, stdio: ['ignore', acFd, acFd] });
+    const timer = setTimeout(() => ch.kill('SIGTERM'), 900_000);
+    ch.on('close', (code) => { clearTimeout(timer); fs.closeSync(acFd); resolve({ status: code, text: fs.readFileSync(acLog, 'utf8') }); });
+  });
+  out.unchanged = await (await import('./lib/gate6ch-core.mjs')).unchanged(root);
+  check(out.unchanged.ok, `item 11: ${out.unchanged.same} of ${out.unchanged.n} committed valid/, K1 and T3 fixtures without an H part answer as on origin/main ${out.unchanged.mainHead.slice(0, 10)} and plan the same IR but its kitVersion; the named exceptions that differ: ${out.unchanged.excepted.join(', ') || 'none'} (wet fits); ${out.unchanged.skipped} skipped (H fixtures, and refused/k1a_r01's two-plan harness)`, out.unchanged.differ);
+  out.core = kitOnce(['kit/test/h-core.test.mjs', 'kit/test/h-foundation.test.mjs']);
+  check(out.core.code === 0 && out.core.fail === 0 && out.core.pass >= 10, `items 1, 11, 12, 14(b), 15 (kit, H-core): the fluid model (shell, runs, the lint FLUID_STATE), M25 on h_core_demo and each broken variant caught with its cells, vanilla's steady state, catalogue 7 and its diff from catalogue-t3.json, R21-R23, the codes, ARVX version 3, determinism: ${out.core.pass} pass, ${out.core.fail} fail`, out.core.failing);
+  out.p0 = kitOnce(['kit/test/plan-p0.test.mjs', 'kit/test/k1-foundation.test.mjs', 'kit/test/t3-foundation.test.mjs', 'kit/test/plan-k1-batch.test.mjs', 'kit/test/plan-t3-batch.test.mjs', 'kit/test/catalogue-since.test.mjs']);
+  check(out.p0.code === 0 && out.p0.fail === 0, `items 11, 12: P0's tests after H (e15/e16 off the flipped ids, h-pending-a/b.json), the K1 and T3 foundation and batch tests, sinceApi stamped: ${out.p0.pass} pass, ${out.p0.fail} fail`, out.p0.failing);
+  out.goldens = kitOnce(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/region-lint.test.mjs', 'kit/test/relief-t1.test.mjs', 'kit/test/route-t2.test.mjs', 'kit/test/plan-t3a.test.mjs', 'kit/test/plan-t3b.test.mjs', 'kit/test/plan-k1a.test.mjs', 'kit/test/plan-k1b.test.mjs']);
+  check(out.goldens.code === 0 && out.goldens.fail === 0, `item 16: the tile goldens that must not move (S1, S7, S2, mega_bench, relief_demo, route_demo, forms_demo, scatter_demo, districts_demo, links_demo, crossings_demo), T2's routes, the T3 and K1 plan tests: ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
+  out.kit = kitOnce(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
+  check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   out.halves = await halves('unit');
+  const ac = await acDone;
+  out.apicompat = { code: ac.status, tail: ac.text.split('\n').slice(-8) };
+  check(ac.status === 0, `item 18: api-compat --gate6ch clean against the 0.36.1, 0.36.0 and 0.35.0 apitest jars and the 0.36.1 jar's 1.33.0 surface`, out.apicompat.tail);
   spendZero();
   return out;
 };

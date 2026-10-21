@@ -448,7 +448,8 @@ steps['flat-misc'] = async () => {
   }
   const h1 = await boxHash([X - 8, gy - 4, Z - 8], [X + 8, gy + 8, Z + 8]);
   const r2 = await cmd('/architect brush undo');
-  for (let i = 0; i < 240; i++) { const st = await call('dev.region.state', { region: mine?.id ?? 'x' }).catch(() => null); if (!st || st.view?.state === 'REMOVED') break; await sleep(500); }
+  // (gate waits, 2026-10-20) a removed brush region answers {missing: true}: that ends the wait too (it used to run out its 120 s)
+  for (let i = 0; i < 240; i++) { const st = await call('dev.region.state', { region: mine?.id ?? 'x' }).catch(() => null); if (!st || st.missing || st.view?.state === 'REMOVED') break; await sleep(500); }
   const h2 = await boxHash([X - 8, gy - 4, Z - 8], [X + 8, gy + 8, Z + 8]);
   check(!!mine && h1.sha256 !== h0.sha256 && h2.sha256 === h0.sha256, `the command: /architect brush raise 5 3 cylinder at ... made ${mine?.id} (owner architect:player), /architect brush undo removed it exactly (${(r1.messages ?? []).join(' ')} | ${(r2.messages ?? []).join(' ')})`);
   // item 12: the apitest apib check and a stroke through the public API

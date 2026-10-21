@@ -883,6 +883,10 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
 - A route ending on a lot its zone couldn't place answers `blocked {dependency}` (naming the lot and zone), not refused NO_ROOM.
 - `rule.palette` gains `scope: "lots" | "all"` (default "all" = today), and `exempt` accepts `ways` and `forms`.
 - Take Steward's 12 re-recorded asks (steward-mc f-strange-asks) into the asks fixtures and gap table.
+- Pond placement keeps a body's shell, spill and single-breach reach off every lot's box + 1 when it chooses a site, so it
+  lands on a free site instead of refusing LEAK (Steward's F3 RC, 2026-10-21: a pond near stone, within 40 of a town zone,
+  refused LEAK because its single-breach reach met lot cottage_1; near claim_n it fits). Main's kit does the same, so this
+  is not an F3 issue. Gate: that plan places with 0 LEAK, plus a unit test where the only lot-clear site is the one chosen.
 
 ## Queued (coordinator, 2026-10-20)
 
@@ -891,6 +895,14 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
 - **Stale asks tables after VOC-c** (found by the release-tool run): h-unit and ha-unit fail H-a item 10, and vocc-unit fails
   VOC-c item 3, because `rule.palette` became supported. Re-cut the tables (vocc's "after" table already matches) and fold them
   into the 6c close-out with Steward's 12 re-recorded asks.
+
+## RS follow-ups (coordinator, 2026-10-21; Steward's supplied-plan run on the RS jar)
+
+- Region tile and road item waits carry no build tag Steward can match. Give them the region and the part, as SITE_WAITING
+  already does, so the steward can say which part waits for what.
+- SITE_BUSY stage waits: give them a reason Steward can say ("the street waits for the walls").
+- Steward found a region builds from materials only when the world's default mode isn't creative, while its batch path needs
+  only the toggle. Write the rule into the RS contract text so callers don't have to discover it.
 
 ## Queued (coordinator, 2026-10-21; Noah: crash safety option A)
 

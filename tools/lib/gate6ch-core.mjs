@@ -21,9 +21,14 @@ export const UNCHANGED_SKIPPED = Object.freeze(['refused/k1a_r01_wall_water.json
  * but its kitVersion (the main checkout's kit in a detached worktree beside this one). `ok`: n >= 40 and only the named exceptions
  * differ (`excepted`: those that do).
  */
+/**
+ * (gate waits, 2026-10-20) The comparison's per-fixture results by `${root}|${mainHead}`: H-a's item 11 (gate6ch-a.mjs haUnchanged)
+ * runs the very same loop over the same fixtures against the same origin/main, so inside one h-unit it reads them from here instead
+ * of planning all 61 fixtures twice more. Its own check, exceptions and bar are unchanged.
+ */
+export const unchangedRuns = new Map();
+
 export async function unchanged(root) {
-  const { createHash } = await import('node:crypto');
-  const sha256 = (s) => createHash('sha256').update(s).digest('hex');
   const mainDir = path.resolve(root, '..', 'architect-mc-H-main');
   execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']);
   const mainHead = execFileSync('git', ['-C', root, 'rev-parse', 'origin/main']).toString().trim();
@@ -32,7 +37,9 @@ export async function unchanged(root) {
   const H = (dir) => import(pathToFileURL(path.join(dir, 'kit', 'test', 'plan-helpers.mjs')).href);
   const [hNew, hOld] = [await H(root), await H(mainDir)];
   const out = { mainHead, fixtures: {} };
-  let same = 0, skipped = 0;
+  let same = 0, skipped = 0, cached = 0;
+  const PC = await import('./plan-cache.mjs');
+  const [treesNew, treesOld] = [PC.treesOf(root), PC.treesOf(mainDir)];
   const H_KINDS = ['pond', 'fountain', 'waterfall', 'quay', 'channel'];
   for (const dir of ['valid', 'k1a', 'rope', 'refused', 't3a', 'tunnel']) {
     const fixDir = path.join(root, 'kit', 'test', 'fixtures', 'plan', dir);
@@ -48,15 +55,22 @@ export async function unchanged(root) {
       const sv = (h) => (fx.terrain ? h.flatSurvey(fx.terrain) : fx.on === 'asks' ? h.asksSurvey() : fx.on === 'flat' ? h.flatSurvey() : fx.on ? h.goldenSurvey(fx.on) : h.flatSurvey());
       const runOn = async (h) => { const s = sv(h); return h.checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...h.stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}) }); };
       let a, b;
-      try { a = await runOn(hNew); b = await runOn(hOld); } catch (e) { out.fixtures[`${dir}/${f}`] = { error: String(e.message).slice(0, 200) }; continue; }
-      const norm = (r) => r.res.irJson.replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"');
-      const answers = (r) => JSON.stringify(r.check.parts);
-      const eq = { answers: answers(a) === answers(b), ir: sha256(norm(a)) === sha256(norm(b)), overall: a.check.overall === b.check.overall };
+      // (gate waits, 2026-10-20) each side keyed by its kit and scenarios trees, the plan and this fixture's options (tools/lib/plan-cache.mjs)
+      const opts = { ...fx, plan: undefined };
+      try {
+        a = await PC.planSide(root, treesNew, ['h', `${dir}/${f}`, fx.plan, opts], () => runOn(hNew));
+        b = await PC.planSide(root, treesOld, ['h', `${dir}/${f}`, fx.plan, opts], () => runOn(hOld)); // (both sides check this checkout's fixture)
+      } catch (e) { out.fixtures[`${dir}/${f}`] = { error: String(e.message).slice(0, 200) }; continue; }
+      cached += a.cached + b.cached;
+      const eq = { answers: a.answers === b.answers, ir: a.ir === b.ir, overall: a.overall === b.overall };
       out.fixtures[`${dir}/${f}`] = eq;
       if (eq.answers && eq.ir && eq.overall) same++;
     }
   }
   out.same = same; out.n = Object.keys(out.fixtures).length; out.skipped = skipped;
+  out.cache = { sides: cached, of: 2 * out.n, trees: { new: treesNew, main: treesOld } };
+  PC.savePlanCache();
+  unchangedRuns.set(`${root}|${mainHead}`, { fixtures: { ...out.fixtures }, same, skipped });
   const differing = Object.entries(out.fixtures).filter(([, v]) => !(v.answers && v.ir && v.overall));
   out.excepted = differing.map(([k]) => k).filter((k) => UNCHANGED_EXCEPTIONS.includes(k));
   out.differ = differing.filter(([k]) => !UNCHANGED_EXCEPTIONS.includes(k)).map(([k, v]) => [k, v]);
