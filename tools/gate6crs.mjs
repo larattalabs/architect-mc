@@ -938,28 +938,39 @@ steps.item15 = async () => {
   const cells = await L.call('dev.rs.cells', { region: R.region }, 300_000);
   const spireT = (cells.targets ?? []).find((t) => (f.last.rs.targets ?? []).some((x) => x.target === t.target && x.part === 'spire'));
   const heldSpire = spireT?.cells.find((c) => (c[3] & 1) && (c[3] & 2) && !(c[3] & 4));
-  // a free fill cell: a free-pass cell of the relief (dev.rs.freeWrite over the claim's surface near the blend's anchor)
-  const at = await L.call('dev.journal.state', {}, 60_000).catch(() => null);
-  void at;
+  // a free fill cell: a free-pass write of the relief (dev.rs.freeWrite in batches over the claim's columns), solid, not the spire's
   let fill = null;
-  for (let dx = 0; dx < 200 && !fill; dx += 7) for (let dz = 0; dz < 160 && !fill; dz += 9) {
-    const x = R.s.W.claim[0] + 10 + dx, z = R.s.W.claim[1] + 10 + dz;
-    for (let y = R.s.W.maxY + 6; y >= R.s.W.minY; y--) {
-      const fw = await L.call('dev.rs.freeWrite', { at: [x, y, z] }, 30_000);
-      if (fw.free?.[0] === true) { fill = [x, y, z]; break; }
+  const spireCells = new Set((spireT?.cells ?? []).map((c) => `${c[0]},${c[1]},${c[2]}`));
+  for (let dx = 4; dx < R.s.W.claim[2] - R.s.W.claim[0] && !fill; dx += 6) {
+    const batch = [];
+    for (let dz = 4; dz < R.s.W.claim[3] - R.s.W.claim[1]; dz += 6) for (let y = R.s.W.minY - 2; y <= R.s.W.maxY + 8; y++) batch.push([R.s.W.claim[0] + dx, y, R.s.W.claim[1] + dz]);
+    const fw = await L.call('dev.rs.freeWrite', { cells: batch }, 120_000);
+    for (let k = 0; k < batch.length && !fill; k++) {
+      if (fw.free?.[k] !== true || spireCells.has(batch[k].join(','))) continue;
+      const j = await L.call('dev.journal.at', { x: batch[k][0], y: batch[k][1], z: batch[k][2] }, 30_000);
+      const top = (j.stack ?? []).slice(-1)[0];
+      if (top && !/minecraft:(air|water|cave_air)/.test(top.after) && top.kind === 'architect:terrain') fill = batch[k];
     }
   }
+  await cmd('/gamemode survival'); // (the terrain builder left the player a spectator)
   const before = (await L.call('dev.stockpile.audit', { owner: G.OWNER, min: [R.box[0], R.box[1], R.box[2]], max: [R.box[3], R.box[4], R.box[5]] }, 120_000)).entities ?? {};
   const b1 = fill ? await L.call('dev.rs.break', { at: fill }, 60_000) : null;
   const b2 = heldSpire ? await L.call('dev.rs.break', { at: heldSpire.slice(0, 3) }, 60_000) : null;
   await sleep(1500);
   const after = (await L.call('dev.stockpile.audit', { owner: G.OWNER, min: [R.box[0], R.box[1], R.box[2]], max: [R.box[3], R.box[4], R.box[5]] }, 120_000)).entities ?? {};
   const dropped = G.minus(after, before);
-  check(!!b1?.broken && !!b2?.broken && Object.keys(dropped).length === 0 && b2.freeBroken >= 2, `item 15 (N-RS-2): a player breaks a free fill cell (${json(fill)}: ${b1?.before}) and a held spire cell (${json(heldSpire?.slice(0, 3))}: ${b2?.before}) in survival: both broken, nothing dropped (${json(dropped)}), the hook counted ${b2?.freeBroken}`);
+  // the control: a natural block the region never wrote (outside its claim, in its box) drops as vanilla
+  const ctl = [R.s.W.claim[0] - 4, R.s.W.ground ?? R.s.W.minY, R.s.W.claim[1] - 4];
+  const b0 = await L.call('dev.rs.break', { at: ctl }, 60_000);
+  await sleep(1500);
+  const after2 = (await L.call('dev.stockpile.audit', { owner: G.OWNER, min: [R.box[0], R.box[1], R.box[2]], max: [R.box[3], R.box[4], R.box[5]] }, 120_000)).entities ?? {};
+  const ctlDrop = G.minus(after2, after);
+  check(b0.gameMode === 'survival' && !!b0.broken && Object.keys(ctlDrop).length > 0, `item 15 (the control): a natural block outside the region (${json(ctl)}: ${b0.before}) broken in ${b0.gameMode} drops ${json(ctlDrop)}`);
+  check(/air/.test(b1?.after ?? '') && /air/.test(b2?.after ?? '') && Object.keys(dropped).length === 0 && b2.freeBroken >= 2, `item 15 (N-RS-2): a player breaks a free fill cell (${json(fill)}: ${b1?.before}) and a held spire cell (${json(heldSpire?.slice(0, 3))}: ${b2?.before}) in survival: both broken (the event cancelled, the block destroyed without drops), nothing dropped (${json(dropped)}), the hook counted ${b2?.freeBroken}`);
   const rm = await G.remove(ctx, R.region);
   const e = await G.diff(ctx, R.box, R.pre);
-  const ef = e.list.filter((m) => !R.crateAt.some((c) => c.join(',') === m.pos));
-  check(rm.removed && ef.length === 0, `item 15: then removed as item 9: E-flat ${ef.length} (the broken cells restored)`, ef.slice(0, 6));
+  const ef = e.list.filter((m) => !R.crateAt.some((c) => c.join(',') === m.pos) && m.pos !== ctl.join(','));
+  check(rm.removed && ef.length === 0, `item 15: then removed as item 9: E-flat ${ef.length} (the mined free cells put back, then restored; the control's cell aside)`, ef.slice(0, 6));
   return { fill, spire: heldSpire, b1, b2, dropped, eflat: ef.length };
 };
 
