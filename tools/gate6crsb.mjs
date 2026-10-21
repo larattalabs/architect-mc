@@ -71,7 +71,8 @@ function spendZero() {
 
 // ------------------------------------------------------------------ the machine slot (docs/GATES.md "Slot lock"), held by the server's pid
 
-const SLOTS = path.resolve(root, '..', '.gate-slots');
+const SLOTS = path.resolve(process.env.GATE_SLOTS_DIR ?? path.resolve(root, '..', '.gate-slots'));
+const NSLOTS = Number(process.env.GATE_SLOTS ?? 3);
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 const readSlot = (i) => { try { return JSON.parse(fs.readFileSync(path.join(SLOTS, `slot-${i}.json`), 'utf8')); } catch { return null; } };
 function withMutex(fn) {
@@ -82,7 +83,7 @@ function withMutex(fn) {
 }
 function claimSlot(pid) {
   return withMutex(() => {
-    for (let i = 1; i <= 3; i++) {
+    for (let i = 1; i <= NSLOTS; i++) {
       const h = readSlot(i);
       if (h?.pid && alive(h.pid)) continue;
       fs.writeFileSync(path.join(SLOTS, `slot-${i}.json`), JSON.stringify({ pid, worktree: root, chain: 'rs-b (headless server)', startedAt: new Date().toISOString() }));
@@ -92,7 +93,7 @@ function claimSlot(pid) {
   });
 }
 function releaseSlots() {
-  withMutex(() => { for (let i = 1; i <= 3; i++) { const h = readSlot(i); if (h && (h.worktree === root && (!h.pid || !alive(h.pid) || h.pid === process.pid))) fs.rmSync(path.join(SLOTS, `slot-${i}.json`), { force: true }); } });
+  withMutex(() => { for (let i = 1; i <= Math.max(NSLOTS, 6); i++) { const h = readSlot(i); if (h && (h.worktree === root && (!h.pid || !alive(h.pid) || h.pid === process.pid))) fs.rmSync(path.join(SLOTS, `slot-${i}.json`), { force: true }); } });
 }
 
 // ------------------------------------------------------------------ the server and the worlds
@@ -101,7 +102,7 @@ steps.start = async () => {
   // a slot first, held by this driver's pid while the server boots, then handed to the server's
   let slot = 0;
   for (let k = 0; !(slot = claimSlot(process.pid)); k++) {
-    if (k % 40 === 0) log(`waiting for a free gate slot (${[1, 2, 3].map((i) => readSlot(i)?.chain ?? 'free').join(', ')})`);
+    if (k % 40 === 0) log(`waiting for a free gate slot (${Array.from({ length: NSLOTS }, (_, i) => i + 1).map((i) => readSlot(i)?.chain ?? 'free').join(', ')})`);
     await sleep(15_000);
   }
   const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim();
