@@ -416,6 +416,9 @@ public final class WorldJournal {
 	 */
 	public static boolean holds(BlockState now, java.util.function.Supplier<@Nullable CompoundTag> nowNbt, Value after) {
 		BlockState want = state(after);
+		if (StillOurs.pathTurned(now, want)) {
+			return true; // (fix/lamp-path) our dirt path turned to dirt under a solid block, outside the journal
+		}
 		if (now.getBlock() != want.getBlock() && !(want.isAir() && !now.getFluidState().isEmpty()) && !(StillOurs.spread(now) && StillOurs.spread(want))
 			&& !StillOurs.fluidHolds(now, want) && !Copper.sameBlock(now.getBlock(), want.getBlock())) {
 			return false; // (a fluid in cleared air goes to StillOurs, phase 6a; another copper stage too, 6c CU)
@@ -434,7 +437,7 @@ public final class WorldJournal {
 		}
 		var f = net.minecraft.world.level.block.Blocks.FARMLAND;
 		var d = net.minecraft.world.level.block.Blocks.DIRT;
-		return Copper.sameBlock(now.getBlock(), after.getBlock()) || now.is(f) && after.is(d) || now.is(d) && after.is(f);
+		return Copper.sameBlock(now.getBlock(), after.getBlock()) || now.is(f) && after.is(d) || now.is(d) && after.is(f) || StillOurs.pathTurned(now, after);
 	}
 
 	/**
@@ -470,6 +473,9 @@ public final class WorldJournal {
 	public static boolean same(Value v, Value after) {
 		if (v.equals(after)) {
 			return true;
+		}
+		if (StillOurs.pathTurned(state(v), state(after))) {
+			return true; // (fix/lamp-path)
 		}
 		return StillOurs.holds(state(v), v.nbt(), state(after), after.nbt());
 	}

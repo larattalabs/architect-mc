@@ -69,4 +69,40 @@ class RoadPlanTest {
 		RoadPlan.Lamp soul = new RoadPlan.Lamp(new int[] {0, 0}, new int[] {0, 1}, 1, 4, 8);
 		assertTrue(lanterns(RoadPlan.plan(XS, YS, ZS, 3, true, false, world(RoadPlan.DIRT), NONE, null, false, null, soul)) > lanterns(d));
 	}
+
+	/** Flat dirt; the verge rows at y 63 of kind {@code north} (z = -2) and {@code south} (z = +2). */
+	private static RoadPlan.World verges(int north, int south) {
+		return (x, y, z) -> y == 63 && z == -2 ? north : y == 63 && z == 2 ? south : y <= 63 ? RoadPlan.DIRT : RoadPlan.AIR;
+	}
+
+	/**
+	 * fix/lamp-path: a lantern post stands on a dirt path only when the road's owner wrote it (a region's verge: the journal owns it, and
+	 * StillOurs.pathTurned keeps it ours once vanilla turns it to dirt under the post). On a path nobody's (a village's) or another
+	 * owner's, the post takes the other side of the road; with such a path on both, none. Main put posts on any dirt path.
+	 */
+	@Test
+	void noPostOnADirtPathNotOurs() {
+		RoadPlan.Lamp gibbet = new RoadPlan.Lamp(new int[] {0, 0, 0, 1, 1}, new int[] {0, 1, 2, 2, 1}, 4, 6, 12);
+		for (RoadPlan.Lamp lamp : new RoadPlan.Lamp[] {null, gibbet}) {
+			int both = lanterns(RoadPlan.plan(XS, YS, ZS, 3, true, false, verges(RoadPlan.DIRT, RoadPlan.DIRT), NONE, null, false, null, lamp));
+			assertTrue(both >= 4, "dirt verges: posts (" + both + ")");
+			for (RoadPlan.OwnFoot notOurs : new RoadPlan.OwnFoot[] {null, (x, y, z) -> false}) {
+				for (int[] sides : new int[][] {{RoadPlan.PATH, RoadPlan.DIRT}, {RoadPlan.DIRT, RoadPlan.PATH}}) {
+					RoadPlan.World w = verges(sides[0], sides[1]);
+					RoadPlan.Plan p = RoadPlan.plan(XS, YS, ZS, 3, true, false, w, NONE, null, false, notOurs, lamp);
+					assertEquals(both, lanterns(p), "a village's path on one side: every post on the other");
+					for (RoadPlan.Op o : p.ops()) {
+						if (o.block() == RoadPlan.Block.FENCE || o.block() == RoadPlan.Block.LANTERN || o.block() == RoadPlan.Block.LAMP) {
+							assertTrue(w.at(o.x(), o.y() - 1, o.z()) != RoadPlan.PATH, "no lamp cell over the village's path: " + o);
+						}
+					}
+				}
+				assertEquals(0, lanterns(RoadPlan.plan(XS, YS, ZS, 3, true, false, verges(RoadPlan.PATH, RoadPlan.PATH), NONE, null, false, notOurs, lamp)),
+					"a village's path on both sides: no post");
+			}
+			// the road owner's own path verge (the farm hamlet's): its posts, as on a dirt verge
+			assertEquals(both, lanterns(RoadPlan.plan(XS, YS, ZS, 3, true, false, verges(RoadPlan.PATH, RoadPlan.PATH), NONE, null, false,
+				(x, y, z) -> y == 63 && Math.abs(z) == 2, lamp)), "our own dirt path verge: posts");
+		}
+	}
 }
