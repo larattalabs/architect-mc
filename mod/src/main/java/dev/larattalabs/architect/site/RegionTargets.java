@@ -795,6 +795,47 @@ public final class RegionTargets {
 		}
 	}
 
+	/**
+	 * (§9, item 9) At a survival region's removal, before its refunds are counted: a target cell holding a player's block (neither the
+	 * plan's block, nor what stood there before, nor air or a fluid), still the target's in the journal, drops that block's items at its
+	 * cell and goes back to its before, as a lot's player block drops (Y1's PLAYER_DROP). Returns the cells. Server thread.
+	 */
+	static int dropPlayerBlocks(ServerLevel level, Infra t) {
+		if (!is(t)) {
+			return 0;
+		}
+		MinecraftServer srv = level.getServer();
+		Builder.Run r = RoadBuilder.run(srv, t);
+		Plan pl = r == null ? null : planOf(srv, t);
+		if (r == null || pl == null) {
+			return 0;
+		}
+		Cells before = beforeOf(t, pl);
+		int n = 0;
+		for (int q = 0; q < r.size(); q++) {
+			BlockPos p = r.pos(q);
+			BlockState now = level.getBlockState(p);
+			if (now.isAir() || !now.getFluidState().isEmpty() || r.matches(now, q)) {
+				continue;
+			}
+			int k = r.queue[q];
+			BlockState was = before != null && k >= 0 && k < before.size() ? before.states[k] : null;
+			if (was != null && now.is(was.getBlock()) || !SiteJournal.isOwnedBy(t.dimension(), p.asLong(), t.id())) {
+				continue;
+			}
+			Map<String, Integer> items = new TreeMap<>();
+			Cells.cost(now).forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
+			Builder.dropItems(level, p, items, null);
+			dev.larattalabs.architect.placed.Placed.set(level, p, was != null ? was : net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),
+				Sites.CELL_FLAGS);
+			n++;
+		}
+		if (n > 0) {
+			Architect.LOGGER.info("Region target {}: {} player block(s) dropped at their cells before its removal", t.id(), n);
+		}
+		return n;
+	}
+
 	/** The target entry's before over its box (read once per plan). */
 	static @Nullable Cells beforeOf(Infra t, Plan pl) {
 		if (pl.before == null) {

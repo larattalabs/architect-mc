@@ -869,6 +869,7 @@ public final class Groups {
 			Infra inf = Infras.get(id);
 			Stockpiles.Pile pile = inf == null ? null : Stockpiles.pileOf(inf);
 			if (pile != null) {
+				RegionTargets.dropPlayerBlocks(level, inf); // (6c RS §9) a player's block in a region target drops at its cell first
 				// 6c Y: a stockpile's construction road: its paid cells standing, credited once its restore is written
 				r.decCredit.put(id, new Credit(pile.owner(), RoadBuilder.creditKey(inf), Map.copyOf(RoadBuilder.refundOf(level, inf)), RoadBuilder.dropAt(inf)
 					.asLong()));

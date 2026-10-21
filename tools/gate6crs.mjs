@@ -623,7 +623,7 @@ steps.item9 = async () => {
   const out = {};
   for (const [tag, name] of [['rs02r', 'rs02_walled'], ['rs03r', 'rs03_water']]) {
     let pre = null;
-    const o = await buildOne(tag, name, { cons: true, keep: async ({ region, rs }) => {
+    const o = await buildOne(tag, name, { cons: true, keep: async ({ region, rs, C, box }) => {
       // one copper cell weathered (a lot's, rs_hut's back wall), one paid target cell replaced by a player's block
       const sites = (await L.call('dev.sites.state', {}, 60_000)).sites ?? [];
       let copper = null;
@@ -632,25 +632,36 @@ steps.item9 = async () => {
         const hit = Object.entries(c).find(([k, v]) => /^-?\d+,-?\d+,-?\d+$/.test(k) && String(v).includes('copper_block'));
         if (hit) { copper = hit[0].split(',').map(Number); break; }
       }
-      if (copper) await cmd(`/setblock ${copper.join(' ')} minecraft:weathered_copper`);
+      if (copper) {
+        await cmd(`/setblock ${copper.join(' ')} minecraft:weathered_copper`);
+        C.cleared['minecraft:copper_block'] = (C.cleared['minecraft:copper_block'] ?? 0) + 1; // (the driver's weathering: a copper block became
+        C.injected['minecraft:weathered_copper'] = (C.injected['minecraft:weathered_copper'] ?? 0) + 1; // a weathered one)
+      }
       const cells = await L.call('dev.rs.cells', { region }, 300_000);
       const t = (cells.targets ?? []).find((x) => (x.cells ?? []).some((c) => (c[3] & 2) && !(c[3] & 1) && !(c[3] & 4)));
       const pc = t.cells.find((c) => (c[3] & 2) && !(c[3] & 1) && !(c[3] & 4)).slice(0, 3);
+      const was = (await L.call('dev.journal.at', { x: pc[0], y: pc[1], z: pc[2] }, 30_000)).stack?.slice(-1)[0]?.after ?? '';
+      const paidItem = String(was).replace(/\{.*$/, '');
       await cmd(`/setblock ${pc.join(' ')} minecraft:oak_planks`);
+      // (the driver's own edit: the paid block gone, a player's oak planks there)
+      C.cleared[paidItem] = (C.cleared[paidItem] ?? 0) + 1;
+      C.injected['minecraft:oak_planks'] = (C.injected['minecraft:oak_planks'] ?? 0) + 1;
       await sleep(2000);
-      const a = await L.call('dev.stockpile.audit', { owner: G.OWNER }, 120_000);
+      const a = await L.call('dev.stockpile.audit', { owner: G.OWNER, min: [box[0], box[1], box[2]], max: [box[3], box[4], box[5]] }, 120_000);
       const p0 = await G.pileState(ctx);
-      pre = { copper, player: pc, paid: a.paidStanding, keys: p0.creditedKeys, stock: p0.stock };
+      pre = { copper, player: pc, paidItem, paid: a.paidStanding, entities: a.entities, keys: p0.creditedKeys, stock: p0.stock, box };
     } });
     const p1 = await G.pileState(ctx);
     const refund = o.removed?.refund ?? {};
-    const want = G.plus(G.minus(pre.paid, pre.copper ? { 'minecraft:copper_block': 1 } : {}), pre.copper ? { 'minecraft:weathered_copper': 1 } : {});
-    const got = G.minus(p1.stock, pre.stock);
+    const want = pre.paid; // (the audit counts a weathered copper cell as the block standing)
+    const a1 = await L.call('dev.stockpile.audit', { owner: G.OWNER, min: [pre.box[0], pre.box[1], pre.box[2]], max: [pre.box[3], pre.box[4], pre.box[5]] }, 120_000);
     const drops = await L.call('dev.items.near', { pos: pre.player, radius: 2 }, 30_000);
+    // credited to the stock, or dropped at the crates past the capacity; the player's block dropped at its cell is no refund
+    const got = G.minus(G.plus(G.minus(p1.stock, pre.stock), G.minus(a1.entities, pre.entities)), { 'minecraft:oak_planks': (drops.items ?? {})['minecraft:oak_planks'] ?? 0 });
     const again = await L.call('dev.region.remove', { region: o.region, requester: G.OWNER }, 600_000);
     const p2 = await G.pileState(ctx);
     out[tag] = { pre, refund, credited: got, want, drops, keys: [pre.keys, p1.creditedKeys, p2.creditedKeys], eflat: o.eflat, conservation: o.conservation };
-    check(G.same(got, want), `item 9 (${tag}): the refund equals the paid cells standing, as standing blocks (the weathered copper cell ${json(pre.copper)} credited as weathered_copper): ${G.same(got, want) ? 'equal' : `differs ${json(G.minus(got, want))}`}`, { got, want });
+    check(G.same(got, want) && G.same(refund, want), `item 9 (${tag}): the refund (credited, or dropped at the crates past the capacity) equals the paid cells standing, as standing blocks (the weathered copper cell ${json(pre.copper)} credited as weathered_copper): ${G.same(got, want) ? 'equal' : `differs ${json(G.minus(got, want))}`}`, { got, want });
     check(((drops.items ?? drops.stacks ?? {})['minecraft:oak_planks'] ?? 0) >= 1 || JSON.stringify(drops).includes('oak_planks'), `item 9 (${tag}): the player's block at ${pre.player.join(',')} drops at its cell (${json(drops).slice(0, 200)})`);
     check(o.eflat?.mismatches === 0, `item 9 (${tag}): free cells restored, E-flat ${o.eflat?.mismatches}`);
     check(p2.creditedKeys === p1.creditedKeys && G.same(p2.stock, p1.stock) && again.removed !== false, `item 9 (${tag}): one credit per key: ${pre.keys} -> ${p1.creditedKeys} keys at the removal, ${p2.creditedKeys} after a second remove (nothing credited again)`);
