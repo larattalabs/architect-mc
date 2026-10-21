@@ -21196,7 +21196,7 @@ Little endian, LEB128 varints (`region/Realised.java` `encode`/`decode`):
 
 ```
 "ARPR" u8 version(1) u8 flags            flags: 1 NO_ENTRY (nothing written: no journal entry, site ""), 2 DERIVED (RV §3.7; never RP),
-                                                4 WRITERS present
+                                                4 WRITERS present, 8 WRITERS_DEFLATED
 varint layer                             0 = the realise; RV's revision rid later (§4)
 str stage, str set, str key, str site    str = varint length + UTF-8; site = the tile's cell site cN
 32 B tileSha                             §3
@@ -21205,7 +21205,7 @@ varint nCells                            = the tile's payload cell count (evalTi
 varint nRuns; per run: u8 code, varint length          the code of every intended cell, in payload order
 varint nExtras; per extra (ascending BlockPos.asLong):
   u8 kind, zigzag varint position delta (from 0), varint cause + 1 (0: unknown)
-varint nWriters + ARWR v1 bytes          the kit's writers (§2.2); 0 when the helper sent none
+varint nWriters + raw-deflated ARWR v1   the kit's writers (§2.2), deflated (flag 8 WRITERS_DEFLATED); 0 when the helper sent none
 u32 CRC32 of every byte before it
 ```
 

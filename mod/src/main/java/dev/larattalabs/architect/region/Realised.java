@@ -79,6 +79,8 @@ public final class Realised {
 	public static final int DERIVED = 2;
 	/** The kit's writers (ARWR) are present. */
 	public static final int WRITERS = 4;
+	/** The writers are stored raw-deflated (always when present; {@link Tile#writers()} is the inflated ARWR). */
+	public static final int WRITERS_DEFLATED = 8;
 
 	private Realised() {
 	}
@@ -184,13 +186,14 @@ public final class Realised {
 	 * ARPR v1, little endian, LEB128 varints: "ARPR", u8 version 1, u8 flags; varint layer; strings (varint length + UTF-8) stage, set,
 	 * key, site; 32 bytes tileSha; 32 bytes chainSha; varint nCells; varint nRuns, per run u8 code + varint length (payload order);
 	 * varint nExtras, per extra (ascending position) u8 kind, zigzag varint position delta (BlockPos.asLong, from 0), varint cause + 1
-	 * (0: unknown); varint writers length + ARWR bytes; u32 CRC32 of every byte before it.
+	 * (0: unknown); varint writers length + the ARWR bytes raw-deflated (flag WRITERS_DEFLATED); u32 CRC32 of every byte before it.
 	 */
 	public static byte[] encode(Tile t) {
 		Out o = new Out(64 + t.codes().length / 8 + t.extras().size() * 6 + t.writers().length);
 		o.bytes(MAGIC);
 		o.u8(FORMAT);
-		o.u8(t.flags() | (t.writers().length > 0 ? WRITERS : 0));
+		byte[] wz = t.writers().length > 0 ? deflate(t.writers()) : new byte[0];
+		o.u8((t.flags() & ~(WRITERS | WRITERS_DEFLATED)) | (wz.length > 0 ? WRITERS | WRITERS_DEFLATED : 0));
 		o.varint(t.layer());
 		o.str(t.stage());
 		o.str(t.set());
@@ -224,8 +227,8 @@ public final class Realised {
 			prev = e.pos();
 			o.varint(e.cause() + 1L);
 		}
-		o.varint(t.writers().length);
-		o.bytes(t.writers());
+		o.varint(wz.length);
+		o.bytes(wz);
 		CRC32 crc = new CRC32();
 		crc.update(o.buf, 0, o.len);
 		long v = crc.getValue();
@@ -284,10 +287,51 @@ public final class Realised {
 			ex.add(new Extra(kind, prev, (int) (in.varint() - 1)));
 		}
 		byte[] writers = in.bytes((int) in.varint());
+		if ((flags & WRITERS_DEFLATED) != 0 && writers.length > 0) {
+			writers = inflate(writers);
+		}
 		if (in.p != a.length - 4) {
 			throw new IOException("ARPR trailing bytes");
 		}
 		return new Tile(layer, stage, set, key, site, flags, tileSha, chainSha, codes, List.copyOf(ex), writers);
+	}
+
+	/** Raw deflate, level 6 (the writers: ~57x smaller on overlapping ops, measured on mega_bench). */
+	static byte[] deflate(byte[] b) {
+		java.util.zip.Deflater d = new java.util.zip.Deflater(6, true);
+		try {
+			d.setInput(b);
+			d.finish();
+			java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream(Math.max(64, b.length / 8));
+			byte[] buf = new byte[8192];
+			while (!d.finished()) {
+				o.write(buf, 0, d.deflate(buf));
+			}
+			return o.toByteArray();
+		} finally {
+			d.end();
+		}
+	}
+
+	static byte[] inflate(byte[] b) throws IOException {
+		java.util.zip.Inflater f = new java.util.zip.Inflater(true);
+		try {
+			f.setInput(b);
+			java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream(b.length * 8);
+			byte[] buf = new byte[8192];
+			while (!f.finished()) {
+				int n = f.inflate(buf);
+				if (n == 0 && (f.needsInput() || f.needsDictionary())) {
+					throw new IOException("ARPR writers truncated");
+				}
+				o.write(buf, 0, n);
+			}
+			return o.toByteArray();
+		} catch (java.util.zip.DataFormatException e) {
+			throw new IOException("ARPR writers: " + e.getMessage());
+		} finally {
+			f.end();
+		}
 	}
 
 	private static byte[] sha32(byte[] s) {

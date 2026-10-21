@@ -153,6 +153,7 @@ class RealisedTest {
 		assertEquals("-3,7", back.key());
 		assertFalse(back.noEntry());
 		assertTrue((back.flags() & Realised.WRITERS) != 0);
+		assertTrue((back.flags() & Realised.WRITERS_DEFLATED) != 0, "the writers are stored deflated");
 		assertArrayEquals(t.tileSha(), back.tileSha());
 		assertArrayEquals(t.chainSha(), back.chainSha());
 		assertArrayEquals(enc, Realised.encode(back), "byte-stable");
@@ -176,6 +177,18 @@ class RealisedTest {
 		bad[12] ^= 1;
 		assertThrows(IOException.class, () -> Realised.decode(bad));
 		assertThrows(IOException.class, () -> Realised.decode(java.util.Arrays.copyOf(enc, enc.length - 1)));
+	}
+
+	@Test
+	void repetitiveWritersAreStoredSmall() throws IOException {
+		byte[] w = new byte[60_000];
+		for (int i = 0; i < w.length; i++) {
+			w[i] = (byte) (i % 3 == 0 ? 1 : 2); // a loser list repeated over every cell
+		}
+		Realised.Tile t = sample(new byte[] {0}, List.of(), w, "c1");
+		byte[] enc = Realised.encode(t);
+		assertTrue(enc.length < 1_000, "60 kB of writers stored in " + enc.length + " B");
+		assertArrayEquals(w, Realised.decode(enc).writers());
 	}
 
 	@Test
