@@ -21285,6 +21285,12 @@ in `Realised` and `RealisedRecords`.
   batch is gone); `placing` while that entry is PLACING; `pending` (no entry, item not placed); `undone`; `stale` (its entry is gone:
   written before a commit that never happened). A stale or pending record is overwritten when the item runs again (the same path).
   A failed tile's record is deleted at its item's end.
+- **A tile that runs twice.** A crash after a tile's commit and before its item is marked placed (RG4, K4 with `+save`) leaves its
+  entry ACTIVE, and the queue runs the item again (main's behaviour, unchanged): the second attempt layers over the first, mostly
+  NOOP. The second record keeps the first: `Realised.mergePrior` lists the standing entry's site after the new one in `site`
+  (comma-separated, newest first; `Tile.sites()`), keeps every cell the first attempt WROTE as WRITTEN, and keeps its extras; a
+  second attempt with nothing to write then has no NO_ENTRY flag (the first attempt's entry is the tile's). Status and verify run
+  over every listed entry. This deviates from §3.1's single entry per tile; RV reads `sites()`.
 - Kill points: `RP1` (the record written, the PLACING commit not submitted) and `RP2` (a tile with nothing to write: the record
   written, the item not placed); both take `+save`.
 

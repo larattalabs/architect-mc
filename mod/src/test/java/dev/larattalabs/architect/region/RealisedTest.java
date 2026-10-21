@@ -208,6 +208,25 @@ class RealisedTest {
 		assertNull(Realised.read(world, "r1", 0, t.stage(), t.set(), t.key()));
 	}
 
+	@Test
+	void aSecondAttemptKeepsTheFirstAttemptsStandingEntry() {
+		// a crash after the first attempt's commit, before its item was placed: the item runs again, the world already holds the
+		// writes (NOOP now); the record keeps them WRITTEN and lists both entries
+		List<Realised.Extra> ex1 = List.of(new Realised.Extra(Realised.TREE, BlockPos.asLong(1, 70, 1), 0));
+		Realised.Tile first = sample(new byte[] {Realised.WRITTEN, Realised.WRITTEN, Realised.COND}, ex1, new byte[0], "c1");
+		Realised.Tile again = sample(new byte[] {Realised.NOOP, Realised.WRITTEN, Realised.COND}, List.of(), new byte[0], "c7");
+		Realised.Tile m = Realised.mergePrior(again, first, List.of("c1"));
+		assertArrayEquals(new byte[] {Realised.WRITTEN, Realised.WRITTEN, Realised.COND}, m.codes());
+		assertEquals(List.of("c7", "c1"), m.sites());
+		assertEquals(ex1, m.extras());
+		Realised.Tile none = sample(new byte[] {Realised.NOOP, Realised.NOOP, Realised.COND}, List.of(), new byte[0], "");
+		Realised.Tile m2 = Realised.mergePrior(none, first, List.of("c1"));
+		assertFalse(m2.noEntry(), "the first attempt's entry is the tile's");
+		assertEquals(List.of("c1"), m2.sites());
+		assertEquals(Realised.WRITTEN, m2.codes()[0]);
+		assertEquals(again, Realised.mergePrior(again, first, List.of()), "the earlier entry gone: nothing kept");
+	}
+
 	// ---- fluid bodies
 
 	@Test

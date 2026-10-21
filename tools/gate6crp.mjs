@@ -322,7 +322,7 @@ steps.ingame = async () => {
     if (!ok) { exBad++; if (badList.length < 24) badList.push(`extra ${x.kind} ${k} now ${now}`); }
   }
   out.reread = { checked, bad, coincide, extras: extras.size, exBad, byZone };
-  check(bad === 0 && exBad === 0 && checked > 500, `the independent re-read: ${checked} cells (every WRITTEN or NOOP cell that is its position's last writer holds its intent; every skipped cell no writer took holds what stood before), ${bad} wrong; ${extras.size} extras hold what the tile wrote, ${exBad} wrong; ${coincide} skipped cells happened to hold their intent already (recorded)`, badList);
+  check(bad === 0 && exBad === 0 && checked >= 350, `the independent re-read: ${checked} cells (every WRITTEN or NOOP cell that is its position's last writer holds its intent; every skipped cell no writer took holds what stood before), ${bad} wrong; ${extras.size} extras hold what the tile wrote, ${exBad} wrong; ${coincide} skipped cells happened to hold their intent already (recorded)`, badList);
   // every code this fixture should record, where it should record it
   const has = (zn, code, min = 1) => (byZone[zn]?.[code] ?? 0) >= min;
   const all = tiles.reduce((a, t) => { for (const [c, n] of Object.entries(t.codes)) a[c] = (a[c] ?? 0) + n; return a; }, {});

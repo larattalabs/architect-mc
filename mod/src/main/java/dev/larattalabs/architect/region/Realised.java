@@ -126,6 +126,11 @@ public final class Realised {
 			return (flags & NO_ENTRY) != 0;
 		}
 
+		/** The tile's entries' cell sites, newest first (several when an earlier attempt's entry stood: see the as-built §6). */
+		public List<String> sites() {
+			return site.isEmpty() ? List.of() : List.of(site.split(","));
+		}
+
 		public int[] counts() {
 			int[] n = new int[NAMES.length];
 			for (byte c : codes) {
@@ -427,6 +432,40 @@ public final class Realised {
 		write(world, region, new Tile(t.layer(), t.stage(), t.set(), t.key(), t.site(), t.flags(), t.tileSha(), t.chainSha(), c, t.extras(),
 			t.writers()));
 		return true;
+	}
+
+	/**
+	 * A tile ran again while an earlier attempt's entry stands (a crash after its commit, before its item was marked placed: the
+	 * queue runs the item again and the earlier entry stays ACTIVE). The new record keeps that attempt: its sites listed after the
+	 * new one, a cell it WROTE stays WRITTEN, its extras kept. Only over the same intent (tile sha) and cell count. Pure.
+	 */
+	public static Tile mergePrior(Tile now, Tile was, List<String> standing) {
+		if (standing.isEmpty() || !Arrays.equals(now.tileSha(), was.tileSha()) || now.codes().length != was.codes().length) {
+			return now;
+		}
+		byte[] c = now.codes().clone();
+		for (int i = 0; i < c.length; i++) {
+			if (was.codes()[i] == WRITTEN) {
+				c[i] = WRITTEN;
+			}
+		}
+		java.util.Map<Long, Extra> ex = new java.util.TreeMap<>();
+		for (Extra e : was.extras()) {
+			ex.put(e.pos(), e);
+		}
+		for (Extra e : now.extras()) {
+			ex.put(e.pos(), e);
+		}
+		List<String> sites = new ArrayList<>(now.sites());
+		for (String s : standing) {
+			if (!sites.contains(s)) {
+				sites.add(s);
+			}
+		}
+		List<Extra> el = new ArrayList<>(ex.values());
+		el.sort((a, b) -> Long.compare(a.pos(), b.pos()));
+		return new Tile(now.layer(), now.stage(), now.set(), now.key(), String.join(",", sites), now.flags() & ~NO_ENTRY, now.tileSha(), now.chainSha(), c,
+			List.copyOf(el), now.writers());
 	}
 
 	/** (RS) The draft with {@code cells} (payload indexes) re-coded, before the record is written (a target's cells: UNFINISHED). */

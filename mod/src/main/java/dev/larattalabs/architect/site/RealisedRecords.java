@@ -82,8 +82,22 @@ public final class RealisedRecords {
 		byte[] chain = Realised.chain(r.ir(), stage, set, key, w -> w[0].equals(stage) && w[1].equals(set) ? orig.sha() : Realised.shaAt(world, region, 0, w[0],
 			w[1], key));
 		byte[] wr = ts.writers;
-		Realised.Tile rec = new Realised.Tile(0, stage, set, key, site == null ? "" : site, site == null ? Realised.NO_ENTRY : 0, HexFormat.of().parseHex(orig
+		Realised.Tile rec0 = new Realised.Tile(0, stage, set, key, site == null ? "" : site, site == null ? Realised.NO_ENTRY : 0, HexFormat.of().parseHex(orig
 			.sha()), chain, d.codes(), d.extras(), wr == null ? new byte[0] : wr);
+		Realised.Tile rec = rec0;
+		// an earlier attempt of this tile whose entry stands (a crash after its commit, before its item was placed): kept in the record
+		Realised.Tile was = Realised.read(world, region, 0, stage, set, key);
+		if (was != null && !was.noEntry()) {
+			List<String> standing = new ArrayList<>();
+			for (String s : was.sites()) {
+				JournalStore.Meta m = mainEntry(s);
+				if (!s.equals(site) && m != null && (m.status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE || m.status()
+					== dev.larattalabs.architect.journal.Journal.Status.PLACING)) {
+					standing.add(s);
+				}
+			}
+			rec = Realised.mergePrior(rec, was, standing);
+		}
 		int n = Realised.write(world, region, rec);
 		tiles++;
 		bytes += n;
@@ -112,15 +126,19 @@ public final class RealisedRecords {
 			}
 			return "committed";
 		}
-		JournalStore.Meta m = mainEntry(rec.site());
-		if (m == null) {
-			return "stale";
+		String worst = "committed";
+		for (String s : rec.sites()) {
+			JournalStore.Meta m = mainEntry(s);
+			String st = m == null ? "stale" : switch (m.status()) {
+				case ACTIVE -> "committed";
+				case PLACING -> "placing";
+				default -> "undone";
+			};
+			if (!"committed".equals(st) && ("committed".equals(worst) || "stale".equals(st))) {
+				worst = st;
+			}
 		}
-		return switch (m.status()) {
-			case ACTIVE -> "committed";
-			case PLACING -> "placing";
-			default -> "undone";
-		};
+		return worst;
 	}
 
 	private static JournalStore.@Nullable Meta mainEntry(String site) {
@@ -232,20 +250,26 @@ public final class RealisedRecords {
 				}
 				String s = status(l, rec);
 				st.merge(s, 1, Integer::sum);
-				if (!rec.noEntry()) {
-					recordedSites.add(rec.site());
-				}
+				recordedSites.addAll(rec.sites());
 				if (!"committed".equals(s) || rec.noEntry()) {
 					if (rec.noEntry() && rec.counts()[Realised.WRITTEN] > 0) {
 						problems.add(f.getFileName() + ": no entry but " + rec.counts()[Realised.WRITTEN] + " WRITTEN");
 					}
 					continue;
 				}
-				JournalStore.Meta m = mainEntry(rec.site());
-				if (js == null || m == null) {
+				if (js == null) {
 					continue;
 				}
-				Long2ObjectOpenHashMap<Value> cells = cellsOf(js, m);
+				// the union of the tile's entries (one, or an earlier attempt's too), each judged on its own layer below
+				Long2ObjectOpenHashMap<Value> cells = new Long2ObjectOpenHashMap<>();
+				List<JournalStore.Meta> metas = new ArrayList<>();
+				for (String sid : rec.sites()) {
+					JournalStore.Meta mm = mainEntry(sid);
+					if (mm != null) {
+						metas.add(mm);
+						cells.putAll(cellsOf(js, mm));
+					}
+				}
 				int written = rec.counts()[Realised.WRITTEN];
 				int ex = 0;
 				LongOpenHashSet leaves = new LongOpenHashSet();
@@ -256,34 +280,41 @@ public final class RealisedRecords {
 						ex++;
 						if (!cells.containsKey(e.pos())) {
 							problems.add(f.getFileName() + ": extra " + Realised.extraName(e.kind()) + " " + BlockPos.of(e.pos()).toShortString() + " not in the entry");
-						}
+							}
 					}
 				}
 				if (written + ex != cells.size()) {
 					problems.add(f.getFileName() + ": WRITTEN " + written + " + extras " + ex + " != entry cells " + cells.size());
 				}
-				JournalStore.Meta lm = leavesEntry(rec.site());
-				Long2ObjectOpenHashMap<Value> lc = lm == null ? new Long2ObjectOpenHashMap<>() : cellsOf(js, lm);
+				Long2ObjectOpenHashMap<Value> lc = new Long2ObjectOpenHashMap<>();
+				for (String sid : rec.sites()) {
+					JournalStore.Meta lm = leavesEntry(sid);
+					if (lm != null) {
+						lc.putAll(cellsOf(js, lm));
+					}
+				}
 				if (!new LongOpenHashSet(lc.keySet()).equals(leaves)) {
 					problems.add(f.getFileName() + ": leaves " + leaves.size() + " != leaves entry " + lc.size());
 				}
 				if (world) {
-					LongOpenHashSet over = coveredAbove(js, m);
-					for (var e : cells.long2ObjectEntrySet()) {
-						long p = e.getLongKey();
-						checked++;
-						if (over.contains(p)) {
-							covered++;
-							continue;
-						}
-						level.getChunk(BlockPos.getX(p) >> 4, BlockPos.getZ(p) >> 4);
-						if (WorldJournal.holds(level, p, e.getValue())) {
-							held++;
-						} else {
-							notHeld++;
-							if (problems.size() < 40) {
-								problems.add(f.getFileName() + ": " + BlockPos.of(p).toShortString() + " holds " + level.getBlockState(BlockPos.of(p)) + ", wrote "
-									+ WorldJournal.state(e.getValue()));
+					for (JournalStore.Meta m : metas) {
+						LongOpenHashSet over = coveredAbove(js, m);
+						for (var e : cellsOf(js, m).long2ObjectEntrySet()) {
+							long p = e.getLongKey();
+							checked++;
+							if (over.contains(p)) {
+								covered++;
+								continue;
+							}
+							level.getChunk(BlockPos.getX(p) >> 4, BlockPos.getZ(p) >> 4);
+							if (WorldJournal.holds(level, p, e.getValue())) {
+								held++;
+							} else {
+								notHeld++;
+								if (problems.size() < 40) {
+									problems.add(f.getFileName() + ": " + BlockPos.of(p).toShortString() + " holds " + level.getBlockState(BlockPos.of(p)) + ", wrote "
+										+ WorldJournal.state(e.getValue()));
+								}
 							}
 						}
 					}
