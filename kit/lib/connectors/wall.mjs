@@ -107,7 +107,8 @@ function gridOf(K, { allowZones = [], walkStanding = null, wet = null, bodies = 
     for (const q of z?.rects ?? (z?.rect ? [z.rect] : [])) zoneRects.push(q);
   }
   const lots = r.lots.map((l) => grow(l.box, 1));
-  const forms = r.forms.filter((f) => f.bounds).map((f) => f.bounds);
+  // ((6c F3 §3.2) a grown form's column mask (its runs), else its bounds)
+  const forms = r.forms.flatMap((f) => (f.columns ? Array.from({ length: f.columns.length / 3 }, (_, i) => ({ minX: f.columns[3 * i + 1], minZ: f.columns[3 * i], maxX: f.columns[3 * i + 2], maxZ: f.columns[3 * i] })) : f.bounds ? [f.bounds] : []));
   const protectedR = [...env.protectedAreas.map((a) => a.rect), ...env.keepOut];
   const st = walkStanding ? env.standing.find((a) => a.id === walkStanding) : null;
   const standingHard = st ? env.standing.flatMap((a) => (a === st ? a.lots.map((q) => [q[0] - 1, q[1] - 1, q[2] + 1, q[3] + 1]) : [...a.lots.map((q) => [q[0] - 1, q[1] - 1, q[2] + 1, q[3] + 1]), ...a.keep])) : env.standingHard;

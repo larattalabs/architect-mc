@@ -1,0 +1,50 @@
+{
+ "about": "(6c F3 \u00a710.1, KC \u00a75) r04_tree_in_pond_band: a 36x36 claim with a pond at its centre (resolved and reserved first) and a giant oak: the only site that holds the oak's canopy meets the pond's footprint grown by 2, so the oak is refused NO_ROOM and the pond fits untouched (the later part keeps clear; the body is never refused)",
+ "on": "flat",
+ "terrain": {
+  "W": 36,
+  "D": 36,
+  "x0": 1000,
+  "z0": 2000
+ },
+ "volume": {},
+ "expect": {
+  "part": "oak",
+  "class": "refused",
+  "code": "NO_ROOM",
+  "bodyPart": "pool",
+  "bodyClass": "fits or adjusted"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "f3_r04",
+  "forms": [
+   {
+    "id": "pool",
+    "kind": "pond",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 2
+     }
+    },
+    "size": {
+     "w": 11,
+     "d": 9
+    },
+    "depth": 2
+   },
+   {
+    "id": "oak",
+    "kind": "giant_tree",
+    "preset": "oak",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 4
+     }
+    }
+   }
+  ]
+ }
+}

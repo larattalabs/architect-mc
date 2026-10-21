@@ -85,6 +85,16 @@ import org.jspecify.annotations.Nullable;
  * <li><b>The removal</b> drains in the exact reverse of the write order (the head first), kill point {@code FL5} after the first body.</li>
  * </ul>
  * An H-only region has none of these members: its bodies are written by the tiles and forced together, in plan order, as before.
+ * <p>
+ * (6c F3-c, "Phase 6c slice F3" §3.4, §6, §7) A body op's {@code decor} set ({@code [{state, cells: runs}]}: the coral a {@code form.coral}
+ * part grew in the body) is the body's own cells: waterlogged plants, fans, wall fans and sea pickles in body cells (each still a cell of
+ * the body: the census and the escape guard count it as a source, its water is its own) and live coral blocks in bed cells (shell floor
+ * cells). The write order is the bed (the shell's stage), then the stage's tiles write the sources with the decor, the decor winning
+ * its cells (the kit's evaluator, as a grate's bars); a re-write ({@link #writeBody}) never puts water over a decor cell. The gate's
+ * check reads a decor cell holding its decor as open, a body that is not written leaves its decor too ({@link #filter}); the removal's
+ * drain leaves the decor (it drains the sources, then the group undo restores the decor and the bed: H's order; a coral that died
+ * meanwhile is still the entry's, {@code StillOurs} via {@code Coral.canonical}), while every other drain (escape, unsettled, upstream,
+ * recheck, a wave's clear) takes water decor back with the sources. Not a course member: a coral pond is not ordered.
  */
 public final class RegionFluids {
 	public static final String STAGE = "fluids";
@@ -180,6 +190,28 @@ public final class RegionFluids {
 		long[] lining = new long[0];
 		/** (6c HY) Body cells written as {@link #GRATE} (a water gate's grate). */
 		long[] grate = new long[0];
+		/** (6c F3-c) The decor set's cells (body cells and bed cells), and each one's state string. */
+		long[] decor = new long[0];
+		final Long2ObjectOpenHashMap<String> decorState = new Long2ObjectOpenHashMap<>();
+		@Nullable LongOpenHashSet decorSet;
+
+		@Nullable LongOpenHashSet grateSet;
+
+		/** (6c HY) Whether a cell is a grate cell. */
+		boolean gratePos(long p) {
+			if (grateSet == null) {
+				grateSet = new LongOpenHashSet(grate);
+			}
+			return grateSet.contains(p);
+		}
+
+		/** (6c F3-c) The decor set's cells. */
+		LongOpenHashSet decorSet() {
+			if (decorSet == null) {
+				decorSet = new LongOpenHashSet(decor);
+			}
+			return decorSet;
+		}
 
 		/** (6c HY) Whether the op is a course's (any course member): its region writes in dependency order. */
 		boolean course() {
@@ -373,6 +405,8 @@ public final class RegionFluids {
 				// (6c HY) the course members
 				b.lining = runs(o.get("lining"));
 				b.grate = runs(o.get("grate"));
+				// (6c F3-c) the decor set
+				decor(o.get("decor"), b);
 				if (o.get("after") instanceof JsonArray af) {
 					List<String> ids = new ArrayList<>();
 					for (JsonElement e : af) {
@@ -475,6 +509,42 @@ public final class RegionFluids {
 			}
 		}
 		return out;
+	}
+
+	/** (6c F3-c) A fluid op's decor set {@code [{state, cells: runs}]}: its cells and each one's state. */
+	static void decor(@Nullable JsonElement e, Body b) {
+		if (!(e instanceof JsonArray a)) {
+			return;
+		}
+		it.unimi.dsi.fastutil.longs.LongArrayList all = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		for (JsonElement d : a) {
+			if (!(d instanceof JsonObject o)) {
+				continue;
+			}
+			String state = RegionsImpl.str(o, "state", "");
+			for (long p : runs(o.get("cells"))) {
+				if (b.decorState.put(p, state) == null) {
+					all.add(p);
+				}
+			}
+		}
+		b.decor = all.toLongArray();
+		b.decorSet = null;
+	}
+
+	/**
+	 * (6c F3-c) Whether a body cell's world state is open for the gate's check: air, water, lava or ice, a grate cell's bars, or a decor
+	 * cell holding its own decor's block (the stage's tiles wrote it before a stop).
+	 */
+	static boolean openCell(Body body, long p, BlockState now) {
+		if (now.isAir() || now.is(Blocks.WATER) || now.is(Blocks.LAVA) || now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE)) {
+			return true;
+		}
+		if (body.grate.length > 0 && now.is(Blocks.IRON_BARS) && body.gratePos(p)) {
+			return true;
+		}
+		String d = body.decorState.get(p);
+		return d != null && now.getBlock() == parse(d).getBlock();
 	}
 
 	/** Column runs [[x, z, y0, y1], ...] as packed positions. */
@@ -842,11 +912,10 @@ public final class RegionFluids {
 		}
 		// the body's own cells are open (dug in an earlier stage, or already its fluid): a cell that is not (lost with unsaved chunks, or
 		// filled since) is not what the body was checked against
-		LongOpenHashSet grate = new LongOpenHashSet(body.grate);
 		for (long[] a : new long[][] {body.cells, body.ice}) {
 			for (long p : a) {
 				BlockState now = level.getBlockState(BlockPos.of(p));
-				if (!(now.isAir() || now.is(Blocks.WATER) || now.is(Blocks.LAVA) || now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE) || grate.contains(p) && now.is(Blocks.IRON_BARS))) {
+				if (!openCell(body, p, now)) {
 					bad.add(new long[] {BlockPos.getX(p), BlockPos.getY(p), BlockPos.getZ(p)});
 				}
 			}
@@ -889,6 +958,10 @@ public final class RegionFluids {
 					drop.add(p);
 				}
 				for (long p : b.ice) {
+					drop.add(p);
+				}
+				// ((6c F3-c) and its decor: no live coral on a bed that holds no water)
+				for (long p : b.decor) {
 					drop.add(p);
 				}
 			}
@@ -1076,18 +1149,38 @@ public final class RegionFluids {
 		WorldJournal.kill(more ? "FL4" : "FL2"); // (6c HY) between two reaches: the downstream written, the upstream not
 	}
 
-	/** (6c HY) A body's sources, ice cap and grate written where the cell is open (air, a fluid, ice; a grate cell's bars), no update. */
+	/**
+	 * (6c HY) A body's sources, ice cap and grate written where the cell is open (air, a fluid, ice; a grate cell's bars), no update.
+	 * (6c F3-c) Then its decor where the cell is open (after its water: a decor cell never takes a source first).
+	 */
 	static void writeBody(ServerLevel level, Body b) {
 		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
 		LongOpenHashSet ice = new LongOpenHashSet(b.ice);
 		BlockState src = (b.lava ? Blocks.LAVA : Blocks.WATER).defaultBlockState();
 		BlockState bars = parse(GRATE);
 		for (long p : b.cells) {
+			if (b.decorState.containsKey(p)) {
+				continue; // (6c F3-c) the decor's own cell: written below, never water first
+			}
 			BlockPos bp = BlockPos.of(p);
 			BlockState now = level.getBlockState(bp);
 			BlockState to = ice.contains(p) ? Blocks.ICE.defaultBlockState() : grate.contains(p) ? bars : src;
 			boolean open = now.isAir() || !now.getFluidState().isEmpty() || now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE) || grate.contains(p) && now.is(Blocks.IRON_BARS);
 			if (open && now != to) {
+				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+			}
+		}
+		// ((6c F3-c) the decor: a body cell's where it is open (air, a fluid, ice, or its decor already); a bed cell's stays as the tiles
+		// wrote it (the shell's cell, never cleared))
+		LongOpenHashSet own = b.decor.length > 0 ? new LongOpenHashSet(b.cells) : null;
+		for (long p : b.decor) {
+			if (!own.contains(p)) {
+				continue;
+			}
+			BlockPos bp = BlockPos.of(p);
+			BlockState now = level.getBlockState(bp);
+			BlockState to = parse(b.decorState.get(p));
+			if (openCell(b, p, now) && now != to) {
 				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
 			}
 		}
@@ -1264,7 +1357,8 @@ public final class RegionFluids {
 	 * Writes skip updates (nothing flows). Returns the cells written.
 	 */
 	static int drain(ServerLevel level, Regional st, Body b, BodyState bs, boolean strays) {
-		return drain(level, st, b, bs, strays, new LongOpenHashSet());
+		// ((6c F3-c) only the removal drains through here: it leaves the decor for the group undo, H's order)
+		return drain(level, st, b, bs, strays, new LongOpenHashSet(), NOT_HELD, true);
 	}
 
 	/** (UMT seam, docs/UMT.md) Where a drain reads and writes cells: the level, or the undo model tester's in-memory world. */
@@ -1277,7 +1371,7 @@ public final class RegionFluids {
 
 	/** {@code others}: cells another standing body plans, left alone (the escape guard drains one body of several). */
 	static int drain(ServerLevel level, Regional st, Body b, BodyState bs, boolean strays, LongOpenHashSet others) {
-		return drain(level, st, b, bs, strays, others, NOT_HELD);
+		return drain(level, st, b, bs, strays, others, NOT_HELD, false);
 	}
 
 	/** No cell held: every drain but the removal's ({@link #removalGate}). */
@@ -1287,8 +1381,13 @@ public final class RegionFluids {
 	 * (fix/drain-holders) {@code held}: cells the drain never writes, though they hold a fluid or ice: the removal's cells another journal
 	 * entry holds on top ({@link Holders}). The journal's undo hands their before down to that entry and leaves its block standing (its
 	 * covering mask), so the drain leaves them too: a later site's waterlogged block in a body cell keeps its block and its water.
+	 * (6c F3-c) {@code removal}: the removal's drain leaves the body's decor standing (the group undo restores it and the bed right after,
+	 * H's order); every other drain (the escape guard, an unsettled body, the upstream closure, a recheck, a wave's clear, a lot removed)
+	 * takes a water decor cell back to its before state with the sources, so a drained body holds no water (a bed coral block holds none
+	 * and stays).
 	 */
-	static int drain(ServerLevel level, Regional st, Body b, BodyState bs, boolean strays, LongOpenHashSet others, java.util.function.LongPredicate held) {
+	static int drain(ServerLevel level, Regional st, Body b, BodyState bs, boolean strays, LongOpenHashSet others, java.util.function.LongPredicate held,
+		boolean removal) {
 		return drain(new DrainTarget() {
 			@Override
 			public BlockState get(BlockPos p) {
@@ -1299,15 +1398,15 @@ public final class RegionFluids {
 			public void set(BlockPos p, BlockState s, int flags) {
 				dev.larattalabs.architect.placed.Placed.set(level, p, s, flags);
 			}
-		}, level, st, b, bs, strays, others, held);
+		}, level, st, b, bs, strays, others, held, removal);
 	}
 
 	/**
-	 * {@link #drain(ServerLevel, Regional, Body, BodyState, boolean, LongOpenHashSet, java.util.function.LongPredicate)} through {@code t};
-	 * {@code level} is read only by an irrigation body's breach judgement (none: it may be null).
+	 * {@link #drain(ServerLevel, Regional, Body, BodyState, boolean, LongOpenHashSet, java.util.function.LongPredicate, boolean)} through
+	 * {@code t}; {@code level} is read only by an irrigation body's breach judgement (none: it may be null).
 	 */
 	static int drain(DrainTarget t, @Nullable ServerLevel level, Regional st, Body b, BodyState bs, boolean strays, LongOpenHashSet others,
-		java.util.function.LongPredicate held) {
+		java.util.function.LongPredicate held, boolean removal) {
 		int n = 0;
 		Fluid src = b.source();
 		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
@@ -1317,6 +1416,9 @@ public final class RegionFluids {
 		LongOpenHashSet breach = lot == null ? null : breachFlow(level, st, b, lot, others);
 		for (long[] a : new long[][] {b.ice, b.cells}) {
 			for (long p : a) {
+				if (removal && drainSkips(b, p)) {
+					continue; // ((6c F3-c) a decor cell: the group undo restores it after the drain, as the bed)
+				}
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = t.get(bp);
 				// ((6c HY) a grate cell goes back too, whether its bars still hold the water or not)
@@ -1374,6 +1476,14 @@ public final class RegionFluids {
 			}
 		}
 		return n;
+	}
+
+	/**
+	 * (6c F3-c, §6) Whether the removal's drain leaves a body cell alone: a decor cell (the coral's own water is its block's). The
+	 * removal's group undo restores it after the drain, with the bed: H's order, drain then decor and bed. Other drains take it.
+	 */
+	static boolean drainSkips(Body b, long p) {
+		return b.decor.length > 0 && b.decorSet().contains(p);
 	}
 
 	/** (6c IRR) How far past its lot's box a breach's flow is followed (water runs 7 from its source, then falls). */
@@ -1624,7 +1734,7 @@ public final class RegionFluids {
 				if (held == null) {
 					held = new Holders(l.rec().dimension, l.rec().groupId, st);
 				}
-				n += drain(level, st, b, bs, true, st.othersOf(b), held);
+				n += drain(level, st, b, bs, true, st.othersOf(b), held, false); // ((6c F3-c) a lot removed: its decor water goes too)
 			}
 			bs.state = "drained";
 			bs.reason = "lot removed: " + lotId + " (its sources leave with it, S-IRR-4)";
@@ -1856,7 +1966,7 @@ public final class RegionFluids {
 				if (bs.before.isEmpty()) {
 					continue; // never written (not checked, or not contained): nothing of it stands
 				}
-				n += drain(level, st, b, bs, true, new LongOpenHashSet(), held);
+				n += drain(level, st, b, bs, true, new LongOpenHashSet(), held, true); // ((6c F3-c) the removal: decor left for the undo)
 				if (++drained == 1 && st.ordered && i > 0) {
 					WorldJournal.kill("FL5"); // (6c HY) the head drained, the rest of the course not yet
 				}
@@ -1880,7 +1990,7 @@ public final class RegionFluids {
 				Body b = st.order.get(i);
 				BodyState bs = st.states.get(b.id);
 				if (!bs.before.isEmpty()) {
-					n += drain(level, st, b, bs, true, new LongOpenHashSet(), held);
+					n += drain(level, st, b, bs, true, new LongOpenHashSet(), held, true); // ((6c F3-c) the removal: decor left for the undo)
 				}
 			}
 			if (n > 0) {

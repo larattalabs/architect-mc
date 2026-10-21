@@ -1,0 +1,151 @@
+{
+ "about": "(6c F3 \u00a710.1) r03_tree_near_natural: a giant oak near the stone (within 8) on a flat claim whose natural trees (survey FLAG_TREE) ring the stone at 14: no site within its locator is 8 clear of them, so the oak moves out past the ring: adjusted (move), never within 8 of a natural tree column",
+ "on": "flat",
+ "terrain": {
+  "trees": [
+   [
+    1133,
+    2079,
+    9
+   ],
+   [
+    1133,
+    2083,
+    9
+   ],
+   [
+    1131,
+    2086,
+    9
+   ],
+   [
+    1129,
+    2089,
+    9
+   ],
+   [
+    1126,
+    2091,
+    9
+   ],
+   [
+    1123,
+    2093,
+    9
+   ],
+   [
+    1119,
+    2093,
+    9
+   ],
+   [
+    1115,
+    2093,
+    9
+   ],
+   [
+    1112,
+    2091,
+    9
+   ],
+   [
+    1109,
+    2089,
+    9
+   ],
+   [
+    1107,
+    2086,
+    9
+   ],
+   [
+    1105,
+    2083,
+    9
+   ],
+   [
+    1105,
+    2079,
+    9
+   ],
+   [
+    1105,
+    2075,
+    9
+   ],
+   [
+    1107,
+    2072,
+    9
+   ],
+   [
+    1109,
+    2069,
+    9
+   ],
+   [
+    1112,
+    2067,
+    9
+   ],
+   [
+    1115,
+    2065,
+    9
+   ],
+   [
+    1119,
+    2065,
+    9
+   ],
+   [
+    1123,
+    2065,
+    9
+   ],
+   [
+    1126,
+    2067,
+    9
+   ],
+   [
+    1129,
+    2069,
+    9
+   ],
+   [
+    1131,
+    2072,
+    9
+   ],
+   [
+    1133,
+    2075,
+    9
+   ]
+  ]
+ },
+ "expect": {
+  "part": "oak",
+  "class": "adjusted",
+  "deviation": "move",
+  "clearOfTrees": 8
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "f3_r03",
+  "forms": [
+   {
+    "id": "oak",
+    "kind": "giant_tree",
+    "preset": "oak",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 8
+     }
+    }
+   }
+  ]
+ }
+}

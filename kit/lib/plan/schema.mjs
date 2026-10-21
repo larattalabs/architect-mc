@@ -372,8 +372,21 @@ function kindError(family, kind, part) {
       if (lo < 8 || hi > max) return { path: '$.height', message: `${JSON.stringify(part.height)}: a ${kind} is 8..${max} high` };
     }
   }
+  // (6c F3) the grown forms: a preset of the entry's limits.presets, a height within its limits (height, or length for the cave forms)
+  if (family === 'form' && F3_KINDS.includes(kind)) {
+    const lim = entryOf(`form.${kind}`)?.limits ?? {};
+    if (part.preset !== undefined && Array.isArray(lim.presets) && !lim.presets.includes(part.preset)) return { path: '$.preset', message: `"${part.preset}" is not a ${kind} preset (${lim.presets.join(', ')})` };
+    const hr = lim.height ?? lim.length;
+    if (part.height !== undefined && hr) {
+      const [lo, hi] = Array.isArray(part.height) ? part.height : [part.height, part.height];
+      if (lo < hr[0] || hi > hr[1]) return { path: '$.height', message: `${JSON.stringify(part.height)}: a ${kind} is ${hr[0]}..${hr[1]} ${lim.height ? 'high' : 'long'}` };
+    }
+  }
   return null;
 }
+
+/** (6c F3) The grown forms' kinds (forms/*.mjs generators F3 added). */
+export const F3_KINDS = Object.freeze(['giant_tree', 'giant_mushroom', 'coral', 'roots', 'stalactites']);
 
 // ------------------------------------------------------------------ the validator
 

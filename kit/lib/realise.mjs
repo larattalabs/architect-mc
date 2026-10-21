@@ -24,7 +24,7 @@ export const IR_FORMATS = Object.freeze([1, 2]);
 /** (6b) Every format-2 kind an IR's `requires` may name; any of them makes the IR format 2. */
 export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:array', 'shape:capsuleChain', 'shape:ellipsoid',
   'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'road:lamp', 'voxels',
-  'mask', 'pattern', 'relief', 'scatter', 'stamp', 'volume:blocks', 'fluid', 'volume:fluids', 'courses', 'survival']);
+  'mask', 'pattern', 'relief', 'scatter', 'stamp', 'volume:blocks', 'fluid', 'volume:fluids', 'courses', 'survival', 'coralDecor']);
 // (6c W) 'road:lamp': a 4e road's `lamp` (the bible's lamp fixture for its lanterns; kit/lib/region/fixtures.mjs roadLamp). A mod
 // before 0.18.0 would lay its own fence and lantern, so the plan needs it (PLAN_STALE there).
 // (6c MP) `mask` (an op's mask) and `pattern` (a pattern anywhere a material goes) from kit 0.19.0
@@ -41,6 +41,9 @@ export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'ma
 // (6c RS) 'survival': a survival IR (the member `survival`: its target groups, kit/REGIONS.md "Kit 0.42.0"): its tiles are ARTL version 2
 // (each cell's class and group) and its ops carry `free`; a mod or kit before RS would write every cell at once, for free, so it refuses the
 // plan PLAN_STALE.
+// (6c F3-c) 'coralDecor': a fluid op with a `decor` set (kit/lib/fluids/body.mjs: [{state, cells: runs}], the coral grown in the body):
+// a body cell's decor is written over its source (decor wins its cells), a bed cell's (a shell cell, not one of the op's cells) as
+// ALWAYS_OURS over the shell's earlier stage. A mod or kit before F3 would drop the coral, so it refuses the plan PLAN_STALE.
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS
@@ -106,6 +109,7 @@ export function walkKinds(ir) {
     if (o.op === 'fluid') k.add('fluid'); // (6c H)
     // (6c HY) a course's fluid op (body.mjs isCourseOp, inlined: this module may not import body.mjs)
     if (o.op === 'fluid' && (['after', 'lining', 'grate'].some((m) => Array.isArray(o[m]) && o[m].length > 0) || (Array.isArray(o.joins) && o.joins.some((j) => j && !Array.isArray(j))))) k.add('courses');
+    if (o.op === 'fluid' && Array.isArray(o.decor) && o.decor.length > 0) k.add('coralDecor'); // (6c F3-c)
   }
   if (ir.blobs && Object.values(ir.blobs).some((b) => b && b.sha !== undefined)) k.add('blobs:side');
   if (ir.fields && Object.keys(ir.fields).length) k.add('fields');
@@ -373,9 +377,39 @@ export function compileIR(ir, opts = {}) {
             if (q[0] < minX) minX = q[0]; if (q[0] > maxX) maxX = q[0]; if (q[1] < minZ) minZ = q[1]; if (q[1] > maxZ) maxZ = q[1];
           }
         }
+        // ((6c F3-c) the decor set: a body cell's decor after its source (it wins the cell); a bed cell's in its own compiled op,
+        // ALWAYS_OURS (3): the cell holds the shell the region wrote in an earlier stage)
+        const bed = new Map();
+        let bx0 = Infinity, bx1 = -Infinity, bz0 = Infinity, bz1 = -Infinity;
+        if (o.decor !== undefined) {
+          if (!Array.isArray(o.decor)) throw new Error(`${where}: a fluid op's decor must be [{state, cells: runs}, ...]`);
+          if (o.decor.length && o.fluid !== 'water') throw new Error(`${where}: only water holds decor`);
+          const own = new Set();
+          for (const q of o.cells) for (let y = q[2]; y <= q[3]; y++) own.add(`${q[0]},${y},${q[1]}`);
+          for (const d of o.decor) {
+            if (!d || typeof d.state !== 'string' || !Array.isArray(d.cells)) throw new Error(`${where}: a decor entry must be {state, cells: runs}`);
+            const m = mat(d.state);
+            for (const q of d.cells) {
+              if (!Array.isArray(q) || q.length !== 4 || !q.every(Number.isInteger) || q[2] > q[3]) throw new Error(`${where}: a decor run must be [x, z, y0, y1] integers, y0 <= y1`);
+              const key = colKey(q[0], q[1]);
+              for (let y = q[2]; y <= q[3]; y++) {
+                const into = own.has(`${q[0]},${y},${q[1]}`) ? lists : bed;
+                let l = into.get(key);
+                if (!l) { l = []; into.set(key, l); }
+                l.push(y, m);
+              }
+              if (q[0] < bx0) bx0 = q[0]; if (q[0] > bx1) bx1 = q[0]; if (q[1] < bz0) bz0 = q[1]; if (q[1] > bz1) bz1 = q[1];
+            }
+          }
+        }
         const idx = new Map();
         for (const [key, l] of lists) idx.set(key, Int32Array.from(l));
         ops.push({ ...base, kind: 2, colIndex: idx, minX, maxX, minZ, maxZ });
+        if (bed.size) {
+          const bi = new Map();
+          for (const [key, l] of bed) bi.set(key, Int32Array.from(l));
+          ops.push({ ...base, index: ops.length, cond: 3, kind: 2, colIndex: bi, minX: bx0, maxX: bx1, minZ: bz0, maxZ: bz1 });
+        }
       } else throw new Error(`IR: unknown op '${o.op}' (supported: ${OP_KINDS.join(', ')})`);
     }
   }

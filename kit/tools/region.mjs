@@ -115,7 +115,8 @@ async function plan(argv) {
   }
   // (6c P0) a plan check (plan_v0): the cost, the overall result, the light preview and the artifact
   let checked = null;
-  if (res.meta.planCheck) {
+  // ((6c F3) a program that compiles a plan of its own in code (grove_demo) keeps its record without params.plan: no artifact to cut)
+  if (res.meta.planCheck && res.ir.params?.plan !== undefined) {
     const cols = fillMissing(asColumns(survey)).columns;
     const f = finishCheck({ res, survey: cols, blobs: (sha) => res.blobs.get(sha) ?? null, surveyBytesSha: createHash('sha256').update(survey).digest('hex'), inputs: { surveyRes: cols.resolution } });
     checked = { overall: f.check.overall, artifactSha: f.artifactSha };

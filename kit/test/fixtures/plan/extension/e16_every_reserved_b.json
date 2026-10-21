@@ -1,5 +1,5 @@
 {
- "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; second half) (H: form.pond and form.waterfall left it when they shipped); VOC-c: rule.palette left the list when it shipped (r_palette stays in the plan: a palette rule with no family answers refused NO_FEATURE)",
+ "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; second half) (H: form.pond and form.waterfall left it when they shipped); VOC-c: rule.palette left the list when it shipped (r_palette stays in the plan: a palette rule with no family answers refused NO_FEATURE); F3: form.giant_tree left the list when it shipped (f_giant_tree stays in the plan: a giant oak near the stone on S7's claim fits)",
  "on": "s7",
  "expect": {
   "all": [
@@ -10,10 +10,6 @@
    {
     "part": "f_scatter",
     "block": "form.scatter"
-   },
-   {
-    "part": "f_giant_tree",
-    "block": "form.giant_tree"
    },
    {
     "part": "f_hidden_room",

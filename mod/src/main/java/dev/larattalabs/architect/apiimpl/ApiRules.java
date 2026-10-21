@@ -82,6 +82,7 @@ public final class ApiRules {
 					case "region.survival" -> "regionSurvival"; // 6c RS: regions in survival (free land, targets fed from the stockpile)
 					case "reserved" -> "designReserved"; // 6c IRR: DesignRequest.reserved, kept by the design job and its checker
 					case "plan.rules" -> "rulePalette"; // 6c VOC-c: rule.palette measured (lotBlocks, the artifact's palette rows, PALETTE)
+					case "plan.forms2" -> "formsTrees"; // 6c F3: form.giant_tree, form.giant_mushroom (with formsCave and formsWater, below)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}
@@ -92,6 +93,11 @@ public final class ApiRules {
 				// 6c F1: a forms-I helper's kit has the iceSpike and rockSpire generators and the voxels op
 				out.add("formsRock");
 				out.add("voxelsOp");
+			}
+			if (sidecarFeatures.contains("plan.forms2")) {
+				// 6c F3: a forms-II helper's kit has the cave forms (form.stalactites, form.roots, their volumes) and coral in a plan body
+				out.add("formsCave");
+				out.add("formsWater");
 			}
 			if (sidecarFeatures.contains("region.passes")) {
 				out.add("reliefOp"); // 6c T1: a T1 helper's kit has the relief op and pass

@@ -1,0 +1,27 @@
+{
+ "about": "(6c F3 \u00a73.3, \u00a710.1) r02_no_ceiling: stalactites over solid ground: the frozen volume (air over the ground, soil, then rock) holds no ceiling with 4 headroom in the search box: refused NO_FEATURE {why: no ceiling}",
+ "on": "flat",
+ "volume": {},
+ "expect": {
+  "part": "drips",
+  "class": "refused",
+  "code": "NO_FEATURE",
+  "why": "no ceiling"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "f3_r02",
+  "forms": [
+   {
+    "id": "drips",
+    "kind": "stalactites",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 12
+     }
+    }
+   }
+  ]
+ }
+}

@@ -1,0 +1,51 @@
+{
+ "about": "(6c F3 \u00a710.1) v75_f3_stalactites: stalactites in a synthetic cave: the frozen volume fixture holds a 12-high chamber (24x24) under the claim's middle, its roof 8 under the ground; two clusters (small and large) of cones from its ceiling and the floor under it, merged where they meet; through the two-plan flow",
+ "on": "flat",
+ "volume": {
+  "edits": [
+   {
+    "box": [
+     1107,
+     44,
+     2067,
+     1130,
+     55,
+     2090
+    ],
+    "class": "AIR"
+   }
+  ]
+ },
+ "covers": [
+  "form.stalactites"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "f3_v75",
+  "forms": [
+   {
+    "id": "drips",
+    "kind": "stalactites",
+    "preset": "small",
+    "count": 2,
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 12
+     }
+    }
+   },
+   {
+    "id": "big",
+    "kind": "stalactites",
+    "preset": "large",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 12
+     }
+    }
+   }
+  ]
+ }
+}

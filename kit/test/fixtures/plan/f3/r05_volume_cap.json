@@ -1,0 +1,32 @@
+{
+ "about": "(6c F3 \u00a73.3, \u00a710.1) r05_volume_cap: stalactites anywhere on a 320x320 claim: the search box (the claim less its margin x 49 under the ground) is past the 4,000,000-cell cap: incomplete VOLUME with evidence.cap, never asked (as a tunnel's corridor past its cap)",
+ "on": "flat",
+ "terrain": {
+  "W": 320,
+  "D": 320,
+  "x0": 1000,
+  "z0": 2000
+ },
+ "volume": {},
+ "expect": {
+  "part": "drips",
+  "class": "incomplete",
+  "code": "VOLUME",
+  "cap": "boxCells"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "f3_r05",
+  "forms": [
+   {
+    "id": "drips",
+    "kind": "stalactites",
+    "where": {
+     "inside": {
+      "claim": true
+     }
+    }
+   }
+  ]
+ }
+}

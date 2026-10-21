@@ -28,6 +28,7 @@ import { bodiesMark, bodiesRollback, centre, featureOf, fluidRolesOf, grow, insi
   rectSurvey, shellBlock, takenRects, volumeAnswer, volumeKeep, MARGIN, flagsAt, refusal, leakRefusal, exitNotches } from './place.mjs';
 import { shellCheck, bodyAnswer, bodyId, iceFor, naturalOf, shellStatesOf } from './pond.mjs';
 import { overflowsOn } from './hooks.mjs';
+import { coralRequests } from '../forms/coral.mjs';
 
 /** (6c HY, §1.5) A moat may feed a course (an overflow) or receive one (a fall over its rim). */
 export const acceptsOverflow = true;
@@ -192,7 +193,7 @@ export function emitMoat(r, o) {
   if (ec.length) { const ex = r.part(`${o.id}_exits`.slice(0, 48), { stage: o.stage }); ex.columns({ abs: 0 }, { abs: 0 }, ec, [null], { cond: 0 }); (r.meta.parts[ex.id] ??= {}).kind = 'carve'; }
   // ((6c HY, §1.5) a course leaving the moat: its overflows, only when there are any)
   const ov = Array.isArray(o.overflow) && o.overflow.length ? { overflow: o.overflow, raised: true } : {};
-  const rec = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: 'moat', stage: o.stage, level, shellRole, ice: o.ice ?? null, outlets: exits, ...ov });
+  const rec = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: 'moat', stage: o.stage, level, shellRole, ice: o.ice ?? null, outlets: exits, ...ov, ...(Array.isArray(o.decor) && o.decor.length ? { decor: o.decor } : {}) });
   rec.shellStates = shellStatesOf(rec, shellRole);
   return Object.assign(rec, { ring: o.ring, columns: water.length });
 }
@@ -217,7 +218,7 @@ export function emit(K, p, res) {
     if (vcells > VOLUME_CAP) { res.capped = { cells: vcells }; return; }
     const dec = iceFor(K.ctx, water.map(([x, z]) => [x, level, z]), p.part.ice);
     if (dec.refuse) throw refusal(dec.refuse.code, dec.refuse.message, dec.refuse.evidence);
-    const rec = emitMoat(r, { id: bodyId(p.id), part: p.id, T: res.T, ring: res.ring, width: sp.width, depth: sp.depth, omit: res.omit, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice: dec.ice, overflow: overflowsOn(K, p.id) });
+    const rec = emitMoat(r, { id: bodyId(p.id), part: p.id, T: res.T, ring: res.ring, width: sp.width, depth: sp.depth, omit: res.omit, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice: dec.ice, overflow: overflowsOn(K, p.id), decor: coralRequests(K, p.id) });
     const hit = reachMeetsKeep(r, env, rec, { volClass: volumeKeep(r, VC, classAt) });
     if (hit) throw leakRefusal(rec, hit);
     shellCheck(r, rec);

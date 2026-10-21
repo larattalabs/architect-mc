@@ -132,7 +132,9 @@ export async function checkPlanVolumes(plan, { volume = {}, ...o } = {}) {
   // (6c H, §10) the trigger widened: a body part (pond, fountain, waterfall, moat), a quay, or a part that took the wet fallback (meta.wet)
   const hasH = [...(plan.forms ?? []), ...(plan.connectors ?? [])].some((p) => ['pond', 'fountain', 'waterfall', 'quay', 'channel'].includes(p?.kind)) || (first.res.meta?.wet ?? []).length > 0 || first.check?.wetAsked === true
     || /"(farmPond|irrigate)":true/.test(JSON.stringify(plan.zones ?? [])); // ((6c IRR) irrigate too: PlanChecks.hasH)
-  if (!need.length || !(hasTunnel || hasH) || volume.missing) return { ...first, volumes: o.volumes ?? [], first, asked: need };
+  // ((6c F3 §3.3) the cave forms read a frozen volume too: PlanChecks.hasCaveForm)
+  const hasCave = (plan.forms ?? []).some((p) => ['stalactites', 'roots'].includes(p?.kind));
+  if (!need.length || !(hasTunnel || hasH || hasCave) || volume.missing) return { ...first, volumes: o.volumes ?? [], first, asked: need };
   const vols = [...(o.volumes ?? [])];
   for (const b of need) if (!vols.some((v) => v.box.minX === b.minX && v.box.minY === b.minY && v.box.minZ === b.minZ && v.box.maxX === b.maxX && v.box.maxY === b.maxY && v.box.maxZ === b.maxZ)) vols.push(await fixtureVolume(b, volume, o.survey, o.claim));
   const second = await checkPlanLocal(plan, { ...o, volumes: vols });
