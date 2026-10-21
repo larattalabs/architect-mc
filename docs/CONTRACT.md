@@ -21312,3 +21312,33 @@ in `Realised` and `RealisedRecords`.
 - `dev.region.realised.audit {on?, dir?}` and the env `ARCHITECT_RP_AUDIT=<dir>`: each tile, right after its commit, re-read from the
   world against its intent per code, and each region verified at its batch's end, as JSON lines.
 - Java: `Realised.read/decode/composedSha/sites`, `RealisedRecords.status/verify/summary`.
+
+### 8. Sizes (measured)
+
+- **The six impact steps' regions** (h, hy, k1a, t3a, irr, cu ingame; run `20261021-030029-change`, the audit over every region they
+  realised): 523 tiles in 62 regions, 540,611 intended cells (about 1,000 per tile: these gates' regions are small). Per tile on the
+  record's bytes: mean 196 B, p50 169, p90 303, max 550; **per 1000 tiles 196 kB**; per region mean 1.65 kB (max 5.9 kB). The raw
+  writers were 101 kB of the 102 kB before deflate; deflated they are most of each record.
+- **Large tiles (offline, the kit):** mega_bench on a 1000 x 1000 synthetic claim, 320 tiles of 29,417 cells on average and 14,552
+  cells per tile with losers: the writers are 57.8 kB per tile raw, **1.0 kB deflated** (the largest tile, 311,384 cells: 864 kB raw,
+  3.2 kB deflated). The codes run-length to a few hundred bytes; extras 2-6 B each.
+- `sites.json`: a few hundred bytes per road, lot or body.
+- **On disk** each tile is its own file, so APFS rounds each up to a 4 KiB block: about 4 MB per 1000 tiles on disk against 0.2-1 MB
+  logical. RV can pack a region's layer into one file later without changing the record's bytes.
+
+### 9. Gate evidence ($0, headless; ports 8936-8941; `artifacts/gate-runs-RP/`)
+
+- **rp-unit** (`scratchpad/rp/unit2`, HEAD): RealisedTest 16 + TileGravityTest 4, 0 failures; kit rp.test 2/0; api-compat clean
+  against the 0.40.0 apitest jar and the 0.40.0 mod surface (`artifacts/gate6c-f3/v0400`, built from the tag) and `--gate6cbatchcu`.
+  Whole suites at 5e614008: kit 665/0, mod `./gradlew build` 757 tests / 0 failures, sidecar `npm run check` 758/0.
+- **The six impact steps** at 5e614008 with `ARCHITECT_RP_AUDIT` (`20261021-030029-change`): h-ingame 60/0, hy-ingame 133/0,
+  k1a-ingame 19/0, t3a-ingame 23/0, irr-ingame 66/0, cu-ingame 9/0: their outcomes unchanged. The audit: **523/523 tiles** re-read
+  right after their commit match their record (WRITTEN 271,621, NOOP 266,002, COND 2,858, FLUID 121 (h's and irr's gated bodies),
+  HELD 9; 2,717 COND cells already held their intent: counted, not failed), and **every region of those six steps** verified at its
+  batch's end (journal and world); the two that failed were rp-crash's RP1+save and RG4+save regions, fixed after (below). Bodies
+  recorded: 180 settled, 16 drained; 9 regions recorded lots, 26 roads.
+- **rp-ingame** and **rp-crash** at HEAD (`20261021-041842-change`): rp-ingame 17/0 (every code where it belongs, TREE 4 / LEAF 65 /
+  DEPENDENT 25 with their causes, 55 losers, a no-entry tile, the shas and writers equal to the kit's own evaluation, the chain and
+  composed hashes, the independent re-read: 382 cells and 94 extras, 0 wrong); rp-crash 14/0 (RP1+save, RP2+save, K2+save, RG4+save,
+  K4+save, RP1: every region PLACED and its record verified, every record committed, 0 unrecorded; RG4+save's PLACING leftover
+  recorded). Earlier runs found the two crash bugs §6 now handles (a reused site id after RP1; a tile written twice after RG4/K4).
