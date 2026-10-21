@@ -120,3 +120,11 @@ RS-a's own runs showed, for RS-b: rs03's lava pit charged 10 lava buckets and 8 
 removal with buckets in stock (item 9's rs03 row, conservation exact at 29 points); the "drained without a bucket" row is not run.
 
 Ports: RS-a used 8930-8935 (ad-hoc server 8930/8931, runner shards 8932-8935). Gate evidence: `../architect-mc/artifacts/gate6c-rs/`.
+
+## Follow-ups for whoever holds RS next
+
+- **Realised provenance (RP, ARPR v1, patch 0.40.1):** once 0.40.1 is on main, merge main and wire the targets into it: at put-down mark
+  each target's queued cells `Realised.withCodes(draft, cells, UNFINISHED)`; when a target cell is built, `Realised.mark(..., WRITTEN)`
+  (RP's as-built §5 in CONTRACT.md on that branch).
+- Item 14 (rs02 on S3's natural claim in survival, E-normal by S3 §6's classes) once S3 has merged.
+- The gate3 survival and Hardcore steps (a GUI p3 client) were not run for RS-a.
