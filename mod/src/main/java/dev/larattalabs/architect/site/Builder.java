@@ -418,12 +418,12 @@ public final class Builder {
 			return Copper.is(now, target[i].getBlock());
 		}
 
-		/** (6c RS) A survival region target's run: soil cells (dirt, grass, podzol, mycelium) are one block (grass spreads; a cell goes to dirt). */
+		/** (6c RS) A built survival region target's run: soil cells (dirt, grass, podzol, mycelium, farmland) are one block (grass spreads, farmland dries). */
 		boolean soilSame;
 
 		static boolean soil(BlockState s) {
 			return s.is(net.minecraft.world.level.block.Blocks.DIRT) || s.is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK) || s.is(
-				net.minecraft.world.level.block.Blocks.PODZOL) || s.is(net.minecraft.world.level.block.Blocks.MYCELIUM);
+				net.minecraft.world.level.block.Blocks.PODZOL) || s.is(net.minecraft.world.level.block.Blocks.MYCELIUM) || s.is(net.minecraft.world.level.block.Blocks.FARMLAND);
 		}
 
 		/**
