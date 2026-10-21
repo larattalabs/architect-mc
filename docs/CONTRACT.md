@@ -18396,6 +18396,7 @@ READY.
   - voc-unit needs docker (OrbStack not running);
   - apijars 0.39.1: one survival check was blocked by a bee in the site;
   - sim-jobs: the launcher reused a running sidecar.
+  - Re-run after merging main's gate speed-ups (`20261021-081316-slice`): sim-jobs 33/0 and apijars 6/0 (all three jars 46/0).
 - Timing recorded: plans 23-35 s in game, 78-105 s offline under load 80-108. MSPT natural 17.6 ms CPU.
 - Gallery: the 6c gallery, section S3 v1 (https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG). **S3 v1 is green only when Noah
   approves evidence `39d6ddb1bbf3`.** The high camera sits over the cloud layer and its shots are fogged; cam_e is the overview.
