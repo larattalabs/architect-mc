@@ -195,7 +195,8 @@ class UmtGateMovesTest {
 	 * gate asserts after the start, then a final removal of everything is exact. The in-game points map to UMT's (docs/UMT.md "Crash
 	 * points"): K1 a fault inside the P3 commit before the index (write, move, read back); K2; K4 after the ACTIVE commit before the record
 	 * is placed (P7 committed, P8); K5 before the R2 commit is durable (its first write); K6; K8 inside the R2 commit that hands H's cells
-	 * down to X (move, read back: files written, the index not).
+	 * down to X (move, read back: files written, the index not). The removal points run unqueued, as a small site's removal is in game
+	 * (K5/K8: all four stand; K6: H taken back, its entries reactivated), and as a queued RestoreJob (it resumes; the next start settles H).
 	 */
 	@Test
 	void crash4e_killPointsLeaveTheStatesTheGateAsserts() throws Exception {
@@ -240,47 +241,64 @@ class UmtGateMovesTest {
 					}
 				}
 			}
-			// removal points: H's removal hands its cells under X down to X
-			for (UmtOps.Crash k : List.of(new UmtOps.Crash("R2", "write", 0, save), new UmtOps.Crash("K6", null, 0, save), new UmtOps.Crash("R2", "move",
-				0, save), new UmtOps.Crash("R2", "read back", 0, save))) {
-				Fixture f = fixture(false);
-				try (UmtCase c = f.c()) {
-					try {
-						c.sim.remove(f.recs().get("H"), k);
-						bad.add(k + ": no halt");
-					} catch (UmtSim.Halt h) {
-						c.sim.restart(true);
-					}
-					runs++;
-					// the hand-down did not half apply: X, T and R stand with ACTIVE entries, no half-written generation is left (the start's
-					// tidy). H: UMT models a removal as a queued RestoreJob, so after K5/K8 (R2 not durable) and K6 the removal resumes and
-					// takes H down (pending, its entry UNDONE) and the next start settles it. In game a small site's removal (Sites.remove)
-					// is not queued: after K5/K8 it is dropped and H stands, after K6 the evidence takes H back (4e-crash-full, release).
-					List<String> notStanding = f.recs().values().stream().filter(x -> !x.id.equals(f.recs().get("H").id)).filter(x -> !c.sim.recs.containsKey(
-						x.id) || x.placing || x.pending).map(x -> x.id).toList();
-					if (!notStanding.isEmpty()) {
-						bad.add(k + ": X, T and R don't all stand: " + notStanding + " (" + c.sim.recs.values() + ")");
-					}
-					String hId = f.recs().get("H").id;
-					if (c.sim.store.index().entries().values().stream().anyMatch(m -> !m.site().equals(hId) && m.status() != Status.ACTIVE)) {
-						bad.add(k + ": an entry of X, T or R is not ACTIVE: " + statuses(c));
-					}
-					List<String> stray = strayGenerations(c.sim.store);
-					if (!stray.isEmpty()) {
-						bad.add(k + ": half-written generations left after the start: " + stray);
-					}
-					c.sim.restart(false);
-					if (c.sim.recs.containsKey(hId) && SiteJournal.active(hId).isEmpty()) {
-						bad.add(k + ": H was neither settled nor standing after the next start (" + c.sim.recs.values() + "; " + statuses(c) + ")");
-					}
-					List<String> v = c.sim.end().stream().filter(x -> !x.startsWith("[UC] ")).toList();
-					if (!v.isEmpty()) {
-						bad.add(k + ": the final removal is not exact: " + v);
+			// removal points: H's removal hands its cells under X down to X. Unqueued (queued false): as in game, where a small site's
+			// removal (Sites.remove) is no queued job, so after the kill nothing resumes it; queued: UMT's RestoreJob, which resumes
+			for (boolean queued : new boolean[] {false, true}) {
+				for (UmtOps.Crash k : List.of(new UmtOps.Crash("R2", "write", 0, save), new UmtOps.Crash("K6", null, 0, save), new UmtOps.Crash("R2",
+					"move", 0, save), new UmtOps.Crash("R2", "read back", 0, save))) {
+					Fixture f = fixture(false);
+					String what = k + (queued ? " queued" : "");
+					try (UmtCase c = f.c()) {
+						String hId = f.recs().get("H").id;
+						try {
+							c.sim.remove(f.recs().get("H"), k);
+							bad.add(what + ": no halt");
+						} catch (UmtSim.Halt h) {
+							if (!queued) {
+								c.sim.jobs.removeIf(j -> j.sites.contains(hId)); // Sites.remove: no queued job to resume
+							}
+							c.sim.restart(true);
+						}
+						runs++;
+						if (!queued) {
+							// K5, K8 (R2 not durable): nothing changed, all four stand with every entry ACTIVE. K6 (R2 durable, the record not yet
+							// pending): the start's evidence finds H standing and takes it back (RECOVER: its entries reactivated, ACTIVE)
+							List<String> notStanding = f.recs().values().stream().filter(x -> !c.sim.recs.containsKey(x.id) || x.placing || x.pending).map(
+								x -> x.id).toList();
+							if (!notStanding.isEmpty()) {
+								bad.add(what + ": not all four stand: " + notStanding + " (" + c.sim.recs.values() + ")");
+							}
+							if (c.sim.store.index().entries().values().stream().anyMatch(m -> m.status() != Status.ACTIVE)) {
+								bad.add(what + ": an entry is not ACTIVE: " + statuses(c));
+							}
+						} else {
+							// the queued removal resumes and takes H down; X, T and R stand ACTIVE; the next start settles H
+							List<String> notStanding = f.recs().values().stream().filter(x -> !x.id.equals(hId)).filter(x -> !c.sim.recs.containsKey(x.id)
+								|| x.placing || x.pending).map(x -> x.id).toList();
+							if (!notStanding.isEmpty()) {
+								bad.add(what + ": X, T and R don't all stand: " + notStanding + " (" + c.sim.recs.values() + ")");
+							}
+							if (c.sim.store.index().entries().values().stream().anyMatch(m -> !m.site().equals(hId) && m.status() != Status.ACTIVE)) {
+								bad.add(what + ": an entry of X, T or R is not ACTIVE: " + statuses(c));
+							}
+							c.sim.restart(false);
+							if (c.sim.recs.containsKey(hId) && SiteJournal.active(hId).isEmpty()) {
+								bad.add(what + ": H was neither settled nor standing after the next start (" + c.sim.recs.values() + "; " + statuses(c) + ")");
+							}
+						}
+						List<String> stray = strayGenerations(c.sim.store);
+						if (!stray.isEmpty()) {
+							bad.add(what + ": half-written generations left after the start: " + stray);
+						}
+						List<String> v = c.sim.end().stream().filter(x -> !x.startsWith("[UC] ")).toList();
+						if (!v.isEmpty()) {
+							bad.add(what + ": the final removal is not exact: " + v);
+						}
 					}
 				}
 			}
 		}
-		assertTrue(runs == 20, "runs " + runs);
+		assertTrue(runs == 28, "runs " + runs);
 		assertTrue(bad.isEmpty(), String.join("\n", bad));
 	}
 
