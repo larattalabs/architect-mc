@@ -431,7 +431,7 @@ steps.item6 = async () => {
     // (batch v0.41.0, RP wiring) half built: the unbuilt targets' cells UNFINISHED in the realised record, the built ones WRITTEN with
     // their sites listed; then the rest fed to build.done: nothing UNFINISHED and dev.region.realised verify agrees
     const rpHalf = await G.rpRecord(ctx, region);
-    check(...G.rpHalf(tag, rpHalf), rpHalf);
+    check(...G.rpHalf(tag, rpHalf, { needBuilt: true }), rpHalf);
     const fd = await G.feed(ctx, region, { timeoutMs: 1_800_000 });
     const rpDone = await G.rpRecord(ctx, region, { verify: true });
     const [okDone, msgDone] = G.rpDone(tag, rpDone);

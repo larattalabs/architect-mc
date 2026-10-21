@@ -315,9 +315,13 @@ export async function rpRecord(ctx, region, { verify = false } = {}) {
   };
 }
 
-/** The half-built check (UNFINISHED on the unbuilt targets, WRITTEN with their site listed on the built ones); returns [ok, message]. */
-export function rpHalf(tag, r) {
-  const ok = r.tiles > 0 && r.open > 0 && r.unfinished === r.openCells && r.builtListed === r.built && r.openListed.length === 0;
+/**
+ * The half-built check (UNFINISHED on the unbuilt targets, WRITTEN with their site listed on the built ones); returns [ok, message].
+ * `needBuilt` / `needOpen`: the row must show a built target (rs02's half feed builds most parts) or an unbuilt one (rs04's one bore part).
+ */
+export function rpHalf(tag, r, { needBuilt = false, needOpen = false } = {}) {
+  const ok = r.tiles > 0 && (!needBuilt || r.built > 0) && (!needOpen || r.open > 0) && r.unfinished === r.openCells && r.builtListed === r.built
+    && r.openListed.length === 0;
   return [ok, `RP (${tag}, half built): the realised record holds the targets' cells UNFINISHED until built: ${r.unfinished} UNFINISHED = the ${r.openCells} cells of the ${r.open} target(s) not built; ${r.builtListed} of the ${r.built} built target(s) listed as their tile's entries (their cells WRITTEN), ${r.openListed.length} unbuilt listed; ${r.tiles} tile record(s), ${r.written} WRITTEN`];
 }
 

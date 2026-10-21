@@ -243,7 +243,7 @@ steps.rs04half = async () => {
   // (batch v0.41.0, RP wiring) the tunnel targets' cells UNFINISHED in the realised record while unbuilt; then the rest fed: every
   // target built, its cells WRITTEN and its site listed, and RP's verify agrees after build.done
   const rpHalf = await G.rpRecord(ctx, region);
-  check(...G.rpHalf('rs04', rpHalf), rpHalf);
+  check(...G.rpHalf('rs04', rpHalf, { needOpen: true }), rpHalf);
   const fd = await R.feed(ctx, G, region, { timeoutMs: 2_400_000 });
   const rpDone = await G.rpRecord(ctx, region, { verify: true });
   const [okDone, msgDone] = G.rpDone('rs04', rpDone);
