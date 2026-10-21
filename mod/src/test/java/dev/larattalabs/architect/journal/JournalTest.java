@@ -226,6 +226,48 @@ class JournalTest {
 		assertEquals(1, s.log.stream().filter(v -> v.equals(chest(12))).count(), "the chest is restored exactly once");
 	}
 
+	/** (undo hardening A, F6) A whole group's reactivation keeps every before, a staying entry between two members included. */
+	@Test
+	void aWholeGroupReactivationAroundAStayingEntryKeepsEveryBefore() {
+		Sim s = new Sim();
+		s.change("l", Policy.BOX, Map.of(P, BOARD));
+		s.change("x", Policy.BOX, Map.of(P, ROAD));
+		s.change("u", Policy.BOX, Map.of(P, SIGN));
+		s.undo("l", "u"); // group "l": u on top writes ROAD, l under x hands its before down to x
+		s.reactivate("l");
+		assertEquals(T, s.entries.get("l").cell(P).before());
+		assertEquals(BOARD, s.entries.get("x").cell(P).before(), "x's hand-down is reversed");
+		assertEquals(ROAD, s.entries.get("u").cell(P).before());
+		// scoped to the lower one: it was under x (its own hand-down there), so its before stays
+		Sim t = new Sim();
+		t.change("l", Policy.BOX, Map.of(P, BOARD));
+		t.change("x", Policy.BOX, Map.of(P, ROAD));
+		t.change("u", Policy.BOX, Map.of(P, SIGN));
+		t.undo("l", "u");
+		t.entries.putAll(Journal.reactivate(t.entries.values(), "l", id -> id.equals("l")));
+		assertEquals(T, t.entries.get("l").cell(P).before());
+		assertEquals(BOARD, t.entries.get("x").cell(P).before());
+	}
+
+	/**
+	 * (undo hardening A, F6) A stacked pair undone as one group, the lower released, the upper taken back alone: its before becomes what
+	 * the undo wrote (the ground), so undoing it again doesn't resurrect the lower's block.
+	 */
+	@Test
+	void anUpperTakenBackAloneOverAReleasedLowerGetsTheUndosValue() {
+		Sim s = new Sim();
+		s.change("l", Policy.BOX, Map.of(P, BOARD, Q, BOARD));
+		s.change("u", Policy.BOX, Map.of(P, SIGN));
+		s.undo("l", "u");
+		assertEquals(T, s.at(P));
+		s.release("l");
+		s.entries.putAll(Journal.reactivate(s.entries.values(), "l", id -> id.equals("u")));
+		assertEquals(T, s.entries.get("u").cell(P).before(), "the undo's written value, not the released lower's block");
+		s.world.put(P, SIGN); // the upper's restore was lost: it stands
+		s.undo("u");
+		assertEquals(T, s.at(P), "no lower block resurrected");
+	}
+
 	@Test
 	void reactivationLeavesACellChangedAgainSince() {
 		Sim s = new Sim();

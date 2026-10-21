@@ -1121,7 +1121,7 @@ public final class SiteJournal {
 		}
 		Set<String> ids = new java.util.HashSet<>();
 		members.forEach(m -> ids.add(m.id()));
-		Map<String, Map<Long, List<Cell>>> back = Sections.reactivate(sections, slices::get, group, ids::contains);
+		Map<String, Map<Long, List<Cell>>> back = Sections.reactivate(sections, slices::get, group, sites == null ? null : ids::contains);
 		JournalStore.Txn t = s.begin().label("settle:reactivate:" + group);
 		for (var e : back.entrySet()) {
 			if (ids.contains(e.getKey())) {

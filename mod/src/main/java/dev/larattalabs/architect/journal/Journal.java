@@ -396,14 +396,15 @@ public final class Journal {
 	 * Returns the changed entries. Pure.
 	 */
 	public static Map<String, Entry> reactivate(Collection<Entry> loaded, String group) {
-		return reactivate(loaded, group, id -> true);
+		return reactivate(loaded, group, null);
 	}
 
 	/**
 	 * {@link #reactivate} of only the group's entries {@code member} accepts (by id): the others stay undone, their hand-downs as
 	 * they are (F6: a settle takes back only the members whose own cells show them). Pure.
 	 */
-	public static Map<String, Entry> reactivate(Collection<Entry> loaded, String group, java.util.function.Predicate<String> member) {
+	public static Map<String, Entry> reactivate(Collection<Entry> loaded, String group, java.util.function.@Nullable Predicate<String> scope) {
+		java.util.function.Predicate<String> member = scope == null ? id -> true : scope;
 		Map<String, Entry> byId = new LinkedHashMap<>();
 		for (Entry e : loaded) {
 			byId.put(e.id(), e);
@@ -444,9 +445,10 @@ public final class Journal {
 			}
 			out.put(e.id(), e.withCells(cs));
 		}
-		// (F6, undo hardening A) a member taken back while a group member under it at a cell stays undone (or was released already): the
-		// world there holds what the group's undo wrote, not that member's after, so the member's before becomes the after of the highest
-		// member under it that comes back too, else what the undo wrote. A whole group taken back changes nothing here.
+		// (F6, undo hardening A) a scoped take-back: a member taken back while a group member under it at a cell stays undone (or was
+		// released already): the world there holds what the group's undo wrote, not that member's after, so the member's before becomes
+		// the after of the highest member under it that comes back too, else what the undo wrote. Only at cells the member was on top of
+		// (no hand-down of its own there: under a staying entry its written value is another's). A whole group (no scope): unchanged.
 		Map<Long, List<Object[]>> groupCells = new HashMap<>(); // pos -> [entry id, cell] of every group member (taken back or not)
 		for (Entry e : loaded) {
 			if (e.status() == Status.UNDONE && e.undo() != null && e.undo().group().equals(group)) {
@@ -458,13 +460,15 @@ public final class Journal {
 		Set<String> back = new HashSet<>(members);
 		for (String id : members) {
 			Entry e = byId.get(id);
-			Map<Long, Value> w = e.undo().written();
+			Map<Long, Value> w = scope == null ? Map.of() : e.undo().written();
+			Set<Long> handedHere = new HashSet<>();
+			e.undo().handed().forEach(h -> handedHere.add(h.pos()));
 			List<Cell> cs = new ArrayList<>(e.cells().size());
 			boolean changed = false;
 			for (Cell c : e.cells()) {
 				Value wv = w.get(c.pos());
 				Cell nc = c;
-				if (wv != null) {
+				if (wv != null && !handedHere.contains(c.pos())) {
 					Cell below = null; // the highest group cell under c
 					boolean belowBack = false;
 					Cell backBelow = null; // the highest group cell under c that comes back
