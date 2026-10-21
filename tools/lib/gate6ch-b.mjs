@@ -27,6 +27,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { kitReuse } from './kit-reuse.mjs';
 
 const OWNER = 'test:hb';
 const FLAT = 'G6B Flat Base', BASE = 'G6B Seed Base', FROZEN_SEED = '2026101102';
@@ -36,6 +37,9 @@ const LOOK_BIBLES = [null, 'g7ak1_infernal', 'g7ak1_coastal'];
 const j = (o) => JSON.stringify(o).replaceAll(' ', '');
 
 function nodeTest(root, files, timeout = 3_600_000) {
+  // (gate waits, 2026-10-20) pass/fail-only kit files: this run's unit-kit report when it is exact (tools/lib/kit-reuse.mjs)
+  const reused = kitReuse(root, files);
+  if (reused) return reused;
   const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
   const t = `${r.stdout}${r.stderr}`;
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);

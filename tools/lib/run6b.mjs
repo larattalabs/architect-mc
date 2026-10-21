@@ -125,6 +125,41 @@ export async function stopClient() {
 export const cmd = async (c) => call('dev.command', { cmd: c }, 120_000);
 export const settle = (ms = 3000) => call('dev.wait', { ms }, ms + 20_000);
 
+/**
+ * (gate waits, 2026-10-20) A settle that ends when the world is quiet, at most `capMs` (the fixed settle it replaces). Quiet: every
+ * chunk of `box` ([minX, minZ, maxX, maxZ], the claim plus a margin) is loaded and ticking, and no chunk the server ticks, anywhere in
+ * the level, holds a scheduled block or fluid tick (dev.ticks.pending: fresh chunks' first ticks, worldgen springs and flowing fluids
+ * all schedule them), for `quietMs` in a row after at least `minMs`. Anything still moving keeps it waiting up to the cap, so it never
+ * cuts a settle short while fluids still flow. A client without the hook settles the full cap. -> {ms, reason: quiet|cap|no-hook,
+ * quietAt, samples: [[s, block, fluid, boxTicking/boxChunks]] (every 5th)}.
+ */
+export async function settleQuiet(box, { capMs = 90_000, quietMs = 10_000, minMs = 5_000 } = {}) {
+  const t0 = Date.now();
+  const samples = [];
+  let quietSince = null;
+  let i = 0;
+  while (Date.now() - t0 < capMs) {
+    const p = await call('dev.ticks.pending', { box }, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
+    if (p.error) {
+      log(`  settleQuiet: no dev.ticks.pending (${p.error.slice(0, 120)}): the full ${capMs / 1000} s`);
+      await settle(Math.max(0, capMs - (Date.now() - t0)));
+      return { ms: Date.now() - t0, reason: 'no-hook', quietAt: null, samples };
+    }
+    const at = Date.now() - t0;
+    const quiet = p.block === 0 && p.fluid === 0 && p.boxTicking === p.boxChunks;
+    if (i++ % 5 === 0 || (quiet && quietSince === null)) samples.push([Math.round(at / 1000), p.block, p.fluid, `${p.boxTicking}/${p.boxChunks}`]);
+    if (!quiet) quietSince = null;
+    else if (quietSince === null) quietSince = at;
+    if (quietSince !== null && at - quietSince >= quietMs && at >= minMs) {
+      log(`  settleQuiet: quiet from ${(quietSince / 1000).toFixed(0)} s, settled at ${(at / 1000).toFixed(0)} s (cap ${capMs / 1000} s)`);
+      return { ms: at, reason: 'quiet', quietAt: quietSince, samples };
+    }
+    await sleep(1000);
+  }
+  log(`  settleQuiet: not quiet within ${capMs / 1000} s (last ${JSON.stringify(samples.at(-1))}): the cap`);
+  return { ms: Date.now() - t0, reason: 'cap', quietAt: quietSince, samples };
+}
+
 export async function leaveWorld() {
   const st = await call('dev.state');
   if (!st.inWorld) return;
@@ -229,16 +264,28 @@ export async function realise(planId, opts = {}) {
   if (r.refused) throw new Error(`realise refused: ${JSON.stringify(r.refused)}`);
   return r.region;
 }
+/**
+ * (gate waits, 2026-10-20) The poll interval while waiting for a batch: 1 s at first, rising by 1 s per 10 s waited to at most 5 s.
+ * It used to be a fixed 30 s (60 s in gate6a), so every realise read 30 or 60 s whatever its size; real placement takes 1.7-12 s.
+ */
+export const pollDelayMs = (waitedMs) => Math.min(5_000, 1_000 + 1_000 * Math.floor(waitedMs / 10_000));
+
+/** Waits for a region's batch to end, polling with pollDelayMs (a line is logged when the state changes, else once a minute). */
 export async function waitRegion(region, timeoutMs = 3 * 3_600_000, onPoll = null) {
-  const end = Date.now() + timeoutMs;
+  const t0 = Date.now();
+  const end = t0 + timeoutMs;
   let st;
+  let last = null;
+  let lastAt = 0;
   while (Date.now() < end) {
     st = await call('dev.region.state', { region }, 60_000);
     const v = st.view;
-    log(`  ${region} ${v.state}: ${v.stages.map((s) => `${s.name} ${s.tilesDone}/${s.tilesTotal}`).join(', ')}; cells ${v.cellsWritten}; items ${JSON.stringify(st.items)}`);
+    const line = `  ${region} ${v.state}: ${v.stages.map((s) => `${s.name} ${s.tilesDone}/${s.tilesTotal}`).join(', ')}; cells ${v.cellsWritten}; items ${JSON.stringify(st.items)}`;
+    const done = ['PLACED', 'PARTIAL', 'FAILED'].includes(v.state) || (st.batchStatus && st.batchStatus !== 'RUNNING');
+    if (done || line !== last || Date.now() - lastAt >= 60_000) { log(line); last = line; lastAt = Date.now(); }
     if (onPoll) await onPoll(st);
-    if (['PLACED', 'PARTIAL', 'FAILED'].includes(v.state) || (st.batchStatus && st.batchStatus !== 'RUNNING')) return st;
-    await sleep(Math.min(30_000, Math.max(5_000, end - Date.now())));
+    if (done) return st;
+    await sleep(Math.min(pollDelayMs(Date.now() - t0), Math.max(1_000, end - Date.now())));
   }
   throw new Error(`region ${region} did not finish`);
 }

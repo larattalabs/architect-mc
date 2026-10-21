@@ -7,6 +7,7 @@
 		"ChunkGenCountMixin",
 		"FallingBlockEntityMixin",
 		"LevelChunkMixin",
+		"LevelTicksAccessor",
 		"LevelTicksMixin",
 		"MovingPistonBlockMixin",
 		"PistonBaseBlockMixin",
