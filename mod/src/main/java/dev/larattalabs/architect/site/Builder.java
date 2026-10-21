@@ -412,6 +412,11 @@ public final class Builder {
 				// a swap that keeps the block (a re-oriented stair, another slab type): built when the state is the target's
 				return dev.larattalabs.architect.journal.StillOurs.holds(now, null, target[i], null);
 			}
+			// (6c RS-b, S-CU-3) a farmland cell that dried or was trampled to dirt is built: it costs dirt either way, and the builder could
+			// never write over the dirt (not free), so the cell would wait for ever and its dirt fall out of the stock's sum
+			if (target[i].is(net.minecraft.world.level.block.Blocks.FARMLAND) && now.is(net.minecraft.world.level.block.Blocks.DIRT)) {
+				return true;
+			}
 			return Copper.is(now, target[i].getBlock());
 		}
 

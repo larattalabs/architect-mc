@@ -258,7 +258,8 @@ steps.ice = async () => {
   } });
   const br = o.beforeRemove ?? {};
   check(br.cap > 0 && br.iceNow === br.cap, `N-RS-4 (rs08, a freezing biome by /fillbiome ${json(o.biome?.biome)}): the pond capped with ice in survival (${br.cap} cap cell(s) planned, ${br.iceNow} more ice in the box than before the realise)`, br);
-  check(!(br.bom ?? {})['minecraft:ice'] && !(br.consumed ?? {})['minecraft:ice'] && !(br.consumed ?? {})['minecraft:water_bucket'], `N-RS-4 (rs08): the cap is free: no ice on the pond's survival bill (${json(br.bom)}), none taken from the stockpile (consumed ${json(br.consumed)}): the shell alone paid`);
+  const fed = o.feed?.inserted ?? {};
+  check(!(br.bom ?? {})['minecraft:ice'] && !fed['minecraft:ice'] && !fed['minecraft:water_bucket'] && G.same(fed, br.bom) && sum(br.stock) === 0, `N-RS-4 (rs08): the cap is free: no ice on the pond's survival bill (${json(br.bom)}); the stockpile was fed exactly that bill (${json(fed)}: no ice, no water) and holds nothing after the build (${json(br.stock)}): the shell alone paid`);
   return o;
 };
 
@@ -345,6 +346,8 @@ steps.brush = async () => {
   const gy = s.W.off + (s.T?.y ?? 64);
   const box = [x0 - 12, gy - 10, z0 - 12, x0 + 12, gy + 16, z0 + 12];
   const pre = await G.snap(ctx, box, 'rsb-brush-pre');
+  // (stone, dirt and gravel in stock: a natural stroke takes none of them)
+  await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: { 'minecraft:stone': 64, 'minecraft:dirt': 64, 'minecraft:gravel': 64 }, exact: true }, 120_000);
   const ps0 = await G.pileState(ctx);
   const brush = (o) => L.call('dev.brush', { owner: G.OWNER, ...o }, 600_000);
   const concrete = await brush({ kind: 'overlay', shape: 'cylinder', at: [x0, gy, z0], radius: 3, strength: 1, pattern: { mix: [{ w: 1, mat: 'minecraft:white_concrete' }] } });
@@ -354,10 +357,10 @@ steps.brush = async () => {
   const ps1 = await G.pileState(ctx);
   const d = await G.diff(ctx, box, pre);
   const items = await L.call('dev.items.near', { pos: [x0, gy, z0], radius: 16 }, 60_000).catch(() => null);
-  const out = { concrete, players, natural: nat, written: d.mismatches, consumed: ps1.consumed ?? {}, items };
+  const out = { concrete, players, natural: nat, written: d.mismatches, stock: [ps0.stock, ps1.stock], items };
   check(concrete?.refused && /NOT_ALLOWED/.test(String(concrete.reason ?? concrete.refused?.reason ?? JSON.stringify(concrete.refused))), `item 13 (brush): a concrete-pattern stroke in survival refused NOT_ALLOWED (${json(concrete?.refused ?? concrete?.reason ?? concrete).slice(0, 300)})`);
   check(players?.refused && /NOT_ALLOWED/.test(String(players.reason ?? json(players.refused))), `item 13 (brush): a PLAYER_BLOCKS stroke refused NOT_ALLOWED (${json(players?.refused ?? players?.reason ?? players).slice(0, 200)})`);
-  check(!nat?.refused && nat?.region && (nat.cellsWritten ?? 0) > 0 && d.mismatches > 0 && sum(ps1.consumed) === sum(ps0.consumed), `item 13 (brush): a natural stroke realised free: ${nat?.cellsWritten} cell(s) written, ${d.mismatches} changed in the world, ${sum(ps1.consumed) - sum(ps0.consumed)} item(s) taken from the stockpile`, nat);
+  check(!nat?.refused && nat?.region && (nat.cellsWritten ?? 0) > 0 && d.mismatches > 0 && G.same(ps1.stock, ps0.stock) && sum(ps0.stock) === 192, `item 13 (brush): a natural stroke realised free: ${nat?.cellsWritten} cell(s) written, ${d.mismatches} changed in the world, the stockpile's stock unchanged (${json(ps0.stock)} -> ${json(ps1.stock)})`, nat);
   if (nat?.region) {
     await G.remove(ctx, nat.region);
     const e = await G.diff(ctx, box, pre);
