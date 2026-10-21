@@ -408,6 +408,9 @@ public final class Builder {
 		 * weathering stage of the target's chain, waxed or scraped, is the target's block: built, never re-queued or charged again.
 		 */
 		boolean matches(BlockState now, int i) {
+			if (soilSame && soil(now) && soil(target[i])) {
+				return true;
+			}
 			if (swap.get(i) && old != null && old[i] != null && old[i].is(target[i].getBlock())) {
 				// a swap that keeps the block (a re-oriented stair, another slab type): built when the state is the target's
 				return dev.larattalabs.architect.journal.StillOurs.holds(now, null, target[i], null);
@@ -415,12 +418,20 @@ public final class Builder {
 			return Copper.is(now, target[i].getBlock());
 		}
 
+		/** (6c RS) A survival region target's run: soil cells (dirt, grass, podzol, mycelium) are one block (grass spreads; a cell goes to dirt). */
+		boolean soilSame;
+
+		static boolean soil(BlockState s) {
+			return s.is(net.minecraft.world.level.block.Blocks.DIRT) || s.is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK) || s.is(
+				net.minecraft.world.level.block.Blocks.PODZOL) || s.is(net.minecraft.world.level.block.Blocks.MYCELIUM);
+		}
+
 		/**
 		 * (6c CU §4, S-CU-2) What a built cell gives back: its plan's cost while it stands as the plan's block, else (another stage of its
 		 * copper chain, waxed or scraped) the items of the block standing: the refund pays what is there.
 		 */
 		List<SurvivalItems.Cost> refundCost(BlockState now, int i) {
-			return now.is(target[i].getBlock()) ? cost.get(i) : Cells.cost(now);
+			return now.is(target[i].getBlock()) || soilSame && soil(now) && soil(target[i]) ? cost.get(i) : Cells.cost(now);
 		}
 
 		/** Derives {@link #built} from the world for every queued cell in a loaded chunk. Returns cells that changed. */

@@ -622,6 +622,7 @@ steps.item9 = async () => {
   await ensure();
   const out = {};
   for (const [tag, name] of [['rs02r', 'rs02_walled'], ['rs03r', 'rs03_water']]) {
+    if (process.env.RS_ONLY && !process.env.RS_ONLY.split(',').includes(tag)) continue;
     let pre = null;
     const o = await buildOne(tag, name, { cons: true, keep: async ({ region, rs, C, box }) => {
       // one copper cell weathered (a lot's, rs_hut's back wall), one paid target cell replaced by a player's block
@@ -655,7 +656,7 @@ steps.item9 = async () => {
     const refund = o.removed?.refund ?? {};
     const want = pre.paid; // (the audit counts a weathered copper cell as the block standing)
     const a1 = await L.call('dev.stockpile.audit', { owner: G.OWNER, min: [pre.box[0], pre.box[1], pre.box[2]], max: [pre.box[3], pre.box[4], pre.box[5]] }, 120_000);
-    const drops = await L.call('dev.items.near', { pos: pre.player, radius: 2 }, 30_000);
+    const drops = await L.call('dev.items.near', { pos: pre.player, radius: 6 }, 30_000); // (pushed out of the restored block)
     // credited to the stock, or dropped at the crates past the capacity; the player's block dropped at its cell is no refund
     const got = G.minus(G.plus(G.minus(p1.stock, pre.stock), G.minus(a1.entities, pre.entities)), { 'minecraft:oak_planks': (drops.items ?? {})['minecraft:oak_planks'] ?? 0 });
     const again = await L.call('dev.region.remove', { region: o.region, requester: G.OWNER }, 600_000);

@@ -461,6 +461,9 @@ public final class RegionTargets {
 			return null;
 		}
 		Builder.Run r = new Builder.Run(RoadBuilder.probe(i), target);
+		// a BUILT target's paid dirt cell that grass grew over (or a grass cell gone to dirt under a block) still stands as built: the land's own
+		// change (its audit and refund count it); while it builds, a cell is built only as planned (it pays)
+		r.soilSame = i.construction() != null && !i.construction().building();
 		JsonObject rs = spec(i);
 		r.name = "part " + (rs.has("part") ? rs.get("part").getAsString() : "?") + " of region " + (rs.has("region") ? rs.get("region").getAsString() : "?");
 		BitSet held = CellBits.fromBase64(rs.has("held") ? rs.get("held").getAsString() : "");
@@ -701,6 +704,7 @@ public final class RegionTargets {
 		}
 		Construction c = t.construction();
 		if (r.built.cardinality() == r.size()) {
+			r.soilSame = true;
 			RoadBuilder.complete(srv, level, t, r, null);
 			return;
 		}
@@ -790,6 +794,7 @@ public final class RegionTargets {
 		if (r.built.cardinality() == r.size()) {
 			Infra now = Infras.get(t.id());
 			if (now != null) {
+				r.soilSame = true;
 				RoadBuilder.complete(srv, level, now, r, null);
 			}
 		}
