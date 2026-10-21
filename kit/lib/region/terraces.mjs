@@ -232,19 +232,19 @@ export function ringOf(S, l) {
   const [fx, fz] = CARD[l.front];
   const approach = new Set();
   for (let k = 0; k <= TERRACE_FRONT + 1; k++) for (let v = -2; v <= 2; v++) approach.add(`${l.entrance[0] + fx * k + fz * v},${l.entrance[2] + fz * k + fx * v}`);
-  const wall = [], rail = [];
+  const wall = [], rail = [], keep = [];
   for (let z = z0 - 2; z <= z1 + 2; z++) for (let x = x0 - 2; x <= x1 + 2; x++) {
     if (Math.max(x0 - x, x - x1, z0 - z, z - z1) !== 2) continue;
     if (approach.has(`${x},${z}`)) continue;
     const g = S.groundAt(x, z);
-    if (!(t - g > RETAIN_OVER)) continue;
+    if (!(t - g > RETAIN_OVER)) { keep.push([x, z, g]); continue; }
     wall.push([x, z, g]);
     // the drop beside it: the lowest ground of its outer neighbours
     let low = g;
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const X = x + dx, Z = z + dz; if (Math.max(x0 - X, X - x1, z0 - Z, Z - z1) === 3) low = Math.min(low, S.groundAt(X, Z)); }
     if (t - low > RAIL_OVER) rail.push([x, z, low]);
   }
-  return { wall, rail };
+  return { wall, rail, keep };
 }
 
 /**
@@ -278,6 +278,9 @@ export function emitTerraces(r, L, { stages = {}, prefix = '', maxHeight = 32, b
       const t = l.floorY - 1;
       const pins = [];
       for (const [x, z, g] of ring.wall) { if (!kept(x, z)) continue; wallCols.push(x, z, Math.max(g, r.claim.minY + 2), t, 0); ringCells.push([x, z, x, z]); pins.push([x, z, t]); retained++; }
+      // (the ring's other cells, within RETAIN_OVER of the pad's top, are pinned at their own ground: a relief blending the land outside
+      // would else cut them into a rim the ring never retained)
+      for (const [x, z, g] of ring.keep) if (kept(x, z)) pins.push([x, z, g]);
       // (a relief around this lot pins its ring at the pad's top: the wall stands, the land is blended to it from outside)
       if (pins.length) (r.terraceRings ??= new Map()).set(s.id, pins);
       for (const [x, z] of ring.rail) { if (!kept(x, z)) continue; railCols.push(x, z, t + 1, t + 1, 0); rails++; }

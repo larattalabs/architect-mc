@@ -163,13 +163,16 @@ function brinkRails(r, ctx, { stage, rounds = 5 }) {
   const nearEntrance = (x, z) => ents.some((e) => Math.abs(e[0] - x) <= 1 && Math.abs(e[2] - z) <= 1);
   const placed = new Set();
   let total = 0, nPar = 0, lanterns = 0;
+  const walkVol = walkVolumeOf(r, ctx);
   for (let round = 0; round < rounds; round++) {
     const { ir, vw } = draftWorld(r, ctx);
     const P = vw.pal;
     const start = ir.anchors.entrance;
     if (!start) break;
     const g = walkGraph(vw, [start]);
-    const drop = (x, y, z) => { for (let d = 1; d <= 4; d++) { const st = vw.get(x, y - d, z); if (!P.passable[st] || P.water[st]) return d - 1; } return 99; };
+    // (a natural SNOW cell on top of its column may be a snow layer, which the world passes through: the drop counts it once)
+    const snowTop = (x, y, z) => !(vw.flags(x, y, z) & 1) && walkVol && classAt(walkVol, x, y, z) === VC.SNOW && P.air[vw.get(x, y + 1, z)];
+    const drop = (x, y, z) => { let skip = true; for (let d = 1; d <= 4; d++) { const st = vw.get(x, y - d, z); if (!P.passable[st] || P.water[st]) { if (skip && !P.water[st] && snowTop(x, y - d, z)) { skip = false; continue; } return d - 1; } } return 99; };
     const cols = [], wall = [], lit = [];
     for (let i = 0; i < g.reached.length; i += 3) {
       const x = g.reached[i], y = g.reached[i + 1], z = g.reached[i + 2];
@@ -204,7 +207,7 @@ function brinkRails(r, ctx, { stage, rounds = 5 }) {
     if (!cols.length && !wall.length) break;
     const part = r.parts.find((q) => q.id === 'mon_brink') ?? r.part('mon_brink', { stage });
     (r.meta.parts['mon_brink'] ??= {}).kind = 'rails';
-    if (wall.length) part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols: wall, materials: [r.material('structure', 'brink parapet')], cond: 2, walk: false });
+    if (wall.length) part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols: wall, materials: [r.material('structure', 'brink parapet')], cond: 0, walk: false });
     if (cols.length) part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: [r.material('rail', 'brink rail')], cond: 3, walk: false });
     if (lit.length) part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols: lit, materials: [r.material('light', 'brink lantern')], cond: 2, walk: false });
     lanterns += lit.length / 5;
@@ -227,6 +230,13 @@ function walkVolume(r, ctx) {
   const box = { minX: claim.minX, minY: Math.max(claim.minY, lo - WALK_VOLUME_BELOW), minZ: claim.minZ, maxX: claim.maxX, maxY: Math.min(claim.maxY, hi + WALK_VOLUME_ABOVE), maxZ: claim.maxZ };
   const v = r.needVolume(box);
   return { box: [box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ], read: !!v };
+}
+
+/** The walk volume (decoded) when the plan read it, else null. */
+function walkVolumeOf(r, ctx) {
+  const { claim } = ctx;
+  const u = Object.values(r.volumesUsed ?? {}).find((x) => x.box.minX === claim.minX && x.box.minZ === claim.minZ && x.box.maxX === claim.maxX && x.box.maxZ === claim.maxZ);
+  return u ? (r._volumeDecoded?.get(u.blob) ?? null) : null;
 }
 
 /** The deepest natural void an underpin fills (cells); a deeper one is left (the brink rails guard its edge). */
@@ -261,7 +271,7 @@ function underpin(r, ctx, { stage }) {
   if (!cols.length) return 0;
   const part = r.part('mon_underpin', { stage });
   (r.meta.parts['mon_underpin'] ??= {}).kind = 'underpin';
-  part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: [r.material('rock', 'underpin')], cond: 2, walk: false });
+  part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: [r.material('rock', 'underpin')], cond: 0, walk: false });
   let n = 0; for (let i = 0; i < cols.length; i += 5) n += cols[i + 3] - cols[i + 2] + 1;
   return n;
 }
@@ -287,12 +297,40 @@ function footing(r, ctx, { stage }) {
     if (keep.some((q) => q.hard.has(k) || q.watch.has(k))) continue;
     cols.push(x, z, y - 1, y - 1, 0);
   }
-  if (!cols.length) return 0;
+  // a tree the plan fells near a body (the realise fells a trunk whole when a write takes one of its logs) leaves its trunk's soil open to
+  // the sky: grass spreads onto it while the monastery stands, within 6 of the body. The soil under each felled trunk near a body is
+  // written as the surface (grass), so the journal holds the soil and the removal puts it back (with the walk volume read)
+  const trunks = [];
+  const vol = walkVolumeOf(r, ctx);
+  if (vol) {
+    const nearBody = (x, z) => x >= x0 - FELL_NEAR && x <= x1 + FELL_NEAR && z >= z0 - FELL_NEAR && z <= z1 + FELL_NEAR;
+    const isLog = (x, y, z) => classAt(vol, x, y, z) === VC.LOG;
+    const seen = new Set(), queue = [];
+    vw.eachWritten((x, y, z) => { if (nearBody(x, z) && isLog(x, y, z) && !seen.has(`${x},${y},${z}`)) { seen.add(`${x},${y},${z}`); queue.push([x, y, z]); } });
+    for (let i = 0; i < queue.length && seen.size < 4096; i++) {
+      const [x, y, z] = queue[i];
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+        const X = x + dx, Y = y + dy, Z = z + dz, k = `${X},${Y},${Z}`;
+        if (!seen.has(k) && isLog(X, Y, Z)) { seen.add(k); queue.push([X, Y, Z]); }
+      }
+    }
+    for (const [x, y, z] of queue) {
+      if (isLog(x, y - 1, z) || classAt(vol, x, y - 1, z) !== VC.SOIL || (vw.flags(x, y - 1, z) & 1)) continue;
+      const k = `${x},${y - 1},${z}`;
+      if (keep.some((q) => q.hard.has(k) || q.watch.has(k))) continue;
+      trunks.push(x, z, y - 1, y - 1, 0);
+    }
+  }
+  if (!cols.length && !trunks.length) return 0;
   const part = r.part('mon_footing', { stage });
   (r.meta.parts['mon_footing'] ??= {}).kind = 'footing';
-  part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: [r.material('subsurface', 'body footing')], cond: 0, walk: false });
-  return cols.length / 5;
+  if (cols.length) part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: [r.material('subsurface', 'body footing')], cond: 0, walk: false });
+  if (trunks.length) part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols: trunks, materials: [r.material('surface', 'felled trunk footing')], cond: 0, walk: false });
+  return (cols.length + trunks.length) / 5;
 }
+
+/** How far (columns) from a body's cells a felled trunk's soil is written (H §4.5: no change within 6 of a body). */
+export const FELL_NEAR = 8;
 
 /** Records every route pass's meta.route (each pass overwrites it) into `log`. */
 function logRoutes(reg, log) {

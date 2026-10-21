@@ -473,12 +473,16 @@ export class Region {
     const nearLot = (x, z) => this.lots.some((l) => { const m = 1 + Math.max(l.pad?.maxCut ?? 0, l.pad?.maxFill ?? 0); return x >= l.box.minX - m && x <= l.box.maxX + m && z >= l.box.minZ - m && z <= l.box.maxZ + m; });
     // (6c S2) nor on a kept natural cell's column (r.keepNatural: a natural ice spike beside the walk stands over it as land)
     const keptCols = new Set(it._unsafe?.retainOnKept ? [] : this._keptColumns().map(([x, z]) => `${x},${z}`)); // (`_unsafe.retainOnKept`: the broken variant)
-    const noRetain = (x, z) => routeCols.has(`${x},${z}`) || nearLot(x, z) || keptCols.has(`${x},${z}`);
+    // ((6c S3) a guarded pass: an earlier pass's run, never under this pass's parapets, retaining walls or stair railings: they would bury
+    // its walk)
+    const priorCols = new Set();
+    if (mats.guard) for (const m of Object.values(this.meta.paths)) if (Array.isArray(m.cells) && m.cells.length && this.meta.parts[m.part]?.kind === 'path') for (const q of footprintOf(m.cells, m.width ?? 1)) priorCols.add(`${q[0]},${q[1]}`);
+    const noRetain = (x, z) => routeCols.has(`${x},${z}`) || nearLot(x, z) || keptCols.has(`${x},${z}`) || priorCols.has(`${x},${z}`);
     // ((6c S3) the guard's parapet columns, once each over every edge; never on another route's cells, a kept column, or a lot's
     // footprint, apron or (a slope pad's) batter, but beside a wall pad's apron: its ring is the parapet's ground)
     const guardCols = mats.guard ? new Set() : null;
     const inPad = (x, z) => this.lots.some((l) => { const m = 1 + (l.pad?.edge === 'slope' ? Math.max(l.pad.maxCut ?? 0, l.pad.maxFill ?? 0) : 0); return x >= l.box.minX - m && x <= l.box.maxX + m && z >= l.box.minZ - m && z <= l.box.maxZ + m; });
-    const noGuard = mats.guard ? (x, z) => routeCols.has(`${x},${z}`) || inPad(x, z) || keptCols.has(`${x},${z}`) : null;
+    const noGuard = mats.guard ? (x, z) => routeCols.has(`${x},${z}`) || priorCols.has(`${x},${z}`) || inPad(x, z) || keptCols.has(`${x},${z}`) : null;
     // a slope pad's batter fill (stage before the routes): ring k (1..maxFill) out from the apron is filled to the pad's top - 1 - k
     const fillTop = (x, z) => {
       let top = -Infinity;
@@ -537,7 +541,7 @@ export class Region {
         } else if (g.kind === 'stair') {
           // the flight's ground (cut above, fill below), then the treads
           p._routeRun(`${rid}_${n}g`, fpOf(si), mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells, noSurface: true, register: false, noRetain, fillTop });
-          const st = p.stair([cells[0], cells[cells.length - 1]], { width: e.width, landingEvery: 8, carve: true, material: mats.stair, id: `${rid}_${n}`, ...(mats.guard ? { railing: mats.guard } : {}) });
+          const st = p.stair([cells[0], cells[cells.length - 1]], { width: e.width, landingEvery: 8, carve: true, material: mats.stair, id: `${rid}_${n}`, ...(mats.guard ? { railing: mats.guard, railSkip: (x, z) => priorCols.has(`${x},${z}`) } : {}) });
           rec.paths.push(st.id);
         } else if (g.kind === 'ladder') {
           ladderSegs.push(n);
@@ -1485,10 +1489,10 @@ class Part {
    * takes `{center: [x, z], radius, top, bottom, start: angle}` instead of a polyline and winds down from `top` to
    * `bottom` around a 3x3 core. `railing`: a role for posts on both sides.
    */
-  stair(path, { width = 3, rise = 1, landingEvery = 8, carve = true, railing = null, spiral = false, material = 'structure', id, lights, _unsafeRise, solid = false } = {}) {
+  stair(path, { width = 3, rise = 1, landingEvery = 8, carve = true, railing = null, spiral = false, material = 'structure', id, lights, _unsafeRise, solid = false, railSkip = null } = {}) {
     this._requirePath('stair');
     if (rise !== 1) throw new Error(`part ${this.id}: stair rise must be 1`);
-    const r = this._stair(path, { width, landingEvery, carve, railing, spiral, material, kind: 'stair', lights, _unsafeRise, solid });
+    const r = this._stair(path, { width, landingEvery, carve, railing, spiral, material, kind: 'stair', lights, _unsafeRise, solid, railSkip });
     const sid = id ?? `${this.id}_stair_${this.region.paths.length + 1}`;
     this.region.paths.push({ id: sid, stage: this.stage, part: this.id, kind: 'stair', box: r.box });
     this.region.meta.paths[sid] = { kind: 'stair', part: this.id, stage: this.stage, width, landingEvery, cells: r.cells };
@@ -1496,7 +1500,7 @@ class Part {
     return { ...r, id: sid };
   }
 
-  _stair(path, { width = 3, landingEvery = 8, carve = true, railing = null, spiral = false, material = 'structure', kind = 'stair', lights, _unsafeRise, solid = false }) {
+  _stair(path, { width = 3, landingEvery = 8, carve = true, railing = null, spiral = false, material = 'structure', kind = 'stair', lights, _unsafeRise, solid = false, railSkip = null }) {
     const what = `part ${this.id}: ${kind}`;
     if (!(isInt(width) && width >= 1 && width <= 9)) throw new Error(`${what}: width must be 1..9`);
     if (!(isInt(landingEvery) && landingEvery >= 2 && landingEvery <= 64)) throw new Error(`${what}: landingEvery must be 2..64`);
@@ -1586,6 +1590,7 @@ class Part {
       if (railM !== null && !solid) {
         for (const k of [offs[0] - 1, offs[offs.length - 1] + 1]) {
           const x = c.x + c.r[0] * k, z = c.z + c.r[1] * k;
+          if (railSkip && railSkip(x, z)) continue; // ((6c S3) never on another route's walk)
           rails.addOnce(`${x},${y},${z}`, x, z, y, y, full);
           rails.addOnce(`${x},${y + 1},${z}`, x, z, y + 1, y + 1, railM);
           grow(x, y + 1, z);
