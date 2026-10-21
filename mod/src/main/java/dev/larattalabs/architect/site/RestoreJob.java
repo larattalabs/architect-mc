@@ -52,6 +52,8 @@ final class RestoreJob implements Placement.Job {
 	transient WorldJournal.@Nullable UndoWork work;
 	transient WorldJournal.@Nullable UndoPlanner planner;
 	transient boolean planned;
+	/** The queue save holding {@link #group}, written before the commit is submitted ({@link #groupSaved}). */
+	transient @Nullable CompletableFuture<Void> preSave;
 	transient @Nullable CompletableFuture<Object[]> txn;
 	/** A restore's writer, prepared off the server thread for a large site (the template of 600k cells). */
 	transient @Nullable CompletableFuture<Object[]> prepared;
@@ -180,7 +182,7 @@ final class RestoreJob implements Placement.Job {
 				}
 				long tp0 = System.nanoTime();
 				int was0 = planner.planned();
-				SiteJournal.Undone u = planned(deadline);
+				SiteJournal.Undone u = planned(server, deadline);
 				if (Sites.Trace.ON) {
 					dev.larattalabs.architect.Architect.LOGGER.info("TRACE restore {} planned {} -> {} of {} sections in {} ms{}", siteId, was0, planner == null ? -1
 						: planner.planned(), planner == null ? -1 : planner.sections(), (System.nanoTime() - tp0) / 1e6, u != null ? " submitted" : "");
@@ -327,7 +329,7 @@ final class RestoreJob implements Placement.Job {
 	 * R1 sliced, then R2: null while planning (or while a large undo's commit is built off the server thread, or when it broke:
 	 * {@link #broken}); the submitted undo once done.
 	 */
-	private SiteJournal.@Nullable Undone planned(long deadline) throws Sites.SiteException {
+	private SiteJournal.@Nullable Undone planned(MinecraftServer server, long deadline) throws Sites.SiteException {
 		try {
 			if (!planned && !planner.step(deadline)) {
 				return null;
@@ -351,7 +353,7 @@ final class RestoreJob implements Placement.Job {
 				});
 				return null;
 			}
-			if (!txn.isDone()) {
+			if (!txn.isDone() || !groupSaved(server)) {
 				return null;
 			}
 			Object[] built;
@@ -366,10 +368,39 @@ final class RestoreJob implements Placement.Job {
 			WorldJournal.kill("K5");
 			u = SiteJournal.submitUndo((WorldJournal.UndoWork) built[0], (dev.larattalabs.architect.journal.JournalStore.Txn) built[1]);
 		} else {
+			if (!groupSaved(server)) {
+				return null;
+			}
 			WorldJournal.kill("K5");
 			u = SiteJournal.submitUndo(planner.work());
 		}
+		String k = WorldJournal.armed();
+		if (u != null && k != null && k.startsWith("R1q")) {
+			// TEST (dev.journal.killAt R1q): the commit durable, the halt before any later queue save (the journal's writer and the queue's
+			// saver are separate threads)
+			try {
+				u.commit().join();
+			} catch (RuntimeException e) {
+				// the halt below either way
+			}
+			WorldJournal.kill("R1q");
+		}
 		return u;
+	}
+
+	/**
+	 * (undo hardening A, as Groups' preSaved) Before R2 is submitted, the queue file holds this job's undo group and that save is written
+	 * (over ticks; the saver is off the server thread). Else a stop after the commit reached the journal and before the next queue save left
+	 * a job with no group: the load planned again, found no active entry and ended the removal, until the next start's settle brought the
+	 * site back. With the group saved, {@link #fromJson} asks the journal (UNDONE in that group: written again).
+	 */
+	private boolean groupSaved(MinecraftServer server) {
+		if (preSave == null) {
+			Placement.save(server, false);
+			preSave = Placement.saved();
+			return false;
+		}
+		return preSave.isDone();
 	}
 
 	/** A road's or cell site's undo: plan and commit (when this job planned it), the record pending, the cells lowest first over ticks. */
@@ -385,7 +416,7 @@ final class RestoreJob implements Placement.Job {
 					group = SiteJournal.group(purpose + "-" + siteId);
 					planner = SiteJournal.undoPlanner(level, List.of(siteId), group);
 				}
-				SiteJournal.Undone u = planned(deadline);
+				SiteJournal.Undone u = planned(server, deadline);
 				if (u == null) {
 					return broken != null;
 				}
@@ -552,8 +583,8 @@ final class RestoreJob implements Placement.Job {
 			String g = j.group;
 			boolean undone = SiteJournal.entries(j.siteId).stream().anyMatch(m -> m.status() == Journal.Status.UNDONE && g.equals(m.undoGroup()));
 			j.phase = undone ? WRITE : PLAN;
-			if (undone && Sites.get(j.siteId) != null) {
-				j.phase = COMMIT; // R3 not done yet: the record goes pending first
+			if (undone && (Sites.get(j.siteId) != null || Infras.get(j.siteId) != null)) {
+				j.phase = COMMIT; // R3 not done yet: the record (a site's, or a road's or cell site's) goes pending first
 			}
 		}
 		if (o.has("dropsBefore")) {

@@ -80,10 +80,10 @@ export async function unchanged(root) {
 
 // ------------------------------------------------------------------ in game: shared helpers
 
-const OWNER = 'test:h';
+export const OWNER = 'test:h';
 const FLAT = 'G6B Flat Base';
 /** h_core_demo's claim on the flat world (96 x 96). */
-const CLAIM = [9000, 9000, 9095, 9095];
+export const CLAIM = [9000, 9000, 9095, 9095];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** The bodies of a plan's IR (its fluid ops), cells unpacked: {id, fluid, level, cells, spill, joins, watch, ice, shell, predicted, settleTicks}. */
@@ -105,7 +105,7 @@ function boxAround(cells, g = 2) {
  * A body's census against its prediction, from dev.fluid.census over its watch box: {ok, sources, flowing, mismatch: [...], outside:
  * [...] (fluid of the body's kind outside its cells, spill and joins that the before-census did not hold), ticks}.
  */
-async function censusOf(ctx, body, before = null, siblings = []) {
+export async function censusOf(ctx, body, before = null, siblings = []) {
   const all = [...body.cells, ...body.shell, ...body.spill, ...body.watch];
   const box = boxAround(all, 2);
   const c = await ctx.L.call('dev.fluid.census', { box }, 120_000);
@@ -136,7 +136,7 @@ async function censusOf(ctx, body, before = null, siblings = []) {
 }
 
 /** A fresh copy of the flat base, its rules ('exact' or the base's own defaults), the player over the claim. */
-async function freshFlat(ctx, name, rules) {
+export async function freshFlat(ctx, name, rules) {
   const L = ctx.L;
   await L.fresh(name, FLAT);
   if (rules === 'exact') await L.setRules('exact');
@@ -145,7 +145,7 @@ async function freshFlat(ctx, name, rules) {
 }
 
 /** Plan h_core_demo (the two-plan flow: its volumes with the fluid layer), its IR and meta read from the sidecar's plan dir. */
-async function planDemo(ctx, params = {}) {
+export async function planDemo(ctx, params = {}) {
   const L = ctx.L;
   const p = await L.plan('h_core_demo', CLAIM, { params, surveyLoad: 'bounded:256', check: true, owner: OWNER });
   const dir = path.join(L.SIDECAR_DATA, 'regions', 'plans', p.planId);
@@ -156,20 +156,20 @@ async function planDemo(ctx, params = {}) {
 }
 
 /** The region's box for snapshots: the claim + 8 around, from 8 under the lowest body cell to 16 over the ground. */
-function demoBox(bodies) {
+export function demoBox(bodies) {
   const all = bodies.flatMap((b) => [...b.cells, ...b.shell, ...b.spill, ...b.watch]);
   const b = boxAround(all, 0);
   return [CLAIM[0] - 8, b[1] - 8, CLAIM[1] - 8, CLAIM[2] + 8, b[4] + 16, CLAIM[3] + 8];
 }
 
-async function realiseWait(ctx, planId, opts = {}) {
+export async function realiseWait(ctx, planId, opts = {}) {
   const L = ctx.L;
   const region = await L.realise(planId, opts);
   const st = await L.waitRegion(region, 3_600_000, async (s) => { if (s.view?.waiting?.reason === 'OCCUPIED') await L.cmd('/kill @e[type=!minecraft:player]'); });
   return { region, st, view: st.view, fluids: st.view.ext?.['architect_mc:fluids'] ?? null };
 }
 
-async function removeWait(ctx, region) {
+export async function removeWait(ctx, region) {
   const L = ctx.L;
   const t0 = Date.now();
   const r = await L.call('dev.region.remove', { region, requester: OWNER }, 3_600_000);
@@ -183,8 +183,8 @@ async function removeWait(ctx, region) {
   throw new Error(`removal of ${region} did not finish`);
 }
 
-const snap = async (ctx, box, name) => { const file = path.join(ctx.OUT, `${name}.snap.gz`); await ctx.L.call('dev.region.hash', { box, mode: 'snap', file }, 4 * 3_600_000); return file; };
-const diff = async (ctx, box, file) => { const r = await ctx.L.call('dev.region.hash', { box, mode: 'diff', file }, 4 * 3_600_000); return { mismatches: r.mismatches, classes: r.classes ?? {}, sample: (r.list ?? []).slice(0, 12) }; };
+export const snap = async (ctx, box, name) => { const file = path.join(ctx.OUT, `${name}.snap.gz`); await ctx.L.call('dev.region.hash', { box, mode: 'snap', file }, 4 * 3_600_000); return file; };
+export const diff = async (ctx, box, file) => { const r = await ctx.L.call('dev.region.hash', { box, mode: 'diff', file }, 4 * 3_600_000); return { mismatches: r.mismatches, classes: r.classes ?? {}, sample: (r.list ?? []).slice(0, 12) }; };
 
 /** The shell cell a breach opens (§14 item 6): the deepest side cell of a body (a shell cell beside a body cell, lowest, ties by x, z). */
 /**
@@ -398,7 +398,7 @@ export async function ingame(ctx) {
  * Halt the server at a kill point (dev.journal.killAt), then open the world again: the headless host keeps the DevBridge and starts the
  * server again on the next dev.world.open (docs/GATES.md "Headless gates").
  */
-async function crashAt(ctx, world, point, action) {
+export async function crashAt(ctx, world, point, action) {
   const L = ctx.L;
   await L.call('dev.journal.killAt', { point }, 10_000);
   action().catch(() => null); // the halt drops the call

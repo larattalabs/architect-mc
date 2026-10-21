@@ -555,6 +555,9 @@ public final class Batches {
 		try {
 			InfraJob job = road ? InfraPlace.beginRoad(level, c, b.owner, i.ext, member, i.construction) : InfraPlace.beginCells(level, i.spec.get("kind").getAsString(),
 				dev.larattalabs.architect.journal.Journal.Policy.valueOf(i.spec.get("policy").getAsString()), c, b.owner, i.ext, member);
+			if (road && RegionItems.isRegion(b)) {
+				RealisedRecords.roadStarted(b, i, job.siteId, c); // (RP) a region road: its site, cells and skipped spans
+			}
 			tr.mark("begin");
 			tr.done();
 			i.status = QItem.Status.PLACING;

@@ -36,20 +36,27 @@ import org.jspecify.annotations.Nullable;
  * sliced over ticks, 64x64-column tiles, chunks loaded by short-lived tickets (at most 32 at once) and never generated:
  * <ul>
  * <li>hash: SHA-256 per tile over every state and block-entity NBT (y ascending, then z, then x), combined in tile order;</li>
- * <li>snap: the same cells to a gzip file (a palette and one index per cell; BE NBT as text);</li>
+ * <li>snap: every cell of the box to a gzip file, {@code exclude} or not (a palette and one index per cell; BE NBT as text);</li>
  * <li>diff: the box against a snap: every mismatch with its position, the snapped and the current value, and the class of the
  * snapped cell ({@code gravity}: a gravity block over air or fluid; {@code unsupported}: a plant or mushroom that can't
  * survive there now; else {@code none}) for E-normal's classified rule.</li>
  * </ul>
  */
 public final class RegionHash {
-	static final TicketType TICKET = net.minecraft.core.Registry.register(net.minecraft.core.registries.BuiltInRegistries.TICKET_TYPE,
-		dev.larattalabs.architect.Architect.id("region_hash"), new TicketType(0L, TicketType.FLAG_LOADING));
+	/** The chunk ticket, in a holder so the cell logic loads in unit tests (registries frozen there; RegionsMod touches it at init). */
+	static final class Ticket {
+		static final TicketType TICKET = net.minecraft.core.Registry.register(net.minecraft.core.registries.BuiltInRegistries.TICKET_TYPE,
+			dev.larattalabs.architect.Architect.id("region_hash"), new TicketType(0L, TicketType.FLAG_LOADING));
+
+		private Ticket() {
+		}
+	}
+
 	static final long BUDGET = 8_000_000L;
 
 	enum Mode { HASH, SNAP, DIFF }
 
-	private static final class Job {
+	static final class Job {
 		final ServerLevel level;
 		final int[] box;
 		final List<int[]> exclude;
@@ -138,7 +145,7 @@ public final class RegionHash {
 							break;
 						}
 						if (j.ticketed.add(c)) {
-							j.level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
+							j.level.getChunkSource().addTicketWithRadius(Ticket.TICKET, ChunkPos.unpack(c), 0);
 						}
 					}
 				}
@@ -155,7 +162,7 @@ public final class RegionHash {
 				tileWork(j, t);
 				for (long c : chunks(j, t)) {
 					if (j.ticketed.remove(c)) {
-						j.level.getChunkSource().removeTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
+						j.level.getChunkSource().removeTicketWithRadius(Ticket.TICKET, ChunkPos.unpack(c), 0);
 					}
 				}
 				j.tile++;
@@ -209,46 +216,13 @@ public final class RegionHash {
 		for (int y = j.box[1]; y <= j.box[4]; y++) {
 			for (int z = z0; z <= z1; z++) {
 				for (int x = x0; x <= x1; x++) {
-					if (excluded(j, x, y, z)) {
+					boolean ex = excluded(j, x, y, z);
+					if (ex && j.mode == Mode.HASH) {
 						continue;
 					}
 					LevelChunk c = j.level.getChunkSource().getChunkNow(x >> 4, z >> 4);
 					BlockState s = c.getBlockState(m.set(x, y, z));
-					String v = value(j.level, s, m);
-					j.cells++;
-					switch (j.mode) {
-						case HASH -> {
-							md.update(v.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-							md.update((byte) 0);
-						}
-						case SNAP -> {
-							Integer k = j.palette.get(v);
-							if (k == null) {
-								k = j.paletteList.size();
-								j.palette.put(v, k);
-								j.paletteList.add(v);
-							}
-							writeVar(j.out, k);
-						}
-						case DIFF -> {
-							String was = j.snapPalette.get(readVar(j.in));
-							if (!was.equals(v)) {
-								j.mismatchCount++;
-								String cls = classify(j.level, m.immutable(), was, v);
-								j.classes.merge(cls, 1, Integer::sum);
-								if (j.mismatches.size() < 2000) {
-									JsonObject o = new JsonObject();
-									o.addProperty("pos", x + "," + y + "," + z);
-									o.addProperty("was", was);
-									o.addProperty("now", v);
-									o.addProperty("class", cls);
-									j.mismatches.add(o);
-								}
-							}
-						}
-						default -> {
-						}
-					}
+					cell(j, md, m, ex, value(j.level, s, m));
 				}
 			}
 		}
@@ -256,6 +230,56 @@ public final class RegionHash {
 			String h = HexFormat.of().formatHex(md.digest());
 			j.tileHashes.add(t[0] + "," + t[1] + "=" + h);
 			j.all.update(h.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+		}
+	}
+
+	/**
+	 * One cell of the box in y, z, x order. An excluded cell isn't hashed or compared, but a snap holds every cell of the box
+	 * (exclude or not) and a diff reads the excluded cell's entry before skipping it, so the cells after it stay paired with
+	 * their own entries (the drain-holders finding: skipping without the read compared every later cell with the cell before it).
+	 */
+	static void cell(Job j, MessageDigest md, BlockPos.MutableBlockPos m, boolean excluded, String v) throws IOException {
+		switch (j.mode) {
+			case HASH -> {
+				if (excluded) {
+					return;
+				}
+				j.cells++;
+				md.update(v.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+				md.update((byte) 0);
+			}
+			case SNAP -> {
+				j.cells++;
+				Integer k = j.palette.get(v);
+				if (k == null) {
+					k = j.paletteList.size();
+					j.palette.put(v, k);
+					j.paletteList.add(v);
+				}
+				writeVar(j.out, k);
+			}
+			case DIFF -> {
+				String was = j.snapPalette.get(readVar(j.in));
+				if (excluded) {
+					return;
+				}
+				j.cells++;
+				if (!was.equals(v)) {
+					j.mismatchCount++;
+					String cls = classify(j.level, m.immutable(), was, v);
+					j.classes.merge(cls, 1, Integer::sum);
+					if (j.mismatches.size() < 2000) {
+						JsonObject o = new JsonObject();
+						o.addProperty("pos", m.getX() + "," + m.getY() + "," + m.getZ());
+						o.addProperty("was", was);
+						o.addProperty("now", v);
+						o.addProperty("class", cls);
+						j.mismatches.add(o);
+					}
+				}
+			}
+			default -> {
+			}
 		}
 	}
 
@@ -392,12 +416,12 @@ public final class RegionHash {
 
 	private static void release(Job j) {
 		for (long c : j.ticketed) {
-			j.level.getChunkSource().removeTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
+			j.level.getChunkSource().removeTicketWithRadius(Ticket.TICKET, ChunkPos.unpack(c), 0);
 		}
 		j.ticketed.clear();
 	}
 
-	private static void writeVar(DataOutputStream out, int v) throws IOException {
+	static void writeVar(DataOutputStream out, int v) throws IOException {
 		while ((v & ~0x7f) != 0) {
 			out.write(v & 0x7f | 0x80);
 			v >>>= 7;
@@ -405,7 +429,7 @@ public final class RegionHash {
 		out.write(v);
 	}
 
-	private static int readVar(DataInputStream in) throws IOException {
+	static int readVar(DataInputStream in) throws IOException {
 		int v = 0;
 		int shift = 0;
 		while (true) {

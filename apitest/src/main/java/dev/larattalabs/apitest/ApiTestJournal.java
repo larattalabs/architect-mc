@@ -151,7 +151,15 @@ final class ApiTestJournal {
 						: null, j.has("force") && j.get("force").getAsBoolean(), j.has("partial") && j.get("partial").getAsBoolean()); // 1.12.0: partial
 	}
 
+	/** A block id, or a full state with properties ({@code minecraft:oak_stairs[waterlogged=true]}: fix/drain-holders' layered stair). */
 	static BlockState block(String id) {
+		if (id.indexOf('[') >= 0) {
+			try {
+				return net.minecraft.commands.arguments.blocks.BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK, id, false).blockState();
+			} catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+				throw new IllegalArgumentException("not a block state: " + id, e);
+			}
+		}
 		return BuiltInRegistries.BLOCK.getValue(Identifier.parse(id)).defaultBlockState();
 	}
 

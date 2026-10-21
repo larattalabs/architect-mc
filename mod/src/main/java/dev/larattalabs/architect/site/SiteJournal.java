@@ -307,9 +307,18 @@ public final class SiteJournal {
 	static Placing begin(ServerLevel level, String siteId, String kind, @Nullable String group, Anchors.Bounds box, List<Integer> held, long[] cut,
 		JsonObject meta, int[] ring, WorldJournal.@Nullable Captured captured) throws Sites.SiteException {
 		requireAvailable();
-		JournalStore s = store();
 		WorldJournal.Captured before = captured != null ? captured : WorldJournal.capture(level, box);
-		String dim = Sites.dimensionId(level);
+		return begin(level, Sites.dimensionId(level), siteId, kind, group, box, held, cut, meta, ring, before);
+	}
+
+	/**
+	 * {@link #begin} with the capture made and the dimension named: {@code level} is read only for the held leaves and the cut halves
+	 * (none: it may be null; the UMT seam, docs/UMT.md).
+	 */
+	static Placing begin(@Nullable ServerLevel level, String dim, String siteId, String kind, @Nullable String group, Anchors.Bounds box, List<Integer> held,
+		long[] cut, JsonObject meta, int[] ring, WorldJournal.Captured before) throws Sites.SiteException {
+		requireAvailable();
+		JournalStore s = store();
 		long layer = s.newLayer();
 		String id = s.newId();
 		long now = System.currentTimeMillis();
@@ -970,32 +979,81 @@ public final class SiteJournal {
 		return r;
 	}
 
+	/**
+	 * (UMT seam, docs/UMT.md) Where an undo's cell writes go: the level ({@link #levelTarget}), or the undo model tester's in-memory
+	 * world. {@link #writeCells} and {@link #fixHalves} write only through it.
+	 */
+	interface CellTarget {
+		BlockState get(BlockPos p);
+
+		/** An Architect write of one cell ({@code Placed.set}). */
+		void set(BlockPos p, BlockState s, int flags);
+
+		/** The block entity data of a cell just written (none there: nothing). */
+		void loadNbt(BlockPos p, CompoundTag nbt);
+
+		net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension();
+	}
+
+	/** The level as a {@link CellTarget}. */
+	static CellTarget levelTarget(ServerLevel level) {
+		return new CellTarget() {
+			@Override
+			public BlockState get(BlockPos p) {
+				return level.getBlockState(p);
+			}
+
+			@Override
+			public void set(BlockPos p, BlockState s, int flags) {
+				dev.larattalabs.architect.placed.Placed.set(level, p, s, flags);
+			}
+
+			@Override
+			public void loadNbt(BlockPos p, CompoundTag nbt) {
+				BlockEntity be = level.getBlockEntity(p);
+				if (be != null) {
+					be.loadWithComponents(TagValueInput.create(ProblemReporter.DISCARDING, level.registryAccess(), nbt));
+					be.setChanged();
+				}
+			}
+
+			@Override
+			public net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension() {
+				return level.dimension();
+			}
+		};
+	}
+
 	/** Puts back the two-block halves a restore wrote that the world does not hold any more (quietly). */
 	static void fixHalves(ServerLevel level, List<CellWrite> halves) {
+		fixHalves(levelTarget(level), halves);
+	}
+
+	static void fixHalves(CellTarget level, List<CellWrite> halves) {
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 		for (CellWrite c : halves) {
 			m.set(Journal.x(c.pos()), Journal.y(c.pos()), Journal.z(c.pos()));
 			BlockState want = WorldJournal.state(c.value());
-			if (level.getBlockState(m) != want) {
-				dev.larattalabs.architect.placed.Placed.set(level, m, want, c.flags());
+			if (level.get(m) != want) {
+				level.set(m, want, c.flags());
 			}
 		}
 	}
 
 	/** Writes CELL undo cells (lowest first): the state with its kind's flags, then the block entity data. */
 	static void writeCells(ServerLevel level, List<CellWrite> cells) {
+		writeCells(levelTarget(level), cells);
+	}
+
+	static void writeCells(CellTarget level, List<CellWrite> cells) {
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 		for (CellWrite c : cells) {
 			m.set(Journal.x(c.pos()), Journal.y(c.pos()), Journal.z(c.pos()));
 			BlockState st = WorldJournal.state(c.value());
-			dev.larattalabs.architect.placed.Placed.set(level, m, st, c.flags());
-			FluidRearm.wrote(level, m.asLong(), st); // (relief falling water) flowing fluid wakes once the restores are done
+			level.set(m, st, c.flags());
+			FluidRearm.wrote(level.dimension(), m.asLong(), st); // (relief falling water) flowing fluid wakes once the restores are done
 			if (c.value().nbt() != null) {
-				BlockEntity be = level.getBlockEntity(m);
-				if (be != null) {
-					be.loadWithComponents(TagValueInput.create(ProblemReporter.DISCARDING, level.registryAccess(), c.value().nbt()));
-					be.setChanged();
-				}
+				level.loadNbt(m, c.value().nbt());
 			}
 		}
 	}
@@ -1026,8 +1084,17 @@ public final class SiteJournal {
 	 * was handed ({@link Sections#reactivate}).
 	 */
 	static void reactivate(String group) throws IOException {
+		reactivate(group, null);
+	}
+
+	/**
+	 * {@link #reactivate(String)} of only the group's entries whose site is in {@code sites} (null: all). (F6) The settle takes back
+	 * only the members whose own cells show them; the others stay undone and settle on their own evidence.
+	 */
+	static void reactivate(String group, @Nullable Set<String> sites) throws IOException {
 		JournalStore s = WorldJournal.store();
-		List<JournalStore.Meta> members = s.find(m -> m.status() == Status.UNDONE && group.equals(m.undoGroup()));
+		List<JournalStore.Meta> members = s.find(m -> m.status() == Status.UNDONE && group.equals(m.undoGroup()) && (sites == null || sites.contains(m
+			.site())));
 		if (members.isEmpty()) {
 			return;
 		}
@@ -1052,17 +1119,24 @@ public final class SiteJournal {
 			}
 			slices.put(k, l);
 		}
-		Map<String, Map<Long, List<Cell>>> back = Sections.reactivate(sections, slices::get, group);
+		Set<String> ids = new java.util.HashSet<>();
+		members.forEach(m -> ids.add(m.id()));
+		Map<String, Map<Long, List<Cell>>> back = Sections.reactivate(sections, slices::get, group, sites == null ? null : ids::contains);
 		JournalStore.Txn t = s.begin().label("settle:reactivate:" + group);
 		for (var e : back.entrySet()) {
+			if (ids.contains(e.getKey())) {
+				continue; // a member: below, with its undo record dropped
+			}
 			List<SectionCells> secs = new ArrayList<>();
 			e.getValue().forEach((k, cells) -> secs.add(SectionCells.of(k, cells, null)));
 			t.sections(e.getKey(), secs);
 		}
 		for (JournalStore.Meta m : members) {
 			List<SectionCells> secs = new ArrayList<>();
+			Map<Long, List<Cell>> changed = back.getOrDefault(m.id(), Map.of());
 			for (long k : m.sections()) {
-				SectionCells sc = s.section(m.id(), k);
+				List<Cell> cs = changed.get(k);
+				SectionCells sc = cs != null ? SectionCells.of(k, cs, null) : s.section(m.id(), k);
 				if (sc != null) {
 					secs.add(sc.withWritten(null));
 				}

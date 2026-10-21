@@ -17,6 +17,11 @@
 //                                      undo under the exact rules (E-flat 0, fluid cells by state); the single breach and its undo
 //     crash     (h-crash)              item 7: a crash before the fluids stage, one mid-stage, one during removal (drained, before the
 //                                      solids): settle at start finishes each, 0 fluid outside the declared cells, the undo exact
+//     holders   (h-holders)            fix/drain-holders: a separate site's waterlogged stair layered over a pond source cell; Regions.remove
+//                                      keeps it standing (the drain skips cells another entry holds on top) and hands the cell down to it;
+//                                      E-flat 0 outside it, then 0 after the stair site goes (tools/lib/gate6ch-holders.mjs)
+//     rmcrash   (h-rmcrash)            the same through the removal's crash windows: FL3+save, K6+save, R2q+save (R2 durable, the queue
+//                                      file not saved), K7+save (mid-R4)
 //     probe     (h-probe)              item 14: (a) the sand anomaly (a sand cell on a rewritten cell, dry and under water, re-read with
 //                                      its journal entries); (b) T1's falling water (relief_demo's committed inputs re-planned:
 //                                      FLUID_STATE 0, the source of the level-8 cells named); item 13's fire reach (a lava pit, a
@@ -173,6 +178,15 @@ steps.ingame = async () => {
 steps.crash = async () => {
   await ensure();
   return { core: await (await import('./lib/gate6ch-core.mjs')).crash(ctx), halves: await halves('crash') };
+};
+// (fix/drain-holders) a later site's block in a body cell through the whole-group drain, and the removal's crash windows
+steps.holders = async () => {
+  await ensure();
+  return await (await import('./lib/gate6ch-holders.mjs')).holders(ctx);
+};
+steps.rmcrash = async () => {
+  await ensure();
+  return await (await import('./lib/gate6ch-holders.mjs')).rmcrash(ctx);
 };
 steps.probe = async () => {
   await ensure();

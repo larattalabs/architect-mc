@@ -1135,8 +1135,47 @@ public final class RegionFluids {
 		return drain(level, st, b, bs, strays, new LongOpenHashSet());
 	}
 
+	/** (UMT seam, docs/UMT.md) Where a drain reads and writes cells: the level, or the undo model tester's in-memory world. */
+	interface DrainTarget {
+		BlockState get(BlockPos p);
+
+		/** An Architect write of one cell ({@code Placed.set}). */
+		void set(BlockPos p, BlockState s, int flags);
+	}
+
 	/** {@code others}: cells another standing body plans, left alone (the escape guard drains one body of several). */
 	static int drain(ServerLevel level, Regional st, Body b, BodyState bs, boolean strays, LongOpenHashSet others) {
+		return drain(level, st, b, bs, strays, others, NOT_HELD);
+	}
+
+	/** No cell held: every drain but the removal's ({@link #removalGate}). */
+	static final java.util.function.LongPredicate NOT_HELD = p -> false;
+
+	/**
+	 * (fix/drain-holders) {@code held}: cells the drain never writes, though they hold a fluid or ice: the removal's cells another journal
+	 * entry holds on top ({@link Holders}). The journal's undo hands their before down to that entry and leaves its block standing (its
+	 * covering mask), so the drain leaves them too: a later site's waterlogged block in a body cell keeps its block and its water.
+	 */
+	static int drain(ServerLevel level, Regional st, Body b, BodyState bs, boolean strays, LongOpenHashSet others, java.util.function.LongPredicate held) {
+		return drain(new DrainTarget() {
+			@Override
+			public BlockState get(BlockPos p) {
+				return level.getBlockState(p);
+			}
+
+			@Override
+			public void set(BlockPos p, BlockState s, int flags) {
+				dev.larattalabs.architect.placed.Placed.set(level, p, s, flags);
+			}
+		}, level, st, b, bs, strays, others, held);
+	}
+
+	/**
+	 * {@link #drain(ServerLevel, Regional, Body, BodyState, boolean, LongOpenHashSet, java.util.function.LongPredicate)} through {@code t};
+	 * {@code level} is read only by an irrigation body's breach judgement (none: it may be null).
+	 */
+	static int drain(DrainTarget t, @Nullable ServerLevel level, Regional st, Body b, BodyState bs, boolean strays, LongOpenHashSet others,
+		java.util.function.LongPredicate held) {
 		int n = 0;
 		Fluid src = b.source();
 		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
@@ -1147,15 +1186,18 @@ public final class RegionFluids {
 		for (long[] a : new long[][] {b.ice, b.cells}) {
 			for (long p : a) {
 				BlockPos bp = BlockPos.of(p);
-				BlockState now = level.getBlockState(bp);
+				BlockState now = t.get(bp);
 				// ((6c HY) a grate cell goes back too, whether its bars still hold the water or not)
 				if (now.getFluidState().isEmpty() && !now.is(Blocks.ICE) && !now.is(Blocks.FROSTED_ICE) && !(grate.contains(p) && now.is(Blocks.IRON_BARS))) {
 					continue;
 				}
+				if (held.test(p)) {
+					continue; // (fix/drain-holders) another entry's block on top: handed down by the undo, not drained
+				}
 				String before = bs.before.get(p);
 				BlockState to = before == null ? Blocks.AIR.defaultBlockState() : parse(before);
 				if (now != to) {
-					dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+					t.set(bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
 					n++;
 				}
 			}
@@ -1163,9 +1205,9 @@ public final class RegionFluids {
 		for (long[] a : new long[][] {b.spill, b.watch}) {
 			for (long p : a) {
 				BlockPos bp = BlockPos.of(p);
-				BlockState now = level.getBlockState(bp);
+				BlockState now = t.get(bp);
 				FluidState f = now.getFluidState();
-				if (f.isEmpty() || others.contains(p)) {
+				if (f.isEmpty() || others.contains(p) || held.test(p)) {
 					continue;
 				}
 				String before = bs.before.get(p);
@@ -1173,7 +1215,7 @@ public final class RegionFluids {
 				if (now == was) {
 					continue; // as it was before (a natural cell, its level included): not the body's doing
 				}
-				dev.larattalabs.architect.placed.Placed.set(level, bp, was, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+				t.set(bp, was, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
 				n++;
 			}
 		}
@@ -1184,19 +1226,19 @@ public final class RegionFluids {
 					continue;
 				}
 				BlockPos bp = BlockPos.of(p);
-				BlockState now = level.getBlockState(bp);
-				if (now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(src)) {
+				BlockState now = t.get(bp);
+				if (now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(src) && !held.test(p)) {
 					// a cell another body recorded (its breached shell cell, its watched cell) goes back to that record, not to air: that body's
 					// own drain, later in the removal, finds no fluid there any more
 					String was = beforeAny(st, p);
-					dev.larattalabs.architect.placed.Placed.set(level, bp, was == null ? Blocks.AIR.defaultBlockState() : parse(was), Block.UPDATE_CLIENTS
+					t.set(bp, was == null ? Blocks.AIR.defaultBlockState() : parse(was), Block.UPDATE_CLIENTS
 						| Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
 					n++;
 				}
 			}
 			// ((6c IRR) an irrigation source: its breach's flow over its own field too)
 			if (breach != null) {
-				n += sweepBreach(level, st, b, bs, breach);
+				n += sweepBreach(level, st, b, bs, breach, held);
 			}
 		}
 		return n;
@@ -1211,7 +1253,7 @@ public final class RegionFluids {
 	 * cells {@link #breachFlow} judged this body's before the drain wrote anything, each to the region's record (else air): no orphan
 	 * water. Counted in {@link BodyState#breached}.
 	 */
-	static int sweepBreach(ServerLevel level, Regional st, Body b, BodyState bs, LongOpenHashSet take) {
+	static int sweepBreach(ServerLevel level, Regional st, Body b, BodyState bs, LongOpenHashSet take, java.util.function.LongPredicate held) {
 		Fluid src = b.source();
 		long[] cells = take.toLongArray();
 		java.util.Arrays.sort(cells);
@@ -1220,8 +1262,8 @@ public final class RegionFluids {
 			BlockPos p = BlockPos.of(k);
 			BlockState now = level.getBlockState(p);
 			FluidState f = now.getFluidState();
-			if (!(now.getBlock() instanceof LiquidBlock) || f.isSource() || !f.getType().isSame(src)) {
-				continue; // (a stray pass took it already, or it changed)
+			if (!(now.getBlock() instanceof LiquidBlock) || f.isSource() || !f.getType().isSame(src) || held.test(k)) {
+				continue; // (a stray pass took it already, or it changed; or another entry holds it on top)
 			}
 			String was = beforeAny(st, k);
 			dev.larattalabs.architect.placed.Placed.set(level, p, was == null ? Blocks.AIR.defaultBlockState() : parse(was), Block.UPDATE_CLIENTS
@@ -1437,6 +1479,7 @@ public final class RegionFluids {
 		}
 		int n = 0;
 		boolean changed = false;
+		Holders held = null; // (fix/drain-holders) as the region's removal: a later entry's block on top of a source stays
 		for (Body b : st.bodies) {
 			if (!ids.contains(b.id)) {
 				continue;
@@ -1446,7 +1489,10 @@ public final class RegionFluids {
 				continue;
 			}
 			if (!bs.before.isEmpty()) {
-				n += drain(level, st, b, bs, true, st.othersOf(b));
+				if (held == null) {
+					held = new Holders(l.rec().dimension, l.rec().groupId, st);
+				}
+				n += drain(level, st, b, bs, true, st.othersOf(b), held);
 			}
 			bs.state = "drained";
 			bs.reason = "lot removed: " + lotId + " (its sources leave with it, S-IRR-4)";
@@ -1457,7 +1503,8 @@ public final class RegionFluids {
 		if (changed) {
 			save(l, st);
 			report(l, st);
-			Architect.LOGGER.info("Region {}: lot {} removed: its irrigation sources drained ({} cell(s) written)", l.rec().id, lotId, n);
+			Architect.LOGGER.info("Region {}: lot {} removed: its irrigation sources drained ({} cell(s) written){}", l.rec().id, lotId, n, held == null || held
+				.kept().isEmpty() ? "" : "; " + held.kept().size() + " cell(s) another entry holds on top kept: " + cells(held.keptCells()));
 			WorldJournal.kill("FL6"); // (6c IRR) the lot's sources drained, its site not restored yet
 		}
 		return n;
@@ -1478,6 +1525,144 @@ public final class RegionFluids {
 	}
 
 	// ------------------------------------------------------------------ the removal
+
+	/**
+	 * (fix/drain-holders) The cells of a removal's drain that another journal entry holds on top of the body's entry. At each position the
+	 * top of the active stack (by layer, ties by the greater entry id: the undo planner's covering rule) is an entry outside the removed
+	 * group (its {@code group} is not the region's, nor is it the group's crate), and it lies above the body's entry:
+	 * <ul>
+	 * <li>where the group has a cell under it (a body's source or ice, a shell cell), always: the undo leaves the cell to that entry (its
+	 * covering mask) and hands the region's before down to it;</li>
+	 * <li>where the group has no cell (a spill or watched cell, predicted flow, a breach's flow), when the entry's layer is above the
+	 * {@link #floor}: the lowest layer of the group's cells at the bodies' own cells (the stage that wrote the sources). Such an entry was
+	 * written after the sources, so its block is not the body's {@code before} there; an entry under the floor was in the world when the
+	 * befores were read, and the drain treats its cell as before.</li>
+	 * </ul>
+	 * The drain leaves held cells as they stand: a later site's waterlogged block in a pond source keeps its block and its water. Read per
+	 * chunk section from the journal (its active slices there), once per section, on the server thread. A journal that cannot be read
+	 * holds nothing (the drain as before; the undo itself refuses then). {@link #kept}: the held cells the drain asked about (each held
+	 * a fluid or ice).
+	 */
+	static final class Holders implements java.util.function.LongPredicate {
+		private final String dim;
+		private final String group;
+		private final String crate;
+		private final Long2ObjectOpenHashMap<Held> bySection = new Long2ObjectOpenHashMap<>();
+		private final it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet kept = new it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet();
+		private final long floor;
+
+		Holders(String dim, String group, Regional st) {
+			this.dim = dim;
+			this.group = group;
+			this.crate = dev.larattalabs.architect.site.SiteGroupRec.CRATE_PREFIX + group;
+			long f = Long.MAX_VALUE;
+			for (Body b : st.bodies) {
+				for (long p : b.cells) {
+					long l = held(p).ours().getOrDefault(p, Long.MAX_VALUE);
+					f = Math.min(f, l);
+				}
+			}
+			this.floor = f;
+		}
+
+		@Override
+		public boolean test(long pos) {
+			if (heldAt(held(pos), pos, floor)) {
+				kept.add(pos);
+				return true;
+			}
+			return false;
+		}
+
+		private Held held(long pos) {
+			long key = dev.larattalabs.architect.journal.Sections.key(pos);
+			Held h = bySection.get(key);
+			if (h == null) {
+				h = load(key);
+				bySection.put(key, h);
+			}
+			return h;
+		}
+
+		/** The held cells the drain asked about, in the order asked. */
+		it.unimi.dsi.fastutil.longs.LongSet kept() {
+			return kept;
+		}
+
+		List<long[]> keptCells() {
+			List<long[]> out = new ArrayList<>();
+			for (long p : kept) {
+				if (out.size() >= NAMED) {
+					break;
+				}
+				out.add(new long[] {BlockPos.getX(p), BlockPos.getY(p), BlockPos.getZ(p)});
+			}
+			return out;
+		}
+
+		private Held load(long key) {
+			try {
+				var store = WorldJournal.store();
+				Map<String, Boolean> ours = new HashMap<>();
+				return heldIn(WorldJournal.activeSlices(dim, key), id -> ours.computeIfAbsent(id, x -> {
+					var m = store.meta(x);
+					return m != null && (group.equals(m.group()) || crate.equals(m.site()));
+				}));
+			} catch (IOException | RuntimeException e) {
+				Architect.LOGGER.warn("Region removal: the journal could not be read for section {} ({}); its cells are drained without asking for holders", key, e
+					.toString());
+				return new Held(new LongOpenHashSet(), new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap(), new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap());
+			}
+		}
+	}
+
+	/**
+	 * (fix/drain-holders) One section's stacks as the drain asks them: {@code over}, positions whose top is another entry with a cell of
+	 * the group under it; {@code bare}, positions whose top is another entry and the group has no cell there (the top's layer);
+	 * {@code ours}, the group's highest layer at each position it has a cell.
+	 */
+	record Held(LongOpenHashSet over, it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap bare, it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap ours) {
+	}
+
+	/** (fix/drain-holders) Of the active entries' slices of one section, {@link Held}; {@code ours}: whether an entry id is the group's. */
+	static Held heldIn(List<dev.larattalabs.architect.journal.Journal.Entry> slices, java.util.function.Predicate<String> ours) {
+		it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap topLayer = new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap();
+		Long2ObjectOpenHashMap<String> top = new Long2ObjectOpenHashMap<>();
+		it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap mine = new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap();
+		for (var e : slices) {
+			boolean our = ours.test(e.id());
+			for (var c : e.cells()) {
+				long p = c.pos();
+				if (our && (!mine.containsKey(p) || c.layer() > mine.get(p))) {
+					mine.put(p, c.layer());
+				}
+				String t = top.get(p);
+				if (t == null || c.layer() > topLayer.get(p) || c.layer() == topLayer.get(p) && e.id().compareTo(t) > 0) {
+					topLayer.put(p, c.layer());
+					top.put(p, e.id());
+				}
+			}
+		}
+		LongOpenHashSet over = new LongOpenHashSet();
+		it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap bare = new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap();
+		for (var en : top.long2ObjectEntrySet()) {
+			long p = en.getLongKey();
+			if (ours.test(en.getValue())) {
+				continue;
+			}
+			if (mine.containsKey(p)) {
+				over.add(p);
+			} else {
+				bare.put(p, topLayer.get(p));
+			}
+		}
+		return new Held(over, bare, mine);
+	}
+
+	/** (fix/drain-holders) Whether the drain leaves {@code pos} to its holder ({@link Holders}): {@code floor}, the bodies' entry layer. */
+	static boolean heldAt(Held h, long pos, long floor) {
+		return h.over().contains(pos) || h.bare().containsKey(pos) && h.bare().get(pos) > floor;
+	}
 
 	/**
 	 * Server thread (Groups, before a whole group's undo is planned): false while the region's bodies drain and settle (§4.1): every body
@@ -1501,6 +1686,8 @@ public final class RegionFluids {
 			return true;
 		}
 		if (st.removal == null) {
+			// (fix/drain-holders) the cells a later entry outside the group holds on top: never drained (the undo hands them down)
+			Holders held = new Holders(l.rec().dimension, group, st);
 			int n = 0;
 			// (6c HY, §4.1) the exact reverse of the write order (an H region: reverse plan order), the head first
 			int drained = 0;
@@ -1510,7 +1697,7 @@ public final class RegionFluids {
 				if (bs.before.isEmpty()) {
 					continue; // never written (not checked, or not contained): nothing of it stands
 				}
-				n += drain(level, st, b, bs, true);
+				n += drain(level, st, b, bs, true, new LongOpenHashSet(), held);
 				if (++drained == 1 && st.ordered && i > 0) {
 					WorldJournal.kill("FL5"); // (6c HY) the head drained, the rest of the course not yet
 				}
@@ -1520,19 +1707,21 @@ public final class RegionFluids {
 			st.redrained = true;
 			st.until = level.getGameTime() + bound;
 			save(l, st);
-			Architect.LOGGER.info("Region {}: removal drained {} fluid cell(s); the solids wait one settle bound ({} ticks)", l.rec().id, n, bound);
+			Architect.LOGGER.info("Region {}: removal drained {} fluid cell(s); the solids wait one settle bound ({} ticks){}", l.rec().id, n, bound, held.kept()
+				.isEmpty() ? "" : "; " + held.kept().size() + " cell(s) another entry holds on top kept for the undo's hand-down: " + cells(held.keptCells()));
 			WorldJournal.kill("FL3"); // drained (step 2), before the solids (step 3)
 			return false;
 		}
 		if (!st.redrained) {
 			// (§3.5) a removal resumed after a stop: the drain again (idempotent: what the stop lost of it, unsaved chunks, is written now)
 			st.redrained = true;
+			Holders held = new Holders(l.rec().dimension, group, st); // (fix/drain-holders) as the first drain
 			int n = 0;
 			for (int i = st.order.size() - 1; i >= 0; i--) {
 				Body b = st.order.get(i);
 				BodyState bs = st.states.get(b.id);
 				if (!bs.before.isEmpty()) {
-					n += drain(level, st, b, bs, true);
+					n += drain(level, st, b, bs, true, new LongOpenHashSet(), held);
 				}
 			}
 			if (n > 0) {
@@ -1726,6 +1915,38 @@ public final class RegionFluids {
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Region {}: fluids.json could not be saved: {}", l.rec().id, e.toString());
 		}
+		if (st.removal == null) {
+			Realised.bodies(l.world(), l.rec().id, realisedRows(st)); // (RP) the realise's body outcomes, after fluids.json (a removal's drains aren't)
+		}
+	}
+
+	/** (RP) Each body that left {@code pending}: its part, state and the flags that decided it (the realised record's rows). Pure. */
+	static Map<String, JsonObject> realisedRows(Regional st) {
+		Map<String, JsonObject> out = new LinkedHashMap<>();
+		for (Body b : st.bodies) {
+			BodyState bs = st.states.get(b.id);
+			if (bs == null || "pending".equals(bs.state)) {
+				continue;
+			}
+			JsonObject r = new JsonObject();
+			if (b.part != null) {
+				r.addProperty("part", b.part);
+			}
+			r.addProperty("state", bs.state);
+			if (bs.reason != null) {
+				r.addProperty("reason", bs.reason);
+			}
+			r.addProperty("uncontained", bs.uncontained);
+			r.addProperty("held", bs.held);
+			r.addProperty("lotRemoved", bs.lotRemoved);
+			r.addProperty("escaped", bs.escaped);
+			r.addProperty("sources", bs.sources);
+			r.addProperty("spill", bs.spill);
+			r.addProperty("settledAt", bs.settledAt);
+			r.addProperty("writtenAt", bs.writtenAt);
+			out.put(b.id, r);
+		}
+		return out;
 	}
 
 	static void load(RegionsImpl.Live l, Regional st) {

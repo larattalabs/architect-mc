@@ -479,6 +479,14 @@ public final class Placement {
 		return t;
 	});
 
+	/**
+	 * (fix/drain-holders) Completes once every save queued so far is written (a failed write is logged): the saver is one thread and runs
+	 * in order. Off the server thread, unlike {@link #flushSaves}.
+	 */
+	static java.util.concurrent.CompletableFuture<Void> saved() {
+		return java.util.concurrent.CompletableFuture.runAsync(() -> { }, SAVER);
+	}
+
 	/** Waits until the queued saves are written. */
 	static void flushSaves() {
 		try {

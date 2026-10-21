@@ -30,10 +30,21 @@ public final class FluidRearm {
 
 	/** A restore wrote {@code state} at {@code pos}: a non-source fluid there is woken once the restores are done. Server thread. */
 	static void wrote(ServerLevel level, long pos, BlockState state) {
+		wrote(level.dimension(), pos, state);
+	}
+
+	/** {@link #wrote(ServerLevel, long, BlockState)} by dimension (UMT seam). */
+	static void wrote(ResourceKey<Level> dimension, long pos, BlockState state) {
 		FluidState f = state.getFluidState();
 		if (!f.isEmpty() && !f.isSource()) {
-			PENDING.computeIfAbsent(level.dimension(), k -> new LongLinkedOpenHashSet()).add(pos);
+			PENDING.computeIfAbsent(dimension, k -> new LongLinkedOpenHashSet()).add(pos);
 		}
+	}
+
+	/** Whether {@code pos} waits for its tick (tests). */
+	static boolean pending(ResourceKey<Level> dimension, long pos) {
+		LongLinkedOpenHashSet s = PENDING.get(dimension);
+		return s != null && s.contains(pos);
 	}
 
 	/** Cells waiting for their tick (DevBridge and tests). */

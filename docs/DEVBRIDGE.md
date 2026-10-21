@@ -314,6 +314,10 @@ there is no DevBridge hook to make layers, so tests go through the API as anothe
 
 `dev.journal.killAt` takes RG1-RG6; `dev.journal.state` adds `indexBytes` and the index commit times (p50, p99, max).
 
+`dev.journal.killAt` also takes GW and R1q (undo hardening A). GW: a group removal has written a member and saved the next
+member's job, nothing of it written yet (4e-crash's F6 kill test). R1q (`+save` too): a single removal job's (RestoreJob) R2 commit
+is durable, the halt comes before any later queue save (4e-crash).
+
 ### Regions (phase 6b)
 
 | hook | arguments, result |
@@ -348,6 +352,11 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-20 (slice RP, v0.40.1):** new (in `RegionDev`, generated headless too) `dev.region.realised {region, layer?: 0, tile?:
+  "stage|set|tx,tz", cells?, verify?, world?: true}` (the realised record: per tile its status, codes, extras, sizes, shas and writers;
+  `sites.json`; `composedSha` per key; `verify` against the journal and the world) and `dev.region.realised.audit {on?, dir?}` (each
+  tile re-read right after its commit, each region at its batch's end, JSON lines; also the env `ARCHITECT_RP_AUDIT`). Kill points
+  `RP1` and `RP2` (CONTRACT "Slice RP" §6).
 - **2026-10-20 (6c slice VOC-c):** new (`SliceVoccDev`, generated headless too) `dev.vocc.checkPalette {sha, lotEntries?: {lot: entry}}`
   (`Regions.checkPalette`: the artifact's palette rules measured with these lot entries over its own -> `{paletteOk, rules: [{rule, required,
   family, share, cells, familyCells, measured, fits, worstLot, lots: {lot: {entry, cells, familyCells}}, pendingLots}]}` or `{missing}`),
@@ -357,6 +366,11 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `applyDelta` with `apply`, through the public API, so a region lot's delta is judged against its palette rules -> `{verdictOk, refusals:
   [{reason, message}], notes}` or `{applied, written, refusals, notes}`; `dev.site.delta.check` and `.apply` call SiteDeltas directly and
   skip that judgement).
+
+- **2026-10-20 (fix/drain-holders, 0.40.1):** no new hook. `dev.journal.killAt` takes `+save` on K1-K8 and RG1-RG6, and `R2q`
+  (`R2q+save`): a group removal's R2 commit is durable and the queue file has not been saved after it (`Groups.committed`; the journal's
+  writer and the queue's saver are separate threads). `dev.journal.at` names each entry's `group`. apitest's `cells` step takes a full
+  block state (`minecraft:oak_stairs[waterlogged=true]`).
 
 - **2026-10-20 (6c slice IRR):** no new hook. `dev.journal.killAt` gains `FL6` (and `FL6+save`): a farm lot's site removal has
   drained its irrigation sources (`RegionFluids.drainLot`, saved) and not restored the site yet. A lot site's `ext` carries

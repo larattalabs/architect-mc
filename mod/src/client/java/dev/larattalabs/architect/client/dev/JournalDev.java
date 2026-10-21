@@ -76,12 +76,12 @@ public final class JournalDev {
 					}
 				})).thenCompose(r -> r);
 			});
-		DevBridge.register("dev.journal.killAt", 10_000, "{point: K1..K8 | D1..D8 (phase 5b deltas) | RG1..RG6 (phase 6a regions) | FL1..FL6 (6c H fluids, HY: FL4 between two reaches written, FL5 a removal between the head and the tail; IRR: FL6 a lot removal's sources drained, its site not restored yet; +save: chunks saved first) | migrate-before-commit | migrate-after-commit | null} - phase 4e TEST "
+		DevBridge.register("dev.journal.killAt", 10_000, "{point: K1..K8 | D1..D8 (phase 5b deltas) | RG1..RG6 (phase 6a regions) | FL1..FL6 (6c H fluids, HY: FL4 between two reaches written, FL5 a removal between the head and the tail; IRR: FL6 a lot removal's sources drained, its site not restored yet) | (RP) RP1 a tile's realised record written, its PLACING commit not; RP2 a tile with nothing to write: its record written, its item not placed | R2q (fix/drain-holders: a group removal's R2 commit durable and the queue file not saved after it, the crash window between the two) | GW (a group removal: a member written, the next one's job saved) | R1q (a single removal job's R2 commit submitted, its group saved first) | +save on any but GW: chunks saved first | migrate-before-commit | migrate-after-commit | null} - phase 4e TEST "
 			+ "hook: the next matching step halts the JVM (Runtime.halt, nothing saved)", (req, mc) -> {
 				JsonElement p = req.get("point");
 				String point = p == null || p.isJsonNull() ? null : p.getAsString();
-				if (point != null && !point.matches("K[1-8]|D[1-8]|D[78]\\+save|RG[1-6]|FL[1-6](\\+save)?|migrate-before-commit|migrate-after-commit")) {
-					throw new DevBridge.DevException("point must be K1..K8, D1..D8, RG1..RG6, FL1..FL6, migrate-before-commit or migrate-after-commit");
+				if (point != null && !point.matches("(K[1-8]|D[1-8]|RG[1-6]|FL[1-6]|RP[12]|R2q|R1q)(\\+save)?|GW|migrate-before-commit|migrate-after-commit")) {
+					throw new DevBridge.DevException("point must be K1..K8, D1..D8, RG1..RG6, FL1..FL6, RP1..RP2, R2q, R1q (each with +save or not), GW, migrate-before-commit or migrate-after-commit");
 				}
 				WorldJournal.killAt(point);
 				JsonObject o = new JsonObject();

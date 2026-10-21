@@ -38,7 +38,7 @@ export interface TileTask {
 }
 
 export type TileResult =
-  | { ok: true; gz: Buffer; count: number; sha: string; ms: number; attempts: number }
+  | { ok: true; gz: Buffer; count: number; sha: string; ms: number; attempts: number; writers?: Buffer }
   | { ok: false; message: string; code: 'timeout' | 'error'; attempts: number };
 
 /** (6c 0a) Evaluations of one tile at most: the first and 3 retries after a timeout (CONTRACT 0a §11). */
@@ -167,7 +167,7 @@ export class TilePool {
   private spawn(): Slot {
     const s = new Slot(this.opts);
     this.stats.started++;
-    s.worker.on('message', (m: { type: string; id?: number; message?: string; gz?: Uint8Array; count?: number; sha?: string; ms?: number }) => {
+    s.worker.on('message', (m: { type: string; id?: number; message?: string; gz?: Uint8Array; wr?: Uint8Array; count?: number; sha?: string; ms?: number }) => {
       if (s.dead) return;
       if (m.type === 'ready') {
         s.ready = true;
@@ -185,7 +185,8 @@ export class TilePool {
         if (m.type === 'done') {
           this.stats.tiles++;
           const gz = Buffer.from(m.gz!.buffer, m.gz!.byteOffset, m.gz!.byteLength);
-          p.resolve({ ok: true, gz, count: m.count ?? 0, sha: m.sha!, ms: m.ms ?? 0, attempts: p.attempt });
+          const writers = m.wr ? Buffer.from(m.wr.buffer, m.wr.byteOffset, m.wr.byteLength) : undefined;
+          p.resolve({ ok: true, gz, count: m.count ?? 0, sha: m.sha!, ms: m.ms ?? 0, attempts: p.attempt, ...(writers ? { writers } : {}) });
         } else {
           this.stats.failed++;
           p.resolve({ ok: false, message: m.message ?? 'evaluation failed', code: 'error', attempts: p.attempt });
