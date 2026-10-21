@@ -60,7 +60,11 @@ Resume notes for `slice/F3` (worktree `../architect-mc-F3`). The contract is doc
   - Pre-existing on main (PLAN "Stale asks tables after VOC-c"; VOC-c's Reason.PALETTE): h-unit (H-a item 10), vocc-unit (item 3), pt2-ingame (item 13: ADOPT_REFUSED no longer last).
   - F3-caused, fixed: kc-unit (F3's broken variants u01/u04 are M25:clear's to catch), k1b-unit (fixtures new on the branch have no base), f3-ingame (s01 needs v73's margin pit).
   - Flaky or load: 4d-all (gravel fell at undo, as IRR/VOC-c runs), 6cf2-scenario-scatter (a snow layer), d2-ingame (2 sunflower tops amid flow), cu-measure and 6b-nudges (sidecar link lost), t1/k1a/s2-unit (timeouts at load 60).
-- Re-run of those plus f3-unit and f3-look: `gate-run change --only ...` (scratchpad/f3-build/run-change-2.out).
+- Re-run of those plus f3-unit and f3-look: the first runner (run-change-2.out) died queued, before a run dir; restarted 2026-10-21 02:41 UTC
+  as PID 58997 with the same command and `GATE_SLOTS=6` (scratchpad/f3-build/run-change-3.out; out artifacts/gate-runs-F3/<ts>-change).
+- Checked: the as-built's "up to 5 other seeds" matches `place.mjs RETRIES = 5` (the 3 in "Done since" above is stale).
+- Gallery: republish with `url` https://claude.ai/artifact/2hNQnQuVafBRh5SkmAfzkw (read in this session), new coral jpgs only in `files`,
+  fix the lede's "added when it lands". Verifier ports free at 02:45: 8896-8901.
 - "F3 as built" drafted in docs/CONTRACT.md (uncommitted until the gate evidence row is filled).
 
 ## Left
