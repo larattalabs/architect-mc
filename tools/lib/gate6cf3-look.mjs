@@ -73,8 +73,26 @@ export async function look(ctx) {
         await shot(name, [mid[0] + d * vx, a[1] + span * 0.45 + 2, mid[2] + d * vz], [mid[0], a[1] + (b[1] - a[1]) * 0.45, mid[2]], desc);
       }
     }
-    // an overview of the fixture
-    {
+    // coral (v73): no grown form; the decor of each body (the body op's `decor`), shot over the water and from under its surface
+    if (tag === 'coral') {
+      const { bodiesOf } = await import('./gate6chy-core.mjs');
+      for (const b of bodiesOf(r.ir).filter((q) => q.decor.length)) {
+        let a = [Infinity, Infinity, Infinity], z = [-Infinity, -Infinity, -Infinity];
+        for (const c of b.decor) for (let i = 0; i < 3; i++) { a[i] = Math.min(a[i], c[i]); z[i] = Math.max(z[i], c[i]); }
+        const mid = [(a[0] + z[0]) / 2 + 0.5, a[1] + 0.5, (a[2] + z[2]) / 2 + 0.5];
+        const span = Math.max(z[0] - a[0], z[2] - a[2], 6);
+        const top = Math.max(...b.cells.map((c) => c[1]));
+        const desc = `coral in ${b.id} (${b.part}): ${b.decor.length} decor cells, ${span + 1} across`;
+        await shot(`coral_${b.part}_over`, [mid[0] + span * 0.5, top + span * 0.7 + 4, mid[2] + span * 0.7], mid, `${desc}: over the water`);
+        // under the surface: the body's top-level water cell nearest a point off the patch's corner (an eye in the water, not the shell)
+        const want = [mid[0] + span * 0.5, mid[2] + span * 0.5];
+        const water = b.cells.filter((c) => c[1] === top && !b.decor.some((d) => d[0] === c[0] && d[1] === c[1] && d[2] === c[2]));
+        const w = water.reduce((m, c) => (Math.hypot(c[0] + 0.5 - want[0], c[2] + 0.5 - want[1]) < Math.hypot(m[0] + 0.5 - want[0], m[2] + 0.5 - want[1]) ? c : m), water[0]);
+        if (w) await shot(`coral_${b.part}_under`, [w[0] + 0.5, top + 0.4, w[2] + 0.5], mid, `${desc}: under the surface`, 75);
+      }
+    }
+    // an overview of the fixture (grown forms only)
+    if (g.cells.size) {
       let a = [Infinity, Infinity, Infinity], b = [-Infinity, -Infinity, -Infinity];
       for (const k of g.cells.keys()) { const c = k.split(',').map(Number); for (let i = 0; i < 3; i++) { a[i] = Math.min(a[i], c[i]); b[i] = Math.max(b[i], c[i]); } }
       const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
