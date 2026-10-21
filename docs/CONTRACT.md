@@ -23305,12 +23305,14 @@ CI set 28); kit 672/0; sidecar 758 (`versions.test.ts`'s fixture hook timed out 
   irr-holders, rp-unit, rp-ingame, rp-crash, plus the impact steps. Not passing:
   - h-unit: its Java item ran gradle in the source worktree with no gradle home yet (an offline build with an empty
     `.gradle-home`), so gradle exited 1 with no test run; fixed by cloning the seed's `.gradle-home`, and it passes in the rerun.
-    Item 10 (H-a's asks gap table) fails on main too: the same failure in `gate-runs-gatewaits/20261021-032653-slice`,
-    `gate-runs-F3/20261020-214604-slice`, `gate-runs-FL/20261021-005342-slice` and `gate-runs-reltool/20261020-222622-change`.
+    Item 10 (H-a's asks gap table) fails on main too: the same failure in `gate-runs-gatewaits/20261021-032653-slice` (head
+    29695ac4, on main), and PLAN.md records the stale gap tables after VOC-c; F3's, FL's and reltool's branch runs show it too.
   - 6cf1-scenario-forms: the natural run's plan input differed from the golden (46 world changes in the fresh copy); the
     release's kit and main's give the same tile shas for that plan. It passes in the rerun.
   - pt2-ingame item 13: known on main (PLAN "pt2-ingame item 13 fails on main").
   - 6b-volume (a second sample of the unchanged area differed; seen before in `gate-runs-IRR/20261020-133341-slice`) and
     6b-nudges (TIMEOUT at 11 min, load ~50): both pass in the rerun.
-- `20261021-083155-slice` (after the main merge, b4ec0281; the steps whose code the merge changed, unit-mod and the failures
-  above): 20 PASS, 1 FAIL (h-unit item 10 only, as on main).
+- `20261021-083155-slice` (after the main merge, 0e161555; the steps whose code the merge changed, unit-mod and the failures
+  above): 20 PASS, 1 FAIL (h-unit item 10 only, as on main). The wider in-game steps were not re-run after the main merge (it
+  brought only gate speed-ups and a dev hook); the gate-verifier re-ran 4e-orders 70/0, 4e-crash 64/0, h-holders 8/0 and h-rmcrash
+  28/0 at 30a05721 (`artifacts/gate-runs-0401-verify/20261021-090204-slice`) and the UMT CI set: PASS.
