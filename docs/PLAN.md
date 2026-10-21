@@ -854,7 +854,9 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
   now dirt (or grass spread onto it) is ours. `StillOurs.holds`, the builder's test, is unchanged. (2) `RoadPlan.lanterns`: a post (or
   a fixture cell) stands on a dirt path only when the road's owner wrote it; main took any dirt path (`ground()` includes PATH), and a
   village's path the road never wrote could never be restored. Tests: RoadPlanTest.noPostOnADirtPathNotOurs, PathTurnedTest,
-  irr-ingame's `lp` case (every journaled path on farm_hamlet turned to dirt, the post's by a block beside it; E-flat 0). **Left:** the
+  irr-ingame's `lp` case (every journaled path on farm_hamlet turned to dirt, the two road posts' paths by a block set beside each
+  post: the chain reproduced; E-flat 163 at main's code, 0 with the fix: `artifacts/gate-runs-lamppath-pre/20261021-003336-6cirr`,
+  `gate-runs-lamppath/20261021-001720-6cirr`). **Left:** the
   kit's street-lantern light model (`light.mjs` roadLights) takes any solid foot, a village path too (a kit slice: kitVersion bump);
   kit props stand on the square's dirt_path paving, covered by (1).
 - **IRR's breach fix, its stated limit.** The drain's record of a breach is made at the drain from the fluid levels, not by a census
