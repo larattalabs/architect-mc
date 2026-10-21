@@ -325,12 +325,16 @@ steps.rs03stop = async () => {
   await C.start();
   const region = await G.realise(ctx, ck.check.artifactSha, entries);
   // fed in waves until about half the paid cells stand: the fluids stage then waits for its barriers (every target BUILT)
-  const f1 = await R.feed(ctx, G, region, { cons: C, fraction: 0.25, until: (st, rs) => (rs.build?.percent ?? 0) >= 50 && !rs.build?.done });
+  // (the targets put down first: a region with none yet reads 100% of nothing)
+  await G.waitFor(ctx, region, (st, rs) => (rs.targets ?? []).length > 0 && (rs.build?.percent ?? 100) < 100, { timeoutMs: 600_000 });
+  const f1 = await R.feed(ctx, G, region, { cons: C, fraction: 0.25, until: (st, rs) => (rs.targets ?? []).length > 0 && (rs.build?.percent ?? 0) >= 50 && (rs.build?.percent ?? 100) < 100 });
   const st0 = f1.last.st, rs0 = f1.last.rs;
   const bodies0 = R.bodiesOf(st0);
   const out = { region, world: s.world, before: { state: st0.view.state, waiting: st0.view.waiting ?? null, percent: rs0.build?.percent, bodies: bodies0 } };
-  check(st0.view.state === 'PLACING' && !bodies0.some((b) => b.state === 'settled'), `item 11 (rs03): mid-build, the bodies wait for their barriers: ${st0.view.state}, ${rs0.build?.percent}% built, waiting ${json(st0.view.waiting ?? null).slice(0, 200)}, bodies ${json(bodies0).slice(0, 300)}`);
   const p0 = await C.point('before the stop');
+  out.before.fed = sum(C.injected);
+  out.before.paid = p0.paid;
+  check(st0.view.state === 'PLACING' && rs0.build?.percent > 0 && rs0.build?.percent < 100 && f1.waves > 0 && p0.paid > 0 && !bodies0.some((b) => b.state === 'settled'), `item 11 (rs03): mid-build, the fluids stage waiting for its barriers (no body written: every target must be BUILT first): ${st0.view.state}, ${rs0.build?.percent}% of the paid cells built, ${f1.waves} wave(s) fed (${sum(C.injected)} items), ${p0.paid} paid item(s) standing, waiting ${json(st0.view.waiting ?? null).slice(0, 200)}, bodies ${json(bodies0).slice(0, 300)}`);
   // the clean stop (the server saves and quits), then the same world again
   await stopClient();
   await startClient(s.world, { backend: 'sim' });
@@ -344,7 +348,7 @@ steps.rs03stop = async () => {
   }
   const p1 = await C.point('after the restart');
   out.resumed = { percent: rs1.build?.percent, targets: (rs1.targets ?? []).length };
-  check(G.exact(p0) && G.exact(p1) && rs1.build?.percent === rs0.build?.percent, `item 11 (rs03): a clean stop and a restart: the build resumes where it stood (${rs0.build?.percent}% -> ${rs1.build?.percent}%), the per-item sum exact before and after (${json(p0.diff)}, ${json(p1.diff)})`);
+  check(G.exact(p0) && G.exact(p1) && rs1.build?.percent === rs0.build?.percent && p1.paid === p0.paid && p1.stock === p0.stock, `item 11 (rs03): a clean stop and a restart: the build resumes where it stood (${rs0.build?.percent}% -> ${rs1.build?.percent}%; paid standing ${p0.paid} -> ${p1.paid}, stock ${p0.stock} -> ${p1.stock}), the per-item sum exact before and after (${json(p0.diff)}, ${json(p1.diff)})`);
   const f2 = await R.feed(ctx, G, region, { cons: C, fraction: 0.5 });
   const st = f2.last.st, rs = f2.last.rs;
   out.after = { state: st.view.state, build: rs.build && { done: rs.build.done, percent: rs.build.percent }, bodies: R.bodiesOf(st) };
