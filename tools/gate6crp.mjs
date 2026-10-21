@@ -96,7 +96,7 @@ const k3 = (x, y, z) => `${x},${y},${z}`;
 const posOf = (p) => (Array.isArray(p) ? p : [p.x, p.y, p.z]);
 
 async function groundY() {
-  const c = await cellsOf([CX, -64, CZ, CX, 0, CZ]);
+  const c = await cellsOf([CX, -64, CZ, CX, 255, CZ]);
   let g = -64;
   for (const [k, s] of c) { const y = Number(k.split(',')[1]); if (idOf(s) !== 'air' && y > g) g = y; }
   return g;
@@ -148,7 +148,11 @@ async function setup(gy, Z) {
   out.claim = await call('dev.pt.claim', { box: [bx0, y0, bz0, bx0 + 2, y0, bz0 + 2], actor: 'RPPlayer' }, 120_000);
   const [tx0, tz0, tx1, tz1] = z('tree');
   const tc = [(tx0 + tx1) >> 1, (tz0 + tz1) >> 1];
-  out.tree = await cmd(`/place feature minecraft:oak ${tc[0]} ${y0} ${tc[1]}`);
+  // an oak by hand (natural logs and non-persistent leaves; /place feature may refuse a spot): trunk y0..y0+5, leaves round its top
+  const lf = 'minecraft:oak_leaves[distance=1,persistent=false,waterlogged=false]';
+  await cmd(`/fill ${tc[0] - 2} ${y0 + 3} ${tc[1] - 2} ${tc[0] + 2} ${y0 + 4} ${tc[1] + 2} ${lf}`);
+  await cmd(`/fill ${tc[0] - 1} ${y0 + 5} ${tc[1] - 1} ${tc[0] + 1} ${y0 + 6} ${tc[1] + 1} ${lf}`);
+  out.tree = await cmd(`/fill ${tc[0]} ${y0} ${tc[1]} ${tc[0]} ${y0 + 5} ${tc[1]} minecraft:oak_log[axis=y]`);
   const [dx0, dz0, dx1, dz1] = z('dep');
   out.dep = await cmd(`/fill ${dx0} ${y0} ${dz0} ${dx1} ${y0} ${dz1} minecraft:short_grass`);
   const [, wz0, wx1, wz1] = z('wet');
@@ -355,11 +359,11 @@ steps.ingame = async () => {
   let chainOk = 0;
   for (const t of tiles) {
     const lines = [];
-    for (const s of p.ir.stages) for (const set of ['terrain', 'path']) {
+    walk: for (const s of p.ir.stages) for (const set of ['terrain', 'path']) {
       if (!(p.ir.tiles[s][set] ?? []).includes(t.key)) continue;
       const w = tiles.find((x) => x.stage === s && x.set === set && x.key === t.key);
       lines.push(`${s}\t${set}\t${w ? w.tileSha : '-'}\n`);
-      if (s === t.stage && set === t.set) break;
+      if (s === t.stage && set === t.set) break walk;
     }
     if (crypto.createHash('sha256').update(lines.join('')).digest('hex') === t.chainSha) chainOk++;
   }
