@@ -26,7 +26,11 @@ Steward (`../steward-mc`) is the main consumer of the API.
 - **Gate policy (Noah, 2026-10-12; docs/GATES.md "Policy update"):** timing bars never block a slice (recorded; judged once
   per batch at release); `slice` is the units, api-compat, the impact steps and the slice's own items, not the full regression;
   the verifier reviews and re-runs only undo, journal, removal or accounting items; at most 3 gate runs at once.
-- **Versions:** assigned by the coordinator at merge (next free minor). Use a placeholder; never renumber a branch yourself.
+- **Versions:** assigned by the coordinator at merge (next free minor). Slices never set a version number: leave the constants
+  as main has them, stamp what you add with `NEXT` (`"sinceApi": "NEXT"`, `Since NEXT.` in javadoc) and write version tests as
+  "at least" or read the constant. At merge the coordinator runs one command, `node tools/release-version.mjs --api X.Y.Z --mod
+  A.B.C --kit K.L.M [--catalogue N]`: it sets every version, stamps the placeholders, re-cuts and verifies the goldens that record
+  `kitVersion`; `--check` verifies only (docs/GATES.md "Release versions").
 - **Merging:** when the `slice` tier and a gate-verifier review of the diff plus evidence pass, the builder pushes its branch
   and reports "ready to merge". The coordinator merges into main, tags and publishes; tag `vX.Y.Z` must equal `mod_version`, and
   CI publishes to GitHub Packages. Agents can't push to main: the permission classifier refuses it. If two slices claim the

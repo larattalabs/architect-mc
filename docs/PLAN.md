@@ -681,6 +681,7 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   stop (cells open, shells and joins hold) and answers uncontained rather than writing into a lost shell. The general case (any
   stage's PLACED entries over chunks the halt did not save) is 6a's crash model ("journal wins" holds only with a save): decide
   whether settle at start should compare a stage's last entries with the world and re-apply them.
+  **Answered (draft):** CONTRACT "Undo hardening C" (roll forward per cell after an unclean stop; release only once durable).
 
 ## Queued from the H RCs (coordinator, 2026-10-19)
 
@@ -870,3 +871,23 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
 - A route ending on a lot its zone couldn't place answers `blocked {dependency}` (naming the lot and zone), not refused NO_ROOM.
 - `rule.palette` gains `scope: "lots" | "all"` (default "all" = today), and `exempt` accepts `ways` and `forms`.
 - Take Steward's 12 re-recorded asks (steward-mc f-strange-asks) into the asks fixtures and gap table.
+
+## Queued (coordinator, 2026-10-20)
+
+- **pt2-ingame item 13 fails on main:** VOC-c appended `Reason.PALETTE` after `ADOPT_REFUSED`, so the check that
+  ADOPT_REFUSED is the last Reason is stale. Make the check order-independent. Fix in the 6c close-out.
+- **Stale asks tables after VOC-c** (found by the release-tool run): h-unit and ha-unit fail H-a item 10, and vocc-unit fails
+  VOC-c item 3, because `rule.palette` became supported. Re-cut the tables (vocc's "after" table already matches) and fold them
+  into the 6c close-out with Steward's 12 re-recorded asks.
+
+## Queued (coordinator, 2026-10-21; Noah: crash safety option A)
+
+- **Diagnose-and-repair command** for builds left half-placed or half-restored by a crash with unsaved chunks.
+  - **Report:** per site or region, cells where the world disagrees with the journal (expected vs found).
+  - **Repair:** re-apply the journal's committed state to cells that still hold the operation's exact before-value (never
+    player-changed cells). Report the rest.
+  - Plus a DevBridge hook, gated by UMT properties and one in-game kill test without `+save`.
+  - Steward ask: an API (not only a command), so its steward can say "this build came back half done; repair it?". The report is
+    readable per site or region by API (it names the cells, expected vs found), and the repair can be invoked by API.
+  - Small contract first. Steward should know about it (a repair changes the world).
+- Full crash safety (Undo hardening C) is parked; see CONTRACT. No fsync for now.

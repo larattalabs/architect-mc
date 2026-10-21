@@ -122,7 +122,7 @@ const canon = (v) => (Array.isArray(v) ? v.map(canon) : v && typeof v === 'objec
  */
 export function stepDefinition(entry, blobOf) {
   if (!entry) return null;
-  const { desc, estMin, timeoutMin, ...rest } = entry;
+  const { desc, estMin, timeoutMin, supersededBy, ...rest } = entry; // supersededBy only picks when the step runs
   const files = driverPaths(entry).map((p) => [p, blobOf(p) ?? null]);
   return crypto.createHash('sha1').update(JSON.stringify(canon({ entry: rest, files }))).digest('hex').slice(0, 16);
 }

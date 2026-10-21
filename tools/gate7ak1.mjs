@@ -577,7 +577,11 @@ steps.look = async () => {
     o.wall = meta.walls.map((w) => ({ id: w.id, height: w.height, thickness: w.thickness, crenels: w.crenels, gates: w.gates.map((g) => ({ id: g.id, kind: g.kind, door: g.door, frame: g.frame, width: g.width })) }));
     o.bom = c.parts.find((p) => p.part === 'town_wall')?.cost?.bom ?? null;
     await cmd('/kill @e[type=!minecraft:player]');
-    await call('dev.region.remove', { region: rr.region, requester: OWNER }, 3_600_000);
+    // (gate waits, 2026-10-20) the last camera leaves the player inside a site's box, and the removal waits for a player to leave
+    // the box (10 minutes, then PARTIAL: "a player stayed in c18 for 10 minutes" in the client log). Above the claim it removes at once.
+    await tp(cx, 300, cz);
+    const rm = await call('dev.region.remove', { region: rr.region, requester: OWNER }, 3_600_000);
+    o.remove = { removed: rm.removed ?? null, restored: rm.restored ?? null, seconds: rm.seconds ?? null, blockers: rm.blockers ?? null };
     await leaveWorld();
   }
   fs.writeFileSync(path.join(dir, 'look.json'), JSON.stringify(out, null, 2));

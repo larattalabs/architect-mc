@@ -336,6 +336,19 @@ async function hashLots(lots) {
   for (const l of lots) out[l.key] = (await hash(region(l))).sha256;
   return out;
 }
+/**
+ * (gate waits, 2026-10-20) hashLots with one settle for the set: hash() settles 3 s before every lot, so six lots after each of C30's
+ * 12 removals waited 18 s where one settle before the first lot gives every lot at least the same 3 s. The same hashes.
+ */
+async function hashLotsSettledOnce(lots) {
+  await settle();
+  const out = {};
+  for (const l of lots) {
+    const b = region(l);
+    out[l.key] = (await call('dev.box.hash', { min: [b[0], b[1], b[2]], max: [b[3], b[4], b[5]], cells: false }, 120_000)).sha256;
+  }
+  return out;
+}
 
 async function village(name, budget, opts = {}) {
   await fresh(name);
@@ -941,7 +954,7 @@ async function c30() {
       runs.at(-1).removal = rm;
     }
     if (!firstDrift) {
-      const now = await hashLots(all);
+      const now = await hashLotsSettledOnce(all);
       const off = all.filter((l) => now[l.key] !== pre[l.key]).map((l) => l.key);
       if (off.length) {
         const cells = await hashLotsCells(all.filter((l) => off.includes(l.key)));
