@@ -877,3 +877,13 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
 - **Stale asks tables after VOC-c** (found by the release-tool run): h-unit and ha-unit fail H-a item 10, and vocc-unit fails
   VOC-c item 3, because `rule.palette` became supported. Re-cut the tables (vocc's "after" table already matches) and fold them
   into the 6c close-out with Steward's 12 re-recorded asks.
+
+## Queued (coordinator, 2026-10-21; Noah: crash safety option A)
+
+- **Diagnose-and-repair command** for builds left half-placed or half-restored by a crash with unsaved chunks.
+  - **Report:** per site or region, cells where the world disagrees with the journal (expected vs found).
+  - **Repair:** re-apply the journal's committed state to cells that still hold the operation's exact before-value (never
+    player-changed cells). Report the rest.
+  - Plus a DevBridge hook, gated by UMT properties and one in-game kill test without `+save`.
+  - Small contract first. Steward should know about it (a repair changes the world).
+- Full crash safety (Undo hardening C) is parked; see CONTRACT. No fsync for now.

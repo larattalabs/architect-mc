@@ -22618,7 +22618,23 @@ v3 avoids 2-6, 9 and 10 by never removing or changing anything standing; 7, 8 an
 - **Size guess:** larger than RV v3 (provenance-driven patching, road provenance, survival replacement); split at least into kit patch,
   mod patch and survival lanes.
 
-## Undo hardening C: crash safety against unsaved world writes (DRAFT)
+## Undo hardening C: crash safety against unsaved world writes (PARKED 2026-10-21 by Noah; a design record, not a slice)
+
+**Parked (Noah, 2026-10-21).** After two GPT-6.1 review rounds (logs: codex-undoc-review.log and codex-undoc-verify.log), full
+crash safety against unsaved world writes is parked. This section and both reviews are the starting point when it's revisited,
+after the 6c close-out, D3 and 7a-1. No power-loss (fsync) protection for now.
+
+**Shipped instead:** the targeted fixes.
+- Group-removal R2-vs-queue-save ordering (fix/drain-holders d63a5ded).
+- Single-site removal ordering (undo hardening A).
+- F1, the stacked-removal settle.
+- F4, and the live F6 reactivation hazard.
+
+**Stated limit:** a server crash or kill with unsaved chunks can leave a build half-placed or half-restored. The world journal
+stays correct; the world can lag it.
+
+**Mitigation, queued in PLAN:** a diagnose-and-repair command.
+
 
 Noah approved undo hardening (A: the UMT findings that reproduce against production code, `fix/undo-a`; C: this section). This is a
 contract only; nothing is built. Revised after GPT-6.1's review at fb26c61c ("Review responses" at the end). It answers the findings that need a crash which loses world writes (UMT F5, F6, F7, UC) and H-core's
