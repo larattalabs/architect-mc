@@ -21,7 +21,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs';
 
@@ -126,6 +126,18 @@ async function javaTests(patterns, minTests) {
 
 steps.unit = async () => {
   const out = {};
+  // (gate waits, 2026-10-20) the Java tests first (they rebuild mod/build/classes), then api-compat (it only reads those classes) in the
+  // background beside the kit items and the halves; the same check when it ends
+  out.java = await javaTests(['*ApiHTest*', '*RegionFluidsTest*', '*RegionFluidsHYTest*', '*PlanChecksHTest*', '*StillOursFluidsTest*', '*ArvxFluidsTest*'], 15);
+  check(out.java.ok, `items 4, 5, 8, 19 (Java): the course members, the write order, the upstream closure, the guard reader, versions, kinds and features: ${out.java.tests} tests, ${out.java.failures} failures`);
+  const acLog = path.join(OUT, 'api-compat-gate6chy.log');
+  fs.mkdirSync(OUT, { recursive: true });
+  const acFd = fs.openSync(acLog, 'w'); // a file, not a pipe: the kit items keep this process busy for minutes at a time
+  const acDone = new Promise((resolve) => {
+    const ch = spawn(process.execPath, ['tools/api-compat.mjs', '--gate6chy'], { cwd: root, stdio: ['ignore', acFd, acFd], env: { ...process.env, PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
+    const timer = setTimeout(() => ch.kill('SIGTERM'), 900_000);
+    ch.on('close', (code) => { clearTimeout(timer); fs.closeSync(acFd); resolve({ status: code, text: fs.readFileSync(acLog, 'utf8') }); });
+  });
   out.unchanged = await CORE.unchanged(root);
   check(out.unchanged.ok, `item 12: ${out.unchanged.same} of ${out.unchanged.n} committed plan fixtures without an HY part (every dir, H's and the asks included) answer as on origin/main ${out.unchanged.mainHead.slice(0, 10)} and plan the same IR but its kitVersion; the named exceptions that differ: ${out.unchanged.excepted.join(', ') || 'none'}; ${out.unchanged.skipped} skipped (course parts, or new since main)`, out.unchanged.differ);
   out.core = kitOnce(['kit/test/hy-core.test.mjs']);
@@ -136,12 +148,10 @@ steps.unit = async () => {
   check(out.p0.code === 0 && out.p0.fail === 0, `item 12: P0's tests after HY (hy-pending-b/c.json, e15 without the course, sinceApi stamped): ${out.p0.pass} pass, ${out.p0.fail} fail`, out.p0.failing);
   out.kit = kitOnce(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
-  out.java = await javaTests(['*ApiHTest*', '*RegionFluidsTest*', '*RegionFluidsHYTest*', '*PlanChecksHTest*', '*StillOursFluidsTest*', '*ArvxFluidsTest*'], 15);
-  check(out.java.ok, `items 4, 5, 8, 19 (Java): the course members, the write order, the upstream closure, the guard reader, versions, kinds and features: ${out.java.tests} tests, ${out.java.failures} failures`);
-  const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6chy'], { cwd: root, encoding: 'utf8', timeout: 900_000, env: { ...process.env, PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
-  out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').slice(-8) };
-  check(ac.status === 0, `item 19: api-compat --gate6chy clean against the 0.38.0, 0.37.1 and 0.37.0 apitest jars and the 0.38.0 jar's 1.35.0 surface (the batch over v0.38.0)`, out.apicompat.tail);
   out.halves = await halves('unit');
+  const ac = await acDone;
+  out.apicompat = { code: ac.status, tail: ac.text.split('\n').slice(-8) };
+  check(ac.status === 0, `item 19: api-compat --gate6chy clean against the 0.38.0, 0.37.1 and 0.37.0 apitest jars and the 0.38.0 jar's 1.35.0 surface (the batch over v0.38.0)`, out.apicompat.tail);
   spendZero();
   return out;
 };

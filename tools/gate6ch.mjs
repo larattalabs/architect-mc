@@ -137,13 +137,13 @@ steps.unit = async () => {
   // in the background beside the kit items and the halves; its check is the same, made when it ends
   out.java = await javaTests(['*ApiHTest*', '*ArvxFluidsTest*', '*StillOursFluidsTest*', '*RegionFluidsTest*', '*PlanChecksHTest*'], 5);
   check(out.java.ok, `items 3, 5, 10, 18 (Java): the features and kinds, ARVX version 3's fluid layer (the cross-language fixture), still ours for fluids, the fluids stage's census and settle, the plan check's H trigger and the fluid guards: ${out.java.tests} tests, ${out.java.failures} failures`);
+  const acLog = path.join(OUT, 'api-compat-gate6ch.log');
+  fs.mkdirSync(OUT, { recursive: true });
+  const acFd = fs.openSync(acLog, 'w'); // a file, not a pipe: the kit items keep this process busy for minutes at a time
   const acDone = new Promise((resolve) => {
-    const ch = spawn(process.execPath, ['tools/api-compat.mjs', '--gate6ch'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
-    let text = '';
-    ch.stdout.on('data', (d) => { text += d; });
-    ch.stderr.on('data', (d) => { text += d; });
+    const ch = spawn(process.execPath, ['tools/api-compat.mjs', '--gate6ch'], { cwd: root, stdio: ['ignore', acFd, acFd] });
     const timer = setTimeout(() => ch.kill('SIGTERM'), 900_000);
-    ch.on('close', (code) => { clearTimeout(timer); resolve({ status: code, text }); });
+    ch.on('close', (code) => { clearTimeout(timer); fs.closeSync(acFd); resolve({ status: code, text: fs.readFileSync(acLog, 'utf8') }); });
   });
   out.unchanged = await (await import('./lib/gate6ch-core.mjs')).unchanged(root);
   check(out.unchanged.ok, `item 11: ${out.unchanged.same} of ${out.unchanged.n} committed valid/, K1 and T3 fixtures without an H part answer as on origin/main ${out.unchanged.mainHead.slice(0, 10)} and plan the same IR but its kitVersion; the named exceptions that differ: ${out.unchanged.excepted.join(', ') || 'none'} (wet fits); ${out.unchanged.skipped} skipped (H fixtures, and refused/k1a_r01's two-plan harness)`, out.unchanged.differ);
