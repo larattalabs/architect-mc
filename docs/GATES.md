@@ -468,8 +468,9 @@ SMOKE row reads, or they are interleaved with a SMOKE or KEEP group. `tools/lint
 status, lint case and rules.
 
 Measured at the same load (`20261021-224114-change`, all four bibles and the refusals skipped): w-ingame 8.1 min against
-w-ingame-smoke 4.1 min, and d2-ingame 3.0 against d2-ingame-smoke 1.6. With packed_mud and the refusals kept, the twins measure
-about 5.1 and 1.8 min (`20261021-2311xx-change` below).
+w-ingame-smoke 4.1 min, and d2-ingame 3.0 against d2-ingame-smoke 1.6. In the slice run (`20261021-225552-slice`, packed_mud and the refusals
+kept), w-ingame-smoke took 2.5 min and d2-ingame-smoke 1.5 min. The baseline medians were 6.3 (w-ingame, after the region-poll
+fix) and 2.3 (d2-ingame).
 
 ### Calibration (release tier: `p2-calibration`)
 
