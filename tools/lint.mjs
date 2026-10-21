@@ -30,6 +30,7 @@ const C = await import(pathToFileURL(path.join(ROOT, 'tools', 'lib', 'lint-cases
 
 async function runOne(lint, id) {
   const t0 = Date.now();
+  if (lint === 'look') await C.loadLook();
   const cs = C.cases(lint).find((c) => c.id === id);
   if (!cs) throw new Error(`no ${lint} case ${id}`);
   const out = await cs.run();
@@ -59,6 +60,7 @@ async function pool(items, n, fn) {
 
 async function runLint(lint) {
   const t0 = Date.now();
+  if (lint === 'look') await C.loadLook();
   const only = opt('--only')?.split(',');
   const list = C.cases(lint).filter((c) => !only || only.includes(c.id));
   const jobs = Number(opt('--jobs') ?? Math.max(2, Math.min(10, Math.floor(os.cpus().length / 2))));
@@ -91,6 +93,7 @@ if (cmd === 'one') {
   const M = await import(pathToFileURL(path.join(ROOT, 'tools', 'lib', 'lint-mutations.mjs')).href);
   process.exit(await M.runMutations({ only: opt('--only')?.split(','), json: opt('--json') }));
 } else if (cmd === 'list') {
+  await C.loadLook();
   for (const lint of ['structure', 'look']) for (const c of C.cases(lint)) console.log(`${lint.padEnd(9)} ${c.id.padEnd(34)} ${c.covers?.join(', ') ?? ''}`);
 } else {
   console.error('usage: node tools/lint.mjs <structure|look|mutations|list|one> ...');

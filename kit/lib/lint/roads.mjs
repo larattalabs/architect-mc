@@ -136,3 +136,42 @@ export function layRoadLanterns(vw, ir, { protect = () => false, preFix = null }
   }
   return out;
 }
+
+/** RoadPlan.smooth: the smallest 1-Lipschitz majorant and largest minorant of g, averaged and floored (FL frontage.mjs smoothFeet). */
+export function smoothFeet(g) {
+  const n = g.length, lo = g.slice(), hi = g.slice();
+  for (let i = 1; i < n; i++) { lo[i] = Math.max(lo[i], lo[i - 1] - 1); hi[i] = Math.min(hi[i], hi[i - 1] + 1); }
+  for (let i = n - 2; i >= 0; i--) { lo[i] = Math.max(lo[i], lo[i + 1] - 1); hi[i] = Math.min(hi[i], hi[i + 1] + 1); }
+  return lo.map((v, i) => Math.floor((v + hi[i]) / 2));
+}
+export const WALK_MAX_SIDE = 2;
+
+/**
+ * The walkway a 4e ground road lays (RoadPlan.plan, ground mode; the port FL made in frontage.mjs groundWalk): the centre cells of the
+ * 4-connected line through the points, each cell's travel from its neighbours (a diagonal step: the x step), the side columns
+ * crossOffsets(width) right of travel (the first centre cell to reach a column owns it; a centre column always wins). `sure`: the mod
+ * lays it for certain (a centre column; a dry side column within WALK_MAX_SIDE - 1 of the smoothed feet). vworld.mjs lays a road per
+ * polyline segment's axis instead, which differs from this on a curve: the look lint reads this one. -> Map "x,z" -> {x, z, centre, sure}.
+ */
+export function groundWalk(points, width, heightAt, waterAt) {
+  const { cells } = centreCells(points.map((p) => [p[0], p[p.length - 1]]));
+  const n = cells.length;
+  const t = smoothFeet(cells.map((c) => heightAt(c.x, c.z) + 1));
+  const offs = crossOffsets(width);
+  const out = new Map();
+  for (let i = 0; i < n; i++) {
+    const c = cells[i], nx = cells[Math.min(n - 1, i + 1)], pv = cells[Math.max(0, i - 1)];
+    let dx = Math.sign(nx.x - pv.x), dz = Math.sign(nx.z - pv.z);
+    if (dx !== 0 && dz !== 0) dz = 0;
+    out.set(`${c.x},${c.z}`, { x: c.x, z: c.z, centre: true, sure: true });
+    const rx = -dz, rz = dx;
+    for (const k of offs) {
+      if (k === 0) continue;
+      const sx = c.x + k * rx, sz = c.z + k * rz, key = `${sx},${sz}`;
+      if (out.has(key)) continue;
+      const diff = Math.abs(heightAt(sx, sz) + 1 - t[i]);
+      out.set(key, { x: sx, z: sz, centre: false, sure: !waterAt(sx, sz) && diff <= WALK_MAX_SIDE - 1 });
+    }
+  }
+  return out;
+}

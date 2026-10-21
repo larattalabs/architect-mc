@@ -152,6 +152,8 @@ function structureCases() {
     out.push({ id: `g:${name}`, covers, run: async () => { const c = await goldenCase(name); const r = await structure(c, M5BAR[name] ?? { m5: null }); return { ok: [summary(r.rep)], fails: r.fails, recorded: r.recorded, metrics: r.rep.metrics }; } });
   }
   for (const name of FLATS) out.push({ id: `g:${name}-flat`, covers: SCEN[name], run: async () => { const c = await goldenCase(name, { flat: true }); const r = await structure(c, M5BAR[`${name}-flat`] ?? { m5: null }); return { ok: [summary(r.rep)], fails: r.fails, recorded: r.recorded }; } });
+  // the pinned plan fixtures the scenarios don't hold (T3b's natural hill): linted as committed
+  out.push({ id: 'fx:tunnel_hill', covers: ['t3b-natural (the hill bore re-read: cover, shell, M3/M4:tunnel)'], run: async () => { const { loadFixture } = await kimp('lib/lint/vworld-fixtures.mjs'); const F = loadFixture('tunnel_hill'); const r = await structure({ ...F, name: 'tunnel_hill' }, { m5: null }); return { ok: [`${summary(r.rep)}; tunnels ${JSON.stringify(r.rep.metrics.tunnels ?? null).slice(0, 160)}`], fails: r.fails, recorded: r.recorded }; } });
   out.push({ id: 'pathbibles', covers: ['w-ingame #8', 'w-ingame #9'], run: pathBibles });
   for (const [dir, n] of [['kc', 1], ['irr', 1], ['rope', 1], ['tunnel', 2], ['t3a', 2], ['k1a', 1], ['refused', 1], ['voc', 1], ['vocc', 1], ['h', 2], ['hy', 3], ['valid', 6]]) {
     for (let k = 0; k < n; k++) out.push({ id: `p0:${dir}${n > 1 ? `/${k + 1}` : ''}`, covers: P0COVERS[dir] ?? [], run: () => corpus(dir, k, n) });

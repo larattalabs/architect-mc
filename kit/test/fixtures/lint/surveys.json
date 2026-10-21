@@ -52,6 +52,19 @@
    "source": "scenario S7 natural run 20261011-214611 (scenarios/goldens/s7.json); equal to IRR slice 20261020-133341 s3/scenarios/s7 (the seed is stable on 26.3)",
    "minecraft": "26.3",
    "note": "S7 flat village claim, natural terrain"
+  },
+  "tunnel_hill": {
+   "dir": "kit/test/fixtures/lint/tunnel_hill",
+   "surveySha": "029a2c73bb19c7ea7846809edbd2c89e3500233f16e06d7ee6bb9b5b0d60f8de",
+   "claim": [
+    1456,
+    432,
+    1615,
+    591
+   ],
+   "source": "tools/gate6ct3b.mjs fixture (step t3b-fixture, T3B_WRITE_FIXTURE=1) on a fresh copy of the seed world 2026100906, 2026-10-21: the pinned hill (scenarios/sites/tunnel_hill.json) checked through Regions.checkPlan; its plan dir with the frozen volume",
+   "minecraft": "26.3",
+   "note": "T3b natural hill: the tunnel over the pinned line, its frozen volume in blobs/"
   }
  }
 }
