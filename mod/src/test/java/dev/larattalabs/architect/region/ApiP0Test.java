@@ -47,6 +47,29 @@ class ApiP0Test {
 		assertEquals(ArchitectApi.VERSION, m.group(1), "kit PLAN_API = ArchitectApi.VERSION");
 	}
 
+	/** The pattern's group 1 in {@code ../<file>}, exactly one line. */
+	private static String one(String file, String regex) throws Exception {
+		String src = Files.readString(Path.of("..", file));
+		var m = java.util.regex.Pattern.compile(regex, java.util.regex.Pattern.MULTILINE).matcher(src);
+		assertTrue(m.find(), regex + " in " + file);
+		String v = m.group(1);
+		assertTrue(!m.find(), "one line only: " + regex + " in " + file);
+		return v;
+	}
+
+	@Test
+	void releaseVersionsAgree() throws Exception {
+		// what tools/release-version.mjs sets at merge: the four API values and the five kit values move together
+		assertEquals(ArchitectApi.VERSION, one("kit/lib/plan/catalogue.mjs", "^export const PLAN_API = '([^']+)';$"), "PLAN_API");
+		assertEquals(ArchitectApi.VERSION, one("kit/schemas/plan-catalogue.golden.json", "^ \"api\": \"([^\"]+)\",$"), "the catalogue golden's api");
+		assertEquals(ArchitectApi.VERSION, PlanCatalogue.get().get("api").getAsString(), "the mod's catalogue api");
+		assertEquals(IrStale.KIT_VERSION, one("kit/lib/region/plan.mjs", "^export const KIT_VERSION = '([^']+)';$"), "KIT_VERSION");
+		assertEquals(IrStale.KIT_VERSION, one("kit/lib/realise.mjs", "^export const EVAL_KIT_VERSION = '([^']+)';$"), "EVAL_KIT_VERSION");
+		assertEquals(IrStale.KIT_VERSION, one("kit/schemas/plan-catalogue.golden.json", "^ \"kitVersion\": \"([^\"]+)\",$"), "the catalogue golden's kitVersion");
+		assertEquals(one("kit/schemas/plan.json", "^    \"catalogueVersion\": (\\d+),$"), one("kit/schemas/plan-catalogue.golden.json", "^ \"catalogueVersion\": (\\d+),$"), "catalogueVersion");
+		assertTrue(one("mod/gradle.properties", "^mod_version=(\\d+\\.\\d+\\.\\d+)$").matches("\\d+\\.\\d+\\.\\d+"), "mod_version");
+	}
+
 	@Test
 	void reasonsAppended() {
 		Reason[] v = Reason.values();

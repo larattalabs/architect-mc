@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Region programs CLI (docs/CONTRACT.md §6 "Kit CLI", kit/REGIONS.md "Plan CLI"):
 //   node kit/tools/region.mjs plan <program.mjs> --params p.json --survey s.bin [--seed u64] --claim minX,minZ,maxX,maxZ[,minY,maxY]
-//        [--bible b.json] [--roles r.json] [--out dir] [--json]
+//        [--bible b.json] [--roles r.json] [--out dir] [--json] [--node N]   (--node: the Node major the IR records; a re-cut golden keeps its own)
 //   node kit/tools/region.mjs eval <ir.json> --tile tx,tz --heights h.bin [--stage s] [--set terrain|path] [--json] [--out file]
 //   node kit/tools/region.mjs synth --box minX,minZ,maxX,maxZ [--res 1|4] [--seed s] --out file      (a synthetic ARSV, for tests)
 // Exit 0 ok, 1 failure, 2 usage. With --json the last stdout line is one JSON object. `plan` writes only into --out.
@@ -41,7 +41,7 @@ const readJson = (f, what) => {
 };
 
 async function plan(argv) {
-  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1, 'plan-cache': 1, beside: 1, biomes: 1, 'lot-blocks': 1 });
+  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1, 'plan-cache': 1, beside: 1, biomes: 1, 'lot-blocks': 1, node: 1 });
   if (pos.length !== 1) throw new Usage('plan <program.mjs> --survey s.bin --claim minX,minZ,maxX,maxZ[,minY,maxY] [...]');
   if (!opts.survey || !opts.claim) throw new Usage('plan needs --survey and --claim');
   const params = opts.params ? readJson(opts.params, '--params') : {};
@@ -67,6 +67,7 @@ async function plan(argv) {
   }
   if (opts.roles) roles = { ...roles, ...readJson(opts.roles, '--roles') };
   if (opts.seed !== undefined && !/^\d{1,20}$/.test(opts.seed)) throw new Usage('--seed must be a u64 decimal');
+  if (opts.node !== undefined && !/^\d{1,3}$/.test(opts.node)) throw new Usage('--node must be a Node major (e.g. 24)');
   // (6b) frozen volumes the program may read: <dir>/<sha>.bin (ARVX, gzip)
   const volumes = [];
   if (opts.volumes) {
@@ -98,7 +99,7 @@ async function plan(argv) {
     if (!/^[0-9a-f]{64}$/.test(key)) return null;
     try { return JSON.parse(fs.readFileSync(path.join(opts['plan-cache'], `${key}.json`), 'utf8')); } catch { return null; }
   } : null;
-  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(biomes ? { biomes } : {}), ...(lotBlocks ? { lotBlocks } : {}) });
+  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(biomes ? { biomes } : {}), ...(lotBlocks ? { lotBlocks } : {}), ...(opts.node ? { node: opts.node } : {}) });
   if (opts['blobs-out'] && res.blobs.size) {
     fs.mkdirSync(opts['blobs-out'], { recursive: true });
     for (const [sha, bytes] of res.blobs) fs.writeFileSync(path.join(opts['blobs-out'], `${sha}.bin`), bytes);
