@@ -24,7 +24,8 @@ public final class CellCond {
 			return false;
 		}
 		return switch (cond) {
-			case Packed.IF_SOLID_NATURAL -> !s.isAir() && (f & TerrainFit.NATURAL) != 0 && s.getFluidState().isEmpty() && s.isSolid();
+			// (6c close-out B) a tree's solid cells too (logs, leaves, mushroom blocks), as the kit's IF_SOLID_NATURAL (NaturalDriftTest)
+			case Packed.IF_SOLID_NATURAL -> !s.isAir() && (f & (TerrainFit.NATURAL | TerrainFit.TREE)) != 0 && s.getFluidState().isEmpty() && s.isSolid();
 			case Packed.IF_AIR_OR_FLUID -> s.isAir() || s.is(Blocks.WATER) || s.is(Blocks.LAVA) || s.is(Blocks.BUBBLE_COLUMN);
 			case Packed.ALWAYS_OURS -> ours || natural(s, f);
 			default -> natural(s, f);

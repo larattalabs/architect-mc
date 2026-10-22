@@ -12,7 +12,8 @@ import { Palette } from '../lib/region/vworld.mjs';
 
 // the tags the mod's rule reads (TerrainFit.flags and TerrainFit.natural); a tag added there must be added here
 export const MOD_TAGS = Object.freeze(['minecraft:substrate_overworld', 'minecraft:dirt', 'minecraft:sand', 'minecraft:base_stone_overworld', 'minecraft:base_stone_nether',
-  'minecraft:flowers', 'minecraft:saplings', 'minecraft:snow', 'minecraft:ores', 'minecraft:leaves', 'minecraft:logs']);
+  'minecraft:flowers', 'minecraft:saplings', 'minecraft:snow', 'minecraft:ores', 'minecraft:leaves', 'minecraft:logs', 'minecraft:terracotta',
+  'minecraft:coral_blocks', 'minecraft:crops', 'minecraft:cave_vines']);
 const FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'natural', 'conds.json');
 
 export function rows() {

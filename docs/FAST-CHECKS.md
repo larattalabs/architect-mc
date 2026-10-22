@@ -554,6 +554,18 @@ here are unchanged (KEEP-INGAME, BAR, setup, and P0/P1/P2 rows).
 | cu-survival 2-4 | weathering while waiting; delta over weathered cells; deconstruct | SMOKE / REPLACE · ledger-lint | **kept** (40 s, and the ledger probe's evidence) | `copper_refundByTheStandingBlock` |
 | v-ingame 12 | survroad | REPLACE · ledger-lint | **kept** (P2's step) | `theFreeConversionSetIsTheShovelsOwn` |
 | y2-ingame 3, 7; y2-bom 2 | nextNeeded, bomFull == bill | ALREADY-OFFLINE / REPLACE · ledger-lint | **kept** (in no recent slice) | `billEqualsTheFullBom` |
+| rs-survival 3, 5 (rs02) | rs02 built from the stockpile, its bills per part, the twin, E-flat | SMOKE (6c close-out B) | out | item 8's rs02c: the same `buildOne`, every one of these rows; release |
+| rs-survival 3, 5 (rs03) | rs03 built, its bodies settled, the bills, the twin, E-flat | SMOKE (6c close-out B) | out | item 9's rs03r: the same `buildOne`; release |
+| rs-survival 9 (rs02r) | refund == the paid cells standing, the player's block drops, one credit per key, conservation | SMOKE (6c close-out B) | out | rs03r (every row, the bodies' scoop besides) and item 8 (rs02's conservation); release |
+| rs-survival 10 (rs02m1) | the mid-build removal without a reopen | SMOKE (6c close-out B) | out | rs02m2: the same removal with a save, a leave and a reopen mid-removal; release |
+
+**RS's rows (6c close-out B).** The ledger lint (`LedgerSim`) models building targets, a construction road and adoption, not RS's region
+targets (`RegionTargets.newRun`'s held cells, run bills, `soilSame`, `leaving`), so no RS row is REPLACE · ledger-lint: rs-survival's
+conservation (item 8), refunds (item 9) and mid-build removal (item 10) stay in game, one build each. The trims above are SMOKE only (each
+left-out build's every row runs on another build of the same step). rs-ingame, rs-crash, rsb-ingame and rsb-crash have no such duplicates
+(each group is its own proof: the free pass, half fed, feed order, refusals, the tunnel's rings, the lava ledger, crash resume), so they
+keep their full ids. Modelling region targets in `LedgerSim` (through a production seam, as `RoadBuilder.freeOff`) would let items 8-10
+move: queued in PLAN.
 
 The fluids' realised == virtual SMOKE rows (docs "Precondition for every REPLACE row"; P2 left the bodies and courses to P3): the
 census reads that stay at the slice tier: h-ingame #2 (h_core_demo's four bodies) and #13 (water_demo's nine), hy-ingame #2

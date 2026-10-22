@@ -891,10 +891,13 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
 ## Queued (coordinator, 2026-10-20)
 
 - **pt2-ingame item 13 fails on main:** VOC-c appended `Reason.PALETTE` after `ADOPT_REFUSED`, so the check that
-  ADOPT_REFUSED is the last Reason is stale. Make the check order-independent. Fix in the 6c close-out.
+  ADOPT_REFUSED is the last Reason is stale. Make the check order-independent. Fix in the 6c close-out. **Done in close-out B:**
+  `apipt2` reports ADOPT_REFUSED right after PLAYER_BUILD and ADOPTED right after PROVISIONAL (and the Reason names), and item 13
+  judges those.
 - **Stale asks tables after VOC-c** (found by the release-tool run): h-unit and ha-unit fail H-a item 10, and vocc-unit fails
   VOC-c item 3, because `rule.palette` became supported. Re-cut the tables (vocc's "after" table already matches) and fold them
-  into the 6c close-out with Steward's 12 re-recorded asks.
+  into the 6c close-out with Steward's 12 re-recorded asks. **Moved to close-out A** (coordinator, 2026-10-22), which re-cuts every
+  asks table with Steward's 12 new asks.
 
 ## RS follow-ups (coordinator, 2026-10-21; Steward's supplied-plan run on the RS jar)
 
@@ -932,6 +935,29 @@ Top first. Not fixed in v0.40.1.
   order road, lower building, pad, upper building leaves the lower building pending at every start. UMT tags it [F1]; gate4e's
   real fixture stands above the pad, so it isn't hit in game. Details: docs/GATES.md "Fast checks P1" (branch chore/gate-fast-p1).
 
+- **F9: a road's head room over a site, removed top-down, is recovered** (umt-long on v0.40.1 and v0.41.0, found by close-out B).
+  A road over a site's edge writes air over the site's blocks. Remove the road, then the site: at the next start the road's evidence
+  reads the site's restored air as its own after, so it reads standing and RECOVERs. Its second removal writes the site's blocks back
+  for good. This is F1's kind, which F1's fix (`laterWrite`) doesn't reach, because CELL evidence counts after-air cells.
+  - Repro: `UmtFindingsTest.f9_aRoadsHeadRoomOverASiteRemovedTopDownIsRecovered` (PLAIN seed 604864872 shrunk). Tag [F9]: 5-6 per
+    20000 fuzz scenarios.
+- **DPT: a delta over a player's block loses its PT record.** `SiteDeltas`' D7 commit rewrites the delta's sections from
+  `new Cell(q, layer, before, after)`, which drops the PT records its create annotated (`JournalStore.ptSource`). The removal puts the
+  player's block back without its record. Production code; UMT mirrors it.
+  - Repro: `UmtFindingsTest.dpt_aDeltaOverAPlayersBlockLosesItsRecord`. Tag [DPT].
+  - Likely fix: `WorldJournal.withAfter` over the stored sections, as `SiteJournal.complete` (P7) does.
+- **F10: a plant over a delta's cell breaks at the removal.** A lot holds short grass (its before). A delta of the lot clears the
+  grass block under it. The removal's one template over the union of their boxes places the plant over air, and V5 breaks it.
+  - Repro: `UmtFindingsTest.f10_aPlantOverADeltasCellBreaksAtTheRemoval`. Tag [F10].
+  - It rests on modelled template order and V5, so confirm it in game.
+
+## Queued from 6c close-out B (builder, 2026-10-22)
+
+- **Model RS's region targets in the ledger lint.** `LedgerSim` covers building targets, a road and adoption. A region-target kind,
+  built through production seams (`RegionTargets.newRun`'s held cells, run bills, `soilSame`, `leaving`), would let rs-survival items
+  8-10 (conservation, refunds, the mid-build removal) move to REPLACE · ledger-lint. Today they stay in game, one build each.
+- **Lava in the natural rule (a ruling):** `NaturalDriftTest`'s one kept semantic difference. See "Queued from slice S3".
+
 ## Queued from slice S3 (builder, 2026-10-21)
 
 - **District routes ignore protected areas** (main, non-terraced districts): `emitDistricts` passes no keep-out of the plan's
@@ -942,7 +968,9 @@ Top first. Not fixed in v0.40.1.
   walls and stair railings off them; unguarded passes (every other plan) still can cross. A shared-height rule would fix both.
 - **The kit's volume classes vs the mod's natural rule.** The mod's `TerrainFit.natural` lacked generated ice (fixed in S3), while
   the kit's ICE class is natural. Audit the rest of `NATURAL_CLASSES` against `TerrainFit.natural` (e.g. LOOSE, PLANT kinds) with a
-  drift test like `MaskPatternDriftTest`.
+  drift test like `MaskPatternDriftTest`. **Done in close-out B** (`NaturalDriftTest`; CONTRACT "6c close-out B as built" §6). One
+  difference is kept for a ruling: **lava** (the mod never writes over it, the kit's virtual world counts LAVA natural). Which side
+  moves is the coordinator's call.
 - **Snow layers read as SNOW (solid) in a volume.** A top snow layer is passable in the world; S3's brink rails count it, the
   checker's M8 doesn't. A layer/block split in ARVX (or a `top` flag) would let M8 and the walk graph agree with the world.
 - **meta.route holds only the last route pass.** S3 merges its passes into one record in its program; a kit-level `meta.routes`
@@ -959,7 +987,8 @@ Top first. Not fixed in v0.40.1.
 ## Queued from RS (moved from HANDOFF-RS.md and HANDOFF-RSb.md at the batch v0.41.0 integration, 2026-10-21)
 
 - **RS item 14: rs02 on S3's natural claim in survival** (E-normal by S3 §6's classes). It waited for S3, which is in this batch;
-  `tools/gate6crs.mjs` lists it as not built (the `survival` group's comment).
+  `tools/gate6crs.mjs` lists it as not built (the `survival` group's comment). **Built in close-out B** (`gate6crs.mjs item14`, in
+  the `survival` group; CONTRACT "6c close-out B as built" §7).
 - **The gate3 survival and Hardcore steps** (a GUI p3 client) were not run for RS-a. A Hardcore world now realises regions in
   survival (mode by world); "Hardcore unchanged" needs gate3's hardcore step green on a release with RS.
 - Done here, no longer queued: RP's provenance for survival targets (HANDOFF-RS "Follow-ups", HANDOFF-RSb "Open"). Each target's
@@ -972,15 +1001,24 @@ Top first. Not fixed in v0.40.1.
   a free zone, so every other plan stays byte-identical. S7 (1 natural, 1 flat) and districts_demo (20 natural, 9 flat) keep their
   counts in `kit/test/fixtures/lint/baseline.json`. Extending the gap to V and D streets moves every street fixture: a slice of its
   own, with Noah's look.
-- **S3's natural scenario depends on the live survey.** Each natural run plans over the world as it stands, and the IR differs run to
+- **S3's natural scenario depends on the live survey.** **Done in close-out B:** the run's survey lacked a tree's TREE flag (x
+  3674-3677, z -945..-942), so the relief blended its grass over a stair flight's head-room cut. The monastery's trim now takes the
+  relief's floating natural cells out, and an M3 left after the trim refuses the plan (`kit/test/s3-live.test.mjs` re-plans the
+  recorded inputs). Before: Each natural run plans over the world as it stands, and the IR differs run to
   run. One run in this batch's gate (`gate-runs-0410/20261021-180501-slice`, IR afc7092eaf47, 11 lots) answered one M3/M8 finding
   (bars 1, 5, 6). S3's own branch kit plans that survey to the identical IR, and the re-run passed. A plan that can answer an M-rule
   finding on some surveys is S3's to harden.
 - **Main's gate-chains.json carried two `release.always` keys** (P1's -full list, then P2's list built on the pre-P1 one; JSON keeps
   the last). The batch merge keeps one list: the -full twins plus the lints, p2-calibration, w-ingame, d2-ingame and
   6c-scenario-s3.
-- **6a-megaB's "REGION_PROGRESS events for every stage" row fails on main.** mega_bench's IR has an empty `lots-4` stage, so the
+- **6a-megaB's "REGION_PROGRESS events for every stage" row fails on main.** **Done in close-out B:** the row skips stages with no
+  items and names them (`tools/lib/megab.mjs`, `kit/test/megab.test.mjs`), and still fails a stage that has items and sends no event.
+  The stuck item in the re-run (`20261022-065722-release`) was **lot_129, not lot_054**. lot_054 was placed 1 s after the relog
+  (site s83, 02:01:42). lot_129 (lots-3) waited OCCUPIED on a polar bear through every lap, then NOT_LOADED for good once the walk had
+  moved on. The driver now clears mobs on OCCUPIED, as megaA does, and its final wait visits each unfinished item (3 times at most).
+  Before: mega_bench's IR has an empty `lots-4` stage, so the
   row can't pass. It failed the same way on ca50b90e and in the batch run. Skip empty stages in the check, or re-balance the bench.
   In one batch re-run, lot_054 (the relog row's item) stayed WAITING NOT_LOADED after the walk until the step timed out. Watch for it
   at the next release.
-- **The P3 cutover for RS's rows** (rs `-smoke` twins) was not done in the batch.
+- **The P3 cutover for RS's rows** (rs `-smoke` twins) was not done in the batch. **Done in close-out B:** `rs-survival-smoke` (SMOKE
+  only: the ledger lint doesn't model region targets; docs/FAST-CHECKS.md "P3 cutover").
