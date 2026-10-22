@@ -187,6 +187,7 @@ if (cmd === 'import') {
       const all = inputMatcher(map, conf, id);
       if (!am.cov || delta.some((p) => am.m(p)) || !delta.some((p) => all(p))) {
         row.staticRuns++; // not a coverage-mode step, or its drivers, data, runner, the safety set, a mode or flag moved: it runs
+        (row.staticIds ??= []).push(id);
         continue;
       }
       row.classesOnly++;
