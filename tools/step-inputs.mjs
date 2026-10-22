@@ -39,7 +39,7 @@ if (cmd === 'build') {
   saveMap(SRC, map);
   const n = Object.keys(map.steps).length;
   const dyn = Object.values(map.steps).reduce((a, e) => a + e.dynamic.length, 0);
-  console.log(`step-inputs: ${n} steps written to tools/step-inputs.json (${dyn} dynamic imports widened)`);
+  console.log(`step-inputs: ${n} steps written to tools/step-inputs.json (${dyn} computed imports left to the trace)`);
 } else if (cmd === 'merge') {
   const map = loadMap(SRC);
   if (!map) throw new Error('no tools/step-inputs.json: run build first');

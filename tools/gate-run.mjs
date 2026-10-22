@@ -1625,6 +1625,16 @@ try {
   }
   const head = git(SRC, 'rev-parse', 'HEAD');
   summary.head = head;
+  // the cache's selection and keys belong to the head they were computed at: a source HEAD that moved while this run waited for
+  // a slot would run another commit than the one selected
+  if (CACHE && CACHE.head !== head) {
+    if (tierInfo.cache?.lookup) throw new Error(`the source HEAD moved from ${CACHE.head.slice(0, 9)} to ${head.slice(0, 9)} while the run waited: its cache selection is stale; start it again`);
+    CACHE = null;
+    tierInfo.cache.record = false;
+    log(`the source HEAD moved while the run waited: nothing will be recorded in the step cache`);
+  }
+  // every key now, at this head (a commit made in the source checkout during the run must not re-key a later step)
+  if (CACHE) for (const id of stepIds) keyOf(id);
   if (stepIds.includes('unit-kit')) {
     runShared.kitJunit = path.join(OUT, 'kit-suite.junit.xml');
     runShared.kitTree = git(SRC, 'rev-parse', 'HEAD:kit');
@@ -1724,6 +1734,12 @@ async function worker(sh) {
     // the step cache: record the PASS under its key (step-cache.mjs decides whether it may: trace inside the set, no bar recorded, ...)
     if (CACHE) {
       try {
+        // the drivers ran from the working tree: one that turned dirty during the run records nothing from here on
+        if (!CACHE.dirty.length && git(SRC, 'status', '--porcelain', '--untracked-files=all')) {
+          CACHE.dirty = ['(the source tree turned dirty during the run)'];
+          keys.clear();
+          log('the source tree turned dirty during the run: no further PASS is recorded in the step cache');
+        }
         const k = keyOf(step.id);
         const r = recordPass(CACHE, step.id, rec, { key: k.key, why: k.why, parts: k.parts, run: OUT, ev: sh.ev, traceDir: path.join(OUT, 'traces', step.id), traced: TRACE,
           timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', judgedBench: JUDGED_BENCHES.has(step.id), tier: chainName,
