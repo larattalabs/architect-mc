@@ -1,6 +1,6 @@
 // (6c close-out A) The kit items' byte identity (docs/CONTRACT.md "Phase 6c close-out A" §11 item 10): every committed plan fixture
 // planned here and on a base checkout (a detached worktree ../architect-mc-coA-base at the merge base with origin/main), compared as
-// S3's gate did (answers, overall, the IR with kitVersion normalised, the first plan's IR), plus the artifact (its palette rows). $0, no game.
+// S3's gate did (answers, overall, the IR with kitVersion normalised, the first plan's IR), plus the artifact (kitVersion and catalogueVersion normalised: its palette rows). $0, no game.
 //   unchanged(root, {check, log, only, moved})   moved: {fixture: 'the item that moves it, and why'} (named, not judged)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,6 +11,8 @@ import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { normSiblingIr } from './batch-0410.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
+/** The artifact compared with its kitVersion and catalogueVersion normalised (§5's catalogue bump moves every artifact's number). */
+const normArt = (a) => normSiblingIr(JSON.stringify(a ?? null)).replace(/"catalogueVersion":\d+/g, '"catalogueVersion":"*"');
 
 /** The base worktree (made at the merge base with origin/main when missing; an existing one is used as it stands). */
 export function baseTree(root) {
@@ -26,7 +28,7 @@ export async function unchanged(root, { check = null, log = console.log, only = 
   const { dir: baseDir, base } = baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
   const [hNew, hOld] = [await H(root), await H(baseDir)];
-  const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(normSiblingIr(r.res.irJson)), first: r.first && r.first !== r ? sha256(normSiblingIr(r.first.res?.irJson ?? JSON.stringify(r.first))) : null, art: sha256(normSiblingIr(JSON.stringify(r.artifact ?? null))) });
+  const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(normSiblingIr(r.res.irJson)), first: r.first && r.first !== r ? sha256(normSiblingIr(r.first.res?.irJson ?? JSON.stringify(r.first))) : null, art: sha256(normArt(r.artifact)) });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {} };
   for (const [name, fx] of fixtures(root)) {
     if (only && !only.test(name)) continue;
