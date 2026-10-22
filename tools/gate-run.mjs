@@ -82,7 +82,7 @@ import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFile
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
 import { currentHistory, definitionNow, definitionsAt, effectiveTimeout, estimateMin, loadHistory } from './lib/gate-history.mjs';
 import { autoConfig, chooseShards, describeChoice, freePairs, probeMachine } from './lib/shard-auto.mjs';
-import { autoFullWhy, cacheContext, coverageMode, fullTwins, judgedBenches, keyFor, lastNightly, lookup, lookupCoverage, record as recordPass } from './lib/step-cache.mjs';
+import { autoFullWhy, cacheContext, coverageMode, fullTwins, judgedBenches, keyFor, lastNightly, lookup, lookupCoverage, manifestOf, record as recordPass } from './lib/step-cache.mjs';
 import { collect as collectCoverage, javaLogOption, snapshotStart } from './lib/step-coverage.mjs';
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
 import { entryOf, expandSplits, isPartId, parentOf, parentResults, validateSplits } from './lib/step-split.mjs';
@@ -1768,6 +1768,12 @@ try {
   }
   // every key now, at this head (a commit made in the source checkout during the run must not re-key a later step)
   if (CACHE) for (const id of stepIds) keyOf(id);
+  // coverage: the run-level build artifact for this head before any step (its manifest keys what the steps load); built now,
+  // not inside the first record, so no step end waits for the compile
+  if (CACHE && COVERAGE) {
+    const m = manifestOf(CACHE);
+    log(`build artifact ${m.hash ?? '?'}: ${m.ok ? `${Object.keys(m.classes ?? {}).length} classes` : `NOT available (${m.error}): coverage-mode steps record source keys`}`);
+  }
   if (stepIds.includes('unit-kit')) {
     runShared.kitJunit = path.join(OUT, 'kit-suite.junit.xml');
     runShared.kitTree = git(SRC, 'rev-parse', 'HEAD:kit');

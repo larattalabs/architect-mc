@@ -11023,6 +11023,7 @@
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
@@ -11090,6 +11091,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
@@ -11261,6 +11263,7 @@
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
@@ -11328,6 +11331,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
@@ -11499,6 +11503,7 @@
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
@@ -11566,6 +11571,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
@@ -11738,6 +11744,7 @@
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
@@ -11805,6 +11812,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
@@ -20376,11 +20384,13 @@
     "scenarios/route_demo.json",
     "tools/api-compat.mjs",
     "tools/gate6cvoc.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -20469,9 +20479,8 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -20487,7 +20496,8 @@
    "testFiltersComplete": true,
    "gradleUse": "tests",
    "eager": [
-    "tools/gate6cvoc.mjs"
+    "tools/gate6cvoc.mjs",
+    "tools/lib/gate-part.mjs"
    ],
    "data": [
     "deno.json",
@@ -20693,11 +20703,13 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -20800,9 +20812,8 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -20823,6 +20834,7 @@
     "tools/gate6cvoc.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -21018,11 +21030,13 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -21125,9 +21139,8 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -21148,6 +21161,7 @@
     "tools/gate6cvoc.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -21343,11 +21357,13 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -21450,9 +21466,8 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -21473,6 +21488,7 @@
     "tools/gate6cvoc.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -21668,11 +21684,13 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -21775,9 +21793,8 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -21798,6 +21815,7 @@
     "tools/gate6cvoc.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -21993,11 +22011,13 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -22100,9 +22120,8 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -22123,6 +22142,7 @@
     "tools/gate6cvoc.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -22313,11 +22333,13 @@
     "scenarios/route_demo.json",
     "tools/api-compat.mjs",
     "tools/gate6cvoc.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -22406,9 +22428,8 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -22424,7 +22445,8 @@
    "testFiltersComplete": true,
    "gradleUse": "tests",
    "eager": [
-    "tools/gate6cvoc.mjs"
+    "tools/gate6cvoc.mjs",
+    "tools/lib/gate-part.mjs"
    ],
    "data": [
     "node_modules",
@@ -22626,11 +22648,13 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -22733,9 +22757,8 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -22756,6 +22779,7 @@
     "tools/gate6cvoc.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -22951,11 +22975,13 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -23058,9 +23084,8 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -23081,6 +23106,7 @@
     "tools/gate6cvoc.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -26844,6 +26870,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cirr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -26964,10 +26991,10 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6cirr-kit.mjs",
      "tools/lib/gate6ckc-kit.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -26991,6 +27018,7 @@
     "tools/gate6cirr.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -28882,11 +28910,13 @@
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6ckc.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
@@ -28978,6 +29008,7 @@
    "flags": {
     "originMain": [
      "tools/gate6ckc.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
@@ -28986,6 +29017,7 @@
    "eager": [
     "tools/gate6ckc.mjs",
     "tools/lib/fl-norm.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/p3-tier.mjs"
    ]
   },
@@ -29164,11 +29196,13 @@
     "tools/gate6b.mjs",
     "tools/gate6ckc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
@@ -29274,6 +29308,7 @@
    "flags": {
     "originMain": [
      "tools/gate6ckc.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
@@ -29287,6 +29322,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/run6b.mjs"
    ]
@@ -29470,12 +29506,14 @@
     "sidecar/src/jobs/systemrefs.ts",
     "tools/api-compat.mjs",
     "tools/gate6cf3.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cf3-coral.mjs",
     "tools/lib/gate6cf3-game.mjs",
     "tools/lib/gate6cf3-kit.mjs",
@@ -29576,6 +29614,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cf3-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
@@ -29590,7 +29629,8 @@
    "testFiltersComplete": true,
    "gradleUse": "tests",
    "eager": [
-    "tools/gate6cf3.mjs"
+    "tools/gate6cf3.mjs",
+    "tools/lib/gate-part.mjs"
    ]
   },
   "f3-ingame": {
@@ -29777,12 +29817,14 @@
     "tools/gate6b.mjs",
     "tools/gate6cf3.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cf3-coral.mjs",
     "tools/lib/gate6cf3-game.mjs",
     "tools/lib/gate6cf3-kit.mjs",
@@ -29897,6 +29939,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cf3-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
@@ -29916,6 +29959,7 @@
     "tools/gate6cf3.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -30103,12 +30147,14 @@
     "tools/gate6b.mjs",
     "tools/gate6cf3.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cf3-coral.mjs",
     "tools/lib/gate6cf3-game.mjs",
     "tools/lib/gate6cf3-kit.mjs",
@@ -30223,6 +30269,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cf3-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
@@ -30242,6 +30289,7 @@
     "tools/gate6cf3.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -30424,12 +30472,14 @@
     "sidecar/src/jobs/systemrefs.ts",
     "tools/api-compat.mjs",
     "tools/gate6cf3.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cf3-coral.mjs",
     "tools/lib/gate6cf3-game.mjs",
     "tools/lib/gate6cf3-kit.mjs",
@@ -30530,6 +30580,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cf3-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
@@ -30544,7 +30595,8 @@
    "testFiltersComplete": true,
    "gradleUse": "tests",
    "eager": [
-    "tools/gate6cf3.mjs"
+    "tools/gate6cf3.mjs",
+    "tools/lib/gate-part.mjs"
    ]
   },
   "f3-look": {
@@ -30731,12 +30783,14 @@
     "tools/gate6b.mjs",
     "tools/gate6cf3.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cf3-coral.mjs",
     "tools/lib/gate6cf3-game.mjs",
     "tools/lib/gate6cf3-kit.mjs",
@@ -30851,6 +30905,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cf3-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
@@ -30870,6 +30925,7 @@
     "tools/gate6cf3.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -31060,6 +31116,7 @@
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6cirr.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -31166,10 +31223,10 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6cirr-kit.mjs",
      "tools/lib/gate6ckc-kit.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -31188,7 +31245,8 @@
    "testFiltersComplete": true,
    "gradleUse": "tests",
    "eager": [
-    "tools/gate6cirr.mjs"
+    "tools/gate6cirr.mjs",
+    "tools/lib/gate-part.mjs"
    ]
   },
   "irr-ingame": {
@@ -31383,6 +31441,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cirr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -31503,10 +31562,10 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6cirr-kit.mjs",
      "tools/lib/gate6ckc-kit.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -31530,6 +31589,7 @@
     "tools/gate6cirr.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ],
    "verified": "20261022-161855-release irr-ingame"
@@ -31726,6 +31786,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cirr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -31846,10 +31907,10 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6cirr-kit.mjs",
      "tools/lib/gate6ckc-kit.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -31873,6 +31934,7 @@
     "tools/gate6cirr.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -32068,6 +32130,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cirr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -32188,10 +32251,10 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6cirr-kit.mjs",
      "tools/lib/gate6ckc-kit.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -32215,6 +32278,7 @@
     "tools/gate6cirr.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -32388,12 +32452,14 @@
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6cfl.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cfl-game.mjs",
     "tools/lib/gate6cfl-kit.mjs",
     "tools/lib/gate6chy-b.mjs",
@@ -32488,6 +32554,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cfl-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
@@ -32504,7 +32571,8 @@
    "testFiltersComplete": true,
    "gradleUse": "tests",
    "eager": [
-    "tools/gate6cfl.mjs"
+    "tools/gate6cfl.mjs",
+    "tools/lib/gate-part.mjs"
    ],
    "data": [
     "node_modules",
@@ -32689,12 +32757,14 @@
     "tools/gate6b.mjs",
     "tools/gate6cfl.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cfl-game.mjs",
     "tools/lib/gate6cfl-kit.mjs",
     "tools/lib/gate6chy-b.mjs",
@@ -32803,6 +32873,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cfl-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
@@ -32824,6 +32895,7 @@
     "tools/gate6cfl.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -33002,12 +33074,14 @@
     "tools/gate6b.mjs",
     "tools/gate6cfl.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cfl-game.mjs",
     "tools/lib/gate6cfl-kit.mjs",
     "tools/lib/gate6chy-b.mjs",
@@ -33116,6 +33190,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cfl-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
@@ -33137,6 +33212,7 @@
     "tools/gate6cfl.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -33315,12 +33391,14 @@
     "tools/gate6b.mjs",
     "tools/gate6cfl.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cfl-game.mjs",
     "tools/lib/gate6cfl-kit.mjs",
     "tools/lib/gate6chy-b.mjs",
@@ -33429,6 +33507,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cfl-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
@@ -33450,6 +33529,7 @@
     "tools/gate6cfl.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -35911,6 +35991,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cirr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -36031,10 +36112,10 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6cirr-kit.mjs",
      "tools/lib/gate6ckc-kit.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -36058,6 +36139,7 @@
     "tools/gate6cirr.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -36236,11 +36318,13 @@
     "tools/gate6b.mjs",
     "tools/gate6ckc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
@@ -36346,6 +36430,7 @@
    "flags": {
     "originMain": [
      "tools/gate6ckc.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
@@ -36359,6 +36444,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/run6b.mjs"
    ]
@@ -36555,11 +36641,13 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -36662,9 +36750,8 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -36685,6 +36772,7 @@
     "tools/gate6cvoc.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -37658,6 +37746,7 @@
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6cs3.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/d2-replay.mjs",
@@ -37665,6 +37754,7 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
@@ -37777,6 +37867,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/gate6cs3-kit.mjs",
@@ -37794,7 +37885,8 @@
    "testFiltersComplete": true,
    "gradleUse": "tests",
    "eager": [
-    "tools/gate6cs3.mjs"
+    "tools/gate6cs3.mjs",
+    "tools/lib/gate-part.mjs"
    ]
   },
   "s3-plan": {
@@ -37993,6 +38085,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cs3.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/d2-replay.mjs",
@@ -38000,6 +38093,7 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
@@ -38126,6 +38220,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/gate6cs3-kit.mjs",
@@ -38148,6 +38243,7 @@
     "tools/gate6cs3.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs"
    ]
   },
@@ -48923,11 +49019,13 @@
     "tools/gate6cvoc.mjs",
     "tools/gate7ak1b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6ch-core.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
@@ -49071,10 +49169,9 @@
     "originMain": [
      "tools/gate6ct3a.mjs",
      "tools/gate7ak1b.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -49099,6 +49196,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs"
    ]
