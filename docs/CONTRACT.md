@@ -23954,3 +23954,16 @@ PALETTE). The old `...Last` booleans stay.
 - **The test.** `kit/test/s3-live.test.mjs` re-plans the run's recorded inputs (`kit/test/fixtures/s3-live`: its survey, frozen
   volumes, biomes and bible) and asserts no M1-M4 and M8 guarded. It is red on main.
 - **The golden.** S3's golden was re-cut with `recutGolden`: programSha only, every tile sha equal.
+
+### 9. hy-ingame item 14, the push stand (added by the coordinator, 2026-10-22)
+
+- **The failures.** It failed in turbo-proof runs 162049 and 170841 with the same IR as every passing run (483439a37d45: the 0410
+  batch slices, the affected release, the turbo slice 212922). Both times the one mob "beyond" was the spider, at y 65 (the lintel is
+  y 64) and 30-45 blocks along the far side.
+- **The cause.** The spider climbed the wall and walked over the lintel. Spiders climb any wall: that is vanilla behaviour, not a
+  grate or water change, and not a product bug. A passing run (161855) also had its spider on the wall top at y 65, just not past the
+  face yet.
+- **The fix, in the driver** (`tools/lib/gate6chy-c.mjs` `pushStand`). Each mob's track is read at every push. A mob counts as beyond
+  only when it crosses the grate's outer face with both sides of the crossing under the lintel's top (through the bars). One that
+  crosses above the lintel is recorded as `over` and not judged. The check line names both counts.
+
