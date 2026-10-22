@@ -21,7 +21,7 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const [cmd, ...args] = process.argv.slice(2);
 const cfg = JSON.parse(fs.readFileSync(path.join(SRC, 'tools', 'gate-chains.json'), 'utf8'));
 const conf = loadConf(SRC);
-const KEEP = ['data', 'derived', 'fingerprint', 'notes'];
+const KEEP = ['data', 'derived', 'fingerprint', 'notes', 'verified'];
 const STATIC = ['classes', 'roots', 'closure', 'globs', 'env', 'flags'];
 
 function rebuilt(old) {
@@ -54,6 +54,8 @@ if (cmd === 'build') {
       const mid = map.steps[s.id] ? s.id : parentOf(s.id); // a split step's part widens its parent's set
       if (!tr || !map.steps[mid]) continue;
       const added = widenFromTrace(map, conf, mid, tr, tracked);
+      // a PASS whose trace now sits inside the set verifies it: the computed imports and data reads it made are recorded
+      if (s.status === 'PASS') map.steps[mid].verified = `${path.basename(run)} ${s.id}`;
       if (added.length) {
         total += added.length;
         console.log(`${s.id} (${s.status}): + ${added.join(', ')}`);

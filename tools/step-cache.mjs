@@ -22,6 +22,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { applyHosts } from './lib/hosts.mjs';
+import { parentOf } from './lib/step-split.mjs';
 import { cacheContext, judgedBenches, keyFor, record } from './lib/step-cache.mjs';
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
 
@@ -112,6 +113,8 @@ if (cmd === 'import') {
     ctx.rawCfg = rawCfg;
     for (const s of sm.steps) {
       if (s.status !== 'PASS') continue;
+      // an untraced PASS is only as good as the set it is keyed by: only steps whose set a traced PASS has verified
+      if (!map.steps[map.steps[s.id] ? s.id : parentOf(s.id)]?.verified) continue;
       const k = keyFor(ctx, s.id);
       const ev = sm.shards?.find((x) => x.k === s.shard)?.evidence;
       const r = record(ctx, s.id, s, { key: k.key, why: k.why, parts: k.parts, run, ev: ev ? path.join(run, ev) : run, traceDir: null, traced: false,

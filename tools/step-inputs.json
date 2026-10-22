@@ -10,7 +10,8 @@
    "closure": [],
    "globs": [],
    "dynamic": [],
-   "env": []
+   "env": [],
+   "verified": "20261022-161855-release unit-mod"
   },
   "umt": {
    "classes": [
@@ -702,7 +703,8 @@
     "dark",
     "nope",
     "rustic"
-   ]
+   ],
+   "verified": "20261022-161855-release unit-kit"
   },
   "unit-sidecar": {
    "classes": [
@@ -10466,7 +10468,8 @@
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-161855-release rs-survival"
   },
   "rs-crash": {
    "classes": [
@@ -13887,7 +13890,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-161855-release t3a-look"
   },
   "k1b-unit": {
    "classes": [
@@ -17009,7 +17013,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-161855-release h-ingame"
   },
   "h-crash": {
    "classes": [
@@ -24485,7 +24490,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-161855-release hy-unit"
   },
   "h-holders": {
    "classes": [
@@ -25808,7 +25814,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-161855-release hy-ingame"
   },
   "hy-crash": {
    "classes": [
@@ -29466,7 +29473,8 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-161855-release irr-ingame"
   },
   "irr-crash": {
    "classes": [
@@ -39178,7 +39186,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-161855-release k1a-look"
   },
   "d2-ingame": {
    "classes": [
@@ -41061,7 +41070,8 @@
     "GATE4D_OUT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "verified": "20261022-161855-release 4d-all-full"
   },
   "4e-orders": {
    "classes": [
@@ -41207,7 +41217,8 @@
     "GATE4E_THROUGHPUT_SMOKE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "verified": "20261022-161855-release 4e-orders-full"
   },
   "4e-crash": {
    "classes": [
@@ -41736,7 +41747,8 @@
    ],
    "data": [
     "kit/lint/**"
-   ]
+   ],
+   "verified": "20261022-161855-release 5b-chains-full"
   },
   "5b-village": {
    "classes": [
@@ -42085,7 +42097,8 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "verified": "20261022-161855-release 6a-crash"
   },
   "6a-eflat": {
    "classes": [
