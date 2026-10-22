@@ -1508,7 +1508,7 @@ function summaryMd() {
   }
   if (summary.cache) {
     const c = summary.cache;
-    lines.push('', `Cache: lookups ${c.lookup ? 'on' : `off (${c.offWhy})`}${t?.name === 'release' && summary.tier ? '' : ''}; PASSes recorded ${c.record ? 'when the trace stayed inside the input set' : 'no'}${c.canaries?.length ? `; canaries: ${c.canaries.join(' ')}` : ''}.`);
+    lines.push('', `Cache: lookups ${c.lookup ? 'on' : `off (${c.offWhy})`}; PASSes recorded ${c.record ? 'when the trace stayed inside the input set' : 'no'}${c.canaries?.length ? `; canaries: ${c.canaries.join(' ')}` : ''}.`);
     if (summary.cached.length) {
       lines.push('', `### CACHED (${summary.cached.length}): skipped, a PASS is recorded for the same key`, '', '| step | PASS at | head | evidence |', '|---|---|---|---|');
       for (const h of summary.cached) lines.push(`| ${h.id} | ${h.at} | ${String(h.head).slice(0, 9)} | \`${h.log ?? h.run}\` |`);
