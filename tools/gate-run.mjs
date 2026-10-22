@@ -25,7 +25,7 @@
 //   --run-dirs A,B,C       GATE_RUN_DIRS  every shard's run worktree, explicitly
 //   --out DIR              GATE_RUNS_OUT  where runs go (<main checkout>/artifacts/gate-runs)
 //   --lock FILE            GATE_LOCK      the lock (<out>/gate-run.lock)
-//   --slots N              GATE_SLOTS     machine-wide gate-run slots (default 6, from gate-chains.json slots.max): at most N runs at once, across worktrees. A run
+//   --slots N              GATE_SLOTS     machine-wide gate-run slots (default slots.max in gate-chains.json, 4): at most N runs at once, across worktrees. A run
 //                                         takes a slot file in --slots-dir (GATE_SLOTS_DIR; <LarattaLabs>/.gate-slots) and waits for a
 //                                         free one; a slot held by a dead pid counts as free. Separate from the per-run --lock.
 //   --judge-timing         in change/slice timing bars (lines `FAIL BAR ...`) are recorded, not judged; this judges them as at release
@@ -39,7 +39,10 @@
 //                          GATE_SNAPSHOT_DIR  prepared worlds restored by APFS clone (the seed's mod/run/saves)
 //                          GATE_NOTIFY=send|dry, GATE_NOTIFY_SCRIPT (~/Developer/_infra/discord-notify.sh); off by default
 //
-// Shards (--shards N, at most shards.max): each has its own client, run worktree, port pair and evidence dir (<out>/s<k>/ when
+// Shards (--shards N, at most shards.max; or --shards auto, the default for slice/release plans of more than shards.auto.minSteps
+// steps): auto picks N from the free shard budget of the slot holders, the load average, available memory and the plan's own
+// schedule, and allocates free port pairs from shards.auto.portRange unless --ports names them (tools/lib/shard-auto.mjs; --plan
+// prints the caps and which bound). One slot per run; the slot file records the run's shards and ports. Each shard has its own client, run worktree, port pair and evidence dir (<out>/s<k>/ when
 // N > 1). Steps declare what they need: steps sharing a resource never overlap, a step with `after` runs on its dependency's
 // shard, `waitFor` waits for steps on any shard (any status), and a `stopOnFail` step is a barrier. A free shard takes the ready
 // step with the longest estimate (history p50 plus the chain waiting on it), less its client cost there (docs/GATES.md "Gate
@@ -62,6 +65,7 @@ import { DevClient } from './lib/devclient.mjs';
 import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFiles } from './gate-impact.mjs';
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
 import { currentHistory, definitionNow, definitionsAt, effectiveTimeout, estimateMin, loadHistory } from './lib/gate-history.mjs';
+import { autoConfig, chooseShards, describeChoice, freePairs, probeMachine } from './lib/shard-auto.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(SRC, '..', 'architect-mc');
@@ -304,8 +308,12 @@ const snapDirCfg = cfg.snapshots?.dir ?? 'seed:mod/run/saves';
 const SNAP = path.resolve(process.env.GATE_SNAPSHOT_DIR ?? (snapDirCfg.startsWith('seed:') ? path.join(SEED, snapDirCfg.slice(5)) : path.resolve(SRC, snapDirCfg)));
 const RUNS_ROOT = path.resolve(opt('--out') ?? process.env.GATE_RUNS_OUT ?? path.join(MAIN, 'artifacts', 'gate-runs'));
 const LOCK = path.resolve(opt('--lock') ?? process.env.GATE_LOCK ?? path.join(RUNS_ROOT, 'gate-run.lock'));
-const NSHARDS = Number(opt('--shards') ?? 1);
-if (!(Number.isInteger(NSHARDS) && NSHARDS >= 1 && NSHARDS <= (cfg.shards?.max ?? 3))) die(`--shards must be 1..${cfg.shards?.max ?? 3}`);
+// --shards N | auto (docs/GATES.md "Adaptive shards"). Omitted: auto for slice and release when the plan has more than
+// shards.auto.minSteps steps (decided below, once the steps are known), else 1 as before.
+const SHARDS_ARG = opt('--shards');
+const AC = autoConfig(cfg);
+let NSHARDS = SHARDS_ARG === undefined || SHARDS_ARG === 'auto' ? 1 : Number(SHARDS_ARG);
+if (!(Number.isInteger(NSHARDS) && NSHARDS >= 1 && NSHARDS <= AC.max)) die(`--shards must be 1..${AC.max} or auto`);
 
 // ------------------------------------------------------------------ guards (before anything runs)
 
@@ -331,17 +339,24 @@ const pairs = (s) => s.split(',').map((p) => p.trim()).filter(Boolean).map((p) =
 const allPairs = opt('--ports') ?? process.env.GATE_PORTS;
 const portPairs = allPairs ? pairs(allPairs)
   : [[Number(process.env.ARCHITECT_GATE_SIDECAR_PORT || 8890), Number(process.env.ARCHITECT_GATE_DEV_PORT || 8891)], ...(process.env.GATE_SHARD_PORTS ? pairs(process.env.GATE_SHARD_PORTS) : [])];
-if (RUN_DIRS.length && RUN_DIRS.length < NSHARDS) die(`--run-dirs names ${RUN_DIRS.length} dirs for ${NSHARDS} shards`);
-const shards = [];
-for (let k = 1; k <= NSHARDS; k++) {
-  const [sp, dp] = portPairs[k - 1] ?? [];
-  if (!sp || !dp) die(`shard ${k}: no port pair. Name every shard's ports: --ports 8890:8891,8896:8897 (or GATE_PORTS)`);
-  const RUN = RUN_DIRS.length ? RUN_DIRS[k - 1] : k === 1 ? RUN1 : `${RUN1}-s${k}`;
-  shards.push({ k, tag: NSHARDS > 1 ? `[s${k}] ` : '', RUN, GAME_DIR: path.join(RUN, 'mod', 'run'), SIDECAR_PORT: sp, DEV_PORT: dp, current: null, activeGroup: null, ev: null });
+// built by buildShards() once N is known: at once for a fixed --shards, after the auto decision (under the slot mutex) for auto
+let shards = [];
+let allPorts = [];
+function buildShards(n, pp) {
+  NSHARDS = n;
+  if (RUN_DIRS.length && RUN_DIRS.length < NSHARDS) die(`--run-dirs names ${RUN_DIRS.length} dirs for ${NSHARDS} shards`);
+  shards = [];
+  for (let k = 1; k <= NSHARDS; k++) {
+    const [sp, dp] = pp[k - 1] ?? [];
+    if (!sp || !dp) die(`shard ${k}: no port pair. Name every shard's ports: --ports 8890:8891,8896:8897 (or GATE_PORTS), or use --shards auto`);
+    const RUN = RUN_DIRS.length ? RUN_DIRS[k - 1] : k === 1 ? RUN1 : `${RUN1}-s${k}`;
+    shards.push({ k, tag: NSHARDS > 1 ? `[s${k}] ` : '', RUN, GAME_DIR: path.join(RUN, 'mod', 'run'), SIDECAR_PORT: sp, DEV_PORT: dp, current: null, activeGroup: null, ev: null });
+  }
+  allPorts = shards.flatMap((s) => [s.SIDECAR_PORT, s.DEV_PORT]);
+  if (new Set(allPorts).size !== allPorts.length) die(`shard ports overlap: ${allPorts.join(' ')}`);
+  for (const p of allPorts) if (p >= 8892 && p <= 8895) die(`port ${p}: 8892-8895 belong to the gates' old-version clients and eval sidecars, never to a shard`);
+  checkRunDirs();
 }
-const allPorts = shards.flatMap((s) => [s.SIDECAR_PORT, s.DEV_PORT]);
-if (new Set(allPorts).size !== allPorts.length) die(`shard ports overlap: ${allPorts.join(' ')}`);
-for (const p of allPorts) if (p >= 8892 && p <= 8895) die(`port ${p}: 8892-8895 belong to the gates' old-version clients and eval sidecars, never to a shard`);
 
 // a run worktree is the runner's own: never the seed (architect-mc-6a-run), this checkout or the main checkout. The gate drivers
 // find their client with an unanchored `pgrep -f <basename>/mod/.gradle/...`, so no run dir's name may end with another's.
@@ -353,16 +368,18 @@ const siblings = (d) => {
     return [];
   }
 };
-const knownRunDirs = [...new Set([...shards.map((s) => s.RUN), ...shards.flatMap((s) => siblings(s.RUN)), path.resolve(SRC, cfg.runDir), SEED])];
-for (const sh of shards) {
-  for (const [what, p] of [['the seed dir', SEED], ['this checkout', SRC], ['the main checkout', MAIN], ['architect-mc-6a-run', path.resolve(SRC, '..', 'architect-mc-6a-run')]]) {
-    if (real(sh.RUN) === real(p)) die(`refusing: the run dir ${sh.RUN} is ${what}`);
-  }
-  if (real(sh.RUN).startsWith(real(SRC) + path.sep)) die(`refusing: the run dir ${sh.RUN} is inside this checkout`);
-  for (const o of knownRunDirs) {
-    const a = path.basename(sh.RUN);
-    const b = path.basename(o);
-    if (a !== b && (a.endsWith(b) || b.endsWith(a))) die(`refusing: run dir ${a} and ${b} end with one another (the drivers' pgrep would match both)`);
+function checkRunDirs() {
+  const knownRunDirs = [...new Set([...shards.map((s) => s.RUN), ...shards.flatMap((s) => siblings(s.RUN)), path.resolve(SRC, cfg.runDir), SEED])];
+  for (const sh of shards) {
+    for (const [what, p] of [['the seed dir', SEED], ['this checkout', SRC], ['the main checkout', MAIN], ['architect-mc-6a-run', path.resolve(SRC, '..', 'architect-mc-6a-run')]]) {
+      if (real(sh.RUN) === real(p)) die(`refusing: the run dir ${sh.RUN} is ${what}`);
+    }
+    if (real(sh.RUN).startsWith(real(SRC) + path.sep)) die(`refusing: the run dir ${sh.RUN} is inside this checkout`);
+    for (const o of knownRunDirs) {
+      const a = path.basename(sh.RUN);
+      const b = path.basename(o);
+      if (a !== b && (a.endsWith(b) || b.endsWith(a))) die(`refusing: run dir ${a} and ${b} end with one another (the drivers' pgrep would match both)`);
+    }
   }
 }
 
@@ -433,8 +450,12 @@ function releaseSlot() {
   }
 }
 process.on('exit', releaseSlot);
-/** One scan under a short mutex (mkdir is atomic): the first free slot (missing, or held by a dead pid) is written for this run. */
-function claimSlot() {
+/**
+ * One scan under a short mutex (mkdir is atomic): the first free slot (missing, or held by a dead pid) is written for this run.
+ * `decide(n)` runs under the same mutex and returns what the slot file records: { shards, ports } (an auto run chooses its shard
+ * count and port pairs there, so two runs starting together never count the same budget or take the same ports).
+ */
+async function claimSlot(decide) {
   const mutex = path.join(SLOT_DIR, '.mutex');
   for (let i = 0; i < 40; i++) {
     try {
@@ -455,7 +476,8 @@ function claimSlot() {
     for (let n = 1; n <= SLOTS; n++) {
       const h = readSlot(n);
       if (h && h.pid && alive(h.pid)) continue;
-      fs.writeFileSync(slotFile(n), JSON.stringify({ pid: process.pid, worktree: SRC, chain: chainName, startedAt: new Date().toISOString() }));
+      const rec = await decide(n);
+      fs.writeFileSync(slotFile(n), JSON.stringify({ pid: process.pid, worktree: SRC, chain: chainName, startedAt: new Date().toISOString(), shards: rec.shards, ports: rec.ports }));
       return n;
     }
     return null;
@@ -468,8 +490,18 @@ function claimSlot() {
   }
 }
 const slotHolders = () => Array.from({ length: SLOTS }, (_, k) => readSlot(k + 1)).filter((h) => h && h.pid && alive(h.pid));
+/** Every live holder in the slot dir (also slots above this run's --slots limit), not this process: their shards and ports count. */
+const allSlotHolders = () => {
+  let names = [];
+  try {
+    names = fs.readdirSync(SLOT_DIR).filter((f) => /^slot-\d+\.json$/.test(f));
+  } catch {
+    // no dir yet
+  }
+  return names.map((f) => readSlot(Number(f.match(/\d+/)[0]))).filter((h) => h && h.pid && h.pid !== process.pid && alive(h.pid));
+};
 const slotNote = { waitedSeconds: 0, slot: null, limit: SLOTS, dir: SLOT_DIR };
-async function acquireSlot() {
+async function acquireSlot(decide) {
   fs.mkdirSync(SLOT_DIR, { recursive: true });
   const t0s = Date.now();
   const stamp = () => new Date().toISOString().slice(11, 19);
@@ -479,7 +511,7 @@ async function acquireSlot() {
   };
   process.once('SIGINT', onSig);
   process.once('SIGTERM', onSig);
-  let n = claimSlot();
+  let n = await claimSlot(decide);
   let lastLog = 0;
   while (n === null) {
     if (Date.now() - lastLog > 300_000 || lastLog === 0) {
@@ -487,7 +519,7 @@ async function acquireSlot() {
       lastLog = Date.now();
     }
     await sleep(Number(process.env.GATE_SLOT_POLL_MS ?? 15_000));
-    n = claimSlot();
+    n = await claimSlot(decide);
   }
   mySlot = n;
   slotNote.slot = n;
@@ -589,6 +621,31 @@ const prioOf = (s, seen = new Set()) => {
 };
 for (const s of steps) prioOf(s);
 
+// ------------------------------------------------------------------ the shard count: fixed, or auto (docs/GATES.md "Adaptive shards")
+
+// auto: --shards auto, or --shards omitted on a slice/release plan of more than shards.auto.minSteps steps (else 1, as before)
+const AUTO = SHARDS_ARG === 'auto' || (SHARDS_ARG === undefined && (chainName === 'slice' || chainName === 'release') && steps.length > AC.minSteps);
+let autoChoice = null;
+/** Choose N and its port pairs from the machine now (tools/lib/shard-auto.mjs). The run calls it under the slot mutex. */
+async function decideAuto() {
+  const probe = probeMachine();
+  const holders = allSlotHolders();
+  const taken = new Set(holders.flatMap((h) => (Array.isArray(h.ports) ? h.ports.flat() : [])).map(Number));
+  const pairsFree = await freePairs({ range: AC.portRange, given: allPairs ? portPairs : null, taken });
+  const freeRunSlots = Math.max(0, SLOTS - slotHolders().filter((h) => h.pid !== process.pid).length - 1);
+  const c = chooseShards(AC, { probe, holders, freeRunSlots, wallFor: (n) => estimate(est, n).wallMin, pairs: pairsFree });
+  if (!pairsFree.length) die(`shards auto: no free port pair ${allPairs ? `in --ports ${allPairs}` : `in ${AC.portRange.join('-')} (shards.auto.portRange)`}`);
+  autoChoice = {
+    mode: SHARDS_ARG === 'auto' ? '--shards auto' : `default for ${chainName} (${steps.length} steps > ${AC.minSteps}; --shards N to fix it)`,
+    n: c.n, bound: c.bound, caps: c.caps, probe, otherShards: c.used, wallByN: c.table.map((t) => ({ n: t.n, wallMin: Math.round(t.wallMin * 10) / 10 })),
+    ports: pairsFree.slice(0, c.n).map(([sp, dp]) => `${sp}:${dp}`), portSource: allPairs ? '--ports' : `range ${AC.portRange.join('-')}`, decidedAt: new Date().toISOString(),
+    text: describeChoice(c, probe, AC),
+  };
+  buildShards(c.n, pairsFree.slice(0, c.n));
+  return autoChoice;
+}
+if (!AUTO) buildShards(NSHARDS, portPairs);
+
 /**
  * The next step shard `sh` may start, or null. st: { pending: [index], running: Map(index -> shardK), done: Map(id -> {status,
  * shard}) }. Rules: a stopOnFail step earlier in the order is a barrier until it is done; `after` waits for its dependency and
@@ -644,9 +701,9 @@ function pick(sh, st, all) {
 }
 
 /** --plan's estimate: the schedule with every step taking its estimate (history p50, else estMin) and passing; client starts ~0.6 min (0.15 for a world switch). */
-function estimate(durOf = est) {
+function estimate(durOf = est, n = shards.length) {
   const st = { pending: steps.map((_, i) => i), running: new Map(), done: new Map() };
-  const sim = shards.map((s) => ({ k: s.k, current: null, freeAt: 0, busy: 0 }));
+  const sim = Array.from({ length: n }, (_, j) => ({ k: j + 1, current: null, freeAt: 0, busy: 0 }));
   const ends = [];
   const assign = {};
   let now = 0;
@@ -706,7 +763,9 @@ function printPlan() {
     console.log(`shard ${sh.k}: run worktree ${sh.RUN} ${fs.existsSync(sh.RUN) ? '(exists; checked out --detach at the source HEAD)' : '(created: git worktree add --detach)'}; ports sidecar ${sh.SIDECAR_PORT}, DevBridge ${sh.DEV_PORT}; `
       + `seed ${missing.length ? `would clone ${missing.join(', ')}` : 'nothing missing'}`);
   }
-  console.log(`slots: at most ${SLOTS} gate runs on the machine (${SLOT_DIR}); in use now ${slotHolders().length}${slotHolders().length ? `: ${slotHolders().map((h) => `pid ${h.pid} ${h.chain}`).join(', ')}` : ''}; timing bars ${RECORD_TIMING ? 'RECORDED, not judged (change/slice)' : 'JUDGED'}`);
+  if (autoChoice) console.log(`${autoChoice.text}\n  mode: ${autoChoice.mode}; ports ${autoChoice.ports.join(',')} (${autoChoice.portSource}; the run re-decides under the slot mutex when it starts)`);
+  else console.log(`shards: ${NSHARDS} (--shards ${SHARDS_ARG ?? `omitted: ${steps.length} steps${['slice', 'release'].includes(chainName) ? ` <= ${AC.minSteps}` : `, ${chainName} is not slice/release`}`})`);
+  console.log(`slots: at most ${SLOTS} gate runs on the machine (${SLOT_DIR}); in use now ${slotHolders().length}${slotHolders().length ? `: ${slotHolders().map((h) => `pid ${h.pid} ${h.chain} ${Number.isInteger(h.shards) ? `${h.shards} shard(s)` : '(shards not recorded)'}`).join(', ')}` : ''}; timing bars ${RECORD_TIMING ? 'RECORDED, not judged (change/slice)' : 'JUDGED'}`);
   console.log(`seed ${SEED} (read-only, APFS clones); snapshots ${SNAP}; artifacts ${RUNS_ROOT}/<timestamp>-${chainName}/; lock ${LOCK}; notify ${NOTIFY_MODE}; quiet-wait ${QUIET === null ? 'off (load recorded)' : `load < ${QUIET}, at most ${QUIET_MAX_MIN} min`}`);
   console.log('setup (each shard): sidecar npm run build (run worktree)');
   const sched = estimate();
@@ -746,6 +805,7 @@ if (!steps.length) {
 }
 
 if (PLAN) {
+  if (AUTO) await decideAuto();
   printPlan();
   for (const sh of shards) {
     const busy = [];
@@ -779,7 +839,12 @@ function takeLock() {
   }
   die(`could not take ${LOCK}`);
 }
-await acquireSlot();
+// the slot (one per run) records this run's shard count and ports; an auto run decides both under the slot mutex
+await acquireSlot(async () => {
+  if (AUTO) await decideAuto();
+  return { shards: NSHARDS, ports: allPorts };
+});
+if (autoChoice) console.log(autoChoice.text);
 takeLock();
 let lockHeld = true;
 const releaseLock = () => {
@@ -817,7 +882,7 @@ const summary = {
   shards: shards.map((s) => ({ k: s.k, runDir: s.RUN, ports: { sidecar: s.SIDECAR_PORT, dev: s.DEV_PORT }, evidence: path.relative(OUT, s.ev) || '.' })),
   tier: tierInfo.kind === 'tier' ? { name: tierInfo.tier, range: tierInfo.range ?? null, engine: tierInfo.engine, placement: tierInfo.placement, impact: tierInfo.impact ?? null,
     rotationKey: tierInfo.rotationKey ?? null, rotationSource: tierInfo.rotationSource ?? null, rotation: tierInfo.rotation ?? null, notes: tierInfo.notes } : null,
-  counts: {}, setup: null, slot: slotNote, hosts: { mode: HOSTS.mode, server: HOSTS.server.filter((id) => stepIds.includes(id)) }, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
+  counts: {}, setup: null, slot: slotNote, shardsAuto: autoChoice ? (({ text, ...a }) => a)(autoChoice) : null, hosts: { mode: HOSTS.mode, server: HOSTS.server.filter((id) => stepIds.includes(id)) }, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
   schedule: { order: 'longest first', historyRuns: HIST.runs, historyFile: HISTORY_FILE, benches: ISOLATE_BENCH ? 'isolated' : 'not isolated (timing recorded)', historyTimeouts: HIST_TIMEOUTS },
   steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin, effectiveTimeoutMin: s.effTimeoutMin, timeoutSource: s.timeoutSource, estimateMin: Math.round(est(s) * 10) / 10, ...(tierInfo.why?.[s.id] ? { why: tierInfo.why[s.id] } : {}) })),
 };
@@ -1262,6 +1327,7 @@ function summaryMd() {
     `Steps: ${Object.entries(c).map(([k, v]) => `${v} ${k}`).join(', ')}.${summary.timingRecorded.length ? ` ${summary.timingRecorded.length} timing bar miss(es) recorded.` : ''}${summary.error ? ` Error: ${summary.error}` : ''}`,
     `Slot ${summary.slot.slot}/${summary.slot.limit}${summary.slot.waitedSeconds ? ` (waited ${fmtDur(summary.slot.waitedSeconds)})` : ''}; timing bars ${summary.timingPolicy}; benches ${summary.schedule.benches}; ${summary.schedule.historyTimeouts ? 'timeouts from history' : 'configured timeouts'}.`,
   ];
+  if (autoChoice) lines.push('', '```', autoChoice.text, '```');
   const t = summary.tier;
   if (t) {
     lines.push('', `Tier **${t.name}**${t.range ? ` over \`${t.range}\`` : ''}: engine-touching ${t.engine ? 'yes' : 'no'}, placement-touching ${t.placement ? 'yes' : 'no'}`

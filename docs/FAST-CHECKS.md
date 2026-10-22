@@ -1,7 +1,9 @@
 # Fast checks: what moves out of the game, and what it buys
 
 Status: analysis for a decision (2026-10-20, main at b4ff2bd4). **Update (chore/gate-waits):** the fixed waits, P0's three pure
-duplicates and the h-unit floor are done; see docs/GATES.md "Gate waits". The look steps stay at the slice tier (Noah judges
+duplicates and the h-unit floor are done; see docs/GATES.md "Gate waits". **Update (chore/gate-fast-p1, 2026-10-21):** P1's moves
+for the undo steps (4e-orders, 4e-crash, 4d-all, c30, 5b-chains, 6a-eflat, 6a-staged, x-resume) are done; see docs/GATES.md "Fast
+checks P1". Each row the undo model touches says its P1 status in its disposition (**P1 done**, kept in slice, not moved, deferred). The look steps stay at the slice tier (Noah judges
 looks per slice), so P0's "look steps -> release" rows have not moved; only their idle time went. This doc maps every in-game assertion in `tools/gate-chains.json` to its fastest trustworthy home. Those homes are the six
 fast checkers Noah approved, a smoke instance kept in game, or "stays in game". The doc then projects what each checker saves at the
 slice tier.
@@ -108,7 +110,7 @@ slice tier.
 | phase | what lands | slice step-min saved | slice wall after |
 |---|---|---|---|
 | P0 (no checker) | look steps → release (`k1a-look`, `t3a-look`, `t3b-look`, `6ch-look`, `ha-look`, `6chy-look`, `irr-look`, `6cvoc-look`); duplicates out (`6cw-scenario-s7`, `6b-scenario-s1-flat`, the ha-* steps that h-* already run); ALREADY-OFFLINE rows out (api-compat inside x/mp/sch/y2/c29, 0a-* sidecar duplicates, 6a-inv3's order invariance, kit re-reads) | 75 | 109 min |
-| P1 undo model | the E-flat/E-normal copies, removal orders (4e-orders), group/stage undo (4d, c30, 6a-staged, 6a-eflat), the crash kill points K1, K2, K4, K5, K6, K8 and RG2-RG6 (fault injection), x-resume's state machine, 5b's delta chains | 32 | 97 min |
+| P1 undo model (**done for the undo steps, 2026-10-21**: docs/GATES.md "Fast checks P1") | the E-flat/E-normal copies, removal orders (4e-orders), group/stage undo (4d, c30, 6a-staged, 6a-eflat), the crash kill points K1, K2, K4, K5, K6, K8 and RG2-RG6 (fault injection), x-resume's state machine, 5b's delta chains | 32 | 97 min |
 | P2 structure + look lints | the realised re-reads of M2/M3/M4/M5/M10 (bridges, tunnels, walls, ropes), keep-clear and protected areas, OVERLAP/PROTECTED/PALETTE refusals, w-ingame's path bibles, d/d2 geometry, voc M20/M26/M27 re-runs | 17 | 92 min |
 | P3 water + survival lints | per-body census copies, breach sweeps, the 12 HY design kinds, ledger rows in y/c29/pt/pt2/cu/voc-survival | 17 | 86 min |
 
@@ -128,6 +130,15 @@ row; it exists only in `gate6cp0.mjs:122` and `gate7ak1.mjs:170`.
 ## The checkers
 
 ### 1. Undo model tester (P1)
+
+**Status (2026-10-21, chore/gate-fast-p1): the undo steps' moves are done.** UMT exists (docs/UMT.md); the properties that stand
+for the moved in-game groups are `UmtGateMovesTest` (4e orders and crash points, 4d/6a stage undos, c30's repeated group removal),
+`RegionReconcileTest` (x-resume (f)), `RegionWaitLimitTest` (6a-staged's control), with `JournalPropertyTest`, `JournalStoreTest`
+and `DeltaPropertyTest`; each was shown red with the production code it guards broken. The slice steps run `--slice` subsets, and
+`-full` twins run everything at release (docs/GATES.md "Fast checks P1"). Deferred: the undo rows inside the P2/P3 agents' drivers
+(p0, c37, v, b, tile-gravity, c31, t2, d, d2, voc, vocc, pt, pt2, h, hy, irr), the scenario G-EX rows (P2's realised == virtual
+guard keeps one per writer kind), x-ingame (UMT injects no restore failure), 4e-megalite (a bench step) and the steps no recent
+slice ran (0a, 0b, sch, 5b-village). The calibration probe (UMT seeds replayed in game) is not built yet.
 
 - **Scope.**
   - Every "the world is back exactly" assertion: E-flat, E-normal minus the world-class diff, removal by owner, group/stage/lot
@@ -544,8 +555,8 @@ p50 13.6 min · in 9/12 recent full slices · 10.8 step-min per slice · after a
 |---|---|---|---|---|---|---|---|
 | 1 | base world gen + 12 lot fits | regenerates the normal-preset "G4D Base" world every run (rm + create), fits 12 lots on varied terrain, only BLOCK_ENTITIES refusals allowed | 53 s = 6.8% (measured) | 59 | SMOKE | 0.49 | Not a proof. The fit check is ALREADY-OFFLINE (`LotFittingTest`, `MassingPredictionTest`). Cheap win: keep the generated base as a restore like the 4e `restore: ["G4E Flat"]` instead of regenerating. |
 | 2 | queue places all 12 + BAR tick | 12-lot batch at 4 ms places 12/12; Architect own tick max <= 50 ms | ~15 s = 1.9% (~est) | 16 | KEEP-INGAME | 0.00 | Real mod write path through ticks into real chunks. BAR half is recorded-not-judged. |
-| 3 | group undo: removeGroup completes + reverse placement order | `sgremove` returns removed=true; SITE_REMOVED events are exactly the reverse of ITEM_PLACED | ~5 s = 0.6% (~est) | 5 | REPLACE · undo-model | 0.06 | Pure journal ordering; `RegionJournalTest.groupUndoEqualsTileByTile` + `JournalPropertyTest` cover order/exactness abstractly. Model: removal order = reverse layer order, blockers (entities in box) as an input. |
-| 4 | **group undo: every lot region (box+7) and village back exactly** | after removeGroup, 12 lot hashes and the whole-village hash equal the pre-placement hashes | ~75 s = 9.5% (~est; | 82 | SMOKE · undo-model | 0.68 | Journal exactness is covered by `JournalPropertyTest` (any order, overlaps, edits). What the in-game copy adds is vanilla neighbour/entity/gravity behaviour on a real world. |
+| 3 | group undo: removeGroup completes + reverse placement order | `sgremove` returns removed=true; SITE_REMOVED events are exactly the reverse of ITEM_PLACED | ~5 s = 0.6% (~est) | 5 | REPLACE · undo-model · **P1: kept in slice** (free: it reads the events; UMT models Groups' order) | 0.06 | Pure journal ordering; `RegionJournalTest.groupUndoEqualsTileByTile` + `JournalPropertyTest` cover order/exactness abstractly. Model: removal order = reverse layer order, blockers (entities in box) as an input. |
+| 4 | **group undo: every lot region (box+7) and village back exactly** | after removeGroup, 12 lot hashes and the whole-village hash equal the pre-placement hashes | ~75 s = 9.5% (~est; | 82 | SMOKE · undo-model · **P1 done** (slice: the village's hash; per lot at release) | 0.68 | Journal exactness is covered by `JournalPropertyTest` (any order, overlaps, edits). What the in-game copy adds is vanilla neighbour/entity/gravity behaviour on a real world. |
 | 5 | queued == atomic equality | same 12 lots placed one-by-one INSTANT in a fresh copy: 12/12 lot regions and the village hash identical (states + BE NBT) | ~77 s = 9.8% (~est; | 85 | SMOKE | 0.71 | Ticked writer vs atomic writer is the real placement system. 4 design kinds x 3: one lot per kind (cabin, gatehouse, tavern, tower) is a representative; all 12 at release. |
 | 6 | relog: MSPT measure sanity | `msptMax >= serverMsptMax` (the full-tick timer includes end-of-tick handlers) | ~0.5 s = 0.1% | 1 | BAR | 0.00 | Timing-instrument self-check. |
 | 7 | relog: queue file kept the job | after a clean leave mid-item, `architect-queue.json` is clean=true and holds a place job with a writer cursor | ~12 s = 1.5% (~est) | 13 | KEEP-INGAME | 0.00 | Save/reload of the queue file. Format is `QueueJsonTest` (offline), but the clean-stop hook needs the real server. |
@@ -554,7 +565,7 @@ p50 13.6 min · in 9/12 recent full slices · 10.8 step-min per slice · after a
 | 10 | waiting: player in lot | PLAYER_IN_BOX wait; not placed while the player stands in it; placed once the player left | ~8 s = 1.0% (~est) | 9 | KEEP-INGAME | 0.00 | Needs the real player entity/box check (`PlayerBlocksTest` covers the predicate only). |
 | 11 | waiting: unloaded chunks + LOAD_BOUNDED | NOT_LOADED wait; far lot places when player walks near; LOAD_BOUNDED(64) places a far lot with no player | ~12 s = 1.5% (~est) | 13 | KEEP-INGAME | 0.00 | Real chunk load/unload and tickets (`ChunkTicketsTest` is the logic only). |
 | 12 | stages: state machine | queued PLANNED, nothing before approval, undo of s1 refused while s3 placed, state sequence in order | ~13 s = 1.6% (~est) | 14 | ALREADY-OFFLINE | 0.17 | `StageRulesTest` (4) + `BatchRulesTest` (12) model the rules; in-game copy is a duplicate of the rule table. Also exercised by c30 group 1. |
-| 13 | stages: undo 3 then undo 1 restore lots exactly | hash of 3 lots after staged undos equals pre; skipped s2 never placed | ~14 s = 1.7% (~est) | 15 | REPLACE · undo-model | 0.18 | Same journal exactness as group 3. Failed in 7 of 84 historical runs on the same decor drift (see notes). |
+| 13 | stages: undo 3 then undo 1 restore lots exactly | hash of 3 lots after staged undos equals pre; skipped s2 never placed | ~14 s = 1.7% (~est) | 15 | REPLACE · undo-model · **P1 done** (UmtGateMovesTest stages) | 0.18 | Same journal exactness as group 3. Failed in 7 of 84 historical runs on the same decor drift (see notes). |
 | 14 | lotfit: 4 lots x 4 street sides geometry | entrance faces street, predicted restore box inside lot, approachIntoStreet, LOT_TOO_SMALL, overlapMargin = front 12 | ~4 s = 0.5% (~est) | 4 | ALREADY-OFFLINE | 0.05 | `LotFittingTest`, `MinLotSizeTest`, `MirrorFitTest` (flat-world geometry, no vanilla). |
 | 15 | lotfit: 16 placed from their fits | each placed restore box is inside its lot and equals `predictedRestoreBox` | ~5.5 s = 0.7% (~est) | 6 | SMOKE | 0.05 | Prediction == placement on flat terrain is unit-tested; real terrain slope extension (`extendMax`) is the only in-game residue. |
 | 16 | gap0: touching lots place; approach crossing a neighbour refuses OVERL… | A,B 0-gap both place; C refuses `FAILED:OVERLAP` | 5.5 s = 0.7% (measured… | 6 | REPLACE · structure-lint | 0.08 | Pure box/approach-strip geometry. `BatchRulesTest` is the likely home (it has no OVERLAP assertion today: grep found none, so add one). Needs: restore boxes and approach strips as AABBs. |
@@ -563,7 +574,7 @@ p50 13.6 min · in 9/12 recent full slices · 10.8 step-min per slice · after a
 | 19 | survival: 3/3 built sites identical to instant placement | restore box + BE NBT hashes of the construction-built sites equal INSTANT placement | ~37 s = 4.7% (~est) | 41 | SMOKE | 0.34 | Construction path final state == instant. One site at slice tier. |
 | 20 | patron: actorless INSTANT batch places in creative with toggle on; | places; box+7 identical to atomic | ~22 s = 2.8% (measured… | 24 | SMOKE | 0.20 | Same equality proof as group 4 for a different permission mode; the toggle is Java config (`BatchRulesTest`). Candidate to fold into group 4. |
 | 21 | toggle: survival toggled mid-batch | placing item finishes; 3 queued INSTANT items fail NOT_ALLOWED; failed lots unchanged, nothing half-placed | ~35 s = 4.4% (~est; | 38 | KEEP-INGAME | 0.00 | Needs a real item mid-placement (`dev.placement.slow`) to prove nothing is half-written. |
-| 22 | toggle: cancelBatch mid-item | placed stays, placing + rest fail CANCELLED; the in-flight lot (at 48/1775) is exactly as before | ~25 s = 3.2% (~est) | 28 | SMOKE · undo-model | 0.23 | Cancel-rollback exactness = journal rollback of a half-written PLACING entry; same machinery as crash K3. Model: abort at an arbitrary writer cursor then `undo`. |
+| 22 | toggle: cancelBatch mid-item | placed stays, placing + rest fail CANCELLED; the in-flight lot (at 48/1775) is exactly as before | ~25 s = 3.2% (~est) | 28 | SMOKE · undo-model · **P1: kept in slice** (the one smoke instance) | 0.23 | Cancel-rollback exactness = journal rollback of a half-written PLACING entry; same machinery as crash K3. Model: abort at an arbitrary writer cursor then `undo`. |
 | 23 | toggle: append | second batch appends a stage; duplicate stage name refuses; another owner refuses; removeGroup takes both batches' sites down exactly | ~21 s = 2.7% (~est) | 23 | ALREADY-OFFLINE | 0.29 | Refusal rules are unit-level; exactness is the same journal property. |
 | 24 | throughput: BAR 1 / 4 / 10 ms | cells/s and own tick per budget (4 ms row reused from equality) | 17.4 s = 2.2% (measure… | 19 | BAR | 0.00 | Already recorded-not-judged in slices. |
 
@@ -575,10 +586,10 @@ p50 5.8 min · in 2/12 recent full slices · 1.0 step-min per slice · after all
 | # | assertion group | what it checks | share | ≈ s | disposition | saved step-min/slice | why / what the checker must model |
 |---|---|---|---|---|---|---|---|
 | 1 | base world gen + 12 fits | same as 4d group 0 | 53 s = 14.8% (measured… | 54 | SMOKE | 0.10 | Restore a saved base instead of regenerating. |
-| 2 | C30 1: 12 staged batches reach placed in order | 12 runs at budgets 2/4/20 ms, autoApprove vs per-stage approve, 4 stages / 6 sites; every stage PLACING->PLACED in order, batch finishes | ~20 s = 5.6% (the batc… | 20 | SMOKE · undo-model | 0.04 | Stage ordering is `StageRulesTest` (unit). In-game adds tick-scheduler timing. Keep one autoApprove and one manual run at slice, all 12 at release. |
-| 3 | C30 1: after each run's group removal the lots are exactly as before | `hashLots(6 lots)` after EVERY of the 12 removals (until a drift is seen) | **~215 s = 60%** (12 x… | 219 | REPLACE · undo-model | 0.61 | The expensive part of the step, and it is the same journal-exactness proof as 4d groups 3/12. Immediate cheap fix: hash once after run 0 and once after run 11. |
+| 2 | C30 1: 12 staged batches reach placed in order | 12 runs at budgets 2/4/20 ms, autoApprove vs per-stage approve, 4 stages / 6 sites; every stage PLACING->PLACED in order, batch finishes | ~20 s = 5.6% (the batc… | 20 | SMOKE · undo-model · **P1 done** (2 of 12 runs) | 0.04 | Stage ordering is `StageRulesTest` (unit). In-game adds tick-scheduler timing. Keep one autoApprove and one manual run at slice, all 12 at release. |
+| 3 | C30 1: after each run's group removal the lots are exactly as before | `hashLots(6 lots)` after EVERY of the 12 removals (until a drift is seen) | **~215 s = 60%** (12 x… | 219 | REPLACE · undo-model · **P1 done** (one hash after both runs; UmtGateMovesTest c30) | 0.61 | The expensive part of the step, and it is the same journal-exactness proof as 4d groups 3/12. Immediate cheap fix: hash once after run 0 and once after run 11. |
 | 4 | C30 2: chicken holds the last stage PLACING | chicken (NoAI) in a district_2 lot: stage stays PLACING, sibling placed, L5 waiting OCCUPIED with message; | ~15 s = 4.2% (~est; | 15 | KEEP-INGAME | 0.00 | Real entity in a real box, vanilla entity handling, the game log line. Steward's v0.22.0 "last stage placing for ten minutes" stall: this is the regression guard. |
-| 5 | C30 3: wait limit 3 s -> TIMED_OUT / stage PARTIAL | L5 FAILED TIMED_OUT, stage ends PARTIAL, batch finishes | ~8 s = 2.2% (~est) | 8 | REPLACE · undo-model | 0.02 | Time-based rule in Java; no vanilla needed beyond the occupying entity, which group 3 already proves. |
+| 5 | C30 3: wait limit 3 s -> TIMED_OUT / stage PARTIAL | L5 FAILED TIMED_OUT, stage ends PARTIAL, batch finishes | ~8 s = 2.2% (~est) | 8 | REPLACE · undo-model · **P1: kept in slice** (8 s; WaitLimit and StageRules are unit-tested, the combination is not) | 0.02 | Time-based rule in Java; no vanilla needed beyond the occupying entity, which group 3 already proves. |
 | 6 | C30 4: survival stage ordering | next stage starts once the street site is PLACED, not built; the player next to the landmark lot holds it APPROVED with one log line; | ~25 s = 7.0% (~est; | 26 | KEEP-INGAME | 0.00 | Real construction site (unbuilt, 0 cells) + real player proximity. Steward's second stall (survival stage start after ten minutes). |
 | 7 | setup (runner) | client up/world open/teardown | 17.6 s = 4.9% (step `s… | 18 | setup | 0.00 | - |
 
@@ -618,8 +629,8 @@ p50 1.6 min · in 12/12 recent full slices · 2.5 step-min per slice · after al
 |---|---|---|---|---|---|---|---|
 | 1 | flatBase + pre-hash of the 256x256 box | restore "G4E Flat", hash MEGA_BOX once (h0) | ~12 s = 11% (~est) | 16 | KEEP-INGAME | 0.00 | Baseline for group 3. |
 | 2 | 256x256 pad + 40 lots + 8 roads placed through the queue (LOAD_BOUNDED… | the LAYER batch at 4 ms with a clean client stop after >= 12 items, then resumes | ~45 s = 40% (4 ms wall… | 58 | KEEP-INGAME | 0.00 | Largest real-system write: chunk loading (LOAD_BOUNDED), journal volume, save/reload. 3rd copy of "resume after relog". |
-| 3 | one lot's undo leaves the pad exact | remove lot L7: pad owns more cells afterwards, 0 differ from its recorded after; 0.07 s | ~10 s = 9% (~est; | 13 | REPLACE · undo-model | 0.22 | Journal layering: removing a top layer exposes the pad's own cells. `JournalPropertyTest`, `RegionJournalTest.invariantIiiForRegionsPadAndLotInEitherOrder`. Model: CELL pad with BOX/CELL entries layered over it. |
-| 4 | group undo is exact | `sgremove` restores the 759,824 cells; the 256x256x36 box hash equals h0 (10.9 s) | ~20 s = 18% (~est) | 26 | SMOKE · undo-model | 0.29 | Scale test of the real undo through chunks (heap, MSPT, 10.9 s). The exactness half is `undo-model`; the at-scale cost is the point. |
+| 3 | one lot's undo leaves the pad exact | remove lot L7: pad owns more cells afterwards, 0 differ from its recorded after; 0.07 s | ~10 s = 9% (~est; | 13 | REPLACE · undo-model · **P1: deferred** (bench step: its undo is also the undo timing bar) | 0.22 | Journal layering: removing a top layer exposes the pad's own cells. `JournalPropertyTest`, `RegionJournalTest.invariantIiiForRegionsPadAndLotInEitherOrder`. Model: CELL pad with BOX/CELL entries layered over it. |
+| 4 | group undo is exact | `sgremove` restores the 759,824 cells; the 256x256x36 box hash equals h0 (10.9 s) | ~20 s = 18% (~est) | 26 | SMOKE · undo-model · **P1: deferred** (bench step: its undo is also the undo timing bar) | 0.29 | Scale test of the real undo through chunks (heap, MSPT, 10.9 s). The exactness half is `undo-model`; the at-scale cost is the point. |
 | 5 | BAR: lot undo / group undo own tick | own tick max 0 ms CPU / 7.8 ms | ~0 | 0 | BAR | 0.00 | recorded. |
 | 6 | 1 ms and 10 ms runs placed everything + BAR cells/s | two more full mega runs (15.6 s, 3.0 s wall) | ~28 s = 25% (~est; | 36 | KEEP-INGAME | 0.00 | Timing/throughput variants of group 1; only the budget differs. One at 4 ms already proves the write path. |
 
@@ -631,9 +642,9 @@ p50 7.1 min · in 8/12 recent full slices · 4.9 step-min per slice · after all
 | # | assertion group | what it checks | share | ≈ s | disposition | saved step-min/slice | why / what the checker must model |
 |---|---|---|---|---|---|---|---|
 | 1 | fixture: LAYER batch places T,R,H,X; union box + 8 inside hash box; | the 4-site layered fixture on the flat base plus a 5th site | ~30 s = 7% (~est) | 31 | KEEP-INGAME | 0.00 | Real layered placement into real chunks. The journal-state checks (4 ACTIVE, 0 unreferenced, covers) are `undo-model` (JournalTest). |
-| 2 | 24 removal orders: all removed, no leak, box+8 exact | for each permutation of {T,R,H,X}: copy world, remove one by one with `keep`; | ~288 s = 67% (24 x ~12… | 298 | REPLACE · undo-model | 3.32 | `JournalPropertyTest` already proves invariants (i)-(iv) over 400 random fixtures including every removal order for <= 4 entries, so this is ALREADY-OFFLINE for the journal. |
+| 2 | 24 removal orders: all removed, no leak, box+8 exact | for each permutation of {T,R,H,X}: copy world, remove one by one with `keep`; | ~288 s = 67% (24 x ~12… | 298 | REPLACE · undo-model · **P1 done** (2 seam orders; UmtGateMovesTest orders) | 3.32 | `JournalPropertyTest` already proves invariants (i)-(iv) over 400 random fixtures including every removal order for <= 4 entries, so this is ALREADY-OFFLINE for the journal. |
 | 3 | group removal of all four is exact | `sgremove` of the group; hash equals pre-hash (24,039 cells) | ~14 s = 3.3% (~est) | 15 | SMOKE | 0.11 | Same as 4d group 3 and megalite group 3. |
-| 4 | 6 random orders including L: exact, no leak | seeded shuffles of 5 sites with the cabin layered over a road edge | ~84 s = 19.5% (~est; | 87 | REPLACE · undo-model | 0.96 | Same as group 1 with an overlapping layer; `JournalPropertyTest` random overlaps cover it. Keep 1 in game. |
+| 4 | 6 random orders including L: exact, no leak | seeded shuffles of 5 sites with the cabin layered over a road edge | ~84 s = 19.5% (~est; | 87 | REPLACE · undo-model · **P1 done** (1 of 6; UmtGateMovesTest orders) | 0.96 | Same as group 1 with an overlapping layer; `JournalPropertyTest` random overlaps cover it. Keep 1 in game. |
 
 #### `4e-crash`
 
@@ -643,14 +654,14 @@ p50 6.2 min · in 8/12 recent full slices · 4.7 step-min per slice · after all
 | # | assertion group | what it checks | share | ≈ s | disposition | saved step-min/slice | why / what the checker must model |
 |---|---|---|---|---|---|---|---|
 | 1 | setup | client start/world base | 20.2 s = 5.5% (measure… | 23 | setup | 0.00 | - |
-| 2 | K1: kill inside the P3 commit (files written, index not) | JVM halts; no file the index names is lost; restart: journal opens, no site/entry, world unchanged, final full removal == pre-hash | ~35 s = 9.6% (~est) | 40 | REPLACE · undo-model | 0.45 | Journal-store crash consistency at a file boundary; `JournalStoreTest` is the base. Model: fault injection at each file write/rename/index write of the commit sequence, then the real startup recovery (orphan GC, PLACING release). |
-| 3 | K2: after P3, before the record | PLACING entry released at start, nothing written | ~35 s = 9.6% | 40 | REPLACE · undo-model | 0.45 | Same fault-injection harness. |
+| 2 | K1: kill inside the P3 commit (files written, index not) | JVM halts; no file the index names is lost; restart: journal opens, no site/entry, world unchanged, final full removal == pre-hash | ~35 s = 9.6% (~est) | 40 | REPLACE · undo-model · **P1 done** (UmtGateMovesTest crash) | 0.45 | Journal-store crash consistency at a file boundary; `JournalStoreTest` is the base. Model: fault injection at each file write/rename/index write of the commit sequence, then the real startup recovery (orphan GC, PLACING release). |
+| 3 | K2: after P3, before the record | PLACING entry released at start, nothing written | ~35 s = 9.6% | 40 | REPLACE · undo-model · **P1 done** (UmtGateMovesTest crash) | 0.45 | Same fault-injection harness. |
 | 4 | K3: kill during ticked block writes (unclean) | restart rolls the placement back from the PLACING entry; world == before | ~44 s = 12% (~est; | 50 | KEEP-INGAME | 0.00 | Real chunk writes interrupted by a real kill, rollback through the journal into real chunks. The representative of "crash mid-write". |
-| 5 | K4: after the ACTIVE commit, before the record is placed | journal wins: record placed BUILT, final removal exact | ~35 s = 9.6% | 40 | REPLACE · undo-model | 0.45 | Journal-vs-record reconciliation at startup. |
-| 6 | K5: before the R2 commit (remove) | all four sites stand, owned cells as before the kill | ~33 s = 9% | 38 | REPLACE · undo-model | 0.42 | Remove-commit atomicity. |
-| 7 | K6: after R2, before records go pending | H reactivated (record and entries ACTIVE) | ~33 s = 9% | 38 | REPLACE · undo-model | 0.42 | Reactivation reverses hand-downs (`JournalTest.reactivation...`). |
+| 5 | K4: after the ACTIVE commit, before the record is placed | journal wins: record placed BUILT, final removal exact | ~35 s = 9.6% | 40 | REPLACE · undo-model · **P1 done** (UmtGateMovesTest crash; glue modelled) | 0.45 | Journal-vs-record reconciliation at startup. |
+| 6 | K5: before the R2 commit (remove) | all four sites stand, owned cells as before the kill | ~33 s = 9% | 38 | REPLACE · undo-model · **P1 done** (UmtGateMovesTest crash; glue modelled) | 0.42 | Remove-commit atomicity. |
+| 7 | K6: after R2, before records go pending | H reactivated (record and entries ACTIVE) | ~33 s = 9% | 38 | REPLACE · undo-model · **P1 done** (UmtGateMovesTest crash; glue modelled) | 0.42 | Reactivation reverses hand-downs (`JournalTest.reactivation...`). |
 | 8 | K7: kill during ticked restore of a group removal | restore re-runs at start; box exact; next start settles the group (0 entries); still exact | ~58 s = 15.8% (~est; | 66 | KEEP-INGAME | 0.00 | Real ticked restore interrupted, restarted twice. |
-| 9 | K8: kill inside the R2 hand-down commit | hand-down did not half-apply, all entries ACTIVE, half-written generations deleted at start (2 -> 0 orphans) | ~33 s = 9% | 38 | REPLACE · undo-model | 0.42 | Generation-file cleanup at start; needs the same fault harness. |
+| 9 | K8: kill inside the R2 hand-down commit | hand-down did not half-apply, all entries ACTIVE, half-written generations deleted at start (2 -> 0 orphans) | ~33 s = 9% | 38 | REPLACE · undo-model · **P1 done** (UmtGateMovesTest crash, JournalStoreTest) | 0.42 | Generation-file cleanup at start; needs the same fault harness. |
 | 10 | K3 clean: clean stop mid-placement resumes from the cursor | placement completes BUILT after restart; final removal exact | ~36 s = 9.8% | 41 | KEEP-INGAME | 0.00 | Save/reload resume; the third copy. |
 
 #### `4e-throughput`
@@ -683,10 +694,10 @@ p50 30.4 min · in 4/12 recent full slices · 10.0 step-min per slice · after a
 | # | assertion group | what it checks | share | ≈ s | disposition | saved step-min/slice | why / what the checker must model |
 |---|---|---|---|---|---|---|---|
 | 1 | v4 refuses FRAME_CHANGED | `deltaCheck(site,4)` not applicable, reason FRAME_CHANGED, once | <1% ~est | 18 | ALREADY-OFFLINE | 0.10 | DeltaPlanner/SitePlanner refusal is a pure plan decision on the version cells. OFFLINE-D plans over random chains incl. frame moves; |
-| 2 | each apply v_a->v_b applied (186 ops, "N cells") | apply of any version to any version succeeds and writes Delta' cells over the tavern fixture | ~50% ~est | 899 | SMOKE | 3.33 | OFFLINE-D proves apply/revert/Remove logic over 150 random chains with every rotation. What it cannot prove: vanilla shape updates and guards on stairs, doors, fences, chests, and real chunk writes (the model "writes exactly the p… |
-| 3 | E2 revert-to-v equals world before its apply (29) and every revert app… | hash of 88x50x82 box after a top-delta revert == hash before that apply | ~17% ~est | 306 | ALREADY-OFFLINE | 1.70 | OFFLINE-D E2 + OFFLINE-J. The in-game copy is the undo-model fidelity check against real block states and block entities. Same SMOKE subset as row 2. |
-| 4 | E3 Remove restores pre-site world (21) | after any chain, `remove` gives the exact h0 hash | ~8% ~est | 144 | SMOKE | 0.53 | OFFLINE-D E3 (player edits included) + OFFLINE-J (i). Same SMOKE subset. |
-| 5 | E1 every one of 273 states equals a fresh placement of that version at… | state hash recorded after each op == hash of `place g5b_tavern_v<n>` at its origin in a fresh world (4 reference placements, 273 comparisons… | ~4% ~est | 72 | SMOKE | 0.27 | OFFLINE-D E1 ("union box + 8 equals a fresh placement"). The comparisons themselves are free (cache lookups); only 4 placements cost time. |
+| 2 | each apply v_a->v_b applied (186 ops, "N cells") | apply of any version to any version succeeds and writes Delta' cells over the tavern fixture | ~50% ~est | 899 | SMOKE · **P1 done** (2 of 20 scripts) | 3.33 | OFFLINE-D proves apply/revert/Remove logic over 150 random chains with every rotation. What it cannot prove: vanilla shape updates and guards on stairs, doors, fences, chests, and real chunk writes (the model "writes exactly the p… |
+| 3 | E2 revert-to-v equals world before its apply (29) and every revert app… | hash of 88x50x82 box after a top-delta revert == hash before that apply | ~17% ~est | 306 | ALREADY-OFFLINE · **P1 done** (2 of 20 scripts) | 1.70 | OFFLINE-D E2 + OFFLINE-J. The in-game copy is the undo-model fidelity check against real block states and block entities. Same SMOKE subset as row 2. |
+| 4 | E3 Remove restores pre-site world (21) | after any chain, `remove` gives the exact h0 hash | ~8% ~est | 144 | SMOKE · **P1 done** (2 of 20 scripts) | 0.53 | OFFLINE-D E3 (player edits included) + OFFLINE-J (i). Same SMOKE subset. |
+| 5 | E1 every one of 273 states equals a fresh placement of that version at… | state hash recorded after each op == hash of `place g5b_tavern_v<n>` at its origin in a fresh world (4 reference placements, 273 comparisons… | ~4% ~est | 72 | SMOKE · **P1 done** (2 of 20 scripts) | 0.27 | OFFLINE-D E1 ("union box + 8 equals a fresh placement"). The comparisons themselves are free (cache lookups); only 4 placements cost time. |
 | 6 | per-script setup: fresh world copy + reopen + `placeAtV1` (5 version i… | not an assertion; 22 x leave/copy/open/tp/place | ~18% ~est | 324 | setup | 0.00 | Pure cost of repeating scripts. |
 | 7 | step setup | flatBase, kit `delta-fixtures.mjs` build, client start | ~2% ~est | 36 | setup | 0.00 |  |
 
@@ -699,10 +710,10 @@ p50 2.0 min · in 4/12 recent full slices · 0.7 step-min per slice · after all
 |---|---|---|---|---|---|---|---|
 | 1 | village base: 12 lots placed as one group | batch queue places 12 INSTANT lots, `ids.length==12` | ~30% ~est | 40 | KEEP-INGAME | 0.00 | real batch/placement path; also the base for everything after. Cached in ctx when the world exists, but a slice run rebuilt it. |
 | 2 | atomic reference: 12 `deltaApply` | each applied (12 ok lines) | ~12% ~est | 16 | ALREADY-OFFLINE | 0.09 | OFFLINE-D; used only to produce hAtomic. |
-| 3 | batch at 4 ms equals atomic applies | 12 delta items as stage "upgrade" give the same V_BOX hash as the atomic applies | ~12% ~est | 16 | SMOKE · undo-model | 0.06 | "batch scheduling == sequential applies" for 12 disjoint lots is order/budget invariance; one budget (4 ms) in game at slice. Model target: undo-model's batch queue (disjoint boxes) if the batch code can be driven headless. |
+| 3 | batch at 4 ms equals atomic applies | 12 delta items as stage "upgrade" give the same V_BOX hash as the atomic applies | ~12% ~est | 16 | SMOKE · undo-model · **P1: deferred** (not in recent slices) | 0.06 | "batch scheduling == sequential applies" for 12 disjoint lots is order/budget invariance; one budget (4 ms) in game at slice. Model target: undo-model's batch queue (disjoint boxes) if the batch code can be driven headless. |
 | 4 | same at 1 ms and 10 ms | same hash equality at two more budgets | ~20% ~est | 27 | SMOKE | 0.10 | per-budget copies of group 3. |
 | 5 | MSPT bars at 4/1/10 ms (4 ms judged at 25 and 50) | Architect own tick max | ~0% (rides rows 3-4) | 0 | BAR | 0.00 | recorded, never blocks. |
-| 6 | undoStage("upgrade") reverts all 12 exactly; | hash == hPlaced, then == h0 | ~8% ~est | 11 | ALREADY-OFFLINE | 0.06 | OFFLINE-D E2/E3 per site + OFFLINE-J group undo equals tile-by-tile. Stage-undo order over a group of sites is the undo-model's removal-order property. Drop from slices; keep at release. |
+| 6 | undoStage("upgrade") reverts all 12 exactly; | hash == hPlaced, then == h0 | ~8% ~est | 11 | ALREADY-OFFLINE · **P1: deferred** (not in recent slices) | 0.06 | OFFLINE-D E2/E3 per site + OFFLINE-J group undo equals tile-by-tile. Stage-undo order over a group of sites is the undo-model's removal-order property. Drop from slices; keep at release. |
 | 7 | relog mid-batch (3 of 12 applied) resumes identically | leave world mid-batch, reopen, batch completes, hash == hAtomic | ~9% ~est | 12 | KEEP-INGAME | 0.00 | save/reload with a persisted batch; timing dependent (350 ms sleep decides how many are applied). |
 | 8 | cancelBatch keeps exactly the applied deltas | cancel after 300 ms, result == same applied set applied atomically in a reference world | ~9% ~est | 12 | SMOKE | 0.04 | batch state machine plus tick boundary; "no half delta" needs a real tick. |
 
@@ -757,9 +768,9 @@ p50 15.7 min · in 0/12 recent full slices · 0.0 step-min per slice · after al
 |---|---|---|---|---|---|---|---|
 | 1 | uninterrupted reference realises and undoes exactly | PLACED and undoHash == h0; gives `refEnd.hash` for later compares | 9% (85 s) | 84 | SMOKE | 0.00 | needed as the golden for rows 3-4; realise+undo exactness already ALREADY-OFFLINE (OFFLINE-J `groupUndoEqualsTileByTile`). |
 | 2 | RG1: kill during prepare, resume | JVM halts during chunk generation; after restart prepare reaches DONE (256/256), no journal entry | 5% (48 s) | 46 | KEEP-INGAME | 0.00 | chunk generation + process death. |
-| 3 | RG2, RG3, RG4, K3: kill during realise, restart, resume | region resumes to PLACED, same region hash as uninterrupted, undo exact | 47% (449 s, ~112 s eac… | 437 | SMOKE · undo-model | 0.00 | The journal/index state machine at each kill point is the undo-model's crash harness: fault injection at every journal and region-record I/O step (JournalStoreTest does this for the store only), reload from disk bytes, resume, com… |
+| 3 | RG2, RG3, RG4, K3: kill during realise, restart, resume | region resumes to PLACED, same region hash as uninterrupted, undo exact | 47% (449 s, ~112 s eac… | 437 | SMOKE · undo-model · **P1: not moved** (release-only step; RG points not mapped to UMT) | 0.00 | The journal/index state machine at each kill point is the undo-model's crash harness: fault injection at every journal and region-record I/O step (JournalStoreTest does this for the store only), reload from disk bytes, resume, com… |
 | 4 | RG5: sidecar killed mid-stream | waiting SIDECAR_UNAVAILABLE while gone; resumes <= 30 s after restart; same hash, undo exact | 11% (110 s) | 102 | KEEP-INGAME | 0.00 | sidecar process kill + reconnect; repeated in megaB. |
-| 5 | RG6, K7: kill during the region group undo | restart settles, region gone, world hash == h0, 0 regions left | 29% (272 s: RG6 111 +… | 270 | SMOKE · undo-model | 0.00 | undo interrupted at journal write points then settled on evidence: same fault-injection harness; must model undo commit order and "restore may be lost by halt". K7 stays in game once per release for the real halt. |
+| 5 | RG6, K7: kill during the region group undo | restart settles, region gone, world hash == h0, 0 regions left | 29% (272 s: RG6 111 +… | 270 | SMOKE · undo-model · **P1: not moved** (release-only step; RG points not mapped to UMT) | 0.00 | undo interrupted at journal write points then settled on evidence: same fault-injection harness; must model undo commit order and "restore may be lost by halt". K7 stays in game once per release for the real halt. |
 
 #### `6a-eflat`
 
@@ -771,10 +782,10 @@ p50 8.0 min · in 11/12 recent full slices · 7.8 step-min per slice · after al
 | 1 | setup: heap baseline, plan, 258M-cell snapshot |  | 7% (33 s) | 36 | setup | 0.00 |  |
 | 2 | realise the mega plan (not asserted here) | 8.85M cells placed in 4803 ticks; no check on state | 50% (15:00:21-15:04:21… | 254 | KEEP-INGAME | 0.00 | only a precondition for the undo; the step never asserts PLACED. |
 | 3 | edit setup: find pad cell, place gold block, save, 2 world copies, reo… | `dev.site.verify` on terrain tiles, `/setblock`, copyWorld x2 | ~6% | 30 | setup | 0.00 |  |
-| 4 | E-flat 0 mismatches after group undo | `region.remove` then `region.hash mode diff` over 258M cells == pre-region snapshot, player block excluded | ~28% (undo ~110-120 s… | 142 | SMOKE · undo-model | 1.45 | pure journal exactness: ALREADY-OFFLINE in OFFLINE-J/RegionJournalTest on random fixtures. What only the real run adds: scale (9M entries, index, chunk-spanning sections) and real chunk-level capture of old states incl. |
+| 4 | E-flat 0 mismatches after group undo | `region.remove` then `region.hash mode diff` over 258M cells == pre-region snapshot, player block excluded | ~28% (undo ~110-120 s… | 142 | SMOKE · undo-model · **P1: kept in slice** (the one E-flat instance) | 1.45 | pure journal exactness: ALREADY-OFFLINE in OFFLINE-J/RegionJournalTest on random fixtures. What only the real run adds: scale (9M entries, index, chunk-spanning sections) and real chunk-level capture of old states incl. |
 | 5 | player's block survives group undo and is reported kept | gold block on pad cell still gold_block, `rm.kept >= 1` | ~0% | 0 | ALREADY-OFFLINE | 0.00 | OFFLINE-J invariant (iv) "player edit survives that entry's undo" + `PlayerBlocksTest`. |
-| 6 | lots-3 stage undo exact on the 39,650 cells its 50 lots own | `sundo2 ... lots-3 keep force` (lots-4 placed after, forced), `dev.undo.check` mismatches 0 | ~3% (15 s incl. | 15 | REPLACE · undo-model | 0.23 | removal-order property of OFFLINE-J (any order, subset never writes outside the subset) at stage granularity. Must model the stage = set of entries and the "force over later stage" semantics. |
-| 7 | one lot's undo exact on its 567 cells, <= 5 s | `remove <lot>` + `dev.undo.check` 0 mismatches, 0.03 s | ~2% (10 s incl. | 10 | REPLACE · undo-model | 0.16 | same as row 6 for one site; the 5 s bar is timing. |
+| 6 | lots-3 stage undo exact on the 39,650 cells its 50 lots own | `sundo2 ... lots-3 keep force` (lots-4 placed after, forced), `dev.undo.check` mismatches 0 | ~3% (15 s incl. | 15 | REPLACE · undo-model · **P1 done** (UmtGateMovesTest stages) | 0.23 | removal-order property of OFFLINE-J (any order, subset never writes outside the subset) at stage granularity. Must model the stage = set of entries and the "force over later stage" semantics. |
+| 7 | one lot's undo exact on its 567 cells, <= 5 s | `remove <lot>` + `dev.undo.check` 0 mismatches, 0.03 s | ~2% (10 s incl. | 10 | REPLACE · undo-model · **P1 done** (UmtGateMovesTest stages) | 0.16 | same as row 6 for one site; the 5 s bar is timing. |
 
 #### `6a-forest`
 
@@ -811,7 +822,7 @@ p50 6.3 min · in 11/12 recent full slices · 6.1 step-min per slice · after al
 | 2 | lots-1 holds after land raised 12 over its lot boxes | waiting DRIFTED "land changed since planning", stage PLANNED, `REGION_STATE` event, nothing written for 10 s | ~4% (15:25:20-15:25:34… | 16 | SMOKE | 0.16 | drift decision = sampled columns vs baseline (`DriftStageTest`), persistence across save/load = `RegionRecDriftTest`. Residual: event firing and "writes nothing while held" via the real batch gate. |
 | 3 | approving lots-1 again continues and places it | drift "continued", stage PLACED, region PLACED | ~18% (60 s poll wait,… | 72 | KEEP-INGAME | 0.00 | real stage gate through the batch; most of the time is the poll granularity (see Global finding). |
 | 4 | maxWait 30 s: items fail TIMED_OUT with the wait reason; | 17 items TIMED_OUT "waited 30 s for: ... not loaded", region PARTIAL after 92 s | ~27% (15:26:40-15:28:2… | 108 | SMOKE | 1.10 | NOT_LOADED requires the player far away with `spawn_chunk_radius 0` and LOADED_ONLY (real chunk loading); the timer logic (TIMED_OUT message, PARTIAL) is a fake-clock unit candidate (cf. |
-| 5 | control without maxWait still waits after ~102 s | 0 failed, batch RUNNING, NOT_LOADED | ~30% (15:28:27-15:30:1… | 120 | REPLACE · undo-model | 1.83 | negative check on elapsed time; needs no real world once NOT_LOADED is shown by row 4. Cutting the sleep to ~10 s loses nothing because the 30 s timer fires within that window in row 4's counterpart. |
+| 5 | control without maxWait still waits after ~102 s | 0 failed, batch RUNNING, NOT_LOADED | ~30% (15:28:27-15:30:1… | 120 | REPLACE · undo-model · **P1 done** (RegionWaitLimitTest) | 1.83 | negative check on elapsed time; needs no real world once NOT_LOADED is shown by row 4. Cutting the sleep to ~10 s loses nothing because the 30 s timer fires within that window in row 4's counterpart. |
 | 6 | H0 with lots in any stage order: lots-1 before ways, ground not realis… | after `sreorder`, drift check ran before the second stage; 351 snapshot-box columns all frozen pre-lot (heights 64) vs after-lot 64/69 | ~17% (64 s, 60 s poll) | 68 | KEEP-INGAME | 0.00 | "lots freeze their columns before they write" reads the ARSV height shards written by the real placement; order logic could be modelled, the freeze-before-write ordering needs the real write path. |
 
 #### `6a-heap`
@@ -994,7 +1005,7 @@ p50 8.0 min · in 11/12 recent full slices · 7.8 step-min per slice · after al
 | 6 | Buildings | kit checker over the placed entries (`kit/check.mjs` on `g6a_stub_9` nbt) 0 errors, restraint warnings 0 | in 5 | 0 | ALREADY-OFFLINE | 0.00 | pure kit check of a library entry; no world needed |
 | 7 | organic read | axis-run share 0.296 (rec) | in 5 | 0 | REPLACE · look-lint | 0.00 | recorded only |
 | 8 | stand | `settle(120 s)` natural | 25 % | 128 | KEEP-INGAME | 0.00 | feeds E-normal only here (no ice rows in S1); growth class 924 cells |
-| 9 | G-EX | E-flat 0 (flat run); E-normal 924 growth, unclassified 0, undo's own 0 (cap 5) | 7 % | 36 | SMOKE · undo-model | 0.37 | see G-EX |
+| 9 | G-EX | E-flat 0 (flat run); E-normal 924 growth, unclassified 0, undo's own 0 (cap 5) | 7 % | 36 | SMOKE · undo-model · **P1: deferred** (scenarios.mjs: P2's realised == virtual guard keeps one per writer kind) | 0.37 | see G-EX |
 | 10 | G-DET | 3 plans same IR; tiles 1 = 4 workers; golden "match (every tile sha; IR sha differs by kitVersion 0.12.0 -> 0.39.0)" natural; | in metrics | 0 | ALREADY-OFFLINE | 0.00 | golden by replan; the flat run's golden FAIL is ignored by the exit-code rule (scenarios.mjs:868-882, `runBad`) |
 | 11 | G-LOOK | 6 before + 6 after screenshots, pending | 2 % | 10 | LOOK → release | 0.16 |  |
 
@@ -1009,7 +1020,7 @@ p50 2.8 min · in 12/12 recent full slices · 3.6 step-min per slice · after al
 | 2 | G-SETTLE | 90 s | 48 % | 104 | setup | 1.73 |  |
 | 3 | realise + MSPT | same as above flat: 47,616 cells | 16 % | 35 | KEEP-INGAME | 0.58 |  |
 | 4 | G-PLAN / G-REAL / Buildings / G-DET | same bars as 6b-scenario-s1 groups 4-7, 10, on the flat survey | 4.5 % | 10 | DUPLICATE | 0.16 |  |
-| 5 | E-flat | box hash diff 0 after `Regions.remove`, 47,616 cells | 9 % | 19 | SMOKE · undo-model | 0.32 |  |
+| 5 | E-flat | box hash diff 0 after `Regions.remove`, 47,616 cells | 9 % | 19 | SMOKE · undo-model · **P1: deferred** (scenarios.mjs: P2's realised == virtual guard keeps one per writer kind) | 0.32 |  |
 
 #### `6cv-scenario-s7`
 
@@ -1026,7 +1037,7 @@ p50 7.6 min · in 12/12 recent full slices · 8.0 step-min per slice · after al
 | 6 | G-LOTS | 4 Door to street: 10/10 lots walk from the placed site's entrance anchor to the street over role blocks; | in 5 | 0 | SMOKE | 0.00 | needs real Sites anchors and the pathStyle approach (6b-pathstyle holds the single-lot proof) |
 | 7 | G-NAV | 3b Villager paths (vanilla): 10/10 villager lots `dev.nav.villager` door -> bell, both variants | 0.1 % (0.2 s) | 0 | KEEP-INGAME | 0.00 | vanilla villager nav; runs in flat as well as natural |
 | 8 | stand | 120 s | 25 % | 119 | KEEP-INGAME | 0.00 | E-normal only (growth 685); no ice rows |
-| 9 | G-EX | E-flat 0; E-normal 685 growth, unclassified 0, residue 0 | 7 % | 33 | SMOKE · undo-model | 0.37 |  |
+| 9 | G-EX | E-flat 0; E-normal 685 growth, unclassified 0, residue 0 | 7 % | 33 | SMOKE · undo-model · **P1: deferred** (scenarios.mjs: P2's realised == virtual guard keeps one per writer kind) | 0.37 |  |
 | 10 | G-DET | IR sha x3, tiles 1 = 4, golden match natural (kit 0.18.0 -> 0.39.0); flat golden differs (non-gating) | ~1 % | 5 | ALREADY-OFFLINE | 0.08 |  |
 | 11 | G-LOOK | 6 + 6 cameras (+ lamp cam) | 2 % | 9 | LOOK → release | 0.16 |  |
 
@@ -1055,7 +1066,7 @@ p50 8.4 min · in 11/12 recent full slices · 8.5 step-min per slice · after al
 | 6 | G-NAV | S2 3 villager edges: kit mover 6/6, vanilla `dev.nav.villager` both ways 6/6, 0 ladders on villager edges (recorded, not gated: SETTLEMENTS… | 0.02 % | 0 | KEEP-INGAME | 0.00 | natural only; flat prints "n/a (flat run)" |
 | 7 | stand + melt (M17) | after the 120 s stand: M17 realised 0 of 12,930 ice/snow cells; ice 104,341 -> 104,341, snow layers 4,437 -> 4,437, lost 0; | 23.5 % | 129 | KEEP-INGAME | 0.00 | vanilla random-tick melt/freeze near the region's lights; S2 is the one with real ice (also F1, F2). Plan-side M17 is ALREADY-OFFLINE |
 | 8 | kept natural spikes | ARWD before/after realise: 0 of 74,661 kept cells changed | in 5 | 0 | REPLACE · structure-lint | 0.00 | write path respects `keep` sets: realised==virtual over keep cells |
-| 9 | G-EX | E-flat 0; E-normal 66 = 64 growth + 2 gravity, unclassified 0 | 6.7 % | 37 | SMOKE · undo-model | 0.38 |  |
+| 9 | G-EX | E-flat 0; E-normal 66 = 64 growth + 2 gravity, unclassified 0 | 6.7 % | 37 | SMOKE · undo-model · **P1: deferred** (scenarios.mjs: P2's realised == virtual guard keeps one per writer kind) | 0.38 |  |
 | 10 | G-DET | IR x3, tiles 1 = 4, golden by replan of committed inputs ("this run's live survey differs in 36,063 columns") | ~1 % | 6 | ALREADY-OFFLINE | 0.08 | the live survey changes between world copies; the golden is replanned offline |
 | 11 | BAR tile eval | S2 12 p99 1.0 ms, 3.4M cells/s | in metrics | 0 | BAR | 0.00 | node timing, offline |
 | 12 | G-LOOK | 6 + 6 cameras | 1.9 % | 10 | LOOK → release | 0.16 | flat run takes no shots and may run headless |
@@ -1092,7 +1103,7 @@ p50 7.6 min · in 9/12 recent full slices · 5.7 step-min per slice · after all
 | 3 | realise + MSPT | flat 72,369 cells, **PARTIAL** (lot `failed:LOT_TOO_SMALL`, 1 of 3), natural 6,694 cells PLACED 3/3 lots; own tick max 6.2-6.5 ms | 13.4 % | 61 | KEEP-INGAME | 0.00 | the flat run's PARTIAL is expected and the step passes |
 | 4 | G-PLAN | T1 10 Checker 0 errors no M1-M4 | ~0 % | 0 | ALREADY-OFFLINE | 0.00 |  |
 | 5 | G-REAL relief | T1 1 Blend smoothness virtual and realised (98.6 % of steps <= 1, 0 over 3); T1 2 pads at target 0 of 616 off (virtual + realised); | 2.2 % (dumps 0.7 + met… | 10 | REPLACE · structure-lint | 0.12 | slope between adjacent surface columns, pad elevation, cut/fill limits; realised side re-surveys dump tops (excluding columns another writer topped, 13 left out) |
-| 6 | G-EX | E-flat 0, E-normal 95 (94 growth + 1 live), unclassified 0 | 7.2 % | 33 | SMOKE · undo-model | 0.27 |  |
+| 6 | G-EX | E-flat 0, E-normal 95 (94 growth + 1 live), unclassified 0 | 7.2 % | 33 | SMOKE · undo-model · **P1: deferred** (scenarios.mjs: P2's realised == virtual guard keeps one per writer kind) | 0.27 |  |
 | 7 | G-DET | IR x3, tiles, golden by replan ("live survey differs in 1,701 columns") | 1 % | 5 | ALREADY-OFFLINE | 0.06 | S3's flowing water moves the survey between world copies (scenarios.mjs:307,493) |
 | 8 | stand | 120 s | 26.8 % | 122 | KEEP-INGAME | 0.00 | E-normal only |
 | 9 | BAR tile eval | T1 7 p99 0.7 ms, 10.8M cells/s | in metrics | 0 | BAR | 0.00 |  |
@@ -1176,7 +1187,7 @@ p50 2.1 min · in 0/12 recent full slices · 0.0 step-min per slice · after all
 | 3 | bible, massingFirst: GROUP_AWAITING_APPROVAL once per round, redirect… | events fire once per massing round (1, then 2 after redirect) | ~14% ~est | 18 | SMOKE | 0.00 | event delivery mod<-sidecar is the protocol; sidecar half in slice0a.test.ts/groups.test.ts. One group is enough |
 | 4 | client restart while awaiting approval | group re-read AWAITING_APPROVAL, seq 18 = 18, nothing re-fires | ~33% (client down + up… | 42 | KEEP-INGAME | 0.00 | real mod<->sidecar reconnect across a client JVM restart; the "no re-fire" property lives in the mod's snapshot diffing |
 | 5 | details done, GROUP_UPDATED seq strictly increasing, C7 stage lines/co… | accounting over the wire | ~8% | 10 | ALREADY-OFFLINE | 0.00 | slice0a.test.ts "C7: seq strictly increases...; breakdown lines sum", breakdown-copy.test.ts, estimates-0a.test.ts |
-| 6 | batch of the 3 details DONE, 3 placed; | real placement + group undo | ~11% | 14 | SMOKE · undo-model | 0.00 | needs real Sites placement; exact removal -> undo-model (JournalPropertyTest already fuzzes site undo) |
+| 6 | batch of the 3 details DONE, 3 placed; | real placement + group undo | ~11% | 14 | SMOKE · undo-model · **P1: deferred** (not in recent slices) | 0.00 | needs real Sites placement; exact removal -> undo-model (JournalPropertyTest already fuzzes site undo) |
 
 #### `0a-budget`
 
@@ -1268,7 +1279,7 @@ p50 6.7 min · in 0/12 recent full slices · 0.0 step-min per slice · after all
 |---|---|---|---|---|---|---|---|
 | 1 | setup: three world copies + three client starts | client up +42 s each | ~31% ~est | 124 | setup | 0.00 |  |
 | 2 | unhooked run PLACED (baseline sha) | small region realise, 4 lots | ~3% | 12 | SMOKE | 0.00 |  |
-| 3 | SLOW_TILES=4: PLACED with the baseline sha; TILE_SLOW shown; | helper slow tiles retried at 30/60/120 s; same final world | ~54% (client up 13:15… | 216 | REPLACE · undo-model | 0.00 | `TileStreamSlowTest` proves the 30/60/120/300 s schedule, WAITING state, RETRY. The "same sha after delayed tiles" is a property of the writer with permuted tile arrival; |
+| 3 | SLOW_TILES=4: PLACED with the baseline sha; TILE_SLOW shown; | helper slow tiles retried at 30/60/120 s; same final world | ~54% (client up 13:15… | 216 | REPLACE · undo-model · **P1: deferred** (not in recent slices) | 0.00 | `TileStreamSlowTest` proves the 30/60/120/300 s schedule, WAITING state, RETRY. The "same sha after delayed tiles" is a property of the writer with permuted tile arrival; |
 | 4 | SLOW_TILES=2: passes inside the helper's retries (no TILE_SLOW) |  | ~12% | 48 | ALREADY-OFFLINE | 0.00 | TileStreamSlowTest (error count below the threshold) |
 
 #### `0b-ingame`
@@ -1281,9 +1292,9 @@ p50 1.0 min · in 0/12 recent full slices · 0.0 step-min per slice · after all
 | 1 | setup | client up ~78 s in the SCH log (p50 total 62) | ~55% ~est | 34 | setup | 0.00 | `client: self` |
 | 2 | item 5 estimate has ORIGINAL/SMALL/COPY lines; |  | ~3% | 2 | ALREADY-OFFLINE | 0.00 | 0b-unit: breakdown-copy.test.ts, copies.test.ts, estimates-0a.test.ts, Wire0bTest |
 | 3 | item 5: massingFirst group with x3 item + SMALL: expansion house, hous… | expansion + ordering + stage COPY | ~7% | 4 | ALREADY-OFFLINE | 0.00 | copies.test.ts / 0b-unit |
-| 4 | item 5: batch of 4 queued, DONE, each copy its own site; | real placement + selective undo | ~15% | 9 | SMOKE · undo-model | 0.00 | write path is real; undo exactness of one overlapping/adjacent copy fits undo-model (JournalPropertyTest family) |
+| 4 | item 5: batch of 4 queued, DONE, each copy its own site; | real placement + selective undo | ~15% | 9 | SMOKE · undo-model · **P1: deferred** (not in recent slices) | 0.00 | write path is real; undo exactness of one overlapping/adjacent copy fits undo-model (JournalPropertyTest family) |
 | 5 | item 7 versionOf with a site: entry placed, 3 player edits, versionOf… | version bump + outdated detection | ~7% | 4 | SMOKE | 0.00 | sidecar half versionof.test.ts, versions.test.ts |
-| 6 | item 7: checkDelta reports 3 kept cells; | delta over a player-edited site | ~10% | 6 | SMOKE · undo-model | 0.00 | delta apply with player edits then undo is a journal property (edits kept, undo order exact). Predicted 47 changed cells (log 18:05:37) is the kit delta: offline |
+| 6 | item 7: checkDelta reports 3 kept cells; | delta over a player-edited site | ~10% | 6 | SMOKE · undo-model · **P1: deferred** (not in recent slices) | 0.00 | delta apply with player edits then undo is a journal property (edits kept, undo order exact). Predicted 47 changed cells (log 18:05:37) is the kit delta: offline |
 | 7 | item 7 refusals: bundled/unknown/COPY/site_mismatch/busy/base_moved | VERSION_REFUSED reasons | ~3% | 2 | ALREADY-OFFLINE | 0.00 | versionof.test.ts, Wire0bTest, ApiRulesTest |
 
 #### `sch-roundtrip`
@@ -1318,7 +1329,7 @@ p50 0.2 min · in 0/12 recent full slices · 0.0 step-min per slice · after all
 | # | assertion group | what it checks | share | ≈ s | disposition | saved step-min/slice | why / what the checker must model |
 |---|---|---|---|---|---|---|---|
 | 1 | imported v3 hut and old-DataVersion .schem place; | placement == template | ~45% ~est | 7 | SMOKE · structure-lint | 0.00 | real Sites placement of an imported entry; `structure-lint`-like equality is the verify call |
-| 2 | box changed on place; remove-exact: box hash after removal == before (… | undo exactness | ~45% ~est | 7 | SMOKE · undo-model | 0.00 | E-flat for a single site; undo-model covers general exactness |
+| 2 | box changed on place; remove-exact: box hash after removal == before (… | undo exactness | ~45% ~est | 7 | SMOKE · undo-model · **P1: deferred** (not in recent slices) | 0.00 | E-flat for a single site; undo-model covers general exactness |
 | 3 | import steps (2 imports) |  | ~10% | 2 | SMOKE | 0.00 |  |
 
 #### `sch-ingame`
@@ -1359,11 +1370,11 @@ p50 7.0 min · in 8/12 recent full slices · 4.5 step-min per slice · after all
 | 2 | lotext: 4096 ok, 4097/non-object/no-namespace ext refuse FIELD_LIMIT w… | validation | ~3% | 11 | ALREADY-OFFLINE | 0.12 | x-unit: kit C19 tests, FieldLimitsTest |
 | 3 | lotext: realise places every lot (10 lots PLACED, 30 s); | plan -> site ext mapping | ~10% | 37 | SMOKE · determinism | 0.28 | write path realise real; ext mapping is `determinism`-able from the plan (x-unit "plan to LotSpec") |
 | 4 | lotext: save and reload leaves every site ext byte equal | persistence | ~3% | 11 | KEEP-INGAME | 0.00 | real save/reload of site records |
-| 5 | lotext: undo (Regions.remove) removes lot sites; | undo/redo cycle | ~12% | 45 | SMOKE · undo-model | 0.33 | removal order and re-realise exactness are journal/model properties |
+| 5 | lotext: undo (Regions.remove) removes lot sites; | undo/redo cycle | ~12% | 45 | SMOKE · undo-model · **P1: deferred** (x-ingame not split in P1) | 0.33 | removal order and re-realise exactness are journal/model properties |
 | 6 | keys: plan keys: same key+body = same plan; | key semantics | ~3% | 11 | ALREADY-OFFLINE | 0.12 | mod RegionKeysTest, sidecar slice0a/regions tests (opKey canonical body) |
 | 7 | keys: realise held future pending, then **world stop -> WORLD_STOPPED*… | durable restart of the keyed realise | ~4% | 15 | KEEP-INGAME | 0.00 | world stop + reload with a pending future (sidecar<->mod protocol on a live server, write path interrupted) |
 | 8 | keys: the interrupted realise resumes and completes (30 s); | resume + key lifecycle | ~19% | 71 | KEEP-INGAME | 0.00 | the resume across a reload is the real thing; key bookkeeping is RegionKeysTest-able |
-| 9 | removal (a): injected restore failure mid-removal -> removed=false, re… | C22 | ~14% (incl. 30 s reali… | 52 | REPLACE · undo-model | 0.58 | failure injection at each journal step then retry, assert E-flat 0 and the PARTIAL/REMOVED state machine; a model with injected failure is stronger than one hit |
+| 9 | removal (a): injected restore failure mid-removal -> removed=false, re… | C22 | ~14% (incl. 30 s reali… | 52 | REPLACE · undo-model · **P1: deferred** (UMT injects no restore failure) | 0.58 | failure injection at each journal step then retry, assert E-flat 0 and the PARTIAL/REMOVED state machine; a model with injected failure is stronger than one hit |
 | 10 | removal (b): remove twice, tombstones with `removedAt`, survive save+r… | C22 tombstone | ~13% | 49 | KEEP-INGAME | 0.00 | the tombstone's persistence needs one real reload |
 | 11 | api-compat vs 0.16/0.15/0.14 jars + apitest api114 |  | ~22% (80 s) | 82 | ALREADY-OFFLINE | 0.91 | apijars + x-unit; api-compat is class-file only |
 
@@ -1378,9 +1389,9 @@ p50 5.8 min · in 6/12 recent full slices · 3.0 step-min per slice · after all
 | 2 | restore failure injected after the reload: PARTIAL never REMOVING, gro… |  | ~17% (58 s) | 61 | setup | 0.00 | failure injection after resume: model with fault injection at every step; exact hash equality is checkable on a journal model |
 | 3 | two restarts mid-removal: REMOVING both times, ends REMOVED, hash equa… | double resume | ~21% (70 s) | 75 | setup | 0.00 | multi-crash orders are exactly what a fuzz of crash points covers; two real restarts cost 14 s each |
 | 4 | another requester's removeGroup of the REMOVING region's group refused… |  | ~13% (45 s) | 47 | ALREADY-OFFLINE | 0.39 | pure ownership rule on a state; ApiRulesTest-style |
-| 5 | world-start reconcile: simulated stop leaves region REMOVING with grou… | reconcile table | ~11% (37 s) | 39 | REPLACE · undo-model | 0.33 | the reconcile is a function of (region state, group state): table test over all combos |
-| 6 | group ACTIVE after failure -> reconcile ends it PARTIAL; |  | (in f1/f2 block) | 0 | REPLACE · undo-model | 0.00 | same table |
-| 7 | plain site group (Sites.removeGroup) batch of 3 DONE; | same for site groups | ~7% (24 s) | 25 | SMOKE · undo-model | 0.14 | the site group version uses the Journal; JournalPropertyTest/StillOursFluidsTest are the base |
+| 5 | world-start reconcile: simulated stop leaves region REMOVING with grou… | reconcile table | ~11% (37 s) | 39 | REPLACE · undo-model · **P1 done** (RegionReconcileTest) | 0.33 | the reconcile is a function of (region state, group state): table test over all combos |
+| 6 | group ACTIVE after failure -> reconcile ends it PARTIAL; |  | (in f1/f2 block) | 0 | REPLACE · undo-model · **P1 done** (RegionReconcileTest) | 0.00 | same table |
+| 7 | plain site group (Sites.removeGroup) batch of 3 DONE; | same for site groups | ~7% (24 s) | 25 | SMOKE · undo-model · **P1: kept in slice** (the smoke) | 0.14 | the site group version uses the Journal; JournalPropertyTest/StillOursFluidsTest are the base |
 | 8 | base | ~1 s; first case needs world start | ~1% | 4 | setup | 0.00 |  |
 
 #### `p0-ingame`
@@ -1393,7 +1404,7 @@ p50 2.6 min · in 10/12 recent full slices · 2.3 step-min per slice · after al
 | 1 | crafted plan checked 3x: READY, one artifact sha, one IR sha; | check determinism + shapes | 16:01:21 -> 16:01:33 ~… | 13 | ALREADY-OFFLINE | 0.18 | p0-unit: valid/malformed fixtures, determinism with 1 and 4 workers, catalogue goldens, 59 Steward plans |
 | 2 | keys: in-flight twin shares, same key returns same, other body OP_KEY_… |  | ~3% | 5 | ALREADY-OFFLINE | 0.07 | RegionKeysTest, ApiP0Test, sidecar plan-check.test.ts |
 | 3 | realiseApproved: PLACED (30 s); region irSha == artifact's; | realised == virtual | ~21% | 35 | KEEP-INGAME | 0.00 | this is the realised==virtual proof; the check is `vworld` compare (M-rule style). The model side exists offline; the equality with the real world needs the real write |
-| 4 | Regions.remove restores world hash (E-flat 0, 1512 cells) |  | ~3% | 5 | REPLACE · undo-model | 0.07 |  |
+| 4 | Regions.remove restores world hash (E-flat 0, 1512 cells) |  | ~3% | 5 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.07 |  |
 | 5 | pinned artifact survives its region's removal (C36); | artifact store bookkeeping | ~1% | 2 | ALREADY-OFFLINE | 0.02 | store logic; ApiP0Test |
 | 6 | ARTIFACT_STALE: a block placed on a planned tile -> refuses naming the… | stale rule | ~2% | 3 | ALREADY-OFFLINE | 0.05 | PlanStaleTest + p0-unit (stale rule is exact); in game only the dev block placement |
 | 7 | recheck, approve, realise (30 s), removal exact | repeat of 3/4 | ~22% | 37 | SMOKE | 0.34 | second identical realise/remove; drop at slice tier |
@@ -1425,7 +1436,7 @@ p50 1.1 min · in 1/12 recent full slices · 0.1 step-min per slice · after all
 | 1 | setup / world open | ~20 s (p50 66 - 46 log) | ~30% ~est | 21 | setup | 0.00 |  |
 | 2 | 13x14 cottages: auto -> ns; forced "ew" -> ew street, 4 lots; | street orientation | 22:14:04 -> :14 ~15% | 10 | ALREADY-OFFLINE | 0.01 | c37-unit: whole kit suite with C37 fixtures (13x14 gives ns/ew, goldens re-plan unchanged). The in-game copy goes through the real sidecar check only |
 | 3 | forced-ew plan realised (30 s), world changed |  | ~45% | 31 | SMOKE | 0.03 | a plan with an ew street through the real write path; would not need 30 s if the poll floor were lowered |
-| 4 | Regions.remove restores world hash exactly (E-flat 0; 319 cells) |  | ~8% | 5 | REPLACE · undo-model | 0.01 |  |
+| 4 | Regions.remove restores world hash exactly (E-flat 0; 319 cells) |  | ~8% | 5 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.01 |  |
 | 5 | C37b: Library.Entry.cells() == PlanChecks.cells for all 101 entries; | cells accounting | ~2% | 1 | REPLACE · determinism | 0.00 | pure Java computation over the bundled library; a unit test with the library on the classpath (or `kit` check) proves it without MC |
 
 #### `c38-ingame`
@@ -1462,12 +1473,12 @@ p50 2.9 min · in 3/12 recent full slices · 0.6 step-min per slice · after all
 | 3 | nav range + negative controls | vanilla canReach on 100-cell flat path true; raised platform with ladder only false; kit villager mover false / player mover true | 8% | 12 | SMOKE | 0.03 | vanilla half calibrates dev.nav.villager itself (one instance suffices at slice). Kit-mover half is route-t2.test.mjs / village.test.mjs |
 | 4 | protect: plan honours area | IR keepOut equals the area; every lot and street south of area z | 6% | 9 | REPLACE · structure-lint | 0.04 | keep-clear against IR boxes; needs lots/roads/paths footprints plus the protected-area list |
 | 5 | protect: realised, 0 cells written in area | ARWD diff over the area after PLACED (2849 cells changed) | 21% (realise ~30s) | 30 | SMOKE · structure-lint | 0.08 | the writer-honours-plan half is the same proof t2 (#2) and d (PT) make; one instance in game. History: this exact check once failed with 5400 cells in the area (T2, see bugs) |
-| 6 | protect: remove by owner | Regions.remove of 6279 cells | 1.5% | 2 | REPLACE · undo-model | 0.01 | journal restore of the region |
-| 7 | protect: PROTECTED refusals | plan made before the mark refused PROTECTED at realise, hash and journal 20->20; program with no keep-out refused PROTECTED | 4% | 6 | REPLACE · undo-model | 0.02 | pure rect arithmetic over claim and area; must model "force does not override" and mark-after-plan staleness |
+| 6 | protect: remove by owner | Regions.remove of 6279 cells | 1.5% | 2 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.01 | journal restore of the region |
+| 7 | protect: PROTECTED refusals | plan made before the mark refused PROTECTED at realise, hash and journal 20->20; program with no keep-out refused PROTECTED | 4% | 6 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.02 | pure rect arithmetic over claim and area; must model "force does not override" and mark-after-plan staleness |
 | 8 | steward: plan outputs | oversized lot unplaced (no_room), LotSpec ext rows 12/12, >=10 lots | 6% | 9 | ALREADY-OFFLINE | 0.04 | kit/test/village.test.mjs, village-layout-*.test.mjs, plus sidecar village test (goldens in gate6cv unit) |
 | 9 | steward: sim massingFirst group + fitToLot | group AWAITING_APPROVAL -> DONE with an entry per lot; fitToLot fits all | 13% | 19 | SMOKE | 0.05 | Steward API integration through the stub sidecar; one in game |
 | 10 | steward: realise(lotEntries) | PLACED, every lot placed | 21% | 30 | SMOKE | 0.08 | real write path via lotEntries; same ~30s floor as #5 |
-| 11 | steward: one Regions.remove exact | hash equal, 18653 cells | 5% | 7 | REPLACE · undo-model | 0.03 |  |
+| 11 | steward: one Regions.remove exact | hash equal, 18653 cells | 5% | 7 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.03 |  |
 | 12 | survroad | construction-road dirt path free on 6 soil kinds, costs gravel on sand (BOM) | 9% | 13 | REPLACE · ledger-lint | 0.05 | BOM from IR cell ops; needs the "free conversion" set (dirt, coarse_dirt, podzol, mycelium, rooted_dirt, grass_block -> dirt_path) and the sand cost row; 13s is mostly plan |
 
 #### `w-ingame`
@@ -1495,8 +1506,8 @@ p50 4.1 min · in 7/12 recent full slices · 2.6 step-min per slice · after all
 | # | assertion group | what it checks | share | ≈ s | disposition | saved step-min/slice | why / what the checker must model |
 |---|---|---|---|---|---|---|---|
 | 1 | base | restore (stale rebuild 22s here, steady ~1s) | 1-9% | 21 | setup | 0.00 |  |
-| 2 | NATURAL_ONLY strokes vs player wall + other owner's road | 9 strokes (raise/smooth/lower/overlay/erode/melt): wall (21 blocks, chest) unchanged; 0 of the road's 87 cells written; | 7% | 16 | SMOKE · undo-model | 0.11 | owner-skip and condition-skip are decided from journal ownership + block class; a model needs the journal's ownership map and the brush condition predicate. The vanilla bit is only that the brush reads real blocks |
-| 3 | 5 overlapping strokes undone in 3 orders, E-flat 0 | reverse, forward, mixed | 7% | 16 | REPLACE · undo-model | 0.16 | the textbook case: fuzz overlap/order against real journal code |
+| 2 | NATURAL_ONLY strokes vs player wall + other owner's road | 9 strokes (raise/smooth/lower/overlay/erode/melt): wall (21 blocks, chest) unchanged; 0 of the road's 87 cells written; | 7% | 16 | SMOKE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.11 | owner-skip and condition-skip are decided from journal ownership + block class; a model needs the journal's ownership map and the brush condition predicate. The vanilla bit is only that the brush reads real blocks |
+| 3 | 5 overlapping strokes undone in 3 orders, E-flat 0 | reverse, forward, mixed | 7% | 16 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.16 | the textbook case: fuzz overlap/order against real journal code |
 | 4 | PLAYER_BLOCKS permission | refused without actor, without op; with op clears wall + chest, nothing dropped, one undo restores NBT | 4% | 9 | SMOKE | 0.06 | needs permission levels and block-entity/item-drop behaviour (chest contents hash with NBT); refusals themselves are a pure policy table (ALREADY-OFFLINE-able via sidecar/Java unit) |
 | 5 | IR sha twice | same request+seed -> same IR sha, 1141 cells | 4% | 9 | REPLACE · determinism | 0.09 |  |
 | 6 | BAR radius-16 strokes latency | p50 951ms over 10 | 5% | 12 | BAR | 0.00 | recorded not judged (historic FAIL at load 23: 2298ms) |
@@ -1516,9 +1527,9 @@ p50 0.3 min · in 11/12 recent full slices · 0.7 step-min per slice · after al
 |---|---|---|---|---|---|---|---|
 | 1 | base (stale rebuild 20s in the log) |  | 5% steady | 2 | setup | 0.00 |  |
 | 2 | (A) sand on grass rewritten to stone stays sand | gravityKept 1, dependentCells 0, no falling_block entity near stroke | ~35% | 15 | KEEP-INGAME | 0.00 | the whole point is that vanilla does not drop the sand; the kit can model "support stays solid -> kept" (structure-lint rule) but not that no falling block spawned. This is the sand-vanish fix |
-| 3 | (A) one undo restores box exactly | 0 mismatches | ~10% | 4 | REPLACE · undo-model | 0.07 |  |
+| 3 | (A) one undo restores box exactly | 0 mismatches | ~10% | 4 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.07 |  |
 | 4 | (B) sand over water source, overlay rewrites support | hanging sand cleared as a cell of the entry (dependentCells 1); free support written solid | ~35% | 15 | KEEP-INGAME | 0.00 | needs strict /setblock to build the hanging sand; the cleared-with-entry rule itself is journal-model |
-| 5 | (B) undo restores incl. the hanging sand | 0 mismatches | ~10% | 4 | REPLACE · undo-model | 0.07 |  |
+| 5 | (B) undo restores incl. the hanging sand | 0 mismatches | ~10% | 4 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.07 |  |
 
 #### `c31-felling`
 
@@ -1528,10 +1539,10 @@ p50 0.3 min · in 2/12 recent full slices · 0.1 step-min per slice · after all
 | # | assertion group | what it checks | share | ≈ s | disposition | saved step-min/slice | why / what the checker must model |
 |---|---|---|---|---|---|---|---|
 | 1 | (1) protected: felling stays out of the cutter's protected area | trunk+outside branch felled (logs 9->0); area unchanged by hash; M3:tree_kept finding recorded | ~50% (10s incl. | 10 | KEEP-INGAME | 0.00 | tree rule is decided from the real log/leaf graph; a structure-lint could check "no forbidden cell changes" over a virtual tree but not vanilla tree shape |
-| 2 | (1) undo exact | 0 mismatches | ~3% | 1 | REPLACE · undo-model | 0.00 |  |
+| 2 | (1) undo exact | 0 mismatches | ~3% | 1 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.00 |  |
 | 3 | (2) owned: another owner's log mound untouched, own trunk felled | tree_kept.owned 1 | ~25% | 5 | KEEP-INGAME | 0.00 |  |
 | 4 | (3) inside: whole tree felled (logs 7->0, held leaves 3) |  | ~20% | 4 | KEEP-INGAME | 0.00 |  |
-| 5 | (2),(3) undo exact |  | ~2% | 0 | REPLACE · undo-model | 0.00 |  |
+| 5 | (2),(3) undo exact |  | ~2% | 0 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.00 |  |
 
 #### `t1-ingame`
 
@@ -1569,7 +1580,7 @@ p50 1.2 min · in 1/12 recent full slices · 0.1 step-min per slice · after all
 | 3 | realised PLACED (989428 cells), 0 cells written in area | ARWD diff | 48% (32s) | 31 | SMOKE | 0.03 | one of the three realise-honours-keepout proofs (v #5, d PT). Failed once with 5400 cells in the area (T2 run 20261012-220700): real writer bug |
 | 4 | vanilla villager paths along villager edges both ways | gate_hall and hall_chapel [true,true] | <1% | 1 | KEEP-INGAME | 0.00 | calibration of the kit's villager mover on a slope route; the offline `synth` step runs both movers on the virtual world |
 | 5 | 0 ladder segments on villager edges |  | <1% | 1 | REPLACE · structure-lint | 0.00 | ladders on villager edges is M2:villager (offline `variants`) |
-| 6 | removal by owner exact, world hash equal (E-flat 0) | 991696 cells | 27% (18s) | 18 | REPLACE · undo-model | 0.02 |  |
+| 6 | removal by owner exact, world hash equal (E-flat 0) | 991696 cells | 27% (18s) | 18 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.02 |  |
 
 #### `d-ingame`
 
@@ -1580,15 +1591,15 @@ p50 2.2 min · in 11/12 recent full slices · 2.2 step-min per slice · after al
 |---|---|---|---|---|---|---|---|
 | 1 | standing flat_village PLACED (S7 lots) | setup | 32% (41s) | 45 | SMOKE | 0.45 | real realise; the setup for everything below |
 | 2 | district seam holds cell past street_e_end, meets no lot/road/path | kit rule on claim | <1% | 1 | REPLACE · structure-lint | 0.02 | kit/test/districts-d.test.mjs |
-| 3 | OVERLAP refusals (over street; 41 deep), missing region (OTHER), other… | named refusals + world hash unchanged | 3% | 4 | REPLACE · undo-model | 0.06 | claim-rect vs standing-region IR geometry (seam width <= 16 columns); hash-unchanged is "refusal writes nothing" |
+| 3 | OVERLAP refusals (over street; 41 deep), missing region (OTHER), other… | named refusals + world hash unchanged | 3% | 4 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.06 | claim-rect vs standing-region IR geometry (seam width <= 16 columns); hash-unchanged is "refusal writes nothing" |
 | 4 | PT: player cabin one tracked build, IR keep-out holds cabin, no lot/pa… |  | 5% | 7 | REPLACE · structure-lint | 0.11 | keep-clear against a tracked player build |
 | 5 | PT: cabin's kept cells unchanged after the district realise (kept hash… |  | within #6 | 0 | SMOKE | 0.00 | writer honours keep-out (see t2 #3) |
 | 6 | join: routed to street_e_end, external edge to rg59, graph edge | IR beside, plan reads rg59 sha | 1% | 1 | REPLACE · structure-lint | 0.02 |  |
 | 7 | join walkable by player + villager movers (kit), ladders 0, grade wind… |  | <1% | 1 | REPLACE · structure-lint | 0.02 | walkability/grade on virtual world |
 | 8 | district rg60 PLACED (131 cells), view names beside, join not dangling |  | 24% | 34 | SMOKE | 0.34 | writer |
 | 9 | vanilla villager nav from every new lot entrance to bell and back (4 l… | all [true,true] | 1.5% | 2 | KEEP-INGAME | 0.00 | calibration; kit movers already assert the same in #7 |
-| 10 | Regions.remove(new): 0 changed cells in village; | ARWD diff + hash | 3% | 4 | REPLACE · undo-model | 0.06 |  |
-| 11 | district again, village removed first: join reported dangling; |  | 31% (mostly a 2nd 30s… | 43 | REPLACE · undo-model | 0.66 | removal order with dependencies (dangling join note) |
+| 10 | Regions.remove(new): 0 changed cells in village; | ARWD diff + hash | 3% | 4 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.06 |  |
+| 11 | district again, village removed first: join reported dangling; |  | 31% (mostly a 2nd 30s… | 43 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.66 | removal order with dependencies (dangling join note) |
 
 #### `d2-ingame`
 
@@ -1600,7 +1611,7 @@ p50 3.9 min · in 11/12 recent full slices · 4.0 step-min per slice · after al
 | 1 | base |  | <1% | 3 | setup | 0.00 |  |
 | 2 | outpost: placed at gap 40, joined to street_e_end; corridor on view | on flat world, village then outpost | ~30% (~72s of the 84s… | 78 | SMOKE · structure-lint | 0.79 | kit/test/outpost-s2.test.mjs already covers the plan geometry |
 | 3 | outpost stable across reload | IR sha equal after save+reopen | ~3% | 8 | KEEP-INGAME | 0.00 | proves nothing in the world leaks into the plan; determinism is the offline half |
-| 4 | outpost one undo exact incl. corridor (453 cells) |  | ~3% | 8 | REPLACE · undo-model | 0.12 |  |
+| 4 | outpost one undo exact incl. corridor (453 cells) |  | ~3% | 8 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.12 |  |
 | 5 | NO_ROOM refusal (no candidate) | named | ~0% | 0 | REPLACE · structure-lint | 0.00 |  |
 | 6 | shore: street parallel to shore (60/60 cells within 8..16 of water) | geometry on seed survey | ~5% | 13 | REPLACE · structure-lint | 0.20 | needs pinned seed survey fixture (S3), a water mask |
 | 7 | ridge: street on crest (43/46 within 4) |  | ~4% | 10 | REPLACE · structure-lint | 0.16 |  |
@@ -1649,8 +1660,8 @@ p50 6.7 min · in 5/12 recent full slices · 2.9 step-min per slice · after all
 | 4 | realised world equals virtual over every written cell outside lots (41… |  | ~8% (6 x 5s) | 33 | KEEP-INGAME | 0.00 | this is the realised==virtual proof; one chain at slice, all at release |
 | 5 | M20, M26, M27 recomputed on realised dump equal plan's |  | in #4 | 0 | REPLACE · structure-lint | 0.00 | on its own it duplicates the virtual-world run; adds value only together with #4 |
 | 6 | cost.rarity equals counts of realised cells; |  | in #4 | 0 | REPLACE · ledger-lint | 0.00 | items placed vs billed from IR |
-| 7 | Regions.remove restores exactly (E-flat 0) | 6 x ~12s | ~17% | 70 | REPLACE · undo-model | 0.49 |  |
-| 8 | r01/r03: refused part wrote nothing; checkPlan answers VOCAB (waterlog… | rule M27:state / M20 with 16 cells | ~4% | 16 | REPLACE · undo-model | 0.11 | refusal from the plan's block set vs blocks.mjs rules; wrote-nothing is undo-model |
+| 7 | Regions.remove restores exactly (E-flat 0) | 6 x ~12s | ~17% | 70 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.49 |  |
+| 8 | r01/r03: refused part wrote nothing; checkPlan answers VOCAB (waterlog… | rule M27:state / M20 with 16 cells | ~4% | 16 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.11 | refusal from the plan's block set vs blocks.mjs rules; wrote-nothing is undo-model |
 | 9 | BibleRequest: malformed rarity FIELD_LIMIT before any job; |  | ~3% | 12 | ALREADY-OFFLINE | 0.09 | sidecar wire/schema tests |
 | 10 | M26 shares and ext rows for the village (uncommon 0.024 etc.) |  | in #5 | 0 | REPLACE · structure-lint | 0.00 |  |
 
@@ -1677,13 +1688,13 @@ p50 3.2 min · in 1/12 recent full slices · 0.3 step-min per slice · after all
 | 1 | base |  | <1% | 2 | setup | 0.00 |  |
 | 2 | mod block histogram of entry equals kit's (copper cabin 144 blocks; | Java lotBlocks vs kit | 4% | 7 | SMOKE | 0.01 | does not need vanilla: a mod-vs-kit parity check on one entry |
 | 3 | r03: checkPlan READY with hall pending; |  | 5% | 9 | REPLACE · structure-lint | 0.01 | palette rule over plan cells + bound lot's histogram; refusal evidence is arithmetic |
-| 4 | r03 re-bind to copper cabin: PLACED; remove exact |  | ~20% (30+12s) | 37 | SMOKE · undo-model | 0.03 |  |
+| 4 | r03 re-bind to copper cabin: PLACED; remove exact |  | ~20% (30+12s) | 37 | SMOKE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.03 |  |
 | 5 | v65 no_wood: re-planned with wood group excluded (stairs/planks/fence… |  | ~10% plan/pre-check +… | 19 | SMOKE · structure-lint | 0.02 |  |
 | 6 | v65 realised world holds no wood in the 3057 plan cells outside lots |  | 2% | 4 | KEEP-INGAME | 0.00 | a simple scan on the dump; virtual equivalent trivial |
-| 7 | v65 copper lots PLACED, ext row no_wood measured 0; |  | ~25% | 46 | SMOKE · undo-model | 0.04 |  |
+| 7 | v65 copper lots PLACED, ext row no_wood measured 0; |  | ~25% | 46 | SMOKE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.04 |  |
 | 8 | v64: checkPlan copper_only fits with bound lot measured from mod's lot… |  | 2% | 4 | REPLACE · structure-lint | 0.01 |  |
 | 9 | S-VOCc-2 pre-check: Regions.checkPalette ok; |  | <1% | 2 | REPLACE · structure-lint | 0.00 |  |
-| 10 | S-VOCc-3: delta to oak version refused PALETTE by checkDelta and apply… |  | <1% | 2 | REPLACE · undo-model | 0.00 |  |
+| 10 | S-VOCc-3: delta to oak version refused PALETTE by checkDelta and apply… |  | <1% | 2 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.00 |  |
 
 #### `6cvoc-look`
 
@@ -1951,11 +1962,11 @@ p50 8.4 min · in 7/12 recent full slices · 5.1 step-min per slice · after all
 | 6 | builds (item 5) | cabin HOUSE 273, walls WALL PROVISIONAL, farm FARM 162, torches/hole/patch 0 builds, 30-cell provisional goes after grace | 5% | 26 | SMOKE | 0.17 | build classifier is a pure function of the tracked set (no unit has it among pt-unit's named tests: gap); keep the cabin + provisional case |
 | 7 | hyst (item 6) | 40 cut to 21 stays, 19 demotes after debounce + 60 s gap, regrown stays incidental, id survives +50, merge/alias, reload | 22% | 116 | REPLACE · ledger-lint | 1.13 | state machine over (cells, time); 60+ s is sleeping on the wall clock. Must model the tick clock and merge/alias; not one of the named linters. Keep none in game except the reload (covered by group 4) |
 | 8 | village (item 7) | plan keepOut holds the cabin/wall rects; realise PLACED over a flat_village: 0 of 309 player blocks lost; findings recorded; | 10% | 53 | KEEP-INGAME | 0.00 | `kit/test/builds-pt.test.mjs` keep-outs; the realise skipping `player_build` and the remove restoring E-flat 0 go through the real journal (`undo-model` can fuzz the skip rule) |
-| 9 | brush (item 8) | 4 stroke kinds x NATURAL_ONLY/PLAYER_BLOCKS at the cabin: 0 of 273 lost; all strokes undone E-flat 0 | 3% | 16 | SMOKE · undo-model | 0.10 | N copies of one proof; keep raise NATURAL_ONLY + the undo; rest is the player_build skip rule (`undo-model`) |
+| 9 | brush (item 8) | 4 stroke kinds x NATURAL_ONLY/PLAYER_BLOCKS at the cabin: 0 of 273 lost; all strokes undone E-flat 0 | 3% | 16 | SMOKE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.10 | N copies of one proof; keep raise NATURAL_ONLY + the undo; rest is the player_build skip rule (`undo-model`) |
 | 10 | felling (item 9) | felling flood stops at the cabin's logs (tree_kept.build 9), one undo exact | 3% | 16 | SMOKE | 0.10 | one representative of tree_kept |
-| 11 | undo (item 10) | consented stroke clears 93 build + 20 incidental cells; one undo E-flat 0, 229 records 0 mismatches | 2% | 11 | REPLACE · undo-model | 0.10 | blocks + records restored exactly after an arbitrary stroke order; model = journal + record index together |
+| 11 | undo (item 10) | consented stroke clears 93 build + 20 incidental cells; one undo E-flat 0, 229 records 0 mismatches | 2% | 11 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.10 | blocks + records restored exactly after an arbitrary stroke order; model = journal + record index together |
 | 12 | refusals (item 11, Steward's PATH) | building over the cabin refused PLAYER_BUILD naming build-1 with first 8 positions equal to the world; partial road span; | 4% | 21 | SMOKE | 0.14 | refusal text derived from the tracked set; keep one + the PATH join |
-| 13 | incidental (item 12) | realise over 20 torches/patch writes with no refusal, undo restores blocks and records; building over 8 incidental cells and removal | 4% | 21 | REPLACE · undo-model | 0.21 | E-flat 0 plus record equality for incidental cells; no vanilla behaviour |
+| 13 | incidental (item 12) | realise over 20 torches/patch writes with no refusal, undo restores blocks and records; building over 8 incidental cells and removal | 4% | 21 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.21 | E-flat 0 plus record equality for incidental cells; no vanilla behaviour |
 | 14 | claim/release (item 13) | claimed pre-PT cabin kept by a stroke, released then cleared, supports kept | 3% | 16 | SMOKE | 0.10 | claim state + stroke skip; one case |
 | 15 | claimhut C34/C34b | 11 claim variants (door row, size, margin, floor in ground, Steward box) + player-use hut + C34b door-half order on ground / y 100 / +40: al… | 11% | 58 | SMOKE | 0.38 | N copies; keep the player-use path and Steward's lifted /setblock-order repro (C34b regression from Steward), the other variants are a classifier unit over cell sets |
 | 16 | plan (item 14) | `near/adjacent/endpoint {build}` on the live index; `Regions.checkPlan` fits; road ends on the apron | 3% | 16 | SMOKE | 0.10 | `kit/test/builds-pt.test.mjs` (feature.build, endpoint.build, apron, pick); the in-game live-index call is one SMOKE |
@@ -1983,7 +1994,7 @@ p50 5.7 min · in 4/12 recent full slices · 2.2 step-min per slice · after all
 | 1 | adopt (items 2, 3, 13) | adopt writes 0 blocks, hash equal, 277 records unchanged; entry has 296 cells/2 block entities, 0 inventory items; | 4% | 15 | SMOKE | 0.06 | `kit/test/adopt-pt2.test.mjs` (source gives back v1 exactly), `AdoptTest`, `JournalAdoptTest`; adopt of a real cabin with 0 writes is one SMOKE |
 | 2 | refusals (item 1) | ~16 ADOPT_REFUSED/FIELD_LIMIT/OVERLAP/NOT_LOADED/TOO_LARGE cases (consent, actor, tracking off, ext shape, size limits, unloaded chunk); | 29% (98 s; the 65x64x6… | 112 | SMOKE | 0.42 | argument checks are pure; NOT_LOADED needs chunk state; TOO_LARGE needs only a bounding box, not a built 8,698-cell shell |
 | 3 | flow (items 4, 5, 7, 9) | versionOf "add a floor": installed v2, capturedChanged 1 of 297, checkDelta, applyDelta KEEP of hand edits, revert, `/save` + restart identi… | 19% | 74 | KEEP-INGAME | 0.00 | revert hash = adopted state + edits and KEEP rule are DeltaPropertyTest-shaped; restart/unload equality needs the real thing |
-| 4 | undoA/run B (item 8) | adopt then remove: hash equals pre-adopt, 0 written, records 0 mismatches; remove with its delta: storey cells gone, cabin and edits stand | 4% | 15 | REPLACE · undo-model | 0.09 | un-adopt/remove order over adopt+delta journal entries |
+| 4 | undoA/run B (item 8) | adopt then remove: hash equals pre-adopt, 0 written, records 0 mismatches; remove with its delta: storey cells gone, cabin and edits stand | 4% | 15 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.09 | un-adopt/remove order over adopt+delta journal entries |
 | 5 | protect (item 10) | 4 stroke kinds, felling, road, region plan, growth over a lean-to with consent: adopted cells skipped as `owned`; | 9% | 35 | SMOKE | 0.13 | N copies of the brush proof from pt-ingame; one stroke + the un-adopt contrast |
 | 6 | states (item 11) | cut to 10 cells stays ADOPTED vs ACTIVE demotes; merge keeps adopted; two adopted within 2 do not merge; split keeps largest; | 26% (90 s of waiting o… | 101 | REPLACE · ledger-lint | 0.56 | same classifier state machine as pt-ingame hyst, plus an `adopted` flag |
 | 7 | elsewhere + c35bible | place/check of an adopted entry refuses placed_elsewhere; polish refuses; library delete refuses; C35 bible ignored for a captured source | 8% | 31 | SMOKE | 0.11 | API refusals; C35 was Steward's repro |
@@ -1999,7 +2010,7 @@ p50 0.3 min · in 4/12 recent full slices · 0.1 step-min per slice · after all
 | 1 | start | server + survival world, stockpile of 3 crates | ~65% | 16 | KEEP-INGAME | 0.00 | startup (13 s of 20 in the log) |
 | 2 | adopt cost | adopt costs 0, writes 0 (ledger {}, stock 0) | ~3% | 1 | REPLACE · ledger-lint | 0.00 | adopt as a zero-charge event on the ledger |
 | 3 | update from the stockpile | versionOf "add a floor" is a construction delta fed by the stockpile (outstanding 209), no refund for the adopted roof block the hatch remov… | ~25% | 6 | SMOKE · ledger-lint | 0.02 | model: delta over adopted cells = pay only added cells, refund only paid cells (an adopted cell has no paid key) |
-| 4 | revert / un-adopt | revert is a forward delta (paid blocks refunded, hatch log built from stock); | ~7% | 2 | REPLACE · undo-model | 0.01 | same model, plus the world equality via undo-model |
+| 4 | revert / un-adopt | revert is a forward delta (paid blocks refunded, hatch log built from stock); | ~7% | 2 | REPLACE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.01 | same model, plus the world equality via undo-model |
 
 #### `cu-measure`
 
@@ -2072,7 +2083,7 @@ p50 17.2 min · in 10/12 recent full slices · 14.1 step-min per slice · after 
 | 15 | ha-flat: lava pit fire | random tick 300 + fire ticks for 1 min: 0 fire blocks in the claim | 5% (60 s) | 51 | KEEP-INGAME | 0.00 | Vanilla fire spread (random ticks); M20 models the reach statically, h-probe calibrates it. Release-only or one instance. |
 | 16 | ha-flat: villager stand | 30 villagers (4 per body edge + 1 in each surface centre) 2 min: 0 drowning damage, 0 deaths, path to a bank | 10% (120 s) | 101 | KEEP-INGAME | 0.00 | Vanilla mob swimming/drowning. Offline M25:trap/exit (surface within 4, exit within 8) is the predictor; this is its calibration. A one-body stand calibrates; the rest is lint. |
 | 17 | ha-flat: nav round every body + moat bridge | vanilla dev.nav.villager bank to opposite bank both ways, and over the moat bridge | 1.3% (16 s) | 13 | KEEP-INGAME | 0.00 | Real villager pathing (dev.nav.villager); cheap. |
-| 18 | ha-exact | exact-rules realise (16,475 cells) + Regions.remove: E-flat 0 (16,654 cells by state) | 7.2% (86 s) | 73 | SMOKE · undo-model | 0.68 | undo-model should own exactness; keep as the settlement-scale instance. Duplicated in ha-ingame. |
+| 18 | ha-exact | exact-rules realise (16,475 cells) + Regions.remove: E-flat 0 (16,654 cells by state) | 7.2% (86 s) | 73 | SMOKE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.68 | undo-model should own exactness; keep as the settlement-scale instance. Duplicated in ha-ingame. |
 | 19 | ha-farm (v49 + Steward's hamlet) | 2 resp. 1 farm pond: planned, realised, census == prediction, M25/M20/M17 0, Regions.remove E-flat 0 | 12.4% (149 s) | 126 | SMOKE | 1.16 | Same proof as #2/#13/#5 for a pond family already covered by #13; kept for Steward's hamlet fixture (it found real RC issues). One instance in slice. |
 | 20 | hb-flat: plan answers | crossing/landing/harbour answer fits/adjusted | 1.4% (17 s) | 14 | ALREADY-OFFLINE | 0.20 | h-wet.test.mjs; mod wiring only. |
 | 21 | hb-flat: realise | 7,910 cells (wet beam, quay, harbour wall) PLACED | 3% (36 s) | 30 | KEEP-INGAME | 0.00 | Real write path through natural water. |
@@ -2191,7 +2202,7 @@ p50 18.2 min · in 6/12 recent full slices · 14.1 step-min per slice · after a
 | 2 | realise: write order downstream first, S-HY-6 rows, settle, census ==… | each body written after its landing settled (r3, r2, r1, feed); census exact incl. fall lip/column/landing/spillway film; settleTicks | 1.6% (30 s) | 27 | KEEP-INGAME | 0.00 | The `predicted` model for courses (levels, lips, columns, films) vs vanilla. Order itself is `writeOrder` (checkFluids.mjs) = REPLACE via water-lint/ALREADY-OFFLINE (M25:order), and "each after its landing settled" is a mod-stagin… |
 | 3 | 2-min stand | adds nothing | 6.3% (120 s) | 107 | SMOKE | 0.59 | repeat |
 | 4 | single breach of a bank, a weir cell, a lining cell + removal | flow reaches nothing past bodies' cells/spill/breach reach/joins; weir breach connects nothing | 0.9% (17 s) | 15 | SMOKE · water-lint | 0.08 | water-lint `breach`; the weir 2-thick M25:shell rule is already offline |
-| 5 | exact undo (E-flat 0) head first then down the course | 2.9 s removal | 3.4% (65 s) | 58 | SMOKE · undo-model | 0.32 | undo-model for exactness + removal order; drain order head-first KEEP one |
+| 5 | exact undo (E-flat 0) head first then down the course | 2.9 s removal | 3.4% (65 s) | 58 | SMOKE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.32 | undo-model for exactness + removal order; drain order head-first KEEP one |
 | 6 | exact-breach undo | E-flat 0 after breach | 3% (57 s) | 51 | SMOKE | 0.28 | duplicate of #5 |
 | 7 | negative control: _unsafe.noLiningCell | feed's spillway floor missing leaks, census names the cell, guard drains, PARTIAL | 2.4% (45 s) | 41 | KEEP-INGAME | 0.00 | runtime guard vs real flow (offline variant caught in hy-core.test) |
 | 8 | negative control: _unsafe.wrongOrder | head written first pours into r2's empty basin; guard drains | 2.5% (48 s) | 42 | KEEP-INGAME | 0.00 | `writeOrder` is offline; this proves what the order protects against and that the guard catches it. |
@@ -2286,8 +2297,8 @@ p50 4.2 min · in 1/12 recent full slices · 2.4 step-min per slice · after all
 | 7 | item 5(c,d): versionOf replacement | field entry v2 (carrots): mask holds, sources unchanged census-exact; no irrigation cell in a site entry (ownership) | 0.2% (5 s) | 3 | KEEP-INGAME | 0.00 | site delta + ownership; the mask offline already proves. |
 | 8 | item 5(b): f2 site removed alone (S-IRR-4) | 1 source drained first and exactly, 0 water left, region still PLACED, farmland sides 4/4 | 6% (125 s) | 104 | KEEP-INGAME | 0.00 | lot removal drain order (S-IRR-4); undo-model must model "remove a lot site with its sources" as a partial removal. |
 | 9 | breach fix: pond + player's well beside f2, breach trench to box edge,… | drain takes the breach flow back, spares pond 4/4 and the well; Regions.remove REMOVED, E-flat over f2 box 0 | 10% (216 s) | 174 | KEEP-INGAME | 0.00 | drain vs vanilla flow with foreign water; undo-model cannot model vanilla flow. |
-| 10 | item 5(a) full region removal with every lot standing | E-flat 0 | 2.8% (58 s) | 49 | SMOKE · undo-model | 0.05 |  |
-| 11 | h0 control (farm_hamlet without irrigate) | E-flat 0, equals s01's | 2.7% (57 s) | 47 | SMOKE · undo-model | 0.04 | control for the hamlet's lantern E-flat; undo-model |
+| 10 | item 5(a) full region removal with every lot standing | E-flat 0 | 2.8% (58 s) | 49 | SMOKE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.05 |  |
+| 11 | h0 control (farm_hamlet without irrigate) | E-flat 0, equals s01's | 2.7% (57 s) | 47 | SMOKE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.04 | control for the hamlet's lantern E-flat; undo-model |
 | 12 | v63 (40 x 40 farm, 25 sources, 175 irrigationDropped), s01 (hamlet, 4… | each: plan READY, realiseApproved, census == prediction, irrigation frame, mask held, E-flat 0 | 8.6% (181 s) | 150 | SMOKE | 0.14 | three more copies of #1 over lot kinds. irr.test covers detection/grid/mask over sizes 3..62 and all of v63/s01/d01. |
 | 13 | broken variant irrUnmasked | live check refuses every source (uncontained), PARTIAL, E-flat 0 | 2.7% (56 s) | 47 | KEEP-INGAME | 0.00 | the guard/refusal at realise time; offline variant caught by irr.test. |
 | 14 | bare pad breach | 73 new cells, 8 outside the lot's box (field-model limit, recorded) | 4% (86 s) | 70 | KEEP-INGAME | 0.00 | records the model's limit. |
@@ -2303,7 +2314,7 @@ p50 2.7 min · in 1/12 recent full slices · 0.2 step-min per slice · after all
 | 1 | FL1+save on v62 | restart settle at start completes: PLACED, every source settled, 0 fluid outside | 22% (36 s) | 36 | SMOKE | 0.03 |  |
 | 2 | FL2+save | same, fluids 1/2 at kill | 22% (36 s) | 36 | SMOKE | 0.03 |  |
 | 3 | FL6+save on a lot removal's drain | drain saved ('lot removed: f2'), the removal asked again finishes, 0 water in the lot | 47% (76 s: realise 52… | 77 | KEEP-INGAME | 0.00 | lot-removal resume is unique to IRR; undo-model needs "lot removed" partial-removal state |
-| 4 | region afterwards Regions.remove E-flat 0 (x3) | 2.7, 2.7, 2.4 s | 9% | 15 | SMOKE · undo-model | 0.01 |  |
+| 4 | region afterwards Regions.remove E-flat 0 (x3) | 2.7, 2.7, 2.4 s | 9% | 15 | SMOKE · undo-model · **P1: deferred** (a P2/P3 agent's driver; a later P1 pass) | 0.01 |  |
 
 #### `irr-look`
 

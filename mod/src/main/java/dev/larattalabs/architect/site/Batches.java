@@ -275,7 +275,7 @@ public final class Batches {
 		JsonObject bext = ext.deepCopy();
 		bext.addProperty(RegionItems.EXT_REGION, regionId);
 		// S8: a region's waits have no time limit (the wait reason is shown instead), unless the caller opts in to maxWait
-		QBatch b = new QBatch(id, owner, bext, groupId, items, stages, maxWaitSeconds > 0 ? maxWaitSeconds * 20L : Long.MAX_VALUE, loadChunks, false, false,
+		QBatch b = new QBatch(id, owner, bext, groupId, items, stages, dev.larattalabs.architect.batch.WaitLimit.regionTicks(maxWaitSeconds), loadChunks, false, false,
 			autoApprove, false, null, System.currentTimeMillis());
 		b.generate = generate;
 		chunkBound(b);
@@ -1079,10 +1079,7 @@ public final class Batches {
 	static void waitFor(QBatch b, QItem i, Reason why, String msg) {
 		boolean first = i.status != QItem.Status.WAITING;
 		boolean changed = first || !why.name().equals(i.reason);
-		if (!first && !RegionItems.uncounted(b, why)) {
-			i.waited += RECHECK;
-		}
-		if (i.waited >= b.maxWaitTicks) {
+		if (dev.larattalabs.architect.batch.WaitLimit.count(b, i, first, RegionItems.uncounted(b, why), RECHECK)) {
 			fail(b, i, Reason.TIMED_OUT, "waited " + i.waited / 20 + " s for: " + msg);
 			return;
 		}

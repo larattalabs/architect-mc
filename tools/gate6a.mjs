@@ -42,6 +42,9 @@ const check = (ok, m, data) => {
   return ok;
 };
 const bar = (ok, m, data) => check(ok, `BAR ${m}`, data); // a timing bar: recorded, not blocking in change/slice (docs/GATES.md)
+// --slice: the slice tier's subset (docs/FAST-CHECKS.md P1): what the undo model and the unit tests cover runs only without it (the
+// release tier's 6a-eflat-full and 6a-staged-full). Without the flag every assertion runs, as before.
+const SLICE = process.argv.includes('--slice');
 const write = (name, data) => fs.writeFileSync(path.join(OUT, name), JSON.stringify(data, null, 2));
 const CTX = path.join(OUT, 'context.json');
 const ctx = fs.existsSync(CTX) ? JSON.parse(fs.readFileSync(CTX, 'utf8')) : {};
@@ -835,11 +838,13 @@ steps.eflat = async () => {
   if (edit) await cmd(`/setblock ${edit[0]} ${edit[1]} ${edit[2]} minecraft:gold_block`);
   out.edit = { at: edit };
   await tp(0.5, 160, 0.5);
-  // copies for the stage undo and the lot undo
+  // copies for the stage undo and the lot undo (slice: those two run at release, UmtGateMovesTest covers them)
   await cmd('/save-all flush');
   await leaveWorld();
-  copyWorld('G6A EFlat', 'G6A EFlat Stage');
-  copyWorld('G6A EFlat', 'G6A EFlat Lot');
+  if (!SLICE) {
+    copyWorld('G6A EFlat', 'G6A EFlat Stage');
+    copyWorld('G6A EFlat', 'G6A EFlat Lot');
+  }
   await openWorld('G6A EFlat');
   await settle(3000);
   const t0 = Date.now();
@@ -855,6 +860,11 @@ steps.eflat = async () => {
     check(!!kept && /gold_block/.test(kept.now) && Number(rm.kept) >= 1, `eflat: the player's block on pad cell ${edit} survives the group undo and is reported kept (kept ${JSON.stringify(rm.kept)})`);
   }
   await leaveWorld();
+  if (SLICE) {
+    log('  eflat --slice: lots-3\'s stage undo and one lot\'s undo run at release (docs/FAST-CHECKS.md 6a-eflat rows 6-7)');
+    write('eflat.json', out);
+    return out;
+  }
   // lots-3's stage undo, exact on the cells it owns
   await openWorld('G6A EFlat Stage');
   const lots3 = r.state.view.lots.filter((l) => l.siteId && r.state.record.lots[l.id]?.stage === 'lots-3').map((l) => l.siteId);
@@ -1217,7 +1227,8 @@ steps.staged = async () => {
     await leaveWorld();
   }
   // (2) maxWait, and the control without it
-  for (const [name, maxWait] of [['G6A MaxWait', 30], ['G6A MaxWait Ctl', 0]]) {
+  // slice: the maxWait half only; the control without maxWait (102 s of waiting) runs at release, RegionWaitLimitTest covers it
+  for (const [name, maxWait] of SLICE ? [['G6A MaxWait', 30]] : [['G6A MaxWait', 30], ['G6A MaxWait Ctl', 0]]) {
     await fresh(name, 'G6A Flat Base Prepared');
     await tp(0.5, 120, 0.5);
     const p = await plan(SMALL, 'generated:64');

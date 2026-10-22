@@ -2349,15 +2349,33 @@ public final class RegionsImpl implements Regions {
 	 */
 	private static void reconcileRemovals() {
 		for (Live l : List.copyOf(REGIONS.values())) {
-			if (l.rec().state != RegionState.REMOVING || l.rec().groupId == null || dev.larattalabs.architect.site.Groups.removalRunning(l.rec().groupId)) {
+			RegionState end = reconcileEnd(l.rec().state, l.rec().groupId, () -> dev.larattalabs.architect.site.Groups.removalRunning(l.rec().groupId),
+				() -> {
+					SiteGroupRec gr = Sites.group(l.rec().groupId);
+					return gr == null ? null : gr.state();
+				});
+			if (end == null) {
 				continue;
 			}
 			SiteGroupRec g = Sites.group(l.rec().groupId);
-			boolean removed = g != null && SiteGroupRec.REMOVED.equals(g.state());
+			boolean removed = end == RegionState.REMOVED;
 			Architect.LOGGER.info("Region {} was REMOVING with no removal of group {} in progress: it ends {}", l.rec().id, l.rec().groupId,
 				removed ? "REMOVED (the group is removed)" : "PARTIAL");
 			finishRemoval(l, removed, removed && g.removedAt() > 0 ? g.removedAt() : System.currentTimeMillis());
 		}
+	}
+
+	/**
+	 * (C23) {@link #reconcileRemovals}'s decision for one region (a table, unit-tested in RegionReconcileTest; docs/GATES.md "Fast checks
+	 * P1"): null leaves it (not REMOVING, no group, or its group's removal still running); else REMOVED when the group's persisted state
+	 * is REMOVED, PARTIAL otherwise. {@code running} and {@code groupState} are asked only for a REMOVING region with a group.
+	 */
+	static @Nullable RegionState reconcileEnd(RegionState state, @Nullable String groupId, java.util.function.BooleanSupplier running,
+		java.util.function.Supplier<@Nullable String> groupState) {
+		if (state != RegionState.REMOVING || groupId == null || running.getAsBoolean()) {
+			return null;
+		}
+		return SiteGroupRec.REMOVED.equals(groupState.get()) ? RegionState.REMOVED : RegionState.PARTIAL;
 	}
 
 	private static volatile boolean reconcilePending;
