@@ -604,26 +604,9 @@ public final class Stockpiles {
 			}
 		}
 		BlockPos at = dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
-		Map<String, Integer> out = new TreeMap<>(p.ledger.stock());
 		Map<String, Integer> toPlayer = new TreeMap<>();
 		Map<String, Integer> toGround = new TreeMap<>();
-		for (var e : out.entrySet()) {
-			if (to != null) {
-				int in = give(to, e.getKey(), e.getValue());
-				p.ledger.withdraw(e.getKey(), in);
-				if (in > 0) {
-					toPlayer.put(e.getKey(), in);
-				}
-				int rest = e.getValue() - in;
-				if (rest > 0) {
-					p.ledger.drop(e.getKey(), rest);
-					toGround.put(e.getKey(), rest);
-				}
-			} else {
-				p.ledger.drop(e.getKey(), e.getValue());
-				toGround.put(e.getKey(), e.getValue());
-			}
-		}
+		Map<String, Integer> out = dissolveLedger(p.ledger, to == null ? null : (item, n) -> give(to, item, n), toPlayer, toGround);
 		if (to != null) {
 			Builder.dropItems((ServerLevel) to.level(), to.blockPosition(), toGround, null);
 		} else {
@@ -638,6 +621,35 @@ public final class Stockpiles {
 		Architect.LOGGER.info("Stockpile {} dissolved: to the player {}, dropped {}; ledger at the end {}", owner, toPlayer, toGround, last.get("ledger"));
 		dev.larattalabs.architect.apiimpl.ApiEvents.stockpileChanged(srv, owner);
 		LAST_DISSOLVED.put(p.id, last);
+		return out;
+	}
+
+	/**
+	 * The ledger half of {@link #dissolve}: every unit in stock, reserved or not, goes to the player ({@code give} answers how many of
+	 * {@code n} went into the inventory; booked as withdrawn) and the rest to the ground (booked as dropped), or all to the ground with no
+	 * player. Fills {@code toPlayer} and {@code toGround}; returns what went out per item. Pure of the level: the survival ledger lint's
+	 * seam (docs/FAST-CHECKS.md "Survival ledger lint").
+	 */
+	static Map<String, Integer> dissolveLedger(StockLedger l, java.util.function.@Nullable ToIntBiFunction<String, Integer> give, Map<String, Integer> toPlayer,
+		Map<String, Integer> toGround) {
+		Map<String, Integer> out = new TreeMap<>(l.stock());
+		for (var e : out.entrySet()) {
+			if (give != null) {
+				int in = give.applyAsInt(e.getKey(), e.getValue());
+				l.withdraw(e.getKey(), in);
+				if (in > 0) {
+					toPlayer.put(e.getKey(), in);
+				}
+				int rest = e.getValue() - in;
+				if (rest > 0) {
+					l.drop(e.getKey(), rest);
+					toGround.put(e.getKey(), rest);
+				}
+			} else {
+				l.drop(e.getKey(), e.getValue());
+				toGround.put(e.getKey(), e.getValue());
+			}
+		}
 		return out;
 	}
 
@@ -1022,57 +1034,128 @@ public final class Stockpiles {
 		if (ts.isEmpty()) {
 			return;
 		}
-		FeedOrder.Reserve reserve = new FeedOrder.Reserve();
 		int cap = capacity(srv, p);
 		BlockPos fallback = dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
-		for (Object t : ts) {
-			if (Groups.leaving(idOf(t))) {
+		Map<String, Integer> reserved = feedPass(ts, new FeedVisit<Object>() {
+			@Override
+			public boolean leaving(Object t) {
+				return Groups.leaving(idOf(t));
+			}
+
+			@Override
+			public void left(Object t) {
 				// C29 (a): a removal started on it: it left the feed (no step, nothing consumed, no reservation); it keeps its place in
 				// the order, so a removal that ends without removing it (a player stayed, blockers) feeds it again from there
 				SiteWaits.observe(srv, level, idOf(t), WaitCalc.Outcome.ENDED);
+			}
+
+			@Override
+			public Builder.@Nullable Run run(Object t) {
+				return Stockpiles.run(srv, t);
+			}
+
+			@Override
+			public boolean paused(Object t) {
+				return t instanceof Site s ? s.construction().paused() : ((Infra) t).construction().paused();
+			}
+
+			@Override
+			public void step(Object t, Builder.Run r, FeedOrder.Reserve reserve) {
+				Builder.Purse purse = new Builder.Purse() {
+					@Override
+					public int stock(String item) {
+						return reserve.available(item, p.ledger::stock);
+					}
+
+					@Override
+					public void pay(List<SurvivalItems.Cost> costs) {
+						Map<String, Integer> over = new TreeMap<>();
+						for (SurvivalItems.Cost c : costs) {
+							p.ledger.consume(c.item(), c.count(), cap, Stockpiles::maxStack, over);
+						}
+						dropOverflow(srv, p, over, fallback);
+					}
+
+					@Override
+					public void giveBack(Map<String, Integer> items, BlockPos fb) {
+						Stockpiles.giveBack(srv, p, items, fb);
+					}
+
+					@Override
+					public void changed() {
+						Stockpiles.changed(p);
+					}
+				};
+				if (t instanceof Site s) {
+					Builder.stepFed(srv, level, s, r, purse);
+				} else {
+					RoadBuilder.stepFed(srv, level, (Infra) t, r, purse);
+				}
+			}
+
+			@Override
+			public boolean building(Object t) {
+				return t instanceof Site s ? Sites.get(s.id()) != null && Sites.get(s.id()).building() : Infras.get(idOf(t)) != null && Infras.get(idOf(t))
+					.building();
+			}
+
+			@Override
+			public boolean frontierLoaded(Object t, Builder.Run r) {
+				return r.frontierLoaded(level, ticks);
+			}
+		});
+		LAST_RESERVED.put(p.id, reserved);
+	}
+
+	/**
+	 * What one feed pass asks of each target, in feed order ({@link #feedPass}). Production's is {@link #feed}'s; the survival ledger
+	 * lint (docs/FAST-CHECKS.md "Survival ledger lint") passes its simulated targets, so the pass's order of decisions is the real one.
+	 */
+	interface FeedVisit<T> {
+		/** C29: a removal started on the target. */
+		boolean leaving(T t);
+
+		/** The target left the feed this pass (C29). */
+		void left(T t);
+
+		/** Its run (null: none, skipped). */
+		Builder.@Nullable Run run(T t);
+
+		/** Paused (read before its step). */
+		boolean paused(T t);
+
+		/** Its builder step, fed at {@code stock - reserved} ({@code reserve} holds the targets before it). */
+		void step(T t, Builder.Run r, FeedOrder.Reserve reserve);
+
+		/** Still building after its step. */
+		boolean building(T t);
+
+		/** S-Y-1: some of its remaining frontier is in a loaded chunk. */
+		boolean frontierLoaded(T t, Builder.Run r);
+	}
+
+	/**
+	 * One feed pass (§3, C29, S-Y-1): every target in feed order; a target being removed leaves the feed (no step, no reservation);
+	 * each other target steps at {@code stock - reserved} and then reserves its unbuilt cost when {@link FeedOrder#reserves} says so.
+	 * Returns the reservation after the last target. The seam the ledger lint drives.
+	 */
+	static <T> Map<String, Integer> feedPass(List<T> ts, FeedVisit<T> v) {
+		FeedOrder.Reserve reserve = new FeedOrder.Reserve();
+		for (T t : ts) {
+			if (v.leaving(t)) {
+				v.left(t);
 				continue;
 			}
-			Builder.Run r = run(srv, t);
+			Builder.Run r = v.run(t);
 			if (r == null) {
 				continue;
 			}
-			boolean paused = t instanceof Site s ? s.construction().paused() : ((Infra) t).construction().paused();
-			Builder.Purse purse = new Builder.Purse() {
-				@Override
-				public int stock(String item) {
-					return reserve.available(item, p.ledger::stock);
-				}
-
-				@Override
-				public void pay(List<SurvivalItems.Cost> costs) {
-					Map<String, Integer> over = new TreeMap<>();
-					for (SurvivalItems.Cost c : costs) {
-						p.ledger.consume(c.item(), c.count(), cap, Stockpiles::maxStack, over);
-					}
-					dropOverflow(srv, p, over, fallback);
-				}
-
-				@Override
-				public void giveBack(Map<String, Integer> items, BlockPos fb) {
-					Stockpiles.giveBack(srv, p, items, fb);
-				}
-
-				@Override
-				public void changed() {
-					Stockpiles.changed(p);
-				}
-			};
-			if (t instanceof Site s) {
-				Builder.stepFed(srv, level, s, r, purse);
-			} else {
-				RoadBuilder.stepFed(srv, level, (Infra) t, r, purse);
-			}
-			boolean building = t instanceof Site s ? Sites.get(s.id()) != null && Sites.get(s.id()).building() : Infras.get(idOf(t)) != null && Infras.get(
-				idOf(t)).building();
-			boolean reserves = FeedOrder.reserves(building, paused, r.built.cardinality() < r.size(), r.frontierLoaded(level, ticks));
+			boolean paused = v.paused(t);
+			v.step(t, r, reserve);
+			boolean reserves = FeedOrder.reserves(v.building(t), paused, r.built.cardinality() < r.size(), v.frontierLoaded(t, r));
 			reserve.add(r.unbuilt, reserves);
 		}
-		LAST_RESERVED.put(p.id, reserve.reserved());
+		return reserve.reserved();
 	}
 
 	/** What a target may use now of each item its unbuilt cells need: {@code stock - reserved} at its position in the order. */

@@ -410,6 +410,69 @@ side (about half).
 (memory fine: no swap, 0.03-2.7 M free pages). The unit floor slowed most, so 6 concurrent runs look like too many for timing
 comparisons; functional results were unaffected (no new failure, no timing bar judged).
 
+## P3: the water and survival ledger lints (2026-10-21)
+
+Noah approved replacing slow in-game checks with instant, repeatable ones wherever that's trustworthy (docs/FAST-CHECKS.md, phase P3).
+Branch feat/lint-p3 built the two P3 lints, their calibration probes and the cutover. What each lint proves, the mutation evidence and
+the row-by-row cutover are in docs/FAST-CHECKS.md ("4. Water lint" and "5. Survival ledger lint", their "As built", and "P3 cutover").
+
+### Steps and tiers
+
+| step | what | tier |
+|---|---|---|
+| `water-lint` | `node --test kit/lint/*.lint.mjs`: the fluid corpus (9 shards in parallel), the lint's own rules, the drain cases | slice always; change through the impact rules "P3 water lint" and "P3 cutover"; release |
+| `p3-lint` | gradle `LedgerLintTest` + `RegionFluidsLintTest`: the survival ledger lint and the water lint's Java half (the real `RegionFluids.breachTake` and `drain`) | slice always; change through "P3 water lint" and "P3 survival ledger lint"; release |
+| `p3-lint-long` | the ledger fuzz over 20000 fresh seeds | release |
+| `<step>-smoke` (h-ingame, h-probe, hy-ingame, hy-crash, hy-cold, irr-ingame, kc-ingame, voc-survival, y-ingame, c29-ingame) | the full step with `GATE_P3=smoke` (y and c29: without the subcommands the lint took): the SMOKE remainder | slice and change, through the impact rules (they name the `-smoke` ids) |
+| the full ids | everything, as before | release (`tiers.release.always`), named chains, by hand |
+| `p3-probe-water` | `tools/p3-probe.mjs water` (waits for the full h-ingame, hy-ingame, h-probe of the same run): h_core_demo's census per body (0 diff), its settles within the bounds, every body's breach in its recorded reach; hy_core_demo's census; the riffle table; the fire-reach posts within M20's FIRE_REACH | release |
+| `p3-probe-ledger` | `tools/p3-probe.mjs ledger` (waits for the full y-ingame and cu-survival): the store run's ledger at each event against the model's; weathering charged nothing; the measured refund == the Java model's refund of the same standing blocks (`LedgerProbeTest`) | release |
+
+`supersededBy`: a `-smoke` id is dropped when its full id is in the same run. The smoke drivers log every group they leave out as
+`P3 smoke: <what> left to <rule or probe>` (neither an ok nor a FAIL line).
+
+### The rule: a probe mismatch sends the P3 rows back in game
+
+A lint is trusted only while its calibration probe passes on the current Minecraft version. When `p3-probe-water` or
+`p3-probe-ledger` fails (at release, or when a Minecraft update runs the probes first):
+1. `node tools/p3-mode.mjs ingame`, and commit it: the impact rules name the full ids again, so every P3 row runs in game at the slice
+   tier. `node tools/p3-mode.mjs --check` prints the mode.
+2. Fix the lint or its model (the failing probe line names the body, the cell or the item), until the probe passes on a release run.
+3. `node tools/p3-mode.mjs smoke`, and commit it.
+
+The probe's own FAIL line says so. Only the impact rules' lists change; the release tier always runs the full ids.
+
+### Mutation evidence
+
+`node tools/p3-mutants.mjs [--only id,...]` puts each historical bug back into the production code in a scratch worktree at HEAD and
+runs the lint there; every mutant must go red and the baseline green. It writes `artifacts/p3-mutants/<stamp>.json` (untracked). Not a
+gate step (a compile per mutant); run it when a lint or the code under it changes.
+
+### Measured
+
+On feat/lint-p3 (2026-10-21, a shared box at load 15-80 with 3-4 other gate runs):
+- **The lints:** `water-lint` 2.0 min in the slice (102 tests; about 3 min alone at load 36, 170 s serial planning on a quiet box);
+  `p3-lint` 0.2-1.5 min (the ledger fuzz's 400 seeds in about 3 s; 20000 seeds in 46 s). Both within FAST-CHECKS' 2-minute budget.
+- **The smoke steps** (slice `artifacts/gate-runs-lintp3/20261021-221111-slice`, 3 shards, before merging main): h-ingame-smoke 12.6 min,
+  h-probe-smoke 0.4, hy-ingame-smoke 16.9, hy-crash-smoke 2.1, hy-cold-smoke 5.5, irr-ingame-smoke 26.4, kc-ingame-smoke 1.3,
+  voc-survival-smoke 1.5, y-ingame-smoke 5.2, c29-ingame-smoke 5.6; all PASS.
+- **The probes** (`artifacts/gate-runs-lintp3-probe/20261021-220925-change`: the full h-ingame 18.2 min, hy-ingame 25.4, h-probe 3.3,
+  y-ingame 6.4, cu-survival 0.7): `p3-probe-water` 10/0 (h_core_demo's four bodies diff 0, settled at 5-20 ticks within bounds
+  30-80; four breaches in reach; hy_core_demo's four reaches diff 0; the riffle table 20/20; the lava lit 4 posts, farthest side 2,
+  above 2, below 1, within FIRE_REACH) and `p3-probe-ledger` 10/0 (the store run's six bills, its delta and revert consumed exactly
+  their outstanding; cu-survival's refund of 256 standing blocks equals the Java model's). Their settles are recorded in
+  kit/lint/water-calibration.json.
+- **The final slice after merging main (dfab398b)** (`artifacts/gate-runs-lintp3/20261022-001736-slice`, `--shards auto` = 3, load
+  about 15-40): **94 min wall, 278 step-minutes**, 55 PASS. The smoke steps: h-ingame 10.6, hy-ingame 15.6, irr-ingame 28.8, hy-cold
+  5.2, y-ingame 4.5, c29-ingame 4.2, kc-ingame 2.3, hy-crash 1.5, voc-survival 0.6, h-probe 0.5; water-lint 0.7, p3-lint 0.3. The 4
+  FAILs are not P3's: pt2-ingame item 13 and h-unit item 10 (pre-existing on main), voc-unit item 1 (docker unavailable), sim-jobs
+  (the sidecar was not running: PASS 33/0 re-run alone, `gate-runs-lintp3-simjobs/20261022-015305-change`). The pre-merge slice
+  (59 steps, 124 min at load 20-80) had 4d-all's known group-undo intermittent instead; it passed here.
+- **Replayed at the baseline's load** (the "Gate waits" replay of the 12 FAST-CHECKS slices, each P3 step at its measured smoke time,
+  the two lint steps added to every slice; 3 shards): median **104 -> 94 min wall**, **311 -> 282 step-minutes** per slice. The fluid-heavy
+  slices gain most (HYb 88 -> 80, CU 103 -> 94, KC 104 -> 94, IRR 145 -> 136); slices without P3 steps pay the lints' 2 minutes in
+  parallel (hk2 67 -> 67). The smoke times were measured at load 20-80, so the replay is conservative.
+
 ## Adaptive shards (2026-10-21)
 
 Releases and big slices ran 100+ steps on a fixed 3 shards for 4+ hours, also on an idle machine. `--shards auto` picks the count

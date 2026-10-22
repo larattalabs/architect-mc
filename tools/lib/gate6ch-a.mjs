@@ -30,6 +30,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { kitReuse } from './kit-reuse.mjs';
+import * as P3 from './p3-tier.mjs';
 
 const OWNER = 'test:ha';
 const FLAT = 'G6B Flat Base', BASE = 'G6B Seed Base', FROZEN_SEED = '2026101102';
@@ -415,11 +416,11 @@ async function haFlat(ctx) {
   check(Object.values(out.bodies).every((c) => c.ok), `item 2 (flat, H-a's bodies): every body settled with its census equal to the prediction (sources, ice, flowing levels; no other fluid in its watch box): ${json(Object.fromEntries(Object.entries(out.bodies).map(([k, c]) => [k, `${c.sources}/${c.sourcesWant}s ${c.flowing}/${c.flowingWant}f ${c.mismatch.length}m ${c.outsideCount}x`])))}`);
   const m25 = run.R.rep.findings.filter((f) => /^M25|^M20|^M17/.test(f.rule));
   check(!m25.length, `item 1 (flat): M25, M20 and M17 0 on the realised world (${m25.map((f) => `${f.rule} ${f.message}`).join('; ').slice(0, 300) || 'none'})`);
-  // a 2-minute stand at default rules adds nothing
-  await L.settle(120_000);
+  // a 2-minute stand at default rules adds nothing (P3 smoke: 30 s)
+  await L.settle(P3.standMs(120_000));
   const stand = {};
   for (const b of run.bodies) stand[b.id] = await census(ctx, b, run.before, run.bodies);
-  check(Object.values(stand).every((c) => c.ok), `item 2 (flat): after a 2-minute stand at default rules every census still equals its prediction (${json(Object.fromEntries(Object.entries(stand).map(([k, c]) => [k, c.ok ? true : { m: c.mismatch, x: c.outside }])))})`);
+  check(Object.values(stand).every((c) => c.ok), `item 2 (flat): after a ${P3.standMs(120_000) / 1000} s stand at default rules every census still equals its prediction (${json(Object.fromEntries(Object.entries(stand).map(([k, c]) => [k, c.ok ? true : { m: c.mismatch, x: c.outside }])))})`);
   // item 13 (bodies): the lava pit with fire ticks on and random ticks at 300: no fire block in the claim
   await L.cmd('/gamerule random_tick_speed 300');
   await L.cmd('/gamerule do_fire_tick true').catch(() => null);
@@ -469,7 +470,9 @@ async function haFarm(ctx) {
   const c = { minX: FLAT_CLAIM[0], minZ: FLAT_CLAIM[1], maxX: FLAT_CLAIM[2], maxZ: FLAT_CLAIM[3] };
   const cx = (c.minX + c.maxX) >> 1, cz = (c.minZ + c.maxZ) >> 1;
   const anchors = { stone: [cx, 65, cz], player: [cx - 24, 65, cz - 24], stockpile: [cx + 12, 65, cz + 12], street_w: [c.minX + 8, 65, cz], street_e: [c.maxX - 8, 65, cz] };
-  for (const [tag, plan, want] of [['farm-v49', fx('valid', 'v49_farm_pond.json'), 2], ['farm-hamlet', fx('h', 'farm_hamlet.json'), 1]]) {
+  // (P3 smoke: Steward's hamlet only, the shape that found the H RCs; v49's farm ponds are the water lint's corpus, valid/v49)
+  if (P3.smoke) P3.skipped(ctx.log, 'ha-farm v49 (two farm ponds)', 'the water lint (valid/v49_farm_pond.json: M25, census == prediction, the breach sweep)');
+  for (const [tag, plan, want] of [['farm-v49', fx('valid', 'v49_farm_pond.json'), 2], ['farm-hamlet', fx('h', 'farm_hamlet.json'), 1]].filter(([tag]) => !P3.smoke || tag === 'farm-hamlet')) {
     await L.fresh(`G6B Ha ${tag}`, FLAT);
     await L.setRules('exact');
     const run = await realiseRun(ctx, tag, { claim: FLAT_CLAIM, plan, anchors, rules: 'exact' });

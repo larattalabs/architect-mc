@@ -1,6 +1,7 @@
 # Fast checks: what moves out of the game, and what it buys
 
-Status: analysis for a decision (2026-10-20, main at b4ff2bd4). **Update (feat/lint-p2, 2026-10-21):** P2 is built; see "P2 as built" and docs/GATES.md "Fast checks (P2)". **Update (chore/gate-waits):** the fixed waits, P0's three pure
+Status: analysis for a decision (2026-10-20, main at b4ff2bd4). **Update (feat/lint-p2, 2026-10-21):** P2 is built; see "P2 as built" and docs/GATES.md "Fast checks (P2)". **Update (feat/lint-p3, 2026-10-21):** P3 is built: the water lint and the survival ledger lint ("As built" under each), their
+calibration probes, and the cutover ("P3 cutover"; docs/GATES.md "P3"). **Update (chore/gate-waits):** the fixed waits, P0's three pure
 duplicates and the h-unit floor are done; see docs/GATES.md "Gate waits". **Update (chore/gate-fast-p1, 2026-10-21):** P1's moves
 for the undo steps (4e-orders, 4e-crash, 4d-all, c30, 5b-chains, 6a-eflat, 6a-staged, x-resume) are done; see docs/GATES.md "Fast
 checks P1". Each row the undo model touches says its P1 status in its disposition (**P1 done**, kept in slice, not moved, deferred). The look steps stay at the slice tier (Noah judges
@@ -112,7 +113,7 @@ slice tier.
 | P0 (no checker) | look steps → release (`k1a-look`, `t3a-look`, `t3b-look`, `6ch-look`, `ha-look`, `6chy-look`, `irr-look`, `6cvoc-look`); duplicates out (`6cw-scenario-s7`, `6b-scenario-s1-flat`, the ha-* steps that h-* already run); ALREADY-OFFLINE rows out (api-compat inside x/mp/sch/y2/c29, 0a-* sidecar duplicates, 6a-inv3's order invariance, kit re-reads) | 75 | 109 min |
 | P1 undo model (**done for the undo steps, 2026-10-21**: docs/GATES.md "Fast checks P1") | the E-flat/E-normal copies, removal orders (4e-orders), group/stage undo (4d, c30, 6a-staged, 6a-eflat), the crash kill points K1, K2, K4, K5, K6, K8 and RG2-RG6 (fault injection), x-resume's state machine, 5b's delta chains | 32 | 97 min |
 | P2 structure + look lints | the realised re-reads of M2/M3/M4/M5/M10 (bridges, tunnels, walls, ropes), keep-clear and protected areas, OVERLAP/PROTECTED/PALETTE refusals, w-ingame's path bibles, d/d2 geometry, voc M20/M26/M27 re-runs | 17 | 92 min |
-| P3 water + survival lints | per-body census copies, breach sweeps, the 12 HY design kinds, ledger rows in y/c29/pt/pt2/cu/voc-survival | 17 | 86 min |
+| P3 water + survival lints | per-body census copies, breach sweeps, the 12 HY design kinds, ledger rows in y/c29/pt/pt2/cu/voc-survival (**built**: "P3 cutover"; pt and pt2's classifier rows stay) | 17 | 86 min |
 
 The order Noah suggested holds up. The undo model saves the most and guards the riskiest code: journal, removal and crash. It also
 already has a base: `JournalPropertyTest`, `RegionJournalTest`, `DeltaPropertyTest`/`DeltaModel` and `JournalStoreTest`. Do P0 first
@@ -267,6 +268,41 @@ slice ran (0a, 0b, sch, 5b-village). The calibration probe (UMT seeds replayed i
   - **H review defects** (bcdc7097): the drain took a player's water.
   - It would **not** have caught the relief refill (7bd8c817), which needed vanilla ticks over a worldgen stream.
 
+#### As built (feat/lint-p3, 2026-10-21): the water lint
+
+- **Where:** `kit/lint/water.mjs` (the lint), `kit/lint/corpus-0..8.lint.mjs` (the corpus in 9 parallel shards), `kit/lint/rules.lint.mjs`
+  (each lint rule against a broken input), `kit/lint/drain.lint.mjs` (W5), `kit/lint/fixtures/drain-cases.json` (generated, committed),
+  and its Java half `mod/src/test/java/dev/larattalabs/architect/region/RegionFluidsLintTest.java`. Gate steps `water-lint`
+  (`node --test kit/lint/*.lint.mjs`) and `p3-lint` (the Java half, with the ledger lint). It is not a `kit/test/*.test.mjs` file:
+  h-unit and hy-unit glob those.
+- **Corpus (102 tests):** every committed plan fixture with a fluid part (84 today: `kit/test/fixtures/plan/**`, a new one joins by
+  itself), h_core_demo and hy_core_demo with each of their broken variants, and water_demo's flat settlement, all through the two-plan
+  flow (the frozen volumes synthesised as the gate's), then the checker's M25 and M20 on the virtual world.
+- **Rules:**
+
+  | rule | what | the in-game rows it replaces |
+  |---|---|---|
+  | W1 containment | M25 leak, convert, mix, shell, keep, wet, trap, exit, clear and M20 clean on every valid plan; every broken variant raises its rule (h_core_demo 8, hy_core_demo 5, kc u01-u04 M25:clear, irr u01-u03), every refused fixture answers its code | the census copies over body kinds (h #13, hy #16, irr #12, kc #1) |
+  | W2 census | every body's recorded prediction (the IR's `predicted`, what the realise's census compares the world with) equals vanilla's steady state recomputed over the same world; inside the conservative reach; `settleTicks == settleBound(path)` and covering the steady state's own settle; the in-game settles the probe records (`kit/lint/water-calibration.json`) | "census == prediction for every body after the first per kind" |
+  | W3 breach | the single breach of every shell, lining and weir cell at or under the surface whose opening a flow can enter (the trivial ones, nothing enterable beside them, are counted: sim.mjs's shortcut): vanilla's steady state from the opened cell stays in the body's cells, spill, joins and recorded breach reach, inside the census's watch box; an irrigation body's flow stays in its own lot (IRR's broken side) | h #4, hy #4, irr #6 |
+  | W4 fire | M20 on every lava body (part of W1) | ha-flat's pit census; the fire probe calibrates FIRE_REACH |
+  | W5 fed | the source/flowing distinction and foreign sources: attribution over the kit's steady state (own-only: flow foreign water alone never reaches; raised: cells this body's water holds higher than foreign water alone leaves; joint: the foreign water's level) on generated breach and drain cases (a bare flow off a pad, a pond, a player's bucket, a waterlogged block, water before the realise, another body's cells, the source already drained, a pond and a bucket together; a spout with a player's bucket in its watch box and a natural flowing cell in its watched set). `RegionFluidsLintTest` drives the mod's real `RegionFluids.breachTake` and `drain` (through `UmtDrain`) over them: the breach sweep takes only own-only or raised water, never a source or foreign water, and all of it when nothing foreign touches; the drain restores the record exactly (a level included) and never writes a player's water | irr #9's selection half (the in-game run with foreign flow stays), h-ingame (E)'s player-water half |
+
+- **History, shown (`node tools/p3-mutants.mjs`: each bug put back in a scratch worktree at the lint's head, the lint run there):**
+
+  | mutant | what it puts back | goes red |
+  |---|---|---|
+  | `c170b161` | IRR's breach sweep before the fix: every connected cell of the fluid, sources included, no feeder test | `theBreachSweepTakesOnlyWhatThisSourceFed` (breach/pond: 48 cells it did not alone feed, 4 of the pond's sources) |
+  | `bcdc7097-strays` | the H drain's stray pass before the fix: the whole watch box | `theStrayPassRestoresTheRecordAndKeepsAPlayersWater` (the player's water at 12,64,12 written) |
+  | `bcdc7097-level` | the H drain before the fix: a watched cell that held the fluid before is skipped | the same test (the watched cell left at level 6, not its recorded 3) |
+  | each lint rule | a wrong predicted level, a settle bound one tick short, hy_core_demo's breach reach unrecorded | `rules.lint.mjs`: W2:census, W2:settle, W3:breach and W3:watch |
+  | broken variants | h_core_demo's predict_short and no_shell_cell, hy_core_demo's predict_short and no_lining_cell, irr u02 and u03 | the corpus: W2 and W3 raise on them beside the checker's M25 |
+
+- **Not shown:** the relief refill (7bd8c817) needs vanilla ticks over a worldgen stream; it stays in game, as the design says. A foreign
+  flow meeting a breach in the real world stays in game too (irr-ingame 'spare'): W5 proves the selection over the kit's levels, not
+  vanilla's flow.
+- **Time:** about 170 s of planning serially on a quiet box; 9 shards in parallel. Measured: see docs/GATES.md "P3".
+
 ### 5. Survival ledger lint (P3)
 
 - **Scope.**
@@ -294,6 +330,66 @@ slice ran (0a, 0b, sch, 5b-village). The calibration probe (UMT seeds replayed i
   - Restart. Keep the y `once/restart` and `c29restart` steps.
 - **Bugs from history:** the Steward repros S-Y-1, dissolve, C29, C34 and C35 were all ledger-arithmetic shaped. The copper refund
   "by standing block, not planned block" is also covered.
+
+#### As built (feat/lint-p3, 2026-10-21): the survival ledger lint
+
+- **Where:** `mod/src/test/java/dev/larattalabs/architect/site/LedgerSim.java` (the simulator) and `LedgerLintTest.java` (the fuzz and
+  the targeted tests), `LedgerProbeTest.java` (the release probe's replay). Gate steps `p3-lint` (with the water lint's Java half),
+  `p3-lint-long` (release: 20000 fresh seeds, about 1 min) and `p3-probe-ledger`.
+- **Real code, as the mod calls it:** `StockLedger` (accept, consume, credit once, giveBack, withdraw, drop, the identity, capacity in
+  stacks, toJson/fromJson), `Builder.Run` (the queue's costs, `matches` with the copper chain, `refundCost`, `affordable`, supports and
+  pairs, `unbuilt`), `BuildOrder.order`, `FeedOrder` (insert, setFront, Reserve, reserves) and these seams, each a pure static the level
+  code now calls with its behaviour unchanged: `Stockpiles.feedPass` (the feed pass's order of decisions: C29's leaving, the
+  reservation, S-Y-1), `Builder.tallyCell`/`coverCell` (a deconstruct's per-cell decision: `Refunds.classify`, the CU standing-block
+  refund, PT2's adopted rule), `Builder.refundRemoved` (a delta's removed cell), `RoadBuilder.freeOff` (the free set off a road's bill),
+  `Stockpiles.dissolveLedger`, `Stockpiles.excess`, `FullBom.compute`.
+- **Modelled (the probe calibrates):** the builder step's placement loop (scan order, affordable at `stock - reserved`, supports, pairs,
+  a free cell, a player in it), the removal's sequencing (leave the feed, wait, restore, credit at the restore once), the delta's queue
+  (a changed cell is removed and re-added: swaps are DeltaPropertyTest's and 5b-chains'), adoption's records, max stack sizes (an
+  ItemStack's components are bound only in a running server).
+- **The fuzz:** 400 CI seeds (about 3 s): 2-4 targets of five designs (houses with a door pair and a wall torch, a copper shed and
+  roof, a farm), sometimes a construction road over every soil and sand and an adopted house, then 30-70 random events: insert, feed
+  passes, a player mining a paid cell or putting their own block in a queued one, weathering, waxing and scraping (V6), farmland drying
+  (V7), a door opened (V10), pause, unload (S-Y-1), a player in a target, the feed order, a delta or revert (storey, hatch, back),
+  removal start and end (one or a stage, with a retried credit), restart, withdraw, a crate gone, a dissolve. 20000 seeds run clean.
+- **Checked at every checkpoint, against expectations the model computes itself:** the identity; conservation (every unit delivered
+  is in stock, standing in a paid cell at the block standing, with the player, on the ground, or standing as the player's block;
+  weathering converts it, recorded); capacity; the credited keys are exactly the removals and deltas that ended (credit once, across
+  restarts and retries). After every feed pass: the reservation is the unbuilt cost of the targets that reserve (not leaving, not
+  paused, not wholly unloaded) and a leaving or paused target consumed nothing. At a removal: the refund equals the items of the paid
+  blocks standing (a deconstruct, an undo, a stage removal; an adopted site's by PT2's rule). At a delta: the refund equals the paid
+  removed blocks standing; once built it paid exactly the cells it queued. Weathering never re-queues or charges. Adoption changes
+  nothing. A dissolve leaves no stock.
+- **Targeted:** S-Y-1, dissolve, C29 (a removal waiting for a player, across a restart; a stage removal and a road), CU (weathering,
+  waxing and scraping while the build waits; a delta over weathered copper; the deconstruct), PT2 (adopt, storey, hatch, revert,
+  un-adopt), a full stockpile's overflow and a crate gone, bill == `FullBom` for every design (C26), the free set ==
+  vanilla's tag `minecraft:turns_into_dirt_path` (the shovel's own block transformer; survroad), and every `UmtVanilla.TABLE` row has a
+  ledger decision (`LedgerLintTest.DECISIONS`: a row added to the shared table without one fails).
+- **History, shown (`tools/p3-mutants.mjs`):**
+
+  | mutant | what it puts back | goes red |
+  |---|---|---|
+  | S-Y-1 | a wholly unloaded target reserves (`FeedOrder.reserves` without `frontierLoaded`) | the fuzz (177 of 400 seeds, `[reserve]`) |
+  | C29 | a target being removed stays in the feed (`feedPass` without the leaving skip) | the fuzz (284 seeds, `[reserve]`, `[leaving]`) |
+  | C29 / Y once | a refund credited again under its key | the fuzz (99 seeds, `[once]`) |
+  | CU refund | the refund pays the planned block, not the one standing (pre-CU `refundCost`) | `copper_refundByTheStandingBlock` |
+  | CU re-queue | a weathered cell no longer built (pre-CU `matches`) | `copper_refundByTheStandingBlock` (`[weather]`) |
+  | dissolve | the dissolve hands out nothing (reserved stock left in the books) | the fuzz (51 seeds, `[dissolve]`) |
+  | PT2 / C35's flow | a delta refunds an adopted block it removes | the fuzz (14 seeds, `[update]`) |
+  | PT2 | an adopted site's removal refunds a block its undo writes back | `pt2_adoptCostsNothingAndAnUpdatePaysOnlyItsCells` |
+  | Y overflow | a credit enters past capacity | `capacityOverflowAndACrateGone` |
+  | survroad | rooted dirt out of the road's free set | `theFreeConversionSetIsTheShovelsOwn` |
+
+- **Not shown:** C34/C34b (the claim box cut a door's lower half; a lifted build's entrance) and C35 (a captured source refused a
+  bible's palette) were not ledger arithmetic: C34 is the claim classifier's geometry (the structure lint's, per "Bugs from history")
+  and C35 the kit's palette exemption. The lint exercises the ledger side of their flows (a claimed or adopted build costs 0; a
+  versionOf of an adopted hut pays only its added cells and refunds no adopted block: the PT2 rows above), but no mutation of either
+  fix can turn it red, so they are reported as not shown.
+- **Finding (counted, not failed; `-Dledger.strict=true` fails it): L-V7.** Farmland in a construction target that dries to dirt
+  (vanilla V7) un-builds a paid cell: `Run.matches` is by block, so the cell is outstanding again, its dirt is not free (the builder
+  waits on it for ever), and at the deconstruct its paid block drops at the site as the player's (`Refunds.natural` sees air -> dirt)
+  instead of a refund. It fired 860 times over 20000 seeds. For the coordinator: `StillOurs` already counts farmland and dirt as the same for
+  the undo (S-CU-3); `Builder.matches` and the refund don't.
 
 ### 6. Determinism and byte identity (exists)
 
@@ -417,6 +513,52 @@ baseline until FL merges.
 
 **What it saves:** about 1 min of a slice's wall time (median 104.0 → 102.9 over the 11 baseline slices that ran w-ingame or
 d2-ingame). That is close to this doc's projection once the G-REAL rows' dumps are counted as the SMOKE row's.
+
+## P3 cutover (feat/lint-p3, 2026-10-21): every P3 row and where it went
+
+The slice tier runs each step below as its `-smoke` id (`GATE_P3=smoke`, `tools/lib/p3-tier.mjs`); the drivers log every group they
+leave out as a `P3 smoke:` line naming what covers it. The release tier runs the full ids (everything, nothing deleted) and the two
+calibration probes. `node tools/p3-mode.mjs ingame` puts the full ids back into the impact map (docs/GATES.md "P3"). Rows not listed
+here are unchanged (KEEP-INGAME, BAR, setup, and P0/P1/P2 rows).
+
+| step # | row | P3 disposition | now at the slice tier | covered by |
+|---|---|---|---|---|
+| h-ingame 3 | 2-minute stand | SMOKE | a 30 s stand | the census (no fluid tick scheduled); 2 min at release |
+| h-ingame 4 | single breach of each body | SMOKE · water-lint | the pond's breach, its reach and its removal | W3 (every non-trivial shell cell of every body in the corpus) |
+| h-ingame 6 | breached bodies' removal exactness | SMOKE | out (the second exact-rules world) | #5's exact undo and #4's removal in the default world; release |
+| h-ingame 13 | ha-flat: every body's census == prediction | SMOKE · water-lint | **kept** (6 s, it reads the realise #12 does anyway): the fluids' realised == virtual row for bodies | W1/W2 for the other kinds |
+| h-ingame 14 | ha-flat: 2-minute stand | SMOKE | a 30 s stand | as #3 |
+| h-ingame 19 | ha-farm (v49 + Steward's hamlet) | SMOKE | Steward's hamlet only | W1-W3 on valid/v49_farm_pond.json and h/farm_hamlet.json |
+| h-probe 3 | lava fire reach (calibrates M20) | KEEP-INGAME, "at release" | out | p3-probe-water (release) reads the full h-probe's posts; W1's M20 on every lava body |
+| hy-ingame 3 | 2-minute stand | SMOKE | a 30 s stand | as h #3 |
+| hy-ingame 4 | breach of a bank, a weir and a lining cell | SMOKE · water-lint | the bank's breach and the lake check | W3 (every shell, lining and weir cell) |
+| hy-ingame 6 | exact-breach undo | SMOKE | out | #5; release |
+| hy-ingame 14 | riffle probes p01/p01b/p02 | SMOKE · water-lint (calibration) | out | p3-probe-water (release) judges the full run's table; W2 on p01/p01b/p02 offline |
+| hy-ingame 16 | the 12 design kinds | SMOKE · water-lint | v50 stream, v51 canal, v54 race, v55 ditch, v56 fountain-fed | W1-W3 on all of them (and v52, v53, v57, v57b, v59, steward) |
+| hy-crash 1, 2, 6 | FL1+save and its undo, FL3 on a course | SMOKE | out (FL4 and FL5 stay) | h-crash's FL1 and FL3 |
+| hy-cold 4 | cold-exact E-normal | SMOKE | out | release |
+| irr-ingame 6 | one farmland side broken | SMOKE · water-lint | out | W3:irr (every side of every irrigation body; irr/u03 caught); the in-game breach drains stay in 'spare' and 'pad' |
+| irr-ingame 12 | v63, s01, d01 | SMOKE | s01 (with its h0 control) | W1-W3 on valid/v63_irr_large and irr/d01_district; irr.test |
+| kc-ingame 1, 3 | v51 realise, census, remove | SMOKE | out (k01 and v61 stay) | W1 incl. M25:clear and W2 on valid/v51_voc_forge; kc.test |
+| voc-survival 4 | voc_copper_hall | SMOKE | out (voc_shrine stays) | the ledger lint's arithmetic (bill == BOM, refund == the standing blocks, weathering) on its own copper designs, not the copper hall's blueprint: that BOM is checked in game at release only |
+| y-ingame 10 | overflow | SMOKE | out | `capacityOverflowAndACrateGone`; the fuzz's capacity check; release |
+| y-ingame 13 | gone | SMOKE · ledger-lint | out | the fuzz's crate gone (`Stockpiles.excess`); release |
+| y-ingame 14 | dissolve | SMOKE · ledger-lint | out | `dissolve_reservedStockAndABuildingTarget`, the fuzz; release |
+| y-ingame 4, 5 | store: delta/revert refund, conservation | REPLACE · ledger-lint | **kept** (inside `store`, which feeds the later items and is the ledger probe's event list) | the fuzz's delta, revert and conservation checks |
+| y-ingame 9 | refunds | SMOKE · ledger-lint | **kept** (the player's blocks dropping is world) | refund == standing |
+| c29-ingame 4 | c29stage: undoStage, a road removal | REPLACE · ledger-lint | out | `c29_stageRemovalAndARoad`, the fuzz's stage removals and retried credits |
+| c29-ingame 2 | c29wait | SMOKE · ledger-lint | **kept** (the real player wait) | `c29_aRemovalWaitingForAPlayerLeavesTheFeed` |
+| pt-ingame 7 | hysteresis | REPLACE · ledger-lint | **kept** | not moved: the classifier's state machine over cells and time, which no lint models |
+| pt2-ingame 6 | build states | REPLACE · ledger-lint | **kept** | not moved: the same classifier |
+| pt2-survival 2, 3 | adopt costs 0, the update from the stockpile | REPLACE / SMOKE · ledger-lint | **kept** (the step is 20 s) | the fuzz's adopt and `pt2_adoptCostsNothingAndAnUpdatePaysOnlyItsCells` |
+| cu-survival 2-4 | weathering while waiting; delta over weathered cells; deconstruct | SMOKE / REPLACE · ledger-lint | **kept** (40 s, and the ledger probe's evidence) | `copper_refundByTheStandingBlock` |
+| v-ingame 12 | survroad | REPLACE · ledger-lint | **kept** (P2's step) | `theFreeConversionSetIsTheShovelsOwn` |
+| y2-ingame 3, 7; y2-bom 2 | nextNeeded, bomFull == bill | ALREADY-OFFLINE / REPLACE · ledger-lint | **kept** (in no recent slice) | `billEqualsTheFullBom` |
+
+The fluids' realised == virtual SMOKE rows (docs "Precondition for every REPLACE row"; P2 left the bodies and courses to P3): the
+census reads that stay at the slice tier: h-ingame #2 (h_core_demo's four bodies) and #13 (water_demo's nine), hy-ingame #2
+(hy_core_demo's reaches) and item 9's five writer kinds, irr-ingame's v62 live and s01 placed checks, kc-ingame's v61. Each compares
+the realised world's fluid cells with the plan's prediction cell by cell.
 
 ## What stays in game at the slice tier (after P3)
 
