@@ -118,13 +118,14 @@ export async function coralItems(ctx) {
         const s = await standing(ctx, 'f3c-v73-stand', r, 'item 4');
         await L.cmd('/gamerule random_tick_speed 3');
         const t0 = Date.now();
-        await sleep(120_000);
+        const w = await L.gameWait(120_000, { real: sleep, label: 'f3 coral item 4 stand, 2 minutes' });
+        const secs = w.mode === 'sprint' ? w.gameMs / 1000 : Math.round((Date.now() - t0) / 1000);
         const d1 = await dumpOf(ctx, s.box, 'f3c-v73-stand-2min');
         const lives = s.decor.filter((d) => !/^minecraft:sea_pickle/.test(d.state));
         const died = lives.filter((d) => d1.at(d.c[0], d.c[1], d.c[2]) === deadOf(d.state));
         const changed = s.decor.filter((d) => d1.at(d.c[0], d.c[1], d.c[2]) !== d.state);
         const m19 = await m19Of(ctx, d1);
-        check(died.length === 0 && m19.dead === 0, `item 4 (f3c-v73-stand): after a 2-minute stand at random_tick_speed 3 (${Math.round((Date.now() - t0) / 1000)} s): ${died.length} of ${lives.length} live coral turned dead, ${changed.length} decor cell(s) changed at all; M19 ${m19.dead} of ${m19.corals}`, changed.slice(0, 8).map((d) => [k3(d.c), d.state, d1.at(d.c[0], d.c[1], d.c[2])]));
+        check(died.length === 0 && m19.dead === 0, `item 4 (f3c-v73-stand): after a 2-minute stand at random_tick_speed 3 (${secs} s): ${died.length} of ${lives.length} live coral turned dead, ${changed.length} decor cell(s) changed at all; M19 ${m19.dead} of ${m19.corals}`, changed.slice(0, 8).map((d) => [k3(d.c), d.state, d1.at(d.c[0], d.c[1], d.c[2])]));
         return { ...s.o, stand: { lives: lives.length, died: died.length, changed: changed.length, m19 } };
       },
     });

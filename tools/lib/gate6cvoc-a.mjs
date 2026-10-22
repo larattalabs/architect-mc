@@ -367,7 +367,8 @@ const probe = [{
     const w0 = Date.now();
     let ticks = 0;
     for (;;) {
-      await L.settle(20_000);
+      // (gate speed 3) 400 ticks between relights, sprinted (GATE_SPRINT=0: 20 s of wall time, as before)
+      await L.gameWait(20_000, { label: 'voc item 10 fire posts, 400 ticks' });
       // a fire's spread odds fall with its age (it reaches 15 in about 900 ticks and stays, on netherrack): relight each source young
       for (const c of cases.filter((x) => x.kind === 'fire')) await L.cmd(`/setblock ${c.at[0]} ${c.at[1]} ${c.at[2]} minecraft:fire[age=0]`);
       for (const c of cases) { const r = await R(c.kind, c.at, { d: c.d }); c.post = r.states[1]; c.source = r.states[0]; c.caught = r.states[1] !== 'minecraft:oak_planks'; }
