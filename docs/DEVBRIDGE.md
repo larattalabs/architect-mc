@@ -567,3 +567,9 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   (`Sites.adopt`, pending `adopt:<key>`; consent `{builds, actor: <uuid>|player}`), `adoptedsite <build>`, `pt2checkdelta <site>
   <version> <owner|-> <b64 consent|->` (checkDelta KEEP with a consent); `checkdelta` and `eversions` print `capturedChanged` and
   `capturedTotal`.
+- **2026-10-22 (6c close-out A):** new (`SliceCoaDev`, generated headless too) `dev.coa.pinKeyed {sha, owner, opKey}` (`Regions.pinArtifact(sha,
+  owner, opKey)` -> `{pins, removed, planId}`), `dev.coa.artifact {sha}` (its pins and whether it was removed), `dev.coa.discardPlan
+  {planId}` (`Regions.discardPlan` -> `{discarded}` or `{refused, reason, detail}`), `dev.coa.planFiles {planId}` (the mod's plan files,
+  its last use, its tombstone, whether it waits in `discard-pending.json`), `dev.coa.clock {days}` (the retention clock's offset: last
+  uses written and sweeps judged at now + days; 0 resets), `dev.coa.sweep` (the world-start sweeps now: keyed pins, then plans ->
+  `{pinsEnded, plans}`) and `dev.coa.planByKey {owner?, opKey}` (`Regions.planByKey`, a use of the plan -> `{planId}`).

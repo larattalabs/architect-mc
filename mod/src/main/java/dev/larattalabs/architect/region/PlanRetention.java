@@ -343,6 +343,42 @@ public final class PlanRetention {
 		return out;
 	}
 
+	// ------------------------------------------------------------------ DevBridge (the gate's views)
+
+	/** DevBridge: the world-start sweeps now (keyed pins, then plans) -> {pinsEnded, plans: [ids]}. Server thread. */
+	public static JsonObject sweepNow(MinecraftServer s) {
+		JsonObject o = new JsonObject();
+		o.addProperty("pinsEnded", PlanChecks.sweepKeyedPins(s));
+		JsonArray a = new JsonArray();
+		sweep(s).forEach(a::add);
+		o.add("plans", a);
+		return o;
+	}
+
+	/**
+	 * DevBridge: a plan's files -> {plan, survey, key, used, lastUsed, discarded, prepare, pending, keyDiscarded}: what exists on disk (the
+	 * mod's side), its last use, whether it waits in discard-pending. Server thread.
+	 */
+	public static JsonObject files(MinecraftServer s, String planId) {
+		Path w = s.getWorldPath(LevelResource.ROOT);
+		Path p = plans(w);
+		JsonObject o = new JsonObject();
+		o.addProperty("plan", Files.isRegularFile(p.resolve(planId + ".json")));
+		o.addProperty("survey", Files.isRegularFile(p.resolve(planId + ".survey.bin")));
+		o.addProperty("key", Files.isRegularFile(p.resolve(planId + ".key.json")));
+		o.addProperty("used", Files.isRegularFile(p.resolve(planId + ".used.json")));
+		try {
+			o.addProperty("lastUsed", lastUsed(p, planId));
+		} catch (IOException e) {
+			o.addProperty("lastUsed", -1);
+		}
+		o.addProperty("discarded", Files.isRegularFile(p.resolve(planId + ".discarded.json")));
+		o.addProperty("prepare", Files.isRegularFile(RegionStore.prepare(w, planId)));
+		o.addProperty("pending", pending(w).contains(planId));
+		o.addProperty("now", now());
+		return o;
+	}
+
 	/** A JSON string member, or null. */
 	static @Nullable String str(JsonObject o, String k) {
 		JsonElement e = o.get(k);
