@@ -23916,7 +23916,16 @@ PALETTE). The old `...Last` booleans stay.
 - **Kept, named in `EXCEPTIONS`:**
   - 7 plants whose "solid" differs (the mod's `isSolid` against the kit's collision; only a carve's lining writes IF_SOLID_NATURAL,
     under the floor);
-  - lava, for a ruling (PLAN).
+  - lava, by the coordinator's ruling (2026-10-22, no behaviour change): the mod never writes over lava, and a plan cell over lava is
+    LAVA. The kit's NATURAL class drives survey reading and M20:natural fire reach, which is a different question from what the mod
+    may overwrite.
+  - **The grep the ruling asked for** (kit writers that clear by "natural"). The fluid writers' `natural(x, y, z)` (fountain, moat,
+    pond, irrigate, waterfall, ditch, course) only pick a block that differs from the natural one beside it. `check.mjs` and
+    `checkFluids.mjs` only read. One path does let a write land over lava: the virtual world's cell conditions (`vworld.mjs`,
+    IF_NATURAL and ALWAYS_OURS read `pal.natural`, which is true for LAVA). A carve (`program.mjs` carve, IF_NATURAL) or any other
+    IF_NATURAL write through a lava cell lands in the plan's virtual world, while the mod skips it and the cell stays lava. Relief keeps
+    lava columns fixed (FLAG_LAVA), so the risk is in underground carves through a frozen volume's LAVA cells. It is not fixed here,
+    because the fix moves the virtual world (byte identity): queued in PLAN.
 - The placement change goes through the placement impact rule. The kit suite is 738/0 and the mod build is green.
 
 ### 7. RS item 14

@@ -42,8 +42,9 @@ class NaturalDriftTest {
 			+ " lining (program.mjs carve), lines solid ground under the column's floor, where this plant never stands";
 		EXCEPTIONS = Map.of("minecraft:azalea", solid, "minecraft:flowering_azalea", solid, "minecraft:chorus_flower", solid, "minecraft:cocoa", solid,
 			"minecraft:sea_pickle", solid, "minecraft:bamboo_sapling", solid, "minecraft:sculk_vein", solid,
-			"minecraft:lava", "a ruling (PLAN): the mod never writes over lava (CellCond's natural: air, natural, water, trees), the kit's virtual world"
-				+ " counts LAVA natural; kept as it stands until the coordinator decides which side moves");
+			"minecraft:lava", "the coordinator's ruling (2026-10-22), no behaviour change: the mod never writes over lava (CellCond's natural: air,"
+				+ " natural, water, trees) and a plan cell over lava is LAVA; the kit's NATURAL class drives survey reading and M20:natural fire reach,"
+				+ " a different question from what the mod may overwrite");
 	}
 
 	static JsonObject fixture;

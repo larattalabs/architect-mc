@@ -923,6 +923,12 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
 
 Top first. Not fixed in v0.40.1.
 
+- **DPT: a delta over a player's block loses its PT record.** `SiteDeltas`' D7 commit rewrites the delta's sections from
+  `new Cell(q, layer, before, after)`, which drops the PT records its create annotated (`JournalStore.ptSource`). The removal puts the
+  player's block back without its record. Production code; UMT mirrors it.
+  - Repro: `UmtFindingsTest.dpt_aDeltaOverAPlayersBlockLosesItsRecord`. Tag [DPT].
+  - Likely fix: `WorldJournal.withAfter` over the stored sections, as `SiteJournal.complete` (P7) does.
+  - **Top of the queue** (coordinator, 2026-10-22): a production bug.
 - **A tile re-run after RG4+save leaves its first entry PLACING (found by RP's rp-crash).** After an RG4+save crash the restart
   logs "0 job(s) to resume": the tile's Infra record was saved but its job was not, so the startup Sites check doesn't release
   the entry. The queue then re-runs the tile and writes a second entry, while the first stays PLACING. The region still reports
@@ -941,11 +947,6 @@ Top first. Not fixed in v0.40.1.
   for good. This is F1's kind, which F1's fix (`laterWrite`) doesn't reach, because CELL evidence counts after-air cells.
   - Repro: `UmtFindingsTest.f9_aRoadsHeadRoomOverASiteRemovedTopDownIsRecovered` (PLAIN seed 604864872 shrunk). Tag [F9]: 5-6 per
     20000 fuzz scenarios.
-- **DPT: a delta over a player's block loses its PT record.** `SiteDeltas`' D7 commit rewrites the delta's sections from
-  `new Cell(q, layer, before, after)`, which drops the PT records its create annotated (`JournalStore.ptSource`). The removal puts the
-  player's block back without its record. Production code; UMT mirrors it.
-  - Repro: `UmtFindingsTest.dpt_aDeltaOverAPlayersBlockLosesItsRecord`. Tag [DPT].
-  - Likely fix: `WorldJournal.withAfter` over the stored sections, as `SiteJournal.complete` (P7) does.
 - **F10: a plant over a delta's cell breaks at the removal.** A lot holds short grass (its before). A delta of the lot clears the
   grass block under it. The removal's one template over the union of their boxes places the plant over air, and V5 breaks it.
   - Repro: `UmtFindingsTest.f10_aPlantOverADeltasCellBreaksAtTheRemoval`. Tag [F10].
@@ -961,7 +962,12 @@ Top first. Not fixed in v0.40.1.
 - **Model RS's region targets in the ledger lint.** `LedgerSim` covers building targets, a road and adoption. A region-target kind,
   built through production seams (`RegionTargets.newRun`'s held cells, run bills, `soilSame`, `leaving`), would let rs-survival items
   8-10 (conservation, refunds, the mid-build removal) move to REPLACE · ledger-lint. Today they stay in game, one build each.
-- **Lava in the natural rule (a ruling):** `NaturalDriftTest`'s one kept semantic difference. See "Queued from slice S3".
+- **Lava in the natural rule: ruled** (coordinator, 2026-10-22). There is no behaviour change: the mod never writes over lava, the kit
+  keeps LAVA natural for survey reading and M20, and lava stays a named exception in `NaturalDriftTest`.
+- **The kit's virtual world writes over lava** (found by the ruling's grep). `vworld.mjs`'s cell conditions read `pal.natural`
+  (true for LAVA), so an IF_NATURAL or ALWAYS_OURS write over a lava cell, for example a carve through a frozen volume's LAVA, lands in
+  the plan's virtual world while the mod skips it. Make the conditions refuse lava (a write-side natural without LAVA). That moves the
+  virtual world for any plan that meets lava: re-cut and check byte identity.
 
 ## Queued from slice S3 (builder, 2026-10-21)
 
@@ -973,9 +979,8 @@ Top first. Not fixed in v0.40.1.
   walls and stair railings off them; unguarded passes (every other plan) still can cross. A shared-height rule would fix both.
 - **The kit's volume classes vs the mod's natural rule.** The mod's `TerrainFit.natural` lacked generated ice (fixed in S3), while
   the kit's ICE class is natural. Audit the rest of `NATURAL_CLASSES` against `TerrainFit.natural` (e.g. LOOSE, PLANT kinds) with a
-  drift test like `MaskPatternDriftTest`. **Done in close-out B** (`NaturalDriftTest`; CONTRACT "6c close-out B as built" §6). One
-  difference is kept for a ruling: **lava** (the mod never writes over it, the kit's virtual world counts LAVA natural). Which side
-  moves is the coordinator's call.
+  drift test like `MaskPatternDriftTest`. **Done in close-out B** (`NaturalDriftTest`; CONTRACT "6c close-out B as built" §6). Lava
+  is kept as a named exception, by the coordinator's ruling (no behaviour change).
 - **Snow layers read as SNOW (solid) in a volume.** A top snow layer is passable in the world; S3's brink rails count it, the
   checker's M8 doesn't. A layer/block split in ARVX (or a `top` flag) would let M8 and the walk graph agree with the world.
 - **meta.route holds only the last route pass.** S3 merges its passes into one record in its program; a kit-level `meta.routes`
