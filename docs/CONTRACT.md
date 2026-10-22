@@ -23829,3 +23829,116 @@ Noah, 2026-10-21, in chat with the coordinator:
 - N-FL-2: ring lots facing inward.
 
 Steward RC passed on F3, RS-a and RS-b.
+
+## 6c close-out B as built (test hygiene and small correctness follow-ups; branch `slice/close-out-b`, 2026-10-22)
+
+No API, catalogue or version change: no `NEXT` stamp, no Steward RC. The stale asks tables (h-unit and ha-unit H-a item 10, vocc-unit
+VOC-c item 3) moved to close-out A (coordinator, 2026-10-22).
+
+### 1. pt2-ingame item 13, order-independent
+
+`apitest apipt2` also reports `adoptRefusedAppended` (ADOPT_REFUSED's ordinal is PLAYER_BUILD's + 1), `adoptedAppended` (ADOPTED right
+after PROVISIONAL) and the Reason names in order. Item 13 judges the two: where PT2 appended them, whatever later slices append (VOC-c's
+PALETTE). The old `...Last` booleans stay.
+
+### 2. 6a-megaB
+
+- "REGION_PROGRESS events for every stage" is `tools/lib/megab.mjs` `stageEvents` over the walk's item count per stage (terrain and path
+  tiles plus lots, `stageItems`). A stage with no items (mega_bench's `lots-4`) is skipped and named in the row. A stage with items and
+  no PLACING/PLACED event fails it. `kit/test/megab.test.mjs` holds both, on the v0.41.0 release run's events. `megabench-B.json`
+  records each stage's `items`.
+- lot_054: in the re-run that timed out (`gate-runs-0410/20261022-065722-release`) lot_054 was placed 1 s after the relog (s83). The
+  item left was **lot_129** (lots-3). It waited OCCUPIED on a polar bear through every lap of the walk (6 laps, 63 min), then NOT_LOADED
+  once the walk moved on, and the final wait idled at the last waypoint. megaB now clears mobs whenever an item waits OCCUPIED (megaA's
+  rule) and its final wait visits the unfinished items (each at most 3 times; `finalVisits`). A driver fixture, not a mod bug.
+
+### 3. umt-long
+
+- **Why it failed on v0.40.1 and v0.41.0, both clock seeds.** There is no pin for the long run: it fails on untagged violations.
+  Each run stopped at PLAIN's first 3 unexplained seeds, so CRASH, DRIFT and ALL never ran. A census of all four generators over 5000
+  seeds from each recorded seed (40000 scenarios) gave 27 failing seeds in five buckets:
+  - **The tagger missed known findings (expectation drift).**
+    - F3's fallout (4 seeds): a road's gravel fell, its undo saw the cell as not its own and left it, and the standing site's cell
+      under it stayed air. `checkStanding` now tags a cell an entry wrote a gravity block at exactly.
+    - Farmland that ends as dirt (1 seed, DRIFT 604865978): V3 or V7. The journal holds farmland and dirt as one block, so it is
+      tagged LP's kind.
+  - **New findings**, each with a tag, a repro in `UmtFindingsTest` and an entry in PLAN's undo-B queue:
+    - **F9** (4 seeds): a road's head room over a site, removed top-down, is recovered.
+    - **DPT** (11 seeds): a delta's D7 drops the PT records its create annotated. This is production code.
+    - **F10** (6 seeds): a plant over a delta's cell breaks at the removal. It rests on modelled code: confirm in game.
+- `UmtLongTest` runs all four generators and fails once at the end.
+- After: `umtLong -Dumt.seeds=5000` passes from 604863162 and from 606067551 (20000 scenarios each). The CI set's pin is unchanged
+  (`ci-baseline.txt` not rewritten). `umtFindings` fails its 9 repros, as it should.
+
+### 4. The P3 cutover for RS's rows
+
+- `LedgerSim` doesn't model region targets, so no RS row is REPLACE · ledger-lint. `rs-survival-smoke` (`GATE_P3=smoke`) trims only
+  duplicate builds, each named in a `P3 smoke:` line:
+  - item 5's rs02 and rs03 (items 8 and 9 build them with the same `buildOne`);
+  - item 9's rs02r (rs03r carries every row);
+  - item 10's rs02m1 (rs02m2 is the same removal with a reopen).
+- `rs-survival` joins `tiers.release.always` and `P3_STEPS`. `node tools/p3-mode.mjs --check` prints `smoke`.
+- rs-ingame, rs-crash, rsb-ingame and rsb-crash have no duplicate builds, so they keep their full ids.
+- Rows: docs/FAST-CHECKS.md "P3 cutover".
+
+### 5. L-V7
+
+- `Builder.driedFarmland(run, befores)` (pure; Builder.run, RoadBuilder.run, RegionTargets.newRun) marks queued farmland cells whose
+  before (the target entry's, at put-down) was not dirt as `Run.tilled`. `Run.matches` reads dirt there as built. The rule: vanilla turns
+  farmland into dirt. Grass, podzol or mycelium go to dirt only under a solid block, which a field's cell never has.
+- Farmland over the ground's own dirt is not marked: that dirt may be the ground's.
+- Corner, accepted: dirt a player places in an unbuilt farmland cell over a non-dirt before counts as built.
+- `LedgerSim.runOf` calls the same seam. Its restart guard skips an unloaded target (not rescanned).
+- Ledger fuzz at 20000 seeds: **L-V7 0, 0 violating**. Mutant without the mark: L-V7 295 and both new tests red.
+- Tests: `lv7_driedFarmlandAfterARestartIsWrittenOnceAndPaidOnce` (full and half built), `lv7_driedFarmlandMarksOnlyCellsWhoseBeforeWasNoSoil`.
+- In game: `gate6crs.mjs lv7` (rs-survival). rs03's town (its farm field) is built first from its own bill. Three built farmland cells
+  dry to dirt, then the world is saved, left and reopened. The dried cells must still read built, dirt outstanding must never grow,
+  the rest is fed to done, the dirt consumed must be the bill's, the refund must equal the paid cells standing, conservation must be
+  exact throughout, and E-flat 0.
+
+### 6. The kit's natural classes against the mod's rule
+
+- `kit/test/natural-drift.test.mjs` keeps `kit/test/fixtures/natural/conds.json` current: every block's IF_NATURAL and
+  IF_SOLID_NATURAL in the virtual world, plus the vanilla block tags the mod reads.
+- `NaturalDriftTest` binds those tags (and water and lava's fluid tags), then compares `CellCond.passes` block for block. It found 162
+  differences.
+- **The mod moves:**
+  - `TerrainFit.natural` gains terracotta, coral blocks (and the dead ones), crops and cave vines (by tag), and a named set: amethyst,
+    calcite, dripstone, smooth basalt, magma, obsidian, crying obsidian, gilded blackstone, soul soil, end stone, the infested stones,
+    stems, mushrooms, fungi, lily pad, nether wart, the vines, bamboo, cocoa, pointed dripstone, sulfur spike, turtle egg, frosted ice
+    and others.
+  - Huge mushrooms' blocks are a tree's (TREE, LEAVES; the stem TREE).
+  - IF_SOLID_NATURAL takes a tree's solid cells.
+- **The kit moves:** the virtual world never counts bedrock or tripwire natural, and counts coral wall fans natural.
+- **Kept, named in `EXCEPTIONS`:**
+  - 7 plants whose "solid" differs (the mod's `isSolid` against the kit's collision; only a carve's lining writes IF_SOLID_NATURAL,
+    under the floor);
+  - lava, for a ruling (PLAN).
+- The placement change goes through the placement impact rule. The kit suite is 738/0 and the mod build is green.
+
+### 7. RS item 14
+
+`gate6crs.mjs item14`, in the `survival` group:
+- **World:** a fresh copy of S3's site (seed base, exact rules), default mode survival, the toggle on, settled 90 s, then surveyed.
+- **Plan:** rs02's plan, with the anchors Steward would compute from that survey:
+  - the town's stone at the flattest window;
+  - the east gate on the claim's edge;
+  - the rope's lips: the first east-west pair over a dip that the kit's own check accepts for a rope bridge.
+- **Check:** Regions.checkPlan in survival. Steward's repair drops a refused optional part (the lift); then READY.
+- **Build:** a stockpile at the north-west corner, fed to done: PLACED and built.
+- **Removal:** E-normal under `s3Classify` (S3 §6's classes, `farfluid` included), the crates' cells aside, 0 unclassified.
+- **Offline, on S3's golden survey:** town fits, in fits, the rope adjusted (lips 3728/3760 at z -876), the wall waits for its volume
+  (read in game).
+
+### 8. S3 on a live survey
+
+- **The cause.** Run `gate-runs-0410/20261021-180501-slice` (IR afc7092eaf47) planned over a survey with no TREE flag on a tree's
+  columns (x 3674-3677, z -945..-942). The pinned survey has it. Free to grade there, the relief blended grass over a stair flight's
+  head-room cut, at x 3679-3681. That left 2 floating relief cells (M3) and 1 unguarded walk cell (M8). Main's kit re-plans that
+  survey to the same IR and the same findings.
+- **The hardening.** The monastery's `trimFloating` also takes out the relief's own floating natural cells (soil, rock, loose, snow,
+  plants; never another part's), and an M3 left after the trim refuses the plan (`S3_STRUCTURE`). A survey the program accepts answers
+  no M3.
+- **The test.** `kit/test/s3-live.test.mjs` re-plans the run's recorded inputs (`kit/test/fixtures/s3-live`: its survey, frozen
+  volumes, biomes and bible) and asserts no M1-M4 and M8 guarded. It is red on main.
+- **The golden.** S3's golden was re-cut with `recutGolden`: programSha only, every tile sha equal.
