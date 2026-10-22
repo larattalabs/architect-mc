@@ -927,3 +927,7 @@ Top first. Not fixed in v0.40.1.
   - Seen in `artifacts/gate-runs-RP/20261021-035819-change` (rp-crash), region rg4: c1 PLACING, c2 ACTIVE.
   - Risk: a later rollback of the leftover entry could write its befores under the re-run's entry.
   - RP reports it as `placingLeftover` in the region's realised record (CONTRACT "Slice RP", §6), so it is visible, not fixed.
+
+- **F1 mirrored (found by fast checks P1, 2026-10-21):** when a building's box includes the pad's ground row, removing in the
+  order road, lower building, pad, upper building leaves the lower building pending at every start. UMT tags it [F1]; gate4e's
+  real fixture stands above the pad, so it isn't hit in game. Details: docs/GATES.md "Fast checks P1" (branch chore/gate-fast-p1).
