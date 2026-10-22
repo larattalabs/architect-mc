@@ -268,6 +268,17 @@ async function runGate(args, { guard = false } = {}) {
   if (guard) {
     timer = setInterval(async () => {
       if (summary.yield || !pastCutoff()) return;
+      // only a runner that holds the machine and runs its steps yields (one still waiting for its slot is left to queue)
+      let running = false;
+      try {
+        for (const d of fs.readdirSync(OUT).filter((x) => /-release$/.test(x))) {
+          const s0 = readJson(path.join(OUT, d, 'summary.json'));
+          if (s0?.runnerPid === child.pid && s0.state === 'running' && s0.steps?.some((x) => x.status === 'RUNNING' || x.status === 'PASS' || x.status === 'FAIL')) running = true;
+        }
+      } catch {
+        // no out dir yet
+      }
+      if (!running) return;
       const q = await queuedOthers([process.pid, child.pid]);
       if (!q.length) return;
       summary.yield = { at: stamp(), cutoff: `${yh}:${String(ym || 0).padStart(2, '0')}`, queued: q };
