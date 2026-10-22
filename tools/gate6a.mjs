@@ -601,9 +601,15 @@ steps.megaB = async () => {
     log(`  ${label}: no progress within 300 s at ${it.key}`);
     return { resumedSeconds: null, item: it.key, itemWas: `${it.status} ${it.reason ?? ''}`.trim() };
   };
+  // (6c close-out B) a lot waiting OCCUPIED holds a mob in its box (megaA's rule, docs/GATES.md "Mobs in scenario lots"): in one
+  // v0.41.0 release run lot_129 waited on a polar bear through every lap of lots-3, then NOT_LOADED for good once the walk moved on
+  const clearMobs = async (s) => {
+    if (s?.waiting?.OCCUPIED) { out.mobsCleared = (out.mobsCleared ?? 0) + 1; await cmd('/kill @e[type=!minecraft:player]'); }
+  };
   const visit = async (x, z) => {
     await cmd(`/tp @s ${x} 200 ${z}`);
     await sleep(MEGAB_DWELL_MS);
+    await clearMobs(await regionState(region));
   };
   // tile centres per stage from the region's batch (dev.region.state lists stages; the tiles come from the plan's tiles)
   const tilesOf = async (stage) => {
@@ -674,27 +680,36 @@ steps.megaB = async () => {
       if (sp.state === 'PLACED' || sp.state === 'PARTIAL' || ++lap > (MEGAB_FAST ? 60 : 6)) break;
     }
     const g1 = await counters();
-    out.stages[stage] = { seconds: (Date.now() - s0) / 1000, chunksLoaded: g1.loads - g0.loads, generated: g1.terrain - g0.terrain };
+    out.stages[stage] = { items: keys.length, seconds: (Date.now() - s0) / 1000, chunksLoaded: g1.loads - g0.loads, generated: g1.terrain - g0.terrain };
     log(`  stage ${stage} done in ${out.stages[stage].seconds.toFixed(0)} s, ${out.stages[stage].chunksLoaded} chunks loaded`);
   }
-  const st = await waitRegion(region, 3_600_000);
+  // (6c close-out B) the walk is over: configuration B places only near the player, so the final wait goes to an item still
+  // unfinished (one at a time, each visited at most 3 times) instead of idling at the last waypoint; recorded as out.finalVisits
+  out.finalVisits = [];
+  let lastVisit = 0;
+  const st = await waitRegion(region, 3_600_000, async (s) => {
+    await clearMobs(s);
+    const left = (s.unfinished ?? []).filter((x) => out.finalVisits.filter((v) => v.key === x.key).length < 3);
+    if (!left.length || Date.now() - lastVisit < MEGAB_DWELL_MS) return;
+    const it = left[0];
+    out.finalVisits.push({ key: it.key, status: `${it.status} ${it.reason ?? ''}`.trim() });
+    log(`  final wait: the player goes to ${it.key} (${it.status} ${it.reason ?? ''})`);
+    lastVisit = Date.now();
+    await cmd(`/tp @s ${it.x} 200 ${it.z}`);
+  });
   out.state = st;
   out.wallSeconds = (Date.now() - t0) / 1000;
   out.events.push(...(await api('revents').catch(() => [])));
   write('megabench-B.json', out);
-  // per-stage progress events (S9): REGION_PROGRESS events whose stage list shows each stage moving (tilesDone rising or PLACING)
-  const seen = {};
-  for (const e of out.events.filter((x) => x.event === 'REGION_PROGRESS' && x.id === region)) {
-    for (const part of String(e.what).split(' ').slice(1)) {
-      const [n, state] = part.split(':');
-      if (state === 'PLACING' || state === 'PLACED') seen[n] = (seen[n] ?? 0) + 1;
-    }
-  }
+  // per-stage progress events (S9): REGION_PROGRESS events whose stage list shows each stage moving (PLACING or PLACED); (6c close-out
+  // B) a stage with no items (mega_bench's empty lots-4) never moves and is skipped, named; a stage with items and no event fails
+  const { stageEvents, stageItems } = await import('./lib/megab.mjs');
+  const pe = stageEvents(stageItems(ir), out.events, region);
   const failed = Object.keys(st.failed ?? {});
   check(failed.length === 0 && st.view.state === 'PLACED', `megaB: ${st.view.state}, ${failed.length} failed items`, st.failed);
   check(out.relog?.resumedSeconds != null && out.relog.resumedSeconds <= 60, `megaB: resumed ${out.relog?.resumedSeconds} s after the player reached a waiting lots-2 item after the relog (${out.relog?.item})`);
   check(out.sidecarKill?.resumedSeconds != null && out.sidecarKill.resumedSeconds <= 30, `megaB: resumed ${out.sidecarKill?.resumedSeconds} s after the sidecar came back, at a waiting ways item (${out.sidecarKill?.item})`);
-  check(ir.stages.every((n) => seen[n] > 0), `megaB: REGION_PROGRESS events for every stage (${JSON.stringify(seen)}; ${out.events.length} events in all)`);
+  check(pe.ok, `megaB: REGION_PROGRESS events for every stage with items (${JSON.stringify(pe.seen)}; skipped, no items: ${pe.skipped.join(', ') || 'none'}; with items and no event: ${pe.silent.join(', ') || 'none'}; ${out.events.length} events in all)`);
   check(Object.keys(out.stages).length === ir.stages.length && Object.values(out.stages).every((x) => x.chunksLoaded >= 0), `megaB: per-stage seconds and chunks loaded ${JSON.stringify(out.stages)}`);
   await leaveWorld();
   return out;

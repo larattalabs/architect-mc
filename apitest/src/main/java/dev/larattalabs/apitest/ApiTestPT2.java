@@ -61,6 +61,15 @@ public final class ApiTestPT2 {
 					o.addProperty("adopt", api.features().contains("adopt"));
 					o.addProperty("adoptRefusedLast", Reason.values()[Reason.values().length - 1] == Reason.ADOPT_REFUSED);
 					o.addProperty("adoptedLast", BuildState.values()[BuildState.values().length - 1] == BuildState.ADOPTED);
+					// (6c close-out B) order-independent: appended where PT2 put them (right after PT's PLAYER_BUILD and PROVISIONAL), whatever
+					// a later slice appends after them; the names in order are evidence
+					o.addProperty("adoptRefusedAppended", Reason.ADOPT_REFUSED.ordinal() == Reason.PLAYER_BUILD.ordinal() + 1);
+					o.addProperty("adoptedAppended", BuildState.ADOPTED.ordinal() == BuildState.PROVISIONAL.ordinal() + 1);
+					com.google.gson.JsonArray rn = new com.google.gson.JsonArray();
+					for (Reason x : Reason.values()) {
+						rn.add(x.name());
+					}
+					o.add("reasons", rn);
 					return o;
 				}
 				case "adopt": {
