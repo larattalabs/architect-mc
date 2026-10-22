@@ -78,7 +78,8 @@ export function cacheContext({ src, main, cfg, conf, map, snapDir, env = process
     toolchain: { node: process.version, java: javaVersion(env), build: buildVersions(src, head) },
     release: { src: commit === 'HEAD' ? releaseContext(src, env).release : null, tagAtHead },
     originMain, plumbing,
-    dir: path.join(main, 'artifacts', 'step-cache'),
+    // GATE_STEP_CACHE_DIR: another cache (an analysis cache rebuilt from history: tools/step-cache.mjs import-history)
+    dir: path.resolve(env.GATE_STEP_CACHE_DIR ?? path.join(main, 'artifacts', 'step-cache')),
     defAt: commit === 'HEAD' ? null : definitionsAt(src),
   };
 }
@@ -184,8 +185,8 @@ export function record(ctx, id, rec, opts) {
   if (rec.status !== 'PASS') return { stored: false, why: rec.status };
   if (rec.timingRecorded?.length) return { stored: false, why: 'timing bars recorded, not judged' };
   if (opts.judgedBench) return { stored: false, why: 'a bench whose timing is judged at release is never cached' };
-  if (!opts.traced) return { stored: false, why: 'the step ran without the input trace (--no-trace)' };
-  const tr = readTrace(opts.traceDir) ?? new Map();
+  if (!opts.traced && !opts.untracedImport) return { stored: false, why: 'the step ran without the input trace (--no-trace)' };
+  const tr = (opts.traced ? readTrace(opts.traceDir) : null) ?? new Map();
   const chk = checkTrace(ctx.map, ctx.conf, mapId(ctx.map, id), tr, { tracked: treeAt(ctx.src, ctx.head) });
   if (chk.outside.length) return { stored: false, why: `inputs-map miss: the step read ${chk.outside.length} source path(s) outside its set`, outside: chk.outside };
   const e = {
@@ -194,9 +195,16 @@ export function record(ctx, id, rec, opts) {
     run: opts.run, log: rec.log ? path.join(opts.run, rec.log) : null, evidence: opts.ev, seconds: rec.seconds, ok: rec.ok,
     metrics: rec.metrics ?? null, traced: { paths: chk.n }, parts: opts.parts,
     external: Object.fromEntries(chk.external.map((r) => [r, externalFingerprint(ctx.main, r)])),
+    ...(opts.untracedImport ? { untraced: opts.untracedImport } : {}),
   };
   const f = entryFile(ctx, id, opts.key);
   fs.mkdirSync(path.dirname(f), { recursive: true });
+  try {
+    const old = JSON.parse(fs.readFileSync(f, 'utf8'));
+    if (String(old.at) > String(e.at)) return { stored: false, why: `a newer PASS for this key is recorded (${old.at})` };
+  } catch {
+    // none yet
+  }
   if (opts.junit && fs.existsSync(opts.junit)) {
     const j = f.replace(/\.json$/, '.junit.xml');
     fs.copyFileSync(opts.junit, j);
