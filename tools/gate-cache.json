@@ -47,10 +47,14 @@
    "kit/**",
    "sidecar/**",
    "tools/gen-palettes.mjs"
+  ],
+  "untraced": [
+   "kit/**",
+   "scenarios/**"
   ]
  },
  "classRules": {
-  "$comment": "Which classes a step gets: by its client (any game client, `self` included), by a gradle cwd, by modules in its closure (a driver that talks to a game, or runs gradle in the source checkout).",
+  "$comment": "Which classes a step gets: by its client (any game client, `self` included), by a gradle cwd, by modules in its closure (a driver that talks to a game, or runs gradle in the source checkout). A closure module that spawns node with a fresh environment (env: { PATH: ... }: the child runs untraced) adds untracedNode.",
   "client": [
    "jar",
    "sidecar",
@@ -71,7 +75,10 @@
    "tools/lib/src-gradle.mjs": [
     "gradle"
    ]
-  }
+  },
+  "untracedNode": [
+   "untraced"
+  ]
  },
  "derived": {
   "$comment": "Untracked paths a step may read that are built from tracked inputs: the trace allows them, and the key carries the tracked files they derive from (globs).",

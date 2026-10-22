@@ -218,6 +218,19 @@ export function staticEntry(id, entry, conf, files, opts) {
   if (classes.has('jar')) allRoots.push(...(conf.classes.jarRoots ?? []));
   const cl = moduleClosure(allRoots, has, opts);
   for (const [mod, cs] of Object.entries(cr.closureModules ?? {})) if (cl.files.has(mod)) for (const c of cs) classes.add(c);
+  // a closure module that spawns node with a fresh environment (env: { PATH: ... }, the plantime timings): that child runs
+  // untraced (no NODE_OPTIONS), so the step gets the trees such a child can read
+  const readMod = opts?.read ?? ((p) => fs.readFileSync(path.join(opts.src, p), 'utf8'));
+  for (const f of cl.files) {
+    if (!/\.mjs$/.test(f)) continue;
+    let t = '';
+    try {
+      t = readMod(f);
+    } catch {
+      continue;
+    }
+    if (/env:\s*\{\s*PATH:\s*process\.env\.PATH/.test(t)) for (const c of cr.untracedNode ?? []) classes.add(c);
+  }
   if (classes.has('jar') && !roots.some((r) => cl.files.has(r))) {
     // nothing to add: the jar roots were already in allRoots
   }
