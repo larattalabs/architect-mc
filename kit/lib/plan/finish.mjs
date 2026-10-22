@@ -20,6 +20,7 @@ const OK = new Set(['fits', 'adjusted']);
 /** Every tile's sha and per-IR-part counts: {tiles: {stage: {terrain: {key: sha}, path: {...}}}, parts: {irPart: {removed, placed}}, cells}. */
 export function evalAll(ir, survey, blobs) {
   const tiles = {}, parts = {};
+  const survival = ir.survival ? {} : null; // (6c RS) per target group: free, held, paid, bom, charged, creativeOnly
   let cells = 0;
   const windows = new Map();
   for (const s of ir.stages) {
@@ -31,9 +32,30 @@ export function evalAll(ir, survey, blobs) {
       tiles[s][set][key] = e.sha;
       cells += e.count;
       for (const [pid, c] of Object.entries(e.notes.parts)) { const o = (parts[pid] ??= { removed: 0, placed: 0 }); o.removed += c.removed; o.placed += c.placed; }
+      if (survival) for (const [g, x] of Object.entries(e.notes.survival ?? {})) addSurvival((survival[g] ??= { free: 0, held: 0, paid: 0, bom: {}, charged: {}, creativeOnly: {} }), x);
     }
   }
-  return { tiles, parts, cells };
+  return { tiles, parts, cells, ...(survival ? { survival } : {}) };
+}
+
+/** (6c RS) Adds one tile's group stats into a running total. */
+function addSurvival(t, x) {
+  t.free += x.free; t.held += x.held; t.paid += x.paid;
+  for (const k of ['bom', 'charged', 'creativeOnly']) for (const [i, n] of Object.entries(x[k] ?? {})) t[k][i] = (t[k][i] ?? 0) + n;
+}
+
+const sortedItems = (m) => Object.fromEntries(Object.entries(m).filter(([, n]) => n).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+
+/**
+ * (6c RS, §3) A part's `cost.survival` from its group's stats: `{free, held, bom, charged?, creativeOnly?}` (free: the free pass's cells,
+ * held: the free cells it builds with its paid ones, bom: the paid cells' bill, which the mod puts on its targets; charged: what its bodies'
+ * writes take, a lava bucket per lava source and the grates' iron bars).
+ */
+export function survivalCostOf(st) {
+  const o = { free: st?.free ?? 0, held: st?.held ?? 0, bom: sortedItems(st?.bom ?? {}) };
+  if (st && Object.keys(sortedItems(st.charged)).length) o.charged = sortedItems(st.charged);
+  if (st && Object.keys(st.creativeOnly).length) o.creativeOnly = sortedItems(st.creativeOnly);
+  return o;
 }
 
 /** The overall result (§3). */
@@ -106,6 +128,8 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
     a.cost = { cells: c.removed + c.placed, removed: c.removed, added: c.placed, tiles: tilesOf(a.part) };
     // (7a K1) a wall's, gate's or rope bridge's exact bill of materials (its emitted cells by C26's block-to-item rules: kit/lib/connectors/bom.mjs)
     if (pc.links?.bom?.[a.part]) a.cost.bom = { ...pc.links.bom[a.part] };
+    // (6c RS, §3) a survival check: the part's free, held and paid cells, and the paid cells' bill (what the mod puts on its targets)
+    if (ev.survival) a.cost.survival = survivalCostOf(ev.survival[a.part]);
     // (6c VOC) cost.rarity: present only when the plan's bible carries `rarity`, or the part writes a precious block that isn't the style's
     // own; cost.creativeOnly: only when the part writes a creative-only block (regions stay INSTANT: information for the caller)
     if (pc.vocabCells) {
@@ -143,7 +167,7 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
   }, { cells: 0, removed: 0, added: 0, range: [0, 0] });
   const cost = { cells: ir.budget.cells, removed: ir.budget.removed, added: ir.budget.added, tiles: Object.values(ev.tiles).reduce((n, s) => n + Object.keys(s.terrain).length + Object.keys(s.path).length, 0),
     parts: { cells: totals.cells, removed: totals.removed, added: totals.added }, ...(lots.some((l) => l.provisional) ? { range: { cells: [ir.budget.cells + totals.range[0] - totals.cells, ir.budget.cells + totals.range[1] - totals.cells] } } : {}),
-    bom: null, bomNote: 'regions are INSTANT only: no BOM' };
+    ...(ev.survival ? survivalBomOf(ev.survival) : { bom: null, bomNote: 'regions are INSTANT only: no BOM' }) };
   // ---- the light preview: per-part bounds and the class map
   const bounds = {};
   for (const a of answers) if (a.geometry?.rect) bounds[a.part] = a.geometry.rect;
@@ -151,7 +175,9 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
   const preview = { bounds, classMap: { file: 'classmap.png', scale: 4, width: classMap.width, height: classMap.height, legend: LEGEND } };
   // ---- the artifact (READY or NEEDS_REPAIR, and never after the time or memory cap)
   let artifact = null, artifactSha = null;
-  if ((overall === 'READY' || overall === 'NEEDS_REPAIR') && !pc.hit) {
+  // ((6c S3) a bundled program that compiles a fixed plan/0 itself (terraced_monastery) has no plan param: its check is recorded, but it
+  // makes no artifact (an artifact names the plan it approves; every plan_v0 check has one, as before))
+  if ((overall === 'READY' || overall === 'NEEDS_REPAIR') && !pc.hit && (inputs.plan ?? ir.params.plan) !== undefined) {
     artifact = {
       format: ARTIFACT_FORMAT, schemaVersion: 'plan/0', catalogueVersion: catalogue.catalogueVersion, kitVersion: ir.kitVersion, api: PLAN_API,
       plan: inputs.plan ?? ir.params.plan, planSha: sha256Hex(canonicalJson(inputs.plan ?? ir.params.plan)),
@@ -160,6 +186,8 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
         protection: ir.params.fingerprint?.sha ?? null, bible: ir.params.bible ?? null, seed: ir.seed, kitVersion: ir.kitVersion, budget: pc.budget,
       },
       region: { program: ir.id, irSha: res.irSha, irFormat: ir.format, requires: ir.requires ?? [], blobs: Object.fromEntries(Object.entries(ir.blobs ?? {}).filter(([, b]) => b.sha).map(([n, b]) => [n, b.sha])), stages: ir.stages, tiles: ev.tiles },
+      // (6c RS, §3) checked in survival: realiseApproved in the other mode refuses it ARTIFACT_STALE
+      ...(ir.survival ? { survival: true } : {}),
       parts: answers.map((a) => ({ part: a.part, class: a.class, block: a.block, ...(a.geometry ? { geometry: a.geometry } : {}), ...(a.cost ? { cost: a.cost } : {}), ...(a.provisional ? { provisional: true } : {}), ...(a.ext ? { ext: a.ext } : {}) })),
       lots, dropped: answers.filter((a) => !OK.has(a.class)).map((a) => ({ part: a.part, class: a.class, block: a.block })), overall,
       // (6c T3b, §6) the tunnels' guard cells (void, shell, 2-cell buffer) and the frozen volume each was checked against:
@@ -173,8 +201,18 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
   }
   // (6c H §10) a part took the wet fallback (the plan meta's wet records, or a wet write that asked a volume and rolled back:
   // meta.wetAsked): the game's check plans twice for its water columns
-  const check = { ...base, overall, parts: answers, cost, catalogue, preview, artifactSha, notes, ...((res.meta?.wet ?? []).length || res.meta?.wetAsked ? { wetAsked: true } : {}) };
+  const check = { ...base, overall, parts: answers, cost, catalogue, preview, artifactSha, notes, ...((res.meta?.wet ?? []).length || res.meta?.wetAsked ? { wetAsked: true } : {}), ...(ir.survival ? { survival: true } : {}) };
   return { check, artifact, artifactSha, classMap: classMap.png, cacheOut: pc.hit || overall === 'INCOMPLETE' ? cacheOnlyAnswered(pc.cacheOut, answers) : pc.cacheOut };
+}
+
+/**
+ * (6c RS, §3) The whole plan's bill in survival: every group's paid cells and charged items (the parts', a shared route's, the route lamps'
+ * and the plan's own helper parts'); the bound lots' design bills (C26's bomFull) and the 4e roads' bills are the game's (it adds them).
+ */
+export function survivalBomOf(sv) {
+  const bom = {};
+  for (const st of Object.values(sv)) for (const k of ['bom', 'charged']) for (const [i, n] of Object.entries(st[k] ?? {})) bom[i] = (bom[i] ?? 0) + n;
+  return { bom: sortedItems(bom), bomNote: 'the regions\' cells only: the bound lots\' design bills (bomFull) and the 4e roads\' bills are added by the game' };
 }
 
 /**

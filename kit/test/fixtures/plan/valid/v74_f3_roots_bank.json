@@ -1,0 +1,48 @@
+{
+ "about": "(6c F3 \u00a710.1) v74_f3_roots_bank: roots down a sculpted bank: the flat claim's east part raised 8 (a band at y 72), its west face a cliff 8 high; dirt roots (rooted dirt in the face, ledges with hanging roots under them) and a mangrove cluster, through the two-plan flow (the face read from the frozen volume)",
+ "on": "flat",
+ "terrain": {
+  "bands": [
+   {
+    "x0": 1130,
+    "x1": 1239,
+    "z0": 2000,
+    "z1": 2159,
+    "y": 72
+   }
+  ]
+ },
+ "volume": {},
+ "covers": [
+  "form.roots"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "f3_v74",
+  "forms": [
+   {
+    "id": "bank_roots",
+    "kind": "roots",
+    "preset": "dirt",
+    "count": 2,
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 20
+     }
+    }
+   },
+   {
+    "id": "mangrove",
+    "kind": "roots",
+    "preset": "mangrove",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 28
+     }
+    }
+   }
+  ]
+ }
+}

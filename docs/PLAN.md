@@ -931,3 +931,56 @@ Top first. Not fixed in v0.40.1.
 - **F1 mirrored (found by fast checks P1, 2026-10-21):** when a building's box includes the pad's ground row, removing in the
   order road, lower building, pad, upper building leaves the lower building pending at every start. UMT tags it [F1]; gate4e's
   real fixture stands above the pad, so it isn't hit in game. Details: docs/GATES.md "Fast checks P1" (branch chore/gate-fast-p1).
+
+## Queued from slice S3 (builder, 2026-10-21)
+
+- **District routes ignore protected areas** (main, non-terraced districts): `emitDistricts` passes no keep-out of the plan's
+  protected areas, other regions or builds to its route pass, so a district's street can cross a protected rect. S3 fixed it for
+  terraced districts only (`routeKeepOut`, so byte identity holds); the fix for every district moves fixtures (re-cut them).
+- **A route pass grades from the survey, not from an earlier pass's cells.** A later pass treated earlier runs only as `prefer`
+  (x, z), so it cut its own stairs through them. S3's guarded passes make earlier runs obstacles and keep parapets, retaining
+  walls and stair railings off them; unguarded passes (every other plan) still can cross. A shared-height rule would fix both.
+- **The kit's volume classes vs the mod's natural rule.** The mod's `TerrainFit.natural` lacked generated ice (fixed in S3), while
+  the kit's ICE class is natural. Audit the rest of `NATURAL_CLASSES` against `TerrainFit.natural` (e.g. LOOSE, PLANT kinds) with a
+  drift test like `MaskPatternDriftTest`.
+- **Snow layers read as SNOW (solid) in a volume.** A top snow layer is passable in the world; S3's brink rails count it, the
+  checker's M8 doesn't. A layer/block split in ARVX (or a `top` flag) would let M8 and the walk graph agree with the world.
+- **meta.route holds only the last route pass.** S3 merges its passes into one record in its program; a kit-level `meta.routes`
+  (every pass) would let the checker's route rules and the scenario rows read all of them for any plan.
+- **The release tool's set test copied the real tree's placeholders** (fixed in S3: it counts them first).
+
+## 6c scenario approvals (SETTLEMENTS §16.3: green = every bar passes and Noah approves the gallery page)
+
+| Scenario | Approved | Evidence | Gallery | Recorded |
+|---|---|---|---|---|
+| S2, the ice-spike outpost (v0.31.0) | Noah, in chat with the coordinator, 2026-10-14T04:39:12Z | `932dafe971f1` | https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG (section S2) | here by slice S3 (2026-10-20), from `artifacts/scenarios/6c/s2/approvals.json` (CONTRACT S3 §9 item 9) |
+| S3 v1, the terraced monastery | Noah, in chat with the coordinator, 2026-10-21 (bar 16) | `39d6ddb1bbf3` (natural run 20261021-041532, slice tier 20261021-040412) | https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG (section S3 v1) | here at the batch v0.41.0 integration (2026-10-21) |
+
+## Queued from RS (moved from HANDOFF-RS.md and HANDOFF-RSb.md at the batch v0.41.0 integration, 2026-10-21)
+
+- **RS item 14: rs02 on S3's natural claim in survival** (E-normal by S3 §6's classes). It waited for S3, which is in this batch;
+  `tools/gate6crs.mjs` lists it as not built (the `survival` group's comment).
+- **The gate3 survival and Hardcore steps** (a GUI p3 client) were not run for RS-a. A Hardcore world now realises regions in
+  survival (mode by world); "Hardcore unchanged" needs gate3's hardcore step green on a release with RS.
+- Done here, no longer queued: RP's provenance for survival targets (HANDOFF-RS "Follow-ups", HANDOFF-RSb "Open"). Each target's
+  cells are UNFINISHED at put-down and WRITTEN, with the target's site listed, once it is built (CONTRACT "Batch v0.41.0 as
+  integrated").
+
+## Queued from the batch v0.41.0 integration (2026-10-22)
+
+- **Lamp spacing on V and D streets (look lint L-LAMP).** FL's look fix L3 (lamps 6 apart settlement-wide) applies only to plans with
+  a free zone, so every other plan stays byte-identical. S7 (1 natural, 1 flat) and districts_demo (20 natural, 9 flat) keep their
+  counts in `kit/test/fixtures/lint/baseline.json`. Extending the gap to V and D streets moves every street fixture: a slice of its
+  own, with Noah's look.
+- **S3's natural scenario depends on the live survey.** Each natural run plans over the world as it stands, and the IR differs run to
+  run. One run in this batch's gate (`gate-runs-0410/20261021-180501-slice`, IR afc7092eaf47, 11 lots) answered one M3/M8 finding
+  (bars 1, 5, 6). S3's own branch kit plans that survey to the identical IR, and the re-run passed. A plan that can answer an M-rule
+  finding on some surveys is S3's to harden.
+- **Main's gate-chains.json carried two `release.always` keys** (P1's -full list, then P2's list built on the pre-P1 one; JSON keeps
+  the last). The batch merge keeps one list: the -full twins plus the lints, p2-calibration, w-ingame, d2-ingame and
+  6c-scenario-s3.
+- **6a-megaB's "REGION_PROGRESS events for every stage" row fails on main.** mega_bench's IR has an empty `lots-4` stage, so the
+  row can't pass. It failed the same way on ca50b90e and in the batch run. Skip empty stages in the check, or re-balance the bench.
+  In one batch re-run, lot_054 (the relog row's item) stayed WAITING NOT_LOADED after the walk until the step timed out. Watch for it
+  at the next release.
+- **The P3 cutover for RS's rows** (rs `-smoke` twins) was not done in the batch.

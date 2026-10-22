@@ -25,11 +25,20 @@ public record Ir(JsonObject json, String id, String kitVersion, String seed, int
 	public record Lot(String id, String stage, @Nullable String part, int[] box, int floorY, String front, @Nullable String brief, int[] max) {
 	}
 
-	/** A ground road: 4e RoadRequest points. */
-	public record Road(String id, String stage, List<int[]> points, int width, @Nullable String surface, boolean lanterns, @Nullable JsonObject lamp) {
+	/**
+	 * A ground road: 4e RoadRequest points. (6c FL, S-FL-5) {@code ext}: the road's own ext in the IR ({@code roads[].ext}), e.g. a
+	 * plan region's street {@code architect_mc:street: {zone, district?}}; null when the IR has none.
+	 */
+	public record Road(String id, String stage, List<int[]> points, int width, @Nullable String surface, boolean lanterns, @Nullable JsonObject lamp,
+		@Nullable JsonObject ext) {
 		/** Without a lamp (4e's fence and lantern). */
 		public Road(String id, String stage, List<int[]> points, int width, @Nullable String surface, boolean lanterns) {
-			this(id, stage, points, width, surface, lanterns, null);
+			this(id, stage, points, width, surface, lanterns, null, null);
+		}
+
+		/** Without an ext (before 6c FL). */
+		public Road(String id, String stage, List<int[]> points, int width, @Nullable String surface, boolean lanterns, @Nullable JsonObject lamp) {
+			this(id, stage, points, width, surface, lanterns, lamp, null);
 		}
 	}
 
@@ -71,7 +80,8 @@ public record Ir(JsonObject json, String id, String kitVersion, String seed, int
 				r.getAsJsonArray("points").forEach(p -> pts.add(ints(p.getAsJsonArray())));
 				roads.add(new Road(r.get("id").getAsString(), r.get("stage").getAsString(), pts, r.has("width") ? r.get("width").getAsInt() : 3, str(r,
 					"surface"), !r.has("lanterns") || r.get("lanterns").getAsBoolean(), r.has("lamp") && r.get("lamp").isJsonObject() ? r.getAsJsonObject("lamp")
-						: null)); // 6c W: the bible's lamp fixture (format 2, kind road:lamp)
+						: null, // 6c W: the bible's lamp fixture (format 2, kind road:lamp)
+					r.has("ext") && r.get("ext").isJsonObject() ? r.getAsJsonObject("ext") : null)); // 6c FL (S-FL-5): the road's ext (a street's)
 			}
 		}
 		Map<String, int[]> anchors = new LinkedHashMap<>();

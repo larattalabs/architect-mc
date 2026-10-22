@@ -80,6 +80,7 @@ public final class RegionHash {
 		final Map<String, Integer> classes = new HashMap<>();
 		long mismatchCount;
 		final long started = System.nanoTime();
+		int limit = 2000;
 
 		Job(ServerLevel level, int[] box, List<int[]> exclude, Mode mode, @Nullable Path file) {
 			this.level = level;
@@ -96,7 +97,13 @@ public final class RegionHash {
 	}
 
 	public static CompletableFuture<JsonObject> start(ServerLevel level, int[] box, List<int[]> exclude, String mode, @Nullable Path file) {
+		return start(level, box, exclude, mode, file, 2000);
+	}
+
+	/** (6c RS) {@code limit}: at most this many mismatches listed (default 2000; the count is always whole). */
+	public static CompletableFuture<JsonObject> start(ServerLevel level, int[] box, List<int[]> exclude, String mode, @Nullable Path file, int limit) {
 		Job j = new Job(level, box, exclude, Mode.valueOf(mode.toUpperCase(java.util.Locale.ROOT)), file);
+		j.limit = Math.max(0, limit);
 		for (int tx = Math.floorDiv(box[0], 64); tx <= Math.floorDiv(box[3], 64); tx++) {
 			for (int tz = Math.floorDiv(box[2], 64); tz <= Math.floorDiv(box[5], 64); tz++) {
 				j.tiles.add(new int[] {tx, tz});
@@ -268,7 +275,7 @@ public final class RegionHash {
 					j.mismatchCount++;
 					String cls = classify(j.level, m.immutable(), was, v);
 					j.classes.merge(cls, 1, Integer::sum);
-					if (j.mismatches.size() < 2000) {
+					if (j.mismatches.size() < j.limit) {
 						JsonObject o = new JsonObject();
 						o.addProperty("pos", m.getX() + "," + m.getY() + "," + m.getZ());
 						o.addProperty("was", was);

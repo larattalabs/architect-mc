@@ -1,0 +1,142 @@
+{
+  "about": "(6c FL, §10, Steward-shaped) around_my_tree re-recorded as Steward's plan writer would: near {anchor: oak, within: 0} (the ring centres on the oak), a well shared space, a road to claim_s",
+  "on": "flat",
+  "anchors": {
+    "oak": [
+      1119,
+      65,
+      2079
+    ]
+  },
+  "expect": {
+    "part": "grove",
+    "class": "fits"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "oakheart_grove",
+    "style": {
+      "pending": "oakheart_grove"
+    },
+    "zones": [
+      {
+        "id": "grove",
+        "kind": "standard",
+        "required": true,
+        "label": "Oakheart Grove",
+        "where": {
+          "near": {
+            "anchor": "oak",
+            "within": 0
+          }
+        },
+        "program": {
+          "layout": "ring",
+          "shared": "well",
+          "lots": [
+            {
+              "id": "tavern_1",
+              "type": "tavern",
+              "role": "oak_wardens_hall",
+              "size": [
+                17,
+                15
+              ],
+              "landmark": true,
+              "placement": "central"
+            },
+            {
+              "id": "cottage_1",
+              "type": "cottage",
+              "role": "grove_cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "cottage_2",
+              "type": "cottage",
+              "role": "grove_cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "cottage_3",
+              "type": "cottage",
+              "role": "grove_cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "cottage_4",
+              "type": "cottage",
+              "role": "grove_cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "cabin_1",
+              "type": "cabin",
+              "role": "woodcutter",
+              "size": [
+                9,
+                9
+              ],
+              "placement": "edge"
+            },
+            {
+              "id": "shop_1",
+              "type": "shop",
+              "role": "herb_shop",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "chapel_1",
+              "type": "chapel",
+              "role": "grove_shrine",
+              "size": [
+                9,
+                9
+              ],
+              "placement": "high_ground"
+            },
+            {
+              "id": "barn_1",
+              "type": "barn",
+              "role": "orchard_barn",
+              "size": [
+                13,
+                11
+              ],
+              "placement": "edge"
+            }
+          ]
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "grove_road",
+        "kind": "road",
+        "required": false,
+        "from": {
+          "part": "grove",
+          "port": "start"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      }
+    ]
+  }
+}

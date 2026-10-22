@@ -1,0 +1,27 @@
+{
+  "about": "(6c RS, §13) Steward's plan v1 shape in survival: an east-west street zone not turned (C37), its lots with Steward's lot ext and bound entries, a pending part not required, a wall round it with the road's auto gate, a rope bridge over a ravine west of it, the street's lamps and a path: walls, gates, ropes and lamps as targets, the lots as construction sites",
+  "terrain": { "bands": [{ "x0": 1024, "z0": 2000, "x1": 1035, "z1": 2159, "y": 52 }] },
+  "anchors": { "lip_w": [1014, 65, 2080], "lip_e": [1046, 65, 2080], "east_gate": [1230, 65, 2080] },
+  "lotEntries": { "h1": "rs_hut", "h2": "rs_hut", "h3": "rs_shed" },
+  "covers": ["zone.standard", "connector.wall", "connector.gate", "connector.rope_bridge", "connector.road", "connector.path"],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "rs02_walled",
+    "zones": [{
+      "id": "town", "kind": "standard", "required": true,
+      "program": { "lots": [
+        { "id": "h1", "type": "cottage", "size": [9, 9], "entry": "rs_hut", "ext": { "steward_mc:settlement": "s1", "steward_mc:lot": "h1", "steward_mc:role": "home" } },
+        { "id": "h2", "type": "cottage", "size": [9, 9], "entry": "rs_hut", "ext": { "steward_mc:settlement": "s1", "steward_mc:lot": "h2", "steward_mc:role": "home" } },
+        { "id": "h3", "type": "smithy", "size": [9, 9], "entry": "rs_shed", "ext": { "steward_mc:settlement": "s1", "steward_mc:lot": "h3", "steward_mc:role": "workshop" } }
+      ], "layout": "street", "orientation": "ew" },
+      "tolerance": { "rotate": { "allowed": false } },
+      "where": { "near": { "anchor": "stone", "within": 16 } }
+    }],
+    "connectors": [
+      { "id": "town_wall", "kind": "wall", "where": { "around": { "feature": { "part": "town" }, "ring": [4, 8] } }, "height": 5 },
+      { "id": "in", "kind": "road", "from": { "anchor": "east_gate" }, "to": { "part": "town" } },
+      { "id": "rope", "kind": "rope_bridge", "from": { "anchor": "lip_w" }, "to": { "anchor": "lip_e" } },
+      { "id": "lift", "kind": "lift", "required": false, "from": { "anchor": "lip_w" }, "to": { "anchor": "stone" } }
+    ]
+  }
+}

@@ -14,13 +14,22 @@ import org.jspecify.annotations.Nullable;
  * {@code checkId} names the check (its region plan's id: {@link Regions#planImages} renders over it). Since 1.23.0.
  */
 public record PlanCheck(String checkId, String planSha, String surveySha, String kitVersion, String schemaVersion, Overall overall, List<JsonObject> parts,
-	JsonObject cost, JsonObject catalogue, JsonObject preview, @Nullable String artifactSha, List<String> notes) {
+	JsonObject cost, JsonObject catalogue, JsonObject preview, @Nullable String artifactSha, List<String> notes, boolean survival) {
 	public PlanCheck {
 		parts = parts == null ? List.of() : List.copyOf(parts);
 		cost = cost == null ? new JsonObject() : cost;
 		catalogue = catalogue == null ? new JsonObject() : catalogue;
 		preview = preview == null ? new JsonObject() : preview;
 		notes = notes == null ? List.of() : List.copyOf(notes);
+	}
+
+	/**
+	 * The 1.24.0 constructor: checked in creative (since 1.38.0, 6c RS: {@code survival}, the check ran in a survival world: each part's
+	 * {@code cost.survival}, the plan's {@code cost.bom}, the artifact checked in survival).
+	 */
+	public PlanCheck(String checkId, String planSha, String surveySha, String kitVersion, String schemaVersion, Overall overall, List<JsonObject> parts,
+		JsonObject cost, JsonObject catalogue, JsonObject preview, @Nullable String artifactSha, List<String> notes) {
+		this(checkId, planSha, surveySha, kitVersion, schemaVersion, overall, parts, cost, catalogue, preview, artifactSha, notes, false);
 	}
 
 	/**

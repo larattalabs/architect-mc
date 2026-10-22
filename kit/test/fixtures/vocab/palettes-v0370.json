@@ -13,6 +13,7 @@
   "preset:oak": "eb81289e5e72d6840ff2be7eb0d25291dcd21aa5f68dcf3c19bd2421f927dc50",
   "preset:rustic": "4f466c0321d5feaf51f3ec14dc687be58fae399ad937b16e57177a6ecc7d4125",
   "scenarios/bibles/g6c_s2_outpost.json": "6466b238dd31c0230b59c0719cd52a07335f4ddb3fed1d1f381f1cf152f698e1",
+  "scenarios/bibles/g6c_s3_monastery.json": "6466b238dd31c0230b59c0719cd52a07335f4ddb3fed1d1f381f1cf152f698e1",
   "scenarios/bibles/g6cv_village.json": "f4dfe888e080b48e9099b22ba58b2de17e0698f5b9456f7efbe234b5a20abd6e",
   "scenarios/bibles/g6cvoc_copper.json": "2e1507dc9a1a50081db580c43e5fbf6f23c34b6bf325b7e784bbf18dca05da69",
   "scenarios/bibles/g6cvoc_copper_free.json": "a35cb5f46f57eb2fd79c433ac43e48bcacdac058e32d341a25493ce1580a35c8",

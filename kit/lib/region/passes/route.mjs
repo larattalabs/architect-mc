@@ -580,7 +580,8 @@ export function routePass(survey, volumes, intent) {
     if (!p || !Array.isArray(p.at)) continue;
     const k = cellAt(p.at[0], p.at[2]);
     if (k < 0) continue;
-    const i0 = k % W, j0 = Math.floor(k / W), R = Math.floor((NEAR_END + r - 1) / r);
+    // ((6c S3) `nearEnd`: the pass's own radius, a terraced district's (several joins share a lot's approach); absent: NEAR_END)
+    const i0 = k % W, j0 = Math.floor(k / W), R = Math.floor(((isInt(it.nearEnd) ? it.nearEnd : NEAR_END) + r - 1) / r);
     for (let j = Math.max(0, j0 - R); j <= Math.min(D - 1, j0 + R); j++) for (let i = Math.max(0, i0 - R); i <= Math.min(W - 1, i0 + R); i++) nearEnd[i + j * W] = 1;
   }
   const coarse = r > 1;
@@ -685,7 +686,7 @@ export function routePass(survey, volumes, intent) {
       withinM = dilate(seed, W, D, Math.floor((A + r - 1) / r));
     }
     const sctx = { G, builtY, prefer: preferE, start: ends[0], goal: ends[1], Gq, w, laneW: Math.floor((w + r - 1) / r), Ld: Math.floor((Math.max(hairpinLanding, w) + r - 1) / r),
-      latLo: Math.floor(lo / r), latHi: Math.floor((hi + r - 1) / r), maxCut, maxFill, stairs: stairs && !coarse, ladders, nearEnd,
+      latLo: Math.floor(lo / r), latHi: Math.floor((hi + r - 1) / r), maxCut, maxFill, stairs: (e.stairs ?? stairs) && !coarse, ladders, nearEnd, // ((6c S3) an edge's own `stairs: false`)
       ...(sp.length ? { special: sp, needFlag } : {}) };
     // ---- the moves as 4-connected centre cells with their surface y, and segments
     const toPath = (res) => {

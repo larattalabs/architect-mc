@@ -424,11 +424,14 @@ steps['flat-misc'] = async () => {
   bar(q(0.5) <= 2000 && q(0.95) <= 5000, `item 7: radius-16 strokes, request to realised: p50 ${Math.round(q(0.5))} ms (<= 2 s), p95 ${Math.round(q(0.95))} ms (<= 5 s) over ${ms.length}; load ${os.loadavg()[0].toFixed(1)}`);
   const d = await diffBox(box, snap);
   check(d.mismatches === 0, `items 7 and 8: every stroke undone, E-flat ${d.mismatches}`, d.sample);
-  // item 10: a survival-toggle world and another dimension refuse NOT_ALLOWED
+  // item 10: another dimension refuses NOT_ALLOWED. ((batch v0.41.0) A survival-toggle world no longer refuses a stroke: RS made a survival
+  // world's brush natural-only and free (CONTRACT "Phase 6c slice RS" item 13; rsb-ingame's brush row judges it, a concrete pattern
+  // refused), so this row checks that a natural raise is written there, and undoes it)
   await call('dev.survival.set', { on: true });
   const s = await brush({ kind: 'raise', at: [X, gy, Z], radius: 4, strength: 2 });
+  if (s.region) await undo(s.region);
   await call('dev.survival.set', { on: false });
-  check(s.reason === 'NOT_ALLOWED', `item 10: refused NOT_ALLOWED in a survival-toggle world (${s.refused})`);
+  check(!s.refused && !!s.region, `item 10 (as RS changed it): a natural raise stroke in a survival-toggle world is written, not refused (${s.refused ?? `${s.region}, ${s.cellsWritten} cells, undone`})`);
   const n = await brush({ kind: 'raise', at: [X, gy, Z], radius: 4, strength: 2, dimension: 'nether' });
   check(n.reason === 'NOT_ALLOWED', `item 10: refused NOT_ALLOWED outside the Overworld (${n.refused})`);
   const f1 = await brush({ kind: 'raise', at: [X, gy, Z], radius: 33, strength: 2 });

@@ -17645,6 +17645,36 @@ verifier reviews the diff and the evidence and **re-runs items 6 and 7** (realis
 - **N-FL-1:** organic layouts are moderately irregular.
 - **N-FL-2:** ring lots face inward, onto the ring street.
 
+### Phase 6c slice FL as built (branch `slice/FL` over main e755d663 (v0.40.0), main 7a48eb02 merged in; versions `NEXT`, set at merge; catalogue 10, feature `freeLayouts`; recorded 2026-10-21)
+
+All four sub-slices (FL-core, ring and spiral, grid, organic and outline) built on the one branch, in that order.
+
+| Part | As built |
+|---|---|
+| The engine (§2) | `kit/lib/region/frontage.mjs`: `Field` (the zone's mask over the claim: the claim less its margin, `env.hard`, the earlier zones' and forms' rects, every registered H footprint, natural water; a street band grid, an occupancy grid), integer polar curves (a 65-entry integer sine table, 256 steps a turn: no floating point reaches a cell), `frontage()` (one street) and `placeMulti()` (several: a grid's avenues, organic lanes), `lotAt()` (V's fitLot rules: wholly in the mask, off every street band (Chebyshev 2 of a centre cell), unoccupied, `lotGap` 3 from the lots placed, dry, slope 3, pad 2 at the entrance's ground + 1; the entrance the cell outside the front edge's middle, joined by a straight lane to the band), `hubSpace()`/`hubAvoid()`/`spokes()`, `emitFree()` (V's result shape: pads and lots, the hub's square or green through V's own `square()`, verges, lanes and spokes, the roads, the graph, `meta.village`/`villageZones`), so props, apron lamps, the bell, M22-M24 and the siteplan run unchanged. `kit/lib/plan/free.mjs` resolves a free zone (`isFreeZone`: a lots program with layout ring, spiral, grid or organic, or `where.around`, or an outline), `compile.mjs` dispatches to it before V's path (V's zones byte for byte), never cached. |
+| **Deviation: the street is its line** | §2.2 asks for "a T2 dry route kept within 2 of the line". Built: the street *is* the centre line (an integer polar ring or spiral, a grid's straight streets, an organic lane's seeded walk, a drawn polyline), checked by V's ground-road rule (no water, cut and fill within 3 with steps of 1: `groundRoadProblem`, `_groundRoadProblem` again at emit) and written as `road()` items in ground mode. A T2 pass per candidate (centres x radii) was too slow for the search; the line is chosen inside the mask, so the route's obstacle avoidance is the mask's. Within 0 of the line. |
+| Lots on a curve | Where a curving street runs on across a lot's front, the lot is pushed out (up to half its width + 2, a longer lane): D2's FOLLOW_PUSH idea. Fronts: the cardinal facing the lot's own street (a ring mixes all four). |
+| **Noah's look fixes (gallery review, after the first look)** | Five fixes, each with a kit check (`kit/test/fl-look.test.mjs` over `fl-written.mjs`, which reads the ground back from the IR) that failed before the fix, and fixtures `fl/w01`-`w04` (the spiral up the hill in the infernal bible, bare hubs in a ring and an organic hamlet, a grid's green). Before: v66-v71 each failed L1, L2 and L4; v66 and v68-v70 failed L3 and L5. **L1** (a grass gap, then a second path-coloured border): the verge was the street's square band (Chebyshev 2 of the centre line less Chebyshev 1), but 4e lays a road's side columns across its travel (a corner beside its x step), so diagonal and curved streets left grass between the road and the verge. The verge is now derived from the walkway 4e lays (`groundWalk`, a port of RoadPlan's centre line, smoothed feet and side columns): every column within 1 of it, so the verge lies against the road. **L2** (strings off the paths, worst on the spiral up the hill): the same band, plus 4e skipping side columns more than 2 off the smoothed feet on the terraces, left verge lines standing apart from the road. A side column the survey puts within 1 of the feet is counted as road, and any other is covered by the verge. The check: no verge more than 1 from a walkway, and a zone's paths form one 4-connected piece (no stub). **L3** (lamps side by side): FL streets carry no 4e lanterns. The zone lays its own street lamps as props (`props_street_lamp`): the first at 6 cells and then every 12, on the verge column 2 beside the travel, never beside an entrance, lane, spoke or apron. Any lamp within `LAMP_GAP` 6 (Chebyshev, D3's rule) of another is skipped. That covers the hub's lamps, earlier street lamps and every column a 4e lantern of another road (a connector's route) may take (`possibleLanterns`). The street lamps are emitted after the connectors. The hub's props (`planProps` `lampGap`) and the apron lamps (`lightCover` `lampGap`, only in a plan with a free zone) keep the same gap. This replaces the first look's `lanternPieces` (pieces cut round entrances): streets are one road item again (two arcs for a ring). **L4** (houses joined by one block): lanes are `laneWidth` 2 wide (V's cross offsets, flipped where a lot or the land's edge is in the way) and run on until they meet the walkway. **L5** (paths ending in grass at the hub): a square hub is paved already. A green gets a paved ring 1 wide round it (`landing`, levelled at the green's y). A bare hub (`none`) gets a paved pad over its bell area when a spoke reaches it, and nothing otherwise. A spoke whose hub end misses the paving is relaid as a 4-connected path from the nearest paved cell. A hub that no spoke reaches (a grid's plaza block) gets a 2-wide path to the nearest road. Each zone records `hubLanding` (square, ring, pad or none) and its spokes on its village meta. V's output is unchanged: the new options default off, and byte identity holds over every plan without a free zone. |
+| Ring (§3.1) | `layouts/ring.mjs`: radius searched by 2 from 10 (a frontage lower bound skips the impossible) to the land's reach; central and landmark lots on the inner side (the hub) facing the street, as many as fit; the rest outside facing in (N-FL-2); the hub's square (11), green or nothing (`none`: a level 5x5 bell area searched near the centre, nothing written); up to 4 spokes from the space's edges to the ring; a closed street as two arcs. Centred on the locator's aim (an anchor, a feature, the claim's centre); candidate centres in rings of 8 round it (at most 12 tried). |
+| Spiral (§3.2) | `layouts/spiral.mjs`: pitch 2 x (deepest lot + 3) + 5, up to 3 turns, cut where it leaves the land or stops being a ground road, then after its last lot; lots outside; central and landmark lots in the hub (the first turn's inner side). On a hill (a summit inside the land that falls 4 within 24 on every side, rising 8 or more) the centre is the summit. Too steep from its start: NO_ROOM {why: grade}, wouldFit the ring (re-checked: r06). The inner radius tried from the hub's own up by 12 (a spiral starting at the foot is the ring). |
+| Grid (§3.3) | `layouts/grid.mjs`: avenues along `orientation` (`auto`: the land's longer run through the centre, ties east-west), k (2..6) lots a block row, block grids 3x3, 5x3, 3x5, ... (1x1, 3x1, 1x3 only for 4 lots or fewer), smallest land first; lots in blocks only (the outer avenues' inner sides), back to back, the central block the plaza (square: V's square filling the block, the bell area and golem space as an 11x11 square holds them at its centre; well: the green; none: an ordinary block); central and landmark lots take the slots nearest the plaza, edge lots the farthest. Block rows laid again as deep as their own deepest lot (§3.3), kept when they place as many (v68: rows 19/19/15). Streets `street_a1..`, `street_c1..`; crossings share one junction. |
+| Organic (§3.4, N-FL-1) | `layouts/organic.mjs`: 2-4 lanes (one per 4 lots) from the green's edge, each a seeded walk in 8 headings, 6-12 cells a segment, turning at most 45 degrees (the cheapest ground of -1/0/+1 headings, the seed's preference first), joining another lane within 6 (a shared junction) or stopping at the land's edge, 72 cells at most, trimmed after its last lot; lots of seeded setback 1..5 beyond the road's edge (front edge 2..6 from the centre: "1" never puts a lot on the road) and gaps 3..6 (each lot's own FNV draw, independent of the try order); spokes from the green to each lane's start. **Measured:** the axis-run share (cells in straight runs of 8+) is recorded; v69 0.635, re-seeded once to 0.639 (still over 0.6: the re-seed is once, as §3.4 says); over 200 seeded claims median 0.412, max 0.783, 53 re-seeded. |
+| Around (§4.1) | Zones: the ring's radius follows the feature's polar extent (256 steps, widened over 12 either side) plus the offset, searched by 2 in `ring` (default [6, 32]); the feature's resolved rect is the hub (nothing written); `closed: false` leaves out 1/6 of the turn nearest the claim's centre. An H body's registered footprint stays hard (KC): r03 (a fountain, ring [2, 4]) answers OVERLAP {kind: body, body, part} with wouldFit `ring: [10, 12]` re-checked alone. grid/spiral/organic under around: adjusted {what: layout, asked, got: ring} (r05). Forms: `resolveSpikesAround`, sites evenly by angle when count >= 3 (f01: 6 spires at 60 degrees), off the footprint + 2. Builds: the build's rect + 1 and its door aprons are the footprint (p01). |
+| Outline (§4.2) | `layouts/outline.mjs`: a polygon rasterised by cell centres (integer even-odd), the used mask = drawn cells on usable land, the deviation the farthest drawn cell from the used mask (in the sketch's unit); a polyline laid as drawn (its longest usable run), the mask its land within the deepest lot + 3 + 2 + 4; a `street` layout in a polygon is one straight street through the mask (each axis and offset, the most lots); past the sketch ceiling: TOLERANCE with wouldFit the sketch scaled about the used cells' centroid (r04: 20%, re-checked). |
+| KC (§5) | Every FL zone's mask cuts every registered H footprint; a street zone `near`/`adjacent`/`inside` an H body takes its footprint as keep-out (never cached). `clearRefusals` refuses the dependent zone (OVERLAP {kind: body}), never the body (`whereNames`). `clearScan` reads each street road marked `architect_mc:street` over a body's hard columns (roads are items, no op shows them), writer the zone. Broken variant `zoneIgnoresBody` (u03): M25:clear names the zone; the backstop over those findings refuses `shore`, not `pond`. None of the committed plans moved. |
+| **S-FL-5 (Steward's addition)** | `compile.mjs stampStreets`: V's `street_w`/`street_e`/`street` (prefixed), each district's (`<did>_street*`) and a following district's route (`route_st_<did>_<n>`) get `architect_mc:street {zone, district?}` in their IR road's `ext`; FL's `street_*` pieces too; connectors' routes and the routes between districts none. Java: `Ir.Road` gains a trailing `ext` (the 6- and 7-argument constructors kept), `RegionsImpl.roadItem` puts it on the road's batch item ext (`BatchView.ItemView.ext`, what Steward reads). **Interpretation for the coordinator:** only plan regions' streets are marked; the standalone `flat_village` and `districts` programs (not through `compile.mjs`) stay unmarked, so S7's and the districts scenario's goldens hold. The IR of every plan with a street changes by this ext (byte identity normalises it). |
+| M1 for roads | `check.mjs`: a road's cells (its width) inside a lot box is M1 (u01 `lotOnStreet`: 6 cells). No committed result moved. |
+| Geometry (§6) | Free zones add `layout`, `streets` [{name, points, closed}], `hub` {rect, centre}, and for around and outlines `mask` (row runs); V's zones gain nothing. Ports: `start`/`end` (an open street's ends; a closed ring's or a grid's street cells nearest and farthest the claim's centre), `hub`/`bell`, a lot; otherwise the street cell nearest the leg's other end. |
+| Catalogue (§7) | Catalogue 10: the six flips (`sinceApi` `NEXT`, schemaVersion 1, each with a note); locator.around's note keeps the wall sentence. Catalogue 9 archived as `fixtures/plan/catalogue-vocc.json`. Compact plan/0 77,607 characters (base 76,652: +955; bound 84,000, S-FL-8). `freeLayouts` / `plan.layouts`. **Versions:** after main's release-version policy landed (merged here), FL sets no version number. API, mod and kit stay at main's values, the six entries and the javadoc of `freeLayouts` are stamped `NEXT`, and `catalogueVersion` is bumped to 10 by the slice. The brief's placeholders (API 1.38.0, mod 0.41.0, kit 0.39.0) become the coordinator's `tools/release-version.mjs --api ... --mod ... --kit ... --catalogue 10` at merge. The tool's own test copies the tree, so it releases a slice's `NEXT` stamps in its copy first: FL's stamps would otherwise break its count. Java beyond the version and the feature: `Ir.Road.ext`, `roadItem`, the dev hook `dev.region.items` (SliceFlDev); api-compat clean. |
+| Moved by name | builds-pt and districts-d2 (locator.around supported), plan-p0 item 1 (e07/e14 answer fits; e15 lost the six ids), vocc item 2 (catalogue 9 from the archive), sidecar system-refs (84,000) and the FEATURES pins, gate6cpt item 14 (locator.around now places a ring, and parts with no dependency between them resolve in id order, so the around zone's id became `zring`. That keeps town and yard placed exactly as before, as a kit repro shows, and the ring answers NO_ROOM in the small claim). The earlier slices' identity and asks items (H, H-a, HY, HY-a, VOC-a, VOC-c, KC, IRR, T3a, K1b) normalise the street ext and name FL's movers (`tools/lib/fl-norm.mjs`). No golden is re-cut: the kit version stays main's. The release tool re-cuts the goldens at merge. `tools/lib/plan-cache.mjs` (main's gate cache) normalises the street ext the same way, and its key gains `flnorm`. KC's head census treats `fl/u03` as a broken variant, like kc/u* and irr/u01. |
+| Steward's asks (§8) | Before and after in `fixtures/plan/fl/asks-before.md` / `asks-after.md`: the five free asks flip to fits or adjusted as predicted; ring_city/ring_town answer **blocked** (their explicit dependency on crater_lake, a form.crater that stays unsupported until 7c), not the predicted fits: the dependency, not the layout, decides. |
+| In game (item 6) | v66, v67, v68, v70, v71, Steward's grove (s01, a Steward-shaped plan) and, after the look fixes, fl/w01 (the spiral up the hill) and fl/w03 (an organic hamlet with a bare hub's pad): checkPlan, then realiseApproved: PLACED, every lot's site standing, every street's batch item carrying the ext, walks from every entrance to the hub, undo restores, removal accounted. Flat fixtures (`on: flat`) realise on the flat base as it is (a /fill pond leaked under the game's water rules; recorded). Dev hook `dev.region.items {region, owner?}` (DEVBRIDGE.md). |
+| Natural (item 7, S3's terrain) | Control drift 315 cells in 90 s. E-normal: 6 mismatches, all flow, 0 unclassified. S3's lower band chosen by the kit's own check over the game's survey: 3 of 11 lots, adjusted (the kit over the committed survey predicted 6; the game's terrain is the truth). |
+| Byte identity (item 10) | 254 of 262 committed plans identical (with the street ext normalised); the 8 movers all named (asks around_my_tree, nomad_camp, ring_city, grid_city, organic_hamlet; extension e07, e14, e15; e16 named by §8 and held identical). 257 street roads marked. |
+| Look (item 13) | 28 shots of the five layouts in two bibles, recorded and not judged. Noah's gallery is https://claude.ai/artifact/VYAU7bA61wzdhf6NnaM73v (version 2 is after the look fixes, with before and after pairs). After the fixes, fl-ingame passed 48/0 and fl-look 41/0 (run `gate-runs-FL/20261021-002114-change`). |
+| Gate | Final slice tier `artifacts/gate-runs-FL/20261021-062606-slice`: 3 shards on ports 8912-8917, head 7fdae3b8 (main 7a48eb02 merged in), 2h24m, **89 PASS, 3 FAIL, none from FL**. That covers unit-mod 744, unit-kit 686, unit-sidecar 758, apijars (0.40.0, 0.39.1, 0.39.0: 46/0 each), fl-unit 280/0, fl-ingame 48/0, fl-natural 7/0, fl-look 41/0, kc-unit 328/0 and pt-ingame 103/1 (the one miss is item 15's timing bar, recorded). The three failures: (1) h-unit item 10, H-a's asks tables. They are stale on main after VOC-c (main's PLAN.md has this), and the builder reproduced the same failure on the base checkout e755d663. (2) pt2-ingame item 13, apipt2. It expects `ADOPT_REFUSED` as the last `Reason`, but VOC-c appended `PALETTE` (main's PLAN.md has this too). (3) voc-unit item 1, the Linux byte check. It needs Docker, and OrbStack's daemon was not running. Earlier runs at 4b5a3bdf: `20261021-005342-slice` (aborted by a SIGTERM the builder did not send) and `20261021-024734-slice` (82 PASS). Those found kc-unit's `fl/u03` and pt-ingame's item 14, both fixed. Gate-verifier: **PASS**. It reviewed the diff at 7fdae3b8, including the groundWalk port against RoadPlan.java, lampGap defaulting off, the Java ext with its old constructors kept, and the never-edit files untouched. It ran fl-look.test and fl.test (14/0) and re-ran fl-ingame (48/0) and fl-natural (7/0) itself in `artifacts/gate-runs-FL-verify/20261021-085111-change` (ports 8916:8917). It found the three slice-tier failures pre-existing or environmental. Not verified: the gallery (recorded, not judged) and voc-unit's Docker check. |
+| Noah's approval (2026-10-21) | **Approved.** N-FL-1: the organic layout's irregularity as shown (v69's straight-run share 0.639). N-FL-2: ring lots facing inward. Both from the gallery above, in chat with the coordinator; recorded at the batch v0.41.0 integration. |
+
 
 ## Phase 6c slice F3: forms II, trees, mushrooms, coral, roots and stalactites (FROZEN 2026-10-20, Steward reviewed)
 
@@ -17988,6 +18018,33 @@ drift). **Steward's RC check before release** (S-F3-5).
 - **N-F3-1:** giant trees stay free in Supplied worlds (forms are free, Noah's rule).
 - **N-F3-2:** scale is 2-4x vanilla.
 
+### Phase 6c slice F3 as built (branch `slice/F3`, with the coral lane `slice/F3-c` merged in; placeholders API 1.39.0, mod 0.42.0, kit 0.40.0, catalogue 11, set at merge; recorded 2026-10-20)
+
+| Area | As built |
+|---|---|
+| Generators (§2) | `kit/lib/forms/giantTree.mjs` (oak, spruce, birch, jungle, dark_oak, cherry, mangrove, pale_oak, crimson, warped), `giantMushroom.mjs` (brown, red), `cave.mjs` (`stalactites` small/large, `roots` dirt/mangrove), `coral.mjs` (the coral lane). The ops are the skeleton (F1's rules: at most 32 primitives an op, absolute y, `fnv64(seed, generator, label)`); the cells come from the kit's own evaluator (`rules.mjs formCells`) and `states.mjs fixStates` sets the drift states from the final cells: every leaf `persistent=true` at vanilla's distance (BFS from `#minecraft:logs`, nether stems included), a mushroom face false exactly next to the same block, pointed dripstone's thickness as `SpeleothemBlock.calculateSpeleothemThickness` (read from the 26.3 jar: tip, frustum, middle, base, tip_merge). Lint STATE (`lintStates`) refuses a form whose states vanilla would change at once; lint GROWS a stalactite root under a fluid (vanilla's `canGrow` reads a water source two over the tip's start). |
+| **Deviation: baked always** | F3's forms hand over cells (`gen.cells`), not ops, and `r.form` bakes them into one `voxels` op (`rules.mjs bakeCells`), whatever the op count: the drift states are a function of the final cell set. Item 1 judges the skeleton ops. |
+| Readings of the generators | Crowns at most 31 across (crown radius 15 lobes included); the crown scales with the height inside the preset's range. A soil cell under a written log, root or stem standing on the ground is written as dirt (a grass block under a solid block dies during a stand, which item 5 would see). Cells in no component touching the foot are dropped (M3). Nether presets: stems, hyphae cores, wart caps, shroomlight under the cap (8%). Roots: rooted dirt in a face or ceiling, a ledge out of a face at seeded steps with hanging roots under it; hanging roots only under a solid the form writes or the volume shows. |
+| Placement (§3.1) | `kit/lib/forms/place.mjs` (`forbidden`, `pickSites`), `hooks.mjs` (`f3Resolve` in step 2: the locator only, a provisional answer; `f3Emit` and `f3CaveEmit` in step 3). **Reading: grown forms are placed at emit**, after the zones' layouts and F1's forms, before walls, farm ponds, the H parts and routes, so `inside {part: <zone>}` reads the zone's real open land (its rect less every op its layout wrote and its lot boxes + 1, grown by 2), and every later writer reads the column mask. A site holds the form's whole mask: inside the claim's margin and the locator, off hard columns and builds + 1, 8 off every natural tree column (`FLAG_TREE`), 2 off bodies (reserved footprints and registered hard and watch cells), zones (not the one it is inside), lots + 1, earlier forms and its own other sites; its foot dry and level (roughness 3). **Addition: retries**: a site whose own shape fits nowhere tries up to 5 other seeds of the species (the later ones in the preset's lower heights), noted; at 0 retries every committed fixture is unchanged. |
+| The mask (§3.2) | `ir.forms[].columns` (flat runs `[z, x0, x1, ...]`, additive; F1 forms have none and keep their bounds), read by `program.mjs _routeObstacles` and `connectors/wall.mjs` (OB.OVERLAP). |
+| Cave forms (§3.3) | The search box is the locator's rect x [the lowest ground - 48, the highest ground]; `r.needVolume(box)`: the first plan answers `incomplete VOLUME {missing}`, the second reads it. **Reading of "refused VOLUME as a tunnel does"**: tunnels answer `incomplete VOLUME` with `evidence.cap` past T3b's caps, so the cave forms answer the same (`cap: boxCells`, 4,000,000) and ask nothing. No ceiling (AIR under ROCK, SOIL or LOOSE with 4 headroom): `refused NO_FEATURE {why: no ceiling}`. Cave cells keep off every body's sets, lot boxes + 1, hard columns and each other. Java `PlanChecks.hasCaveForm` and the kit's `checkPlanVolumes` take the two-plan flow for them. |
+| Checker (§4) | `kit/lib/region/checkForms.mjs`: M18 and M19 (warnings, appended to RULES), metrics `M18 {leaves, persistent, decaying, distanceOff}`, `M19 {corals, dead}`. **Readings**: M3:overhang leaves grown forms out (`GROWN_GENERATORS`: canopies, caps and stalactites overhang by design), M3's support still holds them; a stalactite (pointed dripstone pointing down) is held by the cell above it in M3:gravity; the walk area (M5, M6) leaves grown forms' cells out (a root's top is no path to light). |
+| KC (§5) | Grown forms are not EARLY_FORMS; KC's backstop refuses a grown form as any other writer. **Deviation: `_unsafe.treeInPond`** stands the tree in a fountain's watch (f3/u01): a canopy over a pond's still water is in none of its 3D sets, and a trunk in its water makes the pond refuse itself (LEAK unwritable) before the backstop runs. An `architect_mc:unsafe` part is never refused by the backstop (KC's rule): M25:clear names it, an error. |
+| StillOurs (§6, Java) | `StillOurs`: the six faces of `HugeMushroomBlock` and `SpeleothemBlock`'s `thickness` volatile (only on those classes; `vertical_direction` compared); `Coral` (`journal/Coral.java`): the live form of every dead coral from the `deadBlock` field of the four live coral classes (read by reflection on the field's type at first use, never by name), joined in `StillOurs.holds` beside copper's chain, `WorldJournal.holds`' prefilter and `cuEquivalent` (a player's record wins over it). `StillOursF3Test` (5): faces, thickness, leaves, the 40 coral rows against kit/lib/blocks.mjs, a dead coral holds the live one. |
+| Catalogue 11, API (§7) | form.giant_tree flipped (sinceApi 1.39.0), form.giant_mushroom, form.coral, form.roots, form.stalactites added, one lean def each (a shared `$defs/preset`), presets and ranges in `limits`. **S-F3-3: `limits.volume: true`** on connector.tunnel, form.roots, form.stalactites (the entries whose check reads a frozen volume under the ground). H's bodies are not flagged: their volumes are surface boxes the two-plan flow already reads, and farmPond and irrigate are members, not entries; asked of Steward at the RC. So the diff from catalogue 9 (archived `fixtures/plan/catalogue-vocc.json`) is one flip, four added ids and the tunnel's limits. Features: sidecar `plan.forms2` -> `formsTrees`, `formsCave`, `formsWater`. Compact plan/0 81,064 characters (+4,412 over 76,652; the bound is 84,000, Steward's S-FL-8). |
+| Byte identity (§8) | 262 committed fixtures planned here and on the merge base (`tools/lib/gate6cf3-kit.mjs`): 261 identical (answers, overall, IR but kitVersion, first plan); `extension/e16_every_reserved_b.json` the named exception (form.giant_tree supported: it left the reserved list, its f_giant_tree now fits). M18 and M19 on every fixture: 0 but the broken variant u02 (M18 67). Goldens re-cut for kit 0.40.0: links_demo, links_demo_flat, crossings_demo_flat (IR identical but kitVersion, tiles unchanged). |
+| Asks (§9) | The 59 asks on the base and here: identical (`fixtures/plan/f3/asks-before.md` = `asks-after.md`), 0 malformed. |
+| grove_demo, the site (§10.2) | `kit/regions/grove_demo.mjs` (catalogue false): `GROVE_PLAN` (the eight overworld species and both mushrooms) through `runCheck`. `scenarios/sites/grove.json`: **deviation: pinned by a probe, not find-site** (S5's area surveyed, the plains south-east of its forest, natural trees north and west); every form fits on its res-1 survey. Goldens `scenarios/goldens/grove_demo.json` (over the natural site's own survey from f3-natural) and `grove_demo_flat.json`. |
+| **Deviation: the forest variant (§10.3)** | `kit/regions/mega_bench_forest.mjs`, not a `forest` param on mega_bench: mega_bench.mjs's source sha is every mega_bench IR's programSha, so any edit moves its default IR and region-golden. It runs mega_bench's composition, then `kit/lib/forms/forest.mjs`: giant trees on the columns the composition leaves free (written columns + 1, lots + 3, no water or tree column, one free column between canopies), 18 baked variants placed again by origin, undergrowth by F2's scatter under the canopies (bushes, ferns, moss as raw items on the survey: the claim holds no frozen volume, so F2's bundled plants would not fire). **Reading of "a realise of 16 tiles"**: 16 forest tiles evaluated by the kit (the realise's per-tile work); the in-game light-engine share is measured on the grove and the fixtures instead. |
+| Gate driver | `tools/gate6cf3.mjs` (unit, ingame, natural, forest, look, golden, report), `tools/lib/gate6cf3-{game,kit,look,coral}.mjs`, chain `6cf3` (+ `6cf3-look`), impact rule "6c F3"; api-compat `--gate6cf3` (0.40.0 built from its tag into artifacts/gate6c-f3/v0400, 0.39.1, 0.39.0, the 0.40.0 surface); apijars over 0.40.0/0.39.1/0.39.0. |
+| Item 6 readings | The leaf's and the dripstone tip's drift are a `/setblock ... strict` of their own block with the drifted property (a neighbour's update reverts on its own when the neighbour goes: vanilla recomputes leaf distance and thickness); the mushroom face's drift is a real neighbour (a player places the same cap block beside it and breaks it again: the face stays false). After a stand at default random ticks, E-flat is judged over the region's written cells from dumps before the realise and after the removal, and every difference at an unwritten cell must be the world's own (grass and dirt spreading, plants). |
+| Coral (§3.4, the coral lane `slice/F3-c`) | `kit/lib/forms/coral.mjs` (tube, brain, bubble, fire, horn, mixed; `cover` 0..1, `count` 1..8): patches of 2-4 `capsuleChain` branches on a body's bed: live coral blocks in bed cells, waterlogged plants, fans and sea pickles on the bed, waterlogged wall fans on side walls; never a dead variant; under an ice cap 1 pickle a block (light 6). `form.coral` resolves only `inside` a water pond, fountain, quay or moat part (else `NO_FEATURE {why: no plan water}`); the body's own emit grows it (`coralRequests` into `r.fluidBody(..., {decor})`), so decor exists before the body's simulation and prediction; `f3CoralAnswers` answers the part after the H emit. IR: the body op's `decor: [{state, cells}]` (format 2, `requires: ['coralDecor']`, appended to both KINDS_FORMAT2). Checker: decor in `bodiesOf`, `CLEAR_SETS` and KC's registry (a hard set, the body's own); the census counts waterlogged decor as sources. Java `RegionFluids`: decor parsed, read as open by the live check, never overwritten by water, written after the sources; **only the removal's drain leaves decor standing** (the group undo restores decor and bed), every other drain takes water decor back with the sources. Broken variants `_unsafe.coralOtherPart` (M25:clear names the separate part) and `_unsafe.liveCoralDry` (M19). `RegionFluidsF3Test` (6). |
+| **Deviation: the write order** | §3.4 (bed, water, decor) and §6 (bed, decor, water) disagree. As built: the bed in the shell's stage; the fluids stage's tiles write the sources and the decor together, decor winning its cells, so the journal's `after` is the live coral (what `StillOurs`/`Coral.canonical` and the removal read). No coral waits dry: `CoralBlock` has no `onPlace` (it schedules its death only in `getStateForPlacement`/`updateShape`, and the writes send no updates), and a waterlogged plant or fan's `scanForWater` is true. Item 4: 0 of 81 died. |
+| Coral readings | "2 under the surface" counts from the water's surface plane (plants at y <= level - 1); a fountain basin 1 deep takes bed blocks only (fits, noted); a quay holds no plan body (`NO_ROOM {why: no plan bed}`); a count short past its ceiling is `adjusted`, noted (the cells are the body's own). v73 carries KC's v61 margin pit (a natural pond's shell on the flat base otherwise stands on buried grass: `valid/v41_pond.json` refuses LEAK in game the same way, pre-existing). Queued: `bodyBom` bills the bed blocks coral replaced and not the coral (RS/VOC accounting). |
+| N-F3-1 counts (recorded) | Logs, wood, stems and roots a player can fell, of all cells, at each preset's lowest and highest height (seed `count`): oak 411/1,525 to 1,165/3,102; spruce 525/1,990 to 1,198/4,804; birch 53/480 to 181/770; jungle 1,162/2,258 to 2,199/4,364; dark_oak 795/2,291 to 1,880/3,854; cherry 215/1,703 to 456/2,861; mangrove 352/1,048 to 694/1,959; pale_oak 502/1,778 to 953/2,282; crimson and warped 111/829 to 298/1,766; mushrooms (stem) brown 127/625, red 155/464. Free in Supplied worlds (the Coordinator's N-F3-1); each part's `cost.cells` shows its count. |
+| Gate evidence | **Slice tier** (artifacts/gate-runs-F3/20261020-214604-slice, head 830aa9f0b, before origin/main was merged in at 912242b7): 87 PASS, 10 FAIL, 4 TIMEOUT. Pre-existing on main, not F3's: h-unit (H-a item 10, the asks' gap table), vocc-unit (item 3, the asks' tables: the base now has VOC-c), pt2-ingame (item 13: VOC-c's Reason.PALETTE now follows ADOPT_REFUSED); pt-ingame's timing bar (item 15, the classifier's CPU 1.03 ms of 1 ms) recorded, not judged. F3's, fixed: kc-unit (u01 and u04 are M25:clear's to catch), k1b-unit (fixtures new on the branch have no base), f3-ingame (s01 needs v73's margin pit). **Re-run after the merge** (artifacts/gate-runs-F3/20261021-024133-change, head 846c30ed): every other failed or timed-out step passes, so the slice tier's 4d-all gravel, 6cf2 snow, d2-ingame sunflowers, cu-measure and 6b-nudges sidecar links and the t1/k1a/s2-unit timeouts were flakes under load: unit-mod 755/0, f3-unit 271/0, f3-ingame 66/0, kc-unit 333/0, k1b-unit 6/0, k1a-unit 8/0, t1-unit 17/0, s2-unit 10/0, 4d-all 63/0, 6cf2-scenario-scatter 4/0, d2-ingame 17/0, cu-measure 1/0, 6b-nudges 4/0. f3-unit after the merge: 261 of 262 fixtures byte-identical (e16 the named exception), the 59 asks identical (0 malformed, 0 of 132 parts moved class), compact plan/0 81,064 (bound 84,000), api-compat --gate6cf3 clean, StillOursF3Test green. f3-ingame: v72, v74, v75, v77, s01 items 3, 4, 6, 8 (11,857/11,857 grown cells as baked on v72; 0 leaves, faces or thicknesses off vanilla's rule; 0 cells changed in a 120 s stand; E-flat 0 after the drift and removal, the player's cell kept); coral (v73, c01): 88/88 decor cells, 0 of 81 live coral dead after the stand, 14 killed coral restored ours by the removal (E-flat 0). Kit suite 689/0 after the merge. f3-look (artifacts/gate-runs-F3/20261021-043642-change, after c880ad97: the look shoots v73's coral decor per body, since v73 has no grown form and its empty overview sent dev.camera no position): PASS, 25 shots (the grove's ten forms and overview, the nether's two and overview, the bank's three and overview, the cave's three, the coral pond and fountain from above and under the surface); gallery for Noah https://claude.ai/artifact/2hNQnQuVafBRh5SkmAfzkw (N-F3-2). |
+| Noah's approval (2026-10-21) | **Approved.** N-F3-2: the forms (each species, the mushrooms, stalactites, roots) and the coral, and their scale, as shown in the gallery above; in chat with the coordinator, recorded at the batch v0.41.0 integration. |
+
 ## Batch S3 and RS: summary for one Steward review round (DRAFT, 2026-10-20)
 
 Two slices drafted together for one Steward review round, each in its own section below, marked "(DRAFT for Steward review)".
@@ -18304,6 +18361,103 @@ About **4.5-6 days**, split by default:
 - **N-S3-2, the look:** as proposed. Stone bricks and deepslate tiles, spruce, copper accents, soul lanterns.
 - **N-S3-3:** the gardens fountain is on.
 
+
+### Phase 6c slice S3 as built (branch `slice/S3`; versions as main has them, set at merge by `tools/release-version.mjs`: S3's javadoc says `Since NEXT`; recorded 2026-10-21)
+
+**Kit.**
+- `terrace(..., {edge: 'blend'})` (`program.mjs`): pins each level into the relief as row runs `{rect, y}`, with no batters; a rim
+  standing more than 2 over the outside land is retained after the relief (`Region._retainTerrace`, the retain role). It throws
+  without the relief pass; a blend terrace the relief never pinned refuses the plan (`plan.mjs`).
+- `kit/lib/region/terraces.mjs`: `parseTerraces`, `layoutTerraces` (pure; a ladder of levels from the rect's lowest ground,
+  each lot on k0, k0-1 or k0+1 within cut and fill; trees and water kept out of a lot and its approach; junctions 4 out of each
+  front, 3 apart; cost 4(cut+fill) + 3 off-level + steepness + 40 per level step), `junctionOf`/`terraceEnds` (route ends are lot
+  junctions, no facing), `chainTerraces`, `ringOf`/`emitTerraces` (wall pads plus a retaining ring in `structure` and rails where
+  the drop is over 3; or blend pads). **Addition:** the ring's unwalled cells are pinned in the relief at their own ground, so a
+  blend round the district can't cut an unretained rim.
+- `districtsEmit.mjs`: a district with `terraces` is laid out by `layoutTerraces`. Its approaches and joins route first and are
+  verified in one dry pass as the real pass lays them (failed joins forbidden and re-joined, a failed approach drops the lot,
+  at most 4 rounds). Pair routes are memoised and deduped (at most 4 tries per pair, later tries capped). Terraced routes get
+  the plan's protected areas, regions and builds as keep-out (`routeKeepOut`), and `guard: true`. A district without `terraces`
+  is byte for byte as before.
+- `compile.mjs`: `terraces` on `zone.standard` (resolved as one terraced district on the locator's candidates) and on
+  `district`. A terraced zone's grade comes from `tolerance.grade`; dropped lots are counted and noted; geometry carries
+  `terraces`. `plan.json`: `$defs/terraces` {rise 2-6 (default 3), retain wall|blend (default wall), stairs (default true)}.
+- The route pass (`_route`, program side). A `guard: true` pass puts a parapet and rail beside a walk over a drop of more than
+  3 (a lantern every 4th) and railings on stair flights, and never lays 4e ground roads. **Additions (guarded passes only, so
+  byte identity holds):**
+  - an earlier pass's runs are obstacles (their width), except within 2 of this pass's ends;
+  - its parapets, retaining walls and stair railings stay off earlier runs (each pass grades from the survey, so S3's lookout
+    path cut stairs through `cloister_t6`).
+  - Per-edge `stairs: false`.
+- **Fix (every plan):** a walk run whose every column an earlier edge wrote builds nothing. It registered an empty path whose
+  `-Infinity` box made canonical JSON refuse the plan.
+- `finish.mjs`: a program check without a plan param makes no artifact (it crashed).
+- `check.mjs` exports `supportCheck`.
+
+**The program `terraced_monastery`** (`catalogue = false`; passes relief, route, districts, hydrology):
+- The plan (`monasteryPlan`, shared with item 4): zone `monastery` with districts gate (low band), gardens (mid), cloister (high),
+  each `terraces`, grade 0.2; the gardens fountain; 2 `rock_spire` pinnacles on the steepest shoulders (`required: false`); relief
+  round the monastery; a player-only `lookout_path` (at the zone's grade).
+- The program's own steps after `runCheck`:
+  - the **walk volume**: the claim's frozen volume, 12 under its lowest ground to 8 over its highest (~5M cells), so the draft
+    world sees caves and overhangs;
+  - the **underpin**: rock under relief and route cells over a natural void, at most 24 deep;
+  - the **footing**: subsurface under the bodies' solid cells on the natural top, and grass under trunks the plan fells within 8
+    of a body, so the journal holds them;
+  - every route pass merged into one `meta.route` (each pass overwrites it; the checker's grade and villager rows saw only the
+    lookout's);
+  - scatter;
+  - **brink rails** (5 rounds; a top snow layer counts as passable once);
+  - `lightCover` (soul lanterns, level 8 planned) with candidates beside every route run; lamp posts sink into snow or drop to
+    the first solid cell, at most 4, and are left out above a walk floor;
+  - a **trim** of rails, posts and lanterns left floating;
+  - the spring check (the program throws if any cell is written over the stream's columns).
+- Bible `g6c_s3_monastery` (format 2): stone bricks, deepslate tiles and bricks, spruce, waxed cut copper accent, soul lanterns,
+  sea-lantern spout.
+
+**Mod.** **Fix:** `TerrainFit.natural` now counts generated ice (ice, packed ice, blue ice), as the kit's voxel class ICE always
+was. Before, a route cut into a glacier kept its packed ice in the world while the plan's virtual world replaced it: realised
+grade, reachability and M5 broke on S3.
+
+**Harness.**
+- `isS3` plans after the 90 s settle. Classes: `s3Classify`, with `farfluid` moved into `scenarios.mjs`; growth, grazed and live
+  count only at unwritten cells, and nothing within 6 of a body.
+- `tools/lib/scenario-s3.mjs` holds the 16 bars (on the flat variant: bars 1-6 and 14, plus the golden and spend).
+- **Deviation: the flat variant's hill is raised with vanilla `/fill`** (`raiseHill`: `s3_hill`'s quadratic mound, 60 high, R 88,
+  11,733 commands in about 11 s). A realised `s3_hill` region made every hill cell another owner's (OWNED). The monastery's
+  natural-cell writes failed there, and its fountain met "what is not the plan's own" (M25:keep).
+- Golden `scenarios/goldens/s3` commits `biomes.json` and `bible.json`. `tools/release-version.mjs` passes them to its re-plan
+  (the golden re-plans byte for byte).
+- `planSurvey` is re-pinned to the post-settle survey (`cc52144b`, previousSha `c375efa8`), with a `feasibility` record.
+- `tools/gate6cs3.mjs` (unit, identity, feasibility, plan, apicompat, report); item 4 in `tools/lib/gate6cs3-game.mjs`; chains
+  `6cs3`, `6cs3-dev`, `6cs3-scn` and `6cs3-item4`; impact rule "6c S3".
+
+**Item 4 deviation.** `checkPlan` answers NEEDS_REPAIR, not READY, when an optional part is refused. On S3's copy, spire_1 has no
+dry, level site (NO_ROOM). The twin applies Steward's repair: it drops the refused optional spires and checks again. That plan is
+READY.
+
+**Gate** (slice tier `20261021-040412-slice`, 3 shards, head 1a6de105: 72 PASS, 5 FAIL, none S3's).
+- S3 natural, run `20261021-041532`, evidence `39d6ddb1bbf3`:
+  - 11/11 lots PLACED (orchard and herb_garden have no reachable terrace); checker clean; 13/13 nodes; 22/22 edges; villager
+    21/21, vanilla both ways;
+  - grade 0/232 windows over; 549/549 rims retained; M5 0.16% (T2's 5.25% risk met); M8 100% (125); M17 0;
+  - palette 0.996; fountain settled, census ok; E-normal 235 (growth 234, live 1, unclassified 0, the undo's own 0);
+  - golden match; $0.
+- Flat variant `20261021-040708-flat`: 10/10 PLACED, every bar 1-6 passes, E-flat 0.
+- s3-unit 276/0: identity 262/262 fixtures and the 59 asks unchanged; feasibility 11 lots, virtual M5 0.00%.
+- s3-plan 12/0: natural (after the repair) and flat. READY, PLACED, the fountain settled and its census equal,
+  realised = virtual over 20,534 and 11,792 cells, M25:clear 0, removal E-normal 0 / E-flat 0.
+- Regressions S1, S2, S7, relief_demo, route_demo and districts_demo pass.
+- The 5 failures, none caused by S3:
+  - pt2-ingame item 13 and h-unit item 10 fail on main (PLAN "Queued (coordinator, 2026-10-20)");
+  - voc-unit needs docker (OrbStack not running);
+  - apijars 0.39.1: one survival check was blocked by a bee in the site;
+  - sim-jobs: the launcher reused a running sidecar.
+  - Re-run after merging main's gate speed-ups (`20261021-081316-slice`): sim-jobs 33/0 and apijars 6/0 (all three jars 46/0).
+- Timing recorded: plans 23-35 s in game, 78-105 s offline under load 80-108. MSPT natural 17.6 ms CPU.
+- Gallery: the 6c gallery, section S3 v1 (https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG). **S3 v1 is green only when Noah
+  approves evidence `39d6ddb1bbf3`.** The high camera sits over the cloud layer and its shots are fogged; cam_e is the overview. **Approved by Noah 2026-10-21 (bar 16, the monastery gallery; in chat with the coordinator, recorded at the batch
+  v0.41.0 integration): S3 v1 is green.**
 
 ## Phase 6c slice RS: regions in survival, the terrain half (FROZEN 2026-10-20, Steward reviewed)
 
@@ -18765,6 +18919,170 @@ About **7.5-9.5 days** of work, **5.5-6.5 elapsed**, in two halves with a frozen
 - **N-RS-3:** the free boundary as proposed.
 - **N-RS-4:** ice caps are free.
 
+
+### RS-a as built (slice/RS, 2026-10-21; RS-b builds on `rs/core`)
+
+The slice was split on Noah's word (2026-10-20 night): **RS-a**, the core, is built and gated here; **RS-b** (tunnels ring by ring and the
+bodies' gate rows) builds on branch `rs/core`, whose interface and task list are in `docs/HANDOFF-RS.md` "The split" until RS-b retires
+it. Placeholders: API 1.41.0, mod 0.44.0, kit 0.42.0, catalogue unchanged.
+
+**Kit.**
+- `planRegion({survival})` (CLI `--survival`, sidecar cap `survival`, the mod sends it when the world is survival). Ops written by terrain
+  kinds carry `free: true`; the IR gains `survival {format 1, groups, parts, pads, cells, creativeOnly?}` and `requires: ["survival"]`
+  (format 2, `KINDS_FORMAT2`/`MEMBERS_FORMAT2`, IrStale).
+- A survival IR evaluates to **ARTL v2**: per section, after the palette indexes, one class byte per cell (0 free pass, 1 held, 2 paid)
+  and a u16 group index. A creative IR stays ARTL v1, byte-identical (item 2).
+- The free rule (`kit/lib/region/survival.mjs`): a cut, a water source, any fluid op's cell, a dirt path on a dry column's surface, a
+  natural obtainable block written by a terrain op and not in `FREE_EXCEPT` (generated from `vocab/survival.json`). Else paid. A free cell
+  is **held** when its group can write a paid cell (static) and it is no pad's; **a fluid op's cell is never held** (found in game: a
+  brook target wrote an upstream reach's sources after the gate had cleared them, and the reach below escaped).
+- Groups: the plan part; a shared route part's first connector; `__lamps__` its own group (no part answer: it counts in the plan's
+  `cost.bom` only); a bundled program's IR part.
+- The check in survival: `survival: true`, per part `cost.survival {free, held, bom, creativeOnly?}`, plan `cost.bom` (the groups' bills
+  and their charges) plus `bomParts` the mod adds (bound lots' design bills, the 4e roads' `checkRoad` bills); a creative-only block
+  refuses the part `SURVIVAL {kind: creativeOnly}` and re-plans without it; the artifact `survival: true`.
+
+**Mod.**
+- Mode by world: `SurvivalWorld.on() && defaultGameType != CREATIVE`. A creative artifact in survival: `realiseApproved` refuses
+  `ARTIFACT_STALE`; a realise without a stockpile and with a bill: `NOT_ALLOWED` with the bill; a creative-only block: `CREATIVE_ONLY_BLOCK`.
+- §0's latent bug fixed: region items queue `survivalAtQueue = SurvivalWorld.on()`, `construction` = the region's mode (reproduced on the
+  base: every item FAILED; PLACED on this head).
+- **Targets** (tile x group): a fed `Infra` (`cells:architect:terrain|path`, Construction BUILDING, no crate) per group with held or paid
+  cells, an extra entry of the tile's own P3 transaction (InfraJob `extras`); the free pass is the tile's main entry. Spec
+  `regionTarget {region, part, group, tile, held, heldCells, runs, capStacks}`, ext `architect_mc:region`, `architect_mc:part`.
+- **Runs**: BuildOrder bottom up, a held cut after its paid neighbours above and beside within 1, a paid cell never waits on a cut below;
+  runs per course cut at a quarter of the stockpile's capacity in stacks; zero-bill runs join the next paid run; a held-only target waits
+  for its part's paid targets. A run starts only with its whole bill; the reservation is the current run's bill. Written with CELL_FLAGS
+  and the entry's NBT (a built target equals its INSTANT twin, items 5 and 6).
+- **Stage waits** (S-RS-1, no new Reason): a survival region item waits `SITE_BUSY` with ext `architect_mc:waitsFor {target, part}` while
+  an earlier-stage target or road in its reach, **or one it is queued `after`** (in survival "after" means built: found in game, a road
+  wrote over a span's unbuilt cells), is not BUILT; the fluids stage waits for every target, road and lot of the region.
+- **Lots**: a construction lot never queues its `LotMask` cells (`Builder.planConvert`; found in game: the conversion cleared the
+  region's irrigation banks).
+- **Removal** (C29 path): targets leave the feed at once; refunds through Groups' `decCredit` (`RoadBuilder.refundOf` for targets, the
+  standing block for copper); a player's block in a target drops at its cell and the cell goes back to its before, its refund skipped
+  (item 9); a BUILT target's soil cells (grass over its dirt, farmland gone to dirt) stand as built for its audit and refund, never while it
+  builds or after its removal counted its refund.
+- `RegionView.build` = `RegionBuild(built, done, percent, outstanding, parts)`, `PartBuild(part, state, targets, cells, built, freeCells)`;
+  `PlanCheck` gains a trailing `survival` (old constructors kept); feature `regionSurvival`. SITE_WAITING carries the region and the part
+  in the target's ext (item 7).
+- N-RS-2: `RegionFreeDrops` (PlayerBlockBreakEvents.BEFORE): a free-pass or held cell still holding the region's write drops nothing.
+- §10: targets rescan from the world; a survival region's free-pass entries are re-checked 20 ticks after start (a cell back at its
+  before is written again).
+
+**Gate** (`tools/gate6crs.mjs`, steps `rs-unit`, `rs-ingame`, `rs-survival`, `rs-crash` in `tools/gate-chains.json` with an impact rule;
+evidence `artifacts/gate6c-rs/`): all on this head (`artifacts/gate6c-rs/REPORT.md`, $0.00):
+  - **1** kit `rs.test.mjs` 9 pass; `RegionTargetsTest` 6 (carveFirst, lavaRefund, loseCredit caught); RS's neighbours 24; the mod's whole
+    unit suite and the kit's (672 pass) green. **2** 262 committed plan fixtures (the 59 asks among them) byte-identical in creative to the
+    merge base, rs02's creative tile shas equal, the asks tables committed (`fixtures/plan/rs/asks-creative.md`, `asks-survival.md`: 0
+    malformed, no class change, no SURVIVAL refusal). **17** api-compat clean against the 0.40.0, 0.39.1 and 0.39.0 apitest jars and
+    0.40.0's surface.
+  - **Latent bug**: reproduced on the base, fixed (PLACED). **4** rs01 free pass: 0 items consumed, 0 entities, the free cells equal the
+    twin's, the held terrace waits whole, E-flat 0.
+  - **3, 5** rs02, rs03, survival_village checked and realised in survival, fed in waves: every part BUILT, every body settled (rs03's 8,
+    the brook's two reaches in order, irrigation after its lot), each world equal to its INSTANT twin cell for cell (0 differ), E-flat 0
+    after removal; the bills equal per part and for the region whole (charges included).
+  - **6** rs02 half fed (half the check's bill in waves): no run started without its whole bill, no cut open, M3/M4/gravity 0 and no
+    unguarded edge the build made; rs06's road waits SITE_BUSY until the held terrace is BUILT, then 0 differ from its twin. **6b** rs07
+    (96 stacks against a 54-stack, 2-crate stockpile): 16 runs, the largest 8 stacks (cap 13), reservations at most 7 stacks, built.
+  - **7** setFeedOrder puts the wall first and it builds from its bill alone; SITE_WAITING with region, part and nextNeeded; the paused rope
+    reserves nothing, never waits; S-Y-1: 3 of 3 unloaded targets reserve nothing; RegionView.build per part, done, 100%.
+  - **8** rs02: the per-item sum exact at 21 checkpoints. **9** rs02 and rs03 removed: refunds equal the paid cells standing (a
+    weathered copper cell paid as weathered_copper; rs03's bodies scooped on their own key), a player's block drops at its cell, E-flat 0,
+    one credit per key (a second remove credits nothing), the sum exact (22 and 29 points). **10** rs02 with its wall a quarter built:
+    targets leave the feed at once, refund = paid standing (1400 items), credited once; again with a save, leave and reopen mid-removal
+    (REMOVING after the reopen) (the audit right after the reopen is recorded, not judged: it reads no pending target until its restore
+    ends). **11** a clean stop mid-wall resumes to built and its twin; kill -9 after an autosave: drift {} within the units moved; with
+    saving off, 1152 lost cells re-queued by the rescan and built.
+  - **12** a creative artifact: ARTIFACT_STALE; re-check at Start in survival (same artifact twice), pin, a restart, realiseApproved under a
+    second key (the first none), built; rs05's offer round the town in survival: READY, built, undone alone, the town 0 cells differ.
+    **13** u_spawner (through an installed bible: a game check takes its style from a bible): SURVIVAL {creativeOnly, spawner}; a program
+    plan with spawner lanes: CREATIVE_ONLY_BLOCK, nothing written; no stockpile: NOT_ALLOWED with the bill. **15** N-RS-2: a free fill
+    cell and a held spire cell broken in survival drop nothing (a natural block outside drops dirt), then the removal puts them back:
+    E-flat 0.
+  - **16** the engine tag's steps by the runner (`artifacts/gate-runs/20261021-035110-slice`, 2 shards, 1h52m): unit-mod (747), unit-kit
+    (672), apijars, t3b-unit, 4d-all, 6a-eflat, y-ingame, c29-ingame, cu-survival, pt2-survival, voc-survival, h-ingame, ha-ingame,
+    hy-ingame, irr-ingame, kc-ingame, k1a-ingame PASS; unit-sidecar failed 4 tests that pinned the feature list's last entry
+    (`plan.rules`): fixed for `region.survival` appended (88df6756), 758 of 758 pass locally after.
+  - **Verifier** (gate-verifier, independent): reviewed the diff and re-ran items 5, 8, 9, 10 and 11 at 4e639a3a: PASS
+    (`artifacts/gate6c-rs-verify/`). Its notes: item 5 checks twin 0 and E-flat 0 but no separate M25:clear count; item 4 shows the held
+    terrace waiting whole rather than "one target"; item 10's mid-removal audit point is recorded; all judged acceptable for RS-a.
+  - Not run here: item 14 (S3's natural claim, after S3 merges), the gate3 survival and Hardcore steps (a GUI p3 client; Hardcore realises
+    regions in survival by the same mode rule), RS-b's rows (HANDOFF-RS).
+
+**Notes.**
+- M8 at a half-built checkpoint is judged on the edges the build made: rs02's natural cliff beside its rope bridge's mouth is open until
+  the bridge is built, as it was before the realise (the walk graph is the plan's).
+- A natural-edge pond's rim refuses `LEAK` on a game volume (its rim cells outside the pond's own writes): rs03's pond has a built edge.
+  Not RS's; recorded for the fluids owner.
+- The gate's terrain builder (`gate6chy-b.mjs` buildTerrain) force-loads the claim; item 7 drops it before S-Y-1's probe.
+- Open for RS-b (HANDOFF-RS): rs04's deadlock (a hanging lantern under a roof cell in a bore's lining), items 5/6's rs04 rows, item 8
+  through bodies on rs03, item 9's "drained without a bucket" row, item 11's stop mid body wait, item 13's brush row, ice caps.
+- Open for after S3: item 14 (rs02 on S3's natural claim).
+
+### RS-b as built (2026-10-21, branch `slice/RS-b` over `rs/core` 4ad93e64)
+
+RS-b built the hard kinds on RS-a's frozen interface. One additive change to that interface, and two fixes in shared code, are named
+below. Evidence: `artifacts/gate6c-rsb/` (driver `tools/gate6crsb.mjs`, own ports 8942/8943 and run worktree); resume notes:
+`docs/HANDOFF-RSb.md`.
+
+**Tunnels ring by ring (§6.2, §6.4, §7.2).**
+- *Finding:* T3b writes a tunnel's lining in the `routes` stage and its carve in `links` (`liningStage`). In survival that gave a
+  tile two targets of the tunnel's part. The carve's target waited (§6.3) for the whole lining, so no ring order was possible. The
+  route's approach cut (also `routes`) stood open beside a portal not yet put down (rs04: 8 open-cut breaches across that seam).
+- *Kit, survival IRs only:* a tunnel is written whole in its lining's stage (`tunnelGeom.mjs`: part stage = `liningStage`, the
+  lining in the same part). Its approach, lining, carve, portals and lamps are one target per tile. Creative is unchanged: the
+  lining part is still in `routes` and the tunnel in `links` (item 2's byte identity).
+- *Interface, additive:* `ir.survival.bores = [{group, from, dir, box}]`, one per tunnel, present only when the plan has one. A
+  mod without RS-b ignores it.
+- *Mod:* `RegionTargets.ringOrder` serves a target whose group has bores:
+  - a cell's ring is its step along its bore's heading (the nearest bore; cells past the box take its end ring);
+  - ring k's lining builds bottom up in run k, and its carve in run k+1, after ring k+1's lining (which lies beside it within
+    1, §6.4);
+  - every cell is moved no earlier than what blocks it in `stepFed` (solid below, support, a cut's paid neighbours), so a run
+    never waits on a later one;
+  - runs go per ring, cut by the quarter cap;
+  - the spec gains `rings: true`;
+  - a bore's cut also waits for unbuilt paid cells of the same part's other targets beside it (`seamOpen`: a tile edge);
+  - targets without bores keep RS-a's course order exactly (unit-tested).
+- *Fix (shared builder step):* a hanging lantern deadlocked its roof. The roof waited for the solid cell under it, and the lantern
+  waited for its support. The below rule now skips an attachable hanging from the cell.
+
+**Fix in `Builder.Run.matches` (sites and roads too): a farmland cell the builder already built that dried to dirt stays built** (S-CU-3).
+- rs03's irrigation banks are farmland built in air. They dry to dirt (in the INSTANT twin too).
+- The target then counted them unbuilt. The builder could never write over the dirt, so the cells waited for ever and 3 dirt fell
+  out of item 8's sum.
+- Dirt costs dirt, and the refund pays the standing block, so nothing else moves.
+- Only a cell already built (in memory) keeps it: farmland planned over the ground's own dirt is still written (the verifier's catch on
+  the first version). After a restart a dried, unbuilt-in-memory cell of a target not yet BUILT reads unbuilt again; RS-a's
+  `soilSame` covers a BUILT target.
+
+**Ice caps (N-RS-4):** free as RS-a's kit made them (a fluid op's cells are class 0). `rs08_ice` is a built-edge pond whose biome
+grid is snowy plains; the driver sets the claim's biome with `/fillbiome`.
+
+**Results** (`artifacts/gate6c-rsb/REPORT.md`; after merging `origin/slice/RS` 529138d1 and `origin/main` 6e6b6c87):
+
+| Row | Result |
+|---|---|
+| unit | TunnelRingsTest 5 and RegionTargetsTest (0 failures); `kit/test/rs-b.test.mjs` and `rs.test.mjs`; the T3b tunnel tests. |
+| item 5, rs04 | Built from the stockpile in waves; every target BUILT; twin 0 differ; E-flat 0; item 3's bills equal per part and whole. |
+| ring evidence | No bore cell open without its lining in any sample of the build; in most samples a ring's carve stood open while a later ring's lining wasn't built yet (ring by ring, not course by course). |
+| item 6, rs04 | Half the bill fed (about 49% built): no run started without its whole bill; 0 open cuts without lining; M3, M4, M8 and gravity 0. |
+| item 11, rs04 | `rs04crash`: half built, autosave, `kill -9`, cold start: the targets resume from the world (664 cells as before); the rest fed with no breach; twin 0; E-flat 0. |
+| item 11, rs03 | `rs03stop`: fed in waves until half the bill stands as paid cells (2873 of 4931 items; the fluids stage waits for its barriers, no body written), a clean stop and a restart: paid standing and stock as before, the per-item sum exact; then fed to PLACED and built, every body settled, twin 0, E-flat 0, the sum exact at the end. (Its first version stopped on 100% of nothing: the verifier's catch, fixed.) |
+| ice (N-RS-4) | rs08 in survival: 35 cap cells, 35 ice standing; fed exactly the shell's bill (no ice, no water); body settled after its shell; twin 0; E-flat 0. |
+| item 8, rs03 | The per-item sum constant at 30+ checkpoints: feed, build, bodies (lava charged, a bucket back), the withdrawal, the removal under way. |
+| item 9 lava rows | 10 sources, 5 buckets kept: 5 scooped (5 buckets became 5 lava buckets), 5 drained without credit; the sum then differs by exactly the drained term; a second removal credits nothing; E-flat 0. |
+| item 13, brush | A concrete-pattern and a PLAYER_BLOCKS stroke refused NOT_ALLOWED; a natural stroke writes 31 cells, the stock unchanged and nothing outstanding; removed with E-flat 0. |
+| item 16 | 10/10 PASS on 6132469a through `tools/gate-run.mjs` (`artifacts/gate-runs-rsb/20261021-072147-slice`): `unit-mod`, `h-ingame`, `ha-ingame`, `hy-ingame`, `kc-ingame`, `irr-ingame`, and for the `Builder.matches` change `cu-survival`, `y-ingame`, `c29-ingame`, `pt2-survival`. |
+
+**Notes for RS-a and the RC:**
+- Versions: RS's placeholders (API 1.41.0, mod 0.44.0, kit 0.42.0) are kept. Against main's new `tools/release-version.mjs` four
+  tests of `kit/test/release-version.test.mjs` fail on this tree (goldens `crossings_demo_flat`, `links_demo`, `links_demo_flat` record
+  kit 0.38.0): the coordinator's renumbering at merge settles them.
+- The stockpile accepts only items its targets lack. A brush row can't stock unrelated items.
+- Provenance (RP, 0.40.1): once it is on main, tunnel target cells get `UNFINISHED` at put-down and `WRITTEN` when built. Not
+  wired here (the coordinator's instruction).
 
 ## Phase 6c slice D3: districts beside a standing region town (FROZEN 2026-10-20, Steward reviewed)
 
@@ -23316,3 +23634,198 @@ CI set 28); kit 672/0; sidecar 758 (`versions.test.ts`'s fixture hook timed out 
   above): 20 PASS, 1 FAIL (h-unit item 10 only, as on main). The wider in-game steps were not re-run after the main merge (it
   brought only gate speed-ups and a dev hook); the gate-verifier re-ran 4e-orders 70/0, 4e-crash 64/0, h-holders 8/0 and h-rmcrash
   28/0 at 30a05721 (`artifacts/gate-runs-0401-verify/20261021-090204-slice`) and the UMT CI set: PASS.
+
+## Batch v0.41.0 as integrated (FL, F3, S3, RS-a, RS-b, and RS's realised provenance; 2026-10-21)
+
+Branch `integrate/batch-6c` over main v0.40.1 (6c0b1a7e). Not merged, tagged or published: the coordinator does that after Noah
+approves. **Versions:** API **1.38.0**, mod **0.41.0**, kit **0.39.0**, catalogue **11**.
+
+### What each slice does for a player
+
+- **FL, free layouts.** A town no longer has to be a street with lots along it. A plan can lay its lots round a ring with a hub (a
+  square, a green or nothing) facing in, wind them up a hill as a spiral, set them in a grid with a plaza, or scatter them as an
+  organic hamlet with irregular lanes. A zone or form can sit *around* a feature (`locator.around`), and a zone can follow a drawn
+  outline (`sketch.outline`). Every street road a plan writes says which zone (and district) it serves.
+- **F3, forms II.** Grown landscape: giant trees of every species, giant mushrooms, stalactites in a cave, roots down a bank, and coral
+  in a pond. The journal knows how these blocks drift on their own (leaf distance, mushroom faces, dripstone thickness, coral dying),
+  so undo and removal still restore exactly; a dead coral is the live coral Architect wrote.
+- **S3, the terraced monastery.** A zone or district on a slope can be laid down it as terraces: each lot on its own level, rims
+  retained by a wall with a rail (or blended by the relief), joined by stepped routes. The bundled `terraced_monastery` program is
+  S3's mountainside monastery, and S3's scenario is green (Noah approved bar 16).
+- **RS-a, regions in survival.** In a survival world a region plans, checks and realises in survival. The land it shapes (cuts, fills,
+  relief, natural blocks) is free and written at once; everything it *builds* is a construction target fed from the owner's
+  stockpile, run by run, never starting a run without its whole bill. A plan answers `cost.survival` per part and refuses a
+  creative-only block. Lava sources cost a bucket, grates their iron bars; removal refunds what stands. `RegionView.build` reports
+  progress per part.
+- **RS-b, the hard kinds in survival.** Tunnels build ring by ring (a ring's lining before its carve), so no bore cell is ever open
+  without its lining; ice caps are free; lava rows account exactly; a brush stroke of natural blocks is free, a concrete one refused.
+- **RS provenance (this integration).** RP's realised record (v0.40.1) now covers survival regions: a target's cells read
+  `UNFINISHED` from put-down and `WRITTEN` once the target is built (below).
+
+### Merges and conflict resolutions (order RS-b, F3, S3, FL; all `--no-ff`)
+
+1. **slice/RS-b @ 9e08cb98** (brings RS-a @ 529138d1). Conflicts:
+   - `RegionHash`: main's RP fix factored the per-cell switch into `cell()`; RS-b inlined a mismatch cap. Kept `cell()`, with the cap
+     reading RS-b's `j.limit`.
+   - `RegionItems.tryStartTile`: RS keeps the fluid-filtered cells in `p.cells` for its split; RP adds `.provenance(tile.cells())` and
+     the `BeforeCommit` record write. Both kept; the survival path's record is the RP wiring below.
+   - `mod_version`: the placeholder until the release tool.
+2. **slice/F3 @ d734e4a1.** Conflicts:
+   - `RegionFluids.drain`: main's fix/drain-holders added a `held` predicate and the UMT `DrainTarget` seam; F3-c added a `removal`
+     flag (the removal leaves the coral decor for the group undo). One signature now carries both. The removal gate passes
+     `removal = true`; a lot removed passes false (as F3 had it); `UmtDrain` passes `group != null` (UMT bodies have no decor).
+   - `WorldJournal` (same-stage rule): Copper, Coral, farmland/dirt and main's `pathTurned` all kept.
+   - `KINDS_FORMAT2` (kit and `IrStale`): `survival` (RS) then `coralDecor` (F3); the order tests updated for both.
+   - Sidecar `FEATURES`, `ArchitectApi.features()` javadoc, `ApiRules`, gate-chains (chains and impact rules): both sides.
+3. **slice/S3 @ dde5b2e3.** Conflicts: the IR meta (S3's `monastery` member and F3's `forest` both kept, in S3's order with
+   `forest` last as F3 had it); features (`region.terracedZones`, `region.monastery` appended); `api-compat.mjs` (both slice presets);
+   `gate6a.mjs` apijars (now the batch's three releases, below); release `always` keeps main's `umt-long` and adds
+   `6c-scenario-s3`; PLAN.md (main's undo-hardening-B queue and S3's queue both).
+4. **slice/FL @ 51ddd83e.** Conflicts: `catalogueVersion` (11, below); features (`plan.layouts` appended last); `SliceRsDev` and
+   `SliceFlDev` both registered (client, headless DevServer, devserver build); `api-compat.mjs` (FL's preset kept, and a new batch
+   preset); gate-chains (FL's chains and impact rule after main's); `gate6ckc-kit.mjs` (F3's u01/u04 and FL's u03 broken variants
+   both); `kit/test/release-version.test.mjs` (S3's counted base kept, FL's in-copy release of its stamps dropped: one approach);
+   the vocc tests, the compact plan/0 bound comment and DEVBRIDGE: both sides.
+
+Sidecar `FEATURES` now end `... 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones',
+'region.monastery', 'plan.layouts'`.
+
+### Versions
+
+`node tools/release-version.mjs --api 1.38.0 --mod 0.41.0 --kit 0.39.0 --catalogue 11 --allow-lower`:
+- `--allow-lower` because the merged tree held RS's placeholders (API 1.41.0, mod 0.44.0, kit 0.42.0), above the release.
+- **Catalogue 11, not 10.** FL bumped 9 -> 10 and F3 (frozen as catalogue 11 in the batch plan) 9 -> 11; both archived catalogue 9
+  as `catalogue-vocc.json`. The batch ships one catalogue, 11, holding FL's six flips and F3's one flip, four added forms and the
+  tunnel's volume flag; no catalogue 10 ever ships. FL's item 5 and F3's item 9 now each check their own part of the diff from 9.
+- 30 placeholders stamped (`NEXT`, and F3's and RS's legacy 1.39.0 / 1.41.0 javadoc and `sinceApi`). Six goldens re-cut and verified
+  (tiles, cells and blobs identical): `crossings_demo_flat`, `grove_demo`, `grove_demo_flat`, `links_demo`, `links_demo_flat`, `s3`.
+- `--check`: consistent, no placeholder left.
+- Tests that pinned a slice's placeholder now read the floor: `ApiF3Test` (1.38.0 / 0.39.0), sidecar `forms2.test` (`plan.forms2`
+  after `region.survival`).
+
+### RS realised provenance (RP §5), as wired
+
+- **Put-down** (`RegionItems`, survival tiles): the tile's record is written before the PLACING commit, through a `BeforeCommit` on
+  `InfraPlace.beginTileSurvival`, as the plain path does. Every target cell (its payload index in the tile as evaluated) is
+  `Realised.withCodes(draft, cells, UNFINISHED)`. The record's site is the free-pass entry; a tile with no free-pass cell has none
+  (`NO_ENTRY`) until a target builds. Before this, a survival tile wrote no record at all.
+- **Built** (`RoadBuilder.complete` -> `RegionTargets.realisedBuilt`, before the target is marked BUILT): its cells (kept in the
+  target's spec as `rpCells`) become `WRITTEN` and its site is added to the record's entries (`Realised.mark(..., WRITTEN, site)`,
+  idempotent, clears `NO_ENTRY`). RP's verify then reads the free-pass entry and every built target's entry together.
+- **Granularity: per target, not per cell.** A target's cells turn `WRITTEN` when the whole target is BUILT, so a half-built target's
+  placed cells still read `UNFINISHED`. RP §5 can be read per cell; per target was chosen because a target's journal entry is one
+  unit (the verify compares the WRITTEN count with the entry's cells), a cell placed and then broken by a player would otherwise
+  need un-marking, and one rewrite per target keeps the record's fsync off the builder's per-cell path. A cancelled or refunded
+  target leaves `UNFINISHED` (RP §5).
+- **Verify**: an ACTIVE target entry still building is counted as `targetsBuilding`, not "has no record".
+- **Gate**: rs-ingame item 6 (rs02, half fed: a built target must be listed and WRITTEN, `UNFINISHED` = the unbuilt targets' cells;
+  then fed to build.done: nothing `UNFINISHED`, `dev.region.realised verify` ok) and RS-b's rs04half (the tunnel's unbuilt targets
+  `UNFINISHED`; then build.done and verify ok). RS-b's driver joins the runner as `rsb-ingame` and `rsb-crash`. `RealisedTest`
+  covers the site-adding mark.
+
+### Other changes in the batch
+
+- apijars (`tools/gate6a.mjs`): the batch's latest three releases, 0.40.1 (`artifacts/gate6c-batch/v0401`, built here from tag
+  v0.40.1), 0.40.0 (F3's `gate6c-f3/v0400`) and 0.39.1. New `api-compat --gate6cbatch` (those three jars and the 0.40.1 surface).
+- HANDOFF-RS.md and HANDOFF-RSb.md retired: their queued work is in PLAN.md "Queued from RS".
+- Noah's approvals (2026-10-21) recorded in FL's, F3's and S3's as-built sections, PLAN.md's scenario table and STEWARD-SYNC.
+
+### Main merged in during the integration (gate tooling)
+
+origin/main moved three times while the batch was gated, all gate tooling: dfab398b (P1: `--shards auto`, undo-step slice subsets
+with `-full` twins at release), 027b48ec (P2: the structure and look lints), ca50b90e (P3: the water and survival ledger lints, P3
+`-smoke` twins). Each was merged with `--no-ff`. Conflicts:
+- `tools/gate-chains.json`: one `tiers.release.always`, the union of main's (P1's `-full` twins, P2's lints, P3's lints and probes)
+  and the batch's `6c-scenario-s3`. Main carried two `always` keys between P2 and P3; P3 fixed that. The impact rules come from both
+  sides. `node tools/p3-mode.mjs smoke` then names the `-smoke` ids in the batch's own rules too, and `--check` says `smoke`.
+- `Stockpiles.feed`: main moved the feed pass into `feedPass`/`FeedVisit` (the ledger lint's seam). RS's rule that a survival region
+  target reserves only its current run's bill is now `FeedVisit.reservation`. Its default is `r.unbuilt`, and the production visit
+  overrides it with `RegionTargets.reservation`.
+- The H, HY and KC drivers import both FL's `fl-norm.mjs` and main's `p3-tier.mjs`.
+
+**What the lints found on the batch's plans, and the fixes.** The lint cases now include S3's and F3's goldens and the fl, f3 and rs
+plan dirs (`tools/lib/lint-cases.mjs`, `lint-look-cases.mjs`).
+- Two real findings, both F3's:
+  - grove_demo had M20:natural. Pale oak logs stood within fire reach of natural lava. Grown forms now keep their canopy off survey
+    lava columns, grown by FIRE_REACH.side (`forms/place.mjs`).
+  - grove_demo_flat had M2. The stub entrance and spawn stood inside a grown form. They now go to the nearest column outside F3's
+    masks (`compile.mjs` `stubAnchors`); every plan without F3 masks is unchanged.
+- grove_demo and grove_demo_flat were re-cut (91204cb8395f, 012f84dde047). release-version `--check` is consistent, and the kit suite
+  passes 732/0.
+- Some broken variants never reach the lint. The plan check refuses them as their fixtures expect (FL u02, F3 u03 and u06), or the
+  kit checker's own M18 or M19 catches them (F3 u02 and u05). Those count as caught. rs08 is planned over its own biome grid by
+  rs-b.test, so that runner owns it.
+- The water lint now expects M25:clear from F3 u01, F3 u04 and FL u03.
+- The look lint's four L-LAMP baseline entries (S7, and districts_demo natural and flat) stay. FL's look fix L3 applies only to plans
+  with a free zone, by FL's design, so these counts stand. The reason is recorded in the baseline, and the follow-up is in PLAN.
+- Lint results: structure 57/57, look 13/13, mutations 8/8, water 118/118.
+
+**Ledger lint (P3), RS-b's farmland rule.** `LedgerLintTest.fuzzCiSeeds` at 20,000 seeds:
+- Main gives L-V7 860, from every dry.
+- After the batch merge it gave L-V7 2 and 52 untagged refund mismatches, all on the restart path.
+- The cause: RS-b's S-CU-3 rule (dried farmland stays built) holds only while the run keeps its built bit. A restart's rescan reads
+  the dried cell as not built.
+- LedgerSim now books that path as L-V7. The result is **0 violating, L-V7 306**: only the restart path remains. The CI seeds and
+  LedgerProbeTest pass.
+- RS rows in the P3 cutover (rs `-smoke` twins) are left for a follow-up.
+
+### Suites (head 145c96f8)
+
+| Suite | Result |
+|---|---|
+| mod | `./gradlew build --offline`: 829 tests, 0 failed before the P2/P3 merges. unit-mod passed in every gate run since |
+| kit | 732/0 |
+| sidecar | `npm run check`: 759/759, plus the bundle |
+| api-compat | `--gate6cbatch` clean, against the 0.40.1, 0.40.0 and 0.39.1 apitest jars and the 0.40.1 surface (0.40.1 built here from its tag into `artifacts/gate6c-batch/v0401`). `--gate6cf3`, `--gate6cs3` and `--gate6cfl` clean |
+| versions | `release-version.mjs --check`: consistent (API 1.38.0, mod 0.41.0, kit 0.39.0, catalogue 11); the six tracked goldens re-plan byte for byte |
+
+### Gate evidence (`artifacts/gate-runs-0410/`, ports 8960-8971, $0)
+
+- **The whole slice tier over origin/main** (`20261021-180501-slice`, 140 steps, 3 shards, 4h27m): 129 PASS, 10 FAIL, 1 TIMEOUT.
+  Timing bars were recorded, not judged.
+  - Fixed and re-run in `20261021-223313-slice` (8 PASS) and `20261021-235214-slice`:
+    - s3-unit, f3-unit, rs-unit and fl-unit: sibling changes in each slice's byte-identity item (`tools/lib/batch-0410.mjs`).
+    - rs-ingame: the kit's isLeaves threw on a construction crate.
+    - b-ingame item 10: RS made survival brushes natural-only and free.
+    - voc-unit: item 5 lacked F3's catalogue ids. Item 1 needs docker, and Noah's CI autoscaler stops OrbStack when idle, so it ran
+      with a keepalive container.
+    - 6b-nudges: the TIMEOUT, under load, passed on re-run.
+  - 6c-scenario-s3 natural failed bars 1, 5 and 6 on one survey. S3's own branch kit plans that survey to the identical IR, and the
+    re-run passed (PLAN).
+  - Known on main, not the batch's: h-unit H-a item 10 and pt2-ingame item 13.
+- **Release-only steps** (`20261021-180718-release`, `--release v0.41.0`): 6a-crash, 6b-commands and 6b-versionc PASS.
+  - umt-long fails on untagged UMT findings. Both clock seeds reproduce identically on v0.40.1, so it is pre-existing
+    (`evidence/umt-long-v0401-seed*.log`).
+- **After each main merge**, every step whose files moved:
+  - `20261022-001822-slice` (P1): 46/47, h-unit only.
+  - `20261022-020720-slice` (P2+P3 and the lint fixes, 110 steps): 107 PASS, 3 FAIL. The water lint was fixed after that run
+    (118/0); h-unit and pt2-ingame are known.
+- **RP wiring in game:**
+  - rsb-ingame, half-built rs04: 1244 UNFINISHED = the cells of the one unbuilt target.
+  - Then build.done: 0 UNFINISHED, both targets listed, and `dev.region.realised verify` ok (1352 cells checked, 0 not held).
+  - rs-ingame, rs02: built targets listed; after build.done 9/9 listed and verify ok (3396 cells).
+- **gate-verifier: PASS** at ed549acd (`artifacts/gate-runs-0410-verify/20261022-002111-release`, 11/11). Re-runs:
+  - rs-survival, rs-crash, rsb-crash, rsb-ingame and rs-ingame;
+  - f3-ingame (coral through the merged drain);
+  - h-holders, h-rmcrash, irr-holders, rp-crash and umt.
+  - Its review found no defect in the conflict resolutions or the RP wiring.
+- **gate-verifier, delta: PASS** at 145c96f8 (the three main merges, the lint fixes, the Stockpiles seam, LedgerSim's restart path): kit lints 118/0, kit 732/0, structure 57/57, look 13/13, mutations 8/8, release-version and p3-mode checks, mod build, ledger fuzz 0 violating / L-V7 306; Stockpiles.feed judged behaviour-identical to RS-b's, LedgerSim's L-V7 booking a faithful model of the restart rescan, stubAnchors byte-identical without F3 masks.
+
+- **Release benches, timing judged** (`20261022-043748-release`, `--release v0.41.0`, quiet-wait on, no other run): 8 PASS:
+  6c-scenario-s3, 6c-scenario-s2, 4e-megalite, 4e-throughput, 6a-megaA, 6b-volume, 6b-scenario-s1 and 6a-heap.
+  - 6a-megaB reached PLACED with its relog and sidecar-kill resumes, but failed one row: "REGION_PROGRESS events for every stage".
+    mega_bench's IR now has an empty `lots-4` (144 lots: 50+50+44), so no event can show it. main ca50b90e fails identically
+    (`artifacts/gate-runs-0410-main/`, the same row, `lots-4: 0 items`). That makes it pre-existing; the check or the bench needs a fix
+    (PLAN).
+  - The batch's re-run (`20261022-065722-release`) timed out at 3h. One building (lot_054, the relog row's) stayed WAITING
+    NOT_LOADED after the walk. The first batch run and main's run both reached PLACED with the same walk. Recorded, not attributed.
+
+### Approvals
+
+Noah, 2026-10-21, in chat with the coordinator:
+- N-F3-2: F3's forms, coral and scale.
+- S3 bar 16: the monastery gallery. S3 v1 is green.
+- N-FL-1: organic irregularity as shown, v69's straight-run share 0.639.
+- N-FL-2: ring lots facing inward.
+
+Steward RC passed on F3, RS-a and RS-b.

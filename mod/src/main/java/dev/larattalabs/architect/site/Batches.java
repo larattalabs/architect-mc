@@ -588,18 +588,23 @@ public final class Batches {
 			return;
 		}
 		SiteGroupRec g = Sites.group(b.group);
-		if (g != null && !g.sites().contains(job.siteId)) {
+		// (6c RS) a survival region tile places its extra construction targets with it: every one joins the group and its stage
+		for (String sid : job.siteIds()) {
+			if (g == null || g.sites().contains(sid)) {
+				continue;
+			}
 			List<String> sites = new ArrayList<>(g.sites());
-			sites.add(job.siteId);
+			sites.add(sid);
 			SiteGroupRec n = g.withSites(sites);
 			for (SiteGroupRec.StageRec st : n.stages()) {
-				if (st.items().contains(i.key) && st.batchId().equals(b.id) && !st.sites().contains(job.siteId)) {
+				if (st.items().contains(i.key) && st.batchId().equals(b.id) && !st.sites().contains(sid)) {
 					List<String> ss = new ArrayList<>(st.sites());
-					ss.add(job.siteId);
+					ss.add(sid);
 					n = n.withStage(st.name(), x -> x.withSites(ss));
 				}
 			}
 			Sites.putGroup(server, n);
+			g = n;
 		}
 		placedItem(server, b, i);
 		// 6c 0c §3: a partial road's item names its skipped spans
@@ -920,6 +925,9 @@ public final class Batches {
 	}
 
 	private static void tryStart0(MinecraftServer server, QBatch b, QItem i) {
+		if (RegionItems.isRegion(b) && RegionTargets.stageWait(server, b, i)) {
+			return; // (6c RS, §6.3) a survival region's item waits for the earlier targets it stands on to be built
+		}
 		if ("delta".equals(i.itemKind)) {
 			tryStartDelta(server, b, i);
 			return;

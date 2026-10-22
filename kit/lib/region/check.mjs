@@ -18,9 +18,10 @@ import { tunnelRules } from './checkTunnels.mjs';
 import { fluidRules } from './checkFluids.mjs';
 // (6c VOC-b) the vocabulary rules: M26 rarity, M27 vocabulary misuse, M20 widened (checkVocab.mjs)
 import { vocabRules } from './checkVocab.mjs';
+import { formRulesVw } from './checkForms.mjs';
 
 
-export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17', 'M20', 'M25', 'M26', 'M27'];
+export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17', 'M20', 'M25', 'M26', 'M27', 'M18', 'M19'];
 /** (6c V) The parts a flat village's components emit (the M1 lot-box rule applies to them only). */
 const VILLAGE_PARTS = /^(square|green|verges|lanes|props_[a-z]+)$/;
 // (6c H) M25 (containment) and M20 (fire, run for lava bodies only) are errors
@@ -173,7 +174,7 @@ export function lotEntrance(l) {
 
 // ------------------------------------------------------------------ M3 support
 
-function supportCheck(vw, ir, stage) {
+export function supportCheck(vw, ir, stage) {
   const P = vw.pal;
   const partId = (i) => ir.parts[i]?.id ?? null;
   const groups = (ir.floating ?? []).map((f) => new Set(f.parts.map((id) => ir.parts.findIndex((p) => p.id === id))));
@@ -187,7 +188,9 @@ function supportCheck(vw, ir, stage) {
   const gravity = [];
   vw.eachWritten((x, y, z, idx, f, pi) => {
     if (!solid(idx)) return;
-    if (P.gravity[idx] && !solid(vw.get(x, y - 1, z))) gravity.push([x, y, z, pi]);
+    // ((6c F3) a stalactite hangs: pointed dripstone pointing down is held by the cell above it, a sturdy block or more dripstone pointing
+    // down (SpeleothemBlock.isValidSpeleothemPlacement); it falls only when that support goes)
+    if (P.gravity[idx] && (/^minecraft:pointed_dripstone\[.*vertical_direction=down/.test(P.states[idx]) ? !solid(vw.get(x, y + 1, z)) : !solid(vw.get(x, y - 1, z)))) gravity.push([x, y, z, pi]);
     const g = pi >= 0 ? groupOf(pi) : -1;
     if (g >= 0) { groupCells[g].push(x, y, z); if (ok.add(x, y, z)) queue.push(x, y, z); return; }
     for (const [dx, dy, dz] of DIRS6) {
@@ -294,10 +297,15 @@ export function blockLight(vw) {
 
 // ------------------------------------------------------------------ (6c F1) M3 overhangs, M17 melt, kept cells
 
-/** The parts of generated forms (not floating groups: an island's underside overhangs by design). */
+/**
+ * (6c F3) The grown forms' generators: a canopy's underside, a cap's rim and a stalactite overhang by design, so M3:overhang (F1's
+ * ledge rule) leaves them out; M3's support (no floating cell) still holds them (CONTRACT F3 as built).
+ */
+export const GROWN_GENERATORS = new Set(['giantTree', 'giantMushroom', 'coral', 'roots', 'stalactites']);
+/** The parts of generated forms (not floating groups: an island's underside overhangs by design; not F3's grown forms). */
 function formPartIndexes(ir) {
   const floating = new Set((ir.floating ?? []).flatMap((f) => f.parts));
-  const ids = new Set((ir.forms ?? []).map((f) => f.part ?? f.id).filter((id) => !floating.has(id)));
+  const ids = new Set((ir.forms ?? []).filter((f) => !GROWN_GENERATORS.has(f.generator)).map((f) => f.part ?? f.id).filter((id) => !floating.has(id)));
   return new Set(ir.parts.map((p, i) => (ids.has(p.id) ? i : -1)).filter((i) => i >= 0));
 }
 
@@ -398,6 +406,24 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
     for (const l of ir.lots ?? []) if (!inside(l.box.minX, l.box.minZ) || !inside(l.box.maxX, l.box.maxZ)) findings.push(finding('M1', l.part, l.stage, 1, [[l.box.minX, l.box.minY, l.box.minZ]], `lot ${l.id} leaves the claim`));
     for (const p of ir.paths ?? []) if (!inside(p.box.minX, p.box.minZ) || !inside(p.box.maxX, p.box.maxZ)) findings.push(finding('M1', p.part, p.stage, 1, [[p.box.minX, p.box.minY, p.box.minZ]], `path ${p.id} leaves the claim`));
     for (const [n, a] of Object.entries(ir.anchors ?? {})) if (!inside(a[0], a[2])) findings.push(finding('M1', null, null, 1, [a], `anchor ${n} is outside the claim`));
+    // ((6c FL) K5 for road items, which no op writes: a road's cells (its centre line and width) inside a lot box; a street is laid off
+    // every lot box + 1, as V lays it, so this fires only on a broken layout (FL's lotOnStreet))
+    if ((ir.lots ?? []).length && (ir.roads ?? []).length) {
+      for (const rd of ir.roads) {
+        const { cells } = centreCells(rd.points.map((p) => [p[0], p[2]]));
+        const offs = crossOffsets(rd.width ?? 3);
+        const hit = [];
+        for (let i = 0; i < cells.length; i++) {
+          const a = cells[Math.max(0, i - 1)], b = cells[Math.min(cells.length - 1, i + 1)];
+          const r = rightOf(segmentAxis([a.x, a.z], [b.x, b.z]));
+          for (const k of offs) {
+            const x = cells[i].x + r[0] * k, z = cells[i].z + r[1] * k;
+            for (const l of ir.lots) if (x >= l.box.minX && x <= l.box.maxX && z >= l.box.minZ && z <= l.box.maxZ) { hit.push([x, l.box.minY, z]); break; }
+          }
+        }
+        if (hit.length) findings.push(finding('M1', rd.part ?? null, rd.stage, hit.length, hit, `${hit.length} cell(s) of road ${rd.id} fall inside a lot box (no road crosses a lot)`));
+      }
+    }
   });
 
   // ---- M2 reachability (player mover)
@@ -450,13 +476,18 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
     metrics.M3 = sup.metrics;
     if (ir.forms?.length) { const oh = overhangCheck(vw, ir); findings.push(...oh.findings); Object.assign(metrics.M3, oh.metrics); }
   });
+  // ---- (6c F3 §4) M18 leaf decay, M19 dead coral (warnings; checkForms.mjs)
+  if (want.has('M18') || want.has('M19')) time('M18', () => formRulesVw({ vw, ir, want, findings, metrics, finding, partStage }));
 
   // ---- the walk area: reached cells whose floor the region wrote (or walk-marked cells)
   const walkArea = [];
   const reachedArr = graph.reached;
+  // ((6c F3) a grown form's cells are landscape, not a walk: a root's or a trunk's top is no path to light (M5, M6))
+  const grownParts = new Set();
+  for (const f of ir.forms ?? []) if (GROWN_GENERATORS.has(f.generator)) { const i = ir.parts.findIndex((p) => p.id === (f.part ?? f.id)); if (i >= 0) grownParts.add(i); }
   for (let i = 0; i < reachedArr.length; i += 3) {
     const x = reachedArr[i], y = reachedArr[i + 1], z = reachedArr[i + 2];
-    if (vw.flags(x, y - 1, z) & F_WRITTEN) walkArea.push(x, y, z);
+    if (vw.flags(x, y - 1, z) & F_WRITTEN && !(grownParts.size && grownParts.has(vw.partAt(x, y - 1, z)))) walkArea.push(x, y, z);
   }
 
   // ---- M4 fluid containment

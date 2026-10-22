@@ -1,0 +1,179 @@
+{
+  "about": "(6c FL, §4.2) a polygon outline (the zone's mask; a street layout inside it) and a polyline outline (the street's line, lots on both sides)",
+  "on": "asks",
+  "covers": [
+    "sketch.outline"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "fl_v71",
+    "zones": [
+      {
+        "id": "quarter",
+        "program": {
+          "lots": [
+            {
+              "id": "q1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "q2",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "q3",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "q4",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "q5",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "q6",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "sketch": {
+          "frame": "claim",
+          "unit": "q64",
+          "shape": "polygon",
+          "points": [
+            [
+              6,
+              6
+            ],
+            [
+              30,
+              6
+            ],
+            [
+              34,
+              18
+            ],
+            [
+              22,
+              28
+            ],
+            [
+              6,
+              22
+            ]
+          ],
+          "outline": true
+        }
+      },
+      {
+        "id": "lane",
+        "program": {
+          "lots": [
+            {
+              "id": "l1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "l2",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "l3",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "l4",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "l5",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "l6",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "sketch": {
+          "frame": "claim",
+          "unit": "q64",
+          "shape": "polyline",
+          "points": [
+            [
+              8,
+              40
+            ],
+            [
+              20,
+              44
+            ],
+            [
+              32,
+              40
+            ],
+            [
+              44,
+              46
+            ],
+            [
+              56,
+              42
+            ]
+          ],
+          "outline": true
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "about": "(6c FL, §4.1, §5) a ring zone around a form.pond: the zone depends on the body (its locator), so it is placed after the pond's reservation and keeps clear of its footprint (KC's later-part row); the pond untouched",
+  "on": "flat",
+  "volume": {},
+  "covers": [
+    "locator.around"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "fl_v67",
+    "forms": [
+      {
+        "id": "pond",
+        "kind": "pond",
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 8
+          }
+        },
+        "size": {
+          "w": 13,
+          "d": 11
+        },
+        "depth": 3
+      }
+    ],
+    "zones": [
+      {
+        "id": "shore",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "pond"
+            }
+          }
+        },
+        "program": {
+          "lots": [
+            {
+              "id": "c1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c2",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c3",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c4",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c5",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c6",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c7",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c8",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

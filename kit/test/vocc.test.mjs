@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { FIX, ROOT, checkPlanVolumes, fixtureLotBlocks, fixtureStyle, flatSurvey, stewardAnchors } from './plan-helpers.mjs';
 import { validatePlan } from '../lib/plan/schema.mjs';
-import { diffCatalogues, planCatalogue, PLAN_API } from '../lib/plan/catalogue.mjs';
+import { diffCatalogues } from '../lib/plan/catalogue.mjs';
 import { irPartExempt, measureLot, measurePalette, readPaletteRule, shareFits, unmeasuredBlocks, swapChain, swapState } from '../lib/plan/palette.mjs';
 import { GROUPS, nearestFamily, resolvePalette } from '../lib/vocab/groups.mjs';
 import { VOCC_DESIGNS, blueprintBlocks } from './fixtures/vocab/vocc-designs.mjs';
@@ -272,12 +272,12 @@ test('a non-required rule\'s answers never block; an upper bound of 0 without a 
 
 // ------------------------------------------------------------------ item 2: the catalogue
 
-test('item 2: catalogue 9 is the golden; its diff from catalogue-hy.json (HY\'s 8) is exactly the one flip, its limits and note folded in', () => {
-  const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
-  assert.deepEqual(planCatalogue(), golden);
-  // (release tool) at least 9 and the API of this tree: a merge-time bump moves the header, not catalogue 9's entries (checked below)
-  assert.ok(golden.catalogueVersion >= 9, String(golden.catalogueVersion));
-  assert.equal(golden.api, PLAN_API);
+test('item 2: catalogue 9 (archived as catalogue-vocc.json by 6c FL and F3) against catalogue-hy.json (HY\'s 8) is exactly the one flip, its limits and note folded in', () => {
+  // ((6c FL, F3) catalogue 9 was the golden until the batch's catalogue 11 (FL's six flips and F3's forms); it is archived as
+  // fixtures/plan/catalogue-vocc.json, and plan-p0's item 9 holds the golden to planCatalogue())
+  const golden = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-vocc.json'), 'utf8'));
+  assert.equal(golden.catalogueVersion, 9);
+  assert.equal(golden.api, '1.37.0');
   const hy = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-hy.json'), 'utf8'));
   assert.equal(hy.catalogueVersion, 8);
   const d = diffCatalogues(hy, golden, { pending: [{ part: 'copper_only', block: 'rule.palette' }] });

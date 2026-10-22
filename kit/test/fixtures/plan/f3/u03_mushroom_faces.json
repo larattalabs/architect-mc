@@ -1,0 +1,31 @@
+{
+ "about": "(6c F3 \u00a710.1) u03_mushroom_faces: the broken variant `_unsafe.mushroomFaces`: a giant red mushroom written with every face true: the generator's lint STATE refuses it (the faces vanilla's updateShape would set at once)",
+ "on": "flat",
+ "expect": {
+  "part": "red",
+  "class": "refused",
+  "message": "STATE:"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "f3_u03",
+  "forms": [
+   {
+    "id": "red",
+    "kind": "giant_mushroom",
+    "preset": "red",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 8
+     }
+    },
+    "ext": {
+     "architect_mc:unsafe": {
+      "mushroomFaces": true
+     }
+    }
+   }
+  ]
+ }
+}

@@ -1,0 +1,15 @@
+{
+ "about": "(6c F3 §10.1) the nether's giants on a flat claim: a crimson and a warped huge fungus (stems, wart caps, shroomlight under the caps: light 15, no leaves, no M18)",
+ "on": "flat",
+ "covers": [
+  "form.giant_tree"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "f3_v77",
+  "forms": [
+   { "id": "crimson", "kind": "giant_tree", "preset": "crimson", "where": { "near": { "anchor": "stone", "within": 16 } } },
+   { "id": "warped", "kind": "giant_tree", "preset": "warped", "height": [24, 32], "where": { "near": { "anchor": "stone", "within": 32 } } }
+  ]
+ }
+}

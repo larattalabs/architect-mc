@@ -91,7 +91,8 @@ class RegionFluidsHYTest {
 		// (at least: a later slice moves the API and kit on; CU 1.37.0)
 		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.36.0") >= 0, ArchitectApi.VERSION);
 		assertTrue(IrStale.semverCompare(IrStale.KIT_VERSION, "0.37.0") >= 0, IrStale.KIT_VERSION);
-		assertEquals("courses", IrStale.KINDS_FORMAT2.get(IrStale.KINDS_FORMAT2.size() - 1), "appended at the end");
+		assertEquals("courses", IrStale.KINDS_FORMAT2.get(IrStale.KINDS_FORMAT2.indexOf("survival") - 1), "appended at the end (6c RS's survival, then 6c F3-c's coralDecor, after it)");
+		assertEquals(IrStale.KINDS_FORMAT2.indexOf("volume:fluids") + 1, IrStale.KINDS_FORMAT2.indexOf("courses"), "appended after volume:fluids");
 		assertTrue(ApiRules.features(2, List.of("region.hydrology", "region.courses", "region.waterGates")).containsAll(List.of("hydrologyPass", "regionCourses", "waterGates")));
 		assertFalse(ApiRules.features(2, List.of("region.fluids")).contains("regionCourses"), "an H helper has no courses");
 		// a course IR needs `courses`: a 0.37.0 helper (or this mod's list without it) refuses it PLAN_STALE

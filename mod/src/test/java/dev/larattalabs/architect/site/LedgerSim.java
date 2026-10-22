@@ -924,9 +924,26 @@ final class LedgerSim {
 		for (Tgt t : targets.values()) {
 			if (!t.removed) {
 				Map<String, Integer> billBefore = t.deltaBill;
+				Builder.Run old = t.run;
 				t.run = runOf(t);
 				rescan(t);
 				t.deltaBill = billBefore;
+				// (batch v0.41.0, RS-b's S-CU-3 rule) a farmland cell the builder wrote and that dried stays built only while its run holds
+				// the built bit (Builder.Run.matches); the restart's run rescans the world and reads the dried cell as not built: L-V7 again,
+				// on the restart path only (production's rescan: its cost outstanding, the deconstruct drops it as the player's)
+				if (old != null && t.run != null) {
+					for (long p : new TreeSet<>(t.paid)) {
+						int qo = old.queuePos(BlockPos.of(p)), qn = t.run.queuePos(BlockPos.of(p));
+						BlockState now = at(p);
+						if (qo >= 0 && qn >= 0 && old.built.get(qo) && !t.run.built.get(qn) && now.is(Blocks.DIRT) && old.target[qo].is(Blocks.FARMLAND)) {
+							t.deltaBill = null;
+							t.paid.remove(p);
+							foreign.put(p, now);
+							finding("L-V7", t.id + ": dried farmland at " + BlockPos.of(p).toShortString() + " read as not built after a restart (the rescan has no"
+								+ " built bit): its cost is outstanding again and at the deconstruct the paid block drops at the site as the player's");
+						}
+					}
+				}
 			}
 		}
 	}

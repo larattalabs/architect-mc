@@ -1,0 +1,23 @@
+{
+  "about": "(6c RS, §13) water in survival: v58's walled village (a brook out through its ring wall under a water gate) with an irrigated farm lot, a beam bridge over the brook south of the wall, a fountain, a pond and a lava pit: shells, linings, weirs, the grate and the farm's bed paid, the water free, the lava a bucket a source, every body after its barrier",
+  "terrain": { "W": 240, "D": 200, "x0": 1000, "z0": 2000, "y": 64, "bands": [{ "x0": 1000, "x1": 1239, "z0": 2000, "z1": 2109, "y": 67 }] },
+  "volume": {},
+  "anchors": { "bw": [1100, 65, 2160], "be": [1140, 65, 2160], "fount_at": [1200, 68, 2030], "pond_at": [1200, 65, 2160], "pit_at": [1030, 65, 2160] },
+  "covers": ["form.fountain", "form.pond", "connector.channel", "wall.water_gate", "connector.bridge", "zone.irrigate"],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "rs03_water",
+    "zones": [{ "id": "town", "program": { "template": "flat_village", "params": { "lots": [{ "id": "h1", "type": "house", "size": [9, 9] }, { "id": "h2", "type": "cottage", "size": [9, 9] }, { "id": "f1", "type": "farm", "size": [13, 11], "villager": "farm", "irrigate": true }] } } }],
+    "connectors": [
+      { "id": "town_wall", "kind": "wall", "where": { "around": { "feature": { "part": "town" }, "ring": [4, 8] } }, "height": 6 },
+      { "id": "in", "kind": "road", "from": { "anchor": "claim_e" }, "to": { "part": "town" } },
+      { "id": "brook", "kind": "channel", "label": "a brook from the village's centre out through the ring wall under a water gate", "from": { "anchor": "claim_center" }, "to": { "anchor": "claim_s" } },
+      { "id": "span", "kind": "bridge", "form": "beam", "from": { "anchor": "bw" }, "to": { "anchor": "be" } }
+    ],
+    "forms": [
+      { "id": "fount", "kind": "fountain", "basin": 5, "spout": 3, "where": { "near": { "anchor": "fount_at", "within": 12 } } },
+      { "id": "pond", "kind": "pond", "size": { "w": 9, "d": 7 }, "depth": 2, "edge": "built", "where": { "near": { "anchor": "pond_at", "within": 16 } } },
+      { "id": "pit", "kind": "pond", "fluid": "lava", "depth": 2, "where": { "near": { "anchor": "pit_at", "within": 16 } } }
+    ]
+  }
+}

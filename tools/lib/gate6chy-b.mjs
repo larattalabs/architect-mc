@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { flAsksFilter } from './fl-norm.mjs'; // (6c FL) FL's five free asks left to FL's own item 8
 import * as P3 from './p3-tier.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -483,8 +484,9 @@ export const items = {
         fs.writeFileSync(path.join(ctx.OUT, 'hyb-asks-gap.txt'), after.text);
         // ((6c VOC-c) rule.palette is supported: its 7 parts' lines and the tally they move are VOC-c's (its item 3, fixtures/plan/vocc/
         // asks-before.txt and asks-after.txt); every other line is HY's as committed)
-        const vocc = (t) => t.split('\n').filter((l) => !/rule\.palette/.test(l) && !/^# 59 asks:/.test(l)).join('\n');
-        const lines = (t) => new Map(t.split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/') && !/rule\.palette/.test(l)).map((l) => [l.split(' ')[0], l]));
+        // ((6c FL) and FL's five free asks and the gap table's free-layout rows: tools/lib/fl-norm.mjs flAsksFilter)
+        const vocc = (t) => flAsksFilter(t.split('\n').filter((l) => !/rule\.palette/.test(l) && !/^# 59 asks:/.test(l)).join('\n'));
+        const lines = (t) => new Map(flAsksFilter(t).split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/') && !/rule\.palette/.test(l)).map((l) => [l.split(' ')[0], l]));
         const lb = lines(before), la = lines(after.text);
         const moved = [...la].filter(([k, v]) => lb.get(k) !== v).map(([k]) => k);
         ctx.check(vocc(after.text) === vocc(committed) && after.malformed === 0 && after.untilHY === 0 && after.course === 0 && moved.length === 0, `item 11: the 59 asks' gap table equals fixtures/plan/hy/asks-gap-after.txt and the before table (v0.37.0's): ${after.malformed} malformed, ${after.untilHY} answers naming until HY, channel.course ${after.course}, ${moved.length} part(s) moved class${moved.length ? ` (${moved.join(', ')})` : ''}`);

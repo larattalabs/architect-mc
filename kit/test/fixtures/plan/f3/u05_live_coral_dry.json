@@ -1,0 +1,46 @@
+{
+ "about": "(6c F3 \u00a74, \u00a710.1) u05_live_coral_dry: the broken variant `_unsafe.liveCoralDry`: the pond's coral writes one live coral block on a dry rim cell too (no water beside it): M19 names it (a warning; nothing else does: the cell is the pond's own shell)",
+ "on": "flat",
+ "volume": {},
+ "expect": {
+  "rule": "M19",
+  "part": "w_pond",
+  "bodyClass": "fits"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "f3_u05",
+  "forms": [
+   {
+    "id": "pond",
+    "kind": "pond",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 16
+     }
+    },
+    "size": {
+     "w": 11,
+     "d": 9
+    },
+    "depth": 3
+   },
+   {
+    "id": "reef",
+    "kind": "coral",
+    "where": {
+     "inside": {
+      "part": "pond"
+     }
+    },
+    "count": 3,
+    "ext": {
+     "architect_mc:unsafe": {
+      "liveCoralDry": true
+     }
+    }
+   }
+  ]
+ }
+}

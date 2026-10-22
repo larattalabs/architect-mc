@@ -461,8 +461,18 @@ public final class Realised {
 	 * at put-down ({@link #withCodes} on the draft) and become {@link #WRITTEN} here when its target builds them. Rewritten whole
 	 * (fsync, rename); false when the tile has no record. Server thread.
 	 */
-	public static synchronized boolean mark(Path world, String region, int layer, String stage, String set, String key, int[] cells, byte code)
-		throws IOException {
+	public static boolean mark(Path world, String region, int layer, String stage, String set, String key, int[] cells, byte code) throws IOException {
+		return mark(world, region, layer, stage, set, key, cells, code, null);
+	}
+
+	/**
+	 * {@link #mark(Path, String, int, String, String, String, int[], byte)}; with {@code site} (the batch v0.41.0's RS wiring: a target
+	 * that built its cells), that target's cell site is added to the record's entries (after the free-pass entry; {@link Tile#sites()})
+	 * and the record loses {@link #NO_ENTRY} (a tile with no free-pass cell has its first entry once a target builds), so the RP verify
+	 * reads the target's entry with its WRITTEN cells. Idempotent.
+	 */
+	public static synchronized boolean mark(Path world, String region, int layer, String stage, String set, String key, int[] cells, byte code,
+		@Nullable String site) throws IOException {
 		Tile t = read(world, region, layer, stage, set, key);
 		if (t == null) {
 			return false;
@@ -473,8 +483,13 @@ public final class Realised {
 				c[i] = code;
 			}
 		}
-		write(world, region, new Tile(t.layer(), t.stage(), t.set(), t.key(), t.site(), t.flags(), t.tileSha(), t.chainSha(), c, t.extras(),
-			t.writers()));
+		String sites = t.site();
+		int flags = t.flags();
+		if (site != null && !t.sites().contains(site)) {
+			sites = sites.isEmpty() ? site : sites + "," + site;
+			flags &= ~NO_ENTRY;
+		}
+		write(world, region, new Tile(t.layer(), t.stage(), t.set(), t.key(), sites, flags, t.tileSha(), t.chainSha(), c, t.extras(), t.writers()));
 		return true;
 	}
 

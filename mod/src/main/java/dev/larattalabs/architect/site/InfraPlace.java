@@ -458,7 +458,7 @@ public final class InfraPlace {
 	/** (RP) Run with the new cell site's id after it is named and before its PLACING commit is submitted. */
 	@FunctionalInterface
 	interface BeforeCommit {
-		void run(String siteId) throws Sites.SiteException;
+		void run(@Nullable String siteId) throws Sites.SiteException;
 	}
 
 	/** {@link #beginTile}; (RP) {@code before} runs with the site id before the PLACING commit (the realised record). */
@@ -483,6 +483,82 @@ public final class InfraPlace {
 		job.tile = tile;
 		job.plan(level, c.positions(), c.values());
 		return job;
+	}
+
+	/**
+	 * (6c RS) A survival region tile: its free-pass cells as the main entry (written now), each group with held or paid cells as a
+	 * construction target (an extra entry of the same transaction, written nothing). With no free-pass cell the first target is the main
+	 * entry (nothing written). Returns the job. (RP) {@code payload}: each group's cells as the tile's payload indexes (by group, in
+	 * {@code split.groups()} order), kept in its target's spec for the realised record; {@code before} runs with the free-pass entry's
+	 * site id (null when the tile has no free-pass cell) before the PLACING commit is submitted.
+	 */
+	static InfraJob beginTileSurvival(ServerLevel level, String kind, Check c, @Nullable String owner, @Nullable JsonObject ext, Site.@Nullable Member member,
+		TileCheck.Result r, String tile, RegionTargets.Split split, String regionId, int @Nullable [][] payload, @Nullable BeforeCommit before)
+		throws Sites.SiteException {
+		SiteJournal.requireAvailable();
+		var srv = level.getServer();
+		String dim = Sites.dimensionId(level);
+		java.util.List<Infra> targets = new java.util.ArrayList<>();
+		for (int k = 0; k < split.groups().size(); k++) {
+			RegionTargets.Group g = split.groups().get(k);
+			String tid = "c" + SiteJournal.store().newCells();
+			targets.add(RegionTargets.record(srv, tid, kind, owner, ext, member, dim, regionId, g, tile, payload == null ? null : payload[k]));
+		}
+		boolean free = split.freePos().length > 0;
+		InfraJob job;
+		if (free) {
+			String id = "c" + SiteJournal.store().newCells();
+			if (before != null) {
+				before.run(id);
+			}
+			JsonObject spec = c.spec() == null ? new JsonObject() : c.spec().deepCopy();
+			spec.addProperty("kind", kind);
+			spec.addProperty("policy", Journal.Policy.CELL.name());
+			spec.addProperty("tile", tile);
+			Infra rec = new Infra(id, Infra.CELLS + kind, owner, ext, dim, boundsOf(split.freePos(), c.box()), System.currentTimeMillis(), member, true, spec);
+			job = new InfraJob(id, dim, kind, Journal.Policy.CELL, rec, member == null ? null : member.batchId(), member == null ? null : member.itemKey());
+			job.leafPos = r.leafPos();
+			job.leafBefore = r.leafBefore();
+			job.leafAfter = r.leafAfter();
+		} else {
+			if (before != null) {
+				before.run(null); // (RP) no free-pass entry: the record has none until a target builds (Realised.mark)
+			}
+			Infra rec = targets.get(0);
+			job = new InfraJob(rec.id(), dim, kind, Journal.Policy.CELL, rec, member == null ? null : member.batchId(), member == null ? null : member.itemKey());
+			job.writeMain = false;
+		}
+		job.notes.addAll(c.notes());
+		job.tile = tile;
+		for (int k = free ? 0 : 1; k < targets.size(); k++) {
+			RegionTargets.Group g = split.groups().get(k);
+			job.extras.add(new InfraJob.Extra(targets.get(k), g.pos(), g.vals()));
+		}
+		if (free) {
+			job.plan(level, split.freePos(), split.freeVals());
+		} else {
+			RegionTargets.Group g = split.groups().get(0);
+			job.plan(level, g.pos(), g.vals());
+		}
+		return job;
+	}
+
+	/** The bounds of a set of cells (the free pass's box), or {@code fallback} when empty. */
+	private static Anchors.Bounds boundsOf(long[] pos, Anchors.@Nullable Bounds fallback) {
+		if (pos.length == 0 && fallback != null) {
+			return fallback;
+		}
+		int x0 = Integer.MAX_VALUE, y0 = Integer.MAX_VALUE, z0 = Integer.MAX_VALUE, x1 = Integer.MIN_VALUE, y1 = Integer.MIN_VALUE, z1 = Integer.MIN_VALUE;
+		for (long p : pos) {
+			int x = net.minecraft.core.BlockPos.getX(p), y = net.minecraft.core.BlockPos.getY(p), z = net.minecraft.core.BlockPos.getZ(p);
+			x0 = Math.min(x0, x);
+			y0 = Math.min(y0, y);
+			z0 = Math.min(z0, z);
+			x1 = Math.max(x1, x);
+			y1 = Math.max(y1, y);
+			z1 = Math.max(z1, z);
+		}
+		return new Anchors.Bounds(x0, y0, z0, x1, y1, z1);
 	}
 
 	// ------------------------------------------------------------------ removal

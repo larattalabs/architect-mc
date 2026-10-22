@@ -223,6 +223,9 @@ export function replanGolden(root, name, { paramsOver = null, noVolumes = false,
     '--survey', path.join(gDir, 'survey.bin'), '--seed', String(ir.seed), '--claim', [c.minX, c.minZ, c.maxX, c.maxZ, c.minY, c.maxY].join(','),
     '--keep-out', path.join(inDir, 'keep-out.json'), '--out', out, '--blobs-out', path.join(out, 'blobs'), '--json'];
   if (vols.length && !noVolumes) args.push('--volumes', volDir);
+  // (6c S3) a golden whose plan read the biome grid or the bible's fluid slots commits them (scenarios.mjs golden): the re-cut reads
+  // them too (the roles stay the IR's: --roles wins over the bible's)
+  for (const [f, flag] of [['biomes.json', '--biomes'], ['bible.json', '--bible']]) if (fs.existsSync(path.join(gDir, f))) args.push(flag, path.join(gDir, f));
   // the IR records the planning Node's major (in game: the sidecar's); the re-cut keeps the golden's, whatever node runs this
   if (typeof ir.node === 'string' && /^\d{1,3}$/.test(ir.node)) args.push('--node', ir.node);
   const r = spawnSync(process.execPath, args, { encoding: 'utf8', maxBuffer: 64 << 20 });

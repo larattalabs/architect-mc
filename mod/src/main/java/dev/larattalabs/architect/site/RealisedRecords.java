@@ -69,10 +69,22 @@ public final class RealisedRecords {
 	 * write). Returns its bytes, or -1 when the check made no draft. Throws when it can't be written: the tile then doesn't commit.
 	 */
 	static int tile(ServerLevel level, RegionsImpl.Live r, String[] t, TileStream.Tile ts, TileCheck.Result res, @Nullable String site) throws IOException {
+		return tile(level, r, t, ts, res, site, null);
+	}
+
+	/**
+	 * {@link #tile(ServerLevel, RegionsImpl.Live, String[], TileStream.Tile, TileCheck.Result, String)}; (RS, CONTRACT "Slice RP" §5)
+	 * {@code unfinished}: a survival tile's target cells (payload indexes), {@link Realised#UNFINISHED} until their target builds them.
+	 */
+	static int tile(ServerLevel level, RegionsImpl.Live r, String[] t, TileStream.Tile ts, TileCheck.Result res, @Nullable String site,
+		int @Nullable [] unfinished) throws IOException {
 		Realised.Draft d = res.draft();
 		Packed.Tile orig = ts.cells();
 		if (d == null || orig == null) {
 			return -1;
+		}
+		if (unfinished != null && unfinished.length > 0) {
+			d = Realised.withCodes(d, unfinished, Realised.UNFINISHED);
 		}
 		Path world = r.world();
 		String region = r.rec().id;
@@ -336,8 +348,14 @@ public final class RealisedRecords {
 		}
 		// every ACTIVE tile entry of the region's group has a record
 		int unrecorded = 0;
+		int targetsBuilding = 0;
 		if (js != null && l.rec().groupId != null) {
 			for (JournalStore.Meta m : activeTileEntries(js, l.rec().groupId)) {
+				Infra ti = Infras.get(m.site());
+				if (!recordedSites.contains(m.site()) && RegionTargets.is(ti) && ti.building()) {
+					targetsBuilding++; // (RS) a survival target not built yet: its record lists it once built (Realised.mark)
+					continue;
+				}
 				if (!recordedSites.contains(m.site())) {
 					unrecorded++;
 					if (problems.size() < 60) {
@@ -364,6 +382,7 @@ public final class RealisedRecords {
 		st.forEach(so::addProperty);
 		out.add("status", so);
 		out.addProperty("unrecorded", unrecorded);
+		out.addProperty("targetsBuilding", targetsBuilding);
 		if (world) {
 			out.addProperty("cellsChecked", checked);
 			out.addProperty("held", held);

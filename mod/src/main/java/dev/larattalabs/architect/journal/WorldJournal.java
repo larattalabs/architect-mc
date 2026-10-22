@@ -420,8 +420,8 @@ public final class WorldJournal {
 			return true; // (fix/lamp-path) our dirt path turned to dirt under a solid block, outside the journal
 		}
 		if (now.getBlock() != want.getBlock() && !(want.isAir() && !now.getFluidState().isEmpty()) && !(StillOurs.spread(now) && StillOurs.spread(want))
-			&& !StillOurs.fluidHolds(now, want) && !Copper.sameBlock(now.getBlock(), want.getBlock())) {
-			return false; // (a fluid in cleared air goes to StillOurs, phase 6a; another copper stage too, 6c CU)
+			&& !StillOurs.fluidHolds(now, want) && !Copper.sameBlock(now.getBlock(), want.getBlock()) && !Coral.sameBlock(now.getBlock(), want.getBlock())) {
+			return false; // (a fluid in cleared air goes to StillOurs, phase 6a; another copper stage too, 6c CU; a dead coral, 6c F3)
 		}
 		return StillOurs.holds(now, now.hasBlockEntity() ? nowNbt.get() : null, want, after.nbt());
 	}
@@ -437,7 +437,9 @@ public final class WorldJournal {
 		}
 		var f = net.minecraft.world.level.block.Blocks.FARMLAND;
 		var d = net.minecraft.world.level.block.Blocks.DIRT;
-		return Copper.sameBlock(now.getBlock(), after.getBlock()) || now.is(f) && after.is(d) || now.is(d) && after.is(f) || StillOurs.pathTurned(now, after);
+		// ((6c F3 §6) a dead coral over the live one we wrote: the same equivalence, so a player's record there wins too)
+		return Copper.sameBlock(now.getBlock(), after.getBlock()) || Coral.sameBlock(now.getBlock(), after.getBlock()) || now.is(f) && after.is(d)
+			|| now.is(d) && after.is(f) || StillOurs.pathTurned(now, after);
 	}
 
 	/**

@@ -40,6 +40,8 @@ public final class RegionItems {
 		Heights.@Nullable Freeze freeze;
 		boolean frozen;
 		@Nullable TileCheck check;
+		/** (6c RS) The tile's cells the check started from (a survival tile's classes and groups). */
+		dev.larattalabs.architect.region.Packed.@Nullable Tile cells;
 	}
 
 	private static final Map<String, Pipe> PIPES = new HashMap<>();
@@ -177,13 +179,16 @@ public final class RegionItems {
 		}
 		if (p.check == null) {
 			// (6c H) a fluids-stage tile leaves out the cells of a body its gate did not let through
-			p.check = tileCheck(dev.larattalabs.architect.region.RegionFluids.filter(r, t[1], tile.cells()), r, win).provenance(tile.cells()); // (RP)
+			p.cells = dev.larattalabs.architect.region.RegionFluids.filter(r, t[1], tile.cells());
+			p.check = tileCheck(p.cells, r, win).provenance(tile.cells()); // (RP)
 		}
 		TileCheck.Result res = p.check.step(level, deadline);
 		if (res == null) {
 			return;
 		}
 		p.check = null;
+		var packed = p.cells;
+		p.cells = null;
 		InfraPlace.Check c = res.check();
 		if (!c.ok()) {
 			Sites.Refusal ref = c.refusals().get(0);
@@ -213,8 +218,25 @@ public final class RegionItems {
 		}
 		Site.Member member = new Site.Member(b.group, b.id, i.key);
 		try {
-			InfraJob job = InfraPlace.beginTile(level, dev.larattalabs.architect.site.RegionKinds.of(t[2]), c, b.owner, i.ext, member, res, String.join("|",
-				t), sid -> {
+			InfraJob job;
+			RegionTargets.Split split = packed != null && packed.survival() && RegionsImpl.survival(r) ? RegionTargets.split(packed, c, RegionsImpl.survivalGroups(r))
+				: null;
+			if (split != null && !split.groups().isEmpty()) {
+				// (6c RS) the free pass written now; each group's held and paid cells a construction target
+				// (RP §5) the targets' cells UNFINISHED in the realised record until each target builds them (RegionTargets.realisedBuilt)
+				int[][] payload = tile.cells() == null ? null : RegionTargets.payloadIndexes(tile.cells(), split);
+				int[] unfinished = payload == null ? null : RegionTargets.allIndexes(payload);
+				job = InfraPlace.beginTileSurvival(level, dev.larattalabs.architect.site.RegionKinds.of(t[2]), c, b.owner, i.ext, member, res, String.join("|", t),
+					split, t[0], payload, sid -> {
+						try {
+							RealisedRecords.tile(level, r, t, tile, res, sid, unfinished);
+						} catch (java.io.IOException e) {
+							throw new Sites.SiteException(Reason.OTHER, "the tile's realised record could not be written (" + e.getMessage() + ")");
+						}
+						WorldJournal.kill("RP1"); // the record written, the PLACING commit not submitted
+					});
+			} else {
+				job = InfraPlace.beginTile(level, dev.larattalabs.architect.site.RegionKinds.of(t[2]), c, b.owner, i.ext, member, res, String.join("|", t), sid -> {
 					// (RP) the realised record, durable before the PLACING commit is submitted
 					try {
 						RealisedRecords.tile(level, r, t, tile, res, sid);
@@ -223,6 +245,10 @@ public final class RegionItems {
 					}
 					WorldJournal.kill("RP1"); // the record written, the PLACING commit not submitted
 				});
+			}
+			if (split != null) {
+				RegionsImpl.freeCells(r, split.freeOf());
+			}
 			i.status = QItem.Status.PLACING;
 			i.siteId = job.siteId;
 			i.reason = null;
@@ -404,8 +430,8 @@ public final class RegionItems {
 				} else if (tile != null && tile.phase == TileStream.Phase.DECODED && p.check == null && dev.larattalabs.architect.region.RegionFluids.checkedAhead(r,
 					t[1])) {
 					// its cells sorted and turned into journal values off the server thread now; the world checks run when it is next
-					p.check = tileCheck(dev.larattalabs.architect.region.RegionFluids.filter(r, t[1], tile.cells()), r, window(t[3], r.rec().claim))
-						.provenance(tile.cells()); // (RP)
+					p.cells = dev.larattalabs.architect.region.RegionFluids.filter(r, t[1], tile.cells());
+					p.check = tileCheck(p.cells, r, window(t[3], r.rec().claim)).provenance(tile.cells()); // (RP)
 				}
 				continue;
 			}

@@ -1,0 +1,173 @@
+{
+  "about": "(6c FL, §3.3) grid_city's 16 lots up to 23 x 19 as a grid with orientation ns: avenues north-south, the hall and the market hall facing the plaza block",
+  "on": "asks",
+  "covers": [
+    "layout.grid"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "fl_v68",
+    "zones": [
+      {
+        "id": "city",
+        "program": {
+          "layout": "grid",
+          "orientation": "ns",
+          "lots": [
+            {
+              "id": "town_hall_1",
+              "type": "town_hall",
+              "role": "city_hall",
+              "size": [
+                23,
+                19
+              ],
+              "landmark": true,
+              "placement": "central"
+            },
+            {
+              "id": "shop_1",
+              "type": "shop",
+              "role": "market_hall",
+              "size": [
+                17,
+                15
+              ],
+              "landmark": true,
+              "placement": "central"
+            },
+            {
+              "id": "house_1",
+              "type": "house",
+              "role": "townhouse",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "house_2",
+              "type": "house",
+              "role": "townhouse",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "house_3",
+              "type": "house",
+              "role": "townhouse",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "house_4",
+              "type": "house",
+              "role": "townhouse",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "house_5",
+              "type": "house",
+              "role": "apartment",
+              "size": [
+                13,
+                11
+              ]
+            },
+            {
+              "id": "house_6",
+              "type": "house",
+              "role": "apartment",
+              "size": [
+                13,
+                11
+              ]
+            },
+            {
+              "id": "shop_2",
+              "type": "shop",
+              "role": "corner_shop",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "shop_3",
+              "type": "shop",
+              "role": "corner_shop",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "shop_4",
+              "type": "shop",
+              "role": "corner_shop",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "tavern_1",
+              "type": "tavern",
+              "role": "tavern",
+              "size": [
+                13,
+                11
+              ]
+            },
+            {
+              "id": "smithy_1",
+              "type": "smithy",
+              "role": "smithy",
+              "size": [
+                13,
+                11
+              ],
+              "placement": "edge"
+            },
+            {
+              "id": "barn_1",
+              "type": "barn",
+              "role": "granary",
+              "size": [
+                17,
+                15
+              ],
+              "placement": "edge"
+            },
+            {
+              "id": "chapel_1",
+              "type": "chapel",
+              "role": "chapel",
+              "size": [
+                13,
+                11
+              ]
+            },
+            {
+              "id": "gatehouse_1",
+              "type": "gatehouse",
+              "role": "gatehouse",
+              "size": [
+                13,
+                11
+              ],
+              "placement": "edge"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

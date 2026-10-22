@@ -10,6 +10,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { normIrJson } from './fl-norm.mjs';
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
@@ -55,13 +56,14 @@ export function savePlanCache() {
  * `trees` from treesOf (null: run, don't cache); `input`: the plan and every option the run reads. -> {answers, ir, overall, cached}.
  */
 export async function planSide(root, trees, input, run) {
-  const key = trees ? sha256(JSON.stringify([process.version, process.env.ARCHITECT_BIG_REGIONS ?? null, input])) : null;
+  const key = trees ? sha256(JSON.stringify([process.version, process.env.ARCHITECT_BIG_REGIONS ?? null, 'flnorm', input])) : null;
   const s = trees ? store(root, trees) : null;
   if (key && s.data[key]) return { ...s.data[key], cached: true };
   const r = await run();
   const v = {
     answers: sha256(JSON.stringify(r.check?.parts ?? r.check?.malformed ?? null)),
-    ir: sha256((r.res?.irJson ?? '').replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"')),
+    // ((6c FL) kitVersion and the street roads' S-FL-5 ext normalised: every V/D street carries it since FL; fl-norm.mjs)
+    ir: sha256(normIrJson(r.res?.irJson ?? '')),
     overall: r.check?.overall ?? null,
   };
   if (key) { s.data[key] = v; s.dirty = true; }

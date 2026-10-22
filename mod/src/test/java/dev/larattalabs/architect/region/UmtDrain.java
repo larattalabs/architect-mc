@@ -69,6 +69,6 @@ public final class UmtDrain {
 			public void set(BlockPos p, BlockState s, int flags) {
 				w.set(p, s, flags);
 			}
-		}, null, st, b, bs, true, new LongOpenHashSet(), held);
+		}, null, st, b, bs, true, new LongOpenHashSet(), held, group != null); // (6c F3-c) as the removal when it holds
 	}
 }

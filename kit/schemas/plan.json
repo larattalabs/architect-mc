@@ -18,7 +18,7 @@
     "R11 required parts: a part with required true whose answer is unsupported or refused blocks approval (COMPOSITION §2.5); a required rule that can't be verified blocks readiness",
     "R12 notes and labels are free text: kept, shown, never treated as a verified requirement",
     "R13 provisional parts: a part is provisional when a lot has no library entry or its style (own or inherited from the zone or plan) is {pending}. Its cost and palette are a range; the approval artifact records each provisional part's cost range and fit box; the approval is kept while the fit stays inside the lot box and the cost inside the range, and the caller re-approves past the top of the range (rebinding when the bible exists)",
-    "R4b layout: program.lots.layout is one of street (supported), or ring, spiral, grid, organic (reserved, arriving in slice FL). A reserved layout is checked like any supported lots program and the part answers unsupported {block: layout.<name>}, never malformed. A layout is written only there: not as a connector kind (connector.ring_street, connector.grid) nor as a rule kind (rule.ring_layout, rule.layout_ring)",
+    "R4b layout: program.lots.layout is one of street, ring, spiral, grid or organic (supported; FL) or elevated (reserved until 7b). A reserved layout is checked like any supported lots program and the part answers unsupported {block: layout.<name>}, never malformed. A layout is written only there: not as a connector kind (connector.ring_street, connector.grid) nor as a rule kind (rule.ring_layout, rule.layout_ring)",
     "R4c aliases: zone kind district is a reserved alias of the program form {districts}: the part answers unsupported {block: program.districts} (never zone.district) until D1, so one idea has one block id",
     "R2a lots as places (P0, additive): where a part names a place (a locator target, a near feature, an endpoint) a lot id of a zone of this plan is accepted for a part id: it names that lot (an endpoint: its entrance), through its zone, which is then an implicit dependency (R3). A zone's port is one of its lots or bell, start or end (its street's two ends). Lot ids are unique across the plan (one region's lots)",
     "R14 anchors: names are caller-supplied positions (PlanRequest.anchors) or the built-in claim_* ones; P0 never interprets a name. Steward passes stone, player, street_w, street_e, district_<id> and stockpile; an unknown anchor name used by a part is malformed (UNKNOWN_REF)",
@@ -76,7 +76,7 @@
 
   "x-catalogue": {
     "about": "The capability catalogue that P0 ships (catalogueVersion 1). Each entry: a stable block id (never reused or renamed), the API version it arrived in (sinceApi: the API version at which the entry reached its current state and schemaVersion, always a real semver; a new or changed entry carries the branch's placeholder API version and the merge-time renumber restamps it, which tools/catalogue-since-check.mjs enforces), its own schemaVersion (bumped when its members grow, additively), its state (supported | reserved | retired) and, for reserved, the slice it waits for (until). Checks return this catalogue with every answer; a release commits it as a golden so two catalogues diff by id. Reserved entries carry their parameters through $defs/extension until supported.",
-    "catalogueVersion": 9,
+    "catalogueVersion": 11,
     "entries": [
       { "id": "zone.standard", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.standard" },
       { "id": "zone.outpost", "sinceApi": "1.29.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.outpost" },
@@ -88,17 +88,17 @@
       { "id": "program.rift_city", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template", "note": "N-P0-1: the bundled rift_city program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim." },
       { "id": "program.floating_islands", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template", "note": "N-P0-1: the bundled floating_islands program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim." },
       { "id": "layout.street", "sinceApi": "1.30.0", "schemaVersion": 2, "state": "supported", "def": "#/$defs/program.lots", "note": "C37 (sinceApi 1.30.0, a placeholder set at merge): additive orientation member (ew | ns | auto) of street layouts." },
-      { "id": "layout.ring", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
-      { "id": "layout.spiral", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
-      { "id": "layout.grid", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
-      { "id": "layout.organic", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
+      { "id": "layout.ring", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "note": "FL: a closed street round an open hub, lots outside it facing in; central and landmark lots in the hub." },
+      { "id": "layout.spiral", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "note": "FL: an open street winding out from the hub (up to 3 turns), lots on its outer side; on a hill it climbs to the summit." },
+      { "id": "layout.grid", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "note": "FL: blocks of streets (avenues along orientation, cross streets), lots back to back facing the avenues, a central plaza block." },
+      { "id": "layout.organic", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "note": "FL: 2 to 4 crooked lanes growing out of a green, lots of mixed setbacks along them." },
       { "id": "layout.elevated", "sinceApi": "1.32.0", "schemaVersion": 0, "state": "reserved", "until": "7b", "note": "Lots carried at a level above the ground (canopy huts in trees, cliff ledges): Claude can write them now and they wait as unsupported (S-K1-6)." },
       { "id": "connector.street", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
       { "id": "connector.road", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
       { "id": "connector.path", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
       { "id": "connector.auto", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.auto", "limits": { "moves": ["walk", "stair", "ladder", "rope_bridge", "bridge", "tunnel"] } },
       { "id": "connector.bridge", "sinceApi": "1.34.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.bridge", "limits": { "span": [1, 32], "width": [1, 5], "villagerMinWidth": 2, "forms": ["beam", "arch"], "archSpan": [4, 24], "pierEvery": 8, "pierDepth": 24, "clearance": [0, 6], "approach": 32, "waterDepth": [0, 16] } },
-      { "id": "connector.tunnel", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.tunnel", "limits": { "length": [4, 64], "width": [1, 5], "height": [2, 5], "cover": 2, "fluidBuffer": 2, "approach": 32 } },
+      { "id": "connector.tunnel", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.tunnel", "limits": { "length": [4, 64], "width": [1, 5], "height": [2, 5], "cover": 2, "fluidBuffer": 2, "approach": 32, "volume": true } },
       { "id": "connector.channel", "sinceApi": "1.36.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.channel", "limits": { "width": [1, 7], "depth": [1, 4], "forms": ["moat", "course", "race", "ditch"] }, "note": "H: a level ring of water round a feature (channel.moat). HY: courses, races and ditches (channel.course, channel.race, channel.ditch): water that follows the land from a head to a tail, as a chain of level reaches joined by falls and spillways." },
       { "id": "connector.tube", "sinceApi": "1.33.0", "schemaVersion": 0, "state": "reserved", "until": "UW", "note": "An underwater glass passage through water (after H; it builds on H's shell rule); a recorded glass tunnel through water names it instead of connector.tunnel (S-T3-7)." },
       { "id": "connector.drawbridge", "sinceApi": "1.33.0", "schemaVersion": 0, "state": "reserved", "until": "mechanism", "note": "A moving bridge (redstone, a lifting deck): a connector.bridge whose params name a mechanism or movable answers this block (R18, S-T3-7)." },
@@ -138,7 +138,11 @@
       { "id": "form.pond", "sinceApi": "1.34.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.pond", "limits": { "depth": [1, 6], "lavaDepth": [1, 2], "area": [4, 1024], "fluids": ["water", "lava"], "edges": ["natural", "built"] }, "note": "HY: may feed a course (overflow) or receive one (a fall over the rim)." },
       { "id": "form.fountain", "sinceApi": "1.34.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.fountain", "limits": { "basin": [3, 9], "spout": [1, 4] }, "note": "HY: may feed a course (overflow) or receive one (a fall over the rim)." },
       { "id": "form.scatter", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "F2" },
-      { "id": "form.giant_tree", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "F3" },
+      { "id": "form.giant_tree", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.giant_tree", "limits": { "count": [1, 16], "height": [16, 64], "across": 32, "presets": ["oak", "spruce", "birch", "jungle", "dark_oak", "cherry", "mangrove", "pale_oak", "crimson", "warped"] } },
+      { "id": "form.giant_mushroom", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.giant_mushroom", "limits": { "count": [1, 16], "height": [8, 32], "presets": ["brown", "red"] } },
+      { "id": "form.coral", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.coral", "limits": { "count": [1, 8], "cover": [0, 1], "presets": ["mixed", "tube", "brain", "bubble", "fire", "horn"] }, "note": "Inside a plan body only (where.inside a pond, fountain, quay or moat part): written as the body's own cells." },
+      { "id": "form.roots", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.roots", "limits": { "count": [1, 8], "length": [2, 16], "presets": ["dirt", "mangrove"], "volume": true } },
+      { "id": "form.stalactites", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.stalactites", "limits": { "count": [1, 8], "length": [2, 16], "presets": ["small", "large"], "volume": true } },
       { "id": "form.hidden_room", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7b" },
       { "id": "form.crater", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7c", "note": "A free-standing crater form. A whole-region crater is already the crater_works template (program.crater_works)." },
       { "id": "form.hollow_mountain", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7c" },
@@ -158,7 +162,7 @@
       { "id": "locator.near", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
       { "id": "locator.adjacent", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
       { "id": "locator.along", "sinceApi": "1.29.0", "schemaVersion": 1, "state": "supported" },
-      { "id": "locator.around", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "FL", "note": "On a wall: wall.around, K1 (the wall's own member). This id stays reserved for zones and forms laid out as a ring (FL)." },
+      { "id": "locator.around", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "note": "On a wall: wall.around, K1 (the wall's own member). Zones: a ring street round the feature; forms: sites in the band." },
       { "id": "feature.water", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
       { "id": "feature.part", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
       { "id": "feature.protected", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
@@ -172,7 +176,7 @@
       { "id": "endpoint.region", "sinceApi": "1.27.0", "schemaVersion": 1, "state": "supported" },
       { "id": "endpoint.build", "sinceApi": "1.24.0", "schemaVersion": 1, "state": "supported", "note": "PT (C32): {build: id, port?: door | door_<n>}: a road ends on the door's apron (the cells outside it)." },
       { "id": "sketch.point", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
-      { "id": "sketch.outline", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
+      { "id": "sketch.outline", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "note": "polygon: the zone's mask; polyline: the street's line." },
       { "id": "dependency.after", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" }
     ]
   },
@@ -187,6 +191,7 @@
     "text500": { "type": "string", "pattern": "^[\\s\\S]{0,500}$" },
     "text2000": { "type": "string", "pattern": "^[\\s\\S]{0,2000}$" },
     "label": { "type": "string", "pattern": "^[\\s\\S]{1,80}$" },
+    "preset": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$", "description": "(F3) A species preset by name (the catalogue entry's limits.presets)." },
     "ext": { "type": "object", "description": "Opaque, namespaced, bounded (R7). Steward's hook on a part: Architect echoes it and keeps it in the artifact." },
     "intRange": {
       "oneOf": [
@@ -255,14 +260,14 @@
 
     "sketch": {
       "type": "object", "required": ["frame", "unit", "shape", "points"], "additionalProperties": false,
-      "description": "Optional relative sketch, never world coordinates. q64: 0..64 across the claim's x and z; block: blocks relative to frame anchor (+x east, +z south). v0 uses a point or the centroid of any shape as a soft position target (sketch.point); fitting an outline is sketch.outline (reserved, FL).",
+      "description": "Optional relative sketch, never world coordinates. q64: 0..64 across the claim's x and z; block: blocks relative to frame anchor (+x east, +z south). v0 uses a point or the centroid of any shape as a soft position target (sketch.point); with outline true the drawing itself is fitted (sketch.outline).",
       "properties": {
         "frame": { "enum": ["claim", "anchor"] },
         "anchor": { "$ref": "#/$defs/anchor" },
         "unit": { "enum": ["q64", "block"] },
         "shape": { "enum": ["point", "polyline", "polygon"] },
         "points": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer", "minimum": -512, "maximum": 512 } } },
-        "outline": { "type": "boolean", "description": "true: the outline itself is the requirement (sketch.outline, reserved until FL); false or absent: only its centroid and extent guide the fit." }
+        "outline": { "type": "boolean", "description": "true: the outline itself is the requirement (sketch.outline): a polygon is the zone's mask, a polyline the street's line; false or absent: only its centroid and extent guide the fit." }
       }
     },
 
@@ -315,7 +320,7 @@
           "side": { "enum": ["either", "left", "right", "toward_anchor", "away_from_anchor"] },
           "anchor": { "$ref": "#/$defs/anchor" },
           "distance": { "$ref": "#/$defs/intRange" } } } } },
-        { "type": "object", "required": ["around"], "additionalProperties": false, "properties": { "around": { "type": "object", "required": ["feature"], "additionalProperties": false, "properties": {
+        { "type": "object", "required": ["around"], "additionalProperties": false, "properties": { "around": { "type": "object", "required": ["feature"], "additionalProperties": false, "description": "A zone laid as a ring street round the feature (a part, water, a build or a protected area), offset into ring (default [6, 32]), lots outside facing it; closed false leaves out the arc nearest the claim's centre. A form: its sites in the band. On a wall it is the wall's own member.", "properties": {
           "feature": { "$ref": "#/$defs/feature" },
           "ring": { "$ref": "#/$defs/intRange" },
           "closed": { "type": "boolean" } } } } }
@@ -399,7 +404,7 @@
       "type": "object", "required": ["lots"], "additionalProperties": false,
       "properties": {
         "lots": { "type": "array", "minItems": 1, "maxItems": 40, "items": { "$ref": "#/$defs/lot" } },
-        "layout": { "enum": ["street", "ring", "spiral", "grid", "organic", "elevated"], "description": "How the lots are laid out. street: supported (flat_village's layout with its defaults). ring, spiral, grid and organic: reserved for slice FL, block ids layout.ring, layout.spiral, layout.grid and layout.organic; elevated (K1, reserved until 7b, layout.elevated): lots carried at a level above the ground (canopy huts in trees, cliff ledges); a lots program that names one answers unsupported {block: layout.<name>}. Write a free layout here, never as a connector kind (connector.ring_street, connector.grid) or a rule kind (rule.ring_layout)." },
+        "layout": { "enum": ["street", "ring", "spiral", "grid", "organic", "elevated"], "description": "How the lots are laid out. street (default): one straight street. ring: a closed street round a hub, lots facing in, central lots in the hub. spiral: a street winding out from the hub (up a hill to its top). grid: blocks of streets; only grid reads orientation (the avenues' axis). organic: crooked lanes from a green. Every lot is a rect with a cardinal front facing its street; elevated (K1, reserved until 7b, layout.elevated): lots carried at a level above the ground (canopy huts in trees, cliff ledges); answers unsupported {block: layout.elevated}. Write a free layout here, never as a connector kind (connector.ring_street, connector.grid) or a rule kind (rule.ring_layout)." },
         "shared": { "enum": ["square", "well", "none"] },
         "orientation": { "enum": ["ew", "ns", "auto"], "description": "Street orientation (C37, sinceApi 1.30.0): orientation \"ew\" | \"ns\" | \"auto\" (default auto: the layout picks the axis that places more lots, then scores higher, so it depends on the lot sizes). \"ew\" means the street runs east-west (along x), \"ns\" north-south (along z). \"ew\" and \"ns\" are strict: only that axis is tried, never a fallback, and lots that do not fit are unplaced as ever. If the forced axis places no lot where the other would, the part answers refused NO_ROOM (evidence.orientation names it) and wouldFit holds the same part with the other orientation." }
       }
@@ -423,7 +428,17 @@
         "levelBand": { "enum": ["low", "mid", "high", "any"], "description": "The claim's height tercile the district sits in (default any)." },
         "prefer": { "type": "array", "maxItems": 7, "items": { "enum": ["flat", "sloped", "wet", "dry", "near_water", "wooded", "open"] }, "description": "Candidate tags preferred (each missing one costs; never a refusal)." },
         "near": { "type": "array", "maxItems": 15, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,23}$" }, "description": "Other districts of this program it is placed near (after them, its cost the distance to them)." },
-        "shared": { "enum": ["square", "well"], "description": "Its shared space (default square when both sides are at least 40, else well)." }
+        "shared": { "enum": ["square", "well"], "description": "Its shared space (default square when both sides are at least 40, else well)." },
+        "terraces": { "$ref": "#/$defs/terraces" }
+      }
+    },
+    "terraces": {
+      "type": "object", "additionalProperties": false,
+      "description": "(S3, S-S3-1) Terraced: the lots are laid down the slope as steps, each lot (with its apron) on its own level, the levels rise apart (consecutive lots share a level where the ground allows); the street becomes routes between the lots' entrances (switchbacks and stairs within the zone's grade tolerance). Rims over 2 high are retained (wall: the bible's structure role, with a rail where the drop is over 3; blend: the relief blends them, a wall where its fill can't reach, noted). Write it on the zone (or district) for terraces inside a zone; form.terrace still stands beside zones. On a flat site: one level, noted. {} takes the defaults.",
+      "properties": {
+        "rise": { "type": "integer", "minimum": 2, "maximum": 6, "description": "Blocks between levels (default 3)." },
+        "retain": { "enum": ["wall", "blend"], "description": "How a rim over 2 high is held (default wall)." },
+        "stairs": { "type": "boolean", "description": "Stair flights on the routes between the levels (default true)." }
       }
     },
     "program": {
@@ -440,6 +455,7 @@
         "kind": { "const": "standard" },
         "farmPond": { "type": "boolean", "description": "(H, S-H-2) Every farm lot of the zone gets a farm pond (as a lot's farmPond). Off by default." },
         "irrigate": { "type": "boolean", "description": "(IRR, S-IRR-1) Every farm lot of the zone is irrigated (as a lot's irrigate; its own false wins). Off by default." },
+        "terraces": { "$ref": "#/$defs/terraces", "description": "(S3) The zone's lots on terraced levels down the slope (a lots program; placed as one district on its locator's candidates)." },
         "required": { "type": "boolean" },
         "label": { "$ref": "#/$defs/label" },
         "notes": { "$ref": "#/$defs/text500" },
@@ -757,6 +773,52 @@
       }
     },
 
+    "form.giant_tree": {
+      "type": "object", "required": ["id", "kind", "where"], "additionalProperties": false,
+      "description": "F3: a giant tree (log trunk and branches, persistent leaves; crimson and warped: stems, wart caps, shroomlight), on open land: never within 8 of a natural tree, never over a lot, street, path, wall or body.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "kind": { "const": "giant_tree" }, "required": { "type": "boolean" }, "label": { "$ref": "#/$defs/label" }, "notes": { "$ref": "#/$defs/text500" }, "ext": { "$ref": "#/$defs/ext" },
+        "where": { "$ref": "#/$defs/where" }, "count": { "type": "integer", "minimum": 1, "maximum": 16 }, "preset": { "$ref": "#/$defs/preset" }, "height": { "$ref": "#/$defs/intRange" },
+        "roots": { "type": "boolean", "description": "Buttress roots (default by preset)." }, "tolerance": { "$ref": "#/$defs/tolerance" }, "params": { "type": "object" }
+      }
+    },
+    "form.giant_mushroom": {
+      "type": "object", "required": ["id", "kind", "where"], "additionalProperties": false,
+      "description": "F3: a giant mushroom (stem, a flat brown or domed red cap), placed as giant_tree.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "kind": { "const": "giant_mushroom" }, "required": { "type": "boolean" }, "label": { "$ref": "#/$defs/label" }, "notes": { "$ref": "#/$defs/text500" }, "ext": { "$ref": "#/$defs/ext" },
+        "where": { "$ref": "#/$defs/where" }, "count": { "type": "integer", "minimum": 1, "maximum": 16 }, "preset": { "$ref": "#/$defs/preset" }, "height": { "$ref": "#/$defs/intRange" },
+        "tolerance": { "$ref": "#/$defs/tolerance" }, "params": { "type": "object" }
+      }
+    },
+    "form.coral": {
+      "type": "object", "required": ["id", "kind", "where"], "additionalProperties": false,
+      "description": "F3: live coral, fans and sea pickles on the bed of a plan body; where.inside names the pond, fountain, quay or moat.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "kind": { "const": "coral" }, "required": { "type": "boolean" }, "label": { "$ref": "#/$defs/label" }, "notes": { "$ref": "#/$defs/text500" }, "ext": { "$ref": "#/$defs/ext" },
+        "where": { "$ref": "#/$defs/where" }, "count": { "type": "integer", "minimum": 1, "maximum": 8 }, "preset": { "$ref": "#/$defs/preset" },
+        "cover": { "type": "number", "minimum": 0, "maximum": 1, "description": "Share of the bed (default 0.3)." }, "tolerance": { "$ref": "#/$defs/tolerance" }, "params": { "type": "object" }
+      }
+    },
+    "form.roots": {
+      "type": "object", "required": ["id", "kind", "where"], "additionalProperties": false,
+      "description": "F3: roots down a steep face or from a cave ceiling (rooted dirt, hanging roots; mangrove: mangrove roots); a ceiling needs a frozen volume.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "kind": { "const": "roots" }, "required": { "type": "boolean" }, "label": { "$ref": "#/$defs/label" }, "notes": { "$ref": "#/$defs/text500" }, "ext": { "$ref": "#/$defs/ext" },
+        "where": { "$ref": "#/$defs/where" }, "count": { "type": "integer", "minimum": 1, "maximum": 8 }, "preset": { "$ref": "#/$defs/preset" }, "height": { "$ref": "#/$defs/intRange" },
+        "tolerance": { "$ref": "#/$defs/tolerance" }, "params": { "type": "object" }
+      }
+    },
+    "form.stalactites": {
+      "type": "object", "required": ["id", "kind", "where"], "additionalProperties": false,
+      "description": "F3: dripstone cones from a cave ceiling and the floor under it, columns where they meet; needs a frozen volume.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "kind": { "const": "stalactites" }, "required": { "type": "boolean" }, "label": { "$ref": "#/$defs/label" }, "notes": { "$ref": "#/$defs/text500" }, "ext": { "$ref": "#/$defs/ext" },
+        "where": { "$ref": "#/$defs/where" }, "count": { "type": "integer", "minimum": 1, "maximum": 8 }, "preset": { "$ref": "#/$defs/preset" }, "height": { "$ref": "#/$defs/intRange" },
+        "tolerance": { "$ref": "#/$defs/tolerance" }, "params": { "type": "object" }
+      }
+    },
+
     "form.pond": {
       "type": "object", "required": ["id", "kind"], "additionalProperties": false,
       "description": "(H) A pond: still water (or a lined lava pit, fluid lava, 1..2 deep) sunk 1 under the lowest ground of its rim, depth (default 2) at the centre stepping up 1 per ring, in a 1-thick shell; edge natural (default: a bed of the bible's fluids.bed, plants in the shallows) or built (structure with a 1-high coping). Capped with ice where the biome freezes (ice: false refuses WATER {kind: freezes} unless lit). params read leniently (R21): depth, fluid, lake (a note); every other key noted.",
@@ -906,7 +968,7 @@
     "reason": {
       "type": "object", "required": ["code"], "additionalProperties": false,
       "properties": {
-        "code": { "enum": ["SCHEMA", "UNKNOWN_REF", "CYCLE", "EXTENSION_BOUND", "UNSUPPORTED", "NO_FEATURE", "NO_ROOM", "OUT_OF_CLAIM", "OVERLAP", "PROTECTED", "KEEP_OUT", "TOO_STEEP", "WATER", "UNREACHABLE", "TOLERANCE", "DEPENDENCY", "BUDGET", "CANCELLED", "LIMIT", "NO_GAP", "SPAN", "ANCHOR", "HEADROOM", "MOVER", "NO_COVER", "VOLUME", "LEAK", "FIRE", "VOCAB", "PALETTE"] },
+        "code": { "enum": ["SCHEMA", "UNKNOWN_REF", "CYCLE", "EXTENSION_BOUND", "UNSUPPORTED", "NO_FEATURE", "NO_ROOM", "OUT_OF_CLAIM", "OVERLAP", "PROTECTED", "KEEP_OUT", "TOO_STEEP", "WATER", "UNREACHABLE", "TOLERANCE", "DEPENDENCY", "BUDGET", "CANCELLED", "LIMIT", "NO_GAP", "SPAN", "ANCHOR", "HEADROOM", "MOVER", "NO_COVER", "VOLUME", "LEAK", "FIRE", "VOCAB", "PALETTE", "SURVIVAL"] },
         "message": { "type": "string" },
         "path": { "type": "string", "description": "SCHEMA: the JSON path of the first error." },
         "block": { "$ref": "#/$defs/blockId" },

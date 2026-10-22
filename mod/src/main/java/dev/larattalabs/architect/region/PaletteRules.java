@@ -127,6 +127,30 @@ public final class PaletteRules {
 		return out;
 	}
 
+	/** (6c RS) Every lot a plan binds to a library entry (lot id -> entry), under any zone's program, params or districts. */
+	public static Map<String, String> boundLots(JsonObject plan) {
+		Map<String, String> named = new TreeMap<>();
+		if (plan.get("zones") instanceof JsonArray zones) {
+			for (JsonElement z : zones) {
+				if (!(z instanceof JsonObject zo) || !(zo.get("program") instanceof JsonObject p)) {
+					continue;
+				}
+				lotsOf(p.get("lots"), named);
+				if (p.get("params") instanceof JsonObject pp) {
+					lotsOf(pp.get("lots"), named);
+				}
+				if (p.get("districts") instanceof JsonArray ds) {
+					for (JsonElement d : ds) {
+						if (d instanceof JsonObject dob) {
+							lotsOf(dob.get("lots"), named);
+						}
+					}
+				}
+			}
+		}
+		return named;
+	}
+
 	private static void lotsOf(@Nullable JsonElement lots, Map<String, String> into) {
 		if (lots instanceof JsonArray a) {
 			for (JsonElement l : a) {

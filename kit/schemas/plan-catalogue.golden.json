@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 9,
- "api": "1.37.0",
- "kitVersion": "0.38.0",
+ "catalogueVersion": 11,
+ "api": "1.38.0",
+ "kitVersion": "0.39.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -75,31 +75,31 @@
   },
   {
    "id": "layout.ring",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "FL"
+   "sinceApi": "1.38.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "FL: a closed street round an open hub, lots outside it facing in; central and landmark lots in the hub."
   },
   {
    "id": "layout.spiral",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "FL"
+   "sinceApi": "1.38.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "FL: an open street winding out from the hub (up to 3 turns), lots on its outer side; on a hill it climbs to the summit."
   },
   {
    "id": "layout.grid",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "FL"
+   "sinceApi": "1.38.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "FL: blocks of streets (avenues along orientation, cross streets), lots back to back facing the avenues, a central plaza block."
   },
   {
    "id": "layout.organic",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "FL"
+   "sinceApi": "1.38.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "FL: 2 to 4 crooked lanes growing out of a green, lots of mixed setbacks along them."
   },
   {
    "id": "layout.elevated",
@@ -199,7 +199,8 @@
     ],
     "cover": 2,
     "fluidBuffer": 2,
-    "approach": 32
+    "approach": 32,
+    "volume": true
    }
   },
   {
@@ -623,10 +624,119 @@
   },
   {
    "id": "form.giant_tree",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "F3"
+   "sinceApi": "1.38.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "count": [
+     1,
+     16
+    ],
+    "height": [
+     16,
+     64
+    ],
+    "across": 32,
+    "presets": [
+     "oak",
+     "spruce",
+     "birch",
+     "jungle",
+     "dark_oak",
+     "cherry",
+     "mangrove",
+     "pale_oak",
+     "crimson",
+     "warped"
+    ]
+   }
+  },
+  {
+   "id": "form.giant_mushroom",
+   "sinceApi": "1.38.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "count": [
+     1,
+     16
+    ],
+    "height": [
+     8,
+     32
+    ],
+    "presets": [
+     "brown",
+     "red"
+    ]
+   }
+  },
+  {
+   "id": "form.coral",
+   "sinceApi": "1.38.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "count": [
+     1,
+     8
+    ],
+    "cover": [
+     0,
+     1
+    ],
+    "presets": [
+     "mixed",
+     "tube",
+     "brain",
+     "bubble",
+     "fire",
+     "horn"
+    ]
+   },
+   "note": "Inside a plan body only (where.inside a pond, fountain, quay or moat part): written as the body's own cells."
+  },
+  {
+   "id": "form.roots",
+   "sinceApi": "1.38.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "count": [
+     1,
+     8
+    ],
+    "length": [
+     2,
+     16
+    ],
+    "presets": [
+     "dirt",
+     "mangrove"
+    ],
+    "volume": true
+   }
+  },
+  {
+   "id": "form.stalactites",
+   "sinceApi": "1.38.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "count": [
+     1,
+     8
+    ],
+    "length": [
+     2,
+     16
+    ],
+    "presets": [
+     "small",
+     "large"
+    ],
+    "volume": true
+   }
   },
   {
    "id": "form.hidden_room",
@@ -802,11 +912,10 @@
   },
   {
    "id": "locator.around",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "FL",
-   "note": "On a wall: wall.around, K1 (the wall's own member). This id stays reserved for zones and forms laid out as a ring (FL)."
+   "sinceApi": "1.38.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "On a wall: wall.around, K1 (the wall's own member). Zones: a ring street round the feature; forms: sites in the band."
   },
   {
    "id": "feature.water",
@@ -891,10 +1000,10 @@
   },
   {
    "id": "sketch.outline",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "FL"
+   "sinceApi": "1.38.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "polygon: the zone's mask; polyline: the street's line."
   },
   {
    "id": "dependency.after",

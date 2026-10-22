@@ -71,3 +71,33 @@ export const COSTS = Object.freeze({
   'minecraft:water_cauldron': 'minecraft:cauldron',
   'minecraft:weeping_vines_plant': 'minecraft:weeping_vines',
 });
+
+/**
+ * (6c RS, N-RS-3) Natural blocks a terrain kind's write never gets free in survival (survival.json's `free` rule over the voxel table):
+ * ores, amethyst, obsidian, ancient debris and the natural blocks of tier precious. The region evaluator (kit/lib/region/survival.mjs)
+ * pays them.
+ */
+export const FREE_EXCEPT = new Set([
+  'minecraft:amethyst_block',
+  'minecraft:budding_amethyst',
+  'minecraft:coal_ore',
+  'minecraft:copper_ore',
+  'minecraft:crying_obsidian',
+  'minecraft:deepslate_coal_ore',
+  'minecraft:deepslate_copper_ore',
+  'minecraft:deepslate_diamond_ore',
+  'minecraft:deepslate_emerald_ore',
+  'minecraft:deepslate_gold_ore',
+  'minecraft:deepslate_iron_ore',
+  'minecraft:deepslate_lapis_ore',
+  'minecraft:deepslate_redstone_ore',
+  'minecraft:diamond_ore',
+  'minecraft:emerald_ore',
+  'minecraft:gold_ore',
+  'minecraft:iron_ore',
+  'minecraft:lapis_ore',
+  'minecraft:nether_gold_ore',
+  'minecraft:nether_quartz_ore',
+  'minecraft:obsidian',
+  'minecraft:redstone_ore',
+]);

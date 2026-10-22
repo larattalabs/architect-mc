@@ -1,0 +1,27 @@
+{
+ "about": "(6c RS, \u00a713 item 12) C38's offer in survival: one part, a wall round a standing region (rs02's, its id given by the gate: ${region}), checked and realised alone, undone alone, the town untouched",
+ "on": "flat",
+ "game": true,
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "rs05_offer",
+  "connectors": [
+   {
+    "id": "offer_wall",
+    "kind": "wall",
+    "where": {
+     "around": {
+      "feature": {
+       "region": "${region}"
+      },
+      "ring": [
+       10,
+       14
+      ]
+     }
+    },
+    "height": 4
+   }
+  ]
+ }
+}

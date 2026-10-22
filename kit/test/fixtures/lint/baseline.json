@@ -27,28 +27,28 @@
    "case": "s7",
    "rule": "L-LAMP",
    "count": 1,
-   "why": "S7 natural: square lamp lamp_1 (1552,67,-3075) 5 from the nearest light; main predates FL's look fixes (slice/FL f14024b1, not merged at this branch: lamps 6 apart settlement-wide, the 4e lanterns of a zone's streets replaced by props kept LAMP_GAP from every other lamp). Noah flagged exactly this ('adjacent lamps', L3) in FL's gallery; FL's merge should clear it: delete the entry then, and a count that moves FAILs until it is"
+   "why": "S7 natural: square lamp lamp_1 (1552,67,-3075) 5 from the nearest light; FL's look fix L3 (slice/FL f14024b1: lamps 6 apart, the 4e lanterns of a zone's streets replaced by props kept LAMP_GAP from every other lamp) is merged (batch v0.41.0) but applies to free zones only, by FL's design (lampGap is passed only in a plan with a free zone, so every plan without one stays byte-identical: FL §8). This plan has no free zone, so its count stands. Noah flagged exactly this ('adjacent lamps', L3) in FL's gallery; extending the gap to V/D streets moves every street fixture and is queued (PLAN 'Queued from the batch v0.41.0 integration'); delete the entry when that lands"
   },
   {
    "lint": "look",
    "case": "s7-flat",
    "rule": "L-LAMP",
    "count": 1,
-   "why": "S7 flat: a 4e street lantern 3 from the square's lamp at (1527,66,-3073); main predates FL's look fixes (slice/FL f14024b1, not merged at this branch: lamps 6 apart settlement-wide, the 4e lanterns of a zone's streets replaced by props kept LAMP_GAP from every other lamp). Noah flagged exactly this ('adjacent lamps', L3) in FL's gallery; FL's merge should clear it: delete the entry then, and a count that moves FAILs until it is"
+   "why": "S7 flat: a 4e street lantern 3 from the square's lamp at (1527,66,-3073); FL's look fix L3 (slice/FL f14024b1: lamps 6 apart, the 4e lanterns of a zone's streets replaced by props kept LAMP_GAP from every other lamp) is merged (batch v0.41.0) but applies to free zones only, by FL's design (lampGap is passed only in a plan with a free zone, so every plan without one stays byte-identical: FL §8). This plan has no free zone, so its count stands. Noah flagged exactly this ('adjacent lamps', L3) in FL's gallery; extending the gap to V/D streets moves every street fixture and is queued (PLAN 'Queued from the batch v0.41.0 integration'); delete the entry when that lands"
   },
   {
    "lint": "look",
    "case": "districts_demo",
    "rule": "L-LAMP",
    "count": 20,
-   "why": "districts_demo natural: the districts' street lanterns and square/route lamps as close as 1; main predates FL's look fixes (slice/FL f14024b1, not merged at this branch: lamps 6 apart settlement-wide, the 4e lanterns of a zone's streets replaced by props kept LAMP_GAP from every other lamp). Noah flagged exactly this ('adjacent lamps', L3) in FL's gallery; FL's merge should clear it: delete the entry then, and a count that moves FAILs until it is"
+   "why": "districts_demo natural: the districts' street lanterns and square/route lamps as close as 1; FL's look fix L3 (slice/FL f14024b1: lamps 6 apart, the 4e lanterns of a zone's streets replaced by props kept LAMP_GAP from every other lamp) is merged (batch v0.41.0) but applies to free zones only, by FL's design (lampGap is passed only in a plan with a free zone, so every plan without one stays byte-identical: FL §8). This plan has no free zone, so its count stands. Noah flagged exactly this ('adjacent lamps', L3) in FL's gallery; extending the gap to V/D streets moves every street fixture and is queued (PLAN 'Queued from the batch v0.41.0 integration'); delete the entry when that lands"
   },
   {
    "lint": "look",
    "case": "districts_demo-flat",
    "rule": "L-LAMP",
    "count": 9,
-   "why": "districts_demo flat: as natural, closest 1; main predates FL's look fixes (slice/FL f14024b1, not merged at this branch: lamps 6 apart settlement-wide, the 4e lanterns of a zone's streets replaced by props kept LAMP_GAP from every other lamp). Noah flagged exactly this ('adjacent lamps', L3) in FL's gallery; FL's merge should clear it: delete the entry then, and a count that moves FAILs until it is"
+   "why": "districts_demo flat: as natural, closest 1; FL's look fix L3 (slice/FL f14024b1: lamps 6 apart, the 4e lanterns of a zone's streets replaced by props kept LAMP_GAP from every other lamp) is merged (batch v0.41.0) but applies to free zones only, by FL's design (lampGap is passed only in a plan with a free zone, so every plan without one stays byte-identical: FL §8). This plan has no free zone, so its count stands. Noah flagged exactly this ('adjacent lamps', L3) in FL's gallery; extending the gap to V/D streets moves every street fixture and is queued (PLAN 'Queued from the batch v0.41.0 integration'); delete the entry when that lands"
   },
   {
    "lint": "look",

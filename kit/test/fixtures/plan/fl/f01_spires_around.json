@@ -1,0 +1,55 @@
+{
+  "about": "(6c FL, §4.1) 6 rock spires around a zone, evenly by angle",
+  "on": "asks",
+  "expect": {
+    "part": "spires",
+    "class": "fits",
+    "sites": 6
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "fl_f01",
+    "zones": [
+      {
+        "id": "keep",
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 4
+          }
+        },
+        "program": {
+          "lots": [
+            {
+              "id": "k1",
+              "type": "tower",
+              "size": [
+                13,
+                13
+              ],
+              "landmark": true
+            }
+          ]
+        }
+      }
+    ],
+    "forms": [
+      {
+        "id": "spires",
+        "kind": "rock_spire",
+        "count": 6,
+        "where": {
+          "around": {
+            "feature": {
+              "part": "keep"
+            },
+            "ring": [
+              8,
+              40
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

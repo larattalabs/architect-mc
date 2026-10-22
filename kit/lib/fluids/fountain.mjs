@@ -20,6 +20,7 @@ import { bodiesMark, bodiesRollback, centre, fluidRolesOf, grow, intIn, linesBod
   rectOf, rectSurvey, scanRects, shellBlock, sketchPoint, spawnAvoid, takenRects, volumeAnswer, volumeKeep, refusal, leakRefusal } from './place.mjs';
 import { shellCheck, bodyAnswer, bodyId, iceFor, naturalOf, shellStatesOf } from './pond.mjs';
 import { overflowsOn } from './hooks.mjs';
+import { coralRequests } from '../forms/coral.mjs';
 
 const k3 = (x, y, z) => `${x},${y},${z}`;
 /** (6c HY, §1.5) A fountain may feed a course (an overflow from its basin) or receive one (a fall over its coping). */
@@ -119,7 +120,7 @@ export function emitFountain(r, o) {
   const exits = [[cx, wy + 1, cz - h - 1], [cx, wy + 1, cz + h + 1]];
   // ((6c HY, §1.5) a course leaving the fountain: its overflows, only when there are any)
   const ov = Array.isArray(o.overflow) && o.overflow.length ? { overflow: o.overflow, raised: true } : {};
-  const basin = r.fluidBody(basinCells, { id: o.id, part: o.part ?? null, kind: 'fountain', stage: o.stage, level: wy, shellRole, solid: pillar, ice: o.ice ?? null, outlets: exits, ...ov });
+  const basin = r.fluidBody(basinCells, { id: o.id, part: o.part ?? null, kind: 'fountain', stage: o.stage, level: wy, shellRole, solid: pillar, ice: o.ice ?? null, outlets: exits, ...ov, ...(Array.isArray(o.decor) && o.decor.length ? { decor: o.decor } : {}) });
   const basinSet = new Set(basinCells.map((c) => k3(...c)));
   const outlets = [[cx + 1, top, cz], [cx - 1, top, cz], [cx, top, cz + 1], [cx, top, cz - 1]];
   const spout = r.fluidBody([[cx, top, cz]], { id: `${o.id}_spout`.slice(0, 48), part: o.part ?? null, kind: 'fountain', stage: o.stage, level: top, outlets, shellRole: spoutB, solid: pillar,
@@ -158,7 +159,7 @@ export function emit(K, p, res) {
     const m = bodiesMark(r);
     const cp = K.checkpoint();
     try {
-      const out = emitFountain(r, { id: bodyId(p.id), part: p.id, rect: res.rect, basin: sp.basin, spout: sp.spout, thick, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice, overflow: overflowsOn(K, p.id) });
+      const out = emitFountain(r, { id: bodyId(p.id), part: p.id, rect: res.rect, basin: sp.basin, spout: sp.spout, thick, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice, overflow: overflowsOn(K, p.id), decor: coralRequests(K, p.id) });
       for (const rec of [out.basin, out.spout]) {
         const hit = reachMeetsKeep(r, env, rec, { volClass: vk });
         if (hit) throw leakRefusal(rec, hit);

@@ -54,6 +54,8 @@ test('item 1: extension/ fixtures (at least 6) answer unsupported {block} with t
     for (const e of want) {
       const a = part(r, e.part);
       if (e.class === 'malformed') { assert.equal(a.class, 'malformed', f.name); assert.equal(a.reasons[0].code, e.code, f.name); continue; }
+      // ((6c FL) moved by name: e07's ring and e14's outline shipped in FL, so they answer (the class their fixture names))
+      if (e.class === 'fits' || e.class === 'adjusted') { assert.equal(a.class, e.class, `${f.name} ${e.part}: ${a.class} ${JSON.stringify(a.reasons ?? a.deviations)}`); continue; }
       assert.equal(a.class, 'unsupported', `${f.name} ${e.part}: ${a.class}`);
       assert.equal(a.block, e.block, `${f.name} ${e.part}`);
       assert.equal(a.reasons[0].block, e.block);

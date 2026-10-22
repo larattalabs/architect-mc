@@ -136,6 +136,8 @@ public final class Builder {
 		Stockpiles.init(); // 6c Y (C24): settlement stockpiles
 		ServerTickEvents.END_SERVER_TICK.register(Stockpiles::tick);
 		SiteWaits.init(); // 6c Y2 (C25): waiting status
+		RegionFreeDrops.init(); // 6c RS (N-RS-2): a survival region's free cells drop nothing
+		RegionTargets.init(); // 6c RS (§10): a survival region's free pass rescanned at the world's start
 		ServerLifecycleEvents.SERVER_STARTED.register(s -> server = s);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			RUNS.clear();
@@ -406,11 +408,28 @@ public final class Builder {
 		 * weathering stage of the target's chain, waxed or scraped, is the target's block: built, never re-queued or charged again.
 		 */
 		boolean matches(BlockState now, int i) {
+			if (soilSame && soil(now) && soil(target[i])) {
+				return true;
+			}
 			if (swap.get(i) && old != null && old[i] != null && old[i].is(target[i].getBlock())) {
 				// a swap that keeps the block (a re-oriented stair, another slab type): built when the state is the target's
 				return dev.larattalabs.architect.journal.StillOurs.holds(now, null, target[i], null);
 			}
+			// (6c RS-b, S-CU-3) a farmland cell the builder wrote (built already) that dried or was trampled to dirt stays built: it costs
+			// dirt either way, and the builder could never write over the dirt (not free), so the cell would wait for ever and its dirt
+			// fall out of the stock's sum. Never a cell not built yet: farmland planned over the ground's own dirt is still to be written.
+			if (built.get(i) && target[i].is(net.minecraft.world.level.block.Blocks.FARMLAND) && now.is(net.minecraft.world.level.block.Blocks.DIRT)) {
+				return true;
+			}
 			return Copper.is(now, target[i].getBlock());
+		}
+
+		/** (6c RS) A built survival region target's run: soil cells (dirt, grass, podzol, mycelium, farmland) are one block (grass spreads, farmland dries). */
+		boolean soilSame;
+
+		static boolean soil(BlockState s) {
+			return s.is(net.minecraft.world.level.block.Blocks.DIRT) || s.is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK) || s.is(
+				net.minecraft.world.level.block.Blocks.PODZOL) || s.is(net.minecraft.world.level.block.Blocks.MYCELIUM) || s.is(net.minecraft.world.level.block.Blocks.FARMLAND);
 		}
 
 		/**
@@ -418,7 +437,7 @@ public final class Builder {
 		 * copper chain, waxed or scraped) the items of the block standing: the refund pays what is there.
 		 */
 		List<SurvivalItems.Cost> refundCost(BlockState now, int i) {
-			return now.is(target[i].getBlock()) ? cost.get(i) : Cells.cost(now);
+			return now.is(target[i].getBlock()) || soilSame && soil(now) && soil(target[i]) ? cost.get(i) : Cells.cost(now);
 		}
 
 		/** Derives {@link #built} from the world for every queued cell in a loaded chunk. Returns cells that changed. */
@@ -802,6 +821,13 @@ public final class Builder {
 		// the queued cells: what the instant placement wrote that is not air (template, foundation fill, approach)
 		List<BlockPos> cells = new ArrayList<>();
 		Set<Long> seen = new HashSet<>();
+		// (6c IRR / RS) a lot's irrigation cells (LotMask) were never the site's: the instant placement dropped them, so they are never
+		// queued (else the conversion clears the region's banks and beds to air, and a survival region's target there never finishes)
+		Site rec0 = Sites.get(id);
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet masked = rec0 == null ? null : LotMask.cells(rec0.ext());
+		if (masked != null) {
+			masked.forEach((long q) -> seen.add(q));
+		}
 		GhostModel m = built.grid().ghost(built.turns());
 		BlockState[] tstates = built.grid().states();
 		for (int i = 0; i < m.count(); i++) {

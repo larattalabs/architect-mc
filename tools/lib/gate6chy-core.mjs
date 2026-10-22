@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import * as P3 from './p3-tier.mjs';
 
 /**
@@ -17,7 +18,7 @@ import * as P3 from './p3-tier.mjs';
 // reserved list) and e05 (its reserved rule is rule.shape's draft now); tools/lib/gate6cvoc-c.mjs UNCHANGED_EXCEPTIONS)
 export const UNCHANGED_EXCEPTIONS = Object.freeze(['h/r08_course.json', 'extension/e15_every_reserved_a.json', 'valid/v51_voc_forge.json', 'asks/desert_jungle_wall.json',
   'asks/hidden_village.json', 'asks/mage_exiles.json', 'asks/old_new_town.json', 'asks/one_block.json', 'asks/rival_families.json', 'asks/row_houses.json',
-  'extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json']);
+  'extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json', ...FL_MOVED.filter((n) => n !== 'extension/e15_every_reserved_a.json')]);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const k3 = (c) => `${c[0]},${c[1]},${c[2]}`;
@@ -88,13 +89,14 @@ export const FLAT = 'G6B Flat Base';
 /** hy_core_demo's claim on the flat world (96 x 64). */
 export const CLAIM = [9300, 9000, 9395, 9063];
 
-/** A course IR's bodies, cells unpacked (natural joins as cells; plan joins, lining, after, grate). */
+/** A course IR's bodies, cells unpacked (natural joins as cells; plan joins, lining, after, grate; (6c F3-c) decor [[x, y, z, state]]). */
 export function bodiesOf(ir) {
   const cellsOf = (runs) => { const out = []; for (const [x, z, y0, y1] of runs ?? []) for (let y = y0; y <= y1; y++) out.push([x, y, z]); return out; };
   const out = [];
   for (const p of ir.parts) for (const o of p.ops) if (o.op === 'fluid') {
     const nat = (o.joins ?? []).filter((j) => Array.isArray(j)), plan = (o.joins ?? []).filter((j) => j && !Array.isArray(j));
-    out.push({ id: o.id, part: o.part, fluid: o.fluid, level: o.level, cells: cellsOf(o.cells), spill: cellsOf(o.spill), joins: cellsOf(nat), planJoins: plan.map((q) => ({ body: q.body, cells: cellsOf(q.cells) })), watch: cellsOf(o.watch), ice: cellsOf(o.ice), shell: cellsOf(o.shell), lining: cellsOf(o.lining), grate: cellsOf(o.grate), after: o.after ?? [], predicted: o.predicted ?? [], settleTicks: o.settleTicks });
+    out.push({ id: o.id, part: o.part, fluid: o.fluid, level: o.level, cells: cellsOf(o.cells), spill: cellsOf(o.spill), joins: cellsOf(nat), planJoins: plan.map((q) => ({ body: q.body, cells: cellsOf(q.cells) })), watch: cellsOf(o.watch), ice: cellsOf(o.ice), shell: cellsOf(o.shell), lining: cellsOf(o.lining), grate: cellsOf(o.grate), after: o.after ?? [], predicted: o.predicted ?? [], settleTicks: o.settleTicks,
+      decor: (o.decor ?? []).flatMap((d) => cellsOf(d.cells).map((c) => [...c, d.state])) });
   }
   return out;
 }
@@ -109,6 +111,7 @@ export function boxAround(cells, g = 2) {
 /**
  * A body's census against its prediction over its watch box: {ok, sources, flowing, mismatch, outside (fluid of its kind outside its
  * cells, spill and joins that `before` did not hold and no sibling plans), ticks, fluids}. Grate cells hold a waterlogged source.
+ * (6c F3-c) A body cell of the decor set holds its own decor, waterlogged: a source (`decor` counts them).
  */
 export async function censusOf(ctx, body, before = null, siblings = []) {
   const box = boxAround([...body.cells, ...body.shell, ...body.lining, ...body.spill, ...body.watch], 2);
@@ -117,6 +120,8 @@ export async function censusOf(ctx, body, before = null, siblings = []) {
   const pred = new Map(body.predicted.map(([x, y, z, lv]) => [`${x},${y},${z}`, lv]));
   const others = new Set(siblings.filter((o) => o.id !== body.id).flatMap((o) => [...o.cells.map(k3), ...o.ice.map(k3), ...o.predicted.map(k3)]));
   const own = new Set(body.cells.map(k3)), ice = new Set(body.ice.map(k3)), grate = new Set(body.grate.map(k3));
+  const decor = new Map((body.decor ?? []).map((c) => [k3(c), c[3]]));
+  let decorSources = 0;
   const declared = new Set([...body.cells, ...body.spill, ...body.joins, ...body.planJoins.flatMap((q) => q.cells)].map(k3));
   const kind = body.fluid === 'lava' ? 'minecraft:lava' : 'minecraft:water';
   const levelOf = (s) => { const m = /level=(\d+)/.exec(s); return m ? Number(m[1]) : 0; };
@@ -126,6 +131,7 @@ export async function censusOf(ctx, body, before = null, siblings = []) {
     const s = now.get(k);
     if (ice.has(k)) { if (s !== 'minecraft:ice') mismatch.push([k, s ?? 'none', 'ice']); continue; }
     if (grate.has(k)) { if (!s || !/^minecraft:iron_bars\[.*waterlogged=true/.test(s)) mismatch.push([k, s ?? 'none', 'grate']); else sources++; continue; }
+    if (decor.has(k)) { if (s !== decor.get(k)) mismatch.push([k, s ?? 'none', 'decor']); else { sources++; decorSources++; } continue; }
     if (!s || !s.startsWith(kind) || levelOf(s) !== 0) mismatch.push([k, s ?? 'none', 'source']); else sources++;
   }
   for (const [k, lv] of pred) {
@@ -137,7 +143,7 @@ export async function censusOf(ctx, body, before = null, siblings = []) {
     if (before && before.has(k)) continue;
     if (declared.has(k)) mismatch.push([k, s, 'none']); else outside.push([k, s]);
   }
-  return { ok: !mismatch.length && !outside.length, sources, flowing, mismatch: mismatch.slice(0, 20), outside: outside.slice(0, 20), outsideCount: outside.length, ticks: c.ticks.length, box, fluids: now };
+  return { ok: !mismatch.length && !outside.length, sources, decor: decorSources, flowing, mismatch: mismatch.slice(0, 20), outside: outside.slice(0, 20), outsideCount: outside.length, ticks: c.ticks.length, box, fluids: now };
 }
 
 /** The flat world's ground at the claim (superflat: grass at -61). */

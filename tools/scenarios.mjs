@@ -58,6 +58,137 @@ export function evidenceSha(dir) {
   return { sha: sha256(lines.join('\n') + '\n'), files: lines };
 }
 
+/**
+ * (fix/voc-natural; here since 6c S3, the rule unchanged) voc-natural's item 9 and S3's natural run: the world class for S3's own fluids still settling: F2's `distant` rule (`distantOf` below)
+ * restricted to flowing fluid. S3's fresh chunks carry worldgen springs (a cave stream at x 3752-3760, y 37-48, z -924..-914; lava at
+ * y -2, x 3787-3789) whose flow front can cross the snapshot: with no region at all the same cells go air -> flowing water within 15 s
+ * of a snapshot. An unclassified (`none`) mismatch is classed `farfluid` only when
+ *   - kind: was and now are each air, cave air, or a non-source water or lava (level 1-15), and at least one side is that fluid
+ *     (a source block on either side, or any other block, is never classed);
+ *   - place: a cell the plan never writes, in no lot box, and 8 or more (Manhattan) from every written cell (the undo writes only the
+ *     journal's cells, which are the written cells and what stood on them).
+ * Pure: `written` is a Set of "x,y,z" keys, `lots` the IR's lots. Returns the diff with the moved cells' class and the counts updated.
+ */
+export function farFluidOf(diff, { written, lots = [] }) {
+  if (!diff || !(diff.classes?.none > 0)) return diff;
+  const empty = (st) => /^minecraft:(air|cave_air)$/.test(String(st));
+  const flowing = (st) => /^minecraft:(water|lava)\[level=([1-9]|1[0-5])\]$/.test(String(st));
+  const kind = (m) => (empty(m.was) || flowing(m.was)) && (empty(m.now) || flowing(m.now)) && (flowing(m.was) || flowing(m.now));
+  const inLot = (x, y, z) => lots.some((l) => x >= l.box.minX && x <= l.box.maxX && y >= l.box.minY && y <= l.box.maxY && z >= l.box.minZ && z <= l.box.maxZ);
+  const near = (x, y, z) => {
+    for (let dx = -7; dx <= 7; dx++) for (let dy = -7 + Math.abs(dx); dy <= 7 - Math.abs(dx); dy++) {
+      const r = 7 - Math.abs(dx) - Math.abs(dy);
+      for (let dz = -r; dz <= r; dz++) if (written.has(`${x + dx},${y + dy},${z + dz}`)) return true;
+    }
+    return false;
+  };
+  const moved = new Set((diff.list ?? []).filter((m) => {
+    if (m.class !== 'none' || !kind(m)) return false;
+    const [x, y, z] = String(m.pos).split(',').map(Number);
+    return !written.has(`${x},${y},${z}`) && !inLot(x, y, z) && !near(x, y, z);
+  }));
+  if (!moved.size) return diff;
+  const classes = { ...diff.classes, none: diff.classes.none - moved.size, farfluid: (diff.classes.farfluid ?? 0) + moved.size };
+  if (!classes.none) delete classes.none;
+  return { ...diff, classes, list: diff.list.map((m) => (moved.has(m) ? { ...m, class: 'farfluid' } : m)) };
+}
+
+/**
+ * (6c S3, CONTRACT S3 §6) The mod's world classes `growth`, `grazed` and `live` only at unwritten cells (K1b's and T3's bridge rule): a
+ * mismatch of those classes at a cell the plan wrote (the virtual world's F_WRITTEN) is the undo's, so it goes back to `none` (a
+ * grass/dirt flip on a restored pad counts). Pure: (diff, vw, F_WRITTEN) -> the diff, its counts updated.
+ */
+export function s3Unwritten(diff, vw, F_WRITTEN) {
+  if (!diff?.list?.length) return diff;
+  const back = new Set(diff.list.filter((m) => ['growth', 'grazed', 'live'].includes(m.class) && (vw.flags(...String(m.pos).split(',').map(Number)) & F_WRITTEN)));
+  if (!back.size) return diff;
+  const classes = { ...diff.classes };
+  for (const m of back) { classes[m.class] -= 1; if (!classes[m.class]) delete classes[m.class]; classes.none = (classes.none ?? 0) + 1; }
+  return { ...diff, classes, list: diff.list.map((m) => (back.has(m) ? { ...m, class: 'none', was_class: m.class } : m)) };
+}
+
+/**
+ * (6c S3, H §4.5) Nothing within 6 cells (3D, Chebyshev) of a fluid body's cells, shell or watch is classed: every world class there
+ * goes back to `none` (a body's undo error never hides behind a world class). Pure: (diff, ir) -> the diff, its counts updated.
+ */
+export function s3NearBodies(diff, ir) {
+  if (!diff?.list?.length) return diff;
+  const runs = [];
+  for (const p of ir.parts ?? []) for (const o of p.ops ?? []) if (o.op === 'fluid') for (const set of ['cells', 'shell', 'watch']) for (const q of o[set] ?? []) runs.push(q);
+  if (!runs.length) return diff;
+  const near = (x, y, z) => runs.some(([rx, rz, y0, y1]) => Math.abs(rx - x) <= 6 && Math.abs(rz - z) <= 6 && y >= y0 - 6 && y <= y1 + 6);
+  const back = new Set(diff.list.filter((m) => m.class !== 'none' && near(...String(m.pos).split(',').map(Number))));
+  if (!back.size) return diff;
+  const classes = { ...diff.classes };
+  for (const m of back) { classes[m.class] -= 1; if (!classes[m.class]) delete classes[m.class]; classes.none = (classes.none ?? 0) + 1; }
+  return { ...diff, classes, list: diff.list.map((m) => (back.has(m) ? { ...m, class: 'none', was_class: m.class } : m)) };
+}
+
+/** (6c F1) The world's own freezing (a class body; scenarios.mjs `freezeOf` picks the scenarios): an unclassified mismatch where still water
+ * became ice (or a snow layer fell) at a cell the plan never writes is classed `freeze`. Pure. */
+export function freezeClass(e, vw, F_WRITTEN) {
+  const moved = (e.list ?? []).filter((m) => m.class === 'none' && !(vw.flags(...m.pos.split(',').map(Number)) & F_WRITTEN)
+    && ((/^minecraft:water/.test(m.was) && /^minecraft:ice$/.test(m.now)) || (/air$/.test(m.was) && /^minecraft:snow\[/.test(m.now))));
+  if (!moved.length) return e;
+  const classes = { ...e.classes, none: e.classes.none - moved.length, freeze: (e.classes.freeze ?? 0) + moved.length };
+  return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'freeze' } : m)) };
+}
+
+/** (6c H §4.5) D2's rule for `flow`: a cell more than 6 columns from every written column (`far`), or more than 8 below the surveyed
+ * ground and every written cell within 6 columns (`deep`). Returns (x, y, z) -> boolean (the written columns read once). */
+export function awayFromWrites(vw, sampleIndexOf) {
+  let writtenCols = null;
+  return (x, y, z) => {
+    if (!writtenCols) {
+      writtenCols = new Map();
+      vw.eachWritten((wx, wy, wz) => { const k = `${wx},${wz}`; writtenCols.set(k, Math.min(writtenCols.get(k) ?? Infinity, wy)); });
+    }
+    let near = Infinity, nearest = Infinity;
+    for (let dx = -6; dx <= 6; dx++) for (let dz = -6; dz <= 6; dz++) { const lo = writtenCols.get(`${x + dx},${z + dz}`); if (lo !== undefined) { near = Math.min(near, lo); nearest = 0; } }
+    if (nearest === Infinity) return true; // far
+    const g = vw.survey ? vw.survey.ground[sampleIndexOf(vw.survey, x, z)] : Infinity;
+    return y < g - 8 && y < near - 8; // deep
+  };
+}
+
+/** (6c T1; H §4.5's narrowing) The world's flowing water (`flowOf` picks the scenarios): flowing water in the snapshot, air now, at an
+ * unwritten cell `away` from the writes, is classed `flow`. Pure. */
+export function flowClass(e, vw, F_WRITTEN, away) {
+  const moved = (e.list ?? []).filter((m) => m.class === 'none' && /^minecraft:water\[level=[1-9]/.test(m.was) && /^minecraft:(air|cave_air)$/.test(m.now)
+    && !(vw.flags(...m.pos.split(',').map(Number)) & F_WRITTEN) && away(...m.pos.split(',').map(Number)));
+  if (!moved.length) return e;
+  const classes = { ...e.classes, none: e.classes.none - moved.length, flow: (e.classes.flow ?? 0) + moved.length };
+  return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'flow' } : m)) };
+}
+
+/** (6c T2) The region's lamps melting the world's snow (`meltOf` picks the scenarios): a snow layer in the snapshot, air now, at an
+ * unwritten cell lit over 11 by a light the plan placed (unoccluded), is classed `melt`. Pure. */
+export function meltClass(e, vw, F_WRITTEN) {
+  const lights = [];
+  vw.eachWritten((x, y, z, idx) => { const em = vw.pal.emit[idx]; if (em > 11) lights.push([x, y, z, em]); });
+  const lit = (x, y, z) => lights.some(([lx, ly, lz, em]) => em - (Math.abs(lx - x) + Math.abs(ly - y) + Math.abs(lz - z)) > 11);
+  const moved = (e.list ?? []).filter((m) => { if (m.class !== 'none' || !/^minecraft:snow\[/.test(m.was) || !/^minecraft:(air|cave_air)$/.test(m.now)) return false; const [x, y, z] = m.pos.split(',').map(Number); return !(vw.flags(x, y, z) & F_WRITTEN) && lit(x, y, z); });
+  if (!moved.length) return e;
+  const classes = { ...e.classes, none: e.classes.none - moved.length, melt: (e.classes.melt ?? 0) + moved.length };
+  return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'melt' } : m)) };
+}
+
+/**
+ * (6c S3, CONTRACT S3 §6) S3's E-normal classes on a diff, in one place (the natural scenario run and the s3-plan copy): the mod's growth,
+ * grazed and live only at unwritten cells; then `freeze`, `flow` (D2's far and deep) and `melt` by kind at unwritten cells; `farfluid`
+ * (voc-natural's rule); and nothing within 6 (3D) of a body's cells, shell or watch stays classed. `vw`: the plan's virtual world.
+ */
+export function s3Classify(e, { vw, ir, F_WRITTEN, sampleIndexOf }) {
+  if (!e) return e;
+  let d = s3Unwritten(e, vw, F_WRITTEN);
+  if (d.classes?.none > 0) d = freezeClass(d, vw, F_WRITTEN);
+  if (d.classes?.none > 0) d = flowClass(d, vw, F_WRITTEN, awayFromWrites(vw, sampleIndexOf));
+  if (d.classes?.none > 0) d = meltClass(d, vw, F_WRITTEN);
+  const written = new Set();
+  vw.eachWritten((x, y, z) => { written.add(`${x},${y},${z}`); });
+  return s3NearBodies(farFluidOf(d, { written, lots: ir.lots ?? [] }), ir);
+}
+
 /** Tile shas of a plan's IR over its own survey, with 1 worker forward and 4 workers shuffled. */
 export async function tileShas(planDir, { timingPasses = 1 } = {}) {
   const irJson = fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8');
@@ -151,7 +282,8 @@ const isF2 = (sc) => sc.phase === '6c-f2'; // (6c F2) scatter_demo on S2's claim
 const isT2 = (sc) => sc.phase === '6c-t2'; // (6c T2) route_demo on S3's claim
 const isD = (sc) => sc.phase === '6c-d'; // (6c D1) districts_demo on S3's claim
 const isS2 = (sc) => sc.program === 'ice_outpost'; // (6c S2) the ice-spike outpost on S2's claim
-const BARS = new Set(['mspt', 't1-tiles', 't2-tiles', 'd-tiles', 's2-tiles']); // timing rows (recorded, not blocking in change/slice)
+const isS3 = (sc) => sc.program === 'terraced_monastery'; // (6c S3) the terraced monastery on S3's claim
+const BARS = new Set(['mspt', 't1-tiles', 't2-tiles', 'd-tiles', 's2-tiles', 's3-tiles']); // timing rows (recorded, not blocking in change/slice)
 
 /** (6c T2) An /apitest command's JSON answer (the apitest mod: protected areas). */
 async function apitest(args) {
@@ -239,7 +371,7 @@ async function pin(id) {
   const sc = readSc(id);
   if (!sc.fixture?.claim) throw new Error(`${id}: the fixture is not pinned (node tools/gate6b.mjs findsite ${id})`);
   const seed = sc.seed ?? BigInt.asUintN(64, BigInt(`0x${sha256(`${sc.id}@${sc.world.seed}`).slice(0, 16)}`)).toString();
-  if (isV(sc) || isS2(sc)) await prepV(sc); // (6c S2) its fixture bible and lot entries, as S7's
+  if (isV(sc) || isS2(sc) || isS3(sc)) await prepV(sc); // (6c S2) its fixture bible and lot entries, as S7's (6c S3: S3's too)
   await L.fresh(`G6B Pin ${short(sc)}`, await L.seedBase(sc.world.seed));
   const c = sc.fixture.claim;
   await L.tp((c[0] + c[2]) / 2, sc.fixture.yRange[1], (c[1] + c[3]) / 2);
@@ -254,7 +386,7 @@ async function pin(id) {
     // the ground camera looks up at the islands at a walker's angle, not straight up the tower
     cams[n] = [a[0] + 0.5, a[1], a[2] + 0.5, yaw, n === 'cam_ground' ? Math.max(pitch, -28) : pitch];
   }
-  const lotEntries = isV(sc) || isS2(sc) ? Object.fromEntries(ir.lots.map((l) => [l.id, sc.entryFor[l.id]])) : fitEntries(ir.lots);
+  const lotEntries = isV(sc) || isS2(sc) || isS3(sc) ? Object.fromEntries(ir.lots.map((l) => [l.id, sc.entryFor[l.id]])) : fitEntries(ir.lots);
   Object.assign(sc, { seed, cams, lotEntries });
   sc.fixture.irShaAtPin = p.irSha;
   writeSc(sc);
@@ -284,7 +416,7 @@ async function runScenario(id) {
   const claim = [c[0] + off[0], c[1] + off[1], c[2] + off[0], c[3] + off[1]];
   const cams = Object.fromEntries(Object.entries(sc.cams).map(([k, v]) => [k, [v[0] + off[0], v[1], v[2] + off[1], v[3], v[4]]]));
   L.log(`== scenario ${sc.id} ${flat ? 'flat' : 'natural'} run ${runId} -> ${out}`);
-  if (isV(sc) || isS2(sc)) await prepV(sc);
+  if (isV(sc) || isS2(sc) || isS3(sc)) await prepV(sc);
   let t0 = Date.now();
   await L.fresh(`G6B Scn ${short(sc)}${flat ? ' Flat' : ''}`, flat ? FLAT : await L.seedBase(sc.world.seed));
   await L.setRules(flat ? 'exact' : 'gallery');
@@ -302,10 +434,21 @@ async function runScenario(id) {
   t0 = Date.now();
   const pr = await L.prepare(p1.planId);
   T('prepare', t0);
+  // (6c S3, CONTRACT S3 §6) S3's plans read a survey taken after the 90 s settle: the claim's spring stream starts only once a fresh
+  // copy's chunks tick, so a survey before the settle never holds it (its columns are then no water to the plan, and a fill can bury
+  // the feeder: T1's falling-water failures). The flat variant's hill is raised first (vanilla /fill, natural land: the base world)
+  let hill = null;
+  if (isS3(sc)) {
+    if (flat) { t0 = Date.now(); hill = await (await import('./lib/scenario-s3.mjs')).raiseHill(L, claim, sc); T('hill', t0); }
+    await L.tp((claim[0] + claim[2]) / 2, sc.fixture.yRange[1], (claim[1] + claim[3]) / 2);
+    t0 = Date.now();
+    await L.settle(90_000);
+    T('settleBeforePlan', t0);
+  }
   // (6c F1) a plan that reads a frozen volume of a live world (forms_demo keeps the natural ice) sees the world's own changes between
   // plans (a plant breaking, water freezing): the three plans of the IR sha check run with the world's ticking frozen (/tick freeze)
   // (6c T1) relief_demo's land too: S3's flowing water moves the plan survey between plans
-  const freeze = isF1(sc) || isT1(sc) || isF2(sc) || isT2(sc) || isD(sc) || isS2(sc); // (6c F2) scatter_demo reads the frozen volume; (6c T2) route_demo on S3; (6c D1) districts_demo too; (6c S2) the outpost reads S2's frozen volume too
+  const freeze = isF1(sc) || isT1(sc) || isF2(sc) || isT2(sc) || isD(sc) || isS2(sc) || isS3(sc); // (6c F2) scatter_demo reads the frozen volume; (6c T2) route_demo on S3; (6c D1) districts_demo too; (6c S2) the outpost reads S2's frozen volume too
   if (freeze) await L.cmd('/tick freeze');
   let p2, irShas;
   try {
@@ -349,7 +492,7 @@ async function runScenario(id) {
   // there without its shots (recorded in run.json); every other scenario keeps the client
   const headless = (await L.call('dev.state').catch(() => ({}))).headless === true;
   // (6c S2) S2's flat variant takes no shots either (docs/GATES.md "Headless gates": only the gallery's shots stay on a client)
-  if (headless && !isF2(sc) && !isD(sc) && !(isS2(sc) && flat)) throw new Error('this scenario shoots its cameras: run it on a client (only F2\'s and D\'s scenarios and S2\'s flat variant run headless)');
+  if (headless && !isF2(sc) && !isD(sc) && !((isS2(sc) || isS3(sc)) && flat)) throw new Error('this scenario shoots its cameras: run it on a client (only F2\'s and D\'s scenarios and S2\'s flat variant run headless)');
   const shotsOn = !flat && !headless;
   if (shotsOn) { t0 = Date.now(); before = await shoot(cams, path.join(out, 'before')); T('beforeShots', t0); }
   await L.tp((claim[0] + claim[2]) / 2, sc.fixture.yRange[1], (claim[1] + claim[3]) / 2);
@@ -374,6 +517,8 @@ async function runScenario(id) {
     await L.cmd('/kill @e[type=minecraft:experience_orb]');
   };
   await clearAll();
+  // (6c S3) bar 11: the bodies' boxes censused before the realise (the world's own water there is not the fountain's)
+  const fBefore = isS3(sc) && !flat ? await (await import('./lib/scenario-s3.mjs')).fluidsBefore(L, ir) : null;
   // realise
   await L.call('dev.mspt.trace', { start: true });
   await L.call('dev.placement.stats', { reset: true });
@@ -395,10 +540,12 @@ async function runScenario(id) {
   t0 = Date.now();
   const d1 = await L.call('dev.region.dump', { box, file: path.join(raw, 'after.arwd.gz') }, 1_800_000);
   T('afterDump', t0);
+  // (6c S3) bar 11: the fountain settled and its census against its prediction, right after the realise
+  if (fBefore) { t0 = Date.now(); const cen = await (await import('./lib/scenario-s3.mjs')).fountainCensus(L, region, ir, fBefore); fs.writeFileSync(path.join(out, 'census.json'), `${JSON.stringify(cen, null, 2)}\n`); T('census', t0); }
   // (6c V) the door cells and vanilla's villager paths, before the stand
   if (isV(sc)) { t0 = Date.now(); await villageNav(sc, region, ir, out); T('nav', t0); }
   // (6c T2) vanilla's villager path along every villager edge, both ways
-  if ((isT2(sc) || isD(sc) || isS2(sc)) && !flat) { t0 = Date.now(); await (await import('./lib/scenario-route.mjs')).routeNav(L, JSON.parse(fs.readFileSync(path.join(planDir, 'meta.json'), 'utf8')), ir, out); T('nav', t0); }
+  if ((isT2(sc) || isD(sc) || isS2(sc) || isS3(sc)) && !flat) { t0 = Date.now(); await (await import('./lib/scenario-route.mjs')).routeNav(L, JSON.parse(fs.readFileSync(path.join(planDir, 'meta.json'), 'utf8')), ir, out); T('nav', t0); }
   // the stand and the cameras (natural only)
   let shots = null;
   if (!flat) {
@@ -406,7 +553,7 @@ async function runScenario(id) {
     await L.settle(120_000);
     T('stand', t0);
     // (6c F1) the world after the stand: M17 on the realised world and the melt across the stand
-    if (isF1(sc) || isF2(sc) || isS2(sc)) { t0 = Date.now(); await L.call('dev.region.dump', { box, file: path.join(raw, 'after-stand.arwd.gz') }, 1_800_000); T('standDump', t0); }
+    if (isF1(sc) || isF2(sc) || isS2(sc) || isS3(sc)) { t0 = Date.now(); await L.call('dev.region.dump', { box, file: path.join(raw, 'after-stand.arwd.gz') }, 1_800_000); T('standDump', t0); }
     if (shotsOn) {
       t0 = Date.now();
       shots = await shoot(cams, path.join(out, 'shots'));
@@ -422,7 +569,8 @@ async function runScenario(id) {
   T('remove', t0);
   await L.settle(10_000);
   const diff = await L.call('dev.region.hash', { box, mode: 'diff', file: path.join(raw, 'snap.gz') }, 4 * 3_600_000);
-  const exact = { kind: flat ? 'E-flat' : 'E-normal', box, cellsWritten: rec.cellsWritten, removed: rm.removed, restored: rm.restored, mismatches: diff.mismatches, classes: diff.classes, list: [...(diff.list ?? []).filter((m) => m.class !== 'growth'), ...(diff.list ?? []).filter((m) => m.class === 'growth').slice(0, 50)], listTotal: (diff.list ?? []).length };
+  // ((6c S3) S3 keeps every listed mismatch: its classes narrow growth to unwritten cells, so each one is read)
+  const exact = { kind: flat ? 'E-flat' : 'E-normal', box, cellsWritten: rec.cellsWritten, removed: rm.removed, restored: rm.restored, mismatches: diff.mismatches, classes: diff.classes, list: isS3(sc) ? [...(diff.list ?? [])] : [...(diff.list ?? []).filter((m) => m.class !== 'growth'), ...(diff.list ?? []).filter((m) => m.class === 'growth').slice(0, 50)], listTotal: (diff.list ?? []).length };
   fs.writeFileSync(path.join(out, 'exact.json'), `${JSON.stringify(exact, null, 2)}\n`);
   for (const a of protect) await apitest(`unprotect ${owner} ${a.id}`).catch(() => null);
   await L.leaveWorld();
@@ -436,7 +584,7 @@ async function runScenario(id) {
     planId: p2.planId, region, state: st.view.state, cellsWritten: rec.cellsWritten, lots: sc.lotEntries,
     versions: { mod: /mod_version\s*=\s*(\S+)/.exec(gp)?.[1], api, kit: ir.kitVersion, sidecar: hello.sidecar?.version ?? hello.sidecarVersion ?? null, minecraft: /minecraft_version\s*=\s*(\S+)/.exec(gp)?.[1], node: process.versions.node.split('.')[0], head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim() },
     wallSeconds: t, prepare: pr.stats ?? null, dumps: { before: { sha: d0.sha, cells: d0.cells }, after: { sha: d1.sha, cells: d1.cells } }, snap: { cells: snap.cells }, before, shots,
-    spendUsd: 0, lotStates, mobs,
+    spendUsd: 0, lotStates, mobs, ...(hill ? { hill } : {}),
   };
   fs.writeFileSync(path.join(out, 'run.json'), `${JSON.stringify(run, null, 2)}\n`);
   const ev = evidenceSha(out);
@@ -459,7 +607,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const before = await decodeArwd(fs.readFileSync(path.join(raw, 'before.arwd.gz')));
   const after = await decodeArwd(fs.readFileSync(path.join(raw, 'after.arwd.gz')));
   const world = dumpWorld(before, after, ir.claim, { virtual: vw, lots: ir.lots });
-  const realised = checkRegion({ ir, meta, world, prefix: false, ...(isF1(sc) || isF2(sc) || isS2(sc) ? { blobs } : {}) });
+  const realised = checkRegion({ ir, meta, world, prefix: false, ...(isF1(sc) || isF2(sc) || isS2(sc) || isS3(sc) ? { blobs } : {}) });
   fs.writeFileSync(path.join(out, 'realised-report.json'), `${JSON.stringify(realised, null, 1)}\n`);
   const palette = M.paletteAdherence(ir, world);
   const organic = M.axisRunShare(ir, vw);
@@ -473,7 +621,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const rw = (j.warnings ?? []).filter((w) => w.startsWith('restraint'));
     buildings.push({ entry, errors: (j.errors ?? []).length, errorList: j.errors ?? [], restraint: rw.filter((w) => /detail ?noise|accent/i.test(w)), restraintOther: rw.filter((w) => !/detail ?noise|accent/i.test(w)), metrics: { detailNoise: j.metrics?.detailNoise ?? null, accentShare: j.metrics?.accentShare ?? null } });
   }
-  const ts = await tileShas(planDir, { timingPasses: isF1(sc) || isT1(sc) || isF2(sc) || isT2(sc) || isD(sc) || isS2(sc) ? 3 : 1 });
+  const ts = await tileShas(planDir, { timingPasses: isF1(sc) || isT1(sc) || isF2(sc) || isT2(sc) || isD(sc) || isS2(sc) || isS3(sc) ? 3 : 1 });
   const gFile = path.join(SCEN, 'goldens', `${short(sc)}.json`);
   let golden = 'none';
   if (fs.existsSync(gFile)) {
@@ -497,7 +645,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     // holds the golden itself: its committed inputs re-plan to its IR sha and every tile sha (1 = 4 workers), and it records how far
     // the run's survey is from the golden's
     const gDir = path.join(SCEN, 'goldens', short(sc));
-    if ((isT1(sc) || isT2(sc) || isD(sc) || isS2(sc)) && golden.startsWith('differs') && fs.existsSync(path.join(gDir, 'survey.bin'))) { // (6c T2: route_demo on S3 too; 6c D1: districts_demo; 6c S2: the outpost reads a live survey and frozen volume)
+    if ((isT1(sc) || isT2(sc) || isD(sc) || isS2(sc) || isS3(sc)) && golden.startsWith('differs') && fs.existsSync(path.join(gDir, 'survey.bin'))) { // (6c T2: route_demo on S3 too; 6c D1: districts_demo; 6c S2: the outpost reads a live survey and frozen volume)
       const runSurvey = fs.readFileSync(path.join(planDir, 'survey.bin')), gSurvey = fs.readFileSync(path.join(gDir, 'survey.bin'));
       if (sha256(runSurvey) !== sha256(gSurvey)) {
         const { asColumns } = await import('../kit/lib/region/pack.mjs');
@@ -508,7 +656,10 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
         const gIr = JSON.parse(fs.readFileSync(path.join(gDir, 'ir.json'), 'utf8'));
         // (6c S2) with the golden's committed frozen volumes (its keep sets read them)
         const gVols = gIr.volumes ? await irVolumesIn(gIr, path.join(gDir, 'blobs')) : [];
-        const re = await planRegion({ programFile: path.join(root, 'kit', 'regions', `${gIr.id}.mjs`), params: gIr.params, survey: gSurvey, seed: gIr.seed, claim: { ...gIr.claim, minY: -64, maxY: 319 }, roles: gIr.roles, kitVersion: gIr.kitVersion, keepOut: gIr.keepOut ?? [], ...(gVols.length ? { volumes: gVols } : {}) }); // (6c F2) the golden's own recorded kit: a later slice's KIT_VERSION bump alone moves no planner output
+        // ((6c S3) a golden that kept its plan's biome grid and bible fluids (biomes.json, bible.json: the fountain reads both) re-plans with them)
+        const gBiomes = fs.existsSync(path.join(gDir, 'biomes.json')) ? JSON.parse(fs.readFileSync(path.join(gDir, 'biomes.json'), 'utf8')) : null;
+        const gFluids = fs.existsSync(path.join(gDir, 'bible.json')) ? JSON.parse(fs.readFileSync(path.join(gDir, 'bible.json'), 'utf8')).fluids ?? null : null;
+        const re = await planRegion({ programFile: path.join(root, 'kit', 'regions', `${gIr.id}.mjs`), params: gIr.params, survey: gSurvey, seed: gIr.seed, claim: { ...gIr.claim, minY: -64, maxY: 319 }, roles: gIr.roles, kitVersion: gIr.kitVersion, keepOut: gIr.keepOut ?? [], ...(gVols.length ? { volumes: gVols } : {}), ...(gBiomes ? { biomes: gBiomes } : {}), ...(gFluids ? { fluids: gFluids } : {}) }); // (6c F2) the golden's own recorded kit: a later slice's KIT_VERSION bump alone moves no planner output
         const gts = await tileShas(gDir);
         const ok = re.irSha === g.irSha && gts.irSha === g.irSha && gts.workersSame && JSON.stringify(gts.tiles) === JSON.stringify(g.tiles);
         golden = ok ? `match (the golden's committed inputs re-plan to its IR ${g.irSha.slice(0, 12)} and its ${Object.keys(g.tiles).length} tile shas; this run's live survey differs from the golden's in ${cols} columns, so its IR ${ts.irSha.slice(0, 12)} is its own)`
@@ -525,39 +676,14 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const exactOther = sibling ? JSON.parse(fs.readFileSync(path.join(sibling, 'exact.json'), 'utf8')) : null;
   // (6c F1) the world's own freezing during the stand: an unclassified mismatch where still water became ice (or a snow layer
   // fell) at a cell the plan never writes is the cold biome's doing, not the undo's: classed `freeze` (a world class)
-  const freezeOf = (e) => {
-    if (!e || flat || !(isF1(sc) || isF2(sc) || isS2(sc)) || !(e.classes?.none > 0)) return e;
-    const moved = (e.list ?? []).filter((m) => m.class === 'none' && !(vw.flags(...m.pos.split(',').map(Number)) & F_WRITTEN)
-      && ((/^minecraft:water/.test(m.was) && /^minecraft:ice$/.test(m.now)) || (/air$/.test(m.was) && /^minecraft:snow\[/.test(m.now))));
-    if (!moved.length) return e;
-    const classes = { ...e.classes, none: e.classes.none - moved.length, freeze: (e.classes.freeze ?? 0) + moved.length };
-    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'freeze' } : m)) };
-  };
+  const freezeOf = (e) => (!e || flat || !(isF1(sc) || isF2(sc) || isS2(sc) || isS3(sc)) || !(e.classes?.none > 0) ? e : freezeClass(e, vw, F_WRITTEN));
   // (6c T1) the world's flowing water: an unclassified mismatch where the snapshot held flowing (non-source) water and the world now
   // holds air is a stream that moved between the snapshot and the write (SETTLEMENTS §4.2: flowing water is outside E-normal), classed
   // `flow` (a world class); the plan never places flowing water
   // (6c H §4.5) narrowed to D2's rule, so no class can hide a fluid undo error: only at a cell the plan never writes, more than 6 columns
   // from every written column (`far`), or more than 8 below the surveyed ground and every written cell within 6 columns (`deep`)
-  let writtenCols = null;
-  const awayFromWrites = (x, y, z) => {
-    if (!writtenCols) {
-      writtenCols = new Map();
-      vw.eachWritten((wx, wy, wz) => { const k = `${wx},${wz}`; writtenCols.set(k, Math.min(writtenCols.get(k) ?? Infinity, wy)); });
-    }
-    let near = Infinity, nearest = Infinity;
-    for (let dx = -6; dx <= 6; dx++) for (let dz = -6; dz <= 6; dz++) { const lo = writtenCols.get(`${x + dx},${z + dz}`); if (lo !== undefined) { near = Math.min(near, lo); nearest = 0; } }
-    if (nearest === Infinity) return true; // far
-    const g = vw.survey ? vw.survey.ground[sampleIndexOf(vw.survey, x, z)] : Infinity;
-    return y < g - 8 && y < near - 8; // deep
-  };
-  const flowOf = (e) => {
-    if (!e || flat || !(isT1(sc) || isT2(sc) || isD(sc) || isS2(sc)) || !(e.classes?.none > 0)) return e;
-    const moved = (e.list ?? []).filter((m) => m.class === 'none' && /^minecraft:water\[level=[1-9]/.test(m.was) && /^minecraft:(air|cave_air)$/.test(m.now)
-      && !(vw.flags(...m.pos.split(',').map(Number)) & F_WRITTEN) && awayFromWrites(...m.pos.split(',').map(Number)));
-    if (!moved.length) return e;
-    const classes = { ...e.classes, none: e.classes.none - moved.length, flow: (e.classes.flow ?? 0) + moved.length };
-    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'flow' } : m)) };
-  };
+  const away = awayFromWrites(vw, sampleIndexOf);
+  const flowOf = (e) => (!e || flat || !(isT1(sc) || isT2(sc) || isD(sc) || isS2(sc) || isS3(sc)) || !(e.classes?.none > 0) ? e : flowClass(e, vw, F_WRITTEN, away));
   // (6c F2) the world's own changes far from every cell the plan writes: an unclassified mismatch at a cell the plan never writes,
   // in no lot box, 8 or more (Manhattan) from every written cell, is classed `distant` (a world class): the undo writes only the
   // journal's cells, so it can't reach there (the cave fixture's lava still settling, leaves re-counting their distance)
@@ -608,17 +734,10 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   // after the undo is exactly the shape of an undo error), lit over 11 (vanilla's snow melt) by a light the plan placed (block light
   // from the plan's emitters, unoccluded: emission minus the Manhattan distance), is classed `melt` (a world class: the undo restores
   // the cells the plan wrote; a melted layer was never one). The lamps cannot see snow at plan time (the survey has no snow layers).
-  const meltOf = (e) => {
-    if (!e || flat || !(isT2(sc) || isD(sc) || isS2(sc)) || !(e.classes?.none > 0)) return e;
-    const lights = [];
-    vw.eachWritten((x, y, z, idx) => { const em = vw.pal.emit[idx]; if (em > 11) lights.push([x, y, z, em]); });
-    const lit = (x, y, z) => lights.some(([lx, ly, lz, em]) => em - (Math.abs(lx - x) + Math.abs(ly - y) + Math.abs(lz - z)) > 11);
-    const moved = (e.list ?? []).filter((m) => { if (m.class !== 'none' || !/^minecraft:snow\[/.test(m.was) || !/^minecraft:(air|cave_air)$/.test(m.now)) return false; const [x, y, z] = m.pos.split(',').map(Number); return !(vw.flags(x, y, z) & F_WRITTEN) && lit(x, y, z); });
-    if (!moved.length) return e;
-    const classes = { ...e.classes, none: e.classes.none - moved.length, melt: (e.classes.melt ?? 0) + moved.length };
-    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'melt' } : m)) };
-  };
-  const exN = meltOf(distantOf(amethystOf(flowOf(freezeOf(exact)))));
+  const meltOf = (e) => (!e || flat || !(isT2(sc) || isD(sc) || isS2(sc) || isS3(sc)) || !(e.classes?.none > 0) ? e : meltClass(e, vw, F_WRITTEN));
+  // (6c S3, CONTRACT S3 §6) S3's natural run: s3Classify (the mod's growth, grazed and live only at unwritten cells; freeze, flow and melt
+  // by kind; farfluid; nothing within 6 of a body classed)
+  const exN = !flat && isS3(sc) ? s3Classify(exact, { vw, ir, F_WRITTEN, sampleIndexOf }) : meltOf(distantOf(amethystOf(flowOf(freezeOf(exact)))));
   const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exN, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
@@ -718,6 +837,28 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     rows = S2.s2Bars({ plan, realised, realisedStand, stand: standC, keptAfter, lots, tiles: ts.timing, flat, gravity, load1: Math.round((await import('node:os')).loadavg()[0] * 10) / 10 }, rows, routeRows);
     s2 = { route: rmt, stand: standC, keptAfter, lots, gravity, tiles: ts.timing, outpost: meta.outpost ?? null, realisedM17: (realisedStand ?? realised).metrics.M17 };
   }
+  // (6c S3) the monastery's own rows (CONTRACT S3 §7): T2's route rows, then S3's (tools/lib/scenario-s3.mjs)
+  let s3 = null;
+  if (isS3(sc)) {
+    const T2 = await import('./lib/scenario-route.mjs');
+    const S3 = await import('./lib/scenario-s3.mjs');
+    const nav = fs.existsSync(path.join(out, 'nav.json')) ? JSON.parse(fs.readFileSync(path.join(out, 'nav.json'), 'utf8')) : null;
+    const rmt = await T2.routeMetrics({ sc, ir, meta, report: plan.report, realised, nav, before, after, planDir, flat });
+    const routeRows = T2.routeBars(rmt, plan.report, [], { flat });
+    const standFile = path.join(raw, 'after-stand.arwd.gz');
+    const stand = fs.existsSync(standFile) ? await decodeArwd(fs.readFileSync(standFile)) : null;
+    const realisedStand = stand ? checkRegion({ ir, meta, world: dumpWorld(before, stand, ir.claim, { virtual: vw, lots: ir.lots }), prefix: false, blobs }) : null;
+    if (realisedStand) fs.writeFileSync(path.join(out, 'realised-stand-report.json'), `${JSON.stringify({ ...realisedStand, _world: undefined }, null, 1)}\n`);
+    const geom = (meta.planCheck?.answers ?? []).find((a) => a.part === 'monastery')?.geometry ?? null;
+    const rims = S3.rimsRetained(ir, geom?.terraces ?? null, after, meta.lots);
+    const earth = S3.earthworks(vw, ir, geom);
+    const census = fs.existsSync(path.join(out, 'census.json')) ? JSON.parse(fs.readFileSync(path.join(out, 'census.json'), 'utf8')) : null;
+    const states = Object.fromEntries((lotStates ?? []).map((l) => [l.id, l.state]));
+    const lots = { planned: (ir.lots ?? []).length, placed: Object.values(states).filter((v) => String(v).toUpperCase() === 'PLACED').length, states, unplaced: Object.values(geom?.districts ?? {}).flatMap((d) => d.unplaced ?? []) };
+    const gravity = (realised.findings ?? []).filter((q) => q.rule === 'M3:gravity').reduce((a, q) => a + q.count, 0);
+    rows = S3.s3Bars({ plan, realised, realisedStand, meta, rims, earth, census, tiles: ts.timing, flat, gravity, lots, load1: Math.round((await import('node:os')).loadavg()[0] * 10) / 10 }, rows, routeRows);
+    s3 = { route: rmt, rims, earth, census, lots, gravity, tiles: ts.timing, monastery: meta.monastery ?? null, realisedM17: (realisedStand ?? realised).metrics.M17 };
+  }
   // (6c V) S7's own bars (CONTRACT V §7): the door-to-street walk, the lot fronts, the villager rules, the props
   let village = null;
   if (isV(sc)) {
@@ -740,7 +881,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   rows.push({ id: 'realisedVirtual', label: 'P2 realised == virtual (per writer kind)', value: `${rv.differ} of ${rv.written} written cells differ; ${RV.describeRealised(rv)}${rv.first.length ? `; first ${JSON.stringify(rv.first.slice(0, 3))}` : ''}`, threshold: `0 differing cells of every writer kind${flat ? ' (flat: none but child)' : ''}`, pass: RV.realisedOk(rv, [], { strict: flat }).pass, gated: true });
   const fronts = M.lotFronts(ir, after);
   L.log(`  lot fronts: outside the boxes ${JSON.stringify(fronts.outside)}; inside (the children's own) ${JSON.stringify(fronts.inside)}`);
-  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), ...(relief ? { relief } : {}), ...(scatterM ? { scatter: scatterM } : {}), ...(route ? { route } : {}), ...(districts ? { districts } : {}), ...(s2 ? { s2 } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
+  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), ...(relief ? { relief } : {}), ...(scatterM ? { scatter: scatterM } : {}), ...(route ? { route } : {}), ...(districts ? { districts } : {}), ...(s2 ? { s2 } : {}), ...(s3 ? { s3 } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
     realised: { M2: realised.metrics.M2 && { ...realised.metrics.M2, perNode: undefined }, M3: realised.metrics.M3, M4: realised.metrics.M4, M5: realised.metrics.M5, M8: realised.metrics.M8 && { ...realised.metrics.M8, unguardedSample: (realised.metrics.M8.unguardedSample ?? []).slice(0, 20) }, M10: realised.metrics.M10, findings: realised.findings.map((f) => `${f.rule} ${f.severity} ${f.part ?? '-'} x${f.count}`) } };
   fs.writeFileSync(path.join(out, 'metrics.json'), `${JSON.stringify(metrics, null, 2)}\n`);
   for (const r of rows) L.log(`  ${r.gated ? (r.pass ? 'ok  ' : 'FAIL') : 'rec '} ${BARS.has(r.id) ? 'BAR ' : ''}${r.label}: ${r.value}`); // the mspt row is a timing bar (recorded, not blocking in change/slice)
@@ -831,6 +972,8 @@ async function golden(id, runDir) {
   const gDir = path.join(SCEN, 'goldens', short(sc));
   fs.mkdirSync(path.join(gDir, 'blobs'), { recursive: true });
   for (const f of ['ir.json', 'survey.bin', 'meta.json']) fs.copyFileSync(path.join(planDir, f), path.join(gDir, f));
+  // ((6c S3) the monastery's fountain reads the plan's biome grid and the bible's fluids: kept beside the golden's inputs)
+  if (isS3(sc)) for (const f of ['biomes.json', 'bible.json']) if (fs.existsSync(path.join(planDir, f))) fs.copyFileSync(path.join(planDir, f), path.join(gDir, f));
   for (const f of fs.existsSync(path.join(planDir, 'blobs')) ? fs.readdirSync(path.join(planDir, 'blobs')) : []) fs.copyFileSync(path.join(planDir, 'blobs', f), path.join(gDir, 'blobs', f));
   const run = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
   const g = { scenario: sc.id, version: sc.version, note: `tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/${short(sc)}/`, fromRun: run.runId, irSha: ts.irSha, kitVersion: JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8')).kitVersion, cells: ts.cells, tiles: ts.tiles };

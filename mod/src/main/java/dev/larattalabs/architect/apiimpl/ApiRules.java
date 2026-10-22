@@ -79,8 +79,13 @@ public final class ApiRules {
 					case "region.courses" -> "regionCourses"; // 6c HY: courses, mill races and ditches (channel.course, .race, .ditch)
 					case "region.waterGates" -> "waterGates"; // 6c HY: a course under a wall behind a grate (wall.water_gate)
 					case "region.irrigation" -> "farmIrrigation"; // 6c IRR: a farm lot's irrigate (its sources, lots[].irrigation, the lot mask)
+					case "region.survival" -> "regionSurvival"; // 6c RS: regions in survival (free land, targets fed from the stockpile)
 					case "reserved" -> "designReserved"; // 6c IRR: DesignRequest.reserved, kept by the design job and its checker
 					case "plan.rules" -> "rulePalette"; // 6c VOC-c: rule.palette measured (lotBlocks, the artifact's palette rows, PALETTE)
+					case "plan.forms2" -> "formsTrees"; // 6c F3: form.giant_tree, form.giant_mushroom (with formsCave and formsWater, below)
+					case "region.terracedZones" -> "terracedZones"; // 6c S3: plan/0's terraces member (a zone or district laid down the slope as levels)
+					case "region.monastery" -> "scenarioS3"; // 6c S3: the helper's kit bundles the terraced_monastery program (S3's scenario)
+					case "plan.layouts" -> "freeLayouts"; // 6c FL: plan/0's layout.ring, .spiral, .grid, .organic, locator.around and sketch.outline
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}
@@ -91,6 +96,11 @@ public final class ApiRules {
 				// 6c F1: a forms-I helper's kit has the iceSpike and rockSpire generators and the voxels op
 				out.add("formsRock");
 				out.add("voxelsOp");
+			}
+			if (sidecarFeatures.contains("plan.forms2")) {
+				// 6c F3: a forms-II helper's kit has the cave forms (form.stalactites, form.roots, their volumes) and coral in a plan body
+				out.add("formsCave");
+				out.add("formsWater");
 			}
 			if (sidecarFeatures.contains("region.passes")) {
 				out.add("reliefOp"); // 6c T1: a T1 helper's kit has the relief op and pass

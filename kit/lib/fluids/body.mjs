@@ -24,6 +24,14 @@
 //            second course, an overflow's spillway; written by the body's own part in its shell's stage, fs and not g (M25:shell)
 //   grate    runs: body cells written iron_bars[waterlogged=true] (HY-c's water gate: still water passes, mobs don't)
 // Any of them makes the IR require `courses` (a mod or kit before HY refuses it PLAN_STALE rather than write a course out of order).
+//
+// (6c F3-c, "Phase 6c slice F3" §3.4) Coral is its body's: a `form.coral` part inside a pond, a fountain's basin or a moat compiles into
+// that body's op as `decor` (only when non-empty: every other op is byte for byte as before):
+//   decor    [{state, cells: runs}] sorted by state: the coral generator's cells (kit/lib/forms/coral.mjs). Waterlogged plants, fans,
+//            wall fans and sea pickles replace body cells (each is still one of `cells`: a source for the sim and the census, as a
+//            grate cell is); live coral blocks replace bed cells (shell floor cells, solid to solid). The evaluator writes them after
+//            the sources (decor wins its cells); a bed cell's block is written ALWAYS_OURS over the shell's earlier stage.
+// A decor set makes the IR require `coralDecor` (a mod or kit before F3 refuses it PLAN_STALE rather than drop the coral).
 import { simulate, settleBound } from './sim.mjs';
 import { FLUIDS, FLUIDS_STAGE } from './kinds.mjs';
 import { kindOf } from './world.mjs';
@@ -31,6 +39,8 @@ import { _bindFluidBody } from '../region/program.mjs';
 import { draftIR } from '../region/plan.mjs';
 import { buildVirtual } from '../region/vworld.mjs';
 import { walkKinds } from '../realise.mjs';
+import { coral as growCoral } from '../forms/coral.mjs';
+import { fnv64 } from '../noise.mjs';
 
 export const FLUID_OP = 'fluid';
 /** The block states a body writes (canonical: the default state of each block, a source). */
@@ -40,6 +50,8 @@ export const ICE_STATE = 'minecraft:ice';
 export const GRATE_STATE = 'minecraft:iron_bars[waterlogged=true]';
 /** (6c HY) The IR kind a course's fluid op needs (realise.mjs KINDS_FORMAT2, IrStale.KINDS_FORMAT2). */
 export const COURSES_KIND = 'courses';
+/** (6c F3-c) The IR kind a body op with a `decor` set needs (realise.mjs KINDS_FORMAT2, IrStale.KINDS_FORMAT2). */
+export const CORAL_DECOR_KIND = 'coralDecor';
 /** (6c HY) The op members that make a fluid op a course's (any of them non-empty: the IR requires `courses`). */
 export const COURSE_MEMBERS = Object.freeze(['after', 'lining', 'grate']);
 
@@ -309,6 +321,9 @@ export function fluidBody(r, cellsIn, opts = {}) {
   if (ice.length && fluid !== 'water') throw new Error(`fluidBody ${id}: only water is capped with ice`);
   for (const g of grate) if (!own.has(k3(...g))) throw new Error(`fluidBody ${id}: grate cell ${g.join(', ')} is not a cell of the body`);
   if (grate.length && fluid !== 'water') throw new Error(`fluidBody ${id}: only water stands behind a grate`);
+  // ((6c F3-c, §3.4) the coral parts inside this body: their cells are the body's own `decor` set, grown before the flow is simulated;
+  // one coral's cells are never another's; `_unsafe.coralOtherPart` writes a coral's cells as its own part's op instead (M25:clear))
+  const corals = decorOf(r, opts.decor, { id, fluid, cells, shell, level, ice, grate });
   // the shell first (the flow reads the plan's own world, the shell included)
   let shellWritten = shell;
   if (_unsafe?.noShellCell) {
@@ -400,7 +415,11 @@ export function fluidBody(r, cellsIn, opts = {}) {
   if (opAfter.length) op.after = opAfter;
   if (lining.length) op.lining = toRuns(lining);
   if (grate.length) op.grate = toRuns(grate);
+  // ((6c F3-c) the decor set, only when non-empty)
+  const decorCells = corals.filter((c) => !c.other).flatMap((c) => c.gen.decor);
+  if (decorCells.length) op.decor = decorRuns(decorCells);
   fp._push(op);
+  for (const c of corals.filter((q) => q.other && q.gen.decor.length)) writeOtherPart(r, c, own);
   // the approval guard (§10): the shell and its buffer (the cells within 2 behind it), the joins, as per-column y runs; realiseApproved
   // re-samples them and compares classes and the fluid layer (ARTIFACT_STALE when they changed)
   // ((6c HY) the lining stands with the shell; a plan join's landing cells are another body's, never this one's buffer)
@@ -408,10 +427,66 @@ export function fluidBody(r, cellsIn, opts = {}) {
   const skip = planJoins.length ? [...spill, ...joins, ...planJoins.flatMap((j) => j.cells)] : [...spill, ...joins];
   const guardRuns = volume ? toRuns(bufferOf(cells, wall, skip, 2).concat(wall, joins)) : null;
   const rec = { id, part, kind, fluid, level, cells, shell, spill, joins, watch, ice, predicted, settleTicks: op.settleTicks, path: b.path, findings: sim.findings, raised, volume, volumeState, volumeCells: vcells, guardRuns,
-    lining, after: opAfter, planJoins, grate };
-  (r.meta.waters ??= []).push({ id, part, kind, fluid, level, cells: cells.length, spill: spill.length, ice: ice.length, settleTicks: op.settleTicks, shell: shell.length, watch: watch.length, raised, volume: volumeState });
+    lining, after: opAfter, planJoins, grate, decor: decorCells.map((c) => [c[0], c[1], c[2]]), corals: corals.map(coralSummary) };
+  (r.meta.waters ??= []).push({ id, part, kind, fluid, level, cells: cells.length, spill: spill.length, ice: ice.length, settleTicks: op.settleTicks, shell: shell.length, watch: watch.length, raised, volume: volumeState, ...(decorCells.length ? { decor: decorCells.length } : {}) });
   (r._fluidBodies ??= []).push(rec);
   return rec;
+}
+
+/**
+ * (6c F3-c, §3.4) Grow every coral asked into a body: `reqs` [{id (the coral plan part), preset, cover, count, _unsafe}] in plan order;
+ * each grown over the body's cells, shell, level and ice cap, seeded fnv64(the region's seed, 'coral', id). Returns [{id, gen, other}]
+ * (`other`: the broken variant coralOtherPart, written as the coral part's own op).
+ */
+function decorOf(r, reqs, { id, fluid, cells, shell, level, ice, grate }) {
+  if (!Array.isArray(reqs) || !reqs.length) return [];
+  if (fluid !== 'water') throw new Error(`fluidBody ${id}: coral grows only in water`);
+  const taken = new Set(grate.map((c) => k3(...c)));
+  const out = [];
+  for (const q of reqs) {
+    const seed = fnv64(r.ctx.seed, 'coral', q.id).hex;
+    const gen = growCoral({ preset: q.preset, cover: q.cover, count: q.count, seed, label: q.id }, { cells, shell, level, ice }, { taken, _unsafe: q._unsafe ?? null });
+    for (const c of gen.decor) taken.add(k3(c[0], c[1], c[2]));
+    out.push({ id: q.id, gen, other: !!q._unsafe?.coralOtherPart });
+  }
+  return out;
+}
+
+/** Decor cells [[x, y, z, state]] as the op's set: [{state, cells: runs}] sorted by state. */
+export function decorRuns(list) {
+  const by = new Map();
+  for (const [x, y, z, s] of list) { if (!by.has(s)) by.set(s, []); by.get(s).push([x, y, z]); }
+  return [...by.keys()].sort().map((s) => ({ state: s, cells: toRuns(by.get(s)) }));
+}
+
+/** The op's decor set back to cells [[x, y, z, state]], sorted (y, x, z). */
+export function decorCellsOf(decor) {
+  const out = [];
+  for (const d of decor ?? []) for (const [x, y, z] of fromRuns(d.cells)) out.push([x, y, z, d.state]);
+  return out.sort((a, b) => a[1] - b[1] || a[0] - b[0] || a[2] - b[2]);
+}
+
+/** (the broken variant coralOtherPart) a coral's cells written as its own part's op in the fluids stage, after the body's. */
+function writeOtherPart(r, c, own) {
+  const part = r.part(`f_${c.id}`.slice(0, 48), { stage: FLUIDS_STAGE });
+  for (const water of [true, false]) {
+    const mats = [], idx = new Map(), cols = [];
+    for (const [x, y, z, s] of c.gen.decor) {
+      if (own.has(k3(x, y, z)) !== water) continue;
+      if (!idx.has(s)) { idx.set(s, mats.length); mats.push(s); }
+      cols.push(x, z, y, y, idx.get(s));
+    }
+    if (cols.length) part.columns({ abs: 0 }, { abs: 0 }, cols, mats, { cond: water ? 2 : 3 });
+  }
+  c.irPart = part.id;
+}
+
+/** A coral's record on its body: what the compiler answers it with. */
+function coralSummary(c) {
+  const g = c.gen;
+  let box = null;
+  for (const [x, , z] of g.decor) box = box ? { minX: Math.min(box.minX, x), minZ: Math.min(box.minZ, z), maxX: Math.max(box.maxX, x), maxZ: Math.max(box.maxZ, z) } : { minX: x, minZ: z, maxX: x, maxZ: z };
+  return { id: c.id, other: c.other, irPart: c.irPart ?? null, cells: g.decor.length, room: g.room, sites: g.sites, patches: g.stats.patches, count: g.params.count, rect: box, stats: g.stats, ops: g.ops.length };
 }
 
 /**

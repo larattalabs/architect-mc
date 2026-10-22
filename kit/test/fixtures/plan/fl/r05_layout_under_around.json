@@ -1,0 +1,104 @@
+{
+  "about": "(6c FL, S-FL-2) a grid with around: read as the ring round the feature, adjusted {what: layout, asked: grid, got: ring}",
+  "on": "flat",
+  "expect": {
+    "part": "g",
+    "class": "adjusted",
+    "what": "layout"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "fl_r05",
+    "zones": [
+      {
+        "id": "core",
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 4
+          }
+        },
+        "size": {
+          "w": 24,
+          "d": 24
+        },
+        "program": {
+          "shared": "well",
+          "lots": [
+            {
+              "id": "k1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "g",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "core"
+            }
+          }
+        },
+        "program": {
+          "layout": "grid",
+          "lots": [
+            {
+              "id": "c1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c2",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c3",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c4",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c5",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c6",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

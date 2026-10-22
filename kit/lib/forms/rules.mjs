@@ -97,6 +97,27 @@ export function bakeOps(ops, blob, { cond = 0 } = {}) {
 }
 
 /**
+ * (6c F3) Bake a generator's own final cells (Map "x,y,z" -> state; air entries dropped) into one `voxels` op, as bakeOps does for
+ * ops: F3's generators fix their drift states (leaf distance, mushroom faces, dripstone thickness) over the final cell set, so they
+ * hand over cells, not ops (CONTRACT F3 as built: "baked always").
+ */
+export function bakeCells(cells, blob, { cond = 0 } = {}) {
+  const list = [];
+  let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  for (const [k, st] of cells) {
+    if (st === AIR) continue;
+    const [x, y, z] = k.split(',').map(Number);
+    list.push([x, y, z, st]);
+    if (x < minX) minX = x; if (y < minY) minY = y; if (z < minZ) minZ = z;
+    if (x > maxX) maxX = x; if (y > maxY) maxY = y; if (z > maxZ) maxZ = z;
+  }
+  if (!list.length) throw new Error('bake: the form has no cells');
+  list.sort((a, b) => a[1] - b[1] || a[2] - b[2] || a[0] - b[0]);
+  const bytes = encodeVoxels([maxX - minX + 1, maxY - minY + 1, maxZ - minZ + 1], list.map(([x, y, z, s]) => [x - minX, y - minY, z - minZ, s]));
+  return { op: { op: 'voxels', blob, origin: [minX, minY, minZ], rotation: 0, cond, walk: false }, bytes, cells: list.length, bounds: { minX, maxX, minY, maxY, minZ, maxZ } };
+}
+
+/**
  * Face-connected components of a cell set (Map "x,y,z" -> state, non-air only) and which touch the ground (a cell at or below
  * `groundAt(x, z)`). Returns the keys of the cells in no ground-touching component (to trim).
  */

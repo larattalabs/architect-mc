@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import * as P3 from './p3-tier.mjs';
 
 /**
@@ -13,7 +14,7 @@ import * as P3 from './p3-tier.mjs';
  * column onto the route's side (lo/hi -1..0, not 0..1) and their answers' cell counts and IRs differ; the overall answers are the same.
  */
 // ((6c HY) h/r08_course (a course: HY-b's v51) and extension/e15 (channel.course left the reserved list) by name, though this loop reads neither dir)
-export const UNCHANGED_EXCEPTIONS = Object.freeze(['valid/v33_rope_bridge.json', 'valid/v34_auto.json', 'h/r08_course.json', 'extension/e15_every_reserved_a.json']);
+export const UNCHANGED_EXCEPTIONS = Object.freeze(['valid/v33_rope_bridge.json', 'valid/v34_auto.json', 'h/r08_course.json', 'extension/e15_every_reserved_a.json', ...FL_MOVED.filter((n) => n !== 'extension/e15_every_reserved_a.json')]);
 /** Fixtures the comparison skips by name: refused/k1a_r01 runs the two-plan harness (its `volume`; H-b re-answers it WATER deep). */
 export const UNCHANGED_SKIPPED = Object.freeze(['refused/k1a_r01_wall_water.json']);
 
