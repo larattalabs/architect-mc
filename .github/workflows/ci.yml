@@ -25,6 +25,8 @@ jobs:
           java-version: 25
       - name: Kit tests
         run: node --test kit/test/*.test.mjs
+      - name: Gate step inputs (every driver's imports inside its recorded set, tools/step-inputs.json)
+        run: node tools/step-inputs.mjs check
       - name: Mod jar without the sidecar bundle (dev marks; a release publish fails)
         working-directory: mod
         run: |

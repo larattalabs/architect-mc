@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { entryOf } from './step-split.mjs'; // a split step's part (<id>/p<k>) has its own definition
 
 const KEEP = 30; // newest samples kept per step
 
@@ -129,7 +130,7 @@ export function stepDefinition(entry, blobOf) {
 
 /** The current definition of a step from a checkout's working tree (the drivers run from there) and a parsed chain config. */
 export function definitionNow(srcDir, chains, id) {
-  return stepDefinition(chains?.steps?.[id], (p) => {
+  return stepDefinition(entryOf(chains, id), (p) => {
     try {
       return blobId(fs.readFileSync(path.join(srcDir, p)));
     } catch {
@@ -179,7 +180,7 @@ export function definitionsAt(repoDir, { chainsPath = 'tools/gate-chains.json' }
     const t = treeOf(head);
     const cb = t?.get(chainsPath);
     const c = cb ? configOf(cb) : null;
-    return c ? stepDefinition(c.steps?.[id], (p) => t.get(p) ?? null) : null;
+    return c ? stepDefinition(entryOf(c, id), (p) => t.get(p) ?? null) : null;
   };
 }
 

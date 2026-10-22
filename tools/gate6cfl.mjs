@@ -24,6 +24,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { gatePart, sliceSections, slicesOf } from './lib/gate-part.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-FL-run');
@@ -104,6 +105,11 @@ function junit(name) {
 
 steps.unit = async () => {
   const out = {};
+  // a split unit step (docs/GATES.md "Turbo"): `items` (every item but the byte identity) and the byte identity's fixture loop in
+  // round-robin slices; whole, every section runs exactly as before
+  const P = gatePart(['items', ...sliceSections('unchanged', 3)], { log });
+  const slice = slicesOf(P, 'unchanged', 3);
+  if (P.want('items')) {
   // items 1-3, 5, 8, 9 and the street ext (kit)
   out.kit = nodeTest(['kit/test/fl.test.mjs', 'kit/test/fl-layouts-1.test.mjs', 'kit/test/fl-layouts-2.test.mjs', 'kit/test/fl-look.test.mjs']);
   check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 13, `items 1-3, 5, 8, 9: the layouts on 200 seeded claims each (0 lots overlapping or outside the mask, every entrance joined, the ring closed, the spiral's pitch, the grid's blocks, the organic turn bound), the broken variants caught, the fl/ answers and their wouldFits re-checked alone, KC, catalogue 10, the five asks, plan v1's shape, the street ext: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
@@ -113,11 +119,15 @@ steps.unit = async () => {
   const g = spawnSync('./gradlew', ['test', '--offline', '-q', '--tests', '*IrRoadExtTest'], { cwd: path.join(root, 'mod'), encoding: 'utf8', timeout: 1_800_000, env });
   out.mod = { code: g.status, ir: junit('dev.larattalabs.architect.region.IrRoadExtTest') };
   check(g.status === 0 && out.mod.ir && out.mod.ir.tests > 0 && out.mod.ir.failures === 0 && out.mod.ir.errors === 0, `S-FL-5 (mod): Ir reads a road's ext (architect_mc:street) and keeps the 6- and 7-argument Road constructors: ${json(out.mod)}`);
+  }
   // items 4 and 8: byte identity, the untouched files, the asks
   const K = await import('./lib/gate6cfl-kit.mjs');
-  const u = await K.unchanged(root, { check, log });
+  if (!slice || slice.length) {
+  const u = await K.unchanged(root, { check, log, slice });
   out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, namedMoved: u.namedMoved, added: u.added.length, streetsMarked: u.streetsMarked };
   fs.writeFileSync(path.join(OUT, 'fl-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
+  }
+  if (P.want('items')) {
   out.untouched = K.untouched(root, { check });
   out.asks = await K.asks(root, { check, write: false });
   // item 10: 3 checks of each FL fixture: identical answers and artifact shas
@@ -139,6 +149,7 @@ steps.unit = async () => {
   check(ac.status === 0, `item 12: api-compat --gate6cfl clean against the 0.40.0, 0.39.1 and 0.39.0 apitest jars and the 0.40.0 jar's 1.37.0 surface (no Java beyond the version, the feature string, the road ext and the dev hook)`, out.apicompat.tail);
   out.compact = compactSize();
   check(out.compact.compact !== null && out.compact.compact < 84_000, `item 12: the compact plan/0 is ${out.compact.compact} characters (bound 84,000, S-FL-8; the merge base's ${out.compact.before ?? '?'}: FL's delta ${out.compact.before ? out.compact.compact - out.compact.before : '?'}); $0.00`);
+  }
   spendZero();
   return out;
 };

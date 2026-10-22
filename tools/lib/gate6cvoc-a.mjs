@@ -7,6 +7,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
+import { syncBaseTree } from './base-tree.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -52,11 +53,7 @@ function genVocab(root, args) {
 /** A detached worktree beside this checkout at the base this branch builds on (the merge base with origin/main: v0.37.1 since the VOC batch). */
 export function baseTree(root) {
   const dir = path.resolve(root, '..', 'architect-mc-VOC-main');
-  try { execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']); } catch { /* offline: the last fetched origin/main */ }
-  const base = execFileSync('git', ['-C', root, 'merge-base', 'HEAD', 'origin/main']).toString().trim();
-  if (!fs.existsSync(path.join(dir, '.git'))) execFileSync('git', ['-C', root, 'worktree', 'add', '-q', '--detach', dir, base]);
-  else execFileSync('git', ['-C', dir, 'checkout', '-q', '--detach', base]);
-  return { dir, base };
+  return syncBaseTree(root, dir, { fetchOptional: true }); // (turbo) one fetch and checkout at a time; left alone at the base
 }
 
 /**
@@ -157,6 +154,7 @@ export async function unchanged(root) {
 
 const unit = [
   {
+    key: 'genvocab',
     name: 'items 1, 12, 13: gen-vocab.mjs',
     async run({ root, check }) {
       const out = {};
@@ -174,6 +172,7 @@ const unit = [
     },
   },
   {
+    key: 'vocab-tests',
     name: 'items 1, 3, 4 (kit): the vocabulary tests',
     async run({ root, check }) {
       const r = nodeTest(root, ['kit/test/vocab.test.mjs']);
@@ -185,6 +184,7 @@ const unit = [
     },
   },
   {
+    key: 'identity',
     name: 'item 5: byte identity',
     async run({ root, check }) {
       const u = await unchanged(root);
@@ -193,6 +193,7 @@ const unit = [
     },
   },
   {
+    key: 'java',
     name: 'item 14 and S-VOC-5/6 (Java, sidecar): the record, the feature, vocab/1, api-compat',
     async run({ root, check }) {
       const out = {};
