@@ -324,7 +324,8 @@ public final class PlanRetention {
 		}
 		for (String id : ids) {
 			try {
-				if (held(w, id) != null) {
+				// (a prepared plan is kept whatever its age: it waits for its realise, as a bench's prepared base world does)
+				if (held(w, id) != null || Files.isRegularFile(RegionStore.prepare(w, id))) {
 					continue;
 				}
 				long used = Math.max(lastUsed(p, id), RegionsImpl.removedAtOfPlan(id));

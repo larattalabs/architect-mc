@@ -69,38 +69,64 @@ public final class RegionWaitTags {
 		return null;
 	}
 
-	/** A tile's plan parts (see the class doc). */
-	public static List<String> tileParts(Ir ir, String stage, String set, String tileKey) {
-		int[] t = Ir.tile(tileKey);
-		int T = Heights.TILE, x0 = T * t[0], z0 = T * t[1], x1 = x0 + T - 1, z1 = z0 + T - 1;
+	/** An IR part's tile index entry: its stage, set, plan part and its ops' x/z bounds. */
+	private record PartBounds(String stage, String set, String part, int[][] boxes) {
+	}
+
+	/** Per IR instance (its id and identity: a record's equals would compare the whole JSON), its parts' bounds; the last 8. */
+	private static final java.util.Map<String, List<PartBounds>> INDEX = java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>(16, 0.75f, true) {
+		@Override
+		protected boolean removeEldestEntry(java.util.Map.Entry<String, List<PartBounds>> e) {
+			return size() > 8;
+		}
+	});
+
+	private static List<PartBounds> index(Ir ir) {
+		return INDEX.computeIfAbsent(ir.id() + "|" + System.identityHashCode(ir), k -> indexOf(ir));
+	}
+
+	private static List<PartBounds> indexOf(Ir ir) {
 		JsonObject j = ir.json();
 		JsonObject sv = j.get("survival") instanceof JsonObject o ? o : null;
 		JsonObject svParts = sv != null && sv.get("parts") instanceof JsonObject o ? o : null;
 		List<String> groups = dev.larattalabs.architect.region.RegionSurvival.groups(j);
-		TreeSet<String> out = new TreeSet<>();
+		List<PartBounds> out = new ArrayList<>();
 		if (j.get("parts") instanceof JsonArray parts) {
 			for (JsonElement pe : parts) {
-				if (!(pe instanceof JsonObject p) || !p.has("id") || !stage.equals(str(p, "stage")) || !set.equals(str(p, "set") == null ? "terrain" : str(p, "set"))
-					|| !(p.get("ops") instanceof JsonArray ops)) {
+				if (!(pe instanceof JsonObject p) || !p.has("id") || !(p.get("ops") instanceof JsonArray ops)) {
 					continue;
 				}
-				boolean meets = false;
+				List<int[]> boxes = new ArrayList<>();
 				for (JsonElement oe : ops) {
-					if (oe instanceof JsonObject op && op.get("bounds") instanceof JsonObject bd && bd.has("minX") && bd.has("maxX") && bd.has("minZ") && bd.has("maxZ")
-						&& bd.get("minX").getAsInt() <= x1 && bd.get("maxX").getAsInt() >= x0 && bd.get("minZ").getAsInt() <= z1 && bd.get("maxZ").getAsInt() >= z0) {
-						meets = true;
-						break;
+					if (oe instanceof JsonObject op && op.get("bounds") instanceof JsonObject bd && bd.has("minX") && bd.has("maxX") && bd.has("minZ") && bd.has("maxZ")) {
+						boxes.add(new int[] {bd.get("minX").getAsInt(), bd.get("minZ").getAsInt(), bd.get("maxX").getAsInt(), bd.get("maxZ").getAsInt()});
 					}
 				}
-				if (!meets) {
-					continue;
-				}
 				String id = p.get("id").getAsString();
+				String part = id;
 				if (svParts != null && svParts.has(id)) {
 					int g = svParts.get(id).getAsInt();
-					out.add(g >= 0 && g < groups.size() ? groups.get(g) : id);
-				} else {
-					out.add(id);
+					part = g >= 0 && g < groups.size() ? groups.get(g) : id;
+				}
+				out.add(new PartBounds(String.valueOf(str(p, "stage")), str(p, "set") == null ? "terrain" : str(p, "set"), part, boxes.toArray(int[][]::new)));
+			}
+		}
+		return out;
+	}
+
+	/** A tile's plan parts (see the class doc). */
+	public static List<String> tileParts(Ir ir, String stage, String set, String tileKey) {
+		int[] t = Ir.tile(tileKey);
+		int T = Heights.TILE, x0 = T * t[0], z0 = T * t[1], x1 = x0 + T - 1, z1 = z0 + T - 1;
+		TreeSet<String> out = new TreeSet<>();
+		for (PartBounds pb : index(ir)) {
+			if (!stage.equals(pb.stage()) || !set.equals(pb.set())) {
+				continue;
+			}
+			for (int[] b : pb.boxes()) {
+				if (b[0] <= x1 && b[2] >= x0 && b[1] <= z1 && b[3] >= z0) {
+					out.add(pb.part());
+					break;
 				}
 			}
 		}
@@ -121,7 +147,45 @@ public final class RegionWaitTags {
 		String id = part.startsWith("lot ") || part.startsWith("road ") ? part.substring(part.indexOf(' ') + 1) : part;
 		JsonObject plan = l == null ? null : planOf(l);
 		String label = plan == null ? null : labelOf(plan, id, 0);
+		if (label == null && l != null) {
+			label = roadWords(l, plan, id);
+		}
 		return label != null ? label : id.replace('_', ' ');
+	}
+
+	/**
+	 * A region road's words: a zone's (or a district's) street road ({@code architect_mc:street {zone, district?}}) is "<its label>'s
+	 * street"; a route road ({@code route_c<n>l<k>[_<i>]}) is its connector's label, found by the leg's edge in the artifact's answers.
+	 * Null when the id is no road of the region.
+	 */
+	static @Nullable String roadWords(RegionsImpl.Live l, @Nullable JsonObject plan, String id) {
+		for (Ir.Road r : l.ir().roads()) {
+			if (!r.id().equals(id)) {
+				continue;
+			}
+			if (r.ext() != null && r.ext().get("architect_mc:street") instanceof JsonObject st) {
+				String owner = st.get("district") instanceof JsonElement d && d.isJsonPrimitive() ? d.getAsString()
+					: st.get("zone") instanceof JsonElement z && z.isJsonPrimitive() ? z.getAsString() : null;
+				String ol = owner == null || plan == null ? null : labelOf(plan, owner, 0);
+				return (ol != null ? ol : owner != null ? owner.replace('_', ' ') : "the town") + "'s street";
+			}
+			java.util.regex.Matcher m = java.util.regex.Pattern.compile("^route_(c\\d+l\\d+)(_\\d+)?$").matcher(id);
+			JsonObject body = artifactBody(l);
+			if (m.matches() && body != null && body.get("parts") instanceof JsonArray parts) {
+				for (JsonElement pe : parts) {
+					if (pe instanceof JsonObject p && p.get("geometry") instanceof JsonObject g && g.get("legs") instanceof JsonArray legs) {
+						for (JsonElement le : legs) {
+							if (le instanceof JsonObject leg && m.group(1).equals(str(leg, "edge")) && str(p, "part") != null) {
+								String pl = plan == null ? null : labelOf(plan, str(p, "part"), 0);
+								return pl != null ? pl : str(p, "part").replace('_', ' ');
+							}
+						}
+					}
+				}
+			}
+			return null;
+		}
+		return null;
 	}
 
 	/** The sentence a stage wait says: {@code "<waiter> waits for <part> to be built"}. */
@@ -154,13 +218,18 @@ public final class RegionWaitTags {
 	}
 
 	private static @Nullable JsonObject planOf(RegionsImpl.Live l) {
+		JsonObject b = artifactBody(l);
+		return b != null && b.get("plan") instanceof JsonObject p ? p : null;
+	}
+
+	private static @Nullable JsonObject artifactBody(RegionsImpl.Live l) {
 		String sha = l.rec().ext != null && l.rec().ext.get(dev.larattalabs.architect.region.PlanChecks.EXT_ARTIFACT) instanceof JsonElement e && e.isJsonPrimitive()
 			? e.getAsString() : null;
 		if (sha == null) {
 			return null;
 		}
 		var a = RegionsImpl.INSTANCE.artifact(sha);
-		return a.isPresent() && a.get().body() != null && a.get().body().get("plan") instanceof JsonObject p ? p : null;
+		return a.isPresent() ? a.get().body() : null;
 	}
 
 	private static @Nullable String labelOf(JsonElement e, String id, int depth) {
