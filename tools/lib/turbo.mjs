@@ -344,11 +344,13 @@ export function swapUsedGB() {
  * (JVM, sidecar, gradle, node), with the largest single process. lanes: [{ name, needles: [path + sep] }].
  */
 export function sampleMachine(lanes, loadavg) {
-  const r = spawnSync('ps', ['-axww', '-o', 'pid=,rss=,command='], { encoding: 'utf8', maxBuffer: 64 << 20 });
-  const procs = r.stdout.split('\n').map((l) => l.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/)).filter(Boolean).map(([, pid, rss, cmd]) => ({ pid: Number(pid), rssMB: Number(rss) / 1024, cmd }));
+  const r = spawnSync('ps', ['-axww', '-o', 'pid=,pgid=,rss=,command='], { encoding: 'utf8', maxBuffer: 64 << 20 });
+  const procs = r.stdout.split('\n').map((l) => l.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/)).filter(Boolean).map(([, pid, pgid, rss, cmd]) => ({ pid: Number(pid), pgid: Number(pgid), rssMB: Number(rss) / 1024, cmd }));
   const per = {};
   for (const ln of lanes) {
-    const mine = procs.filter((p) => ln.needles.some((n) => p.cmd.includes(n)));
+    // its run worktree's processes (the client or server JVM, the sidecar, gradle) and its running step's process group (the
+    // driver and the unit steps run from the source checkout by relative paths)
+    const mine = procs.filter((p) => ln.needles.some((n) => p.cmd.includes(n)) || (ln.pgids ?? []).includes(p.pgid));
     const java = mine.filter((p) => /\bjava\b/.test(p.cmd.split(' ')[0]) || /\/bin\/java /.test(p.cmd));
     per[ln.name] = { rssGB: Math.round(mine.reduce((a, p) => a + p.rssMB, 0) / 102.4) / 10, javaGB: Math.round(java.reduce((a, p) => a + p.rssMB, 0) / 102.4) / 10, procs: mine.length,
       maxProcGB: Math.round(Math.max(0, ...mine.map((p) => p.rssMB)) / 102.4) / 10 };

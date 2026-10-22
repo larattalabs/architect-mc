@@ -1513,9 +1513,8 @@ try {
 // (its run worktree's processes: the server/client JVM, the sidecar, gradle, node) to <out>/machine.jsonl; folded into summary.machine
 const sampleNow = () => {
   try {
-    // per shard/lane (its run worktree's processes) and `src`: the drivers and the unit steps, which run from this checkout
-    const smp = sampleMachine([...shards.map((sh) => ({ name: sh.name, needles: [...new Set([sh.RUN, real(sh.RUN)])].map((p) => p + path.sep) })),
-      { name: 'src', needles: [...new Set([SRC, real(SRC)])].map((p) => p + path.sep) }], os.loadavg());
+    // per shard/lane: its run worktree's processes and its running step's process group
+    const smp = sampleMachine(shards.map((sh) => ({ name: sh.name, needles: [...new Set([sh.RUN, real(sh.RUN)])].map((p) => p + path.sep), pgids: sh.activeGroup ? [sh.activeGroup] : [] })), os.loadavg());
     machineSamples.push(smp);
     fs.appendFileSync(MACHINE_LOG, JSON.stringify(smp) + '\n');
   } catch {
