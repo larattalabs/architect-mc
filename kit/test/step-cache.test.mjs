@@ -165,3 +165,213 @@ test('an archived input under artifacts/ is fingerprinted: changing it makes the
   write(main, 'artifacts/gate6c-x/v0160/surface.json', '{"a":22}\n');
   assert.match(lookup(c, 'a', k.key).why, /archived input changed/);
 });
+
+// ------------------------------------------------------------------ coverage mode (tools/lib/step-coverage.mjs)
+
+import { coverageSet, constantChanges, collect, snapshotStart } from '../../tools/lib/step-coverage.mjs';
+import { lookupCoverage, coverageMode } from '../../tools/lib/step-cache.mjs';
+
+function covRepo() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-'));
+  git(root, 'init', '-q', '-b', 'slice/x');
+  git(root, 'config', 'user.email', 't@t');
+  git(root, 'config', 'user.name', 't');
+  const J = 'mod/src/main/java/dev/larattalabs/architect';
+  write(root, 'tools/gate-g.mjs', "import { k } from '../kit/lib/used.mjs';\n");
+  write(root, 'kit/lib/used.mjs', 'export const k = 1;\n');
+  write(root, 'kit/lib/forms/unused.mjs', 'export const f = 1;\n');
+  write(root, `${J}/journal/Journal.java`, 'package dev.larattalabs.architect.journal; public class Journal { public static final int LIMIT = 4; }\n');
+  write(root, `${J}/region/RegionFluids.java`, 'package dev.larattalabs.architect.region; public class RegionFluids { int x = 1; }\n');
+  write(root, `${J}/mixin/LevelMixin.java`, 'package dev.larattalabs.architect.mixin; class LevelMixin {}\n');
+  write(root, 'mod/build.gradle', '// build\n');
+  write(root, 'docs/x.md', 'x\n');
+  git(root, 'add', '-A');
+  git(root, 'commit', '-q', '-m', 'init');
+  return root;
+}
+const covConf = {
+  ...conf,
+  classes: { jar: ['mod/**', '!mod/src/test/**'], sidecar: ['kit/**'] },
+  coverage: { enabled: true, replaces: ['jar', 'sidecar', 'world'], packagePrefix: 'dev.larattalabs.', javaRoots: ['mod/src/main/java'], always: ['mod/build.gradle', 'mod/src/*/java/**/mixin/**'], alwaysRoots: [] },
+};
+
+test('coverage: a class or kit module the run never touched is outside the set; touched, mixins and build files are in', () => {
+  const root = covRepo();
+  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-main-'));
+  const cfg = { steps: { g: { shell: 'node tools/gate-g.mjs', client: '6b', timeoutMin: 5 } }, clients: { '6b': { world: 'W' } } };
+  const files = treeAt(root, 'HEAD');
+  const map = { steps: { g: staticEntry('g', cfg.steps.g, covConf, files, { src: root }) } };
+  const ctx = () => {
+    const c = cacheContext({ src: root, main, cfg, conf: covConf, map, snapDir: null, env: {} });
+    c.rawCfg = cfg;
+    return c;
+  };
+  assert.ok(coverageMode(ctx(), 'g'));
+  // the run's JVM loaded Journal only; its node touched used.mjs only
+  const covDir = path.join(main, 'cov');
+  write(covDir, 'jvm-1.log', '[0.1s] dev.larattalabs.architect.journal.Journal source: file:/x\n[0.1s] java.lang.Object source: jrt:/java.base\n');
+  const cov = collect(covDir, { t: 0, alive: new Set() });
+  assert.deepEqual(cov.classes, ['dev.larattalabs.architect.journal.Journal']);
+  const tdir = path.join(main, 'trace-g');
+  write(tdir, '1.txt', 'm\ttools/gate-g.mjs\nm\tkit/lib/used.mjs\n');
+  const c0 = ctx();
+  const r = record(c0, 'g', pass({ id: 'g' }), { key: 'x', run: main, ev: main, traceDir: tdir, traced: true, coverage: cov, timingPolicy: 'judged', judgedBench: false, tier: 'release' });
+  assert.equal(r.stored, true, r.why);
+  const e = JSON.parse(fs.readFileSync(r.file, 'utf8'));
+  assert.equal(e.mode, 'coverage');
+  for (const p of ['mod/src/main/java/dev/larattalabs/architect/journal/Journal.java', 'kit/lib/used.mjs', 'mod/build.gradle']) assert.ok(e.coverageSet.includes(p), p);
+  assert.ok(!e.coverageSet.some((p) => p.includes('RegionFluids') || p.includes('forms')));
+  assert.ok(lookupCoverage(ctx(), 'g').hit, 'unchanged: served');
+  // an untouched class and an untouched kit module change: still served
+  write(root, 'mod/src/main/java/dev/larattalabs/architect/region/RegionFluids.java', 'package dev.larattalabs.architect.region; public class RegionFluids { int x = 2; }\n');
+  write(root, 'kit/lib/forms/unused.mjs', 'export const f = 2;\n');
+  git(root, 'commit', '-qam', 'outside');
+  assert.ok(lookupCoverage(ctx(), 'g').hit, 'changes outside the coverage: served');
+  // a mixin (always in) changes: miss
+  write(root, 'mod/src/main/java/dev/larattalabs/architect/mixin/LevelMixin.java', 'package dev.larattalabs.architect.mixin; class LevelMixin { int y; }\n');
+  git(root, 'commit', '-qam', 'mixin');
+  assert.equal(lookupCoverage(ctx(), 'g').hit, null, 'a mixin is always in');
+});
+
+test('coverage: a touched file changing, or a compile-time constant anywhere, re-runs the step', () => {
+  const root = covRepo();
+  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-main-'));
+  const cfg = { steps: { g: { shell: 'node tools/gate-g.mjs', client: '6b', timeoutMin: 5 } }, clients: { '6b': { world: 'W' } } };
+  const map = { steps: { g: staticEntry('g', cfg.steps.g, covConf, treeAt(root, 'HEAD'), { src: root }) } };
+  const ctx = () => Object.assign(cacheContext({ src: root, main, cfg, conf: covConf, map, snapDir: null, env: {} }), { rawCfg: cfg });
+  const covDir = path.join(main, 'cov');
+  write(covDir, 'jvm-1.log', '[0.1s] dev.larattalabs.architect.region.RegionFluids source: file:/x\n');
+  const tdir = path.join(main, 'trace-g');
+  write(tdir, '1.txt', 'm\ttools/gate-g.mjs\n');
+  const r = record(ctx(), 'g', pass({ id: 'g' }), { key: 'x', run: main, ev: main, traceDir: tdir, traced: true, coverage: collect(covDir, { t: 0, alive: new Set() }), timingPolicy: 'judged', judgedBench: false, tier: 'release' });
+  assert.equal(r.stored, true, r.why);
+  // Journal (not loaded) changes a compile-time constant: javac inlines it elsewhere, so every coverage PASS is invalid
+  write(root, 'mod/src/main/java/dev/larattalabs/architect/journal/Journal.java', 'package dev.larattalabs.architect.journal; public class Journal { public static final int LIMIT = 5; }\n');
+  git(root, 'commit', '-qam', 'constant');
+  assert.ok(constantChanges(root, 'HEAD~1', 'HEAD', ['mod/src/main/java']).size === 1);
+  assert.match(lookupCoverage(ctx(), 'g').why, /compile-time constant/);
+  // a fresh PASS at the new head; then the touched class changes: miss
+  const r2 = record(ctx(), 'g', pass({ id: 'g', startedAt: new Date(Date.now() + 1000).toISOString() }), { key: 'x', run: main, ev: main, traceDir: tdir, traced: true, coverage: collect(covDir, { t: 0, alive: new Set() }), timingPolicy: 'judged', judgedBench: false, tier: 'release' });
+  assert.equal(r2.stored, true);
+  assert.ok(lookupCoverage(ctx(), 'g').hit);
+  write(root, 'mod/src/main/java/dev/larattalabs/architect/region/RegionFluids.java', 'package dev.larattalabs.architect.region; public class RegionFluids { int x = 3; }\n');
+  git(root, 'commit', '-qam', 'touched');
+  assert.equal(lookupCoverage(ctx(), 'g').hit, null);
+});
+
+test('coverage: a JVM alive at a step\'s start counts (a reused client), one that ended before does not', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-snap-'));
+  write(dir, `jvm-${process.pid}.log`, '[0.1s] dev.larattalabs.A source: x\n'); // this process: alive
+  write(dir, 'jvm-999999.log', '[0.1s] dev.larattalabs.Dead source: x\n');
+  const old = new Date(Date.now() - 60_000);
+  fs.utimesSync(path.join(dir, 'jvm-999999.log'), old, old);
+  const snap = snapshotStart(dir);
+  assert.deepEqual(collect(dir, snap).classes, ['dev.larattalabs.A']);
+  void coverageSet;
+});
+
+test('coverage: the sidecar still stats kit/tools/region.mjs before it spawns the untraced region CLI (whenTouched relies on it)', () => {
+  const src = fs.readFileSync(new URL('../../sidecar/src/regions.ts', import.meta.url), 'utf8');
+  const body = src.slice(src.indexOf('private async runKit('), src.indexOf('private async runKit(') + 2500);
+  assert.match(body, /const script = path\.join\(kit, 'tools', 'region\.mjs'\);\s*\n\s*if \(!fs\.existsSync\(script\)\)/, 'runKit must stat the script (the trace sees that stat) before the permission-model spawn');
+  assert.match(body, /env: minimalEnv\(\)/);
+  const gc = JSON.parse(fs.readFileSync(new URL('../../tools/gate-cache.json', import.meta.url), 'utf8'));
+  assert.equal(gc.coverage.whenTouched['kit/tools/region.mjs'].kinds, 's');
+});
+
+test('coverage: a step whose trace shows the region CLI stat gets the CLI closure and every region program', () => {
+  const root = covRepo();
+  write(root, 'kit/tools/region.mjs', "import '../lib/region/plan.mjs';\n");
+  write(root, 'kit/lib/region/plan.mjs', "import '../forms/unused.mjs';\nexport const KIT_VERSION = '1';\n");
+  write(root, 'kit/regions/demo.mjs', "import '../lib/used.mjs';\n");
+  git(root, 'add', '-A');
+  git(root, 'commit', '-qm', 'region cli');
+  const cfg = { steps: { g: { shell: 'node tools/gate-g.mjs', client: '6b', timeoutMin: 5 } } };
+  const files = treeAt(root, 'HEAD');
+  const entry = staticEntry('g', cfg.steps.g, covConf, files, { src: root });
+  const conf2 = { ...covConf, coverage: { ...covConf.coverage, whenTouched: { 'kit/tools/region.mjs': { kinds: 's', roots: ['kit/tools/region.mjs', 'kit/regions/*.mjs'], globs: ['kit/regions/**'] } } } };
+  const without = coverageSet({ entry, trace: new Map(), cov: { classes: [], node: new Map() }, conf: conf2, tree: files, src: root }).set;
+  assert.ok(!without.includes('kit/lib/forms/unused.mjs'));
+  const withCli = coverageSet({ entry, trace: new Map(), cov: { classes: [], node: new Map([['kit/tools/region.mjs', new Set(['s'])]]) }, conf: conf2, tree: files, src: root }).set;
+  for (const p of ['kit/tools/region.mjs', 'kit/lib/region/plan.mjs', 'kit/lib/forms/unused.mjs', 'kit/regions/**']) assert.ok(withCli.includes(p), p);
+});
+
+test('coverage, bytecode mode: keyed by the loaded classes\' class-file digests from the build artifact; no artifact, no key', () => {
+  const root = covRepo();
+  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-main-'));
+  const cfg = { steps: { g: { shell: 'node tools/gate-g.mjs', client: '6b', timeoutMin: 5 } }, clients: { '6b': { world: 'W' } } };
+  const map = { steps: { g: staticEntry('g', cfg.steps.g, covConf, treeAt(root, 'HEAD'), { src: root }) } };
+  const J = 'dev.larattalabs.architect';
+  let manifest = { ok: true, hash: 'b1', classes: { [`${J}.journal.Journal`]: 'aa', [`${J}.region.RegionFluids`]: 'bb' } };
+  const ctx = () => Object.assign(cacheContext({ src: root, main, cfg, conf: covConf, map, snapDir: null, env: {} }), { rawCfg: cfg, manifest });
+  const covDir = path.join(main, 'cov');
+  write(covDir, 'jvm-1.log', `[0.1s] ${J}.journal.Journal source: x\n`);
+  const tdir = path.join(main, 'trace-g');
+  write(tdir, '1.txt', 'm\ttools/gate-g.mjs\n');
+  const r = record(ctx(), 'g', pass({ id: 'g' }), { key: 'x', run: main, ev: main, traceDir: tdir, traced: true, coverage: collect(covDir, { t: 0, alive: new Set() }), timingPolicy: 'judged', judgedBench: false, tier: 'release' });
+  assert.equal(r.stored, true, r.why);
+  const e = JSON.parse(fs.readFileSync(r.file, 'utf8'));
+  assert.deepEqual(e.coverageClasses, [`${J}.journal.Journal`]);
+  assert.ok(!e.coverageSet.some((p) => p.endsWith('Journal.java')), 'a class the artifact compiled is keyed by bytecode, not source');
+  // a source edit in Journal.java that compiles to the same bytecode (a comment): still served
+  write(root, 'mod/src/main/java/dev/larattalabs/architect/journal/Journal.java', '// a comment\npackage dev.larattalabs.architect.journal; public class Journal { public static final int LIMIT = 4; }\n');
+  git(root, 'commit', '-qam', 'comment');
+  assert.ok(lookupCoverage(ctx(), 'g').hit, 'same bytecode: served');
+  // another class's bytecode moves (a constant inlined into it, say): still served; the loaded one's moves: miss
+  manifest = { ...manifest, hash: 'b2', classes: { ...manifest.classes, [`${J}.region.RegionFluids`]: 'cc' } };
+  assert.ok(lookupCoverage(ctx(), 'g').hit);
+  manifest = { ...manifest, hash: 'b3', classes: { ...manifest.classes, [`${J}.journal.Journal`]: 'dd' } };
+  assert.equal(lookupCoverage(ctx(), 'g').hit, null);
+  // a failed build: no coverage key at all
+  manifest = { ok: false, hash: 'b4', error: 'gradle exited 1' };
+  assert.match(lookupCoverage(ctx(), 'g').why, /build artifact|differs|changed|unknown|recorded/);
+  assert.equal(lookupCoverage(ctx(), 'g').hit, null);
+});
+
+test('coverage: test filters resolve at each commit (a new test a wildcard selects by method name moves the key)', async () => {
+  const { setHash } = await import('../../tools/lib/step-cache.mjs');
+  const { testSourcesMatching } = await import('../../tools/lib/step-coverage.mjs');
+  const root = covRepo();
+  write(root, 'mod/src/test/java/dev/larattalabs/architect/AlphaTest.java', 'class AlphaTest { void irStaleReads() {} }\n');
+  write(root, 'mod/src/test/java/dev/larattalabs/architect/BetaTest.java', 'class BetaTest { void other() {} }\n');
+  git(root, 'add', '-A');
+  git(root, 'commit', '-qm', 'tests');
+  const tree = treeAt(root, 'HEAD');
+  const show = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+  assert.deepEqual(testSourcesMatching(['*irStale*'], tree, ['mod/src/test/java'], show), ['mod/src/test/java/dev/larattalabs/architect/AlphaTest.java']);
+  assert.deepEqual(testSourcesMatching(['dev.larattalabs.architect.BetaTest.other'], tree, ['mod/src/test/java'], show), ['mod/src/test/java/dev/larattalabs/architect/BetaTest.java']);
+  const set = ['mod/build.gradle', '@tests:*irStale*'];
+  const h0 = setHash(set, root, 'HEAD').hash;
+  write(root, 'mod/src/test/java/dev/larattalabs/architect/BetaTest.java', 'class BetaTest { void other() {} void irStaleToo() {} }\n');
+  git(root, 'commit', '-qam', 'a method the wildcard now selects');
+  assert.notEqual(setHash(set, root, 'HEAD').hash, h0);
+  const h1 = setHash(set, root, 'HEAD').hash;
+  write(root, 'mod/src/test/java/dev/larattalabs/architect/GammaTest.java', 'class GammaTest { void unrelated() {} }\n');
+  git(root, 'add', '-A');
+  git(root, 'commit', '-qm', 'an unrelated test');
+  assert.equal(setHash(set, root, 'HEAD').hash, h1);
+});
+
+test('coverage: drivers count by their eager imports; a lazy import() only when a run executed it; a driver edit that starts executing it moves the key', () => {
+  const root = covRepo();
+  write(root, 'kit/lib/lazy.mjs', 'export const lazy = 1;\n');
+  write(root, 'tools/gate-g.mjs', "import { k } from '../kit/lib/used.mjs';\nif (process.argv[2] === 'scenario') await import('../kit/lib/lazy.mjs');\n");
+  git(root, 'add', '-A');
+  git(root, 'commit', '-qm', 'a driver with a lazy subcommand');
+  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-main-'));
+  const cfg = { steps: { g: { shell: 'node tools/gate-g.mjs base', client: '6b', timeoutMin: 5 } }, clients: { '6b': { world: 'W' } } };
+  const map = { steps: { g: staticEntry('g', cfg.steps.g, covConf, treeAt(root, 'HEAD'), { src: root }) } };
+  assert.ok(map.steps.g.closure.includes('kit/lib/lazy.mjs'), 'the full static closure (the CI check) has the lazy import');
+  assert.ok(!map.steps.g.eager.includes('kit/lib/lazy.mjs') && map.steps.g.eager.includes('kit/lib/used.mjs'));
+  const ctx = () => Object.assign(cacheContext({ src: root, main, cfg, conf: covConf, map, snapDir: null, env: {} }), { rawCfg: cfg });
+  const tdir = path.join(main, 'trace-g');
+  write(tdir, '1.txt', 'm\ttools/gate-g.mjs\nm\tkit/lib/used.mjs\n'); // `base`: the lazy path never ran
+  const r = record(ctx(), 'g', pass({ id: 'g' }), { key: 'x', run: main, ev: main, traceDir: tdir, traced: true, coverage: { classes: [], node: new Map() }, timingPolicy: 'judged', judgedBench: false, tier: 'release' });
+  assert.equal(r.stored, true, r.why);
+  write(root, 'kit/lib/lazy.mjs', 'export const lazy = 2;\n');
+  git(root, 'commit', '-qam', 'the lazy module changes');
+  assert.ok(lookupCoverage(ctx(), 'g').hit, 'a lazy module the run never loaded: served');
+  write(root, 'tools/gate-g.mjs', "import { k } from '../kit/lib/used.mjs';\nawait import('../kit/lib/lazy.mjs');\n");
+  git(root, 'commit', '-qam', 'the driver now always executes the lazy import');
+  assert.equal(lookupCoverage(ctx(), 'g').hit, null, 'the driver itself changed: re-run (and re-traced)');
+});
