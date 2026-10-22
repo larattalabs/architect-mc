@@ -1451,13 +1451,21 @@ async function finish(state, error) {
 }
 
 let finishing = false;
+let stopped = false; // set by a stopOnFail step or an abort: no worker starts another step
 async function abort(why) {
   if (finishing) return;
   finishing = true;
+  // no worker starts another step from here (2026-10-22: an abort during a turbo run's first minute left the unit steps that
+  // the idle shards started during its waits running, orphaned)
+  stopped = true;
   log(`aborting: ${why}`);
-  for (const sh of shards) if (sh.activeGroup) killGroup(sh.activeGroup, 'SIGTERM');
-  await sleep(3000);
-  for (const sh of shards) if (sh.activeGroup) killGroup(sh.activeGroup, 'SIGKILL');
+  const groups = new Set();
+  for (let round = 0; round < 3; round++) {
+    for (const sh of shards) if (sh.activeGroup) groups.add(sh.activeGroup);
+    for (const g of groups) killGroup(g, 'SIGTERM');
+    await sleep(3000);
+  }
+  for (const g of groups) killGroup(g, 'SIGKILL');
   for (const sh of shards) {
     await stopClient(sh, 'abort').catch(() => killRunDir(sh, 'abort'));
     cleanStrays(sh);
@@ -1527,7 +1535,6 @@ sampler.unref();
 
 // the scheduler: one worker per shard, each starting the next step `pick` allows
 const st = { pending: steps.map((_, i) => i), running: new Map(), done: new Map() };
-let stopped = false;
 const overlaps = new Map(); // running step id -> the ids of the steps that ran at the same time
 let waiters = [];
 const wake = () => new Promise((r) => {
