@@ -343,39 +343,47 @@ it.
 **Proofs (offline; the exact counts need the first traced turbo run, which records every step's coverage).**
 - **A real JVM** (`./gradlew test --tests *IrRoadExtTest` with the class-load log): 353 `dev.larattalabs` classes, every one mapped
   to its source. The coverage set it gives an in-game entry holds 91 of the 345 mod/src/main files.
-- **5 recent commits, with the build artifact and test filters (the design)** (`tools/step-cache.mjs coverage-select <commits>
-  --bytecode`). Both sides are compiled and the changed class files listed.
-  - **Unit drivers that run gradle tests in the source checkout** run them for real: mod/build.gradle's `gateRerunTests`, set by
-    the runner, makes test tasks never UP-TO-DATE or FROM-CACHE, so the test JVM logs its classes. The runner sets it only for
-    steps keyed by their test filters. unit-mod keeps gradle's up-to-date checks: rerunning the whole suite costs about 4 min.
-  - **Such a driver with complete filters** is keyed by:
-    - the test sources its `--tests` patterns can select, resolved at each commit (`@tests:<pattern>` entries).
-      - Gradle also matches Class.method, so a wildcard pattern selects every test file whose name or text holds all its fragments.
-      - A new, renamed or changed matching test (or test method) moves the key; an unrelated one doesn't.
-    - the test resources;
-    - the trees its Java tests read (kit, sidecar);
-    - the bytecode it loaded.
+- **5 recent commits: the design as built** (`tools/step-cache.mjs coverage-select <commits> --bytecode`). Both sides are compiled
+  and the changed class files listed. A coverage-mode step is keyed by:
+  - **its drivers' eager closure.** That is the top-level `import`s, which always load. A lazy `import()` counts only when its run
+    executed it, because the trace records it.
+    - Guard: a driver edit that starts executing a lazy path changes the driver file, which is in the eager set, so the step
+      re-runs and is re-traced (kit test "drivers count by their eager imports").
+    - The CI check still walks the full static closure (`closure` in the map; `eager` is new).
+  - **gradle runs in the source checkout, three cases:**
+    - **compile only** (`compileJava` for api-compat): the build artifact compiled the same sources. The class files the driver then
+      reads are keyed by their bytecode (`classReads`).
+    - **tests with readable filters** (`gateRerunTests` makes the JVM run and log; the runner sets it only for these steps):
+      - the test sources the patterns select at each commit (`@tests:<pattern>`; Gradle also matches Class.method, so a wildcard
+        selects every test file whose name or text holds its fragments);
+      - the kit and sidecar paths those test sources name (`javaTestRefs`: literal `"../kit/..."` and `Path.of("..", "kit", ...)`
+        paths, a node module's closure, a directory's tree, or the whole tree when a source builds the path any other way);
+      - the test resources;
+      - the loaded bytecode.
+    - **otherwise:** the whole build and test tree. That now applies to 3 steps only: f2-unit, f2-harvest and
+      6cf2-scenario-scatter, whose `gradle(args)` wrapper passes a parameter.
+  - **The 8 drivers that were unreadable:** f1, t1, t2, p0, s2, d and k1a only compile (api-compat), and pt2's
+    `*${t.split('.').pop()}` template ranges over literal names, so it is readable. Gradle calls are now read from the code (comments
+    stripped), with an `args` variable resolved to its array literal.
 
-    It is not keyed by the main source tree.
-  - **Incomplete filters keep the whole tree:** a `test` run without `--tests`, or a pattern built from a template. That is 20 of
-    the 120 steps that run gradle tests: f1, t1, pt2, t2, p0, s2, d, k1a, d2.
-
-  "At least" is what runs whatever the coverage says. Of the 210 cacheable steps:
+  "At least" is what runs whatever the recorded coverage says. Of the 210 cacheable steps:
 
   | commit | change | class files changed | map mode runs | coverage at least |
   |---|---|---|---|---|
-  | e5dafb64 | kit isLeaves (kit/lib/forms/states.mjs) | 0 | 209 | 157 |
-  | 0bb0c89e | RS realised provenance (11 files) | 14 | 204 | 21 |
-  | f5c73633 | RegionHash (5 files) | 6 | 204 | 30 |
-  | 8b4da151 | RS-b farmland (3 files) | 5 | 204 | 14 |
-  | 4d891398 | RP verify (1 Java file) | 2 | 204 | 12 |
+  | e5dafb64 | kit isLeaves (kit/lib/forms/states.mjs) | 0 | 209 | 14 |
+  | 0bb0c89e | RS realised provenance (11 files) | 14 | 204 | 13 |
+  | f5c73633 | RegionHash (5 files) | 6 | 204 | 6 |
+  | 8b4da151 | RS-b farmland (3 files) | 5 | 204 | 7 |
+  | 4d891398 | RP verify (1 Java file) | 2 | 204 | 5 |
 
-  The Java floor is now:
-  - unit-mod, umt, p3-lint and p3-lint-long;
-  - the 8 drivers with incomplete filters;
-  - the steps whose own drivers moved.
-
-  A compile error in a main class no step loaded still stops every coverage key, because the build artifact won't compile. Above the floor, a step runs only if its run loaded a changed class. With the gradle class kept, the floor was 35-50.
+  - **Who is in the floor:**
+    - unit-mod, umt, p3-lint and p3-lint-long (the build and its tests);
+    - f2-unit (its filters are unreadable);
+    - the steps whose eager drivers or data moved: the RS steps for 0bb0c89e, rsb for 8b4da151;
+    - for the kit change: unit-kit, water-lint and the lints, which load it eagerly, plus the unit drivers whose Java tests name it.
+  - **Above the floor**, a step runs only if its run loaded a changed class or a changed node file, a lazily imported driver module
+    included (f5c73633 changed `gate6ch-holders.mjs`, which only `gate6ch.mjs holders` loads).
+  - **Before:** 157 and 20-30 with the full closure, and 35-50 with the gradle class kept.
 - **Why the kit change ran 157 before** (measured): 143 of the 157 held kit/lib/forms/states.mjs only through lazy `import()`s
   in shared drivers that most runs never execute. The main one is `gate6b.mjs base` → `scenarios.mjs` → `kit/lib/region/check.mjs`.
   The eager-closure rule above, approved and built, takes it to 14.
