@@ -141,6 +141,9 @@ const SCEN = {
   route_demo: ['6ct2-scenario-route #5', 't2-ingame #2', 't2-ingame #5'], forms_demo: ['6cf1-scenario-forms #5', '6cf1-scenario-forms #6', '6cf1-scenario-forms #7'],
   scatter_demo: ['6cf2-scenario-scatter #6', '6cf2-scenario-scatter #7'], districts_demo: ['6cd-scenario-districts #5'],
   crossings_demo_flat: ['t3a-ingame #3', 't3b-ingame #4'], links_demo: ['k1b-ingame #4'], links_demo_flat: ['k1b-ingame #4'],
+  // ((batch v0.41.0) the batch's goldens: S3's monastery, F3's grove (natural and flat))
+  s3: ['6c-scenario-s3 (bars 1, 5, 6: checker, structure, safety)'], grove_demo: ['f3-natural (the grove on its forest site)'],
+  grove_demo_flat: ['f3-ingame (the grove, flat)'],
 };
 const FLATS = ['s1', 's7', 'relief_demo', 'route_demo', 'districts_demo'];
 // M5 gated where the scenario's own `safety` row is gated in game (S1, S7 and S2's natural run: < 1% of the walk area); recorded elsewhere
@@ -156,7 +159,7 @@ function structureCases() {
   out.push({ id: 'fx:tunnel_hill', covers: ['t3b-natural (the hill bore re-read: cover, shell, M3/M4:tunnel)'], run: async () => { const { loadFixture } = await kimp('lib/lint/vworld-fixtures.mjs'); const F = loadFixture('tunnel_hill'); const r = await structure({ ...F, name: 'tunnel_hill' }, { m5: null }); return { ok: [`${summary(r.rep)}; tunnels ${JSON.stringify(r.rep.metrics.tunnels ?? null).slice(0, 160)}`], fails: r.fails, recorded: r.recorded }; } });
   out.push({ id: 'd2:crest', covers: ['d2-ingame #7', 'd2-ingame #9 (the crest instance)', 'd2-ingame #5', 'd2-ingame #12'], run: d2Crest });
   out.push({ id: 'pathbibles', covers: ['w-ingame #8', 'w-ingame #9'], run: pathBibles });
-  for (const [dir, n] of [['kc', 1], ['irr', 1], ['rope', 1], ['tunnel', 2], ['t3a', 2], ['k1a', 1], ['refused', 1], ['voc', 1], ['vocc', 1], ['h', 2], ['hy', 3], ['valid', 6]]) {
+  for (const [dir, n] of [['kc', 1], ['irr', 1], ['rope', 1], ['tunnel', 2], ['t3a', 2], ['k1a', 1], ['refused', 1], ['voc', 1], ['vocc', 1], ['h', 2], ['hy', 3], ['valid', 6], ['fl', 2], ['f3', 2], ['rs', 1]]) {
     for (let k = 0; k < n; k++) out.push({ id: `p0:${dir}${n > 1 ? `/${k + 1}` : ''}`, covers: P0COVERS[dir] ?? [], run: () => corpus(dir, k, n) });
   }
   for (const w of ['bridge', 'rope', 'tunnel']) out.push({ id: `even:${w}`, covers: EVENCOVERS[w], run: () => evenFuzz(w) });
@@ -186,7 +189,8 @@ async function corpus(dir, k, n) {
     // a broken variant the plan check passes and the region check must catch (KC's u01-u04: ext architect_mc:unsafe)
     const broken = (/^u\d+_/.test(f) || /broken variant/.test(fx.about ?? '') || fx.expect?.clearRule === true) && !fx.expect?.code;
     // fixtures whose kit test runs them its own way (a `loose` volume spec, a bible object as `style`): their refusals stay the kit test's
-    const ownRunner = !!fx.volume?.loose || (fx.style && typeof fx.style === 'object');
+    // ((batch v0.41.0) and a fixture its kit test plans over its own biome grid and terrain: RS-b's rs08, the freezing pond, rs-b.test.mjs)
+    const ownRunner = !!fx.volume?.loose || (fx.style && typeof fx.style === 'object') || (!!fx.biomes && dir === 'rs');
     // the refusal set: a fixture that expects a refused part answers that code (and the refused part writes nothing)
     if (fx.expect?.part && fx.expect?.code && ownRunner) res.recorded.push(`${f}: refusal ${fx.expect.code} judged by its own kit test (its runner)`);
     else if (fx.expect?.part && fx.expect?.code) {
@@ -200,7 +204,13 @@ async function corpus(dir, k, n) {
     if (ownRunner) continue;
     const r = await structure({ ...p.c, name: `p0:${dir}/${f}` }, { corpus: true, connectors: CONNECTOR_DIRS.has(dir) });
     if (broken) {
+      // ((batch v0.41.0: FL's and F3's variants) one the plan check refuses as its fixture expects, or one the kit checker's own rule
+      // catches (F3's M18 and M19, recorded by the lint, not gated: f3-unit gates them), is caught before the lint
+      const ans = fx.expect?.part ? (p.check?.parts ?? []).find((q) => q.part === fx.expect.part) : null;
+      const byRule = fx.expect?.rule ? (r.rep?.findings ?? []).filter((x) => x.rule === fx.expect.rule).length : 0;
       if (r.fails.length) res.ok.push(`${f}: broken variant caught (${[...new Set(r.fails.map((l) => l.split(' ')[0]))].join(', ')})`);
+      else if (fx.expect?.class && ans?.class === fx.expect.class) res.ok.push(`${f}: broken variant caught by the plan check (${fx.expect.part} ${ans.class})`);
+      else if (byRule > 0) res.ok.push(`${f}: broken variant caught by the kit checker's ${fx.expect.rule} (${byRule} finding(s); judged by its slice's kit test)`);
       else res.fails.push(`${f}: a broken variant the lint did not catch`);
     } else {
       // a refused part writes nothing: its cells are no finding of an answered part; the parts that fit must be clean

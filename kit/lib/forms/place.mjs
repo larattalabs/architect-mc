@@ -15,6 +15,7 @@
 // forms (regenerated on the real ground at the chosen site).
 import { FLAG_LAVA, FLAG_TREE, FLAG_WATER } from '../region/pack.mjs';
 import { sampleIndex } from '../region/survey.mjs';
+import { FIRE_REACH } from '../region/checkFluids.mjs';
 import { eachColumn, runsRect, shiftRuns } from './states.mjs';
 
 /** A natural tree keeps this far (Chebyshev, columns) from every column of a grown form (§3.1). */
@@ -77,6 +78,12 @@ export function forbidden(o) {
     if (f & FLAG_TREE) trees.set(x, z);
     if (f & (FLAG_WATER | FLAG_LAVA)) foot.set(x, z);
   }
+  // ((batch v0.41.0, the structure lint's M20:natural on grove_demo) a grown form keeps its canopy off the fire reach of natural lava
+  // (a survey lava column, grown by FIRE_REACH.side): its logs and leaves are flammable, and the checker's M20:natural refuses that
+  const lava = grid(claim);
+  for (let z = claim.minZ; z <= claim.maxZ; z++) for (let x = claim.minX; x <= claim.maxX; x++) if (flagAt(x, z) & FLAG_LAVA) lava.set(x, z);
+  dilate(lava, FIRE_REACH.side);
+  for (let i = 0; i < canopy.a.length; i++) if (lava.a[i]) canopy.a[i] = 1;
   // natural tree cells a frozen volume shows (LOG, LEAVES) count as tree columns
   for (const v of o.volumes ?? []) v.eachTreeColumn?.((x, z) => trees.set(x, z));
   dilate(trees, TREE_CLEAR);

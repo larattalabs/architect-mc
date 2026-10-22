@@ -68,7 +68,7 @@ export async function lookCases({ goldenCase, kimp, LINTFIX, applyBaseline }) {
     },
   });
   // the scenarios' plans (their goldens' inputs re-planned by this kit): settlement looks
-  for (const [name, flat] of [['s7', false], ['s7', true], ['districts_demo', false], ['districts_demo', true], ['s1', false], ['s2', false], ['route_demo', false], ['relief_demo', false], ['scatter_demo', false], ['links_demo', false]]) {
+  for (const [name, flat] of [['s7', false], ['s7', true], ['districts_demo', false], ['districts_demo', true], ['s1', false], ['s2', false], ['route_demo', false], ['relief_demo', false], ['scatter_demo', false], ['links_demo', false], ['s3', false], ['grove_demo', false]]) { // ((batch v0.41.0) S3's and F3's goldens too
     const id = `g:${name}${flat ? '-flat' : ''}`;
     out.push({
       id, covers: name === 's1' ? ['6b-scenario-s1 #7 (organic read)'] : name === 's7' && !flat ? ['6cv-scenario-s7 (the look lint at the slice: the camera steps stay)'] : [],

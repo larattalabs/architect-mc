@@ -37,7 +37,7 @@
  "planCheck": {
   "schemaVersion": "plan/0",
   "catalogueVersion": 11,
-  "kitVersion": "0.40.0",
+  "kitVersion": "0.39.0",
   "budget": {
    "maxNodes": 2000000,
    "maxEdges": 128,

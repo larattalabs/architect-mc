@@ -29,6 +29,7 @@ import { TERRACE_GAP, layoutTerraces, parseTerraces } from '../region/terraces.m
 import { levelBands } from '../region/passes/districts.mjs';
 import { zoneDistricts, channelForm } from './schema.mjs';
 import { CAVE, f3CaveEmit, f3CoralAnswers, f3Emit, f3Resolve, GROWN, INTO_BODY, isF3 } from '../forms/hooks.mjs';
+import { eachColumn } from '../forms/states.mjs';
 // (7a K1) walls and gates (K1a), rope bridges and auto connectors (K1b): the compiler's hooks for the four connector kinds
 import { WALL_KINDS, emitWalls, finishGates, planWalls, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
 import { ROPE_KINDS, emitRopes, ropeAnswer, ropeFailAnswer, ropeLeg, ropePassInput, ropeResolve } from '../connectors/rope.mjs';
@@ -1729,7 +1730,23 @@ function templateParams(mod, given) {
 
 /** The entrance and spawn anchors at the claim's centre (a plan with no zone emitted). */
 function stubAnchors(r, env) {
-  const [cx, cz] = centre(env.claim);
+  let [cx, cz] = centre(env.claim);
+  // ((batch v0.41.0, the structure lint's M2 on grove_demo_flat) the stub entrance never stands in a grown form (F3's column masks):
+  // the nearest free column to the centre, ring by ring. Without F3 masks (every plan before F3), the centre as before.
+  const grown = new Set();
+  for (const f of r.forms ?? []) if (f.columns) eachColumn(f.columns, (x, z) => grown.add(`${x},${z}`));
+  if (grown.has(`${cx},${cz}`)) {
+    const c = env.claim;
+    search: for (let d = 1; d < Math.max(c.maxX - c.minX, c.maxZ - c.minZ); d++) {
+      for (let dz = -d; dz <= d; dz++) for (let dx = -d; dx <= d; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== d) continue;
+        const x = cx + dx, z = cz + dz;
+        if (x < c.minX || x > c.maxX || z < c.minZ || z > c.maxZ || grown.has(`${x},${z}`)) continue;
+        cx = x; cz = z;
+        break search;
+      }
+    }
+  }
   r.anchor('entrance', [cx, env.S.groundAt(cx, cz) + 1, cz]);
   r.anchor('spawn', [cx, env.S.groundAt(cx, cz) + 1, cz]);
 }

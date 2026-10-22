@@ -37,7 +37,7 @@
  "planCheck": {
   "schemaVersion": "plan/0",
   "catalogueVersion": 11,
-  "kitVersion": "0.40.0",
+  "kitVersion": "0.39.0",
   "budget": {
    "maxNodes": 2000000,
    "maxEdges": 128,
@@ -201,15 +201,15 @@
     "required": false,
     "geometry": {
      "rect": [
-      3429,
-      -1413,
-      3455,
-      -1387
+      3425,
+      -1415,
+      3451,
+      -1389
      ],
      "sites": [
       [
-       3442,
-       -1400
+       3438,
+       -1402
       ]
      ]
     }

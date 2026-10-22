@@ -965,3 +965,17 @@ Top first. Not fixed in v0.40.1.
 - Done here, no longer queued: RP's provenance for survival targets (HANDOFF-RS "Follow-ups", HANDOFF-RSb "Open"). Each target's
   cells are UNFINISHED at put-down and WRITTEN, with the target's site listed, once it is built (CONTRACT "Batch v0.41.0 as
   integrated").
+
+## Queued from the batch v0.41.0 integration (2026-10-22)
+
+- **Lamp spacing on V and D streets (look lint L-LAMP).** FL's look fix L3 (lamps 6 apart settlement-wide) applies only to plans with
+  a free zone, so every other plan stays byte-identical. S7 (1 natural, 1 flat) and districts_demo (20 natural, 9 flat) keep their
+  counts in `kit/test/fixtures/lint/baseline.json`. Extending the gap to V and D streets moves every street fixture: a slice of its
+  own, with Noah's look.
+- **S3's natural scenario depends on the live survey.** Each natural run plans over the world as it stands, and the IR differs run to
+  run. One run in this batch's gate (`gate-runs-0410/20261021-180501-slice`, IR afc7092eaf47, 11 lots) answered one M3/M8 finding
+  (bars 1, 5, 6). S3's own branch kit plans that survey to the identical IR, and the re-run passed. A plan that can answer an M-rule
+  finding on some surveys is S3's to harden.
+- **Main's gate-chains.json carried two `release.always` keys** (P1's -full list, then P2's list built on the pre-P1 one; JSON keeps
+  the last). The batch merge keeps one list: the -full twins plus the lints, p2-calibration, w-ingame, d2-ingame and
+  6c-scenario-s3.
