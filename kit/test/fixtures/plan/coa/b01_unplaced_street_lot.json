@@ -1,0 +1,135 @@
+{
+ "about": "(close-out A §4) a street zone (fixed 56x48) that places 4 of its 8 lots: a road to lot l8 (a lot part) and a road to the zone port l8 answer blocked by town (DEPENDENCY, kind unplaced); a path depending on the first stays blocked by it (R3). Main answered both roads refused NO_ROOM",
+ "on": "asks",
+ "plan": {
+  "schemaVersion": "plan/0",
+  "zones": [
+   {
+    "id": "town",
+    "kind": "standard",
+    "size": {
+     "w": [
+      56,
+      56
+     ],
+     "d": [
+      48,
+      48
+     ]
+    },
+    "program": {
+     "template": "flat_village",
+     "params": {
+      "lots": [
+       {
+        "id": "l1",
+        "type": "house",
+        "size": [
+         13,
+         13
+        ]
+       },
+       {
+        "id": "l2",
+        "type": "house",
+        "size": [
+         13,
+         13
+        ]
+       },
+       {
+        "id": "l3",
+        "type": "house",
+        "size": [
+         13,
+         13
+        ]
+       },
+       {
+        "id": "l4",
+        "type": "house",
+        "size": [
+         13,
+         13
+        ]
+       },
+       {
+        "id": "l5",
+        "type": "house",
+        "size": [
+         13,
+         13
+        ]
+       },
+       {
+        "id": "l6",
+        "type": "house",
+        "size": [
+         13,
+         13
+        ]
+       },
+       {
+        "id": "l7",
+        "type": "house",
+        "size": [
+         13,
+         13
+        ]
+       },
+       {
+        "id": "l8",
+        "type": "house",
+        "size": [
+         13,
+         13
+        ]
+       }
+      ]
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "r_lot",
+    "kind": "road",
+    "from": {
+     "anchor": "stockpile"
+    },
+    "to": {
+     "part": "l8"
+    }
+   },
+   {
+    "id": "r_port",
+    "kind": "road",
+    "from": {
+     "anchor": "player"
+    },
+    "to": {
+     "part": "town",
+     "port": "l8"
+    }
+   },
+   {
+    "id": "after",
+    "kind": "path",
+    "from": {
+     "anchor": "street_w"
+    },
+    "to": {
+     "anchor": "street_e"
+    }
+   }
+  ],
+  "dependencies": [
+   {
+    "part": "after",
+    "after": [
+     "r_lot"
+    ]
+   }
+  ]
+ }
+}

@@ -978,7 +978,7 @@
     },
     "partAnswer": {
       "type": "object", "required": ["part", "class"], "additionalProperties": false,
-      "description": "One part's answer from Regions.checkPlan (docs/CONTRACT.md P0 §3).",
+      "description": "One part's answer from Regions.checkPlan (docs/CONTRACT.md P0 §3). blocked: the part depends on a part that is not fits or adjusted, or on a piece of a part (a lot, a district) that the part could not place, even when that part fits or is adjusted; blockedBy names the part, the DEPENDENCY reason's evidence the piece ({kind: unplaced, lot | district, zone}).",
       "properties": {
         "part": { "$ref": "#/$defs/id" },
         "block": { "$ref": "#/$defs/blockId" },
