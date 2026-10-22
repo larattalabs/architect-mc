@@ -12,7 +12,8 @@
 //     latent                            §0's latent bug: a creative-game-type world with the toggle on realises a region (PLACED)
 //     item4  .. item15                  one item each, on a fresh world copy (the verifier re-runs item5, item8, item9, item10, item11)
 //     ingame    (rs-ingame)             latent, items 4, 6 (with RP's record half built and after build.done), 6b, 7, 12, 13, 15
-//     survival  (rs-survival)           items 3 and 5 (build, bills), 8 (conservation), 9 (removal), 10 (mid-build removal), 14 (natural)
+//     survival  (rs-survival)           items 3 and 5 (build, bills), 8 (conservation), 9 (removal), 10 (mid-build removal), lv7 (L-V7:
+//                                       dried farmland across a restart), 14 (rs02 on S3's natural claim); GATE_P3=smoke: one build per proof
 //     crash     (rs-crash)              item 11
 //     report                            REPORT.md over the step JSONs
 //
@@ -36,6 +37,10 @@ const { OUT, check, connect, log, results, root, state, startClient, stopClient,
 const core = await import('./lib/gate6chy-core.mjs');
 const B = await import('./lib/gate6chy-b.mjs');
 const G = await import('./lib/gate6crs-game.mjs');
+// (6c close-out B, the P3 cutover for RS's rows: docs/FAST-CHECKS.md "P3 cutover") GATE_P3=smoke (rs-survival-smoke, the slice tier): one
+// build per proof; every left-out build is named in a `P3 smoke:` line. The full rs-survival runs at release.
+const P3T = await import('./lib/p3-tier.mjs');
+const smokeSkip = (tag, by) => { if (!P3T.smoke) return false; P3T.skipped(log, tag, by); return true; };
 
 L.refuseKeys();
 const KIT = path.join(root, 'kit');
@@ -296,6 +301,9 @@ steps.item5 = async () => {
   // (rs04, the tunnel, is RS-b's row: RS_ONLY=rs04 runs it)
   for (const [tag, name] of [['rs02', 'rs02_walled'], ['rs03', 'rs03_water'], ['village', 'survival_village'], ...(process.env.RS_ONLY?.includes('rs04') ? [['rs04', 'rs04_tunnel']] : [])]) {
     if (process.env.RS_ONLY && !process.env.RS_ONLY.split(',').includes(tag)) continue; // (development: one fixture)
+    // (smoke: rs02's build and its item 3/5 rows are item 8's rs02c, rs03's are item 9's rs03r, each the same buildOne)
+    if (tag === 'rs02' && smokeSkip('item 5 (rs02): the build, the bills, the twin, E-flat', "item 8's rs02c (the same buildOne)")) continue;
+    if (tag === 'rs03' && smokeSkip('item 5 (rs03): the build, the bodies, the bills, the twin, E-flat', "item 9's rs03r (the same buildOne)")) continue;
     try { out[tag] = await buildOne(tag, name, { remove: !process.env.RS_KEEP }); } catch (e) { check(false, `item 5 (${tag}): ${String(e.message).slice(0, 300)}`); out[tag] = { error: String(e.stack ?? e) }; }
   }
   return out;
@@ -650,6 +658,7 @@ steps.item9 = async () => {
   const out = {};
   for (const [tag, name] of [['rs02r', 'rs02_walled'], ['rs03r', 'rs03_water']]) {
     if (process.env.RS_ONLY && !process.env.RS_ONLY.split(',').includes(tag)) continue;
+    if (tag === 'rs02r' && smokeSkip('item 9 (rs02r): the refund, the player\'s block, once per key, conservation on rs02', 'rs03r (every row of it, the bodies\' scoop besides) and item 8 (rs02\'s conservation)')) continue;
     let pre = null;
     const o = await buildOne(tag, name, { cons: true, keep: async ({ region, rs, C, box }) => {
       // one copper cell weathered (a lot's, rs_hut's back wall), one paid target cell replaced by a player's block
@@ -705,6 +714,7 @@ steps.item10 = async () => {
   const out = {};
   for (const leave of [false, true]) {
     const tag = leave ? 'rs02m2' : 'rs02m1';
+    if (!leave && smokeSkip('item 10 (rs02m1): the mid-build removal without a reopen', 'rs02m2 (the same removal, with a save, a leave and a reopen mid-removal)')) continue;
     const R = await realised(tag, 'rs02_walled');
     const C = new G.Conservation(ctx, R.box);
     await C.start();
@@ -943,13 +953,174 @@ steps.item13 = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ (6c close-out B) L-V7: dried farmland across a restart
+
+/**
+ * L-V7 (the ledger lint's finding, fixed by Builder.driedFarmland): rs03's farm field (part town) built first from its own bill, three of
+ * its farmland cells dried to dirt (/setblock: the block vanilla's drying leaves), the world saved, left and reopened (a restart: the
+ * runs are made again from the journal, with no built bit); then the dried cells still read built (nothing re-queued, nothing
+ * outstanding again), the rest fed to done, the conservation sum exact throughout, the region's consumption its bill exactly, and the
+ * removal refunds the paid cells standing (the dried cells' dirt among them), E-flat 0.
+ */
+steps.lv7 = async () => {
+  await ensure();
+  const tag = 'rs03f';
+  const R = await realised(tag, 'rs03_water');
+  const C = new G.Conservation(ctx, R.box);
+  await C.start();
+  const has = (rs, part) => (rs.build?.parts ?? []).some((p) => p.part === part && p.targets.length);
+  const f0 = await G.feed(ctx, R.region, { cons: C, fraction: 0.5, timeoutMs: 1_200_000, until: (st, rs) => has(rs, 'town') });
+  const town = f0.last.rs.build.parts.find((p) => p.part === 'town');
+  check(!!town, `L-V7 (${tag}): the town part's targets are down (${json((f0.last.rs.build?.parts ?? []).map((p) => [p.part, p.targets.length]))})`);
+  if (!town) return { open: true };
+  const tgt = new Map((f0.last.rs.targets ?? []).map((t) => [t.target, t]));
+  const bill = town.targets.reduce((a, id) => G.plus(a, tgt.get(id)?.bom), {});
+  await L.call('dev.stockpile.order', { owner: G.OWNER, ids: town.targets }, 60_000);
+  await C.insert(`stockpile:${G.OWNER}`, bill);
+  const w = await G.waitFor(ctx, R.region, (st, rs) => town.targets.every((id) => { const t = (rs.targets ?? []).find((x) => x.target === id); return t && t.built === t.cells; }), { timeoutMs: 900_000 });
+  check(w.ok, `L-V7 (${tag}): the town's targets built from their own bill first (${json(town.targets)})`);
+  // its farmland cells, built: the journal's after at each of the town targets' built cells
+  const cells = await L.call('dev.rs.cells', { region: R.region }, 300_000);
+  const farm = [];
+  for (const t of (cells.targets ?? []).filter((x) => town.targets.includes(x.target))) {
+    for (const c of t.cells ?? []) {
+      if (farm.length >= 3 || (c[3] & 1) || !(c[3] & 2)) continue;
+      const top = ((await L.call('dev.journal.at', { x: c[0], y: c[1], z: c[2] }, 30_000)).stack ?? []).slice(-1)[0];
+      if (/^minecraft:farmland/.test(String(top?.after ?? ''))) farm.push(c.slice(0, 3));
+    }
+  }
+  check(farm.length === 3, `L-V7 (${tag}): three built farmland cells of the town's targets (${json(farm)})`);
+  for (const c of farm) await cmd(`/setblock ${c.join(' ')} minecraft:dirt`); // dried (farmland and dirt are both the dirt item: no conservation change)
+  await sleep(2000);
+  const builtOf = (rs) => town.targets.map((id) => (rs.targets ?? []).find((x) => x.target === id)?.built ?? -1);
+  const rsA = await G.rsState(ctx, R.region);
+  const psA = await G.pileState(ctx);
+  await C.point('dried');
+  await L.leaveWorld();
+  await L.openWorld(R.s.world);
+  await sleep(5000);
+  const rsB = await G.rsState(ctx, R.region);
+  const psB = await G.pileState(ctx);
+  await C.point('restarted');
+  const dirtA = psA.outstanding?.['minecraft:dirt'] ?? 0, dirtB = psB.outstanding?.['minecraft:dirt'] ?? 0;
+  check(json(builtOf(rsA)) === json(builtOf(rsB)) && dirtB <= dirtA, `L-V7 (${tag}): after the restart the dried cells still read built: the town's built ${json(builtOf(rsA))} -> ${json(builtOf(rsB))}; dirt outstanding ${dirtA} -> ${dirtB} (never more)`);
+  const f = await G.feed(ctx, R.region, { cons: C, timeoutMs: 1_800_000 });
+  check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done, `L-V7 (${tag}): then fed to done: ${f.last.st.view.state}`);
+  const bills = G.billsOf(R.ck, f.last.rs);
+  const a0 = await C.parts();
+  const dirtBill = bills.got.__region__?.['minecraft:dirt'] ?? 0, dirtPaid = a0.ledger?.consumed?.['minecraft:dirt'] ?? -1;
+  check(dirtBill > 0 && dirtPaid === dirtBill, `L-V7 (${tag}): the dirt consumed is the bill's exactly, the dried cells paid once: ${dirtPaid} of ${dirtBill} (consumed ${json(a0.ledger?.consumed)})`);
+  await C.point('built');
+  const s0 = await G.pileState(ctx);
+  const rm = await G.remove(ctx, R.region);
+  await sleep(3000);
+  const s1 = await G.pileState(ctx);
+  const a1 = await C.parts();
+  // (item 9's rule) the refund: credited to the stock, or dropped at the crates past the capacity
+  const got = G.plus(G.minus(s1.stock, s0.stock), G.minus(a1.entities, a0.entities));
+  await C.point('removed');
+  const e = await G.diff(ctx, R.box, R.pre);
+  const ef = e.list.filter((m) => !R.crateAt.some((c) => c.join(',') === m.pos));
+  check(!!rm.removed && G.same(got, a0.paidStanding), `L-V7 (${tag}): the refund equals the paid cells standing, the dried cells' dirt among them (${json(G.minus(got, a0.paidStanding))} off; dirt ${got['minecraft:dirt'] ?? 0} of ${a0.paidStanding?.['minecraft:dirt'] ?? 0})`);
+  check(C.points.every(G.exact) && ef.length === 0, `L-V7 (${tag}): conservation exact at ${C.points.map((p) => p.label).join(', ')}; E-flat ${ef.length}`, { points: C.points.filter((p) => !G.exact(p)), ef: ef.slice(0, 6) });
+  return { farm, builtA: builtOf(rsA), builtB: builtOf(rsB), dirtA, dirtB, dirtPaid, dirtBill, refund: got, paid: a0.paidStanding, points: C.points };
+};
+
 // ------------------------------------------------------------------ item 14: the natural site (S3's claim)
 
+/**
+ * Item 14 (CONTRACT RS §13 row 14): rs02 on a fresh copy of S3's claim in survival (S3 item 4's world: the seed base, exact rules, the
+ * chunks settled 90 s, then surveyed): the world's default mode survival and the survival toggle on, rs02's plan with the anchors Steward
+ * would compute there (naturalAnchors), Regions.checkPlan (Steward's repair drops a refused optional part, as S3's item 4), a stockpile
+ * fed to done: PLACED and built; then Regions.remove: E-normal 0 unclassified under S3 §6's classes (tools/scenarios.mjs s3Classify,
+ * `farfluid` included).
+ */
 steps.item14 = async () => {
   await ensure();
-  const sc = process.env.RS_S3_CLAIM ? JSON.parse(process.env.RS_S3_CLAIM) : null;
-  if (!sc) { check(false, 'item 14: S3\'s natural claim is not on this branch yet (RS_S3_CLAIM={world, claim, anchors}): recorded as open'); return { open: true }; }
-  return { open: true };
+  const tag = 'rs02n';
+  const out = { tag };
+  const SC = await import('./scenarios.mjs');
+  const { surveyApi, sampleIndex: sampleIndexOf } = await imp('lib/region/survey.mjs');
+  const { buildVirtual, F_WRITTEN } = await imp('lib/region/vworld.mjs');
+  const sc = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 's3_monastery.json'), 'utf8'));
+  const c = sc.fixture.claim;
+  const claim = { minX: c[0], minZ: c[1], maxX: c[2], maxZ: c[3], minY: -64, maxY: 319 };
+  // ---- the world: a fresh copy of S3's site, survival by the world (its default mode) and the toggle, settled
+  await L.fresh(`G6B RS N ${tag}`, await L.seedBase(sc.world.seed));
+  await L.setRules('exact');
+  await cmd('/weather clear');
+  await cmd('/defaultgamemode survival');
+  await L.call('dev.survival.set', { on: true });
+  await L.tp((c[0] + c[2]) / 2, sc.fixture.yRange[1], (c[1] + c[3]) / 2);
+  await L.call('dev.waitChunks', { timeoutMs: 180_000 }, 240_000).catch(() => null);
+  await L.settle(90_000);
+  const sv = path.join(OUT, `rs-${tag}-survey.bin`);
+  await L.call('dev.region.survey', { claim: c, surveyLoad: 'bounded:256', file: sv }, 900_000);
+  const S = surveyApi(fs.readFileSync(sv), claim);
+  const K = await import('./lib/gate6crs-kit.mjs');
+  const Hp = await imp('test/plan-helpers.mjs');
+  const an = K.naturalAnchors(S, c);
+  const lips = await K.ropeLips(Hp, fs.readFileSync(sv), claim, S, an.stone);
+  check(!!lips, `item 14: a rope crossing the kit's check accepts on the settled survey (${json(lips)})`);
+  Object.assign(an, lips ?? {});
+  out.anchors = an;
+  const fx = G.fixture(ctx, 'rs02_walled');
+  const plan = JSON.parse(JSON.stringify(fx.plan));
+  const anchors = { ...Hp.stewardAnchors(claim), stone: an.stone, east_gate: an.east_gate, lip_w: an.lip_w, lip_e: an.lip_e };
+  const entries = entriesOf(fx);
+  await G.designs(ctx);
+  const checkOnce = async () => L.call('dev.region.checkPlan', { plan, claim: c, owner: G.OWNER, anchors, load: 'generate' }, 1_800_000);
+  let ck = await checkOnce();
+  const optional = new Set([...(plan.connectors ?? []), ...(plan.forms ?? []), ...(plan.zones ?? [])].filter((p) => p.required === false).map((p) => p.id));
+  const refusedOf = (k) => (k.check?.parts ?? []).filter((a) => !['fits', 'adjusted'].includes(a.class));
+  if (ck.check?.overall === 'NEEDS_REPAIR' && refusedOf(ck).length && refusedOf(ck).every((a) => optional.has(a.part))) {
+    const drop = refusedOf(ck).map((a) => a.part);
+    out.repaired = { dropped: drop, reasons: refusedOf(ck).map((a) => `${a.class} ${a.reasons?.[0]?.code ?? ''}`.trim()) };
+    plan.connectors = (plan.connectors ?? []).filter((x) => !drop.includes(x.id));
+    plan.forms = (plan.forms ?? []).filter((x) => !drop.includes(x.id));
+    log(`  item 14: NEEDS_REPAIR with ${drop.join(', ')} not placed; Steward's repair drops them and checks again`);
+    ck = await checkOnce();
+  }
+  fs.writeFileSync(path.join(OUT, `rs-${tag}-check.json`), `${JSON.stringify({ anchors, ck }, null, 1)}\n`);
+  const parts = (ck.check?.parts ?? []).map((a) => [a.part, a.class, a.reasons?.[0]?.code ?? null]);
+  out.check = { overall: ck.check?.overall ?? null, survival: ck.check?.survival, parts };
+  check(ck.check?.survival === true && ck.check?.overall === 'READY', `item 14 (rs02 on S3's claim): Regions.checkPlan in survival on the settled copy: ${ck.check?.overall}${out.repaired ? ` (after Steward's repair: ${json(out.repaired)})` : ''}; ${json(parts)}; anchors ${json(an)}`);
+  if (ck.check?.overall !== 'READY') { await L.leaveWorld(); return out; }
+  // ---- the box (S3 item 4's: the claim + 8, the floor - 8 to the top + 24), the snapshot, the stockpile on the ground at the NW corner
+  let y0 = 320, y1 = -64;
+  for (let x = c[0]; x <= c[2]; x += 2) for (let z = c[1]; z <= c[3]; z += 2) { y0 = Math.min(y0, S.floorAt(x, z)); y1 = Math.max(y1, S.topAt(x, z)); }
+  const box = [c[0] - 8, Math.max(-64, y0 - 8), c[1] - 8, c[2] + 8, Math.min(319, y1 + 24), c[3] + 8];
+  await cmd('/kill @e[type=!minecraft:player]');
+  const crates = Array.from({ length: 4 }, (_, k) => [c[0] + 2 + 2 * k, S.groundAt(c[0] + 2 + 2 * k, c[1] + 2) + 1, c[1] + 2]);
+  const cr = await L.call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
+  check(!cr.refused, `item 14: the stockpile's 4 crates at the claim's north-west corner (${json(cr.refused ?? crates)})`);
+  const snapF = await G.snap(ctx, box, `rs-${tag}-pre`);
+  // ---- realised and fed to done
+  const region = await G.realise(ctx, ck.check.artifactSha, entries);
+  out.region = region;
+  const f = await G.feed(ctx, region, { fraction: 0.5, timeoutMs: 2_400_000 });
+  out.state = f.last.st.view.state;
+  out.build = f.last.rs.build;
+  check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done && f.last.rs.build?.percent === 100, `item 14: realiseApproved in survival and fed in ${f.waves} waves (${sum(f.inserted)} items): ${f.last.st.view.state}, build ${json(f.last.rs.build && { built: f.last.rs.build.built, done: f.last.rs.build.done, percent: f.last.rs.build.percent })}`);
+  const planId = f.last.st.view.planId;
+  const planDir = path.join(L.SIDECAR_DATA, 'regions', 'plans', planId);
+  const ir = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8'));
+  const blobs = (sha) => { const p = path.join(planDir, 'blobs', `${sha}.bin`); return fs.existsSync(p) ? fs.readFileSync(p) : null; };
+  const { vw } = buildVirtual({ ir, survey: fs.readFileSync(path.join(planDir, 'survey.bin')), blobs });
+  // ---- removed: E-normal under S3 §6's classes (the crates' cells aside)
+  await cmd('/kill @e[type=!minecraft:player]');
+  const rm = await G.remove(ctx, region);
+  await L.settle(10_000);
+  const d = await L.call('dev.region.hash', { box, mode: 'diff', file: snapF }, 4 * 3_600_000);
+  const crateSet = new Set(crates.map((k) => k.join(',')));
+  const list = (d.list ?? []).filter((m) => !crateSet.has(m.pos));
+  const classes = {};
+  for (const m of list) classes[m.class] = (classes[m.class] ?? 0) + 1;
+  const e = SC.s3Classify({ mismatches: list.length, classes, list }, { vw, ir, F_WRITTEN, sampleIndexOf });
+  out.exact = { kind: 'E-normal', mismatches: e.mismatches, classes: e.classes, unclassified: e.classes?.none ?? 0, listed: (d.list ?? []).length === d.mismatches, sample: (e.list ?? []).filter((m) => m.class === 'none').slice(0, 12) };
+  check(!!rm.removed && (d.list ?? []).length === d.mismatches && (e.classes?.none ?? 0) === 0, `item 14: Regions.remove (${rm.removed ? 'removed' : json(rm)}); E-normal ${e.mismatches} (${json(e.classes)}; the crates aside): 0 unclassified under S3 §6's classes`, out.exact.sample);
+  await L.leaveWorld();
+  return out;
 };
 
 // ------------------------------------------------------------------ item 15: free drops (N-RS-2)
@@ -1033,7 +1204,7 @@ steps.report = async () => {
 
 const groups = {
   ingame: ['latent', 'item4', 'item6', 'item6b', 'item7', 'item12', 'item13', 'item15'],
-  survival: ['item5', 'item8', 'item9', 'item10'], // (item14: on S3's claim once S3 has merged)
+  survival: ['item5', 'item8', 'item9', 'item10', 'lv7', 'item14'],
   crash: ['item11'],
 };
 const name = process.argv[2];

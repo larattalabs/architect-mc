@@ -357,7 +357,7 @@ class LedgerLintTest {
 	}
 
 	/**
-	 * (6c close-out B, L-V7) A farm built from the stockpile, then three of its farmland cells dry to dirt, then a restart: the restart's run
+	 * (6c close-out B, L-V7) A farm (over air) built from the stockpile, then three of its farmland cells dry to dirt, then a restart: the restart's run
 	 * reads the dried cells as built (Builder.driedFarmland from the befores), nothing is outstanding or charged again, and the deconstruct
 	 * refunds the bill exactly (dirt for each dried cell, as farmland costs). The same over a half-built farm finished after the restart.
 	 */
@@ -396,7 +396,7 @@ class LedgerLintTest {
 		}
 	}
 
-	/** (6c close-out B, L-V7) driedFarmland marks farmland over no soil (air, stone) or over farmland; never over the ground's own soil. */
+	/** (6c close-out B, L-V7) driedFarmland marks farmland over anything but dirt (air, stone, farmland, grass, podzol); never over dirt (the ground's own). */
 	@Test
 	void lv7_driedFarmlandMarksOnlyCellsWhoseBeforeWasNoSoil() {
 		LedgerSim s = new LedgerSim();
@@ -404,7 +404,7 @@ class LedgerLintTest {
 		net.minecraft.world.level.block.state.BlockState[] befores = {LedgerSim.AIR, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),
 			net.minecraft.world.level.block.Blocks.FARMLAND.defaultBlockState(), net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState(),
 			net.minecraft.world.level.block.Blocks.GRASS_BLOCK.defaultBlockState(), net.minecraft.world.level.block.Blocks.PODZOL.defaultBlockState()};
-		boolean[] want = {true, true, true, false, false, false};
+		boolean[] want = {true, true, true, false, true, true};
 		for (int b = 0; b < befores.length; b++) {
 			for (long p : f.target.keySet()) {
 				f.before.put(p, befores[b]);

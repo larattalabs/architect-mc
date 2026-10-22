@@ -142,3 +142,59 @@ export async function asksTables(root, { check, OUT }) {
   check(committedS === text, `item 2 (§11): fixtures/plan/rs/asks-survival.md is this table${committedS === null ? ' (missing)' : ''}`);
   return { moved, malformed, refusedSurvival };
 }
+
+// (6c close-out B) item 14
+/**
+ * The anchors Steward would compute for rs02 on a natural claim, from the settled survey (S3 item 4's rule: what it sees): `stone` the
+ * centre of the flattest 40x40 window (least relief, no water), the town near it; `east_gate` on the claim's east edge at the stone's z;
+ * the rope bridge's lips come from ropeLips. Pure.
+ */
+export function naturalAnchors(S, c) {
+  const top = (x, z) => S.groundAt(x, z);
+  const wet = (x, z) => S.groundAt(x, z) !== S.floorAt(x, z);
+  let stone = null, best = Infinity;
+  for (let x = c[0] + 24; x <= c[2] - 24; x += 4) {
+    for (let z = c[1] + 24; z <= c[3] - 24; z += 4) {
+      let lo = Infinity, hi = -Infinity, w = 0;
+      for (let dx = -20; dx <= 20; dx += 4) for (let dz = -20; dz <= 20; dz += 4) { const y = top(x + dx, z + dz); lo = Math.min(lo, y); hi = Math.max(hi, y); if (wet(x + dx, z + dz)) w++; }
+      const r = hi - lo + 4 * w;
+      if (r < best) { best = r; stone = [x, top(x, z) + 1, z]; }
+    }
+  }
+  const gate = [c[2] - 2, top(c[2] - 2, stone[2]) + 1, stone[2]];
+  return { stone, east_gate: gate, relief: best };
+}
+
+/**
+ * The rope bridge's lips Steward would pick on a natural claim: east-west pairs 16, 24 or 32 apart, dry, their landings within 3, over a
+ * dip of 4 or more, deepest first, at least 36 from the town's stone in z; the first the kit's own check answers fits or adjusted for a
+ * rope bridge alone (survival). `H`: kit/test/plan-helpers.mjs; `bytes`: the survey. Returns {lip_w, lip_e, dip, tried} or null.
+ */
+export async function ropeLips(H, bytes, claim, S, stone, maxTries = 60) {
+  const c = [claim.minX, claim.minZ, claim.maxX, claim.maxZ];
+  const top = (x, z) => S.groundAt(x, z), wet = (x, z) => S.groundAt(x, z) !== S.floorAt(x, z);
+  const cands = [];
+  for (let z = c[1] + 8; z <= c[3] - 8; z += 4) {
+    if (Math.abs(z - stone[2]) < 36) continue;
+    for (let x = c[0] + 4; x + 16 <= c[2] - 4; x += 4) {
+      for (const n of [16, 24, 32]) {
+        if (x + n > c[2] - 4) continue;
+        const a = top(x, z), b = top(x + n, z);
+        if (wet(x, z) || wet(x + n, z) || Math.abs(a - b) > 3) continue;
+        let lo = Infinity;
+        for (let k = 1; k < n; k++) lo = Math.min(lo, top(x + k, z));
+        if (Math.min(a, b) - lo >= 4) cands.push({ x, z, n, a, b, d: Math.min(a, b) - lo });
+      }
+    }
+  }
+  cands.sort((p, q) => q.d - p.d || p.z - q.z || p.x - q.x || p.n - q.n);
+  const plan = { schemaVersion: 'plan/0', planId: 'rope_lips', connectors: [{ id: 'rope', kind: 'rope_bridge', from: { anchor: 'lip_w' }, to: { anchor: 'lip_e' } }] };
+  let tried = 0;
+  for (const k of cands.slice(0, maxTries)) {
+    tried++;
+    const anchors = { lip_w: [k.x, k.a + 1, k.z], lip_e: [k.x + k.n, k.b + 1, k.z] };
+    const r = await H.checkPlanLocal(plan, { survey: bytes, claim, anchors, survival: true });
+    if (['fits', 'adjusted'].includes(r.check.parts[0]?.class)) return { ...anchors, dip: k.d, tried };
+  }
+  return null;
+}
