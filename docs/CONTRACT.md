@@ -23922,7 +23922,7 @@ default CompletableFuture<Boolean> discardPlan(String planId)   // true: discard
   - `pinned`: an artifact of the plan has a pin (plain or keyed). Unpin it first.
 - **A tombstone** `plans/<id>.discarded.json {discardedAt, owner?, opKey?}` stays as long as plan keys do. A keyed plan discarded:
   the same key and body refuses `PLAN_STALE` (detail `discarded`), never re-plans silently; `planByKey` answers empty (the caller
-  discarded it); `realise` of the id refuses `ARTIFACT_UNAPPROVED`-style `PLAN_STALE` "discarded".
+  discarded it); `realise` of the id refuses `PLAN_STALE` (detail `discarded`).
 - **The sweep** (world start, after the region records load): an unrealised plan, with no prepare, no pinned artifact and no region
   naming it, is discarded **7 days** after it was made, or **30 days** if it has a plan key (0a's retention). A plan whose region was
   REMOVED is swept on the same clock from the removal. Logged once per sweep with a count. Feature `planSweep`.
