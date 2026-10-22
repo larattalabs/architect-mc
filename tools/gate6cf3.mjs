@@ -28,6 +28,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { gatePart, sliceSections, slicesOf } from './lib/gate-part.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-F3-run');
@@ -98,6 +99,11 @@ function nodeTest(files, timeout = 3_600_000) {
 
 steps.unit = async () => {
   const out = {};
+  // a split unit step (docs/GATES.md "Turbo"): `items` (every item but the byte identity) and the byte identity's fixture loop in
+  // round-robin slices; whole, every section runs exactly as before
+  const P = gatePart(['items', ...sliceSections('unchanged', 3)], { log });
+  const slice = slicesOf(P, 'unchanged', 3);
+  if (P.want('items')) {
   // item 1 (the generators) and items 2, 7, 8 (plan side), 9 (the catalogue): the F3 kit tests
   const files = ['kit/test/forms-f3-property.test.mjs', 'kit/test/forms-f3.test.mjs', ...(fs.existsSync(path.join(KIT, 'test', 'forms-f3-coral.test.mjs')) ? ['kit/test/forms-f3-coral.test.mjs'] : [])];
   out.kit = nodeTest(files);
@@ -105,11 +111,15 @@ steps.unit = async () => {
   // the P0 catalogue rule (item 9: every supported entry has a valid/ fixture that fits) and the scenario goldens (item 11)
   out.p0 = nodeTest(['kit/test/plan-p0.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-golden.test.mjs']);
   check(out.p0.code === 0 && out.p0.fail === 0, `items 9, 11, 12 (kit): plan-p0 (every supported entry has a valid fixture that fits; every reserved one an extension fixture), the scenario goldens (grove_demo's among them) and mega_bench's golden (unchanged): ${out.p0.pass} pass, ${out.p0.fail} fail`, out.p0.failing);
+  }
   // §8 byte identity and M18/M19 per fixture
   const K = await import('./lib/gate6cf3-kit.mjs');
-  const u = await K.unchanged(root, { check, log });
+  if (!slice || slice.length) {
+  const u = await K.unchanged(root, { check, log, slice });
   fs.writeFileSync(path.join(OUT, 'f3-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
   out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, excepted: K.EXCEPT, m18: Object.entries(u.m18).filter(([, v]) => v.count > 0), m19: Object.entries(u.m19).filter(([, v]) => v.count > 0) };
+  }
+  if (P.want('items')) {
   // §9 the 59 asks before and after
   const { asksGap } = await import('./lib/gate6chy-b.mjs');
   const baseDir = path.resolve(root, '..', 'architect-mc-F3-main');
@@ -142,6 +152,7 @@ steps.unit = async () => {
   const jr = gradle ? await gradle(path.join(root, 'mod'), args, { env }) : spawnSync('./gradlew', args, { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 });
   out.java = { code: jr.status ?? jr.code, tail: `${jr.stdout ?? ''}${jr.stderr ?? ''}`.split('\n').slice(-8) };
   check((jr.status ?? jr.code) === 0, `Java units: StillOursF3Test (mushroom faces and dripstone thickness volatile, Coral.canonical equal to the kit's 40 rows, a dead coral holds the live one), CopperTest, ApiF3Test: gradle exit ${jr.status ?? jr.code}`, out.java.tail);
+  }
   spendZero();
   return out;
 };

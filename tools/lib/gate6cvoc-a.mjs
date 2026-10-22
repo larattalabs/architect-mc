@@ -157,6 +157,7 @@ export async function unchanged(root) {
 
 const unit = [
   {
+    key: 'genvocab',
     name: 'items 1, 12, 13: gen-vocab.mjs',
     async run({ root, check }) {
       const out = {};
@@ -174,6 +175,7 @@ const unit = [
     },
   },
   {
+    key: 'vocab-tests',
     name: 'items 1, 3, 4 (kit): the vocabulary tests',
     async run({ root, check }) {
       const r = nodeTest(root, ['kit/test/vocab.test.mjs']);
@@ -185,6 +187,7 @@ const unit = [
     },
   },
   {
+    key: 'identity',
     name: 'item 5: byte identity',
     async run({ root, check }) {
       const u = await unchanged(root);
@@ -193,6 +196,7 @@ const unit = [
     },
   },
   {
+    key: 'java',
     name: 'item 14 and S-VOC-5/6 (Java, sidecar): the record, the feature, vocab/1, api-compat',
     async run({ root, check }) {
       const out = {};

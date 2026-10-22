@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { SIBLING_MOVED, normSiblingIr } from './batch-0410.mjs';
+import { inSlice } from './gate-part.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -25,7 +26,7 @@ export function baseTree(root) {
 
 const hasTerraces = (plan) => /"terraces":\s*[{t]/.test(JSON.stringify(plan));
 
-export async function unchanged(root, { check, log = console.log, only = null } = {}) {
+export async function unchanged(root, { check, log = console.log, only = null, slice = null } = {}) {
   const { dir: mainDir, base } = baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
   const [hNew, hOld] = [await H(root), await H(mainDir)];
@@ -33,8 +34,13 @@ export async function unchanged(root, { check, log = console.log, only = null } 
   const norm = (r) => normSiblingIr(r.res.irJson);
   const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(norm(r)), first: r.first && r.first !== r ? sha256(norm(r.first)) : null });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {} };
+  let i = -1;
+  let elsewhere = 0; // (a split unit step) fixtures another part plans: counted, not planned here
   for (const [name, fx] of fixtures(root)) {
+    i++;
     if (only && !only.test(name)) continue;
+    // (counted as the whole loop's rows count: those on the base)
+    if (!inSlice(i, slice)) { if (fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name))) elsewhere++; continue; }
     const existsOld = fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name));
     let a, b, err = null;
     try { a = sig((await planFixture(hNew, root, fx)).r); } catch (e) { err = `head: ${String(e.message).slice(0, 160)}`; }
@@ -48,7 +54,8 @@ export async function unchanged(root, { check, log = console.log, only = null } 
     if (check) check(same || (!a && !b), `${name}: ${same ? 'byte-identical (answers, overall, IR, first plan)' : !a && !b ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, base: b })}`}`);
   }
   const rows = Object.entries(out.fixtures).filter(([, r]) => r.existsOld);
-  out.n = rows.length;
+  out.n = rows.length + elsewhere;
+  if (slice) out.slice = { slices: slice, planned: rows.length, elsewhere };
   out.same = rows.filter(([, r]) => r.same).length;
   out.differ = rows.filter(([, r]) => !r.same && !r.sibling).map(([k]) => k);
   out.baseWithTerraces = rows.filter(([, r]) => r.terraces).map(([k]) => k);

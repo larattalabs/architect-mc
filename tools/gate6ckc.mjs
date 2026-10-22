@@ -26,6 +26,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { flAsksFilter } from './lib/fl-norm.mjs'; // (6c FL) FL's five free asks left to FL's own item 8
 import * as P3 from './lib/p3-tier.mjs';
+import { gatePart, sliceSections, slicesOf } from './lib/gate-part.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-KC-run');
@@ -96,14 +97,23 @@ function nodeTest(files, timeout = 3_600_000) {
 
 steps.unit = async () => {
   const out = {};
+  // a split unit step (docs/GATES.md "Turbo"): `items` (every item but the byte identity) and the byte identity's fixture loop in
+  // round-robin slices; whole, every section runs exactly as before
+  const P = gatePart(['items', ...sliceSections('unchanged', 3)], { log });
+  const slice = slicesOf(P, 'unchanged', 3);
+  if (P.want('items')) {
   // item 1
   out.kc = nodeTest(['kit/test/kc.test.mjs']);
   check(out.kc.code === 0 && out.kc.fail === 0 && out.kc.pass >= 16, `item 1 (kit): the registry (resolve, emit, rollback), OB.BODY never WATER (no harbour fallback), every §4 row on its fixture (k01-k08, v61), OVERLAP {kind: body} with its wouldFit re-checked alone, M25:clear on each broken variant (u01-u04), the moat's berm: ${out.kc.pass} pass, ${out.kc.fail} fail`, out.kc.failing);
+  }
   // item 2 (byte identity, the watch count, the head's census)
-  const u = await KCK.unchanged(root, { check, log });
+  if (!slice || slice.length) {
+  const u = await KCK.unchanged(root, { check, log, slice });
   out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, watch: u.watch, hard: u.hard, watchCount: u.watchCount, excepted: KCK.EXCEPT };
   fs.writeFileSync(path.join(OUT, 'kc-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
   check(true, `item 2 (recorded): the watch count: ${u.watch.length} committed fixture(s) where another part writes a body's watch cell on the base (${u.watch.map((w) => `${w.fixture}: ${w.cells} cells by ${w.writers.join(', ')}`).join('; ') || 'none'})`);
+  }
+  if (P.want('items')) {
   // item 3 (the 59 asks before and after)
   const { asksGap } = await import('./lib/gate6chy-b.mjs');
   const baseDir = path.resolve(root, '..', 'architect-mc-KC-main');
@@ -125,6 +135,7 @@ steps.unit = async () => {
   const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6ckc'], { cwd: root, encoding: 'utf8', timeout: 900_000, env: { ...process.env, PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
   out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').filter((l) => /^(ok|FAIL)/.test(l)) };
   check(ac.status === 0, `item 7: api-compat --gate6ckc clean against the 0.39.0, 0.38.0 and 0.37.1 apitest jars and the 0.39.0 jar's 1.36.0 surface (no Java change); $0.00`, out.apicompat.tail);
+  }
   spendZero();
   return out;
 };

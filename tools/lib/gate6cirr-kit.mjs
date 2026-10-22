@@ -11,7 +11,8 @@ import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { UNCHANGED_EXCEPTIONS as VOCC_EXCEPTIONS } from './gate6cvoc-c.mjs';
-import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs';
+import { inSlice } from './gate-part.mjs'; // (6c FL) the street ext normalised, FL's named movers
 
 /** (The CU/IRR/VOC-c batch) VOC-c's named exceptions (rule.palette supported: the 7 asks with a palette rule, extension/e05 and e16): its own item 4 holds them. */
 export const LATER_EXCEPTIONS = [...VOCC_EXCEPTIONS, ...FL_MOVED.filter((n) => !VOCC_EXCEPTIONS.includes(n))];
@@ -28,17 +29,21 @@ export function baseTree(root) {
   return { dir, base };
 }
 
-export async function unchanged(root, { check, log = console.log, only = null } = {}) {
+export async function unchanged(root, { check, log = console.log, only = null, slice = null } = {}) {
   const { dir: mainDir, base } = baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
   const [hNew, hOld] = [await H(root), await H(mainDir)];
   const norm = (r) => normIrJson(r.res?.irJson);
   const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(norm(r)), first: r.first && r.first !== r ? sha256(norm(r.first)) : null });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {}, added: [] };
+  let i = -1;
+  let elsewhere = 0; // (a split irr-unit) fixtures another part plans: counted, not planned here
   for (const [name, fx] of fixtures(root)) {
+    i++;
     if (only && !only.test(name)) continue;
     if (!fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name))) { out.added.push(name); continue; }
     if (/"irrigate":/.test(JSON.stringify(fx.plan))) { out.added.push(name); continue; }
+    if (!inSlice(i, slice)) { elsewhere++; continue; }
     let a, b, err = null;
     try { a = sig((await planFixture(hNew, root, fx)).r); } catch (e) { err = `head: ${String(e.message).slice(0, 160)}`; }
     try { b = sig((await planFixture(hOld, mainDir, fx)).r); } catch (e) { err = (err ? `${err}; ` : '') + `base: ${String(e.message).slice(0, 160)}`; }
@@ -48,7 +53,8 @@ export async function unchanged(root, { check, log = console.log, only = null } 
     check(same || (!a && !b), `${name}: ${same ? 'byte-identical (answers, overall, IR, first plan)' : !a && !b ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, base: b })}`}`);
   }
   const rows = Object.entries(out.fixtures);
-  out.n = rows.length;
+  out.n = rows.length + elsewhere;
+  if (slice) out.slice = { slices: slice, planned: rows.length, elsewhere };
   out.same = rows.filter(([, r]) => r.same).length;
   out.differ = rows.filter(([, r]) => !r.same && !r.later && !/errors on both/.test(r.err ?? '')).map(([k]) => k);
   if (!only) check(out.n >= 230, `${out.n} committed fixtures without irrigate planned (every dir, the 59 asks included)`);
