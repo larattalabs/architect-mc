@@ -23830,7 +23830,7 @@ Noah, 2026-10-21, in chat with the coordinator:
 
 Steward RC passed on F3, RS-a and RS-b.
 
-## Phase 6c close-out A: the Steward-facing API asks (DRAFT for Steward review, 2026-10-22)
+## Phase 6c close-out A: the Steward-facing API asks (FROZEN 2026-10-22, Steward reviewed)
 
 Steward's round-12 asks and its RS follow-ups, before the 6c close-out's release tier. PLAN "For the 6c close-out", "Queued
 (coordinator, 2026-10-20)" (`discardPlan`), "RS follow-ups" and "Queued from slice S3" (the first item); steward-mc
@@ -23840,9 +23840,8 @@ catalogue 11).
 - **Branch:** `slice/close-out-a`, worktree `../architect-mc-coA`. **Spend:** $0 (kit, stub and sim only).
 - **Versions:** none set. Every addition is stamped `NEXT` (`"sinceApi": "NEXT"`, `Since NEXT.`); the coordinator numbers API, mod,
   kit and catalogue at merge (`tools/release-version.mjs`).
-- **Scope:** §1-§9 below, one per PLAN item. **Also taken (scope note):** PLAN's two gate fixes marked "fix in the 6c close-out":
-  pt2-ingame item 13 made order-independent (it asserts `ADOPT_REFUSED` is the last `Reason`), and the asks tables made stale by
-  VOC-c (h-unit and ha-unit item 10, vocc-unit item 3). Both fold into §6's re-cut. Coordinator: say if A should not take them.
+- **Scope:** §1-§9 below, one per PLAN item. **Also taken (coordinator, 2026-10-22):** every asks table, the ones made stale by
+  VOC-c (h-unit and ha-unit item 10, vocc-unit item 3) with §6's re-cut. pt2-ingame item 13 is close-out B's (`slice/close-out-b`).
 - **Not in scope:** the diagnose-and-repair command (its own contract), the lamp-spacing look slice, every `rule.*` but palette,
   farm ponds' own site rule (§7 is `form.pond`), S3's other queued items.
 - **Steward's RC** before release: this slice changes the API Steward calls (§1, §2, §3, §8) and answers its plans give (§4, §5).
@@ -24042,7 +24041,7 @@ rule.palette: {..., scope?: [part ids], over?: "all" | "lots", exempt?: ["terrai
 | 10 | Byte identity | every committed plan fixture not named in §4-§9 plans as on origin/main but kitVersion |
 | 11 | api-compat, lints | api-compat clean (§10); lint-structure, lint-look, water-lint, p3-lint green |
 
-Plus the impact map's steps (`gate-run.mjs slice --since origin/main`), with pt2-ingame item 13 order-independent.
+Plus the impact map's steps (`gate-run.mjs slice --since origin/main`).
 
 ### 12. What Steward changes when this ships
 
@@ -24055,6 +24054,28 @@ Plus the impact map's steps (`gate-run.mjs slice --since origin/main`), with pt2
   free); then re-record the five older palette plans (Noah approved, about $0.20).
 - Say `waitsFor.say`; match tile and road waits by `architect_mc:region` / `part(s)`.
 - Re-check plans planned on an older kit (`PLAN_STALE`).
+
+### 14. Changes from Steward's review (2026-10-22; binding, they win over the sections above)
+
+- **The sweep's clock is last use, not creation** (§2, §3). A Steward build can wait weeks on a player's approvals while the player is
+  away; ageing from creation would sweep it and lose the approved designs.
+  - **`lastUsed`** is stored per plan (in `plans/<id>.json`'s sidecar record `plans/<id>.used.json`, written durably: write, fsync,
+    atomic rename) and per keyed pin (`keyed[].at` is its `lastUsed`, in `<sha>.pins.json`). Both survive restarts.
+  - **What resets it:** for a plan, `planByKey` and `plan` by its key (adopted), `checkByKey` of the check that made it, a pin or re-pin
+    of an artifact made from it, and a realise attempt on it (`realise`, `realiseApproved`, refused or not); for a keyed pin, a pin
+    or re-pin under its key, and a `realiseApproved` attempt under its key.
+  - **The sweep ages from `lastUsed`:** 7 days for an unkeyed unrealised plan, 30 days for a keyed plan and for a keyed pin. A plan made
+    before this version reads `lastUsed` as its file's modification time.
+  - Steward re-pins and looks up its keyed plans at every world start for each build it resumes.
+  - **Gate (added to items 2 and 3):** a keyed plan touched at day 29 survives a sweep at day 35, and an untouched one is swept; the same
+    for a keyed pin re-pinned at day 29.
+- **S-COA-1:** `over` beside `scope`, as proposed. Steward writes `over: "lots"`.
+- **S-COA-2:** all of a key's pins end at its realise, as proposed.
+- **S-COA-3:** `OVERLAP_BUSY {realised | busy | pinned}`, as proposed.
+- **S-COA-4:** `parts` plus `part`, as proposed.
+- **S-COA-5, the RC:** a Supplied plan v1 build with a stale retry under one key, keyed pins, `discardPlan` of an abandoned check,
+  waits said from `waitsFor.say`, and a palette `over: "lots"` plan. The gate covers the same flows (items 1, 2, 3, 5 and 8 in one
+  survival flow in `coa-ingame`).
 
 ### 13. Questions for Steward
 
