@@ -540,6 +540,7 @@ export const items = {
   ],
   ingame: [
     {
+      key: 'probe',
       name: 'item 18 (c), recorded: the census against the prediction on riffles of 2, 4 and 6 per drop and 1 to 3 drops, and one long run past the cap',
       async run(ctx) {
         const only = (process.env.HYB_ONLY ?? '').split(',').filter(Boolean);
@@ -558,6 +559,7 @@ export const items = {
       },
     },
     {
+      key: 'item10',
       name: 'item 10: villagers over the bridges and round the pools; the swept stand',
       async run(ctx) {
         const only = (process.env.HYB_ONLY ?? '').split(',').filter(Boolean);
@@ -571,6 +573,7 @@ export const items = {
       },
     },
     {
+      key: 'item9',
       name: 'item 9: every new kind through Regions.checkPlan and realiseApproved',
       async run(ctx) {
         const out = {};

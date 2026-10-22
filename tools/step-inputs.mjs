@@ -14,6 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parentOf } from './lib/step-split.mjs';
 import { buildStatic, checkTrace, inputMatcher, inputsHash, loadConf, loadMap, readTrace, saveMap, staticEntry, treeAt, widenFromTrace, workingFiles } from './lib/step-inputs.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -50,8 +51,9 @@ if (cmd === 'build') {
     for (const s of sm.steps) {
       const dir = path.join(run, 'traces', s.id);
       const tr = readTrace(dir);
-      if (!tr || !map.steps[s.id]) continue;
-      const added = widenFromTrace(map, conf, s.id, tr, tracked);
+      const mid = map.steps[s.id] ? s.id : parentOf(s.id); // a split step's part widens its parent's set
+      if (!tr || !map.steps[mid]) continue;
+      const added = widenFromTrace(map, conf, mid, tr, tracked);
       if (added.length) {
         total += added.length;
         console.log(`${s.id} (${s.status}): + ${added.join(', ')}`);
@@ -105,7 +107,7 @@ if (cmd === 'build') {
   const map = loadMap(SRC);
   const sm = JSON.parse(fs.readFileSync(path.join(args[0], 'summary.json'), 'utf8'));
   const tr = readTrace(path.join(args[0], 'traces', args[1]));
-  console.log(JSON.stringify(checkTrace(map, conf, args[1], tr, { tracked: treeAt(SRC, sm.head) }), null, 1));
+  console.log(JSON.stringify(checkTrace(map, conf, map.steps[args[1]] ? args[1] : parentOf(args[1]), tr, { tracked: treeAt(SRC, sm.head) }), null, 1));
 } else {
   console.error('usage: node tools/step-inputs.mjs build | merge <run dir>... | check | show <step> | which <path> | trace <run dir> <step>');
   process.exit(2);

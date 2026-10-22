@@ -222,10 +222,12 @@
   "evidenceDeps": "a canary or a running step whose waitFor target (other than unit-kit, whose JUnit report a cached run hands on) reads that step's evidence of the same run: the target runs too"
  },
  "nightly": {
-  "$comment": "tools/nightly.mjs: release --full --no-cache on a fresh detached origin/main, in its own worktree and run dirs. extraArgs: added to the gate-run command (e.g. the turbo lock once chore/gate-turbo lands).",
+  "$comment": "tools/nightly.mjs: release --full --no-cache on a fresh detached origin/main, in its own worktree and run dirs. extraArgs: added to the gate-run command (--turbo: the run waits for the whole machine and holds it, docs/GATES.md \"Turbo\").",
   "worktree": "../architect-mc-nightly",
   "runDir": "../architect-mc-nightrun",
   "out": "artifacts/gate-runs-nightly",
-  "extraArgs": []
+  "extraArgs": [
+   "--turbo"
+  ]
  }
 }

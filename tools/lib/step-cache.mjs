@@ -17,6 +17,7 @@ import path from 'node:path';
 import { definitionNow, definitionsAt } from './gate-history.mjs';
 import { checkTrace, dirtyPaths, fingerprintOf, inputsHash, readTrace, treeAt } from './step-inputs.mjs';
 import { releaseContext } from '../release-context.mjs';
+import { entryOf, parentOf } from './step-split.mjs';
 
 const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 << 20 }).toString().trim();
 const sha = (v) => crypto.createHash('sha1').update(typeof v === 'string' ? v : JSON.stringify(v)).digest('hex');
@@ -82,6 +83,9 @@ export function cacheContext({ src, main, cfg, conf, map, snapDir, env = process
   };
 }
 
+/** The input map's entry id for a step or a split step's part (the parent's). */
+export const mapId = (map, id) => (map?.steps?.[id] ? id : parentOf(id));
+
 /** The snapshot worlds a step restores and its client's world: a fingerprint of each level.dat (size, mtime) in the store. */
 function snapshotsOf(ctx, entry) {
   const client = ctx.cfg.clients?.[entry.client];
@@ -102,13 +106,16 @@ function snapshotsOf(ctx, entry) {
  */
 export function keyFor(ctx, id) {
   const { cfg, conf, map } = ctx;
-  const entry = cfg.steps[id];
+  // a split step's part (<id>/p<k>, turbo): its own entry (its section env) and key, its parent's input set
+  const entry = cfg.steps[id] ?? entryOf(cfg, id);
   if (!entry) return { key: null, why: 'unknown step' };
-  if (conf.uncacheable?.[id]) return { key: null, why: `uncacheable: ${conf.uncacheable[id]}` };
-  const me = map?.steps?.[id];
+  const pid = parentOf(id);
+  if (conf.uncacheable?.[pid]) return { key: null, why: `uncacheable: ${conf.uncacheable[pid]}` };
+  const mid = mapId(map, id);
+  const me = map?.steps?.[mid];
   if (!me) return { key: null, why: 'no entry in tools/step-inputs.json' };
   if (ctx.dirty.length) return { key: null, why: `the source tree is dirty (${ctx.dirty.length} path(s), e.g. ${ctx.dirty[0]}): a dirty tree is never cached` };
-  const inputs = inputsHash(map, conf, id, ctx.src, ctx.head);
+  const inputs = inputsHash(map, conf, mid, ctx.src, ctx.head);
   const def = ctx.defAt ? ctx.defAt(ctx.head, id) : definitionNow(ctx.src, ctx.rawCfg ?? cfg, id);
   const names = new Set([...(me.env ?? []), ...(conf.modeEnv?.always ?? [])]);
   const modes = {};
@@ -128,7 +135,7 @@ export function keyFor(ctx, id) {
     stepEnv: entry.env ?? null,
     inputs: inputs.hash,
     inputFiles: inputs.files,
-    fingerprint: fingerprintOf(map, conf, id, ctx.src),
+    fingerprint: fingerprintOf(map, conf, mid, ctx.src),
     snapshots: entry.client === 'none' ? [] : snapshotsOf(ctx, entry),
     toolchain: ctx.toolchain,
     modes,
@@ -179,7 +186,7 @@ export function record(ctx, id, rec, opts) {
   if (opts.judgedBench) return { stored: false, why: 'a bench whose timing is judged at release is never cached' };
   if (!opts.traced) return { stored: false, why: 'the step ran without the input trace (--no-trace)' };
   const tr = readTrace(opts.traceDir) ?? new Map();
-  const chk = checkTrace(ctx.map, ctx.conf, id, tr, { tracked: treeAt(ctx.src, ctx.head) });
+  const chk = checkTrace(ctx.map, ctx.conf, mapId(ctx.map, id), tr, { tracked: treeAt(ctx.src, ctx.head) });
   if (chk.outside.length) return { stored: false, why: `inputs-map miss: the step read ${chk.outside.length} source path(s) outside its set`, outside: chk.outside };
   const e = {
     id, key: opts.key, status: 'PASS', at: rec.startedAt, recordedAt: new Date().toISOString(), head: ctx.head, tier: opts.tier,

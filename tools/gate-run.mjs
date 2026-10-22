@@ -77,6 +77,8 @@ import { currentHistory, definitionNow, definitionsAt, effectiveTimeout, estimat
 import { autoConfig, chooseShards, describeChoice, freePairs, probeMachine } from './lib/shard-auto.mjs';
 import { autoFullWhy, cacheContext, fullTwins, judgedBenches, keyFor, lastNightly, lookup, record as recordPass } from './lib/step-cache.mjs';
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
+import { entryOf, expandSplits, isPartId, parentOf, parentResults, validateSplits } from './lib/step-split.mjs';
+import { acquire as acquireMachine, chooseTurbo, describeQueue, describeTurbo, foldSamples, liveHolders, releaseAll, sampleMachine, turboConfig } from './lib/turbo.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(SRC, '..', 'architect-mc');
@@ -85,7 +87,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ------------------------------------------------------------------ arguments and config
 
 const argv = process.argv.slice(2);
-const VALUED = ['--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min', '--host'];
+const VALUED = ['--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min', '--host', '--lanes'];
 const flag = (f) => argv.includes(f);
 const opt = (f) => {
   const i = argv.indexOf(f);
@@ -133,6 +135,7 @@ if (!cfg.chains[chainName] && !TIERS.includes(chainName)) die(`unknown chain ${c
       if (!cfg.steps[s]) bad.push(`tiers: unknown step ${s}`);
     }
   }
+  bad.push(...validateSplits(cfg.steps));
   if (bad.length) die(`config: ${bad.join('; ')}`);
 }
 
@@ -319,12 +322,34 @@ function select() {
 const sel = select();
 let stepIds = sel.ids;
 const tierInfo = sel.info;
+// --only takes step ids and part ids (`<id>/p<k>` of a split step: that part alone, the run splits)
+const onlyParts = opt('--only') ? opt('--only').split(',').filter(isPartId) : [];
 if (opt('--only')) {
-  const only = opt('--only').split(',');
-  for (const s of only) if (!cfg.steps[s]) die(`--only: unknown step ${s}`);
+  const only = opt('--only').split(',').map(parentOf);
+  for (const s of opt('--only').split(',')) if (!entryOf(cfg, s)) die(`--only: unknown step ${s}`);
   stepIds = cfg.chains[chainName] ? stepIds.filter((s) => only.includes(s)) : ORDER.filter((s) => only.includes(s));
 }
 if (opt('--from')) stepIds = stepIds.slice(Math.max(0, stepIds.indexOf(opt('--from'))));
+
+// turbo (docs/GATES.md "Turbo"): --turbo, or by default a tier run (change | slice | release) of at least shards.turbo.minSteps
+// steps; --no-turbo turns it off. A turbo run waits for the whole machine and holds it, runs up to shards.turbo.max in-game shards
+// and the client-less steps on their own offline lanes (--lanes N, default shards.turbo.offlineLanes).
+const TC = turboConfig(cfg);
+const TURBO = !flag('--no-turbo') && (flag('--turbo') || (TIERS.includes(chainName) && stepIds.length >= TC.minSteps));
+// split steps (tools/lib/step-split.mjs): a turbo run (or --split) runs a split step as its parts, in parallel; --no-split keeps
+// every step whole. The selection above names parents only; the parts replace them here.
+const SPLIT = onlyParts.length > 0 || flag('--split') || (TURBO && !flag('--no-split'));
+let splitParts = {};
+if (SPLIT) {
+  const x = expandSplits(cfg.steps, stepIds);
+  Object.assign(cfg.steps, x.defs);
+  stepIds = x.ids.filter((id) => !isPartId(id) || !onlyParts.some((p) => parentOf(p) === parentOf(id)) || onlyParts.includes(id));
+  splitParts = Object.fromEntries(Object.entries(x.parts).map(([k, v]) => [k, v.filter((id) => stepIds.includes(id))]));
+  for (const [k, v] of Object.entries(splitParts)) {
+    if (tierInfo.why?.[k]) for (const id of v) tierInfo.why[id] = [...tierInfo.why[k], `part of the split step ${k}`];
+  }
+  if (Object.keys(splitParts).length) tierInfo.notes = [...(tierInfo.notes ?? []), `split: ${Object.entries(splitParts).map(([k, v]) => `${k} -> ${v.length} parts`).join(', ')} (--no-split keeps them whole)`];
+}
 
 const PLAN = flag('--plan') || flag('--dry-run');
 // --quiet-wait [load] (opt-in; on by default at release): before a bench step, wait until the 1-minute load average is below <load> (default 8), at most
@@ -394,22 +419,24 @@ if (tierInfo.cache.lookup) {
   const canary = new Map();
   if (chainName === 'release') {
     const c = CACHE_CONF.release?.canaries ?? {};
-    for (const s of c.always ?? []) if (want.has(s)) canary.set(s, 'canary: a calibration probe, every release');
+    // canaries are named by step id; a split step's parts (turbo) are canaries with their parent
+    const present = (s) => [...want].some((x) => parentOf(x) === s);
+    for (const s of c.always ?? []) if (present(s)) canary.set(s, 'canary: a calibration probe, every release');
     const rot = (c.scenarioRotation ?? []).filter((s) => cfg.steps[s]);
     if (rot.length) {
       const s = rot[tierInfo.rotationKey % rot.length];
       canary.set(s, `canary: this release's big scenario (${rot.join(' / ')} rotate; key ${tierInfo.rotationKey})`);
-      want.add(s);
+      if (!present(s)) want.add(s);
     }
-    for (const s of tierInfo.rotation?.find((r) => r.name === c.crashRotation)?.ran ?? []) if (want.has(s)) canary.set(s, 'canary: this release\'s crash suite (the rotation)');
-    if (c.judgedBenches) for (const s of want) if (JUDGED_BENCHES.has(s)) canary.set(s, 'canary: a bench whose timing is judged at release');
+    for (const s of tierInfo.rotation?.find((r) => r.name === c.crashRotation)?.ran ?? []) if (present(s)) canary.set(s, 'canary: this release\'s crash suite (the rotation)');
+    if (c.judgedBenches) for (const s of want) if (JUDGED_BENCHES.has(parentOf(s))) canary.set(parentOf(s), 'canary: a bench whose timing is judged at release');
   }
   const nightly = chainName === 'release' ? lastNightly(MAIN) : null;
   const twins = fullTwins(cfg);
   for (const id of want) {
-    if (canary.has(id)) {
+    if (canary.has(parentOf(id))) {
       run.add(id);
-      push(id, canary.get(id));
+      push(id, canary.get(parentOf(id)));
       continue;
     }
     const k = keyOf(id);
@@ -424,7 +451,7 @@ if (tierInfo.cache.lookup) {
       push(id, `cache miss (key ${k.key.slice(0, 12)}): ${l.why}`);
       continue;
     }
-    if (nightly && twins.has(id) && String(l.hit.at) < String(nightly.startedAt)) {
+    if (nightly && twins.has(parentOf(id)) && String(l.hit.at) < String(nightly.startedAt)) {
       run.add(id);
       push(id, `a full twin whose last PASS (${l.hit.at}) is older than the last full nightly (${nightly.startedAt})`);
       continue;
@@ -440,7 +467,7 @@ if (tierInfo.cache.lookup) {
       const deps = [];
       if (s.after && want.has(s.after)) deps.push([s.after, `needed by ${id}: it runs after it, in its context`]);
       for (const w of s.waitFor ?? []) if (w !== 'unit-kit' && want.has(w)) deps.push([w, `needed by ${id}: it reads ${w}'s evidence of this run`]);
-      if ((INPUT_MAP.steps[id]?.env ?? []).includes('GATE_UNIT_MOD_RUN') && want.has('unit-mod')) deps.push(['unit-mod', `needed by ${id}: it reads the classes unit-mod builds in this run`]);
+      if ((INPUT_MAP.steps[parentOf(id)]?.env ?? []).includes('GATE_UNIT_MOD_RUN') && want.has('unit-mod')) deps.push(['unit-mod', `needed by ${id}: it reads the classes unit-mod builds in this run`]);
       for (const [d, r] of deps) {
         if (run.has(d)) continue;
         run.add(d);
@@ -451,7 +478,7 @@ if (tierInfo.cache.lookup) {
     }
   }
   stepIds = ORDER.filter((s) => run.has(s));
-  tierInfo.cache.canaries = [...canary.keys()].filter((s) => run.has(s));
+  tierInfo.cache.canaries = [...canary.keys()].filter((s) => [...run].some((x) => parentOf(x) === s));
   tierInfo.cached = [...cachedHits].map(([id, e]) => ({ id, key: e.key, at: e.at, head: e.head, run: e.run, log: e.log, evidence: e.evidence, tier: e.tier }));
   tierInfo.cache.nightly = nightly ? { startedAt: nightly.startedAt, head: nightly.head, run: nightly.run } : null;
 }
@@ -460,7 +487,8 @@ if (tierInfo.cache.lookup) {
 const SHARDS_ARG = opt('--shards');
 const AC = autoConfig(cfg);
 let NSHARDS = SHARDS_ARG === undefined || SHARDS_ARG === 'auto' ? 1 : Number(SHARDS_ARG);
-if (!(Number.isInteger(NSHARDS) && NSHARDS >= 1 && NSHARDS <= AC.max)) die(`--shards must be 1..${AC.max} or auto`);
+// the bound is shards.max, or shards.turbo.max for a turbo run (checked once the steps, and so turbo, are known)
+if (!(Number.isInteger(NSHARDS) && NSHARDS >= 1 && NSHARDS <= Math.max(AC.max, TC.max))) die(`--shards must be 1..${Math.max(AC.max, TC.max)} or auto`);
 
 // ------------------------------------------------------------------ guards (before anything runs)
 
@@ -489,15 +517,22 @@ const portPairs = allPairs ? pairs(allPairs)
 // built by buildShards() once N is known: at once for a fixed --shards, after the auto decision (under the slot mutex) for auto
 let shards = [];
 let allPorts = [];
-function buildShards(n, pp) {
+// offline lanes (turbo): extra workers for the client-less steps (units, lints), each with its own run worktree (<run dir>-o<j>:
+// gradle and the kit suite write into it) and a port pair of its own (the drivers default ports; nothing of theirs is shared)
+let NLANES = 0;
+function buildShards(n, pp, lanes = 0) {
   NSHARDS = n;
-  if (RUN_DIRS.length && RUN_DIRS.length < NSHARDS) die(`--run-dirs names ${RUN_DIRS.length} dirs for ${NSHARDS} shards`);
+  NLANES = lanes;
+  if (RUN_DIRS.length && RUN_DIRS.length < NSHARDS + NLANES) die(`--run-dirs names ${RUN_DIRS.length} dirs for ${NSHARDS} shards${NLANES ? ` + ${NLANES} lanes` : ''}`);
   shards = [];
-  for (let k = 1; k <= NSHARDS; k++) {
+  const many = NSHARDS + NLANES > 1;
+  for (let k = 1; k <= NSHARDS + NLANES; k++) {
+    const lane = k > NSHARDS ? k - NSHARDS : 0;
     const [sp, dp] = pp[k - 1] ?? [];
-    if (!sp || !dp) die(`shard ${k}: no port pair. Name every shard's ports: --ports 8890:8891,8896:8897 (or GATE_PORTS), or use --shards auto`);
-    const RUN = RUN_DIRS.length ? RUN_DIRS[k - 1] : k === 1 ? RUN1 : `${RUN1}-s${k}`;
-    shards.push({ k, tag: NSHARDS > 1 ? `[s${k}] ` : '', RUN, GAME_DIR: path.join(RUN, 'mod', 'run'), SIDECAR_PORT: sp, DEV_PORT: dp, current: null, activeGroup: null, ev: null });
+    if (!sp || !dp) die(`${lane ? `lane ${lane}` : `shard ${k}`}: no port pair. Name every shard's ports: --ports 8890:8891,8896:8897 (or GATE_PORTS), or use --shards auto`);
+    const RUN = RUN_DIRS.length ? RUN_DIRS[k - 1] : lane ? `${RUN1}-o${lane}` : k === 1 ? RUN1 : `${RUN1}-s${k}`;
+    const name = lane ? `o${lane}` : `s${k}`;
+    shards.push({ k, name, kind: lane ? 'offline' : 'game', tag: many ? `[${name}] ` : '', RUN, GAME_DIR: path.join(RUN, 'mod', 'run'), SIDECAR_PORT: sp, DEV_PORT: dp, current: null, activeGroup: null, ev: null });
   }
   allPorts = shards.flatMap((s) => [s.SIDECAR_PORT, s.DEV_PORT]);
   if (new Set(allPorts).size !== allPorts.length) die(`shard ports overlap: ${allPorts.join(' ')}`);
@@ -577,80 +612,21 @@ const alive = (pid) => {
 const SLOTS = Number(opt('--slots') ?? process.env.GATE_SLOTS ?? cfg.slots?.max ?? 3);
 if (!(Number.isInteger(SLOTS) && SLOTS >= 1)) die('--slots takes a positive integer');
 const SLOT_DIR = path.resolve(opt('--slots-dir') ?? process.env.GATE_SLOTS_DIR ?? path.join(MAIN, '..', '.gate-slots'));
-const slotFile = (i) => path.join(SLOT_DIR, `slot-${i}.json`);
-const readSlot = (i) => {
-  try {
-    return JSON.parse(fs.readFileSync(slotFile(i), 'utf8'));
-  } catch {
-    return null; // missing or unreadable (a half-written file): treated as free; the claim below re-checks under the mutex
-  }
-};
-let mySlot = null;
+// the queue, the slots and turbo's exclusive hold live in tools/lib/turbo.mjs (docs/GATES.md "Turbo"): every run queues (FIFO
+// under the slot mutex); a shared run takes one slot, a turbo run every slot. A dead pid's ticket or slot is free.
+const slotHolders = () => liveHolders(SLOT_DIR).filter((h) => h.pid !== process.pid);
+/** Every live holder in the slot dir (also slots above this run's --slots limit), not this process: their shards and ports count. */
+const allSlotHolders = slotHolders;
+let holdingSlots = false;
 function releaseSlot() {
-  if (mySlot === null) return;
-  const i = mySlot;
-  mySlot = null;
-  try {
-    if (readSlot(i)?.pid === process.pid) fs.rmSync(slotFile(i), { force: true });
-  } catch {
-    // gone
-  }
+  if (!holdingSlots) return;
+  holdingSlots = false;
+  releaseAll(SLOT_DIR, process.pid);
 }
 process.on('exit', releaseSlot);
-/**
- * One scan under a short mutex (mkdir is atomic): the first free slot (missing, or held by a dead pid) is written for this run.
- * `decide(n)` runs under the same mutex and returns what the slot file records: { shards, ports } (an auto run chooses its shard
- * count and port pairs there, so two runs starting together never count the same budget or take the same ports).
- */
-async function claimSlot(decide) {
-  const mutex = path.join(SLOT_DIR, '.mutex');
-  for (let i = 0; i < 40; i++) {
-    try {
-      fs.mkdirSync(mutex);
-      break;
-    } catch (e) {
-      if (e.code !== 'EEXIST') throw e;
-      try {
-        if (Date.now() - fs.statSync(mutex).mtimeMs > 10_000) fs.rmdirSync(mutex); // a crashed claimer
-      } catch {
-        // raced
-      }
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
-      if (i === 39) return null;
-    }
-  }
-  try {
-    for (let n = 1; n <= SLOTS; n++) {
-      const h = readSlot(n);
-      if (h && h.pid && alive(h.pid)) continue;
-      const rec = await decide(n);
-      fs.writeFileSync(slotFile(n), JSON.stringify({ pid: process.pid, worktree: SRC, chain: chainName, startedAt: new Date().toISOString(), shards: rec.shards, ports: rec.ports }));
-      return n;
-    }
-    return null;
-  } finally {
-    try {
-      fs.rmdirSync(mutex);
-    } catch {
-      // gone
-    }
-  }
-}
-const slotHolders = () => Array.from({ length: SLOTS }, (_, k) => readSlot(k + 1)).filter((h) => h && h.pid && alive(h.pid));
-/** Every live holder in the slot dir (also slots above this run's --slots limit), not this process: their shards and ports count. */
-const allSlotHolders = () => {
-  let names = [];
-  try {
-    names = fs.readdirSync(SLOT_DIR).filter((f) => /^slot-\d+\.json$/.test(f));
-  } catch {
-    // no dir yet
-  }
-  return names.map((f) => readSlot(Number(f.match(/\d+/)[0]))).filter((h) => h && h.pid && h.pid !== process.pid && alive(h.pid));
-};
-const slotNote = { waitedSeconds: 0, slot: null, limit: SLOTS, dir: SLOT_DIR };
+const slotNote = { waitedSeconds: 0, slot: null, slots: null, limit: SLOTS, dir: SLOT_DIR, turbo: false };
 async function acquireSlot(decide) {
   fs.mkdirSync(SLOT_DIR, { recursive: true });
-  const t0s = Date.now();
   const stamp = () => new Date().toISOString().slice(11, 19);
   const onSig = (sig) => {
     releaseSlot();
@@ -658,22 +634,15 @@ async function acquireSlot(decide) {
   };
   process.once('SIGINT', onSig);
   process.once('SIGTERM', onSig);
-  let n = await claimSlot(decide);
-  let lastLog = 0;
-  while (n === null) {
-    if (Date.now() - lastLog > 300_000 || lastLog === 0) {
-      console.log(`[${stamp()}] gate-run ${chainName}: waiting for a free slot (${slotHolders().length}/${SLOTS} in use: ${slotHolders().map((h) => `pid ${h.pid} ${h.chain} ${h.worktree} since ${h.startedAt}`).join('; ') || 'none'})`);
-      lastLog = Date.now();
-    }
-    await sleep(Number(process.env.GATE_SLOT_POLL_MS ?? 15_000));
-    n = await claimSlot(decide);
-  }
-  mySlot = n;
-  slotNote.slot = n;
-  slotNote.waitedSeconds = Math.round((Date.now() - t0s) / 1000);
+  holdingSlots = true; // the ticket (and a turbo run's reserved slots) from here on
+  const me = { pid: process.pid, worktree: SRC, chain: chainName, turbo: TURBO };
+  const fill = Math.max(TC.fillSlots, SLOTS, cfg.slots?.max ?? 0);
+  const got = await acquireMachine(SLOT_DIR, me, { slots: SLOTS, fill, decide, pollMs: Number(process.env.GATE_SLOT_POLL_MS ?? (TURBO ? TC.pollMs : 15_000)),
+    log: (m) => console.log(`[${stamp()}] gate-run ${chainName}: ${m}`) });
+  Object.assign(slotNote, { slot: got.slot, slots: got.slots, waitedSeconds: got.waitedSeconds, turbo: TURBO });
   process.removeListener('SIGINT', onSig);
   process.removeListener('SIGTERM', onSig);
-  console.log(`[${stamp()}] gate-run ${chainName}: took slot ${n}/${SLOTS} (${slotFile(n)})${slotNote.waitedSeconds ? ` after waiting ${fmtDur(slotNote.waitedSeconds)}` : ''}`);
+  console.log(`[${stamp()}] gate-run ${chainName}: ${TURBO ? `TURBO: holds the machine (slots ${got.slots.join(',')})` : `took slot ${got.slot}/${SLOTS}`}${got.waitedSeconds ? ` after waiting ${fmtDur(got.waitedSeconds)}` : ''}`);
 }
 
 const portFree = (port) => new Promise((resolve) => {
@@ -773,6 +742,33 @@ for (const s of steps) prioOf(s);
 // auto: --shards auto, or --shards omitted on a slice/release plan of more than shards.auto.minSteps steps (else 1, as before)
 const AUTO = SHARDS_ARG === 'auto' || (SHARDS_ARG === undefined && (chainName === 'slice' || chainName === 'release') && steps.length > AC.minSteps);
 let autoChoice = null;
+if (!TURBO && NSHARDS > AC.max) die(`--shards ${NSHARDS}: more than shards.max ${AC.max} needs --turbo (up to shards.turbo.max ${TC.max})`);
+if (TURBO && NSHARDS > TC.max) die(`--shards ${NSHARDS}: more than shards.turbo.max ${TC.max}`);
+const offlineSteps = steps.filter((s) => s.client === 'none').length;
+const LANES_WANT = TURBO ? Number(opt('--lanes') ?? TC.offlineLanes) : 0;
+if (!(Number.isInteger(LANES_WANT) && LANES_WANT >= 0)) die('--lanes takes a non-negative integer');
+// lanes only when there are client-less steps and in-game ones to run beside them
+const LANES = offlineSteps && offlineSteps < steps.length ? Math.min(LANES_WANT, offlineSteps) : 0;
+const TURBO_AUTO = TURBO && (SHARDS_ARG === undefined || SHARDS_ARG === 'auto');
+/** Turbo: the shard count from the plan, memory and ports only (the run holds the machine), and the port pairs from the turbo range. */
+async function decideTurbo() {
+  const probe = probeMachine();
+  const pairsFree = await freePairs({ range: TC.portRange, given: allPairs ? portPairs : null, taken: new Set() });
+  const max = TURBO_AUTO ? TC.max : NSHARDS;
+  const c = chooseTurbo(TC, { max, probe, lanes: LANES, wallFor: (n) => estimate(est, n, LANES).wallMin, pairs: pairsFree.length });
+  if (pairsFree.length < c.n + LANES) die(`turbo: ${pairsFree.length} free port pair(s) ${allPairs ? `in --ports ${allPairs}` : `in ${TC.portRange.join('-')} (shards.turbo.portRange)`}, need ${c.n + LANES}`);
+  // a fixed --shards N is taken as asked (the plan cap only advises), within memory and the ports
+  if (!TURBO_AUTO && Math.min(c.caps.memory, c.caps.ports) < NSHARDS) die(`turbo --shards ${NSHARDS}: only ${Math.min(c.caps.memory, c.caps.ports)} fit (memory ${c.caps.memory}, ports ${c.caps.ports})`);
+  const n = TURBO_AUTO ? c.n : NSHARDS;
+  autoChoice = {
+    mode: TURBO_AUTO ? `turbo auto (${flag('--turbo') ? '--turbo' : `default for a ${chainName} of ${steps.length} steps >= ${TC.minSteps}`}; --no-turbo for a shared run)` : `turbo --shards ${NSHARDS}`,
+    turbo: true, n, lanes: LANES, bound: TURBO_AUTO ? c.bound : ['--shards'], caps: c.caps, probe, wallByN: c.table.map((t) => ({ n: t.n, wallMin: Math.round(t.wallMin * 10) / 10 })),
+    ports: pairsFree.slice(0, n + LANES).map(([sp, dp]) => `${sp}:${dp}`), portSource: allPairs ? '--ports' : `range ${TC.portRange.join('-')}`, decidedAt: new Date().toISOString(),
+    text: describeTurbo({ ...c, n, bound: TURBO_AUTO ? c.bound : ['--shards'] }, probe, TC, LANES),
+  };
+  buildShards(n, pairsFree.slice(0, n + LANES), LANES);
+  return autoChoice;
+}
 /** Choose N and its port pairs from the machine now (tools/lib/shard-auto.mjs). The run calls it under the slot mutex. */
 async function decideAuto() {
   const probe = probeMachine();
@@ -780,7 +776,7 @@ async function decideAuto() {
   const taken = new Set(holders.flatMap((h) => (Array.isArray(h.ports) ? h.ports.flat() : [])).map(Number));
   const pairsFree = await freePairs({ range: AC.portRange, given: allPairs ? portPairs : null, taken });
   const freeRunSlots = Math.max(0, SLOTS - slotHolders().filter((h) => h.pid !== process.pid).length - 1);
-  const c = chooseShards(AC, { probe, holders, freeRunSlots, wallFor: (n) => estimate(est, n).wallMin, pairs: pairsFree });
+  const c = chooseShards(AC, { probe, holders, freeRunSlots, wallFor: (n) => estimate(est, n, 0).wallMin, pairs: pairsFree });
   if (!pairsFree.length) die(`shards auto: no free port pair ${allPairs ? `in --ports ${allPairs}` : `in ${AC.portRange.join('-')} (shards.auto.portRange)`}`);
   autoChoice = {
     mode: SHARDS_ARG === 'auto' ? '--shards auto' : `default for ${chainName} (${steps.length} steps > ${AC.minSteps}; --shards N to fix it)`,
@@ -791,7 +787,8 @@ async function decideAuto() {
   buildShards(c.n, pairsFree.slice(0, c.n));
   return autoChoice;
 }
-if (!AUTO) buildShards(NSHARDS, portPairs);
+const decideShards = TURBO ? decideTurbo : AUTO ? decideAuto : null;
+if (!decideShards) buildShards(NSHARDS, portPairs);
 
 /**
  * The next step shard `sh` may start, or null. st: { pending: [index], running: Map(index -> shardK), done: Map(id -> {status,
@@ -806,9 +803,15 @@ function pick(sh, st, all) {
   const runningSteps = [...st.running.keys()].map((i) => steps[i]);
   if (runningSteps.some(isIsolated)) return null;
   const held = new Set(runningSteps.flatMap((s) => (s.resources ?? []).filter((r) => r !== 'bench')));
+  // offline lanes (turbo): a lane takes only client-less steps; an in-game shard takes them only once no in-game step is pending
+  // (it would stop its client for one), so the in-game shards keep their clients and the lanes run the units beside them
+  const lanes = all.some((o) => o.kind === 'offline');
+  const offline = (s) => s.client === 'none';
+  const gamePending = lanes && sh.kind !== 'offline' && st.pending.some((j) => !offline(steps[j]));
   const ready = [];
   for (const i of st.pending) {
     const s = steps[i];
+    if (lanes && (sh.kind === 'offline' ? !offline(s) : offline(s) && gamePending)) continue;
     if (steps.some((b, j) => j < i && b.stopOnFail && !st.done.has(b.id))) continue;
     if (s.after && stepIds.includes(s.after)) {
       const d = st.done.get(s.after);
@@ -847,10 +850,11 @@ function pick(sh, st, all) {
   return best;
 }
 
-/** --plan's estimate: the schedule with every step taking its estimate (history p50, else estMin) and passing; client starts ~0.6 min (0.15 for a world switch). */
-function estimate(durOf = est, n = shards.length) {
+/** --plan's estimate: the schedule with every step taking its estimate (history p50, else estMin) and passing; client starts ~0.6 min
+ * (0.15 for a world switch). n in-game shards plus `lanes` offline lanes. */
+function estimate(durOf = est, n = NSHARDS, lanes = NLANES) {
   const st = { pending: steps.map((_, i) => i), running: new Map(), done: new Map() };
-  const sim = Array.from({ length: n }, (_, j) => ({ k: j + 1, current: null, freeAt: 0, busy: 0 }));
+  const sim = Array.from({ length: n + lanes }, (_, j) => ({ k: j + 1, kind: j >= n ? 'offline' : 'game', current: null, freeAt: 0, busy: 0 }));
   const ends = [];
   const assign = {};
   let now = 0;
@@ -879,7 +883,7 @@ function estimate(durOf = est, n = shards.length) {
     st.done.set(steps[e.i].id, { status: 'PASS', shard: e.k });
   }
   const serial = steps.reduce((a, s) => a + durOf(s), 0);
-  return { wallMin: now, serialMin: serial, assign, perShard: sim.map((s) => ({ k: s.k, busyMin: s.busy })) };
+  return { wallMin: now, serialMin: serial, assign, perShard: sim.map((s) => ({ k: s.k, name: s.kind === 'offline' ? `o${s.k - n}` : `s${s.k}`, busyMin: s.busy })) };
 }
 
 // ------------------------------------------------------------------ the plan
@@ -920,19 +924,19 @@ function printPlan() {
   console.log(`source ${SRC} @ ${head}${git(SRC, 'status', '--porcelain', '--untracked-files=no') ? ' (DIRTY: the drivers run from the working tree, the clients from HEAD)' : ''}`);
   for (const sh of shards) {
     const missing = (cfg.seed ?? []).filter((s) => !fs.existsSync(path.join(sh.RUN, s)));
-    console.log(`shard ${sh.k}: run worktree ${sh.RUN} ${fs.existsSync(sh.RUN) ? '(exists; checked out --detach at the source HEAD)' : '(created: git worktree add --detach)'}; ports sidecar ${sh.SIDECAR_PORT}, DevBridge ${sh.DEV_PORT}; `
+    console.log(`${sh.kind === 'offline' ? `offline lane ${sh.name}` : `shard ${sh.k}`}: run worktree ${sh.RUN} ${fs.existsSync(sh.RUN) ? '(exists; checked out --detach at the source HEAD)' : '(created: git worktree add --detach)'}; ports sidecar ${sh.SIDECAR_PORT}, DevBridge ${sh.DEV_PORT}; `
       + `seed ${missing.length ? `would clone ${missing.join(', ')}` : 'nothing missing'}`);
   }
   if (autoChoice) console.log(`${autoChoice.text}\n  mode: ${autoChoice.mode}; ports ${autoChoice.ports.join(',')} (${autoChoice.portSource}; the run re-decides under the slot mutex when it starts)`);
   else console.log(`shards: ${NSHARDS} (--shards ${SHARDS_ARG ?? `omitted: ${steps.length} steps${['slice', 'release'].includes(chainName) ? ` <= ${AC.minSteps}` : `, ${chainName} is not slice/release`}`})`);
-  console.log(`slots: at most ${SLOTS} gate runs on the machine (${SLOT_DIR}); in use now ${slotHolders().length}${slotHolders().length ? `: ${slotHolders().map((h) => `pid ${h.pid} ${h.chain} ${Number.isInteger(h.shards) ? `${h.shards} shard(s)` : '(shards not recorded)'}`).join(', ')}` : ''}; timing bars ${RECORD_TIMING ? 'RECORDED, not judged (change/slice)' : 'JUDGED'}`);
+  console.log(`${TURBO ? `TURBO: waits for the whole machine and holds every slot (queue FIFO; --no-turbo for a shared run)` : `slots: at most ${SLOTS} gate runs on the machine`} (${SLOT_DIR}); now: ${describeQueue(SLOT_DIR).text}; timing bars ${RECORD_TIMING ? 'RECORDED, not judged (change/slice)' : 'JUDGED'}`);
   console.log(`seed ${SEED} (read-only, APFS clones); snapshots ${SNAP}; artifacts ${RUNS_ROOT}/<timestamp>-${chainName}/; lock ${LOCK}; notify ${NOTIFY_MODE}; quiet-wait ${QUIET === null ? 'off (load recorded)' : `load < ${QUIET}, at most ${QUIET_MAX_MIN} min`}`);
   console.log('setup (each shard): sidecar npm run build (run worktree)');
   const sched = estimate();
   let cur = null;
   steps.forEach((s, i) => {
     let clientNote = '';
-    if (NSHARDS === 1) {
+    if (shards.length === 1) {
       if (s.client === 'none' || s.client === 'self') {
         if (cur) clientNote = `stop client ${cur}; `;
         cur = null;
@@ -947,13 +951,13 @@ function printPlan() {
     const cmd = s.shell ?? s.cmd.join(' ');
     const tags = [s.stopOnFail ? 'stopOnFail' : '', isBench(s) ? (isIsolated(s) ? 'bench, isolated' : 'bench (not isolated: timing recorded)') : '', ...(s.waitFor ?? []).filter((w) => stepIds.includes(w)).map((w) => `waits for ${w}`), ...(s.resources ?? []).filter((r) => r !== 'bench'), s.after ? `after ${s.after}` : '',
       s.restore ? `restore ${s.restore.map((w) => `"${w}"`).join(',')}` : ''].filter(Boolean).join(', ');
-    console.log(`${String(i + 1).padStart(2)}. ${s.id.padEnd(19)} ~${est(s).toFixed(1).padStart(5)} / ${String(s.effTimeoutMin).padStart(3)}${s.effTimeoutMin < s.timeoutMin ? `(${s.timeoutMin})` : ''} min${NSHARDS > 1 ? ` s${sched.assign[s.id]}` : ''}  ${clientNote}${cmd}${tags ? `  [${tags}]` : ''}`);
+    console.log(`${String(i + 1).padStart(2)}. ${s.id.padEnd(19)} ~${est(s).toFixed(1).padStart(5)} / ${String(s.effTimeoutMin).padStart(3)}${s.effTimeoutMin < s.timeoutMin ? `(${s.timeoutMin})` : ''} min${shards.length > 1 ? ` ${sched.perShard[sched.assign[s.id] - 1]?.name ?? '?'}` : ''}  ${clientNote}${cmd}${tags ? `  [${tags}]` : ''}`);
     if (tierInfo.why?.[s.id]) console.log(`      why: ${tierInfo.why[s.id].join('; ')}`);
     if (flag('--verbose')) console.log(`      estimate: ${estOf.get(s.id).source}; timeout: ${s.timeoutSource}; priority ${prio.get(s.id).toFixed(1)} min`);
   });
-  if (NSHARDS === 1 && cur) console.log(`    end: stop client ${cur}`);
-  console.log(`estimate: ~${fmtDur(sched.wallMin * 60)} wall on ${NSHARDS} shard(s) (serial sum of the step estimates ~${fmtDur(sched.serialMin * 60)}; client starts ~40 s each); `
-    + `${NSHARDS > 1 ? `per shard busy ${sched.perShard.map((p) => `s${p.k} ${fmtDur(p.busyMin * 60)}`).join(', ')}; ` : ''}`
+  if (shards.length === 1 && cur) console.log(`    end: stop client ${cur}`);
+  console.log(`estimate: ~${fmtDur(sched.wallMin * 60)} wall on ${NSHARDS} shard(s)${NLANES ? ` + ${NLANES} offline lane(s)` : ''} (serial sum of the step estimates ~${fmtDur(sched.serialMin * 60)}; client starts ~40 s each); `
+    + `${shards.length > 1 ? `per shard busy ${sched.perShard.map((p) => `${p.name} ${fmtDur(p.busyMin * 60)}`).join(', ')}; ` : ''}`
     + `schedule: longest first from ${HIST.runs} past runs (${HISTORY_FILE}); benches ${ISOLATE_BENCH ? 'isolated (timing judged)' : 'not isolated (timing recorded)'}; `
     + `timeouts ${HIST_TIMEOUTS ? `from history on ${steps.filter((s) => s.effTimeoutMin < s.timeoutMin).length}/${steps.length} steps` : 'configured'} (--verbose: per step)`);
 }
@@ -966,13 +970,13 @@ if (!steps.length) {
 }
 
 if (PLAN) {
-  if (AUTO) await decideAuto();
+  if (decideShards) await decideShards();
   printPlan();
   for (const sh of shards) {
     const busy = [];
     for (const p of [sh.SIDECAR_PORT, sh.DEV_PORT]) if (!(await portFree(p))) busy.push(p);
     const procs = runDirProcs(sh);
-    console.log(`preflight now, shard ${sh.k}: ports ${busy.length ? `BUSY ${busy.join(',')}` : 'free'}; processes in its run worktree: ${procs.length ? procs.map((p) => p.pid).join(',') : 'none'}`);
+    console.log(`preflight now, ${sh.name ?? `s${sh.k}`}: ports ${busy.length ? `BUSY ${busy.join(',')}` : 'free'}; processes in its run worktree: ${procs.length ? procs.map((p) => p.pid).join(',') : 'none'}`);
   }
   process.exit(0);
 }
@@ -1002,8 +1006,8 @@ function takeLock() {
 }
 // the slot (one per run) records this run's shard count and ports; an auto run decides both under the slot mutex
 await acquireSlot(async () => {
-  if (AUTO) await decideAuto();
-  return { shards: NSHARDS, ports: allPorts };
+  if (decideShards) await decideShards();
+  return { shards: NSHARDS, lanes: NLANES, ports: allPorts };
 });
 if (autoChoice) console.log(autoChoice.text);
 takeLock();
@@ -1024,8 +1028,8 @@ const releaseLock = () => {
 const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-');
 const OUT = path.join(RUNS_ROOT, `${stamp}-${chainName}`);
 for (const sh of shards) {
-  sh.ev = NSHARDS > 1 ? path.join(OUT, `s${sh.k}`) : OUT;
-  sh.clientLog = path.join(OUT, NSHARDS > 1 ? `client-s${sh.k}.log` : 'client.log');
+  sh.ev = shards.length > 1 ? path.join(OUT, sh.name) : OUT;
+  sh.clientLog = path.join(OUT, shards.length > 1 ? `client-${sh.name}.log` : 'client.log');
   fs.mkdirSync(path.join(sh.ev, 'shots'), { recursive: true });
 }
 fs.writeFileSync(path.join(OUT, 'runner.pid'), String(process.pid));
@@ -1046,8 +1050,12 @@ const summary = {
   counts: {}, setup: null, slot: slotNote, shardsAuto: autoChoice ? (({ text, ...a }) => a)(autoChoice) : null, hosts: { mode: HOSTS.mode, server: HOSTS.server.filter((id) => stepIds.includes(id)) }, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
   cache: tierInfo.cache ?? null, cached: tierInfo.cached ?? [], inputsMisses: [],
   schedule: { order: 'longest first', historyRuns: HIST.runs, historyFile: HISTORY_FILE, benches: ISOLATE_BENCH ? 'isolated' : 'not isolated (timing recorded)', historyTimeouts: HIST_TIMEOUTS },
-  steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin, effectiveTimeoutMin: s.effTimeoutMin, timeoutSource: s.timeoutSource, estimateMin: Math.round(est(s) * 10) / 10, ...(tierInfo.why?.[s.id] ? { why: tierInfo.why[s.id] } : {}) })),
+  steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin, effectiveTimeoutMin: s.effTimeoutMin, timeoutSource: s.timeoutSource, estimateMin: Math.round(est(s) * 10) / 10, ...(s.parentId ? { parent: s.parentId } : {}), ...(tierInfo.why?.[s.id] ? { why: tierInfo.why[s.id] } : {}) })),
+  split: Object.keys(splitParts).length ? splitParts : null,
 };
+const MACHINE_LOG = path.join(OUT, 'machine.jsonl');
+const machineSamples = [];
+let sampler = null;
 const writeSummary = () => {
   const c = {};
   for (const s of summary.steps) c[s.status] = (c[s.status] ?? 0) + 1;
@@ -1056,7 +1064,7 @@ const writeSummary = () => {
   fs.renameSync(path.join(OUT, 'summary.json.tmp'), path.join(OUT, 'summary.json'));
 };
 writeSummary();
-if (slotNote.slot !== null) log(`slot ${slotNote.slot}/${SLOTS} held (pid ${process.pid})${slotNote.waitedSeconds ? `, waited ${fmtDur(slotNote.waitedSeconds)} for it` : ''}; timing bars ${RECORD_TIMING ? 'recorded, not judged' : 'judged'}; quiet-wait ${QUIET === null ? 'off' : `load < ${QUIET}`}`);
+if (slotNote.slot !== null) log(`${TURBO ? `TURBO: the machine held (slots ${slotNote.slots.join(',')})` : `slot ${slotNote.slot}/${SLOTS} held`} (pid ${process.pid})${slotNote.waitedSeconds ? `, waited ${fmtDur(slotNote.waitedSeconds)} for it` : ''}; timing bars ${RECORD_TIMING ? 'recorded, not judged' : 'judged'}; quiet-wait ${QUIET === null ? 'off' : `load < ${QUIET}`}`);
 
 // ------------------------------------------------------------------ processes: kill only ours
 
@@ -1309,7 +1317,7 @@ function runProcess(sh, step, logFile) {
     }
     const cwd = resolveCwd(step.cwd, sh);
     const [cmd, args] = step.shell ? ['/bin/zsh', ['-c', step.shell]] : [step.cmd[0], step.cmd.slice(1)];
-    fs.writeSync(fd, `# ${new Date().toISOString()} ${step.shell ?? step.cmd.join(' ')}  (cwd ${cwd}, shard ${sh.k}, ports ${sh.SIDECAR_PORT}/${sh.DEV_PORT})\n`);
+    fs.writeSync(fd, `# ${new Date().toISOString()} ${step.shell ?? step.cmd.join(' ')}  (cwd ${cwd}, shard ${sh.name}, ports ${sh.SIDECAR_PORT}/${sh.DEV_PORT})\n`);
     const child = spawn(cmd, args, { cwd, env, detached: true, stdio: ['ignore', fd, fd] });
     let timedOut = false;
     let killTimer;
@@ -1336,10 +1344,11 @@ function runProcess(sh, step, logFile) {
 }
 
 async function runStep(sh, step, rec) {
-  const logFile = path.join(OUT, `${step.id}.log`);
+  const logFile = path.join(OUT, `${step.id.replaceAll('/', '.')}.log`); // a split part <id>/p<k> logs to <id>.p<k>.log
   rec.log = path.relative(OUT, logFile);
   rec.status = 'RUNNING';
   rec.shard = sh.k;
+  rec.shardName = sh.name;
   rec.startedAt = new Date().toISOString();
   rec.load1 = { start: load1() };
   writeSummary();
@@ -1441,7 +1450,7 @@ async function runStep(sh, step, rec) {
 async function setupShard(sh, head) {
   const rec = { status: 'RUNNING', shard: sh.k };
   const ts = Date.now();
-  const setupLog = path.join(OUT, NSHARDS > 1 ? `setup-s${sh.k}.log` : 'setup.log');
+  const setupLog = path.join(OUT, shards.length > 1 ? `setup-${sh.name}.log` : 'setup.log');
   const shx = (cmd, args, cwd) => {
     const r = spawnSync(cmd, args, { cwd, env: childEnv(sh), encoding: 'utf8' });
     fs.appendFileSync(setupLog, `# ${cmd} ${args.join(' ')} (cwd ${cwd}) -> ${r.status}\n${r.stdout ?? ''}${r.stderr ?? ''}\n`);
@@ -1476,10 +1485,24 @@ async function setupShard(sh, head) {
       cleanStrays(sh);
     }
   }
+  // the sidecar build runs in the background: the caller prepares every worktree serially (git and the seed clones), then waits
+  // for all builds at once (12 shards' builds in parallel instead of one after another)
   log('setup: sidecar npm run build', sh);
-  shx('npm', ['run', 'build'], path.join(RUN, 'sidecar'));
-  rec.status = 'PASS';
-  rec.seconds = (Date.now() - ts) / 1000;
+  rec.build = new Promise((resolve, reject) => {
+    const fd = fs.openSync(setupLog, 'a');
+    fs.writeSync(fd, `# npm run build (cwd ${path.join(RUN, 'sidecar')})\n`);
+    const child = spawn('npm', ['run', 'build'], { cwd: path.join(RUN, 'sidecar'), env: childEnv(sh), stdio: ['ignore', fd, fd] });
+    child.on('error', (e) => reject(e));
+    child.on('exit', (code) => {
+      fs.closeSync(fd);
+      if (code !== 0) reject(new Error(`npm run build failed (${code}) in ${sh.name}; ${path.basename(setupLog)}`));
+      else {
+        rec.status = 'PASS';
+        rec.seconds = (Date.now() - ts) / 1000;
+        resolve();
+      }
+    });
+  });
   return rec;
 }
 
@@ -1491,11 +1514,14 @@ function summaryMd() {
     `# Gate run ${summary.chain}: ${summary.verdict}${summary.verdict === 'PASS' && summary.timingRecorded.length ? ` (${summary.timingRecorded.length} timing bar miss(es) recorded, not judged)` : ''}`,
     '',
     `${summary.state}, ${fmtDur(summary.durationSeconds)}, head ${summary.head?.slice(0, 9) ?? '?'}${summary.sourceDirty ? ' (source dirty)' : ''}, `
-      + `${shards.map((s) => `${NSHARDS > 1 ? `s${s.k} ` : ''}ports ${s.SIDECAR_PORT}/${s.DEV_PORT}`).join(', ')}.`,
+      + `${shards.map((s) => `${shards.length > 1 ? `${s.name} ` : ''}ports ${s.SIDECAR_PORT}/${s.DEV_PORT}`).join(', ')}.`,
     `Steps: ${Object.entries(c).map(([k, v]) => `${v} ${k}`).join(', ')}.${summary.timingRecorded.length ? ` ${summary.timingRecorded.length} timing bar miss(es) recorded.` : ''}${summary.error ? ` Error: ${summary.error}` : ''}`,
-    `Slot ${summary.slot.slot}/${summary.slot.limit}${summary.slot.waitedSeconds ? ` (waited ${fmtDur(summary.slot.waitedSeconds)})` : ''}; timing bars ${summary.timingPolicy}; benches ${summary.schedule.benches}; ${summary.schedule.historyTimeouts ? 'timeouts from history' : 'configured timeouts'}.`,
+    `${summary.slot.turbo ? `TURBO (the machine held, ${NSHARDS} shard(s) + ${NLANES} offline lane(s))` : `Slot ${summary.slot.slot}/${summary.slot.limit}`}${summary.slot.waitedSeconds ? ` (waited ${fmtDur(summary.slot.waitedSeconds)})` : ''}; timing bars ${summary.timingPolicy}; benches ${summary.schedule.benches}; ${summary.schedule.historyTimeouts ? 'timeouts from history' : 'configured timeouts'}.`,
   ];
   if (autoChoice) lines.push('', '```', autoChoice.text, '```');
+  const mc = summary.machine;
+  if (mc) lines.push('', `Machine (${mc.samples} samples, machine.jsonl): load p50 ${mc.loadP50}, p90 ${mc.loadP90}, max ${mc.loadMax}; available memory min ${mc.availGBMin} GB; swap max ${mc.swapGBMax} GB; `
+    + `gate processes' RSS max ${mc.gateRssGBMax} GB; largest process per shard ${Object.entries(mc.lanes).map(([k, v]) => `${k} ${v.maxProcGB}`).join(', ')} GB.`);
   const t = summary.tier;
   if (t) {
     lines.push('', `Tier **${t.name}**${t.range ? ` over \`${t.range}\`` : ''}: engine-touching ${t.engine ? 'yes' : 'no'}, placement-touching ${t.placement ? 'yes' : 'no'}`
@@ -1518,12 +1544,16 @@ function summaryMd() {
       for (const m of summary.inputsMisses) lines.push(`- **${m.step}**: ${m.paths.slice(0, 8).map((p) => `\`${p}\``).join(', ')}${m.paths.length > 8 ? ` and ${m.paths.length - 8} more` : ''}`);
     }
   }
-  lines.push('', `| step | ${NSHARDS > 1 ? 'shard | ' : ''}status | time | ok/FAIL | key numbers |`, `|---|${NSHARDS > 1 ? '---|' : ''}---|---|---|---|`);
+  lines.push('', `| step | ${shards.length > 1 ? 'shard | ' : ''}status | time | ok/FAIL | key numbers |`, `|---|${shards.length > 1 ? '---|' : ''}---|---|---|---|`);
   for (const s of summary.steps) {
     const m = [s.metrics ? Object.entries(s.metrics).map(([k, v]) => `${k} ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ') : '',
       s.load1 ? `load ${s.load1.start}->${s.load1.end ?? '?'}` : '', s.noisy ? `noisy (outcome ${s.noisyOutcome ?? '?'})` : '',
       s.contended ? `bench contended (ran with ${s.ranWith.length} step(s))` : '', s.timeoutSource?.startsWith('history') && s.status === 'TIMEOUT' ? `history timeout ${s.effectiveTimeoutMin} of ${s.timeoutMin} min` : ''].filter(Boolean).join('; ');
-    lines.push(`| ${s.id} | ${NSHARDS > 1 ? `${s.shard ?? '-'} | ` : ''}${s.status} | ${s.seconds != null ? fmtDur(s.seconds) : '-'} | ${s.ok ?? '-'}/${s.fail ?? '-'} | ${m.replace(/\|/g, '/')} |`);
+    lines.push(`| ${s.id} | ${shards.length > 1 ? `${s.shardName ?? s.shard ?? '-'} | ` : ''}${s.status} | ${s.seconds != null ? fmtDur(s.seconds) : '-'} | ${s.ok ?? '-'}/${s.fail ?? '-'} | ${m.replace(/\|/g, '/')} |`);
+  }
+  if (summary.splitResults) {
+    lines.push('', '## Split steps (each part runs its share of the parent\'s assertions)', '', '| parent | parts | status | step time | wall (first start to last end) | ok/FAIL |', '|---|---|---|---|---|---|');
+    for (const [p, r] of Object.entries(summary.splitResults)) lines.push(`| ${p} | ${r.parts.length} | ${r.status} | ${fmtDur(r.stepSeconds)} | ${r.wallSeconds != null ? fmtDur(r.wallSeconds) : '-'} | ${r.ok}/${r.fail} |`);
   }
   const rec = summary.steps.filter((s) => s.timingRecorded?.length);
   if (rec.length) {
@@ -1542,7 +1572,7 @@ function summaryMd() {
       for (const l of s.failLines ?? s.tail ?? []) lines.push(`  - \`${l.replace(/`/g, "'").slice(0, 200)}\``);
     }
   }
-  lines.push('', `Evidence: \`${OUT}\` (summary.json, runner.log, <step>.log, ${NSHARDS > 1 ? 's<k>/' : ''}gate4d/ gate4e/ gate5b/ gate6a/ sim-*/, client logs).`, '');
+  lines.push('', `Evidence: \`${OUT}\` (summary.json, runner.log, <step>.log, ${shards.length > 1 ? 's<k>/ o<j>/' : ''}gate4d/ gate4e/ gate5b/ gate6a/ sim-*/, client logs).`, '');
   return lines.join('\n');
 }
 
@@ -1575,6 +1605,9 @@ function notify() {
 }
 
 async function finish(state, error) {
+  if (sampler) clearInterval(sampler);
+  if (machineSamples.length) summary.machine = foldSamples(machineSamples);
+  if (summary.split) summary.splitResults = parentResults(summary.split, summary.steps);
   summary.state = state;
   if (error) summary.error = error;
   summary.endedAt = new Date().toISOString();
@@ -1623,7 +1656,7 @@ try {
   for (const sh of shards) {
     const others = runDirProcs(sh);
     if (others.length) throw new Error(`processes already use the run worktree ${sh.RUN} (${others.map((p) => `${p.pid}`).join(', ')}); not ours, not touched`);
-    for (const p of [sh.SIDECAR_PORT, sh.DEV_PORT]) if (!(await portFree(p))) throw new Error(`port ${p} is in use (shard ${sh.k}; set --ports / GATE_PORTS)`);
+    for (const p of [sh.SIDECAR_PORT, sh.DEV_PORT]) if (!(await portFree(p))) throw new Error(`port ${p} is in use (${sh.name}; set --ports / GATE_PORTS)`);
   }
   log(`gate-run ${chainName}: ${steps.length} steps (${steps.map((s) => s.id).join(' ')}); ${shards.map((s) => `shard ${s.k} ${s.RUN} ports ${s.SIDECAR_PORT}/${s.DEV_PORT}`).join('; ')}; notify ${NOTIFY_MODE}`);
   if (tierInfo.kind === 'tier') {
@@ -1655,6 +1688,10 @@ try {
   summary.sourceDirty = !!git(SRC, 'status', '--porcelain', '--untracked-files=no');
   summary.setup = [];
   for (const sh of shards) summary.setup.push(await setupShard(sh, head));
+  const builds = await Promise.allSettled(summary.setup.map((r) => r.build));
+  for (const r of summary.setup) delete r.build;
+  const bad = builds.find((b) => b.status === 'rejected');
+  if (bad) throw bad.reason;
   writeSummary();
 } catch (e) {
   log(`setup failed: ${e.message}`);
@@ -1662,6 +1699,21 @@ try {
   await finish('aborted', `setup: ${e.message}`);
   process.exit(1);
 }
+
+// the machine sampler (tools/lib/turbo.mjs): every 30 s the load, available memory, swap and each shard's/lane's resident memory
+// (its run worktree's processes: the server/client JVM, the sidecar, gradle, node) to <out>/machine.jsonl; folded into summary.machine
+const sampleNow = () => {
+  try {
+    const smp = sampleMachine(shards.map((sh) => ({ name: sh.name, needles: [...new Set([sh.RUN, real(sh.RUN)])].map((p) => p + path.sep) })), os.loadavg());
+    machineSamples.push(smp);
+    fs.appendFileSync(MACHINE_LOG, JSON.stringify(smp) + '\n');
+  } catch {
+    // a missed sample
+  }
+};
+sampleNow();
+sampler = setInterval(sampleNow, Number(process.env.GATE_SAMPLE_MS ?? 30_000));
+sampler.unref();
 
 // the scheduler: one worker per shard, each starting the next step `pick` allows
 const st = { pending: steps.map((_, i) => i), running: new Map(), done: new Map() };
@@ -1715,7 +1767,7 @@ async function worker(sh) {
     const step = steps[i];
     const rec = summary.steps[i];
     // an isolated bench step runs alone (pick drained the others): the other shards' idle clients would load the machine, so stop them
-    if (isIsolated(step)) for (const o of shards) if (o !== sh && ownProcs(o).length) await stopClient(o, `bench step ${step.id} on s${sh.k}`);
+    if (isIsolated(step)) for (const o of shards) if (o !== sh && ownProcs(o).length) await stopClient(o, `bench step ${step.id} on ${sh.name}`);
     if (isIsolated(step) && QUIET !== null) {
       const tq = Date.now();
       if (load1() >= QUIET) log(`  ${step.id}: waiting for the 1-min load average ${load1()} to drop below ${QUIET} (at most ${QUIET_MAX_MIN} min)`, sh);
@@ -1749,7 +1801,7 @@ async function worker(sh) {
         }
         const k = keyOf(step.id);
         const r = recordPass(CACHE, step.id, rec, { key: k.key, why: k.why, parts: k.parts, run: OUT, ev: sh.ev, traceDir: path.join(OUT, 'traces', step.id), traced: TRACE,
-          timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', judgedBench: JUDGED_BENCHES.has(step.id), tier: chainName,
+          timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', judgedBench: JUDGED_BENCHES.has(parentOf(step.id)), tier: chainName,
           ...(step.id === 'unit-kit' && runShared.kitJunit ? { junit: runShared.kitJunit, kitTree: runShared.kitTree } : {}) });
         rec.cache = { key: k.key, recorded: r.stored, why: r.why };
         if (r.outside) {
