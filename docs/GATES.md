@@ -261,6 +261,179 @@ node tools/nightly-install.mjs --uninstall
 The plist runs `node <checkout>/tools/nightly.mjs` at 02:00. Its environment is PATH (the mise node, Homebrew, system), HOME and
 JAVA_HOME, nothing else: no `ANTHROPIC_*`, no `GATE_NOTIFY`. Logs go to `~/Library/Logs/architect-nightly.log`.
 
+### Coverage-based inputs (2026-10-22; code and offline proofs, no in-game run yet)
+
+The whole-tree classes made any mod/src/main or kit/lib change re-run every in-game step. In **coverage mode**
+(`tools/lib/step-coverage.mjs`, `gate-cache.json` `coverage`, on by default; `--no-coverage` turns it off) an in-game step's PASS is
+keyed by what that run touched. The key covers:
+- **Java classes.** Every JVM of the shard logs its class loads (`JAVA_TOOL_OPTIONS=-Xlog:class+load` into
+  `<run>/coverage/jvm-<pid>.log`). A step owns the logs of the JVMs alive at its start (a reused client counts with everything it
+  loaded before) and of the JVMs written during it. Each class maps to its source file; a class with no file of its own widens to
+  its package's files.
+  - Loaded is a superset of executed, which is JaCoCo's class level. It needs no agent: JaCoCo isn't in the gradle cache, and adding it
+    would mean a download. JaCoCo can replace it later.
+- **Node files.** The step's own trace, plus the trace of the client the runner started: the sidecar and its workers.
+  - The tracer follows worker threads through a wrapper that also gives the tracer's environment to a worker started with
+    `env: {}` (the region pool).
+  - The kit tools the sidecar spawns with `minimalEnv` are not traced; their closures are in the safety set.
+  - The region CLI runs under Node's permission model, where no tracer can load. A step whose client stats `kit/tools/region.mjs`
+    (the sidecar's `runKit`, just before it spawns the CLI) gets the CLI's closure and every region program
+    (`coverage.whenTouched`). A kit test guards that contract.
+  - It records `mkdirSync` as evidence of a gradle run in the source checkout.
+  - The JVM log never rotates (`filecount=0`).
+- **The step's static, non-class inputs.** Its drivers' module closure and its traced data. The `gradle` class is kept only when
+  the run took the source checkout's gradle lock.
+- **The safety set**, always in (`coverage.always` and the closures of `coverage.alwaysRoots`), with the reason for each group in
+  `coverage.why`:
+  - build files and resources;
+  - mixins (applied as bytes, never loaded under their own name);
+  - the `*Registry*`, `*Codec*`, `*Serial*` and `*Nbt*` sources, and the fabric.mod.json entrypoints;
+  - devserver (its generated hooks);
+  - `sidecar/src` (one esbuild bundle);
+  - the kit tools the sidecar spawns with a minimal environment (untraced), the kit data it reads, the region worker, and
+    kit/lib/region/plan.mjs (the KIT_INFO probe reads its constants);
+  - the kit files the jar carries.
+- **The runner's own code** (`runnerKey`: gate-run.mjs, hosts, splits, turbo, shard-auto, gate-history, the tracer) is in every
+  key, coverage or not. The fail audit below found 8 past FAILs that only a runner change explains.
+
+**The run-level build artifact** (`tools/lib/build-artifact.mjs`, `gate-cache.json` `build`) is the design that makes a Java change
+cheap.
+- **What it is:** the mod (main, client, test), devserver and apitest classes, compiled once per hash of their inputs (all of
+  mod/, devserver/ and apitest/, plus the kit files the build reads and the compiler), offline, in `../architect-mc-buildcache`.
+  A manifest of every class file's digest goes to `artifacts/build-cache/<hash>.json`. A build of 1283 classes takes about 40 s
+  and is byte-identical across worktrees.
+- **What a coverage-mode key holds instead of the build:** the bytecode digests of the classes its run loaded, instead of their
+  Java sources. It keeps the `gradle` class only when its run took the source checkout's gradle lock: gradle may serve those
+  tests from its cache with no class log, and a `--tests` filter takes new test classes by name.
+  - A source edit that compiles to the same bytecode, or a change to a class the step never loaded, leaves the key alone.
+  - A constant inlined into a loaded class changes that class's bytecode, so the global constant rule only applies to PASSes
+    recorded without an artifact.
+- **The guard:** a build that fails, or can't run, gives no coverage key, so every coverage-mode step runs.
+  - A compile failure is kept in the manifest cache. A timeout, a lock problem or a dirty cache worktree is not, so the next run
+    retries.
+  - The build environment drops `LAB_UI_DIR`, `ORG_GRADLE_PROJECT_*` and the gate's tracing variables.
+- **Not the whole artifact's hash** in every key. That hash moves on any Java change, which would put the floor back at "every
+  step". The per-class digests are that guard at the granularity a step actually consumes.
+- **The gradle-cwd steps** (unit-mod, umt, p3-lint) are the build and its whole test suite, so they keep the whole trees.
+- **Not yet done:** clients still compile their own run worktree (loom `runClient`). Making them load the shared classes would only
+  save time, and needs an in-game run to prove; the keys don't depend on who compiles.
+- `--no-build-artifact` keeps coverage keys on sources.
+
+A coverage PASS is looked up by recomputing its key over the set it recorded (`lookupCoverage`, the newest twelve PASSes of the step):
+- a changed file in the set re-runs the step, and that run re-records its coverage;
+- a changed file outside the set skips it;
+- **a constant variable changed in any Java file** invalidates every coverage PASS, because javac inlines constants into the
+  classes that use them. A constant variable is a `final` field or local of a primitive or String type with an initialiser, or any
+  such field in an interface or annotation. Every one is parsed from both versions of each changed file, across lines and
+  concatenations (`constantDecls`).
+
+**Auto `--full`, narrowed (PROPOSED, awaiting approval).** The impact rules' `engine` tag no longer forces `--full`. Instead it is
+forced by the Minecraft or dependency versions, the build files, and a named engine list (`release.autoFull.enginePaths`):
+- the journal and its store: `journal/**`;
+- the block-write queues: `batch/**`, `site/RegionQueue`, `TickDeferral`, `ChunkTickets`;
+- the placement and removal core: `site/TemplateWriter`, `PlaceJob`, `RestoreJob`, `InfraJob`, `SiteJournal`, `Sites`, `Groups`,
+  `Batches`, `Placement`, `placement/Reconcile` and `region/RegionsImpl`;
+- the files the UMT rule names as undo-critical: `site/FluidRearm`, `TileCheck`, `LotMask`;
+- placement tracking: `placed/**`;
+- the world-update mixins: `mixin/**` and the mixins json.
+
+kit/lib/** and region/RegionFluids.java no longer force it: the coordinator ruled RegionFluids not engine, though the UMT rule lists
+it.
+
+**Proofs (offline; the exact counts need the first traced turbo run, which records every step's coverage).**
+- **A real JVM** (`./gradlew test --tests *IrRoadExtTest` with the class-load log): 353 `dev.larattalabs` classes, every one mapped
+  to its source. The coverage set it gives an in-game entry holds 91 of the 345 mod/src/main files.
+- **5 recent commits: the design as built** (`tools/step-cache.mjs coverage-select <commits> --bytecode`). Both sides are compiled
+  and the changed class files listed. A coverage-mode step is keyed by:
+  - **its drivers' eager closure.** That is the top-level `import`s, which always load. A lazy `import()` counts only when its run
+    executed it, because the trace records it.
+    - Guard: a driver edit that starts executing a lazy path changes the driver file, which is in the eager set, so the step
+      re-runs and is re-traced (kit test "drivers count by their eager imports").
+    - The CI check still walks the full static closure (`closure` in the map; `eager` is new).
+  - **gradle runs in the source checkout, three cases:**
+    - **compile only** (`compileJava` for api-compat): the build artifact compiled the same sources. The class files the driver then
+      reads are keyed by their bytecode (`classReads`).
+    - **tests with readable filters** (`gateRerunTests` makes the JVM run and log; the runner sets it only for these steps):
+      - the test sources the patterns select at each commit (`@tests:<pattern>`; Gradle also matches Class.method, so a wildcard
+        selects every test file whose name or text holds its fragments);
+      - the repo paths those test sources name (`javaTestRefs`): literal `"../X/..."` and `Path.of("..", "X", ...)` paths for
+        any X (kit, sidecar, scenarios, ...), a node module's closure, or a directory's tree. A source that builds a path any other
+        way (`Path.of("..", var)`, `Path.of("..")`, `resolve(var)`) makes the whole repository its input;
+      - the test resources;
+      - the loaded bytecode.
+    - **otherwise:** the whole build and test tree. That now applies to 3 steps only: f2-unit, f2-harvest and
+      6cf2-scenario-scatter, whose `gradle(args)` wrapper passes a parameter.
+  - **gradle runs, as recognised:**
+    - A run is any `gradlew` the step's node processes launched: srcGradle's lock, or the tracer's record of the launch (kind
+      `x`; `spawnSync('./gradlew', ...)` called directly counts).
+    - A call is a test run unless every task it names is compile-only (compileJava, classes, testClasses, jar, headlessLaunch,
+      ...). build, check, umtLong and `:x:test` run tests.
+    - An `args` variable is resolved to its nearest array literal before the call.
+    - A message string that names gradlew is not a call.
+  - **kit-reuse** (a driver whose closure loads kit-reuse.mjs, eagerly or through `await import`) delegates its kit tests to unit-kit. Its coverage
+    PASS serves only a run that holds unit-kit, which re-runs on any kit change.
+  - **`coverage.lazyAlways`** (gate6a-stubs.mjs) lists lazy paths that run state, not code, decides: they stay in.
+  - **The 8 drivers that were unreadable:** f1, t1, t2, p0, s2, d and k1a only compile (api-compat), and pt2's
+    `*${t.split('.').pop()}` template ranges over literal names, so it is readable. Gradle calls are now read from the code (comments
+    stripped), with an `args` variable resolved to its array literal.
+
+  "At least" is what runs whatever the recorded coverage says. Of the 210 cacheable steps:
+
+  | commit | change | class files changed | map mode runs | coverage at least |
+  |---|---|---|---|---|
+  | e5dafb64 | kit isLeaves (kit/lib/forms/states.mjs) | 0 | 209 | 15 |
+  | 0bb0c89e | RS realised provenance (11 files) | 14 | 204 | 15 |
+  | f5c73633 | RegionHash (5 files) | 6 | 204 | 9 |
+  | 8b4da151 | RS-b farmland (3 files) | 5 | 204 | 10 |
+  | 4d891398 | RP verify (1 Java file) | 2 | 204 | 8 |
+
+  - **Who is in the floor:**
+    - unit-mod, umt, p3-lint and p3-lint-long (the build and its tests);
+    - f2-unit (its filters are unreadable);
+    - sch-unit, pt2-unit and rs-unit, whose selected Java tests build repo paths opaquely (ApiP0Test's `Path.of("..", file)`), so
+      the whole repo is their input;
+    - the steps whose eager drivers or data moved: the RS steps for 0bb0c89e, rsb for 8b4da151;
+    - for the kit change: unit-kit, water-lint, the lints and x-unit, which load it eagerly, and mp-unit.
+  - **Above the floor**, a step runs only if its run loaded a changed class or a changed node file, a lazily imported driver module
+    included (f5c73633 changed `gate6ch-holders.mjs`, which only `gate6ch.mjs holders` loads).
+  - **Before:** 157 and 20-30 with the full closure, and 35-50 with the gradle class kept.
+- **Why the kit change ran 157 before** (measured): 143 of the 157 held kit/lib/forms/states.mjs only through lazy `import()`s
+  in shared drivers that most runs never execute. The main one is `gate6b.mjs base` → `scenarios.mjs` → `kit/lib/region/check.mjs`.
+  The eager-closure rule above, approved and built, takes the floor to 15.
+
+  The earlier bound, which kept the gradle class (`--source-gradle`):
+- **The same 5 commits, source keys** (`tools/step-cache.mjs coverage-select <commit>...`, against each parent).
+  "Coverage at least" is the steps whose drivers, data, runner or safety set moved, which run in any mode; the rest are decided
+  by their recorded coverage. Of the 210 cacheable steps:
+
+  | commit | change | map mode runs | coverage at least, worst case | coverage at least, in-game steps without gradle (`--gradle-in-game-off`) |
+  |---|---|---|---|---|
+  | e5dafb64 | kit isLeaves (1 kit/lib file) | 209 | 169 | 157 |
+  | 0bb0c89e | RS realised provenance (11 files: Java, kit, drivers) | 204 | 118 | 40 |
+  | f5c73633 | RegionHash (5 files) | 204 | 118 | 50 |
+  | 8b4da151 | RS-b farmland (3 files) | 204 | 118 | 37 |
+  | 4d891398 | RP verify (1 Java file) | 204 | 118 | 35 |
+
+  - A Java-only change now runs as few as the client-less steps that build the mod in the source checkout, plus whatever touched
+    the changed classes.
+  - A change to a widely imported kit module (kit/lib/blocks or check) still runs most steps, because the drivers themselves import
+    it. Node coverage is at file level, as specified.
+- **History** (`tools/step-cache.mjs fail-audit`, every FAIL or TIMEOUT in artifacts/ against the step's last earlier PASS on an
+  ancestor commit). 626 records on 2026-10-22; the count grows as runs land:
+  - 197 have no earlier PASS on an ancestor;
+  - 10 came on the same commit as a PASS: no code change, so a flake, load or environment;
+  - 415 had their cause in the step's drivers, data, definition, runner or safety set, so they run in every mode. That count leans
+    on the large safety set (devserver and sidecar sources, the Registry/Codec/Serial/Nbt globs);
+  - **2 are decided by coverage**, pending its first recording: t3b-ingame after a TileCheck.java change, and sim-jobs after the
+    kit/lib/lint changes;
+  - 2 have no change in the step's set at all:
+    - 6ct2-scenario-route's change was docs only;
+    - pt2-ingame failed item 13 (the one known on main) after a change to tools/gate6cpt.mjs, which is not in its set. The audit
+      can't tell whether that change caused it.
+  - So the coverage half of the proof is still to come: only 2 of 626 records depend on coverage, and none has been recorded
+    yet.
+  - Before the runner joined the keys, the audit found 10 such holes. The 8 explained by runner changes are why `runnerKey` exists.
+
 ### Impact-map misses log
 
 Each line is a nightly's miss: the date, the step, what failed, where it was cached from, and what was done.
