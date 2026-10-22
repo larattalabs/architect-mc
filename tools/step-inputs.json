@@ -1645,6 +1645,7 @@
     "*ApiMPTest",
     "*MaskPatternDriftTest",
     "*PlanStaleTest",
+    "*sources*",
     "api.ApiMPTest",
     "api.MaskPatternDriftTest",
     "region.PlanStaleTest"
@@ -1937,6 +1938,7 @@
     "*ApiMPTest",
     "*MaskPatternDriftTest",
     "*PlanStaleTest",
+    "*sources*",
     "api.ApiMPTest",
     "api.MaskPatternDriftTest",
     "region.PlanStaleTest"
@@ -10377,6 +10379,7 @@
     "*ApiDTest*",
     "*C29CreditTest*",
     "*FeedOrderTest*",
+    "*IrStale*",
     "*PlanChecksT3Test*",
     "*RegionFluidsHYTest*",
     "*RegionTargetsTest*",
@@ -10609,6 +10612,7 @@
     "*ApiDTest*",
     "*C29CreditTest*",
     "*FeedOrderTest*",
+    "*IrStale*",
     "*PlanChecksT3Test*",
     "*RegionFluidsHYTest*",
     "*RegionTargetsTest*",
@@ -10841,6 +10845,7 @@
     "*ApiDTest*",
     "*C29CreditTest*",
     "*FeedOrderTest*",
+    "*IrStale*",
     "*PlanChecksT3Test*",
     "*RegionFluidsHYTest*",
     "*RegionTargetsTest*",
@@ -11074,6 +11079,7 @@
     "*ApiDTest*",
     "*C29CreditTest*",
     "*FeedOrderTest*",
+    "*IrStale*",
     "*PlanChecksT3Test*",
     "*RegionFluidsHYTest*",
     "*RegionTargetsTest*",
@@ -41736,6 +41742,7 @@
     "GATE6C0B_RUN"
    ],
    "testFilters": [
+    "**FAIL**",
     "*MirrorFitTest",
     "*MirrorOracleTest",
     "*Wire0bTest"
@@ -41843,6 +41850,7 @@
     "JAVA_HOME"
    ],
    "testFilters": [
+    "**FAIL**",
     "*MirrorFitTest",
     "*MirrorOracleTest",
     "*Wire0bTest"

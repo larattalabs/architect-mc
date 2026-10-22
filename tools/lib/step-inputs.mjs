@@ -270,7 +270,9 @@ export function staticEntry(id, entry, conf, files, opts) {
     runsTests = true;
     if (!/--tests/.test(t)) filtersComplete = false;
     if (/--tests[^\n]*\$\{/.test(t)) filtersComplete = false;
-    for (const m of t.matchAll(/(['"])([\w.$*]*Test[\w.$*]*)\1/g)) testFilters.add(m[2]);
+    // every literal that can be a filter: one with a wildcard or "Test" in it (javaTests(['*IrStale*', ...]) passes them on)
+    for (const m of t.matchAll(/(['"])([\w.$*]+)\1/g)) if (/\*|Test/.test(m[2]) && /[A-Za-z]/.test(m[2])) testFilters.add(m[2]);
+    for (const m of t.matchAll(/['"]--tests['"]\s*,\s*(['"])([^'"]+)\1/g)) testFilters.add(m[2]);
   }
   if (!runsTests) filtersComplete = false;
   return {
