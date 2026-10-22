@@ -10,8 +10,8 @@
 //
 // It never kills anything, never queues behind or ahead of another run, and never touches another checkout's tree:
 //   - one nightly at a time: artifacts/nightly/nightly.lock (pid); a live holder -> exit 0 at once ("already active");
-//   - any gate run active or queued (a live slot holder or queue ticket in the slot dir): it waits for an idle machine without
-//     taking a queue ticket (nightly.idleWaitMin, 240), then skips the night, exit 0;
+//   - any gate run active or queued (a live slot holder or queue ticket in the slot dir): the night is skipped, exit 0 at once
+//     (nightly.idleWaitMin > 0 waits that long for an idle machine first, without taking a queue ticket);
 //   - otherwise the gate run (turbo: the machine idle at night, it holds every slot until it ends) runs in its own run dirs;
 //   - the main checkout is only fetched (git fetch), never checked out or pulled; the nightly worktree (gate-cache.json
 //     nightly.worktree) is moved only when clean, else the night is skipped.
@@ -166,8 +166,8 @@ async function activeRuns() {
 }
 // wait for an idle machine without taking a place in the queue (nightly.idleWaitMin, polled every 5 min), then skip the night
 let busy = flag('--plan') ? [] : [...new Set(await activeRuns())];
-const idleUntil = Date.now() + Number(opt('--idle-wait-min') ?? conf.idleWaitMin ?? 240) * 60_000;
-if (busy.length) log(`nightly: a gate run is active or queued (${busy.join('; ')}); waiting for an idle machine until ${new Date(idleUntil).toISOString()} (no queue ticket taken)`);
+const idleUntil = Date.now() + Number(opt('--idle-wait-min') ?? conf.idleWaitMin ?? 0) * 60_000;
+if (busy.length && idleUntil > Date.now()) log(`nightly: a gate run is active or queued (${busy.join('; ')}); waiting for an idle machine until ${new Date(idleUntil).toISOString()} (no queue ticket taken)`);
 while (busy.length && Date.now() < idleUntil) {
   await new Promise((r) => setTimeout(r, Math.min(300_000, Math.max(1000, idleUntil - Date.now()))));
   busy = [...new Set(await activeRuns())];

@@ -213,9 +213,9 @@ What a CACHED step does not do: it does not re-measure. Its timing bars were rec
 ### The nightly (`tools/nightly.mjs`)
 
 At about 02:00 it:
-1. waits for an idle machine: no live slot holder and no queue ticket in the slot dir. It takes no ticket while it waits
-   (`nightly.idleWaitMin`, 240 min, polled every 5 min), so it never queues ahead of a run, and skips the night if the machine
-   stays busy;
+1. checks that no gate run is active or queued (a live slot holder or queue ticket in the slot dir). If one is, it **exits at once**
+   and the night is skipped (`artifacts/nightly/<date>/summary.json` says why). `nightly.idleWaitMin` (0) can make it wait that long
+   for an idle machine first, without taking a queue ticket, so it never queues ahead of a run;
 2. fetches origin and moves its own worktree (`../architect-mc-nightly`, detached) to origin/main. The main checkout is never
    checked out or pulled. A nightly worktree with local changes skips the night;
 3. runs `release --full --no-cache --turbo` there (`nightly.extraArgs`), in its own run dirs (`../architect-mc-nightrun[-s<k>]`)
