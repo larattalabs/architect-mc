@@ -272,11 +272,15 @@ keyed by what that run touched. The key covers:
   its package's files.
   - Loaded is a superset of executed, which is JaCoCo's class level. It needs no agent: JaCoCo isn't in the gradle cache, and adding it
     would mean a download. JaCoCo can replace it later.
-- **Node files.** The step's own trace, plus the trace of the client the runner started: the sidecar, its workers, and the kit
-  tools it spawns. The sidecar's `minimalEnv` passes the gate tracer, and nothing else, to those tools, and only when a gate run set
-  it (sidecar/test/minimal-env-trace.test.ts). The tracer follows worker threads through a wrapper that also gives the tracer's
-  environment to a worker started with `env: {}` (the region pool). It records `mkdirSync` as evidence of a gradle run in the
-  source checkout. The JVM log never rotates (`filecount=0`).
+- **Node files.** The step's own trace, plus the trace of the client the runner started: the sidecar and its workers.
+  - The tracer follows worker threads through a wrapper that also gives the tracer's environment to a worker started with
+    `env: {}` (the region pool).
+  - The kit tools the sidecar spawns with `minimalEnv` are not traced; their closures are in the safety set.
+  - The region CLI runs under Node's permission model, where no tracer can load. A step whose client stats `kit/tools/region.mjs`
+    (the sidecar's `runKit`, just before it spawns the CLI) gets the CLI's closure and every region program
+    (`coverage.whenTouched`). A kit test guards that contract.
+  - It records `mkdirSync` as evidence of a gradle run in the source checkout.
+  - The JVM log never rotates (`filecount=0`).
 - **The step's static, non-class inputs.** Its drivers' module closure and its traced data. The `gradle` class is kept only when
   the run took the source checkout's gradle lock.
 - **The safety set**, always in (`coverage.always` and the closures of `coverage.alwaysRoots`), with the reason for each group in
@@ -286,7 +290,8 @@ keyed by what that run touched. The key covers:
   - the `*Registry*`, `*Codec*`, `*Serial*` and `*Nbt*` sources, and the fabric.mod.json entrypoints;
   - devserver (its generated hooks);
   - `sidecar/src` (one esbuild bundle);
-  - the kit tools the sidecar spawns with a minimal environment (untraced), the kit data it reads, and the region worker;
+  - the kit tools the sidecar spawns with a minimal environment (untraced), the kit data it reads, the region worker, and
+    kit/lib/region/plan.mjs (the KIT_INFO probe reads its constants);
   - the kit files the jar carries.
 - **The runner's own code** (`runnerKey`: gate-run.mjs, hosts, splits, turbo, shard-auto, gate-history, the tracer) is in every
   key, coverage or not. The fail audit below found 8 past FAILs that only a runner change explains.

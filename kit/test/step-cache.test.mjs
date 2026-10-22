@@ -269,3 +269,29 @@ test('coverage: a JVM alive at a step\'s start counts (a reused client), one tha
   assert.deepEqual(collect(dir, snap).classes, ['dev.larattalabs.A']);
   void coverageSet;
 });
+
+test('coverage: the sidecar still stats kit/tools/region.mjs before it spawns the untraced region CLI (whenTouched relies on it)', () => {
+  const src = fs.readFileSync(new URL('../../sidecar/src/regions.ts', import.meta.url), 'utf8');
+  const body = src.slice(src.indexOf('private async runKit('), src.indexOf('private async runKit(') + 2500);
+  assert.match(body, /const script = path\.join\(kit, 'tools', 'region\.mjs'\);\s*\n\s*if \(!fs\.existsSync\(script\)\)/, 'runKit must stat the script (the trace sees that stat) before the permission-model spawn');
+  assert.match(body, /env: minimalEnv\(\)/);
+  const gc = JSON.parse(fs.readFileSync(new URL('../../tools/gate-cache.json', import.meta.url), 'utf8'));
+  assert.equal(gc.coverage.whenTouched['kit/tools/region.mjs'].kinds, 's');
+});
+
+test('coverage: a step whose trace shows the region CLI stat gets the CLI closure and every region program', () => {
+  const root = covRepo();
+  write(root, 'kit/tools/region.mjs', "import '../lib/region/plan.mjs';\n");
+  write(root, 'kit/lib/region/plan.mjs', "import '../forms/unused.mjs';\nexport const KIT_VERSION = '1';\n");
+  write(root, 'kit/regions/demo.mjs', "import '../lib/used.mjs';\n");
+  git(root, 'add', '-A');
+  git(root, 'commit', '-qm', 'region cli');
+  const cfg = { steps: { g: { shell: 'node tools/gate-g.mjs', client: '6b', timeoutMin: 5 } } };
+  const files = treeAt(root, 'HEAD');
+  const entry = staticEntry('g', cfg.steps.g, covConf, files, { src: root });
+  const conf2 = { ...covConf, coverage: { ...covConf.coverage, whenTouched: { 'kit/tools/region.mjs': { kinds: 's', roots: ['kit/tools/region.mjs', 'kit/regions/*.mjs'], globs: ['kit/regions/**'] } } } };
+  const without = coverageSet({ entry, trace: new Map(), cov: { classes: [], node: new Map() }, conf: conf2, tree: files, src: root }).set;
+  assert.ok(!without.includes('kit/lib/forms/unused.mjs'));
+  const withCli = coverageSet({ entry, trace: new Map(), cov: { classes: [], node: new Map([['kit/tools/region.mjs', new Set(['s'])]]) }, conf: conf2, tree: files, src: root }).set;
+  for (const p of ['kit/tools/region.mjs', 'kit/lib/region/plan.mjs', 'kit/lib/forms/unused.mjs', 'kit/regions/**']) assert.ok(withCli.includes(p), p);
+});

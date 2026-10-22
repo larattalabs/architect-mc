@@ -188,13 +188,6 @@ export function minimalEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.Proces
   const keep = ['PATH', 'Path', 'HOME', 'USERPROFILE', 'TMP', 'TEMP', 'TMPDIR', 'SystemRoot', 'SYSTEMROOT', 'windir', 'LANG', 'LC_ALL'];
   const env: NodeJS.ProcessEnv = {};
   for (const k of keep) if (base[k] !== undefined) env[k] = base[k];
-  // the gate runner's input tracer (tools/lib/step-trace.mjs; docs/GATES.md "Coverage-based inputs"): only inside a gate run,
-  // where GATE_TRACE_DIR is set, the kit tools we spawn record the files they load like every other node process of the step
-  const tracer = base.GATE_TRACE_DIR ? /(?:^|\s)(--import=file:\S+\/tools\/lib\/step-trace\.mjs)(?=\s|$)/.exec(base.NODE_OPTIONS ?? '')?.[1] : undefined;
-  if (tracer) {
-    env.NODE_OPTIONS = tracer; // the tracer alone: no other option of ours reaches agent-written code
-    for (const k of ['GATE_TRACE_DIR', 'GATE_TRACE_ROOTS']) if (base[k] !== undefined) env[k] = base[k];
-  }
   // the node running us comes first (Minecraft starts the sidecar with a minimal PATH)
   return withPathFirst(env, path.dirname(process.execPath)) as NodeJS.ProcessEnv;
 }

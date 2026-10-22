@@ -478,6 +478,7 @@
     "scenarios/relief_demo.json",
     "scenarios/route_demo.json",
     "scenarios/s3_monastery.json",
+    "sidecar/src/regions.ts",
     "tools/api-compat.mjs",
     "tools/catalogue-since-check.mjs",
     "tools/find-site.mjs",
@@ -601,6 +602,10 @@
      "expr": "path.join(KIT, name))"
     },
     {
+     "from": "kit/tools/region.mjs",
+     "expr": "pathToFileURL(path.join(dir, f)).href)"
+    },
+    {
      "from": "kit/test/release-version.test.mjs",
      "expr": "`${path.join(t, 'kit/lib/plan/catalogue.mjs')}?${Date.now()}`)"
     },
@@ -615,10 +620,6 @@
     {
      "from": "tools/release-version.mjs",
      "expr": "${JSON.stringify(pathToFileURL(path.join(root, 'tools/catalogue-since-check.mjs')).href)})"
-    },
-    {
-     "from": "kit/tools/region.mjs",
-     "expr": "pathToFileURL(path.join(dir, f)).href)"
     },
     {
      "from": "kit/test/phase5a.test.mjs",

@@ -161,6 +161,17 @@ export function coverageSet({ entry, trace, cov, conf, tree, src, read }) {
     for (const x of conf.classes?.[cls] ?? []) set.add(x);
   }
   for (const x of safetyGlobs(c, tree, src, read)) set.add(x);
+  // conditional safety (coverage.whenTouched): an untraced tool the run's traces show it used brings its closure and globs
+  const hasT = new Set(tree.keys());
+  for (const [trig, w] of Object.entries(c.whenTouched ?? {})) {
+    if (trig.startsWith('$')) continue;
+    const hit = [trace, cov?.node].some((m) => [...(m?.get(trig) ?? [])].some((k) => (w.kinds ?? 'rsdm').includes(k)));
+    if (!hit) continue;
+    const roots = (w.roots ?? []).flatMap((r) => (/[*?]/.test(r) ? [...hasT].filter((p) => globRe(r).test(p)) : [r])).filter((r) => hasT.has(r));
+    const cl = moduleClosure(roots, hasT, { src, read });
+    for (const f of cl.files) set.add(f);
+    for (const g of [...cl.globs, ...(w.globs ?? [])]) set.add(g);
+  }
   // Java: the classes its JVMs loaded
   const roots = c.javaRoots ?? [];
   const j = classesToFiles(cov?.classes ?? [], javaIndex(tree, roots), roots);
