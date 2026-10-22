@@ -213,7 +213,8 @@ export function coverageSet({ entry, trace, cov, conf, tree, src, read, manifest
 export function testSourcesMatching(patterns, tree, roots, content = null) {
   const out = [];
   const plain = patterns.filter((p) => !p.includes('*')).map((p) => p.replaceAll('$', '.'));
-  const wild = patterns.filter((p) => p.includes('*')).map((p) => p.split(/[*.$]+/).filter(Boolean));
+  // every pattern also by its fragments (a plain one too: it can name a second top-level class in a differently named file)
+  const wild = patterns.map((p) => p.split(/[*.$]+/).filter(Boolean));
   for (const f of tree.keys()) {
     const r = roots.find((x) => f.startsWith(`${x}/`));
     if (!r || !f.endsWith('.java')) continue;
