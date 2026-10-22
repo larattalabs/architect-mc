@@ -328,6 +328,10 @@ final class UmtSim {
 		new java.util.concurrent.atomic.AtomicLong()};
 	/** (6c close-out B, F3's fallout) The exact cells an entry wrote a gravity block at. */
 	final LongOpenHashSet fallAt = new LongOpenHashSet();
+	/** (6c close-out B, PTS) Every site's and lot's box. */
+	final List<Anchors.Bounds> siteBoxes = new ArrayList<>();
+	/** (6c close-out B) Cells a standing check tagged UC: the world diff at the same cell is UC's fallout. */
+	final LongOpenHashSet ucCells = new LongOpenHashSet();
 	/** (6c close-out B, [F9]) Cells a road wrote air at over a block (its head room over a lower site's cell). */
 	final LongOpenHashSet roadAir = new LongOpenHashSet();
 	/** (6c close-out B, [DPT], [F10]) Cells a site delta wrote. */
@@ -401,6 +405,15 @@ final class UmtSim {
 		if (deltaWritten.contains(p) && now == initial.get(p) && initial.record(p) != null && world.record(p) == null) {
 			return "[DPT] ";
 		}
+		// (6c close-out B, PTS) a player's block with a PT record in two or more sites' boxes comes back without its record (stacked
+		// boxes, removed one by one or as a group)
+		if (now == initial.get(p) && initial.record(p) != null && world.record(p) == null && siteBoxes.stream().filter(b -> b.contains(BlockPos.getX(p),
+			BlockPos.getY(p), BlockPos.getZ(p))).count() >= 2) {
+			return "[PTS] ";
+		}
+		if (ucCells.contains(p)) {
+			return "[UC] "; // the standing check's UC cell (a crash lost its writes), seen again at the end
+		}
 		// (6c close-out B, F10) a plant an entry holds (F8's is no entry's) whose support a delta of the site changed: it breaks at the removal
 		if (UmtVanilla.decor(initial.get(p)) && now.isAir() && everWritten.contains(p) && deltaWritten.contains(BlockPos.offset(p, Direction.DOWN))) {
 			return "[F10] ";
@@ -428,7 +441,10 @@ final class UmtSim {
 		Anchors.Bounds box = new Anchors.Bounds(p.x(), y0, p.z(), p.x() + p.w() - 1, y0 + p.h(), p.z() + p.d() - 1);
 		Rec rec = new Rec(id, p.kind(), p.group(), box, nextRec);
 		switch (p.kind()) {
-			case SITE, LOT -> placeSite(rec, r, p.crash(), p.kind() == Kind.LOT);
+			case SITE, LOT -> {
+				siteBoxes.add(box); // (6c close-out B, PTS)
+				placeSite(rec, r, p.crash(), p.kind() == Kind.LOT);
+			}
 			case ROAD, TILE -> placeCells(rec, r, p.crash());
 		}
 	}
@@ -1015,6 +1031,9 @@ final class UmtSim {
 						// the fallen cell as not its own and left it (the standing site's cell under it stays air)
 						boolean f3 = now.getBlock() instanceof net.minecraft.world.level.block.FallingBlock || WorldJournal.state(cell.after())
 							.getBlock() instanceof net.minecraft.world.level.block.FallingBlock || fallAt.contains(cell.pos());
+						if (!lp && !f3 && !phantom.contains(x.id) && !f7.contains(x.id) && !reverted.isEmpty()) {
+							ucCells.add(cell.pos());
+						}
 						violations.add((lp ? "[LP] " : f3 ? "[F3] " : phantom.contains(x.id) ? "[F6] " : f7.contains(x.id) ? "[F7] " : reverted.isEmpty() ? "" : "[UC] ")
 							+ when + ": standing " + x.id + "'s cell " + BlockPos.of(cell.pos()).toShortString() + " should hold " + cell.after()
 							+ ", holds " + world.get(cell.pos()));

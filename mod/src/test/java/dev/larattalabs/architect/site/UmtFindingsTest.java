@@ -149,4 +149,16 @@ class UmtFindingsTest {
 			null), new UmtOps.Delta(1, -7952756831339956499L)), UmtOps.Gen.PLAIN));
 		assertTrue(r.violations().stream().noneMatch(v -> v.startsWith("[F10]")), r.report());
 	}
+
+	/**
+	 * (6c close-out B, PTS; umt-long PLAIN seed 731544100) A player's cobblestone with its PT record inside two stacked boxes of one group
+	 * (a site, then a lot over its edge), removed as a group: the block comes back without its record. Not yet isolated between the
+	 * restore's PT expectations for a lower entry (SiteJournal.restore, production) and the modelled record restore (UmtWorld.restoring).
+	 */
+	@Test
+	void pts_aPlayersBlockUnderTwoStackedBoxesLosesItsRecord() throws Exception {
+		UmtRunner.Result r = UmtRunner.run(new UmtOps.Scenario(22677867107L, List.of(new UmtOps.Place(UmtOps.Kind.SITE, 31, 10, 5, 7, 6, 2529238243948841804L, 2,
+			null), new UmtOps.Place(UmtOps.Kind.LOT, 33, 14, 3, 9, 5, 5479923252941712732L, 2, null), new UmtOps.RemoveGroup(2, null)), UmtOps.Gen.PLAIN));
+		assertTrue(r.violations().stream().noneMatch(v -> v.startsWith("[PTS]")), r.report());
+	}
 }

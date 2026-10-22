@@ -23866,9 +23866,11 @@ PALETTE). The old `...Last` booleans stay.
     - **F9** (4 seeds): a road's head room over a site, removed top-down, is recovered.
     - **DPT** (11 seeds): a delta's D7 drops the PT records its create annotated. This is production code.
     - **F10** (6 seeds): a plant over a delta's cell breaks at the removal. It rests on modelled code: confirm in game.
+- A third, fresh seed (731542907) found two more kinds. A world difference at a cell the standing check had tagged UC is UC's fallout
+  (now tagged UC). **PTS** is new: a player's block under two stacked boxes loses its PT record (tag, repro, undo-B queue).
 - `UmtLongTest` runs all four generators and fails once at the end.
 - After: `umtLong -Dumt.seeds=5000` passes from 604863162 and from 606067551 (20000 scenarios each). The CI set's pin is unchanged
-  (`ci-baseline.txt` not rewritten). `umtFindings` fails its 9 repros, as it should.
+  (`ci-baseline.txt` not rewritten). `umtFindings` fails its 10 repros, as it should. The fresh seed's re-run waits for the coordinator's go (machine quiet).
 
 ### 4. The P3 cutover for RS's rows
 
@@ -23889,7 +23891,8 @@ PALETTE). The old `...Last` booleans stay.
 - Farmland over the ground's own dirt is not marked: that dirt may be the ground's.
 - Corner, accepted: dirt a player places in an unbuilt farmland cell over a non-dirt before counts as built.
 - `LedgerSim.runOf` calls the same seam. Its restart guard skips an unloaded target (not rescanned).
-- Ledger fuzz at 20000 seeds: **L-V7 0, 0 violating**. Mutant without the mark: L-V7 295 and both new tests red.
+- Ledger fuzz at 20000 seeds, on the final rule (before not dirt): **L-V7 0, 0 violating**. Mutant without the mark: L-V7 295 (306 on
+  v0.41.0: the 11 between are the restart guard's false reports on unloaded targets, which it now skips) and both new tests red.
 - Tests: `lv7_driedFarmlandAfterARestartIsWrittenOnceAndPaidOnce` (full and half built), `lv7_driedFarmlandMarksOnlyCellsWhoseBeforeWasNoSoil`.
 - In game: `gate6crs.mjs lv7` (rs-survival). rs03's town (its farm field) is built first from its own bill. Three built farmland cells
   dry to dirt, then the world is saved, left and reopened. The dried cells must still read built, dirt outstanding must never grow,

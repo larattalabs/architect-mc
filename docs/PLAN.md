@@ -951,6 +951,11 @@ Top first. Not fixed in v0.40.1.
   - Repro: `UmtFindingsTest.f10_aPlantOverADeltasCellBreaksAtTheRemoval`. Tag [F10].
   - It rests on modelled template order and V5, so confirm it in game.
 
+- **PTS: a player's block under two stacked boxes loses its PT record** (a fresh umt-long seed, 731542907). A site, then a lot over
+  its edge, in one group, over a player's cobblestone with its record. After the group's removal (or removal one by one) the block is
+  back without its record. Not yet isolated between `SiteJournal.restore`'s PT expectations for a lower entry and the modelled record
+  restore. Repro: `UmtFindingsTest.pts_aPlayersBlockUnderTwoStackedBoxesLosesItsRecord`. Tag [PTS].
+
 ## Queued from 6c close-out B (builder, 2026-10-22)
 
 - **Model RS's region targets in the ledger lint.** `LedgerSim` covers building targets, a road and adoption. A region-target kind,
