@@ -62,13 +62,19 @@ async function anyModeMatcher(id, tree) {
     // a client-less step with the gradle class runs gradle tests in the source checkout: it keeps the class (whole build and
     // test tree: gradle may serve the tests from its cache, and --tests filters take new classes); an in-game step drops it
     // unless its run's trace shows the source gradle lock (decided at record time)
-    const keepGradle = (rawCfg.steps[parentOf(id)]?.client ?? 'none') === 'none' && (e.classes ?? []).includes('gradle');
-    // with complete test filters (and gateRerunTests): the matching test sources and the test-read trees, not the main sources
-    const { testSourcesMatching } = await import('./lib/step-coverage.mjs');
+    const keepGradle = (rawCfg.steps[parentOf(id)]?.client ?? 'none') === 'none' && (e.classes ?? []).includes('gradle') && e.gradleUse !== 'compile';
+    // with complete test filters (and gateRerunTests): the matching test sources and the paths those tests name, not the main
+    // sources; a compile-only gradle run keeps nothing (the build artifact compiles the same sources)
+    const { testSourcesMatching, javaTestRefs } = await import('./lib/step-coverage.mjs');
     const narrow = keepGradle && e.testFiltersComplete && !argv.includes('--whole-test-tree');
     const show = (f) => execFileSync('git', ['-C', SRC, 'show', `HEAD:${f}`], { encoding: 'utf8', maxBuffer: 64 << 20 });
-    const gradleKeep = !keepGradle ? [] : narrow ? [...testSourcesMatching(e.testFilters ?? [], tree, conf.coverage?.testRoots ?? ['mod/src/test/java'], show), ...(conf.coverage?.gradleTestTrees ?? ['mod/src/test/resources/**', 'kit/**', 'sidecar/**'])] : (conf.classes.gradle ?? []);
-    const keep = setMatcher([...(e.closure ?? []), ...(e.data ?? []), ...(conf.runnerKey?.files ?? []), ...gradleKeep]);
+    let gradleKeep = [];
+    if (narrow) {
+      const files = testSourcesMatching(e.testFilters ?? [], tree, conf.coverage?.testRoots ?? ['mod/src/test/java'], show);
+      gradleKeep = [...files, ...javaTestRefs(files, tree, show, SRC), 'mod/src/test/resources/**'];
+    } else if (keepGradle) gradleKeep = conf.classes.gradle ?? [];
+    const statics = argv.includes('--full-closure') ? (e.closure ?? []) : (e.eager ?? e.closure ?? []);
+    const keep = setMatcher([...statics, ...(e.data ?? []), ...(conf.runnerKey?.files ?? []), ...gradleKeep]);
     return { cov: true, m: (p) => keep(p) || safetyCache(p) };
   }
   // --gradle-in-game-off: an in-game step keeps the gradle class only when its run takes the source gradle lock (known from its

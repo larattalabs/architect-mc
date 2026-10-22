@@ -325,7 +325,7 @@ export function record(ctx, id, rec, opts) {
     // coverage mode: the key runs over what this run touched (its trace, its client's, its JVMs' classes) and the safety set
     const m = manifestOf(ctx);
     cov = coverageSet({ entry: ctx.map.steps[mapId(ctx.map, id)], trace: tr, cov: opts.coverage, conf: ctx.conf, tree: treeAt(ctx.src, ctx.head), src: ctx.src, manifest: m?.ok ? m : null });
-    cov.loaded = m?.ok ? opts.coverage.classes ?? [] : null;
+    cov.loaded = m?.ok ? [...new Set([...(opts.coverage.classes ?? []), ...(cov.classReads ?? [])])].sort() : null;
     const k = keyFor(ctx, id, { set: cov.set, classes: cov.loaded });
     if (!k.key) return { stored: false, why: k.why };
     opts = { ...opts, key: k.key, parts: k.parts };

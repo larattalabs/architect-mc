@@ -150,7 +150,9 @@ export function coverageSet({ entry, trace, cov, conf, tree, src, read, manifest
   const set = new Set();
   // the static, non-class part: its drivers' module closure, the data its traced runs read, derived sources, fingerprinted data.
   // Not the map's literal-path globs (kit/lib/** for a literal 'kit/lib'): those guess at reads the trace now records exactly
-  for (const x of [...(entry.closure ?? []), ...(entry.data ?? [])]) set.add(x);
+  // its drivers by their EAGER closure (top-level imports always load); a lazy import() counts when its run executed it (the
+  // trace, below). A driver edit that starts executing a lazy path changes the driver itself, which is in this set
+  for (const x of [...(entry.eager ?? entry.closure ?? []), ...(entry.data ?? [])]) set.add(x);
   for (const d of entry.derived ?? []) for (const x of conf.derived?.[d] ?? []) set.add(x);
   for (const x of entry.fingerprint ?? []) set.add(x);
   // classes other than the ones coverage replaces; gradle only when the step really ran gradle in the source checkout
@@ -161,12 +163,21 @@ export function coverageSet({ entry, trace, cov, conf, tree, src, read, manifest
     // log) and a --tests filter picks up new test classes by name, so a step that ran gradle depends on the whole build and test
     // tree, not only on what loaded. A run that never ran gradle there drops it (its classes are keyed by bytecode or source)
     if (cls === 'gradle' && !ranGradle) continue;
+    // a compile-only gradle run (compileJava for api-compat): its classes are the build artifact's (the same sources); the class
+    // files it then reads are keyed by bytecode (classReads below)
+    if (cls === 'gradle' && manifest?.ok && entry.gradleUse === 'compile') continue;
     // a source-checkout test run with complete filters (and gradleRerunTests: its JVM logged) is keyed by the test sources its
     // filters can match (a new matching test moves the key), the test resources, the trees its tests read from Java (kit, sidecar)
     // and the bytecode of what it loaded; not the whole main source tree
     if (cls === 'gradle' && manifest?.ok && entry.testFiltersComplete && (cov?.classes ?? []).some((x) => /Test(\$|$)/.test(x))) {
       for (const p of entry.testFilters ?? []) set.add(`${TESTS_PREFIX}${p}`);
-      for (const x of c.gradleTestTrees ?? ['mod/src/test/resources/**', 'kit/**', 'sidecar/**']) set.add(x);
+      // the trees its Java tests read: the kit and sidecar paths the selected and loaded test sources name (javaTestRefs)
+      const testRoots = c.testRoots ?? ['mod/src/test/java'];
+      const tidx = javaIndex(tree, testRoots);
+      const reader = read ?? ((p) => fs.readFileSync(path.join(src, p), 'utf8'));
+      const files = new Set([...testSourcesMatching(entry.testFilters ?? [], tree, testRoots, reader), ...(cov?.classes ?? []).map((x) => tidx.get(x.split('$')[0])).filter(Boolean)]);
+      for (const x of javaTestRefs([...files], tree, reader, src)) set.add(x);
+      set.add('mod/src/test/resources/**');
       continue;
     }
     for (const x of conf.classes?.[cls] ?? []) set.add(x);
@@ -189,6 +200,9 @@ export function coverageSet({ entry, trace, cov, conf, tree, src, read, manifest
   const j = classesToFiles((cov?.classes ?? []).filter((x) => !manifest?.ok || !manifest.classes?.[x]), javaIndex(tree, roots), roots);
   for (const x of j.files) set.add(x);
   for (const x of j.globs) set.add(x);
+  // class files a node process read from a build output (api-compat reading the compiled API): keyed by bytecode
+  const classReads = [];
+  const CLASS_FILE = /^(?:mod|devserver|apitest)\/build\/classes\/java\/\w+\/(.+)\.class$/;
   // Node: what its processes and its client's touched (a listing or an absent path widens to the directory, as in the map)
   const has = new Set(tree.keys());
   const dirs = new Set();
@@ -196,12 +210,23 @@ export function coverageSet({ entry, trace, cov, conf, tree, src, read, manifest
   for (const m of [trace, cov?.node]) {
     for (const [p, kinds] of m ?? []) {
       if (p.startsWith('@')) continue; // archived inputs: fingerprinted in the entry
+      const cf = CLASS_FILE.exec(p);
+      if (cf && manifest?.ok) {
+        classReads.push(cf[1].replaceAll('/', '.'));
+        continue;
+      }
+      // its own outputs (test results, reports) are not inputs; another build output counts as the sources it derives from
+      if (/^(?:mod|devserver|apitest)\/build\/(test-results|reports|tmp)\//.test(p)) continue;
+      if (/^(?:mod|devserver|apitest)\/build\//.test(p)) {
+        for (const [g, from] of Object.entries(conf.derived ?? {})) if (!g.startsWith('$') && globRe(g).test(p)) for (const x of from) set.add(x);
+        continue;
+      }
       if (has.has(p)) set.add(p);
       else if (dirs.has(p)) set.add(`${p}/**`);
       else if (kinds.has('s') || kinds.has('r') || kinds.has('d')) set.add(p); // absent: its appearance must move the key
     }
   }
-  return { set: [...set].sort(), unmappedClasses: j.unmapped, classes: (cov?.classes ?? []).length };
+  return { set: [...set].sort(), unmappedClasses: j.unmapped, classes: (cov?.classes ?? []).length, classReads: [...new Set(classReads)].sort() };
 }
 
 /**
@@ -228,6 +253,49 @@ export function testSourcesMatching(patterns, tree, roots, content = null) {
     if (hit) out.push(f);
   }
   return out.sort();
+}
+
+/**
+ * The repo paths Java test sources read: `"../kit/a/b"` and `Path.of("..", "kit", "a", "b")` literals (a file, its closure when
+ * a node module run as a child, a directory's tree), the same for sidecar; a source that builds kit or sidecar paths any other
+ * way (`Path.of("..", "kit")` and resolve) widens to that whole tree.
+ */
+export function javaTestRefs(files, tree, read, src) {
+  const has = new Set(tree.keys());
+  const dirs = new Set();
+  for (const f of has) for (let d = path.posix.dirname(f); d !== '.'; d = path.posix.dirname(d)) dirs.add(d);
+  const out = new Set();
+  const addPath = (p) => {
+    const q = path.posix.normalize(p).replace(/\/$/, '');
+    if (has.has(q)) {
+      out.add(q);
+      if (/\.m?js$/.test(q)) for (const x of moduleClosure([q], has, { src, read }).files) out.add(x);
+    } else if (dirs.has(q)) out.add(`${q}/**`);
+    else out.add(q); // absent: its appearance counts
+  };
+  for (const f of files) {
+    let t = '';
+    try {
+      t = read(f);
+    } catch {
+      continue;
+    }
+    for (const top of ['kit', 'sidecar']) {
+      let opaque = false;
+      for (const m of t.matchAll(new RegExp(`"\\.\\./${top}(/[^"]*)?"`, 'g'))) {
+        if (!m[1] || m[1] === '/') opaque = true;
+        else addPath(`${top}${m[1]}`);
+      }
+      for (const m of t.matchAll(new RegExp(`Path\\.of\\(\\s*"\\.\\."\\s*,\\s*"${top}"((?:\\s*,\\s*"[^"]*")*)\\s*\\)`, 'g'))) {
+        const segs = [...m[1].matchAll(/"([^"]*)"/g)].map((x) => x[1]);
+        if (!segs.length) opaque = true;
+        else addPath([top, ...segs].join('/'));
+      }
+      if (new RegExp(`resolve\\("${top}[/"]`).test(t)) opaque = true;
+      if (opaque) out.add(`${top}/**`);
+    }
+  }
+  return [...out].sort();
 }
 
 /** The `@tests:<pattern>` entries of a coverage set: resolved at each commit (setHash), so a new matching test moves the key. */

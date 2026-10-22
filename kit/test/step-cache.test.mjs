@@ -351,3 +351,27 @@ test('coverage: test filters resolve at each commit (a new test a wildcard selec
   git(root, 'commit', '-qm', 'an unrelated test');
   assert.equal(setHash(set, root, 'HEAD').hash, h1);
 });
+
+test('coverage: drivers count by their eager imports; a lazy import() only when a run executed it; a driver edit that starts executing it moves the key', () => {
+  const root = covRepo();
+  write(root, 'kit/lib/lazy.mjs', 'export const lazy = 1;\n');
+  write(root, 'tools/gate-g.mjs', "import { k } from '../kit/lib/used.mjs';\nif (process.argv[2] === 'scenario') await import('../kit/lib/lazy.mjs');\n");
+  git(root, 'add', '-A');
+  git(root, 'commit', '-qm', 'a driver with a lazy subcommand');
+  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-main-'));
+  const cfg = { steps: { g: { shell: 'node tools/gate-g.mjs base', client: '6b', timeoutMin: 5 } }, clients: { '6b': { world: 'W' } } };
+  const map = { steps: { g: staticEntry('g', cfg.steps.g, covConf, treeAt(root, 'HEAD'), { src: root }) } };
+  assert.ok(map.steps.g.closure.includes('kit/lib/lazy.mjs'), 'the full static closure (the CI check) has the lazy import');
+  assert.ok(!map.steps.g.eager.includes('kit/lib/lazy.mjs') && map.steps.g.eager.includes('kit/lib/used.mjs'));
+  const ctx = () => Object.assign(cacheContext({ src: root, main, cfg, conf: covConf, map, snapDir: null, env: {} }), { rawCfg: cfg });
+  const tdir = path.join(main, 'trace-g');
+  write(tdir, '1.txt', 'm\ttools/gate-g.mjs\nm\tkit/lib/used.mjs\n'); // `base`: the lazy path never ran
+  const r = record(ctx(), 'g', pass({ id: 'g' }), { key: 'x', run: main, ev: main, traceDir: tdir, traced: true, coverage: { classes: [], node: new Map() }, timingPolicy: 'judged', judgedBench: false, tier: 'release' });
+  assert.equal(r.stored, true, r.why);
+  write(root, 'kit/lib/lazy.mjs', 'export const lazy = 2;\n');
+  git(root, 'commit', '-qam', 'the lazy module changes');
+  assert.ok(lookupCoverage(ctx(), 'g').hit, 'a lazy module the run never loaded: served');
+  write(root, 'tools/gate-g.mjs', "import { k } from '../kit/lib/used.mjs';\nawait import('../kit/lib/lazy.mjs');\n");
+  git(root, 'commit', '-qam', 'the driver now always executes the lazy import');
+  assert.equal(lookupCoverage(ctx(), 'g').hit, null, 'the driver itself changed: re-run (and re-traced)');
+});

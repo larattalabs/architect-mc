@@ -376,17 +376,9 @@ it.
   - the steps whose own drivers moved.
 
   A compile error in a main class no step loaded still stops every coverage key, because the build artifact won't compile. Above the floor, a step runs only if its run loaded a changed class. With the gradle class kept, the floor was 35-50.
-- **Why the kit change still runs 157** (measured; `tools/lib` analysis in the coverage branch's notes):
-  - 143 of the 157 hold kit/lib/forms/states.mjs only through **lazy `import()`s** in shared drivers that most of their runs never
-    execute. The main one is `tools/gate6b.mjs`, which nearly every in-game step runs as `gate6b.mjs base`. It lazily imports
-    `tools/scenarios.mjs`, which lazily imports `kit/lib/region/check.mjs` and with it the forms.
-  - 2 (unit-kit, water-lint) import it eagerly and really run it.
-  - 12 hold it through the Java tests' kit tree (the gradle-cwd steps, and the unit drivers whose Java tests read ../kit).
-  - **PROPOSED, not built:** key a coverage step's drivers by their *eager* closure (top-level imports, which always load) plus
-    what its runs traced, instead of the full static closure. A lazy `import()` then counts only when a run executed it (Ekstazi's
-    rule, sound for the same reason the trace gate is). No driver needs splitting for this commit: the split already exists, as
-    lazy imports by subcommand. The kit floor would drop from 157 to about 14, plus the steps whose runs really load the forms (the
-    region-planning steps, through whenTouched). Second: narrow the Java tests' `kit/**` to the kit paths their sources name.
+- **Why the kit change ran 157 before** (measured): 143 of the 157 held kit/lib/forms/states.mjs only through lazy `import()`s
+  in shared drivers that most runs never execute. The main one is `gate6b.mjs base` → `scenarios.mjs` → `kit/lib/region/check.mjs`.
+  The eager-closure rule above, approved and built, takes it to 14.
 
   The earlier bound, which kept the gradle class (`--source-gradle`):
 - **The same 5 commits, source keys** (`tools/step-cache.mjs coverage-select <commit>...`, against each parent).

@@ -181,6 +181,60 @@ function rootWiden(r, has) {
   return `${path.posix.dirname(r)}/**`;
 }
 
+/** The argument text of each gradlew invocation in a module: the bracketed args array after `gradlew'`, or the rest of a shell
+ * string (`./gradlew compileJava ...`). */
+export function gradlewCalls(t) {
+  const out = [];
+  const bracket = (str, at) => {
+    let depth = 0;
+    let i = at;
+    for (; i < str.length; i++) {
+      if (str[i] === '[') depth++;
+      else if (str[i] === ']' && --depth === 0) break;
+    }
+    return str.slice(at + 1, i);
+  };
+  for (const m of t.matchAll(/gradlew/g)) {
+    const rest = t.slice(m.index + 7, m.index + 2000);
+    const open = /^['"`]?\s*,\s*\[/.exec(rest);
+    const named = /^['"`]?\s*,\s*(\w+)\s*[,)]/.exec(rest);
+    if (open) out.push(bracket(rest, open[0].length - 1));
+    else if (named) {
+      // an args variable: its array literal in the module (the last definition before the call), else unreadable
+      const defs = [...t.slice(0, m.index).matchAll(new RegExp(`(?:const|let|var)\\s+${named[1]}\\s*=\\s*\\[`, 'g'))];
+      const d = defs.at(-1);
+      out.push(d ? bracket(t, d.index + d[0].length - 1) : 'test /*unreadable args*/');
+    } else out.push(rest.slice(0, Math.max(0, rest.search(/[`'"\n]/)) || 200));
+  }
+  return out;
+}
+
+const EAGER_RE = /(?:^|[^\w.$])(?:import|export)\s[^'"`;]*?\sfrom\s*(['"])([^'"\n]+)\1|(?:^|[^\w.$])import\s*(['"])([^'"\n]+)\3/gm;
+/** The eager closure of roots: static `import`/`export ... from` only (always loaded with the module), never `import()`. */
+export function eagerClosure(roots, has, readText) {
+  const seen = new Set();
+  const st = [...roots];
+  while (st.length) {
+    const f = st.pop();
+    if (seen.has(f)) continue;
+    seen.add(f);
+    if (!/\.(mjs|js|cjs)$/.test(f)) continue;
+    let t = '';
+    try {
+      t = readText(f);
+    } catch {
+      continue;
+    }
+    for (const m of t.matchAll(EAGER_RE)) {
+      const sp = m[2] ?? m[4];
+      if (!sp?.startsWith('.')) continue;
+      const r = path.posix.normalize(path.posix.join(path.posix.dirname(f), sp));
+      if (has.has(r)) st.push(r);
+    }
+  }
+  return seen;
+}
+
 /** The roots a chain entry runs: the tools/… and kit/… files its shell or cmd names, and the globs it passes to node (kit/test/*.test.mjs). */
 export function stepRoots(entry) {
   const text = entry.shell ?? (entry.cmd ?? []).join(' ');
@@ -258,6 +312,7 @@ export function staticEntry(id, entry, conf, files, opts) {
   const testFilters = new Set();
   let filtersComplete = true;
   let runsTests = false;
+  let runsGradle = false;
   for (const f of cl.files) {
     if (!/\.mjs$/.test(f) || !f.startsWith('tools/') || runner.has(f)) continue;
     let t = '';
@@ -266,15 +321,28 @@ export function staticEntry(id, entry, conf, files, opts) {
     } catch {
       continue;
     }
-    if (!/gradlew/.test(t) || !/['"]test['"]/.test(t)) continue;
+    // comments name gradlew calls too (src-gradle.mjs's header): only code counts
+    t = t.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
+    if (!/gradlew/.test(t)) continue;
+    runsGradle = true;
+    // each gradlew invocation: its argument text up to the call's end; a `test` task makes it a test run, else compile only
+    const calls = gradlewCalls(t);
+    const testCalls = calls.filter((a) => /['"]test['"]|(?:^|\s)test(?:\s|$)/.test(a));
+    if (!testCalls.length) continue;
     runsTests = true;
-    if (!/--tests/.test(t)) filtersComplete = false;
-    if (/--tests[^\n]*\$\{/.test(t)) filtersComplete = false;
+    for (const a of testCalls) {
+      if (!/--tests/.test(a)) filtersComplete = false;
+      // a template is unreadable, except `*${t.split('.').pop()}` over the literal test names the module holds
+      for (const tm of a.matchAll(/--tests['"]?\s*,\s*`([^`]*)`/g)) if (!/^\*\$\{\w+\.split\('\.'\)\.pop\(\)\}$/.test(tm[1])) filtersComplete = false;
+    }
     // every literal that can be a filter: one with a wildcard or "Test" in it (javaTests(['*IrStale*', ...]) passes them on)
     for (const m of t.matchAll(/(['"])([\w.$*]+)\1/g)) if (/\*|Test/.test(m[2]) && /[A-Za-z]/.test(m[2])) testFilters.add(m[2]);
     for (const m of t.matchAll(/['"]--tests['"]\s*,\s*(['"])([^'"]+)\1/g)) testFilters.add(m[2]);
   }
   if (!runsTests) filtersComplete = false;
+  // the eager closure: what the drivers' top-level (static) imports always load. A lazy import() counts only when a run executed
+  // it (its trace), which is what a coverage-mode key uses; the full closure above stays the CI check's
+  const eager = eagerClosure(roots.filter((r) => has.has(r)), has, readText);
   return {
     classes: [...classes].sort(),
     roots,
@@ -284,6 +352,8 @@ export function staticEntry(id, entry, conf, files, opts) {
     env: [...cl.env].sort(),
     ...(Object.keys(flags).length ? { flags } : {}),
     ...(runsTests ? { testFilters: [...testFilters].sort(), testFiltersComplete: filtersComplete } : {}),
+    ...(runsGradle ? { gradleUse: runsTests ? 'tests' : 'compile' } : {}),
+    eager: [...eager].sort(),
   };
 }
 
