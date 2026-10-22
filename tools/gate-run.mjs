@@ -11,6 +11,7 @@
 //   node tools/gate-run.mjs slice   --since <ref> | --range A...B | --files a,b [--shards N] [--plan]   quick + the affected steps
 //   node tools/gate-run.mjs release [--release <tag>] [--since <ref>] [--shards N] [--plan]  everything, duplicates rotated, the
 //                                   cached steps skipped (below); --full runs every candidate and every rotation option
+//   [--turbo | --no-turbo] [--lanes N] [--split | --no-split]   turbo: the whole machine (default for tier runs of 20+ steps)
 //   node tools/gate-run.mjs --list                  the chains and tiers
 //   [--notify | --notify-dry-run]                   off by default (Noah: no Discord pings)
 //
@@ -49,6 +50,12 @@
 // step with the longest estimate (history p50 plus the chain waiting on it), less its client cost there (docs/GATES.md "Gate
 // speed"). A `bench` step (timing or MSPT bars) runs alone only where timing is judged (release, named chains, --judge-timing,
 // `"isolate": true`); in change/slice it schedules like any step and records `contended`/`ranWith`.
+// Turbo (docs/GATES.md "Turbo"): --turbo, or by default a tier run of at least shards.turbo.minSteps (20) steps (--no-turbo: a
+// shared run as before). A turbo run queues (FIFO, tools/lib/turbo.mjs) until no other run holds a slot, then holds every slot file,
+// runs up to shards.turbo.max in-game shards (auto: the plan, memory and ports bound it; no cpu cap) plus --lanes N offline lanes
+// (shards.turbo.offlineLanes) that take the client-less steps beside them, and splits the `split` steps into parallel parts
+// (tools/lib/step-split.mjs; --no-split keeps them whole, --split splits outside turbo too). Every run (turbo or not) samples the
+// machine to machine.jsonl (summary.machine).
 // The kit suite runs once: unit-kit writes a JUnit report to GATE_KIT_RESULTS (tools/lib/kit-reuse.mjs), and the drivers'
 // kit-suite and goldens checks read it when exact; the runner also passes GATE_UNIT_MOD_RUN (where unit-mod built this head).
 //
@@ -1701,13 +1708,21 @@ async function finish(state, error) {
 }
 
 let finishing = false;
+let stopped = false; // set by a stopOnFail step or an abort: no worker starts another step
 async function abort(why) {
   if (finishing) return;
   finishing = true;
+  // no worker starts another step from here (2026-10-22: an abort during a turbo run's first minute left the unit steps that
+  // the idle shards started during its waits running, orphaned)
+  stopped = true;
   log(`aborting: ${why}`);
-  for (const sh of shards) if (sh.activeGroup) killGroup(sh.activeGroup, 'SIGTERM');
-  await sleep(3000);
-  for (const sh of shards) if (sh.activeGroup) killGroup(sh.activeGroup, 'SIGKILL');
+  const groups = new Set();
+  for (let round = 0; round < 3; round++) {
+    for (const sh of shards) if (sh.activeGroup) groups.add(sh.activeGroup);
+    for (const g of groups) killGroup(g, 'SIGTERM');
+    await sleep(3000);
+  }
+  for (const g of groups) killGroup(g, 'SIGKILL');
   for (const sh of shards) {
     await stopClient(sh, 'abort').catch(() => killRunDir(sh, 'abort'));
     cleanStrays(sh);
@@ -1782,7 +1797,8 @@ try {
 // (its run worktree's processes: the server/client JVM, the sidecar, gradle, node) to <out>/machine.jsonl; folded into summary.machine
 const sampleNow = () => {
   try {
-    const smp = sampleMachine(shards.map((sh) => ({ name: sh.name, needles: [...new Set([sh.RUN, real(sh.RUN)])].map((p) => p + path.sep) })), os.loadavg());
+    // per shard/lane: its run worktree's processes and its running step's process group
+    const smp = sampleMachine(shards.map((sh) => ({ name: sh.name, needles: [...new Set([sh.RUN, real(sh.RUN)])].map((p) => p + path.sep), pgids: sh.activeGroup ? [sh.activeGroup] : [] })), os.loadavg());
     machineSamples.push(smp);
     fs.appendFileSync(MACHINE_LOG, JSON.stringify(smp) + '\n');
   } catch {
@@ -1795,7 +1811,6 @@ sampler.unref();
 
 // the scheduler: one worker per shard, each starting the next step `pick` allows
 const st = { pending: steps.map((_, i) => i), running: new Map(), done: new Map() };
-let stopped = false;
 const overlaps = new Map(); // running step id -> the ids of the steps that ran at the same time
 let waiters = [];
 const wake = () => new Promise((r) => {

@@ -122,6 +122,7 @@ async function megaTiming(ctx) {
 
 const unit = [
   {
+    key: 'rules',
     name: 'items 6, 7 (kit): the building rules, the region rules, the refusals, the bibles',
     async run({ root, check }) {
       const r = nodeTest(root, ['kit/test/vocab-rules.test.mjs']);
@@ -130,6 +131,7 @@ const unit = [
     },
   },
   {
+    key: 'rarity',
     name: 'item 7 (sidecar, Java): BibleRequest.rarity, FIELD_LIMIT, the stub bible copying it, the wire',
     async run({ root, check }) {
       const out = {};
@@ -142,6 +144,7 @@ const unit = [
     },
   },
   {
+    key: 'census',
     name: 'item 13 (recorded) and the census: the compile pass per plan, M26/M27 on mega_bench A; which committed plans the new rules touch',
     async run(ctx) {
       const out = await census(ctx);

@@ -27,3 +27,17 @@ export function gatePart(all, { env = process.env, log = console.log, legacy = n
   log(`part ${env.GATE_PART ?? '?'}: sections ${mine.join(',')} (of ${all.join(',')})`);
   return { want: (s) => mine.includes(s), sections: all.filter((s) => mine.includes(s)), part: env.GATE_PART ?? null };
 }
+
+/**
+ * A fixture loop split into `n` round-robin slices (sections `<name>-1` .. `<name>-n`, a split unit step's parts each taking some):
+ * -> null when this process runs every slice (the loop runs whole, exactly as before), else the slices it runs ([{k, n}]).
+ * `inSlice(i, sl)`: whether the loop's i-th fixture (0-based, in its full order) is in them. A sliced loop still walks every
+ * fixture's cheap eligibility and counts the ones another part plans, so its totals (the "at least N fixtures" checks) are the
+ * whole loop's.
+ */
+export function slicesOf(P, name, n) {
+  const ks = Array.from({ length: n }, (_, i) => i + 1).filter((k) => P.want(`${name}-${k}`));
+  return ks.length === n ? null : ks.map((k) => ({ k, n }));
+}
+export const sliceSections = (name, n) => Array.from({ length: n }, (_, i) => `${name}-${i + 1}`);
+export const inSlice = (i, sl) => !sl || sl.some((s) => i % s.n === s.k - 1);

@@ -11,6 +11,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson, flAsksFilter } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
+import { syncBaseTree } from './base-tree.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const j = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
@@ -50,11 +51,7 @@ async function javaTests(root, patterns, minTests) {
 /** A detached worktree beside this checkout at the base this branch builds on (the merge base with origin/main). */
 export function baseTree(root) {
   const dir = path.resolve(root, '..', 'architect-mc-VOCc-main');
-  try { execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']); } catch { /* offline: the last fetched origin/main */ }
-  const base = execFileSync('git', ['-C', root, 'merge-base', 'HEAD', 'origin/main']).toString().trim();
-  if (!fs.existsSync(path.join(dir, '.git'))) execFileSync('git', ['-C', root, 'worktree', 'add', '-q', '--detach', dir, base]);
-  else execFileSync('git', ['-C', dir, 'checkout', '-q', '--detach', base]);
-  return { dir, base };
+  return syncBaseTree(root, dir, { fetchOptional: true }); // (turbo) one fetch and checkout at a time; left alone at the base
 }
 
 /**
