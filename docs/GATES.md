@@ -450,7 +450,22 @@ gate step (a compile per mutant); run it when a lint or the code under it change
 
 ### Measured
 
-(filled in below when the runs end)
+On feat/lint-p3 (2026-10-21, a shared box at load 15-80 with 3-4 other gate runs):
+- **The lints:** `water-lint` 2.0 min in the slice (102 tests; about 3 min alone at load 36, 170 s serial planning on a quiet box);
+  `p3-lint` 0.2-1.5 min (the ledger fuzz's 400 seeds in about 3 s; 20000 seeds in 46 s). Both within FAST-CHECKS' 2-minute budget.
+- **The smoke steps** (slice `artifacts/gate-runs-lintp3/20261021-221111-slice`, 3 shards, before merging main): h-ingame-smoke 12.6 min,
+  h-probe-smoke 0.4, hy-ingame-smoke 16.9, hy-crash-smoke 2.1, hy-cold-smoke 5.5, irr-ingame-smoke 26.4, kc-ingame-smoke 1.3,
+  voc-survival-smoke 1.5, y-ingame-smoke 5.2, c29-ingame-smoke 5.6; all PASS.
+- **The probes** (`artifacts/gate-runs-lintp3-probe/20261021-220925-change`: the full h-ingame 18.2 min, hy-ingame 25.4, h-probe 3.3,
+  y-ingame 6.4, cu-survival 0.7): `p3-probe-water` 10/0 (h_core_demo's four bodies diff 0, settled at 5-20 ticks within bounds
+  30-80; four breaches in reach; hy_core_demo's four reaches diff 0; the riffle table 20/20; the lava lit 4 posts, farthest side 2,
+  above 2, below 1, within FIRE_REACH) and `p3-probe-ledger` 10/0 (the store run's six bills, its delta and revert consumed exactly
+  their outstanding; cu-survival's refund of 256 standing blocks equals the Java model's). Their settles are recorded in
+  kit/lint/water-calibration.json.
+- **Replayed at the baseline's load** (the "Gate waits" replay of the 12 FAST-CHECKS slices, each P3 step at its measured smoke time,
+  the two lint steps added to every slice; 3 shards): median **104 -> 94 min wall**, **311 -> 282 step-minutes** per slice. The fluid-heavy
+  slices gain most (HYb 88 -> 80, CU 103 -> 94, KC 104 -> 94, IRR 145 -> 136); slices without P3 steps pay the lints' 2 minutes in
+  parallel (hk2 67 -> 67). The smoke times were measured at load 20-80, so the replay is conservative.
 
 ## Adaptive shards (2026-10-21)
 
