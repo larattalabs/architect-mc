@@ -286,7 +286,7 @@ keyed by what that run touched. The key covers:
   - the kit tools the sidecar spawns with a minimal environment (untraced), the kit data it reads, and the region worker;
   - the kit files the jar carries.
 - **The runner's own code** (`runnerKey`: gate-run.mjs, hosts, splits, turbo, shard-auto, gate-history, the tracer) is in every
-  key, coverage or not. The fail audit below found 21 past FAILs caused by runner changes alone.
+  key, coverage or not. The fail audit below found 8 past FAILs that only a runner change explains.
 
 A coverage PASS is looked up by recomputing its key over the set it recorded (`lookupCoverage`, the newest twelve PASSes of the step):
 - a changed file in the set re-runs the step, and that run re-records its coverage;
@@ -332,7 +332,7 @@ kit/lib/forms/** and RegionFluids.java no longer force it.
     kit/lib/lint changes;
   - 2 have no change in the step's set at all. 6ct2-scenario-route's change was docs only, and pt2-ingame's was item 13, known
     on main.
-  - Before the runner joined the keys, the audit found 10 such holes, all caused by runner changes; that is why `runnerKey` exists.
+  - Before the runner joined the keys, the audit found 10 such holes. The 8 explained by runner changes are why `runnerKey` exists.
 
 ### Impact-map misses log
 
