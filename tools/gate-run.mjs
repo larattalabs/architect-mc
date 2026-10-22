@@ -272,6 +272,10 @@ function select() {
       }
       for (const s of chosen) addW(s, `release rotation "${r.name}": ${reason}`);
       const skipped = all.filter((s) => !chosen.includes(s));
+      // the rotation decides its steps, also when an impact rule names one (4e-throughput on a release that isn't placement-touching)
+      for (const s of skipped) {
+        if (want.delete(s)) delete why[s];
+      }
       const next = {};
       for (const s of skipped) {
         const oi = r.options.findIndex((o) => o.includes(s));
