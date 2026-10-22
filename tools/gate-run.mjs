@@ -87,7 +87,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ------------------------------------------------------------------ arguments and config
 
 const argv = process.argv.slice(2);
-const VALUED = ['--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min', '--host', '--lanes'];
+const VALUED = ['--assume-warm', '--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min', '--host', '--lanes'];
 const flag = (f) => argv.includes(f);
 const opt = (f) => {
   const i = argv.indexOf(f);
@@ -433,6 +433,15 @@ if (tierInfo.cache.lookup) {
   }
   const nightly = chainName === 'release' ? lastNightly(MAIN) : null;
   const twins = fullTwins(cfg);
+  // --assume-warm <ref> (with --plan only): what the run would select after a full nightly that passed at <ref>: a step whose key
+  // at <ref> equals its key here counts as CACHED. Keys only, no recorded PASS is read or written: the selection examples
+  let warm = null;
+  if (opt('--assume-warm')) {
+    if (!flag('--plan')) die('--assume-warm is for --plan only (it assumes PASSes that were never run)');
+    warm = cacheContext({ src: SRC, main: MAIN, cfg, conf: CACHE_CONF, map: INPUT_MAP, snapDir: SNAP, commit: git(SRC, 'rev-parse', opt('--assume-warm')), dirty: [] });
+    warm.rawCfg = RAW_CFG;
+    tierInfo.cache.assumeWarm = { ref: opt('--assume-warm'), head: warm.head };
+  }
   for (const id of want) {
     if (canary.has(parentOf(id))) {
       run.add(id);
@@ -445,7 +454,11 @@ if (tierInfo.cache.lookup) {
       push(id, `cache: ${k.why}`);
       continue;
     }
-    const l = lookup(CACHE, id, k.key);
+    let l;
+    if (warm) {
+      const w = keyFor(warm, id);
+      l = w.key === k.key ? { hit: { key: k.key, at: `(assumed: a full nightly at ${warm.head.slice(0, 9)})`, head: warm.head, run: '(assumed)', tier: 'assumed' } } : { hit: null, why: w.key ? `its key at ${warm.head.slice(0, 9)} differs (an input, its definition or a mode moved)` : `no key at ${warm.head.slice(0, 9)}: ${w.why}` };
+    } else l = lookup(CACHE, id, k.key);
     if (!l.hit) {
       run.add(id);
       push(id, `cache miss (key ${k.key.slice(0, 12)}): ${l.why}`);
@@ -909,6 +922,7 @@ function printCache() {
   const c = tierInfo.cache;
   if (!c) return;
   if (tierInfo.full) console.log(`release --full: ${tierInfo.full.on ? `ON (${tierInfo.full.why.join('; ')})` : tierInfo.full.overridden ? `off by --no-auto-full (the rule would set it: ${tierInfo.full.overridden.join('; ')})` : 'off (no engine, Minecraft-version or build-dependency path in the range; --full forces it)'}`);
+  if (c.assumeWarm) console.log(`cache: ASSUMED WARM at ${c.assumeWarm.ref} (${c.assumeWarm.head.slice(0, 9)}): a step whose key there equals its key here counts as CACHED (--assume-warm; plan only)`);
   console.log(`cache: lookups ${c.lookup ? 'on' : `OFF (${c.offWhy})`}; PASSes recorded ${c.record ? 'yes (traced)' : `no (${TRACE ? cacheErr ?? 'no input map' : '--no-trace'})`}${c.dirty ? `; the source tree is DIRTY (${c.dirty} path(s)): nothing is looked up or recorded` : ''}${c.nightly ? `; last full nightly ${c.nightly.startedAt} @ ${String(c.nightly.head).slice(0, 9)}` : chainName === 'release' ? '; no full nightly recorded yet' : ''}`);
   if (c.canaries?.length) console.log(`  canaries (${c.canaries.length}): ${c.canaries.join(' ')}`);
   const cached = tierInfo.cached ?? [];
