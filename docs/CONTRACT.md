@@ -23811,6 +23811,15 @@ plan dirs (`tools/lib/lint-cases.mjs`, `lint-look-cases.mjs`).
   - Its review found no defect in the conflict resolutions or the RP wiring.
 - **gate-verifier, delta: PASS** at 145c96f8 (the three main merges, the lint fixes, the Stockpiles seam, LedgerSim's restart path): kit lints 118/0, kit 732/0, structure 57/57, look 13/13, mutations 8/8, release-version and p3-mode checks, mod build, ledger fuzz 0 violating / L-V7 306; Stockpiles.feed judged behaviour-identical to RS-b's, LedgerSim's L-V7 booking a faithful model of the restart rescan, stubAnchors byte-identical without F3 masks.
 
+- **Release benches, timing judged** (`20261022-043748-release`, `--release v0.41.0`, quiet-wait on, no other run): 8 PASS:
+  6c-scenario-s3, 6c-scenario-s2, 4e-megalite, 4e-throughput, 6a-megaA, 6b-volume, 6b-scenario-s1 and 6a-heap.
+  - 6a-megaB reached PLACED with its relog and sidecar-kill resumes, but failed one row: "REGION_PROGRESS events for every stage".
+    mega_bench's IR now has an empty `lots-4` (144 lots: 50+50+44), so no event can show it. main ca50b90e fails identically
+    (`artifacts/gate-runs-0410-main/`, the same row, `lots-4: 0 items`). That makes it pre-existing; the check or the bench needs a fix
+    (PLAN).
+  - The batch's re-run (`20261022-065722-release`) timed out at 3h. One building (lot_054, the relog row's) stayed WAITING
+    NOT_LOADED after the walk. The first batch run and main's run both reached PLACED with the same walk. Recorded, not attributed.
+
 ### Approvals
 
 Noah, 2026-10-21, in chat with the coordinator:

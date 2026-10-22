@@ -979,3 +979,8 @@ Top first. Not fixed in v0.40.1.
 - **Main's gate-chains.json carried two `release.always` keys** (P1's -full list, then P2's list built on the pre-P1 one; JSON keeps
   the last). The batch merge keeps one list: the -full twins plus the lints, p2-calibration, w-ingame, d2-ingame and
   6c-scenario-s3.
+- **6a-megaB's "REGION_PROGRESS events for every stage" row fails on main.** mega_bench's IR has an empty `lots-4` stage, so the
+  row can't pass. It failed the same way on ca50b90e and in the batch run. Skip empty stages in the check, or re-balance the bench.
+  In one batch re-run, lot_054 (the relog row's item) stayed WAITING NOT_LOADED after the walk until the step timed out. Watch for it
+  at the next release.
+- **The P3 cutover for RS's rows** (rs `-smoke` twins) was not done in the batch.
