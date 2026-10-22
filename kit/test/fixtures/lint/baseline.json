@@ -1,0 +1,68 @@
+{
+ "$comment": "Known findings of the lints on committed fixtures, recorded with their reason instead of failing (tools/lib/lint-cases.mjs applyBaseline): an exact count per case and rule, so a new instance (or one fixed) shows. Each entry names who decides: a finding Noah or a slice owns stays here until fixed, then leaves.",
+ "entries": [
+  {
+   "lint": "structure",
+   "case": "s1",
+   "rule": "S-LOTS",
+   "count": 4,
+   "why": "S1 golden (floating islands): the hub's `links` walkway (stone bricks, y 168) runs 2 columns under the back corners of lot_1 and lot_2 (their pad row, y 169). In game the realised M2 reach is 16/16 (another link reaches each lot); recorded for the S1 owner, not gated"
+  },
+  {
+   "lint": "structure",
+   "case": "s1-flat",
+   "rule": "S-LOTS",
+   "count": 4,
+   "why": "as s1 (the same plan over the flat claim)"
+  },
+  {
+   "lint": "structure",
+   "case": "p0:valid/v14_floating_islands.json",
+   "rule": "S-LOTS",
+   "count": 4,
+   "why": "valid/v14 is S1's plan (floating_islands) as a plan/0 fixture: the same links walkway under lot_1's and lot_2's back corners as the s1 entry"
+  },
+  {
+   "lint": "look",
+   "case": "s7",
+   "rule": "L-LAMP",
+   "count": 1,
+   "why": "S7 natural: square lamp lamp_1 (1552,67,-3075) 5 from the nearest light; main predates FL's look fixes (slice/FL f14024b1, not merged at this branch: lamps 6 apart settlement-wide, the 4e lanterns of a zone's streets replaced by props kept LAMP_GAP from every other lamp). Noah flagged exactly this ('adjacent lamps', L3) in FL's gallery; FL's merge should clear it: delete the entry then, and a count that moves FAILs until it is"
+  },
+  {
+   "lint": "look",
+   "case": "s7-flat",
+   "rule": "L-LAMP",
+   "count": 1,
+   "why": "S7 flat: a 4e street lantern 3 from the square's lamp at (1527,66,-3073); main predates FL's look fixes (slice/FL f14024b1, not merged at this branch: lamps 6 apart settlement-wide, the 4e lanterns of a zone's streets replaced by props kept LAMP_GAP from every other lamp). Noah flagged exactly this ('adjacent lamps', L3) in FL's gallery; FL's merge should clear it: delete the entry then, and a count that moves FAILs until it is"
+  },
+  {
+   "lint": "look",
+   "case": "districts_demo",
+   "rule": "L-LAMP",
+   "count": 20,
+   "why": "districts_demo natural: the districts' street lanterns and square/route lamps as close as 1; main predates FL's look fixes (slice/FL f14024b1, not merged at this branch: lamps 6 apart settlement-wide, the 4e lanterns of a zone's streets replaced by props kept LAMP_GAP from every other lamp). Noah flagged exactly this ('adjacent lamps', L3) in FL's gallery; FL's merge should clear it: delete the entry then, and a count that moves FAILs until it is"
+  },
+  {
+   "lint": "look",
+   "case": "districts_demo-flat",
+   "rule": "L-LAMP",
+   "count": 9,
+   "why": "districts_demo flat: as natural, closest 1; main predates FL's look fixes (slice/FL f14024b1, not merged at this branch: lamps 6 apart settlement-wide, the 4e lanterns of a zone's streets replaced by props kept LAMP_GAP from every other lamp). Noah flagged exactly this ('adjacent lamps', L3) in FL's gallery; FL's merge should clear it: delete the entry then, and a count that moves FAILs until it is"
+  },
+  {
+   "lint": "look",
+   "case": "districts_demo",
+   "rule": "L-END",
+   "count": 1,
+   "why": "districts_demo natural: one district street ends 4 from its hub (3708,156,-1021) without paving at the hub (FL's L5 rule, which main's districts don't apply: FL's hub landings are free zones only). For Noah's judgement on the D gallery; recorded"
+  },
+  {
+   "lint": "look",
+   "case": "scatter_demo",
+   "rule": "L-END",
+   "count": 2,
+   "why": "scatter_demo (F2's decor fixture, no settlement): its 2-wide demo path stops short at both ends by design (a path through scatter); recorded"
+  }
+ ]
+}

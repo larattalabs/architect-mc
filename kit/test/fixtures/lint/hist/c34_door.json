@@ -1,0 +1,175 @@
+{
+ "about": "C34/C34b claim-box door (f5204066, a0530bc3): a tracked build's claim box holds both halves of every door it cuts (BuildViews takes the partner in), and a lifted build's door counts as an entrance from its lowest row (Builds). The fixed records are clean; the variants are the records as the mod returned them before (the box cut at the door's lower half; the hut at y 100 with no entrance) and the lint catches each (S-DOOR); with the cut box the plan's lamp post also stands in the door's upper half (S-KEEP over the grown box)",
+ "claim": [
+  0,
+  0,
+  63,
+  63
+ ],
+ "ground": 64,
+ "builds": [
+  {
+   "id": "build-1",
+   "kind": "HOUSE",
+   "bounds": [
+    30,
+    65,
+    30,
+    36,
+    68,
+    36
+   ],
+   "state": "ACTIVE",
+   "entrances": [
+    {
+     "pos": [
+      33,
+      65,
+      30
+     ],
+     "facing": "north"
+    }
+   ],
+   "blocks": [
+    [
+     33,
+     65,
+     30,
+     "minecraft:oak_door[facing=north,half=lower,hinge=left,open=false,powered=false]"
+    ],
+    [
+     33,
+     66,
+     30,
+     "minecraft:oak_door[facing=north,half=upper,hinge=left,open=false,powered=false]"
+    ]
+   ]
+  },
+  {
+   "id": "build-2",
+   "kind": "HOUSE",
+   "bounds": [
+    10,
+    100,
+    40,
+    14,
+    103,
+    44
+   ],
+   "state": "ACTIVE",
+   "entrances": [
+    {
+     "pos": [
+      12,
+      100,
+      40
+     ],
+     "facing": "north"
+    }
+   ],
+   "blocks": [
+    [
+     12,
+     100,
+     40,
+     "minecraft:oak_door[facing=north,half=lower,hinge=left,open=false,powered=false]"
+    ],
+    [
+     12,
+     101,
+     40,
+     "minecraft:oak_door[facing=north,half=upper,hinge=left,open=false,powered=false]"
+    ],
+    [
+     10,
+     100,
+     41,
+     "minecraft:oak_planks"
+    ]
+   ]
+  }
+ ],
+ "spec": {
+  "stages": [
+   "ground"
+  ],
+  "entrance": [
+   10,
+   65,
+   10
+  ],
+  "parts": [
+   {
+    "id": "street",
+    "cols": [
+     30,
+     28,
+     64,
+     64,
+     0,
+     31,
+     28,
+     64,
+     64,
+     0,
+     32,
+     28,
+     64,
+     64,
+     0,
+     33,
+     28,
+     64,
+     64,
+     0,
+     34,
+     28,
+     64,
+     64,
+     0,
+     35,
+     28,
+     64,
+     64,
+     0
+    ],
+    "materials": [
+     "minecraft:dirt_path"
+    ],
+    "cond": 0,
+    "walk": true
+   }
+  ]
+ },
+ "variants": [
+  {
+   "name": "c34 (the claim box cut at the door's lower half)",
+   "patch": {
+    "builds": {
+     "0": {
+      "bounds": [
+       30,
+       65,
+       30,
+       36,
+       65,
+       36
+      ]
+     }
+    }
+   },
+   "expect": "S-DOOR"
+  },
+  {
+   "name": "c34b (the lifted hut's door no entrance)",
+   "patch": {
+    "builds": {
+     "1": {
+      "entrances": []
+     }
+    }
+   },
+   "expect": "S-DOOR"
+  }
+ ]
+}
