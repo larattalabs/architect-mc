@@ -195,7 +195,8 @@ public interface Regions {
 	 * Reason#ARTIFACT_UNAPPROVED}, {@link Reason#ARTIFACT_STALE}, {@link Reason#PALETTE}, {@link Reason#NOT_LOADED}, and what {@link
 	 * #realise} refuses before it writes the record: {@link Reason#NOT_ALLOWED}, {@link Reason#CREATIVE_ONLY_BLOCK}) binds nothing to its
 	 * opKey: the same key may realise another artifact (the one checked again after a stale refusal). Once a realise under the key has
-	 * written its region record, the key is that region's for as long as the record stands, in every state: the same body answers its
+	 * written its region record, the key is that region's while the region stands, in every state but REMOVED (as since C20, {@link
+	 * #realiseByKey} is empty once it is removed, and the key is free again): the same body answers its
 	 * id, another artifact {@link Reason#OP_KEY_CONFLICT}, and {@link #realiseByKey} finds it after a restart. A keyed {@link #checkPlan}
 	 * answers its first check: check again unkeyed or under a new key. The realise ends every keyed pin under its key
 	 * ({@link #pinArtifact(String, String, String)}).
