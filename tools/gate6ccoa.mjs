@@ -319,6 +319,8 @@ steps.waits = async () => {
   const out = {};
   const fx = G.fixture(ctx, 'rs06_over_held');
   const s = await G.site(ctx, 'coa_waits', fx);
+  // every part labelled, so the waits' sentences show they come from the plan's labels (never an id with underscores)
+  for (const fam of ['zones', 'forms', 'connectors', 'rules']) for (const p of s.wp.plan[fam] ?? []) if (p.id && !p.label) p.label = `${p.id.replace(/_/g, ' ')} (plan label)`;
   const VK = `steward.coa.${Date.now().toString(36)}.vrealise`;
   const check1 = await call('dev.region.checkPlan', { plan: s.wp.plan, claim: s.W.claim, owner: G.OWNER, anchors: s.wp.anchors, load: 'generate' }, 1_800_000);
   const a = check1.check;
@@ -363,7 +365,7 @@ steps.waits = async () => {
   const said = mine.filter((e) => e.ext?.['architect_mc:waitsFor']?.say);
   out.events = { itemWaiting: ev.length, region: mine.length, said: said.length, first: said[0] && { key: said[0].itemKey, waitsFor: said[0].ext['architect_mc:waitsFor'], message: said[0].message } };
   check(mine.length > 0 && mine.every((e) => e.ext['architect_mc:part'] || (e.ext['architect_mc:parts'] ?? []).length || e.ext['architect_mc:lot']), `item 8: ITEM_WAITING for the region's tiles and roads carries the region and the part(s) (${mine.length} event(s))`);
-  check(said.length > 0 && said.every((e) => /waits for .+ to be built/.test(e.ext['architect_mc:waitsFor'].say) && e.message.startsWith(e.ext['architect_mc:waitsFor'].say)), `item 8: a stage wait says ${json(out.events.first?.waitsFor?.say)} (waiter ${json(out.events.first?.waitsFor?.waiter)}); the message starts with it`);
+  check(said.length > 0 && said.every((e) => /waits for .+ to be built/.test(e.ext['architect_mc:waitsFor'].say) && /\(plan label\)/.test(e.ext['architect_mc:waitsFor'].say) && !/_/.test(e.ext['architect_mc:waitsFor'].say) && e.message.startsWith(e.ext['architect_mc:waitsFor'].say)), `item 8: a stage wait says, from the plan's labels and with no id, ${json(out.events.first?.waitsFor?.say)} (waiter ${json(out.events.first?.waitsFor?.waiter)}); the message starts with it`);
   check(f.last?.st?.view?.state === 'PLACED', `S-COA-5: fed to PLACED (${f.waves} waves)`);
   await G.remove(ctx, region);
   out.sawStage = sawStage;
