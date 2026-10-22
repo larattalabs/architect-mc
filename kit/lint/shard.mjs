@@ -10,6 +10,10 @@ export const BROKEN = Object.freeze({
   'irr/u01_unmasked.json': ['M25:clear'],
   'irr/u02_nobed.json': ['M25:shell', 'M25:leak'],
   'irr/u03_breach_out.json': ['M25:keep', 'W3:irr'], // IRR's broken side: the lint's own breach rule names it too
+  // (batch v0.41.0) the batch's broken variants with a body, the ones kc-unit names too (tools/lib/gate6ckc-kit.mjs)
+  'f3/u01_tree_in_body.json': ['M25:clear'], // F3: a grown tree in a plan body
+  'f3/u04_coral_other_part.json': ['M25:clear'], // F3: coral written by another part
+  'fl/u03_zone_ignores_body.json': ['M25:clear'], // FL: a free zone's street through a body
 });
 
 export function runShard(i, n) {
