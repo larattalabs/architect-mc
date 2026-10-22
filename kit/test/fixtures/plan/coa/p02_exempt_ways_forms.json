@@ -1,0 +1,112 @@
+{
+ "about": "(close-out A §5) exempt [terrain, support, ways, forms]: the town street, the road to street_e and the fountain are left out by writer (the town lamps and the apron lamps still count): copper share [0.95, 1] fits; with the default exempt it refuses TOLERANCE",
+ "on": "flat",
+ "volume": {},
+ "style": {
+  "roles": {
+   "wall": "minecraft:copper_block",
+   "wall_alt": "minecraft:cut_copper",
+   "trim": "minecraft:waxed_cut_copper",
+   "roof": "minecraft:cut_copper",
+   "floor": "minecraft:spruce_planks",
+   "frame": "minecraft:spruce_log",
+   "accent": "minecraft:copper_bulb",
+   "light": "minecraft:copper_lantern",
+   "glass": "minecraft:glass",
+   "foundation": "minecraft:stone_bricks",
+   "path": "minecraft:cobblestone",
+   "rail": "minecraft:spruce_fence",
+   "structure": "minecraft:stone_bricks",
+   "rock": "minecraft:stone",
+   "surface": "minecraft:grass_block",
+   "subsurface": "minecraft:dirt",
+   "rubble": "minecraft:andesite"
+  }
+ },
+ "lotDesigns": {
+  "h1": "vocc_copper_cabin",
+  "h2": "vocc_copper_cabin"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "coa_p02",
+  "zones": [
+   {
+    "id": "town",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 24
+     }
+    },
+    "program": {
+     "lots": [
+      {
+       "id": "h1",
+       "type": "house",
+       "size": [
+        9,
+        11
+       ],
+       "entry": "vocc_copper_cabin"
+      },
+      {
+       "id": "h2",
+       "type": "house",
+       "size": [
+        9,
+        11
+       ],
+       "entry": "vocc_copper_cabin"
+      }
+     ],
+     "shared": "none"
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "east_road",
+    "kind": "road",
+    "from": {
+     "part": "town"
+    },
+    "to": {
+     "anchor": "street_e"
+    }
+   }
+  ],
+  "forms": [
+   {
+    "id": "fount",
+    "kind": "fountain",
+    "basin": 5,
+    "spout": 2,
+    "where": {
+     "near": {
+      "anchor": "stockpile",
+      "within": 30
+     }
+    }
+   }
+  ],
+  "rules": [
+   {
+    "id": "copper_ways_free",
+    "kind": "palette",
+    "required": true,
+    "family": "copper",
+    "exempt": [
+     "terrain",
+     "support",
+     "ways",
+     "forms"
+    ],
+    "share": [
+     0.95,
+     1
+    ]
+   }
+  ]
+ }
+}
