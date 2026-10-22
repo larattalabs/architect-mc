@@ -203,7 +203,10 @@ export function gradlewCalls(t) {
       // an args variable: its array literal in the module (the last definition before the call), else unreadable
       const defs = [...t.slice(0, m.index).matchAll(new RegExp(`(?:const|let|var)\\s+${named[1]}\\s*=\\s*\\[`, 'g'))];
       const d = defs.at(-1);
-      out.push(d ? bracket(t, d.index + d[0].length - 1) : 'test /*unreadable args*/');
+      // a parameter of the nearest enclosing function by that name shadows any definition: unreadable
+      const fns = [...t.slice(d ? d.index : 0, m.index).matchAll(/function\s*\w*\s*\(([^)]*)\)|\(([^()]*)\)\s*=>|(\w+)\s*=>/g)];
+      const shadow = fns.some((f) => (f[1] ?? f[2] ?? f[3] ?? '').split(',').map((x) => x.trim().split(/[\s=]/)[0]).includes(named[1]));
+      out.push(d && !shadow ? bracket(t, d.index + d[0].length - 1) : 'test /*unreadable args*/');
     } else if (/[./]$/.test(t.slice(Math.max(0, m.index - 1), m.index))) out.push(rest.slice(0, Math.max(0, rest.search(/[`'"\n]/)) || 200)); // a shell command `./gradlew ...` (not a message that names gradlew)
   }
   return out;

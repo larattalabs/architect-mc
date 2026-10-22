@@ -370,7 +370,7 @@ it.
       ...). build, check, umtLong and `:x:test` run tests.
     - An `args` variable is resolved to its nearest array literal before the call.
     - A message string that names gradlew is not a call.
-  - **kit-reuse** (a driver that answers its kit tests from the run's unit-kit report) delegates those tests to unit-kit. Its coverage
+  - **kit-reuse** (a driver whose closure loads kit-reuse.mjs, eagerly or through `await import`) delegates its kit tests to unit-kit. Its coverage
     PASS serves only a run that holds unit-kit, which re-runs on any kit change.
   - **`coverage.lazyAlways`** (gate6a-stubs.mjs) lists lazy paths that run state, not code, decides: they stay in.
   - **The 8 drivers that were unreadable:** f1, t1, t2, p0, s2, d and k1a only compile (api-compat), and pt2's

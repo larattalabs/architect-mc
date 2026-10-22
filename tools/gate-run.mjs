@@ -488,7 +488,7 @@ if (tierInfo.cache.lookup) {
         l = c.hit ? c : { hit: null, why: `${l.why}; coverage: ${c.why}` };
         // kit-reuse (tools/lib/kit-reuse.mjs): such a driver's kit tests are unit-kit's report, so its coverage PASS serves only
         // a run that holds unit-kit (which re-runs on any kit change and fails the run when they fail)
-        if (l.hit && (INPUT_MAP.steps[parentOf(id)]?.eager ?? []).includes('tools/lib/kit-reuse.mjs') && !want.has('unit-kit')) {
+        if (l.hit && (INPUT_MAP.steps[parentOf(id)]?.closure ?? []).includes('tools/lib/kit-reuse.mjs') && !want.has('unit-kit')) {
           l = { hit: null, why: 'its kit tests are delegated to unit-kit (kit-reuse), which is not in this run' };
         }
       }
