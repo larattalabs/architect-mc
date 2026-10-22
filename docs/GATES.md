@@ -602,6 +602,64 @@ an env every part gets (`${PART}` = p1, p2, ...: each part's own evidence dir) a
   parent, the check lines (`ok`, `FAIL`, `rec`, indented ones too) of the whole step with the parts' together, numbers, hex ids,
   paths and times masked. A timing bar that is `ok` on one side and `FAIL` on the other is reported as timing.
 
+### The knee: why `shards.turbo.max` is 9
+
+The same 49 steps (`change --files tools/gate-run.mjs --turbo --no-split --lanes 3 --only ...`: 15 client-less steps (the unit
+suites with unit-kit, which their readers wait for, the lints), 25 in-game steps on headless servers, 6 scenarios (5 on hidden
+clients) and 3 look steps on clients; each at most about 12 min in history) at 3, 6, 9 and 12 in-game shards, back to back on
+2026-10-22 (`artifacts/gate-runs-turbo-knee/`), each a turbo run, after a warm-up run that made the 12+3 run worktrees, built the
+mod in each and warmed the h/hy plan cache. No other gate run was active; the background was Spotlight indexing and the
+coordinator's agents' editors (load 4.5, 7, 4.8 and 9 at the starts; about 1-3 cores; recorded in each run's notes).
+
+| in-game shards (+3 lanes) | wall | step-minutes | client/server setup | load p50 / p90 / max | least available memory | swap | gate RSS max (largest process) | median step time vs the 3-shard run | vs the history p50 | not passing |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 3 | **58.8 min** | 235 | 7.7 min | 9 / 27 / 81 | 65.5 GB | 0 | 20.7 GB (4.6) | 1.00 | 0.83 | pt2-ingame item 13 (on main), 6ct1-scenario-relief's P2 realised == virtual (1 of 8 before) |
+| 6 | **33.7 min** | 276 | 11.7 min | 29 / 50 / 58 | 57.9 GB | 0 | 29.9 GB (5.4) | 1.16 | 0.95 | pt2-ingame item 13 |
+| 9 | **31.3 min** | 339 | 16.5 min | 52 / 77 / 91 | 55.5 GB | 0 | 38.5 GB (4.6) | 1.34 | 1.11 | pt2-ingame item 13 |
+| 12 | **36.2 min** | 447 | 28.7 min | 52 / 74 / 95 | 52.8 GB | 0 | 44.2 GB (4.2) | 1.75 | 1.40 | pt2-ingame item 13, and three load failures: unit-sidecar's versions hook timed out (60 s), 6cd-scenario-districts' plan refused after 120 s, 6ct2-scenario-route realised == virtual 1 cell |
+
+- **Where it bends.** 3 to 6 nearly halves the wall; 6 to 9 saves 7%; 12 is slower than 9. The load saturates at a median of
+  about 52 from 9 shards on (18 cores), so each shard more only slows every step (1.34x at 9, 1.75x at 12 against the same
+  step at 3) and the client and server starts (one per shard, 2-3 min each at 12) grow. 12 also added three failures that were
+  load, not code: a flake is a real cost under load.
+- **Memory never binds.** A headless server's JVM peaked at 1.7-2.1 GB resident (`-Xmx4G`), a hidden client 4-5.4 GB; the whole
+  run at 12 shards took 44 GB with 52 GB still available and no swap. The memory cap (5 GB per shard, 2 per lane) is never the
+  bound below 15 shards.
+- **The critical path at 9 was a unit step**, not the in-game work: irr-unit took 30.3 min and voc-unit 27.1 (14.3 and 12.8 at
+  3 shards), both on lanes, because their byte-identity loops plan every committed fixture on both trees, CPU-bound. Hence the
+  unit splits below.
+- **Decision:** `shards.turbo.max` 9 and `shards.turbo.offlineLanes` 3 (12 workers): the knee by wall, and the largest count with
+  no new failure.
+
+### What is split
+
+Each split step at its measured time, its natural partition, and the union proof (whole against split at the same head:
+`artifacts/gate-runs-turbo-proof/20261022-162049-change` whole, `-170841-change` split, 6 shards each, beside the affected-only
+release; `node tools/split-proof.mjs --whole <A> --parts <B>`):
+
+| step | measured (min) | parts | partition | union proof (checks whole / parts together) |
+|---|---|---|---|---|
+| irr-ingame / irr-ingame-smoke | 29.4 / 26.7 | 3 | worlds: v62 live; v62 exact + the breach fix + 5 (a); the lamp path, s01 with its control, v63, d01, irrUnmasked, the pad, the probe | 34/34, 29/29: equal, full masked lines too |
+| h-ingame / h-ingame-smoke | 15.5 / 12.3 | 3 / 2 | H-core; H-a flat; H-a exact, farm, H-b flat | 19/19, 16/16: equal |
+| hy-ingame / hy-ingame-smoke | 21.7 / 14.7 | 3 / 2 | HY-core; the riffle table, villagers, HY-c's water gate and v58; item 9's kinds | 31/31, 24/24: equal |
+| 4d-all / 4d-all-full | 13.1 / 15.3 | 2 | base, then survival; base, then the other nine sub-steps (stages and gap0 with waiting) | 23/23: same checks |
+| 5b-chains-full | 31.4 | 3 | the 21 scripts (fixed + 20 seeds), each from its own world; E1 over each part's states | 3 names / 13 lines: equal |
+| rs-survival | 23.2 | 3 | items 5; 9; 8 and 10 | 11/11: equal |
+| 6c-scenario-s3 | 14.4 | 2 | flat; natural (a shell split) | 20/20 checks |
+| 6cf2-scenario-scatter | 12.2 | 3 | harvest, then flat; natural; cave (a shell split) | 21/21: equal |
+| irr-unit, kc-unit, f3-unit, fl-unit, s3-unit | 14-36 under turbo | 3 | the byte-identity fixture loop in 3 round-robin slices (the first part also runs every other item) | proof below (the turbo slice against the whole runs) |
+| voc-unit | 27-34 under turbo | 3 | item 5 (byte identity); item 13 and the census; the rest | proof below |
+
+The status differences in the proof runs are all failures known on main, on one side only: 4d's "shared crate" (4 of 98 runs
+before), 4d's "stages: undo" (8 of 199), 4d-all-full's "group undo" (22 of 94), S3's exactness (7 of 12) and safety, scatter_cave's
+exactness (6 of 42). hy-ingame's item 14 push stand (a mob beyond the grate) failed on both sides at this head (0 of 24 before
+today), so it is not a split problem; it is reported to the coordinator.
+
+**Server and world reuse: not done.** In the 2h18m baseline slice, client and server starts, world switches and snapshot
+restores took 10.0 of 414 step-minutes and the steps' own `gate6b.mjs base` 6.5: 4% together, under the 10% that would pay
+for a warm-server-per-shard reset and its proof. Under turbo the starts grow (28.7 of 447 step-minutes at 12 shards, 6%;
+16.5 of 339 at 9, 5%), still under 10%; a reset proven clean (world hash, entities, journal) is not worth its risk at that.
+
 ## Fast checks P1 (2026-10-21): the undo assertions move to the undo model
 
 Phase P1 of docs/FAST-CHECKS.md: the in-game undo assertions it maps to the undo model (UMT, docs/UMT.md) leave the slice tier.
@@ -1120,7 +1178,10 @@ Several agents and runners share this machine, so everything is configurable. A 
 
 | flag | environment | default |
 |---|---|---|
-| `--shards N\|auto` | | auto for `slice`/`release` over 20 steps (`shards.auto.minSteps`), else 1; N at most `shards.max` (6) |
+| `--turbo`, `--no-turbo` | | turbo for a tier run of at least 20 steps (`shards.turbo.minSteps`): the whole machine ("Turbo") |
+| `--lanes N` | | turbo: `shards.turbo.offlineLanes` (3) offline lanes for the client-less steps |
+| `--split`, `--no-split` | | split steps run as parts in turbo runs; `--split` outside turbo too |
+| `--shards N\|auto` | | turbo: auto up to `shards.turbo.max` (9), N at most 9; shared: auto for `slice`/`release` over 20 steps (`shards.auto.minSteps`), else 1; N at most `shards.max` (6) |
 | `--ports S:D[,S:D...]` (every shard's sidecar:DevBridge pair) | `GATE_PORTS`; or `ARCHITECT_GATE_SIDECAR_PORT`/`ARCHITECT_GATE_DEV_PORT` for shard 1 and `GATE_SHARD_PORTS` for shards 2.. | auto: free pairs of `shards.auto.portRange` (8980-8999); else shard 1: 8890:8891; shards 2..: **none, name them** |
 | | `GATE_AUTO_PROBE` (JSON: `load1`, `load5`, `freeGB`, `cores`) | the machine now; overrides fields of auto's probe (marked INJECTED) |
 | `--run-dir DIR` (shard k>1: `DIR-s<k>`) | `GATE_RUN_DIR` | `../architect-mc-gate-run` |
@@ -1199,6 +1260,8 @@ that still hold an unfinished item. The relog, the sidecar kill and every bar st
    ```
 
    At most one background wait at a time, with a timeout longer than the run's (`--plan` prints the worst case).
+   A turbo run (any tier run of 20+ steps) may first wait in the queue for the machine: its run dir appears only once it has it,
+   and its output names whom it waits for. Wait on the runner's pid until then (`kill -0 <pid>`), then on `summary.json`.
 4. **Read `SUMMARY.md` once.** Open a step's `<step>.log` or its gate JSON only for the steps that didn't pass.
 5. **Never kill processes by name.** To stop a run, `kill -TERM $(cat $R/runner.pid)`. The runner stops its own steps and clients.
 6. **Bench steps measure time.** Don't start clients while another run is in a `bench` step (its tick and cells/s bars), and
