@@ -13,6 +13,19 @@
   "tools/lib/shard-auto.mjs",
   "tools/lib/step-coverage.mjs"
  ],
+ "runnerKey": {
+  "$comment": "The runner code that changes how every step runs (its environment, timeouts, kills, hosts, splits, the tracer): its blobs are in every key, so a runner change re-runs everything (the fail audit found 4 past FAILs caused by runner changes alone).",
+  "files": [
+   "tools/gate-run.mjs",
+   "tools/lib/hosts.mjs",
+   "tools/lib/step-split.mjs",
+   "tools/lib/turbo.mjs",
+   "tools/lib/shard-auto.mjs",
+   "tools/lib/gate-history.mjs",
+   "tools/lib/step-trace.mjs",
+   "tools/lib/gate-part.mjs"
+  ]
+ },
  "classes": {
   "$comment": "Input classes: globs (a leading ! excludes). A step's input set is the union of its classes, its drivers' module closure, the globs that closure needs and the data its traced runs read.",
   "jar": [

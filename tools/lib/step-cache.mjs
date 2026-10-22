@@ -82,9 +82,12 @@ export function cacheContext({ src, main, cfg, conf, map, snapDir, env = process
     // none reachable
   }
   const repoListing = sha([...treeAt(src, head).keys()].sort().join('\n')).slice(0, 16);
+  // the runner code every step runs under (gate-cache.json runnerKey): its blobs at this commit
+  const tr = treeAt(src, head);
+  const runner = sha((conf.runnerKey?.files ?? []).map((f) => `${f}\0${tr.get(f) ?? '-'}`).join('\n')).slice(0, 16);
   return {
     src, main, cfg, conf, map, snapDir, env, head, dirty: dirtyList,
-    toolchain: { node: process.version, java: javaVersion(env), build: buildVersions(src, head) }, lastTag, repoListing,
+    toolchain: { node: process.version, java: javaVersion(env), build: buildVersions(src, head) }, lastTag, repoListing, runner,
     // the release context (strict NEXT checks): this checkout's; for another commit, as a detached checkout of it would see it
     // (ARCHITECT_RELEASE, else a v* tag on it), which is what the nightly's and the runner's detached worktrees see
     release: { src: commit === 'HEAD' ? releaseContext(src, env).release : env.ARCHITECT_RELEASE === '1' || env.ARCHITECT_RELEASE === '0' ? env.ARCHITECT_RELEASE === '1' : tagAtHead, tagAtHead },
@@ -157,6 +160,7 @@ export function keyFor(ctx, id, { set = null } = {}) {
     fingerprint: fingerprintOf(map, conf, mid, ctx.src),
     snapshots: entry.client === 'none' ? [] : snapshotsOf(ctx, entry),
     toolchain: ctx.toolchain,
+    runner: ctx.runner,
     modes,
     flags,
   });
