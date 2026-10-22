@@ -589,7 +589,8 @@ async function decideTurbo() {
   const max = TURBO_AUTO ? TC.max : NSHARDS;
   const c = chooseTurbo(TC, { max, probe, lanes: LANES, wallFor: (n) => estimate(est, n, LANES).wallMin, pairs: pairsFree.length });
   if (pairsFree.length < c.n + LANES) die(`turbo: ${pairsFree.length} free port pair(s) ${allPairs ? `in --ports ${allPairs}` : `in ${TC.portRange.join('-')} (shards.turbo.portRange)`}, need ${c.n + LANES}`);
-  if (!TURBO_AUTO && c.n < NSHARDS) die(`turbo --shards ${NSHARDS}: only ${c.n} fit (${c.bound.join(', ')})`);
+  // a fixed --shards N is taken as asked (the plan cap only advises), within memory and the ports
+  if (!TURBO_AUTO && Math.min(c.caps.memory, c.caps.ports) < NSHARDS) die(`turbo --shards ${NSHARDS}: only ${Math.min(c.caps.memory, c.caps.ports)} fit (memory ${c.caps.memory}, ports ${c.caps.ports})`);
   const n = TURBO_AUTO ? c.n : NSHARDS;
   autoChoice = {
     mode: TURBO_AUTO ? `turbo auto (${flag('--turbo') ? '--turbo' : `default for a ${chainName} of ${steps.length} steps >= ${TC.minSteps}`}; --no-turbo for a shared run)` : `turbo --shards ${NSHARDS}`,

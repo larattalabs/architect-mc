@@ -24,8 +24,9 @@ export const TURBO_DEFAULTS = {
   minSteps: 20, // a tier run (change | slice | release) of at least this many steps is turbo by default
   offlineLanes: 2, // lanes for the client-less steps (units, lints), beside the in-game shards
   portRange: [8940, 8999], // turbo port pairs (the lanes get a pair too, unused by their steps but never shared)
-  memPerShardGB: 5,
-  reserveGB: 8,
+  memPerShardGB: 5, // an in-game shard: a headless server or client (3-4.7 GB peak), its sidecar, gradle
+  laneGB: 2, // an offline lane: node test workers, a gradle test JVM
+  reserveGB: 4, // turbo pushes the machine: less kept back than a shared run's 8
   planSlack: 0.03, // turbo: a shard more must save more than 3% of the wall
   fillSlots: 8, // a turbo run fills slot-1..max(this, slots.max, --slots, the highest existing slot) so every runner waits
   pollMs: 5000, // a turbo run polls faster than shared runs (15 s) so it takes freed slots before a pre-queue runner does
@@ -269,7 +270,7 @@ export function chooseTurbo(tc, { max, probe, lanes, wallFor, pairs }) {
   const caps = {
     max,
     plan,
-    memory: Math.floor((probe.freeGB - tc.reserveGB) / tc.memPerShardGB) - lanes,
+    memory: Math.floor((probe.freeGB - tc.reserveGB - lanes * tc.laneGB) / tc.memPerShardGB),
     ports: pairs - lanes,
   };
   const n = Math.max(1, Math.min(...Object.values(caps)));

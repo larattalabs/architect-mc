@@ -149,14 +149,14 @@ test('two turbo runs: the second waits for the first, then goes', async () => {
 });
 
 test('chooseTurbo: no cpu cap; plan, memory and ports bind; lanes take memory and ports', () => {
-  const tc = { planSlack: 0.03, reserveGB: 8, memPerShardGB: 5 };
+  const tc = { planSlack: 0.03, reserveGB: 8, memPerShardGB: 5, laneGB: 2 };
   const wall = (n) => 400 / n + 20;
   const probe = { freeGB: 110, load1: 90, load5: 90, cores: 18 };
   const c = chooseTurbo(tc, { max: 12, probe, lanes: 2, wallFor: wall, pairs: 30 });
-  assert.equal(c.caps.memory, 18);
+  assert.equal(c.caps.memory, 19);
   assert.ok(!('cpu' in c.caps));
   assert.equal(c.n, 12, 'a busy load average does not cap a turbo run');
-  assert.equal(chooseTurbo(tc, { max: 12, probe: { ...probe, freeGB: 50 }, lanes: 2, wallFor: wall, pairs: 30 }).n, 6);
+  assert.equal(chooseTurbo(tc, { max: 12, probe: { ...probe, freeGB: 50 }, lanes: 2, wallFor: wall, pairs: 30 }).n, 7);
   assert.equal(chooseTurbo(tc, { max: 12, probe, lanes: 2, wallFor: wall, pairs: 8 }).n, 6);
   assert.equal(chooseTurbo(tc, { max: 12, probe, lanes: 0, wallFor: (n) => Math.max(30, 400 / n), pairs: 30 }).n, 12);
 });
