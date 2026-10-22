@@ -377,7 +377,7 @@ steps.waits = async () => {
 steps.palette = async () => {
   await ensure();
   const P = await import('./lib/gate6ccoa-kit.mjs');
-  return P.paletteInGame(ctx, { checkPlan, creativeWorld, waitPlaced, art, OWNER });
+  return P.paletteInGame(ctx, { OWNER });
 };
 
 steps.ingame = async () => {

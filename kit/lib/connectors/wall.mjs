@@ -242,7 +242,7 @@ function lineOf(K, p, st, wet = null, bodies = true) {
     }
     const other = ends[i === ends.length - 1 ? i - 1 : i + 1];
     const n = K.endpointNode(e, other, p, i === 0 ? 'from' : i === ends.length - 1 ? 'to' : `via[${i - 1}]`);
-    if (n.error) return { error: n.error };
+    if (n.error) return { error: n.error.legacy ?? n.error }; // ((close-out A) a wall's end answers as before)
     pts.push({ at: [n.at[0], n.at[2]] });
   }
   // a lot's faces (headings: 0 E, 1 S, 2 W, 3 N): the face toward the other point, its apron cells (walk cells aside) any of which
@@ -429,7 +429,7 @@ export function planWalls(K) {
     }
     // ((6c KC, §4) a wall no line or ring of which avoids the plan's bodies: OVERLAP {kind: body}, with the ring widened as its wouldFit)
     if (L.error && K.keep?.length && !blind) { const bb = bodyBlame(K, p, st); if (bb) { K.ans(p, { class: 'refused', reasons: [bb.reason], notes, ...(bb.wouldFit ? { wouldFit: bb.wouldFit } : {}) }); continue; } }
-    if (L.error) { K.ans(p, { ...(K.unplacedBlocked?.(L.error) ?? { class: 'refused', reasons: [L.error] }), notes }); continue; }
+    if (L.error) { K.ans(p, { class: 'refused', reasons: [L.error], notes }); continue; }
     // ((H-b) the wet sections: their columns read from the frozen volume (asked: the first plan answers incomplete VOLUME), recorded
     // and guarded)
     let wetInfo = null;
@@ -501,7 +501,7 @@ function placeAtGate(K, g) {
   const W = w.W;
   if (W.st.sealed) { K.ans(g, { class: 'refused', reasons: [{ code: 'NO_ROOM', message: `wall ${W.id} is sealed (gates 0)`, evidence: { wall: W.id } }], notes: gateNotes(g) }); return; }
   const n = K.endpointNode(at, g.part.to ?? null, g, 'at');
-  if (n.error) { K.ans(g, { ...(K.unplacedBlocked?.(n.error) ?? { class: 'refused', reasons: [n.error] }), notes: gateNotes(g) }); return; }
+  if (n.error) { K.ans(g, { class: 'refused', reasons: [n.error.legacy ?? n.error], notes: gateNotes(g) }); return; } // ((close-out A) a gate answers as before
   const door = g.part.door ?? WALL_DEFAULTS.door;
   const width = g.part.width ?? (door === 'door' ? 2 : WALL_DEFAULTS.gateWidth);
   const run = nearestRun(W, [n.at[0], n.at[2]], width);

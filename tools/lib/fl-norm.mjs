@@ -10,7 +10,8 @@
 //   close-out A's items 4, 5, 7 and 9 move.
 export const COA_REREC_ASKS = Object.freeze(['arcology', 'end_city_ruins', 'one_block', 'redstone_gate', 'rival_families', 'spiral_town', 'swamp_stilts',
   'terraced_hill', 'treetop_village', 'two_districts', 'underwater_domes', 'upside_down'].map((a) => `asks/${a}.json`));
-export const COA_MOVED_FIXTURES = Object.freeze([...COA_REREC_ASKS]);
+export const COA_MOVED_FIXTURES = Object.freeze([...COA_REREC_ASKS, 'asks/mage_exiles.json', 'valid/v64_vocc_copper.json', 'valid/v65_vocc_nowood.json',
+  'vocc/r03_entry.json', 'vocc/r04_lenient.json']);
 export const FL_MOVED_ASKS = Object.freeze(['around_my_tree.json', 'nomad_camp.json', 'ring_city.json', 'grid_city.json', 'organic_hamlet.json']);
 export const FL_MOVED = Object.freeze([...FL_MOVED_ASKS.map((f) => `asks/${f}`), 'extension/e07_ring_layout.json', 'extension/e14_sketch_outline.json', 'extension/e15_every_reserved_a.json', ...COA_MOVED_FIXTURES]);
 

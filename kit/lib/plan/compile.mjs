@@ -1777,8 +1777,9 @@ function freeEnds(L) {
  * (close-out A, §4) An endpoint on a piece (a lot, a district) its zone could not place: a DEPENDENCY error naming the piece and the zone;
  * the caller answers `blocked` by the zone (unplacedBlocked), never `refused`.
  */
-function unplacedEnd(kind, id, zone) {
-  return { code: 'DEPENDENCY', message: `ends on ${kind} ${id}, which zone ${zone} could not place`, evidence: { kind: 'unplaced', [kind]: id, zone, blockedBy: [zone] } };
+function unplacedEnd(kind, id, zone, legacy = null) {
+  // (`legacy`: the error before close-out A, for the walls and gates that end on the same piece: §4 is a route's rule, so they answer as before)
+  return { code: 'DEPENDENCY', message: `ends on ${kind} ${id}, which zone ${zone} could not place`, evidence: { kind: 'unplaced', [kind]: id, zone, blockedBy: [zone] }, ...(legacy ? { legacy } : {}) };
 }
 
 /**
@@ -1822,7 +1823,7 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
   if (e.part !== undefined) {
     if (lotZone.has(e.part)) {
       const n = lotNode(e.part);
-      return n ? { ...n, at: r.meta.lots[e.part].entrance } : { error: unplacedEnd('lot', e.part, lotZone.get(e.part)) };
+      return n ? { ...n, at: r.meta.lots[e.part].entrance } : { error: unplacedEnd('lot', e.part, lotZone.get(e.part), { code: 'NO_ROOM', message: `lot ${e.part} was not placed (unplaced in its zone)`, path: where }) };
     }
     const g = geom.get(e.part);
     const z = zoneEmit.get(e.part);
@@ -1835,15 +1836,15 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
         const n = lotNode(port);
         if (n) return { ...n, at: r.meta.lots[port].entrance };
         // ((close-out A, §4) a lot of the zone or one of its districts the zone could not place: blocked by the zone)
-        if (lotZone.get(port) === e.part) return { error: unplacedEnd('lot', port, e.part) };
-        if ((out.data.unplaced ?? []).some((u) => u.id === port)) return { error: unplacedEnd('district', port, e.part) };
+        if (lotZone.get(port) === e.part) return { error: unplacedEnd('lot', port, e.part, { code: 'NO_ROOM', message: `port ${port}: not placed (unplaced in its zone)`, path: where }) };
+        if ((out.data.unplaced ?? []).some((u) => u.id === port)) return { error: unplacedEnd('district', port, e.part, { code: 'NO_ROOM', message: `port ${port}: not placed (unplaced in its zone)`, path: where }) };
         return { error: { code: 'NO_ROOM', message: `port ${port}: not placed (unplaced in its zone)`, path: where } };
       }
       const d0 = Object.keys(out.data.bells)[0];
       if (port === 'bell') { const b = out.data.bells[d0]; return feet(b[0], b[2], `b_${tag}`); }
       const dist = (q) => Math.max(Math.abs(q[0] - op[0]), Math.abs(q[1] - op[1]));
       const did = ids.includes(port ?? '') ? port : port === 'start' || port === 'end' ? d0 : [...ids].sort((p1, p2) => dist([out.data.bells[p1][0], out.data.bells[p1][2]]) - dist([out.data.bells[p2][0], out.data.bells[p2][2]]) || cmp(p1, p2))[0];
-      if (!out.ends[did]) return { error: unplacedEnd('district', did ?? port, e.part) };
+      if (!out.ends[did]) return { error: unplacedEnd('district', did ?? port, e.part, { code: 'NO_ROOM', message: `district ${port} was not placed`, path: where }) };
       const en = out.ends[did];
       // ((6c S3) a terraced district's ends are its lots: the nearest of them all)
       const pick = port === 'start' ? en[0] : port === 'end' ? en[1] : en[0]?.terraced ? [...en].sort((p1, p2) => dist([p1.x, p1.z]) - dist([p2.x, p2.z]) || p1.k - p2.k)[0] : dist([en[1].x, en[1].z]) < dist([en[0].x, en[0].z]) ? en[1] : en[0];
@@ -1855,7 +1856,7 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
       // (6c FL, §2.4) a free layout: its lots, bell and hub; start (the street cell nearest the claim's centre, or an open street's first
       // end) and end (the farthest, or its last end); else the street cell nearest the leg's other end
       const port = e.port ?? null;
-      if (port && !ZONE_PORTS.includes(port) && port !== 'hub') { const n = lotNode(port); return n ? { ...n, at: r.meta.lots[port].entrance } : { error: unplacedEnd('lot', port, e.part) }; }
+      if (port && !ZONE_PORTS.includes(port) && port !== 'hub') { const n = lotNode(port); return n ? { ...n, at: r.meta.lots[port].entrance } : { error: unplacedEnd('lot', port, e.part, { code: 'NO_ROOM', message: `port ${port}: the lot was not placed`, path: where }) }; }
       if (port === 'bell' || port === 'hub') return feet(z.L.res.bell[0], z.L.res.bell[2], `b_${tag}`);
       const ends = freeEnds(z.L);
       let pick;
@@ -1868,7 +1869,7 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
     }
     if (z) {
       const port = e.port ?? null;
-      if (port && !ZONE_PORTS.includes(port)) { const n = lotNode(port); return n ? { ...n, at: r.meta.lots[port].entrance } : { error: unplacedEnd('lot', port, e.part) }; }
+      if (port && !ZONE_PORTS.includes(port)) { const n = lotNode(port); return n ? { ...n, at: r.meta.lots[port].entrance } : { error: unplacedEnd('lot', port, e.part, { code: 'NO_ROOM', message: `port ${port}: the lot was not placed`, path: where }) }; }
       if (port === 'bell') return feet(z.L.res.bell[0], z.L.res.bell[2], `b_${tag}`);
       // the street's ends: the cell past each end along the street axis
       const o = z.L.orientation, sv = z.L.road.sv;
