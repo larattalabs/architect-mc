@@ -429,7 +429,7 @@ here are unchanged (KEEP-INGAME, BAR, setup, and P0/P1/P2 rows).
 | irr-ingame 6 | one farmland side broken | SMOKE · water-lint | out | W3:irr (every side of every irrigation body; irr/u03 caught); the in-game breach drains stay in 'spare' and 'pad' |
 | irr-ingame 12 | v63, s01, d01 | SMOKE | s01 (with its h0 control) | W1-W3 on valid/v63_irr_large and irr/d01_district; irr.test |
 | kc-ingame 1, 3 | v51 realise, census, remove | SMOKE | out (k01 and v61 stay) | W1 incl. M25:clear and W2 on valid/v51_voc_forge; kc.test |
-| voc-survival 4 | voc_copper_hall | SMOKE | out (voc_shrine stays) | the ledger lint: bill == BOM, refund == the standing blocks, weathering |
+| voc-survival 4 | voc_copper_hall | SMOKE | out (voc_shrine stays) | the ledger lint's arithmetic (bill == BOM, refund == the standing blocks, weathering) on its own copper designs, not the copper hall's blueprint: that BOM is checked in game at release only |
 | y-ingame 10 | overflow | SMOKE | out | `capacityOverflowAndACrateGone`; the fuzz's capacity check; release |
 | y-ingame 13 | gone | SMOKE · ledger-lint | out | the fuzz's crate gone (`Stockpiles.excess`); release |
 | y-ingame 14 | dissolve | SMOKE · ledger-lint | out | `dissolve_reservedStockAndABuildingTarget`, the fuzz; release |
