@@ -13,6 +13,7 @@ import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { UNCHANGED_EXCEPTIONS as VOCC_EXCEPTIONS } from './gate6cvoc-c.mjs';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs';
 import { inSlice } from './gate-part.mjs'; // (6c FL) the street ext normalised, FL's named movers
+import { syncBaseTree } from './base-tree.mjs';
 
 /** (The CU/IRR/VOC-c batch) VOC-c's named exceptions (rule.palette supported: the 7 asks with a palette rule, extension/e05 and e16): its own item 4 holds them. */
 export const LATER_EXCEPTIONS = [...VOCC_EXCEPTIONS, ...FL_MOVED.filter((n) => !VOCC_EXCEPTIONS.includes(n))];
@@ -22,11 +23,7 @@ const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 /** The base worktree at the merge base with origin/main (made or moved there). */
 export function baseTree(root) {
   const dir = path.resolve(root, '..', 'architect-mc-IRR-main');
-  execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']);
-  const base = execFileSync('git', ['-C', root, 'merge-base', 'HEAD', 'origin/main']).toString().trim();
-  if (!fs.existsSync(path.join(dir, '.git'))) execFileSync('git', ['-C', root, 'worktree', 'add', '-q', '--detach', dir, base]);
-  else execFileSync('git', ['-C', dir, 'checkout', '-q', '--detach', base]);
-  return { dir, base };
+  return syncBaseTree(root, dir); // (turbo) one fetch and checkout at a time; left alone at the base
 }
 
 export async function unchanged(root, { check, log = console.log, only = null, slice = null } = {}) {

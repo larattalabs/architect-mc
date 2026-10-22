@@ -11,17 +11,14 @@ import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { SIBLING_MOVED, normSiblingIr } from './batch-0410.mjs';
 import { inSlice } from './gate-part.mjs';
+import { syncBaseTree } from './base-tree.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
 /** The base worktree at the merge base with origin/main (made or moved there): S3's own, never another builder's. */
 export function baseTree(root) {
   const dir = path.resolve(root, '..', 'architect-mc-S3-main');
-  execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']);
-  const base = execFileSync('git', ['-C', root, 'merge-base', 'HEAD', 'origin/main']).toString().trim();
-  if (!fs.existsSync(path.join(dir, '.git'))) execFileSync('git', ['-C', root, 'worktree', 'add', '-q', '--detach', dir, base]);
-  else execFileSync('git', ['-C', dir, 'checkout', '-q', '--detach', base]);
-  return { dir, base };
+  return syncBaseTree(root, dir); // (turbo) one fetch and checkout at a time; left alone at the base
 }
 
 const hasTerraces = (plan) => /"terraces":\s*[{t]/.test(JSON.stringify(plan));
