@@ -8,9 +8,11 @@
 //   node tools/nightly.mjs --misses <nightly run dir> [--release <release run dir>]
 //                                       recompute the impact-map misses of a finished nightly run (writes nothing; prints JSON)
 //
-// It never kills anything and never touches another checkout's tree:
+// It never kills anything, never queues behind or ahead of another run, and never touches another checkout's tree:
 //   - one nightly at a time: artifacts/nightly/nightly.lock (pid); a live holder -> exit 0 at once ("already active");
-//   - the gate run takes its slot like any run and waits for one (gate-run's slot queue), in its own run dirs;
+//   - any gate run active or queued (a live slot holder or queue ticket in the slot dir): it waits for an idle machine without
+//     taking a queue ticket (nightly.idleWaitMin, 240), then skips the night, exit 0;
+//   - otherwise the gate run (turbo: the machine idle at night, it holds every slot until it ends) runs in its own run dirs;
 //   - the main checkout is only fetched (git fetch), never checked out or pulled; the nightly worktree (gate-cache.json
 //     nightly.worktree) is moved only when clean, else the night is skipped.
 // An impact-map miss: a step the last release skipped as CACHED fails (FAIL or TIMEOUT) at the same key here. It is written to
@@ -144,6 +146,38 @@ const releaseLock = () => {
   }
 };
 process.on('exit', releaseLock);
+
+// any gate run active or waiting: skip the night (a turbo nightly would hold the machine; queued behind a run it would start late)
+const SLOT_DIR = path.resolve(process.env.GATE_SLOTS_DIR ?? path.join(MAIN, '..', '.gate-slots'));
+async function activeRuns() {
+  try {
+    const t = await import(path.join(HERE, 'tools', 'lib', 'turbo.mjs'));
+    return [...t.liveHolders(SLOT_DIR), ...t.liveTickets(SLOT_DIR, { prune: false })].filter((h) => h.pid !== process.pid).map((h) => t.describeRun(h));
+  } catch {
+    // no turbo module (an older checkout): the slot files alone
+    let names = [];
+    try {
+      names = fs.readdirSync(SLOT_DIR).filter((f) => /^slot-\d+\.json$/.test(f));
+    } catch {
+      return [];
+    }
+    return [...new Set(names.map((f) => readJson(path.join(SLOT_DIR, f))).filter((h) => h?.pid && alive(h.pid)).map((h) => `pid ${h.pid} ${h.chain ?? '?'} ${h.worktree ?? ''}`))];
+  }
+}
+// wait for an idle machine without taking a place in the queue (nightly.idleWaitMin, polled every 5 min), then skip the night
+let busy = flag('--plan') ? [] : [...new Set(await activeRuns())];
+const idleUntil = Date.now() + Number(opt('--idle-wait-min') ?? conf.idleWaitMin ?? 240) * 60_000;
+if (busy.length) log(`nightly: a gate run is active or queued (${busy.join('; ')}); waiting for an idle machine until ${new Date(idleUntil).toISOString()} (no queue ticket taken)`);
+while (busy.length && Date.now() < idleUntil) {
+  await new Promise((r) => setTimeout(r, Math.min(300_000, Math.max(1000, idleUntil - Date.now()))));
+  busy = [...new Set(await activeRuns())];
+}
+if (busy.length) {
+  log(`nightly: skipped, a gate run is still active or queued (${busy.join('; ')}); nothing started`);
+  fs.mkdirSync(path.join(NIGHTLY, new Date().toISOString().slice(0, 10)), { recursive: true });
+  fs.writeFileSync(path.join(NIGHTLY, new Date().toISOString().slice(0, 10), 'summary.json'), `${JSON.stringify({ date: new Date().toISOString().slice(0, 10), state: 'skipped', why: 'a gate run is active or queued', active: busy, at: stamp() }, null, 1)}\n`);
+  process.exit(0);
+}
 
 const date = new Date().toISOString().slice(0, 10);
 const DAY = path.join(NIGHTLY, date);

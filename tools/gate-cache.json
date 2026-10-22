@@ -228,6 +228,7 @@
   "out": "artifacts/gate-runs-nightly",
   "extraArgs": [
    "--turbo"
-  ]
+  ],
+  "idleWaitMin": 240
  }
 }
