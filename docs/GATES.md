@@ -346,10 +346,12 @@ it.
 - **5 recent commits, with the build artifact and test filters (the design)** (`tools/step-cache.mjs coverage-select <commits>
   --bytecode`). Both sides are compiled and the changed class files listed.
   - **Unit drivers that run gradle tests in the source checkout** run them for real: mod/build.gradle's `gateRerunTests`, set by
-    the runner, makes test tasks never UP-TO-DATE or FROM-CACHE, so the test JVM logs its classes.
+    the runner, makes test tasks never UP-TO-DATE or FROM-CACHE, so the test JVM logs its classes. The runner sets it only for
+    steps keyed by their test filters. unit-mod keeps gradle's up-to-date checks: rerunning the whole suite costs about 4 min.
   - **Such a driver with complete filters** is keyed by:
-    - the test sources its `--tests` patterns can match (`testFilters`, read from its modules; a new matching test class moves the
-      key);
+    - the test sources its `--tests` patterns can select, resolved at each commit (`@tests:<pattern>` entries).
+      - Gradle also matches Class.method, so a wildcard pattern selects every test file whose name or text holds all its fragments.
+      - A new, renamed or changed matching test (or test method) moves the key; an unrelated one doesn't.
     - the test resources;
     - the trees its Java tests read (kit, sidecar);
     - the bytecode it loaded.
@@ -363,13 +365,17 @@ it.
   | commit | change | class files changed | map mode runs | coverage at least |
   |---|---|---|---|---|
   | e5dafb64 | kit isLeaves (kit/lib/forms/states.mjs) | 0 | 209 | 157 |
-  | 0bb0c89e | RS realised provenance (11 files) | 14 | 204 | 20 |
+  | 0bb0c89e | RS realised provenance (11 files) | 14 | 204 | 21 |
   | f5c73633 | RegionHash (5 files) | 6 | 204 | 30 |
   | 8b4da151 | RS-b farmland (3 files) | 5 | 204 | 14 |
   | 4d891398 | RP verify (1 Java file) | 2 | 204 | 12 |
 
-  The Java floor is now unit-mod, umt, p3-lint, p3-lint-long, the 8 drivers with incomplete filters, and the steps whose own drivers
-  moved. Above the floor, a step runs only if its run loaded a changed class. With the gradle class kept, the floor was 35-50.
+  The Java floor is now:
+  - unit-mod, umt, p3-lint and p3-lint-long;
+  - the 8 drivers with incomplete filters;
+  - the steps whose own drivers moved.
+
+  A compile error in a main class no step loaded still stops every coverage key, because the build artifact won't compile. Above the floor, a step runs only if its run loaded a changed class. With the gradle class kept, the floor was 35-50.
 - **Why the kit change still runs 157** (measured; `tools/lib` analysis in the coverage branch's notes):
   - 143 of the 157 hold kit/lib/forms/states.mjs only through **lazy `import()`s** in shared drivers that most of their runs never
     execute. The main one is `tools/gate6b.mjs`, which nearly every in-game step runs as `gate6b.mjs base`. It lazily imports

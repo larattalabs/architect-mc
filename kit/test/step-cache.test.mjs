@@ -327,3 +327,27 @@ test('coverage, bytecode mode: keyed by the loaded classes\' class-file digests 
   assert.match(lookupCoverage(ctx(), 'g').why, /build artifact|differs|changed|unknown|recorded/);
   assert.equal(lookupCoverage(ctx(), 'g').hit, null);
 });
+
+test('coverage: test filters resolve at each commit (a new test a wildcard selects by method name moves the key)', async () => {
+  const { setHash } = await import('../../tools/lib/step-cache.mjs');
+  const { testSourcesMatching } = await import('../../tools/lib/step-coverage.mjs');
+  const root = covRepo();
+  write(root, 'mod/src/test/java/dev/larattalabs/architect/AlphaTest.java', 'class AlphaTest { void irStaleReads() {} }\n');
+  write(root, 'mod/src/test/java/dev/larattalabs/architect/BetaTest.java', 'class BetaTest { void other() {} }\n');
+  git(root, 'add', '-A');
+  git(root, 'commit', '-qm', 'tests');
+  const tree = treeAt(root, 'HEAD');
+  const show = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+  assert.deepEqual(testSourcesMatching(['*irStale*'], tree, ['mod/src/test/java'], show), ['mod/src/test/java/dev/larattalabs/architect/AlphaTest.java']);
+  assert.deepEqual(testSourcesMatching(['dev.larattalabs.architect.BetaTest.other'], tree, ['mod/src/test/java'], show), ['mod/src/test/java/dev/larattalabs/architect/BetaTest.java']);
+  const set = ['mod/build.gradle', '@tests:*irStale*'];
+  const h0 = setHash(set, root, 'HEAD').hash;
+  write(root, 'mod/src/test/java/dev/larattalabs/architect/BetaTest.java', 'class BetaTest { void other() {} void irStaleToo() {} }\n');
+  git(root, 'commit', '-qam', 'a method the wildcard now selects');
+  assert.notEqual(setHash(set, root, 'HEAD').hash, h0);
+  const h1 = setHash(set, root, 'HEAD').hash;
+  write(root, 'mod/src/test/java/dev/larattalabs/architect/GammaTest.java', 'class GammaTest { void unrelated() {} }\n');
+  git(root, 'add', '-A');
+  git(root, 'commit', '-qm', 'an unrelated test');
+  assert.equal(setHash(set, root, 'HEAD').hash, h1);
+});

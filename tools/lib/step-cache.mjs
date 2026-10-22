@@ -18,7 +18,15 @@ import { definitionNow, definitionsAt } from './gate-history.mjs';
 import { checkTrace, dirtyPaths, fingerprintOf, globRe, inputsHash, readTrace, treeAt } from './step-inputs.mjs';
 import { releaseContext } from '../release-context.mjs';
 import { entryOf, parentOf } from './step-split.mjs';
-import { constantChanges, coverageSet, setMatcher } from './step-coverage.mjs';
+import { constantChanges, coverageSet, setMatcher, testSourcesMatching, TESTS_PREFIX } from './step-coverage.mjs';
+
+const blobs = new Map();
+/** A blob's text (cached by id). */
+function blobText(src, id) {
+  if (!id) return '';
+  if (!blobs.has(id)) blobs.set(id, execFileSync('git', ['-C', src, 'cat-file', 'blob', id], { maxBuffer: 64 << 20 }).toString());
+  return blobs.get(id);
+}
 import { bytecodeDigest, ensureBuild } from './build-artifact.mjs';
 
 /** The build artifact's manifest at the context's head (tools/lib/build-artifact.mjs); built on first use when ctx.allowBuild. */
@@ -203,7 +211,11 @@ export function externalFingerprint(main, rel) {
 /** The hash of a coverage set's files at a commit (git blob ids, sorted). */
 export function setHash(set, src, commit) {
   const tree = treeAt(src, commit);
-  const m = setMatcher(set);
+  // `@tests:<pattern>` entries: the test sources that pattern selects at this commit (a new or renamed matching test moves it)
+  const pats = set.filter((x) => x.startsWith(TESTS_PREFIX)).map((x) => x.slice(TESTS_PREFIX.length));
+  const tests = pats.length ? new Set(testSourcesMatching(pats, tree, ['mod/src/test/java', 'apitest/src/test/java'], (f) => blobText(src, tree.get(f)))) : new Set();
+  const m0 = setMatcher(set);
+  const m = (p) => m0(p) || tests.has(p);
   const h = crypto.createHash('sha1');
   let n = 0;
   for (const p of [...tree.keys()].sort()) {

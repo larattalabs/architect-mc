@@ -66,7 +66,8 @@ async function anyModeMatcher(id, tree) {
     // with complete test filters (and gateRerunTests): the matching test sources and the test-read trees, not the main sources
     const { testSourcesMatching } = await import('./lib/step-coverage.mjs');
     const narrow = keepGradle && e.testFiltersComplete && !argv.includes('--whole-test-tree');
-    const gradleKeep = !keepGradle ? [] : narrow ? [...testSourcesMatching(e.testFilters ?? [], tree, conf.coverage?.testRoots ?? ['mod/src/test/java']), ...(conf.coverage?.gradleTestTrees ?? ['mod/src/test/resources/**', 'kit/**', 'sidecar/**'])] : (conf.classes.gradle ?? []);
+    const show = (f) => execFileSync('git', ['-C', SRC, 'show', `HEAD:${f}`], { encoding: 'utf8', maxBuffer: 64 << 20 });
+    const gradleKeep = !keepGradle ? [] : narrow ? [...testSourcesMatching(e.testFilters ?? [], tree, conf.coverage?.testRoots ?? ['mod/src/test/java'], show), ...(conf.coverage?.gradleTestTrees ?? ['mod/src/test/resources/**', 'kit/**', 'sidecar/**'])] : (conf.classes.gradle ?? []);
     const keep = setMatcher([...(e.closure ?? []), ...(e.data ?? []), ...(conf.runnerKey?.files ?? []), ...gradleKeep]);
     return { cov: true, m: (p) => keep(p) || safetyCache(p) };
   }

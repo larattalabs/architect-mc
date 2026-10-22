@@ -165,7 +165,7 @@ export function coverageSet({ entry, trace, cov, conf, tree, src, read, manifest
     // filters can match (a new matching test moves the key), the test resources, the trees its tests read from Java (kit, sidecar)
     // and the bytecode of what it loaded; not the whole main source tree
     if (cls === 'gradle' && manifest?.ok && entry.testFiltersComplete && (cov?.classes ?? []).some((x) => /Test(\$|$)/.test(x))) {
-      for (const x of testSourcesMatching(entry.testFilters ?? [], tree, c.testRoots ?? ['mod/src/test/java'])) set.add(x);
+      for (const p of entry.testFilters ?? []) set.add(`${TESTS_PREFIX}${p}`);
       for (const x of c.gradleTestTrees ?? ['mod/src/test/resources/**', 'kit/**', 'sidecar/**']) set.add(x);
       continue;
     }
@@ -204,22 +204,37 @@ export function coverageSet({ entry, trace, cov, conf, tree, src, read, manifest
   return { set: [...set].sort(), unmappedClasses: j.unmapped, classes: (cov?.classes ?? []).length };
 }
 
-/** Gradle `--tests` patterns -> the test source files whose class (or simple name) they can match (`*` spans dots). */
-export function testSourcesMatching(patterns, tree, roots) {
-  const res = patterns.map((p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}(\\..*)?$`));
+/**
+ * Gradle `--tests` patterns -> the test source files they can select, conservatively. Gradle matches a pattern against
+ * Class.method too, so a wildcard pattern selects a file when every literal fragment of it (split on `*`, `.` and `$`) occurs in the
+ * file's FQN or its text (a method, a nested or second class). A plain pattern (no `*`) selects the file whose FQN or simple name
+ * it names, or one it names a method or nested class of. `content(path)` -> the file's text at the commit.
+ */
+export function testSourcesMatching(patterns, tree, roots, content = null) {
   const out = [];
+  const plain = patterns.filter((p) => !p.includes('*')).map((p) => p.replaceAll('$', '.'));
+  const wild = patterns.filter((p) => p.includes('*')).map((p) => p.split(/[*.$]+/).filter(Boolean));
   for (const f of tree.keys()) {
     const r = roots.find((x) => f.startsWith(`${x}/`));
     if (!r || !f.endsWith('.java')) continue;
     const fqn = f.slice(r.length + 1, -5).replaceAll('/', '.');
     const simple = fqn.split('.').pop();
-    if (res.some((re) => re.test(fqn) || re.test(simple))) out.push(f);
+    let hit = plain.some((p) => p === fqn || p === simple || p.startsWith(`${fqn}.`) || p.startsWith(`${simple}.`));
+    if (!hit && wild.length) {
+      const text = `${fqn}\n${content ? content(f) : ''}`;
+      hit = wild.some((frags) => frags.every((x) => text.includes(x)));
+    }
+    if (hit) out.push(f);
   }
   return out.sort();
 }
 
+/** The `@tests:<pattern>` entries of a coverage set: resolved at each commit (setHash), so a new matching test moves the key. */
+export const TESTS_PREFIX = '@tests:';
+
 /** A matcher for a coverage set (exact paths and globs). */
 export function setMatcher(set) {
+  set = set.filter((x) => !x.startsWith(TESTS_PREFIX));
   const exact = new Set(set.filter((x) => !/[*?]/.test(x)));
   const m = matcher(set.filter((x) => /[*?]/.test(x)));
   return (p) => exact.has(p) || m(p);
