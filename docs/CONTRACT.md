@@ -23729,3 +23729,94 @@ Sidecar `FEATURES` now end `... 'reserved', 'plan.rules', 'region.survival', 'pl
   v0.40.1), 0.40.0 (F3's `gate6c-f3/v0400`) and 0.39.1. New `api-compat --gate6cbatch` (those three jars and the 0.40.1 surface).
 - HANDOFF-RS.md and HANDOFF-RSb.md retired: their queued work is in PLAN.md "Queued from RS".
 - Noah's approvals (2026-10-21) recorded in FL's, F3's and S3's as-built sections, PLAN.md's scenario table and STEWARD-SYNC.
+
+### Main merged in during the integration (gate tooling)
+
+origin/main moved three times while the batch was gated, all gate tooling: dfab398b (P1: `--shards auto`, undo-step slice subsets
+with `-full` twins at release), 027b48ec (P2: the structure and look lints), ca50b90e (P3: the water and survival ledger lints, P3
+`-smoke` twins). Each was merged with `--no-ff`. Conflicts:
+- `tools/gate-chains.json`: one `tiers.release.always`, the union of main's (P1's `-full` twins, P2's lints, P3's lints and probes)
+  and the batch's `6c-scenario-s3`. Main carried two `always` keys between P2 and P3; P3 fixed that. The impact rules come from both
+  sides. `node tools/p3-mode.mjs smoke` then names the `-smoke` ids in the batch's own rules too, and `--check` says `smoke`.
+- `Stockpiles.feed`: main moved the feed pass into `feedPass`/`FeedVisit` (the ledger lint's seam). RS's rule that a survival region
+  target reserves only its current run's bill is now `FeedVisit.reservation`. Its default is `r.unbuilt`, and the production visit
+  overrides it with `RegionTargets.reservation`.
+- The H, HY and KC drivers import both FL's `fl-norm.mjs` and main's `p3-tier.mjs`.
+
+**What the lints found on the batch's plans, and the fixes.** The lint cases now include S3's and F3's goldens and the fl, f3 and rs
+plan dirs (`tools/lib/lint-cases.mjs`, `lint-look-cases.mjs`).
+- Two real findings, both F3's:
+  - grove_demo had M20:natural. Pale oak logs stood within fire reach of natural lava. Grown forms now keep their canopy off survey
+    lava columns, grown by FIRE_REACH.side (`forms/place.mjs`).
+  - grove_demo_flat had M2. The stub entrance and spawn stood inside a grown form. They now go to the nearest column outside F3's
+    masks (`compile.mjs` `stubAnchors`); every plan without F3 masks is unchanged.
+- grove_demo and grove_demo_flat were re-cut (91204cb8395f, 012f84dde047). release-version `--check` is consistent, and the kit suite
+  passes 732/0.
+- Some broken variants never reach the lint. The plan check refuses them as their fixtures expect (FL u02, F3 u03 and u06), or the
+  kit checker's own M18 or M19 catches them (F3 u02 and u05). Those count as caught. rs08 is planned over its own biome grid by
+  rs-b.test, so that runner owns it.
+- The water lint now expects M25:clear from F3 u01, F3 u04 and FL u03.
+- The look lint's four L-LAMP baseline entries (S7, and districts_demo natural and flat) stay. FL's look fix L3 applies only to plans
+  with a free zone, by FL's design, so these counts stand. The reason is recorded in the baseline, and the follow-up is in PLAN.
+- Lint results: structure 57/57, look 13/13, mutations 8/8, water 118/118.
+
+**Ledger lint (P3), RS-b's farmland rule.** `LedgerLintTest.fuzzCiSeeds` at 20,000 seeds:
+- Main gives L-V7 860, from every dry.
+- After the batch merge it gave L-V7 2 and 52 untagged refund mismatches, all on the restart path.
+- The cause: RS-b's S-CU-3 rule (dried farmland stays built) holds only while the run keeps its built bit. A restart's rescan reads
+  the dried cell as not built.
+- LedgerSim now books that path as L-V7. The result is **0 violating, L-V7 306**: only the restart path remains. The CI seeds and
+  LedgerProbeTest pass.
+- RS rows in the P3 cutover (rs `-smoke` twins) are left for a follow-up.
+
+### Suites (head 145c96f8)
+
+| Suite | Result |
+|---|---|
+| mod | `./gradlew build --offline`: 829 tests, 0 failed before the P2/P3 merges. unit-mod passed in every gate run since |
+| kit | 732/0 |
+| sidecar | `npm run check`: 759/759, plus the bundle |
+| api-compat | `--gate6cbatch` clean, against the 0.40.1, 0.40.0 and 0.39.1 apitest jars and the 0.40.1 surface (0.40.1 built here from its tag into `artifacts/gate6c-batch/v0401`). `--gate6cf3`, `--gate6cs3` and `--gate6cfl` clean |
+| versions | `release-version.mjs --check`: consistent (API 1.38.0, mod 0.41.0, kit 0.39.0, catalogue 11); the six tracked goldens re-plan byte for byte |
+
+### Gate evidence (`artifacts/gate-runs-0410/`, ports 8960-8971, $0)
+
+- **The whole slice tier over origin/main** (`20261021-180501-slice`, 140 steps, 3 shards, 4h27m): 129 PASS, 10 FAIL, 1 TIMEOUT.
+  Timing bars were recorded, not judged.
+  - Fixed and re-run in `20261021-223313-slice` (8 PASS) and `20261021-235214-slice`:
+    - s3-unit, f3-unit, rs-unit and fl-unit: sibling changes in each slice's byte-identity item (`tools/lib/batch-0410.mjs`).
+    - rs-ingame: the kit's isLeaves threw on a construction crate.
+    - b-ingame item 10: RS made survival brushes natural-only and free.
+    - voc-unit: item 5 lacked F3's catalogue ids. Item 1 needs docker, and Noah's CI autoscaler stops OrbStack when idle, so it ran
+      with a keepalive container.
+    - 6b-nudges: the TIMEOUT, under load, passed on re-run.
+  - 6c-scenario-s3 natural failed bars 1, 5 and 6 on one survey. S3's own branch kit plans that survey to the identical IR, and the
+    re-run passed (PLAN).
+  - Known on main, not the batch's: h-unit H-a item 10 and pt2-ingame item 13.
+- **Release-only steps** (`20261021-180718-release`, `--release v0.41.0`): 6a-crash, 6b-commands and 6b-versionc PASS.
+  - umt-long fails on untagged UMT findings. Both clock seeds reproduce identically on v0.40.1, so it is pre-existing
+    (`evidence/umt-long-v0401-seed*.log`).
+- **After each main merge**, every step whose files moved:
+  - `20261022-001822-slice` (P1): 46/47, h-unit only.
+  - `20261022-020720-slice` (P2+P3 and the lint fixes, 110 steps): 107 PASS, 3 FAIL. The water lint was fixed after that run
+    (118/0); h-unit and pt2-ingame are known.
+- **RP wiring in game:**
+  - rsb-ingame, half-built rs04: 1244 UNFINISHED = the cells of the one unbuilt target.
+  - Then build.done: 0 UNFINISHED, both targets listed, and `dev.region.realised verify` ok (1352 cells checked, 0 not held).
+  - rs-ingame, rs02: built targets listed; after build.done 9/9 listed and verify ok (3396 cells).
+- **gate-verifier: PASS** at ed549acd (`artifacts/gate-runs-0410-verify/20261022-002111-release`, 11/11). Re-runs:
+  - rs-survival, rs-crash, rsb-crash, rsb-ingame and rs-ingame;
+  - f3-ingame (coral through the merged drain);
+  - h-holders, h-rmcrash, irr-holders, rp-crash and umt.
+  - Its review found no defect in the conflict resolutions or the RP wiring.
+- A delta verification of the later merges is recorded below when it returns.
+
+### Approvals
+
+Noah, 2026-10-21, in chat with the coordinator:
+- N-F3-2: F3's forms, coral and scale.
+- S3 bar 16: the monastery gallery. S3 v1 is green.
+- N-FL-1: organic irregularity as shown, v69's straight-run share 0.639.
+- N-FL-2: ring lots facing inward.
+
+Steward RC passed on F3, RS-a and RS-b.
