@@ -125,8 +125,8 @@ steps.unit = async () => {
   const U = await import('./lib/gate6ccoa-kit.mjs');
   Object.assign(out, await U.unit(root, { check, log, OUT, nodeTest }));
   // items 2, 3, 8 (mod)
-  out.java = await javaTests(['*PlanRetentionTest*', '*RegionWaitTagsTest*', '*ApiRulesTest*'], 10);
-  check(out.java.ok, `items 2, 3, 8 (mod): PlanRetentionTest (the last-use sweep: a keyed plan touched at day 29 survives day 35, an untouched one goes; 7 days unkeyed, 30 keyed; a pinned artifact holds its plan; keyed pins end at the key's realise and 30 days after their last use; an old pins file), RegionWaitTagsTest (a tile's plan parts, the tags, the sentence), ApiRulesTest (the features): ${out.java.tests} tests, ${out.java.failures} failures (${out.java.names.join('; ')})`, out.java.tail);
+  out.java = await javaTests(['*PlanRetentionTest*', '*RegionWaitTagsTest*', '*RealiseKeyTest*', '*ApiRulesTest*'], 13);
+  check(out.java.ok, `items 1, 2, 3, 8 (mod): RealiseKeyTest (the key rule: a stale retry under the same key, a standing region holds it, an undo frees it), PlanRetentionTest (the last-use sweep: a keyed plan touched at day 29 survives day 35, an untouched one goes; 7 days unkeyed, 30 keyed; a pinned artifact holds its plan; keyed pins end at the key's realise and 30 days after their last use; an old pins file), RegionWaitTagsTest (a tile's plan parts, the tags, the sentence), ApiRulesTest (the features): ${out.java.tests} tests, ${out.java.failures} failures (${out.java.names.join('; ')})`, out.java.tail);
   // item 3 (sidecar)
   const s = spawnSync('npx', ['vitest', 'run', 'test/regions-discard.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 600_000 });
   const st = `${s.stdout}${s.stderr}`;
@@ -223,6 +223,16 @@ steps.keys = async () => {
   check(k2.region?.id === r.region, `item 1: after a restart realiseByKey(k) finds ${k2.region?.id ?? 'nothing'}`);
   const rm = await call('dev.region.remove', { region: r.region, requester: OWNER }, 3_600_000);
   check(!!rm.removed, `the region removed (${rm.removed})`);
+  // (§14 amendment) an undo frees the key, as since C20: realiseByKey empty, and the same key realises afresh
+  const k3 = await call('dev.region.realiseByKey', { owner: OWNER, opKey: K });
+  const c = await checkPlan(PLAN('gate_coa_keys'), W.claim, { anchors: W.anchors });
+  const r3 = await call('dev.region.realiseApproved', { sha: c.artifactSha, opKey: K }, 300_000);
+  out.afterUndo = { byKey: k3.region ?? null, region: r3.region ?? r3.refused };
+  check(!k3.region && !!r3.region && r3.region !== r.region, `item 1 (§14): after the undo realiseByKey(k) is empty and the same key realises afresh (${json(out.afterUndo)})`);
+  if (r3.region) {
+    await waitPlaced(r3.region);
+    await call('dev.region.remove', { region: r3.region, requester: OWNER }, 3_600_000);
+  }
   return out;
 };
 

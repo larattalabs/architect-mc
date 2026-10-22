@@ -1135,20 +1135,19 @@ public final class RegionsImpl implements Regions {
 			String hash = RegionKeys.hash(RegionKeys.realiseBody(r));
 			String scope = RegionKeys.scope(owner, "region.realise", key);
 			Live live = regionByKey(owner, key);
-			if (live != null) {
-				if (!hash.equals(live.rec().opHash)) {
-					throw conflict(key, owner, live.rec().id);
-				}
-				Architect.LOGGER.info("Region {}: realise adopted by opKey {} ({})", live.rec().id, key, live.rec().state.name().toLowerCase(java.util.Locale.ROOT));
-				return CompletableFuture.completedFuture(live.rec().id);
-			}
 			KeyedRealise kr = REALISE_KEYS.get(scope);
-			if (kr != null) {
-				if (!kr.hash().equals(hash)) {
-					throw conflict(key, owner, null);
+			switch (keyOutcome(live == null ? null : live.rec().opHash, kr == null ? null : kr.hash(), hash)) {
+				case CONFLICT -> throw conflict(key, owner, live == null ? null : live.rec().id);
+				case ADOPT_REGION -> {
+					Architect.LOGGER.info("Region {}: realise adopted by opKey {} ({})", live.rec().id, key, live.rec().state.name().toLowerCase(java.util.Locale.ROOT));
+					return CompletableFuture.completedFuture(live.rec().id);
 				}
-				Architect.LOGGER.info("Realise adopted by opKey {} (still starting)", key);
-				return kr.future();
+				case ADOPT_STARTING -> {
+					Architect.LOGGER.info("Realise adopted by opKey {} (still starting)", key);
+					return kr.future();
+				}
+				case NEW -> {
+				}
 			}
 			CompletableFuture<String> mine = new CompletableFuture<>();
 			REALISE_KEYS.put(scope, new KeyedRealise(hash, mine));
@@ -1166,6 +1165,24 @@ public final class RegionsImpl implements Regions {
 			}));
 			return mine;
 		}).thenCompose(f -> f);
+	}
+
+	/** (6c close-out A, §1) What a keyed realise does with its key. */
+	enum KeyOutcome { NEW, ADOPT_REGION, ADOPT_STARTING, CONFLICT }
+
+	/**
+	 * (6c close-out A, §1 and its §14 amendment) The realise key rule, pure: {@code standingHash} is the body hash of the standing region
+	 * realised under the key (null when none: never realised, refused before its record, or REMOVED, as since C20), {@code startingHash}
+	 * the one still starting under it (null when none). The same body adopts, another conflicts, and no holder starts afresh.
+	 */
+	static KeyOutcome keyOutcome(@Nullable String standingHash, @Nullable String startingHash, String hash) {
+		if (standingHash != null) {
+			return standingHash.equals(hash) ? KeyOutcome.ADOPT_REGION : KeyOutcome.CONFLICT;
+		}
+		if (startingHash != null) {
+			return startingHash.equals(hash) ? KeyOutcome.ADOPT_STARTING : KeyOutcome.CONFLICT;
+		}
+		return KeyOutcome.NEW;
 	}
 
 	/** (6c X) Hold the next keyed realise's future after its region record is saved (the gate's item 3). */

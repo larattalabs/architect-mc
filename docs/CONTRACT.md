@@ -24077,6 +24077,10 @@ Plus the impact map's steps (`gate-run.mjs slice --since origin/main`).
   - Steward re-pins and looks up its keyed plans at every world start for each build it resumes.
   - **Gate (added to items 2 and 3):** a keyed plan touched at day 29 survives a sweep at day 35, and an untouched one is swept; the same
     for a keyed pin re-pinned at day 29.
+- **§1 amended (coordinator, 2026-10-22; Steward told):** the key is its region's in **every state but REMOVED**: `realiseByKey` is
+  empty once the region is removed, as since C20, and the same key realises afresh after an undo. Unit test `RealiseKeyTest` (a stale
+  retry under the same key, a standing region holds it, an undo frees it); in game, gate item 1 realises again under the key after the
+  undo.
 - **S-COA-1:** `over` beside `scope`, as proposed. Steward writes `over: "lots"`.
 - **S-COA-2:** all of a key's pins end at its realise, as proposed.
 - **S-COA-3:** `OVERLAP_BUSY {realised | busy | pinned}`, as proposed.
