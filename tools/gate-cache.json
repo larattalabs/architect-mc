@@ -1,0 +1,244 @@
+{
+ "$comment": "The step result cache and the affected-only release (docs/GATES.md \"Affected-only releases\"). Hand-written policy; tools/step-inputs.json is the derived input map (tools/step-inputs.mjs). Read by the runner only (no gate driver reads this file, so editing it never changes a step's inputs).",
+ "runnerFiles": [
+  "tools/gate-run.mjs",
+  "tools/step-inputs.mjs",
+  "tools/step-cache.mjs",
+  "tools/nightly.mjs",
+  "tools/nightly-install.mjs",
+  "tools/lib/step-cache.mjs",
+  "tools/lib/step-inputs.mjs",
+  "tools/lib/step-trace.mjs",
+  "tools/lib/gate-history.mjs",
+  "tools/lib/shard-auto.mjs"
+ ],
+ "classes": {
+  "$comment": "Input classes: globs (a leading ! excludes). A step's input set is the union of its classes, its drivers' module closure, the globs that closure needs and the data its traced runs read.",
+  "jar": [
+   "mod/**",
+   "!mod/src/test/**",
+   "devserver/**",
+   "apitest/**",
+   "kit/voxel_classes.json",
+   "kit/schemas/**",
+   "kit/examples/**",
+   "tools/run-gate4d-client.sh",
+   "tools/run-gate4e-client.sh",
+   "tools/run-gate5b-client.sh",
+   "tools/run-gate6a-client.sh",
+   "tools/run-gate6b-client.sh",
+   "tools/run-gate6c0a-client.sh"
+  ],
+  "jarRoots": [
+   "tools/gen-palettes.mjs",
+   "tools/run-headless-server.mjs"
+  ],
+  "sidecar": [
+   "sidecar/**",
+   "kit/**",
+   "!kit/test/**",
+   "!kit/lint/**"
+  ],
+  "world": [
+   "scenarios/**"
+  ],
+  "gradle": [
+   "mod/**",
+   "kit/**",
+   "sidecar/**",
+   "devserver/**",
+   "apitest/**",
+   "tools/gen-palettes.mjs"
+  ],
+  "untraced": [
+   "kit/**",
+   "scenarios/**"
+  ]
+ },
+ "classRules": {
+  "$comment": "Which classes a step gets: by its client (any game client, `self` included), by a gradle cwd, by modules in its closure (a driver that talks to a game, or runs gradle in the source checkout). A closure module that spawns node with a fresh environment (env: { PATH: ... }: the child runs untraced) adds untracedNode.",
+  "client": [
+   "jar",
+   "sidecar",
+   "world"
+  ],
+  "gradleCwd": [
+   "gradle"
+  ],
+  "sidecarCwd": [
+   "sidecar"
+  ],
+  "closureModules": {
+   "tools/lib/devclient.mjs": [
+    "jar",
+    "sidecar",
+    "world"
+   ],
+   "tools/lib/src-gradle.mjs": [
+    "gradle"
+   ]
+  },
+  "untracedNode": [
+   "untraced"
+  ]
+ },
+ "derived": {
+  "$comment": "Untracked paths a step may read that are built from tracked inputs: the trace allows them, and the key carries the tracked files they derive from (globs).",
+  "sidecar/node_modules/**": [
+   "sidecar/package.json",
+   "sidecar/package-lock.json"
+  ],
+  "sidecar/dist/**": [
+   "sidecar/**"
+  ],
+  "kit/node_modules/**": [
+   "kit/package.json",
+   "kit/package-lock.json"
+  ],
+  "node_modules/**": [
+   "package.json",
+   "package-lock.json"
+  ],
+  "tools/node_modules/**": [
+   "tools/package.json",
+   "tools/package-lock.json"
+  ],
+  "mod/build/**": [
+   "mod/**"
+  ],
+  "mod/.gradle/**": [
+   "mod/**"
+  ],
+  ".gradle-home/**": [
+   "mod/build.gradle",
+   "mod/gradle.properties",
+   "mod/settings.gradle",
+   "mod/gradle/**"
+  ],
+  "apitest/build/**": [
+   "apitest/**",
+   "mod/**"
+  ],
+  "apitest/.gradle/**": [
+   "apitest/**"
+  ],
+  "devserver/build/**": [
+   "devserver/**",
+   "mod/**"
+  ],
+  "devserver/.gradle/**": [
+   "devserver/**"
+  ],
+  "sidecar/dist-eval-test/**": [
+   "sidecar/**"
+  ]
+ },
+ "fingerprint": {
+  "$comment": "Untracked inputs hashed by content when a key is computed (local data that is not in git).",
+  "globs": [
+   "kit/stamps/**"
+  ]
+ },
+ "state": {
+  "$comment": "Untracked run-time state a step reads in its run worktree or the source checkout: the game dir, logs, scratch. Not an input (the worlds a step restores are fingerprinted from the snapshot store; what a base step creates comes from code).",
+  "globs": [
+   "mod/run/**",
+   "run/**",
+   "mod/logs/**",
+   "**/*.log",
+   "sidecar/scratch/**",
+   "out/**",
+   "kit/out/**",
+   "_import/**",
+   ".env"
+  ]
+ },
+ "external": {
+  "$comment": "Files a step read under the main checkout's artifacts/ (archived tag builds, apitest jars): fingerprinted (size, mtime) into its cache entry and re-checked at every lookup. These are caches keyed by content, or a run's own evidence: ignored.",
+  "ignore": [
+   "plan-cache/**",
+   "lint-cache/**",
+   "step-cache/**",
+   "gate-runs*/**",
+   "gate-step-history.json*",
+   "nightly/**",
+   "p3-mutants/**"
+  ]
+ },
+ "uncacheable": {
+  "$comment": "Steps never served from the cache (their PASS is not recorded): fresh-seed fuzz, inputs outside git that the key can't see, probes that read other steps' evidence of the same run.",
+  "umt-long": "fresh clock seeds every run: the point is new seeds",
+  "apijars": "runs the archived apitest jars under artifacts/ (outside git)",
+  "6b-versionc": "runs an archived release jar (outside git)",
+  "p3-probe-water": "reads h-ingame, hy-ingame and h-probe's evidence of the same run",
+  "p3-probe-ledger": "reads y-ingame and cu-survival's evidence of the same run",
+  "p2-calibration": "a calibration probe: always runs at release",
+  "d2-findsite": "a by-hand pin",
+  "6c-scenario-s3-dev": "a by-hand pin"
+ },
+ "modeEnv": {
+  "$comment": "The environment that changes what a step runs: every variable a module of its closure reads (process.env.NAME), every ambient variable with the project's prefixes (prefixes: the JVM, the sidecar, the client scripts and aliased reads are invisible to the scan), plus always; less the per-run plumbing (ports, run and out dirs, tokens; a *_DIR that redirects an input, such as ARCHITECT_STAMPS_DIR or LINT_KIT_DIR, is a mode).",
+  "always": [
+   "GATE_P3",
+   "GATE_P2_SMOKE",
+   "CALIBRATION_WRITE",
+   "ARCHITECT_RELEASE",
+   "ARCHITECT_TEST_SLOW_TILES",
+   "ARCHITECT_APITEST",
+   "ARCHITECT_HEADLESS"
+  ],
+  "plumbing": "^(PATH|HOME|USER|TMPDIR|JAVA_HOME|GRADLE_USER_HOME|GATE_RUNNER|GATE_KIT_RESULTS|GATE_KIT_TREE|GATE_UNIT_MOD_RUN|GATE_TRACE_DIR|GATE_TRACE_ROOT|GATE_TRACE_ROOTS|GATE_HISTORY_FILE|GATE_SLOTS|GATE_SLOTS_DIR|GATE_SLOT_POLL_MS|GATE_PORTS|GATE_SHARD_PORTS|GATE_RUN_DIR|GATE_RUN_DIRS|GATE_RUNS_OUT|GATE_LOCK|GATE_SEED_DIR|GATE_SNAPSHOT_DIR|GATE_NOTIFY|GATE_NOTIFY_SCRIPT|GATE_AUTO_PROBE|GATE_STEP_CACHE_DIR|GATE_PART|GATE_PART_ALL|SCENARIOS_ART|ARCHITECT_DEV_TOKEN|ARCHITECT_SHOTS_DIR|ARCHITECT_ARTIFACTS|ARCHITECT_EVAL_PORT|ARCHITECT_GAME_DIR|ARCHITECT_PORT|ARCHITECT_DEV_PORT|ARCHITECT_GATE_SIDECAR_PORT|ARCHITECT_GATE_DEV_PORT|ARCHITECT_GATE_OLD_SIDECAR_PORT|ARCHITECT_GATE_OLD_DEV_PORT|APITEST_GAME_DIR|APITEST_OUT|P3_RUN|LINT_OUT|GATE4E_RUN|GATE5B_RUN|GATE6A_RUN|GATE6B_RUN|GATE6B_DEV_PORT|GATE6B_SIDECAR_PORT|.*_OUT)$",
+  "prefixes": "^(ARCHITECT_|GATE_|G5B_|RS_|IRR_|HYB_|UPDATE_|LINT_|UMT|LEDGER|CALIBRATION_|P2_|P3_|APITEST_|T3[AB]_|K1B_|F3_|C3[078]_|GATE6)"
+ },
+ "release": {
+  "$comment": "The release tier's selection (docs/GATES.md \"Affected-only releases\"). Candidates: tiers.release.always, the rotation, and every step an impact rule names (change and slice lists), the supersededBy twins dropped. A candidate runs when its key misses, when it is a canary, or when it is a full twin whose last PASS is older than the last full nightly.",
+  "canaries": {
+   "always": [
+    "p2-calibration",
+    "p3-probe-water",
+    "p3-probe-ledger"
+   ],
+   "scenarioRotation": [
+    "6b-scenario-s1",
+    "6c-scenario-s2",
+    "6c-scenario-s3",
+    "6cv-scenario-s7"
+   ],
+   "crashRotation": "crash suite",
+   "judgedBenches": true
+  },
+  "autoFull": {
+   "$comment": "--full is the rule when the release range matches: the Minecraft version or a build dependency (mod/build.gradle, settings, the wrapper, gradle.properties beyond mod_version), or an impact rule tagged engine.",
+   "paths": [
+    "mod/build.gradle",
+    "mod/settings.gradle",
+    "mod/gradle/**",
+    "devserver/build.gradle",
+    "apitest/build.gradle"
+   ],
+   "gradleProperties": "mod/gradle.properties",
+   "propertiesExcept": [
+    "mod_version"
+   ],
+   "tags": [
+    "engine"
+   ]
+  },
+  "evidenceDeps": "a canary or a running step whose waitFor target (other than unit-kit, whose JUnit report a cached run hands on) reads that step's evidence of the same run: the target runs too"
+ },
+ "nightly": {
+  "$comment": "tools/nightly.mjs: release --full --no-cache on a fresh detached origin/main, in its own worktree and run dirs. extraArgs: added to the gate-run command (--turbo: the run waits for the whole machine and holds it, docs/GATES.md \"Turbo\"). idleWaitMin: when a gate run is active or queued at start, how long to wait for an idle machine (no queue ticket taken) before skipping the night; 0 (the brief): exit at once. yieldAfter (local time): past it, with another run queued, the turbo run yields (SIGUSR2: nothing new starts, its running steps finish) and the steps it didn't start run as a one-slot run; the summary records the yield.",
+  "worktree": "../architect-mc-nightly",
+  "runDir": "../architect-mc-nightrun",
+  "out": "artifacts/gate-runs-nightly",
+  "extraArgs": [
+   "--turbo"
+  ],
+  "idleWaitMin": 0,
+  "seedFromMain": [
+   ".gradle-home",
+   "sidecar/node_modules"
+  ],
+  "yieldAfter": "05:30"
+ }
+}

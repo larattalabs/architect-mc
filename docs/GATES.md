@@ -10,7 +10,12 @@ node tools/gate-run.mjs change --since origin/main --plan        # what a tier w
 node tools/gate-run.mjs change --since origin/main               # minutes: the unit suites + the steps the diff maps to
 node tools/gate-run.mjs slice  --since origin/main                 # units + apijars + the impact steps + the slice's own steps; timing bars recorded;
                                                                   #   over 20 steps the shard count and ports are chosen for the machine (--shards auto)
-node tools/gate-run.mjs release --release v0.12.0                  # overnight: everything, duplicates rotated; timing bars judged, --quiet-wait on; auto shards
+node tools/gate-run.mjs release --release v0.12.0                  # the candidates whose cache key misses + the canaries; timing bars judged, --quiet-wait on
+node tools/gate-run.mjs release --release v0.12.0 --full           # every candidate and every rotation option (automatic on engine/Minecraft/build changes;
+                                                                  #   --no-auto-full: the cache's own selection anyway)
+node tools/gate-run.mjs slice  --since origin/main --no-cache      # run every selected step (a PASS is still recorded); --no-trace: no trace, no record
+node tools/step-inputs.mjs check                                 # CI: every driver's imports inside its recorded input set
+node tools/nightly.mjs                                           # the nightly: release --full --no-cache on origin/main (LaunchAgent at 02:00)
 node tools/gate-run.mjs slice  --since origin/main --shards 3 --ports 8896:8897,8898:8899,8900:8901   # a fixed shard count, as before
 node tools/gate-run.mjs quick                                    # a named chain (quick | regress | engine), as before (bars judged)
 node tools/gate-run.mjs change --since origin/main --slots 2     # at most 2 gate runs on the machine at once (default slots.max, 4)
@@ -83,6 +88,220 @@ free, so a SIGKILLed run does not hold one. `--slots N` / `GATE_SLOTS` overrides
 separate from the run's own `--lock`, which still guards one runner's run dir and ports. The plan shows how many slots are in
 use; `SUMMARY.md` and `summary.json` (`slot`) record the slot and the wait. Runners started before this change take no slot, so
 for the first runs the count is a floor.
+
+## Affected-only releases: the step cache and the nightly (Noah, 2026-10-22)
+
+A release re-ran about 140 steps even when the batch's slices had passed them on the same code; 0.41.0 took about 12 hours end to
+end. Now every step's PASS is recorded under a key that names everything that can change its result. A release runs the steps
+whose key has no recorded PASS, plus a fixed set of canaries. A nightly full run on origin/main keeps the cache warm and catches
+what the input map misses.
+
+### Step inputs (`tools/step-inputs.json`, `tools/step-inputs.mjs`)
+
+A step's input set is the union of four parts:
+
+| part | what | from |
+|---|---|---|
+| classes | whole trees, by the step's kind (tools/gate-cache.json `classes`). Any game client (`self` too): `jar` (mod/** less mod/src/test, devserver/, apitest/, the client scripts, the kit files the jar copies) + `sidecar` (sidecar/** and the kit it runs: kit/** less kit/test and kit/lint) + `world` (scenarios/**). A gradle cwd, or a driver that runs gradle in the source checkout (`src-gradle.mjs`): `gradle` (mod/**, kit/**, sidecar/**: the Java tests read ../kit and ../sidecar). | its client, cwd, closure |
+| closure | the drivers' module closure: the tools/... files its command names (and the test globs it passes to node, kit/test/*.test.mjs), their static imports, literal `import('...')`, `new URL('...', import.meta.url)`, literal repo paths and `path.join(..., 'lit', 'lit')` tails | `step-inputs.mjs build` (static) |
+| globs | the directories literal paths name (kit/test/fixtures/plan/**), widened | `build` |
+| data | what the step's traced runs read outside the rest, widened to the directory (a file -> its directory/**, a listing -> that directory/**) | `step-inputs.mjs merge <run dir>` |
+
+The JVM (the client, gradle) and a sidecar the runner starts are not traced, which is why the in-game and gradle steps carry whole
+trees. A consequence, by design: **a change under mod/src/main, mod/src/client or kit/ outside kit/test and kit/lint invalidates
+every in-game step**, because the jar or the sidecar the clients run contains it. A change to one driver, a kit test, a lint, a
+fixture or docs invalidates only the steps whose sets hold it. The `gradle` class also holds devserver/ and apitest/, because
+mod/settings.gradle includes them and `gradlew build` compiles both.
+
+**The trace** (`tools/lib/step-trace.mjs`). Every step runs with `NODE_OPTIONS=--import=<tracer>`. Each node process of the step
+records the files it loads as a module, reads, lists or stats. That covers the driver, `node --test` and vitest, and any node child
+that inherits the step's environment. The traced roots are the source checkout and the shard's run worktree, both holding the
+commit's tree, and the main checkout's artifacts/. The records go to `<run>/traces/<step>/`. A computed import
+(`import(pathToFileURL(path.join(KIT, rel)))`, about 1200 sites) is not resolved statically; the trace records what it loads.
+
+**Run state is not an input**: tools/gate-cache.json `state` (mod/run, logs, sidecar/scratch). **Derived files** (node_modules,
+mod/build, .gradle-home) count as the tracked files they come from (`derived`). kit/stamps (gitignored, harvested locally) is
+hashed by content (`fingerprint`). Files read under the main checkout's artifacts/ (archived tag builds, apitest jars) are recorded in the
+cache entry with their size and mtime, and a lookup re-checks them. Caches keyed by content (plan-cache, lint-cache) and a run's own
+evidence are not inputs.
+
+**The check** (CI, `node tools/step-inputs.mjs check`) rebuilds the static part at HEAD and fails when:
+- a step's closure reaches a file outside its recorded set (a driver gained an import);
+- a step's classes, roots or the environment variables its closure reads differ from the recorded ones;
+- a step has no entry.
+
+The fix is `node tools/step-inputs.mjs build` (it keeps the traced data) and a commit. `show <step>` prints a set and its file count
+at HEAD; `which <path>` lists the steps whose sets hold a path.
+
+### The key and what is recorded (`tools/lib/step-cache.mjs`)
+
+A step's key is a hash of:
+- **inputs**: the git blob id of every tracked file in its set at HEAD, plus the tracked sources of the derived files it read,
+  plus the content of its fingerprinted local data;
+- **definition**: gate-history's `stepDefinition` (the chain entry, `desc`/`estMin`/`timeoutMin`/`supersededBy` aside, and the
+  blob ids of the drivers its shell names), the **resolved** client entry and host (after `--host`), the step's `env`;
+- **toolchain**: `node` (process.version), `java -version` of JAVA_HOME, mod/gradle.properties less `mod_version` (the Minecraft,
+  loader, Fabric API, loom and lab-ui versions);
+- **modes**: every environment variable a module of its closure reads (`process.env.NAME`), every ambient variable with the
+  project's prefixes (`ARCHITECT_`, `GATE_`, `G5B_`, ...: the JVM, the sidecar, the client scripts and aliased reads are invisible to
+  the scan), plus `GATE_P3`, `GATE_P2_SMOKE`, `CALIBRATION_WRITE`, `ARCHITECT_RELEASE`, `ARCHITECT_TEST_SLOW_TILES`,
+  `ARCHITECT_APITEST` and `ARCHITECT_HEADLESS` always; less the per-run plumbing (ports, run and out dirs, tokens).
+  A `*_DIR` that redirects an input, such as `ARCHITECT_STAMPS_DIR`, counts as a mode.
+  The P2 calibration record and the P3 mode are committed files the trace sees, so they are inputs;
+- **flags**: the release context (branch, a v* tag at HEAD) for steps whose closure has `tools/release-context.mjs`; the code trees
+  (kit, scenarios, tools, mod, sidecar, devserver, apitest) of origin/main and of the merge base for steps whose closure diffs
+  against origin/main (the "unchanged" items); the newest reachable v* tag for closures that run `git describe --tags`
+  (release-version's last tag); the whole tree's file list for closures that run `git ls-files`;
+- **snapshots**: size and mtime of the level.dat of every world the step restores, and of its client's world, in the snapshot store.
+
+**A source HEAD that moves during a run** (a commit or checkout in the source checkout) stops recording from there on, as does a tree
+that turns dirty. **A dirty source tree never looks up and never records** (`git status --porcelain --untracked-files=all` non-empty: the drivers
+run from the working tree, and an untracked file can be imported). Keys are git blob ids, so they are computed at a commit. The same
+function gives `tools/step-cache.mjs replay` its keys at a past head.
+
+**Recorded** (`<main checkout>/artifacts/step-cache/<step>/<key>.json`: the run dir, the step log, the evidence dir, the head and
+time; for unit-kit its JUnit report and kit tree) only when every one of these holds:
+- the step ended PASS;
+- no timing bar was recorded rather than judged (`timingRecorded` empty). A slice PASS with a bar missed never serves anything;
+- it is not a **judged bench**: a bench step of the release tier's own lists (always and rotation: megalite, throughput, megaA,
+  megaB, heap, volume, s1, s2, s3). Their timing is judged at every release, so they are canaries there and never cached. The
+  slices' scenario steps (forms, relief, scatter, route, districts, s7, mp-ingame) are ordinary candidates: they cache when they pass
+  with no bar missed;
+- it ran traced, and every source path its trace touched is inside its set. Otherwise the run reports an **inputs-map miss**
+  (`summary.json` `inputsMisses`, SUMMARY.md, the runner log) and the PASS is not recorded. The fix is
+  `node tools/step-inputs.mjs merge <run dir>`, a review of the globs it adds, and a commit; `node tools/step-cache.mjs import <run dir>`
+  then records that run's PASSes under the widened map;
+- the step is not **uncacheable** (tools/gate-cache.json `uncacheable`): umt-long (fresh clock seeds), apijars and 6b-versionc
+  (archived jars run by hand-made clients), the P3 probes (they read other steps' evidence of the same run), p2-calibration, the by-hand pins.
+
+FAIL, TIMEOUT, ERROR and NOISY are never recorded. `--no-cache` turns lookups off and still records. `--no-trace` turns both off.
+
+### Lookups and the release selection
+
+A tier run (`change`, `slice`, `release`) looks up every selected step. It does not when the run is a named chain, `--only`/`--from`
+(an explicit list, such as the verifier's re-runs, always runs), `--no-cache` or `release --full`. A step with a recorded PASS for
+its key is **CACHED**: it is not run. It is listed in `--plan`, in `summary.json` `cached` (key, PASS time, head, run dir, log) and in
+SUMMARY.md, each with a pointer to its evidence.
+
+**The release candidates** are `tiers.release.always`, the rotation, every step an impact rule names (its `change` and `slice`
+lists) and the slice tier's `always` list, with the `supersededBy` twins dropped. Today that is 179 steps under `--full`: the old
+release tier's 60 plus what a batch's slice run covered (0.41.0's integration slice ran 140). A candidate runs when one of these holds:
+1. **its key misses**: no recorded PASS, a dirty tree, an uncacheable step, or an archived input that changed;
+2. **it is a canary** (tools/gate-cache.json `release.canaries`), cached or not:
+   - the calibration probes p2-calibration, p3-probe-water and p3-probe-ledger;
+   - one big scenario, rotating 6b-scenario-s1, 6c-scenario-s2, 6c-scenario-s3, 6cv-scenario-s7 by the release's rotation key;
+   - the crash suite the existing rotation picks;
+   - the judged benches;
+3. **it is a full twin whose last PASS is older than the last full nightly**. A full twin is any `supersededBy` target: the -full
+   steps and the full ids of the -smoke steps. The nightly's start comes from `artifacts/nightly/latest.json`;
+4. **a running step needs it from this run**:
+   - its `after` dependency (4e-crash-full needs 4e-orders-full's context on its shard);
+   - a `waitFor` target whose evidence it reads (the P3 probes read h-ingame, hy-ingame and h-probe, or y-ingame and cu-survival);
+   - unit-mod, for a step that reads `GATE_UNIT_MOD_RUN` (gate6cmp).
+
+   `unit-kit` is the exception: when it is CACHED, its recorded JUnit report for the same kit tree is copied into the run and serves
+   the kit-suite readers (kit-reuse.mjs checks the tree).
+
+**Split steps** (turbo, docs/GATES.md "Turbo"): each part `<id>/p<k>` has its own key (its own entry: the section env) over its
+parent's input set, and is CACHED or run on its own; a canary or a judged bench takes all its parts.
+
+**`--full`** runs every candidate and every rotation option (the full megaB and throughput stand for their --fast/-smoke variants). It
+is **the rule, automatically,** when the release range touches one of these:
+- mod/build.gradle, mod/settings.gradle, the gradle wrapper, devserver/ or apitest/ build files;
+- mod/gradle.properties beyond `mod_version` (the Minecraft version or a dependency);
+- a path whose impact rule is tagged `engine`.
+
+`--plan` prints why. Run a manual `release --full` every few weeks as well, and after any toolchain or machine change the key can't
+see (a new JDK build is in the key; a changed snapshot world is in the key by its level.dat).
+
+What a CACHED step does not do: it does not re-measure. Its timing bars were recorded with its PASS; the judged benches always run.
+
+### The nightly (`tools/nightly.mjs`)
+
+At about 02:00 it:
+1. checks that no gate run is active or queued (a live slot holder or queue ticket in the slot dir). If one is, it **exits at once**
+   and the night is skipped (`artifacts/nightly/<date>/summary.json` says why). `nightly.idleWaitMin` (0) can make it wait that long
+   for an idle machine first, without taking a queue ticket, so it never queues ahead of a run;
+2. fetches origin and moves its own worktree (`../architect-mc-nightly`, detached) to origin/main. The main checkout is never
+   checked out or pulled. A nightly worktree with local changes skips the night;
+3. runs `release --full --no-cache --turbo` there (`nightly.extraArgs`), in its own run dirs (`../architect-mc-nightrun[-s<k>]`)
+   and out dir (`artifacts/gate-runs-nightly/`). As a turbo run it holds the whole machine: a run started during the night waits in
+   the queue for it (FIFO), and nothing is killed. **The yield guard** (`nightly.yieldAfter`, 05:30 local): past it, with another run
+   queued, the nightly sends its runner SIGUSR2. The runner starts no new step, lets its running steps finish, and ends `stopped`
+   with `yielded` (the steps not started are SKIPPED, error "yielded"). The nightly then runs those steps as a normal one-slot run
+   (`release --no-cache --no-turbo --only ...`), which queues like any run. The summary records the yield, both runs and the
+   combined verdict;
+4. writes `artifacts/nightly/<date>/SUMMARY.md`, `summary.json` (head, verdict, counts, wall, slot wait, what didn't pass, PASSes
+   recorded), `impact-map-misses.json`, `misses-log.md`, and `artifacts/nightly/latest.json` when the run finished.
+
+It sends no notification of any kind; the coordinator reads the summary. It never kills anything:
+- one nightly at a time: `artifacts/nightly/nightly.lock` holds the pid, and a second nightly exits at once ("already active");
+- its gate run takes a slot like any run and waits in the queue;
+- SIGTERM to the nightly stops only its own runner.
+
+**An impact-map miss** is a step that the last release skipped as CACHED and that FAILs or TIMEOUTs in the nightly **at the same
+key**. Nothing in its set moved since the PASS that served the release, yet it fails, so the map lacks an input (or the step is flaky).
+A failing step whose key moved is listed as "explained", not as a miss. Each miss goes to `impact-map-misses.json`, with:
+- the fail lines;
+- both keys;
+- the PASS it was served from;
+- the files changed between that PASS's head and the nightly's.
+
+A ready line goes to `misses-log.md`. The nightly never writes to a tree, so **the coordinator pastes that line into the log below
+and commits it**, and widens the map.
+
+**Install** (persistent machine config; the coordinator runs it from the main checkout once this is merged):
+
+```sh
+node tools/nightly-install.mjs --print      # the filled plist (tools/launchd/dev.larattalabs.architect-nightly.plist), nothing written
+node tools/nightly-install.mjs              # writes ~/Library/LaunchAgents/dev.larattalabs.architect-nightly.plist, launchctl bootstrap gui/<uid>
+node tools/nightly-install.mjs --uninstall
+```
+
+The plist runs `node <checkout>/tools/nightly.mjs` at 02:00. Its environment is PATH (the mise node, Homebrew, system), HOME and
+JAVA_HOME, nothing else: no `ANTHROPIC_*`, no `GATE_NOTIFY`. Logs go to `~/Library/Logs/architect-nightly.log`.
+
+### Impact-map misses log
+
+Each line is a nightly's miss: the date, the step, what failed, where it was cached from, and what was done.
+
+| date | step | what | resolution |
+|---|---|---|---|
+
+### Measured
+
+Offline, 2026-10-22. The coordinator stopped the first traced warm-up run to keep the machine free for turbo's measurement, so no
+real release has run against a warm cache yet.
+
+- **The first traced run** (`artifacts/gate-runs-affected/20261022-161855-release`, `release --full` at 703187d5, 3 shards, stopped
+  by SIGINT after 1h50m with 22 steps done):
+  - 13 PASSes, each trace inside its set after one `merge`: unit-mod, unit-kit, rs-survival, t3a-look, h-ingame, hy-unit,
+    hy-ingame, irr-ingame, k1a-look, 4d-all-full, 4e-orders-full, 5b-chains-full and 6a-crash. They are recorded in the live cache
+    (`step-cache.mjs import`), and their sets are marked `verified`;
+  - 2 inputs-map misses on the first pass, both widened by `merge`: 5b-chains-full copies kit/ (kit/lint/** was missing), and
+    unit-kit stats four bare names at the repo root;
+  - fl-unit, f3-unit, voc-unit and vocc-unit failed for two reasons. The source worktree had no `.gradle-home` or
+    `sidecar/node_modules` (the drivers run gradle and vitest there; the nightly now clones both). And the slices' "against the
+    merge base" items fail on main, where the merge base is HEAD.
+- **Selection examples** (`--plan --since <base> --release v0.42.0` on a scratch commit over 8b5e1287; `--assume-warm <base>`
+  stands for "a full nightly passed at the base"):
+
+  | the release changes | the rule | the cache alone (`--no-auto-full --assume-warm`) | estimate (rule / cache) |
+  |---|---|---|---|
+  | one line of docs/PLAN.md | not --full | **18 of 182 run**: the 12 canaries, the probes' evidence (h-probe, y-ingame, cu-survival), 4e-orders-full for the crash suite, and the uncacheable umt-long, apijars and 6b-versionc. 164 CACHED | 2h20m on 2 shards + 2 lanes |
+  | one file in kit/lib/forms/ | **--full** (engine) | 164 of 168 run. CACHED: c33-unit and the three lints (their sets are not yet verified: a lint's computed kit imports come in with its first trace) | 5h53m / 5h16m |
+  | mod/.../region/RegionFluids.java | **--full** (engine) | 162 of 168 run. CACHED: unit-sidecar, c33-unit, water-lint and the three lints | 5h53m / 5h15m |
+
+  A kit/lib or mod/src/main change re-runs every in-game step, because the jar and the sidecar classes hold it. Docs, a driver, a
+  kit test, a lint or a fixture re-run only the steps whose sets hold them.
+- **0.41.0's history** (`tools/step-cache.mjs replay --at a6a947bc` over the batch's 34 slice, integration and verify runs, keys
+  only): 15 of the 169 steps they ran would have been served at v0.41.0's merge commit. 14 come from the last integration slice
+  run at 6d736f80, the batch's final merges having moved kit/lint/shard.mjs, the versions and the merge base under the rest; c33-unit
+  comes from aea80cf5. The slices' own branch-head PASSes serve nothing at the merged head. So the saving on a batch release comes
+  from the warm nightly at the integration head and from releases that change no jar or kit code, not from the slices' runs.
+- **The analysis cache**: `step-cache.mjs import-history --into artifacts/step-cache-history` over every run since the toolchain's
+  install (2026-10-21 18:16Z, node 24.22.1) recorded 66 untraced entries for the 13 verified steps (514 older runs skipped). Without
+  the verified-set rule it was 435. GATE_STEP_CACHE_DIR points a plan at it; the live cache never takes untraced entries.
 
 ## Gate speed (2026-10-17): scheduling, timeouts, one kit suite
 

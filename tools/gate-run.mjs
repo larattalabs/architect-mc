@@ -9,7 +9,8 @@
 //   node tools/gate-run.mjs <chain> [--shards N] [--only a,b] [--from step] [--plan]
 //   node tools/gate-run.mjs change  --since <ref> | --range A...B | --files a,b [--shards N] [--plan]   unit suites + mapped steps
 //   node tools/gate-run.mjs slice   --since <ref> | --range A...B | --files a,b [--shards N] [--plan]   quick + the affected steps
-//   node tools/gate-run.mjs release [--release <tag>] [--since <ref>] [--shards N] [--plan]  everything, duplicates rotated
+//   node tools/gate-run.mjs release [--release <tag>] [--since <ref>] [--shards N] [--plan]  everything, duplicates rotated, the
+//                                   cached steps skipped (below); --full runs every candidate and every rotation option
 //   [--turbo | --no-turbo] [--lanes N] [--split | --no-split]   turbo: the whole machine (default for tier runs of 20+ steps)
 //   node tools/gate-run.mjs --list                  the chains and tiers
 //   [--notify | --notify-dry-run]                   off by default (Noah: no Discord pings)
@@ -58,6 +59,14 @@
 // The kit suite runs once: unit-kit writes a JUnit report to GATE_KIT_RESULTS (tools/lib/kit-reuse.mjs), and the drivers'
 // kit-suite and goldens checks read it when exact; the runner also passes GATE_UNIT_MOD_RUN (where unit-mod built this head).
 //
+// The step cache (docs/GATES.md "Affected-only releases"; tools/lib/step-cache.mjs, tools/lib/step-inputs.mjs): a tier run (not
+// --only/--from, not a named chain) skips a step whose key (its input set's git blobs, its definition, toolchain and modes) has a
+// recorded PASS and reports it CACHED with a pointer to the evidence. release adds the canaries (calibration probes, a rotating
+// big scenario, the crash suite, the judged benches) and the full twins older than the last full nightly. --full (automatic for
+// engine, Minecraft-version and build-dependency ranges) runs everything; --no-cache skips no step (a PASS is still recorded).
+// Every step runs traced (tools/lib/step-trace.mjs, <out>/traces/<step>/; --no-trace: off, nothing recorded); a PASS is recorded
+// only when its trace stayed inside its input set.
+//
 // Output: <out>/<timestamp>-<chain>/: summary.json (written at the start with state "running", rewritten after every step,
 // final state "done" | "stopped" | "aborted"), SUMMARY.md, runner.log, <step>.log, the gates' own evidence under
 // [s<k>/]gate4d/ gate4e/ gate5b/ gate6a/ sim-*/, client[-s<k>].log.
@@ -67,12 +76,14 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DevClient } from './lib/devclient.mjs';
 import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFiles } from './gate-impact.mjs';
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
 import { currentHistory, definitionNow, definitionsAt, effectiveTimeout, estimateMin, loadHistory } from './lib/gate-history.mjs';
 import { autoConfig, chooseShards, describeChoice, freePairs, probeMachine } from './lib/shard-auto.mjs';
+import { autoFullWhy, cacheContext, fullTwins, judgedBenches, keyFor, lastNightly, lookup, record as recordPass } from './lib/step-cache.mjs';
+import { loadConf, loadMap } from './lib/step-inputs.mjs';
 import { entryOf, expandSplits, isPartId, parentOf, parentResults, validateSplits } from './lib/step-split.mjs';
 import { acquire as acquireMachine, chooseTurbo, describeQueue, describeTurbo, foldSamples, liveHolders, releaseAll, sampleMachine, turboConfig } from './lib/turbo.mjs';
 
@@ -83,7 +94,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ------------------------------------------------------------------ arguments and config
 
 const argv = process.argv.slice(2);
-const VALUED = ['--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min', '--host', '--lanes'];
+// SIGUSR2: yield (the nightly past its cutoff with a run queued, docs/GATES.md "The nightly"): start no new step, let the running
+// ones finish, then end with state "stopped" and `yielded` listing the steps not started (they are SKIPPED, error "yielded").
+// Installed first, so a runner still waiting for its slot is never killed by it (it then starts nothing and ends at once).
+let draining = null;
+let onYield = () => {};
+process.on('SIGUSR2', () => {
+  if (draining) return;
+  draining = { at: new Date().toISOString(), why: 'SIGUSR2 (yield)' };
+  try {
+    onYield();
+  } catch {
+    // before the scheduler started: the workers see `draining` when they start
+  }
+});
+const VALUED = ['--assume-warm', '--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min', '--host', '--lanes'];
 const flag = (f) => argv.includes(f);
 const opt = (f) => {
   const i = argv.indexOf(f);
@@ -91,6 +116,9 @@ const opt = (f) => {
 };
 const CONFIG_PATH = path.resolve(opt('--config') ?? path.join(SRC, 'tools', 'gate-chains.json'));
 const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+// the step cache's policy (tools/gate-cache.json) and the derived input map (tools/step-inputs.json); read by the runner only
+const CACHE_CONF = loadConf(SRC);
+const INPUT_MAP = loadMap(SRC);
 const TIERS = ['change', 'slice', 'release'];
 // where each step runs: a dev client or a headless server (tools/lib/hosts.mjs; docs/GATES.md "Headless gates")
 let HOSTS;
@@ -187,8 +215,10 @@ function select() {
   const listed = opt('--files') ? opt('--files').split(',').map((f) => f.trim()).filter(Boolean) : null;
   if (!range && !listed && chainName !== 'release') die(`${chainName} needs --since <ref> (e.g. origin/main), --range A...B or --files a,b`);
   let imp = null;
+  let changed = [];
   if (range || listed) {
     const files = listed ?? changedFiles(SRC, range);
+    changed = files;
     // a file whose only changes are version constants maps to its unit suite (gate-impact.mjs versionOnlyFiles; needs a range)
     imp = impactOf(files, cfg.impact ?? {}, { versionOnly: listed ? new Set() : versionOnlyFiles(SRC, range, cfg.impact?.versionConstants) });
     info.range = range ?? `--files (${files.length})`;
@@ -239,12 +269,27 @@ function select() {
     info.rotationKey = rk.key;
     info.rotationSource = rk.source;
     info.rotation = [];
+    // --full (docs/GATES.md "Affected-only releases"): every candidate runs, every rotation option; the rule when the range
+    // touches the Minecraft version, a build dependency or an engine path (tools/gate-cache.json release.autoFull)
+    const autoWhy = imp ? autoFullWhy(CACHE_CONF, SRC, range, changed, imp.tags) : ['no range (no release tag reachable)'];
+    // --no-auto-full: the cache's own selection even where the rule says --full (what the cache alone would run; analysis, or a
+    // coordinator's explicit override)
+    info.full = flag('--full') ? { on: true, why: ['--full'] } : autoWhy.length && !flag('--no-auto-full') ? { on: true, why: autoWhy, auto: true }
+      : { on: false, why: [], ...(autoWhy.length ? { overridden: autoWhy } : {}) };
     for (const s of t.always) addW(s, 'release: always');
+    // the candidates beyond the always list: every step an impact rule names and the slice tier's always list; the cache, not the
+    // range, decides which of them run
+    for (const r of cfg.impact?.rules ?? []) for (const k of ['change', 'slice']) for (const s of r[k] ?? []) if (!want.has(s)) addW(s, 'release: an impact rule names it (a candidate: it runs when its cache key misses)');
+    for (const s of cfg.tiers.slice?.always ?? []) if (!want.has(s)) addW(s, 'release: the slice tier always runs it (a candidate)');
     for (const r of t.rotate) {
       const all = [...new Set([...r.options.flat(), ...(r.when?.steps ?? [])])];
       let chosen;
       let reason;
-      if (r.when && tags.has(r.when.tag)) {
+      if (info.full.on) {
+        // every option; with a `when` (megaB, throughput) its full step stands for the --fast/-smoke variants
+        chosen = r.when ? [...new Set([...r.when.steps, ...r.options.flat().filter((s) => !/-(fast|smoke)$/.test(s))])] : all;
+        reason = 'release --full: every option';
+      } else if (r.when && tags.has(r.when.tag)) {
         chosen = r.when.steps;
         reason = `${r.when.tag}-touching release`;
       } else {
@@ -254,6 +299,10 @@ function select() {
       }
       for (const s of chosen) addW(s, `release rotation "${r.name}": ${reason}`);
       const skipped = all.filter((s) => !chosen.includes(s));
+      // the rotation decides its steps, also when an impact rule names one (4e-throughput on a release that isn't placement-touching)
+      for (const s of skipped) {
+        if (want.delete(s)) delete why[s];
+      }
       const next = {};
       for (const s of skipped) {
         const oi = r.options.findIndex((o) => o.includes(s));
@@ -275,12 +324,17 @@ function select() {
   // (gate waits, 2026-10-20) a step whose every assertion another step also runs (`supersededBy`, docs/GATES.md "Duplicates") is
   // dropped when that step is in the run too; alone (e.g. the change tier's scenario step) it runs as before
   info.superseded = {};
-  for (const s of [...want]) {
-    const by = cfg.steps[s].supersededBy;
-    if (by && want.has(by) && !Object.entries(cfg.steps).some(([id, x]) => x.after === s && want.has(id))) {
-      want.delete(s);
-      info.superseded[s] = by;
-      info.notes.push(`${s}: dropped, ${by} runs every assertion it runs (supersededBy)`);
+  // to a fixpoint: a step kept only because a dropped twin was `after` it (4e-orders for 4e-crash) drops on the next pass
+  for (let again = true; again;) {
+    again = false;
+    for (const s of [...want]) {
+      const by = cfg.steps[s].supersededBy;
+      if (by && want.has(by) && !Object.entries(cfg.steps).some(([id, x]) => x.after === s && want.has(id))) {
+        want.delete(s);
+        info.superseded[s] = by;
+        info.notes.push(`${s}: dropped, ${by} runs every assertion it runs (supersededBy)`);
+        again = true;
+      }
     }
   }
   return { ids: ORDER.filter((s) => want.has(s)), info };
@@ -340,6 +394,128 @@ const snapDirCfg = cfg.snapshots?.dir ?? 'seed:mod/run/saves';
 const SNAP = path.resolve(process.env.GATE_SNAPSHOT_DIR ?? (snapDirCfg.startsWith('seed:') ? path.join(SEED, snapDirCfg.slice(5)) : path.resolve(SRC, snapDirCfg)));
 const RUNS_ROOT = path.resolve(opt('--out') ?? process.env.GATE_RUNS_OUT ?? path.join(MAIN, 'artifacts', 'gate-runs'));
 const LOCK = path.resolve(opt('--lock') ?? process.env.GATE_LOCK ?? path.join(RUNS_ROOT, 'gate-run.lock'));
+
+// ------------------------------------------------------------------ the step cache (docs/GATES.md "Affected-only releases")
+
+// every step runs traced (tools/lib/step-trace.mjs): its node processes record the source files they touch, and a PASS is recorded
+// only when they stayed inside the step's input set (tools/step-inputs.json). --no-trace turns it off (and records nothing).
+const TRACE = !flag('--no-trace');
+const RAW_CFG = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')); // the chain file as written (cfg has the hosts applied)
+// the judged benches: the release tier's own (its always list and rotation). Their timing is judged at every release, so they are
+// canaries there and never cached; the other bench steps (the slices' scenario steps) cache when they pass with no bar missed
+const JUDGED_BENCHES = judgedBenches(cfg);
+// lookups: a tier run (not a named chain, not --only/--from: an explicit list always runs), not --no-cache, not release --full
+const CACHE_OFF_WHY = tierInfo.kind !== 'tier' ? 'a named chain runs its steps' : opt('--only') || opt('--from') ? '--only/--from: an explicit list runs'
+  : flag('--no-cache') ? '--no-cache' : tierInfo.full?.on ? `release --full (${tierInfo.full.why.join('; ')})` : !INPUT_MAP ? 'no tools/step-inputs.json' : null;
+let CACHE = null;
+let cacheErr = null;
+try {
+  if (INPUT_MAP) {
+    CACHE = cacheContext({ src: SRC, main: MAIN, cfg, conf: CACHE_CONF, map: INPUT_MAP, snapDir: SNAP });
+    CACHE.rawCfg = RAW_CFG;
+  }
+} catch (e) {
+  cacheErr = e.message;
+}
+const keys = new Map();
+const keyOf = (id) => {
+  if (!keys.has(id)) {
+    let k;
+    try {
+      k = CACHE ? keyFor(CACHE, id) : { key: null, why: cacheErr ?? 'no tools/step-inputs.json' };
+    } catch (e) {
+      k = { key: null, why: `key: ${e.message}` };
+    }
+    keys.set(id, k);
+  }
+  return keys.get(id);
+};
+const cachedHits = new Map(); // id -> the recorded PASS that serves it
+tierInfo.cache = { lookup: !CACHE_OFF_WHY && !!CACHE, offWhy: CACHE_OFF_WHY ?? cacheErr, dirty: CACHE?.dirty.length ?? null, record: TRACE && !!CACHE, canaries: [] };
+if (tierInfo.cache.lookup) {
+  const want = new Set(stepIds);
+  const run = new Set();
+  const why = (tierInfo.why ??= {});
+  const push = (id, r) => (why[id] ??= []).includes(r) || why[id].push(r);
+  const canary = new Map();
+  if (chainName === 'release') {
+    const c = CACHE_CONF.release?.canaries ?? {};
+    // canaries are named by step id; a split step's parts (turbo) are canaries with their parent
+    const present = (s) => [...want].some((x) => parentOf(x) === s);
+    for (const s of c.always ?? []) if (present(s)) canary.set(s, 'canary: a calibration probe, every release');
+    const rot = (c.scenarioRotation ?? []).filter((s) => cfg.steps[s]);
+    if (rot.length) {
+      const s = rot[tierInfo.rotationKey % rot.length];
+      canary.set(s, `canary: this release's big scenario (${rot.join(' / ')} rotate; key ${tierInfo.rotationKey})`);
+      if (!present(s)) want.add(s);
+    }
+    for (const s of tierInfo.rotation?.find((r) => r.name === c.crashRotation)?.ran ?? []) if (present(s)) canary.set(s, 'canary: this release\'s crash suite (the rotation)');
+    if (c.judgedBenches) for (const s of want) if (JUDGED_BENCHES.has(parentOf(s))) canary.set(parentOf(s), 'canary: a bench whose timing is judged at release');
+  }
+  const nightly = chainName === 'release' ? lastNightly(MAIN) : null;
+  const twins = fullTwins(cfg);
+  // --assume-warm <ref> (with --plan only): what the run would select after a full nightly that passed at <ref>: a step whose key
+  // at <ref> equals its key here counts as CACHED. Keys only, no recorded PASS is read or written: the selection examples
+  let warm = null;
+  if (opt('--assume-warm')) {
+    if (!flag('--plan')) die('--assume-warm is for --plan only (it assumes PASSes that were never run)');
+    warm = cacheContext({ src: SRC, main: MAIN, cfg, conf: CACHE_CONF, map: INPUT_MAP, snapDir: SNAP, commit: git(SRC, 'rev-parse', opt('--assume-warm')), dirty: [] });
+    warm.rawCfg = RAW_CFG;
+    tierInfo.cache.assumeWarm = { ref: opt('--assume-warm'), head: warm.head };
+  }
+  for (const id of want) {
+    if (canary.has(parentOf(id))) {
+      run.add(id);
+      push(id, canary.get(parentOf(id)));
+      continue;
+    }
+    const k = keyOf(id);
+    if (!k.key) {
+      run.add(id);
+      push(id, `cache: ${k.why}`);
+      continue;
+    }
+    let l;
+    if (warm) {
+      const w = keyFor(warm, id);
+      l = w.key === k.key ? { hit: { key: k.key, at: `(assumed: a full nightly at ${warm.head.slice(0, 9)})`, head: warm.head, run: INPUT_MAP.steps[parentOf(id)]?.verified ? '(assumed)' : '(assumed; its set is NOT yet verified by a traced PASS: computed imports may be missing)', tier: 'assumed' } } : { hit: null, why: w.key ? `its key at ${warm.head.slice(0, 9)} differs (an input, its definition or a mode moved)` : `no key at ${warm.head.slice(0, 9)}: ${w.why}` };
+    } else l = lookup(CACHE, id, k.key);
+    if (!l.hit) {
+      run.add(id);
+      push(id, `cache miss (key ${k.key.slice(0, 12)}): ${l.why}`);
+      continue;
+    }
+    if (nightly && twins.has(parentOf(id)) && String(l.hit.at) < String(nightly.startedAt)) {
+      run.add(id);
+      push(id, `a full twin whose last PASS (${l.hit.at}) is older than the last full nightly (${nightly.startedAt})`);
+      continue;
+    }
+    cachedHits.set(id, l.hit);
+  }
+  // what a running step needs from this run: its `after` context (same shard), the evidence its waitFor targets write (unit-kit
+  // excepted: a cached unit-kit's JUnit report is handed on), and unit-mod's built classes (GATE_UNIT_MOD_RUN)
+  for (let again = true; again;) {
+    again = false;
+    for (const id of [...run]) {
+      const s = cfg.steps[id];
+      const deps = [];
+      if (s.after && want.has(s.after)) deps.push([s.after, `needed by ${id}: it runs after it, in its context`]);
+      for (const w of s.waitFor ?? []) if (w !== 'unit-kit' && want.has(w)) deps.push([w, `needed by ${id}: it reads ${w}'s evidence of this run`]);
+      if ((INPUT_MAP.steps[parentOf(id)]?.env ?? []).includes('GATE_UNIT_MOD_RUN') && want.has('unit-mod')) deps.push(['unit-mod', `needed by ${id}: it reads the classes unit-mod builds in this run`]);
+      for (const [d, r] of deps) {
+        if (run.has(d)) continue;
+        run.add(d);
+        cachedHits.delete(d);
+        push(d, r);
+        again = true;
+      }
+    }
+  }
+  stepIds = ORDER.filter((s) => run.has(s));
+  tierInfo.cache.canaries = [...canary.keys()].filter((s) => [...run].some((x) => parentOf(x) === s));
+  tierInfo.cached = [...cachedHits].map(([id, e]) => ({ id, key: e.key, at: e.at, head: e.head, run: e.run, log: e.log, evidence: e.evidence, tier: e.tier }));
+  tierInfo.cache.nightly = nightly ? { startedAt: nightly.startedAt, head: nightly.head, run: nightly.run } : null;
+}
 // --shards N | auto (docs/GATES.md "Adaptive shards"). Omitted: auto for slice and release when the plan has more than
 // shards.auto.minSteps steps (decided below, once the steps are known), else 1 as before.
 const SHARDS_ARG = opt('--shards');
@@ -759,6 +935,20 @@ function printSelection() {
     }
   }
   for (const n of tierInfo.notes ?? []) console.log(`  note: ${n}`);
+  printCache();
+}
+
+/** The cache's part of the plan: lookups on or off, --full, the canaries, and every CACHED step with its evidence. */
+function printCache() {
+  const c = tierInfo.cache;
+  if (!c) return;
+  if (tierInfo.full) console.log(`release --full: ${tierInfo.full.on ? `ON (${tierInfo.full.why.join('; ')})` : tierInfo.full.overridden ? `off by --no-auto-full (the rule would set it: ${tierInfo.full.overridden.join('; ')})` : 'off (no engine, Minecraft-version or build-dependency path in the range; --full forces it)'}`);
+  if (c.assumeWarm) console.log(`cache: ASSUMED WARM at ${c.assumeWarm.ref} (${c.assumeWarm.head.slice(0, 9)}): a step whose key there equals its key here counts as CACHED (--assume-warm; plan only)`);
+  console.log(`cache: lookups ${c.lookup ? 'on' : `OFF (${c.offWhy})`}; PASSes recorded ${c.record ? 'yes (traced)' : `no (${TRACE ? cacheErr ?? 'no input map' : '--no-trace'})`}${c.dirty ? `; the source tree is DIRTY (${c.dirty} path(s)): nothing is looked up or recorded` : ''}${c.nightly ? `; last full nightly ${c.nightly.startedAt} @ ${String(c.nightly.head).slice(0, 9)}` : chainName === 'release' ? '; no full nightly recorded yet' : ''}`);
+  if (c.canaries?.length) console.log(`  canaries (${c.canaries.length}): ${c.canaries.join(' ')}`);
+  const cached = tierInfo.cached ?? [];
+  if (c.lookup) console.log(`  CACHED ${cached.length}, to run ${stepIds.length}${cached.length ? ':' : ''}`);
+  for (const h of cached) console.log(`    CACHED ${h.id.padEnd(22)} PASS ${h.at} (${h.tier ?? '?'}, head ${String(h.head).slice(0, 9)}, key ${h.key.slice(0, 12)}) evidence ${h.log ?? h.run}`);
 }
 
 function printPlan() {
@@ -808,6 +998,7 @@ function printPlan() {
 }
 
 if (!steps.length) {
+  if (!PLAN && tierInfo.cached?.length) console.log('every selected step is CACHED: nothing to run');
   printSelection();
   console.log(`${chainName}: nothing to run (${tierInfo.kind === 'tier' ? 'the diff maps to no gate step' : 'empty selection'}).`);
   process.exit(0);
@@ -892,6 +1083,7 @@ const summary = {
   tier: tierInfo.kind === 'tier' ? { name: tierInfo.tier, range: tierInfo.range ?? null, engine: tierInfo.engine, placement: tierInfo.placement, impact: tierInfo.impact ?? null,
     rotationKey: tierInfo.rotationKey ?? null, rotationSource: tierInfo.rotationSource ?? null, rotation: tierInfo.rotation ?? null, notes: tierInfo.notes } : null,
   counts: {}, setup: null, slot: slotNote, shardsAuto: autoChoice ? (({ text, ...a }) => a)(autoChoice) : null, hosts: { mode: HOSTS.mode, server: HOSTS.server.filter((id) => stepIds.includes(id)) }, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
+  cache: tierInfo.cache ?? null, cached: tierInfo.cached ?? [], inputsMisses: [],
   schedule: { order: 'longest first', historyRuns: HIST.runs, historyFile: HISTORY_FILE, benches: ISOLATE_BENCH ? 'isolated' : 'not isolated (timing recorded)', historyTimeouts: HIST_TIMEOUTS },
   steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin, effectiveTimeoutMin: s.effTimeoutMin, timeoutSource: s.timeoutSource, estimateMin: Math.round(est(s) * 10) / 10, ...(s.parentId ? { parent: s.parentId } : {}), ...(tierInfo.why?.[s.id] ? { why: tierInfo.why[s.id] } : {}) })),
   split: Object.keys(splitParts).length ? splitParts : null,
@@ -1152,6 +1344,12 @@ function runProcess(sh, step, logFile) {
   return new Promise((resolve) => {
     const fd = fs.openSync(logFile, 'a');
     const env = childEnv(sh, step.env ?? {});
+    if (TRACE) {
+      // the input trace (tools/lib/step-trace.mjs): every node process of the step records the source files it touches
+      env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${pathToFileURL(path.join(SRC, 'tools', 'lib', 'step-trace.mjs')).href}`].filter(Boolean).join(' ');
+      env.GATE_TRACE_DIR = path.join(OUT, 'traces', step.id);
+      env.GATE_TRACE_ROOTS = JSON.stringify([[SRC, ''], [sh.RUN, ''], [path.join(MAIN, 'artifacts'), '@artifacts/']]);
+    }
     const cwd = resolveCwd(step.cwd, sh);
     const [cmd, args] = step.shell ? ['/bin/zsh', ['-c', step.shell]] : [step.cmd[0], step.cmd.slice(1)];
     fs.writeSync(fd, `# ${new Date().toISOString()} ${step.shell ?? step.cmd.join(' ')}  (cwd ${cwd}, shard ${sh.name}, ports ${sh.SIDECAR_PORT}/${sh.DEV_PORT})\n`);
@@ -1369,6 +1567,18 @@ function summaryMd() {
     }
     for (const n of t.notes ?? []) lines.push(`- ${n}`);
   }
+  if (summary.cache) {
+    const c = summary.cache;
+    lines.push('', `Cache: lookups ${c.lookup ? 'on' : `off (${c.offWhy})`}; PASSes recorded ${c.record ? 'when the trace stayed inside the input set' : 'no'}${c.canaries?.length ? `; canaries: ${c.canaries.join(' ')}` : ''}.`);
+    if (summary.cached.length) {
+      lines.push('', `### CACHED (${summary.cached.length}): skipped, a PASS is recorded for the same key`, '', '| step | PASS at | head | evidence |', '|---|---|---|---|');
+      for (const h of summary.cached) lines.push(`| ${h.id} | ${h.at} | ${String(h.head).slice(0, 9)} | \`${h.log ?? h.run}\` |`);
+    }
+    if (summary.inputsMisses.length) {
+      lines.push('', `### Inputs-map misses (${summary.inputsMisses.length}): these PASSes were not cached`, '', `A step read source files outside its set in tools/step-inputs.json. Widen it: \`node tools/step-inputs.mjs merge ${OUT}\`, review, commit.`, '');
+      for (const m of summary.inputsMisses) lines.push(`- **${m.step}**: ${m.paths.slice(0, 8).map((p) => `\`${p}\``).join(', ')}${m.paths.length > 8 ? ` and ${m.paths.length - 8} more` : ''}`);
+    }
+  }
   lines.push('', `| step | ${shards.length > 1 ? 'shard | ' : ''}status | time | ok/FAIL | key numbers |`, `|---|${shards.length > 1 ? '---|' : ''}---|---|---|---|`);
   for (const s of summary.steps) {
     const m = [s.metrics ? Object.entries(s.metrics).map(([k, v]) => `${k} ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ') : '',
@@ -1477,6 +1687,9 @@ process.on('SIGINT', () => abort('SIGINT'));
 process.on('SIGTERM', () => abort('SIGTERM'));
 // unattended: a closed terminal (SIGHUP, EPIPE on stdout) must not end the run; everything also goes to runner.log
 process.on('SIGHUP', () => log('SIGHUP ignored (unattended)'));
+// SIGUSR2: yield (the nightly past its cutoff with a run queued, docs/GATES.md "The nightly"): start no new step, let the running
+// ones finish, then end with state "stopped" and `yielded` listing the steps not started (they are SKIPPED, error "yielded")
+// (the handler is installed at the top, before the slot wait: SIGUSR2's default action would kill the runner)
 process.stdout.on('error', () => {});
 process.stderr.on('error', () => {});
 process.on('uncaughtException', (e) => abort(`uncaught: ${e?.stack ?? e}`));
@@ -1498,9 +1711,25 @@ try {
   }
   const head = git(SRC, 'rev-parse', 'HEAD');
   summary.head = head;
+  // the cache's selection and keys belong to the head they were computed at: a source HEAD that moved while this run waited for
+  // a slot would run another commit than the one selected
+  if (CACHE && CACHE.head !== head) {
+    if (tierInfo.cache?.lookup) throw new Error(`the source HEAD moved from ${CACHE.head.slice(0, 9)} to ${head.slice(0, 9)} while the run waited: its cache selection is stale; start it again`);
+    CACHE = null;
+    tierInfo.cache.record = false;
+    log(`the source HEAD moved while the run waited: nothing will be recorded in the step cache`);
+  }
+  // every key now, at this head (a commit made in the source checkout during the run must not re-key a later step)
+  if (CACHE) for (const id of stepIds) keyOf(id);
   if (stepIds.includes('unit-kit')) {
     runShared.kitJunit = path.join(OUT, 'kit-suite.junit.xml');
     runShared.kitTree = git(SRC, 'rev-parse', 'HEAD:kit');
+  } else if (cachedHits.get('unit-kit')?.junit && cachedHits.get('unit-kit').kitTree === git(SRC, 'rev-parse', 'HEAD:kit') && fs.existsSync(cachedHits.get('unit-kit').junit)) {
+    // unit-kit is CACHED: its recorded JUnit report (the same kit tree) serves the drivers' kit-suite checks (kit-reuse.mjs)
+    runShared.kitJunit = path.join(OUT, 'kit-suite.junit.xml');
+    fs.copyFileSync(cachedHits.get('unit-kit').junit, runShared.kitJunit);
+    runShared.kitTree = cachedHits.get('unit-kit').kitTree;
+    log(`unit-kit CACHED: its JUnit report (kit tree ${runShared.kitTree.slice(0, 9)}) serves this run's kit-suite readers`);
   }
   summary.sourceDirty = !!git(SRC, 'status', '--porcelain', '--untracked-files=no');
   summary.setup = [];
@@ -1564,8 +1793,13 @@ function skipBlocked() {
   }
 }
 
+onYield = () => {
+  log('yield requested (SIGUSR2): no new step starts; the running ones finish');
+  wakeAll();
+};
+if (draining) log('yield requested (SIGUSR2) before the steps started: none starts');
 async function worker(sh) {
-  while (!stopped) {
+  while (!stopped && !draining) {
     skipBlocked();
     if (!st.pending.length) break;
     const i = pick(sh, st, shards);
@@ -1607,6 +1841,36 @@ async function worker(sh) {
       if (ov.length) log(`  ${step.id}: bench step ran next to ${ov.join(' ')} (contended: its timing is recorded only)`, sh);
     }
     if (step.id === 'unit-mod' && rec.status === 'PASS') runShared.unitModRun = sh.RUN;
+    // the step cache: record the PASS under its key (step-cache.mjs decides whether it may: trace inside the set, no bar recorded, ...)
+    if (CACHE) {
+      try {
+        // the drivers ran from the working tree: one that turned dirty during the run records nothing from here on
+        // and one whose HEAD moved (a commit or checkout mid-run: the tree is clean again, but later steps ran other code)
+        const headNow = git(SRC, 'rev-parse', 'HEAD');
+        if (!CACHE.dirty.length && headNow !== CACHE.head) {
+          CACHE.dirty = [`(the source HEAD moved to ${headNow.slice(0, 9)} during the run)`];
+          keys.clear();
+          log(`the source HEAD moved to ${headNow.slice(0, 9)} during the run: no further PASS is recorded in the step cache`);
+        }
+        if (!CACHE.dirty.length && git(SRC, 'status', '--porcelain', '--untracked-files=all')) {
+          CACHE.dirty = ['(the source tree turned dirty during the run)'];
+          keys.clear();
+          log('the source tree turned dirty during the run: no further PASS is recorded in the step cache');
+        }
+        const k = keyOf(step.id);
+        const r = recordPass(CACHE, step.id, rec, { key: k.key, why: k.why, parts: k.parts, run: OUT, ev: sh.ev, traceDir: path.join(OUT, 'traces', step.id), traced: TRACE,
+          timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', judgedBench: JUDGED_BENCHES.has(parentOf(step.id)), tier: chainName,
+          ...(step.id === 'unit-kit' && runShared.kitJunit ? { junit: runShared.kitJunit, kitTree: runShared.kitTree } : {}) });
+        rec.cache = { key: k.key, recorded: r.stored, why: r.why };
+        if (r.outside) {
+          rec.cache.outside = r.outside.slice(0, 40);
+          summary.inputsMisses.push({ step: step.id, paths: r.outside });
+          log(`  ${step.id}: INPUTS-MAP MISS, not cached: it read ${r.outside.length} source path(s) outside its set (${r.outside.slice(0, 5).join(', ')}${r.outside.length > 5 ? ', ...' : ''}); widen it: node tools/step-inputs.mjs merge ${OUT}`, sh);
+        }
+      } catch (e) {
+        rec.cache = { recorded: false, why: `error: ${e.message}` };
+      }
+    }
     st.running.delete(i);
     st.done.set(step.id, { status: rec.status, shard: sh.k });
     writeSummary();
@@ -1620,7 +1884,14 @@ async function worker(sh) {
 }
 
 await Promise.all(shards.map((sh) => worker(sh)));
+if (draining) {
+  const left = st.pending.map((j) => steps[j].id);
+  for (const j of st.pending) Object.assign(summary.steps[j], { status: 'SKIPPED', error: 'yielded' });
+  st.pending.length = 0;
+  summary.yielded = { ...draining, notStarted: left };
+  log(`yielded: ${left.length} step(s) not started: ${left.join(' ')}`);
+}
 finishing = true;
 for (const sh of shards) await stopClient(sh, 'end of chain');
-await finish(stopped ? 'stopped' : 'done');
+await finish(stopped || draining ? 'stopped' : 'done');
 process.exit(summary.verdict === 'PASS' ? 0 : 1);
