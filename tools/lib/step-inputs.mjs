@@ -351,17 +351,27 @@ const TRACE_IGNORE = [/^artifacts\//, /^\.git(\/|$)/, /^tools\/lib\/step-trace\.
 
 /**
  * Compares a step's trace with its set: -> { outside: [paths not in the set], derived: [derived globs touched], fingerprint:
- * [ignored local data touched], n }. A stat of a path that doesn't exist counts like a read of it (its absence is an input).
+ * [ignored local data touched], external: [artifacts/ files read], n }. A stat of a path that doesn't exist counts like a read of
+ * it (its absence is an input). Run-time state (conf.state: the game dir, logs) is not an input.
  */
 export function checkTrace(map, conf, id, trace, { tracked } = {}) {
   const m = inputMatcher(map, conf, id);
   const fp = matcher(conf.fingerprint?.globs ?? []);
+  const state = matcher(conf.state?.globs ?? []);
+  const extIgnore = matcher(conf.external?.ignore ?? []);
   const outside = [];
   const derived = new Set();
   const fpHit = new Set();
-  for (const p of trace.keys()) {
+  const external = [];
+  for (const [p, kinds] of trace) {
+    if (p.startsWith('@artifacts/')) {
+      const r = p.slice('@artifacts/'.length);
+      if (r && !extIgnore(r) && !(kinds.size === 1 && kinds.has('d'))) external.push(r);
+      continue;
+    }
     if (TRACE_IGNORE.some((r) => r.test(p))) continue;
     if (m(p)) continue;
+    if (state(p)) continue;
     const d = derivedOf(conf, p);
     if (d) {
       derived.add(d.glob);
@@ -380,7 +390,7 @@ export function checkTrace(map, conf, id, trace, { tracked } = {}) {
     if (m(`${p}/x`) && (!tracked || !tracked.has(p))) continue;
     outside.push(p);
   }
-  return { outside: outside.sort(), derived: [...derived].sort(), fingerprint: [...fpHit].sort(), n: trace.size };
+  return { outside: outside.sort(), derived: [...derived].sort(), fingerprint: [...fpHit].sort(), external: external.sort(), n: trace.size };
 }
 
 /**

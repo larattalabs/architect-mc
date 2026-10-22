@@ -1299,7 +1299,7 @@ function runProcess(sh, step, logFile) {
       // the input trace (tools/lib/step-trace.mjs): every node process of the step records the source files it touches
       env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${pathToFileURL(path.join(SRC, 'tools', 'lib', 'step-trace.mjs')).href}`].filter(Boolean).join(' ');
       env.GATE_TRACE_DIR = path.join(OUT, 'traces', step.id);
-      env.GATE_TRACE_ROOT = SRC;
+      env.GATE_TRACE_ROOTS = JSON.stringify([[SRC, ''], [sh.RUN, ''], [path.join(MAIN, 'artifacts'), '@artifacts/']]);
     }
     const cwd = resolveCwd(step.cwd, sh);
     const [cmd, args] = step.shell ? ['/bin/zsh', ['-c', step.shell]] : [step.cmd[0], step.cmd.slice(1)];

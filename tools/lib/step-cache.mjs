@@ -11,7 +11,7 @@
 // inputs-map miss, reported).
 
 import crypto from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { definitionNow, definitionsAt } from './gate-history.mjs';
@@ -27,12 +27,8 @@ let javaCache = null;
 export function javaVersion(env = process.env) {
   if (javaCache) return javaCache;
   const home = env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25';
-  try {
-    const r = execFileSync(path.join(home, 'bin', 'java'), ['-version'], { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
-    javaCache = r.split('\n')[0].trim();
-  } catch (e) {
-    javaCache = (e.stderr ?? '').toString().split('\n').filter(Boolean).slice(0, 2).join(' | ') || `unknown (${home})`;
-  }
+  const r = spawnSync(path.join(home, 'bin', 'java'), ['-version'], { encoding: 'utf8' });
+  javaCache = `${r.stderr ?? ''}${r.stdout ?? ''}`.split('\n').filter(Boolean).slice(0, 2).join(' | ') || `unknown (${home})`;
   return javaCache;
 }
 
@@ -131,6 +127,18 @@ export function keyFor(ctx, id) {
   return { key: sha(parts).slice(0, 24), parts };
 }
 
+/** An archived file's fingerprint: "size:mtime", or "missing". A directory's: its sorted listing's names. */
+export function externalFingerprint(main, rel) {
+  const f = path.join(main, 'artifacts', rel);
+  try {
+    const st = fs.statSync(f);
+    if (st.isDirectory()) return `dir:${sha(fs.readdirSync(f).sort().join('\n')).slice(0, 12)}`;
+    return `${st.size}:${Math.round(st.mtimeMs)}`;
+  } catch {
+    return 'missing';
+  }
+}
+
 const entryFile = (ctx, id, key) => path.join(ctx.dir, id.replace(/[^\w.@-]/g, '_'), `${key}.json`);
 
 /** The recorded PASS for a key: -> { hit: entry | null, why }. */
@@ -142,6 +150,11 @@ export function lookup(ctx, id, key) {
     return { hit: null, why: 'no recorded PASS for this key' };
   }
   if (e.status !== 'PASS' || e.key !== key) return { hit: null, why: 'entry mismatch' };
+  // the archived files it read under artifacts/ (tag builds, apitest jars): each must still be there, unchanged
+  for (const [rel, fpr] of Object.entries(e.external ?? {})) {
+    const now = externalFingerprint(ctx.main, rel);
+    if (now !== fpr) return { hit: null, why: `an archived input changed: artifacts/${rel} (${fpr} -> ${now})` };
+  }
   return { hit: e, why: `PASS at ${e.at} in ${path.basename(e.run ?? '?')} (head ${String(e.head).slice(0, 9)})` };
 }
 
@@ -163,6 +176,7 @@ export function record(ctx, id, rec, opts) {
     timingPolicy: opts.timingPolicy,
     run: opts.run, log: rec.log ? path.join(opts.run, rec.log) : null, evidence: opts.ev, seconds: rec.seconds, ok: rec.ok,
     metrics: rec.metrics ?? null, traced: { paths: chk.n }, parts: opts.parts,
+    external: Object.fromEntries(chk.external.map((r) => [r, externalFingerprint(ctx.main, r)])),
   };
   const f = entryFile(ctx, id, opts.key);
   fs.mkdirSync(path.dirname(f), { recursive: true });

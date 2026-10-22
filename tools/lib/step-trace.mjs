@@ -1,10 +1,13 @@
 // The step tracer (docs/GATES.md "Affected-only releases"): a `--import` preload the runner puts in a step's NODE_OPTIONS. Every
 // node process of the step (the driver, `node --test`, vitest, the node children it spawns with the step's environment) records
-// the files of the source checkout it loads as a module, reads, lists or stats, one line per path:
-//   <GATE_TRACE_DIR>/<pid>-<rand>.txt:  "# <argv>" then "<kind>\t<repo-relative path>"  (kind m = module, r = read, d = listing, s = stat/exists)
-// The runner compares them with the step's input set (tools/step-inputs.json): a step that touched a source file outside its set
-// is never cached and is reported as an inputs-map miss. Paths outside GATE_TRACE_ROOT (run worktrees, the seed, caches) are not
-// recorded. Off unless GATE_TRACE_DIR and GATE_TRACE_ROOT are set; it never changes what the process does.
+// the files it loads as a module, reads, lists or stats under the traced roots, one line per path:
+//   <GATE_TRACE_DIR>/<pid>-<rand>.txt:  "# <argv>" then "<kind>\t<prefix><path relative to its root>"  (kind m = module, r = read,
+//   d = listing, s = stat/exists)
+// GATE_TRACE_ROOTS (JSON [[root, prefix], ...]): the source checkout and the shard's run worktree (prefix "": both hold the
+// commit's tree) and the main checkout's artifacts/ ("@artifacts/": archived tag builds and jars, outside git). The runner compares
+// them with the step's input set (tools/step-inputs.json): a step that touched a source file outside its set is never cached and is
+// reported as an inputs-map miss; the archived files it read are fingerprinted into its cache entry. Off unless GATE_TRACE_DIR and
+// GATE_TRACE_ROOTS (or GATE_TRACE_ROOT, one root) are set; it never changes what the process does.
 
 import fs from 'node:fs';
 import module from 'node:module';
@@ -12,16 +15,23 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const DIR = process.env.GATE_TRACE_DIR;
-const ROOT = process.env.GATE_TRACE_ROOT;
+let ROOTS = null;
+try {
+  ROOTS = process.env.GATE_TRACE_ROOTS ? JSON.parse(process.env.GATE_TRACE_ROOTS) : process.env.GATE_TRACE_ROOT ? [[process.env.GATE_TRACE_ROOT, '']] : null;
+} catch {
+  ROOTS = null;
+}
 
-if (DIR && ROOT) {
-  const roots = [...new Set([path.resolve(ROOT), (() => {
+if (DIR && ROOTS?.length) {
+  const realOf = (r) => {
     try {
-      return fs.realpathSync(ROOT);
+      return fs.realpathSync(r);
     } catch {
-      return path.resolve(ROOT);
+      return path.resolve(r);
     }
-  })()])].map((r) => r + path.sep);
+  };
+  // longest root first (artifacts/ sits inside the main checkout, a run worktree may sit next to the source)
+  const roots = ROOTS.flatMap(([r, prefix]) => [...new Set([path.resolve(r), realOf(r)])].map((x) => [x + path.sep, prefix ?? ''])).sort((a, b) => b[0].length - a[0].length);
   const append = fs.appendFileSync;
   const mkdir = fs.mkdirSync;
   let file = null;
@@ -39,7 +49,7 @@ if (DIR && ROOT) {
     } catch {
       return null;
     }
-    for (const r of roots) if (abs.startsWith(r)) return abs.slice(r.length).split(path.sep).join('/');
+    for (const [r, prefix] of roots) if (abs.startsWith(r)) return prefix + abs.slice(r.length).split(path.sep).join('/');
     return null;
   };
   const record = (kind, p) => {
