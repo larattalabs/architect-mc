@@ -229,6 +229,10 @@
   "extraArgs": [
    "--turbo"
   ],
-  "idleWaitMin": 0
+  "idleWaitMin": 0,
+  "seedFromMain": [
+   ".gradle-home",
+   "sidecar/node_modules"
+  ]
  }
 }

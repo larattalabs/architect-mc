@@ -197,12 +197,15 @@ try {
     if (git(WT, 'status', '--porcelain', '--untracked-files=all')) throw new Error(`${WT} has local changes: not moving it (the night is skipped)`);
     git(WT, 'checkout', '-q', '--detach', 'origin/main');
   }
-  // the drivers run gradle in this checkout (src-gradle.mjs, --offline): it needs a gradle home with the dependencies (AGENTS.md:
-  // an APFS clone of the main checkout's, cheap); untracked, so the tree stays clean
-  if (!fs.existsSync(path.join(WT, '.gradle-home', 'caches')) && fs.existsSync(path.join(MAIN, '.gradle-home'))) {
-    if (fs.existsSync(path.join(WT, '.gradle-home'))) throw new Error(`${WT}/.gradle-home exists without caches: not replacing it (the night is skipped)`);
-    execFileSync('cp', ['-c', '-R', path.join(MAIN, '.gradle-home'), path.join(WT, '.gradle-home')]);
-    log(`nightly: cloned the main checkout's .gradle-home into ${WT}`);
+  // the drivers run gradle (src-gradle.mjs, --offline) and vitest in this checkout: it needs the main checkout's untracked deps,
+  // APFS-cloned (AGENTS.md; cheap). Ignored by git, so the tree stays clean. nightly.seedFromMain lists them.
+  for (const rel of wtConf.seedFromMain ?? conf.seedFromMain ?? ['.gradle-home', 'sidecar/node_modules']) {
+    const dst = path.join(WT, rel);
+    const src = path.join(MAIN, rel);
+    if (fs.existsSync(dst) || !fs.existsSync(src)) continue;
+    fs.mkdirSync(path.dirname(dst), { recursive: true });
+    execFileSync('cp', ['-c', '-R', src, dst]);
+    log(`nightly: cloned the main checkout's ${rel} into ${WT}`);
   }
   summary.head = git(WT, 'rev-parse', 'HEAD');
   log(`nightly: ${WT} at origin/main ${summary.head.slice(0, 9)}`);
