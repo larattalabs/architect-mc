@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { flAsksFilter } from './fl-norm.mjs'; // (6c FL) FL's five free asks left to FL's own item 8
+import * as P3 from './p3-tier.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const k3 = (c) => `${c[0]},${c[1]},${c[2]}`;
@@ -264,6 +265,9 @@ export const ITEM9 = Object.freeze([
   ['v59', 'valid/v59_riffles.json'], // a riffle
   ['steward', 'hy/s01_steward_farm.json'], // a Steward-shaped plan: a farm zone, a race to its mill lot, ditches along its farm
 ]);
+
+/** (P3 smoke) item 9's slice-tier remainder: one fixture per course writer kind (docs/FAST-CHECKS.md hy-ingame #16). */
+export const SMOKE9 = Object.freeze(['v50', 'v51', 'v54', 'v55', 'v56']);
 
 /** A kit terrain's ground at a world column (flatSurvey's bands, later bands win), in world y. */
 function groundAt(T, W, x, z) {
@@ -528,7 +532,8 @@ export const items = {
             return { froze };
           } });
         } catch (e) { check(false, `cold: ${String(e.message ?? e).slice(0, 300)}`); try { await L.leaveWorld(); } catch { /* left */ } }
-        try { out.exact = await realiseFixture(ctx, 'cold-exact', fx, { base, at: true, rules: 'exact', normal: true }); } catch (e) { check(false, `cold exact: ${String(e.message ?? e).slice(0, 300)}`); try { await L.leaveWorld(); } catch { /* left */ } }
+        if (P3.smoke) P3.skipped(ctx.log, 'cold-exact (the capped brook again, E-normal)', 'the frozen-river write and the cold census above; its exactness at release');
+        else try { out.exact = await realiseFixture(ctx, 'cold-exact', fx, { base, at: true, rules: 'exact', normal: true }); } catch (e) { check(false, `cold exact: ${String(e.message ?? e).slice(0, 300)}`); try { await L.leaveWorld(); } catch { /* left */ } }
         return out;
       },
     },
@@ -539,6 +544,8 @@ export const items = {
       async run(ctx) {
         const only = (process.env.HYB_ONLY ?? '').split(',').filter(Boolean);
         if (only.length && !only.includes('probe')) return { skipped: true };
+        // (P3: the riffle table is the release tier's calibration probe, p3-probe-water; offline the water lint's W2 holds every course)
+        if (P3.smoke) { P3.skipped(ctx.log, 'item 18 (c): the riffle table p01/p01b/p02', 'p3-probe-water at release; the water lint W2 (census == prediction over the corpus, p01/p01b/p02 included)'); return { skipped: 'P3 smoke' }; }
         const out = {};
         for (const [tag, rel] of [['p01', 'hy/p01_riffle_probe.json'], ['p01b', 'hy/p01b_riffle_probe.json'], ['p02', 'hy/p02_long_riffle.json']]) {
           try {
@@ -568,8 +575,12 @@ export const items = {
       async run(ctx) {
         const out = {};
         const only = (process.env.HYB_ONLY ?? '').split(',').filter(Boolean);
+        // (P3 smoke: one per course writer kind: stream, canal, race, ditch, fountain-fed; all of them at release; every kind's census,
+        // containment and breach sweep are the water lint's, offline)
+        if (P3.smoke) P3.skipped(ctx.log, `item 9: ${ITEM9.map(([t]) => t).filter((t) => !SMOKE9.includes(t)).join(', ')}`, 'the water lint (W1-W3 over every kind)');
         for (const [tag, rel] of ITEM9) {
           if (only.length && !only.includes(tag)) continue;
+          if (P3.smoke && !SMOKE9.includes(tag)) continue;
           try { out[tag] = await realiseFixture(ctx, tag, fixture(ctx, rel)); } catch (e) { ctx.check(false, `item 9 (${tag}): ${String(e.message ?? e).slice(0, 300)}`); try { await ctx.L.leaveWorld(); } catch { /* left */ } }
         }
         return out;

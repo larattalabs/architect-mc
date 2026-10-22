@@ -1871,11 +1871,7 @@ public final class Builder {
 							int qi = r == null ? -1 : r.queuePos(m);
 							// displaced: the covering site's before is this site's block and the world no longer holds it there (a block
 							// the covering site kept stays in the world; it drops once, with the covering site's removal)
-							BlockState was0 = WorldJournal.state(over);
-							if (qi >= 0 && !free.get(qi) && Copper.is(was0, r.target[qi].getBlock()) && !Copper.is(level.getBlockState(m), r.target[qi]
-								.getBlock())) {
-								tally.add(Refunds.Outcome.REFUND, r.refundCost(was0, qi)); // (6c CU) the block that stood there
-							}
+							coverCell(r, qi, WorldJournal.state(over), level.getBlockState(m), free, tally);
 							continue;
 						}
 					}
@@ -1887,27 +1883,14 @@ public final class Builder {
 					int k = Construction.index(x - b.minX(), y - b.minY(), z - b.minZ(), dx, dz);
 					BlockState was = k < before.size() ? before.states[k] : Blocks.AIR.defaultBlockState();
 					int qi = r == null ? -1 : r.queuePos(m);
-					boolean asPlaced = qi >= 0 && r.matches(now, qi);
-					// (6c CU) the snapshot's block at any copper stage is still the snapshot's (an adopted copper roof that weathered)
-					boolean asSnapshot = Copper.is(now, was.getBlock());
-					Refunds.Outcome o = Refunds.classify(qi >= 0, asPlaced, qi >= 0 && free.get(qi), now.isAir(), asSnapshot,
-						Refunds.natural(Cells.blockId(was), Cells.blockId(now)));
-					if (only != null && o == Refunds.Outcome.REFUND && asSnapshot) {
-						o = Refunds.Outcome.NONE; // (6c PT2) the undo writes the same block back: it stays, so no refund
-					}
-					if (o == Refunds.Outcome.REFUND) {
-						tally.add(o, r.refundCost(now, qi)); // (6c CU, S-CU-2) the block standing
-						if (TRACE_REFUNDS) {
-							Architect.LOGGER.info("refund-trace deconstruct {} {} target {} now {} cost {}", s.id(), m.toShortString(), r.target[qi], now, r.cost.get(qi));
-						}
-					} else if (o == Refunds.Outcome.PLAYER_DROP) {
-						tally.add(o, Cells.cost(now));
-						if (TRACE_REFUNDS) {
-							Architect.LOGGER.info("refund-trace player {} {} was {} now {} qi {}", s.id(), m.toShortString(), was, now, qi);
-						}
-					} else if (qi >= 0 && !asPlaced && now.isAir()) {
+					Refunds.Outcome o = tallyCell(r, qi, now, was, free, only != null, tally);
+					if (o == null) {
 						missing++;
-						tally.mined();
+					}
+					if (TRACE_REFUNDS && o == Refunds.Outcome.REFUND) {
+						Architect.LOGGER.info("refund-trace deconstruct {} {} target {} now {} cost {}", s.id(), m.toShortString(), r.target[qi], now, r.cost.get(qi));
+					} else if (TRACE_REFUNDS && o == Refunds.Outcome.PLAYER_DROP) {
+						Architect.LOGGER.info("refund-trace player {} {} was {} now {} qi {}", s.id(), m.toShortString(), was, now, qi);
 					}
 				}
 			}
@@ -1939,6 +1922,45 @@ public final class Builder {
 		Deconstruction d = new Deconstruction(tally, stock, at, r == null ? 0 : r.size(), missing);
 		lastDeconstruction = d;
 		return d;
+	}
+
+	/**
+	 * One cell of a deconstruct ({@link #prepareDeconstruct}), booked in {@code tally}: {@code now} the block standing, {@code was} the
+	 * site's before there, {@code qi} the cell's queue position (-1: not queued), {@code adopted} the PT2 rule (an adopted site's removal
+	 * writes only its deltas' cells). Returns the outcome booked, or null for a queued, paid cell the player mined (air now: counted, never
+	 * refunded). Pure of the level: the seam the survival ledger lint (docs/FAST-CHECKS.md "Survival ledger lint") drives with the real
+	 * {@link Run}.
+	 */
+	static Refunds.@Nullable Outcome tallyCell(@Nullable Run r, int qi, BlockState now, BlockState was, BitSet free,
+		boolean adopted, Refunds.Tally tally) {
+		boolean asPlaced = qi >= 0 && r.matches(now, qi);
+		// (6c CU) the snapshot's block at any copper stage is still the snapshot's (an adopted copper roof that weathered)
+		boolean asSnapshot = Copper.is(now, was.getBlock());
+		Refunds.Outcome o = Refunds.classify(qi >= 0, asPlaced, qi >= 0 && free.get(qi), now.isAir(), asSnapshot,
+			Refunds.natural(Cells.blockId(was), Cells.blockId(now)));
+		if (adopted && o == Refunds.Outcome.REFUND && asSnapshot) {
+			o = Refunds.Outcome.NONE; // (6c PT2) the undo writes the same block back: it stays, so no refund
+		}
+		if (o == Refunds.Outcome.REFUND) {
+			tally.add(o, r.refundCost(now, qi)); // (6c CU, S-CU-2) the block standing
+		} else if (o == Refunds.Outcome.PLAYER_DROP) {
+			tally.add(o, Cells.cost(now));
+		} else if (qi >= 0 && !asPlaced && now.isAir()) {
+			tally.mined();
+			return null;
+		}
+		return o;
+	}
+
+	/**
+	 * A cell of a deconstruct that a covering site holds (phase 4e "Survival layering", rule 3b): a paid cell of this site whose block the
+	 * covering site displaced ({@code was0}, the covering site's before there, is this site's block, and the world no longer holds it) is
+	 * refunded as the block that stood there; nothing else. The ledger lint's seam, as {@link #tallyCell}.
+	 */
+	static void coverCell(@Nullable Run r, int qi, BlockState was0, BlockState now, BitSet free, Refunds.Tally tally) {
+		if (qi >= 0 && !free.get(qi) && Copper.is(was0, r.target[qi].getBlock()) && !Copper.is(now, r.target[qi].getBlock())) {
+			tally.add(Refunds.Outcome.REFUND, r.refundCost(was0, qi)); // (6c CU) the block that stood there
+		}
 	}
 
 	/** After the restore: the deconstruct's items drop at the crate's cell (kept from the restore's drop cleanup). */
@@ -2425,8 +2447,7 @@ public final class Builder {
 			BlockState old = was.get(e.getKey());
 			if (target.isAir() || kind == null || kind == SiteDeltas.REMOVED) {
 				// removed (or now air): written already, free; the paid block that stood there is refunded now
-				if (wasPaid && old != null && !old.isAir()) {
-					Cells.cost(old).forEach(x -> refunded.merge(x.item(), x.count(), Integer::sum));
+				if (refundRemoved(wasPaid, old, refunded)) {
 					if (TRACE_REFUNDS) {
 						Architect.LOGGER.info("refund-trace delta-removed {} {} old {} target {} kind {}", s.id(), p.toShortString(), old, target, kind);
 					}
@@ -2511,6 +2532,19 @@ public final class Builder {
 			.cardinality(), refunded);
 		return new SiteDeltas.Result(true, s.id(), res.from(), res.to(), res.written(), res.kept(), res.reshaped(), List.of(), res.notes(), before, built,
 			refunded);
+	}
+
+	/**
+	 * A construction delta's removed cell (phase 5b, 6c CU): the paid block standing there ({@code old}) is refunded now, by the block that
+	 * stands (a weathered copper block refunds its own items); a cell that was never paid (an adopted block, PT2) refunds nothing. Returns
+	 * whether it booked a refund into {@code refunded}. The survival ledger lint's seam (docs/FAST-CHECKS.md "Survival ledger lint").
+	 */
+	static boolean refundRemoved(boolean wasPaid, @Nullable BlockState old, Map<String, Integer> refunded) {
+		if (wasPaid && old != null && !old.isAir()) {
+			Cells.cost(old).forEach(x -> refunded.merge(x.item(), x.count(), Integer::sum));
+			return true;
+		}
+		return false;
 	}
 
 	static int boxIndexOld(Anchors.Bounds box, BlockPos p) {

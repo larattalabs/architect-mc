@@ -25,6 +25,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { flAsksFilter } from './lib/fl-norm.mjs'; // (6c FL) FL's five free asks left to FL's own item 8
+import * as P3 from './lib/p3-tier.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-KC-run');
@@ -139,9 +140,10 @@ steps.ingame = async () => {
   const dst = path.join(L.GAME_DIR, 'architect', 'bibles', 'g6cvoc_forge', 'versions', '1');
   fs.mkdirSync(dst, { recursive: true });
   fs.copyFileSync(path.join(root, 'scenarios', 'bibles', 'g6cvoc_forge.json'), path.join(dst, 'bible.json'));
-  // ---- item 4: v51, its ring repaired
+  // ---- item 4: v51, its ring repaired (P3 smoke: v61 is the in-game instance; v51's fountain census and M25:clear are the water lint's)
   const v51 = B.fixture(ctx, 'valid/v51_voc_forge.json');
-  out.v51 = await B.realiseFixture(ctx, 'kc-v51', v51, {
+  if (P3.smoke) P3.skipped(log, 'item 4: v51 realised (the fountain census, the wall writing 0 cells of its sets)', 'the water lint (valid/v51_voc_forge.json: M25 incl. M25:clear, census == prediction) and kc.test');
+  else out.v51 = await B.realiseFixture(ctx, 'kc-v51', v51, {
     bible: 'g6cvoc_forge',
     after: async (r) => {
       const o = {};

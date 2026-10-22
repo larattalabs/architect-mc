@@ -20,6 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import * as P3 from './p3-tier.mjs';
 
 const OWNER = 'test:vocb';
 const FLAT = 'G6B Flat Base';
@@ -528,7 +529,10 @@ const survival = [{
     const box6 = (s) => String(s).replace(/[^-0-9,]/g, ' ').trim().split(/[\s,]+/).map(Number);
     const hash = async (b) => L.call('dev.box.hash', { min: [b[0], b[1], b[2]], max: [b[3], b[4], b[5]] }, 300_000);
     const at = [7100, FLAT_Y + 1, 7100];
+    // (P3 smoke: voc_shrine only; voc_copper_hall is the same bill == BOM and refund proof with copper blocks: the survival ledger lint's)
+    if (P3.smoke) P3.skipped(ctx.log, 'item 11: voc_copper_hall', 'the survival ledger lint (bill == BOM, fed exactly, refund == the standing blocks, copper weathering)');
     for (const [k, id] of ['voc_shrine', 'voc_copper_hall'].entries()) {
+      if (P3.smoke && id !== 'voc_shrine') continue;
       const o = {};
       out[id] = o;
       const x = at[0] + 40 * k, y = at[1], z = at[2];

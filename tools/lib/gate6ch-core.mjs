@@ -5,6 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
+import * as P3 from './p3-tier.mjs';
 
 /**
  * Item 11's named exceptions: the fixtures that may differ from origin/main; every other fixture must not. (The H batch's T3a r06 and
@@ -232,19 +233,22 @@ export async function ingame(ctx) {
     for (const b of d.bodies) c1[b.id] = await censusOf(ctx, b, before, d.bodies);
     out.census = Object.fromEntries(Object.entries(c1).map(([k, v]) => [k, { ok: v.ok, sources: v.sources, flowing: v.flowing, mismatch: v.mismatch, outside: v.outside, ticks: v.ticks }]));
     check(Object.values(c1).every((c) => c.ok && c.ticks === 0), `item 2: every body's census equals its prediction exactly (sources, flowing levels), 0 fluid outside its cells, spill and joins, no fluid tick scheduled (${json(Object.entries(c1).map(([k, v]) => [k, v.sources, v.flowing, v.mismatch.length, v.outsideCount]))})`);
-    // the stand: 2 minutes at default rules (random ticks, fire, spawns): the census unchanged
-    await sleep(120_000);
+    // the stand: 2 minutes at default rules (random ticks, fire, spawns): the census unchanged (P3 smoke: 30 s; the physics is the census's)
+    await sleep(P3.standMs(120_000));
     const c2 = {};
     for (const b of d.bodies) c2[b.id] = await censusOf(ctx, b, before, d.bodies);
     out.stand = Object.fromEntries(Object.entries(c2).map(([k, v]) => [k, { ok: v.ok, mismatch: v.mismatch, outside: v.outside }]));
-    check(Object.values(c2).every((c) => c.ok), `item 2: a 2-minute stand at default rules adds nothing (${json(Object.entries(c2).map(([k, v]) => [k, v.mismatch.length, v.outsideCount]))})`, out.stand);
+    check(Object.values(c2).every((c) => c.ok), `item 2: a ${P3.standMs(120_000) / 1000} s stand at default rules adds nothing (${json(Object.entries(c2).map(([k, v]) => [k, v.mismatch.length, v.outsideCount]))})`, out.stand);
     // item 6: one shell cell of each body opened (a player's pickaxe); after a settle bound the water reaches only its declared and
     // watched cells (the breach reach as predicted, re-surveyed), never a lot, a build, a protected area or keep-out (none here: the claim)
+    // (P3 smoke: one body's breach, the pond's: the calibration instance; the water lint's W3 sweeps every shell cell of every body offline)
+    const breached = P3.smoke ? d.bodies.filter((b) => b.id === 'pond') : d.bodies;
+    if (P3.smoke) P3.skipped(log, `item 6: the single breach of ${d.bodies.filter((b) => b.id !== 'pond').map((b) => b.id).join(', ')}`, 'the water lint W3 (kit/lint)');
     const opened = {};
-    for (const b of d.bodies) { const c = breachCell(b); opened[b.id] = c; if (c) await L.cmd(`/setblock ${c[0]} ${c[1]} ${c[2]} minecraft:air`); }
-    await sleep(Math.max(...d.bodies.map((b) => b.settleTicks)) * 50 * 2 + 3000);
+    for (const b of breached) { const c = breachCell(b); opened[b.id] = c; if (c) await L.cmd(`/setblock ${c[0]} ${c[1]} ${c[2]} minecraft:air`); }
+    await sleep(Math.max(...breached.map((b) => b.settleTicks)) * 50 * 2 + 3000);
     const c3 = {};
-    for (const b of d.bodies) {
+    for (const b of breached) {
       const c = await censusOf(ctx, b, before, d.bodies);
       // every body was breached at once: each one's reach is its own cells, spill and watch plus its siblings' (a spout over its basin)
       const linked = linkedOf(b, d.bodies);
@@ -270,10 +274,11 @@ export async function ingame(ctx) {
     await L.leaveWorld();
   }
   // ---- (B) exact rules: item 5, exact undo (E-flat 0 over the claim, fluid cells compared by state)
+  let box = null;
   {
     await freshFlat(ctx, 'G6B H Exact', 'exact');
     const d = await planDemo(ctx, { lava: true });
-    const box = demoBox(d.bodies);
+    box = demoBox(d.bodies);
     const file = await snap(ctx, box, 'h-exact');
     const r = await realiseWait(ctx, d.p.planId);
     check(r.view.state === 'PLACED' && (r.fluids ?? []).every((x) => x.state === 'settled'), `item 5: the exact-rules realise PLACED, every body settled (${r.view.state}; ${json((r.fluids ?? []).map((x) => [x.body, x.state]))})`);
@@ -286,6 +291,9 @@ export async function ingame(ctx) {
     check(rm.state === 'REMOVED' && df.mismatches === 0, `item 5: Regions.remove (drain, a settle bound, then the solids) restores the box exactly under the exact rules: E-flat ${df.mismatches} over ${(box[3] - box[0] + 1) * (box[4] - box[1] + 1) * (box[5] - box[2] + 1)} cells (fluid cells by state; ${rm.seconds} s)`, df.sample);
     // the same, with item 6's breach before the removal (its exactness is item 5's)
     await L.leaveWorld();
+  }
+  if (P3.smoke) P3.skipped(log, "item 6's exactness after a breach (a second exact-rules world)", "item 5's exact undo here and the breach's removal in (A)");
+  else {
     await freshFlat(ctx, 'G6B H ExactBreach', 'exact');
     const d2 = await planDemo(ctx, { lava: true });
     const file2 = await snap(ctx, box, 'h-exact-breach');
@@ -549,7 +557,8 @@ export async function probe(ctx) {
     await L.leaveWorld();
   }
   // ---- item 13: the fire reach: a 3x3 lava pool, flammable posts at distances 1-4 sideways and heights -1..3, random ticks 300, fire on
-  {
+  if (P3.smoke) P3.skipped(log, 'item 13: the lava fire reach probe (posts 1-4, random ticks 300, 2 minutes)', 'p3-probe-water at release (the calibration of M20; the water lint runs M20 on every lava body)');
+  else {
     await freshFlat(ctx, 'G6B H Fire', 'default');
     const gy = await groundY(ctx, 200, 200);
     const X = 200, Z = 200;

@@ -554,7 +554,8 @@ steps.survival = async () => {
     const dropped = Object.fromEntries(Object.entries(near.items ?? {}).filter(([k]) => /copper|lightning_rod/.test(k)));
     const post = await cellsOf(area);
     const differ = [...pre].filter(([k, s]) => post.get(k) !== s && !/grass_block|dirt/.test(`${s}${post.get(k)}`));
-    out.b = { weather: w2, waxed: ws.waxed.length, scraped: ws.scraped.length, perCell, expect, remove: { removed: rm.removed, refund: rm.refund, blockers: rm.blockers }, returned, dropped, differ: differ.length };
+    // (P3: `standing`, every refunded cell's state, for the release tier's ledger probe: the Java model's refund of the same blocks)
+    out.b = { weather: w2, waxed: ws.waxed.length, scraped: ws.scraped.length, perCell, expect, standing, remove: { removed: rm.removed, refund: rm.refund, blockers: rm.blockers }, returned, dropped, differ: differ.length };
     check(perCell.length > 0 && rm.removed && same(returned, expect) && same(rm.refund ?? returned, expect), `item 8b: deconstructed after weathering (${w2.cells} cells), waxing (${ws.waxed.length}) and scraping (${ws.scraped.length}): the stockpile was credited the items of the blocks standing (${sum(expect)} items; returned ${json(minus(returned, expect))} off); ${perCell.length} cells refunded a block other than their plan's, named per cell`, { expect, returned, perCell: perCell.slice(0, 20) });
     check(Object.keys(dropped).length === 0, `item 8b: 0 copper dropped at the site as a player's block (${json(near.items ?? {})})`, dropped);
     // the ledger: charged (consumed over the whole build) minus everything refunded (the delta's and the deconstruct's) equals, per item,

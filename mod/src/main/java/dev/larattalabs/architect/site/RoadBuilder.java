@@ -238,6 +238,24 @@ public final class RoadBuilder {
 		}
 		r = new Builder.Run(probe(i), target);
 		r.name = "road " + i.id();
+		BlockState[] bs = freeOff(r, before);
+		ServerLevel level = Sites.levelOf(srv, i.dimension());
+		if (level != null) {
+			r.rescan(level);
+			r.newlyCount = 0;
+			r.resend = false;
+		}
+		RUNS.put(i.id(), r);
+		BEFORE.put(i.id(), bs);
+		return r;
+	}
+
+	/**
+	 * A construction road's free cells off its run's bill ({@link #freeCell}: a dirt path on a block a shovel paths), before the rescan
+	 * derives what is built: their costs leave {@code unbuilt} and {@code bom} and the cell costs nothing. Returns the queued cells'
+	 * {@code before} states. Pure: the survival ledger lint's seam for the free-conversion set (docs/FAST-CHECKS.md).
+	 */
+	static BlockState[] freeOff(Builder.Run r, Cells before) {
 		BlockState[] bs = new BlockState[r.size()];
 		for (int q = 0; q < r.size(); q++) {
 			int k = r.queue[q];
@@ -253,15 +271,7 @@ public final class RoadBuilder {
 		}
 		r.unbuilt.values().removeIf(v -> v == 0);
 		r.bom.values().removeIf(v -> v == 0);
-		ServerLevel level = Sites.levelOf(srv, i.dimension());
-		if (level != null) {
-			r.rescan(level);
-			r.newlyCount = 0;
-			r.resend = false;
-		}
-		RUNS.put(i.id(), r);
-		BEFORE.put(i.id(), bs);
-		return r;
+		return bs;
 	}
 
 	/** The building construction roads of a group. */

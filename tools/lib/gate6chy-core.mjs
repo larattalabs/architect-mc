@@ -7,6 +7,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
+import * as P3 from './p3-tier.mjs';
 
 /**
  * Item 12's named exceptions: fixtures HY re-answers by name. h/r08_course is a course (now HY-b's v51, the stub's UNREACHABLE until HYb
@@ -274,11 +275,11 @@ export async function ingame(ctx) {
     check(Object.values(c1).every((c) => c.ok && c.ticks === 0), `item 3: every body's census equals its prediction exactly (sources; the fall's lip, column and landing; the spillway's film; the feed's spillway), 0 fluid outside its cells, spill and joins, no fluid tick (${json(Object.entries(c1).map(([k, v]) => [k, v.sources, v.flowing, v.mismatch.length, v.outsideCount]))})`, out.census);
     const bound = new Map(r.bodies.map((b) => [b.id, b.settleTicks]));
     check(fl.every((x) => x.settledAt <= bound.get(x.body)), `item 3: each body settled within its settleTicks (${json(fl.map((x) => [x.body, x.settledAt, bound.get(x.body)]))})`);
-    await sleep(120_000);
+    await sleep(P3.standMs(120_000)); // (P3 smoke: 30 s; the physics is the census's: no fluid tick scheduled)
     const c2 = {};
     for (const b of r.bodies) c2[b.id] = await censusOf(ctx, b, before, r.bodies);
     out.stand = Object.fromEntries(Object.entries(c2).map(([k, v]) => [k, { ok: v.ok, mismatch: v.mismatch, outside: v.outside }]));
-    check(Object.values(c2).every((c) => c.ok), `item 3: a 2-minute stand at default rules adds nothing (${json(Object.entries(c2).map(([k, v]) => [k, v.mismatch.length, v.outsideCount]))})`, out.stand);
+    check(Object.values(c2).every((c) => c.ok), `item 3: a ${P3.standMs(120_000) / 1000} s stand at default rules adds nothing (${json(Object.entries(c2).map(([k, v]) => [k, v.mismatch.length, v.outsideCount]))})`, out.stand);
     // item 7: one bank cell of a reach (r2's side shell), one weir cell (r1's outer course, the lake's side) and one lining cell (r1's
     // lip side) opened; after a settle bound the water reaches nothing past the bodies' cells, spill, watched breach reach and joins
     const r2 = r.bodies.find((b) => b.id === 'stream_r2'), r1 = r.bodies.find((b) => b.id === 'stream_r1');
@@ -287,7 +288,9 @@ export async function ingame(ctx) {
     const weir = r1.lining.filter(([x, y]) => x === minX - 2 && y === r1.level).sort((a, b) => a[2] - b[2])[1] ?? r1.lining.find(([x]) => x === minX - 2);
     const lining = r1.lining.find(([x]) => x > Math.max(...r1.cells.map((q) => q[0])));
     out.breach = { bank, weir, lining };
-    for (const c of [bank, weir, lining]) if (c) await L.cmd(`/setblock ${c[0]} ${c[1]} ${c[2]} minecraft:air`);
+    // (P3 smoke: the bank's breach only, the calibration instance; the water lint's W3 sweeps every shell, lining and weir cell offline)
+    if (P3.smoke) P3.skipped(ctx.log, 'item 7: the weir and lining breaches', 'the water lint W3 (every shell, lining and weir cell of hy_core_demo and the HY corpus)');
+    for (const c of P3.smoke ? [bank] : [bank, weir, lining]) if (c) await L.cmd(`/setblock ${c[0]} ${c[1]} ${c[2]} minecraft:air`);
     await sleep(Math.max(...r.bodies.map((b) => b.settleTicks)) * 50 * 2 + 3000);
     const allowed = new Set(r.bodies.flatMap((o) => [...o.cells, ...o.spill, ...o.watch, ...o.joins, ...o.predicted, ...o.planJoins.flatMap((q) => q.cells)]).map(k3));
     const nowF = await fluidsIn(ctx, box);
@@ -297,7 +300,7 @@ export async function ingame(ctx) {
     // the weir's breach connects nothing: the lake's cells still sources at their level, r1's still its own (no flowing cell between)
     const lake = [...before].filter(([, s]) => /^minecraft:water(\[level=0\])?$/.test(s)).map(([k]) => k);
     const lakeOk = lake.length > 0 && lake.every((k) => nowF.get(k) === before.get(k));
-    check(bank && weir && lining && beyond.length === 0 && lakeOk, `item 7: a single breach of a reach's bank ${json(bank)}, a weir cell ${json(weir)} and a lining cell ${json(lining)} reaches nothing past the bodies' cells, spill, watched breach reach and joins (${beyond.length}); the weir's breach connects nothing (the lake's ${lake.length} sources unchanged: ${lakeOk})`, out.breach);
+    check(bank && weir && lining && beyond.length === 0 && lakeOk, `item 7: a single breach of a reach's bank ${json(bank)}${P3.smoke ? '' : `, a weir cell ${json(weir)} and a lining cell ${json(lining)}`} reaches nothing past the bodies' cells, spill, watched breach reach and joins (${beyond.length}); the weir's breach connects nothing (the lake's ${lake.length} sources unchanged: ${lakeOk})`, out.breach);
     const rm = await removeWait(ctx, r.region);
     const st = await strayFluid(ctx, r.bodies, before);
     out.breachUndo = { state: rm.state, seconds: rm.seconds, extra: st.n, left: st.left };
@@ -305,7 +308,8 @@ export async function ingame(ctx) {
     await L.leaveWorld();
   }
   // ---- (B) exact rules: item 5 (E-flat by state), and item 7's exactness (the same breach, then the removal)
-  for (const breach of [false, true]) {
+  if (P3.smoke) P3.skipped(ctx.log, "item 7's exactness after the breach (a second exact-rules world)", "item 5's exact undo and the breach's removal in (A)");
+  for (const breach of P3.smoke ? [false] : [false, true]) {
     const tag = breach ? 'exact-breach' : 'exact';
     const { g } = await freshCourse(ctx, `G6B HY ${breach ? 'ExactBreach' : 'Exact'}`, 'exact');
     const ck = await checkCourse(ctx, tag);
@@ -491,7 +495,9 @@ async function lastRegion(ctx) {
 export async function crash(ctx) {
   const { L, check, json } = ctx;
   const out = {};
-  for (const [tag, point, during] of [['fl1', 'FL1+save', 'realise'], ['fl4', 'FL4+save', 'realise'], ['fl5', 'FL5+save', 'removal'], ['fl3', 'FL3', 'removal']]) {
+  // (P3 smoke: FL4 and FL5, the course's own stages; FL1 and FL3 repeat h-crash's on a course: at release)
+  if (P3.smoke) P3.skipped(ctx.log, 'item 8: FL1+save and FL3 on a course', "h-crash's FL1 and FL3 (every slice that touches fluids)");
+  for (const [tag, point, during] of [['fl1', 'FL1+save', 'realise'], ['fl4', 'FL4+save', 'realise'], ['fl5', 'FL5+save', 'removal'], ['fl3', 'FL3', 'removal']].filter(([tag]) => !P3.smoke || tag === 'fl4' || tag === 'fl5')) {
     const world = `G6B HY Crash ${tag}`;
     const { g } = await freshCourse(ctx, world, 'exact');
     const ck = await checkCourse(ctx, `crash-${tag}`);

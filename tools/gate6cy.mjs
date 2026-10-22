@@ -452,12 +452,15 @@ steps.store = async () => {
   check(st0.feedOrder.indexOf(ids.h1) < st0.feedOrder.indexOf(ids.h2) && st0.feedOrder.indexOf(ids.h2) < st0.feedOrder.indexOf(ids.h3)
     && st0.feedOrder.indexOf(ids.h3) < st0.feedOrder.indexOf(ids.r1), `store: the default order is the batch's item order (${json(st0.feedOrder)})`);
   out.bom = st0.outstanding;
+  // (P3, the release tier's ledger probe: tools/p3-probe.mjs ledger) the ledger at each event of this run, for the model's prediction
+  out.probe = { start: { ledger: st0.ledger, outstanding: st0.outstanding, keys: st0.creditedKeys } };
   // feed the whole bill in waves (chunks of 40 per item), a checkpoint after every wave and while building
   await feedAll(cons, `stockpile:${OWNER}`, { chunk: 40, onWave: async (w) => { await cons.point(`wave ${w}`); } });
   const built = await waitBuilt(Object.values(ids), 300_000, async () => { if (cons.points.length < 14) await cons.point('building'); });
   check(built.length === 6, `store: all six targets BUILT from the stockpile (${json(built)})`);
   await settle(2000);
   await cons.point('built');
+  out.probe.built = { ledger: (await pstate()).ledger };
   // each target cell-identical to its INSTANT twin
   for (const k of ['h1', 'h2', 'h3', 'h4', 'r1', 'r2']) {
     const s0 = await siteOf(ids[k]);
@@ -485,6 +488,7 @@ steps.store = async () => {
   check(sum(d.refund) > 0 && Object.entries(d.refund).every(([k, v]) => (dret[k] ?? 0) >= v) && Ps1.creditedKeys === Ld0Keys + 1,
     `store: the delta's removed cells were credited into the stockpile under one key (refund ${sum(d.refund)}, returned ${sum(dret)}; keys ${Ld0Keys} -> ${Ps1.creditedKeys})`);
   out.delta = { refund: d.refund, returned: dret };
+  out.probe.delta = { before: Ld0, after: Ld1, outstanding: Ps1.outstanding, refund: d.refund, keys: [Ld0Keys, Ps1.creditedKeys] };
   const dt = await later(`applydelta ${twins.h4} ${v2.version} test:twin actor`, 120_000);
   check(dt.applied, `store: the twin's instant delta (${json(dt.refusals ?? dt.to)})`);
   await cons.point('delta applied');
@@ -501,6 +505,7 @@ steps.store = async () => {
   check(ddl.length === 0, `store: after the delta it equals the legacy construction twin (own crate) cell for cell${ddl.length ? ` (${json(ddl).slice(0, 300)})` : ''}`);
   check(dd.every(soilOnly), `store: after the delta it equals the instant twin cell for cell but for soil cells (grass/dirt: ${dd.length}; the same on the legacy construction path, 5b's, not Y1's)${dd.filter((x) => !soilOnly(x)).length ? ` (${json(dd).slice(0, 300)})` : ''}`);
   await cons.point('delta built');
+  out.probe.deltaBuilt = { ledger: (await pstate()).ledger };
   const Pr0 = await pstate();
   const Lr0 = Pr0.ledger;
   const rv = await later(`srevert ${ids.h4} 1`, 120_000);
@@ -512,6 +517,7 @@ steps.store = async () => {
   check(sum(rv.refund) > 0 && Object.entries(rv.refund).every(([k, v]) => (rret[k] ?? 0) >= v) && Pr1.creditedKeys === Pr0.creditedKeys + 1,
     `store: the revert's removed cells were credited into the stockpile under one key (refund ${sum(rv.refund)}, returned ${sum(rret)})`);
   out.revert = { refund: rv.refund, returned: rret };
+  out.probe.revert = { before: Lr0, after: Lr1, outstanding: Pr1.outstanding, refund: rv.refund, keys: [Pr0.creditedKeys, Pr1.creditedKeys] };
   const rt = await later(`srevert ${twins.h4} 1 actor`, 120_000);
   check(rt.applied, `store: the twin's instant revert (${json(rt.refusals ?? rt.to)})`);
   const rl = await later(`srevert ${twins.h4legacy} 1`, 120_000);
@@ -520,6 +526,7 @@ steps.store = async () => {
   const br = await waitBuilt([ids.h4]);
   check(br.length === 1, `store: the revert target BUILT from the stockpile (${json(br)})`);
   await settle(2000);
+  out.probe.revertBuilt = { ledger: (await pstate()).ledger };
   const dr = await sameCells(big, shift(big, 0, DZ));
   const drl = await sameCells(big, shift(big, 0, DL));
   out.revertTwin = { instant: dr, legacy: drl };
