@@ -8,6 +8,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DevClient } from './devclient.mjs';
 import { baseCurrent as baseCurrentIn, baseRecipe, writeStamp } from './basestamp.mjs';
+import { gameWait as sprintWait } from './sprint.mjs';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -124,6 +125,12 @@ export async function stopClient() {
 
 export const cmd = async (c) => call('dev.command', { cmd: c }, 120_000);
 export const settle = (ms = 3000) => call('dev.wait', { ms }, ms + 20_000);
+
+/**
+ * (gate speed 3) `ms` of game time, sprinted on the headless host (tools/lib/sprint.mjs; GATE_SPRINT=0: exactly `real(ms)`, the
+ * call site's original wait, by default this settle). Only for waits on ticks: stands, fluid settles, hydration, growth.
+ */
+export const gameWait = (ms, { real = settle, label, sprint } = {}) => sprintWait({ call, cmd, log }, ms, real, { label, sprint });
 
 /**
  * (gate waits, 2026-10-20) A settle that ends when the world is quiet, at most `capMs` (the fixed settle it replaces). Quiet: every
