@@ -188,6 +188,8 @@ writeDay();
 
 // ------------------------------------------------------------------ the worktree at origin/main
 
+let wtConf = conf; // origin/main's own nightly settings, once its worktree is there
+
 try {
   git(MAIN, 'fetch', '--quiet', 'origin');
   if (!fs.existsSync(WT)) {
@@ -197,6 +199,7 @@ try {
     if (git(WT, 'status', '--porcelain', '--untracked-files=all')) throw new Error(`${WT} has local changes: not moving it (the night is skipped)`);
     git(WT, 'checkout', '-q', '--detach', 'origin/main');
   }
+  wtConf = readJson(path.join(WT, 'tools', 'gate-cache.json'))?.nightly ?? conf;
   // the drivers run gradle (src-gradle.mjs, --offline) and vitest in this checkout: it needs the main checkout's untracked deps,
   // APFS-cloned (AGENTS.md; cheap). Ignored by git, so the tree stays clean. nightly.seedFromMain lists them.
   for (const rel of wtConf.seedFromMain ?? conf.seedFromMain ?? ['.gradle-home', 'sidecar/node_modules']) {
@@ -216,7 +219,6 @@ try {
   log(`nightly: skipped: ${e.message}`);
   process.exit(0);
 }
-const wtConf = readJson(path.join(WT, 'tools', 'gate-cache.json'))?.nightly ?? conf;
 if (!fs.existsSync(path.join(WT, 'tools', 'step-inputs.json'))) log('nightly: origin/main has no step cache yet: the run still runs everything, nothing is recorded');
 
 // ------------------------------------------------------------------ the run

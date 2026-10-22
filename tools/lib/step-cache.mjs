@@ -73,9 +73,17 @@ export function cacheContext({ src, main, cfg, conf, map, snapDir, env = process
     // none
   }
   const plumbing = new RegExp(conf.modeEnv?.plumbing ?? '^$');
+  let lastTag = null;
+  try {
+    const t = git(src, 'describe', '--tags', '--abbrev=0', '--match', 'v*', head);
+    lastTag = { tag: t, commit: git(src, 'rev-parse', `${t}^{commit}`) };
+  } catch {
+    // none reachable
+  }
+  const repoListing = sha([...treeAt(src, head).keys()].sort().join('\n')).slice(0, 16);
   return {
     src, main, cfg, conf, map, snapDir, env, head, dirty: dirtyList,
-    toolchain: { node: process.version, java: javaVersion(env), build: buildVersions(src, head) },
+    toolchain: { node: process.version, java: javaVersion(env), build: buildVersions(src, head) }, lastTag, repoListing,
     // the release context (strict NEXT checks): this checkout's; for another commit, as a detached checkout of it would see it
     // (ARCHITECT_RELEASE, else a v* tag on it), which is what the nightly's and the runner's detached worktrees see
     release: { src: commit === 'HEAD' ? releaseContext(src, env).release : env.ARCHITECT_RELEASE === '1' || env.ARCHITECT_RELEASE === '0' ? env.ARCHITECT_RELEASE === '1' : tagAtHead, tagAtHead },
@@ -121,6 +129,9 @@ export function keyFor(ctx, id) {
   const inputs = inputsHash(map, conf, mid, ctx.src, ctx.head);
   const def = ctx.defAt ? ctx.defAt(ctx.head, id) : definitionNow(ctx.src, ctx.rawCfg ?? cfg, id);
   const names = new Set([...(me.env ?? []), ...(conf.modeEnv?.always ?? [])]);
+  // ambient variables with the project's prefixes: read by the JVM, the sidecar, the client scripts or an aliased process.env
+  const pre = conf.modeEnv?.prefixes ? new RegExp(conf.modeEnv.prefixes) : null;
+  if (pre) for (const n of Object.keys(ctx.env)) if (pre.test(n)) names.add(n);
   const modes = {};
   for (const n of [...names].sort()) {
     if (ctx.plumbing.test(n) || Object.hasOwn(entry.env ?? {}, n)) continue;
@@ -129,6 +140,8 @@ export function keyFor(ctx, id) {
   const flags = {};
   if (me.flags?.releaseContext) flags.release = ctx.release;
   if (me.flags?.originMain) flags.originMain = ctx.originMain;
+  if (me.flags?.lastTag) flags.lastTag = ctx.lastTag;
+  if (me.flags?.repoListing) flags.repoListing = ctx.repoListing;
   const parts = canon({
     v: 1,
     id,

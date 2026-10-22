@@ -46,6 +46,8 @@
    "mod/**",
    "kit/**",
    "sidecar/**",
+   "devserver/**",
+   "apitest/**",
    "tools/gen-palettes.mjs"
   ],
   "untraced": [
@@ -175,15 +177,18 @@
   "6c-scenario-s3-dev": "a by-hand pin"
  },
  "modeEnv": {
-  "$comment": "The environment that changes what a step runs: every variable a module of its closure reads (process.env.NAME) except the per-run plumbing below, plus these always.",
+  "$comment": "The environment that changes what a step runs: every variable a module of its closure reads (process.env.NAME), every ambient variable with the project's prefixes (prefixes: the JVM, the sidecar, the client scripts and aliased reads are invisible to the scan), plus always; less the per-run plumbing (ports, run and out dirs, tokens; a *_DIR that redirects an input, such as ARCHITECT_STAMPS_DIR or LINT_KIT_DIR, is a mode).",
   "always": [
    "GATE_P3",
    "GATE_P2_SMOKE",
    "CALIBRATION_WRITE",
    "ARCHITECT_RELEASE",
-   "ARCHITECT_TEST_SLOW_TILES"
+   "ARCHITECT_TEST_SLOW_TILES",
+   "ARCHITECT_APITEST",
+   "ARCHITECT_HEADLESS"
   ],
-  "plumbing": "^(PATH|HOME|USER|TMPDIR|JAVA_HOME|GRADLE_USER_HOME|GATE_RUNNER|GATE_KIT_RESULTS|GATE_KIT_TREE|GATE_UNIT_MOD_RUN|GATE_TRACE_DIR|GATE_TRACE_ROOT|GATE_HISTORY_FILE|GATE_SLOTS|GATE_SLOTS_DIR|GATE_SLOT_POLL_MS|GATE_PORTS|GATE_SHARD_PORTS|GATE_RUN_DIR|GATE_RUN_DIRS|GATE_RUNS_OUT|GATE_LOCK|GATE_SEED_DIR|GATE_SNAPSHOT_DIR|GATE_NOTIFY|GATE_NOTIFY_SCRIPT|GATE_AUTO_PROBE|SCENARIOS_ART|ARCHITECT_DEV_TOKEN|ARCHITECT_SHOTS_DIR|ARCHITECT_ARTIFACTS|ARCHITECT_EVAL_PORT|ARCHITECT_GAME_DIR|APITEST_GAME_DIR|APITEST_OUT|P3_RUN|LINT_OUT|.*_PORT|.*_OUT|.*_RUN|.*_DIR)$"
+  "plumbing": "^(PATH|HOME|USER|TMPDIR|JAVA_HOME|GRADLE_USER_HOME|GATE_RUNNER|GATE_KIT_RESULTS|GATE_KIT_TREE|GATE_UNIT_MOD_RUN|GATE_TRACE_DIR|GATE_TRACE_ROOT|GATE_TRACE_ROOTS|GATE_HISTORY_FILE|GATE_SLOTS|GATE_SLOTS_DIR|GATE_SLOT_POLL_MS|GATE_PORTS|GATE_SHARD_PORTS|GATE_RUN_DIR|GATE_RUN_DIRS|GATE_RUNS_OUT|GATE_LOCK|GATE_SEED_DIR|GATE_SNAPSHOT_DIR|GATE_NOTIFY|GATE_NOTIFY_SCRIPT|GATE_AUTO_PROBE|GATE_STEP_CACHE_DIR|GATE_PART|GATE_PART_ALL|SCENARIOS_ART|ARCHITECT_DEV_TOKEN|ARCHITECT_SHOTS_DIR|ARCHITECT_ARTIFACTS|ARCHITECT_EVAL_PORT|ARCHITECT_GAME_DIR|ARCHITECT_PORT|ARCHITECT_DEV_PORT|ARCHITECT_GATE_SIDECAR_PORT|ARCHITECT_GATE_DEV_PORT|ARCHITECT_GATE_OLD_SIDECAR_PORT|ARCHITECT_GATE_OLD_DEV_PORT|APITEST_GAME_DIR|APITEST_OUT|P3_RUN|LINT_OUT|GATE4E_RUN|GATE5B_RUN|GATE6A_RUN|GATE6B_RUN|GATE6B_DEV_PORT|GATE6B_SIDECAR_PORT|.*_OUT)$",
+  "prefixes": "^(ARCHITECT_|GATE_|G5B_|RS_|IRR_|HYB_|UPDATE_|LINT_|UMT|LEDGER|CALIBRATION_|P2_|P3_|APITEST_|T3[AB]_|K1B_|F3_|C3[078]_|GATE6)"
  },
  "release": {
   "$comment": "The release tier's selection (docs/GATES.md \"Affected-only releases\"). Candidates: tiers.release.always, the rotation, and every step an impact rule names (change and slice lists), the supersededBy twins dropped. A candidate runs when its key misses, when it is a canary, or when it is a full twin whose last PASS is older than the last full nightly.",

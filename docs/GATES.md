@@ -110,7 +110,8 @@ A step's input set is the union of four parts:
 The JVM (the client, gradle) and a sidecar the runner starts are not traced, which is why the in-game and gradle steps carry whole
 trees. A consequence, by design: **a change under mod/src/main, mod/src/client or kit/ outside kit/test and kit/lint invalidates
 every in-game step**, because the jar or the sidecar the clients run contains it. A change to one driver, a kit test, a lint, a
-fixture or docs invalidates only the steps whose sets hold it.
+fixture or docs invalidates only the steps whose sets hold it. The `gradle` class also holds devserver/ and apitest/, because
+mod/settings.gradle includes them and `gradlew build` compiles both.
 
 **The trace** (`tools/lib/step-trace.mjs`). Every step runs with `NODE_OPTIONS=--import=<tracer>`. Each node process of the step
 records the files it loads as a module, reads, lists or stats. That covers the driver, `node --test` and vitest, and any node child
@@ -141,15 +142,20 @@ A step's key is a hash of:
   blob ids of the drivers its shell names), the **resolved** client entry and host (after `--host`), the step's `env`;
 - **toolchain**: `node` (process.version), `java -version` of JAVA_HOME, mod/gradle.properties less `mod_version` (the Minecraft,
   loader, Fabric API, loom and lab-ui versions);
-- **modes**: every environment variable a module of its closure reads (`process.env.NAME`) other than per-run plumbing (ports,
-  dirs, outs), plus `GATE_P3`, `GATE_P2_SMOKE`, `CALIBRATION_WRITE`, `ARCHITECT_RELEASE` and `ARCHITECT_TEST_SLOW_TILES` always.
+- **modes**: every environment variable a module of its closure reads (`process.env.NAME`), every ambient variable with the
+  project's prefixes (`ARCHITECT_`, `GATE_`, `G5B_`, ...: the JVM, the sidecar, the client scripts and aliased reads are invisible to
+  the scan), plus `GATE_P3`, `GATE_P2_SMOKE`, `CALIBRATION_WRITE`, `ARCHITECT_RELEASE`, `ARCHITECT_TEST_SLOW_TILES`,
+  `ARCHITECT_APITEST` and `ARCHITECT_HEADLESS` always; less the per-run plumbing (ports, run and out dirs, tokens).
+  A `*_DIR` that redirects an input, such as `ARCHITECT_STAMPS_DIR`, counts as a mode.
   The P2 calibration record and the P3 mode are committed files the trace sees, so they are inputs;
 - **flags**: the release context (branch, a v* tag at HEAD) for steps whose closure has `tools/release-context.mjs`; the code trees
   (kit, scenarios, tools, mod, sidecar, devserver, apitest) of origin/main and of the merge base for steps whose closure diffs
-  against origin/main (the "unchanged" items);
+  against origin/main (the "unchanged" items); the newest reachable v* tag for closures that run `git describe --tags`
+  (release-version's last tag); the whole tree's file list for closures that run `git ls-files`;
 - **snapshots**: size and mtime of the level.dat of every world the step restores, and of its client's world, in the snapshot store.
 
-**A dirty source tree never looks up and never records** (`git status --porcelain --untracked-files=all` non-empty: the drivers
+**A source HEAD that moves during a run** (a commit or checkout in the source checkout) stops recording from there on, as does a tree
+that turns dirty. **A dirty source tree never looks up and never records** (`git status --porcelain --untracked-files=all` non-empty: the drivers
 run from the working tree, and an untracked file can be imported). Keys are git blob ids, so they are computed at a commit. The same
 function gives `tools/step-cache.mjs replay` its keys at a past head.
 

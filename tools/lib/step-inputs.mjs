@@ -248,8 +248,11 @@ export function staticEntry(id, entry, conf, files, opts) {
       continue;
     }
     if (/origin\/main|merge-base/.test(t) && /\bgit\b/.test(t)) (flags.originMain ??= []).push(f);
+    // the newest reachable v* tag (git describe --tags; release-version's lastTag) and the whole repo's file list (git ls-files)
+    if (/['"]describe['"][^\n]*['"]--tags['"]|describe --tags/.test(t)) (flags.lastTag ??= []).push(f);
+    if (/['"]ls-files['"]|git ls-files/.test(t)) (flags.repoListing ??= []).push(f);
   }
-  if (flags.originMain) flags.originMain.sort();
+  for (const k of ['originMain', 'lastTag', 'repoListing']) if (flags[k]) flags[k].sort();
   return {
     classes: [...classes].sort(),
     roots,

@@ -1808,6 +1808,13 @@ async function worker(sh) {
     if (CACHE) {
       try {
         // the drivers ran from the working tree: one that turned dirty during the run records nothing from here on
+        // and one whose HEAD moved (a commit or checkout mid-run: the tree is clean again, but later steps ran other code)
+        const headNow = git(SRC, 'rev-parse', 'HEAD');
+        if (!CACHE.dirty.length && headNow !== CACHE.head) {
+          CACHE.dirty = [`(the source HEAD moved to ${headNow.slice(0, 9)} during the run)`];
+          keys.clear();
+          log(`the source HEAD moved to ${headNow.slice(0, 9)} during the run: no further PASS is recorded in the step cache`);
+        }
         if (!CACHE.dirty.length && git(SRC, 'status', '--porcelain', '--untracked-files=all')) {
           CACHE.dirty = ['(the source tree turned dirty during the run)'];
           keys.clear();

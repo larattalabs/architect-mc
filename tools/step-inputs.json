@@ -696,6 +696,9 @@
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
+    ],
+    "lastTag": [
+     "tools/release-version.mjs"
     ]
    },
    "data": [
@@ -8203,6 +8206,9 @@
     "UPDATE_GOLDEN"
    ],
    "flags": {
+    "repoListing": [
+     "tools/gate6cf2.mjs"
+    ],
     "originMain": [
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
@@ -8504,6 +8510,9 @@
     "UPDATE_GOLDEN"
    ],
    "flags": {
+    "repoListing": [
+     "tools/gate6cf2.mjs"
+    ],
     "originMain": [
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
@@ -8809,6 +8818,9 @@
     "originMain": [
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
+    ],
+    "repoListing": [
+     "tools/gate6cf2.mjs"
     ]
    }
   },
@@ -19012,9 +19024,6 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
-   "derived": [
-    "node_modules/**"
-   ],
    "data": [
     "deno.json",
     "deno.jsonc",
@@ -19022,6 +19031,9 @@
     "node_modules",
     "package.json",
     "pnpm-workspace.yaml"
+   ],
+   "derived": [
+    "node_modules/**"
    ]
   },
   "voc-registry": {
@@ -20840,12 +20852,12 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
-   "derived": [
-    "node_modules/**"
-   ],
    "data": [
     "node_modules",
     "package.json"
+   ],
+   "derived": [
+    "node_modules/**"
    ]
   },
   "vocc-ingame": {
@@ -30392,12 +30404,12 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
-   "derived": [
-    "node_modules/**"
-   ],
    "data": [
     "node_modules",
     "package.json"
+   ],
+   "derived": [
+    "node_modules/**"
    ]
   },
   "fl-ingame": {
