@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { FIX, ROOT, checkPlanVolumes, fixtureLotBlocks, fixtureStyle, flatSurvey, stewardAnchors } from './plan-helpers.mjs';
+import { FIX, ROOT, asksFirstPath, checkPlanVolumes, fixtureLotBlocks, fixtureStyle, flatSurvey, stewardAnchors } from './plan-helpers.mjs';
 import { validatePlan } from '../lib/plan/schema.mjs';
 import { diffCatalogues } from '../lib/plan/catalogue.mjs';
 import { irPartExempt, measureLot, measurePalette, readPaletteRule, shareFits, unmeasuredBlocks, swapChain, swapState } from '../lib/plan/palette.mjs';
@@ -32,7 +32,7 @@ test('item 1: the strict def (0 malformed over Steward\'s 7 recorded rules, e16\
   const asks = path.join(FIX, 'asks');
   const recorded = [];
   for (const f of fs.readdirSync(asks).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json')) {
-    const plan = JSON.parse(fs.readFileSync(path.join(asks, f), 'utf8')).answer.plan;
+    const plan = JSON.parse(fs.readFileSync(asksFirstPath(f), 'utf8')).answer.plan; // ((6c close-out A) the 7 rules VOC-c judged: the first recordings)
     for (const r of plan.rules ?? []) if (r.kind === 'palette') recorded.push([f, r]);
   }
   assert.equal(recorded.length, 7);

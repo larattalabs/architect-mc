@@ -2,6 +2,7 @@
 // (`unit`): items 1, 3, 4 (kit), 5 (byte identity against the base this branch builds on), 12, 13 and 14; in game: item 2 (`registry`),
 // item 10 (`probe`) and item 4's survival placement (`survival`). VOC-a owns this file; VOC-b's items are in gate6cvoc-b.mjs.
 import fs from 'node:fs';
+import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
@@ -97,7 +98,7 @@ export async function unchanged(root) {
   // Steward's 59 recorded plans (fixtures/plan/asks), on the asks survey
   const asksDir = path.join(root, 'kit', 'test', 'fixtures', 'plan', 'asks');
   for (const f of fs.readdirSync(asksDir).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) {
-    const fx = JSON.parse(fs.readFileSync(path.join(asksDir, f), 'utf8'));
+    const fx = JSON.parse(fs.readFileSync(firstAsk(asksDir, f), 'utf8')); // ((6c close-out A) the first recordings)
     const runOn = async (h) => { const s = h.asksSurvey(); return h.checkPlanLocal(fx.answer.plan, { survey: s.bytes, claim: s.claim, anchors: h.stewardAnchors(s.claim) }); };
     try { out.asks[f] = cmpRun(await runOn(hNew), await runOn(hOld)); } catch (e) { out.asks[f] = { error: String(e.message).slice(0, 200) }; }
   }

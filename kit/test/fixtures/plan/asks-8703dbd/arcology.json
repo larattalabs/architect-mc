@@ -1,0 +1,167 @@
+{
+  "prompt": "A single tower arcology, every floor a different district.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "stacked_city",
+      "style": {
+        "pending": "stacked_city"
+      },
+      "zones": [
+        {
+          "id": "tower_city",
+          "kind": "standard",
+          "required": true,
+          "label": "The Stacked City",
+          "purpose": "arcology",
+          "style": {
+            "pending": "stacked_city"
+          },
+          "program": {
+            "lots": [
+              {
+                "id": "arcology_tower_1",
+                "type": "arcology_tower",
+                "role": "arcology_tower",
+                "label": "arcology tower",
+                "size": [
+                  23,
+                  19
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "The whole city as one tall tower of stone, glass and iron, with stacked district floors linked by a central stairwell and shafts; glass-crowned top."
+              },
+              {
+                "id": "gatehouse_1",
+                "type": "gatehouse",
+                "role": "gatehouse",
+                "label": "ground-level gatehouse and lobby",
+                "size": [
+                  13,
+                  11
+                ],
+                "villager": "none",
+                "brief": "Entrance plaza at the tower base leading to the central stairwell."
+              },
+              {
+                "id": "market_floor_1",
+                "type": "market_floor",
+                "role": "market_floor",
+                "label": "market district floor",
+                "size": [
+                  17,
+                  15
+                ],
+                "villager": "trading_hall",
+                "brief": "Stalls, shops and a tavern ring under lanterns."
+              },
+              {
+                "id": "residential_floor_1",
+                "type": "residential_floor",
+                "role": "residential_floor",
+                "label": "residential district floor",
+                "size": [
+                  17,
+                  15
+                ],
+                "villager": "dwelling",
+                "brief": "Dense rows of small apartments along corridors."
+              },
+              {
+                "id": "farm_floor_1",
+                "type": "farm_floor",
+                "role": "farm_floor",
+                "label": "hydroponic farm floor",
+                "size": [
+                  17,
+                  15
+                ],
+                "villager": "farm",
+                "brief": "Crop beds, water channels, glowstone grow lights."
+              },
+              {
+                "id": "workshop_floor_1",
+                "type": "workshop_floor",
+                "role": "workshop_floor",
+                "label": "forge and workshop district",
+                "size": [
+                  17,
+                  15
+                ],
+                "villager": "job",
+                "brief": "Smithies, smelters and crafting benches."
+              },
+              {
+                "id": "garden_floor_1",
+                "type": "garden_floor",
+                "role": "garden_floor",
+                "label": "temple and garden floor",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "high_ground",
+                "brief": "Open-air garden and chapel near the top."
+              },
+              {
+                "id": "observatory_1",
+                "type": "observatory",
+                "role": "observatory",
+                "label": "observatory summit",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "high_ground",
+                "villager": "none",
+                "brief": "Glass-domed lookout capping the tower."
+              }
+            ],
+            "layout": "street"
+          },
+          "where": {
+            "near": {
+              "anchor": "stone",
+              "within": 32
+            }
+          },
+          "notes": "Floors are listed as lots; true vertical stacking inside one tower is the reserved part stacked_floors."
+        },
+        {
+          "id": "unused_placeholder",
+          "kind": "standard",
+          "required": false,
+          "program": {
+            "template": "flat_village",
+            "params": {
+              "lots": []
+            }
+          }
+        }
+      ],
+      "rules": [
+        {
+          "id": "stacked_floors",
+          "kind": "stacked_floors",
+          "required": true,
+          "label": "districts stacked as floors of one tower",
+          "scope": [
+            "tower_city"
+          ],
+          "notes": "Every district floor sits vertically inside the single tower, in order: gatehouse at base, market, residential, farm, workshop, garden, observatory at the summit. Needs vertical stacking, not yet a supported kind."
+        }
+      ],
+      "notes": "One huge tower on flat land with each district a floor in a shared stone, glass and iron shell; each floor gets its own palette and lighting once the style bible exists."
+    },
+    "waits": [
+      {
+        "part": "stacked_floors",
+        "words": "Stacking the districts as floors inside one tower: vertical stacking isn't a supported block yet. The buildings are laid out on the ground around the tower first, and the stacking is offered when it can be built."
+      }
+    ],
+    "summary": "The Stacked City is built as one standard zone near the founding stone: a central XL arcology tower plus a gatehouse, market, residential, farm, workshop and garden floors and a glass-domed observatory. Style is left pending for a shared shell with a distinct look per district. True vertical stacking of floors isn't buildable yet, so the districts are first laid out on the ground around the tower, and the stacking is kept as a pending part."
+  },
+  "usd": 0.032152,
+  "errors": []
+}

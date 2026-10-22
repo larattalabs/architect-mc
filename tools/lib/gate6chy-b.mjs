@@ -367,14 +367,18 @@ async function sweptStand(ctx, r) {
  * Item 11 (§13): the 59 asks through the two-plan flow on the asks claim with the kit at `kitDir`: the gap table text (the classes, the
  * unsupported blocks, every part's class), the malformed count and the answers naming until HY.
  */
-export async function asksGap(kitDir) {
+export async function asksGap(kitDir, { current = false } = {}) {
   const H = await import(pathToFileURL(path.join(kitDir, 'test', 'plan-helpers.mjs')).href);
   const dir = path.join(kitDir, 'test', 'fixtures', 'plan', 'asks');
+  // ((6c close-out A) the slices before it judged Steward's first recordings: the 12 it re-recorded since come from asks-8703dbd/ when the kit
+  // has them; `current` reads asks/ as it stands, close-out A's own item 6)
+  const first = path.join(kitDir, 'test', 'fixtures', 'plan', 'asks-8703dbd');
+  const fileOf = (f) => (!current && fs.existsSync(path.join(first, f)) ? path.join(first, f) : path.join(dir, f));
   const s = H.asksSurvey();
   const tally = {}, gaps = {}, classes = [];
   let malformed = 0, untilHY = 0;
   for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) {
-    const plan = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')).answer.plan;
+    const plan = JSON.parse(fs.readFileSync(fileOf(f), 'utf8')).answer.plan;
     const r = await H.checkPlanVolumes(plan, { survey: s.bytes, claim: s.claim, anchors: H.stewardAnchors(s.claim), volume: {} });
     for (const a of r.check.parts) {
       tally[a.class] = (tally[a.class] ?? 0) + 1;

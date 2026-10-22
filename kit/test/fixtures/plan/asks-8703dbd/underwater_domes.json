@@ -1,0 +1,218 @@
+{
+  "prompt": "Glass domes on the sea floor, a colony under the waves.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "drowned_dome_colony",
+      "style": {
+        "pending": "drowned_dome_colony"
+      },
+      "zones": [
+        {
+          "id": "colony",
+          "kind": "standard",
+          "required": true,
+          "label": "Dome colony",
+          "purpose": "colony",
+          "style": {
+            "pending": "drowned_dome_colony"
+          },
+          "where": {
+            "near": {
+              "feature": {
+                "water": {
+                  "body": "ocean",
+                  "pick": "largest"
+                }
+              },
+              "within": 32
+            }
+          },
+          "program": {
+            "layout": "street",
+            "shared": "none",
+            "lots": [
+              {
+                "id": "great_dome_1",
+                "type": "great_dome",
+                "role": "central_habitat",
+                "label": "central habitat dome",
+                "size": [
+                  23,
+                  19
+                ],
+                "landmark": true,
+                "placement": "central",
+                "villager": "none",
+                "brief": "Largest glass dome at the heart; gathering hall, kelp garden and sea lantern ceiling light. Air-lock entrance."
+              },
+              {
+                "id": "dome_house_1",
+                "type": "dome_house",
+                "role": "residence",
+                "label": "residential pod",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Small glass dome with prismarine floor, bunks, and a window onto the seabed."
+              },
+              {
+                "id": "dome_house_2",
+                "type": "dome_house",
+                "role": "residence",
+                "label": "residential pod",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Small glass dome with prismarine floor, bunks, and a window onto the seabed."
+              },
+              {
+                "id": "dome_house_3",
+                "type": "dome_house",
+                "role": "residence",
+                "label": "residential pod",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Small glass dome with prismarine floor, bunks, and a window onto the seabed."
+              },
+              {
+                "id": "dome_house_4",
+                "type": "dome_house",
+                "role": "residence",
+                "label": "residential pod",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Small glass dome with prismarine floor, bunks, and a window onto the seabed."
+              },
+              {
+                "id": "greenhouse_dome_1",
+                "type": "greenhouse_dome",
+                "role": "farm",
+                "label": "kelp and sea-crop farm dome",
+                "size": [
+                  13,
+                  11
+                ],
+                "villager": "farm",
+                "brief": "Glass dome with kelp, sea pickles and water-filled planters for food."
+              },
+              {
+                "id": "gatehouse_1",
+                "type": "gatehouse",
+                "role": "airlock",
+                "label": "air-lock gatehouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "edge",
+                "villager": "none",
+                "brief": "Entrance chamber with doors and a bubble column lift to the surface."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "workshop",
+                "label": "workshop and forge dome",
+                "size": [
+                  13,
+                  11
+                ],
+                "villager": "job",
+                "brief": "Copper and prismarine crafting, tools and repairs."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "observation",
+                "label": "observation tower",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "villager": "none",
+                "brief": "Tall glass spire watching the deep for threats and wonders."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "market_mess",
+                "label": "market and mess dome",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "villager": "trading_hall",
+                "brief": "Shared eating and trading space lit by sea lanterns."
+              }
+            ]
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "glass_tunnels",
+          "kind": "tunnel",
+          "required": false,
+          "label": "Glass tunnels between domes",
+          "from": {
+            "anchor": "stone"
+          },
+          "to": {
+            "part": "colony"
+          },
+          "notes": "Glass tunnels linking the domes, radiating from the great dome.",
+          "params": {
+            "material": "glass",
+            "width": 3
+          }
+        }
+      ],
+      "forms": [
+        {
+          "id": "sea_floor",
+          "kind": "seabed_site",
+          "required": true,
+          "label": "Sea-floor site",
+          "where": {
+            "inside": {
+              "part": "colony"
+            }
+          },
+          "notes": "The colony sits on the ocean bed under deep water, flooded, with domes sealed and air-filled.",
+          "params": {
+            "medium": "underwater",
+            "depth": "deep_ocean",
+            "floor": "existing_seabed"
+          }
+        }
+      ],
+      "notes": "Underwater colony: needs a deep ocean area with a fairly flat floor."
+    },
+    "waits": [
+      {
+        "part": "sea_floor",
+        "words": "The underwater setting: building on and under the ocean, with sealed air-filled domes, isn't something Architect can do yet. The colony is placed near the largest ocean it finds and the sea-floor form is kept pending."
+      },
+      {
+        "part": "glass_tunnels",
+        "words": "The glass tunnels between domes: tunnels come with a later Architect release; the domes are built first and the tunnels are offered when they can be."
+      }
+    ],
+    "summary": "A medium colony of ten buildings in one zone near the largest ocean: a great central dome, four residential pods, a kelp farm dome, a smithy, a market and mess dome, an air-lock gatehouse at the edge and an observation tower on high ground. Styled prismarine, glass, sea lanterns and copper. The underwater setting and the glass tunnels between domes can't be built yet and stay pending."
+  },
+  "usd": 0.036636,
+  "errors": []
+}

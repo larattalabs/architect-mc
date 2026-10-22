@@ -9,6 +9,7 @@
 //   asks(root)        the 59 asks' every part, before (the base) and after (this head): fixtures/plan/fl/asks-before.md, asks-after.md
 //   timing(root)      plan time of each layout on a 256 x 256 claim with 40 lots (median of 3), the candidates evaluated (item 11)
 import fs from 'node:fs';
+import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -109,7 +110,7 @@ async function asksTable(h) {
   const tally = {}, gaps = {}, rows = [];
   const S = h.asksSurvey();
   for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) {
-    const fx = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    const fx = JSON.parse(fs.readFileSync(firstAsk(dir, f), 'utf8')); // ((6c close-out A) the first recordings)
     const r = await h.checkPlanLocal(fx.answer.plan, { survey: S.bytes, claim: S.claim, anchors: h.stewardAnchors(S.claim) });
     for (const a of r.check.parts) {
       tally[a.class] = (tally[a.class] ?? 0) + 1;

@@ -27,6 +27,7 @@
 //
 // Run H-a's items on their own: `node tools/gate6cha.mjs <step> [item ...]`.
 import fs from 'node:fs';
+import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
@@ -120,7 +121,7 @@ async function haAsks(ctx) {
   const tally = {}, gaps = {}, classes = [];
   let malformed = 0, untilH = 0;
   for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) {
-    const plan = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')).answer.plan;
+    const plan = JSON.parse(fs.readFileSync(firstAsk(dir, f), 'utf8')).answer.plan; // ((6c close-out A) the first recordings)
     const r = await H.checkPlanVolumes(plan, { survey: s.bytes, claim: s.claim, anchors: H.stewardAnchors(s.claim), volume: {} });
     for (const a of r.check.parts) {
       tally[a.class] = (tally[a.class] ?? 0) + 1;

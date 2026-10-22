@@ -17,6 +17,7 @@
 //                             placement; deconstructed under the exact rules, the refund equals the items of the blocks standing
 //   look      (6cvoc-look)    item 15 (client, recorded not judged): the four VOC bibles on v50's village and the four designs
 import fs from 'node:fs';
+import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
@@ -83,7 +84,7 @@ async function census(ctx) {
     }
   }
   const asksDir = path.join(ctx.root, 'kit', 'test', 'fixtures', 'plan', 'asks');
-  for (const f of fs.readdirSync(asksDir).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) runs.push({ id: `asks/${f}`, fx: { on: 'asks' }, plan: JSON.parse(fs.readFileSync(path.join(asksDir, f), 'utf8')).answer.plan });
+  for (const f of fs.readdirSync(asksDir).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) runs.push({ id: `asks/${f}`, fx: { on: 'asks' }, plan: JSON.parse(fs.readFileSync(firstAsk(asksDir, f), 'utf8')).answer.plan }); // ((6c close-out A) the first recordings
   for (const r of runs) {
     const sv = r.fx.terrain ? H.flatSurvey(r.fx.terrain) : r.fx.on === 'asks' ? H.asksSurvey() : r.fx.on === 'flat' ? H.flatSurvey() : r.fx.on ? H.goldenSurvey(r.fx.on) : H.flatSurvey();
     try {
