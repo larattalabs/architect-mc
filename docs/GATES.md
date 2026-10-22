@@ -8,10 +8,12 @@ and the runner refuses to start when Claude credentials are in the environment.
 node tools/gate-run.mjs --list                                   # the chains and tiers
 node tools/gate-run.mjs change --since origin/main --plan        # what a tier would run, and why; runs nothing
 node tools/gate-run.mjs change --since origin/main               # minutes: the unit suites + the steps the diff maps to
-node tools/gate-run.mjs slice  --since origin/main --ports 8896:8897   # units + apijars + the impact steps + the slice's own steps; timing bars recorded
-node tools/gate-run.mjs release --release v0.12.0 --shards 3 --ports ...   # overnight: everything, duplicates rotated; timing bars judged, --quiet-wait on
+node tools/gate-run.mjs slice  --since origin/main                 # units + apijars + the impact steps + the slice's own steps; timing bars recorded;
+                                                                  #   over 20 steps the shard count and ports are chosen for the machine (--shards auto)
+node tools/gate-run.mjs release --release v0.12.0                  # overnight: everything, duplicates rotated; timing bars judged, --quiet-wait on; auto shards
+node tools/gate-run.mjs slice  --since origin/main --shards 3 --ports 8896:8897,8898:8899,8900:8901   # a fixed shard count, as before
 node tools/gate-run.mjs quick                                    # a named chain (quick | regress | engine), as before (bars judged)
-node tools/gate-run.mjs change --since origin/main --slots 2     # at most 2 gate runs on the machine at once (default 3)
+node tools/gate-run.mjs change --since origin/main --slots 2     # at most 2 gate runs on the machine at once (default slots.max, 4)
 node tools/gate-impact.mjs --since origin/main                   # just the change-impact report
 ```
 
@@ -37,7 +39,8 @@ from each slice's own focused items, the verifier's code review and Steward's re
 5. **Batch releases.** Merge 2-3 slices, then one release tier, one tag and one publish. API and mod versions are assigned at
    merge (next free minor), so branches never renumber; builders use a placeholder until the coordinator sets it.
 6. **At most 3 gate runs on the machine at once** (a machine-wide slot lock in the runner); more only causes load failures.
-   *Implemented:* see "Slot lock" below.
+   *Implemented:* see "Slot lock" below. (Since raised to `slots.max` 4; a run's shard count now follows the machine's load,
+   "Adaptive shards".)
 7. **Bench isolation only where timing is judged (Noah, 2026-10-17).** A bench step runs alone only at `release`, in the named
    chains and with `--judge-timing`. In `change` and `slice` it schedules like any other step (same client, host and
    resources) and its timing is recorded as **contended**. No check is dropped. *Implemented:* see "Gate speed" below.
@@ -68,13 +71,15 @@ A driver whose check mixes both is split into a functional `check` and a `bar`.
   turn it off).
 - A new timing check in a driver must use `bar(...)`, otherwise it blocks slices on machine load.
 
-### Slot lock: at most 3 gate runs on the machine
+### Slot lock: at most N gate runs on the machine (`slots.max`, 4)
 
 Every gate run (not `--plan`) takes one of N slot files, `slot-1.json` .. `slot-N.json`, in `<LarattaLabs>/.gate-slots/` before
-anything else: pid, worktree, chain and start time. With none free it logs the wait (the holders, repeated every 5 minutes) and
+anything else: pid, worktree, chain and start time, and (since "Adaptive shards") the run's shard count and ports. **One slot per
+run, whatever its shard count**: the slot caps how many agents' runs share the box; the shard budget below caps how much they
+load it. With none free it logs the wait (the holders, repeated every 5 minutes) and
 polls every 15 s. The slot is released on exit, on SIGINT/SIGTERM (also while waiting), and a slot whose pid is dead counts as
 free, so a SIGKILLed run does not hold one. `--slots N` / `GATE_SLOTS` overrides the limit (default 3, `slots.max` in
-`gate-chains.json`), `--slots-dir` / `GATE_SLOTS_DIR` the directory. Claims are serialised by a short `mkdir` mutex. The slot is
+`gate-chains.json`, 4), `--slots-dir` / `GATE_SLOTS_DIR` the directory. Claims are serialised by a short `mkdir` mutex. The slot is
 separate from the run's own `--lock`, which still guards one runner's run dir and ports. The plan shows how many slots are in
 use; `SUMMARY.md` and `summary.json` (`slot`) record the slot and the wait. Runners started before this change take no slot, so
 for the first runs the count is a floor.
@@ -447,6 +452,162 @@ gate step (a compile per mutant); run it when a lint or the code under it change
 
 (filled in below when the runs end)
 
+## Adaptive shards (2026-10-21)
+
+Releases and big slices ran 100+ steps on a fixed 3 shards for 4+ hours, also on an idle machine. `--shards auto` picks the count
+for the machine and the plan when the run starts. It is the default for `slice` and `release` plans of more than 20 steps
+(`shards.auto.minSteps`); smaller plans, `change` and the named chains keep 1 unless `--shards` says otherwise, and `--shards N`
+still fixes it (`shards.max` is now 6). Code: `tools/lib/shard-auto.mjs`; settings: `shards.auto` in `gate-chains.json`.
+
+**N is the smallest of these caps** (`--plan` prints each, the one that bound, and the wall estimate for every N):
+
+| cap | rule | default settings |
+|---|---|---|
+| plan | the smallest N whose longest-first schedule (the runner's own `estimate`) is within 5% of the best wall up to `max` | `planSlack` 0.05 |
+| cpu | `floor((cores x overcommit - max(load1, load5)) / cpuPerShard)`; the 5-minute load guards against a 1-minute dip | `overcommit` 1.5, `cpuPerShard` 3 |
+| memory | `floor((free + inactive + purgeable + speculative GB - reserve) / memPerShard)` from `vm_stat` (`os.freemem()` counts free pages only) | `reserveGB` 8, `memPerShardGB` 5 |
+| slots | `machineShards` less the shards the other live slot holders recorded (an older runner that recorded none counts as 3), less `reserveShards` while run slots are still free | 12, 3, 2 |
+| ports | free port pairs: `shards.auto.portRange` (8980-8999), skipping ports any live slot holder recorded and 8892-8895; or the pairs `--ports` names | |
+| max | `shards.max` | 6 |
+
+A **floor of 3** (`shards.auto.floor`) applies when only the load-derived caps (cpu, slots) say less and the plan, memory and ports
+allow 3. Decision: auto is never fewer shards than the old documented `--shards 3`. On this box's usual load (40-80) the cpu cap
+is always below 1, so without the floor every loaded run would get fewer shards than before; the brief's problem was too few
+shards on an idle box, not too many on a busy one. The first proof run below ran with a floor of 2 (it took 2); the floor went to
+3 after it.
+
+**When it decides.** `--plan` decides from the machine at that moment and says the run re-decides. The run decides under the slot
+mutex, right after it gets its slot (after any slot wait), and writes its shard count and port pairs into its slot file in the same
+critical section, so two runs starting together never count the same budget or take the same ports. `summary.json` records
+`shardsAuto` (the probe, the caps, what bound, the wall by N, the ports) and `SUMMARY.md` prints the decision.
+
+**The machine (measured 2026-10-21):** 18 cores (`hw.ncpu`: 6 performance + 12 efficiency), 128 GB. A headless server peaks at
+3.0-4.7 GB and a sidecar at 0.2 GB ("Headless gates"), so memory allows 14+ shards and never binds first. CPU does: the gate-waits
+runs put about 18 shards (6 runs x 3) on the box at a median load of 55, about 3 load units per busy shard, and unit steps ran 2-3x
+slower there. So `cpuPerShard` is 3 and the target load is 1.5 x cores = 27: on an idle box (load ~2) the cpu cap is 8 and a
+big plan gets 6; at load 20 it gets 2.
+
+**Slots: one per run (decision).** The slot is still taken once per run, not per shard. The rule "at most `slots.max` runs" is what
+AGENTS.md and the policy cite, and it is what lets a waiting agent start at all; older runners on other branches take one slot
+whatever their shards, and per-shard slots would let one auto run hold most of them. The shards are accounted separately: each
+slot file records them, and an auto run counts the others' shards against `machineShards`, so a later run sees the earlier run's
+load before that load shows in the load average.
+
+**Proof** (`artifacts/gate-runs-gatefast/`, local):
+
+- **`--plan`, the same 121-step plan (`slice --since v0.39.0`), loaded and idle.** Loaded (the real probe, 2026-10-21 21:20 UTC:
+  load 72.7/65.6, 79.9 GB available, one other run of 3 shards): `2 shard(s), bound by floor 2 (cpu said -16)` (the floor was 2
+  then; now `3 shard(s), bound by floor 3`), caps max 6, plan 6, slots 7, cpu -16, memory 14, ports 10; estimate 5h45m on 2. Idle (`GATE_AUTO_PROBE='{"load1":1.5,"load5":1.2,"freeGB":110}'`,
+  marked INJECTED): `6 shard(s), bound by max, plan`, cpu 8, memory 20; estimate 1h57m. The wall by N from the plan's own
+  schedule: 1: 701, 2: 346, 3: 232, 4: 175, 5: 140, 6: 118 min.
+- **A real run with auto shards** (`20261021-212419-change`): the 18 steps of the gate-waits branch's first change run
+  (`--only unit-kit,b-ingame,...,6a-staged`, the same ids), ports allocated 8980-8983, recorded in the slot file. The box was busy
+  (the rel0410 release, the P2/P3 agents' runs): load 58.2/62.3 at the decision, so auto took 2 shards (the floor then). **46.8 min
+  wall**, 17 PASS and h-unit's known H-a item 10 FAIL, step loads 17-84 (median 43). The same set on 3 shards from history:
+  **48 min** (`gate-runs-gatewaits/20261021-004231-change`, load median 60, hy-unit's cold cache 32 min of it) and 27 min
+  (`-021416-change`, load 34, with 3 steps skipped and 4 failing fast). This run's own step times packed longest-first: 97 min
+  serial, 48.8 on 2 shards, 32.5 on 3, 24.9 on 4, 16.5 on 6. So under that load the floor of 2 gave up about 15 min of this
+  run's wall against 3 shards; that is why the floor is now 3. On an idle box the same set would get 6 shards
+  (about 17 min). No idle window came on 2026-10-21 to run that case for real; the first quiet-box release will show it in its
+  `SUMMARY.md`.
+
+## Fast checks P1 (2026-10-21): the undo assertions move to the undo model
+
+Phase P1 of docs/FAST-CHECKS.md: the in-game undo assertions it maps to the undo model (UMT, docs/UMT.md) leave the slice tier.
+Nothing is deleted. Each driver takes `--slice` (5b-chains: `G5B_SCRIPTS=2`) and runs only its slice subset; without the flag it
+runs every assertion, as before. Each changed step has a `-full` twin with the old definition, which the release tier, the crash
+rotation and the named chains (`regress`, `engine`) run instead (`4e-crash-full` is `after` `4e-orders-full`). The slice step is
+`supersededBy` its twin, so a run that has both drops the subset. The impact rules are unchanged: they name the slice steps.
+
+The offline proofs run in `unit-mod` (`gradlew build` runs every test) at every slice, and `umt` runs the UMT set on journal changes.
+
+| step | slice keeps | moved to the full step (release) | offline proof |
+|---|---|---|---|
+| `4e-orders` | the fixture; 2 seam orders (`HXTR`, `TRXH`); the group removal; 1 of the 6 orders with L | the other 22 orders and 5 orders with L | `UmtGateMovesTest.orders4e_*` (all 24 + group + 6 with L: exact, no leak, settled at the next start), `JournalPropertyTest` (every order of up to 4), UMT P1 fuzz |
+| `4e-crash` | K3, K7, K8 group, GW, R1q, K3 clean | K1, K2, K4, K5, K6, K8 (single) | `UmtGateMovesTest.crash4e_*` (each point with and without an autosave: the state after the start, then an exact final removal), `UmtPropertiesTest.p2_everyKillPointOfOneScenario`, `JournalStoreTest.openTidiesLeftoversAndKeepsUncommittedEntries` (K8's half-written generations deleted at the start) |
+| `4d-all` | everything but: the group undo is checked on the whole village's hash (it covers every lot's box + 7) | the 12 per-lot hashes after the group undo (row 4) and the stage undos s3 then s1 with their exactness (row 13) | `UmtGateMovesTest.stages4d6a_*`, UMT P1 |
+| `c30-ingame` | 2 of the 12 staged runs (one autoApprove, one approved stage by stage), the lots hashed once after both removals; C30 2-4 | the 12 runs, hashed after each removal | `UmtGateMovesTest.c30_*` (a staged group placed and removed 12 times: exact and settled each time) |
+| `5b-chains` | the fixed script and 2 of the 20 seeded scripts (E1, E2, E3 on those) | the other 18 seeded scripts | `DeltaPropertyTest` (E1-E7 over 150 random chains), UMT's deltas |
+| `6a-eflat` | the mega realise, E-flat after the group undo, the player's block kept | lots-3's forced stage undo, one lot's undo (and their two world copies) | `UmtGateMovesTest.stages4d6a_*` (a middle stage under a later one, one lot alone) |
+| `6a-staged` | per-stage drift, the maxWait 30 s half, H0 | the control without maxWait (a fresh world, a realise and 102 s of waiting) | `RegionWaitLimitTest` (production `WaitLimit`, which `Batches.waitFor` and `queueRegion` now call) |
+| `x-resume` | (a)-(e) | (f) the world-start reconcile (f1 REMOVED, f2 PARTIAL), two realises and restarts | `RegionReconcileTest` (`RegionsImpl.reconcileEnd`, the decision `reconcileRemovals` now calls: every state x group x running x group state) |
+| `6a-crash` | (not at the slice tier: release rotation only) | not moved | none claimed: RG2-RG6 are not mapped to UMT points (RG3 is the heights-on-disk point UMT doesn't model); nothing to trim |
+
+**Two production seams**, behaviour unchanged: `batch/WaitLimit` (the region wait limit and the per-recheck count, moved out of
+`Batches`, whose static init needs the game's registries) and `RegionsImpl.reconcileEnd` (the reconcile's decision; it asks
+`Groups.removalRunning` and the group lookup only for a REMOVING region with a group, as before).
+
+**Every proof goes red with the code it guards broken** (`scratchpad/gf/mutate.py`, local: each mutation applied to production
+code, the named tests run, the file restored with `git checkout`):
+
+| mutation (production) | red |
+|---|---|
+| `Journal.planUndo` hands nothing down (`r = v`) | `UmtGateMovesTest` orders, crash, stages; `JournalPropertyTest` i, iii |
+| `JournalStore.tidy` keeps superseded generations | `JournalStoreTest.openTidiesLeftoversAndKeepsUncommittedEntries` (`UmtGateMovesTest` stays green: UMT's faults leave none) |
+| `SiteJournal.releaseGroup` releases nothing | `UmtGateMovesTest` orders, crash (K1, K2), stages, c30 |
+| `Sites.settleSite` always KEEP | `UmtGateMovesTest` orders, crash, stages, c30 |
+| `SiteJournal.reactivate` reactivates nothing | `UmtGateMovesTest` crash (`K6: an entry is not ACTIVE`, H left pending) |
+| `Sites.evidence` without F1's later write | `UmtGateMovesTest` orders, crash, stages |
+| `WaitLimit.regionTicks` with a 90 s default | `RegionWaitLimitTest` (the control) |
+| `RegionsImpl.reconcileEnd`: REMOVED unless the group is ACTIVE | `RegionReconcileTest` (the table) |
+| `RegionsImpl.reconcileEnd` ignores a running removal | `RegionReconcileTest` (the table, f1/f2) |
+| `DeltaPlanner.deltaSet` keeps removed cells | `DeltaPropertyTest.e1PathIndependenceE2RevertE4MinimalWritesE3Remove` |
+
+**What the model does not show** (why those groups run in full at release):
+- K4, K5, K6 and K8's *glue* (which job is saved when) is modelled. `crash4e_*` runs H's removal both ways. Unqueued, as a small
+  site's `Sites.remove` is in game, there is no job to resume: K5/K8 leave all four standing with ACTIVE entries, and at K6 the
+  start's evidence takes H back (`SiteJournal.reactivate`, production). Queued, as UMT's RestoreJob, the removal resumes and the
+  next start settles H. UMT's faults leave no superseded generation of a known entry, so K8's "half-written generations deleted"
+  is `JournalStoreTest`'s.
+- Shape updates at a seam (fences, panes): the 2 seam orders stay in game.
+- `Groups`' production removal order ("sites removed in reverse placement order", 4d row 3): UMT models it, so that check (free:
+  it reads the events) stays at the slice tier.
+- C30 3 (a 3 s wait limit, TIMED_OUT, stage PARTIAL; 8 s) stays: its parts are unit-tested (`WaitLimit`, `StageRules.finish`), the
+  combination is not.
+
+**A finding for the coordinator (not fixed here).** A first version of the orders property put H's and X's boxes into the pad's
+cells (a building whose box includes the ground row). Then the order R, H, T, X leaves H pending at every start: its evidence is
+"neither restored nor standing" (KEEP). The cause is F1's case, mirrored. H's cells under X were handed down to X, then T (under
+them) was removed, handing them down to X again; X's removal wrote T's before there. H's own entry still expects T's after,
+because `laterWrite` only reads a later undo by an entry under the cell. gate4e's cabin and gatehouse stand on the pad (box above
+it), so the in-game fixture never had this, and the committed property uses that geometry. UMT tags it `[F1]` (checked: the end
+reports the record and its entry left, both `[F1]`), so the CI set counts such seeds without failing.
+
+**Measured** (`artifacts/gate-runs-gatefast/`, local):
+
+One validation run, `20261021-214600-change` (auto: 2 shards, the floor then; load 14-87, median 33), ran every slice step and its
+`-full` twin side by side at the same load, plus `unit-mod` and `umt` (PASS: the new tests in the build). Every `-full` step's
+check-line count equals main's latest PASS of the old step (from `gate-runs-0410`, `gate-runs-lintp3`), so nothing was dropped:
+
+| step | slice (min) | full (min) | slice / full | check lines slice / full (main's last PASS) |
+|---|---|---|---|---|
+| 4e-orders | 2.1 | 9.5 | 0.22 | 16 / 70 (70) |
+| 4e-crash | 6.2 | 11.1 | 0.56 | 30 / 64 (64) |
+| 4d-all | 13.6 (rerun `20261021-232345-change`) | 14.9 | 0.91 | 63 / 63 (63) |
+| c30-ingame | 2.4 | 3.1 | 0.78 | 22 / 22 (22) |
+| 5b-chains | 7.3 | 33.1 | 0.22 | 53 / 329 (329) |
+| 6a-eflat | 10.0 | 10.6 | 0.94 | 3 / 5 (5) |
+| 6a-staged | 2.5 | 4.9 | 0.52 | 9 / 10 (10) |
+| x-resume | 3.6 | 5.7 | 0.63 | 35 / 46 (46) |
+
+The first 4d-all slice attempt failed 5 lines, neither in a part `--slice` changes. Three came from `removeGroup` refusing for a
+bee in a site box (`bee at 43, 94, -47`, the known 4d noise N2). Two came from the cancel test: L5 placed before L3, and L3 was the
+item mid-placement (32/2223) when the cancel came. L3 was rolled back exactly (its region hash equals the pre-hash), but the check
+assumes the batch's first item places first. This had not happened in 95 earlier 4d-all logs and did not reproduce on rerun
+(`20261021-232345-change`: PASS, 63 ok).
+
+**The slice, replayed** (`scratchpad/gf/replay-p1.mjs`, local). The 12 FAST-CHECKS baseline slices, with gate-waits' new step
+times applied as "before". Each P1 step's recorded time is multiplied by its slice/full ratio above (measured at one load, so the
+ratio holds where absolute times don't). The result is packed longest-first:
+
+| | 3 shards | 6 shards (auto, idle box) | step-minutes |
+|---|---|---|---|
+| before P1 (after gate waits) | 104 min | 52 min | 311 |
+| after P1 | **93 min** (-11%) | **48 min** | 278 |
+
+FAST-CHECKS projected 109 -> 97 for P1 against its own P0 baseline. The measured -11 min is the same size, from a smaller set of
+moves: the rows inside the P2/P3 drivers are deferred, and 6a-eflat and 4d-all barely shrink (their kept parts dominate).
+
 ## Headless gates
 
 A gate step can run on a **headless server** instead of a dev client. The server is a dedicated Minecraft 26.3 server with
@@ -774,14 +935,16 @@ Several agents and runners share this machine, so everything is configurable. A 
 
 | flag | environment | default |
 |---|---|---|
-| `--ports S:D[,S:D...]` (every shard's sidecar:DevBridge pair) | `GATE_PORTS`; or `ARCHITECT_GATE_SIDECAR_PORT`/`ARCHITECT_GATE_DEV_PORT` for shard 1 and `GATE_SHARD_PORTS` for shards 2.. | shard 1: 8890:8891; shards 2..: **none, name them** |
+| `--shards N\|auto` | | auto for `slice`/`release` over 20 steps (`shards.auto.minSteps`), else 1; N at most `shards.max` (6) |
+| `--ports S:D[,S:D...]` (every shard's sidecar:DevBridge pair) | `GATE_PORTS`; or `ARCHITECT_GATE_SIDECAR_PORT`/`ARCHITECT_GATE_DEV_PORT` for shard 1 and `GATE_SHARD_PORTS` for shards 2.. | auto: free pairs of `shards.auto.portRange` (8980-8999); else shard 1: 8890:8891; shards 2..: **none, name them** |
+| | `GATE_AUTO_PROBE` (JSON: `load1`, `load5`, `freeGB`, `cores`) | the machine now; overrides fields of auto's probe (marked INJECTED) |
 | `--run-dir DIR` (shard k>1: `DIR-s<k>`) | `GATE_RUN_DIR` | `../architect-mc-gate-run` |
 | `--run-dirs A,B,C` (every shard's, explicitly) | `GATE_RUN_DIRS` | |
 | `--out DIR` | `GATE_RUNS_OUT` | `<main checkout>/artifacts/gate-runs` |
 | `--lock FILE` | `GATE_LOCK` | `<out>/gate-run.lock` |
 | `--seed-dir DIR` | `GATE_SEED_DIR` | `../architect-mc-6a-run` |
 | `--quiet-wait [N]`, `--no-quiet-wait`, `--quiet-max-min M` | | on at release (N 8), else off (load recorded only); M 30 |
-| `--slots N`, `--slots-dir DIR` | `GATE_SLOTS`, `GATE_SLOTS_DIR` | 3; `<LarattaLabs>/.gate-slots/` |
+| `--slots N`, `--slots-dir DIR` | `GATE_SLOTS`, `GATE_SLOTS_DIR` | `slots.max` (4); `<LarattaLabs>/.gate-slots/` |
 | `--judge-timing` | | change/slice record timing bars; this judges them as at release |
 | | `GATE_SNAPSHOT_DIR` | the seed's `mod/run/saves` |
 | | `ARCHITECT_GATE_OLD_SIDECAR_PORT`/`_DEV_PORT` (gate4e/gate5b's old-version client, migration/downgrade steps only) | 8892/8893 |

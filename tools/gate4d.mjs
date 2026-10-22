@@ -37,6 +37,9 @@ const check = (ok, m, data) => {
   return ok;
 };
 const bar = (ok, m, data) => check(ok, `BAR ${m}`, data); // a timing bar: recorded, not blocking in change/slice (docs/GATES.md)
+// --slice: the slice tier's subset (docs/FAST-CHECKS.md P1): what the undo model tester covers runs only without it (the release tier's
+// 4d-all-full and c30-ingame-full). Without the flag every assertion runs, as before.
+const SLICE = process.argv.includes('--slice');
 const cmd = async (c) => call('dev.command', { cmd: c }, 60_000);
 /** Runs /apitest <args> and parses its JSON answer. */
 const api = async (args) => {
@@ -355,7 +358,8 @@ async function village(name, budget, opts = {}) {
   await cmd(`/architect budget ${budget}`);
   await cmd('/save-off');
   // the cells too, so a group undo that is not exact says which cells differ
-  const preCells = opts.pre ? await hashLotsCells(ctx.lots) : null;
+  // slice: the whole village's hash only (it covers every lot's box + 7); the per-lot hashes and cells come with the full mode
+  const preCells = opts.pre && !SLICE ? await hashLotsCells(ctx.lots) : null;
   const pre = preCells ? Object.fromEntries(Object.entries(preCells).map(([k, v]) => [k, v.sha256])) : null;
   const preAll = opts.pre ? (await hash(villageRegion())).sha256 : null;
   await call('dev.placement.stats', { reset: true });
@@ -384,11 +388,13 @@ async function equality() {
   check(rm.removed === true, 'group undo: removeGroup completes', rm);
   check(JSON.stringify(rev.map((e) => e.id)) === JSON.stringify([...placedSites].reverse()), 'group undo: sites removed in reverse placement order',
     { removed: rev.map((e) => e.id), placed: placedSites });
-  const back = await hashLots(ctx.lots);
+  // slice (SMOKE, docs/FAST-CHECKS.md 4d-all row 4): the whole village's hash, which covers every lot's box + 7; per lot at release
+  const back = SLICE ? null : await hashLots(ctx.lots);
   const backAll = (await hash(villageRegion())).sha256;
-  const exact = Object.keys(back).every((k) => back[k] === v.pre[k]) && backAll === v.preAll;
-  check(exact, 'group undo: every lot region (box + 7) and the whole village are back exactly',
-    { pre: v.pre, back, preAll: v.preAll, backAll, ...(exact ? {} : { cells: cellDiff(v.preCells, await hashLotsCells(ctx.lots)) }) });
+  const exact = (SLICE || Object.keys(back).every((k) => back[k] === v.pre[k])) && backAll === v.preAll;
+  check(exact, SLICE ? 'group undo: the whole village (every lot\'s box + 7) is back exactly (slice: one hash; per lot at release)'
+    : 'group undo: every lot region (box + 7) and the whole village are back exactly',
+    { pre: v.pre, back, preAll: v.preAll, backAll, ...(exact || SLICE ? {} : { cells: cellDiff(v.preCells, await hashLotsCells(ctx.lots)) }) });
   await cmd('/save-on');
   // the atomic reference, one by one in the order the batch placed them, in another copy of the same world
   await fresh('G4D Atomic');
@@ -526,7 +532,7 @@ async function stages() {
   await openWorld('G4D Wait');
   await tpCenter();
   const [l1, l2, l3] = [ctx.lots[0], ctx.lots[1], ctx.lots[2]];
-  const pre = await hashLots([l1, l2, l3]);
+  const pre = SLICE ? null : await hashLots([l1, l2, l3]);
   await mark();
   const id = await queue({ id: 'staged', proximity: false, items: [item(l1, { stage: 's1' }), item(l2, { stage: 's2' }), item(l3, { stage: 's3' })] });
   const g = (await batchView(id)).group;
@@ -543,15 +549,21 @@ async function stages() {
   await waitBatch(id, 30_000);
   const refused = await result(await api(`sundo ${g} s1`), 30_000);
   check(!!refused.error && /s3/.test(refused.error), `stages: undoing s1 while s3 is placed is refused (${refused.error})`, refused);
-  const u3 = await result(await api(`sundo ${g} s3`), 120_000);
-  const u1 = await result(await api(`sundo ${g} s1`), 120_000);
-  const back = await hashLots([l1, l2, l3]);
+  // slice: the stage undos and their exactness (docs/FAST-CHECKS.md 4d-all row 13, the undo model's stage-undo property) run at release
+  const u3 = SLICE ? null : await result(await api(`sundo ${g} s3`), 120_000);
+  const u1 = SLICE ? null : await result(await api(`sundo ${g} s1`), 120_000);
+  const back = SLICE ? null : await hashLots([l1, l2, l3]);
   const seq = (await since()).filter((e) => e.event === 'STAGE_STATE').map((e) => `${e.name}:${e.state}`);
   const want = ['s1:PLANNED', 's2:PLANNED', 's3:PLANNED', 's1:APPROVED', 's1:PLACING', 's1:PLACED', 's2:SKIPPED', 's3:APPROVED', 's3:PLACING',
-    's3:PLACED', 's3:UNDONE', 's1:UNDONE'];
+    's3:PLACED', ...(SLICE ? [] : ['s3:UNDONE', 's1:UNDONE'])];
   check(JSON.stringify(seq) === JSON.stringify(want), `stages: every state change observed in order (${seq.join(' ')})`, seq);
-  check(u3.removed && u1.removed && back[l1.key] === pre[l1.key] && back[l3.key] === pre[l3.key] && back[l2.key] === pre[l2.key],
-    'stages: undo 3 then undo 1 restore their lots exactly (box + 7); skipped 2 never placed', { u3, u1, pre, back });
+  if (!SLICE) {
+    check(u3.removed && u1.removed && back[l1.key] === pre[l1.key] && back[l3.key] === pre[l3.key] && back[l2.key] === pre[l2.key],
+      'stages: undo 3 then undo 1 restore their lots exactly (box + 7); skipped 2 never placed', { u3, u1, pre, back });
+  } else {
+    const rm = await result(await api(`sgremove ${g}`), 120_000); // the slice's lots back for the steps after (the full mode undoes them)
+    check(rm.removed, 'stages: the group removed (slice; the stage undos run at release)', rm);
+  }
   return { seq };
 }
 
@@ -918,7 +930,9 @@ async function c30() {
   await fresh('G4D C30');
   await cmd('/kill @e[type=!minecraft:player]');
   const L = ctx.lots;
-  const n = Number(process.env.C30_N || 12);
+  // slice (docs/FAST-CHECKS.md c30 rows 2-3): one autoApprove run and one approved stage by stage, the lots hashed once after both
+  // removals; the 12 runs, hashed after each removal, run at release (c30-ingame-full)
+  const n = Number(process.env.C30_N || (SLICE ? 2 : 12));
   const budgets = [2, 4, 20];
   const names = ['street', 'landmarks', 'district_1', 'district_2'];
   const plan = [['street', L[0]], ['landmarks', L[2]], ['district_1', L[5]], ['district_1', L[7]], ['district_2', L[9]], ['district_2', L[11]]];
@@ -953,7 +967,7 @@ async function c30() {
       bad++;
       runs.at(-1).removal = rm;
     }
-    if (!firstDrift) {
+    if (!firstDrift && (!SLICE || k === n - 1)) {
       const now = await hashLotsSettledOnce(all);
       const off = all.filter((l) => now[l.key] !== pre[l.key]).map((l) => l.key);
       if (off.length) {

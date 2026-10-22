@@ -62,6 +62,9 @@ const check = (ok, m, data) => {
   return ok;
 };
 const bar = (ok, m, data) => check(ok, `BAR ${m}`, data); // a timing bar: recorded, not blocking in change/slice (docs/GATES.md)
+// --slice: the slice tier's subset (docs/FAST-CHECKS.md P1, docs/GATES.md "Fast checks P1"): the assertions the undo model tester
+// covers run only in the full mode (the release tier's 4e-orders-full / 4e-crash-full). Without the flag every assertion runs, as before.
+const SLICE = process.argv.includes('--slice');
 const write = (name, data) => fs.writeFileSync(path.join(OUT, name), JSON.stringify(data, null, 2));
 const CTX = path.join(OUT, 'context.json');
 const ctx = fs.existsSync(CTX) ? JSON.parse(fs.readFileSync(CTX, 'utf8')) : {};
@@ -569,9 +572,11 @@ steps.orders = async () => {
   const b = await ordersBase();
   const h0 = b.h0.sha256;
   let passed = 0;
-  const all = perms(['T', 'R', 'H', 'X']);
+  // slice: the two seam orders (H's cells handed down to X, and X off H first, each with the pad and road around them); the 24 orders
+  // run in the full mode (UMT's orders property and JournalPropertyTest cover every order of four, docs/FAST-CHECKS.md P1)
+  const all = SLICE ? [['H', 'X', 'T', 'R'], ['T', 'R', 'X', 'H']] : perms(['T', 'R', 'H', 'X']);
   for (const o of all) if (await removeInOrder('G4E OrdBase', b.ids, o, h0, 'orders')) passed++;
-  check(passed === 24, `orders: ${passed}/24 removal orders exact with no leak`);
+  check(passed === all.length, `orders: ${passed}/${all.length} removal orders exact with no leak${SLICE ? ' (slice: the 2 seam orders; all 24 at release)' : ''}`);
   // one group removal of all four
   copyWorld('G4E OrdBase', 'G4E Ord');
   await openWorld('G4E Ord');
@@ -583,10 +588,11 @@ steps.orders = async () => {
   // L: 6 random orders of five
   const idsL = { ...b.ids, L: b.L.siteId };
   let passedL = 0;
-  for (let i = 0; i < 6; i++) {
+  const nL = SLICE ? 1 : 6; // slice: the first seeded order with L; the six at release
+  for (let i = 0; i < nL; i++) {
     if (await removeInOrder('G4E OrdBaseL', idsL, shuffled(['T', 'R', 'H', 'X', 'L'], 4242 + i), h0, 'orders+L')) passedL++;
   }
-  check(passedL === 6, `orders: ${passedL}/6 random orders with L exact with no leak`);
+  check(passedL === nL, `orders: ${passedL}/${nL} random orders with L exact with no leak${SLICE ? ' (slice: 1; 6 at release)' : ''}`);
   return { ids: b.ids, L: b.L.siteId, seam: b.seamKinds };
 };
 
@@ -1747,23 +1753,28 @@ steps.crash = async () => {
   const ids = ctx.orders.ids;
   const out = {};
   const placeAtomic = () => api('place cabin 28 65 -40 INSTANT unowned noactor 0');
-  // K1: inside the P3 commit (files written, index not) - nothing changed, the files are orphans
-  let r = await killRun('K1', FLAT, placeAtomic, pre);
-  if (r) {
-    const all = await sites();
-    check(all.length === 0 && (r.j.entries ?? []).length === 0, `crash K1: no site and no entry (orphans after the start: ${r.after.orphans.length})`, { all, r });
-    check((await hash(FIX_BOX)).sha256 === pre, 'crash K1: the world is unchanged');
-    await finalExact('K1', pre);
-    out.K1 = r;
-  }
-  // K2: after P3, before the record - the PLACING entry is released at the start and nothing is written
-  r = await killRun('K2', FLAT, placeAtomic, pre);
-  if (r) {
-    const all = await sites();
-    check(all.length === 0 && (r.j.entries ?? []).length === 0, 'crash K2: the PLACING entry is released, no record', { all, entries: r.j.entries });
-    check((await hash(FIX_BOX)).sha256 === pre, 'crash K2: nothing was written');
-    await finalExact('K2', pre);
-    out.K2 = r;
+  let r = null;
+  if (SLICE) log('  crash --slice: K1, K2, K4, K5, K6 and K8 (single) run at release only (UMT covers them); K3, K7, K8 group, GW, R1q and K3 clean run');
+  // (slice: run at release only; the undo model's crash properties cover this kill point, docs/FAST-CHECKS.md P1)
+  if (!SLICE) {
+    // K1: inside the P3 commit (files written, index not) - nothing changed, the files are orphans
+    r = await killRun('K1', FLAT, placeAtomic, pre);
+    if (r) {
+      const all = await sites();
+      check(all.length === 0 && (r.j.entries ?? []).length === 0, `crash K1: no site and no entry (orphans after the start: ${r.after.orphans.length})`, { all, r });
+      check((await hash(FIX_BOX)).sha256 === pre, 'crash K1: the world is unchanged');
+      await finalExact('K1', pre);
+      out.K1 = r;
+    }
+    // K2: after P3, before the record - the PLACING entry is released at the start and nothing is written
+    r = await killRun('K2', FLAT, placeAtomic, pre);
+    if (r) {
+      const all = await sites();
+      check(all.length === 0 && (r.j.entries ?? []).length === 0, 'crash K2: the PLACING entry is released, no record', { all, entries: r.j.entries });
+      check((await hash(FIX_BOX)).sha256 === pre, 'crash K2: nothing was written');
+      await finalExact('K2', pre);
+      out.K2 = r;
+    }
   }
   // K3: during the ticked block writes (unclean) - rolled back by the undo of the PLACING entry
   r = await killRun('K3', FLAT, async () => {
@@ -1781,37 +1792,40 @@ steps.crash = async () => {
     await cmd('/architect budget 4');
     out.K3 = r;
   }
-  // K4: after the ACTIVE commit, before the record is placed - the journal wins
-  r = await killRun('K4', FLAT, placeAtomic, pre);
-  if (r) {
-    const all = await sites();
-    const j = await journal();
-    check(all.length === 1 && all[0].state === 'BUILT' && (j.entries ?? []).some((e) => e.status === 'ACTIVE' && e.site === all[0].id),
-      `crash K4: the record is placed (${JSON.stringify(all.map((x) => [x.id, x.state]))})`, { all, entries: j.entries });
-    await finalExact('K4', pre);
-    out.K4 = r;
-  }
-  // K5: before the R2 commit - nothing changed
-  r = await killRun('K5', 'G4E OrdBase', () => api(`remove ${ids.H} - noforce keep`), pre);
-  if (r) {
-    const all = (await sites()).map((x) => x.id).sort();
-    check(JSON.stringify(all) === JSON.stringify(Object.values(ids).sort()), `crash K5: all four sites stand (${all})`, { all });
-    const lk = await ownedNow(Object.values(ids));
-    const bad = Object.keys(lk).filter((k) => lk[k].owned !== r.before.owned[k].owned || [...lk[k].cells].some(([p, v]) => r.before.owned[k].cells.get(p) !== v));
-    check(bad.length === 0, 'crash K5: every site\'s owned cells are as before the kill', bad);
-    await finalExact('K5', pre);
-    out.K5 = r;
-  }
-  // K6: after R2, before the records go pending - the evidence finds H standing: reactivated, the record back
-  r = await killRun('K6', 'G4E OrdBase', () => api(`remove ${ids.H} - noforce keep`), pre);
-  if (r) {
-    const all = (await sites()).map((x) => x.id).sort();
-    const j = await journal();
-    const hEntries = (j.entries ?? []).filter((e) => e.site === ids.H);
-    check(all.includes(ids.H) && hEntries.every((e) => e.status === 'ACTIVE'), `crash K6: H is back (record and ACTIVE entries: ${hEntries.map((e) => e.status)})`,
-      { all, hEntries });
-    await finalExact('K6', pre);
-    out.K6 = r;
+  // (slice: run at release only; the undo model's crash properties cover this kill point, docs/FAST-CHECKS.md P1)
+  if (!SLICE) {
+    // K4: after the ACTIVE commit, before the record is placed - the journal wins
+    r = await killRun('K4', FLAT, placeAtomic, pre);
+    if (r) {
+      const all = await sites();
+      const j = await journal();
+      check(all.length === 1 && all[0].state === 'BUILT' && (j.entries ?? []).some((e) => e.status === 'ACTIVE' && e.site === all[0].id),
+        `crash K4: the record is placed (${JSON.stringify(all.map((x) => [x.id, x.state]))})`, { all, entries: j.entries });
+      await finalExact('K4', pre);
+      out.K4 = r;
+    }
+    // K5: before the R2 commit - nothing changed
+    r = await killRun('K5', 'G4E OrdBase', () => api(`remove ${ids.H} - noforce keep`), pre);
+    if (r) {
+      const all = (await sites()).map((x) => x.id).sort();
+      check(JSON.stringify(all) === JSON.stringify(Object.values(ids).sort()), `crash K5: all four sites stand (${all})`, { all });
+      const lk = await ownedNow(Object.values(ids));
+      const bad = Object.keys(lk).filter((k) => lk[k].owned !== r.before.owned[k].owned || [...lk[k].cells].some(([p, v]) => r.before.owned[k].cells.get(p) !== v));
+      check(bad.length === 0, 'crash K5: every site\'s owned cells are as before the kill', bad);
+      await finalExact('K5', pre);
+      out.K5 = r;
+    }
+    // K6: after R2, before the records go pending - the evidence finds H standing: reactivated, the record back
+    r = await killRun('K6', 'G4E OrdBase', () => api(`remove ${ids.H} - noforce keep`), pre);
+    if (r) {
+      const all = (await sites()).map((x) => x.id).sort();
+      const j = await journal();
+      const hEntries = (j.entries ?? []).filter((e) => e.site === ids.H);
+      check(all.includes(ids.H) && hEntries.every((e) => e.status === 'ACTIVE'), `crash K6: H is back (record and ACTIVE entries: ${hEntries.map((e) => e.status)})`,
+        { all, hEntries });
+      await finalExact('K6', pre);
+      out.K6 = r;
+    }
   }
   // K7: during the ticked restore of a group removal - re-run at the start, settled at the next
   r = await killRun('K7', 'G4E OrdBase', async () => {
@@ -1832,17 +1846,20 @@ steps.crash = async () => {
     await cmd('/architect budget 4');
     out.K7 = r;
   }
-  // K8: inside the R2 commit that hands H's cells down to X - nothing changed (the index was not written)
-  r = await killRun('K8', 'G4E OrdBase', () => api(`remove ${ids.H} - noforce keep`), pre);
-  if (r) {
-    const all = (await sites()).map((x) => x.id).sort();
-    const j = await journal();
-    check(JSON.stringify(all) === JSON.stringify(Object.values(ids).sort()) && (j.entries ?? []).every((e) => e.status === 'ACTIVE'),
-      `crash K8: the hand-down did not half apply: all four stand, all entries ACTIVE`, { all, entries: j.entries });
-    check(r.after.orphans.length === 0, `crash K8: the half-written generations were deleted at the start (${r.disk.orphans.length} before, ${r.after.orphans.length} after)`,
-      { before: r.disk.orphans, after: r.after.orphans });
-    await finalExact('K8', pre);
-    out.K8 = r;
+  // (slice: run at release only; the undo model's crash properties cover this kill point, docs/FAST-CHECKS.md P1)
+  if (!SLICE) {
+    // K8: inside the R2 commit that hands H's cells down to X - nothing changed (the index was not written)
+    r = await killRun('K8', 'G4E OrdBase', () => api(`remove ${ids.H} - noforce keep`), pre);
+    if (r) {
+      const all = (await sites()).map((x) => x.id).sort();
+      const j = await journal();
+      check(JSON.stringify(all) === JSON.stringify(Object.values(ids).sort()) && (j.entries ?? []).every((e) => e.status === 'ACTIVE'),
+        `crash K8: the hand-down did not half apply: all four stand, all entries ACTIVE`, { all, entries: j.entries });
+      check(r.after.orphans.length === 0, `crash K8: the half-written generations were deleted at the start (${r.disk.orphans.length} before, ${r.after.orphans.length} after)`,
+        { before: r.disk.orphans, after: r.after.orphans });
+      await finalExact('K8', pre);
+      out.K8 = r;
+    }
   }
   // (undo hardening A, F4) K8 inside a GROUP removal's R2 commit (R hands down to L, layered over its edge): Groups.committed had saved
   // the removal with its undo group; at the start Removal.fromJson finds the group in no entry and plans the removal again
