@@ -984,3 +984,13 @@ Top first. Not fixed in v0.40.1.
   In one batch re-run, lot_054 (the relog row's item) stayed WAITING NOT_LOADED after the walk until the step timed out. Watch for it
   at the next release.
 - **The P3 cutover for RS's rows** (rs `-smoke` twins) was not done in the batch.
+
+## Queued from close-out A (builder, 2026-10-22)
+
+- **Retire `kit/test/fixtures/plan/asks-8703dbd/`.** It holds Steward's first recordings of the 12 asks re-recorded at steward-mc 0c8f4a8.
+  The slices before close-out A still judge those plans; the readers are listed in its README.
+  - Re-cut those slices' committed asks tables and test expectations to the new recordings: K1a item 7, K1b, T3a §9, T3b §9, VOC-c
+    items 1 and 3, H-a item 10, and the HY-b/KC/F3/S3/RS/FL asks items.
+  - Then drop `asksFirstPath`, `tools/lib/asks-first.mjs` and the `current` option of `asksGap`, and remove the directory.
+- **§5 left over:** the "no X" re-plan still swaps materials in parts that `exempt: [ways, forms]` leaves out of the measure. A shared
+  green (`_green`) isn't classed as `ways`.
