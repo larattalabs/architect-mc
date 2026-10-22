@@ -558,10 +558,16 @@ steps.megaA = async () => {
  * The full walk (the default) is the engine tier: docs/GATES.md.
  */
 const MEGAB_FAST = process.argv.includes('--fast') || process.env.GATE6A_MEGAB_FAST === '1';
-const MEGAB_DWELL_MS = Number(process.env.GATE6A_DWELL_MS || (MEGAB_FAST ? 8_000 : 30_000));
-steps.megaB = async () => {
+/**
+ * The configuration-B walk, shared by `megaB` (the bench: full or --fast, isolated where its timing is judged) and `resume` (the
+ * functional resilience step, docs/GATES.md "Benches out of the release path"): `fast` the walk's mode, `name` its world, `file`
+ * its evidence, `label` the check lines' prefix. Every check is a functional `check` (none is a BAR); megaB and resume assert the
+ * same rows with the same thresholds, only the prefix differs.
+ */
+async function walkB({ fast, name, file, label }) {
+  const MEGAB_FAST = fast;
+  const MEGAB_DWELL_MS = Number(process.env.GATE6A_DWELL_MS || (fast ? 8_000 : 30_000));
   if (!dev) await connect();
-  const name = 'G6A MegaB';
   await fresh(name, 'G6A Mega Base Prepared');
   await cmd('/architect reload').catch(() => null);
   await tp(0.5, 160, 0.5);
@@ -681,7 +687,7 @@ steps.megaB = async () => {
   out.state = st;
   out.wallSeconds = (Date.now() - t0) / 1000;
   out.events.push(...(await api('revents').catch(() => [])));
-  write('megabench-B.json', out);
+  write(file, out);
   // per-stage progress events (S9): REGION_PROGRESS events whose stage list shows each stage moving (tilesDone rising or PLACING)
   const seen = {};
   for (const e of out.events.filter((x) => x.event === 'REGION_PROGRESS' && x.id === region)) {
@@ -691,14 +697,24 @@ steps.megaB = async () => {
     }
   }
   const failed = Object.keys(st.failed ?? {});
-  check(failed.length === 0 && st.view.state === 'PLACED', `megaB: ${st.view.state}, ${failed.length} failed items`, st.failed);
-  check(out.relog?.resumedSeconds != null && out.relog.resumedSeconds <= 60, `megaB: resumed ${out.relog?.resumedSeconds} s after the player reached a waiting lots-2 item after the relog (${out.relog?.item})`);
-  check(out.sidecarKill?.resumedSeconds != null && out.sidecarKill.resumedSeconds <= 30, `megaB: resumed ${out.sidecarKill?.resumedSeconds} s after the sidecar came back, at a waiting ways item (${out.sidecarKill?.item})`);
-  check(ir.stages.every((n) => seen[n] > 0), `megaB: REGION_PROGRESS events for every stage (${JSON.stringify(seen)}; ${out.events.length} events in all)`);
-  check(Object.keys(out.stages).length === ir.stages.length && Object.values(out.stages).every((x) => x.chunksLoaded >= 0), `megaB: per-stage seconds and chunks loaded ${JSON.stringify(out.stages)}`);
+  check(failed.length === 0 && st.view.state === 'PLACED', `${label}: ${st.view.state}, ${failed.length} failed items`, st.failed);
+  check(out.relog?.resumedSeconds != null && out.relog.resumedSeconds <= 60, `${label}: resumed ${out.relog?.resumedSeconds} s after the player reached a waiting lots-2 item after the relog (${out.relog?.item})`);
+  check(out.sidecarKill?.resumedSeconds != null && out.sidecarKill.resumedSeconds <= 30, `${label}: resumed ${out.sidecarKill?.resumedSeconds} s after the sidecar came back, at a waiting ways item (${out.sidecarKill?.item})`);
+  check(ir.stages.every((n) => seen[n] > 0), `${label}: REGION_PROGRESS events for every stage (${JSON.stringify(seen)}; ${out.events.length} events in all)`);
+  check(Object.keys(out.stages).length === ir.stages.length && Object.values(out.stages).every((x) => x.chunksLoaded >= 0), `${label}: per-stage seconds and chunks loaded ${JSON.stringify(out.stages)}`);
   await leaveWorld();
   return out;
-};
+}
+
+steps.megaB = () => walkB({ fast: MEGAB_FAST, name: 'G6A MegaB', file: 'megabench-B.json', label: 'megaB' });
+
+/**
+ * `resume`: megaB's resilience rows as an ordinary (non-bench) step, on the fast walk in its own world and evidence file
+ * (resume-B.json; the runner adds resume.json), so it never clobbers a megaB run's: the region placed with 0 failed items, resumed within 60 s after a relog in the
+ * middle of lots-2, resumed within 30 s after a sidecar kill in the middle of ways, REGION_PROGRESS for every stage, the per-stage
+ * record. The same checks and thresholds as megaB (the release tier's 6a-resume; the bench itself runs in the nightly).
+ */
+steps.resume = () => walkB({ fast: true, name: 'G6A Resume', file: 'resume-B.json', label: 'resume' });
 
 // ------------------------------------------------------------------ gate 3: chunk status without loading, its cost
 
