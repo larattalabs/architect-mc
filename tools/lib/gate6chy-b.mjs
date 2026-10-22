@@ -368,7 +368,10 @@ async function sweptStand(ctx, r) {
  * unsupported blocks, every part's class), the malformed count and the answers naming until HY.
  */
 export async function asksGap(kitDir) {
-  const H = await import(pathToFileURL(path.join(kitDir, 'test', 'plan-helpers.mjs')).href);
+  // ((gate speed 3) the 59 plans from the run's shared store (corpus-plan.mjs), prewarmed on every core; GATE_PLAN_CACHE=0: as before)
+  const CP = await import('./corpus-plan.mjs');
+  await CP.prewarmAsks(path.dirname(kitDir), [path.dirname(kitDir)], 'checkPlanVolumes');
+  const H = await CP.helpers(path.dirname(kitDir));
   const dir = path.join(kitDir, 'test', 'fixtures', 'plan', 'asks');
   const s = H.asksSurvey();
   const tally = {}, gaps = {}, classes = [];

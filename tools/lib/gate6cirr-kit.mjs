@@ -14,6 +14,7 @@ import { UNCHANGED_EXCEPTIONS as VOCC_EXCEPTIONS } from './gate6cvoc-c.mjs';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs';
 import { inSlice } from './gate-part.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import { syncBaseTree } from './base-tree.mjs';
+import * as CP from './corpus-plan.mjs'; // (gate speed 3) the plans from the run's shared store, prewarmed on every core
 
 /** (The CU/IRR/VOC-c batch) VOC-c's named exceptions (rule.palette supported: the 7 asks with a palette rule, extension/e05 and e16): its own item 4 holds them. */
 export const LATER_EXCEPTIONS = [...VOCC_EXCEPTIONS, ...FL_MOVED.filter((n) => !VOCC_EXCEPTIONS.includes(n))];
@@ -29,13 +30,16 @@ export function baseTree(root) {
 export async function unchanged(root, { check, log = console.log, only = null, slice = null } = {}) {
   const { dir: mainDir, base } = baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
-  const [hNew, hOld] = [await H(root), await H(mainDir)];
+  const { hNew, hOld } = await CP.corpusHelpers(root, mainDir);
   const norm = (r) => normIrJson(r.res?.irJson);
   const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(norm(r)), first: r.first && r.first !== r ? sha256(norm(r.first)) : null });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {}, added: [] };
+  const all = fixtures(root);
+  const onBase = (name) => fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name));
+  await CP.prewarm(root, CP.fixtureJobs(root, all.filter(([name, fx], k) => !(only && !only.test(name)) && onBase(name) && !/"irrigate":/.test(JSON.stringify(fx.plan)) && inSlice(k, slice)).flatMap(([name, fx]) => [[root, root, fx, 'head', name], [mainDir, mainDir, fx, 'base', name]])), { log });
   let i = -1;
   let elsewhere = 0; // (a split irr-unit) fixtures another part plans: counted, not planned here
-  for (const [name, fx] of fixtures(root)) {
+  for (const [name, fx] of all) {
     i++;
     if (only && !only.test(name)) continue;
     if (!fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name))) { out.added.push(name); continue; }
@@ -56,5 +60,6 @@ export async function unchanged(root, { check, log = console.log, only = null, s
   out.differ = rows.filter(([, r]) => !r.same && !r.later && !/errors on both/.test(r.err ?? '')).map(([k]) => k);
   if (!only) check(out.n >= 230, `${out.n} committed fixtures without irrigate planned (every dir, the 59 asks included)`);
   check(out.differ.length === 0, `${out.same} of ${out.n} byte-identical, no exception of IRR's own (VOC-c's named ones aside); new on this branch (not compared): ${out.added.join(', ')}`);
+  log(CP.statsLine());
   return out;
 }
