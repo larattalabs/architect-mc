@@ -63,7 +63,11 @@ async function anyModeMatcher(id, tree) {
     // test tree: gradle may serve the tests from its cache, and --tests filters take new classes); an in-game step drops it
     // unless its run's trace shows the source gradle lock (decided at record time)
     const keepGradle = (rawCfg.steps[parentOf(id)]?.client ?? 'none') === 'none' && (e.classes ?? []).includes('gradle');
-    const keep = setMatcher([...(e.closure ?? []), ...(e.data ?? []), ...(conf.runnerKey?.files ?? []), ...(keepGradle ? (conf.classes.gradle ?? []) : [])]);
+    // with complete test filters (and gateRerunTests): the matching test sources and the test-read trees, not the main sources
+    const { testSourcesMatching } = await import('./lib/step-coverage.mjs');
+    const narrow = keepGradle && e.testFiltersComplete && !argv.includes('--whole-test-tree');
+    const gradleKeep = !keepGradle ? [] : narrow ? [...testSourcesMatching(e.testFilters ?? [], tree, conf.coverage?.testRoots ?? ['mod/src/test/java']), ...(conf.coverage?.gradleTestTrees ?? ['mod/src/test/resources/**', 'kit/**', 'sidecar/**'])] : (conf.classes.gradle ?? []);
+    const keep = setMatcher([...(e.closure ?? []), ...(e.data ?? []), ...(conf.runnerKey?.files ?? []), ...gradleKeep]);
     return { cov: true, m: (p) => keep(p) || safetyCache(p) };
   }
   // --gradle-in-game-off: an in-game step keeps the gradle class only when its run takes the source gradle lock (known from its

@@ -343,29 +343,44 @@ it.
 **Proofs (offline; the exact counts need the first traced turbo run, which records every step's coverage).**
 - **A real JVM** (`./gradlew test --tests *IrRoadExtTest` with the class-load log): 353 `dev.larattalabs` classes, every one mapped
   to its source. The coverage set it gives an in-game entry holds 91 of the 345 mod/src/main files.
-- **5 recent commits, with the build artifact (the design)** (`tools/step-cache.mjs coverage-select <commits> --bytecode`). Both
-  sides are compiled and the changed class files listed. "At least" is what runs whatever the coverage says:
-  - the gradle-cwd steps (unit-mod, umt, p3-lint, p3-lint-long);
-  - about 30 client-less unit drivers that run `./gradlew test --tests ...` in the source checkout. They keep the whole build and
-    test tree: gradle can serve `test` FROM-CACHE, so with no JVM there is no class log, and a `--tests` filter picks up new test
-    classes by name;
-  - the steps whose drivers, data, runner or safety set moved.
+- **5 recent commits, with the build artifact and test filters (the design)** (`tools/step-cache.mjs coverage-select <commits>
+  --bytecode`). Both sides are compiled and the changed class files listed.
+  - **Unit drivers that run gradle tests in the source checkout** run them for real: mod/build.gradle's `gateRerunTests`, set by
+    the runner, makes test tasks never UP-TO-DATE or FROM-CACHE, so the test JVM logs its classes.
+  - **Such a driver with complete filters** is keyed by:
+    - the test sources its `--tests` patterns can match (`testFilters`, read from its modules; a new matching test class moves the
+      key);
+    - the test resources;
+    - the trees its Java tests read (kit, sidecar);
+    - the bytecode it loaded.
 
-  Above that floor, an in-game step runs only if its run loaded a changed class (or touched a changed node file). Of the 210
-  cacheable steps:
+    It is not keyed by the main source tree.
+  - **Incomplete filters keep the whole tree:** a `test` run without `--tests`, or a pattern built from a template. That is 20 of
+    the 120 steps that run gradle tests: f1, t1, pt2, t2, p0, s2, d, k1a, d2.
+
+  "At least" is what runs whatever the coverage says. Of the 210 cacheable steps:
 
   | commit | change | class files changed | map mode runs | coverage at least |
   |---|---|---|---|---|
-  | e5dafb64 | kit isLeaves (1 kit/lib file) | 0 | 209 | 157 (most in-game drivers import that kit module) |
-  | 0bb0c89e | RS realised provenance (11 files) | 14 (Realised, InfraPlace, ...) | 204 | 40 (the RS steps' drivers moved) |
-  | f5c73633 | RegionHash (5 files) | 6 (RegionHash, RegionsMod, a test) | 204 | 50 (the H and IRR drivers moved) |
-  | 8b4da151 | RS-b farmland (3 files) | 5 (Builder and its inner classes) | 204 | 37 |
-  | 4d891398 | RP verify (1 Java file) | 2 (RealisedRecords) | 204 | 35 |
+  | e5dafb64 | kit isLeaves (kit/lib/forms/states.mjs) | 0 | 209 | 157 |
+  | 0bb0c89e | RS realised provenance (11 files) | 14 | 204 | 20 |
+  | f5c73633 | RegionHash (5 files) | 6 | 204 | 30 |
+  | 8b4da151 | RS-b farmland (3 files) | 5 | 204 | 14 |
+  | 4d891398 | RP verify (1 Java file) | 2 | 204 | 12 |
 
-  The floor is a lower bound, not the expected count: the in-game steps that loaded a changed class run too, and that becomes
-  exact once coverage is recorded.
-  - The next lever is the unit drivers' source-checkout gradle runs: `--rerun` for those test tasks, and the test sources the
-    filter can match in their keys.
+  The Java floor is now unit-mod, umt, p3-lint, p3-lint-long, the 8 drivers with incomplete filters, and the steps whose own drivers
+  moved. Above the floor, a step runs only if its run loaded a changed class. With the gradle class kept, the floor was 35-50.
+- **Why the kit change still runs 157** (measured; `tools/lib` analysis in the coverage branch's notes):
+  - 143 of the 157 hold kit/lib/forms/states.mjs only through **lazy `import()`s** in shared drivers that most of their runs never
+    execute. The main one is `tools/gate6b.mjs`, which nearly every in-game step runs as `gate6b.mjs base`. It lazily imports
+    `tools/scenarios.mjs`, which lazily imports `kit/lib/region/check.mjs` and with it the forms.
+  - 2 (unit-kit, water-lint) import it eagerly and really run it.
+  - 12 hold it through the Java tests' kit tree (the gradle-cwd steps, and the unit drivers whose Java tests read ../kit).
+  - **PROPOSED, not built:** key a coverage step's drivers by their *eager* closure (top-level imports, which always load) plus
+    what its runs traced, instead of the full static closure. A lazy `import()` then counts only when a run executed it (Ekstazi's
+    rule, sound for the same reason the trace gate is). No driver needs splitting for this commit: the split already exists, as
+    lazy imports by subcommand. The kit floor would drop from 157 to about 14, plus the steps whose runs really load the forms (the
+    region-planning steps, through whenTouched). Second: narrow the Java tests' `kit/**` to the kit paths their sources name.
 
   The earlier bound, which kept the gradle class (`--source-gradle`):
 - **The same 5 commits, source keys** (`tools/step-cache.mjs coverage-select <commit>...`, against each parent).

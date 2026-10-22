@@ -161,6 +161,14 @@ export function coverageSet({ entry, trace, cov, conf, tree, src, read, manifest
     // log) and a --tests filter picks up new test classes by name, so a step that ran gradle depends on the whole build and test
     // tree, not only on what loaded. A run that never ran gradle there drops it (its classes are keyed by bytecode or source)
     if (cls === 'gradle' && !ranGradle) continue;
+    // a source-checkout test run with complete filters (and gradleRerunTests: its JVM logged) is keyed by the test sources its
+    // filters can match (a new matching test moves the key), the test resources, the trees its tests read from Java (kit, sidecar)
+    // and the bytecode of what it loaded; not the whole main source tree
+    if (cls === 'gradle' && manifest?.ok && entry.testFiltersComplete && (cov?.classes ?? []).some((x) => /Test(\$|$)/.test(x))) {
+      for (const x of testSourcesMatching(entry.testFilters ?? [], tree, c.testRoots ?? ['mod/src/test/java'])) set.add(x);
+      for (const x of c.gradleTestTrees ?? ['mod/src/test/resources/**', 'kit/**', 'sidecar/**']) set.add(x);
+      continue;
+    }
     for (const x of conf.classes?.[cls] ?? []) set.add(x);
   }
   for (const x of safetyGlobs(c, tree, src, read)) set.add(x);
@@ -194,6 +202,20 @@ export function coverageSet({ entry, trace, cov, conf, tree, src, read, manifest
     }
   }
   return { set: [...set].sort(), unmappedClasses: j.unmapped, classes: (cov?.classes ?? []).length };
+}
+
+/** Gradle `--tests` patterns -> the test source files whose class (or simple name) they can match (`*` spans dots). */
+export function testSourcesMatching(patterns, tree, roots) {
+  const res = patterns.map((p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}(\\..*)?$`));
+  const out = [];
+  for (const f of tree.keys()) {
+    const r = roots.find((x) => f.startsWith(`${x}/`));
+    if (!r || !f.endsWith('.java')) continue;
+    const fqn = f.slice(r.length + 1, -5).replaceAll('/', '.');
+    const simple = fqn.split('.').pop();
+    if (res.some((re) => re.test(fqn) || re.test(simple))) out.push(f);
+  }
+  return out.sort();
 }
 
 /** A matcher for a coverage set (exact paths and globs). */

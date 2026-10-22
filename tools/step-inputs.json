@@ -559,6 +559,7 @@
     "mod/src/client/java/**",
     "mod/src/main/java/**",
     "mod/src/main/java/dev/larattalabs/architect/**",
+    "mod/src/test/java/**",
     "mod/src/test/resources/arvx/**",
     "mod/src/test/resources/stub-sidecar/**",
     "scenarios/bibles/**",
@@ -709,6 +710,20 @@
      "tools/release-version.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiBTest",
+    "*ApiVocTest*",
+    "*ArvxBlocksTest",
+    "*ArvxTest",
+    "*BrushesTest",
+    "*Wire4bTest*",
+    "*WireVocbTest*",
+    "api.ApiBTest",
+    "region.BrushesTest",
+    "region.volume.ArvxBlocksTest",
+    "region.volume.ArvxTest"
+   ],
+   "testFiltersComplete": true,
    "data": [
     "cherry",
     "dark",
@@ -1624,7 +1639,17 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*Api114Test",
+    "*ApiMPTest",
+    "*MaskPatternDriftTest",
+    "*PlanStaleTest",
+    "api.ApiMPTest",
+    "api.MaskPatternDriftTest",
+    "region.PlanStaleTest"
+   ],
+   "testFiltersComplete": true
   },
   "mp-ingame": {
    "classes": [
@@ -1906,7 +1931,17 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*Api114Test",
+    "*ApiMPTest",
+    "*MaskPatternDriftTest",
+    "*PlanStaleTest",
+    "api.ApiMPTest",
+    "api.MaskPatternDriftTest",
+    "region.PlanStaleTest"
+   ],
+   "testFiltersComplete": true
   },
   "sch-unit": {
    "classes": [
@@ -1952,7 +1987,12 @@
     "originMain": [
      "tools/gate6csch.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.api.ApiSchTest",
+    "dev.larattalabs.architect.library.SchematicTest"
+   ],
+   "testFiltersComplete": true
   },
   "sch-roundtrip": {
    "classes": [
@@ -2010,7 +2050,12 @@
     "originMain": [
      "tools/gate6csch.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.api.ApiSchTest",
+    "dev.larattalabs.architect.library.SchematicTest"
+   ],
+   "testFiltersComplete": true
   },
   "sch-refusals": {
    "classes": [
@@ -2068,7 +2113,12 @@
     "originMain": [
      "tools/gate6csch.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.api.ApiSchTest",
+    "dev.larattalabs.architect.library.SchematicTest"
+   ],
+   "testFiltersComplete": true
   },
   "sch-placement": {
    "classes": [
@@ -2126,7 +2176,12 @@
     "originMain": [
      "tools/gate6csch.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.api.ApiSchTest",
+    "dev.larattalabs.architect.library.SchematicTest"
+   ],
+   "testFiltersComplete": true
   },
   "sch-ingame": {
    "classes": [
@@ -2184,7 +2239,12 @@
     "originMain": [
      "tools/gate6csch.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.api.ApiSchTest",
+    "dev.larattalabs.architect.library.SchematicTest"
+   ],
+   "testFiltersComplete": true
   },
   "v-unit": {
    "classes": [
@@ -3568,7 +3628,9 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [],
+   "testFiltersComplete": false
   },
   "6cf1-scenario-forms": {
    "classes": [
@@ -4009,7 +4071,16 @@
     "GATE_KIT_TREE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "testFilters": [
+    "*Api113Test",
+    "*Api114Test",
+    "*PlanStaleTest",
+    "*RegionKeysTest",
+    "api.Api114Test",
+    "region.RegionKeysTest"
+   ],
+   "testFiltersComplete": true
   },
   "x-ingame": {
    "classes": [
@@ -4295,7 +4366,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*Api113Test",
+    "*Api114Test",
+    "*PlanStaleTest",
+    "*RegionKeysTest",
+    "api.Api114Test",
+    "region.RegionKeysTest"
+   ],
+   "testFiltersComplete": true
   },
   "y-unit": {
    "classes": [
@@ -4335,7 +4415,25 @@
     "GATE6CY_REF",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "testFilters": [
+    "*ApiC29Test",
+    "*ApiRulesTest",
+    "*ApiY1Test",
+    "*C29CreditTest",
+    "*FeedOrderTest",
+    "*LedgerTest",
+    "*StockpileFileTest",
+    "*StockpileTest",
+    "api.ApiC29Test",
+    "api.ApiY1Test",
+    "apiimpl.ApiRulesTest",
+    "site.C29CreditTest",
+    "site.FeedOrderTest",
+    "site.StockpileFileTest",
+    "survival.StockpileTest"
+   ],
+   "testFiltersComplete": true
   },
   "y-ingame": {
    "classes": [
@@ -4389,7 +4487,25 @@
     "GATE6CY_REF",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "testFilters": [
+    "*ApiC29Test",
+    "*ApiRulesTest",
+    "*ApiY1Test",
+    "*C29CreditTest",
+    "*FeedOrderTest",
+    "*LedgerTest",
+    "*StockpileFileTest",
+    "*StockpileTest",
+    "api.ApiC29Test",
+    "api.ApiY1Test",
+    "apiimpl.ApiRulesTest",
+    "site.C29CreditTest",
+    "site.FeedOrderTest",
+    "site.StockpileFileTest",
+    "survival.StockpileTest"
+   ],
+   "testFiltersComplete": true
   },
   "c29-unit": {
    "classes": [
@@ -4429,7 +4545,25 @@
     "GATE6CY_REF",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "testFilters": [
+    "*ApiC29Test",
+    "*ApiRulesTest",
+    "*ApiY1Test",
+    "*C29CreditTest",
+    "*FeedOrderTest",
+    "*LedgerTest",
+    "*StockpileFileTest",
+    "*StockpileTest",
+    "api.ApiC29Test",
+    "api.ApiY1Test",
+    "apiimpl.ApiRulesTest",
+    "site.C29CreditTest",
+    "site.FeedOrderTest",
+    "site.StockpileFileTest",
+    "survival.StockpileTest"
+   ],
+   "testFiltersComplete": true
   },
   "c29-ingame": {
    "classes": [
@@ -4483,7 +4617,25 @@
     "GATE6CY_REF",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "testFilters": [
+    "*ApiC29Test",
+    "*ApiRulesTest",
+    "*ApiY1Test",
+    "*C29CreditTest",
+    "*FeedOrderTest",
+    "*LedgerTest",
+    "*StockpileFileTest",
+    "*StockpileTest",
+    "api.ApiC29Test",
+    "api.ApiY1Test",
+    "apiimpl.ApiRulesTest",
+    "site.C29CreditTest",
+    "site.FeedOrderTest",
+    "site.StockpileFileTest",
+    "survival.StockpileTest"
+   ],
+   "testFiltersComplete": true
   },
   "y2-unit": {
    "classes": [
@@ -4512,7 +4664,17 @@
     "GATE6CY2_OUT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "testFilters": [
+    "*ApiRulesTest",
+    "*ApiY2Test",
+    "*FullBomTest",
+    "*SiteWaitTest",
+    "ApiY2Test",
+    "FullBomTest",
+    "SiteWaitTest"
+   ],
+   "testFiltersComplete": true
   },
   "y2-ingame": {
    "classes": [
@@ -4555,7 +4717,17 @@
     "GATE6CY2_OUT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "testFilters": [
+    "*ApiRulesTest",
+    "*ApiY2Test",
+    "*FullBomTest",
+    "*SiteWaitTest",
+    "ApiY2Test",
+    "FullBomTest",
+    "SiteWaitTest"
+   ],
+   "testFiltersComplete": true
   },
   "y2-bom": {
    "classes": [
@@ -4598,7 +4770,17 @@
     "GATE6CY2_OUT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "testFilters": [
+    "*ApiRulesTest",
+    "*ApiY2Test",
+    "*FullBomTest",
+    "*SiteWaitTest",
+    "ApiY2Test",
+    "FullBomTest",
+    "SiteWaitTest"
+   ],
+   "testFiltersComplete": true
   },
   "t1-unit": {
    "classes": [
@@ -4877,7 +5059,9 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [],
+   "testFiltersComplete": false
   },
   "b-unit": {
    "classes": [
@@ -5144,7 +5328,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiBTest",
+    "*ArvxBlocksTest",
+    "*ArvxTest",
+    "*BrushesTest",
+    "api.ApiBTest",
+    "region.BrushesTest",
+    "region.volume.ArvxBlocksTest",
+    "region.volume.ArvxTest"
+   ],
+   "testFiltersComplete": true
   },
   "b-ingame": {
    "classes": [
@@ -5429,7 +5624,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiBTest",
+    "*ArvxBlocksTest",
+    "*ArvxTest",
+    "*BrushesTest",
+    "api.ApiBTest",
+    "region.BrushesTest",
+    "region.volume.ArvxBlocksTest",
+    "region.volume.ArvxTest"
+   ],
+   "testFiltersComplete": true
   },
   "pt-unit": {
    "classes": [
@@ -5611,7 +5817,20 @@
     "GATE6CPT_STEPS",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "testFilters": [
+    "*ApiPTTest",
+    "*JournalPtTest",
+    "*PlacedChunkTest",
+    "*PredicatePathsTest",
+    "*RecordRulesTest",
+    "api.ApiPTTest",
+    "journal.JournalPtTest",
+    "placed.PlacedChunkTest",
+    "placed.PredicatePathsTest",
+    "placed.RecordRulesTest"
+   ],
+   "testFiltersComplete": true
   },
   "c33-unit": {
    "classes": [],
@@ -5895,7 +6114,20 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiPTTest",
+    "*JournalPtTest",
+    "*PlacedChunkTest",
+    "*PredicatePathsTest",
+    "*RecordRulesTest",
+    "api.ApiPTTest",
+    "journal.JournalPtTest",
+    "placed.PlacedChunkTest",
+    "placed.PredicatePathsTest",
+    "placed.RecordRulesTest"
+   ],
+   "testFiltersComplete": true
   },
   "pt-nomod": {
    "classes": [
@@ -6164,7 +6396,20 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiPTTest",
+    "*JournalPtTest",
+    "*PlacedChunkTest",
+    "*PredicatePathsTest",
+    "*RecordRulesTest",
+    "api.ApiPTTest",
+    "journal.JournalPtTest",
+    "placed.PlacedChunkTest",
+    "placed.PredicatePathsTest",
+    "placed.RecordRulesTest"
+   ],
+   "testFiltersComplete": true
   },
   "pt2-unit": {
    "classes": [
@@ -6261,7 +6506,20 @@
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PT2_V0270"
-   ]
+   ],
+   "testFilters": [
+    "*Pt2Old027ReadTest",
+    "Pt2Old027ReadTest.java",
+    "api.ApiPT2Test",
+    "api.ApiPTTest",
+    "apiimpl.ApiRulesTest",
+    "journal.JournalAdoptTest",
+    "journal.JournalPtTest",
+    "placed.BuildsAdoptTest",
+    "region.ApiP0Test",
+    "site.AdoptTest"
+   ],
+   "testFiltersComplete": false
   },
   "pt2-ingame": {
    "classes": [
@@ -6535,7 +6793,20 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*Pt2Old027ReadTest",
+    "Pt2Old027ReadTest.java",
+    "api.ApiPT2Test",
+    "api.ApiPTTest",
+    "apiimpl.ApiRulesTest",
+    "journal.JournalAdoptTest",
+    "journal.JournalPtTest",
+    "placed.BuildsAdoptTest",
+    "region.ApiP0Test",
+    "site.AdoptTest"
+   ],
+   "testFiltersComplete": false
   },
   "pt2-survival": {
    "classes": [
@@ -6809,7 +7080,20 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*Pt2Old027ReadTest",
+    "Pt2Old027ReadTest.java",
+    "api.ApiPT2Test",
+    "api.ApiPTTest",
+    "apiimpl.ApiRulesTest",
+    "journal.JournalAdoptTest",
+    "journal.JournalPtTest",
+    "placed.BuildsAdoptTest",
+    "region.ApiP0Test",
+    "site.AdoptTest"
+   ],
+   "testFiltersComplete": false
   },
   "tile-gravity": {
    "classes": [
@@ -7094,7 +7378,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiBTest",
+    "*ArvxBlocksTest",
+    "*ArvxTest",
+    "*BrushesTest",
+    "api.ApiBTest",
+    "region.BrushesTest",
+    "region.volume.ArvxBlocksTest",
+    "region.volume.ArvxTest"
+   ],
+   "testFiltersComplete": true
   },
   "c31-felling": {
    "classes": [
@@ -7379,7 +7674,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiBTest",
+    "*ArvxBlocksTest",
+    "*ArvxTest",
+    "*BrushesTest",
+    "api.ApiBTest",
+    "region.BrushesTest",
+    "region.volume.ArvxBlocksTest",
+    "region.volume.ArvxTest"
+   ],
+   "testFiltersComplete": true
   },
   "t1-ingame": {
    "classes": [
@@ -7677,7 +7983,9 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [],
+   "testFiltersComplete": false
   },
   "6ct1-scenario-relief": {
    "classes": [
@@ -8221,7 +8529,13 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.region.ApiF2Test",
+    "dev.larattalabs.architect.region.ApiT1Test",
+    "dev.larattalabs.architect.region.PlanStaleTest"
+   ],
+   "testFiltersComplete": true
   },
   "f2-harvest": {
    "classes": [
@@ -8525,7 +8839,13 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.region.ApiF2Test",
+    "dev.larattalabs.architect.region.ApiT1Test",
+    "dev.larattalabs.architect.region.PlanStaleTest"
+   ],
+   "testFiltersComplete": true
   },
   "6cf2-scenario-scatter": {
    "classes": [
@@ -8830,7 +9150,13 @@
     "repoListing": [
      "tools/gate6cf2.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.region.ApiF2Test",
+    "dev.larattalabs.architect.region.ApiT1Test",
+    "dev.larattalabs.architect.region.PlanStaleTest"
+   ],
+   "testFiltersComplete": true
   },
   "t2-unit": {
    "classes": [
@@ -9113,7 +9439,9 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [],
+   "testFiltersComplete": false
   },
   "p0-unit": {
    "classes": [
@@ -10044,7 +10372,17 @@
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiDTest*",
+    "*C29CreditTest*",
+    "*FeedOrderTest*",
+    "*PlanChecksT3Test*",
+    "*RegionFluidsHYTest*",
+    "*RegionTargetsTest*",
+    "*RoadFreeCellTest*"
+   ],
+   "testFiltersComplete": true
   },
   "rs-ingame": {
    "classes": [
@@ -10266,7 +10604,17 @@
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiDTest*",
+    "*C29CreditTest*",
+    "*FeedOrderTest*",
+    "*PlanChecksT3Test*",
+    "*RegionFluidsHYTest*",
+    "*RegionTargetsTest*",
+    "*RoadFreeCellTest*"
+   ],
+   "testFiltersComplete": true
   },
   "rs-survival": {
    "classes": [
@@ -10489,6 +10837,16 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiDTest*",
+    "*C29CreditTest*",
+    "*FeedOrderTest*",
+    "*PlanChecksT3Test*",
+    "*RegionFluidsHYTest*",
+    "*RegionTargetsTest*",
+    "*RoadFreeCellTest*"
+   ],
+   "testFiltersComplete": true,
    "verified": "20261022-161855-release rs-survival"
   },
   "rs-crash": {
@@ -10711,7 +11069,17 @@
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiDTest*",
+    "*C29CreditTest*",
+    "*FeedOrderTest*",
+    "*PlanChecksT3Test*",
+    "*RegionFluidsHYTest*",
+    "*RegionTargetsTest*",
+    "*RoadFreeCellTest*"
+   ],
+   "testFiltersComplete": true
   },
   "rsb-ingame": {
    "classes": [
@@ -10924,7 +11292,12 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*RegionTargetsTest*",
+    "*TunnelRingsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "rsb-crash": {
    "classes": [
@@ -11137,7 +11510,12 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*RegionTargetsTest*",
+    "*TunnelRingsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "p0-ingame": {
    "classes": [
@@ -11963,7 +12341,9 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [],
+   "testFiltersComplete": false
   },
   "t3a-unit": {
    "classes": [
@@ -15112,7 +15492,12 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiT3Test*",
+    "*PlanChecksT3Test*"
+   ],
+   "testFiltersComplete": true
   },
   "t3b-ingame": {
    "classes": [
@@ -15426,7 +15811,12 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiT3Test*",
+    "*PlanChecksT3Test*"
+   ],
+   "testFiltersComplete": true
   },
   "t3b-natural": {
    "classes": [
@@ -15740,7 +16130,12 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiT3Test*",
+    "*PlanChecksT3Test*"
+   ],
+   "testFiltersComplete": true
   },
   "t3b-pin": {
    "classes": [
@@ -16054,7 +16449,12 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiT3Test*",
+    "*PlanChecksT3Test*"
+   ],
+   "testFiltersComplete": true
   },
   "t3b-look": {
    "classes": [
@@ -16368,7 +16768,12 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiT3Test*",
+    "*PlanChecksT3Test*"
+   ],
+   "testFiltersComplete": true
   },
   "h-unit": {
    "classes": [
@@ -16691,7 +17096,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "h-ingame": {
    "classes": [
@@ -17034,6 +17447,14 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
    "verified": "20261022-161855-release h-ingame"
   },
   "h-crash": {
@@ -17376,7 +17797,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "h-probe": {
    "classes": [
@@ -17718,7 +18147,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "h-natural": {
    "classes": [
@@ -18060,7 +18497,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "h-cold": {
    "classes": [
@@ -18402,7 +18847,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "6ch-look": {
    "classes": [
@@ -18744,7 +19197,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "voc-unit": {
    "classes": [
@@ -19032,6 +19493,16 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true,
    "data": [
     "deno.json",
     "deno.jsonc",
@@ -19348,7 +19819,17 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true
   },
   "voc-probe": {
    "classes": [
@@ -19654,7 +20135,17 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true
   },
   "voc-survival": {
    "classes": [
@@ -19960,7 +20451,17 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true
   },
   "voc-ingame": {
    "classes": [
@@ -20266,7 +20767,17 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true
   },
   "voc-natural": {
    "classes": [
@@ -20572,7 +21083,17 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true
   },
   "vocc-unit": {
    "classes": [
@@ -20860,6 +21381,16 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true,
    "data": [
     "node_modules",
     "package.json"
@@ -21172,7 +21703,17 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true
   },
   "6cvoc-look": {
    "classes": [
@@ -21478,7 +22019,17 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true
   },
   "cu-unit": {
    "classes": [
@@ -21520,7 +22071,17 @@
     "GATE6CCU_OUT",
     "JAVA_HOME",
     "PATH"
-   ]
+   ],
+   "testFilters": [
+    "*ApiCuTest*",
+    "*CopperTest*",
+    "*DeltaPropertyTest*",
+    "*JournalPropertyTest*",
+    "*JournalTest*",
+    "*RefundsAndBitsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "cu-measure": {
    "classes": [
@@ -21783,7 +22344,17 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiCuTest*",
+    "*CopperTest*",
+    "*DeltaPropertyTest*",
+    "*JournalPropertyTest*",
+    "*JournalTest*",
+    "*RefundsAndBitsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "cu-ingame": {
    "classes": [
@@ -22046,7 +22617,17 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiCuTest*",
+    "*CopperTest*",
+    "*DeltaPropertyTest*",
+    "*JournalPropertyTest*",
+    "*JournalTest*",
+    "*RefundsAndBitsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "rp-unit": {
    "classes": [
@@ -22178,7 +22759,12 @@
     "GATE6CRP_OUT",
     "JAVA_HOME",
     "PATH"
-   ]
+   ],
+   "testFilters": [
+    "*RealisedTest*",
+    "*TileGravityTest*"
+   ],
+   "testFiltersComplete": true
   },
   "rp-ingame": {
    "classes": [
@@ -22445,7 +23031,12 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*RealisedTest*",
+    "*TileGravityTest*"
+   ],
+   "testFiltersComplete": true
   },
   "rp-crash": {
    "classes": [
@@ -22712,7 +23303,12 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*RealisedTest*",
+    "*TileGravityTest*"
+   ],
+   "testFiltersComplete": true
   },
   "cu-survival": {
    "classes": [
@@ -22775,7 +23371,32 @@
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH"
-   ]
+   ],
+   "testFilters": [
+    "*ApiC29Test",
+    "*ApiCuTest*",
+    "*ApiRulesTest",
+    "*ApiY1Test",
+    "*C29CreditTest",
+    "*CopperTest*",
+    "*DeltaPropertyTest*",
+    "*FeedOrderTest",
+    "*JournalPropertyTest*",
+    "*JournalTest*",
+    "*LedgerTest",
+    "*RefundsAndBitsTest*",
+    "*StillOursFluidsTest*",
+    "*StockpileFileTest",
+    "*StockpileTest",
+    "api.ApiC29Test",
+    "api.ApiY1Test",
+    "apiimpl.ApiRulesTest",
+    "site.C29CreditTest",
+    "site.FeedOrderTest",
+    "site.StockpileFileTest",
+    "survival.StockpileTest"
+   ],
+   "testFiltersComplete": true
   },
   "ha-unit": {
    "classes": [
@@ -24511,6 +25132,15 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
    "verified": "20261022-161855-release hy-unit"
   },
   "h-holders": {
@@ -24853,7 +25483,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "irr-holders": {
    "classes": [
@@ -25173,7 +25811,20 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiIrrTest",
+    "*ApiVocTest*",
+    "*LotMaskTest",
+    "*PaletteRulesTest*",
+    "*PlanChecksHTest",
+    "*RegionFluidsHYTest*",
+    "dev.larattalabs.architect.apiimpl.ApiIrrTest",
+    "dev.larattalabs.architect.region.PlanChecksHTest",
+    "dev.larattalabs.architect.site.LotMaskTest"
+   ],
+   "testFiltersComplete": true
   },
   "h-rmcrash": {
    "classes": [
@@ -25515,7 +26166,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "hy-ingame": {
    "classes": [
@@ -25835,6 +26494,15 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
    "verified": "20261022-161855-release hy-ingame"
   },
   "hy-crash": {
@@ -26154,7 +26822,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "hy-natural": {
    "classes": [
@@ -26473,7 +27150,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "hy-cold": {
    "classes": [
@@ -26792,7 +27478,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "kc-unit": {
    "classes": [
@@ -27647,7 +28342,13 @@
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.apiimpl.ApiF3Test",
+    "dev.larattalabs.architect.journal.CopperTest",
+    "dev.larattalabs.architect.journal.StillOursF3Test"
+   ],
+   "testFiltersComplete": true
   },
   "f3-ingame": {
    "classes": [
@@ -27958,7 +28659,13 @@
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.apiimpl.ApiF3Test",
+    "dev.larattalabs.architect.journal.CopperTest",
+    "dev.larattalabs.architect.journal.StillOursF3Test"
+   ],
+   "testFiltersComplete": true
   },
   "f3-natural": {
    "classes": [
@@ -28269,7 +28976,13 @@
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.apiimpl.ApiF3Test",
+    "dev.larattalabs.architect.journal.CopperTest",
+    "dev.larattalabs.architect.journal.StillOursF3Test"
+   ],
+   "testFiltersComplete": true
   },
   "f3-forest": {
    "classes": [
@@ -28561,7 +29274,13 @@
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.apiimpl.ApiF3Test",
+    "dev.larattalabs.architect.journal.CopperTest",
+    "dev.larattalabs.architect.journal.StillOursF3Test"
+   ],
+   "testFiltersComplete": true
   },
   "f3-look": {
    "classes": [
@@ -28872,7 +29591,13 @@
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.apiimpl.ApiF3Test",
+    "dev.larattalabs.architect.journal.CopperTest",
+    "dev.larattalabs.architect.journal.StillOursF3Test"
+   ],
+   "testFiltersComplete": true
   },
   "irr-unit": {
    "classes": [
@@ -29173,7 +29898,20 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiIrrTest",
+    "*ApiVocTest*",
+    "*LotMaskTest",
+    "*PaletteRulesTest*",
+    "*PlanChecksHTest",
+    "*RegionFluidsHYTest*",
+    "dev.larattalabs.architect.apiimpl.ApiIrrTest",
+    "dev.larattalabs.architect.region.PlanChecksHTest",
+    "dev.larattalabs.architect.site.LotMaskTest"
+   ],
+   "testFiltersComplete": true
   },
   "irr-ingame": {
    "classes": [
@@ -29494,6 +30232,19 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiIrrTest",
+    "*ApiVocTest*",
+    "*LotMaskTest",
+    "*PaletteRulesTest*",
+    "*PlanChecksHTest",
+    "*RegionFluidsHYTest*",
+    "dev.larattalabs.architect.apiimpl.ApiIrrTest",
+    "dev.larattalabs.architect.region.PlanChecksHTest",
+    "dev.larattalabs.architect.site.LotMaskTest"
+   ],
+   "testFiltersComplete": true,
    "verified": "20261022-161855-release irr-ingame"
   },
   "irr-crash": {
@@ -29814,7 +30565,20 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiIrrTest",
+    "*ApiVocTest*",
+    "*LotMaskTest",
+    "*PaletteRulesTest*",
+    "*PlanChecksHTest",
+    "*RegionFluidsHYTest*",
+    "dev.larattalabs.architect.apiimpl.ApiIrrTest",
+    "dev.larattalabs.architect.region.PlanChecksHTest",
+    "dev.larattalabs.architect.site.LotMaskTest"
+   ],
+   "testFiltersComplete": true
   },
   "irr-look": {
    "classes": [
@@ -30134,7 +30898,20 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiIrrTest",
+    "*ApiVocTest*",
+    "*LotMaskTest",
+    "*PaletteRulesTest*",
+    "*PlanChecksHTest",
+    "*RegionFluidsHYTest*",
+    "dev.larattalabs.architect.apiimpl.ApiIrrTest",
+    "dev.larattalabs.architect.region.PlanChecksHTest",
+    "dev.larattalabs.architect.site.LotMaskTest"
+   ],
+   "testFiltersComplete": true
   },
   "fl-unit": {
    "classes": [
@@ -30412,6 +31189,14 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiVocTest*",
+    "*IrRoadExtTest",
+    "*Wire4bTest*",
+    "*WireVocbTest*",
+    "dev.larattalabs.architect.region.IrRoadExtTest"
+   ],
+   "testFiltersComplete": true,
    "data": [
     "node_modules",
     "package.json"
@@ -30714,7 +31499,15 @@
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiVocTest*",
+    "*IrRoadExtTest",
+    "*Wire4bTest*",
+    "*WireVocbTest*",
+    "dev.larattalabs.architect.region.IrRoadExtTest"
+   ],
+   "testFiltersComplete": true
   },
   "fl-natural": {
    "classes": [
@@ -31010,7 +31803,15 @@
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiVocTest*",
+    "*IrRoadExtTest",
+    "*Wire4bTest*",
+    "*WireVocbTest*",
+    "dev.larattalabs.architect.region.IrRoadExtTest"
+   ],
+   "testFiltersComplete": true
   },
   "fl-look": {
    "classes": [
@@ -31306,7 +32107,15 @@
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiVocTest*",
+    "*IrRoadExtTest",
+    "*Wire4bTest*",
+    "*WireVocbTest*",
+    "dev.larattalabs.architect.region.IrRoadExtTest"
+   ],
+   "testFiltersComplete": true
   },
   "water-lint": {
    "classes": [],
@@ -31611,7 +32420,11 @@
     "JAVA_HOME",
     "P3_REPO",
     "P3_RUN"
-   ]
+   ],
+   "testFilters": [
+    "dev.larattalabs.architect.site.LedgerProbeTest"
+   ],
+   "testFiltersComplete": false
   },
   "p3-probe-ledger": {
    "classes": [],
@@ -31719,7 +32532,11 @@
     "JAVA_HOME",
     "P3_REPO",
     "P3_RUN"
-   ]
+   ],
+   "testFilters": [
+    "dev.larattalabs.architect.site.LedgerProbeTest"
+   ],
+   "testFiltersComplete": false
   },
   "h-ingame-smoke": {
    "classes": [
@@ -32061,7 +32878,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "h-probe-smoke": {
    "classes": [
@@ -32403,7 +33228,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "hy-ingame-smoke": {
    "classes": [
@@ -32722,7 +33555,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "hy-crash-smoke": {
    "classes": [
@@ -33041,7 +33883,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "hy-cold-smoke": {
    "classes": [
@@ -33360,7 +34211,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "irr-ingame-smoke": {
    "classes": [
@@ -33680,7 +34540,20 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiIrrTest",
+    "*ApiVocTest*",
+    "*LotMaskTest",
+    "*PaletteRulesTest*",
+    "*PlanChecksHTest",
+    "*RegionFluidsHYTest*",
+    "dev.larattalabs.architect.apiimpl.ApiIrrTest",
+    "dev.larattalabs.architect.region.PlanChecksHTest",
+    "dev.larattalabs.architect.site.LotMaskTest"
+   ],
+   "testFiltersComplete": true
   },
   "kc-ingame-smoke": {
    "classes": [
@@ -34277,7 +35150,17 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true
   },
   "y-ingame-smoke": {
    "classes": [
@@ -34331,7 +35214,25 @@
     "GATE6CY_REF",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "testFilters": [
+    "*ApiC29Test",
+    "*ApiRulesTest",
+    "*ApiY1Test",
+    "*C29CreditTest",
+    "*FeedOrderTest",
+    "*LedgerTest",
+    "*StockpileFileTest",
+    "*StockpileTest",
+    "api.ApiC29Test",
+    "api.ApiY1Test",
+    "apiimpl.ApiRulesTest",
+    "site.C29CreditTest",
+    "site.FeedOrderTest",
+    "site.StockpileFileTest",
+    "survival.StockpileTest"
+   ],
+   "testFiltersComplete": true
   },
   "c29-ingame-smoke": {
    "classes": [
@@ -34385,7 +35286,25 @@
     "GATE6CY_REF",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "testFilters": [
+    "*ApiC29Test",
+    "*ApiRulesTest",
+    "*ApiY1Test",
+    "*C29CreditTest",
+    "*FeedOrderTest",
+    "*LedgerTest",
+    "*StockpileFileTest",
+    "*StockpileTest",
+    "api.ApiC29Test",
+    "api.ApiY1Test",
+    "apiimpl.ApiRulesTest",
+    "site.C29CreditTest",
+    "site.FeedOrderTest",
+    "site.StockpileFileTest",
+    "survival.StockpileTest"
+   ],
+   "testFiltersComplete": true
   },
   "6chy-look": {
    "classes": [
@@ -34704,7 +35623,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true
   },
   "s2-unit": {
    "classes": [
@@ -34984,7 +35912,9 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [],
+   "testFiltersComplete": false
   },
   "s3-unit": {
    "classes": [
@@ -35301,7 +36231,16 @@
      "tools/lib/gate6cs3-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiS2Test",
+    "*ApiS3Test",
+    "*ApiVocTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*",
+    "dev.larattalabs.architect.region.ApiS3Test"
+   ],
+   "testFiltersComplete": true
   },
   "s3-plan": {
    "classes": [
@@ -35637,7 +36576,16 @@
      "tools/lib/gate6cs3-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiS2Test",
+    "*ApiS3Test",
+    "*ApiVocTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*",
+    "dev.larattalabs.architect.region.ApiS3Test"
+   ],
+   "testFiltersComplete": true
   },
   "6c-scenario-s3": {
    "classes": [
@@ -36972,7 +37920,9 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [],
+   "testFiltersComplete": false
   },
   "d-ingame": {
    "classes": [
@@ -37318,7 +38268,9 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [],
+   "testFiltersComplete": false
   },
   "6cd-scenario-districts": {
    "classes": [
@@ -37882,7 +38834,9 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [],
+   "testFiltersComplete": false
   },
   "k1a-ingame": {
    "classes": [
@@ -38213,7 +39167,9 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [],
+   "testFiltersComplete": false
   },
   "k1a-natural": {
    "classes": [
@@ -38544,7 +39500,9 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [],
+   "testFiltersComplete": false
   },
   "k1a-target": {
    "classes": [
@@ -38875,7 +39833,9 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [],
+   "testFiltersComplete": false
   },
   "k1a-look": {
    "classes": [
@@ -39207,6 +40167,8 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [],
+   "testFiltersComplete": false,
    "verified": "20261022-161855-release k1a-look"
   },
   "d2-ingame": {
@@ -39553,7 +40515,9 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [],
+   "testFiltersComplete": false
   },
   "d2-findsite": {
    "classes": [
@@ -40090,7 +41054,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*Api113Test",
+    "*Api114Test",
+    "*PlanStaleTest",
+    "*RegionKeysTest",
+    "api.Api114Test",
+    "region.RegionKeysTest"
+   ],
+   "testFiltersComplete": true
   },
   "x-resume-full": {
    "classes": [
@@ -40376,7 +41349,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*Api113Test",
+    "*Api114Test",
+    "*PlanStaleTest",
+    "*RegionKeysTest",
+    "api.Api114Test",
+    "region.RegionKeysTest"
+   ],
+   "testFiltersComplete": true
   },
   "6cv-scenario-s7": {
    "classes": [
@@ -40752,7 +41734,13 @@
     "COPIES_REPORT",
     "GATE6C0B_OUT",
     "GATE6C0B_RUN"
-   ]
+   ],
+   "testFilters": [
+    "*MirrorFitTest",
+    "*MirrorOracleTest",
+    "*Wire0bTest"
+   ],
+   "testFiltersComplete": true
   },
   "0b-ingame": {
    "classes": [
@@ -40853,7 +41841,13 @@
     "GATE6C0B_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "testFilters": [
+    "*MirrorFitTest",
+    "*MirrorOracleTest",
+    "*Wire0bTest"
+   ],
+   "testFiltersComplete": true
   },
   "4e-megalite": {
    "classes": [
@@ -45350,7 +46344,12 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiT3Test*",
+    "*PlanChecksT3Test*"
+   ],
+   "testFiltersComplete": true
   },
   "lint-structure": {
    "classes": [],
@@ -46108,7 +47107,17 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true
   },
   "w-ingame-smoke": {
    "classes": [
@@ -46745,7 +47754,9 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [],
+   "testFiltersComplete": false
   }
  }
 }

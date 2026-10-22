@@ -253,6 +253,26 @@ export function staticEntry(id, entry, conf, files, opts) {
     if (/['"]ls-files['"]|git ls-files/.test(t)) (flags.repoListing ??= []).push(f);
   }
   for (const k of ['originMain', 'lastTag', 'repoListing']) if (flags[k]) flags[k].sort();
+  // the Java test filters its source-checkout gradle runs can use (`--tests <pattern>`): every literal pattern in the modules that
+  // run gradle tests; a run with no --tests at all, or one built from a template, makes them incomplete (the whole test tree counts)
+  const testFilters = new Set();
+  let filtersComplete = true;
+  let runsTests = false;
+  for (const f of cl.files) {
+    if (!/\.mjs$/.test(f) || !f.startsWith('tools/') || runner.has(f)) continue;
+    let t = '';
+    try {
+      t = readText(f);
+    } catch {
+      continue;
+    }
+    if (!/gradlew/.test(t) || !/['"]test['"]/.test(t)) continue;
+    runsTests = true;
+    if (!/--tests/.test(t)) filtersComplete = false;
+    if (/--tests[^\n]*\$\{/.test(t)) filtersComplete = false;
+    for (const m of t.matchAll(/(['"])([\w.$*]*Test[\w.$*]*)\1/g)) testFilters.add(m[2]);
+  }
+  if (!runsTests) filtersComplete = false;
   return {
     classes: [...classes].sort(),
     roots,
@@ -261,6 +281,7 @@ export function staticEntry(id, entry, conf, files, opts) {
     dynamic: cl.dynamic,
     env: [...cl.env].sort(),
     ...(Object.keys(flags).length ? { flags } : {}),
+    ...(runsTests ? { testFilters: [...testFilters].sort(), testFiltersComplete: filtersComplete } : {}),
   };
 }
 

@@ -726,6 +726,8 @@ function childEnv(sh, extra = {}) {
     const cov = path.join(sh.ev, 'coverage');
     fs.mkdirSync(path.join(cov, 'node'), { recursive: true });
     env.JAVA_TOOL_OPTIONS = [env.JAVA_TOOL_OPTIONS, javaLogOption(cov)].filter(Boolean).join(' ');
+    // gradle test tasks always run in a JVM (mod/build.gradle gateRerunTests): a test run served from gradle's cache logs nothing
+    env.ORG_GRADLE_PROJECT_gateRerunTests = '1';
     env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${pathToFileURL(path.join(SRC, 'tools', 'lib', 'step-trace.mjs')).href}`].filter(Boolean).join(' ');
     env.GATE_TRACE_DIR = path.join(cov, 'node');
     env.GATE_TRACE_ROOTS = JSON.stringify([[SRC, ''], [sh.RUN, ''], [path.join(MAIN, 'artifacts'), '@artifacts/']]);
