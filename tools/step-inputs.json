@@ -121,6 +121,7 @@
     "kit/test/scenario-goldens.test.mjs",
     "kit/test/schem.test.mjs",
     "kit/test/smalls.test.mjs",
+    "kit/test/step-cache.test.mjs",
     "kit/test/t3-foundation.test.mjs",
     "kit/test/terraces-s3.test.mjs",
     "kit/test/tunnel-t3b.test.mjs",
@@ -419,6 +420,7 @@
     "kit/test/scenario-goldens.test.mjs",
     "kit/test/schem.test.mjs",
     "kit/test/smalls.test.mjs",
+    "kit/test/step-cache.test.mjs",
     "kit/test/t3-foundation.test.mjs",
     "kit/test/terraces-s3.test.mjs",
     "kit/test/tunnel-t3b.test.mjs",
@@ -471,6 +473,7 @@
     "tools/api-compat.mjs",
     "tools/catalogue-since-check.mjs",
     "tools/find-site.mjs",
+    "tools/gate-cache.json",
     "tools/gate-chains.json",
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
@@ -503,13 +506,16 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/src-gradle.mjs",
+    "tools/lib/step-cache.mjs",
+    "tools/lib/step-inputs.mjs",
     "tools/lib/wsserver.mjs",
     "tools/plan-catalogue-diff.mjs",
     "tools/release-context.mjs",
     "tools/release-version.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
-    "tools/scenarios.mjs"
+    "tools/scenarios.mjs",
+    "tools/step-inputs.json"
    ],
    "globs": [
     "kit/bibles/**",
@@ -573,6 +579,10 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "kit/test/step-cache.test.mjs",
+     "expr": "path.join(KIT, name))"
     },
     {
      "from": "kit/test/release-version.test.mjs",
@@ -649,6 +659,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CB_OUT",
     "GATE6CT3A_OUT",
+    "GATE_A_MODE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",

@@ -1,5 +1,17 @@
 {
  "$comment": "The step result cache and the affected-only release (docs/GATES.md \"Affected-only releases\"). Hand-written policy; tools/step-inputs.json is the derived input map (tools/step-inputs.mjs). Read by the runner only (no gate driver reads this file, so editing it never changes a step's inputs).",
+ "runnerFiles": [
+  "tools/gate-run.mjs",
+  "tools/step-inputs.mjs",
+  "tools/step-cache.mjs",
+  "tools/nightly.mjs",
+  "tools/nightly-install.mjs",
+  "tools/lib/step-cache.mjs",
+  "tools/lib/step-inputs.mjs",
+  "tools/lib/step-trace.mjs",
+  "tools/lib/gate-history.mjs",
+  "tools/lib/shard-auto.mjs"
+ ],
  "classes": {
   "$comment": "Input classes: globs (a leading ! excludes). A step's input set is the union of its classes, its drivers' module closure, the globs that closure needs and the data its traced runs read.",
   "jar": [

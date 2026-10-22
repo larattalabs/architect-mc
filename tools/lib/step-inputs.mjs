@@ -67,6 +67,12 @@ export function treeAt(src, commit) {
   }
   return trees.get(sha);
 }
+/** The working tree's files (tracked and untracked, not ignored) as a Set: what `build` and `check` scan (a new driver counts before
+ * it is committed). Keys never use this: they hash a commit's tree. */
+export function workingFiles(src) {
+  return new Set(git(src, 'ls-files', '-z', '--cached', '--others', '--exclude-standard').split('\0').filter((p) => p && fs.existsSync(path.join(src, p))));
+}
+
 /** Paths that differ from HEAD in the working tree (modified, staged, untracked and not ignored). */
 export function dirtyPaths(src) {
   const out = git(src, 'status', '--porcelain', '-z', '--untracked-files=all');
@@ -219,8 +225,9 @@ export function staticEntry(id, entry, conf, files, opts) {
   if (cl.files.has('tools/release-context.mjs')) flags.releaseContext = true;
   // a closure module that diffs against origin/main or a merge base reads git objects outside HEAD's tree
   const readText = opts?.read ?? ((p) => fs.readFileSync(path.join(opts.src, p), 'utf8'));
+  const runner = new Set(conf.runnerFiles ?? []);
   for (const f of cl.files) {
-    if (!/\.mjs$/.test(f) || !f.startsWith('tools/')) continue;
+    if (!/\.mjs$/.test(f) || !f.startsWith('tools/') || runner.has(f)) continue;
     let t = '';
     try {
       t = readText(f);
@@ -242,8 +249,8 @@ export function staticEntry(id, entry, conf, files, opts) {
 }
 
 /** The whole static map for a chain config at the working tree of `src` (tracked files only). */
-export function buildStatic(cfg, conf, src, { commit = 'HEAD', read } = {}) {
-  const files = treeAt(src, commit);
+export function buildStatic(cfg, conf, src, { read } = {}) {
+  const files = workingFiles(src);
   const steps = {};
   for (const [id, entry] of Object.entries(cfg.steps)) steps[id] = staticEntry(id, entry, conf, files, { src, read });
   return steps;

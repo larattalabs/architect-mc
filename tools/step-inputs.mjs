@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildStatic, checkTrace, inputMatcher, inputsHash, loadConf, loadMap, readTrace, saveMap, staticEntry, treeAt, widenFromTrace } from './lib/step-inputs.mjs';
+import { buildStatic, checkTrace, inputMatcher, inputsHash, loadConf, loadMap, readTrace, saveMap, staticEntry, treeAt, widenFromTrace, workingFiles } from './lib/step-inputs.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const [cmd, ...args] = process.argv.slice(2);
@@ -65,7 +65,7 @@ if (cmd === 'build') {
   const bad = [];
   if (!map) bad.push('no tools/step-inputs.json');
   else {
-    const files = treeAt(SRC, 'HEAD');
+    const files = workingFiles(SRC);
     for (const [id, entry] of Object.entries(cfg.steps)) {
       const rec = map.steps[id];
       if (!rec) {
