@@ -24,6 +24,7 @@ import path from 'node:path';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs';
+import { gatePart } from './lib/gate-part.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-HY-run');
@@ -66,10 +67,11 @@ function spendZero() {
   fs.mkdirSync(OUT, { recursive: true });
   fs.writeFileSync(path.join(OUT, 'spend.json'), `${JSON.stringify({ capUsd: 0, totalUsd: 0, runs: [], note: 'slice HY is $0: sim and stub only, no Claude call' }, null, 2)}\n`);
 }
-/** Run the halves' items of a step (each `{name, run(ctx)}`), after the core's. */
-async function halves(step) {
+/** Run the halves' items of a step (each `{name, run(ctx)}`), after the core's; `want(key)` (a split part) picks among them. */
+async function halves(step, want = () => true) {
   const out = {};
   for (const it of [...(B.items[step] ?? []), ...(C.items[step] ?? [])]) {
+    if (!want(it.key ?? it.name)) continue;
     log(`-- ${it.name}`);
     out[it.name] = await it.run(ctx);
   }
@@ -158,9 +160,12 @@ steps.unit = async () => {
 
 // ------------------------------------------------------------------ in game (HY-core's items; the halves' after)
 
+// a split hy-ingame (docs/GATES.md "Turbo"): its sections are HY-core's items and each half's item (tools/lib/gate-part.mjs)
+const HY_INGAME_SECTIONS = ['core', ...[...B.items.ingame, ...C.items.ingame].map((it) => it.key ?? it.name)];
 steps.ingame = async () => {
+  const P = gatePart(HY_INGAME_SECTIONS, { log });
   await ensure();
-  return { core: SKIP_CORE ? 'skipped (GATE6CHY_SKIP_CORE)' : await CORE.ingame(ctx), halves: await halves('ingame') };
+  return { core: SKIP_CORE ? 'skipped (GATE6CHY_SKIP_CORE)' : P.want('core') ? await CORE.ingame(ctx) : `another part's (${P.part})`, halves: await halves('ingame', P.want) };
 };
 steps.crash = async () => {
   await ensure();

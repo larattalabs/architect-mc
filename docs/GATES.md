@@ -10,7 +10,12 @@ node tools/gate-run.mjs change --since origin/main --plan        # what a tier w
 node tools/gate-run.mjs change --since origin/main               # minutes: the unit suites + the steps the diff maps to
 node tools/gate-run.mjs slice  --since origin/main                 # units + apijars + the impact steps + the slice's own steps; timing bars recorded;
                                                                   #   over 20 steps the shard count and ports are chosen for the machine (--shards auto)
-node tools/gate-run.mjs release --release v0.12.0                  # overnight: everything, duplicates rotated; timing bars judged, --quiet-wait on; auto shards
+node tools/gate-run.mjs release --release v0.12.0                  # the candidates whose cache key misses + the canaries; timing bars judged, --quiet-wait on
+node tools/gate-run.mjs release --release v0.12.0 --full           # every candidate and every rotation option (automatic on engine/Minecraft/build changes;
+                                                                  #   --no-auto-full: the cache's own selection anyway)
+node tools/gate-run.mjs slice  --since origin/main --no-cache      # run every selected step (a PASS is still recorded); --no-trace: no trace, no record
+node tools/step-inputs.mjs check                                 # CI: every driver's imports inside its recorded input set
+node tools/nightly.mjs                                           # the nightly: release --full --no-cache on origin/main (LaunchAgent at 02:00)
 node tools/gate-run.mjs slice  --since origin/main --shards 3 --ports 8896:8897,8898:8899,8900:8901   # a fixed shard count, as before
 node tools/gate-run.mjs quick                                    # a named chain (quick | regress | engine), as before (bars judged)
 node tools/gate-run.mjs change --since origin/main --slots 2     # at most 2 gate runs on the machine at once (default slots.max, 4)
@@ -83,6 +88,220 @@ free, so a SIGKILLed run does not hold one. `--slots N` / `GATE_SLOTS` overrides
 separate from the run's own `--lock`, which still guards one runner's run dir and ports. The plan shows how many slots are in
 use; `SUMMARY.md` and `summary.json` (`slot`) record the slot and the wait. Runners started before this change take no slot, so
 for the first runs the count is a floor.
+
+## Affected-only releases: the step cache and the nightly (Noah, 2026-10-22)
+
+A release re-ran about 140 steps even when the batch's slices had passed them on the same code; 0.41.0 took about 12 hours end to
+end. Now every step's PASS is recorded under a key that names everything that can change its result. A release runs the steps
+whose key has no recorded PASS, plus a fixed set of canaries. A nightly full run on origin/main keeps the cache warm and catches
+what the input map misses.
+
+### Step inputs (`tools/step-inputs.json`, `tools/step-inputs.mjs`)
+
+A step's input set is the union of four parts:
+
+| part | what | from |
+|---|---|---|
+| classes | whole trees, by the step's kind (tools/gate-cache.json `classes`). Any game client (`self` too): `jar` (mod/** less mod/src/test, devserver/, apitest/, the client scripts, the kit files the jar copies) + `sidecar` (sidecar/** and the kit it runs: kit/** less kit/test and kit/lint) + `world` (scenarios/**). A gradle cwd, or a driver that runs gradle in the source checkout (`src-gradle.mjs`): `gradle` (mod/**, kit/**, sidecar/**: the Java tests read ../kit and ../sidecar). | its client, cwd, closure |
+| closure | the drivers' module closure: the tools/... files its command names (and the test globs it passes to node, kit/test/*.test.mjs), their static imports, literal `import('...')`, `new URL('...', import.meta.url)`, literal repo paths and `path.join(..., 'lit', 'lit')` tails | `step-inputs.mjs build` (static) |
+| globs | the directories literal paths name (kit/test/fixtures/plan/**), widened | `build` |
+| data | what the step's traced runs read outside the rest, widened to the directory (a file -> its directory/**, a listing -> that directory/**) | `step-inputs.mjs merge <run dir>` |
+
+The JVM (the client, gradle) and a sidecar the runner starts are not traced, which is why the in-game and gradle steps carry whole
+trees. A consequence, by design: **a change under mod/src/main, mod/src/client or kit/ outside kit/test and kit/lint invalidates
+every in-game step**, because the jar or the sidecar the clients run contains it. A change to one driver, a kit test, a lint, a
+fixture or docs invalidates only the steps whose sets hold it. The `gradle` class also holds devserver/ and apitest/, because
+mod/settings.gradle includes them and `gradlew build` compiles both.
+
+**The trace** (`tools/lib/step-trace.mjs`). Every step runs with `NODE_OPTIONS=--import=<tracer>`. Each node process of the step
+records the files it loads as a module, reads, lists or stats. That covers the driver, `node --test` and vitest, and any node child
+that inherits the step's environment. The traced roots are the source checkout and the shard's run worktree, both holding the
+commit's tree, and the main checkout's artifacts/. The records go to `<run>/traces/<step>/`. A computed import
+(`import(pathToFileURL(path.join(KIT, rel)))`, about 1200 sites) is not resolved statically; the trace records what it loads.
+
+**Run state is not an input**: tools/gate-cache.json `state` (mod/run, logs, sidecar/scratch). **Derived files** (node_modules,
+mod/build, .gradle-home) count as the tracked files they come from (`derived`). kit/stamps (gitignored, harvested locally) is
+hashed by content (`fingerprint`). Files read under the main checkout's artifacts/ (archived tag builds, apitest jars) are recorded in the
+cache entry with their size and mtime, and a lookup re-checks them. Caches keyed by content (plan-cache, lint-cache) and a run's own
+evidence are not inputs.
+
+**The check** (CI, `node tools/step-inputs.mjs check`) rebuilds the static part at HEAD and fails when:
+- a step's closure reaches a file outside its recorded set (a driver gained an import);
+- a step's classes, roots or the environment variables its closure reads differ from the recorded ones;
+- a step has no entry.
+
+The fix is `node tools/step-inputs.mjs build` (it keeps the traced data) and a commit. `show <step>` prints a set and its file count
+at HEAD; `which <path>` lists the steps whose sets hold a path.
+
+### The key and what is recorded (`tools/lib/step-cache.mjs`)
+
+A step's key is a hash of:
+- **inputs**: the git blob id of every tracked file in its set at HEAD, plus the tracked sources of the derived files it read,
+  plus the content of its fingerprinted local data;
+- **definition**: gate-history's `stepDefinition` (the chain entry, `desc`/`estMin`/`timeoutMin`/`supersededBy` aside, and the
+  blob ids of the drivers its shell names), the **resolved** client entry and host (after `--host`), the step's `env`;
+- **toolchain**: `node` (process.version), `java -version` of JAVA_HOME, mod/gradle.properties less `mod_version` (the Minecraft,
+  loader, Fabric API, loom and lab-ui versions);
+- **modes**: every environment variable a module of its closure reads (`process.env.NAME`), every ambient variable with the
+  project's prefixes (`ARCHITECT_`, `GATE_`, `G5B_`, ...: the JVM, the sidecar, the client scripts and aliased reads are invisible to
+  the scan), plus `GATE_P3`, `GATE_P2_SMOKE`, `CALIBRATION_WRITE`, `ARCHITECT_RELEASE`, `ARCHITECT_TEST_SLOW_TILES`,
+  `ARCHITECT_APITEST` and `ARCHITECT_HEADLESS` always; less the per-run plumbing (ports, run and out dirs, tokens).
+  A `*_DIR` that redirects an input, such as `ARCHITECT_STAMPS_DIR`, counts as a mode.
+  The P2 calibration record and the P3 mode are committed files the trace sees, so they are inputs;
+- **flags**: the release context (branch, a v* tag at HEAD) for steps whose closure has `tools/release-context.mjs`; the code trees
+  (kit, scenarios, tools, mod, sidecar, devserver, apitest) of origin/main and of the merge base for steps whose closure diffs
+  against origin/main (the "unchanged" items); the newest reachable v* tag for closures that run `git describe --tags`
+  (release-version's last tag); the whole tree's file list for closures that run `git ls-files`;
+- **snapshots**: size and mtime of the level.dat of every world the step restores, and of its client's world, in the snapshot store.
+
+**A source HEAD that moves during a run** (a commit or checkout in the source checkout) stops recording from there on, as does a tree
+that turns dirty. **A dirty source tree never looks up and never records** (`git status --porcelain --untracked-files=all` non-empty: the drivers
+run from the working tree, and an untracked file can be imported). Keys are git blob ids, so they are computed at a commit. The same
+function gives `tools/step-cache.mjs replay` its keys at a past head.
+
+**Recorded** (`<main checkout>/artifacts/step-cache/<step>/<key>.json`: the run dir, the step log, the evidence dir, the head and
+time; for unit-kit its JUnit report and kit tree) only when every one of these holds:
+- the step ended PASS;
+- no timing bar was recorded rather than judged (`timingRecorded` empty). A slice PASS with a bar missed never serves anything;
+- it is not a **judged bench**: a bench step of the release tier's own lists (always and rotation: megalite, throughput, megaA,
+  megaB, heap, volume, s1, s2, s3). Their timing is judged at every release, so they are canaries there and never cached. The
+  slices' scenario steps (forms, relief, scatter, route, districts, s7, mp-ingame) are ordinary candidates: they cache when they pass
+  with no bar missed;
+- it ran traced, and every source path its trace touched is inside its set. Otherwise the run reports an **inputs-map miss**
+  (`summary.json` `inputsMisses`, SUMMARY.md, the runner log) and the PASS is not recorded. The fix is
+  `node tools/step-inputs.mjs merge <run dir>`, a review of the globs it adds, and a commit; `node tools/step-cache.mjs import <run dir>`
+  then records that run's PASSes under the widened map;
+- the step is not **uncacheable** (tools/gate-cache.json `uncacheable`): umt-long (fresh clock seeds), apijars and 6b-versionc
+  (archived jars run by hand-made clients), the P3 probes (they read other steps' evidence of the same run), p2-calibration, the by-hand pins.
+
+FAIL, TIMEOUT, ERROR and NOISY are never recorded. `--no-cache` turns lookups off and still records. `--no-trace` turns both off.
+
+### Lookups and the release selection
+
+A tier run (`change`, `slice`, `release`) looks up every selected step. It does not when the run is a named chain, `--only`/`--from`
+(an explicit list, such as the verifier's re-runs, always runs), `--no-cache` or `release --full`. A step with a recorded PASS for
+its key is **CACHED**: it is not run. It is listed in `--plan`, in `summary.json` `cached` (key, PASS time, head, run dir, log) and in
+SUMMARY.md, each with a pointer to its evidence.
+
+**The release candidates** are `tiers.release.always`, the rotation, every step an impact rule names (its `change` and `slice`
+lists) and the slice tier's `always` list, with the `supersededBy` twins dropped. Today that is 179 steps under `--full`: the old
+release tier's 60 plus what a batch's slice run covered (0.41.0's integration slice ran 140). A candidate runs when one of these holds:
+1. **its key misses**: no recorded PASS, a dirty tree, an uncacheable step, or an archived input that changed;
+2. **it is a canary** (tools/gate-cache.json `release.canaries`), cached or not:
+   - the calibration probes p2-calibration, p3-probe-water and p3-probe-ledger;
+   - one big scenario, rotating 6b-scenario-s1, 6c-scenario-s2, 6c-scenario-s3, 6cv-scenario-s7 by the release's rotation key;
+   - the crash suite the existing rotation picks;
+   - the judged benches;
+3. **it is a full twin whose last PASS is older than the last full nightly**. A full twin is any `supersededBy` target: the -full
+   steps and the full ids of the -smoke steps. The nightly's start comes from `artifacts/nightly/latest.json`;
+4. **a running step needs it from this run**:
+   - its `after` dependency (4e-crash-full needs 4e-orders-full's context on its shard);
+   - a `waitFor` target whose evidence it reads (the P3 probes read h-ingame, hy-ingame and h-probe, or y-ingame and cu-survival);
+   - unit-mod, for a step that reads `GATE_UNIT_MOD_RUN` (gate6cmp).
+
+   `unit-kit` is the exception: when it is CACHED, its recorded JUnit report for the same kit tree is copied into the run and serves
+   the kit-suite readers (kit-reuse.mjs checks the tree).
+
+**Split steps** (turbo, docs/GATES.md "Turbo"): each part `<id>/p<k>` has its own key (its own entry: the section env) over its
+parent's input set, and is CACHED or run on its own; a canary or a judged bench takes all its parts.
+
+**`--full`** runs every candidate and every rotation option (the full megaB and throughput stand for their --fast/-smoke variants). It
+is **the rule, automatically,** when the release range touches one of these:
+- mod/build.gradle, mod/settings.gradle, the gradle wrapper, devserver/ or apitest/ build files;
+- mod/gradle.properties beyond `mod_version` (the Minecraft version or a dependency);
+- a path whose impact rule is tagged `engine`.
+
+`--plan` prints why. Run a manual `release --full` every few weeks as well, and after any toolchain or machine change the key can't
+see (a new JDK build is in the key; a changed snapshot world is in the key by its level.dat).
+
+What a CACHED step does not do: it does not re-measure. Its timing bars were recorded with its PASS; the judged benches always run.
+
+### The nightly (`tools/nightly.mjs`)
+
+At about 02:00 it:
+1. checks that no gate run is active or queued (a live slot holder or queue ticket in the slot dir). If one is, it **exits at once**
+   and the night is skipped (`artifacts/nightly/<date>/summary.json` says why). `nightly.idleWaitMin` (0) can make it wait that long
+   for an idle machine first, without taking a queue ticket, so it never queues ahead of a run;
+2. fetches origin and moves its own worktree (`../architect-mc-nightly`, detached) to origin/main. The main checkout is never
+   checked out or pulled. A nightly worktree with local changes skips the night;
+3. runs `release --full --no-cache --turbo` there (`nightly.extraArgs`), in its own run dirs (`../architect-mc-nightrun[-s<k>]`)
+   and out dir (`artifacts/gate-runs-nightly/`). As a turbo run it holds the whole machine: a run started during the night waits in
+   the queue for it (FIFO), and nothing is killed. **The yield guard** (`nightly.yieldAfter`, 05:30 local): past it, with another run
+   queued, the nightly sends its runner SIGUSR2. The runner starts no new step, lets its running steps finish, and ends `stopped`
+   with `yielded` (the steps not started are SKIPPED, error "yielded"). The nightly then runs those steps as a normal one-slot run
+   (`release --no-cache --no-turbo --only ...`), which queues like any run. The summary records the yield, both runs and the
+   combined verdict;
+4. writes `artifacts/nightly/<date>/SUMMARY.md`, `summary.json` (head, verdict, counts, wall, slot wait, what didn't pass, PASSes
+   recorded), `impact-map-misses.json`, `misses-log.md`, and `artifacts/nightly/latest.json` when the run finished.
+
+It sends no notification of any kind; the coordinator reads the summary. It never kills anything:
+- one nightly at a time: `artifacts/nightly/nightly.lock` holds the pid, and a second nightly exits at once ("already active");
+- its gate run takes a slot like any run and waits in the queue;
+- SIGTERM to the nightly stops only its own runner.
+
+**An impact-map miss** is a step that the last release skipped as CACHED and that FAILs or TIMEOUTs in the nightly **at the same
+key**. Nothing in its set moved since the PASS that served the release, yet it fails, so the map lacks an input (or the step is flaky).
+A failing step whose key moved is listed as "explained", not as a miss. Each miss goes to `impact-map-misses.json`, with:
+- the fail lines;
+- both keys;
+- the PASS it was served from;
+- the files changed between that PASS's head and the nightly's.
+
+A ready line goes to `misses-log.md`. The nightly never writes to a tree, so **the coordinator pastes that line into the log below
+and commits it**, and widens the map.
+
+**Install** (persistent machine config; the coordinator runs it from the main checkout once this is merged):
+
+```sh
+node tools/nightly-install.mjs --print      # the filled plist (tools/launchd/dev.larattalabs.architect-nightly.plist), nothing written
+node tools/nightly-install.mjs              # writes ~/Library/LaunchAgents/dev.larattalabs.architect-nightly.plist, launchctl bootstrap gui/<uid>
+node tools/nightly-install.mjs --uninstall
+```
+
+The plist runs `node <checkout>/tools/nightly.mjs` at 02:00. Its environment is PATH (the mise node, Homebrew, system), HOME and
+JAVA_HOME, nothing else: no `ANTHROPIC_*`, no `GATE_NOTIFY`. Logs go to `~/Library/Logs/architect-nightly.log`.
+
+### Impact-map misses log
+
+Each line is a nightly's miss: the date, the step, what failed, where it was cached from, and what was done.
+
+| date | step | what | resolution |
+|---|---|---|---|
+
+### Measured
+
+Offline, 2026-10-22. The coordinator stopped the first traced warm-up run to keep the machine free for turbo's measurement, so no
+real release has run against a warm cache yet.
+
+- **The first traced run** (`artifacts/gate-runs-affected/20261022-161855-release`, `release --full` at 703187d5, 3 shards, stopped
+  by SIGINT after 1h50m with 22 steps done):
+  - 13 PASSes, each trace inside its set after one `merge`: unit-mod, unit-kit, rs-survival, t3a-look, h-ingame, hy-unit,
+    hy-ingame, irr-ingame, k1a-look, 4d-all-full, 4e-orders-full, 5b-chains-full and 6a-crash. They are recorded in the live cache
+    (`step-cache.mjs import`), and their sets are marked `verified`;
+  - 2 inputs-map misses on the first pass, both widened by `merge`: 5b-chains-full copies kit/ (kit/lint/** was missing), and
+    unit-kit stats four bare names at the repo root;
+  - fl-unit, f3-unit, voc-unit and vocc-unit failed for two reasons. The source worktree had no `.gradle-home` or
+    `sidecar/node_modules` (the drivers run gradle and vitest there; the nightly now clones both). And the slices' "against the
+    merge base" items fail on main, where the merge base is HEAD.
+- **Selection examples** (`--plan --since <base> --release v0.42.0` on a scratch commit over 8b5e1287; `--assume-warm <base>`
+  stands for "a full nightly passed at the base"):
+
+  | the release changes | the rule | the cache alone (`--no-auto-full --assume-warm`) | estimate (rule / cache) |
+  |---|---|---|---|
+  | one line of docs/PLAN.md | not --full | **18 of 182 run**: the 12 canaries, the probes' evidence (h-probe, y-ingame, cu-survival), 4e-orders-full for the crash suite, and the uncacheable umt-long, apijars and 6b-versionc. 164 CACHED | 2h20m on 2 shards + 2 lanes |
+  | one file in kit/lib/forms/ | **--full** (engine) | 164 of 168 run. CACHED: c33-unit and the three lints (their sets are not yet verified: a lint's computed kit imports come in with its first trace) | 5h53m / 5h16m |
+  | mod/.../region/RegionFluids.java | **--full** (engine) | 162 of 168 run. CACHED: unit-sidecar, c33-unit, water-lint and the three lints | 5h53m / 5h15m |
+
+  A kit/lib or mod/src/main change re-runs every in-game step, because the jar and the sidecar classes hold it. Docs, a driver, a
+  kit test, a lint or a fixture re-run only the steps whose sets hold them.
+- **0.41.0's history** (`tools/step-cache.mjs replay --at a6a947bc` over the batch's 34 slice, integration and verify runs, keys
+  only): 15 of the 169 steps they ran would have been served at v0.41.0's merge commit. 14 come from the last integration slice
+  run at 6d736f80, the batch's final merges having moved kit/lint/shard.mjs, the versions and the merge base under the rest; c33-unit
+  comes from aea80cf5. The slices' own branch-head PASSes serve nothing at the merged head. So the saving on a batch release comes
+  from the warm nightly at the integration head and from releases that change no jar or kit code, not from the slices' runs.
+- **The analysis cache**: `step-cache.mjs import-history --into artifacts/step-cache-history` over every run since the toolchain's
+  install (2026-10-21 18:16Z, node 24.22.1) recorded 66 untraced entries for the 13 verified steps (514 older runs skipped). Without
+  the verified-set rule it was 435. GATE_STEP_CACHE_DIR points a plan at it; the live cache never takes untraced entries.
 
 ## Gate speed (2026-10-17): scheduling, timeouts, one kit suite
 
@@ -531,6 +750,138 @@ load before that load shows in the load average.
   run's wall against 3 shards; that is why the floor is now 3. On an idle box the same set would get 6 shards
   (about 17 min). No idle window came on 2026-10-21 to run that case for real; the first quiet-box release will show it in its
   `SUMMARY.md`.
+
+## Turbo (2026-10-22): one run owns the machine
+
+Noah approved this on 2026-10-22: much faster runs, with the machine pushed hard while one runs. A slice tier (about 107 steps)
+took 2h18m on 3 shards (`artifacts/gate-runs-0410/20261022-020720-slice`, 414 step-minutes at load 3-22), while the machine
+(M5 Max: 18 cores, 6 performance and 12 efficiency; 128 GB) was mostly idle. Code: `tools/lib/turbo.mjs` (the queue, the
+exclusive hold, the shard choice, the sampler), `tools/lib/step-split.mjs` and `tools/lib/gate-part.mjs` (split steps),
+`tools/split-proof.mjs` (the union proof); settings: `shards.turbo` in `gate-chains.json`.
+
+### What a turbo run is
+
+- **When.** `--turbo`, or by default any tier run (`change`, `slice`, `release`) of at least 20 steps (`shards.turbo.minSteps`).
+  `--no-turbo` makes it a shared run as before. Small `change` runs, `--only` subsets under 20 steps and the named chains stay
+  shared.
+- **The machine.** It queues, then holds **every** slot file (`slot-1` .. `slot-<n>`, n = max(8, `slots.max`, `--slots`, the
+  highest slot file present)), so no other gate run starts while it runs, including runners from before this change (they only
+  look at slot files, find none free and print the turbo run as the holder).
+- **Shards.** Up to `shards.turbo.max` in-game shards (auto: the smallest N within 3% of the plan's best wall, bounded by
+  memory and free port pairs; no cpu or slots cap, the run owns the machine). `--shards N` fixes N (up to `shards.turbo.max`).
+  Port pairs come from `shards.turbo.portRange` (8940-8999, 30 pairs), checked by binding.
+- **Offline lanes.** The client-less steps (the unit suites, the lints: `client: none`) run on `--lanes N` lanes
+  (`shards.turbo.offlineLanes`) beside the in-game shards, each with its own run worktree (`<run dir>-o<j>`: gradle and the kit
+  suite write into it) and a port pair it doesn't use. An in-game shard keeps its client and takes a client-less step only once
+  no in-game step is pending. `self` steps (apijars, 0a-*) start their own clients, so they stay on in-game shards.
+- **Split steps** run as parallel parts ("Split steps" below); `--no-split` keeps them whole.
+- **Setup** runs the worktrees' git and seed clones serially, then every shard's sidecar build at once.
+- **The sampler** (every run, turbo or not): every 30 s the load, available memory, swap and each shard's and lane's resident
+  memory (its run worktree's processes and its running step's process group) to `machine.jsonl`; `summary.machine` and
+  `SUMMARY.md` fold it (load p50/p90/max, the least available memory, swap, the largest process per shard).
+
+### The queue: fair, no deadlock, stale state by pid
+
+Every run (not `--plan`) takes a ticket in `<slots dir>/queue/` under the slot mutex, which also sets its enqueue time later than
+every live ticket's, so the order is the order of enqueueing.
+- A **shared** run takes one slot only when no ticket queued before it is still waiting and no turbo run holds or is reserving
+  the machine. It logs whom it waits for ("queued before it: pid ... TURBO slice ...", "the machine: pid ... TURBO ..."), at once,
+  on every change and every 5 minutes.
+- A **turbo** run, once no ticket queued before it is still waiting, writes its pid into each slot as it frees (state
+  `reserving`) and runs when it holds them all. It polls every 5 s (shared runs 15 s).
+- **Fairness.** A run queued behind a turbo run starts when that run ends; a turbo run never overtakes an earlier ticket (it
+  reserves nothing while one waits), so it can't starve a run that queued first; a later shared run never overtakes an earlier
+  one. When a turbo run ends and the head of the queue is another turbo run, it hands its slots straight to it (they become that
+  run's reserved slots), so nothing slips in between.
+- **No deadlock.** The head of the queue waits only for running holders, which end or die; every other ticket waits only for
+  tickets ahead of it, a total order. A dead pid's ticket or slot (a SIGKILLed run) is free, as slots always were.
+- **Limits.** A runner from before this change takes no ticket: it can take a slot that frees while a turbo run at the head
+  of the queue polls (as the gate-affected release did on 2026-10-22, 45 s after the warm-up run ended), and the turbo run then
+  waits for it. Once every branch has merged main this goes away. A turbo run at the head reserves slots while it waits, so
+  every later run waits too: queue a turbo run when the machine is about to be free, not behind a long release.
+- `kit/test/gate-turbo.test.mjs` covers it with real pids: the waits, the FIFO order, no overtaking either way, stale tickets
+  and holds, two turbo runs, the hand-over.
+
+### Split steps
+
+A long step whose driver runs independent sections (worlds, fixtures, seeds, scenario variants, item groups) declares `split` in
+`gate-chains.json`: a part's env (its sections, `GATE_PART_SECTIONS`), or its own `shell` (a shell chain split by its commands),
+an env every part gets (`${PART}` = p1, p2, ...: each part's own evidence dir) and an estimate.
+- **Ids.** The parent keeps its id everywhere a step is named (the impact rules, the tiers, `supersededBy`, `--only`); after the
+  selection a splitting run replaces it by `<id>/p1` .. `<id>/pN`. `--only <id>/p2` runs that part alone. A step that `waitFor`s
+  the parent waits for every part; `after` a split step is not allowed (the config check refuses it). The history records each
+  part under its own id; a part's definition (for history timeouts) is its parent's entry with the part's env.
+- **No dropped assertion.** The runner also sets `GATE_PART_ALL`, every part's sections together; the driver
+  (`tools/lib/gate-part.mjs`) throws before anything runs unless that equals its own section list, and the config check refuses a
+  section named in two parts. A driver without `GATE_PART_SECTIONS` runs every section exactly as before.
+- **Evidence.** Each part writes its own evidence dir; `p3-probe.mjs` reads the h/hy evidence from the parts' dirs.
+- `summary.json` records `split` (parent -> parts) and `splitResults` (the parent's worst status, its step time and its wall from
+  the first part's start to the last's end); `SUMMARY.md` prints them.
+- **The union proof:** `node tools/split-proof.mjs --whole <run with the step whole> --parts <run with it split>` compares, per
+  parent, the check lines (`ok`, `FAIL`, `rec`, indented ones too) of the whole step with the parts' together, numbers, hex ids,
+  paths and times masked. A timing bar that is `ok` on one side and `FAIL` on the other is reported as timing.
+
+### The knee: why `shards.turbo.max` is 9
+
+The same 49 steps (`change --files tools/gate-run.mjs --turbo --no-split --lanes 3 --only ...`: 15 client-less steps (the unit
+suites with unit-kit, which their readers wait for, the lints), 25 in-game steps on headless servers, 6 scenarios (5 on hidden
+clients) and 3 look steps on clients; each at most about 12 min in history) at 3, 6, 9 and 12 in-game shards, back to back on
+2026-10-22 (`artifacts/gate-runs-turbo-knee/`), each a turbo run, after a warm-up run that made the 12+3 run worktrees, built the
+mod in each and warmed the h/hy plan cache. No other gate run was active; the background was Spotlight indexing and the
+coordinator's agents' editors (load 4.5, 7, 4.8 and 9 at the starts; about 1-3 cores; recorded in each run's notes).
+
+| in-game shards (+3 lanes) | wall | step-minutes | client/server setup | load p50 / p90 / max | least available memory | swap | gate RSS max (largest process) | median step time vs the 3-shard run | vs the history p50 | not passing |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 3 | **58.8 min** | 235 | 7.7 min | 9 / 27 / 81 | 65.5 GB | 0 | 20.7 GB (4.6) | 1.00 | 0.83 | pt2-ingame item 13 (on main), 6ct1-scenario-relief's P2 realised == virtual (1 of 8 before) |
+| 6 | **33.7 min** | 276 | 11.7 min | 29 / 50 / 58 | 57.9 GB | 0 | 29.9 GB (5.4) | 1.16 | 0.95 | pt2-ingame item 13 |
+| 9 | **31.3 min** | 339 | 16.5 min | 52 / 77 / 91 | 55.5 GB | 0 | 38.5 GB (4.6) | 1.34 | 1.11 | pt2-ingame item 13 |
+| 12 | **36.2 min** | 447 | 28.7 min | 52 / 74 / 95 | 52.8 GB | 0 | 44.2 GB (4.2) | 1.75 | 1.40 | pt2-ingame item 13, and three load failures: unit-sidecar's versions hook timed out (60 s), 6cd-scenario-districts' plan refused after 120 s, 6ct2-scenario-route realised == virtual 1 cell |
+
+- **Where it bends.** 3 to 6 nearly halves the wall; 6 to 9 saves 7%; 12 is slower than 9. The load saturates at a median of
+  about 52 from 9 shards on (18 cores), so each shard more only slows every step (1.34x at 9, 1.75x at 12 against the same
+  step at 3) and the client and server starts (one per shard, 2-3 min each at 12) grow. 12 also added three failures that were
+  load, not code: a flake is a real cost under load.
+- **Memory never binds.** A headless server's JVM peaked at 1.7-2.1 GB resident (`-Xmx4G`), a hidden client 4-5.4 GB; the whole
+  run at 12 shards took 44 GB with 52 GB still available and no swap. The memory cap (5 GB per shard, 2 per lane) is never the
+  bound below 15 shards.
+- **The critical path at 9 was a unit step**, not the in-game work: irr-unit took 30.3 min and voc-unit 27.1 (14.3 and 12.8 at
+  3 shards), both on lanes, because their byte-identity loops plan every committed fixture on both trees, CPU-bound. Hence the
+  unit splits below.
+- **Decision:** `shards.turbo.max` 9 and `shards.turbo.offlineLanes` 3 (12 workers): the knee by wall, and the largest count with
+  no new failure.
+
+### What is split
+
+Each split step at its measured time, its natural partition, and the union proof (whole against split at the same head:
+`artifacts/gate-runs-turbo-proof/20261022-162049-change` whole, `-170841-change` split, 6 shards each, beside the affected-only
+release; `node tools/split-proof.mjs --whole <A> --parts <B>`):
+
+| step | measured (min) | parts | partition | union proof (checks whole / parts together) |
+|---|---|---|---|---|
+| irr-ingame / irr-ingame-smoke | 29.4 / 26.7 | 3 | worlds: v62 live; v62 exact + the breach fix + 5 (a); the lamp path, s01 with its control, v63, d01, irrUnmasked, the pad, the probe | 34/34, 29/29: equal, full masked lines too |
+| h-ingame / h-ingame-smoke | 15.5 / 12.3 | 3 / 2 | H-core; H-a flat; H-a exact, farm, H-b flat | 19/19, 16/16: equal |
+| hy-ingame / hy-ingame-smoke | 21.7 / 14.7 | 3 / 2 | HY-core; the riffle table, villagers, HY-c's water gate and v58; item 9's kinds | 31/31, 24/24: equal |
+| 4d-all / 4d-all-full | 13.1 / 15.3 | 2 | base, then survival; base, then the other nine sub-steps (stages and gap0 with waiting) | 23/23: same checks |
+| 5b-chains-full | 31.4 | 3 | the 21 scripts (fixed + 20 seeds), each from its own world; E1 over each part's states | 3 names / 13 lines: equal |
+| rs-survival | 23.2 | 3 | items 5; 9; 8 and 10 | 11/11: equal |
+| 6cf2-scenario-scatter | 12.2 | 2 | harvest, then scatter_demo flat and natural; harvest, then scatter_cave (a shell split) | see below |
+| irr-unit, kc-unit, f3-unit, fl-unit, s3-unit | 14-36 under turbo | 3 | the byte-identity fixture loop in 3 round-robin slices (the first part also runs every other item) | proof below (the turbo slice against the whole runs) |
+| voc-unit | 27-34 under turbo | 3 | item 5 (byte identity); item 13 and the census; the rest | proof below |
+
+**Not split, and why (found by the proof):** a scenario's natural run reads its flat run's E-flat from the same evidence dir
+(`tools/scenarios.mjs` `latestRun`). Split apart, the natural part printed "E-flat n/a" and failed its exactness bar (S3 and
+scatter_demo in `-170841-change`, and S3 again in the turbo slice). So a flat/natural pair stays in one part: 6c-scenario-s3 is
+whole again and 6cf2-scenario-scatter splits only off scatter_cave (which has no flat variant). `split-proof.mjs` now flags a
+check whose part line lacks a value the whole step has (`n/a`, `none`, `missing`) for review and exits non-zero.
+
+The other status differences in the proof runs are failures known on main, on one side only: 4d's "shared crate" (4 of 98 runs
+before), 4d's "stages: undo" (8 of 199), 4d-all-full's "group undo" (22 of 94), S3's safety, scatter_cave's exactness (6 of 42). hy-ingame's item 14 push stand (a mob beyond the grate) failed on both sides at this head (0 of 24 before
+today), so it is not a split problem; it is reported to the coordinator.
+
+**Server and world reuse: not done.** In the 2h18m baseline slice, client and server starts, world switches and snapshot
+restores took 10.0 of 414 step-minutes and the steps' own `gate6b.mjs base` 6.5: 4% together, under the 10% that would pay
+for a warm-server-per-shard reset and its proof. Under turbo the starts grow (28.7 of 447 step-minutes at 12 shards, 6%;
+16.5 of 339 at 9, 5%), still under 10%; a reset proven clean (world hash, entities, journal) is not worth its risk at that.
 
 ## Fast checks P1 (2026-10-21): the undo assertions move to the undo model
 
@@ -1050,7 +1401,10 @@ Several agents and runners share this machine, so everything is configurable. A 
 
 | flag | environment | default |
 |---|---|---|
-| `--shards N\|auto` | | auto for `slice`/`release` over 20 steps (`shards.auto.minSteps`), else 1; N at most `shards.max` (6) |
+| `--turbo`, `--no-turbo` | | turbo for a tier run of at least 20 steps (`shards.turbo.minSteps`): the whole machine ("Turbo") |
+| `--lanes N` | | turbo: `shards.turbo.offlineLanes` (3) offline lanes for the client-less steps |
+| `--split`, `--no-split` | | split steps run as parts in turbo runs; `--split` outside turbo too |
+| `--shards N\|auto` | | turbo: auto up to `shards.turbo.max` (9), N at most 9; shared: auto for `slice`/`release` over 20 steps (`shards.auto.minSteps`), else 1; N at most `shards.max` (6) |
 | `--ports S:D[,S:D...]` (every shard's sidecar:DevBridge pair) | `GATE_PORTS`; or `ARCHITECT_GATE_SIDECAR_PORT`/`ARCHITECT_GATE_DEV_PORT` for shard 1 and `GATE_SHARD_PORTS` for shards 2.. | auto: free pairs of `shards.auto.portRange` (8980-8999); else shard 1: 8890:8891; shards 2..: **none, name them** |
 | | `GATE_AUTO_PROBE` (JSON: `load1`, `load5`, `freeGB`, `cores`) | the machine now; overrides fields of auto's probe (marked INJECTED) |
 | `--run-dir DIR` (shard k>1: `DIR-s<k>`) | `GATE_RUN_DIR` | `../architect-mc-gate-run` |
@@ -1129,6 +1483,8 @@ that still hold an unfinished item. The relog, the sidecar kill and every bar st
    ```
 
    At most one background wait at a time, with a timeout longer than the run's (`--plan` prints the worst case).
+   A turbo run (any tier run of 20+ steps) may first wait in the queue for the machine: its run dir appears only once it has it,
+   and its output names whom it waits for. Wait on the runner's pid until then (`kill -0 <pid>`), then on `summary.json`.
 4. **Read `SUMMARY.md` once.** Open a step's `<step>.log` or its gate JSON only for the steps that didn't pass.
 5. **Never kill processes by name.** To stop a run, `kill -TERM $(cat $R/runner.pid)`. The runner stops its own steps and clients.
 6. **Bench steps measure time.** Don't start clients while another run is in a `bench` step (its tick and cells/s bars), and

@@ -26,6 +26,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { gatePart } from './lib/gate-part.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-VOC-run');
@@ -70,10 +71,13 @@ function spendZero() {
   fs.mkdirSync(OUT, { recursive: true });
   fs.writeFileSync(path.join(OUT, 'spend.json'), `${JSON.stringify({ capUsd: 0, totalUsd: 0, runs: [], note: 'slice VOC is $0: sim and stub only, no Claude call' }, null, 2)}\n`);
 }
-/** Runs a step's items: VOC-a's, then VOC-b's. */
+/** Runs a step's items: VOC-a's, then VOC-b's. A split voc-unit (docs/GATES.md "Turbo") runs its part's items (by key). */
 async function items(step) {
   const out = {};
-  for (const it of [...(A.items[step] ?? []), ...(B.items[step] ?? [])]) {
+  const all = [...(A.items[step] ?? []), ...(B.items[step] ?? [])];
+  const P = step === 'unit' ? gatePart(all.map((it) => it.key ?? it.name), { log }) : null;
+  for (const it of all) {
+    if (P && !P.want(it.key ?? it.name)) continue;
     log(`-- ${it.name}`);
     out[it.name] = await it.run(ctx);
   }

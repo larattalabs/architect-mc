@@ -41,13 +41,26 @@ function runDir() {
   return d;
 }
 
-/** The newest file at `rel` (e.g. gate6c-h/ingame.json) in the run dir or any of its shard dirs. */
-function evidence(rel) {
+/** The newest file at `rel` (e.g. gate6c-h/ingame.json) in the run dir or any of its shard dirs, also under a split step's part
+ * dirs (gate6c-h/p<k>/ingame.json: docs/GATES.md "Turbo"), that satisfies `has` (a split step's parts each hold their share). */
+function evidence(rel, has = () => true) {
   const base = runDir();
-  const cands = [path.join(base, rel), ...fs.readdirSync(base).filter((x) => /^s\d+$/.test(x)).map((s) => path.join(base, s, rel))].filter((f) => fs.existsSync(f));
-  if (!cands.length) return null;
+  const dirs = [base, ...fs.readdirSync(base).filter((x) => /^[so]\d+$/.test(x)).map((s) => path.join(base, s))];
+  const parts = (d) => {
+    const pd = path.join(d, path.dirname(rel));
+    try {
+      return fs.readdirSync(pd).filter((x) => /^p\d+$/.test(x)).map((x) => path.join(pd, x, path.basename(rel)));
+    } catch {
+      return [];
+    }
+  };
+  const cands = dirs.flatMap((d) => [path.join(d, rel), ...parts(d)]).filter((f) => fs.existsSync(f));
   cands.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-  return JSON.parse(fs.readFileSync(cands[0], 'utf8'));
+  for (const f of cands) {
+    const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+    if (has(j)) return j;
+  }
+  return null;
 }
 
 const sub = (a = {}, b = {}) => { const o = {}; for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) { const v = (a[k] ?? 0) - (b[k] ?? 0); if (v) o[k] = v; } return o; };
@@ -55,7 +68,7 @@ const same = (a = {}, b = {}) => json(Object.entries(a).filter(([, v]) => v).sor
 const geq = (a = {}, b = {}) => Object.entries(b).every(([k, v]) => (a[k] ?? 0) >= v);
 
 async function water() {
-  const h = evidence('gate6c-h/ingame.json');
+  const h = evidence('gate6c-h/ingame.json', (j) => typeof j?.data?.core === 'object');
   ok(!!h?.data?.core, 'h_core_demo: the full h-ingame evidence of this run', h ? Object.keys(h.data ?? {}) : null);
   if (h?.data?.core) {
     const c = h.data.core;
@@ -75,12 +88,14 @@ async function water() {
       console.log(`recorded ${fl.length} settle(s) into ${path.relative(ROOT, f)}`);
     }
   }
-  const hy = evidence('gate6c-hy/ingame.json');
+  const hy = evidence('gate6c-hy/ingame.json', (j) => typeof j?.data?.core === 'object');
   ok(!!hy?.data?.core, 'hy_core_demo: the full hy-ingame evidence of this run');
+  // the riffle table: HY-b's item 18 (c), in the core's evidence when whole, in its own part's when split
+  const hyRif = evidence('gate6c-hy/ingame.json', (j) => Object.keys(j?.data?.halves ?? {}).some((k) => /item 18 \(c\)/.test(k)));
   if (hy?.data?.core) {
     const census = Object.entries(hy.data.core.census ?? {});
     ok(census.length >= 4 && census.every(([, v]) => v.ok && v.ticks === 0), `hy_core_demo: every reach's census equals its prediction (lips, columns, landings, films): ${json(census.map(([k, v]) => [k, (v.mismatch ?? []).length]))}`);
-    const rif = Object.entries(hy.data.halves ?? {}).find(([k]) => /item 18 \(c\)/.test(k))?.[1];
+    const rif = Object.entries(hyRif?.data?.halves ?? {}).find(([k]) => /item 18 \(c\)/.test(k))?.[1];
     const rows = rif && !rif.skipped ? Object.entries(rif).flatMap(([tag, bodies]) => (bodies.error ? [[tag, 'error', bodies.error]] : Object.entries(bodies).map(([b, v]) => [`${tag}/${b}`, v.ok && v.mismatch === 0 && v.outside === 0]))) : [];
     ok(rows.length >= 9 && rows.every((r) => r[1] === true), `the riffle table (riffles 2/4/6 per drop at 1-3 drops, p01/p01b/p02): every body's census equals its prediction (${rows.filter((r) => r[1] === true).length}/${rows.length})`, rows.filter((r) => r[1] !== true));
   }
