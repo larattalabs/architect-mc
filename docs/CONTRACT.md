@@ -18593,6 +18593,10 @@ by cell, in the region's own order, and is refunded as it stands when the region
 
 ### 3. The survival check and the artifact
 
+- **(6c close-out A, §8) The rule callers need: a region builds from materials only when survival is on for the world.** That is the
+  survival toggle on **and** the world's default game mode not creative (`RegionSurvival.on`). Then it checks, bills and realises
+  in `CONSTRUCTION` from the owner's stockpile; otherwise it checks and realises in creative, whatever the toggle says. A batch
+  (`Sites.queue`) needs only the toggle. `PlanCheck.survival` answers it for each check.
 - **Mode by world.** `Regions.checkPlan` in a survival-toggle world whose default game type isn't creative checks in survival;
   elsewhere in creative, unchanged. The answer's top level carries `survival: true`. No request member (Steward checks in the
   world it builds in).
@@ -18739,6 +18743,10 @@ under its box + 8 likewise.
   `building`, `built`) and counts, so Steward neither routes villagers over an unbuilt bridge nor claims an unbuilt wall.
 - **Partial use is safe by construction** (§4.3, §6.2, §6.3): free cells of a part with paid cells wait with it, a run starts only
   with its whole bill, and a later stage waits for what it stands on.
+- **(6c close-out A, §8) Matching and saying the waits.** Tile and road items carry `architect_mc:region` and `architect_mc:part`
+  (a road's id; a tile's when one plan part writes it) and `architect_mc:parts` (a tile's plan parts), as targets do. A stage wait
+  (`SITE_BUSY`, `architect_mc:waitsFor`) carries `target`, `part`, `waiter` and `say`, a sentence to say as is ("The street waits for
+  the town wall to be built"), and the item's message starts with it.
 
 ### 9. Removal and refunds
 
