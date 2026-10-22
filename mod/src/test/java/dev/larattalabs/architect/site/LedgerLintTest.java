@@ -357,6 +357,67 @@ class LedgerLintTest {
 	}
 
 	/**
+	 * (6c close-out B, L-V7) A farm built from the stockpile, then three of its farmland cells dry to dirt, then a restart: the restart's run
+	 * reads the dried cells as built (Builder.driedFarmland from the befores), nothing is outstanding or charged again, and the deconstruct
+	 * refunds the bill exactly (dirt for each dried cell, as farmland costs). The same over a half-built farm finished after the restart.
+	 */
+	@Test
+	void lv7_driedFarmlandAfterARestartIsWrittenOnceAndPaidOnce() {
+		for (boolean half : new boolean[] {false, true}) {
+			LedgerSim s = new LedgerSim();
+			LedgerSim.Tgt f = s.place("farm", "farm");
+			Map<String, Integer> bill = new TreeMap<>(f.run.bom);
+			if (half) {
+				for (var e : bill.entrySet()) {
+					s.insert(e.getKey(), e.getValue() / 2);
+				}
+			} else {
+				fill(s);
+			}
+			feedUntilQuiet(s, 40);
+			assertTrue(f.run.built.cardinality() > 3, "farmland written");
+			for (int i = 0; i < 3; i++) {
+				assertTrue(s.dry(f, i * 5));
+				s.checkpoint("dry " + i);
+			}
+			s.restart();
+			s.checkpoint("restart");
+			fill(s);
+			feedUntilQuiet(s, 40);
+			clean(s);
+			assertEquals(Map.of(), s.findings, "no L-V7 (half " + half + ")");
+			assertEquals(f.run.size(), f.run.built.cardinality(), "built, the dried cells among it");
+			assertEquals(bill, new TreeMap<>(f.consumed), "the bill charged once (half " + half + ")");
+			s.removeStart(f);
+			s.removeEnd(f, false);
+			s.checkpoint("deconstruct");
+			clean(s);
+			assertEquals(bill, new TreeMap<>(s.ledger.returned()), "the refund is the bill (half " + half + ")");
+		}
+	}
+
+	/** (6c close-out B, L-V7) driedFarmland marks farmland over no soil (air, stone) or over farmland; never over the ground's own soil. */
+	@Test
+	void lv7_driedFarmlandMarksOnlyCellsWhoseBeforeWasNoSoil() {
+		LedgerSim s = new LedgerSim();
+		LedgerSim.Tgt f = s.place("farm", "farm");
+		net.minecraft.world.level.block.state.BlockState[] befores = {LedgerSim.AIR, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),
+			net.minecraft.world.level.block.Blocks.FARMLAND.defaultBlockState(), net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState(),
+			net.minecraft.world.level.block.Blocks.GRASS_BLOCK.defaultBlockState(), net.minecraft.world.level.block.Blocks.PODZOL.defaultBlockState()};
+		boolean[] want = {true, true, true, false, false, false};
+		for (int b = 0; b < befores.length; b++) {
+			for (long p : f.target.keySet()) {
+				f.before.put(p, befores[b]);
+			}
+			Builder.Run r = s.runOf(f);
+			for (int q = 0; q < r.size(); q++) {
+				boolean farmland = r.target[q].is(net.minecraft.world.level.block.Blocks.FARMLAND);
+				assertEquals(farmland && want[b], r.tilled.get(q), "before " + befores[b] + " at " + r.pos(q));
+			}
+		}
+	}
+
+	/**
 	 * PT2 item 6 (pt2-survival) and the shape of Steward's C35 flow (versionOf of an adopted hut): adoption costs 0; an update pays only its
 	 * added cells; a delta removing an adopted block refunds nothing; the revert is a paid forward delta; the un-adopt refunds only paid
 	 * blocks it takes away.
@@ -479,7 +540,8 @@ class LedgerLintTest {
 		Map.entry("V4", "no charge: Run.matches is by block, a connection change stays built"),
 		Map.entry("V5", "not modelled: a broken plant drops its item (the world's) and its cell re-queues"),
 		Map.entry("V6", "no charge, no re-queue; refund and delta refund by the block standing (LedgerSim.weather)"),
-		Map.entry("V7", "finding L-V7: dried farmland un-builds a paid cell and blocks it (LedgerSim.dry)"),
+		Map.entry("V7", "no charge, no re-queue: dried farmland stays built in session (the built bit) and after a restart (Builder.driedFarmland from the befores); "
+			+ "L-V7 is reported if either breaks (LedgerSim.dry, LedgerSim.restart)"),
 		Map.entry("V8", "not modelled: construction sites build dry (waterlogged off); regions are INSTANT"),
 		Map.entry("V9", "none: a restore's fluid tick has no ledger effect"),
 		Map.entry("V10", "no charge: a door opened stays built (LedgerSim.useDoor)"),
