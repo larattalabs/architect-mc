@@ -1,0 +1,78 @@
+{
+ "about": "(close-out A §5, S-K1-3) the lenient string scope \"lots\" (Steward's first spelling): never malformed, read as over: lots (noted \"scope read as over\"), the whole plan bound; params.over likewise",
+ "on": "flat",
+ "volume": {},
+ "style": {
+  "roles": {
+   "wall": "minecraft:copper_block",
+   "wall_alt": "minecraft:cut_copper",
+   "trim": "minecraft:waxed_cut_copper",
+   "roof": "minecraft:cut_copper",
+   "floor": "minecraft:spruce_planks",
+   "frame": "minecraft:spruce_log",
+   "accent": "minecraft:copper_bulb",
+   "light": "minecraft:copper_lantern",
+   "glass": "minecraft:glass",
+   "foundation": "minecraft:stone_bricks",
+   "path": "minecraft:cobblestone",
+   "rail": "minecraft:spruce_fence",
+   "structure": "minecraft:stone_bricks",
+   "rock": "minecraft:stone",
+   "surface": "minecraft:grass_block",
+   "subsurface": "minecraft:dirt",
+   "rubble": "minecraft:andesite"
+  }
+ },
+ "lotDesigns": {
+  "h1": "vocc_copper_cabin",
+  "h2": "vocc_copper_cabin"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "coa_p03",
+  "zones": [
+   {
+    "id": "town",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 24
+     }
+    },
+    "program": {
+     "lots": [
+      {
+       "id": "h1",
+       "type": "house",
+       "size": [
+        9,
+        11
+       ],
+       "entry": "vocc_copper_cabin"
+      },
+      {
+       "id": "h2",
+       "type": "house",
+       "size": [
+        9,
+        11
+       ],
+       "entry": "vocc_copper_cabin"
+      }
+     ],
+     "shared": "none"
+    }
+   }
+  ],
+  "rules": [
+   {
+    "id": "copper_buildings",
+    "kind": "palette",
+    "required": true,
+    "label": "only copper for the buildings",
+    "family": "copper",
+    "scope": "lots"
+   }
+  ]
+ }
+}

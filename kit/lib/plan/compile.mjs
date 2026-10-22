@@ -1694,6 +1694,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     // ((6c IRR) the irrigated lots' cells by the plan's lot id: the artifact's lots[].irrigation (only when a lot is irrigated)
     ...(irrigationByLot.size ? { irrigation: Object.fromEntries(irrigationByLot) } : {}),
     ...(paletteRules.length ? { palette: paletteRules } : {}),
+    // ((close-out A, §5) a palette rule exempting ways or forms reads its parts' writers by the plan parts' blocks)
+    ...(paletteRules.some((x) => x.read.exempt.includes('ways') || x.read.exempt.includes('forms')) ? { paletteBlocks: Object.fromEntries(V.parts.filter((p) => p.block).map((p) => [p.id, p.block])) } : {}),
     anchors: Object.fromEntries([...env.anchors.entries()].map(([k, v]) => [k, [v[0], env.S.groundAt(v[0], v[1]) + 1, v[1]]])),
   } };
 }

@@ -146,7 +146,7 @@ test('v64 (only copper): fits, READY; the bound lot measured from its entry\'s b
   assert.deepEqual(Object.keys(a.measured.parts).sort(), ['fount', 'reach', 'reach_wall']);
   // the artifact's palette row: sorted, the family's blocks, the unmeasured blocks, the parts' and the lot's counts
   const row = r.artifact.palette[0];
-  assert.deepEqual(Object.keys(row), ['rule', 'required', 'family', 'share', 'lots', 'blocks', 'natural', 'partsCells', 'partsFamily', 'lotCounts']);
+  assert.deepEqual(Object.keys(row), ['rule', 'required', 'family', 'share', 'over', 'lots', 'blocks', 'natural', 'partsCells', 'partsFamily', 'lotCounts']); // ((close-out A, §5) rows gain over)
   assert.deepEqual([row.rule, row.required, row.family, row.share, row.lots], ['copper_only', true, 'copper', [1, 1], ['hall']]);
   assert.deepEqual(row.blocks, [...cu].sort());
   assert.deepEqual(row.natural, [...unmeasuredBlocks()]);
