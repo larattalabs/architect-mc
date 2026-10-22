@@ -385,9 +385,10 @@ final class UmtSim {
 		if ((pathAfter.contains(p) || initial.get(p).is(Blocks.DIRT_PATH)) && (now.is(Blocks.DIRT) || now.is(Blocks.GRASS_BLOCK))) {
 			return "[LP] ";
 		}
-		// (6c close-out B) V3's other half: farmland that ends as dirt (a later solid write over it, V3; or dried, V7). The journal holds
-		// farmland and dirt as one block (StillOurs), so no undo tells them apart: LP's kind (umt-long DRIFT seed 604865978)
-		if (initial.get(p).is(Blocks.FARMLAND) && now.is(Blocks.DIRT)) {
+		// (6c close-out B) V3's other half: farmland the world itself turned into dirt (a later solid write over it, V3; or dried, V7) and
+		// that ends as dirt. The journal holds farmland and dirt as one block (StillOurs), so no undo tells them apart: LP's kind (umt-long
+		// DRIFT seed 604865978). Only where the world's own conversion happened (UmtWorld.farmlandTurned): an undo's miss stays unexplained
+		if (initial.get(p).is(Blocks.FARMLAND) && now.is(Blocks.DIRT) && world.farmlandTurned.contains(p)) {
 			return "[LP] ";
 		}
 		// (6c close-out B, F9) a road's head room (air it wrote over a lower site's block): the road removed first, then the site, the road's
@@ -1101,6 +1102,7 @@ final class UmtSim {
 				to = next.get().withPropertiesOf(s); // weathering
 			} else if (s.is(Blocks.FARMLAND)) {
 				to = Blocks.DIRT.defaultBlockState(); // dried, trampled
+				world.farmlandTurned.add(p);
 			} else if (s.is(Blocks.DIRT)) {
 				to = Blocks.GRASS_BLOCK.defaultBlockState(); // grass spread
 			} else if (s.is(Blocks.GRASS_BLOCK)) {

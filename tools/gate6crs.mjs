@@ -998,8 +998,15 @@ steps.lv7 = async () => {
   await C.point('dried');
   await L.leaveWorld();
   await L.openWorld(R.s.world);
-  await sleep(5000);
-  const rsB = await G.rsState(ctx, R.region);
+  // the runs are made again from the journal after the load: read until the town's built counts stop moving (3 equal reads, 3 s apart)
+  let rsB = null, same = 0, last = '';
+  for (let k = 0; k < 60 && same < 3; k++) {
+    await sleep(3000);
+    rsB = await G.rsState(ctx, R.region);
+    const now = json(builtOf(rsB));
+    same = now === last && !now.includes('-1') ? same + 1 : 0;
+    last = now;
+  }
   const psB = await G.pileState(ctx);
   await C.point('restarted');
   const dirtA = psA.outstanding?.['minecraft:dirt'] ?? 0, dirtB = psB.outstanding?.['minecraft:dirt'] ?? 0;

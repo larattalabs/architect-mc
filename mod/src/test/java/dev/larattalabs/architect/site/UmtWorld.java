@@ -63,6 +63,8 @@ final class UmtWorld implements BlockGetter, SiteJournal.CellTarget {
 	private Long2ObjectOpenHashMap<BlockState> states = new Long2ObjectOpenHashMap<>();
 	private Long2ObjectOpenHashMap<CompoundTag> nbt = new Long2ObjectOpenHashMap<>();
 	private Long2ObjectOpenHashMap<Pt> pt = new Long2ObjectOpenHashMap<>();
+	/** (6c close-out B) Cells where the world itself turned farmland into dirt (V3 here, V7 in the sim's drift). */
+	final it.unimi.dsi.fastutil.longs.LongOpenHashSet farmlandTurned = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
 	/** The last autosave (what a crash leaves on disk). */
 	private @Nullable UmtWorld saved;
 	/** Scheduled ticks (V3), in order. */
@@ -399,6 +401,9 @@ final class UmtWorld implements BlockGetter, SiteJournal.CellTarget {
 				updates(q, was, s, Block.UPDATE_ALL);
 			} else if (turnsToDirt(s, get(BlockPos.offset(p, Direction.UP)))) {
 				UmtVanilla.fired("V3");
+				if (s.is(Blocks.FARMLAND)) {
+					farmlandTurned.add(p); // (6c close-out B) the LP tag's farmland: the world's own conversion, nothing else
+				}
 				natural(p, Blocks.DIRT.defaultBlockState());
 				pt.remove(p);
 				updates(p, s, Blocks.DIRT.defaultBlockState(), Block.UPDATE_ALL);

@@ -36,7 +36,9 @@ test('no stage with items at all is not a pass', () => {
   assert.equal(stageEvents({ a: 0 }, [], 'rg1').ok, false);
 });
 
-test('stageItems counts terrain and path tiles and lots per stage', () => {
-  const ir = { stages: ['ground', 'lots-1', 'lots-2'], tiles: { ground: { terrain: ['0,0', '0,1'], path: ['1,1'] } }, lots: [{ stage: 'lots-1' }, { stage: 'lots-1' }] };
-  assert.deepEqual(stageItems(ir), { ground: 3, 'lots-1': 2, 'lots-2': 0 });
+test('stageItems counts terrain and path tiles, 4e roads and lots per stage (a stage of roads alone is not empty)', () => {
+  const ir = { stages: ['ground', 'ways', 'lots-1', 'lots-2'], tiles: { ground: { terrain: ['0,0', '0,1'], path: ['1,1'] } }, roads: [{ id: 'r1', stage: 'ways' }],
+    lots: [{ stage: 'lots-1' }, { stage: 'lots-1' }] };
+  assert.deepEqual(stageItems(ir), { ground: 3, ways: 1, 'lots-1': 2, 'lots-2': 0 });
+  assert.deepEqual(stageEvents(stageItems(ir), [], 'rg1').silent, ['ground', 'ways', 'lots-1']);
 });
