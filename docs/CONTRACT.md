@@ -23809,7 +23809,7 @@ plan dirs (`tools/lib/lint-cases.mjs`, `lint-look-cases.mjs`).
   - f3-ingame (coral through the merged drain);
   - h-holders, h-rmcrash, irr-holders, rp-crash and umt.
   - Its review found no defect in the conflict resolutions or the RP wiring.
-- A delta verification of the later merges is recorded below when it returns.
+- **gate-verifier, delta: PASS** at 145c96f8 (the three main merges, the lint fixes, the Stockpiles seam, LedgerSim's restart path): kit lints 118/0, kit 732/0, structure 57/57, look 13/13, mutations 8/8, release-version and p3-mode checks, mod build, ledger fuzz 0 violating / L-V7 306; Stockpiles.feed judged behaviour-identical to RS-b's, LedgerSim's L-V7 booking a faithful model of the restart rescan, stubAnchors byte-identical without F3 masks.
 
 ### Approvals
 
