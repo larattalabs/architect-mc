@@ -18,6 +18,7 @@ import { definitionNow, definitionsAt } from './gate-history.mjs';
 import { checkTrace, dirtyPaths, fingerprintOf, inputsHash, readTrace, treeAt } from './step-inputs.mjs';
 import { releaseContext } from '../release-context.mjs';
 import { entryOf, parentOf } from './step-split.mjs';
+import { constantChanges, coverageSet, setMatcher } from './step-coverage.mjs';
 
 const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 << 20 }).toString().trim();
 const sha = (v) => crypto.createHash('sha1').update(typeof v === 'string' ? v : JSON.stringify(v)).digest('hex');
@@ -29,7 +30,7 @@ export function javaVersion(env = process.env) {
   if (javaCache) return javaCache;
   const home = env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25';
   const r = spawnSync(path.join(home, 'bin', 'java'), ['-version'], { encoding: 'utf8' });
-  javaCache = `${r.stderr ?? ''}${r.stdout ?? ''}`.split('\n').filter(Boolean).slice(0, 2).join(' | ') || `unknown (${home})`;
+  javaCache = `${r.stderr ?? ''}${r.stdout ?? ''}`.split('\n').filter((l) => l && !/^(NOTE: )?Picked up /.test(l)).slice(0, 2).join(' | ') || `unknown (${home})`;
   return javaCache;
 }
 
@@ -115,7 +116,7 @@ function snapshotsOf(ctx, entry) {
 /**
  * Step `id`'s key -> { key, parts } or { key: null, why } when it can't be cached (uncacheable, no map entry, a dirty tree).
  */
-export function keyFor(ctx, id) {
+export function keyFor(ctx, id, { set = null } = {}) {
   const { cfg, conf, map } = ctx;
   // a split step's part (<id>/p<k>, turbo): its own entry (its section env) and key, its parent's input set
   const entry = cfg.steps[id] ?? entryOf(cfg, id);
@@ -126,7 +127,8 @@ export function keyFor(ctx, id) {
   const me = map?.steps?.[mid];
   if (!me) return { key: null, why: 'no entry in tools/step-inputs.json' };
   if (ctx.dirty.length) return { key: null, why: `the source tree is dirty (${ctx.dirty.length} path(s), e.g. ${ctx.dirty[0]}): a dirty tree is never cached` };
-  const inputs = inputsHash(map, conf, mid, ctx.src, ctx.head);
+  // coverage mode (step-coverage.mjs): the hash runs over the set a recorded run touched instead of the map's set
+  const inputs = set ? setHash(set, ctx.src, ctx.head) : inputsHash(map, conf, mid, ctx.src, ctx.head);
   const def = ctx.defAt ? ctx.defAt(ctx.head, id) : definitionNow(ctx.src, ctx.rawCfg ?? cfg, id);
   const names = new Set([...(me.env ?? []), ...(conf.modeEnv?.always ?? [])]);
   // ambient variables with the project's prefixes: read by the JVM, the sidecar, the client scripts or an aliased process.env
@@ -151,6 +153,7 @@ export function keyFor(ctx, id) {
     stepEnv: entry.env ?? null,
     inputs: inputs.hash,
     inputFiles: inputs.files,
+    ...(set ? { mode: 'coverage', set: sha(set) } : {}),
     fingerprint: fingerprintOf(map, conf, mid, ctx.src),
     snapshots: entry.client === 'none' ? [] : snapshotsOf(ctx, entry),
     toolchain: ctx.toolchain,
@@ -170,6 +173,74 @@ export function externalFingerprint(main, rel) {
   } catch {
     return 'missing';
   }
+}
+
+/** The hash of a coverage set's files at a commit (git blob ids, sorted). */
+export function setHash(set, src, commit) {
+  const tree = treeAt(src, commit);
+  const m = setMatcher(set);
+  const h = crypto.createHash('sha1');
+  let n = 0;
+  for (const p of [...tree.keys()].sort()) {
+    if (!m(p)) continue;
+    h.update(`${p}\0${tree.get(p)}\n`);
+    n++;
+  }
+  // absent paths the run statted are in the set by name: their appearance moves the hash
+  for (const p of set) if (!/[*?]/.test(p) && !tree.has(p)) h.update(`${p}\0-\n`);
+  return { hash: h.digest('hex'), files: n };
+}
+
+/** Whether a step records and looks up in coverage mode: an in-game step (its map entry has a class coverage replaces). */
+export function coverageMode(ctx, id) {
+  const me = ctx.map?.steps?.[mapId(ctx.map, id)];
+  const rep = ctx.conf.coverage?.replaces ?? ['jar', 'sidecar', 'world'];
+  return !!ctx.conf.coverage?.enabled && !!me && (me.classes ?? []).some((c) => rep.includes(c));
+}
+
+/**
+ * The newest coverage-mode PASS of a step whose set's files are unchanged here: -> { hit, why }. A compile-time constant changed in
+ * Java since that PASS invalidates it (javac inlines constants into the classes that use them).
+ */
+export function lookupCoverage(ctx, id, { limit = 12 } = {}) {
+  const dir = path.join(ctx.dir, id.replace(/[^\w.@-]/g, '_'));
+  let es = [];
+  try {
+    es = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => {
+      try {
+        return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+      } catch {
+        return null;
+      }
+    }).filter((e) => e?.mode === 'coverage' && e.status === 'PASS' && Array.isArray(e.coverageSet));
+  } catch {
+    return { hit: null, why: 'no coverage PASS recorded' };
+  }
+  if (!es.length) return { hit: null, why: 'no coverage PASS recorded' };
+  es.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
+  let why = 'no coverage PASS recorded';
+  for (const e of es.slice(0, limit)) {
+    const cc = constantChanges(ctx.src, e.head, ctx.head, ctx.conf.coverage?.javaRoots ?? []);
+    if (cc === null || cc.size) {
+      why = cc === null ? `its head ${String(e.head).slice(0, 9)} is unknown here` : `a compile-time constant changed since its PASS (${[...cc].slice(0, 3).join(', ')})`;
+      continue;
+    }
+    const k = keyFor(ctx, id, { set: e.coverageSet });
+    if (k.key !== e.key) {
+      why = `a file its coverage holds changed since ${String(e.head).slice(0, 9)} (or its definition, toolchain or a mode)`;
+      continue;
+    }
+    for (const [rel, fpr] of Object.entries(e.external ?? {})) {
+      if (externalFingerprint(ctx.main, rel) !== fpr) {
+        why = `an archived input changed: artifacts/${rel}`;
+        e.__bad = true;
+        break;
+      }
+    }
+    if (e.__bad) continue;
+    return { hit: e, why: `coverage PASS at ${e.at} (head ${String(e.head).slice(0, 9)}, ${e.coverageSet.length} set entries)` };
+  }
+  return { hit: null, why };
 }
 
 const entryFile = (ctx, id, key) => path.join(ctx.dir, id.replace(/[^\w.@-]/g, '_'), `${key}.json`);
@@ -203,7 +274,13 @@ export function record(ctx, id, rec, opts) {
   if (!opts.traced && !opts.untracedImport) return { stored: false, why: 'the step ran without the input trace (--no-trace)' };
   const tr = (opts.traced ? readTrace(opts.traceDir) : null) ?? new Map();
   const chk = checkTrace(ctx.map, ctx.conf, mapId(ctx.map, id), tr, { tracked: treeAt(ctx.src, ctx.head) });
-  if (chk.outside.length) return { stored: false, why: `inputs-map miss: the step read ${chk.outside.length} source path(s) outside its set`, outside: chk.outside };
+  let cov = null;
+  if (opts.coverage && opts.traced && coverageMode(ctx, id)) {
+    // coverage mode: the key runs over what this run touched (its trace, its client's, its JVMs' classes) and the safety set
+    cov = coverageSet({ entry: ctx.map.steps[mapId(ctx.map, id)], trace: tr, cov: opts.coverage, conf: ctx.conf, tree: treeAt(ctx.src, ctx.head), src: ctx.src });
+    const k = keyFor(ctx, id, { set: cov.set });
+    opts = { ...opts, key: k.key, parts: k.parts };
+  } else if (chk.outside.length) return { stored: false, why: `inputs-map miss: the step read ${chk.outside.length} source path(s) outside its set`, outside: chk.outside };
   const e = {
     id, key: opts.key, status: 'PASS', at: rec.startedAt, recordedAt: new Date().toISOString(), head: ctx.head, tier: opts.tier,
     timingPolicy: opts.timingPolicy,
@@ -211,6 +288,7 @@ export function record(ctx, id, rec, opts) {
     metrics: rec.metrics ?? null, traced: { paths: chk.n }, parts: opts.parts,
     external: Object.fromEntries(chk.external.map((r) => [r, externalFingerprint(ctx.main, r)])),
     ...(opts.untracedImport ? { untraced: opts.untracedImport } : {}),
+    ...(cov ? { mode: 'coverage', coverageSet: cov.set, coverage: { classes: cov.classes, unmappedClasses: cov.unmappedClasses.slice(0, 50), mapOutside: chk.outside.length } } : {}),
   };
   const f = entryFile(ctx, id, opts.key);
   fs.mkdirSync(path.dirname(f), { recursive: true });
@@ -229,7 +307,7 @@ export function record(ctx, id, rec, opts) {
   const tmp = `${f}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(e, null, 1));
   fs.renameSync(tmp, f);
-  return { stored: true, why: 'recorded', file: f };
+  return { stored: true, why: cov ? `recorded (coverage: ${cov.set.length} set entries, ${cov.classes} classes)` : 'recorded', file: f, key: opts.key, ...(chk.outside.length ? { outside: chk.outside } : {}) };
 }
 
 /** The last full nightly that ran to the end: artifacts/nightly/latest.json -> { startedAt, head, run } or null. */

@@ -240,5 +240,88 @@
    "sidecar/node_modules"
   ],
   "yieldAfter": "05:30"
+ },
+ "coverage": {
+  "$comment": "Coverage-based inputs (tools/lib/step-coverage.mjs, docs/GATES.md \"Coverage-based inputs\"): an in-game step (a class in replaces) records what its run touched (its JVMs' loaded classes, its and its client's node files) and caches against that set plus `always` (and the closures of alwaysRoots) instead of the whole-tree classes. A compile-time constant changed in Java invalidates every coverage PASS.",
+  "enabled": true,
+  "replaces": [
+   "jar",
+   "sidecar",
+   "world"
+  ],
+  "packagePrefix": "dev.larattalabs.",
+  "javaRoots": [
+   "mod/src/main/java",
+   "mod/src/client/java",
+   "devserver/src/main/java",
+   "devserver/src/client/java",
+   "apitest/src/main/java",
+   "apitest/src/client/java",
+   "mod/src/test/java",
+   "apitest/src/test/java"
+  ],
+  "always": [
+   "mod/build.gradle",
+   "mod/settings.gradle",
+   "mod/gradle.properties",
+   "mod/gradle/**",
+   "mod/run-template/**",
+   "mod/src/*/resources/**",
+   "devserver/build.gradle",
+   "devserver/src/*/resources/**",
+   "apitest/build.gradle",
+   "apitest/src/*/resources/**",
+   "mod/src/*/java/**/mixin/**",
+   "devserver/src/*/java/**/mixin/**",
+   "apitest/src/*/java/**/mixin/**",
+   "mod/src/*/java/**/*Registry*.java",
+   "mod/src/*/java/**/*Registries*.java",
+   "mod/src/*/java/**/*Codec*.java",
+   "mod/src/*/java/**/*Serial*.java",
+   "mod/src/*/java/**/*Nbt*.java",
+   "devserver/src/**/*.java",
+   "sidecar/src/**",
+   "sidecar/scripts/**",
+   "sidecar/package.json",
+   "sidecar/package-lock.json",
+   "sidecar/tsconfig.json",
+   "kit/voxel_classes.json",
+   "kit/schemas/**",
+   "kit/examples/**",
+   "kit/designs/**",
+   "kit/massings/**",
+   "kit/bibles/**",
+   "kit/vocab/**",
+   "tools/run-gate4d-client.sh",
+   "tools/run-gate4e-client.sh",
+   "tools/run-gate5b-client.sh",
+   "tools/run-gate6a-client.sh",
+   "tools/run-gate6b-client.sh",
+   "tools/run-gate6c0a-client.sh"
+  ],
+  "alwaysRoots": [
+   "kit/build.mjs",
+   "kit/check.mjs",
+   "kit/render.mjs",
+   "kit/import.mjs",
+   "kit/tools/bible.mjs",
+   "kit/tools/rebuild.mjs",
+   "kit/tools/diff.mjs",
+   "kit/tools/slices.mjs",
+   "kit/tools/describe.mjs",
+   "kit/lib/vocab/rarity.mjs",
+   "kit/lib/realise.mjs",
+   "sidecar/src/region-worker.mjs",
+   "tools/gen-palettes.mjs",
+   "tools/run-headless-server.mjs"
+  ],
+  "why": {
+   "mixins": "applied to their targets as bytes by the mixin transformer: never loaded under their own name",
+   "registries, codecs, serialization, nbt": "read world and save data whose shape a run may not exercise, and register at startup",
+   "devserver": "generated hooks (build-time code from the client's hook sources) and the headless host: small, always in",
+   "sidecar/src": "one esbuild bundle: loading it loads all of it",
+   "kit tools and data the sidecar spawns": "the sidecar runs kit tools with a minimal environment (no NODE_OPTIONS): untraced",
+   "region worker": "traced through the tracer's Worker wrapper, kept in for safety"
+  }
  }
 }

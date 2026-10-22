@@ -75,7 +75,8 @@ import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFile
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
 import { currentHistory, definitionNow, definitionsAt, effectiveTimeout, estimateMin, loadHistory } from './lib/gate-history.mjs';
 import { autoConfig, chooseShards, describeChoice, freePairs, probeMachine } from './lib/shard-auto.mjs';
-import { autoFullWhy, cacheContext, fullTwins, judgedBenches, keyFor, lastNightly, lookup, record as recordPass } from './lib/step-cache.mjs';
+import { autoFullWhy, cacheContext, coverageMode, fullTwins, judgedBenches, keyFor, lastNightly, lookup, lookupCoverage, record as recordPass } from './lib/step-cache.mjs';
+import { collect as collectCoverage, javaLogOption, snapshotStart } from './lib/step-coverage.mjs';
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
 import { entryOf, expandSplits, isPartId, parentOf, parentResults, validateSplits } from './lib/step-split.mjs';
 import { acquire as acquireMachine, chooseTurbo, describeQueue, describeTurbo, foldSamples, liveHolders, releaseAll, sampleMachine, turboConfig } from './lib/turbo.mjs';
@@ -410,6 +411,9 @@ const keyOf = (id) => {
   return keys.get(id);
 };
 const cachedHits = new Map(); // id -> the recorded PASS that serves it
+// coverage-based inputs (docs/GATES.md "Coverage-based inputs"): on when gate-cache.json coverage.enabled and the run traces
+const COVERAGE = TRACE && !!CACHE_CONF.coverage?.enabled && !flag('--no-coverage');
+const stepCoverage = new Map(); // id -> collect()'s result for its run
 tierInfo.cache = { lookup: !CACHE_OFF_WHY && !!CACHE, offWhy: CACHE_OFF_WHY ?? cacheErr, dirty: CACHE?.dirty.length ?? null, record: TRACE && !!CACHE, canaries: [] };
 if (tierInfo.cache.lookup) {
   const want = new Set(stepIds);
@@ -458,7 +462,14 @@ if (tierInfo.cache.lookup) {
     if (warm) {
       const w = keyFor(warm, id);
       l = w.key === k.key ? { hit: { key: k.key, at: `(assumed: a full nightly at ${warm.head.slice(0, 9)})`, head: warm.head, run: INPUT_MAP.steps[parentOf(id)]?.verified ? '(assumed)' : '(assumed; its set is NOT yet verified by a traced PASS: computed imports may be missing)', tier: 'assumed' } } : { hit: null, why: w.key ? `its key at ${warm.head.slice(0, 9)} differs (an input, its definition or a mode moved)` : `no key at ${warm.head.slice(0, 9)}: ${w.why}` };
-    } else l = lookup(CACHE, id, k.key);
+    } else {
+      l = lookup(CACHE, id, k.key);
+      // an in-game step: the newest coverage PASS whose touched files are unchanged here
+      if (!l.hit && coverageMode(CACHE, id)) {
+        const c = lookupCoverage(CACHE, id);
+        l = c.hit ? c : { hit: null, why: `${l.why}; coverage: ${c.why}` };
+      }
+    }
     if (!l.hit) {
       run.add(id);
       push(id, `cache miss (key ${k.key.slice(0, 12)}): ${l.why}`);
@@ -691,6 +702,16 @@ function childEnv(sh, extra = {}) {
   if (runShared.kitJunit) Object.assign(env, { GATE_KIT_RESULTS: runShared.kitJunit, GATE_KIT_TREE: runShared.kitTree });
   // the run worktree where unit-mod built this HEAD (gate6cmp reads its classes): set once unit-mod passed
   if (runShared.unitModRun) env.GATE_UNIT_MOD_RUN = runShared.unitModRun;
+  if (COVERAGE && sh.ev) {
+    // coverage (tools/lib/step-coverage.mjs): every JVM of the shard logs its class loads, every node process of a client it
+    // starts (the sidecar, its workers) traces what it touches; a step's own processes trace into the step's dir (runProcess)
+    const cov = path.join(sh.ev, 'coverage');
+    fs.mkdirSync(path.join(cov, 'node'), { recursive: true });
+    env.JAVA_TOOL_OPTIONS = [env.JAVA_TOOL_OPTIONS, javaLogOption(cov)].filter(Boolean).join(' ');
+    env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${pathToFileURL(path.join(SRC, 'tools', 'lib', 'step-trace.mjs')).href}`].filter(Boolean).join(' ');
+    env.GATE_TRACE_DIR = path.join(cov, 'node');
+    env.GATE_TRACE_ROOTS = JSON.stringify([[SRC, ''], [sh.RUN, ''], [path.join(MAIN, 'artifacts'), '@artifacts/']]);
+  }
   for (const [k, v] of Object.entries(extra)) env[k] = expand(String(v), sh);
   return env;
 }
@@ -1325,7 +1346,7 @@ function runProcess(sh, step, logFile) {
     const env = childEnv(sh, step.env ?? {});
     if (TRACE) {
       // the input trace (tools/lib/step-trace.mjs): every node process of the step records the source files it touches
-      env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${pathToFileURL(path.join(SRC, 'tools', 'lib', 'step-trace.mjs')).href}`].filter(Boolean).join(' ');
+      if (!COVERAGE) env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${pathToFileURL(path.join(SRC, 'tools', 'lib', 'step-trace.mjs')).href}`].filter(Boolean).join(' ');
       env.GATE_TRACE_DIR = path.join(OUT, 'traces', step.id);
       env.GATE_TRACE_ROOTS = JSON.stringify([[SRC, ''], [sh.RUN, ''], [path.join(MAIN, 'artifacts'), '@artifacts/']]);
     }
@@ -1367,6 +1388,8 @@ async function runStep(sh, step, rec) {
   rec.load1 = { start: load1() };
   writeSummary();
   const ts = Date.now();
+  // coverage: the shard's JVM and client traces alive now, or begun before the step ends, are the step's (collect below)
+  const covSnap = COVERAGE ? snapshotStart(path.join(sh.ev, 'coverage')) : null;
   log(`== ${step.id}: ${step.desc ?? ''}`, sh);
   for (const [to, from] of Object.entries(step.links ?? {})) {
     const dst = path.join(sh.ev, to);
@@ -1387,6 +1410,18 @@ async function runStep(sh, step, rec) {
   }
   rec.setupSeconds = (Date.now() - ts) / 1000;
   const r = await runProcess(sh, step, logFile);
+  if (covSnap) {
+    try {
+      const c = collectCoverage(path.join(sh.ev, 'coverage'), covSnap, { prefix: CACHE_CONF.coverage?.packagePrefix ?? 'dev.larattalabs.' });
+      stepCoverage.set(step.id, c);
+      const td = path.join(OUT, 'traces', step.id);
+      fs.mkdirSync(td, { recursive: true });
+      fs.writeFileSync(path.join(td, 'coverage.json'), JSON.stringify({ classes: c.classes, node: Object.fromEntries([...c.node].map(([p, k]) => [p, [...k].join('')])) }));
+      rec.coverage = { classes: c.classes.length, clientPaths: c.node.size };
+    } catch (e) {
+      rec.coverage = { error: e.message };
+    }
+  }
   sh.activeGroup = null;
   rec.seconds = (Date.now() - ts) / 1000;
   rec.exitCode = r.code;
@@ -1835,10 +1870,11 @@ async function worker(sh) {
         }
         const k = keyOf(step.id);
         const r = recordPass(CACHE, step.id, rec, { key: k.key, why: k.why, parts: k.parts, run: OUT, ev: sh.ev, traceDir: path.join(OUT, 'traces', step.id), traced: TRACE,
+          coverage: stepCoverage.get(step.id) ?? null,
           timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', judgedBench: JUDGED_BENCHES.has(parentOf(step.id)), tier: chainName,
           ...(step.id === 'unit-kit' && runShared.kitJunit ? { junit: runShared.kitJunit, kitTree: runShared.kitTree } : {}) });
-        rec.cache = { key: k.key, recorded: r.stored, why: r.why };
-        if (r.outside) {
+        rec.cache = { key: r.key ?? k.key, recorded: r.stored, why: r.why };
+        if (r.outside && !r.stored) {
           rec.cache.outside = r.outside.slice(0, 40);
           summary.inputsMisses.push({ step: step.id, paths: r.outside });
           log(`  ${step.id}: INPUTS-MAP MISS, not cached: it read ${r.outside.length} source path(s) outside its set (${r.outside.slice(0, 5).join(', ')}${r.outside.length > 5 ? ', ...' : ''}); widen it: node tools/step-inputs.mjs merge ${OUT}`, sh);

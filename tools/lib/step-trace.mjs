@@ -105,6 +105,40 @@ if (DIR && ROOTS?.length) {
   for (const n of ['readdir', 'opendir']) wrap(fp, n, 'd');
   for (const n of ['stat', 'lstat', 'access']) wrap(fp, n, 's');
   for (const n of ['cp', 'copyFile']) wrap(fp, n, 'r');
+  // creates of directories: not inputs, but evidence (a step that ran gradle in the source checkout takes mod/.gradle/gate-gradle.lock)
+  wrap(fs, 'mkdirSync', 'w');
+  // worker threads: --import preloads don't reach them, so a file worker starts through a small eval wrapper that loads this
+  // tracer first (the same env) and then the worker's own module
+  try {
+    const wt = module.createRequire(import.meta.url)('node:worker_threads');
+    const Orig = wt.Worker;
+    if (!Orig.__gateTrace) {
+      const self = import.meta.url;
+      class TracedWorker extends Orig {
+        constructor(file, opts = {}) {
+          let f = file;
+          let o = opts;
+          try {
+            if (!opts?.eval && (typeof file === 'string' || file instanceof URL)) {
+              const url = file instanceof URL ? file.href : file.startsWith('file:') ? file : new URL(`file://${path.resolve(file)}`).href;
+              if (/\.m?js$/.test(url)) {
+                f = `import(${JSON.stringify(self)}).then(() => import(${JSON.stringify(url)}))`;
+                o = { ...opts, eval: true };
+              }
+            }
+          } catch {
+            f = file;
+            o = opts;
+          }
+          super(f, o);
+        }
+      }
+      Object.defineProperty(TracedWorker, '__gateTrace', { value: true });
+      wt.Worker = TracedWorker;
+    }
+  } catch {
+    // no worker_threads
+  }
   try {
     module.syncBuiltinESMExports();
   } catch {
