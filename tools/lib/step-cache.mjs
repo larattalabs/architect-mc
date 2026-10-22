@@ -76,7 +76,9 @@ export function cacheContext({ src, main, cfg, conf, map, snapDir, env = process
   return {
     src, main, cfg, conf, map, snapDir, env, head, dirty: dirtyList,
     toolchain: { node: process.version, java: javaVersion(env), build: buildVersions(src, head) },
-    release: { src: commit === 'HEAD' ? releaseContext(src, env).release : null, tagAtHead },
+    // the release context (strict NEXT checks): this checkout's; for another commit, as a detached checkout of it would see it
+    // (ARCHITECT_RELEASE, else a v* tag on it), which is what the nightly's and the runner's detached worktrees see
+    release: { src: commit === 'HEAD' ? releaseContext(src, env).release : env.ARCHITECT_RELEASE === '1' || env.ARCHITECT_RELEASE === '0' ? env.ARCHITECT_RELEASE === '1' : tagAtHead, tagAtHead },
     originMain, plumbing,
     // GATE_STEP_CACHE_DIR: another cache (an analysis cache rebuilt from history: tools/step-cache.mjs import-history)
     dir: path.resolve(env.GATE_STEP_CACHE_DIR ?? path.join(main, 'artifacts', 'step-cache')),
