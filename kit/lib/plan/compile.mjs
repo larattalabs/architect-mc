@@ -1182,7 +1182,10 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         // ((6c S3) a terraced zone's routes keep its grade tolerance; every other zone as before)
         // ((6c S3) the broken variant `unretained` (the zone's ext architect_mc:unsafe): no retaining ring or rail on any terraced lot)
         ...(p.part.ext?.['architect_mc:unsafe']?.unretained === true ? { _unsafeUnretained: true } : {}),
-        ...(z.ds.some((d) => d.terraces) ? { maxGrade: tolOf(p.part, 'grade').max, routeKeepOut: [...env.protectedAreas.map((a) => rectArr(a.rect)), ...env.regions.map((a) => rectArr(a.rect)), ...env.buildRects.map((a) => rectArr(a.rect))] } : {}),
+        ...(z.ds.some((d) => d.terraces) ? { maxGrade: tolOf(p.part, 'grade').max } : {}),
+        // ((6c close-out A, §9) every districts zone's routes keep out of the plan's protected areas, other regions and builds: the
+        // district links, the following districts' streets, the outposts' joins and the terraced joins (S3 passed it for terraces only))
+        routeKeepOut: [...env.protectedAreas.map((a) => rectArr(a.rect)), ...env.regions.map((a) => rectArr(a.rect)), ...env.buildRects.map((a) => rectArr(a.rect))],
       });
       for (const k of out.reserved) reserved.add(k);
       laneCells.push(...out.laneCells);
