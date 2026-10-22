@@ -38,6 +38,7 @@ import path from 'node:path';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs';
+import { gatePart } from './lib/gate-part.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-H-run');
@@ -79,9 +80,10 @@ function spendZero() {
   fs.writeFileSync(path.join(OUT, 'spend.json'), `${JSON.stringify({ capUsd: 0, totalUsd: 0, runs: [], note: 'slice H is $0: sim and stub only, no Claude call' }, null, 2)}\n`);
 }
 /** Run the halves' items of a step (each `{name, run(ctx)}`), after the core's. */
-async function halves(step) {
+async function halves(step, want = () => true) {
   const out = {};
   for (const it of [...(A.items[step] ?? []), ...(B.items[step] ?? [])]) {
+    if (!want(it.name)) continue;
     log(`-- ${it.name}`);
     out[it.name] = await it.run(ctx);
   }
@@ -170,10 +172,13 @@ steps.unit = async () => {
 
 // ------------------------------------------------------------------ in game (H-core's items; the halves' after)
 
+// a split h-ingame (docs/GATES.md "Turbo"): its sections are H-core's items and each half's item (tools/lib/gate-part.mjs)
+const H_INGAME_SECTIONS = ['core', ...[...A.items.ingame, ...B.items.ingame].map((it) => it.name)];
 steps.ingame = async () => {
+  const P = gatePart(H_INGAME_SECTIONS, { log });
   await ensure();
-  const core = await (await import('./lib/gate6ch-core.mjs')).ingame(ctx);
-  return { core, halves: await halves('ingame') };
+  const core = P.want('core') ? await (await import('./lib/gate6ch-core.mjs')).ingame(ctx) : `another part's (${P.part})`;
+  return { core, halves: await halves('ingame', P.want) };
 };
 steps.crash = async () => {
   await ensure();

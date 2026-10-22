@@ -66,6 +66,7 @@ import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFile
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
 import { currentHistory, definitionNow, definitionsAt, effectiveTimeout, estimateMin, loadHistory } from './lib/gate-history.mjs';
 import { autoConfig, chooseShards, describeChoice, freePairs, probeMachine } from './lib/shard-auto.mjs';
+import { entryOf, expandSplits, isPartId, parentOf, parentResults, validateSplits } from './lib/step-split.mjs';
 import { acquire as acquireMachine, chooseTurbo, describeQueue, describeTurbo, foldSamples, liveHolders, releaseAll, sampleMachine, turboConfig } from './lib/turbo.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -120,6 +121,7 @@ if (!cfg.chains[chainName] && !TIERS.includes(chainName)) die(`unknown chain ${c
       if (!cfg.steps[s]) bad.push(`tiers: unknown step ${s}`);
     }
   }
+  bad.push(...validateSplits(cfg.steps));
   if (bad.length) die(`config: ${bad.join('; ')}`);
 }
 
@@ -280,12 +282,34 @@ function select() {
 const sel = select();
 let stepIds = sel.ids;
 const tierInfo = sel.info;
+// --only takes step ids and part ids (`<id>/p<k>` of a split step: that part alone, the run splits)
+const onlyParts = opt('--only') ? opt('--only').split(',').filter(isPartId) : [];
 if (opt('--only')) {
-  const only = opt('--only').split(',');
-  for (const s of only) if (!cfg.steps[s]) die(`--only: unknown step ${s}`);
+  const only = opt('--only').split(',').map(parentOf);
+  for (const s of opt('--only').split(',')) if (!entryOf(cfg, s)) die(`--only: unknown step ${s}`);
   stepIds = cfg.chains[chainName] ? stepIds.filter((s) => only.includes(s)) : ORDER.filter((s) => only.includes(s));
 }
 if (opt('--from')) stepIds = stepIds.slice(Math.max(0, stepIds.indexOf(opt('--from'))));
+
+// turbo (docs/GATES.md "Turbo"): --turbo, or by default a tier run (change | slice | release) of at least shards.turbo.minSteps
+// steps; --no-turbo turns it off. A turbo run waits for the whole machine and holds it, runs up to shards.turbo.max in-game shards
+// and the client-less steps on their own offline lanes (--lanes N, default shards.turbo.offlineLanes).
+const TC = turboConfig(cfg);
+const TURBO = !flag('--no-turbo') && (flag('--turbo') || (TIERS.includes(chainName) && stepIds.length >= TC.minSteps));
+// split steps (tools/lib/step-split.mjs): a turbo run (or --split) runs a split step as its parts, in parallel; --no-split keeps
+// every step whole. The selection above names parents only; the parts replace them here.
+const SPLIT = onlyParts.length > 0 || flag('--split') || (TURBO && !flag('--no-split'));
+let splitParts = {};
+if (SPLIT) {
+  const x = expandSplits(cfg.steps, stepIds);
+  Object.assign(cfg.steps, x.defs);
+  stepIds = x.ids.filter((id) => !isPartId(id) || !onlyParts.some((p) => parentOf(p) === parentOf(id)) || onlyParts.includes(id));
+  splitParts = Object.fromEntries(Object.entries(x.parts).map(([k, v]) => [k, v.filter((id) => stepIds.includes(id))]));
+  for (const [k, v] of Object.entries(splitParts)) {
+    if (tierInfo.why?.[k]) for (const id of v) tierInfo.why[id] = [...tierInfo.why[k], `part of the split step ${k}`];
+  }
+  if (Object.keys(splitParts).length) tierInfo.notes = [...(tierInfo.notes ?? []), `split: ${Object.entries(splitParts).map(([k, v]) => `${k} -> ${v.length} parts`).join(', ')} (--no-split keeps them whole)`];
+}
 
 const PLAN = flag('--plan') || flag('--dry-run');
 // --quiet-wait [load] (opt-in; on by default at release): before a bench step, wait until the 1-minute load average is below <load> (default 8), at most
@@ -313,7 +337,6 @@ const LOCK = path.resolve(opt('--lock') ?? process.env.GATE_LOCK ?? path.join(RU
 // shards.auto.minSteps steps (decided below, once the steps are known), else 1 as before.
 const SHARDS_ARG = opt('--shards');
 const AC = autoConfig(cfg);
-const TC = turboConfig(cfg);
 let NSHARDS = SHARDS_ARG === undefined || SHARDS_ARG === 'auto' ? 1 : Number(SHARDS_ARG);
 // the bound is shards.max, or shards.turbo.max for a turbo run (checked once the steps, and so turbo, are known)
 if (!(Number.isInteger(NSHARDS) && NSHARDS >= 1 && NSHARDS <= Math.max(AC.max, TC.max))) die(`--shards must be 1..${Math.max(AC.max, TC.max)} or auto`);
@@ -570,10 +593,6 @@ for (const s of steps) prioOf(s);
 // auto: --shards auto, or --shards omitted on a slice/release plan of more than shards.auto.minSteps steps (else 1, as before)
 const AUTO = SHARDS_ARG === 'auto' || (SHARDS_ARG === undefined && (chainName === 'slice' || chainName === 'release') && steps.length > AC.minSteps);
 let autoChoice = null;
-// turbo (docs/GATES.md "Turbo"): --turbo, or by default a tier run (change | slice | release) of at least shards.turbo.minSteps
-// steps; --no-turbo turns it off. A turbo run waits for the whole machine and holds it, runs up to shards.turbo.max in-game shards
-// and the client-less steps on their own offline lanes (--lanes N, default shards.turbo.offlineLanes).
-const TURBO = !flag('--no-turbo') && (flag('--turbo') || (TIERS.includes(chainName) && steps.length >= TC.minSteps));
 if (!TURBO && NSHARDS > AC.max) die(`--shards ${NSHARDS}: more than shards.max ${AC.max} needs --turbo (up to shards.turbo.max ${TC.max})`);
 if (TURBO && NSHARDS > TC.max) die(`--shards ${NSHARDS}: more than shards.turbo.max ${TC.max}`);
 const offlineSteps = steps.filter((s) => s.client === 'none').length;
@@ -867,7 +886,8 @@ const summary = {
     rotationKey: tierInfo.rotationKey ?? null, rotationSource: tierInfo.rotationSource ?? null, rotation: tierInfo.rotation ?? null, notes: tierInfo.notes } : null,
   counts: {}, setup: null, slot: slotNote, shardsAuto: autoChoice ? (({ text, ...a }) => a)(autoChoice) : null, hosts: { mode: HOSTS.mode, server: HOSTS.server.filter((id) => stepIds.includes(id)) }, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
   schedule: { order: 'longest first', historyRuns: HIST.runs, historyFile: HISTORY_FILE, benches: ISOLATE_BENCH ? 'isolated' : 'not isolated (timing recorded)', historyTimeouts: HIST_TIMEOUTS },
-  steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin, effectiveTimeoutMin: s.effTimeoutMin, timeoutSource: s.timeoutSource, estimateMin: Math.round(est(s) * 10) / 10, ...(tierInfo.why?.[s.id] ? { why: tierInfo.why[s.id] } : {}) })),
+  steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin, effectiveTimeoutMin: s.effTimeoutMin, timeoutSource: s.timeoutSource, estimateMin: Math.round(est(s) * 10) / 10, ...(s.parentId ? { parent: s.parentId } : {}), ...(tierInfo.why?.[s.id] ? { why: tierInfo.why[s.id] } : {}) })),
+  split: Object.keys(splitParts).length ? splitParts : null,
 };
 const MACHINE_LOG = path.join(OUT, 'machine.jsonl');
 const machineSamples = [];
@@ -1154,7 +1174,7 @@ function runProcess(sh, step, logFile) {
 }
 
 async function runStep(sh, step, rec) {
-  const logFile = path.join(OUT, `${step.id}.log`);
+  const logFile = path.join(OUT, `${step.id.replaceAll('/', '.')}.log`); // a split part <id>/p<k> logs to <id>.p<k>.log
   rec.log = path.relative(OUT, logFile);
   rec.status = 'RUNNING';
   rec.shard = sh.k;
@@ -1349,6 +1369,10 @@ function summaryMd() {
       s.contended ? `bench contended (ran with ${s.ranWith.length} step(s))` : '', s.timeoutSource?.startsWith('history') && s.status === 'TIMEOUT' ? `history timeout ${s.effectiveTimeoutMin} of ${s.timeoutMin} min` : ''].filter(Boolean).join('; ');
     lines.push(`| ${s.id} | ${shards.length > 1 ? `${s.shardName ?? s.shard ?? '-'} | ` : ''}${s.status} | ${s.seconds != null ? fmtDur(s.seconds) : '-'} | ${s.ok ?? '-'}/${s.fail ?? '-'} | ${m.replace(/\|/g, '/')} |`);
   }
+  if (summary.splitResults) {
+    lines.push('', '## Split steps (each part runs its share of the parent\'s assertions)', '', '| parent | parts | status | step time | wall (first start to last end) | ok/FAIL |', '|---|---|---|---|---|---|');
+    for (const [p, r] of Object.entries(summary.splitResults)) lines.push(`| ${p} | ${r.parts.length} | ${r.status} | ${fmtDur(r.stepSeconds)} | ${r.wallSeconds != null ? fmtDur(r.wallSeconds) : '-'} | ${r.ok}/${r.fail} |`);
+  }
   const rec = summary.steps.filter((s) => s.timingRecorded?.length);
   if (rec.length) {
     lines.push('', '## Timing bars recorded, not judged (change/slice policy)', '',
@@ -1401,6 +1425,7 @@ function notify() {
 async function finish(state, error) {
   if (sampler) clearInterval(sampler);
   if (machineSamples.length) summary.machine = foldSamples(machineSamples);
+  if (summary.split) summary.splitResults = parentResults(summary.split, summary.steps);
   summary.state = state;
   if (error) summary.error = error;
   summary.endedAt = new Date().toISOString();

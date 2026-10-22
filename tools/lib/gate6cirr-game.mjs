@@ -6,6 +6,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as P3 from './p3-tier.mjs';
+import { gatePart } from './gate-part.mjs';
+
+/** irr-ingame's sections, each its own world(s) (a split step runs them as parts: tools/lib/gate-part.mjs). s01 includes its control h0. */
+export const IRR_SECTIONS = ['v62live', 'v62a', 'spare', 'v62b', 'lp', 's01', 'v63', 'd01', 'u01b', 'pad', 'probe'];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const k3 = (c) => `${c[0]},${c[1]},${c[2]}`;
@@ -651,9 +655,10 @@ async function lampPath(ctx, o) {
 export async function ingame(ctx) {
   const { L, check, json, B } = ctx;
   const out = {};
-  // (development: IRR_ONLY=v62a,v62b,spare,lp,v63,s01,d01,u01b,pad,probe runs those sections only)
+  // (development: IRR_ONLY=v62live,v62a,v62b,spare,lp,v63,s01,d01,u01b,pad,probe,h0,h0p runs those sections only; a split step's
+  // part runs its GATE_PART_SECTIONS)
   const only = (process.env.IRR_ONLY ?? '').split(',').filter(Boolean);
-  const want = (k) => !only.length || only.includes(k);
+  const { want } = gatePart(IRR_SECTIONS, { log: ctx.log, legacy: only });
   const F = await installFields(ctx);
   const fx = (rel) => B.fixture(ctx, rel);
   const E62 = { f1: 'g6c_irr_field_13x11', f2: 'g6c_irr_field_11x11' };
