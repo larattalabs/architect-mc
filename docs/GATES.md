@@ -462,6 +462,12 @@ On feat/lint-p3 (2026-10-21, a shared box at load 15-80 with 3-4 other gate runs
   above 2, below 1, within FIRE_REACH) and `p3-probe-ledger` 10/0 (the store run's six bills, its delta and revert consumed exactly
   their outstanding; cu-survival's refund of 256 standing blocks equals the Java model's). Their settles are recorded in
   kit/lint/water-calibration.json.
+- **The final slice after merging main (dfab398b)** (`artifacts/gate-runs-lintp3/20261022-001736-slice`, `--shards auto` = 3, load
+  about 15-40): **94 min wall, 278 step-minutes**, 55 PASS. The smoke steps: h-ingame 10.6, hy-ingame 15.6, irr-ingame 28.8, hy-cold
+  5.2, y-ingame 4.5, c29-ingame 4.2, kc-ingame 2.3, hy-crash 1.5, voc-survival 0.6, h-probe 0.5; water-lint 0.7, p3-lint 0.3. The 4
+  FAILs are not P3's: pt2-ingame item 13 and h-unit item 10 (pre-existing on main), voc-unit item 1 (docker unavailable), sim-jobs
+  (the sidecar was not running: PASS 33/0 re-run alone, `gate-runs-lintp3-simjobs/20261022-015305-change`). The pre-merge slice
+  (59 steps, 124 min at load 20-80) had 4d-all's known group-undo intermittent instead; it passed here.
 - **Replayed at the baseline's load** (the "Gate waits" replay of the 12 FAST-CHECKS slices, each P3 step at its measured smoke time,
   the two lint steps added to every slice; 3 shards): median **104 -> 94 min wall**, **311 -> 282 step-minutes** per slice. The fluid-heavy
   slices gain most (HYb 88 -> 80, CU 103 -> 94, KC 104 -> 94, IRR 145 -> 136); slices without P3 steps pay the lints' 2 minutes in
