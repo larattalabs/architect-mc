@@ -27,6 +27,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { gatePart, sliceSections, slicesOf } from './lib/gate-part.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-S3-run');
@@ -135,11 +136,17 @@ steps.apicompat = async () => { const o = await apicompat(); spendZero(); return
 
 steps.identity = async () => {
   const out = {};
+  // a split s3-unit (docs/GATES.md "Turbo"): the fixture loop in round-robin slices and the asks; whole, both exactly as before
+  const P = gatePart(['asks', ...sliceSections('unchanged', 3)], { log });
+  const slice = slicesOf(P, 'unchanged', 3);
   const K = await import('./lib/gate6cs3-kit.mjs');
-  const u = await K.unchanged(root, { check, log });
+  if (!slice || slice.length) {
+  const u = await K.unchanged(root, { check, log, slice });
   out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, baseWithTerraces: u.baseWithTerraces };
   fs.writeFileSync(path.join(OUT, 's3-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
   check(u.n > 0 && u.differ.length === 0 && u.baseWithTerraces.length === 0, `item 5: every committed plan fixture as on the merge base ${u.base.slice(0, 10)} (answers, overall, IR but kitVersion, first plan): ${u.same}/${u.n} byte-identical; no base fixture carries terraces`, u.differ);
+  }
+  if (P.want('asks')) {
   const { asksGap } = await import('./lib/gate6chy-b.mjs');
   const before = await asksGap(path.join(K.baseTree(root).dir, 'kit')), after = await asksGap(KIT);
   // ((batch v0.41.0) the five asks FL moves by name are FL's to judge)
@@ -148,6 +155,7 @@ steps.identity = async () => {
   fs.writeFileSync(path.join(OUT, 's3-asks-after.md'), after.text);
   out.asks = { malformedBefore: before.malformed, malformedAfter: after.malformed, same: siblingAsks(before.text) === siblingAsks(after.text) };
   check(out.asks.same && after.malformed === 0, `item 5: the 59 asks' answers and gap table unchanged (${after.text.split('\n')[0]})`);
+  }
   spendZero();
   return out;
 };

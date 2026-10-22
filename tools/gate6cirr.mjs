@@ -27,6 +27,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { gatePart, sliceSections, slicesOf } from './lib/gate-part.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-IRR-run');
@@ -105,8 +106,12 @@ function junit(name) {
   return { tests: g('tests'), failures: g('failures'), errors: g('errors') };
 }
 
+// a split irr-unit (docs/GATES.md "Turbo"): `items` (items 1 and 10) and item 8's fixture loop in round-robin slices
+const UNIT_SECTIONS = ['items', ...sliceSections('unchanged', 3)];
 steps.unit = async () => {
   const out = {};
+  const P = gatePart(UNIT_SECTIONS, { log });
+  if (P.want('items')) {
   // item 1 (kit)
   out.irr = nodeTest(['kit/test/irr.test.mjs']);
   check(out.irr.code === 0 && out.irr.fail === 0 && out.irr.pass >= 9, `item 1 (kit): detection (lot, zone, false over the zone, type-implied farms, template and district lots), the grid (every field column within 4 on 20 x 20 field sizes 3..62, 4 fronts), the mask, the lot's frame against the mod's placement table, reserved, the notes (not a farm, cold, small), M25:keep's own-lot exemption, the broken variants (M25:clear, M25:shell, M25:keep): ${out.irr.pass} pass, ${out.irr.fail} fail`, out.irr.failing);
@@ -115,15 +120,21 @@ steps.unit = async () => {
   const g = spawnSync('./gradlew', ['test', '--offline', '-q', '--tests', '*ApiIrrTest', '--tests', '*LotMaskTest', '--tests', '*PlanChecksHTest'], { cwd: path.join(root, 'mod'), encoding: 'utf8', timeout: 1_800_000, env });
   out.mod = { code: g.status, api: junit('dev.larattalabs.architect.apiimpl.ApiIrrTest'), mask: junit('dev.larattalabs.architect.site.LotMaskTest'), planChecks: junit('dev.larattalabs.architect.region.PlanChecksHTest') };
   check(g.status === 0 && [out.mod.api, out.mod.mask, out.mod.planChecks].every((x) => x && x.tests > 0 && x.failures === 0 && x.errors === 0), `item 1 (mod): kit and Java agree on detection (PlanChecks.hasH over lots, template lots and districts; a string never), the mask (ext, filter, a delta's writes and growth), the placement table, DesignRequest.reserved (the 1.11.0 constructor kept, sent only when set, refused by a helper before IRR, its limits): ${json(out.mod)}`);
+  }
   // item 8 (byte identity, the 59 asks among the fixtures)
-  const K = await import('./lib/gate6cirr-kit.mjs');
-  const u = await K.unchanged(root, { check, log });
-  out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, added: u.added };
-  fs.writeFileSync(path.join(OUT, 'irr-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
+  const slice = slicesOf(P, 'unchanged', 3);
+  if (!slice || slice.length) {
+    const K = await import('./lib/gate6cirr-kit.mjs');
+    const u = await K.unchanged(root, { check, log, slice });
+    out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, added: u.added, slice: u.slice };
+    fs.writeFileSync(path.join(OUT, 'irr-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
+  }
+  if (P.want('items')) {
   // item 10
   const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6cirr'], { cwd: root, encoding: 'utf8', timeout: 900_000, env: { ...process.env, PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
   out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').filter((l) => /^(ok|FAIL)/.test(l)) };
   check(ac.status === 0, `item 10: api-compat --gate6cirr clean against the 0.39.0, 0.38.0 and 0.37.1 apitest jars and the 0.39.0 jar's 1.36.0 surface (0.39.1 changed no Java) (DesignRequest's 1.11.0 constructor kept); $0.00`, out.apicompat.tail);
+  }
   spendZero();
   return out;
 };

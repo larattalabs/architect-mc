@@ -14,6 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fromPlacementStats as ownTick, ownOk, describe as tickText } from './lib/tickbar.mjs';
 import { DevClient } from './lib/devclient.mjs';
+import { gatePart } from './lib/gate-part.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -1065,8 +1066,13 @@ async function c30() {
   return { n, runs: runs.map((r) => ({ k: r.k, budget: r.budget, manual: r.manual, ms: r.ms, ok: r.ok })) };
 }
 
+// a split 4d-all (docs/GATES.md "Turbo"): every part runs base (the world and the lots every sub-step copies) and then its sections;
+// stages and gap0 open waiting's world, so they share its part
+const ALL_SECTIONS = ['equality', 'relog', 'waiting', 'stages', 'lotfit', 'gap0', 'survival', 'patron', 'toggle', 'throughput'];
 async function all() {
-  for (const s of ['base', 'equality', 'relog', 'waiting', 'stages', 'lotfit', 'gap0', 'survival', 'patron', 'toggle', 'throughput']) {
+  const P = gatePart(ALL_SECTIONS, { log });
+  if ((P.want('stages') || P.want('gap0')) && !P.want('waiting')) throw new Error(`4d all: stages and gap0 need waiting in their part (${P.sections.join(',')})`);
+  for (const s of ['base', ...P.sections]) {
     log(`== ${s}`);
     await run(s);
   }

@@ -16,6 +16,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { fromPlacementStats as ownTick, ownOk, describe as tickText } from './lib/tickbar.mjs';
 import { DevClient } from './lib/devclient.mjs';
+import { gatePart } from './lib/gate-part.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -570,6 +571,9 @@ steps.chains = async () => {
   const scripts = [{ name: 'fixed', ops: ['a2', 'a3', 'r2', 'a5', 'a1', 'r5', 'r1', 'a3', 'a5', 'r3', 'a2', 'r1'] }];
   const nRandom = Number(process.env.G5B_SCRIPTS ?? 20);
   for (let k = 0; k < nRandom; k++) scripts.push({ name: `seed${k + 1}`, seed: 1000 + k });
+  // a split 5b-chains-full (docs/GATES.md "Turbo"): each part runs its scripts, each from its own world, and E1 over its own states
+  const P = gatePart(scripts.map((sc) => sc.name), { log });
+  scripts.splice(0, scripts.length, ...scripts.filter((sc) => P.want(sc.name)));
   const states = [];
   let first = true;
   for (const sc of scripts) {

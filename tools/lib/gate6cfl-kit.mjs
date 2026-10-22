@@ -16,6 +16,8 @@ import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { SIBLING_FILES } from './batch-0410.mjs';
+import { inSlice } from './gate-part.mjs';
+import { syncBaseTree } from './base-tree.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -35,11 +37,7 @@ export const EXCEPT = Object.freeze({
 /** The base worktree at the merge base with origin/main (made or moved there). */
 export function baseTree(root) {
   const dir = path.resolve(root, '..', 'architect-mc-FL-main');
-  execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']);
-  const base = execFileSync('git', ['-C', root, 'merge-base', 'HEAD', 'origin/main']).toString().trim();
-  if (!fs.existsSync(path.join(dir, '.git'))) execFileSync('git', ['-C', root, 'worktree', 'add', '-q', '--detach', dir, base]);
-  else execFileSync('git', ['-C', dir, 'checkout', '-q', '--detach', base]);
-  return { dir, base };
+  return syncBaseTree(root, dir); // (turbo) one fetch and checkout at a time; left alone at the base
 }
 
 /** An IR's JSON normalised: kitVersion, and the street roads' S-FL-5 ext (dropped, with ext itself when nothing else is in it). */
@@ -53,15 +51,19 @@ export function normIr(json) {
   return JSON.stringify(ir);
 }
 
-export async function unchanged(root, { check, log = console.log, only = null } = {}) {
+export async function unchanged(root, { check, log = console.log, only = null, slice = null } = {}) {
   const { dir: mainDir, base } = baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
   const [hNew, hOld] = [await H(root), await H(mainDir)];
   const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(normIr(r.res.irJson)), first: r.first && r.first !== r ? sha256(normIr(r.first.res.irJson)) : null });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {}, added: [], streetsMarked: 0 };
+  let i = -1;
+  let elsewhere = 0; // (a split unit step) fixtures another part plans: counted, not planned here
   for (const [name, fx] of fixtures(root)) {
+    i++;
     if (only && !only.test(name)) continue;
     if (!fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name))) { out.added.push(name); continue; }
+    if (!inSlice(i, slice)) { elsewhere++; continue; }
     // a fixture this branch moved by name is planned from its base copy on the base (its old expectation) and its own here
     const oldFx = JSON.parse(fs.readFileSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name), 'utf8'));
     const oldPlan = { ...oldFx, plan: oldFx.plan ?? oldFx.answer?.plan, on: oldFx.on ?? (name.startsWith('asks/') ? 'asks' : undefined) };
@@ -75,7 +77,8 @@ export async function unchanged(root, { check, log = console.log, only = null } 
     check(same || (!a && !b), `${name}: ${same ? 'byte-identical (answers, overall, IR, first plan; kitVersion and the street ext normalised)' : !a && !b ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, base: b })}`}`);
   }
   const rows = Object.entries(out.fixtures);
-  out.n = rows.length;
+  out.n = rows.length + elsewhere;
+  if (slice) out.slice = { slices: slice, planned: rows.length, elsewhere };
   out.same = rows.filter(([, r]) => r.same).length;
   out.differ = rows.filter(([, r]) => !r.same && !r.named && !/errors on both/.test(r.err ?? '')).map(([k]) => k);
   out.namedMoved = rows.filter(([, r]) => !r.same && r.named).map(([k]) => k);

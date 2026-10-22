@@ -11,6 +11,8 @@ import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { SIBLING_MOVED, normSiblingIr } from './batch-0410.mjs';
+import { inSlice } from './gate-part.mjs';
+import { syncBaseTree } from './base-tree.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -22,14 +24,10 @@ export const EXCEPT = Object.freeze({
 /** The base worktree at the merge base with origin/main. */
 export function baseTree(root) {
   const dir = path.resolve(root, '..', 'architect-mc-F3-main');
-  execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']);
-  const base = execFileSync('git', ['-C', root, 'merge-base', 'HEAD', 'origin/main']).toString().trim();
-  if (!fs.existsSync(path.join(dir, '.git'))) execFileSync('git', ['-C', root, 'worktree', 'add', '-q', '--detach', dir, base]);
-  else execFileSync('git', ['-C', dir, 'checkout', '-q', '--detach', base]);
-  return { dir, base };
+  return syncBaseTree(root, dir); // (turbo) one fetch and checkout at a time; left alone at the base
 }
 
-export async function unchanged(root, { check, log = console.log, only = null } = {}) {
+export async function unchanged(root, { check, log = console.log, only = null, slice = null } = {}) {
   const { dir: mainDir, base } = baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
   const [hNew, hOld] = [await H(root), await H(mainDir)];
@@ -38,8 +36,13 @@ export async function unchanged(root, { check, log = console.log, only = null } 
   const norm = (r) => normSiblingIr(r.res.irJson);
   const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(norm(r)), first: r.first && r.first !== r ? sha256(norm(r.first)) : null });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {}, m18: {}, m19: {} };
+  let i = -1;
+  let elsewhere = 0; // (a split unit step) fixtures another part plans: counted, not planned here
   for (const [name, fx] of fixtures(root)) {
+    i++;
     if (only && !only.test(name)) continue;
+    // (counted as the whole loop's rows count: those on the base)
+    if (!inSlice(i, slice)) { if (fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name))) elsewhere++; continue; }
     const existsOld = fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name));
     let a, b, err = null, headRun = null;
     try { headRun = await planFixture(hNew, root, fx); a = sig(headRun.r); } catch (e) { err = `head: ${String(e.message).slice(0, 160)}`; }
@@ -63,7 +66,8 @@ export async function unchanged(root, { check, log = console.log, only = null } 
     check(same || (!a && !b), `${name}: ${same ? 'byte-identical (answers, overall, IR, first plan)' : !a && !b ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, base: b })}`}`);
   }
   const rows = Object.entries(out.fixtures).filter(([, r]) => r.existsOld);
-  out.n = rows.length;
+  out.n = rows.length + elsewhere;
+  if (slice) out.slice = { slices: slice, planned: rows.length, elsewhere };
   out.same = rows.filter(([, r]) => r.same).length;
   out.differ = rows.filter(([, r]) => !r.same && !r.excepted && !r.sibling).map(([k]) => k);
   if (!only) check(out.n >= 230, `${out.n} committed fixtures planned (every dir, the 59 asks included)`);

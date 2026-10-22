@@ -336,6 +336,6 @@ async function v58Ingame(ctx) {
 
 export const items = {
   unit: [{ name: 'hyc-unit', run: gateUnit }],
-  ingame: [{ name: 'hyc-water-gate', run: gateIngame }, { name: 'hy-v58 (the batch: a routed course through a ring wall)', run: v58Ingame }],
+  ingame: [{ key: 'hyc-gate', name: 'hyc-water-gate', run: gateIngame }, { key: 'hyc-v58', name: 'hy-v58 (the batch: a routed course through a ring wall)', run: v58Ingame }],
   look: [{ name: 'hyc-look', run: gateLook }],
 };
