@@ -260,7 +260,38 @@ Each line is a nightly's miss: the date, the step, what failed, where it was cac
 
 ### Measured
 
-MEASURED_PLACEHOLDER
+Offline, 2026-10-22. The coordinator stopped the first traced warm-up run to keep the machine free for turbo's measurement, so no
+real release has run against a warm cache yet.
+
+- **The first traced run** (`artifacts/gate-runs-affected/20261022-161855-release`, `release --full` at 703187d5, 3 shards, stopped
+  by SIGINT after 1h50m with 22 steps done):
+  - 13 PASSes, each trace inside its set after one `merge`: unit-mod, unit-kit, rs-survival, t3a-look, h-ingame, hy-unit,
+    hy-ingame, irr-ingame, k1a-look, 4d-all-full, 4e-orders-full, 5b-chains-full and 6a-crash. They are recorded in the live cache
+    (`step-cache.mjs import`), and their sets are marked `verified`;
+  - 2 inputs-map misses on the first pass, both widened by `merge`: 5b-chains-full copies kit/ (kit/lint/** was missing), and
+    unit-kit stats four bare names at the repo root;
+  - fl-unit, f3-unit, voc-unit and vocc-unit failed for two reasons. The source worktree had no `.gradle-home` or
+    `sidecar/node_modules` (the drivers run gradle and vitest there; the nightly now clones both). And the slices' "against the
+    merge base" items fail on main, where the merge base is HEAD.
+- **Selection examples** (`--plan --since <base> --release v0.42.0` on a scratch commit over 8b5e1287; `--assume-warm <base>`
+  stands for "a full nightly passed at the base"):
+
+  | the release changes | the rule | the cache alone (`--no-auto-full --assume-warm`) | estimate (rule / cache) |
+  |---|---|---|---|
+  | one line of docs/PLAN.md | not --full | **18 of 182 run**: the 12 canaries, the probes' evidence (h-probe, y-ingame, cu-survival), 4e-orders-full for the crash suite, and the uncacheable umt-long, apijars and 6b-versionc. 164 CACHED | 2h20m on 2 shards + 2 lanes |
+  | one file in kit/lib/forms/ | **--full** (engine) | 164 of 168 run. CACHED: c33-unit and the three lints (their sets are not yet verified: a lint's computed kit imports come in with its first trace) | 5h53m / 5h16m |
+  | mod/.../region/RegionFluids.java | **--full** (engine) | 162 of 168 run. CACHED: unit-sidecar, c33-unit, water-lint and the three lints | 5h53m / 5h15m |
+
+  A kit/lib or mod/src/main change re-runs every in-game step, because the jar and the sidecar classes hold it. Docs, a driver, a
+  kit test, a lint or a fixture re-run only the steps whose sets hold them.
+- **0.41.0's history** (`tools/step-cache.mjs replay --at a6a947bc` over the batch's 34 slice, integration and verify runs, keys
+  only): 15 of the 169 steps they ran would have been served at v0.41.0's merge commit. 14 come from the last integration slice
+  run at 6d736f80, the batch's final merges having moved kit/lint/shard.mjs, the versions and the merge base under the rest; c33-unit
+  comes from aea80cf5. The slices' own branch-head PASSes serve nothing at the merged head. So the saving on a batch release comes
+  from the warm nightly at the integration head and from releases that change no jar or kit code, not from the slices' runs.
+- **The analysis cache**: `step-cache.mjs import-history --into artifacts/step-cache-history` over every run since the toolchain's
+  install (2026-10-21 18:16Z, node 24.22.1) recorded 66 untraced entries for the 13 verified steps (514 older runs skipped). Without
+  the verified-set rule it was 435. GATE_STEP_CACHE_DIR points a plan at it; the live cache never takes untraced entries.
 
 ## Gate speed (2026-10-17): scheduling, timeouts, one kit suite
 
