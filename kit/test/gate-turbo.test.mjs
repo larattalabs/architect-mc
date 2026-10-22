@@ -160,3 +160,23 @@ test('chooseTurbo: no cpu cap; plan, memory and ports bind; lanes take memory an
   assert.equal(chooseTurbo(tc, { max: 12, probe, lanes: 2, wallFor: wall, pairs: 8 }).n, 6);
   assert.equal(chooseTurbo(tc, { max: 12, probe, lanes: 0, wallFor: (n) => Math.max(30, 400 / n), pairs: 30 }).n, 12);
 });
+
+test('a turbo run hands the machine straight to the next queued turbo run: a pre-queue runner cannot slip in between', async () => {
+  const dir = tmp();
+  const t1 = await queued(dir, run('t1', true));
+  assert.ok((await go(dir, t1)).acquired);
+  const t2 = await queued(dir, run('t2', true));
+  assert.equal((await go(dir, t2)).acquired, false);
+  assert.equal(releaseAll(dir, t1.pid), t2.pid, 'handed to t2');
+  for (let i = 1; i <= 8; i++) {
+    const h = JSON.parse(fs.readFileSync(slotFile(dir, i)));
+    assert.equal(h.pid, t2.pid, `slot ${i} is t2's at once`);
+    assert.equal(h.handedOverBy, t1.pid);
+  }
+  assert.ok((await go(dir, t2)).acquired);
+  // a shared run at the head gets nothing handed: the slots are freed for it
+  const b = await queued(dir, run('b'));
+  assert.equal(releaseAll(dir, t2.pid), null);
+  assert.equal(liveHolders(dir).length, 0);
+  assert.ok((await go(dir, b)).acquired);
+});

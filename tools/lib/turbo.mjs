@@ -207,20 +207,59 @@ export async function tryAcquire(dir, me, { slots, fill = slots, decide = async 
   });
 }
 
-/** Removes every slot file holding pid and its ticket (sync: also safe on process exit). */
-export function releaseAll(dir, pid) {
-  for (const { i } of readSlots(dir, { alive: () => true })) {
-    const f = slotFile(dir, i);
+/** The mutex, synchronously (for release on exit): -> true when taken within `ms`. */
+function lockSync(dir, ms = 2000) {
+  const mutex = path.join(dir, '.mutex');
+  const end = Date.now() + ms;
+  for (;;) {
     try {
-      if (readJson(f)?.pid === pid) fs.rmSync(f, { force: true });
-    } catch {
-      // gone
+      fs.mkdirSync(mutex);
+      return true;
+    } catch (e) {
+      if (e.code !== 'EEXIST') return false;
+      try {
+        if (Date.now() - fs.statSync(mutex).mtimeMs > 10_000) fs.rmdirSync(mutex);
+      } catch {
+        // raced
+      }
+      if (Date.now() > end) return false;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
     }
   }
+}
+
+/**
+ * Removes every slot file holding pid and its ticket (sync: also safe on process exit). A turbo run hands its slots straight to
+ * the next turbo run when that one is at the head of the queue (they become its reserved slots), so no runner from before the
+ * queue (which only looks at slot files) slips in between two turbo runs. Otherwise the slots are freed.
+ */
+export function releaseAll(dir, pid, { handoff = true } = {}) {
+  const got = lockSync(dir);
   try {
-    for (const f of fs.readdirSync(queueDir(dir))) if (f.endsWith(`-${pid}.json`)) fs.rmSync(path.join(queueDir(dir), f), { force: true });
-  } catch {
-    // no queue
+    try {
+      for (const f of fs.readdirSync(queueDir(dir))) if (f.endsWith(`-${pid}.json`)) fs.rmSync(path.join(queueDir(dir), f), { force: true });
+    } catch {
+      // no queue
+    }
+    const mine = readSlots(dir, { alive: () => true }).map(({ i }) => ({ i, h: readJson(slotFile(dir, i)) })).filter((x) => x.h?.pid === pid);
+    const head = got && handoff && mine.some((x) => x.h.turbo) ? liveTickets(dir)[0] : null;
+    for (const { i } of mine) {
+      try {
+        if (head?.turbo && head.pid !== pid) writeAtomic(slotFile(dir, i), { pid: head.pid, worktree: head.worktree, chain: head.chain, turbo: true, state: 'reserving', enqueuedAt: head.enqueuedAt, handedOverBy: pid });
+        else fs.rmSync(slotFile(dir, i), { force: true });
+      } catch {
+        // gone
+      }
+    }
+    return head?.turbo ? head.pid : null;
+  } finally {
+    if (got) {
+      try {
+        fs.rmdirSync(path.join(dir, '.mutex'));
+      } catch {
+        // gone
+      }
+    }
   }
 }
 
