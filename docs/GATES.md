@@ -196,6 +196,9 @@ release tier's 60 plus what a batch's slice run covered (0.41.0's integration sl
    `unit-kit` is the exception: when it is CACHED, its recorded JUnit report for the same kit tree is copied into the run and serves
    the kit-suite readers (kit-reuse.mjs checks the tree).
 
+**Split steps** (turbo, docs/GATES.md "Turbo"): each part `<id>/p<k>` has its own key (its own entry: the section env) over its
+parent's input set, and is CACHED or run on its own; a canary or a judged bench takes all its parts.
+
 **`--full`** runs every candidate and every rotation option (the full megaB and throughput stand for their --fast/-smoke variants). It
 is **the rule, automatically,** when the release range touches one of these:
 - mod/build.gradle, mod/settings.gradle, the gradle wrapper, devserver/ or apitest/ build files;
@@ -210,11 +213,15 @@ What a CACHED step does not do: it does not re-measure. Its timing bars were rec
 ### The nightly (`tools/nightly.mjs`)
 
 At about 02:00 it:
-1. fetches origin and moves its own worktree (`../architect-mc-nightly`, detached) to origin/main. The main checkout is never
+1. waits for an idle machine: no live slot holder and no queue ticket in the slot dir. It takes no ticket while it waits
+   (`nightly.idleWaitMin`, 240 min, polled every 5 min), so it never queues ahead of a run, and skips the night if the machine
+   stays busy;
+2. fetches origin and moves its own worktree (`../architect-mc-nightly`, detached) to origin/main. The main checkout is never
    checked out or pulled. A nightly worktree with local changes skips the night;
-2. runs `release --full --no-cache` there, in its own run dirs (`../architect-mc-nightrun[-s<k>]`) and out dir
-   (`artifacts/gate-runs-nightly/`), plus `nightly.extraArgs` from gate-cache.json (the turbo lock once it lands);
-3. writes `artifacts/nightly/<date>/SUMMARY.md`, `summary.json` (head, verdict, counts, wall, slot wait, what didn't pass, PASSes
+3. runs `release --full --no-cache --turbo` there (`nightly.extraArgs`), in its own run dirs (`../architect-mc-nightrun[-s<k>]`)
+   and out dir (`artifacts/gate-runs-nightly/`). As a turbo run it holds the whole machine until it ends: a run started during
+   the night waits in the queue for it (FIFO), and nothing is killed;
+4. writes `artifacts/nightly/<date>/SUMMARY.md`, `summary.json` (head, verdict, counts, wall, slot wait, what didn't pass, PASSes
    recorded), `impact-map-misses.json`, `misses-log.md`, and `artifacts/nightly/latest.json` when the run finished.
 
 It sends no notification of any kind; the coordinator reads the summary. It never kills anything:
