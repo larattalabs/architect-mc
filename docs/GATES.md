@@ -356,12 +356,23 @@ it.
     - **tests with readable filters** (`gateRerunTests` makes the JVM run and log; the runner sets it only for these steps):
       - the test sources the patterns select at each commit (`@tests:<pattern>`; Gradle also matches Class.method, so a wildcard
         selects every test file whose name or text holds its fragments);
-      - the kit and sidecar paths those test sources name (`javaTestRefs`: literal `"../kit/..."` and `Path.of("..", "kit", ...)`
-        paths, a node module's closure, a directory's tree, or the whole tree when a source builds the path any other way);
+      - the repo paths those test sources name (`javaTestRefs`): literal `"../X/..."` and `Path.of("..", "X", ...)` paths for
+        any X (kit, sidecar, scenarios, ...), a node module's closure, or a directory's tree. A source that builds a path any other
+        way (`Path.of("..", var)`, `Path.of("..")`, `resolve(var)`) makes the whole repository its input;
       - the test resources;
       - the loaded bytecode.
     - **otherwise:** the whole build and test tree. That now applies to 3 steps only: f2-unit, f2-harvest and
       6cf2-scenario-scatter, whose `gradle(args)` wrapper passes a parameter.
+  - **gradle runs, as recognised:**
+    - A run is any `gradlew` the step's node processes launched: srcGradle's lock, or the tracer's record of the launch (kind
+      `x`; `spawnSync('./gradlew', ...)` called directly counts).
+    - A call is a test run unless every task it names is compile-only (compileJava, classes, testClasses, jar, headlessLaunch,
+      ...). build, check, umtLong and `:x:test` run tests.
+    - An `args` variable is resolved to its nearest array literal before the call.
+    - A message string that names gradlew is not a call.
+  - **kit-reuse** (a driver that answers its kit tests from the run's unit-kit report) delegates those tests to unit-kit. Its coverage
+    PASS serves only a run that holds unit-kit, which re-runs on any kit change.
+  - **`coverage.lazyAlways`** (gate6a-stubs.mjs) lists lazy paths that run state, not code, decides: they stay in.
   - **The 8 drivers that were unreadable:** f1, t1, t2, p0, s2, d and k1a only compile (api-compat), and pt2's
     `*${t.split('.').pop()}` template ranges over literal names, so it is readable. Gradle calls are now read from the code (comments
     stripped), with an `args` variable resolved to its array literal.
@@ -370,23 +381,25 @@ it.
 
   | commit | change | class files changed | map mode runs | coverage at least |
   |---|---|---|---|---|
-  | e5dafb64 | kit isLeaves (kit/lib/forms/states.mjs) | 0 | 209 | 14 |
-  | 0bb0c89e | RS realised provenance (11 files) | 14 | 204 | 13 |
-  | f5c73633 | RegionHash (5 files) | 6 | 204 | 6 |
-  | 8b4da151 | RS-b farmland (3 files) | 5 | 204 | 7 |
-  | 4d891398 | RP verify (1 Java file) | 2 | 204 | 5 |
+  | e5dafb64 | kit isLeaves (kit/lib/forms/states.mjs) | 0 | 209 | 15 |
+  | 0bb0c89e | RS realised provenance (11 files) | 14 | 204 | 15 |
+  | f5c73633 | RegionHash (5 files) | 6 | 204 | 9 |
+  | 8b4da151 | RS-b farmland (3 files) | 5 | 204 | 10 |
+  | 4d891398 | RP verify (1 Java file) | 2 | 204 | 8 |
 
   - **Who is in the floor:**
     - unit-mod, umt, p3-lint and p3-lint-long (the build and its tests);
     - f2-unit (its filters are unreadable);
+    - sch-unit, pt2-unit and rs-unit, whose selected Java tests build repo paths opaquely (ApiP0Test's `Path.of("..", file)`), so
+      the whole repo is their input;
     - the steps whose eager drivers or data moved: the RS steps for 0bb0c89e, rsb for 8b4da151;
-    - for the kit change: unit-kit, water-lint and the lints, which load it eagerly, plus the unit drivers whose Java tests name it.
+    - for the kit change: unit-kit, water-lint, the lints and x-unit, which load it eagerly, and mp-unit.
   - **Above the floor**, a step runs only if its run loaded a changed class or a changed node file, a lazily imported driver module
     included (f5c73633 changed `gate6ch-holders.mjs`, which only `gate6ch.mjs holders` loads).
   - **Before:** 157 and 20-30 with the full closure, and 35-50 with the gradle class kept.
 - **Why the kit change ran 157 before** (measured): 143 of the 157 held kit/lib/forms/states.mjs only through lazy `import()`s
   in shared drivers that most runs never execute. The main one is `gate6b.mjs base` → `scenarios.mjs` → `kit/lib/region/check.mjs`.
-  The eager-closure rule above, approved and built, takes it to 14.
+  The eager-closure rule above, approved and built, takes the floor to 15.
 
   The earlier bound, which kept the gradle class (`--source-gradle`):
 - **The same 5 commits, source keys** (`tools/step-cache.mjs coverage-select <commit>...`, against each parent).

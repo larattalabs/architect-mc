@@ -381,7 +381,10 @@
      "kit/lib/region/**"
     ]
    }
-  }
+  },
+  "lazyAlways": [
+   "tools/gate6a-stubs.mjs"
+  ]
  },
  "build": {
   "$comment": "The run-level build artifact (tools/lib/build-artifact.mjs): the classes of mod (main, client, test), devserver and apitest, compiled once per hash of these inputs in the worktree below, offline, with a manifest of every class file's digest in artifacts/build-cache/<hash>.json. A coverage-mode key holds the bytecode digests of the classes its run loaded; a failed or missing build means no coverage lookup.",

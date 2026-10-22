@@ -153,10 +153,15 @@ export function coverageSet({ entry, trace, cov, conf, tree, src, read, manifest
   // its drivers by their EAGER closure (top-level imports always load); a lazy import() counts when its run executed it (the
   // trace, below). A driver edit that starts executing a lazy path changes the driver itself, which is in this set
   for (const x of [...(entry.eager ?? entry.closure ?? []), ...(entry.data ?? [])]) set.add(x);
+  // (kit-reuse: a driver that answers its kit tests from the run's unit-kit report delegates them to unit-kit; the runner serves
+  // such a step from coverage only in a run that holds unit-kit, which re-runs on any kit change: gate-run's selection)
+  // lazy paths gated by run state rather than code (coverage.lazyAlways: gate6a-stubs runs when the game dir lacks the stubs)
+  for (const l of c.lazyAlways ?? []) if ((entry.closure ?? []).includes(l)) for (const x of moduleClosure([l], new Set(tree.keys()), { src, read }).files) set.add(x);
   for (const d of entry.derived ?? []) for (const x of conf.derived?.[d] ?? []) set.add(x);
   for (const x of entry.fingerprint ?? []) set.add(x);
   // classes other than the ones coverage replaces; gradle only when the step really ran gradle in the source checkout
-  const ranGradle = [...(trace?.keys() ?? [])].some((p) => p.startsWith('mod/.gradle/gate-gradle.lock'));
+  // a gradle run in the source checkout: srcGradle's lock, or any gradlew the step's processes launched (the tracer's kind x)
+  const ranGradle = [...(trace?.entries() ?? [])].some(([p, k]) => p.startsWith('mod/.gradle/gate-gradle.lock') || (k.has('x') && /gradlew$/.test(p)));
   for (const cls of entry.classes ?? []) {
     if ((c.replaces ?? ['jar', 'sidecar', 'world']).includes(cls)) continue;
     // gradle: kept whenever the run took the source checkout's gradle lock. Gradle may serve `test` FROM-CACHE (no JVM, no class
@@ -273,6 +278,9 @@ export function javaTestRefs(files, tree, read, src) {
     } else if (dirs.has(q)) out.add(`${q}/**`);
     else out.add(q); // absent: its appearance counts
   };
+  // any repo path: `"../X/..."` and `Path.of("..", "X", ...)` literals name it; `Path.of("..")`, `Path.of("..", <not a
+  // literal>)`, `Path.of("..", "X")` with nothing after, or `resolve(<not a literal>)` on such a base make the source opaque:
+  // the whole repo (every tracked file but docs) is its input
   for (const f of files) {
     let t = '';
     try {
@@ -280,20 +288,25 @@ export function javaTestRefs(files, tree, read, src) {
     } catch {
       continue;
     }
-    for (const top of ['kit', 'sidecar']) {
-      let opaque = false;
-      for (const m of t.matchAll(new RegExp(`"\\.\\./${top}(/[^"]*)?"`, 'g'))) {
-        if (!m[1] || m[1] === '/') opaque = true;
-        else addPath(`${top}${m[1]}`);
-      }
-      for (const m of t.matchAll(new RegExp(`Path\\.of\\(\\s*"\\.\\."\\s*,\\s*"${top}"((?:\\s*,\\s*"[^"]*")*)\\s*\\)`, 'g'))) {
-        const segs = [...m[1].matchAll(/"([^"]*)"/g)].map((x) => x[1]);
-        if (!segs.length) opaque = true;
-        else addPath([top, ...segs].join('/'));
-      }
-      if (new RegExp(`resolve\\("${top}[/"]`).test(t)) opaque = true;
-      if (opaque) out.add(`${top}/**`);
+    let opaque = false;
+    for (const m of t.matchAll(/"\.\.\/([^"]*)"/g)) {
+      if (!m[1] || m[1].endsWith('/')) (m[1] ? addPath(m[1]) : (opaque = true));
+      else addPath(m[1]);
     }
+    for (const m of t.matchAll(/Path\.of\(\s*"\.\."\s*(\)|,([^)]*)\))/g)) {
+      const args = (m[2] ?? '').split(',').map((a) => a.trim()).filter(Boolean);
+      if (!args.length || !args.every((a) => /^"[^"]*"$/.test(a))) {
+        opaque = true;
+        continue;
+      }
+      const segs = args.map((a) => a.slice(1, -1));
+      if (segs.length === 1 && dirs.has(segs[0])) {
+        // a base such as KIT = Path.of("..", "kit"): its literal resolve("a/b") uses are paths, anything else is opaque
+        out.add(`${segs[0]}/**`);
+      } else addPath(segs.join('/'));
+    }
+    if (/\bresolve\(\s*[^"\s)]/.test(t) && /Path\.of\(\s*"\.\."/.test(t)) opaque = true;
+    if (opaque) out.add('**');
   }
   return [...out].sort();
 }

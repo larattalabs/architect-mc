@@ -105,6 +105,35 @@ if (DIR && ROOTS?.length) {
   for (const n of ['readdir', 'opendir']) wrap(fp, n, 'd');
   for (const n of ['stat', 'lstat', 'access']) wrap(fp, n, 's');
   for (const n of ['cp', 'copyFile']) wrap(fp, n, 'r');
+  // gradle launches (kind x): evidence that the step ran gradle in a checkout, also without srcGradle's lock
+  try {
+    const cp = module.createRequire(import.meta.url)('node:child_process');
+    const seeGradle = (file, args, opts) => {
+      const cmd = [file, ...(Array.isArray(args) ? args : [])].join(' ');
+      if (!/gradlew/.test(cmd)) return;
+      const cwd = (Array.isArray(args) ? opts : args)?.cwd ?? process.cwd();
+      const m = /(?:^|[\s;&])(?:cd\s+(\S+)\s*&&\s*)?(\S*gradlew)/.exec(cmd);
+      record('x', path.resolve(String(cwd), m?.[1] ?? '.', m?.[2] ?? 'gradlew'));
+    };
+    for (const n of ['spawn', 'spawnSync', 'execFile', 'execFileSync', 'exec', 'execSync']) {
+      const orig = cp[n];
+      if (typeof orig !== 'function' || orig.__gateTrace) continue;
+      const f = function (...a) {
+        try {
+          seeGradle(a[0], a[1], a[2]);
+        } catch {
+          // never fail the call
+        }
+        return orig.apply(this, a);
+      };
+      Object.defineProperty(f, '__gateTrace', { value: true });
+      for (const k of Object.keys(orig)) f[k] = orig[k];
+      if (orig[Symbol.for('nodejs.util.promisify.custom')]) f[Symbol.for('nodejs.util.promisify.custom')] = orig[Symbol.for('nodejs.util.promisify.custom')];
+      cp[n] = f;
+    }
+  } catch {
+    // no child_process
+  }
   // creates of directories: not inputs, but evidence (a step that ran gradle in the source checkout takes mod/.gradle/gate-gradle.lock)
   wrap(fs, 'mkdirSync', 'w');
   // worker threads: --import preloads don't reach them, so a file worker starts through a small eval wrapper that loads this

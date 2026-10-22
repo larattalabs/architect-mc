@@ -7076,7 +7076,16 @@
     "PT2_V0270"
    ],
    "testFilters": [
+    "*AdoptTest",
+    "*ApiP0Test",
+    "*ApiPT2Test",
+    "*ApiPTTest",
+    "*ApiRulesTest",
+    "*BuildsAdoptTest",
+    "*JournalAdoptTest",
+    "*JournalPtTest",
     "*Pt2Old027ReadTest",
+    "*java",
     "Pt2Old027ReadTest.java",
     "api.ApiPT2Test",
     "api.ApiPTTest",
@@ -7368,7 +7377,16 @@
     ]
    },
    "testFilters": [
+    "*AdoptTest",
+    "*ApiP0Test",
+    "*ApiPT2Test",
+    "*ApiPTTest",
+    "*ApiRulesTest",
+    "*BuildsAdoptTest",
+    "*JournalAdoptTest",
+    "*JournalPtTest",
     "*Pt2Old027ReadTest",
+    "*java",
     "Pt2Old027ReadTest.java",
     "api.ApiPT2Test",
     "api.ApiPTTest",
@@ -7665,7 +7683,16 @@
     ]
    },
    "testFilters": [
+    "*AdoptTest",
+    "*ApiP0Test",
+    "*ApiPT2Test",
+    "*ApiPTTest",
+    "*ApiRulesTest",
+    "*BuildsAdoptTest",
+    "*JournalAdoptTest",
+    "*JournalPtTest",
     "*Pt2Old027ReadTest",
+    "*java",
     "Pt2Old027ReadTest.java",
     "api.ApiPT2Test",
     "api.ApiPTTest",
@@ -43420,14 +43447,7 @@
     "GATE6C0B_OUT",
     "GATE6C0B_RUN"
    ],
-   "testFilters": [
-    "**FAIL**",
-    "*MirrorFitTest",
-    "*MirrorOracleTest",
-    "*Wire0bTest"
-   ],
-   "testFiltersComplete": true,
-   "gradleUse": "tests",
+   "gradleUse": "compile",
    "eager": [
     "tools/gate6c0b.mjs",
     "tools/lib/devclient.mjs",
@@ -43534,14 +43554,7 @@
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
-   "testFilters": [
-    "**FAIL**",
-    "*MirrorFitTest",
-    "*MirrorOracleTest",
-    "*Wire0bTest"
-   ],
-   "testFiltersComplete": true,
-   "gradleUse": "tests",
+   "gradleUse": "compile",
    "eager": [
     "tools/gate6c0b.mjs",
     "tools/lib/devclient.mjs",

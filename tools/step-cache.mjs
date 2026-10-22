@@ -73,7 +73,9 @@ async function anyModeMatcher(id, tree) {
       const files = testSourcesMatching(e.testFilters ?? [], tree, conf.coverage?.testRoots ?? ['mod/src/test/java'], show);
       gradleKeep = [...files, ...javaTestRefs(files, tree, show, SRC), 'mod/src/test/resources/**'];
     } else if (keepGradle) gradleKeep = conf.classes.gradle ?? [];
-    const statics = argv.includes('--full-closure') ? (e.closure ?? []) : (e.eager ?? e.closure ?? []);
+    const statics = argv.includes('--full-closure') ? (e.closure ?? []) : [...(e.eager ?? e.closure ?? []),
+      // kit-reuse answers kit tests without loading them: their kit files stay in; lazy paths gated by state stay in
+      ...(conf.coverage?.lazyAlways ?? []).filter((l) => (e.closure ?? []).includes(l))];
     const keep = setMatcher([...statics, ...(e.data ?? []), ...(conf.runnerKey?.files ?? []), ...gradleKeep]);
     return { cov: true, m: (p) => keep(p) || safetyCache(p) };
   }
