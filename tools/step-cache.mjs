@@ -59,7 +59,11 @@ async function anyModeMatcher(id, tree) {
   // the build artifact design (default): a coverage step keeps no gradle class and no Java source but the safety set's; its loaded
   // classes are keyed by bytecode. --source-gradle: the older bound (the gradle class kept)
   if (!argv.includes('--source-gradle')) {
-    const keep = setMatcher([...(e.closure ?? []), ...(e.data ?? []), ...(conf.runnerKey?.files ?? [])]);
+    // a client-less step with the gradle class runs gradle tests in the source checkout: it keeps the class (whole build and
+    // test tree: gradle may serve the tests from its cache, and --tests filters take new classes); an in-game step drops it
+    // unless its run's trace shows the source gradle lock (decided at record time)
+    const keepGradle = (rawCfg.steps[parentOf(id)]?.client ?? 'none') === 'none' && (e.classes ?? []).includes('gradle');
+    const keep = setMatcher([...(e.closure ?? []), ...(e.data ?? []), ...(conf.runnerKey?.files ?? []), ...(keepGradle ? (conf.classes.gradle ?? []) : [])]);
     return { cov: true, m: (p) => keep(p) || safetyCache(p) };
   }
   // --gradle-in-game-off: an in-game step keeps the gradle class only when its run takes the source gradle lock (known from its

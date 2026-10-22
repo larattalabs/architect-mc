@@ -157,9 +157,10 @@ export function coverageSet({ entry, trace, cov, conf, tree, src, read, manifest
   const ranGradle = [...(trace?.keys() ?? [])].some((p) => p.startsWith('mod/.gradle/gate-gradle.lock'));
   for (const cls of entry.classes ?? []) {
     if ((c.replaces ?? ['jar', 'sidecar', 'world']).includes(cls)) continue;
-    // gradle: with the run-level build artifact (manifest), a source-checkout test run's compile is the artifact's (it built
-    // the same sources) and its classes are logged like any JVM's; without it, kept when the run took the source gradle lock
-    if (cls === 'gradle' && (manifest?.ok || !ranGradle)) continue;
+    // gradle: kept whenever the run took the source checkout's gradle lock. Gradle may serve `test` FROM-CACHE (no JVM, no class
+    // log) and a --tests filter picks up new test classes by name, so a step that ran gradle depends on the whole build and test
+    // tree, not only on what loaded. A run that never ran gradle there drops it (its classes are keyed by bytecode or source)
+    if (cls === 'gradle' && !ranGradle) continue;
     for (const x of conf.classes?.[cls] ?? []) set.add(x);
   }
   for (const x of safetyGlobs(c, tree, src, read)) set.add(x);

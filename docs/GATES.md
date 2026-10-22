@@ -302,12 +302,16 @@ cheap.
   mod/, devserver/ and apitest/, plus the kit files the build reads and the compiler), offline, in `../architect-mc-buildcache`.
   A manifest of every class file's digest goes to `artifacts/build-cache/<hash>.json`. A build of 1283 classes takes about 40 s
   and is byte-identical across worktrees.
-- **What a coverage-mode key holds instead of the build:** the bytecode digests of the classes its run loaded. It no longer holds
-  their Java sources or the `gradle` class.
+- **What a coverage-mode key holds instead of the build:** the bytecode digests of the classes its run loaded, instead of their
+  Java sources. It keeps the `gradle` class only when its run took the source checkout's gradle lock: gradle may serve those
+  tests from its cache with no class log, and a `--tests` filter takes new test classes by name.
   - A source edit that compiles to the same bytecode, or a change to a class the step never loaded, leaves the key alone.
   - A constant inlined into a loaded class changes that class's bytecode, so the global constant rule only applies to PASSes
     recorded without an artifact.
 - **The guard:** a build that fails, or can't run, gives no coverage key, so every coverage-mode step runs.
+  - A compile failure is kept in the manifest cache. A timeout, a lock problem or a dirty cache worktree is not, so the next run
+    retries.
+  - The build environment drops `LAB_UI_DIR`, `ORG_GRADLE_PROJECT_*` and the gate's tracing variables.
 - **Not the whole artifact's hash** in every key. That hash moves on any Java change, which would put the floor back at "every
   step". The per-class digests are that guard at the granularity a step actually consumes.
 - **The gradle-cwd steps** (unit-mod, umt, p3-lint) are the build and its whole test suite, so they keep the whole trees.
@@ -340,17 +344,28 @@ it.
 - **A real JVM** (`./gradlew test --tests *IrRoadExtTest` with the class-load log): 353 `dev.larattalabs` classes, every one mapped
   to its source. The coverage set it gives an in-game entry holds 91 of the 345 mod/src/main files.
 - **5 recent commits, with the build artifact (the design)** (`tools/step-cache.mjs coverage-select <commits> --bytecode`). Both
-  sides are compiled and the changed class files listed. "At least" is what runs whatever the coverage says: the gradle-cwd steps,
-  and the steps whose drivers, data, runner or safety set moved. Above that, a step runs only if its run loaded a changed class (or
-  touched a changed node file). Of the 210 cacheable steps:
+  sides are compiled and the changed class files listed. "At least" is what runs whatever the coverage says:
+  - the gradle-cwd steps (unit-mod, umt, p3-lint, p3-lint-long);
+  - about 30 client-less unit drivers that run `./gradlew test --tests ...` in the source checkout. They keep the whole build and
+    test tree: gradle can serve `test` FROM-CACHE, so with no JVM there is no class log, and a `--tests` filter picks up new test
+    classes by name;
+  - the steps whose drivers, data, runner or safety set moved.
+
+  Above that floor, an in-game step runs only if its run loaded a changed class (or touched a changed node file). Of the 210
+  cacheable steps:
 
   | commit | change | class files changed | map mode runs | coverage at least |
   |---|---|---|---|---|
-  | e5dafb64 | kit isLeaves (1 kit/lib file) | 0 | 209 | 149 (the drivers import that kit module) |
-  | 0bb0c89e | RS realised provenance (11 files) | 14 (Realised, InfraPlace, ...) | 204 | 11 |
-  | f5c73633 | RegionHash (5 files) | 6 (RegionHash, RegionsMod, a test) | 204 | 22 |
-  | 8b4da151 | RS-b farmland (3 files) | 5 (Builder and its inner classes) | 204 | 6 |
-  | 4d891398 | RP verify (1 Java file) | 2 (RealisedRecords) | 204 | 4 (unit-mod, umt, p3-lint, p3-lint-long) |
+  | e5dafb64 | kit isLeaves (1 kit/lib file) | 0 | 209 | 157 (most in-game drivers import that kit module) |
+  | 0bb0c89e | RS realised provenance (11 files) | 14 (Realised, InfraPlace, ...) | 204 | 40 (the RS steps' drivers moved) |
+  | f5c73633 | RegionHash (5 files) | 6 (RegionHash, RegionsMod, a test) | 204 | 50 (the H and IRR drivers moved) |
+  | 8b4da151 | RS-b farmland (3 files) | 5 (Builder and its inner classes) | 204 | 37 |
+  | 4d891398 | RP verify (1 Java file) | 2 (RealisedRecords) | 204 | 35 |
+
+  The floor is a lower bound, not the expected count: the in-game steps that loaded a changed class run too, and that becomes
+  exact once coverage is recorded.
+  - The next lever is the unit drivers' source-checkout gradle runs: `--rerun` for those test tasks, and the test sources the
+    filter can match in their keys.
 
   The earlier bound, which kept the gradle class (`--source-gradle`):
 - **The same 5 commits, source keys** (`tools/step-cache.mjs coverage-select <commit>...`, against each parent).

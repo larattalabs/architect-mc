@@ -93,7 +93,13 @@ export function ensureBuild({ src, main, commit, conf, java, build = true, log =
         pid = Number(fs.readFileSync(path.join(lock, 'pid'), 'utf8'));
         process.kill(pid, 0);
       } catch {
-        fs.rmSync(lock, { recursive: true, force: true });
+        // a dead holder: one waiter wins the atomic rename, then takes the lock; the others wait again
+        try {
+          fs.renameSync(lock, `${lock}.stale.${process.pid}`);
+          fs.rmSync(`${lock}.stale.${process.pid}`, { recursive: true, force: true });
+        } catch {
+          // another waiter took it over
+        }
         continue;
       }
       if (i > 3600) return { ok: false, hash, error: `the build lock is held by pid ${pid}` };
@@ -111,7 +117,7 @@ export function ensureBuild({ src, main, commit, conf, java, build = true, log =
   try {
     if (!fs.existsSync(wt)) git(src, 'worktree', 'add', '--detach', wt, head);
     else {
-      if (git(wt, 'status', '--porcelain', '--untracked-files=no')) throw new Error(`${wt} has local changes`);
+      if (git(wt, 'status', '--porcelain', '--untracked-files=all')) throw new Error(`${wt} has local changes or untracked files`);
       git(wt, 'checkout', '-q', '--detach', head);
     }
     if (!fs.existsSync(path.join(wt, '.gradle-home', 'caches')) && fs.existsSync(path.join(main, '.gradle-home'))) {
@@ -119,24 +125,27 @@ export function ensureBuild({ src, main, commit, conf, java, build = true, log =
     }
     log(`build artifact ${hash}: compiling ${head.slice(0, 9)} in ${wt}`);
     const env = { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(wt, '.gradle-home') };
-    for (const k of Object.keys(env)) if (/^(JAVA_TOOL_OPTIONS|NODE_OPTIONS|GATE_TRACE_)/.test(k) || /^(ANTHROPIC_|CLAUDE)/.test(k)) delete env[k];
+    // nothing that changes what is compiled from outside the commit (a forced lab-ui checkout) and nothing of the gate's tracing
+    for (const k of Object.keys(env)) if (/^(JAVA_TOOL_OPTIONS|NODE_OPTIONS|GATE_TRACE_|LAB_UI_DIR|ORG_GRADLE_PROJECT_)/.test(k) || /^(ANTHROPIC_|CLAUDE)/.test(k)) delete env[k];
     const r = spawnSync('./gradlew', ['--offline', '--no-daemon', '-q', ...b.tasks], { cwd: path.join(wt, 'mod'), env, encoding: 'utf8', timeout: b.timeoutMin * 60_000, maxBuffer: 64 << 20 });
     const logFile = path.join(dir, `${hash}.log`);
     fs.writeFileSync(logFile, `${r.stdout ?? ''}${r.stderr ?? ''}`);
-    if (r.status !== 0) m = { ok: false, hash, head, error: `gradle exited ${r.status ?? r.signal}`, log: logFile, at: new Date().toISOString(), ms: Date.now() - t0 };
+    // a compile that fails is a fact of the commit (kept); a timeout or a signal is not (not kept: the next run tries again)
+    if (r.status !== 0) m = { ok: false, hash, head, error: `gradle exited ${r.status ?? r.signal}`, log: logFile, at: new Date().toISOString(), ms: Date.now() - t0, transient: r.status === null || !!r.error };
     else {
       if (git(wt, 'rev-parse', 'HEAD') !== head) throw new Error('the build worktree moved');
       m = { ok: true, hash, head, classes: classManifest(wt, b.classDirs), log: logFile, at: new Date().toISOString(), ms: Date.now() - t0 };
     }
   } catch (e) {
-    m = { ok: false, hash, head, error: e.message, at: new Date().toISOString(), ms: Date.now() - t0 };
+    m = { ok: false, hash, head, error: e.message, at: new Date().toISOString(), ms: Date.now() - t0, transient: true };
   } finally {
     fs.rmSync(lock, { recursive: true, force: true });
   }
+  loaded.set(hash, m);
+  if (m.transient) return m; // not cached: a worktree, lock or timeout problem is retried by the next run
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(m));
   fs.renameSync(tmp, file);
-  loaded.set(hash, m);
   return m;
 }
 
