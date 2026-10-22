@@ -15,7 +15,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { definitionNow, definitionsAt } from './gate-history.mjs';
-import { checkTrace, dirtyPaths, fingerprintOf, inputsHash, readTrace, treeAt } from './step-inputs.mjs';
+import { checkTrace, dirtyPaths, fingerprintOf, globRe, inputsHash, readTrace, treeAt } from './step-inputs.mjs';
 import { releaseContext } from '../release-context.mjs';
 import { entryOf, parentOf } from './step-split.mjs';
 import { constantChanges, coverageSet, setMatcher } from './step-coverage.mjs';
@@ -336,7 +336,7 @@ export function fullTwins(cfg) {
 export function autoFullWhy(conf, src, range, files, tags) {
   const af = conf.release?.autoFull ?? {};
   const why = [];
-  const re = (g) => new RegExp(`^${g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '.*').replace(/(?<!\.)\*/g, '[^/]*')}$`);
+  const re = (g) => globRe(g);
   const hit = files.filter((f) => (af.paths ?? []).some((g) => re(g).test(f)));
   if (hit.length) why.push(`build files changed: ${hit.join(', ')}`);
   if (af.gradleProperties && files.includes(af.gradleProperties) && range) {
@@ -348,6 +348,8 @@ export function autoFullWhy(conf, src, range, files, tags) {
       why.push(`${af.gradleProperties} changed (no diff)`);
     }
   }
+  const eng = files.filter((f) => (af.enginePaths ?? []).some((g) => re(g).test(f)));
+  if (eng.length) why.push(`engine list: ${eng.slice(0, 4).join(', ')}${eng.length > 4 ? ` and ${eng.length - 4} more` : ''}`);
   const t = (af.tags ?? []).filter((x) => tags.includes(x));
   if (t.length) why.push(`${t.join(', ')}-touching (impact tags)`);
   return why;
