@@ -223,62 +223,118 @@ if (!fs.existsSync(path.join(WT, 'tools', 'step-inputs.json'))) log('nightly: or
 
 // ------------------------------------------------------------------ the run
 
-const args = ['tools/gate-run.mjs', 'release', '--full', '--no-cache', '--run-dir', RUN_DIR, '--out', OUT, ...(wtConf.extraArgs ?? []), ...(flag('--plan') ? ['--plan'] : [])];
 const env = {};
 for (const [k, v] of Object.entries(process.env)) if (!/^(ANTHROPIC_|CLAUDE)/.test(k) && !/^GATE_NOTIFY/.test(k) && k !== 'AWS_BEARER_TOKEN_BEDROCK') env[k] = v;
-log(`nightly: node ${args.join(' ')} (cwd ${WT})`);
 const outFile = path.join(DAY, flag('--plan') ? 'plan.out' : 'gate-run.out');
-const fd = fs.openSync(outFile, 'a');
 const t0 = Date.now();
-const child = spawn(process.execPath, args, { cwd: WT, env, stdio: ['ignore', fd, fd] });
-summary.state = 'running';
-summary.runnerPid = child.pid;
-writeDay();
+let current = null; // the runner child now running
 // SIGTERM to the nightly passes on to its own runner only (the runner then stops its own steps and clients)
 const onSig = () => {
   try {
-    process.kill(child.pid, 'SIGTERM');
+    if (current) process.kill(current.pid, 'SIGTERM');
   } catch {
     // gone
   }
 };
 process.on('SIGTERM', onSig);
 process.on('SIGINT', onSig);
-const code = await new Promise((r) => child.on('exit', (c) => r(c ?? 1)));
-fs.closeSync(fd);
+
+// the yield guard (gate-cache.json nightly.yieldAfter, local time): past it, with another run queued, the turbo run is asked to
+// yield (SIGUSR2: it starts nothing new, its running steps finish); the steps it didn't start then run as a normal one-slot run
+const [yh, ym] = String(wtConf.yieldAfter ?? conf.yieldAfter ?? '05:30').split(':').map(Number);
+const pastCutoff = () => {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes() >= yh * 60 + (ym || 0);
+};
+async function queuedOthers(mine) {
+  try {
+    const t = await import(path.join(HERE, 'tools', 'lib', 'turbo.mjs'));
+    return t.liveTickets(SLOT_DIR, { prune: false }).filter((x) => !mine.includes(x.pid)).map((x) => t.describeRun(x));
+  } catch {
+    return [];
+  }
+}
+
+/** Runs gate-run with `args` to its end; -> { code, run, sm, pid }. `guard`: watch for the yield cutoff. */
+async function runGate(args, { guard = false } = {}) {
+  log(`nightly: node ${args.join(' ')} (cwd ${WT})`);
+  const fd = fs.openSync(outFile, 'a');
+  const child = spawn(process.execPath, args, { cwd: WT, env, stdio: ['ignore', fd, fd] });
+  current = child;
+  summary.state = 'running';
+  summary.runnerPid = child.pid;
+  writeDay();
+  let timer = null;
+  if (guard) {
+    timer = setInterval(async () => {
+      if (summary.yield || !pastCutoff()) return;
+      const q = await queuedOthers([process.pid, child.pid]);
+      if (!q.length) return;
+      summary.yield = { at: stamp(), cutoff: `${yh}:${String(ym || 0).padStart(2, '0')}`, queued: q };
+      writeDay();
+      log(`nightly: past ${summary.yield.cutoff} with a run queued (${q.join('; ')}): asking the turbo run to yield (SIGUSR2)`);
+      try {
+        process.kill(child.pid, 'SIGUSR2');
+      } catch {
+        // gone
+      }
+    }, 60_000);
+  }
+  const code = await new Promise((r) => child.on('exit', (c) => r(c ?? 1)));
+  if (timer) clearInterval(timer);
+  fs.closeSync(fd);
+  current = null;
+  let run = null;
+  try {
+    for (const d of fs.readdirSync(OUT).filter((x) => /-release$/.test(x)).sort().reverse()) {
+      if (readJson(path.join(OUT, d, 'summary.json'))?.runnerPid === child.pid) {
+        run = path.join(OUT, d);
+        break;
+      }
+    }
+  } catch {
+    // no out dir
+  }
+  return { code, run, sm: run ? readJson(path.join(run, 'summary.json')) : null, pid: child.pid };
+}
+
+const first = await runGate(['tools/gate-run.mjs', 'release', '--full', '--no-cache', '--run-dir', RUN_DIR, '--out', OUT, ...(wtConf.extraArgs ?? []), ...(flag('--plan') ? ['--plan'] : [])], { guard: !flag('--plan') });
 if (flag('--plan')) {
   summary.state = 'plan';
   writeDay();
   log(`nightly: plan written to ${outFile}`);
   process.exit(0);
 }
-
-// the run dir: the one whose runner was ours
-let run = null;
-try {
-  for (const d of fs.readdirSync(OUT).filter((x) => /-release$/.test(x)).sort().reverse()) {
-    const sm = readJson(path.join(OUT, d, 'summary.json'));
-    if (sm?.runnerPid === child.pid) {
-      run = path.join(OUT, d);
-      break;
-    }
-  }
-} catch {
-  // no out dir
+const runs = [first];
+if (first.sm?.yielded?.notStarted?.length) {
+  // the rest as a normal shared run: one slot, in the queue like any run (behind the run that was waiting)
+  const rest = first.sm.yielded.notStarted;
+  summary.yield = { ...(summary.yield ?? {}), yieldedAt: first.sm.yielded.at, notStarted: rest.length, firstRun: first.run };
+  log(`nightly: the turbo run yielded with ${rest.length} step(s) not started; running them as a one-slot run`);
+  const second = await runGate(['tools/gate-run.mjs', 'release', '--no-cache', '--no-turbo', '--only', rest.join(','), '--run-dir', RUN_DIR, '--out', OUT]);
+  summary.yield.secondRun = second.run;
+  runs.push(second);
 }
-const sm = run ? readJson(path.join(run, 'summary.json')) : null;
+const run = first.run;
+const allSteps = runs.flatMap((r) => (r.sm?.steps ?? []).filter((s) => !(s.status === 'SKIPPED' && s.error === 'yielded')).map((s) => ({ ...s, run: r.run })));
+const counts = {};
+for (const s of allSteps) counts[s.status] = (counts[s.status] ?? 0) + 1;
+const last = runs[runs.length - 1].sm;
+const sm = first.sm;
 Object.assign(summary, {
-  state: sm?.state ?? 'aborted', endedAt: stamp(), wallMin: Math.round((Date.now() - t0) / 600) / 100, exitCode: code, run, verdict: sm?.verdict ?? null,
-  counts: sm?.counts ?? null, steps: sm?.steps?.length ?? 0, slotWaitMin: sm?.slot?.waitedSeconds ? Math.round(sm.slot.waitedSeconds / 6) / 10 : 0,
-  notPassing: (sm?.steps ?? []).filter((s) => s.status !== 'PASS').map((s) => ({ id: s.id, status: s.status, failLines: (s.failLines ?? s.tail ?? []).slice(0, 3), log: s.log ? path.join(run, s.log) : null })),
-  recorded: (sm?.steps ?? []).filter((s) => s.cache?.recorded).length, inputsMisses: sm?.inputsMisses ?? [],
+  state: last?.state === 'done' && (sm?.state === 'done' || sm?.yielded) ? 'done' : sm?.state ?? 'aborted', endedAt: stamp(), wallMin: Math.round((Date.now() - t0) / 600) / 100,
+  exitCode: runs.map((r) => r.code), run, runs: runs.map((r) => r.run), verdict: runs.some((r) => !r.sm) ? null : allSteps.length && allSteps.every((x) => x.status === 'PASS') ? 'PASS' : 'FAIL',
+  counts, steps: allSteps.length, slotWaitMin: Math.round(runs.reduce((a, r) => a + (r.sm?.slot?.waitedSeconds ?? 0), 0) / 6) / 10,
+  notPassing: allSteps.filter((s) => s.status !== 'PASS').map((s) => ({ id: s.id, status: s.status, failLines: (s.failLines ?? s.tail ?? []).slice(0, 3), log: s.log ? path.join(s.run, s.log) : null })),
+  recorded: allSteps.filter((s) => s.cache?.recorded).length, inputsMisses: runs.flatMap((r) => r.sm?.inputsMisses ?? []),
 });
 
 // the impact-map misses against the last release that served steps from the cache
 let mm = { misses: [], explained: [], release: null };
-if (run) {
+for (const r of runs.filter((x) => x.run)) {
   try {
-    mm = impactMisses(run);
+    const m = impactMisses(r.run);
+    mm = { ...m, misses: [...mm.misses, ...m.misses], explained: [...mm.explained, ...m.explained], release: m.release ?? mm.release };
   } catch (e) {
     summary.missError = e.message;
   }
@@ -294,6 +350,7 @@ const md = [
   `# Nightly ${date}: ${summary.verdict ?? summary.state}`,
   '',
   `origin/main ${String(summary.head).slice(0, 9)}; \`release --full --no-cache\`, ${summary.steps} steps in ${summary.wallMin} min${summary.slotWaitMin ? ` (${summary.slotWaitMin} min waiting for a slot)` : ''}; run \`${run ?? '-'}\`.`,
+  ...(summary.yield?.yieldedAt ? [`**Yielded** at ${summary.yield.yieldedAt} (past ${summary.yield.cutoff} with ${summary.yield.queued?.length ?? '?'} run(s) queued): ${summary.yield.notStarted} step(s) ran afterwards as a one-slot run, \`${summary.yield.secondRun ?? '-'}\`.`] : []),
   `Steps: ${Object.entries(summary.counts ?? {}).map(([k, v]) => `${v} ${k}`).join(', ') || '-'}; ${summary.recorded} PASS(es) recorded in the step cache.`,
   '',
   `**Impact-map misses: ${mm.misses.length}**${mm.release ? ` (against the last cached release ${path.basename(mm.release.run)} @ ${String(mm.release.head).slice(0, 9)})` : ' (no release has served a step from the cache yet)'}.`,

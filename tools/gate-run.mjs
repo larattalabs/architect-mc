@@ -1658,6 +1658,19 @@ process.on('SIGINT', () => abort('SIGINT'));
 process.on('SIGTERM', () => abort('SIGTERM'));
 // unattended: a closed terminal (SIGHUP, EPIPE on stdout) must not end the run; everything also goes to runner.log
 process.on('SIGHUP', () => log('SIGHUP ignored (unattended)'));
+// SIGUSR2: yield (the nightly past its cutoff with a run queued, docs/GATES.md "The nightly"): start no new step, let the running
+// ones finish, then end with state "stopped" and `yielded` listing the steps not started (they are SKIPPED, error "yielded")
+let draining = null;
+process.on('SIGUSR2', () => {
+  if (draining) return;
+  draining = { at: new Date().toISOString(), why: 'SIGUSR2 (yield)' };
+  log('yield requested (SIGUSR2): no new step starts; the running ones finish');
+  try {
+    wakeAll();
+  } catch {
+    // before the scheduler started: the workers see `draining` when they start
+  }
+});
 process.stdout.on('error', () => {});
 process.stderr.on('error', () => {});
 process.on('uncaughtException', (e) => abort(`uncaught: ${e?.stack ?? e}`));
@@ -1762,7 +1775,7 @@ function skipBlocked() {
 }
 
 async function worker(sh) {
-  while (!stopped) {
+  while (!stopped && !draining) {
     skipBlocked();
     if (!st.pending.length) break;
     const i = pick(sh, st, shards);
@@ -1847,7 +1860,14 @@ async function worker(sh) {
 }
 
 await Promise.all(shards.map((sh) => worker(sh)));
+if (draining) {
+  const left = st.pending.map((j) => steps[j].id);
+  for (const j of st.pending) Object.assign(summary.steps[j], { status: 'SKIPPED', error: 'yielded' });
+  st.pending.length = 0;
+  summary.yielded = { ...draining, notStarted: left };
+  log(`yielded: ${left.length} step(s) not started: ${left.join(' ')}`);
+}
 finishing = true;
 for (const sh of shards) await stopClient(sh, 'end of chain');
-await finish(stopped ? 'stopped' : 'done');
+await finish(stopped || draining ? 'stopped' : 'done');
 process.exit(summary.verdict === 'PASS' ? 0 : 1);

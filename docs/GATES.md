@@ -225,8 +225,12 @@ At about 02:00 it:
 2. fetches origin and moves its own worktree (`../architect-mc-nightly`, detached) to origin/main. The main checkout is never
    checked out or pulled. A nightly worktree with local changes skips the night;
 3. runs `release --full --no-cache --turbo` there (`nightly.extraArgs`), in its own run dirs (`../architect-mc-nightrun[-s<k>]`)
-   and out dir (`artifacts/gate-runs-nightly/`). As a turbo run it holds the whole machine until it ends: a run started during
-   the night waits in the queue for it (FIFO), and nothing is killed;
+   and out dir (`artifacts/gate-runs-nightly/`). As a turbo run it holds the whole machine: a run started during the night waits in
+   the queue for it (FIFO), and nothing is killed. **The yield guard** (`nightly.yieldAfter`, 05:30 local): past it, with another run
+   queued, the nightly sends its runner SIGUSR2. The runner starts no new step, lets its running steps finish, and ends `stopped`
+   with `yielded` (the steps not started are SKIPPED, error "yielded"). The nightly then runs those steps as a normal one-slot run
+   (`release --no-cache --no-turbo --only ...`), which queues like any run. The summary records the yield, both runs and the
+   combined verdict;
 4. writes `artifacts/nightly/<date>/SUMMARY.md`, `summary.json` (head, verdict, counts, wall, slot wait, what didn't pass, PASSes
    recorded), `impact-map-misses.json`, `misses-log.md`, and `artifacts/nightly/latest.json` when the run finished.
 
