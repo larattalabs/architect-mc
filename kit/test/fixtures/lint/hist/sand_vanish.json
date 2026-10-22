@@ -1,0 +1,97 @@
+{
+ "about": "sand vanish (70fc0dd0): world sand resting on grass, and a plan that rewrites the grass under it to stone (tile-gravity's probe A, offline). TileCheck's dependents stage keeps a gravity block whose support is solid before and after (the fix); before it, every gravity block on a changed cell was cleared and the sand vanished. The lint models the dependents stage (S-GRAV, metric gravityKept); tile-gravity #2 keeps the vanilla no-falling-block half in game",
+ "claim": [
+  0,
+  0,
+  63,
+  63
+ ],
+ "ground": 64,
+ "volume": {
+  "box": [
+   0,
+   60,
+   0,
+   63,
+   72,
+   63
+  ],
+  "blocks": [
+   [
+    20,
+    65,
+    20,
+    23,
+    65,
+    23,
+    "minecraft:sand"
+   ]
+  ]
+ },
+ "spec": {
+  "stages": [
+   "ground"
+  ],
+  "entrance": [
+   10,
+   65,
+   10
+  ],
+  "parts": [
+   {
+    "id": "stroke",
+    "cols": [
+     20,
+     20,
+     64,
+     64,
+     0,
+     21,
+     20,
+     64,
+     64,
+     0,
+     22,
+     20,
+     64,
+     64,
+     0,
+     23,
+     20,
+     64,
+     64,
+     0,
+     20,
+     21,
+     64,
+     64,
+     0,
+     21,
+     21,
+     64,
+     64,
+     0,
+     22,
+     21,
+     64,
+     64,
+     0,
+     23,
+     21,
+     64,
+     64,
+     0
+    ],
+    "materials": [
+     "minecraft:stone"
+    ],
+    "cond": 0
+   }
+  ]
+ },
+ "mutation": {
+  "preFix": "gravity:sand-vanish",
+  "expect": "S-GRAV"
+ },
+ "expectKept": 8
+}

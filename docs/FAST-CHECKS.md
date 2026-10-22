@@ -1,6 +1,6 @@
 # Fast checks: what moves out of the game, and what it buys
 
-Status: analysis for a decision (2026-10-20, main at b4ff2bd4). **Update (chore/gate-waits):** the fixed waits, P0's three pure
+Status: analysis for a decision (2026-10-20, main at b4ff2bd4). **Update (feat/lint-p2, 2026-10-21):** P2 is built; see "P2 as built" and docs/GATES.md "Fast checks (P2)". **Update (chore/gate-waits):** the fixed waits, P0's three pure
 duplicates and the h-unit floor are done; see docs/GATES.md "Gate waits". **Update (chore/gate-fast-p1, 2026-10-21):** P1's moves
 for the undo steps (4e-orders, 4e-crash, 4d-all, c30, 5b-chains, 6a-eflat, 6a-staged, x-resume) are done; see docs/GATES.md "Fast
 checks P1". Each row the undo model touches says its P1 status in its disposition (**P1 done**, kept in slice, not moved, deferred). The look steps stay at the slice tier (Noah judges
@@ -306,6 +306,117 @@ slice ran (0a, 0b, sch, 5b-village). The calibration probe (UMT seeds replayed i
 - **Missed historically:** nested guard runs (72d305ba). It was a kit-to-Java schema mismatch that only `realiseApproved` in Java
   saw. Neither determinism nor any lint here catches it. A contract test that round-trips every emitted IR through the Java reader
   does, so add it to the unit tier.
+
+## P2 as built (feat/lint-p2, 2026-10-21)
+
+The structure and look lints are in `tools/lint.mjs` (cases `tools/lib/lint-cases.mjs`, `tools/lib/lint-look-cases.mjs`) over
+`kit/lib/lint/` (`vworld-fixtures.mjs` the loader shared with P3, `writers.mjs`, `roads.mjs`, `structure.mjs`, `look.mjs`,
+`hist.mjs`). Each in-game P2 row's status is in `tools/lint-coverage.json`. The gate side is docs/GATES.md "Fast checks (P2)".
+
+**The precondition** is built first: a realised == virtual row per writer kind, in every scenario run and in t3a-, t3b-, k1b- and
+h-ingame. It was 0 differing cells in all of them (GATES). Its classes are recorded, not tolerated blindly: a flat run has none
+but `child`.
+
+### Structure lint rules
+
+- **The checker:** every M-rule over the virtual world, including M10:bridge, M10:rope, M3/M4:tunnel, M2:wall, M8:wall and
+  M20/M26/M27.
+- **The lit world:** M2, M5, M6 and M8 again over the virtual world with the 4e street lanterns laid as the mod lays them.
+  - The posts equal the realised dumps cell for cell on S7 and districts_demo, natural and flat; the SMOKE row keeps checking
+    that.
+  - The kit light is the game's: the light probe matched 97k cells over six fixtures.
+  - The lint's M5 over S7's walk area is 0.13% (natural) and 0.00% (flat). Without the lanterns it read 53%: the in-game
+    re-read only ever saw the realised lanterns.
+- **S-KEEP:** no written cell in keep-out, protected areas, a tracked build's claim box (its door and bed partners included) or
+  a wall's `around` region. The bodies' sets are M25:clear.
+- **S-LOTS:** no lot box over a street or route walk, apart from the entrance's approach.
+- **S-FOOT:** a lamp post is never on a dirt path the region did not write.
+- **S-LAND:** a deck's or floor's end rows lie on the route's walk footprint at the deck's width.
+- **S-GRAV:** the dependents stage keeps a gravity block whose support stays solid (TileCheck modelled stage by stage).
+- **S-FELL:** felling stops at protected areas, builds and the claim (over a frozen volume's logs).
+- **S-DOOR:** a build record's claim box holds both halves of its doors and beds, and a lifted build's door is an entrance.
+- **S-FARM:** a zone asking a farm pond with a farm lot, its villager use given or implied, gets one or says why.
+- **The refusal set:** each corpus fixture expecting a refused code answers it: OVERLAP, PROTECTED, NO_ROOM, WATER, OUT_OF_CLAIM,
+  MOVER, UNREACHABLE and the rest. NO_EDGE is checked by `d2:crest`. PALETTE is the mod's own code and stays in game; the kit's
+  palette rule is checked by `p0:vocc`.
+- **The even-width fuzz:** a bridge, rope bridge and tunnel at widths 2 and 4 (rope 2), each on both axes and both ways: 20 plans.
+
+### Cases and runtime
+
+The cases are 49:
+- the 11 scenario goldens re-planned by the checkout's kit, plus 5 flat variants;
+- S7's four path bibles;
+- D2's crest;
+- the pinned hill;
+- the plan/0 corpus (kc, irr, rope, tunnel, t3a, k1a, refused, voc, vocc, h, hy and valid's 59 Steward plans) with its broken
+  variants;
+- the fuzz;
+- five historical fixtures.
+
+Runtime: 50 s warm, 3.6 min with a cold plan cache, at load 40-58.
+
+### Historical bugs and the mutation evidence
+
+`node tools/lint.mjs mutations` reproduces each bug, and every one FAILs the lint.
+
+| bug | reproduced by | caught by |
+|---|---|---|
+| wall through the fountain (v51; KC f88ec297) | kit: both layers of the fix reverted in a scratch copy (wall.mjs's body-blind grid, plan.mjs's clear scan); also the broken variant kc/u01 | M25:clear on k01_forge (`w_forge_wall` writes 5 of the fountain's cells) |
+| KC keep-clear finds (f88ec297) | kit: light.mjs's kept-cell skip reverted; broken variants kc/u02-u04 | M25:clear on k06_lamp (a lamp in the fountain's watch) |
+| KC/HY lamp in a course's spill (e8bc2e57) | kit: the spill columns and the kept-cell skip reverted | M25:clear on hy/s01_steward_farm (an apron lamp in mill_race's spill) |
+| even-width bridges, ropes, tunnels (c4f1c8f9, 9ba60b79) | kit: ropeGeom.latOn back to `lateral` | S-LAND in even:bridge, even:rope, even:tunnel (a width-2 deck running +z stands off its walk) |
+| farm typed lot (65d61b0b) | kit: pond.mjs's implied villager use and its "no farm lot" note reverted; Steward's hamlet fixture | S-FARM (no pond, no note) |
+| lamp on dirt path (52cc9606, c494ddab) | model: roads.mjs's pre-fix foot rule; fixture hist/lamp_path (a village's dirt path beside a street) | S-FOOT (4 posts on the path) |
+| sand vanish (70fc0dd0) | model: the dependents stage's pre-fix rule; fixture hist/sand_vanish (tile-gravity's probe A offline) | S-GRAV (8 sand blocks cleared) |
+| C31 felling into protected areas (5cc0d7f1) | model: unbounded felling; fixture hist/c31_felling (a branch into a garden) | S-FELL (4 logs in the garden) |
+| C34 / C34b claim-box door (f5204066, a0530bc3) | broken variants of hist/c34_door: the pre-fix records (the box cut at the door, the lifted hut with no entrance) | S-DOOR |
+
+Notes on the evidence:
+- **Java-side bugs.** Four were Java-side (lamp path, sand, C31, C34). The lint catches them given its model of the Java rule.
+  The model's fidelity is guarded by the realised == virtual row (the lanterns) or by the KEEP-INGAME probes, which stay
+  (tile-gravity #2, c31-felling #1, pt's claim rows).
+- **The farm typed lot** is caught on the Steward-shaped hamlet, which is now a lint fixture (risk 6).
+
+### Look lint
+
+The rules run over the settlement's paving. The 4e roads are laid as RoadPlan lays them (`roads.mjs groundWalk`, FL's port).
+vworld's per-segment road model differs on curves, so the look lint does not use it.
+
+Hard rules (FAIL):
+- L-GAP: road/verge seams;
+- L-STRING: loose one-wide strings off any wider paving;
+- L-LINK: one-block links from the door;
+- L-STUB: pieces of a zone's paving that join nothing;
+- L-END: dead lanes, paths that stop short in grass, and streets that end at the hub on no paving;
+- L-LAMP: lamps under 6 apart over the whole region, the 4e lanterns included.
+
+Taste rules (WARN): T-ORGANIC, T-BATTER (paving over air: the slope-pad batter undercut), T-LAMP (stranded lamps) and T-PALETTE.
+
+**Calibration (case `fl:calibration`).** FL's gallery plans before the look fixes (957d5c30) and after (51ddd83e): v66-v71 and
+fl/w01-w04.
+- Every one of Noah's complaints is flagged on every v1 plan where FL's own encoding has it: L1 10/10, L2 strings 10/10, stubs
+  5/5, L3 7/7, L4 10/10, and L5 2/2 counting the visual street ends.
+- Every v2 plan is clean of every hard rule; one T-LAMP warning remains on v69.
+
+Main's goldens: S7 and districts_demo carry the pre-FL lamp spacing that FL fixes, plus one districts hub end. They are in the
+baseline until FL merges.
+
+### Row status, against the 53 P2-marked rows below
+
+- **Trimmed at the slice tier (3 rows):**
+  - w-ingame #8 and #9: pathbibles keeps one bible in game, packed_mud, the built verge that keeps the lint's RoadPlan model honest;
+    the other three are the lint's;
+  - d2-ingame #7: the crest round. With it go one of three instances of #9, #10 and #11 at the slice tier.
+  The full steps run at release.
+- **Covered by a lint case and kept in game (42 rows).** They cost about 0 s beside the SMOKE row's dumps, take seconds (d2's
+  refusals), or are interleaved with SMOKE or KEEP groups: the scenarios' G-REAL rows, the connector re-reads, d, t2, v, vocc and
+  voc. Trimming them would save nothing.
+- **SMOKE (8 rows):** kept, including the realised == virtual rows for forms and scatter.
+- **Without a committed fixture, still in game:** d2 #8 (the biome edge needs the desert/jungle site's biome grid), b-ingame #10
+  (no brush fixture), t3a-natural and t3a-frozen #4 (the river crossings are no goldens), and the mod's PALETTE code.
+
+**What it saves:** about 1 min of a slice's wall time (median 104.0 → 102.9 over the 11 baseline slices that ran w-ingame or
+d2-ingame). That is close to this doc's projection once the G-REAL rows' dumps are counted as the SMOKE row's.
 
 ## What stays in game at the slice tier (after P3)
 

@@ -1,0 +1,165 @@
+{
+ "$comment": "Noah's FL look complaints (the gallery review 2026-10-20, CONTRACT FL as built: L1 verge gaps, L2 loose strings (L2s) and stubs (L2p), L3 adjacent lamps, L4 one-block house links, L5 paths ending in grass at the hub) as FL's own encoding (kit/test/fl-written.mjs at slice/FL 51ddd83e) counted on the same plans: v1 = FL as built before the look fixes (957d5c30), v2 = after (51ddd83e). L3 is the closest lamp pair when under 6 (0: none). L5 counts include FL's own 'no hubLanding recorded' meta line, which v1 never records: only the street-end lines are visual. Plans captured by planning each fixture with that commit's kit (fixture.json; ir/meta gzipped); the IRs record kit 0.39.0 (FL's), which the look lint re-stamps to read (format 1, no new op).",
+ "labels": {
+  "v1/v66_fl_ring": {
+   "L1": 165,
+   "L2s": 132,
+   "L2p": 0,
+   "L3": 4,
+   "L4": 24,
+   "L5": 1
+  },
+  "v1/v67_fl_around_pond": {
+   "L1": 81,
+   "L2s": 50,
+   "L2p": 2,
+   "L3": 0,
+   "L4": 14,
+   "L5": 0
+  },
+  "v1/v68_fl_grid": {
+   "L1": 36,
+   "L2s": 4,
+   "L2p": 0,
+   "L3": 1,
+   "L4": 16,
+   "L5": 1
+  },
+  "v1/v69_fl_organic": {
+   "L1": 91,
+   "L2s": 87,
+   "L2p": 6,
+   "L3": 1,
+   "L4": 24,
+   "L5": 4
+  },
+  "v1/v70_fl_spiral": {
+   "L1": 231,
+   "L2s": 187,
+   "L2p": 3,
+   "L3": 4,
+   "L4": 36,
+   "L5": 1
+  },
+  "v1/v71_fl_outline": {
+   "L1": 67,
+   "L2s": 40,
+   "L2p": 0,
+   "L3": 0,
+   "L4": 17,
+   "L5": 0
+  },
+  "v1/w01_spiral_uphill_infernal": {
+   "L1": 209,
+   "L2s": 165,
+   "L2p": 3,
+   "L3": 2,
+   "L4": 41,
+   "L5": 1
+  },
+  "v1/w02_ring_bare_hub": {
+   "L1": 156,
+   "L2s": 125,
+   "L2p": 0,
+   "L3": 2,
+   "L4": 27,
+   "L5": 1
+  },
+  "v1/w03_organic_bare_hub": {
+   "L1": 123,
+   "L2s": 118,
+   "L2p": 3,
+   "L3": 0,
+   "L4": 50,
+   "L5": 4
+  },
+  "v1/w04_grid_green": {
+   "L1": 36,
+   "L2s": 4,
+   "L2p": 0,
+   "L3": 1,
+   "L4": 16,
+   "L5": 1
+  },
+  "v2/v66_fl_ring": {
+   "L1": 0,
+   "L2s": 0,
+   "L2p": 0,
+   "L3": 0,
+   "L4": 0,
+   "L5": 0
+  },
+  "v2/v67_fl_around_pond": {
+   "L1": 0,
+   "L2s": 0,
+   "L2p": 0,
+   "L3": 0,
+   "L4": 0,
+   "L5": 0
+  },
+  "v2/v68_fl_grid": {
+   "L1": 0,
+   "L2s": 0,
+   "L2p": 0,
+   "L3": 0,
+   "L4": 0,
+   "L5": 0
+  },
+  "v2/v69_fl_organic": {
+   "L1": 0,
+   "L2s": 0,
+   "L2p": 0,
+   "L3": 0,
+   "L4": 0,
+   "L5": 0
+  },
+  "v2/v70_fl_spiral": {
+   "L1": 0,
+   "L2s": 0,
+   "L2p": 0,
+   "L3": 0,
+   "L4": 0,
+   "L5": 0
+  },
+  "v2/v71_fl_outline": {
+   "L1": 0,
+   "L2s": 0,
+   "L2p": 0,
+   "L3": 0,
+   "L4": 0,
+   "L5": 0
+  },
+  "v2/w01_spiral_uphill_infernal": {
+   "L1": 0,
+   "L2s": 0,
+   "L2p": 0,
+   "L3": 0,
+   "L4": 0,
+   "L5": 0
+  },
+  "v2/w02_ring_bare_hub": {
+   "L1": 0,
+   "L2s": 0,
+   "L2p": 0,
+   "L3": 0,
+   "L4": 0,
+   "L5": 0
+  },
+  "v2/w03_organic_bare_hub": {
+   "L1": 0,
+   "L2s": 0,
+   "L2p": 0,
+   "L3": 0,
+   "L4": 0,
+   "L5": 0
+  },
+  "v2/w04_grid_green": {
+   "L1": 0,
+   "L2s": 0,
+   "L2p": 0,
+   "L3": 0,
+   "L4": 0,
+   "L5": 0
+  }
+ }
+}

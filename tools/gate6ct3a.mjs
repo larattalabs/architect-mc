@@ -379,6 +379,14 @@ async function crossRun(tag, claim, { kind, golden }) {
   await call('dev.region.dump', { box, file: after, light: true }, 1_800_000);
   const R = await realisedOf(planDir, before, after);
   out.item1 = await item1(tag, R);
+  // (fast checks P2, docs/FAST-CHECKS.md "Precondition for every REPLACE row") the realised world against the plan's virtual world, per
+  // writer kind: the bridges' SMOKE row (beam and arch on the flat world) that keeps the structure lint's bridge re-read trustworthy
+  {
+    const RV = await import('./lib/realised-virtual.mjs');
+    const rv = await RV.realisedVsVirtual(planDir, after, before, { lots: false });
+    out.realisedVirtual = { written: rv.written, differ: rv.differ, byKind: rv.byKind, first: rv.first };
+    check(RV.realisedOk(rv, ['bridges'], { strict: flat }).pass, `P2 SMOKE (${tag}${flat ? ', strict' : ''}): realised == virtual per writer kind, ${rv.differ} of ${rv.written} differ: ${RV.describeRealised(rv)}${rv.first.length ? ` first ${json(rv.first.slice(0, 3))}` : ''}`);
+  }
   // (frozen) nothing written in the ice: every ice cell under a bridge's box has the same state before and after the realise
   if (kind === 'frozen') {
     const pb = R.before, pa = R.after;
