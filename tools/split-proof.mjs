@@ -102,11 +102,18 @@ function main() {
     const full = compare(read(wholeLog), partLogs.map((f) => read(f)));
     report[id] = { whole: wholeLog, parts: partLogs, ...r, fullLines: { equal: full.equal, missing: full.missing, extra: full.extra } };
     if (r.missing.length || r.extra.length) bad++;
-    const verdict = r.missing.length || r.extra.length ? 'DIFFERENT' : r.status.length ? 'SAME CHECKS, status differs' : 'EQUAL';
+    // a check whose values differ only in a part, e.g. "E-flat n/a" where the whole step has "E-flat 0" (a section that read
+    // another section's result in the same process: 2026-10-22, scatter_demo's and S3's natural runs read their flat run's E-flat),
+    // is listed for review: the check names are the same, but the parts may not have run the same check
+    const valued = full.extra.filter((k) => /\bn\/a\b|\bnone\b|\bmissing\b|\bundefined\b|\bnull\b/.test(k) && !full.missing.some((w) => w === k));
+    const verdict = r.missing.length || r.extra.length ? 'DIFFERENT' : valued.length ? 'SAME CHECKS, REVIEW: a part lacks a value the whole step has' : r.status.length ? 'SAME CHECKS, status differs' : 'EQUAL';
+    report[id].review = valued;
+    if (valued.length) bad++;
     console.log(`${id}: ${verdict}: whole ${r.lines} checks, the ${partLogs.length} parts together ${r.unionLines}${full.equal ? ' (full masked lines equal too)' : `; full masked lines: ${full.missing.length} differ in their values`}${r.timing.length ? `; ${r.timing.length} timing bar(s) ok on one side, FAIL on the other (timing, recorded)` : ''}`);
     for (const k of r.missing) console.log(`  missing from the parts: ${k.slice(0, 200)}`);
     for (const k of r.extra) console.log(`  only in the parts: ${k.slice(0, 200)}`);
     for (const s of r.status) console.log(`  status ${s.whole} whole, ${s.parts} parts: ${s.line.slice(0, 200)}`);
+    for (const k of valued) console.log(`  REVIEW (only in the parts, with n/a/none/missing): ${k.slice(0, 220)}`);
     if (opt('--verbose')) for (const k of full.missing) console.log(`  (values) whole: ${k.slice(0, 220)}`);
   }
   if (opt('--json')) fs.writeFileSync(opt('--json'), `${JSON.stringify(report, null, 1)}\n`);

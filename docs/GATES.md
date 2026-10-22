@@ -864,14 +864,18 @@ release; `node tools/split-proof.mjs --whole <A> --parts <B>`):
 | 4d-all / 4d-all-full | 13.1 / 15.3 | 2 | base, then survival; base, then the other nine sub-steps (stages and gap0 with waiting) | 23/23: same checks |
 | 5b-chains-full | 31.4 | 3 | the 21 scripts (fixed + 20 seeds), each from its own world; E1 over each part's states | 3 names / 13 lines: equal |
 | rs-survival | 23.2 | 3 | items 5; 9; 8 and 10 | 11/11: equal |
-| 6c-scenario-s3 | 14.4 | 2 | flat; natural (a shell split) | 20/20 checks |
-| 6cf2-scenario-scatter | 12.2 | 3 | harvest, then flat; natural; cave (a shell split) | 21/21: equal |
+| 6cf2-scenario-scatter | 12.2 | 2 | harvest, then scatter_demo flat and natural; harvest, then scatter_cave (a shell split) | see below |
 | irr-unit, kc-unit, f3-unit, fl-unit, s3-unit | 14-36 under turbo | 3 | the byte-identity fixture loop in 3 round-robin slices (the first part also runs every other item) | proof below (the turbo slice against the whole runs) |
 | voc-unit | 27-34 under turbo | 3 | item 5 (byte identity); item 13 and the census; the rest | proof below |
 
-The status differences in the proof runs are all failures known on main, on one side only: 4d's "shared crate" (4 of 98 runs
-before), 4d's "stages: undo" (8 of 199), 4d-all-full's "group undo" (22 of 94), S3's exactness (7 of 12) and safety, scatter_cave's
-exactness (6 of 42). hy-ingame's item 14 push stand (a mob beyond the grate) failed on both sides at this head (0 of 24 before
+**Not split, and why (found by the proof):** a scenario's natural run reads its flat run's E-flat from the same evidence dir
+(`tools/scenarios.mjs` `latestRun`). Split apart, the natural part printed "E-flat n/a" and failed its exactness bar (S3 and
+scatter_demo in `-170841-change`, and S3 again in the turbo slice). So a flat/natural pair stays in one part: 6c-scenario-s3 is
+whole again and 6cf2-scenario-scatter splits only off scatter_cave (which has no flat variant). `split-proof.mjs` now flags a
+check whose part line lacks a value the whole step has (`n/a`, `none`, `missing`) for review and exits non-zero.
+
+The other status differences in the proof runs are failures known on main, on one side only: 4d's "shared crate" (4 of 98 runs
+before), 4d's "stages: undo" (8 of 199), 4d-all-full's "group undo" (22 of 94), S3's safety, scatter_cave's exactness (6 of 42). hy-ingame's item 14 push stand (a mob beyond the grate) failed on both sides at this head (0 of 24 before
 today), so it is not a split problem; it is reported to the coordinator.
 
 **Server and world reuse: not done.** In the 2h18m baseline slice, client and server starts, world switches and snapshot
