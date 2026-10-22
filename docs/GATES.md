@@ -272,8 +272,11 @@ keyed by what that run touched. The key covers:
   its package's files.
   - Loaded is a superset of executed, which is JaCoCo's class level. It needs no agent: JaCoCo isn't in the gradle cache, and adding it
     would mean a download. JaCoCo can replace it later.
-- **Node files.** The step's own trace, plus the trace of the client the runner started (the sidecar and its workers). The tracer
-  now follows worker threads, and records `mkdirSync` as evidence of a gradle run in the source checkout.
+- **Node files.** The step's own trace, plus the trace of the client the runner started: the sidecar, its workers, and the kit
+  tools it spawns. The sidecar's `minimalEnv` passes the gate tracer, and nothing else, to those tools, and only when a gate run set
+  it (sidecar/test/minimal-env-trace.test.ts). The tracer follows worker threads through a wrapper that also gives the tracer's
+  environment to a worker started with `env: {}` (the region pool). It records `mkdirSync` as evidence of a gradle run in the
+  source checkout. The JVM log never rotates (`filecount=0`).
 - **The step's static, non-class inputs.** Its drivers' module closure and its traced data. The `gradle` class is kept only when
   the run took the source checkout's gradle lock.
 - **The safety set**, always in (`coverage.always` and the closures of `coverage.alwaysRoots`), with the reason for each group in
@@ -291,18 +294,23 @@ keyed by what that run touched. The key covers:
 A coverage PASS is looked up by recomputing its key over the set it recorded (`lookupCoverage`, the newest twelve PASSes of the step):
 - a changed file in the set re-runs the step, and that run re-records its coverage;
 - a changed file outside the set skips it;
-- **a compile-time constant changed in any Java file** (a `static final` primitive or String) invalidates every coverage PASS,
-  because javac inlines constants into the classes that use them.
+- **a constant variable changed in any Java file** invalidates every coverage PASS, because javac inlines constants into the
+  classes that use them. A constant variable is a `final` field or local of a primitive or String type with an initialiser, or any
+  such field in an interface or annotation. Every one is parsed from both versions of each changed file, across lines and
+  concatenations (`constantDecls`).
 
 **Auto `--full`, narrowed (PROPOSED, awaiting approval).** The impact rules' `engine` tag no longer forces `--full`. Instead it is
 forced by the Minecraft or dependency versions, the build files, and a named engine list (`release.autoFull.enginePaths`):
 - the journal and its store: `journal/**`;
-- the block-write queue: `batch/**`;
-- the placement core: `site/TemplateWriter`, `PlaceJob`, `RestoreJob`, `SiteJournal`, `Sites`, `Batches`, `Placement`, and
-  `placement/Reconcile`;
-- the world-update mixins: `mixin/**`.
+- the block-write queues: `batch/**`, `site/RegionQueue`, `TickDeferral`, `ChunkTickets`;
+- the placement and removal core: `site/TemplateWriter`, `PlaceJob`, `RestoreJob`, `InfraJob`, `SiteJournal`, `Sites`, `Groups`,
+  `Batches`, `Placement`, `placement/Reconcile` and `region/RegionsImpl`;
+- the files the UMT rule names as undo-critical: `site/FluidRearm`, `TileCheck`, `LotMask`;
+- placement tracking: `placed/**`;
+- the world-update mixins: `mixin/**` and the mixins json.
 
-kit/lib/forms/** and RegionFluids.java no longer force it.
+kit/lib/** and region/RegionFluids.java no longer force it: the coordinator ruled RegionFluids not engine, though the UMT rule lists
+it.
 
 **Proofs (offline; the exact counts need the first traced turbo run, which records every step's coverage).**
 - **A real JVM** (`./gradlew test --tests *IrRoadExtTest` with the class-load log): 353 `dev.larattalabs` classes, every one mapped
@@ -311,7 +319,7 @@ kit/lib/forms/** and RegionFluids.java no longer force it.
   "Coverage at least" is the steps whose drivers, data, runner or safety set moved, which run in any mode; the rest are decided
   by their recorded coverage. Of the 210 cacheable steps:
 
-  | commit | change | map mode runs | coverage at least, worst case | coverage at least, in-game steps without gradle |
+  | commit | change | map mode runs | coverage at least, worst case | coverage at least, in-game steps without gradle (`--gradle-in-game-off`) |
   |---|---|---|---|---|
   | e5dafb64 | kit isLeaves (1 kit/lib file) | 209 | 169 | 157 |
   | 0bb0c89e | RS realised provenance (11 files: Java, kit, drivers) | 204 | 118 | 40 |
@@ -324,14 +332,19 @@ kit/lib/forms/** and RegionFluids.java no longer force it.
   - A change to a widely imported kit module (kit/lib/blocks or check) still runs most steps, because the drivers themselves import
     it. Node coverage is at file level, as specified.
 - **History** (`tools/step-cache.mjs fail-audit`, every FAIL or TIMEOUT in artifacts/ against the step's last earlier PASS on an
-  ancestor commit). 626 records:
+  ancestor commit). 626 records on 2026-10-22; the count grows as runs land:
   - 197 have no earlier PASS on an ancestor;
   - 10 came on the same commit as a PASS: no code change, so a flake, load or environment;
-  - 415 had their cause in the step's drivers, data, definition, runner or safety set, so they run in every mode;
+  - 415 had their cause in the step's drivers, data, definition, runner or safety set, so they run in every mode. That count leans
+    on the large safety set (devserver and sidecar sources, the Registry/Codec/Serial/Nbt globs);
   - **2 are decided by coverage**, pending its first recording: t3b-ingame after a TileCheck.java change, and sim-jobs after the
     kit/lib/lint changes;
-  - 2 have no change in the step's set at all. 6ct2-scenario-route's change was docs only, and pt2-ingame's was item 13, known
-    on main.
+  - 2 have no change in the step's set at all:
+    - 6ct2-scenario-route's change was docs only;
+    - pt2-ingame failed item 13 (the one known on main) after a change to tools/gate6cpt.mjs, which is not in its set. The audit
+      can't tell whether that change caused it.
+  - So the coverage half of the proof is still to come: only 2 of 626 records depend on coverage, and none has been recorded
+    yet.
   - Before the runner joined the keys, the audit found 10 such holes. The 8 explained by runner changes are why `runnerKey` exists.
 
 ### Impact-map misses log

@@ -29,7 +29,7 @@ const alive = (pid) => {
 };
 
 /** The JVM option that logs every class load of a JVM to <dir>/jvm-<pid>.log. */
-export const javaLogOption = (dir) => `-Xlog:class+load=info:file=${dir}/jvm-%p.log:uptime`;
+export const javaLogOption = (dir) => `-Xlog:class+load=info:file=${dir}/jvm-%p.log:uptime:filecount=0`; // no rotation: one file per JVM
 
 /** The coverage files of a shard: jvm-<pid>.log and the client tracer's <pid>-<rand>.txt under node/. */
 function coverageFiles(dir) {
@@ -189,34 +189,62 @@ export function setMatcher(set) {
 }
 
 const constCache = new Map();
+const TYPES = '(?:byte|short|int|long|float|double|char|boolean|String|java\\.lang\\.String)';
+/** The constant variables a Java source declares: name -> its initialiser, normalised. Comments and string-literal contents that
+ * look like code are handled by stripping comments first; a declaration may span lines. Counted: any `final` field or local of a
+ * primitive or String type with an initialiser (a constant variable when the initialiser is constant: javac inlines it), and in an
+ * interface or annotation, every field of those types (implicitly static final). */
+export function constantDecls(text) {
+  const t = text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+  const out = new Map();
+  const add = (name, expr) => out.set(name, `${out.has(name) ? `${out.get(name)}|` : ''}${expr.replace(/\s+/g, ' ').trim()}`);
+  // `final` anywhere among the modifiers, then the type, then one or more declarators up to the semicolon
+  const re = new RegExp(`\\b((?:(?:public|protected|private|static|final|transient|volatile)\\s+)*)${TYPES}(\\s*\\[\\s*\\])?\\s+([^;(){}]+?);`, 'g');
+  const iface = /\binterface\s+\w+|@interface\s+\w+/.test(t);
+  for (const m of t.matchAll(re)) {
+    const mods = m[1] ?? '';
+    if (!/\bfinal\b/.test(mods) && !iface) continue;
+    if (m[2]) continue; // arrays are never constant variables
+    for (const d of m[3].split(/,(?![^(]*\))/)) {
+      const eq = d.indexOf('=');
+      if (eq < 0) continue;
+      add(d.slice(0, eq).trim(), d.slice(eq + 1));
+    }
+  }
+  return out;
+}
+
 /**
- * Java files whose diff between two commits changes a compile-time constant (static final primitive or String initialised by
- * a constant expression): javac inlines those into the classes that use them, which load without loading the declaring class.
+ * Java files whose constant variables differ between two commits (any declared, removed, or with another initialiser): javac
+ * inlines constants into the classes that use them, which load without loading the declaring class. -> Set of paths, or null
+ * when a commit is unknown here (the caller treats that as a change).
  */
 export function constantChanges(src, from, to, roots) {
-  const k = `${from}..${to}`;
+  const k = `${src}\0${from}..${to}`;
   if (constCache.has(k)) return constCache.get(k);
-  const out = new Set();
-  let d = '';
+  let names;
   try {
-    d = git(src, 'diff', '-U0', from, to, '--', ...roots.map((r) => `${r}/**/*.java`));
+    names = git(src, 'diff', '--name-only', from, to, '--', ...roots.map((r) => `${r}/**/*.java`)).split('\n').filter(Boolean);
   } catch {
-    d = null;
-  }
-  if (d === null) {
-    constCache.set(k, null); // unknown (a commit missing here): the caller treats it as a change
+    constCache.set(k, null);
     return null;
   }
-  let file = null;
-  const CONST = /\bstatic\s+final\s+(?:byte|short|int|long|float|double|char|boolean|String)\s+\w+\s*=|\bfinal\s+static\s+(?:byte|short|int|long|float|double|char|boolean|String)\s+\w+\s*=/;
-  const IFACE_CONST = /^\s*(?:public\s+)?(?:byte|short|int|long|float|double|char|boolean|String)\s+[A-Z_][A-Z0-9_]*\s*=/;
-  for (const line of d.split('\n')) {
-    const f = /^\+\+\+ b\/(.+)$/.exec(line);
-    if (f) {
-      file = f[1];
-      continue;
+  const show = (c, f) => {
+    try {
+      return git(src, 'show', `${c}:${f}`);
+    } catch {
+      return '';
     }
-    if (/^[+-](?![+-])/.test(line) && (CONST.test(line) || IFACE_CONST.test(line.slice(1)))) out.add(file);
+  };
+  const out = new Set();
+  for (const f of names) {
+    const a = constantDecls(show(from, f));
+    const b = constantDecls(show(to, f));
+    const keys = new Set([...a.keys(), ...b.keys()]);
+    for (const n of keys) if (a.get(n) !== b.get(n)) {
+      out.add(f);
+      break;
+    }
   }
   constCache.set(k, out);
   return out;

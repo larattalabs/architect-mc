@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import module from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const DIR = process.env.GATE_TRACE_DIR;
 let ROOTS = null;
@@ -120,10 +120,12 @@ if (DIR && ROOTS?.length) {
           let o = opts;
           try {
             if (!opts?.eval && (typeof file === 'string' || file instanceof URL)) {
-              const url = file instanceof URL ? file.href : file.startsWith('file:') ? file : new URL(`file://${path.resolve(file)}`).href;
-              if (/\.m?js$/.test(url)) {
+              const url = file instanceof URL ? file.href : file.startsWith('file:') ? file : pathToFileURL(path.resolve(file)).href;
+              if (/\.m?js$/.test(new URL(url).pathname)) {
                 f = `import(${JSON.stringify(self)}).then(() => import(${JSON.stringify(url)}))`;
                 o = { ...opts, eval: true };
+                // a worker given its own environment (the region pool passes env: {}) still gets the tracer's
+                if (o.env && typeof o.env === 'object') o.env = { ...o.env, GATE_TRACE_DIR: DIR, GATE_TRACE_ROOTS: JSON.stringify(ROOTS) };
               }
             }
           } catch {

@@ -88,6 +88,20 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ------------------------------------------------------------------ arguments and config
 
 const argv = process.argv.slice(2);
+// SIGUSR2: yield (the nightly past its cutoff with a run queued, docs/GATES.md "The nightly"): start no new step, let the running
+// ones finish, then end with state "stopped" and `yielded` listing the steps not started (they are SKIPPED, error "yielded").
+// Installed first, so a runner still waiting for its slot is never killed by it (it then starts nothing and ends at once).
+let draining = null;
+let onYield = () => {};
+process.on('SIGUSR2', () => {
+  if (draining) return;
+  draining = { at: new Date().toISOString(), why: 'SIGUSR2 (yield)' };
+  try {
+    onYield();
+  } catch {
+    // before the scheduler started: the workers see `draining` when they start
+  }
+});
 const VALUED = ['--assume-warm', '--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min', '--host', '--lanes'];
 const flag = (f) => argv.includes(f);
 const opt = (f) => {
@@ -1695,17 +1709,7 @@ process.on('SIGTERM', () => abort('SIGTERM'));
 process.on('SIGHUP', () => log('SIGHUP ignored (unattended)'));
 // SIGUSR2: yield (the nightly past its cutoff with a run queued, docs/GATES.md "The nightly"): start no new step, let the running
 // ones finish, then end with state "stopped" and `yielded` listing the steps not started (they are SKIPPED, error "yielded")
-let draining = null;
-process.on('SIGUSR2', () => {
-  if (draining) return;
-  draining = { at: new Date().toISOString(), why: 'SIGUSR2 (yield)' };
-  log('yield requested (SIGUSR2): no new step starts; the running ones finish');
-  try {
-    wakeAll();
-  } catch {
-    // before the scheduler started: the workers see `draining` when they start
-  }
-});
+// (the handler is installed at the top, before the slot wait: SIGUSR2's default action would kill the runner)
 process.stdout.on('error', () => {});
 process.stderr.on('error', () => {});
 process.on('uncaughtException', (e) => abort(`uncaught: ${e?.stack ?? e}`));
@@ -1809,6 +1813,11 @@ function skipBlocked() {
   }
 }
 
+onYield = () => {
+  log('yield requested (SIGUSR2): no new step starts; the running ones finish');
+  wakeAll();
+};
+if (draining) log('yield requested (SIGUSR2) before the steps started: none starts');
 async function worker(sh) {
   while (!stopped && !draining) {
     skipBlocked();
