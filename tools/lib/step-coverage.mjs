@@ -145,7 +145,7 @@ export function safetyGlobs(cov, tree, src, read) {
  * The coverage set of one run of a step: sorted globs/paths. `entry`: its input-map entry; `trace`: its own trace (Map path ->
  * kinds); `cov`: collect()'s result for its shard; `conf`: tools/gate-cache.json; `tree`: the commit's tracked files.
  */
-export function coverageSet({ entry, trace, cov, conf, tree, src, read }) {
+export function coverageSet({ entry, trace, cov, conf, tree, src, read, manifest = null }) {
   const c = conf.coverage ?? {};
   const set = new Set();
   // the static, non-class part: its drivers' module closure, the data its traced runs read, derived sources, fingerprinted data.
@@ -157,7 +157,9 @@ export function coverageSet({ entry, trace, cov, conf, tree, src, read }) {
   const ranGradle = [...(trace?.keys() ?? [])].some((p) => p.startsWith('mod/.gradle/gate-gradle.lock'));
   for (const cls of entry.classes ?? []) {
     if ((c.replaces ?? ['jar', 'sidecar', 'world']).includes(cls)) continue;
-    if (cls === 'gradle' && !ranGradle) continue;
+    // gradle: with the run-level build artifact (manifest), a source-checkout test run's compile is the artifact's (it built
+    // the same sources) and its classes are logged like any JVM's; without it, kept when the run took the source gradle lock
+    if (cls === 'gradle' && (manifest?.ok || !ranGradle)) continue;
     for (const x of conf.classes?.[cls] ?? []) set.add(x);
   }
   for (const x of safetyGlobs(c, tree, src, read)) set.add(x);
@@ -174,7 +176,8 @@ export function coverageSet({ entry, trace, cov, conf, tree, src, read }) {
   }
   // Java: the classes its JVMs loaded
   const roots = c.javaRoots ?? [];
-  const j = classesToFiles(cov?.classes ?? [], javaIndex(tree, roots), roots);
+  // a loaded class the build artifact compiled is keyed by its bytecode (bytecodeDigest), not its source; only the others by source
+  const j = classesToFiles((cov?.classes ?? []).filter((x) => !manifest?.ok || !manifest.classes?.[x]), javaIndex(tree, roots), roots);
   for (const x of j.files) set.add(x);
   for (const x of j.globs) set.add(x);
   // Node: what its processes and its client's touched (a listing or an absent path widens to the directory, as in the map)

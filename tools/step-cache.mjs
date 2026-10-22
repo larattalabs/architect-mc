@@ -52,8 +52,16 @@ async function anyModeMatcher(id, tree) {
   const mid = map.steps[id] ? id : parentOf(id);
   const e = map.steps[mid];
   const rep = conf.coverage?.replaces ?? ['jar', 'sidecar', 'world'];
-  if (!conf.coverage?.enabled || !(e.classes ?? []).some((c) => rep.includes(c))) return { cov: false, m: inputMatcher(map, conf, mid) };
+  const entry = rawCfg.steps[parentOf(id)];
+  const gradleCwd = /^(run|src):mod/.test(entry?.cwd ?? '');
+  if (!conf.coverage?.enabled || gradleCwd || !(e.classes ?? []).some((c) => rep.includes(c) || c === 'gradle')) return { cov: false, m: inputMatcher(map, conf, mid) };
   safetyCache ??= setMatcher(safetyGlobs(conf.coverage, tree, SRC));
+  // the build artifact design (default): a coverage step keeps no gradle class and no Java source but the safety set's; its loaded
+  // classes are keyed by bytecode. --source-gradle: the older bound (the gradle class kept)
+  if (!argv.includes('--source-gradle')) {
+    const keep = setMatcher([...(e.closure ?? []), ...(e.data ?? []), ...(conf.runnerKey?.files ?? [])]);
+    return { cov: true, m: (p) => keep(p) || safetyCache(p) };
+  }
   // --gradle-in-game-off: an in-game step keeps the gradle class only when its run takes the source gradle lock (known from its
   // trace); without a trace, the bound either keeps it (default, the worst case) or drops it for client steps (this flag)
   const dropGradle = argv.includes('--gradle-in-game-off') && (rawCfg.steps[parentOf(id)]?.client ?? 'none') !== 'none';
@@ -158,6 +166,16 @@ if (cmd === 'import') {
     cb.rawCfg = rawCfg;
     ch.rawCfg = rawCfg;
     const row = { commit: c, subject: git('log', '-1', '--format=%s', head).slice(0, 80), changed: delta.length, steps: 0, mapRuns: 0, staticRuns: 0, classesOnly: 0, coverageRuns: 0, coverageSkips: 0, pending: 0, classesOnlyIds: [] };
+    if (argv.includes('--bytecode')) {
+      // the classes whose bytecode the commit changed: both builds' manifests (tools/lib/build-artifact.mjs, compiled offline)
+      const { ensureBuild } = await import('./lib/build-artifact.mjs');
+      const ma = ensureBuild({ src: SRC, main: MAIN, commit: base, conf, java: cb.toolchain.java, log: (m) => console.log(`  ${m}`) });
+      const mb = ensureBuild({ src: SRC, main: MAIN, commit: head, conf, java: ch.toolchain.java, log: (m) => console.log(`  ${m}`) });
+      if (ma.ok && mb.ok) {
+        const names = new Set([...Object.keys(ma.classes), ...Object.keys(mb.classes)]);
+        row.classesChanged = [...names].filter((n) => ma.classes[n] !== mb.classes[n]).sort();
+      } else row.classesChanged = `build failed: ${ma.error ?? mb.error}`;
+    }
     for (const id of Object.keys(cfg.steps)) {
       if (!map.steps[id] || conf.uncacheable?.[id]) continue;
       row.steps++;
@@ -175,6 +193,7 @@ if (cmd === 'import') {
       row.classesOnlyIds.push(id);
     }
     out.push(row);
+    if (row.classesChanged) console.log(`  bytecode: ${Array.isArray(row.classesChanged) ? `${row.classesChanged.length} class file(s) changed${row.classesChanged.length ? ` (${row.classesChanged.slice(0, 6).join(', ')}${row.classesChanged.length > 6 ? ', ...' : ''})` : ''}` : row.classesChanged}`);
     console.log(`${c} ${row.subject}\n  ${row.changed} files changed; ${row.steps} cacheable steps: map mode runs ${row.mapRuns}; coverage mode runs at least ${row.staticRuns} (their drivers, data or runner moved) and at most ${row.mapRuns}: ${row.classesOnly} moved only through the whole-tree classes, decided by their recorded coverage`);
   }
   if (opt('--json')) fs.writeFileSync(opt('--json'), JSON.stringify(out, null, 1));

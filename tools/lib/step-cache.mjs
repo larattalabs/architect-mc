@@ -19,6 +19,19 @@ import { checkTrace, dirtyPaths, fingerprintOf, globRe, inputsHash, readTrace, t
 import { releaseContext } from '../release-context.mjs';
 import { entryOf, parentOf } from './step-split.mjs';
 import { constantChanges, coverageSet, setMatcher } from './step-coverage.mjs';
+import { bytecodeDigest, ensureBuild } from './build-artifact.mjs';
+
+/** The build artifact's manifest at the context's head (tools/lib/build-artifact.mjs); built on first use when ctx.allowBuild. */
+export function manifestOf(ctx) {
+  if (ctx.manifest === undefined) {
+    try {
+      ctx.manifest = ensureBuild({ src: ctx.src, main: ctx.main, commit: ctx.head, conf: ctx.conf, java: ctx.toolchain.java, build: !!ctx.allowBuild, log: ctx.log });
+    } catch (e) {
+      ctx.manifest = { ok: false, error: e.message };
+    }
+  }
+  return ctx.manifest;
+}
 
 const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 << 20 }).toString().trim();
 const sha = (v) => crypto.createHash('sha1').update(typeof v === 'string' ? v : JSON.stringify(v)).digest('hex');
@@ -119,7 +132,7 @@ function snapshotsOf(ctx, entry) {
 /**
  * Step `id`'s key -> { key, parts } or { key: null, why } when it can't be cached (uncacheable, no map entry, a dirty tree).
  */
-export function keyFor(ctx, id, { set = null } = {}) {
+export function keyFor(ctx, id, { set = null, classes = null } = {}) {
   const { cfg, conf, map } = ctx;
   // a split step's part (<id>/p<k>, turbo): its own entry (its section env) and key, its parent's input set
   const entry = cfg.steps[id] ?? entryOf(cfg, id);
@@ -132,6 +145,13 @@ export function keyFor(ctx, id, { set = null } = {}) {
   if (ctx.dirty.length) return { key: null, why: `the source tree is dirty (${ctx.dirty.length} path(s), e.g. ${ctx.dirty[0]}): a dirty tree is never cached` };
   // coverage mode (step-coverage.mjs): the hash runs over the set a recorded run touched instead of the map's set
   const inputs = set ? setHash(set, ctx.src, ctx.head) : inputsHash(map, conf, mid, ctx.src, ctx.head);
+  // bytecode mode: the loaded classes' class-file digests from the run-level build artifact; no artifact (or a failed build), no key
+  let bytecode = null;
+  if (classes) {
+    const m = manifestOf(ctx);
+    if (!m?.ok) return { key: null, why: `the build artifact at ${ctx.head.slice(0, 9)}: ${m?.error ?? 'missing'}` };
+    bytecode = bytecodeDigest(classes, m);
+  }
   const def = ctx.defAt ? ctx.defAt(ctx.head, id) : definitionNow(ctx.src, ctx.rawCfg ?? cfg, id);
   const names = new Set([...(me.env ?? []), ...(conf.modeEnv?.always ?? [])]);
   // ambient variables with the project's prefixes: read by the JVM, the sidecar, the client scripts or an aliased process.env
@@ -157,6 +177,7 @@ export function keyFor(ctx, id, { set = null } = {}) {
     inputs: inputs.hash,
     inputFiles: inputs.files,
     ...(set ? { mode: 'coverage', set: sha(set) } : {}),
+    ...(bytecode ? { bytecode } : {}),
     fingerprint: fingerprintOf(map, conf, mid, ctx.src),
     snapshots: entry.client === 'none' ? [] : snapshotsOf(ctx, entry),
     toolchain: ctx.toolchain,
@@ -199,7 +220,10 @@ export function setHash(set, src, commit) {
 export function coverageMode(ctx, id) {
   const me = ctx.map?.steps?.[mapId(ctx.map, id)];
   const rep = ctx.conf.coverage?.replaces ?? ['jar', 'sidecar', 'world'];
-  return !!ctx.conf.coverage?.enabled && !!me && (me.classes ?? []).some((c) => rep.includes(c));
+  // the gradle steps themselves (cwd mod: unit-mod, umt, p3-lint) are the build and its tests: whole trees
+  const entry = ctx.cfg.steps[id] ?? entryOf(ctx.cfg, id);
+  if (/^(run|src):mod/.test(entry?.cwd ?? '')) return false;
+  return !!ctx.conf.coverage?.enabled && !!me && (me.classes ?? []).some((c) => rep.includes(c) || c === 'gradle');
 }
 
 /**
@@ -224,12 +248,18 @@ export function lookupCoverage(ctx, id, { limit = 12 } = {}) {
   es.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
   let why = 'no coverage PASS recorded';
   for (const e of es.slice(0, limit)) {
-    const cc = constantChanges(ctx.src, e.head, ctx.head, ctx.conf.coverage?.javaRoots ?? []);
+    // a source-keyed PASS (no build artifact then): a constant inlined across classes invalidates it; a bytecode-keyed PASS
+    // sees an inlined constant in the class that uses it
+    const cc = e.coverageClasses ? new Set() : constantChanges(ctx.src, e.head, ctx.head, ctx.conf.coverage?.javaRoots ?? []);
     if (cc === null || cc.size) {
       why = cc === null ? `its head ${String(e.head).slice(0, 9)} is unknown here` : `a compile-time constant changed since its PASS (${[...cc].slice(0, 3).join(', ')})`;
       continue;
     }
-    const k = keyFor(ctx, id, { set: e.coverageSet });
+    const k = keyFor(ctx, id, { set: e.coverageSet, classes: e.coverageClasses ?? null });
+    if (!k.key) {
+      why = k.why;
+      continue;
+    }
     if (k.key !== e.key) {
       why = `a file its coverage holds changed since ${String(e.head).slice(0, 9)} (or its definition, toolchain or a mode)`;
       continue;
@@ -281,8 +311,11 @@ export function record(ctx, id, rec, opts) {
   let cov = null;
   if (opts.coverage && opts.traced && coverageMode(ctx, id)) {
     // coverage mode: the key runs over what this run touched (its trace, its client's, its JVMs' classes) and the safety set
-    cov = coverageSet({ entry: ctx.map.steps[mapId(ctx.map, id)], trace: tr, cov: opts.coverage, conf: ctx.conf, tree: treeAt(ctx.src, ctx.head), src: ctx.src });
-    const k = keyFor(ctx, id, { set: cov.set });
+    const m = manifestOf(ctx);
+    cov = coverageSet({ entry: ctx.map.steps[mapId(ctx.map, id)], trace: tr, cov: opts.coverage, conf: ctx.conf, tree: treeAt(ctx.src, ctx.head), src: ctx.src, manifest: m?.ok ? m : null });
+    cov.loaded = m?.ok ? opts.coverage.classes ?? [] : null;
+    const k = keyFor(ctx, id, { set: cov.set, classes: cov.loaded });
+    if (!k.key) return { stored: false, why: k.why };
     opts = { ...opts, key: k.key, parts: k.parts };
   } else if (chk.outside.length) return { stored: false, why: `inputs-map miss: the step read ${chk.outside.length} source path(s) outside its set`, outside: chk.outside };
   const e = {
@@ -292,6 +325,7 @@ export function record(ctx, id, rec, opts) {
     metrics: rec.metrics ?? null, traced: { paths: chk.n }, parts: opts.parts,
     external: Object.fromEntries(chk.external.map((r) => [r, externalFingerprint(ctx.main, r)])),
     ...(opts.untracedImport ? { untraced: opts.untracedImport } : {}),
+    ...(cov?.loaded ? { coverageClasses: cov.loaded, build: manifestOf(ctx).hash } : {}),
     ...(cov ? { mode: 'coverage', coverageSet: cov.set, coverage: { classes: cov.classes, unmappedClasses: cov.unmappedClasses.slice(0, 50), mapOutside: chk.outside.length } } : {}),
   };
   const f = entryFile(ctx, id, opts.key);

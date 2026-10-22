@@ -295,3 +295,35 @@ test('coverage: a step whose trace shows the region CLI stat gets the CLI closur
   const withCli = coverageSet({ entry, trace: new Map(), cov: { classes: [], node: new Map([['kit/tools/region.mjs', new Set(['s'])]]) }, conf: conf2, tree: files, src: root }).set;
   for (const p of ['kit/tools/region.mjs', 'kit/lib/region/plan.mjs', 'kit/lib/forms/unused.mjs', 'kit/regions/**']) assert.ok(withCli.includes(p), p);
 });
+
+test('coverage, bytecode mode: keyed by the loaded classes\' class-file digests from the build artifact; no artifact, no key', () => {
+  const root = covRepo();
+  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-main-'));
+  const cfg = { steps: { g: { shell: 'node tools/gate-g.mjs', client: '6b', timeoutMin: 5 } }, clients: { '6b': { world: 'W' } } };
+  const map = { steps: { g: staticEntry('g', cfg.steps.g, covConf, treeAt(root, 'HEAD'), { src: root }) } };
+  const J = 'dev.larattalabs.architect';
+  let manifest = { ok: true, hash: 'b1', classes: { [`${J}.journal.Journal`]: 'aa', [`${J}.region.RegionFluids`]: 'bb' } };
+  const ctx = () => Object.assign(cacheContext({ src: root, main, cfg, conf: covConf, map, snapDir: null, env: {} }), { rawCfg: cfg, manifest });
+  const covDir = path.join(main, 'cov');
+  write(covDir, 'jvm-1.log', `[0.1s] ${J}.journal.Journal source: x\n`);
+  const tdir = path.join(main, 'trace-g');
+  write(tdir, '1.txt', 'm\ttools/gate-g.mjs\n');
+  const r = record(ctx(), 'g', pass({ id: 'g' }), { key: 'x', run: main, ev: main, traceDir: tdir, traced: true, coverage: collect(covDir, { t: 0, alive: new Set() }), timingPolicy: 'judged', judgedBench: false, tier: 'release' });
+  assert.equal(r.stored, true, r.why);
+  const e = JSON.parse(fs.readFileSync(r.file, 'utf8'));
+  assert.deepEqual(e.coverageClasses, [`${J}.journal.Journal`]);
+  assert.ok(!e.coverageSet.some((p) => p.endsWith('Journal.java')), 'a class the artifact compiled is keyed by bytecode, not source');
+  // a source edit in Journal.java that compiles to the same bytecode (a comment): still served
+  write(root, 'mod/src/main/java/dev/larattalabs/architect/journal/Journal.java', '// a comment\npackage dev.larattalabs.architect.journal; public class Journal { public static final int LIMIT = 4; }\n');
+  git(root, 'commit', '-qam', 'comment');
+  assert.ok(lookupCoverage(ctx(), 'g').hit, 'same bytecode: served');
+  // another class's bytecode moves (a constant inlined into it, say): still served; the loaded one's moves: miss
+  manifest = { ...manifest, hash: 'b2', classes: { ...manifest.classes, [`${J}.region.RegionFluids`]: 'cc' } };
+  assert.ok(lookupCoverage(ctx(), 'g').hit);
+  manifest = { ...manifest, hash: 'b3', classes: { ...manifest.classes, [`${J}.journal.Journal`]: 'dd' } };
+  assert.equal(lookupCoverage(ctx(), 'g').hit, null);
+  // a failed build: no coverage key at all
+  manifest = { ok: false, hash: 'b4', error: 'gradle exited 1' };
+  assert.match(lookupCoverage(ctx(), 'g').why, /build artifact|differs|changed|unknown|recorded/);
+  assert.equal(lookupCoverage(ctx(), 'g').hit, null);
+});

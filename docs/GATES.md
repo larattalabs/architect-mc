@@ -296,6 +296,25 @@ keyed by what that run touched. The key covers:
 - **The runner's own code** (`runnerKey`: gate-run.mjs, hosts, splits, turbo, shard-auto, gate-history, the tracer) is in every
   key, coverage or not. The fail audit below found 8 past FAILs that only a runner change explains.
 
+**The run-level build artifact** (`tools/lib/build-artifact.mjs`, `gate-cache.json` `build`) is the design that makes a Java change
+cheap.
+- **What it is:** the mod (main, client, test), devserver and apitest classes, compiled once per hash of their inputs (all of
+  mod/, devserver/ and apitest/, plus the kit files the build reads and the compiler), offline, in `../architect-mc-buildcache`.
+  A manifest of every class file's digest goes to `artifacts/build-cache/<hash>.json`. A build of 1283 classes takes about 40 s
+  and is byte-identical across worktrees.
+- **What a coverage-mode key holds instead of the build:** the bytecode digests of the classes its run loaded. It no longer holds
+  their Java sources or the `gradle` class.
+  - A source edit that compiles to the same bytecode, or a change to a class the step never loaded, leaves the key alone.
+  - A constant inlined into a loaded class changes that class's bytecode, so the global constant rule only applies to PASSes
+    recorded without an artifact.
+- **The guard:** a build that fails, or can't run, gives no coverage key, so every coverage-mode step runs.
+- **Not the whole artifact's hash** in every key. That hash moves on any Java change, which would put the floor back at "every
+  step". The per-class digests are that guard at the granularity a step actually consumes.
+- **The gradle-cwd steps** (unit-mod, umt, p3-lint) are the build and its whole test suite, so they keep the whole trees.
+- **Not yet done:** clients still compile their own run worktree (loom `runClient`). Making them load the shared classes would only
+  save time, and needs an in-game run to prove; the keys don't depend on who compiles.
+- `--no-build-artifact` keeps coverage keys on sources.
+
 A coverage PASS is looked up by recomputing its key over the set it recorded (`lookupCoverage`, the newest twelve PASSes of the step):
 - a changed file in the set re-runs the step, and that run re-records its coverage;
 - a changed file outside the set skips it;
@@ -320,7 +339,21 @@ it.
 **Proofs (offline; the exact counts need the first traced turbo run, which records every step's coverage).**
 - **A real JVM** (`./gradlew test --tests *IrRoadExtTest` with the class-load log): 353 `dev.larattalabs` classes, every one mapped
   to its source. The coverage set it gives an in-game entry holds 91 of the 345 mod/src/main files.
-- **5 recent commits touching mod/src/main or kit/lib** (`tools/step-cache.mjs coverage-select <commit>...`, against each parent).
+- **5 recent commits, with the build artifact (the design)** (`tools/step-cache.mjs coverage-select <commits> --bytecode`). Both
+  sides are compiled and the changed class files listed. "At least" is what runs whatever the coverage says: the gradle-cwd steps,
+  and the steps whose drivers, data, runner or safety set moved. Above that, a step runs only if its run loaded a changed class (or
+  touched a changed node file). Of the 210 cacheable steps:
+
+  | commit | change | class files changed | map mode runs | coverage at least |
+  |---|---|---|---|---|
+  | e5dafb64 | kit isLeaves (1 kit/lib file) | 0 | 209 | 149 (the drivers import that kit module) |
+  | 0bb0c89e | RS realised provenance (11 files) | 14 (Realised, InfraPlace, ...) | 204 | 11 |
+  | f5c73633 | RegionHash (5 files) | 6 (RegionHash, RegionsMod, a test) | 204 | 22 |
+  | 8b4da151 | RS-b farmland (3 files) | 5 (Builder and its inner classes) | 204 | 6 |
+  | 4d891398 | RP verify (1 Java file) | 2 (RealisedRecords) | 204 | 4 (unit-mod, umt, p3-lint, p3-lint-long) |
+
+  The earlier bound, which kept the gradle class (`--source-gradle`):
+- **The same 5 commits, source keys** (`tools/step-cache.mjs coverage-select <commit>...`, against each parent).
   "Coverage at least" is the steps whose drivers, data, runner or safety set moved, which run in any mode; the rest are decided
   by their recorded coverage. Of the 210 cacheable steps:
 

@@ -407,6 +407,10 @@ try {
   if (INPUT_MAP) {
     CACHE = cacheContext({ src: SRC, main: MAIN, cfg, conf: CACHE_CONF, map: INPUT_MAP, snapDir: SNAP });
     CACHE.rawCfg = RAW_CFG;
+    // the run-level build artifact (tools/lib/build-artifact.mjs): compiled once per build-input hash, the first time a coverage
+    // key needs it; --no-build-artifact keeps coverage keys on sources (and the constant rule)
+    CACHE.allowBuild = !flag('--no-build-artifact');
+    CACHE.log = (m) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${m}`);
   }
 } catch (e) {
   cacheErr = e.message;
