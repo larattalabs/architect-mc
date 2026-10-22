@@ -248,7 +248,10 @@ function select() {
     // --full (docs/GATES.md "Affected-only releases"): every candidate runs, every rotation option; the rule when the range
     // touches the Minecraft version, a build dependency or an engine path (tools/gate-cache.json release.autoFull)
     const autoWhy = imp ? autoFullWhy(CACHE_CONF, SRC, range, changed, imp.tags) : ['no range (no release tag reachable)'];
-    info.full = flag('--full') ? { on: true, why: ['--full'] } : autoWhy.length ? { on: true, why: autoWhy, auto: true } : { on: false, why: [] };
+    // --no-auto-full: the cache's own selection even where the rule says --full (what the cache alone would run; analysis, or a
+    // coordinator's explicit override)
+    info.full = flag('--full') ? { on: true, why: ['--full'] } : autoWhy.length && !flag('--no-auto-full') ? { on: true, why: autoWhy, auto: true }
+      : { on: false, why: [], ...(autoWhy.length ? { overridden: autoWhy } : {}) };
     for (const s of t.always) addW(s, 'release: always');
     // the candidates beyond the always list: every step an impact rule names and the slice tier's always list; the cache, not the
     // range, decides which of them run
@@ -901,7 +904,7 @@ function printSelection() {
 function printCache() {
   const c = tierInfo.cache;
   if (!c) return;
-  if (tierInfo.full) console.log(`release --full: ${tierInfo.full.on ? `ON (${tierInfo.full.why.join('; ')})` : 'off (no engine, Minecraft-version or build-dependency path in the range; --full forces it)'}`);
+  if (tierInfo.full) console.log(`release --full: ${tierInfo.full.on ? `ON (${tierInfo.full.why.join('; ')})` : tierInfo.full.overridden ? `off by --no-auto-full (the rule would set it: ${tierInfo.full.overridden.join('; ')})` : 'off (no engine, Minecraft-version or build-dependency path in the range; --full forces it)'}`);
   console.log(`cache: lookups ${c.lookup ? 'on' : `OFF (${c.offWhy})`}; PASSes recorded ${c.record ? 'yes (traced)' : `no (${TRACE ? cacheErr ?? 'no input map' : '--no-trace'})`}${c.dirty ? `; the source tree is DIRTY (${c.dirty} path(s)): nothing is looked up or recorded` : ''}${c.nightly ? `; last full nightly ${c.nightly.startedAt} @ ${String(c.nightly.head).slice(0, 9)}` : chainName === 'release' ? '; no full nightly recorded yet' : ''}`);
   if (c.canaries?.length) console.log(`  canaries (${c.canaries.length}): ${c.canaries.join(' ')}`);
   const cached = tierInfo.cached ?? [];

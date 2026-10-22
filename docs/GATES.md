@@ -11,7 +11,8 @@ node tools/gate-run.mjs change --since origin/main               # minutes: the 
 node tools/gate-run.mjs slice  --since origin/main                 # units + apijars + the impact steps + the slice's own steps; timing bars recorded;
                                                                   #   over 20 steps the shard count and ports are chosen for the machine (--shards auto)
 node tools/gate-run.mjs release --release v0.12.0                  # the candidates whose cache key misses + the canaries; timing bars judged, --quiet-wait on
-node tools/gate-run.mjs release --release v0.12.0 --full           # every candidate and every rotation option (automatic on engine/Minecraft/build changes)
+node tools/gate-run.mjs release --release v0.12.0 --full           # every candidate and every rotation option (automatic on engine/Minecraft/build changes;
+                                                                  #   --no-auto-full: the cache's own selection anyway)
 node tools/gate-run.mjs slice  --since origin/main --no-cache      # run every selected step (a PASS is still recorded); --no-trace: no trace, no record
 node tools/step-inputs.mjs check                                 # CI: every driver's imports inside its recorded input set
 node tools/nightly.mjs                                           # the nightly: release --full --no-cache on origin/main (LaunchAgent at 02:00)
