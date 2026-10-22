@@ -207,11 +207,15 @@ function writeTimes(root, add) {
   } catch { /* */ }
 }
 
-/** The pool's size: GATE_PLAN_WORKERS, else the cores the machine has free now (at least 1, at most cores - 1). */
+/**
+ * The pool's size: GATE_PLAN_WORKERS, else the cores the machine has free now, at least 4 and at most cores - 1. (A floor: the 1-min
+ * load lags, and under a turbo run it reads 30-70 on 18 cores, which left one worker, the serial loop, exactly when a driver sits on
+ * the run's critical path; four CPU-bound workers on a busy machine only share it.)
+ */
 export function poolSize(jobs) {
   const env = Number(process.env.GATE_PLAN_WORKERS);
   const cpus = os.availableParallelism?.() ?? os.cpus().length;
-  const n = Number.isFinite(env) && env >= 1 ? Math.floor(env) : Math.max(1, Math.min(cpus - 1, Math.floor(cpus - os.loadavg()[0])));
+  const n = Number.isFinite(env) && env >= 1 ? Math.floor(env) : Math.max(Math.min(4, cpus - 1), Math.min(cpus - 1, Math.floor(cpus - os.loadavg()[0])));
   return Math.max(1, Math.min(n, jobs));
 }
 
