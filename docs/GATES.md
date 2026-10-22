@@ -532,6 +532,76 @@ load before that load shows in the load average.
   (about 17 min). No idle window came on 2026-10-21 to run that case for real; the first quiet-box release will show it in its
   `SUMMARY.md`.
 
+## Turbo (2026-10-22): one run owns the machine
+
+Noah approved this on 2026-10-22: much faster runs, with the machine pushed hard while one runs. A slice tier (about 107 steps)
+took 2h18m on 3 shards (`artifacts/gate-runs-0410/20261022-020720-slice`, 414 step-minutes at load 3-22), while the machine
+(M5 Max: 18 cores, 6 performance and 12 efficiency; 128 GB) was mostly idle. Code: `tools/lib/turbo.mjs` (the queue, the
+exclusive hold, the shard choice, the sampler), `tools/lib/step-split.mjs` and `tools/lib/gate-part.mjs` (split steps),
+`tools/split-proof.mjs` (the union proof); settings: `shards.turbo` in `gate-chains.json`.
+
+### What a turbo run is
+
+- **When.** `--turbo`, or by default any tier run (`change`, `slice`, `release`) of at least 20 steps (`shards.turbo.minSteps`).
+  `--no-turbo` makes it a shared run as before. Small `change` runs, `--only` subsets under 20 steps and the named chains stay
+  shared.
+- **The machine.** It queues, then holds **every** slot file (`slot-1` .. `slot-<n>`, n = max(8, `slots.max`, `--slots`, the
+  highest slot file present)), so no other gate run starts while it runs, including runners from before this change (they only
+  look at slot files, find none free and print the turbo run as the holder).
+- **Shards.** Up to `shards.turbo.max` in-game shards (auto: the smallest N within 3% of the plan's best wall, bounded by
+  memory and free port pairs; no cpu or slots cap, the run owns the machine). `--shards N` fixes N (up to `shards.turbo.max`).
+  Port pairs come from `shards.turbo.portRange` (8940-8999, 30 pairs), checked by binding.
+- **Offline lanes.** The client-less steps (the unit suites, the lints: `client: none`) run on `--lanes N` lanes
+  (`shards.turbo.offlineLanes`) beside the in-game shards, each with its own run worktree (`<run dir>-o<j>`: gradle and the kit
+  suite write into it) and a port pair it doesn't use. An in-game shard keeps its client and takes a client-less step only once
+  no in-game step is pending. `self` steps (apijars, 0a-*) start their own clients, so they stay on in-game shards.
+- **Split steps** run as parallel parts ("Split steps" below); `--no-split` keeps them whole.
+- **Setup** runs the worktrees' git and seed clones serially, then every shard's sidecar build at once.
+- **The sampler** (every run, turbo or not): every 30 s the load, available memory, swap and each shard's and lane's resident
+  memory (its run worktree's processes and its running step's process group) to `machine.jsonl`; `summary.machine` and
+  `SUMMARY.md` fold it (load p50/p90/max, the least available memory, swap, the largest process per shard).
+
+### The queue: fair, no deadlock, stale state by pid
+
+Every run (not `--plan`) takes a ticket in `<slots dir>/queue/` under the slot mutex, which also sets its enqueue time later than
+every live ticket's, so the order is the order of enqueueing.
+- A **shared** run takes one slot only when no ticket queued before it is still waiting and no turbo run holds or is reserving
+  the machine. It logs whom it waits for ("queued before it: pid ... TURBO slice ...", "the machine: pid ... TURBO ..."), at once,
+  on every change and every 5 minutes.
+- A **turbo** run, once no ticket queued before it is still waiting, writes its pid into each slot as it frees (state
+  `reserving`) and runs when it holds them all. It polls every 5 s (shared runs 15 s).
+- **Fairness.** A run queued behind a turbo run starts when that run ends; a turbo run never overtakes an earlier ticket (it
+  reserves nothing while one waits), so it can't starve a run that queued first; a later shared run never overtakes an earlier
+  one. When a turbo run ends and the head of the queue is another turbo run, it hands its slots straight to it (they become that
+  run's reserved slots), so nothing slips in between.
+- **No deadlock.** The head of the queue waits only for running holders, which end or die; every other ticket waits only for
+  tickets ahead of it, a total order. A dead pid's ticket or slot (a SIGKILLed run) is free, as slots always were.
+- **Limits.** A runner from before this change takes no ticket: it can take a slot that frees while a turbo run at the head
+  of the queue polls (as the gate-affected release did on 2026-10-22, 45 s after the warm-up run ended), and the turbo run then
+  waits for it. Once every branch has merged main this goes away. A turbo run at the head reserves slots while it waits, so
+  every later run waits too: queue a turbo run when the machine is about to be free, not behind a long release.
+- `kit/test/gate-turbo.test.mjs` covers it with real pids: the waits, the FIFO order, no overtaking either way, stale tickets
+  and holds, two turbo runs, the hand-over.
+
+### Split steps
+
+A long step whose driver runs independent sections (worlds, fixtures, seeds, scenario variants, item groups) declares `split` in
+`gate-chains.json`: a part's env (its sections, `GATE_PART_SECTIONS`), or its own `shell` (a shell chain split by its commands),
+an env every part gets (`${PART}` = p1, p2, ...: each part's own evidence dir) and an estimate.
+- **Ids.** The parent keeps its id everywhere a step is named (the impact rules, the tiers, `supersededBy`, `--only`); after the
+  selection a splitting run replaces it by `<id>/p1` .. `<id>/pN`. `--only <id>/p2` runs that part alone. A step that `waitFor`s
+  the parent waits for every part; `after` a split step is not allowed (the config check refuses it). The history records each
+  part under its own id; a part's definition (for history timeouts) is its parent's entry with the part's env.
+- **No dropped assertion.** The runner also sets `GATE_PART_ALL`, every part's sections together; the driver
+  (`tools/lib/gate-part.mjs`) throws before anything runs unless that equals its own section list, and the config check refuses a
+  section named in two parts. A driver without `GATE_PART_SECTIONS` runs every section exactly as before.
+- **Evidence.** Each part writes its own evidence dir; `p3-probe.mjs` reads the h/hy evidence from the parts' dirs.
+- `summary.json` records `split` (parent -> parts) and `splitResults` (the parent's worst status, its step time and its wall from
+  the first part's start to the last's end); `SUMMARY.md` prints them.
+- **The union proof:** `node tools/split-proof.mjs --whole <run with the step whole> --parts <run with it split>` compares, per
+  parent, the check lines (`ok`, `FAIL`, `rec`, indented ones too) of the whole step with the parts' together, numbers, hex ids,
+  paths and times masked. A timing bar that is `ok` on one side and `FAIL` on the other is reported as timing.
+
 ## Fast checks P1 (2026-10-21): the undo assertions move to the undo model
 
 Phase P1 of docs/FAST-CHECKS.md: the in-game undo assertions it maps to the undo model (UMT, docs/UMT.md) leave the slice tier.
