@@ -548,7 +548,13 @@ steps.boundary = async () => {
   const mask = (runs) => runs.flatMap(([x0, z, x1]) => Array.from({ length: x1 - x0 + 1 }, (_, i) => [x0 + i, z]));
   // ---- the shore (S3's river) and the ridge (S3's crest), on S3's pinned claim
   await tp(Math.floor((S3[0] + S3[2]) / 2), 200, Math.floor((S3[1] + S3[3]) / 2));
-  for (const [id, follow, size, lots] of [['quay', { shore: { minArea: 64 } }, [64, 24], 2], ['crest', { ridge: { minRise: 8 } }, [64, 20], 1]]) {
+  // (fast checks P2) the crest round's ridge geometry is the structure lint's (districts on S3's pinned survey); at the slice tier
+  // (`d2-ingame-smoke`) the quay round stays the one natural follow district realised (its reload and undo too), the crest round runs
+  // at release; the refusals stay (seconds)
+  const P2 = await import('./lib/p2-trim.mjs');
+  const rounds = [['quay', { shore: { minArea: 64 } }, [64, 24], 2], ['crest', { ridge: { minRise: 8 } }, [64, 20], 1]];
+  const trimCrest = P2.p2Trim(log, 'd2 boundary: the crest round (ridge street on the crest, its realise and undo)');
+  for (const [id, follow, size, lots] of trimCrest ? rounds.slice(0, 1) : rounds) {
     const r = await d2Round(id, world, S3, { id, size, follow, lots: Array.from({ length: lots }, (_, i) => ({ id: `${id}_${i + 1}`, type: 'cottage', size: [7, 7] })) }, { natural: true });
     const f = r.files.meta.districts.follow[id];
     const cols = decodeColumns(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', r.plan.planId, 'survey.bin')));

@@ -281,7 +281,10 @@ steps.lampsoff = async () => {
 steps.pathbibles = async () => {
   await ensure();
   // (S7's own fixture bible, coarse dirt, run here too: the step stands alone on a fresh run worktree)
-  const bibles = [['coarse_dirt', 'g6cv_village'], ['packed_mud', 'g6cw_path_packed_mud'], ['stone_bricks', 'g6cw_path_stone_bricks'], ['oak_planks', 'g6cw_path_oak_planks']];
+  // (fast checks P2) GATE6CW_BIBLES: the bibles to run (w-ingame-smoke: packed_mud only, the built verge 4e's lanterns stand on as their
+  // owner's: the structure lint's `pathbibles` case runs all four, this keeps its RoadPlan model honest in game)
+  const only = (process.env.GATE6CW_BIBLES ?? '').split(',').filter(Boolean);
+  const bibles = [['coarse_dirt', 'g6cv_village'], ['packed_mud', 'g6cw_path_packed_mud'], ['stone_bricks', 'g6cw_path_stone_bricks'], ['oak_planks', 'g6cw_path_oak_planks']].filter(([b]) => !only.length || only.includes(b));
   const out = {};
   for (const [blk, bible] of bibles) {
     let dir;
@@ -308,6 +311,8 @@ steps.pathbibles = async () => {
     out[blk] = { run: dir, roadLanterns: n, sample: lanterns.slice(0, 4), walkDark: wd && { share: wd.share, cells: wd.walkCells, dark: wd.dark }, roadsIr: ir.roads.map((r) => r.id) };
     check(wd && wd.share === 0, `item 5 (${blk}): M5 over the street, verges, lanes and square 0.00% (${wd ? `${wd.dark} of ${wd.walkCells}` : 'n/a'})`);
   }
+  // (with one bible: its count against the structure lint's, the coarse-dirt bible's 7 there)
+  if (only.length && !out.coarse_dirt) for (const blk of only) if (out[blk]) check(out[blk].roadLanterns === 7, `item 5 (${blk}): road lanterns ${out[blk].roadLanterns} = the lint's count for every bible (7)`);
   for (const blk of ['packed_mud', 'stone_bricks', 'oak_planks']) if (out[blk] && out.coarse_dirt) check(out[blk].roadLanterns === out.coarse_dirt.roadLanterns, `item 5: road lanterns with a ${blk} path ${out[blk].roadLanterns} = the coarse-dirt bible's ${out.coarse_dirt.roadLanterns}`);
   return out;
 };

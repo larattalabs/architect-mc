@@ -731,6 +731,13 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     village = { lamps: meta.village?.apronLamps ?? null, walkDark, door: Object.fromEntries(Object.entries(door).map(([k, d]) => [k, { ...d, path: undefined, pathLength: d.path?.length }])), fronts, props, nav: VB.navSummary(nav),
       M2villager: realised.metrics.M2villager, M22: realised.metrics.M22, M23: realised.metrics.M23, M24: realised.metrics.M24, graph: realised.metrics.graph };
   }
+  // (fast checks P2, docs/FAST-CHECKS.md "Precondition for every REPLACE row") the realised world against the plan's virtual world,
+  // per writer kind: the SMOKE row that keeps the structure and look lints (tools/lint.mjs) trustworthy. Gated: 0 differing cells of
+  // any kind (the classes kept / road / plant / child / grass / fluid recorded; tools/lib/realised-virtual.mjs)
+  const RV = await import('./lib/realised-virtual.mjs');
+  const rv = await RV.realisedVsVirtual(planDir, path.join(raw, 'after.arwd.gz'), path.join(raw, 'before.arwd.gz'));
+  fs.writeFileSync(path.join(out, 'realised-virtual.json'), `${JSON.stringify(rv, null, 1)}\n`);
+  rows.push({ id: 'realisedVirtual', label: 'P2 realised == virtual (per writer kind)', value: `${rv.differ} of ${rv.written} written cells differ; ${RV.describeRealised(rv)}${rv.first.length ? `; first ${JSON.stringify(rv.first.slice(0, 3))}` : ''}`, threshold: `0 differing cells of every writer kind${flat ? ' (flat: none but child)' : ''}`, pass: RV.realisedOk(rv, [], { strict: flat }).pass, gated: true });
   const fronts = M.lotFronts(ir, after);
   L.log(`  lot fronts: outside the boxes ${JSON.stringify(fronts.outside)}; inside (the children's own) ${JSON.stringify(fronts.inside)}`);
   const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), ...(relief ? { relief } : {}), ...(scatterM ? { scatter: scatterM } : {}), ...(route ? { route } : {}), ...(districts ? { districts } : {}), ...(s2 ? { s2 } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,

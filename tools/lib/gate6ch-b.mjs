@@ -228,6 +228,15 @@ async function wetRun(ctx, tag, { claim, plan, anchors, kind, bible = null, expe
   const planDir = path.join(L.SIDECAR_DATA, 'regions', 'plans', st.view.planId);
   const R = await realisedOf(ctx, planDir, before, after);
   out.items = await item8(ctx, tag, R, expect);
+  // (fast checks P2, docs/FAST-CHECKS.md "Precondition for every REPLACE row") the realised world against the plan's virtual world, per
+  // writer kind: the wet writes' SMOKE row (wet piers, quays, harbour walls: kind fluids / bridges / walls). The fluid bodies' and
+  // courses' rows belong to the water lint (P3)
+  {
+    const RV = await import('./realised-virtual.mjs');
+    const rv = await RV.realisedVsVirtual(planDir, after, before, { lots: false });
+    out.realisedVirtual = { written: rv.written, differ: rv.differ, byKind: rv.byKind, first: rv.first };
+    check(RV.realisedOk(rv).pass, `P2 SMOKE (${tag}): realised == virtual per writer kind, ${rv.differ} of ${rv.written} differ: ${RV.describeRealised(rv)}${rv.first.length ? ` first ${j(rv.first.slice(0, 3))}` : ''}`);
+  }
   // item 9: vanilla villagers across every bridge and onto every quay, both ways
   await L.cmd('/kill @e[type=!minecraft:player]');
   out.nav = {};
