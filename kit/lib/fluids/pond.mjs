@@ -401,10 +401,23 @@ function emitSite(K, p, res, water) {
   }
 }
 
-/** Why a pond tries its first site only (an overflow feeds it; a part other than its own coral is placed against it), else null. */
+/** (close-out A, §7) Connectors routed after the H parts emit (step 4): they read the pond's moved geometry, so they never hold its site. */
+const ROUTED_LATER = new Set(['street', 'road', 'path', 'bridge', 'tunnel', 'rope_bridge', 'drawbridge', 'auto']);
+
+/**
+ * Why a pond tries its first site only, else null: an overflow feeds it, or a part placed against its first site before the H parts
+ * emit depends on it (a zone or form resolved after it, its own coral aside; a wall or gate, planned before; another H part). A route
+ * to it (a street, road, path, bridge, tunnel or rope bridge) is routed after, to the site written, and holds nothing.
+ */
 function singleSiteWhy(K, p) {
   if (overflowsOn(K, p.id).length) return 'overflow';
-  const dep = (K.order ?? []).find((q) => q.id !== p.id && (q.deps ?? []).includes(p.id) && !(q.family === 'form' && q.kind === 'coral' && q.part?.where?.inside?.part === p.id));
+  const placedAgainst = (q) => {
+    if (q.id === p.id || !(q.deps ?? []).includes(p.id) || (K.okClass && !K.okClass(q.id))) return false;
+    if (q.family === 'form' && q.kind === 'coral' && q.part?.where?.inside?.part === p.id) return false;
+    if (q.family === 'connector' && ROUTED_LATER.has(q.kind)) return false;
+    return q.family === 'zone' || q.family === 'form' || q.family === 'connector';
+  };
+  const dep = (K.order ?? []).find(placedAgainst);
   return dep ? `dependant ${dep.id}` : null;
 }
 

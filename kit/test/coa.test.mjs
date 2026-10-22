@@ -247,6 +247,30 @@ test('§7: Steward\'s grove_pond with its pond near the stone (beside the town\'
   }
 });
 
+test('§7: a path to the pond does not hold its first site: the pond moves and the path ends beside the site written', async () => {
+  const fx = readJ('coa', 'n01_grove_pond_stone.json');
+  const plan = { ...fx.answer.plan, connectors: [{ id: 'pond_path', kind: 'path', from: { anchor: 'stone' }, to: { part: 'pond' } }] };
+  const r = await run(fx, { plan });
+  assert.deepEqual(leaks(r), []);
+  const pond = part(r, 'pond'), path = part(r, 'pond_path');
+  assert.equal(pond.class, 'adjusted');
+  assert.equal(path.class, 'fits');
+  const [x0, z0, x1, z1] = pond.geometry.rect;
+  const end = path.geometry.legs.at(-1).to;
+  // a form's route end: the column just outside its rect grown by 2 (compile.mjs endpointNode), of the site written
+  assert.ok(end[0] >= x0 - 2 && end[0] <= x1 + 2 && end[2] >= z0 - 2 && end[2] <= z1 + 2 && !(end[0] > x0 - 2 && end[0] < x1 + 2 && end[2] > z0 - 2 && end[2] < z1 + 2), `the path ends at ${end} beside ${pond.geometry.rect}`);
+});
+
+test('§7: a form placed near the pond holds its first site: LEAK as main answers, evidence.tried and single', async () => {
+  const fx = readJ('coa', 'n01_grove_pond_stone.json');
+  const plan = { ...fx.answer.plan, forms: [...fx.answer.plan.forms, { id: 'spire', kind: 'rock_spire', where: { near: { feature: { part: 'pond' }, within: 12 } } }] };
+  const r = await run(fx, { plan });
+  const pond = part(r, 'pond');
+  assert.equal(pond.class, 'refused');
+  assert.equal(pond.reasons[0].code, 'LEAK');
+  assert.deepEqual([pond.reasons[0].evidence.single, pond.reasons[0].evidence.tried], ['dependant spire', [{ water: [154, 154, 164, 162], skipped: 'LEAK', meets: ['lot cottage_1'] }]]);
+});
+
 test('§7 (unit): the only lot-clear site, ranked below the first (its locator move 6), is written; with it taken too, LEAK with tried', async () => {
   const fx = readJ('coa', 'n02_pond_only_clear_site.json');
   const r = await run(fx);
