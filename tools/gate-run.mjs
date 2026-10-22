@@ -732,6 +732,8 @@ function childEnv(sh, extra = {}) {
   if (runShared.kitJunit) Object.assign(env, { GATE_KIT_RESULTS: runShared.kitJunit, GATE_KIT_TREE: runShared.kitTree });
   // the run worktree where unit-mod built this HEAD (gate6cmp reads its classes): set once unit-mod passed
   if (runShared.unitModRun) env.GATE_UNIT_MOD_RUN = runShared.unitModRun;
+  // the merge base the drivers' "unchanged against origin/main" items compare with, fixed once per run (tools/lib/base-tree.mjs)
+  if (runShared.mergeBase && !process.env.GATE_MERGE_BASE) env.GATE_MERGE_BASE = runShared.mergeBase;
   if (COVERAGE && sh.ev) {
     // coverage (tools/lib/step-coverage.mjs): every JVM of the shard logs its class loads, every node process of a client it
     // starts (the sidecar, its workers) traces what it touches; a step's own processes trace into the step's dir (runProcess)
@@ -746,7 +748,7 @@ function childEnv(sh, extra = {}) {
   return env;
 }
 /** Run-level facts the steps' environment carries (filled in when the run starts and as steps end). */
-const runShared = { kitJunit: null, kitTree: null, unitModRun: null };
+const runShared = { kitJunit: null, kitTree: null, unitModRun: null, mergeBase: null };
 const expand = (s, sh) => s.replace(/\$\{(\w+)\}/g, (_, n) => ({ RUN: sh.RUN, SRC, MAIN, OUT: sh.ev })[n] ?? '');
 const resolveCwd = (c, sh) => (!c ? SRC : c.startsWith('run:') ? path.join(sh.RUN, c.slice(4)) : c.startsWith('src:') ? path.join(SRC, c.slice(4)) : path.resolve(SRC, c));
 const getPath = (obj, p) => p.split('.').filter(Boolean).reduce((o, k) => (o == null ? undefined : o[k]), obj);
@@ -1758,6 +1760,19 @@ try {
   }
   const head = git(SRC, 'rev-parse', 'HEAD');
   summary.head = head;
+  // one merge base for the whole run: origin/main moving mid-run (a merge to main) moved the drivers' base worktrees under the
+  // steps (and split parts) still reading them, and the steps that started later compared with another base (2026-10-22)
+  try {
+    execFileSync('git', ['-C', SRC, 'fetch', '-q', 'origin', 'main'], { stdio: 'ignore', timeout: 120_000 });
+  } catch {
+    // offline: the last fetched origin/main
+  }
+  try {
+    runShared.mergeBase = process.env.GATE_MERGE_BASE || git(SRC, 'merge-base', 'HEAD', 'origin/main');
+    summary.mergeBase = runShared.mergeBase;
+  } catch {
+    // no origin/main: the drivers find their own
+  }
   // the cache's selection and keys belong to the head they were computed at: a source HEAD that moved while this run waited for
   // a slot would run another commit than the one selected
   if (CACHE && CACHE.head !== head) {

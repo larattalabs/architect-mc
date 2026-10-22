@@ -1051,6 +1051,34 @@ The other status differences in the proof runs are failures known on main, on on
 before), 4d's "stages: undo" (8 of 199), 4d-all-full's "group undo" (22 of 94), S3's safety, scatter_cave's exactness (6 of 42). hy-ingame's item 14 push stand (a mob beyond the grate) failed on both sides at this head (0 of 24 before
 today), so it is not a split problem; it is reported to the coordinator.
 
+### Measured: the slice at turbo
+
+The baseline's 110 steps (`artifacts/gate-runs-0410/20261022-020720-slice`: **2h18m** on 3 shards, 414 step-minutes) run as
+`slice --files tools/gate-run.mjs --only <the same 110 ids>` at turbo, head c8bc281a (`artifacts/gate-runs-turbo-slice/
+20261022-212922-slice`): 9 in-game shards + 3 offline lanes, 130 steps after the splits, **58m08s wall** (2.4x faster),
+651 step-minutes. Every worker was busy 53-58 min, so the run is throughput-bound: the step time grows with the load (median
+about 1.3-1.5x, load p50 35, p90 71, max 93; 52 GB available at least, no swap, gate processes 38 GB, the largest process 5.2 GB);
+the longest single part was 20.6 min (fl-unit's slice 1). The next gain is less work (the step cache, a shared plan cache for the
+byte-identity loops), not more shards.
+
+119 PASS, 11 FAIL. Split problems, fixed after this run (and re-proven below): kc-unit/p3 and f3-unit/p1 raced on their merge-base
+worktree's checkout (`tools/lib/base-tree.mjs` now locks it and leaves a tree at the base alone); 6cf2-scenario-scatter/p2 and
+6c-scenario-s3/p2 lacked their flat run's E-flat (a flat/natural pair now stays in one part). Known on main: pt2-ingame item 13,
+h-unit item 10, f3-unit's e16 exception and fl-unit's item 8 (both also in the affected-only release's whole runs of v0.41.0),
+sim-jobs' launcher reuse (7 of 93 runs), 4d's shared crate, 6b-scenario-s1's E-normal (2 of 62), S3's checker and structure
+(in the 0410 slices too), scatter_cave's realised == virtual (2 of 19).
+
+**Proof of the unit slices and the 6cf2 split** (head 65715bfe, turbo, 3 shards + 3 lanes; whole
+`artifacts/gate-runs-turbo-proof/20261022-222818-change`, split `-230320-change`): irr-unit 304/304 checks, f3-unit 311/311, fl-unit
+317/317, voc-unit 12/12, 6cf2-scenario-scatter 22/22 (now 2 parts): equal, and the full masked lines too except where noted.
+kc-unit 324/324: the same checks; one recorded line ("the watch count: N fixtures ... (none)") lists only its slice's fixtures, as
+expected of a recorded count. s3-unit 308/308: the same checks, but asks/redstone_gate.json DIFFERS in part 2 (its first plan's IR):
+origin/main moved to 15c54050 during the run, so the parts that started later took the new merge base (65715bfe, this head) and
+moved the shared base worktree while another part was planning on it. gate-run now fetches once and fixes the run's merge base
+(`GATE_MERGE_BASE`, recorded as `summary.mergeBase`); `tools/lib/base-tree.mjs` uses it and never fetches mid-run. Drivers that
+make their base worktree themselves (gate6ch-core, gate6chy-core, gate6ch-a, gate6ct3a, gate7ak1b, gate6chya) still fetch per step;
+their steps are not split.
+
 **Server and world reuse: not done.** In the 2h18m baseline slice, client and server starts, world switches and snapshot
 restores took 10.0 of 414 step-minutes and the steps' own `gate6b.mjs base` 6.5: 4% together, under the 10% that would pay
 for a warm-server-per-shard reset and its proof. Under turbo the starts grow (28.7 of 447 step-minutes at 12 shards, 6%;
