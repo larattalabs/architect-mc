@@ -43,6 +43,8 @@ export const acceptsOverflow = true;
 export const POND = Object.freeze({ water: [9, 7], lava: [3, 3], areaMax: 1024, areaMin: 4, depth: 2, lavaDepth: 1 });
 /** The farm pond (S-H-1): 3 x 3, 1 deep, its rim 2 from the lot's box (M25:keep keeps one clear cell beside a box). */
 export const FARM_POND = Object.freeze({ side: 3, depth: 1, rimGap: 2 });
+/** (close-out A, §7) How many sites resolve ranks (the first is the geometry; emit tries the others when its reach meets a lot). */
+export const POND_SITES = 16;
 /** Lava keeps this far (Chebyshev, columns) off surveyed water and trees (its fire reach plus a tree's leaves). */
 const LAVA_WATER_GAP = 4, LAVA_TREE_GAP = FIRE_REACH.side + 4;
 
@@ -262,7 +264,9 @@ export function resolve(C, p) {
   const ok = (a) => { const w = waterOk(a); if (w !== true) return w; return lava ? lavaSiteOk(env, a) : true; };
   const avoid = spawnAvoid(C);
   const scanWith = (o) => scanRects(env, sp.w, sp.d, loc, { sketch: sk, obstacles, maxMove: tMove.ceiling, keep, limit: 1, avoid, ...o });
-  let c = scanWith({ ok })[0];
+  // ((close-out A, §7) up to POND_SITES sites ranked as before (the same scan and score; the first is today's site), tried in order at emit)
+  const ranked = scanWith({ ok, limit: POND_SITES });
+  let c = ranked[0];
   if (!c) {
     // why: the water (a body meeting natural water at another level), a protected area or build, the fire reach, else no room
     const anyRect = scanWith({ ok: () => true, keep: 0, obstacles: [] })[0] ?? null;
@@ -289,7 +293,11 @@ export function resolve(C, p) {
   return {
     klass: j.klass, rect: grow(a, 1), footprints: [rectArr(grow(a, lava ? keep : 2))], deviations: j.deviations, notes: sp.notes,
     reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${j.failed.what} ${j.failed.value} past its limit`, evidence: { what: j.failed.what, value: j.failed.value } }] : [],
-    water: a, spec: sp,
+    water: a, spec: sp, keep: lava ? keep : 2,
+    // ((close-out A, §7) the later ranked sites, each judged as the first is, for emit's retry; `rescan(clear)`: the same scan and score
+    // over the whole locator, keeping the sites `clear(rect)` accepts (emit's footprint test), the first POND_SITES of them)
+    alts: ranked.slice(1).map((q) => ({ water: q.rect, move: q.move, sketch: q.sketch })),
+    rescan: (clear) => scanWith({ ok: (q) => { const w = ok(q); return w === true ? clear(q) : w; }, limit: POND_SITES }).map((q) => ({ water: q.rect, move: q.move, sketch: q.sketch })),
   };
 }
 
@@ -310,8 +318,60 @@ export function iceFor(ctx, surface, asked) {
   return { ice, notes };
 }
 
-/** Write the part: the pond's body; refuse it when its reach meets what it may not (LEAK) or its frozen surface may not be capped. */
+/**
+ * Write the part: the pond's body; refuse it when its reach meets what it may not (LEAK) or its frozen surface may not be capped.
+ * (close-out A, §7) When the first site's reach meets a lot box, a build, a protected area, keep-out or another owner (the reach's LEAK),
+ * the later ranked sites are tried in order: a site is skipped when its footprint meets another part's resolved geometry (zones,
+ * districts, forms, lots, planned walls, other H parts' footprints and bodies) or when its own write is refused; the first that writes
+ * is the part's (adjusted, a move deviation; the answer's geometry and the footprint the routes see follow it). None: the first site's
+ * LEAK, as before, with `evidence.tried`. A pond fed by an overflow, or with a dependant placed against its site (coral inside it aside),
+ * tries its first site only. Every other refusal of the first site (unwritable, mix, FIRE, WATER) is as before.
+ */
 export function emit(K, p, res) {
+  const cp0 = (res.alts ?? []).length ? K.checkpoint() : null;
+  const first = emitSite(K, p, res, res.water);
+  if (first.ok) { res.emitted = first.emitted; return; }
+  if (first.kind !== 'reach') throw first.error;
+  if (cp0) K.rollback(cp0);
+  const tried = [{ water: rectArr(res.water), skipped: 'LEAK', meets: first.error.evidence?.meets ?? [] }];
+  const only = (res.alts ?? []).length ? singleSiteWhy(K, p) : null;
+  let footprint = 0;
+  if (!only) {
+    // the ranked sites in rank order, those whose footprint meets another part's geometry skipped (counted): the first POND_SITES
+    // clear ones are tried (the top ranks are the first site's neighbours, inside whatever held it)
+    const same = (a, b) => a.minX === b.minX && a.minZ === b.minZ && a.maxX === b.maxX && a.maxZ === b.maxZ;
+    const clearSites = res.rescan((q) => (footprintMeets(K, p, res, q) ? 'footprint' : true)).filter((q) => !same(q.water, res.water));
+    footprint = res.alts.filter((q) => footprintMeets(K, p, res, q.water)).length;
+    for (const alt of clearSites) {
+      const j = laterJudge(K, p, res, alt);
+      if (j.klass === 'refused') { tried.push({ water: rectArr(alt.water), skipped: 'TOLERANCE' }); continue; }
+      const cp = K.checkpoint();
+      const o = emitSite(K, p, res, alt.water);
+      if (!o.ok) { K.rollback(cp); tried.push({ water: rectArr(alt.water), skipped: o.code, ...(o.kind === 'reach' ? { meets: o.error.evidence?.meets ?? [] } : {}) }); continue; }
+      // the site written: the part's geometry, answer and footprint follow it
+      const from = res.water;
+      res.water = alt.water;
+      res.rect = grow(alt.water, 1);
+      res.footprints = [rectArr(grow(alt.water, res.keep ?? 2))];
+      res.klass = 'adjusted';
+      res.deviations = j.deviations;
+      res.moved = { from: rectArr(from), tried: tried.length, footprint };
+      K.geom?.set(p.id, { rect: res.rect });
+      res.emitted = o.emitted;
+      res.emitted.notes = [...res.emitted.notes, `the first site (${rectArr(from).join(', ')}) reaches ${tried[0].meets.join(', ') || 'what it may not'} (LEAK): moved to the next ranked site clear of the other parts and of the lots (${tried.length - 1} more tried, ${footprint}+ skipped for their footprint)`];
+      return;
+    }
+  }
+  const e = first.error;
+  e.evidence = { ...(e.evidence ?? {}), tried, ...(footprint ? { footprintSkipped: footprint } : {}), ...(only ? { single: only } : {}) };
+  throw e;
+}
+
+/**
+ * Write one site of the pond: {ok: true, emitted} or {ok: false, kind: 'reach' (the reach's LEAK) | 'other', code, error} (the bodies
+ * this call added rolled back; the caller rolls the region back for a later site).
+ */
+function emitSite(K, p, res, water) {
   const r = K.r, env = K.env, sp = res.spec;
   const m = bodiesMark(r);
   try {
@@ -323,19 +383,67 @@ export function emit(K, p, res) {
     const noCap = p.part.ext?.['architect_mc:unsafe']?.noCap === true;
     if (noCap) notes.push('architect_mc:unsafe noCap: the surface is left open (the gate\'s uncapped twin)');
     if (sp.fluid === 'water' && !noCap) {
-      const dec = iceFor(K.ctx, surfaceOf(r, res.water, shape), p.part.ice);
+      const dec = iceFor(K.ctx, surfaceOf(r, water, shape), p.part.ice);
       if (dec.refuse) throw refusal(dec.refuse.code, dec.refuse.message, dec.refuse.evidence);
       ice = dec.ice; notes.push(...dec.notes);
     }
     // ((6c KC) the broken variant `ownerUnknown` (ext architect_mc:unsafe): a body op with no part; M25:clear and M25:shell name it)
-    const rec = emitPond(r, { id: bodyId(p.id), part: p.part.ext?.['architect_mc:unsafe']?.ownerUnknown === true ? null : p.id, kind: 'pond', rect: res.water, shape, depth: sp.depth, edge: sp.edge, fluid: sp.fluid, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice, overflow: overflowsOn(K, p.id), decor: coralRequests(K, p.id) });
-    leakCheck(r, env, rec);
+    const rec = emitPond(r, { id: bodyId(p.id), part: p.part.ext?.['architect_mc:unsafe']?.ownerUnknown === true ? null : p.id, kind: 'pond', rect: water, shape, depth: sp.depth, edge: sp.edge, fluid: sp.fluid, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), ice, overflow: overflowsOn(K, p.id), decor: coralRequests(K, p.id) });
+    const hit = reachMeetsKeep(r, env, rec, { volClass: volumeKeep(r, VC, classAt) });
+    if (hit) { const e = leakRefusal(rec, hit); e.reach = true; throw e; }
+    shellCheck(r, rec);
     if (sp.fluid === 'lava') mixCheck(r, rec);
-    res.emitted = { bodies: [rec], notes };
+    return { ok: true, emitted: { bodies: [rec], notes } };
   } catch (e) {
     bodiesRollback(r, m);
-    throw e;
+    const code = /^([A-Z_]{3,20}): /.exec(String(e.message))?.[1] ?? 'NO_ROOM';
+    return { ok: false, kind: e.reach ? 'reach' : 'other', code, error: e };
   }
+}
+
+/** Why a pond tries its first site only (an overflow feeds it; a part other than its own coral is placed against it), else null. */
+function singleSiteWhy(K, p) {
+  if (overflowsOn(K, p.id).length) return 'overflow';
+  const dep = (K.order ?? []).find((q) => q.id !== p.id && (q.deps ?? []).includes(p.id) && !(q.family === 'form' && q.kind === 'coral' && q.part?.where?.inside?.part === p.id));
+  return dep ? `dependant ${dep.id}` : null;
+}
+
+/**
+ * A later site judged as resolve judges the first (its locator move and sketch distance against the part's tolerances: a site past a hard
+ * limit is skipped). Its deviations always name the move: the locator's move when it has one, else the site's shift from the first site
+ * (Chebyshev, centres) as {what: move, value} (the site is still where the locator asks).
+ */
+function laterJudge(K, p, res, alt) {
+  const sk = sketchPoint(K.env, p.part.sketch);
+  const j = K.judge([{ what: 'move', value: alt.move, ...K.tolOf(p.part, 'move') }, ...(sk ? [{ what: 'sketch', value: alt.sketch, ...K.tolOf(p.part, 'sketch') }] : [])]);
+  if (j.klass === 'refused' || j.deviations.some((d) => d.what === 'move')) return j;
+  const [ax, az] = centre(res.water), [bx, bz] = centre(alt.water);
+  return { ...j, deviations: [{ what: 'move', value: Math.max(1, Math.abs(ax - bx), Math.abs(az - bz)) }, ...j.deviations] };
+}
+
+/**
+ * Whether a later site's footprint (its water grown by its keep: 2, a lava pit's fire keep) meets another part's resolved geometry:
+ * the zones' rects (a districts zone's district rects), the forms' and other parts' rects (coral inside this pond aside), the lots
+ * written, the planned walls' cells and the other H parts' reserved footprints and bodies. Returns what it meets ([strings]) or null.
+ */
+function footprintMeets(K, p, res, water) {
+  const fp = grow(water, res.keep ?? 2);
+  const met = [];
+  const inMe = (id) => { const q = K.byId?.get(id); return q?.part?.where?.inside?.part === p.id; };
+  for (const [id, g] of K.geom ?? []) {
+    if (id === p.id || inMe(id) || !g?.rect) continue;
+    const rr = K.res?.get(id)?.rects ?? [g.rect];
+    if (rr.some((q) => meets(fp, q))) met.push(id);
+  }
+  for (const l of K.r.lots ?? []) if (meets(fp, grow({ minX: l.box.minX, minZ: l.box.minZ, maxX: l.box.maxX, maxZ: l.box.maxZ }, 1))) met.push(`lot ${l.id}`);
+  for (const W of K.walls ?? []) if (W.cells.some((c) => c.x >= fp.minX && c.x <= fp.maxX && c.z >= fp.minZ && c.z <= fp.maxZ)) met.push(`wall ${W.id}`);
+  for (const rec of K.keep ?? []) {
+    if (rec.part === p.id || inMe(rec.part)) continue;
+    let hit = false;
+    for (let x = fp.minX; x <= fp.maxX && !hit; x++) for (let z = fp.minZ; z <= fp.maxZ && !hit; z++) if (rec.cols.has(k2(x, z))) hit = true;
+    if (hit) met.push(`body ${rec.body ?? rec.part}`);
+  }
+  return met.length ? [...new Set(met)].slice(0, 8) : null;
 }
 
 /** A body's reach (its cells, shell, spill and single breach) meeting a lot, a build, a protected area, keep-out or another owner: LEAK. */
@@ -387,7 +495,9 @@ export function answer(K, p, res) {
   if (!e) return null;
   const vol = volumeAnswer(K.r, e.bodies);
   if (vol) return vol;
-  return bodyAnswer(K, p, e.bodies, { rect: res.rect, notes: [...(res.notes ?? []), ...e.notes], extra: { water: rectArr(res.water), fluid: res.spec.fluid, edge: res.spec.edge, depth: res.spec.depth } });
+  const a = bodyAnswer(K, p, e.bodies, { rect: res.rect, notes: [...(res.notes ?? []), ...e.notes], extra: { water: rectArr(res.water), fluid: res.spec.fluid, edge: res.spec.edge, depth: res.spec.depth } });
+  // ((close-out A, §7) a later site: adjusted, its move a deviation)
+  return res.moved ? { ...a, class: 'adjusted', deviations: res.deviations } : a;
 }
 
 /**

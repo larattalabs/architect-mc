@@ -214,3 +214,53 @@ test('§5 lenient: a string scope "lots" plans (never malformed) as over: lots, 
   assert.deepEqual(b.measured, a.measured);
   assert.equal(p.artifact.palette[0].over, 'lots');
 });
+
+// ------------------------------------------------------------------ §7 (item 7): ponds choose a lot-clear site
+
+const leaks = (r) => r.check.parts.flatMap((a) => (a.reasons ?? []).filter((x) => x.code === 'LEAK').map((x) => `${a.part}: ${x.message}`));
+
+test('§7: Steward\'s grove_pond with its pond near the stone (beside the town\'s lots) places: adjusted (move), 0 LEAK, the reef in it', async () => {
+  const fx = readJ('coa', 'n01_grove_pond_stone.json');
+  const r = await run(fx);
+  assert.deepEqual(leaks(r), []);
+  assert.equal(r.check.overall, 'READY');
+  const pond = part(r, 'pond');
+  assert.equal(pond.class, 'adjusted');
+  assert.equal(pond.deviations[0].what, 'move');
+  assert.ok(pond.deviations[0].value > 0);
+  assert.match(pond.notes.at(-1), /^the first site \(154, 154, 164, 162\) reaches lot cottage_1 \(LEAK\): moved to the next ranked site/);
+  // the answer's geometry is the site written: the body, its rect, and the reef grown inside it
+  const [x0, z0, x1, z1] = pond.geometry.water;
+  assert.deepEqual(pond.geometry.rect, [x0 - 1, z0 - 1, x1 + 1, z1 + 1]);
+  const ir = irOf(r);
+  const body = ir.parts.find((p) => p.id === 'w_pond_basin');
+  assert.ok(body, 'the basin is written once');
+  assert.equal(ir.parts.filter((p) => p.id === 'w_pond_basin').length, 1);
+  const reef = part(r, 'reef');
+  assert.equal(reef.class, 'fits');
+  const [rx0, rz0, rx1, rz1] = reef.geometry.rect;
+  assert.ok(rx0 >= x0 && rz0 >= z0 && rx1 <= x1 && rz1 <= z1, `the reef ${reef.geometry.rect} inside the pond ${pond.geometry.water}`);
+  // clear of the town's lots (box + 1) by its footprint (water + 2)
+  for (const l of part(r, 'town').geometry.lots) {
+    const [bx0, , bz0, bx1, , bz1] = l.box;
+    assert.ok(x1 + 2 < bx0 - 1 || x0 - 2 > bx1 + 1 || z1 + 2 < bz0 - 1 || z0 - 2 > bz1 + 1, `lot ${l.id}`);
+  }
+});
+
+test('§7 (unit): the only lot-clear site, ranked below the first (its locator move 6), is written; with it taken too, LEAK with tried', async () => {
+  const fx = readJ('coa', 'n02_pond_only_clear_site.json');
+  const r = await run(fx);
+  assert.deepEqual(leaks(r), []);
+  const pond = part(r, 'pond');
+  assert.equal(pond.class, 'adjusted');
+  assert.deepEqual(pond.deviations, [{ what: 'move', value: 6, max: 6 }]);
+  assert.deepEqual(pond.geometry.water, [1087, 2049, 1097, 2057]);
+  assert.match(pond.notes.at(-1), /reaches lot cottage_1, lot farm_1 \(LEAK\): moved .* \(0 more tried, /);
+  // that site's place taken by a third protected area: no clear site is left: the first site's LEAK, as main answers, with evidence.tried
+  const r2 = await run({ ...fx, protected: [...fx.protected, { id: 'barn', rect: [1084, 2046, 1099, 2052] }] });
+  const p2 = part(r2, 'pond');
+  assert.equal(p2.class, 'refused');
+  assert.equal(p2.reasons[0].code, 'LEAK');
+  assert.deepEqual(p2.reasons[0].evidence.meets, ['lot cottage_1', 'lot farm_1']);
+  assert.deepEqual(p2.reasons[0].evidence.tried, [{ water: [1114, 2075, 1124, 2083], skipped: 'LEAK', meets: ['lot cottage_1', 'lot farm_1'] }]);
+});
