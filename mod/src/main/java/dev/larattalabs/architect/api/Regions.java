@@ -191,6 +191,14 @@ public interface Regions {
 	 * its fit box or cost range refuses {@link Reason#ARTIFACT_STALE} (naming them) and writes nothing. Then
 	 * {@link #realise} of the artifact's own plan (its IR: never planned again), with the key. Completes with the region id once
 	 * queued. {@link #remove} undoes it. Since 1.23.0.
+	 * <p>(6c close-out A, §1) <b>The key after a refusal.</b> A realise refused before its region record is written ({@link
+	 * Reason#ARTIFACT_UNAPPROVED}, {@link Reason#ARTIFACT_STALE}, {@link Reason#PALETTE}, {@link Reason#NOT_LOADED}, and what {@link
+	 * #realise} refuses before it writes the record: {@link Reason#NOT_ALLOWED}, {@link Reason#CREATIVE_ONLY_BLOCK}) binds nothing to its
+	 * opKey: the same key may realise another artifact (the one checked again after a stale refusal). Once a realise under the key has
+	 * written its region record, the key is that region's for as long as the record stands, in every state: the same body answers its
+	 * id, another artifact {@link Reason#OP_KEY_CONFLICT}, and {@link #realiseByKey} finds it after a restart. A keyed {@link #checkPlan}
+	 * answers its first check: check again unkeyed or under a new key. The realise ends every keyed pin under its key
+	 * ({@link #pinArtifact(String, String, String)}).
 	 */
 	default CompletableFuture<String> realiseApproved(ApprovedRealise r) {
 		throw new UnsupportedOperationException("Regions.realiseApproved needs Architect API 1.23.0");
@@ -204,8 +212,38 @@ public interface Regions {
 		throw new UnsupportedOperationException("Regions.pinArtifact needs Architect API 1.23.0");
 	}
 
-	/** (6c P0) Drops an owner's pin (idempotent); see {@link #pinArtifact}. Since 1.23.0. */
+	/**
+	 * (6c P0) Drops an owner's pin (idempotent); see {@link #pinArtifact}. Since 1.23.0. (6c close-out A) It drops the owner's keyed pins on
+	 * that artifact too.
+	 */
 	default void unpinArtifact(String artifactSha, String owner) {
 		throw new UnsupportedOperationException("Regions.unpinArtifact needs Architect API 1.23.0");
+	}
+
+	/**
+	 * (6c close-out A, §2) A keyed pin: keeps an artifact for an owner until the key's realise. {@code opKey} is the key the caller will
+	 * pass to {@link #realiseApproved} ({@code [A-Za-z0-9_.:-]{1,128}}, scoped by the owner, the plan's owner); one key may pin several
+	 * artifacts (the check's, then the re-check's). A keyed pin ends when a realise under {@code (owner, opKey)} writes its region record
+	 * (every keyed pin under the key, on every artifact: the realised one is then held by its region, the others go to their tombstones),
+	 * on {@link #unpinArtifact}, or at the world-start sweep 30 days after its last use (a pin or re-pin under the key, or a
+	 * {@link #realiseApproved} attempt under it). Idempotent; a re-pin refreshes its last use. Unknown or removed artifacts: nothing.
+	 * Server thread. Since NEXT.
+	 */
+	default void pinArtifact(String artifactSha, String owner, String opKey) {
+		throw new UnsupportedOperationException("Regions.pinArtifact(sha, owner, opKey) needs Architect API NEXT");
+	}
+
+	/**
+	 * (6c close-out A, §3) Discards an unrealised plan: the mod's plan files, its prepare record and the helper's plan dir (sent when the
+	 * helper is connected, else at its next connect), and every artifact made from it that has no pin (to its tombstone). Completes true
+	 * when discarded now, false for an unknown or already discarded plan. Refuses {@link Reason#OVERLAP_BUSY} with
+	 * {@link ArchitectRefused#detail()} {@code realised} (a region that is not REMOVED was realised from it), {@code busy} (it is still
+	 * being prepared or checked) or {@code pinned} (an artifact of it has a pin: unpin it first). A tombstone stays: a keyed plan's same
+	 * key and body then refuses {@link Reason#PLAN_STALE} (detail {@code discarded}), {@link #planByKey} answers empty, and a
+	 * {@link #realise} of the id refuses PLAN_STALE. The world-start sweep discards an unrealised plan 7 days after its last use (30
+	 * with a plan key). Since NEXT.
+	 */
+	default CompletableFuture<Boolean> discardPlan(String planId) {
+		throw new UnsupportedOperationException("Regions.discardPlan needs Architect API NEXT");
 	}
 }

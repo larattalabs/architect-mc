@@ -1561,14 +1561,60 @@ public final class RegionTargets {
 	}
 
 	private static void waitOn(dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i, String target, @Nullable String part) {
+		waitFor(b, i, target, part, Batches::waitFor, "waits for " + (part == null ? target : part + " (" + target + ")")
+			+ " to be built: a survival region builds what stands on a part only once it is built");
+	}
+
+	/** How a wait is put on an item (a {@link Batches#waitFor} or a stage's). */
+	interface Waiter {
+		void wait(dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i, dev.larattalabs.architect.api.Reason why, String msg);
+	}
+
+	/**
+	 * (6c close-out A, §8) A stage wait on {@code i}: SITE_BUSY with {@code architect_mc:waitsFor {target, part, waiter, say}} (the
+	 * sentence a caller can say as is, from the plan parts' labels), the message starting with that sentence.
+	 */
+	static void waitFor(dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i, String target, @Nullable String part, Waiter how,
+		String detail) {
+		String region = RegionItems.regionOf(b);
+		var l = region == null ? null : dev.larattalabs.architect.region.RegionsImpl.live(region);
+		String waiter = RegionWaitTags.waiterOf(b, i);
+		String say = RegionWaitTags.say(l, waiter, part == null ? target : part);
 		JsonObject w = new JsonObject();
 		w.addProperty("target", target);
 		if (part != null) {
 			w.addProperty("part", part);
 		}
+		if (waiter != null) {
+			w.addProperty("waiter", waiter);
+		}
+		w.addProperty("say", say);
 		i.ext.add(EXT_WAITS_FOR, w);
-		Batches.waitFor(b, i, dev.larattalabs.architect.api.Reason.SITE_BUSY, "waits for " + (part == null ? target : part + " (" + target + ")")
-			+ " to be built: a survival region builds what stands on a part only once it is built");
+		how.wait(b, i, dev.larattalabs.architect.api.Reason.SITE_BUSY, say + ": " + detail);
+	}
+
+	/**
+	 * (6c close-out A, §8) A group's first target, lot (a construction site) or construction road still building, with its part
+	 * ({@code {id, part}}: a target's plan part, {@code lot <lot id>}, {@code road <road id>}), or null.
+	 */
+	public static @Nullable String[] firstBuilding(String groupId) {
+		for (Infra i : Infras.all()) {
+			if (is(i) && groupId.equals(i.group()) && i.building()) {
+				return new String[] {i.id(), partOf(i)};
+			}
+		}
+		for (Site s : Sites.all()) {
+			if (groupId.equals(s.group()) && s.building()) {
+				return new String[] {s.id(), s.ext().has("architect_mc:lot") ? "lot " + s.ext().get("architect_mc:lot").getAsString() : null};
+			}
+		}
+		for (Infra i : Infras.all()) {
+			if (groupId.equals(i.group()) && i.building() && !is(i)) {
+				String key = i.member() == null ? null : i.member().itemKey();
+				return new String[] {i.id(), key != null && key.startsWith("road:") ? "road " + key.substring(5) : null};
+			}
+		}
+		return null;
 	}
 
 	/** An item's region of interest [x0, z0, x1, z1]: a tile's columns and one tile around; a lot's or a road's box + 8. */
