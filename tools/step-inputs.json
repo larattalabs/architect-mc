@@ -696,7 +696,13 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "cherry",
+    "dark",
+    "nope",
+    "rustic"
+   ]
   },
   "unit-sidecar": {
    "classes": [
@@ -19000,7 +19006,18 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "derived": [
+    "node_modules/**"
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "node_modules",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ]
   },
   "voc-registry": {
    "classes": [
@@ -20817,7 +20834,14 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "derived": [
+    "node_modules/**"
+   ],
+   "data": [
+    "node_modules",
+    "package.json"
+   ]
   },
   "vocc-ingame": {
    "classes": [
@@ -30359,7 +30383,14 @@
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "derived": [
+    "node_modules/**"
+   ],
+   "data": [
+    "node_modules",
+    "package.json"
+   ]
   },
   "fl-ingame": {
    "classes": [
@@ -41702,6 +41733,9 @@
     "HOME",
     "JAVA_HOME",
     "PATH"
+   ],
+   "data": [
+    "kit/lint/**"
    ]
   },
   "5b-village": {
