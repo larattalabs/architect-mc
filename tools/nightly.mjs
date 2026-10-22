@@ -197,6 +197,13 @@ try {
     if (git(WT, 'status', '--porcelain', '--untracked-files=all')) throw new Error(`${WT} has local changes: not moving it (the night is skipped)`);
     git(WT, 'checkout', '-q', '--detach', 'origin/main');
   }
+  // the drivers run gradle in this checkout (src-gradle.mjs, --offline): it needs a gradle home with the dependencies (AGENTS.md:
+  // an APFS clone of the main checkout's, cheap); untracked, so the tree stays clean
+  if (!fs.existsSync(path.join(WT, '.gradle-home', 'caches')) && fs.existsSync(path.join(MAIN, '.gradle-home'))) {
+    if (fs.existsSync(path.join(WT, '.gradle-home'))) throw new Error(`${WT}/.gradle-home exists without caches: not replacing it (the night is skipped)`);
+    execFileSync('cp', ['-c', '-R', path.join(MAIN, '.gradle-home'), path.join(WT, '.gradle-home')]);
+    log(`nightly: cloned the main checkout's .gradle-home into ${WT}`);
+  }
   summary.head = git(WT, 'rev-parse', 'HEAD');
   log(`nightly: ${WT} at origin/main ${summary.head.slice(0, 9)}`);
 } catch (e) {
