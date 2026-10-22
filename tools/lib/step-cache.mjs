@@ -49,11 +49,21 @@ export function buildVersions(src, commit) {
 export function cacheContext({ src, main, cfg, conf, map, snapDir, env = process.env, commit = 'HEAD', dirty }) {
   const head = git(src, 'rev-parse', commit);
   const dirtyList = dirty ?? (commit === 'HEAD' ? dirtyPaths(src) : []);
+  // drivers that compare against origin/main (a worktree there, or the merge base) read those commits' code trees: their tree ids
+  // (docs excluded: a doc-only commit on main or on the branch changes nothing they read)
+  const SUB = ['kit', 'scenarios', 'tools', 'mod', 'sidecar', 'devserver', 'apitest'];
+  const subtrees = (c) => Object.fromEntries(SUB.map((d) => {
+    try {
+      return [d, git(src, 'rev-parse', `${c}:${d}`)];
+    } catch {
+      return [d, null];
+    }
+  }));
   let originMain = null;
   try {
-    originMain = { tree: git(src, 'rev-parse', 'origin/main^{tree}'), mergeBase: git(src, 'merge-base', head, 'origin/main') };
+    originMain = { main: subtrees('origin/main'), mergeBase: subtrees(git(src, 'merge-base', head, 'origin/main')) };
   } catch {
-    originMain = { tree: null, mergeBase: null };
+    originMain = { main: null, mergeBase: null };
   }
   let tagAtHead = false;
   try {
@@ -200,6 +210,13 @@ export function lastNightly(main) {
   } catch {
     return null;
   }
+}
+
+/** The judged benches: the release tier's own bench steps (always and rotation). Canaries at release, never cached. */
+export function judgedBenches(cfg) {
+  const isBench = (id) => (cfg.steps[id]?.resources ?? []).includes('bench');
+  const r = cfg.tiers?.release ?? {};
+  return new Set([...(r.always ?? []), ...(r.rotate ?? []).flatMap((x) => [...x.options.flat(), ...(x.when?.steps ?? [])])].filter(isBench));
 }
 
 /** The steps that are some step's `supersededBy` target: the full twins (the -full, the full ids of the -smoke steps). */

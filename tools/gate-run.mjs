@@ -75,7 +75,7 @@ import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFile
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
 import { currentHistory, definitionNow, definitionsAt, effectiveTimeout, estimateMin, loadHistory } from './lib/gate-history.mjs';
 import { autoConfig, chooseShards, describeChoice, freePairs, probeMachine } from './lib/shard-auto.mjs';
-import { autoFullWhy, cacheContext, fullTwins, keyFor, lastNightly, lookup, record as recordPass } from './lib/step-cache.mjs';
+import { autoFullWhy, cacheContext, fullTwins, judgedBenches, keyFor, lastNightly, lookup, record as recordPass } from './lib/step-cache.mjs';
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -348,10 +348,9 @@ const LOCK = path.resolve(opt('--lock') ?? process.env.GATE_LOCK ?? path.join(RU
 // only when they stayed inside the step's input set (tools/step-inputs.json). --no-trace turns it off (and records nothing).
 const TRACE = !flag('--no-trace');
 const RAW_CFG = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')); // the chain file as written (cfg has the hosts applied)
-const benchId = (id) => (cfg.steps[id]?.resources ?? []).includes('bench');
 // the judged benches: the release tier's own (its always list and rotation). Their timing is judged at every release, so they are
 // canaries there and never cached; the other bench steps (the slices' scenario steps) cache when they pass with no bar missed
-const JUDGED_BENCHES = new Set([...(cfg.tiers.release?.always ?? []), ...(cfg.tiers.release?.rotate ?? []).flatMap((r) => [...r.options.flat(), ...(r.when?.steps ?? [])])].filter(benchId));
+const JUDGED_BENCHES = judgedBenches(cfg);
 // lookups: a tier run (not a named chain, not --only/--from: an explicit list always runs), not --no-cache, not release --full
 const CACHE_OFF_WHY = tierInfo.kind !== 'tier' ? 'a named chain runs its steps' : opt('--only') || opt('--from') ? '--only/--from: an explicit list runs'
   : flag('--no-cache') ? '--no-cache' : tierInfo.full?.on ? `release --full (${tierInfo.full.why.join('; ')})` : !INPUT_MAP ? 'no tools/step-inputs.json' : null;

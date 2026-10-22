@@ -4,7 +4,7 @@
 //     step's client, its cwd and the modules in its closure;
 //   - the module closure of its drivers (the tools/*.mjs|sh its command names, the test files its globs name), statically: import
 //     and export specifiers, literal dynamic imports, `new URL('…', import.meta.url)`, literal repo paths and path.join(…) tails;
-//     an import the scan can't resolve widens to a whole tree (kit/**, tools/**, or the module's own directory);
+//     a computed import the scan can't resolve is left to the trace (below), which records every module a run loads;
 //   - the data its traced runs read (tools/lib/step-trace.mjs), widened to the directory, merged by `tools/step-inputs.mjs merge`.
 // The committed map is tools/step-inputs.json; `tools/step-inputs.mjs check` (CI) fails when a driver's closure gains a file
 // outside its recorded set. The key of a set is a hash of its files' git blob ids at a commit: a clean tree only (step-cache.mjs).
@@ -131,7 +131,8 @@ export function moduleClosure(roots, files, { src, read } = {}) {
       if (r.file) {
         if (viaModule || /\.(mjs|js|cjs)$/.test(r.file)) stack.push(r.file);
         else out.files.add(r.file);
-      } else out.globs.add(r.glob);
+      } else if (r.glob.split('/').length > 2) out.globs.add(r.glob);
+      // a top-level directory (KIT = path.join(ROOT, 'kit')) is a base for computed paths, not an input: the trace has what it reads
       return true;
     };
     for (const m of text.matchAll(IMPORT_RE)) {
@@ -161,10 +162,9 @@ export function moduleClosure(roots, files, { src, read } = {}) {
         const inner = /^pathToFileURL\(path\.(?:join|resolve)\(([^()]*)\)\)/.exec(expr)[1];
         if (inner.split(',').slice(1).every((a) => /^\s*(['"])[^'"]*\1\s*$/.test(a))) continue; // all literal after the base: JOIN_RE resolved it
       }
-      const widened = /KIT|kit/.test(expr) ? 'kit/**' : /designs/.test(expr) ? 'kit/designs/**' : /tools|ROOT|root|SRC/.test(expr) ? 'tools/**' : `${dir}/**`;
-      out.dynamic.push({ from: f, expr: expr.slice(0, 100), widened });
-      out.globs.add(widened);
-      if (widened === 'tools/**') out.globs.add('kit/**');
+      // a computed import: the trace records what it loads (a PASS is cached only when its trace stays inside the set, so a
+      // module it loads that the map lacks makes an inputs-map miss, never a stale PASS); listed here for review
+      out.dynamic.push({ from: f, expr: expr.slice(0, 100) });
     }
     for (const m of text.matchAll(ENV_RE)) out.env.add(m[1] ?? m[2]);
   }
