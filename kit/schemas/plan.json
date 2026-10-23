@@ -697,7 +697,7 @@
 
     "connector.stair": {
       "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
-      "description": "(7a CL) A stair: a T2 route under the stair profile (it climbs in flights of 2..8 rising 1 a cell, then 2 flat cells, rather than winding at the grade), railed beside drops over 3 (rails drops, the default; both; none), lit. width 1..5 (default 2). Ends that rise less than 2 answer refused NO_CLIMB with a path wouldFit; a climb walked within the grade answers adjusted (deviation climb). R26.",
+      "description": "(7a CL) A climb in stair flights (T2's stair profile), railed beside drops. Ends rising under 2: refused NO_CLIMB (a path wouldFit); walked within the grade: adjusted (deviation climb). R26.",
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "kind": { "const": "stair" },
@@ -707,7 +707,7 @@
         "ext": { "$ref": "#/$defs/ext" },
         "from": { "$ref": "#/$defs/endpoint" },
         "to": { "$ref": "#/$defs/endpoint" },
-        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" }, "description": "Read leniently (R26): the first leg (from to via[0]); the rest noted." },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
         "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" } },
         "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
         "style": { "$ref": "#/$defs/bibleRef" },
@@ -715,13 +715,13 @@
         "lamps": { "enum": ["none", "few", "street"] },
         "width": { "type": "integer", "minimum": 1, "maximum": 5 },
         "rails": { "enum": ["drops", "both", "none"] },
-        "params": { "type": "object", "description": "Read leniently (S-K1-3): width, lamps or torches; material noted; every other key listed by name." }
+        "params": { "type": "object" }
       }
     },
 
     "connector.switchback": {
       "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
-      "description": "(7a CL) A switchback: a T2 route under the switchback profile (no stair flights; it zigzags on hairpin landings), its retaining walls in the bible's connectors.switchback.retaining role capped with the trim's slab (retaining plain, the default; none keeps T2's). width 1..5 (default 2), landing 3..7 (the hairpin landing's depth). NO_CLIMB as a stair. R26.",
+      "description": "(7a CL) A climb on hairpins, no flights (T2's switchback profile), retaining walls in the bible's role (none: T2's). NO_CLIMB as a stair. R26.",
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "kind": { "const": "switchback" },
@@ -731,7 +731,7 @@
         "ext": { "$ref": "#/$defs/ext" },
         "from": { "$ref": "#/$defs/endpoint" },
         "to": { "$ref": "#/$defs/endpoint" },
-        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" }, "description": "Read leniently (R26): the first leg (from to via[0]); the rest noted." },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
         "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" } },
         "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
         "style": { "$ref": "#/$defs/bibleRef" },
@@ -740,13 +740,13 @@
         "width": { "type": "integer", "minimum": 1, "maximum": 5 },
         "landing": { "type": "integer", "minimum": 3, "maximum": 7 },
         "retaining": { "enum": ["plain", "none"] },
-        "params": { "type": "object", "description": "Read leniently (S-K1-3): width, lamps or torches; material noted; every other key listed by name." }
+        "params": { "type": "object" }
       }
     },
 
     "connector.ladder": {
       "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
-      "description": "(7a CL) A ladder: a T2 route under the ladder profile (it climbs a face, up to 48, rather than walking round), player-only by kind (S-7a-8: movers naming villager answer refused MOVER with a stair or path wouldFit), a rest landing every rest rungs (8..24, default 24), a fence gate at the top (top gate, the default; open). Every ladder cell needs a sturdy face (else ANCHOR). NO_CLIMB as a stair. R26.",
+      "description": "(7a CL) A climb up a face to 48 (T2's ladder profile), player-only (movers naming villager: refused MOVER), a rest landing every rest rungs, a fence gate on top; every rung against a sturdy face (else ANCHOR). NO_CLIMB as a stair. R26.",
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "kind": { "const": "ladder" },
@@ -756,20 +756,20 @@
         "ext": { "$ref": "#/$defs/ext" },
         "from": { "$ref": "#/$defs/endpoint" },
         "to": { "$ref": "#/$defs/endpoint" },
-        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" }, "description": "Read leniently (R26): the first leg (from to via[0]); the rest noted." },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
         "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" } },
         "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
         "style": { "$ref": "#/$defs/bibleRef" },
         "tolerance": { "$ref": "#/$defs/tolerance" },
         "rest": { "type": "integer", "minimum": 8, "maximum": 24 },
         "top": { "enum": ["gate", "open"] },
-        "params": { "type": "object", "description": "Read leniently (S-K1-3): width, lamps or torches; material noted; every other key listed by name." }
+        "params": { "type": "object" }
       }
     },
 
     "connector.rock_stair": {
       "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
-      "description": "(7a RK) A rock stair: a stair flight carved into rising ground (T3b's bore, inclined), route row 11. width 1..3 (default 2), height 2..4 clear (default 3), rise 2..48, a landing every landing steps (4..12, default 8), lining exposed (default) or all, portal plain or arch. Needs the plan check's frozen volume (limits.volume). R26.",
+      "description": "(7a RK) A stair flight carved into rising ground (route row 11); needs a frozen volume. R26.",
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "kind": { "const": "rock_stair" },
@@ -779,7 +779,7 @@
         "ext": { "$ref": "#/$defs/ext" },
         "from": { "$ref": "#/$defs/endpoint" },
         "to": { "$ref": "#/$defs/endpoint" },
-        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" }, "description": "Read leniently (R26): the first leg (from to via[0]); the rest noted." },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
         "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" } },
         "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
         "style": { "$ref": "#/$defs/bibleRef" },
@@ -792,13 +792,13 @@
         "approach": { "type": "integer", "minimum": 0, "maximum": 32 },
         "lining": { "enum": ["exposed", "all"] },
         "portal": { "enum": ["plain", "arch"] },
-        "params": { "type": "object", "description": "Read leniently (S-K1-3): width, lamps or torches; material noted; every other key listed by name." }
+        "params": { "type": "object" }
       }
     },
 
     "connector.lift": {
       "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
-      "description": "(7a LF) A lift: a bubble column against a face (an H body), route row 9, player-only by kind (S-7a-8). rise 4..64; down: a second column with a magma base. R26.",
+      "description": "(7a LF) A bubble column against a face (route row 9), player-only; down: a second column. R26.",
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "kind": { "const": "lift" },
@@ -808,7 +808,7 @@
         "ext": { "$ref": "#/$defs/ext" },
         "from": { "$ref": "#/$defs/endpoint" },
         "to": { "$ref": "#/$defs/endpoint" },
-        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" }, "description": "Read leniently (R26): the first leg (from to via[0]); the rest noted." },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
         "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" } },
         "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
         "style": { "$ref": "#/$defs/bibleRef" },
@@ -816,13 +816,13 @@
         "rise": { "type": "object", "additionalProperties": false, "properties": { "min": { "type": "integer", "minimum": 4, "maximum": 64 }, "max": { "type": "integer", "minimum": 4, "maximum": 64 } } },
         "down": { "type": "boolean" },
         "approach": { "type": "integer", "minimum": 0, "maximum": 32 },
-        "params": { "type": "object", "description": "Read leniently (S-K1-3): width, lamps or torches; material noted; every other key listed by name." }
+        "params": { "type": "object" }
       }
     },
 
     "connector.catwalk": {
       "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
-      "description": "(7a CW) A catwalk: a bracketed deck along a face (the face form), route row 10. width 1..2 (default 2 on a villager edge, 1 player-only), length 3..32. R26.",
+      "description": "(7a CW) A bracketed deck along a face (route row 10). R26.",
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "kind": { "const": "catwalk" },
@@ -832,7 +832,7 @@
         "ext": { "$ref": "#/$defs/ext" },
         "from": { "$ref": "#/$defs/endpoint" },
         "to": { "$ref": "#/$defs/endpoint" },
-        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" }, "description": "Read leniently (R26): the first leg (from to via[0]); the rest noted." },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
         "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" } },
         "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
         "style": { "$ref": "#/$defs/bibleRef" },
@@ -841,13 +841,13 @@
         "width": { "type": "integer", "minimum": 1, "maximum": 2 },
         "length": { "type": "object", "additionalProperties": false, "properties": { "min": { "type": "integer", "minimum": 3, "maximum": 32 }, "max": { "type": "integer", "minimum": 3, "maximum": 32 } } },
         "approach": { "type": "integer", "minimum": 0, "maximum": 32 },
-        "params": { "type": "object", "description": "Read leniently (S-K1-3): width, lamps or torches; material noted; every other key listed by name." }
+        "params": { "type": "object" }
       }
     },
 
     "connector.stairs_around": {
       "type": "object", "required": ["id", "kind", "from", "around"], "additionalProperties": false,
-      "description": "(7a SA) A spiral stair round a form part to a lookout: around.feature.part names the host, a form part of kind rock_spire, ice_spike, giant_tree or giant_mushroom (R27; another part answers refused NO_FEATURE {why: host}). top: summit (default on a spire or spike), canopy (default on a tree or mushroom) or {y}. width 1..2 (default 1), rails outer (default) or none.",
+      "description": "(7a SA) A spiral stair round a form part (R27: a rock_spire, ice_spike, giant_tree or giant_mushroom) up to a lookout.",
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "kind": { "const": "stairs_around" },
@@ -864,7 +864,7 @@
         "rails": { "enum": ["outer", "none"] },
         "lamps": { "enum": ["none", "few", "street"] },
         "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
-        "params": { "type": "object", "description": "Read leniently (S-K1-3): width, lamps or torches; material noted; every other key listed by name." }
+        "params": { "type": "object" }
       }
     },
 
