@@ -42,7 +42,7 @@ test('sidecarReuse: exact report -> vitest\'s two summary lines and the JSON of 
     assert.equal(r.status, 0);
     assert.match(r.stdout, /Test Files {2}2 passed \(2\)/);
     assert.match(r.stdout, /\n {6}Tests {2}3 passed \(3\)/);
-    assert.equal(JSON.parse(fs.readFileSync(j, 'utf8')).testResults[0].assertionResults[0].fullName, 's > one');
+    assert.equal(JSON.parse(fs.readFileSync(j, 'utf8')).testResults[0].assertionResults[0].fullName, 's one');
     assert.ok(lines.some((l) => /reused from this run's unit-sidecar/.test(l)));
     for (const [files, why] of [[['test/missing.test.ts'], /not in the report/], [['test/bad.test.ts'], /1 failed/], [['test/skip.test.ts'], /1 skipped/]]) {
       lines.length = 0;

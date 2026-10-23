@@ -550,6 +550,11 @@ async function flowItem() {
     const entry = process.env.GATE6C0A_PIN_ENTRY ?? 'g5b_cap';
     const lib = path.join(GAME_DIR, 'architect', 'library', entry);
     if (check(fs.existsSync(path.join(lib, 'versions', '1')) && fs.existsSync(path.join(lib, 'versions', '2')), `${entry} has v1 and v2 (version folders in ${path.relative(RUN, lib)})`)) {
+      // the residue ages v1 and has it collected: this run's library entry is saved first and put back after (a later 0a-flow or any step
+      // reading ${entry} in this run worktree starts from the seeded library, as before the residue ran)
+      const keep = fs.mkdtempSync(path.join(os.tmpdir(), 'gate6c0a-lib-'));
+      execFileSync('cp', ['-c', '-R', lib, path.join(keep, entry)]);
+      try {
       await result(await api(`pin p1 ${entry} 1 steward:s1`));
       const forceAgeAndGc = async () => {
         const lp = await call('dev.launcher.state');
@@ -567,6 +572,13 @@ async function flowItem() {
       check(await forceAgeAndGc(), 'a helper restart runs the GC: a pinned v1 survives a forced-age GC');
       await result(await api(`unpin u1 ${entry} 1 steward:s1`));
       check(!(await forceAgeAndGc()), 'a helper restart runs the GC: unpinned, v1 is collected by the forced-age GC');
+      } finally {
+        fs.rmSync(lib, { recursive: true, force: true }); // this run worktree's own library entry (mod/run, a gate scratch dir)
+        execFileSync('cp', ['-c', '-R', path.join(keep, entry), lib]);
+        fs.rmSync(keep, { recursive: true, force: true });
+        await call('dev.launcher.restart').catch(() => null); // the helper re-reads the restored library
+        await until(async () => (await call('dev.launcher.state')).state === 'running', 'the helper back', 300_000).catch(() => null);
+      }
     }
   }
   return out;

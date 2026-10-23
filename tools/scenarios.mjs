@@ -372,7 +372,7 @@ async function pin(id) {
   if (!sc.fixture?.claim) throw new Error(`${id}: the fixture is not pinned (node tools/gate6b.mjs findsite ${id})`);
   const seed = sc.seed ?? BigInt.asUintN(64, BigInt(`0x${sha256(`${sc.id}@${sc.world.seed}`).slice(0, 16)}`)).toString();
   if (isV(sc) || isS2(sc) || isS3(sc)) await prepV(sc); // (6c S2) its fixture bible and lot entries, as S7's (6c S3: S3's too)
-  await L.fresh(`G6B Pin ${short(sc)}`, await L.claimBase(sc.world.seed, sc.fixture.claim));
+  await L.fresh(`G6B Pin ${short(sc)}`, await L.seedBase(sc.world.seed));
   const c = sc.fixture.claim;
   await L.tp((c[0] + c[2]) / 2, sc.fixture.yRange[1], (c[1] + c[3]) / 2);
   const p = await L.plan(sc.program, c, { params: sc.params, surveyLoad: 'bounded:256', seed, bible: sc.bible ?? undefined });

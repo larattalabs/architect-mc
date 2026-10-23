@@ -74,7 +74,7 @@ export function sidecarReuse(root, files, { jsonOut = null } = {}) {
     if (!e) return no(`${f} is not in the report`);
     if (e.tests === 0 || e.failures > 0 || e.errors > 0 || e.skipped > 0) return no(`${f}: ${e.tests} tests, ${e.failures} failed, ${e.errors} errors, ${e.skipped} skipped`);
     tests += e.tests;
-    results.push({ name: path.join(root, 'sidecar', f), status: 'passed', assertionResults: e.cases.map((c) => ({ fullName: c.name, title: c.name.split(' > ').pop(), status: 'passed' })) });
+    results.push({ name: path.join(root, 'sidecar', f), status: 'passed', assertionResults: e.cases.map((c) => ({ fullName: c.name.split(' > ').join(' '), title: c.name.split(' > ').pop(), status: 'passed' })) });
   }
   const stdout = ` Test Files  ${files.length} passed (${files.length})\n      Tests  ${tests} passed (${tests})\n`;
   const reused = `reused from this run's unit-sidecar (${path.basename(file)}, tree ${tree}): ${files.length} file(s), ${tests} pass, 0 fail`;
