@@ -211,9 +211,20 @@ const rectsOfRuns = (runs) => runs.map((q) => [q[0], q[1], q[2], q[3]]);
  * off (none stands on the contact columns). A Steward-style addition (a cell site with Steward's ext) on the west street's lot-free side
  * and a PT player build (a cabin) in the claim. Returns {A, planId, region, ir, east, world0} (world0: the dump of A + 120 before the town).
  */
+/**
+ * A town claim's chunks generated before its realise: prepare covers claim + 2 chunks, and an edge tile's window off the 64-grid
+ * reaches a third (it waits NOT_GENERATED otherwise, main's behaviour), so a throwaway plan over the claim grown by 16 is prepared.
+ */
+async function generateFor(A, params) {
+  const g = await planReq({ program: 'flat_village', params, claim: [A[0] - 16, A[1] - 16, A[2] + 16, A[3] + 16], check: false });
+  if (g.refused) { L.log?.(`  (the generating plan over ${json(A)} refused: ${String(g.refused).slice(0, 100)}; its chunks left to the realise)`); return; }
+  await L.prepare(g.planId);
+}
+
 async function d3Town(X, Z, { addition = true, cabin = true, dip = true, partial = false } = {}) {
   const A = [X, Z, X + TOWN_SIZE - 1, Z + TOWN_SIZE - 1];
   const params = { lots: TOWN_LOTS, apronLamps: false };
+  await generateFor(A, params);
   const g = await groundAt(X + 80, Z + 80);
   let east = null;
   if (dip) {
@@ -235,7 +246,6 @@ async function d3Town(X, Z, { addition = true, cabin = true, dip = true, partial
   const lots = Object.fromEntries(cottages.map((id) => [id, STUB]));
   if (partial) lots[ir.lots.find((l) => !cottages.includes(l.id) && l.id.startsWith('cottage_'))?.id ?? 'hall_1'] = 'd3_no_such_design';
   await kill();
-  await L.prepare(pa.planId); // the claim's chunks generated first (a town off the spawn area waits NOT_GENERATED otherwise)
   const region = await L.realise(pa.planId, { lots });
   const st = await L.waitRegion(region, 3_600_000);
   let additionSite = null, cabinBox = null, additionCells = [];
@@ -582,8 +592,8 @@ steps.refusals = async () => {
   // ---- a town in flight (PLACING): a plan beside it refuses OVERLAP_BUSY (Steward's finding), and so does the realise of a plan made
   // beside it before (its re-check, §4.4); nothing written
   const A2 = [A[0], A[1] + 400, A[2], A[3] + 400], B2 = [B[0], B[1] + 400, B[2], B[3] + 400];
+  await generateFor(A2, { lots: TOWN_LOTS, apronLamps: false }); // off the spawn area
   const pA2 = await planReq({ program: 'flat_village', params: { lots: TOWN_LOTS, apronLamps: false }, claim: A2, check: false });
-  await L.prepare(pA2.planId); // off the spawn area: its chunks generated first
   const rt2 = await L.realise(pA2.planId, { lots: {} });
   await L.waitRegion(rt2, 3_600_000);
   const pOld = await planReq({ program: 'districts', params: ONE('east'), claim: B2, beside: rt2, check: false });
@@ -645,8 +655,8 @@ steps.steward = async () => {
   // a partial town (one lot failed) is a valid beside town (Steward's finding)
   const P = await d3Town(X, Z + 400, { dip: false, cabin: false, addition: false, partial: true });
   out.partial = { region: P.region, state: P.state };
+  await generateFor([P.A[2] + 1, P.A[1] + 30, P.A[2] + 90, P.A[3] - 30], { lots: TOWN_LOTS, apronLamps: false });
   const pp = await planReq({ program: 'districts', params: ONE('east'), claim: [P.A[2] + 1, P.A[1] + 30, P.A[2] + 90, P.A[3] - 30], beside: P.region, check: false });
-  if (!pp.refused) await L.prepare(pp.planId);
   const rp = pp.refused ? null : await L.realise(pp.planId, { lots: {} });
   const sp = rp ? await L.waitRegion(rp, 3_600_000) : null;
   out.partial.district = sp?.view?.state ?? pp.refused;
