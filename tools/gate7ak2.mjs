@@ -546,6 +546,13 @@ function camsOf(meta) {
     const dx = Math.sign(gx - cx) * (Math.abs(gx - cx) > Math.abs(gz - cz) ? 1 : 0), dz = Math.sign(gz - cz) * (Math.abs(gz - cz) >= Math.abs(gx - cx) ? 1 : 0);
     cams[`cam_gate${i + 1}`] = [gx + dx * 12 + 0.5, gy + 4, gz + dz * 12 + 0.5, yawOf(-dx, -dz), 12];
   });
+  // (the coordinator's ask) a shore gate's landing: from above its flight's top, looking down it to the gate
+  const lg = w.gates.find((g) => g.landing);
+  if (lg) {
+    const top = lg.landing.cells.reduce((a, c) => (c[1] > a[1] ? c : a), lg.landing.cells[0]);
+    const [gx, , gz] = lg.at, dx = gx - top[0], dz = gz - top[2];
+    cams.cam_landing = [top[0] - Math.sign(dx) * 4 + 0.5, top[1] + 6, top[2] - Math.sign(dz) * 4 + 0.5, Math.abs(dx) >= Math.abs(dz) ? yawOf(Math.sign(dx), 0) : yawOf(0, Math.sign(dz)), 30];
+  }
   const wk = w.walk;
   if (wk) {
     const a = wk.accesses.find((q) => q.kind === 'stair') ?? wk.accesses[0];
@@ -590,6 +597,13 @@ async function lookRound(out, dir, tag, plan, claim, bible, from = BASE) {
   check(st.view.state === 'PLACED', `look (${tag}): realised (${st.view.cellsWritten} cells)`);
   await L.settle(5000);
   o.after = await shoot(cams, path.join(dir, tag, 'after'));
+  // (the coordinator's ask) the walk at dusk: its lamps lit
+  if (cams.cam_walk || cams.cam_access) {
+    await cmd('/time set 13000');
+    await L.settle(3000);
+    o.dusk = await shoot(Object.fromEntries(Object.entries(cams).filter(([k]) => ['cam_walk', 'cam_access', 'cam_high'].includes(k))), path.join(dir, tag, 'dusk'));
+    await cmd('/time set 6000');
+  }
   o.wall = meta.walls.map((w) => ({ id: w.id, height: w.height, thickness: w.thickness, crenels: w.crenels, walk: w.walk ? { cells: w.walk.cells.length, accesses: w.walk.accesses.map((a) => a.kind), lamps: w.walk.lamps.length, parapetWall: w.walk.parapetWall } : null, along: w.along ? { kind: w.along.kind, side: w.along.side } : null }));
   await cmd('/kill @e[type=!minecraft:player]');
   await tp(cx, 300, cz);
