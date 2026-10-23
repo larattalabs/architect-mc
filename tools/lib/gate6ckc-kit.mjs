@@ -13,6 +13,8 @@ import { pathToFileURL } from 'node:url';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import { inSlice } from './gate-part.mjs';
 import { syncBaseTree } from './base-tree.mjs';
+import * as CP from './corpus-plan.mjs'; // (gate speed 3) the plans from the run's shared store, prewarmed on every core
+import { DERIVE } from './corpus-derive.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -56,21 +58,22 @@ export function baseTree(root) {
   return syncBaseTree(root, dir); // (turbo) one fetch and checkout at a time; left alone at the base
 }
 
-export async function unchanged(root, { check, log = console.log, only = null, slice = null } = {}) {
-  const { dir: mainDir, base } = baseTree(root);
+export async function unchanged(root, { check, log = console.log, only = null, slice = null, baseDir = null } = {}) {
+  // (baseDir: a test's own base tree, kit/test/gate-corpus-plan.test.mjs; a gate run always uses the merge base's worktree)
+  const { dir: mainDir, base } = baseDir ? { dir: baseDir, base: 'given' } : baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
-  const [hNew, hOld] = [await H(root), await H(mainDir)];
-  const K = (f) => import(pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href);
-  const { clearScan, bodiesOf } = await K('region/checkFluids.mjs');
-  const { buildVirtual } = await K('region/vworld.mjs');
-  const { fillMissing } = await K('region/plan.mjs');
-  const { asColumns } = await K('region/pack.mjs');
+  const { hNew, hOld } = await CP.corpusHelpers(root, mainDir);
+  // (the census: corpus-derive.mjs kcCensus, computed where the plan ran; without the store (GATE_PLAN_CACHE=0), here, as before)
+  const censusOf = async (r, s) => r.derived?.kcCensus ?? DERIVE.kcCensus(r, { survey: s.bytes }, { headRoot: root });
   const norm = (r) => normIrJson(r.res?.irJson);
   const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(norm(r)), first: r.first && r.first !== r ? sha256(norm(r.first)) : null });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {}, watch: [], hard: [] };
+  const all = fixtures(root);
+  const mine = all.filter(([name], k) => !(only && !only.test(name)) && inSlice(k, slice));
+  await CP.prewarm(root, CP.fixtureJobs(root, mine.flatMap(([name, fx]) => [[root, root, fx, 'head', name], ...(fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name)) ? [[mainDir, mainDir, fx, 'base', name]] : [])])), { log });
   let i = -1;
   let elsewhere = 0; // (a split unit step) fixtures another part plans: counted, not planned here
-  for (const [name, fx] of fixtures(root)) {
+  for (const [name, fx] of all) {
     i++;
     if (only && !only.test(name)) continue;
     // (counted as the whole loop's rows count: those on the base)
@@ -83,12 +86,11 @@ export async function unchanged(root, { check, log = console.log, only = null, s
       try {
         const { r, s } = await planFixture(hOld, mainDir, fx);
         b = sig(r);
-        const ir = JSON.parse(r.res.irJson);
-        if (bodiesOf(ir).length) {
-          const cols = fillMissing(asColumns(s.bytes)).columns;
-          const { vw } = buildVirtual({ ir, survey: cols, filled: cols, blobs: (sha) => r.res.blobs.get(sha) ?? null, volumes: r.volumes.map((v) => v.decoded ?? v) });
-          const sc = clearScan({ ir, vw, meta: r.res.meta });
-          census = { counts: sc.counts, findings: sc.findings.map((q) => ({ body: q.body, part: q.part, set: q.set, writer: q.writer, writerPart: q.writerPart, why: q.why, count: q.count })) };
+        const cz = await censusOf(r, s);
+        if (cz.threw) throw new Error(cz.threw);
+        if (cz.census) {
+          census = cz.census;
+          const sc = { counts: census.counts, findings: census.findings };
           if (sc.counts.watch) out.watch.push({ fixture: name, cells: sc.counts.watch, writers: [...new Set(sc.findings.filter((q) => q.set === 'watch').map((q) => `${q.writerPart ?? q.writer} in ${q.body}`))] });
           if (sc.counts.hard) out.hard.push({ fixture: name, cells: sc.counts.hard, writers: [...new Set(sc.findings.filter((q) => q.set !== 'watch').map((q) => `${q.writerPart ?? q.writer} in ${q.body}.${q.set}`))] });
         }
@@ -97,11 +99,10 @@ export async function unchanged(root, { check, log = console.log, only = null, s
     // the head's census: M25:clear 0 on every fixture but the broken variants (kc/u*)
     if (headRun) try {
       const { r, s } = headRun;
-      const ir = JSON.parse(r.res.irJson);
-      if (bodiesOf(ir).length) {
-        const cols = fillMissing(asColumns(s.bytes)).columns;
-        const { vw } = buildVirtual({ ir, survey: cols, filled: cols, blobs: (sha) => r.res.blobs.get(sha) ?? null, volumes: r.volumes.map((v) => v.decoded ?? v) });
-        const sc = clearScan({ ir, vw, meta: r.res.meta });
+      const cz = await censusOf(r, s);
+      if (cz.threw) throw new Error(cz.threw);
+      if (cz.census) {
+        const sc = cz.census;
         const broken = /^kc\/u\d/.test(name) || /^irr\/u01_/.test(name) || /^f3\/u0[14]_/.test(name) || /^fl\/u03_/.test(name); // ((6c IRR) irrigation's M25:clear variant, u01, too; (6c F3) treeInPond u01 and coralOtherPart u04; (6c FL) zoneIgnoresBody, u03)
         (out.headCensus ??= {})[name] = sc.counts;
         if (broken) check(sc.counts.hard + sc.counts.watch > 0, `${name} (a broken variant): M25:clear catches it on this head (${JSON.stringify(sc.counts)})`);
@@ -127,5 +128,6 @@ export async function unchanged(root, { check, log = console.log, only = null, s
   check(out.differ.length === 0, `${out.same} of ${out.n} byte-identical; the rest exactly the named exceptions (${Object.keys(EXCEPT).join(', ')})`);
   log(`watch count (recorded, §8): ${out.watch.length} committed fixture(s) where another part writes a body's watch cell on the base: ${out.watch.map((w) => `${w.fixture} (${w.cells}: ${w.writers.join(', ')})`).join('; ') || 'none'}`);
   log(`hard count (recorded): ${out.hard.length} fixture(s): ${out.hard.map((w) => `${w.fixture} (${w.cells}: ${w.writers.join(', ')})`).join('; ') || 'none'}`);
+  log(CP.statsLine());
   return out;
 }
