@@ -92,9 +92,14 @@ test('§4: the defs (strict, read once each kind flips), NO_CLIMB, the climb dev
   assert.ok(defs.partAnswer.properties.deviations.items.properties.what.enum.includes('climb'));
   const rules = PLAN_SCHEMA['x-rules'];
   for (const r of ['R25 ', 'R26 ', 'R27 ']) assert.equal(rules.filter((x) => x.startsWith(r)).length, 1, r);
-  // every 7a kind but the alias stays reserved (each slice flips its own)
+  // every 7a kind but the alias stays reserved until its own slice flips it ((7a slices) a flipped kind is supported, schemaVersion
+  // at least 1, with its def: FLIPPED_7A below)
   const cat = planCatalogue();
-  for (const k of K7.KINDS_7A) assert.equal(cat.entries.find((e) => e.id === `connector.${k}`).state, 'reserved', k);
+  for (const k of K7.KINDS_7A) {
+    const e = cat.entries.find((x) => x.id === `connector.${k}`);
+    if (e.state === 'supported') { assert.ok(e.schemaVersion >= 1 && PLAN_SCHEMA['x-catalogue'].entries.find((x) => x.id === e.id)?.def === `#/$defs/connector.${k}`, k); continue; }
+    assert.equal(e.state, 'reserved', k);
+  }
 });
 
 test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.json exactly §4\'s three entries', () => {
@@ -102,22 +107,27 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   assert.deepEqual(planCatalogue(), golden);
   const pre = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-pre7a.json'), 'utf8'));
   const d = diffCatalogues(pre, golden, { pending: [{ part: 'rail_1', block: 'connector.rail' }, { part: 'x', block: 'connector.span_bridge' }] });
-  assert.deepEqual(d.reservedToSupported, ['connector.span_bridge']);
-  assert.deepEqual(d.schemaVersionBumps, [{ id: 'connector.span_bridge', from: 0, to: 1 }]);
-  assert.deepEqual(d.untilChanged, [{ id: 'connector.rail', from: '7a', to: 'CR' }, { id: 'connector.branch_walk', from: '7a', to: '7b' }]);
-  assert.deepEqual(d.notesChanged.map((x) => x.id), ['connector.rail', 'connector.branch_walk']);
-  assert.deepEqual([d.added, d.removed, d.retired, d.otherStateChanges, d.limitsChanged], [[], [], [], [], []]);
+  // ((7a slices) each 7a slice flips its own kinds reserved -> supported (CW: connector.catwalk): those flips are the slices' and are
+  // left out here, so this item keeps checking exactly the foundation's three entries whichever slices have merged)
+  const flipped = new Set(K7.KINDS_7A.map((k) => `connector.${k}`).filter((id) => golden.entries.find((e) => e.id === id)?.state === 'supported'));
+  const own = (l, f = (x) => x) => l.filter((x) => !flipped.has(f(x)));
+  assert.deepEqual(own(d.reservedToSupported), ['connector.span_bridge']);
+  assert.deepEqual(own(d.schemaVersionBumps, (x) => x.id), [{ id: 'connector.span_bridge', from: 0, to: 1 }]);
+  assert.deepEqual(own(d.untilChanged, (x) => x.id), [{ id: 'connector.rail', from: '7a', to: 'CR' }, { id: 'connector.branch_walk', from: '7a', to: '7b' }]);
+  assert.deepEqual(own(d.notesChanged, (x) => x.id).map((x) => x.id), ['connector.rail', 'connector.branch_walk']);
+  assert.deepEqual([d.added, d.removed, d.retired, d.otherStateChanges, own(d.limitsChanged, (x) => x.id ?? x)], [[], [], [], [], []]);
   assert.deepEqual(d.recheck, [{ part: 'x', block: 'connector.span_bridge' }]);
   const sb = golden.entries.find((e) => e.id === 'connector.span_bridge');
   assert.equal(sb.aliasOf, 'connector.bridge');
   // the three changed entries carry the placeholder (the merge stamps it); nothing else changed its sinceApi
   const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(pre.entries.find((x) => x.id === e.id)));
-  assert.deepEqual(changed.map((e) => e.id), ['connector.rail', 'connector.branch_walk', 'connector.span_bridge']);
+  assert.deepEqual(own(changed, (e) => e.id).map((e) => e.id), ['connector.rail', 'connector.branch_walk', 'connector.span_bridge']);
   for (const e of changed) assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === golden.api, `${e.id}: ${e.sinceApi}`);
   // every reserved 7a kind still has its extension fixture; span_bridge left e15
   const ext = new Set(read('extension').flatMap((f) => (f.expect.all ?? [f.expect]).map((x) => x.block)));
   assert.ok(!ext.has('connector.span_bridge'));
-  for (const id of ['connector.rail', 'connector.branch_walk', 'connector.tube', ...K7.KINDS_7A.map((k) => `connector.${k}`)]) assert.ok(ext.has(id), id);
+  for (const id of ['connector.rail', 'connector.branch_walk', 'connector.tube', ...own(K7.KINDS_7A.map((k) => `connector.${k}`))]) assert.ok(ext.has(id), id);
+  for (const id of flipped) assert.ok(!ext.has(id), `${id} left e15 when it shipped`);
 });
 
 test('§7 item 4: a span_bridge part answers as the same bridge part, block connector.bridge, with the note (R25); the caller\'s plan untouched', async () => {
