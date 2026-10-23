@@ -573,7 +573,8 @@ steps.item7 = async () => {
   const order = ord.stockpile?.feedOrder ?? [];
   check(wall.targets.every((t, k) => order[k] === t), `item 7: setFeedOrder puts rs02's wall first: ${json(order.slice(0, wall.targets.length + 2))}`);
   for (const t of rope.targets) await L.call('dev.stockpile.pause', { site: t, paused: true }, 60_000);
-  await sleep(10_000); // the wall's targets starve past WaitCalc's threshold (100 ticks): their SITE_WAITING fires
+  // the wall's targets starve past WaitCalc's threshold (100 builder ticks of game time, not wall clock): their SITE_WAITING fires
+  await L.gameWait(10_000, { real: sleep, label: 'rs item 7 starve' });
   // the wall's bill alone: with the wall first it builds whole, though every other target wants the same blocks
   await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: wallBill, exact: true }, 120_000);
   // (a rope target put down later is paused as it appears)
@@ -989,11 +990,12 @@ steps.lv7 = async () => {
   await C.insert(`stockpile:${G.OWNER}`, st0.bom ?? {});
   const isFarm = async (c) => { const r = await cmd(`/execute if block ${c.join(' ')} minecraft:farmland`); return !!(r?.success || Number(r?.result) > 0); };
   let built = 0;
-  for (let k = 0; k < 120; k++) {
+  // (speed audit B) polled every 1 s (was 3 s), the same 6 minutes
+  for (let k = 0; k < 360; k++) {
     built = 0;
     for (const c of cells) if (await isFarm(c)) built++;
     if (built === cells.length) break;
-    await sleep(3000);
+    await sleep(1000);
   }
   check(built === cells.length, `L-V7 (${tag}): h1's farmland written from its own bill (${built}/${cells.length})`);
   const farm = cells.slice(0, 3);
@@ -1004,10 +1006,10 @@ steps.lv7 = async () => {
   await C.point('dried');
   await L.leaveWorld();
   await L.openWorld(R.s.world);
-  // the site's run is made again after the load: read until its built count stops moving (3 equal reads, 3 s apart)
+  // the site's run is made again after the load: read until its built count stops moving (3 equal reads, 1 s apart; was 3 s: speed audit B)
   let sB = null, same = 0, last = -1;
-  for (let k = 0; k < 60 && same < 3; k++) {
-    await sleep(3000);
+  for (let k = 0; k < 180 && same < 3; k++) {
+    await sleep(1000);
     sB = await L.call('dev.site.state', { site }, 60_000).catch(() => null);
     const now = sB?.built ?? -1;
     same = now === last && now >= 0 ? same + 1 : 0;
@@ -1066,7 +1068,8 @@ steps.item14 = async () => {
   await L.call('dev.survival.set', { on: true });
   await L.tp((c[0] + c[2]) / 2, sc.fixture.yRange[1], (c[1] + c[3]) / 2);
   await L.call('dev.waitChunks', { timeoutMs: 180_000 }, 240_000).catch(() => null);
-  await L.settle(90_000);
+  // (speed audit B) until quiet (no scheduled block or fluid tick, claim + 48 ticking), at most the 90 s it always waited, as scenarios.mjs
+  await L.settleQuiet([c[0] - 48, c[1] - 48, c[2] + 48, c[3] + 48], { capMs: 90_000 });
   const sv = path.join(OUT, `rs-${tag}-survey.bin`);
   await L.call('dev.region.survey', { claim: c, surveyLoad: 'bounded:256', file: sv }, 900_000);
   const S = surveyApi(fs.readFileSync(sv), claim);

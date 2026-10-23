@@ -14,6 +14,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { fromOwnTime as ownTick, ownPctOk, describePct as tickText } from './lib/tickbar.mjs';
 import { DevClient } from './lib/devclient.mjs';
+import { gameWait as sprintWait } from './lib/sprint.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -164,6 +165,8 @@ const result = async (pending, timeoutMs = 120_000) => {
   throw new Error(`timed out waiting for ${key}`);
 };
 const settle = (ms = 3000) => call('dev.wait', { ms }, ms + 20_000);
+// (speed audit B) `ms` of game time, sprinted on a headless host (tools/lib/sprint.mjs; GATE_SPRINT=0 or a client: `real(ms)` as before)
+const gameWait = (ms, { real = settle, label } = {}) => sprintWait({ call, cmd, log }, ms, real, { label });
 
 async function setRules(extra = []) {
   for (const r of ['random_tick_speed 0', 'mob_griefing false', 'advance_time false', 'advance_weather false', 'fire_spread_radius_around_player 0',
@@ -380,8 +383,11 @@ async function megaRun(name, opts = {}) {
   // its realise cells/s bar is the throughput bar at 4 ms (4e-throughput's timing folded into megaA)
   if (opts.budget) await cmd(`/architect budget ${opts.budget}`);
   await settle(5000);
-  out.heapBaseline = await call('dev.heap.gc', {}, 120_000);
-  log(`  heap baseline after GC: ${out.heapBaseline.usedMb.toFixed(0)} MB (max ${out.heapBaseline.maxMb.toFixed(0)})`);
+  // (speed audit B) 6a-eflat never reads the baseline (it passes heapBaseline: false); the other callers keep it in their evidence
+  if (opts.heapBaseline !== false) {
+    out.heapBaseline = await call('dev.heap.gc', {}, 120_000);
+    log(`  heap baseline after GC: ${out.heapBaseline.usedMb.toFixed(0)} MB (max ${out.heapBaseline.maxMb.toFixed(0)})`);
+  }
   const program = opts.program ?? MEGA;
   const p2 = await plan(program, 'generated:64', opts.params);
   out.plan = { planId: p2.planId, ms: p2.ms, budget: p2.budget, irSha: p2.irSha, stages: p2.stages, lots: p2.lots.length };
@@ -855,7 +861,7 @@ steps.eflat = async () => {
     ctx.flatMegaPrepared = await prepared('G6A Flat Base', MEGA, {}, 'G6A Flat Mega Prepared');
     saveCtx();
   }
-  const r = await megaRun('G6A EFlat', { base: 'G6A Flat Mega Prepared' });
+  const r = await megaRun('G6A EFlat', { base: 'G6A Flat Mega Prepared', heapBaseline: false });
   const out = { run: { cellsWritten: r.cellsWritten, cellsPerSecond: r.cellsPerSecond, mspt: r.mspt?.all, state: r.state.view.state } };
   // a player's block on a pad cell: a solid cell a ground terrain tile owns at the top of its stack
   const lotSite = r.state.view.lots.find((l) => l.siteId)?.siteId;
@@ -969,7 +975,7 @@ steps.forest = async () => {
   check(leaves.length > 0 && leaves.reduce((a, e) => a + (e.cells ?? 0), 0) > 0, `forest: held leaves on the tiles' leaves entries (${leaves.length} entries, `
     + `${leaves.reduce((a, e) => a + (e.cells ?? 0), 0)} cells; ${after.leavesPersistent} persistent leaves in the box)`);
   await cmd('/gamerule random_tick_speed 3');
-  await sleep(120_000);
+  await gameWait(120_000, { real: sleep, label: '6a forest stand' });
   const rm = await call('dev.region.remove', { region }, 3_600_000);
   await cmd('/gamerule random_tick_speed 0');
   await settle(5000);
@@ -1131,7 +1137,12 @@ steps.crash = async () => {
     const ls = await call('dev.launcher.state');
     log(`  killing the sidecar pid ${ls.pid}`);
     if (ls.pid) process.kill(ls.pid, 'SIGKILL');
-    await sleep(20_000);
+    // (speed audit B) the pause is for the sidecar to be seen gone: poll for SIDECAR_UNAVAILABLE, at most the 20 s it always waited
+    for (let i = 0, t1 = Date.now(); Date.now() - t1 < 20_000; i++) {
+      const s1 = await regionState(region).catch(() => null);
+      if (s1 && (JSON.stringify(s1.waiting).includes('SIDECAR_UNAVAILABLE') || s1.view?.waiting?.reason === 'SIDECAR_UNAVAILABLE')) break;
+      await sleep(500);
+    }
     const w = await regionState(region);
     const t0 = Date.now();
     await call('dev.launcher.restart', {}, 120_000);

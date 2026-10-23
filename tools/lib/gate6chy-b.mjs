@@ -99,7 +99,8 @@ export async function buildTerrain(ctx, T, at = null) {
       await fillBox(L, [bx0, g(b.y) + 1, bz0, bx1, g(b.y + b.water), bz1], 'minecraft:water');
     } else await fillBox(L, [bx0, g(b.y), bz0, bx1, g(b.y), bz1], 'minecraft:grass_block');
   }
-  await L.settle(3000);
+  // (speed audit B) the fills' fluids settling: 3 s of game time (the settle at the top of the function stays real: chunk activation)
+  await L.gameWait(3000, { real: L.settle, label: 'hy terrain settle' });
   return W;
 }
 
@@ -223,7 +224,7 @@ export async function realiseFixture(ctx, tag, fx, o = {}) {
   if (o.after) out.after = await o.after(r, { W, T, box, before, ck: { ...ck, plan: [...(wp.plan.connectors ?? [])] }, anchors: wp.anchors });
   if (o.noUndo) { await core.removeWait(ctx, r.region).catch(() => null); await L.leaveWorld(); return out; }
   const rm = await core.removeWait(ctx, r.region);
-  await sleep(3000);
+  await L.gameWait(3000, { real: sleep, label: 'hy post-removal settle' });
   if (o.normal) {
     // E-normal (§4.4): 0 unclassified, no classified mismatch within 6 of any body, shell, lining, weir, spill or watched cell, 0 gravity
     const df = await ctx.L.call('dev.region.hash', { box, mode: 'diff', file }, 4 * 3_600_000);

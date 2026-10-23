@@ -85,7 +85,7 @@ async function connect(port = PORT, gameDir = GAME_DIR, timeoutMs = 600_000) {
       return dev;
     } catch (e) {
       last = e;
-      await sleep(2000);
+      await sleep(500); // (speed audit B) was 2 s between attempts
     }
   }
   throw new Error(`no DevBridge on ${port}: ${last}`);
@@ -125,10 +125,10 @@ async function waitInWorld(timeoutMs = 600_000) {
     const st = await call('dev.state').catch(() => ({}));
     if (st.inWorld && st.ready) {
       await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => {});
-      await sleep(2000);
+      await settleQuiet(2000, { quietMs: 500 });
       return st;
     }
-    await sleep(1000);
+    await sleep(500);
   }
   throw new Error('not in a world');
 }
@@ -215,8 +215,28 @@ async function waitBatch(id, timeoutMs = 600_000) {
   return waitEvent((e) => e.event === 'BATCH_DONE' && e.batch === id, timeoutMs, `BATCH_DONE ${id}`);
 }
 const settle = (ms = 3000) => call('dev.wait', { ms }, 20_000);
+/**
+ * (speed audit B) A fixed settle ended early once the world is tick-quiet: no chunk the server ticks holds a scheduled block or fluid tick
+ * (dev.ticks.pending), the box's chunks (`box6`: a 6-number box) ticking, or without a box some chunk ticking, for `quietMs` in a row (and
+ * `extra()` true, when given: a further condition such as a stable journal); at most `capMs`, the fixed settle it replaces. A call that
+ * fails waits the full cap.
+ */
+async function settleQuiet(capMs, { box6: b = null, quietMs = 1000, extra = null } = {}) {
+  const t0 = Date.now();
+  let quietSince = null;
+  while (Date.now() - t0 < capMs) {
+    const p = await call('dev.ticks.pending', b ? { box: [b[0], b[2], b[3], b[5]] } : {}, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
+    if (p.error) { await settle(Math.max(0, capMs - (Date.now() - t0))); return; }
+    const at = Date.now() - t0;
+    const quiet = p.block === 0 && p.fluid === 0 && (b ? p.boxTicking === p.boxChunks : (p.tickingChunks ?? 0) > 0) && (extra ? await extra() : true);
+    if (!quiet) quietSince = null;
+    else if (quietSince === null) quietSince = at;
+    if (quietSince !== null && at - quietSince >= quietMs) return;
+    await sleep(250);
+  }
+}
 async function hash(box, exclude = [], cells = false) {
-  await settle();
+  await settleQuiet(3000, { box6: box });
   return call('dev.region.hash', { box, exclude, cells }, 300_000);
 }
 const grow = (b, n) => [b[0] - n, b[1] - n, b[2] - n, b[3] + n, b[4] + n, b[5] + n];
@@ -276,7 +296,7 @@ async function openWorld(name, opts = {}) {
     const st = await call('dev.state').catch(() => ({}));
     if (st.inWorld && st.ready) {
       await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => {});
-      await sleep(2000);
+      await settleQuiet(2000, { quietMs: 500 });
       return;
     }
   }
@@ -527,7 +547,7 @@ async function removeInOrder(world, ids, order, h0, label) {
       break;
     }
     standing = standing.filter((x) => x !== k);
-    await settle(1500);
+    await settleQuiet(1500, { quietMs: 500 });
     const now = await ownedNow(standing.map((x) => ids[x]));
     const l = leaks(snap, now);
     if (Object.keys(l).length) leaked[k] = l;
@@ -1734,7 +1754,9 @@ async function killRun(point, base, action, pre) {
   check(disk.missing.length === 0, `crash ${point}: no file the index names is lost (orphans on disk: ${disk.orphans.length})`, disk);
   await startClient('G4E Crash');
   await tp(48.5, 80, 30.5);
-  await settle(5000);
+  // (speed audit B) until the world is tick-quiet and the journal has not changed for a second, at most the 5 s it always waited
+  let jPrev = null;
+  await settleQuiet(5000, { extra: async () => { const s = JSON.stringify(await journal().catch(() => null)); const same = s === jPrev; jPrev = s; return same; } });
   const j = await journal();
   check(j.open && !j.unavailable, `crash ${point}: the journal opens`, { open: j.open, unavailable: j.unavailable });
   const after = journalFiles('G4E Crash');
