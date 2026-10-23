@@ -581,6 +581,15 @@ the groups the water and ledger lints took over (the `P3 smoke: ... left to ...`
 probe beside them; the probe rule is unchanged. `irr-ingame`, `c29-ingame`, `voc-survival`, `x-resume`, `6a-eflat`, `6a-staged` and
 `c30` stay full at release. Details: docs/GATES.md "Smoke at releases".
 
+## 0a: the retired steps (speed audit D, 2026-10-23)
+
+`0a-stub`, `0a-budget`, `0a-cancel` and `0a-pins` are retired from the tiers and the impact rules: every row of 0a-budget is ALREADY-OFFLINE (sidecar
+limits/groups/simcosts tests), 0a-stub's rows 2-4 and 0a-pins' rows 2-3 are ALREADY-OFFLINE (bundle.e2e, slice0a, versions tests) and 0a-cancel's
+second row is. Their residues became rows of `0a-flow`: the packed jar carries the helper bundle and the helper runs the sim with no SDK (0a-stub row 1,
+the only KEEP-INGAME row there), `cancelJob` gives CANCELLED and BIBLE_DONE once (0a-cancel row 2, with the "already cancelled" row, one call), and
+a helper restart runs the library GC (0a-pins: pinned v1 survives, unpinned it goes). `0a-flow`, `0a-fit` and `0a-stopped` run as `0a-session`,
+one client session. The drivers still run by name (`node tools/gate6c0a.mjs stub|budget|cancel|pins`).
+
 ## What stays in game at the slice tier (after P3)
 
 About 162 in-game step-minutes per slice (55% of today). It is dominated by:
