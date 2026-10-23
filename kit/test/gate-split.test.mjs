@@ -172,3 +172,15 @@ test('aggregateProblems: split parents, supersededBy drops and canaries rest on 
   assert.deepEqual(aggregateProblems({ rows: [], cached: [{ id: 'b', log: 'l' }] }), []);
   assert.equal(resultOf('nope', { rows }), null);
 });
+
+test('parentResults/aggregateProblems: a run of fewer parts than configured is PARTIAL, never the parent\'s PASS', () => {
+  const row = (id) => ({ id, status: 'PASS', ok: 2, fail: 0, log: `${id}.log` });
+  const r = parentResults({ a: ['a/p1'] }, [row('a/p1')], [], { total: { a: 2 } });
+  assert.equal(r.a.status, 'PARTIAL');
+  assert.equal(r.a.partial, '1 of 2 parts');
+  assert.match(aggregateProblems({ rows: [row('a/p1')], splitResults: r }).join(), /split a: PARTIAL/);
+  assert.deepEqual(aggregateProblems({ rows: [row('a/p1')], splitResults: r, partialOk: true }), [], '--only a/p1 certifies the part only');
+  assert.equal(parentResults({ a: ['a/p1', 'a/p2'] }, [row('a/p1'), row('a/p2')], [], { total: { a: 2 } }).a.status, 'PASS');
+  // a superseded step that ran itself (--only names it) stands on its own row
+  assert.deepEqual(aggregateProblems({ rows: [row('x-flat')], superseded: { 'x-flat': 'x' } }), []);
+});

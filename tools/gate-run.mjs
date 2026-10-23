@@ -368,6 +368,8 @@ const TURBO = !flag('--no-turbo') && (flag('--turbo') || (TIERS.includes(chainNa
 // every step whole. The selection above names parents only; the parts replace them here.
 const SPLIT = onlyParts.length > 0 || flag('--split') || (TURBO && !flag('--no-split'));
 let splitParts = {};
+// every split parent's configured part count (a parent with fewer parts in the run is PARTIAL)
+const splitTotals = () => Object.fromEntries(Object.keys(splitParts).map((k) => [k, cfg.steps[k]?.split?.parts?.length ?? splitParts[k].length]));
 if (SPLIT) {
   const x = expandSplits(cfg.steps, stepIds);
   Object.assign(cfg.steps, x.defs);
@@ -1051,6 +1053,10 @@ function printPlan() {
 
 if (!steps.length) {
   if (!PLAN && tierInfo.cached?.length) console.log('every selected step is CACHED: nothing to run');
+  // nothing runs: every split parent's parts must be CACHED with evidence (no vacuous PASS, 2026-10-23)
+  const bad = aggregateProblems({ rows: [], cached: tierInfo.cached ?? [], splitResults: parentResults(splitParts, [], tierInfo.cached ?? [], { total: splitTotals() }), partialOk: onlyParts.length > 0 })
+    .filter((p) => !p.startsWith('no step ran'));
+  if (!PLAN && bad.length) die(`nothing to run, but: ${bad.join('; ')}`);
   printSelection();
   console.log(`${chainName}: nothing to run (${tierInfo.kind === 'tier' ? 'the diff maps to no gate step' : 'empty selection'}).`);
   process.exit(0);
@@ -1722,9 +1728,9 @@ async function finish(state, error) {
   summary.durationSeconds = (Date.now() - t0) / 1000;
   for (const s of summary.steps) if (['PENDING', 'RUNNING'].includes(s.status)) s.status = 'SKIPPED';
   // the aggregates (split parents, supersededBy drops, canaries) rest on real results or the run fails (no vacuous PASS)
-  if (summary.split) summary.splitResults = parentResults(summary.split, summary.steps, summary.cached, { logExists: (l) => fs.existsSync(path.join(OUT, l)) });
+  if (summary.split) summary.splitResults = parentResults(summary.split, summary.steps, summary.cached, { logExists: (l) => fs.existsSync(path.join(OUT, l)), total: splitTotals() });
   summary.aggregateProblems = aggregateProblems({ rows: summary.steps, cached: summary.cached, splitResults: summary.splitResults ?? {}, superseded: summary.superseded ?? {},
-    canaries: summary.cache?.canariesDeclared ?? [] });
+    canaries: summary.cache?.canariesDeclared ?? [], partialOk: onlyParts.length > 0 });
   for (const p of summary.aggregateProblems) log(`AGGREGATE FAIL: ${p}`);
   writeSummary();
   const c = summary.counts;
