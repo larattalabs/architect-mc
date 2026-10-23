@@ -12,6 +12,12 @@ export const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
 export const ROOT = path.resolve(KIT, '..');
 export const PLAN_V0 = path.join(KIT, 'regions', 'plan_v0.mjs');
 export const FIX = path.join(KIT, 'test', 'fixtures', 'plan');
+/**
+ * (6c close-out A, §6) Steward's first recordings of the 59 asks (steward-mc 8703dbd): the 47 still in asks/ and the 12 it re-recorded since
+ * (0c8f4a8), kept whole in asks-8703dbd/. The slices before close-out A judged those plans, and their tests still do.
+ */
+export const ASKS_FIRST_DIR = path.join(FIX, 'asks-8703dbd');
+export const asksFirstPath = (file) => (fs.existsSync(path.join(ASKS_FIRST_DIR, file)) ? path.join(ASKS_FIRST_DIR, file) : path.join(FIX, 'asks', file));
 
 /** A committed scenario survey: S7's flat claim (`s7`) or S3's pinned claim (`s3`, relief_demo's and route_demo's golden survey). */
 export function goldenSurvey(name) {

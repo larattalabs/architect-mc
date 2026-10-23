@@ -1,0 +1,203 @@
+{
+  "prompt": "Everything built only of copper, in every stage of oxidation.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "verdigris_reach",
+      "style": {
+        "pending": "verdigris_reach"
+      },
+      "zones": [
+        {
+          "id": "reach",
+          "kind": "standard",
+          "required": true,
+          "label": "Verdigris Reach",
+          "purpose": "market",
+          "style": {
+            "pending": "verdigris_reach"
+          },
+          "where": {
+            "near": {
+              "anchor": "stone",
+              "within": 32
+            }
+          },
+          "program": {
+            "lots": [
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "founders_hall",
+                "label": "Founders' copper hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Central gathering hall in bright new copper, roof aged to exposed and weathered copper."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "smithy",
+                "label": "Copper smithy",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Workshop with copper bulb lights and a lightning rod chimney; semi-weathered copper."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "Weathered cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Home in exposed copper, early oxidation."
+              },
+              {
+                "id": "cottage_2",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "Weathered cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Home in weathered copper."
+              },
+              {
+                "id": "cottage_3",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "Weathered cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Home in a mix of weathered and oxidized copper."
+              },
+              {
+                "id": "cottage_4",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "Weathered cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Home in fully oxidized teal-green copper."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "watchtower",
+                "label": "Oxidized watchtower",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Tall tower fully oxidized, teal-green, topped with a lightning rod."
+              },
+              {
+                "id": "chapel_1",
+                "type": "chapel",
+                "role": "chapel",
+                "label": "Copper chapel of ageing",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Shrine showing all four oxidation stages in a gradient from floor to spire."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "shop",
+                "label": "Trading shop",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "brief": "Small waxed-copper shop kept bright."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "barn",
+                "label": "Copper-roofed barn",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Storage barn in weathered copper."
+              }
+            ],
+            "layout": "street",
+            "shared": "square"
+          },
+          "notes": "Oxidation steps from bright copper at the centre to oxidized teal at the edges."
+        }
+      ],
+      "forms": [
+        {
+          "id": "gentle_terraces",
+          "kind": "terrace",
+          "required": false,
+          "label": "Gentle terraces",
+          "where": {
+            "inside": {
+              "part": "reach"
+            }
+          },
+          "steps": 3,
+          "rise": 1,
+          "edge": "blend",
+          "notes": "Low steps so buildings climb from the bright centre to the weathered edges."
+        }
+      ],
+      "rules": [
+        {
+          "id": "copper_only",
+          "kind": "palette",
+          "required": true,
+          "label": "Copper and its oxidation only",
+          "scope": [
+            "reach"
+          ],
+          "params": {
+            "family": "copper",
+            "share": [
+              1,
+              1
+            ],
+            "exempt": [
+              "terrain",
+              "support"
+            ],
+            "gradient": "bright at centre, oxidized at edges"
+          },
+          "notes": "Only copper and its oxidized and waxed variants; no other building material where avoidable."
+        }
+      ],
+      "notes": "Showcase home base in copper at every stage of oxidation."
+    },
+    "waits": [
+      {
+        "part": "copper_only",
+        "words": "The all-copper rule with oxidation shading from bright centre to teal edges: palette rules come with a later Architect release. The village is built first and the palette is carried by the style bible."
+      }
+    ],
+    "summary": "Verdigris Reach is a medium, street-laid copper village of ten buildings around a square: a large founders' hall and a small shop at the centre, the smithy, chapel, four cottages and watchtower around them, and a barn on the edge. Gentle terraces step the ground. The copper-only palette and its oxidation gradient is recorded as a rule that waits for a later release."
+  },
+  "usd": 0.059692,
+  "errors": []
+}

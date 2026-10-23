@@ -615,7 +615,13 @@ public final class RegionFluids {
 		if (l.rec().survival()) {
 			String waiting = survivalBarrier(s, l);
 			if (waiting != null) {
-				RegionItems.waitStage(b, STAGE, Reason.SITE_BUSY, waiting);
+				// (6c close-out A, §8) with waitsFor {target, part, waiter, say}: what the bodies wait for, sayable
+				String[] first = dev.larattalabs.architect.site.RegionTargets.firstBuilding(l.rec().groupId);
+				if (first != null) {
+					RegionItems.waitStageFor(b, STAGE, first[0], first[1], waiting);
+				} else {
+					RegionItems.waitStage(b, STAGE, Reason.SITE_BUSY, waiting);
+				}
 				return false;
 			}
 		}

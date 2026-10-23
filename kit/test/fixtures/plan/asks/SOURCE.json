@@ -1,8 +1,13 @@
 {
   "about": "Steward's recorded plans for the 59 strange asks (docs/CONTRACT.md P0 gate item 11), copied whole (prompt, answer.plan, answer.waits, answer.summary, usd, errors) and never edited. answer.waits is the oracle the gate reads: a part it names answers unsupported (or blocked); every other part is never malformed.",
   "repo": "larattalabs/steward-mc",
-  "commit": "8703dbd0cadf02fba08d6f4497e058f0eebcb563",
+  "commit": "0c8f4a8bbf72325192d0e15495705410a4834916",
   "path": "fixtures/strange-asks/plans/",
-  "copied": "2026-10-13",
-  "count": 59
+  "copied": "2026-10-22",
+  "count": 59,
+  "rerecorded": {
+    "about": "6c close-out A (docs/CONTRACT.md \"Phase 6c close-out A\" §6): the 12 plans Steward re-recorded with its plan writer's shape rules (steward-mc 0c8f4a8, $0.65, Noah approved); the other 47 are unchanged since 8703dbd (copied 2026-10-13). All 59 equal steward-mc main at 91a46ee.",
+    "files": ["arcology", "end_city_ruins", "one_block", "redstone_gate", "rival_families", "spiral_town", "swamp_stilts", "terraced_hill", "treetop_village", "two_districts", "underwater_domes", "upside_down"],
+    "previous": "8703dbd0cadf02fba08d6f4497e058f0eebcb563"
+  }
 }

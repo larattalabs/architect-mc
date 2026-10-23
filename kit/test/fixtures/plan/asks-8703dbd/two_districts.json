@@ -1,0 +1,244 @@
+{
+  "prompt": "A town with a craftsmen's district to the east.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "craftsmens_town",
+      "style": {
+        "pending": "craftsmens_town"
+      },
+      "zones": [
+        {
+          "id": "town",
+          "kind": "standard",
+          "required": true,
+          "label": "Craftsmen's Town",
+          "purpose": "market",
+          "style": {
+            "pending": "craftsmens_town"
+          },
+          "program": {
+            "layout": "street",
+            "shared": "square",
+            "lots": [
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "town_hall",
+                "label": "town hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "villager": "none",
+                "brief": "Civic heart of the town, facing the central square."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "market_stall",
+                "label": "market stall",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "villager": "job",
+                "brief": "Stall around the square selling goods from the craftsmen."
+              },
+              {
+                "id": "shop_2",
+                "type": "shop",
+                "role": "market_stall",
+                "label": "market stall",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "villager": "job",
+                "brief": "Stall around the square selling goods from the craftsmen."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "tavern",
+                "label": "tavern",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "villager": "trading_hall",
+                "brief": "Near the square, with a common room and rooms upstairs."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Home for townsfolk in the western or central part."
+              },
+              {
+                "id": "house_3",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Home for townsfolk in the western or central part."
+              },
+              {
+                "id": "house_4",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Home for townsfolk in the western or central part."
+              },
+              {
+                "id": "house_5",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Home for townsfolk in the western or central part."
+              },
+              {
+                "id": "chapel_1",
+                "type": "chapel",
+                "role": "chapel",
+                "label": "chapel",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "high_ground",
+                "brief": "Small chapel on slightly higher ground."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "smithy",
+                "label": "smithy",
+                "size": [
+                  13,
+                  11
+                ],
+                "villager": "job",
+                "brief": "Eastern craftsmen's district: forge with an open yard and anvil."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "carpenter",
+                "label": "carpenter's workshop",
+                "size": [
+                  13,
+                  11
+                ],
+                "villager": "job",
+                "brief": "Eastern craftsmen's district: timber stacks and a covered work area."
+              },
+              {
+                "id": "shop_3",
+                "type": "shop",
+                "role": "mason",
+                "label": "mason's workshop",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "job",
+                "brief": "Eastern craftsmen's district: stone blocks stacked outside."
+              },
+              {
+                "id": "shop_4",
+                "type": "shop",
+                "role": "potter",
+                "label": "potter's workshop",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "job",
+                "brief": "Eastern craftsmen's district: kilns outside."
+              },
+              {
+                "id": "cabin_1",
+                "type": "cabin",
+                "role": "weaver_tanner",
+                "label": "weaver's and tanner's workshop",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "edge",
+                "villager": "job",
+                "brief": "Eastern craftsmen's district, on the outer edge because of the smell."
+              }
+            ]
+          },
+          "notes": "One street town on flat land. The workshops (smithy_1, cottage_1, shop_3, shop_4, cabin_1) belong on the east side of the founding stone."
+        },
+        {
+          "id": "craftsmen_district",
+          "kind": "district",
+          "required": false,
+          "label": "Craftsmen's district",
+          "notes": "Eastern district grouping the five workshops; needs district support. Until then the workshops are lots of the town.",
+          "where": {
+            "adjacent": {
+              "to": {
+                "part": "town"
+              },
+              "side": "e",
+              "gap": [
+                0,
+                4
+              ]
+            }
+          },
+          "params": {
+            "lots": [
+              "smithy_1",
+              "cottage_1",
+              "shop_3",
+              "shop_4",
+              "cabin_1"
+            ],
+            "side": "east"
+          }
+        }
+      ],
+      "notes": "East is taken as true east of the founding stone."
+    },
+    "waits": [
+      {
+        "part": "craftsmen_district",
+        "words": "The craftsmen's district as its own eastern district: districts come with a later Architect release. The workshops are built now as lots of the town, and the east side grouping is offered when it can be."
+      }
+    ],
+    "summary": "A medium medieval market town on flat land: a central square with the town hall, two market stalls and the tavern, four townhouses, and a chapel on higher ground. The five craftsmen's workshops (smithy, carpenter, mason, potter, weaver and tanner) are in the same town for now, aimed at the east side. A separate eastern district waits for a later Architect release."
+  },
+  "usd": 0.036648,
+  "errors": []
+}

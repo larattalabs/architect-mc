@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 11,
- "api": "1.38.0",
- "kitVersion": "0.39.0",
+ "catalogueVersion": 12,
+ "api": "1.39.0",
+ "kitVersion": "0.40.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -826,8 +826,8 @@
   },
   {
    "id": "rule.palette",
-   "sinceApi": "1.37.0",
-   "schemaVersion": 1,
+   "sinceApi": "1.39.0",
+   "schemaVersion": 2,
    "state": "supported",
    "limits": {
     "groups": [
@@ -839,11 +839,17 @@
     ],
     "exempt": [
      "terrain",
-     "support"
+     "support",
+     "ways",
+     "forms"
+    ],
+    "over": [
+     "all",
+     "lots"
     ],
     "scope": 32
    },
-   "note": "measured over parts and bound lots; required rules are checked again at realise"
+   "note": "measured over parts and bound lots (over: lots: bound lots only); required rules are checked again at realise"
   },
   {
    "id": "rule.shape",

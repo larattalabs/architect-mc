@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { FIX, ROOT, checkPlanVolumes, fixtureLotBlocks, fixtureStyle, flatSurvey, stewardAnchors } from './plan-helpers.mjs';
+import { FIX, ROOT, asksFirstPath, checkPlanVolumes, fixtureLotBlocks, fixtureStyle, flatSurvey, stewardAnchors } from './plan-helpers.mjs';
 import { validatePlan } from '../lib/plan/schema.mjs';
 import { diffCatalogues } from '../lib/plan/catalogue.mjs';
 import { irPartExempt, measureLot, measurePalette, readPaletteRule, shareFits, unmeasuredBlocks, swapChain, swapState } from '../lib/plan/palette.mjs';
@@ -32,7 +32,7 @@ test('item 1: the strict def (0 malformed over Steward\'s 7 recorded rules, e16\
   const asks = path.join(FIX, 'asks');
   const recorded = [];
   for (const f of fs.readdirSync(asks).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json')) {
-    const plan = JSON.parse(fs.readFileSync(path.join(asks, f), 'utf8')).answer.plan;
+    const plan = JSON.parse(fs.readFileSync(asksFirstPath(f), 'utf8')).answer.plan; // ((6c close-out A) the 7 rules VOC-c judged: the first recordings)
     for (const r of plan.rules ?? []) if (r.kind === 'palette') recorded.push([f, r]);
   }
   assert.equal(recorded.length, 7);
@@ -146,7 +146,7 @@ test('v64 (only copper): fits, READY; the bound lot measured from its entry\'s b
   assert.deepEqual(Object.keys(a.measured.parts).sort(), ['fount', 'reach', 'reach_wall']);
   // the artifact's palette row: sorted, the family's blocks, the unmeasured blocks, the parts' and the lot's counts
   const row = r.artifact.palette[0];
-  assert.deepEqual(Object.keys(row), ['rule', 'required', 'family', 'share', 'lots', 'blocks', 'natural', 'partsCells', 'partsFamily', 'lotCounts']);
+  assert.deepEqual(Object.keys(row), ['rule', 'required', 'family', 'share', 'over', 'lots', 'blocks', 'natural', 'partsCells', 'partsFamily', 'lotCounts']); // ((close-out A, §5) rows gain over)
   assert.deepEqual([row.rule, row.required, row.family, row.share, row.lots], ['copper_only', true, 'copper', [1, 1], ['hall']]);
   assert.deepEqual(row.blocks, [...cu].sort());
   assert.deepEqual(row.natural, [...unmeasuredBlocks()]);
