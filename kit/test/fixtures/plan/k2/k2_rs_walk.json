@@ -1,0 +1,118 @@
+{
+ "about": "(7a K2, \u00a75, \u00a79 item 10) v7a_k2_walk's shape in survival (RS's flat terrain, rs02's town and lot entries): a walled town with walk: true and corner towers, the road's auto gate; the walk is paid, built with its wall's targets after the body under it; BOM exact, the removal refunds once",
+ "terrain": {},
+ "anchors": {
+  "east_gate": [
+   1230,
+   65,
+   2080
+  ]
+ },
+ "lotEntries": {
+  "h1": "rs_hut",
+  "h2": "rs_hut",
+  "h3": "rs_shed"
+ },
+ "covers": [
+  "connector.wall"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "k2_rs_walk",
+  "zones": [
+   {
+    "id": "town",
+    "kind": "standard",
+    "required": true,
+    "program": {
+     "lots": [
+      {
+       "id": "h1",
+       "type": "cottage",
+       "size": [
+        9,
+        9
+       ],
+       "entry": "rs_hut",
+       "ext": {
+        "steward_mc:settlement": "s1",
+        "steward_mc:lot": "h1",
+        "steward_mc:role": "home"
+       }
+      },
+      {
+       "id": "h2",
+       "type": "cottage",
+       "size": [
+        9,
+        9
+       ],
+       "entry": "rs_hut",
+       "ext": {
+        "steward_mc:settlement": "s1",
+        "steward_mc:lot": "h2",
+        "steward_mc:role": "home"
+       }
+      },
+      {
+       "id": "h3",
+       "type": "smithy",
+       "size": [
+        9,
+        9
+       ],
+       "entry": "rs_shed",
+       "ext": {
+        "steward_mc:settlement": "s1",
+        "steward_mc:lot": "h3",
+        "steward_mc:role": "workshop"
+       }
+      }
+     ],
+     "layout": "street",
+     "orientation": "ew"
+    },
+    "tolerance": {
+     "rotate": {
+      "allowed": false
+     }
+    },
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 16
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "town_wall",
+    "kind": "wall",
+    "where": {
+     "around": {
+      "feature": {
+       "part": "town"
+      },
+      "ring": [
+       4,
+       8
+      ]
+     }
+    },
+    "walk": true,
+    "corners": "tower"
+   },
+   {
+    "id": "in",
+    "kind": "road",
+    "from": {
+     "anchor": "east_gate"
+    },
+    "to": {
+     "part": "town"
+    }
+   }
+  ]
+ }
+}
