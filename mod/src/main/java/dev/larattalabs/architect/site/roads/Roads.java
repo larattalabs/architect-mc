@@ -208,14 +208,19 @@ public final class Roads {
 		if (pos.length == 0) {
 			// (6c close-out B) every column it would write is its own region's (a target, a lot or a tile of the same group wrote it): a
 			// no-op, placed, each column held by the sibling that owns it (heldBy); anything else stays a failure, as before
-			Map<String, Integer> held = heldByOwn(plan, ownGroup, Roads::groupOf);
+			RoadTerrain terrain = new RoadTerrain(level, consent);
+			RoadPlan.Owned holder = js == null ? (x, y, z) -> null : (x, y, z) -> {
+				String[] top = topSite(js, dim, Journal.pos(x, y, z));
+				return top == null ? null : top[0];
+			};
+			Map<String, Integer> held = heldByOwn(plan, ownGroup, Roads::groupOf, terrain, holder);
 			if (held != null) {
 				List<String> n2 = new ArrayList<>(notes);
 				held.forEach((site, c) -> n2.add("held by its region's own " + site + " (" + c + " cells): nothing to write"));
 				return new Planned(plan, pos, vals, null, null, null, n2, List.of(), held);
 			}
 			return new Planned(plan, pos, vals, null, "the road changes no cell (every column is another site's or blocked: owned " + plan.ownedBy()
-				+ ", skipped " + plan.skipped() + ")", Reason.OTHER, notes, List.copyOf(layered.keySet()));
+				+ ", skipped " + plan.skipped() + ", stopped columns " + plan.stopped().size() + ")", Reason.OTHER, notes, List.copyOf(layered.keySet()));
 		}
 		return new Planned(plan, pos, vals, box, null, null, notes, List.copyOf(layered.keySet()));
 	}
@@ -277,24 +282,24 @@ public final class Roads {
 	 * skipped span (protected, a player's build, too steep); a column skipped as blocked or kept only when every built cell in it is a
 	 * site's (RoadPlan.builtOwners), those sites its group's too; none skipped as water, steep or ore (lanterns without room may be). Returns those columns' cells per owning site, or null (a failure, as before). Pure.
 	 */
-	public static @Nullable Map<String, Integer> heldByOwn(RoadPlan.Plan plan, @Nullable String ownGroup, java.util.function.Function<String, @Nullable String> groupOf) {
+	public static @Nullable Map<String, Integer> heldByOwn(RoadPlan.Plan plan, @Nullable String ownGroup, java.util.function.Function<String, @Nullable String> groupOf,
+		RoadPlan.World w, RoadPlan.Owned holder) {
 		if (ownGroup == null || plan.refused() || !plan.spans().isEmpty() || !plan.ops().isEmpty()) {
 			return null;
 		}
-		// a column stopped (blocked, kept) counts only when every built cell in it is a site's (RoadPlan.builtOwners)
-		int stopped = 0;
-		for (var e : plan.skipped().entrySet()) {
-			if (e.getKey().equals("blocked") || e.getKey().equals("kept")) {
-				stopped += e.getValue();
-			} else if (!e.getKey().equals("lantern")) {
+		for (String k : plan.skipped().keySet()) {
+			if (!k.equals("blocked") && !k.equals("kept") && !k.equals("lantern")) {
 				return null;
 			}
 		}
-		if (stopped != plan.blockedHeld()) {
-			return null;
-		}
 		Map<String, Integer> held = new java.util.TreeMap<>(plan.ownedBy());
-		plan.blockedBy().forEach((site, n) -> held.merge(site, n, Integer::sum));
+		for (int[] col : plan.stopped()) {
+			Map<String, Integer> by = RoadPlan.builtOwners(col, w, holder);
+			if (by == null) {
+				return null;
+			}
+			by.forEach((site, n) -> held.merge(site, n, Integer::sum));
+		}
 		if (held.isEmpty()) {
 			return null;
 		}
