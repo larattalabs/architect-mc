@@ -594,12 +594,24 @@ megaB run. It is not a bench: no `bench` resource, not isolated.
 | `${state}, N failed items` | the same | PLACED and 0 failed |
 | `resumed S s after the player reached a waiting lots-2 item after the relog (item)` | the same | S <= 60 |
 | `resumed S s after the sidecar came back, at a waiting ways item (item)` | the same | S <= 30 |
-| `REGION_PROGRESS events for every stage (...)` | the same | every stage seen |
+| `REGION_PROGRESS events for every stage with items (...)` | the same | every stage with items seen |
 | `per-stage seconds and chunks loaded {...}` | the same | every stage recorded |
 | metrics `mode`, `wallSeconds`, `relogResumeSeconds`, `sidecarResumeSeconds` | the same, from `resume-B.json` | recorded |
 
 The relog and sidecar rows are time thresholds, though functional ones (did it resume at all, within a minute). Read them with the
-step's load, as for any step.
+step's load, as for any step. 6a-resume runs them without isolation, beside other steps; a loaded machine could fail them where the
+isolated megaB passed. If that shows up, make 6a-resume a bench with `"isolate": true` (it then runs alone, about 25 min).
+
+**Two fixes to the shared walk (2026-10-23).** megaB failed on main for reasons unrelated to what it measures, and 6a-resume would
+inherit both:
+- **The empty stage.** MEGA's plan now has an empty `lots-4` (0 items). It places nothing, so it has no PLACING event, and the
+  REGION_PROGRESS row failed the full walk on 2026-10-22 (`gate-runs-0410/20261022-043748-release`) for that stage alone. The row
+  now asks for every stage *with items*. The per-stage record keeps each stage's item count.
+- **The mob stall.** A lot waiting OCCUPIED holds a mob in its box (a resting polar bear) and never starts. It stalled the walk's
+  final wait for its whole hour (`gate-runs/20261017-232136-slice`, and this branch's first proof run). The walk now clears the mobs
+  while it waits, as megaRun has since 6c W.
+
+No other row changed.
 
 ### The fold: every metric and assertion, before and after
 
