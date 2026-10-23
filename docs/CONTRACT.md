@@ -24091,6 +24091,9 @@ Built against the frozen D3 section above, with Steward's review and the coordin
   - `MEMBERS_FORMAT2` knows `beside`, `corridor` and `reach`.
 - **Checker**: `M28:beside` (`kit/lib/region/checkBeside.mjs`) and `M25:clear` over the town's bodies, named `<town>:<id>`.
   - M1 lets `route_join`'s paths leave the claim.
+  - M2's route metric walks the join into its reach: the virtual world carries the reach columns as a walk area
+    (`VWorld.setReach`/`inWalk`), read only by the route metric's graph (`walkGraph(..., {reach: true})`). Every other rule keeps
+    to the claim, and a seam-step plan has no reach, so its report is unchanged.
   - M5 over the join's walk cells in the town (`metrics.M28.M5reach`).
   - The four broken variants (`spec._unsafe`): `ignoreHeld`, `writeVerge`, `wideReach` and `noHold`, each caught in the unit tests.
 - **The land** (`kit/lib/region/land.mjs` and `region/DistrictLand.java`): equal on the parity fixture
@@ -24150,6 +24153,24 @@ Built against the frozen D3 section above, with Steward's review and the coordin
 |---|---|---|
 | 1, 2, 17 (kit) | `kit/test/districts-d3.test.mjs`, `districts-d3-parity.test.mjs` | 13 + 1 pass; 300 synthetic towns: 300 joined (143 at a side), 648 terrain-held contact cells; the pinned seam joins share 0 columns |
 | 1 (Java) | `DistrictLandTest` | 5/5: standing and land equal the kit's on every parity case |
-| 2 | the whole kit suite at 5ea96103 | 804 pass; the 2 failures (the realise lint's `Math.sign`, item 2's verge-row count) fixed since |
-| lints | lint-structure 57/0, lint-look 13/0, water-lint 118/0, p3-lint pass | |
-| 3-16 (in game) | `tools/gate6cd3.mjs` steps ingame, side, refusals, steward, along, kc, walled, pond, natural, survival (chain `6cd3`) | **pending**: queued behind the v0.42.0 release run; see HANDOFF-D3.md |
+| 2 | the whole kit suite at e75a0e18 | 806/806 pass |
+| lints | at e75a0e18: lint-structure 57/0, lint-look 13/0, water-lint 118/0; p3-lint pass | |
+| 1, 2, 17, 18 (step `d3-unit`) | run `20261023-173830-6cd3` at 5e0860a9 | PASS, 7 ok / 0 FAIL (the kit's D3, D1/D2, P0 and goldens; Java parity; the sidecar; api-compat against the 0.41.0, 0.40.1 and 0.40.0 jars) |
+| 3, 7, 8, 9, 10, 14 (step `d3-ingame`) | run `20261023-173030-6cd3` at b2b92d3d | PASS, 26 ok / 0 FAIL |
+| 4, 5, 13 (step `d3-side`: side, along, kc) | the same run | PASS, 9 ok / 0 FAIL |
+| 11, 13 (step `d3-walled`: walled, pond) | the same run | PASS, 7 ok / 0 FAIL |
+| 15 (step `d3-natural`) | the same run | PASS, 4 ok / 0 FAIL |
+| 16 (step `d3-survival`) | the same run | PASS, 5 ok / 0 FAIL |
+| 6, 11, 12 and Steward's partial town (step `d3-steward`: refusals, steward) | run `20261023-173524-6cd3` at 5e0860a9 | PASS, 17 ok / 0 FAIL |
+
+The first in-game round found one kit bug and four driver bugs, all fixed:
+- M2 on the join: the kit's walk graph stopped at the district's claim (fixed as above).
+- The driver read refusals through its space-stripping `json()`.
+- Item 11's protected area sat on the reach's rect corner rather than a reach column.
+- The towns 400 blocks off the spawn waited `NOT_GENERATED` (see the observation below), and their beside plans read unloaded chunks as
+  missing (§4: the town's survey reads loaded chunks only). The driver now prepares a plan over the claim grown by 16, and
+  force-loads those towns' claims while it plans beside them.
+
+Observation for main (not D3's): `Prepare.chunksOf(claim)` covers the claim plus 2 chunks. A tile at a claim edge off the 64-grid
+needs a third chunk for its window (tile 437 spans x 27968..28031 and needs chunk 1747), so a region realised in never-generated land
+after a prepare can wait `NOT_GENERATED` on its edge tiles.

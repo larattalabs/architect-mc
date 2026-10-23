@@ -54,14 +54,15 @@ On disk (sidecar plan dir): `reach-survey.bin`, `held.json`, `standing.json`, an
 - [x] Driver `tools/gate6cd3.mjs` (steps unit, apicompat, ingame, side, refusals, steward, along, kc, walled, pond, natural,
       survival), chain 6cd3, impact rule "6c D3", step-inputs rebuilt.
 - [x] As-built section in CONTRACT.md (evidence row pending the in-game run); PLAN queue entries.
-- [ ] Slice tier run (`node tools/gate-run.mjs slice --since origin/main`) after merging origin/main once v0.42.0 is tagged.
+- [x] In-game steps green (2026-10-23): d3-ingame, d3-side, d3-walled, d3-natural, d3-survival (run 20261023-173030-6cd3 at
+      b2b92d3d), d3-steward (20261023-173524-6cd3 at 5e0860a9), d3-unit (20261023-173830-6cd3). Evidence rows in the as-built.
+- [ ] Slice tier run (`node tools/gate-run.mjs slice --since origin/main`) after merging origin/main once v0.42.0 is tagged
+      (not tagged at 17:45 on 2026-10-23; origin/main still 87d96dd6).
 - [ ] Gate-verifier (re-runs items 7, 8, 10, 12).
 - [ ] Steward RC (S-D3-7) on the branch head.
 
-## Not yet proven in game (the driver is unrun)
+## Notes from the first in-game round
 
-Every in-game step is written but has not run (main frozen for v0.42.0). Expect a round of driver fixes. Known soft spots:
-- item 10's "PLACING its routes stage" detection polls stage progress;
-- item 11's walled case needs C38 `gates: 0` to give a sealed ring;
-- item 13's pond town is a plan/0 town (its streets flagged); item 15 falls back to a plain district if no shore street routes;
-- item 16 feeds the stockpile with its own loop (owner test:d3).
+- Towns off the spawn area: the driver prepares a throwaway plan over the claim grown by 16 (`generateFor`), because prepare's
+  claim + 2 chunks misses an edge tile's window off the 64-grid (main's behaviour, noted in the as-built), and force-loads a town
+  400 away while it plans beside it (§4: the town survey reads loaded chunks only).
