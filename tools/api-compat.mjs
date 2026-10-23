@@ -142,9 +142,11 @@
 // for them; a pattern switch would show up as a MatchException reference). Exit 1 when a reference is missing.
 
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -361,19 +363,24 @@ if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a' || proces
     ['1.8.0 surface', ['--surface', path.join(dir, 'gate6b', 'v0110', 'architect_mc-0.11.0.jar')]],
   ];
   let failed = 0;
-  for (const [name, a] of checks) {
+  // ((gate speed 3) the checks run side by side (each its own process, as before); their lines print in the checks' order)
+  const { execFile } = await import('node:child_process');
+  const results = await Promise.all(checks.map(([, a]) => {
     const jarPath = a[a.length - 1];
-    if (!fs.existsSync(jarPath)) {
-      console.log(`FAIL ${name}: ${jarPath} is missing`);
+    if (!fs.existsSync(jarPath)) return { missing: jarPath };
+    return new Promise((resolve) => execFile(process.execPath, [fileURLToPath(import.meta.url), ...a, ...rest], { encoding: 'utf8', maxBuffer: 64 << 20 }, (err, stdout, stderr) => resolve({ err, stdout, stderr })));
+  }));
+  for (const [i, [name]] of checks.entries()) {
+    const r = results[i];
+    if (r.missing) {
+      console.log(`FAIL ${name}: ${r.missing} is missing`);
       failed++;
       continue;
     }
-    try {
-      const out = execFileSync(process.execPath, [fileURLToPath(import.meta.url), ...a, ...rest], { encoding: 'utf8', maxBuffer: 64 << 20 });
-      console.log(`ok   ${name}: ${out.trim().split('\n').pop()}`);
-    } catch (e) {
+    if (!r.err) console.log(`ok   ${name}: ${r.stdout.trim().split('\n').pop()}`);
+    else {
       failed++;
-      console.log(`FAIL ${name}:\n${(e.stdout || '') + (e.stderr || '')}`);
+      console.log(`FAIL ${name}:\n${(r.stdout || '') + (r.stderr || '')}`);
     }
   }
   console.log(failed ? `${failed} of ${checks.length} checks failed` : `all ${checks.length} checks clean`);
@@ -389,6 +396,28 @@ if (!jar) {
   process.exit(2);
 }
 const javap = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', 'javap') : 'javap';
+// ((gate speed 3) javap's answer for a class file is a pure function of the file's bytes, the flags and the JDK: one JVM per class
+// cost 1.5-4 min a run, re-done by every driver's api-compat. Cached by exactly those (the class file's sha, or a JDK class's name
+// with the JDK's real path), in <main checkout>/artifacts/javap-cache (untracked; a miss runs javap as before; an error is never
+// stored). GATE_JAVAP_CACHE=0: no cache.)
+const JAVAP_CACHE = process.env.GATE_JAVAP_CACHE === '0' ? null : (process.env.GATE_JAVAP_CACHE_DIR ?? path.join(fs.existsSync(path.resolve(root, '..', 'architect-mc', '.git')) ? path.resolve(root, '..', 'architect-mc') : root, 'artifacts', 'javap-cache'));
+let javapReal = null;
+const javapOut = (flags, target, isFile = true) => {
+  const run = () => execFileSync(javap, [...flags, target], { encoding: 'utf8', maxBuffer: 64 << 20 });
+  if (!JAVAP_CACHE) return run();
+  try { javapReal ??= (() => { try { return fs.realpathSync(execFileSync('/usr/bin/which', [javap], { encoding: 'utf8' }).trim() || javap); } catch { return fs.realpathSync(javap); } })(); } catch { return run(); }
+  const h = crypto.createHash('sha256').update(JSON.stringify([javapReal, flags, isFile ? crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex') : target])).digest('hex');
+  const f = path.join(JAVAP_CACHE, h.slice(0, 2), `${h}.txt.gz`);
+  try { return zlib.gunzipSync(fs.readFileSync(f)).toString('utf8'); } catch { /* a miss */ }
+  const out = run();
+  try {
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    const tmpf = `${f}.${process.pid}.tmp`;
+    fs.writeFileSync(tmpf, zlib.gzipSync(out, { level: 1 }));
+    fs.renameSync(tmpf, f);
+  } catch { /* a cache: never fails the check */ }
+  return out;
+};
 const API = 'dev/larattalabs/architect/api/';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'api-compat-'));
@@ -408,7 +437,7 @@ const refs = new Map(); // "owner.name:desc" -> kind
 let patternSwitch = false;
 const switchMaps = new Set();
 for (const f of surface ? [] : classFiles) {
-  const out = execFileSync(javap, ['-v', '-p', f], { encoding: 'utf8', maxBuffer: 64 << 20 });
+  const out = javapOut(['-v', '-p'], f);
   for (const line of out.split('\n')) {
     const m = /=\s+(Methodref|InterfaceMethodref|Fieldref)\s+#\d+\.#\d+\s+\/\/\s+(\S+)\.("?[^:"]+"?):(\S+)/.exec(line);
     if (m && m[2].startsWith(API)) refs.set(`${m[2]}.${m[3].replace(/"/g, '')}:${m[4]}`, m[1]);
@@ -423,7 +452,7 @@ if (surface) {
     const rel = path.relative(tmp, f).replace(/\\/g, '/');
     if (!rel.startsWith(API) || !rel.endsWith('.class')) continue;
     const cls = rel.slice(0, -'.class'.length);
-    const out = execFileSync(javap, ['-protected', '-s', f], { encoding: 'utf8' }).split('\n');
+    const out = javapOut(['-protected', '-s'], f).split('\n');
     for (let i = 0; i < out.length; i++) {
       const d = /^\s+descriptor: (\S+)/.exec(out[i]);
       if (!d) continue;
@@ -453,7 +482,7 @@ const load = (cls) => {
   if (!file && !jdk) return set;
   let out;
   try {
-    out = jdk ? execFileSync(javap, ['-protected', '-s', cls.replace(/\//g, '.')], { encoding: 'utf8' }) : execFileSync(javap, ['-p', '-s', file], { encoding: 'utf8' });
+    out = jdk ? javapOut(['-protected', '-s'], cls.replace(/\//g, '.'), false) : javapOut(['-p', '-s'], file);
   } catch {
     return set;
   }

@@ -29,6 +29,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gatePart, sliceSections, slicesOf } from './lib/gate-part.mjs';
+import { kitReuse } from './lib/kit-reuse.mjs'; // ((gate speed 3) its kit files' results from this run's unit-kit, when exact)
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-F3-run');
@@ -96,6 +97,7 @@ function nodeTest(files, timeout = 3_600_000) {
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };
 }
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 
 steps.unit = async () => {
   const out = {};
@@ -106,10 +108,10 @@ steps.unit = async () => {
   if (P.want('items')) {
   // item 1 (the generators) and items 2, 7, 8 (plan side), 9 (the catalogue): the F3 kit tests
   const files = ['kit/test/forms-f3-property.test.mjs', 'kit/test/forms-f3.test.mjs', ...(fs.existsSync(path.join(KIT, 'test', 'forms-f3-coral.test.mjs')) ? ['kit/test/forms-f3-coral.test.mjs'] : [])];
-  out.kit = nodeTest(files);
+  out.kit = kitOnce(files);
   check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 10, `items 1, 2, 7, 8, 9 (kit): ${files.map((f) => path.basename(f)).join(', ')}: ${out.kit.pass} pass, ${out.kit.fail} fail (200 seeds per generator and preset: ops at most 32 primitives, lint STATE clean, nothing floating; every F3 fixture's answer; the broken variants caught; catalogue 11's diff)`, out.kit.failing);
   // the P0 catalogue rule (item 9: every supported entry has a valid/ fixture that fits) and the scenario goldens (item 11)
-  out.p0 = nodeTest(['kit/test/plan-p0.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-golden.test.mjs']);
+  out.p0 = kitOnce(['kit/test/plan-p0.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-golden.test.mjs']);
   check(out.p0.code === 0 && out.p0.fail === 0, `items 9, 11, 12 (kit): plan-p0 (every supported entry has a valid fixture that fits; every reserved one an extension fixture), the scenario goldens (grove_demo's among them) and mega_bench's golden (unchanged): ${out.p0.pass} pass, ${out.p0.fail} fail`, out.p0.failing);
   }
   // §8 byte identity and M18/M19 per fixture
