@@ -284,8 +284,8 @@ keyed by what that run touched. The key covers:
   `<run>/coverage/jvm-<pid>.log`). A step owns the logs of the JVMs alive at its start (a reused client counts with everything it
   loaded before) and of the JVMs written during it. Each class maps to its source file; a class with no file of its own widens to
   its package's files.
-  - Loaded is a superset of executed, which is JaCoCo's class level. It needs no agent: JaCoCo isn't in the gradle cache, and adding it
-    would mean a download. JaCoCo can replace it later.
+  - Loaded is a superset of executed. Since 2026-10-23 every JVM also runs JaCoCo, and a class the step's JVMs loaded but never
+    entered counts only by its skeleton ("Execution coverage (JaCoCo)" below).
 - **Node files.** The step's own trace, plus the trace of the client the runner started: the sidecar and its workers.
   - The tracer follows worker threads through a wrapper that also gives the tracer's environment to a worker started with
     `env: {}` (the region pool).
@@ -447,6 +447,77 @@ it.
   - So the coverage half of the proof is still to come: only 2 of 626 records depend on coverage, and none has been recorded
     yet.
   - Before the runner joined the keys, the audit found 10 such holes. The 8 explained by runner changes are why `runnerKey` exists.
+
+### Execution coverage (JaCoCo) (2026-10-23)
+
+v0.42.0's first traced full run showed that the class-load set is too broad: booting the mod loads most classes, so a core Java
+change still selected 140-160 of the 215 cacheable steps (CellCond 160, Roads 140). Execution coverage keys a step by the classes
+its JVMs **entered** instead. Code: `tools/lib/jacoco.mjs` (pins, fetch, the helpers), `tools/lib/GateCovAgent.java` (the
+per-JVM agent), `tools/lib/GateCovTool.java` (skeleton digests), `collect` in step-coverage.mjs, `bytecodeDigest` in
+build-artifact.mjs; config `gate-cache.json` `coverage.jacoco`. Gate and test tooling only: nothing of it is in the mod, its jar or
+its build.
+
+**JaCoCo** (Noah approved the download, 2026-10-23): 0.8.15, from Maven Central, sha1 checked against Central's and pinned by
+sha256 in `tools/lib/jacoco.mjs`:
+
+| jar | sha256 |
+|---|---|
+| `org.jacoco.agent-0.8.15-runtime.jar` | `fb5b0036a0899ea97edfa0fc2c7985b55f3f7c5695028163e5e60d4f3cf6075d` |
+| `org.jacoco.cli-0.8.15-nodeps.jar` | `d2b74b20b415163c1f53261e7c5ef4445b788327094208ff821e0c2baf9bc8f1` |
+
+They live in `<main checkout>/artifacts/vendor/jacoco/0.8.15/` (untracked; one copy for every worktree and the nightly's;
+`GATE_JACOCO_DIR` overrides). `node tools/lib/jacoco.mjs fetch` downloads and verifies them, `status` checks. The runtime agent's
+internal package (`internal_bac9136`, its Premain-Class) is version-specific and pinned with the jar. The two helpers compile on
+first use into `<vendor>/helpers/<hash of their sources and the JDK>/`. **A missing jar, a sha256 mismatch or a failed compile
+turns execution coverage off for the run** (logged once); the class-load coverage stays, so nothing is keyed wrongly.
+
+**What a JVM does.** The runner adds `-javaagent:gate-cov-agent.jar=dir=<run>/coverage/<shard>;...` to `JAVA_TOOL_OPTIONS`, next
+to the class-load log: every JVM of the shard gets it (the headless server, the client, gradle and its test JVMs). The agent:
+1. starts JaCoCo with `output=none`, `includes=dev.larattalabs.*`, `excludes=*.mixin.*`, `inclnolocationclasses=true` (only the
+   project's classes are instrumented; JaCoCo writes nothing itself);
+2. notes every project class that came out of JaCoCo's transformer without `$jacocoInit` (a class with no code, or one JaCoCo
+   refused): such a class counts as entered;
+3. dumps `jvm-<pid>.entered` (temp file and rename) when the runner writes a new token to `dump.req`, and at exit. It never resets,
+   so a client reused across steps stays cumulative, as the class-load log is.
+
+**Entered, not hit.** JaCoCo marks an instruction only once the probe after it runs, so a method that throws before its first probe
+has no hits although it ran (a parser calling an `expect()` that throws, the exception caught upstream). The JaCoCo store, though,
+registers a class the moment any of its instrumented methods (or `<clinit>`) starts: `$jacocoInit` runs first. The agent reads the
+store directly (`RuntimeData.collect`), because the stock dump drops classes with no hits. So "entered" = in the store.
+
+**Granularity: class, not method.** Method level was not adopted: JaCoCo has no per-method entry signal, and a method with no hits
+may still have run (above). A key that dropped "unhit" method bodies could serve a stale PASS. The class is the finest level with a
+sound "entered" bit.
+
+**At a step's end** the runner writes a new token, waits (bounded, `coverage.jacoco.dumpTimeoutSec`, 20 s) until every live agent
+JVM of the shard has dumped it, and `collect` takes, per JVM in the step's window (alive at its start, or begun since):
+- its dump when it answers this token or is its exit dump: the classes it entered, plus those JaCoCo left uninstrumented;
+- **otherwise every class its class-load log shows** (no agent, an agent error, killed before it could answer, no answer in time).
+  The class-load log is both the loaded set and the fail-safe.
+
+**The key** (`bytecodeDigest(loaded, manifest, entered)`), over the step's loaded classes:
+- an **entered** class: its whole class-file digest, as before;
+- a class **loaded but never entered**: its **skeleton** digest: the class with every method body removed except `<clinit>`'s.
+  That keeps the flags, super class and interfaces (`instanceof` reads the hierarchy without initialising the class), the fields
+  and their constant values, every member's declaration and flags (an added override or default method changes dispatch without
+  touching an entered body), annotations, and the InnerClasses, NestHost/NestMembers, PermittedSubclasses and Record attributes.
+  Debug attributes and frames are dropped. It is digested over a class file re-written from the parsed class, so constant-pool
+  order plays no part. A class with no skeleton in the manifest counts whole;
+- a class never loaded: nothing.
+
+The granularity string (`entered-class/jacoco-0.8.15/skel-v1`) is in the digest; the entry records `coverageEntered`,
+`coverageGranularity` and each JVM's dump state (`coverageJvms`). The build manifest carries `skel` (the format is in its hash, so
+the manifests built before rebuild once). Class-load PASSes recorded before stay valid under their own rule (loaded is a superset
+of entered). Unchanged: the safety set (mixins, which JaCoCo never sees, registries, serialization, resources, entrypoints, build
+files), the constant rule for source-keyed PASSes, `classReads` (a class file a node process read counts as entered), the
+node-file coverage, and the gradle-cwd steps (unit-mod, umt, p3-lint), which keep the whole trees.
+
+**Tests** (`kit/test/step-jacoco.test.mjs`: real javac fixtures under the real agent; skipped where the jars aren't fetched, as on
+CI): a changed entered method misses, a method that threw before any probe is entered and misses, a changed `<clinit>`, constant,
+added member, interface or default method of a loaded-but-not-entered class misses; a never-entered body and a never-loaded class
+may hit; a JVM reused across two steps stays cumulative; a JVM killed mid-step, and one whose agent failed, count every loaded class
+as entered. `kit/test/step-cache.test.mjs` covers the record and lookup path and the old entries. A changed mixin misses through
+the safety set (the coverage test above it).
 
 ### Impact-map misses log
 
