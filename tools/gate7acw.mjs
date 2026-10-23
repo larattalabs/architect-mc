@@ -26,7 +26,7 @@
 //                                       within 8); the winner recorded in the site file (commit it)
 //     natural   (cw-natural)            items 4, 5, 7 on the pinned site (a fresh copy of the seed world): catwalks_demo natural, the same
 //                                       bars, the removal's E-normal classified (0 unclassified)
-//     look      (cw-look)               item 10 (client, recorded not judged: N-CW-1): catwalks_demo flat in three bibles, from below and on it
+//     look      (cw-look)               item 10 (client, recorded not judged: N-CW-1): catwalks_demo flat in three bibles, from below, on it, a close-up of the rail on its bed, the lanes and the landing, and from the side
 //     report                            REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate7a-cw/<step>.json in the main checkout (GATE7ACW_OUT overrides), all.log, REPORT.md, spend.json.
@@ -501,6 +501,8 @@ steps.look = async () => {
       const [x, y, z] = q.from, mid = [x + q.dir[0] * Math.floor(q.n / 2), y, z];
       out.shots.push(await shot(`${tag}_below`, [mid[0] + 0.5, y - 7, mid[2] + 9.5], [mid[0] + 0.5, y, mid[2] + 0.5]));
       out.shots.push(await shot(`${tag}_deck`, [x - 1.5, y + 2.6, z + 1], [q.to[0] + 0.5, y + 1.2, z + 1]));
+      // the close-up (the coordinator's ask): the rail on its bed, the two walk lanes and the far landing, from just outside the bed
+      out.shots.push(await shot(`${tag}_closeup`, [q.to[0] + 3.5, y + 3.5, z + 5.5], [q.to[0] - 2.5, y + 0.5, z + 1.5]));
       out.shots.push(await shot(`${tag}_side`, [mid[0] + 0.5, y + 4, mid[2] + 22.5], [mid[0] + 0.5, y + 1, mid[2] - 0.5]));
       if (tag === 'default') {
         await cmd('/time set 6000');
