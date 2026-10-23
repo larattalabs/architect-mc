@@ -67,8 +67,11 @@ export async function unchanged(root, { check, log = console.log, only = null, s
     const ex = EXCEPT[name] ?? null;
     out.fixtures[name] = { existsOld, same, ...(ex ? { excepted: ex } : {}), ...(err ? { err } : {}), ...(a && b && !same ? { head: a, base: b } : {}) };
     if (!existsOld) { log(`note ${name}: new on this branch`); continue; }
+    // (release v0.42.0) on a base that already has the storm fix (main since 52c2707f) a storm fixture plans the same: noted, not failed
+    if (ex && STORM_MOVED.includes(name) && same) { log(`note ${name}: excepted by name (${ex}): unchanged against this base (it has the storm fix already)`); continue; }
     if (ex && STORM_MOVED.includes(name)) { check(!same && !!a && !!b && a.answers === b.answers && a.overall === b.overall, `${name}: excepted by name (${ex}): ${same ? 'UNCHANGED (the exception did not move)' : a && b && a.answers === b.answers && a.overall === b.overall ? 'its IR differs, its answers and overall the same, as named' : `its answers or overall moved ${JSON.stringify({ head: a, base: b })}`}`); continue; }
-    if (ex) { check(!same, `${name}: excepted by name (${ex}): ${same ? 'UNCHANGED (the exception did not move)' : 'differs, as named'}`); continue; }
+    // ((6c close-out A) on a base that already has F3 (main since v0.41.0) an F3 exception plans the same: noted, not failed)
+    if (ex) { if (same) log(`note ${name}: excepted by name (${ex}): unchanged against this base (it has F3 already)`); else check(true, `${name}: excepted by name (${ex}): differs, as named`); continue; }
     if (SIBLING_MOVED[name]) { out.fixtures[name].sibling = SIBLING_MOVED[name]; log(`note ${name}: ${same ? 'byte-identical' : 'differs'}; ${SIBLING_MOVED[name]}`); continue; }
     check(same || (!a && !b), `${name}: ${same ? 'byte-identical (answers, overall, IR, first plan)' : !a && !b ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, base: b })}`}`);
   }

@@ -10,7 +10,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson, COA_MOVED_FIXTURES } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import { inSlice } from './gate-part.mjs';
 import { syncBaseTree } from './base-tree.mjs';
 import * as CP from './corpus-plan.mjs'; // (gate speed 3) the plans from the run's shared store, prewarmed on every core
@@ -115,6 +115,8 @@ export async function unchanged(root, { check, log = console.log, only = null, s
     if (!existsOld) { log(`note ${name}: new on this branch`); continue; }
     // ((6c IRR) after KC merged, the base holds the named fixture as repaired: identical then, the exception already on the base)
     const onBase = existsOld && fs.readFileSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name), 'utf8') === fs.readFileSync(path.join(root, 'kit', 'test', 'fixtures', 'plan', name), 'utf8') && execFileSync('git', ['-C', mainDir, 'log', '-1', '--format=%H', '--', 'kit/lib/fluids/keep.mjs']).toString().trim() !== '';
+    // ((6c close-out A) close-out A's movers, folded into FL_MOVED: planned from this head's copy on both here, so identical)
+    if (ex && same && COA_MOVED_FIXTURES.includes(name)) { log(`note ${name}: close-out A moves it by name (identical: planned from this head's copy on both)`); continue; }
     if (ex) { check(!same || onBase, `${name}: excepted by name (${ex}): ${same ? (onBase ? 'identical: the base already has KC (the exception merged)' : 'UNCHANGED (the exception did not move)') : 'differs, as named'}`); continue; }
     check(same || (!a && !b), `${name}: ${same ? 'byte-identical (answers, overall, IR, first plan)' : !a && !b ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, base: b })}`}`);
   }

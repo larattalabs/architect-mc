@@ -9,6 +9,8 @@
 //   asks(root)        the 59 asks' every part, before (the base) and after (this head): fixtures/plan/fl/asks-before.md, asks-after.md
 //   timing(root)      plan time of each layout on a 256 x 256 claim with 40 lots (median of 3), the candidates evaluated (item 11)
 import fs from 'node:fs';
+import { COA_MOVED_FIXTURES } from './fl-norm.mjs'; // (6c close-out A) its movers
+import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -78,7 +80,8 @@ export async function unchanged(root, { check, log = console.log, only = null, s
     try { const { r } = await planFixture(hNew, root, fx); a = sig(r); out.streetsMarked += (JSON.parse(r.res.irJson).roads ?? []).filter((x) => x.ext?.['architect_mc:street']).length; } catch (e) { err = `head: ${String(e.message).slice(0, 160)}`; }
     try { b = sig((await planFixture(hOld, mainDir, oldPlan)).r); } catch (e) { err = (err ? `${err}; ` : '') + `base: ${String(e.message).slice(0, 160)}`; }
     const same = !!a && !!b && a.answers === b.answers && a.overall === b.overall && a.ir === b.ir && a.first === b.first;
-    const named = EXCEPT[name];
+    // ((6c close-out A) the 12 asks Steward re-recorded and close-out A's movers: theirs to judge (fl-norm COA_MOVED_FIXTURES))
+    const named = EXCEPT[name] ?? (COA_MOVED_FIXTURES.includes(name) ? 'close-out A moves it by name' : undefined);
     out.fixtures[name] = { same, ...(err ? { err } : {}), ...(a && b && !same ? { head: a, base: b } : {}), ...(named ? { named } : {}) };
     if (named) { check(true, `${name}: ${same ? 'byte-identical' : 'differs'} (named: ${named})`); continue; }
     check(same || (!a && !b), `${name}: ${same ? 'byte-identical (answers, overall, IR, first plan; kitVersion and the street ext normalised)' : !a && !b ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, base: b })}`}`);
@@ -121,7 +124,7 @@ async function asksTable(h) {
   const tally = {}, gaps = {}, rows = [];
   const S = h.asksSurvey();
   for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) {
-    const fx = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    const fx = JSON.parse(fs.readFileSync(firstAsk(dir, f), 'utf8')); // ((6c close-out A) the first recordings)
     const r = await h.checkPlanLocal(fx.answer.plan, { survey: S.bytes, claim: S.claim, anchors: h.stewardAnchors(S.claim) });
     for (const a of r.check.parts) {
       tally[a.class] = (tally[a.class] ?? 0) + 1;
@@ -145,8 +148,11 @@ export async function asks(root, { check, write = true }) {
   }
   const moved = after.rows.filter((r) => !before.rows.includes(r));
   const five = ['around_my_tree/grove', 'nomad_camp/camp', 'ring_city/ring_town', 'grid_city/grid_city', 'organic_hamlet/hamlet'];
-  check(moved.every((r) => five.some((p) => r.startsWith(`${p} `))) && five.every((p) => moved.some((r) => r.startsWith(`${p} `))), `item 8: exactly the five free zones change class: ${moved.join('; ')}`);
-  check(!['layout.ring', 'layout.grid', 'layout.organic'].some((k) => after.gaps[k]) && before.gaps['layout.ring'] === 3 && before.gaps['layout.grid'] === 1 && before.gaps['layout.organic'] === 1, `item 8: the gap table's layout.ring ${before.gaps['layout.ring']}, layout.grid ${before.gaps['layout.grid']}, layout.organic ${before.gaps['layout.organic']} become 0; 0 malformed (${after.tally.malformed ?? 0})`);
+  // ((6c close-out A) a base past FL (main since v0.41.0): the free zones already answer there, so nothing moves; noted)
+  const pastFL = !before.gaps['layout.ring'] && !before.gaps['layout.grid'] && !before.gaps['layout.organic'];
+  if (pastFL) check(moved.length === 0, `item 8: the base is past FL: the five free zones answer the same on both (${moved.join('; ') || 'nothing moved'})`);
+  else check(moved.every((r) => five.some((p) => r.startsWith(`${p} `))) && five.every((p) => moved.some((r) => r.startsWith(`${p} `))), `item 8: exactly the five free zones change class: ${moved.join('; ')}`);
+  check(!['layout.ring', 'layout.grid', 'layout.organic'].some((k) => after.gaps[k]) && (pastFL || before.gaps['layout.ring'] === 3 && before.gaps['layout.grid'] === 1 && before.gaps['layout.organic'] === 1), `item 8: the gap table's layout.ring ${before.gaps['layout.ring']}, layout.grid ${before.gaps['layout.grid']}, layout.organic ${before.gaps['layout.organic']} become 0; 0 malformed (${after.tally.malformed ?? 0})`);
   check(!after.tally.malformed, 'item 8: 0 malformed');
   return { before: before.tally, after: after.tally, moved };
 }

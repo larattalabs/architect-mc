@@ -12,10 +12,21 @@
           "id": "town",
           "kind": "standard",
           "required": true,
-          "label": "Terraced hill town",
-          "purpose": "home_base",
+          "label": "Terrace town",
+          "purpose": "home",
+          "style": {
+            "pending": "switchback_terrace_town"
+          },
+          "where": {
+            "near": {
+              "anchor": "stone",
+              "within": 16
+            }
+          },
+          "size": {
+            "preset": "M"
+          },
           "program": {
-            "layout": "street",
             "lots": [
               {
                 "id": "tavern_1",
@@ -28,73 +39,73 @@
                 ],
                 "landmark": true,
                 "placement": "high_ground",
-                "brief": "Crowns the top terrace and overlooks every switchback and the valley below."
+                "brief": "Crowns the top terrace, overlooking every switchback and the valley."
               },
               {
                 "id": "house_1",
                 "type": "house",
-                "role": "terrace_houses",
+                "role": "terrace_house",
                 "label": "terrace house",
                 "size": [
                   9,
                   9
                 ],
-                "brief": "Stepped into the slope on its own terrace with a small garden or stair frontage."
+                "villager": "dwelling"
               },
               {
                 "id": "house_2",
                 "type": "house",
-                "role": "terrace_houses",
+                "role": "terrace_house",
                 "label": "terrace house",
                 "size": [
                   9,
                   9
                 ],
-                "brief": "Stepped into the slope on its own terrace with a small garden or stair frontage."
+                "villager": "dwelling"
               },
               {
                 "id": "house_3",
                 "type": "house",
-                "role": "terrace_houses",
+                "role": "terrace_house",
                 "label": "terrace house",
                 "size": [
                   9,
                   9
                 ],
-                "brief": "Stepped into the slope on its own terrace with a small garden or stair frontage."
+                "villager": "dwelling"
               },
               {
                 "id": "house_4",
                 "type": "house",
-                "role": "terrace_houses",
+                "role": "terrace_house",
                 "label": "terrace house",
                 "size": [
                   9,
                   9
                 ],
-                "brief": "Stepped into the slope on its own terrace with a small garden or stair frontage."
+                "villager": "dwelling"
               },
               {
                 "id": "cottage_1",
                 "type": "cottage",
-                "role": "hillside_cottages",
+                "role": "hillside_cottage",
                 "label": "hillside cottage",
                 "size": [
                   9,
                   9
                 ],
-                "brief": "Tucked beside a switchback bend on a middle terrace."
+                "villager": "dwelling"
               },
               {
                 "id": "cottage_2",
                 "type": "cottage",
-                "role": "hillside_cottages",
+                "role": "hillside_cottage",
                 "label": "hillside cottage",
                 "size": [
                   9,
                   9
                 ],
-                "brief": "Tucked beside a switchback bend on a middle terrace."
+                "villager": "dwelling"
               },
               {
                 "id": "shop_1",
@@ -106,7 +117,7 @@
                   11
                 ],
                 "placement": "central",
-                "brief": "Opens onto a wide landing on the middle terrace."
+                "villager": "trading_hall"
               },
               {
                 "id": "smithy_1",
@@ -118,7 +129,7 @@
                   11
                 ],
                 "placement": "edge",
-                "brief": "Mid-level terrace, sheltered by a retaining wall."
+                "villager": "job"
               },
               {
                 "id": "chapel_1",
@@ -129,24 +140,23 @@
                   13,
                   11
                 ],
-                "placement": "high_ground",
-                "brief": "Small chapel on a high terrace with a view down the streets."
+                "placement": "high_ground"
               },
               {
                 "id": "gatehouse_1",
                 "type": "gatehouse",
-                "role": "gatehouse_at_foot",
+                "role": "gatehouse",
                 "label": "gatehouse at the foot",
                 "size": [
                   9,
                   9
                 ],
-                "placement": "edge",
-                "brief": "Marks where the lowest switchback begins."
+                "placement": "edge"
               }
-            ]
-          },
-          "notes": "Hilltop town on existing hillside; hall on summit, houses stepping down."
+            ],
+            "layout": "street",
+            "shared": "square"
+          }
         }
       ],
       "connectors": [
@@ -154,38 +164,57 @@
           "id": "switchback_street",
           "kind": "street",
           "required": true,
-          "label": "switchback street",
+          "label": "Switchback street",
           "from": {
-            "anchor": "claim_s"
+            "part": "gatehouse_1"
           },
           "to": {
-            "part": "town"
+            "part": "tavern_1"
           },
           "lamps": "street",
-          "notes": "Zigzags up the slope in switchbacks from the foot to the summit, lantern-lit, with stairs where steep."
+          "notes": "Routed up the slope with switchbacks and stairs; lantern-lit."
         }
       ],
       "forms": [
         {
           "id": "terraces",
           "kind": "terrace",
-          "required": false,
-          "label": "stepped terraces",
+          "required": true,
+          "label": "Stepped terraces",
           "where": {
-            "inside": {
-              "part": "town"
+            "adjacent": {
+              "to": {
+                "part": "town"
+              },
+              "side": "any",
+              "gap": [
+                0,
+                4
+              ]
             }
           },
-          "steps": 4,
+          "steps": 5,
           "rise": 3,
-          "edge": "blend",
-          "notes": "Stone-retained flat steps cut into the hillside carrying the houses."
+          "edge": "slope",
+          "notes": "Stone retaining-wall steps on the hillside next to the town."
+        },
+        {
+          "id": "blend",
+          "kind": "relief",
+          "required": false,
+          "around": [
+            "town",
+            "terraces"
+          ],
+          "radius": 12
         }
-      ]
+      ],
+      "rules": [],
+      "notes": "Needs hillside; land not surveyed. The terraces sit beside the town, which is placed on the flattest ground near the stone."
     },
     "waits": [],
-    "summary": "A medium terraced hill town: one zone of 11 buildings with a hilltop hall on the summit, a chapel on a high terrace, four houses and two cottages stepping down, a market shop, a smithy and a gatehouse at the foot. A lantern-lit street zigzags up from the south, and stepped terraces are cut into the slope. The land isn't surveyed yet, so placement will adjust to the real hillside."
+    "summary": "A medium hill town: a hall on the summit, a chapel, houses, cottages, a market shop and a smithy, with a gatehouse at the foot. A lantern-lit street switchbacks up from the gate to the hall, and stepped terraces with relief sit on the slope beside the town. The land isn't surveyed, so it needs a real hillside near the stone."
   },
-  "usd": 0.03058,
+  "usd": 0.037504,
   "errors": []
 }

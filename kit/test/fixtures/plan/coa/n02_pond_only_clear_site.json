@@ -1,0 +1,81 @@
+{
+ "about": "(close-out A §7) a unit case: a 11x9 built pond near the stone within 16 (move hard 6) beside a two-lot town on the flat claim; its first site's reach meets lots farm_1 and cottage_1 (LEAK); two protected areas leave one site within the move limit whose footprint is clear (ranked below the first: its locator move is 6): that site is written (adjusted, move 6)",
+ "on": "flat",
+ "protected": [
+  {
+   "id": "orchard",
+   "rect": [
+    1060,
+    2061,
+    1095,
+    2110
+   ]
+  },
+  {
+   "id": "meadow",
+   "rect": [
+    1141,
+    2000,
+    1200,
+    2120
+   ]
+  }
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "coa_n02",
+  "zones": [
+   {
+    "id": "town",
+    "program": {
+     "template": "flat_village",
+     "params": {
+      "lots": [
+       {
+        "id": "farm_1",
+        "type": "farm",
+        "role": "farm",
+        "size": [
+         13,
+         14
+        ]
+       },
+       {
+        "id": "cottage_1",
+        "type": "cottage",
+        "size": [
+         13,
+         14
+        ]
+       }
+      ]
+     }
+    }
+   }
+  ],
+  "forms": [
+   {
+    "id": "pond",
+    "kind": "pond",
+    "size": {
+     "w": 11,
+     "d": 9
+    },
+    "edge": "built",
+    "depth": 3,
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 16
+     }
+    },
+    "tolerance": {
+     "move": {
+      "max": 6,
+      "hard": true
+     }
+    }
+   }
+  ]
+ }
+}

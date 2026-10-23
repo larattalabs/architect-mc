@@ -430,4 +430,4 @@ export function vocabDoc(fields, { groups = {} } = {}) {
 }
 
 /** (6c VOC-c) compact.palette: how a plan writer names a family in rule.palette. */
-export const PALETTE_NOTE = "rule.palette {family, share} measures a family's share of written blocks; family is a family or group named here; 'only X' is share [1, 1], 'no X' is share [0, 0]";
+export const PALETTE_NOTE = "rule.palette {family, share} measures a family's share of written blocks; family is a family or group named here; 'only X' is share [1, 1], 'no X' is share [0, 0]; over: lots measures the buildings only; exempt ways/forms leaves the streets and forms out";

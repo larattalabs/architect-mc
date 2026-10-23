@@ -20,15 +20,19 @@
           "where": {
             "near": {
               "anchor": "stone",
-              "within": 32
+              "within": 16
             }
           },
+          "size": {
+            "preset": "M"
+          },
+          "notes": "Oxidation steps from bright cut copper at the centre to oxidized teal at the edges; the style bible carries the gradient.",
           "program": {
             "lots": [
               {
-                "id": "tavern_1",
+                "id": "hall_1",
                 "type": "tavern",
-                "role": "founders_hall",
+                "role": "hall",
                 "label": "Founders' copper hall",
                 "size": [
                   17,
@@ -36,85 +40,8 @@
                 ],
                 "landmark": true,
                 "placement": "central",
-                "brief": "Central gathering hall in bright new copper, roof aged to exposed and weathered copper."
-              },
-              {
-                "id": "smithy_1",
-                "type": "smithy",
-                "role": "smithy",
-                "label": "Copper smithy",
-                "size": [
-                  13,
-                  11
-                ],
-                "brief": "Workshop with copper bulb lights and a lightning rod chimney; semi-weathered copper."
-              },
-              {
-                "id": "cottage_1",
-                "type": "cottage",
-                "role": "cottage",
-                "label": "Weathered cottage",
-                "size": [
-                  9,
-                  9
-                ],
-                "brief": "Home in exposed copper, early oxidation."
-              },
-              {
-                "id": "cottage_2",
-                "type": "cottage",
-                "role": "cottage",
-                "label": "Weathered cottage",
-                "size": [
-                  9,
-                  9
-                ],
-                "brief": "Home in weathered copper."
-              },
-              {
-                "id": "cottage_3",
-                "type": "cottage",
-                "role": "cottage",
-                "label": "Weathered cottage",
-                "size": [
-                  9,
-                  9
-                ],
-                "brief": "Home in a mix of weathered and oxidized copper."
-              },
-              {
-                "id": "cottage_4",
-                "type": "cottage",
-                "role": "cottage",
-                "label": "Weathered cottage",
-                "size": [
-                  9,
-                  9
-                ],
-                "brief": "Home in fully oxidized teal-green copper."
-              },
-              {
-                "id": "tower_1",
-                "type": "tower",
-                "role": "watchtower",
-                "label": "Oxidized watchtower",
-                "size": [
-                  9,
-                  9
-                ],
-                "placement": "high_ground",
-                "brief": "Tall tower fully oxidized, teal-green, topped with a lightning rod."
-              },
-              {
-                "id": "chapel_1",
-                "type": "chapel",
-                "role": "chapel",
-                "label": "Copper chapel of ageing",
-                "size": [
-                  13,
-                  11
-                ],
-                "brief": "Shrine showing all four oxidation stages in a gradient from floor to spire."
+                "villager": "none",
+                "brief": "Bright new copper walls, roof aged to exposed and weathered copper."
               },
               {
                 "id": "shop_1",
@@ -126,7 +53,93 @@
                   9
                 ],
                 "placement": "central",
+                "villager": "trading_hall",
                 "brief": "Small waxed-copper shop kept bright."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "smithy",
+                "label": "Copper smithy",
+                "size": [
+                  13,
+                  11
+                ],
+                "villager": "job",
+                "brief": "Semi-weathered; copper bulb lights and a lightning rod chimney."
+              },
+              {
+                "id": "chapel_1",
+                "type": "chapel",
+                "role": "chapel",
+                "label": "Copper chapel of ageing",
+                "size": [
+                  13,
+                  11
+                ],
+                "villager": "none",
+                "brief": "All four oxidation stages in a gradient from floor to spire."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "home",
+                "label": "Weathered cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Exposed copper."
+              },
+              {
+                "id": "cottage_2",
+                "type": "cottage",
+                "role": "home",
+                "label": "Weathered cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Lightly weathered copper."
+              },
+              {
+                "id": "cottage_3",
+                "type": "cottage",
+                "role": "home",
+                "label": "Weathered cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Weathered copper."
+              },
+              {
+                "id": "cottage_4",
+                "type": "cottage",
+                "role": "home",
+                "label": "Weathered cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Fully oxidized teal-green."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "watchtower",
+                "label": "Oxidized watchtower",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "villager": "none",
+                "brief": "Tall, fully oxidized, topped with a lightning rod."
               },
               {
                 "id": "barn_1",
@@ -138,30 +151,47 @@
                   11
                 ],
                 "placement": "edge",
+                "villager": "none",
                 "brief": "Storage barn in weathered copper."
               }
             ],
             "layout": "street",
             "shared": "square"
-          },
-          "notes": "Oxidation steps from bright copper at the centre to oxidized teal at the edges."
+          }
         }
       ],
       "forms": [
         {
-          "id": "gentle_terraces",
+          "id": "terraces",
           "kind": "terrace",
           "required": false,
           "label": "Gentle terraces",
           "where": {
-            "inside": {
-              "part": "reach"
+            "adjacent": {
+              "to": {
+                "part": "reach"
+              },
+              "side": "any",
+              "gap": [
+                0,
+                4
+              ]
             }
           },
           "steps": 3,
           "rise": 1,
           "edge": "blend",
-          "notes": "Low steps so buildings climb from the bright centre to the weathered edges."
+          "notes": "Gentle steps beside the town, echoing the oxidation stages."
+        },
+        {
+          "id": "blend",
+          "kind": "relief",
+          "required": false,
+          "around": [
+            "reach",
+            "terraces"
+          ],
+          "radius": 10
         }
       ],
       "rules": [
@@ -169,35 +199,24 @@
           "id": "copper_only",
           "kind": "palette",
           "required": true,
-          "label": "Copper and its oxidation only",
-          "scope": [
-            "reach"
+          "label": "Only copper",
+          "family": "copper",
+          "share": [
+            1,
+            1
           ],
-          "params": {
-            "family": "copper",
-            "share": [
-              1,
-              1
-            ],
-            "exempt": [
-              "terrain",
-              "support"
-            ],
-            "gradient": "bright at centre, oxidized at edges"
-          },
-          "notes": "Only copper and its oxidized and waxed variants; no other building material where avoidable."
+          "exempt": [
+            "terrain",
+            "support"
+          ],
+          "notes": "Copper and its oxidation variants only, waxed or not."
         }
       ],
-      "notes": "Showcase home base in copper at every stage of oxidation."
+      "notes": "Glass and non-copper items avoided where possible; the all-copper rule is required."
     },
-    "waits": [
-      {
-        "part": "copper_only",
-        "words": "The all-copper rule with oxidation shading from bright centre to teal edges: palette rules come with a later Architect release. The village is built first and the palette is carried by the style bible."
-      }
-    ],
-    "summary": "Verdigris Reach is a medium, street-laid copper village of ten buildings around a square: a large founders' hall and a small shop at the centre, the smithy, chapel, four cottages and watchtower around them, and a barn on the edge. Gentle terraces step the ground. The copper-only palette and its oxidation gradient is recorded as a rule that waits for a later release."
+    "waits": [],
+    "summary": "Verdigris Reach is one medium town on a single street, with a founders' hall and shop at the centre and the smithy, chapel, four cottages, watchtower and barn around them. Gentle terraces sit beside it. A required rule keeps every block copper or an oxidation variant of it. The style gradient from bright centre to teal edges is set in the style bible."
   },
-  "usd": 0.059692,
+  "usd": 0.03736,
   "errors": []
 }

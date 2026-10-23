@@ -7,16 +7,18 @@
       "style": {
         "pending": "overhang_hanging_village"
       },
-      "notes": "Needs a cliff overhang found by survey; every building should hang from the rock ceiling, roofs against the stone, floors toward the drop.",
       "zones": [
         {
-          "id": "village",
+          "id": "hanging_village",
           "kind": "standard",
           "required": true,
-          "label": "Hanging village",
+          "label": "Overhang hanging village",
           "purpose": "home_base",
           "style": {
             "pending": "overhang_hanging_village"
+          },
+          "size": {
+            "preset": "M"
           },
           "where": {
             "near": {
@@ -24,8 +26,9 @@
               "within": 32
             }
           },
+          "notes": "Lots hang beneath a cliff overhang ceiling, roofs against the rock. Needs an existing overhang; none surveyed yet.",
           "program": {
-            "layout": "street",
+            "layout": "elevated",
             "shared": "none",
             "lots": [
               {
@@ -39,7 +42,8 @@
                 ],
                 "landmark": true,
                 "placement": "central",
-                "brief": "Largest hanging building, chained to the overhang ceiling; the communal heart with lantern-lit windows."
+                "villager": "trading_hall",
+                "brief": "Largest hanging building, chained to the overhang ceiling; lantern-lit windows, the communal heart."
               },
               {
                 "id": "cabin_1",
@@ -50,6 +54,7 @@
                   9,
                   9
                 ],
+                "villager": "dwelling",
                 "brief": "Small cabin inverted from the rock ceiling, roof against the stone, floor facing the drop."
               },
               {
@@ -61,6 +66,7 @@
                   9,
                   9
                 ],
+                "villager": "dwelling",
                 "brief": "Small cabin inverted from the rock ceiling, roof against the stone, floor facing the drop."
               },
               {
@@ -72,6 +78,7 @@
                   9,
                   9
                 ],
+                "villager": "dwelling",
                 "brief": "Small cabin inverted from the rock ceiling, roof against the stone, floor facing the drop."
               },
               {
@@ -83,6 +90,7 @@
                   9,
                   9
                 ],
+                "villager": "dwelling",
                 "brief": "Small cabin inverted from the rock ceiling, roof against the stone, floor facing the drop."
               },
               {
@@ -95,6 +103,7 @@
                   11
                 ],
                 "placement": "edge",
+                "villager": "job",
                 "brief": "Lift and rope station linking the village to the cliff top and ground."
               },
               {
@@ -107,6 +116,7 @@
                   9
                 ],
                 "placement": "edge",
+                "villager": "none",
                 "brief": "Slim tower hanging down from the overhang edge for watching the valley."
               },
               {
@@ -118,6 +128,7 @@
                   13,
                   11
                 ],
+                "villager": "job",
                 "brief": "Forges chains and fittings that keep the village hanging; connects homes via bridges."
               },
               {
@@ -129,6 +140,7 @@
                   13,
                   11
                 ],
+                "villager": "none",
                 "brief": "Glow berries and vines grown from the ceiling as a food source."
               }
             ]
@@ -137,75 +149,48 @@
       ],
       "connectors": [
         {
-          "id": "main_street",
-          "kind": "street",
-          "required": false,
-          "label": "Main walk",
-          "from": {
-            "anchor": "stone"
-          },
-          "to": {
-            "part": "village"
-          },
-          "lamps": "street",
-          "notes": "Walkway linking the hall and buildings."
-        },
-        {
-          "id": "chain_bridges",
+          "id": "chain_bridge_1",
           "kind": "rope_bridge",
-          "required": true,
-          "label": "Chain bridges between homes",
+          "required": false,
+          "label": "chain bridge to the homes",
           "from": {
-            "part": "village"
+            "part": "smithy_1"
           },
           "to": {
-            "part": "village"
+            "part": "cabin_1"
           },
-          "notes": "Chain bridges linking the hanging homes, hall and workshop to each other."
-        },
-        {
-          "id": "winch_lift",
-          "kind": "lift",
-          "required": true,
-          "label": "Winch lift",
-          "from": {
-            "part": "village"
-          },
-          "to": {
-            "anchor": "stone"
-          },
-          "notes": "Rope lift from the winch house to the cliff top and the ground."
+          "movers": [
+            "player",
+            "villager"
+          ],
+          "lamps": "few",
+          "notes": "Hangs between lots; waits on the elevated layout."
         }
       ],
-      "rules": [
+      "dependencies": [
         {
-          "id": "hang_from_ceiling",
-          "kind": "suspended",
-          "required": true,
-          "label": "Everything hangs from the overhang",
-          "scope": [
-            "village"
+          "part": "chain_bridge_1",
+          "after": [
+            "hanging_village"
           ],
-          "notes": "Buildings are suspended beneath the rock ceiling by chains, not standing on the ground."
+          "why": "Bridges join lots that only exist once the elevated layout is built."
         }
-      ]
+      ],
+      "rules": [],
+      "notes": "Needs a cliff overhang near the stone; terrain not surveyed."
     },
     "waits": [
       {
-        "part": "chain_bridges",
-        "words": "The chain bridges between the hanging buildings: rope bridges come with a later Architect release."
+        "part": "hanging_village",
+        "words": "The whole hanging village waits: lots hung under a rock ceiling need the elevated layout, which isn't built yet."
       },
       {
-        "part": "winch_lift",
-        "words": "The winch lift to the cliff top and ground: lifts come with a later Architect release."
-      },
-      {
-        "part": "hang_from_ceiling",
-        "words": "Buildings truly suspended from the overhang ceiling: there is no hanging-from-above rule or form yet; the village is laid out first and the hanging is offered when it can be built."
+        "part": "chain_bridge_1",
+        "words": "The chain bridges between the hanging homes wait for the hanging village itself."
       }
     ],
-    "summary": "A secluded home-base village of nine buildings in one zone near the founding stone: an overhang hall at the centre, four hanging cabins, a winch house and a lookout tower at the edge, a chain workshop and a hanging garden, joined by a lamp-lit street. The chain bridges, the winch lift and the true hanging-from-the-ceiling rule can't be built yet and wait for a later Architect release; the village needs a cliff overhang found at the site."
+    "summary": "You'll get a quiet home-base village hung beneath a cliff overhang. It has a big lantern-lit hall, four small hanging homes, a winch house, a lookout tower, a chain workshop and a ceiling garden, all in rustic timber and stone. Hanging lots aren't buildable yet, so the plan is written and waits. It needs a real overhang near your founding stone."
   },
-  "usd": 0.035611,
+  "usd": 0.037225,
   "errors": []
 }

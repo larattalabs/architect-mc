@@ -613,6 +613,8 @@ export class Sidecar {
       // ---- 6b
       case 'region.check':
         return this.regions.check(msg.planId);
+      case 'region.plan.discard':
+        return this.regions.discard(msg.planId);
       case 'region.preview':
         return this.regions.preview(msg.planId, msg.views, msg.axes);
       case 'region.design':

@@ -320,6 +320,16 @@ public final class Prepare {
 		return !RUNS.isEmpty();
 	}
 
+	/** (6c close-out A) Whether a prepare of this plan is generating now. Server thread. */
+	static boolean runningFor(String planId) {
+		return RUNS.containsKey(planId);
+	}
+
+	/** (6c close-out A) A discarded plan's ended prepare is forgotten. Server thread. */
+	static void forget(String planId) {
+		ENDED.remove(planId);
+	}
+
 	static @Nullable PrepareView view(String planId) {
 		Run r = RUNS.get(planId);
 		if (r != null) {

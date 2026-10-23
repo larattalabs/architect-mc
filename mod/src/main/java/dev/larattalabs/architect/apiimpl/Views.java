@@ -106,7 +106,10 @@ public final class Views {
 	}
 
 	public static dev.larattalabs.architect.api.ItemEvent itemEvent(dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i) {
-		return new dev.larattalabs.architect.api.ItemEvent(b.id, i.key, i.ext.deepCopy(), Optional.ofNullable(i.siteId), reason(i.reason), i.message);
+		// (6c close-out A, §8) a region tile or road item queued before its tags: shown with them
+		com.google.gson.JsonObject filled = dev.larattalabs.architect.site.RegionWaitTags.backfill(b, i);
+		return new dev.larattalabs.architect.api.ItemEvent(b.id, i.key, filled != null ? filled : i.ext.deepCopy(), Optional.ofNullable(i.siteId), reason(i.reason),
+			i.message);
 	}
 
 	public static Optional<dev.larattalabs.architect.api.Reason> reason(@Nullable String name) {

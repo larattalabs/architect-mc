@@ -10,18 +10,25 @@
       "zones": [
         {
           "id": "fortress",
-          "purpose": "defence",
-          "label": "Fortress",
+          "kind": "standard",
           "required": true,
+          "label": "Fortress",
+          "purpose": "defence",
           "style": {
             "pending": "drawbridge_fortress"
           },
+          "size": {
+            "preset": "M"
+          },
+          "where": {
+            "inside": {
+              "claim": true
+            }
+          },
           "program": {
-            "layout": "street",
-            "shared": "none",
             "lots": [
               {
-                "id": "tower_1",
+                "id": "keep_1",
                 "type": "tower",
                 "role": "main_keep",
                 "label": "main keep",
@@ -31,24 +38,36 @@
                 ],
                 "landmark": true,
                 "placement": "central",
-                "brief": "Central stronghold with great hall and lord's quarters; the tallest structure."
+                "brief": "Central stronghold with great hall and lord's quarters; tallest structure."
               },
               {
                 "id": "gatehouse_1",
                 "type": "gatehouse",
-                "role": "drawbridge_gatehouse",
+                "role": "gatehouse",
                 "label": "drawbridge gatehouse",
                 "size": [
                   13,
                   11
                 ],
                 "placement": "edge",
-                "brief": "Houses the redstone drawbridge mechanism (pistons or chain-style lift) with a portcullis behind it. Faces the moat."
+                "brief": "Houses the redstone drawbridge mechanism, with a portcullis behind it. Faces the moat."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "watchtower",
+                "label": "corner watchtower",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Wall corner tower with arrow slits and battlement access."
               },
               {
                 "id": "tower_2",
                 "type": "tower",
-                "role": "corner_watchtower",
+                "role": "watchtower",
                 "label": "corner watchtower",
                 "size": [
                   9,
@@ -60,7 +79,7 @@
               {
                 "id": "tower_3",
                 "type": "tower",
-                "role": "corner_watchtower",
+                "role": "watchtower",
                 "label": "corner watchtower",
                 "size": [
                   9,
@@ -70,19 +89,7 @@
                 "brief": "Wall corner tower with arrow slits and battlement access."
               },
               {
-                "id": "tower_4",
-                "type": "tower",
-                "role": "corner_watchtower",
-                "label": "corner watchtower",
-                "size": [
-                  9,
-                  9
-                ],
-                "placement": "high_ground",
-                "brief": "Wall corner tower with arrow slits and battlement access."
-              },
-              {
-                "id": "house_1",
+                "id": "barracks_1",
                 "type": "house",
                 "role": "barracks",
                 "label": "barracks",
@@ -93,7 +100,7 @@
                 "brief": "Bunks for the garrison, near the gate."
               },
               {
-                "id": "house_2",
+                "id": "barracks_2",
                 "type": "house",
                 "role": "barracks",
                 "label": "barracks",
@@ -106,7 +113,7 @@
               {
                 "id": "smithy_1",
                 "type": "smithy",
-                "role": "armoury_smithy",
+                "role": "armoury",
                 "label": "armoury smithy",
                 "size": [
                   13,
@@ -115,7 +122,7 @@
                 "brief": "Forges and stores weapons and armour."
               },
               {
-                "id": "barn_1",
+                "id": "stable_1",
                 "type": "barn",
                 "role": "stables_granary",
                 "label": "stables and granary",
@@ -127,9 +134,9 @@
                 "brief": "Horses and supplies for a siege."
               },
               {
-                "id": "tavern_1",
+                "id": "mess_1",
                 "type": "tavern",
-                "role": "garrison_mess",
+                "role": "mess",
                 "label": "garrison mess",
                 "size": [
                   13,
@@ -137,19 +144,35 @@
                 ],
                 "brief": "Dining hall and gathering place for soldiers."
               }
-            ]
-          },
-          "where": {
-            "inside": {
-              "claim": true
-            }
-          },
-          "size": {
-            "preset": "M"
+            ],
+            "layout": "street",
+            "shared": "square"
           }
         }
       ],
       "connectors": [
+        {
+          "id": "curtain_wall",
+          "kind": "wall",
+          "required": true,
+          "label": "fortress wall",
+          "where": {
+            "around": {
+              "feature": {
+                "part": "fortress"
+              },
+              "ring": [
+                3,
+                6
+              ]
+            }
+          },
+          "height": 8,
+          "thickness": 2,
+          "crenels": true,
+          "corners": "tower",
+          "lamps": "gates"
+        },
         {
           "id": "moat",
           "kind": "channel",
@@ -161,77 +184,54 @@
                 "part": "fortress"
               },
               "ring": [
-                6,
-                12
-              ],
-              "closed": true
+                8,
+                14
+              ]
             }
           },
-          "notes": "Water-filled moat or ditch ringing the walls; reserved until channels are supported.",
-          "params": {
-            "width": 5,
-            "depth": 3
-          }
+          "width": 5,
+          "depth": 3
         },
         {
-          "id": "curtain_wall",
-          "kind": "wall",
-          "required": true,
-          "label": "curtain wall",
-          "where": {
-            "around": {
-              "feature": {
-                "part": "fortress"
-              },
-              "ring": [
-                2,
-                4
-              ],
-              "closed": true
-            }
+          "id": "gate_road",
+          "kind": "road",
+          "required": false,
+          "label": "approach road",
+          "from": {
+            "anchor": "claim_s"
           },
-          "notes": "Stone curtain wall with battlements linking the corner towers; the gatehouse sits in its edge.",
-          "params": {
-            "height": 8,
-            "joins": [
-              "tower_2",
-              "tower_3",
-              "tower_4",
-              "gatehouse_1"
-            ]
-          }
+          "to": {
+            "part": "gatehouse_1"
+          },
+          "width": 3
         },
         {
           "id": "main_gate",
           "kind": "gate",
           "required": false,
           "label": "main gate",
-          "from": {
-            "part": "fortress",
-            "port": "gatehouse_1"
-          },
-          "to": {
-            "anchor": "claim_center"
-          },
-          "notes": "Portcullis gate in the gatehouse, behind the drawbridge."
+          "wall": "curtain_wall",
+          "crossing": "gate_road",
+          "width": 3,
+          "height": 4,
+          "frame": "arch"
         },
         {
           "id": "drawbridge",
-          "kind": "bridge",
+          "kind": "drawbridge",
           "required": true,
           "label": "redstone drawbridge",
           "from": {
-            "part": "fortress",
-            "port": "gatehouse_1"
-          },
-          "to": {
             "anchor": "claim_s"
           },
-          "notes": "Redstone-powered lifting bridge spanning the moat at the main gate.",
+          "to": {
+            "part": "gatehouse_1"
+          },
           "params": {
             "mechanism": "redstone",
             "movable": true
-          }
+          },
+          "notes": "A lifting deck across the moat at the main gate, worked from the gatehouse."
         }
       ],
       "dependencies": [
@@ -239,33 +239,20 @@
           "part": "drawbridge",
           "after": [
             "moat",
-            "fortress"
+            "main_gate"
           ],
-          "why": "The bridge needs the moat to span and the gatehouse to carry its mechanism."
+          "why": "The drawbridge spans the moat at the gate."
         }
-      ],
-      "notes": "Medieval stone fortress on flat ground. Moat, wall, gate and drawbridge are reserved kinds and wait for later Architect releases."
+      ]
     },
     "waits": [
       {
-        "part": "moat",
-        "words": "The moat or ditch around the walls: channels come with a later Architect release; the fortress is built first and the moat is offered when it can be."
-      },
-      {
-        "part": "curtain_wall",
-        "words": "The curtain wall linking the towers: walls come with a later Architect release."
-      },
-      {
-        "part": "main_gate",
-        "words": "The portcullis main gate: gates come with a later Architect release."
-      },
-      {
         "part": "drawbridge",
-        "words": "The redstone drawbridge across the moat: bridges come with a later Architect release; the gatehouse is built ready for it."
+        "words": "The working redstone drawbridge waits for a later release; a fixed bridge over the moat is built meanwhile."
       }
     ],
-    "summary": "A medieval stone fortress on level ground: a central keep, a drawbridge gatehouse on the edge, three corner watchtowers, two barracks, an armoury smithy, stables and granary, and a garrison mess. The moat, curtain wall, gate and redstone drawbridge are recorded but wait for later Architect support; the buildings are built first."
+    "summary": "A stone medieval fortress on level ground: a central keep, a gatehouse at the edge, three corner watchtowers, two barracks, a smithy, a stable and granary, and a mess hall. A crenellated wall with corner towers rings it, and a moat circles the wall. A road from the south crosses the moat to the main gate on a fixed bridge. The redstone drawbridge is in the plan but can't be built yet. The land isn't surveyed, so the site may shift the layout."
   },
-  "usd": 0.037054,
+  "usd": 0.040939,
   "errors": []
 }
