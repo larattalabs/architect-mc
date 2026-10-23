@@ -533,7 +533,7 @@ export class Region {
       if (d.rope) rec.rope = d.rope; // (7a K1b) why a rope_bridge edge found no route ({code, evidence})
       if (d.bridge) rec.bridge = d.bridge; // (6c T3) why a bridge edge found no route ({code, evidence, ...})
       if (d.tunnel) rec.tunnel = d.tunnel; // (6c T3) why a tunnel edge found no route
-      if (d.t7) rec.t7 = d.t7; // (7a CW) why a 7a row's edge found no route ({catwalk: {code, evidence}}, as the rows set it)
+      if (d.t7) rec.t7 = d.t7; // (7a) why a 7a row's edge found no route ({lift | catwalk | rock_stair: {code, evidence}}, as each row's fail sets it)
       metaEdges.push(rec);
       if (!d.ok) { this.note(`route ${e.id} (${e.a.name} -> ${e.b.name}): ${d.failed} (${d.note})`); res.push({ id: e.id, ok: false, failed: d.failed }); continue; }
       rec.path = d.path; rec.segments = d.segments; rec.landings = d.landings; rec.ladderCols = d.ladderCols;
