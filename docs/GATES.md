@@ -2074,3 +2074,10 @@ passes `--judge-timing`. mega-lite's bars judge here as before.
 5. **Never kill processes by name.** To stop a run, `kill -TERM $(cat $R/runner.pid)`. The runner stops its own steps and clients.
 6. **Bench steps measure time.** Don't start clients while another run is in a `bench` step (its tick and cells/s bars), and
    read your own bench numbers with their recorded load. On a shared, busy box use `--quiet-wait`.
+
+### Release drops the 4e -full undo extras (Noah, 2026-10-23)
+
+Releases run the slice subsets `4e-orders` and `4e-crash` (crash rotation), not `4e-orders-full` and `4e-crash-full`. The extra orders
+and kill points (the 22 orders and K1, K2, K4, K5, K6, K8) are covered by the undo model (`UmtGateMovesTest.orders4e_*`,
+`crash4e_*`). About 12 minutes saved per release. The -full twins stay defined, and still run in the `regress` and `engine` chains
+and in the nightly's `--full` run.
