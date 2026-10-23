@@ -984,3 +984,14 @@ Top first. Not fixed in v0.40.1.
   In one batch re-run, lot_054 (the relog row's item) stayed WAITING NOT_LOADED after the walk until the step timed out. Watch for it
   at the next release.
 - **The P3 cutover for RS's rows** (rs `-smoke` twins) was not done in the batch.
+
+## Queued from the split false-PASS fix (coordinator, 2026-10-23)
+
+- **4d-all split into parts fails group undo; whole it passes.** fix/split-false-pass's proof run
+  (artifacts/gate-runs-splitfix/20261023-042653-slice): 4d-all/p2 failed "removeGroup completes", "sites removed in reverse
+  placement order" and "the whole village back exactly"; the whole step passed 63/0 in close-out A's re-run. 4d-all and
+  4d-all-full are unsplit for now (gate-chains.json). Find whether p2 depends on state p1's sections leave behind, or whether it's
+  contention; re-split only with a split-proof pass.
+- **gate6crs item 4's "consumed 0 items" can never fail** (found by fix/survival-off-storm): it reads a top-level `consumed`
+  that `dev.stockpile.state` doesn't have (it is under `ledger`). Read `ledger.consumed` and prove the check goes red on a
+  broken variant.

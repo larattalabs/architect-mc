@@ -11,6 +11,7 @@
    "globs": [],
    "dynamic": [],
    "env": [],
+   "eager": [],
    "verified": "20261022-161855-release unit-mod"
   },
   "umt": {
@@ -21,7 +22,8 @@
    "closure": [],
    "globs": [],
    "dynamic": [],
-   "env": []
+   "env": [],
+   "eager": []
   },
   "umt-long": {
    "classes": [
@@ -31,7 +33,8 @@
    "closure": [],
    "globs": [],
    "dynamic": [],
-   "env": []
+   "env": [],
+   "eager": []
   },
   "unit-kit": {
    "classes": [
@@ -67,6 +70,7 @@
     "kit/test/forms-f3-property.test.mjs",
     "kit/test/forms-f3.test.mjs",
     "kit/test/forms-island.test.mjs",
+    "kit/test/gate-benches.test.mjs",
     "kit/test/gate-history.test.mjs",
     "kit/test/gate-split.test.mjs",
     "kit/test/gate-turbo.test.mjs",
@@ -361,6 +365,7 @@
     "kit/test/forms-f3-property.test.mjs",
     "kit/test/forms-f3.test.mjs",
     "kit/test/forms-island.test.mjs",
+    "kit/test/gate-benches.test.mjs",
     "kit/test/gate-history.test.mjs",
     "kit/test/gate-split.test.mjs",
     "kit/test/gate-turbo.test.mjs",
@@ -460,11 +465,14 @@
     "kit/vocab/roles.json",
     "kit/vocab/tiers.json",
     "kit/voxel_classes.json",
+    "mod/build.gradle",
     "mod/gradle.properties",
     "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
     "mod/src/main/java/dev/larattalabs/architect/api/Limits.java",
+    "mod/src/main/java/dev/larattalabs/architect/journal/Journal.java",
     "mod/src/main/java/dev/larattalabs/architect/region/Brushes.java",
     "mod/src/main/java/dev/larattalabs/architect/region/IrStale.java",
+    "mod/src/main/java/dev/larattalabs/architect/region/RegionFluids.java",
     "mod/src/main/resources/data/architect_mc/survival_items.json",
     "scenarios/goldens/links_demo_flat.json",
     "scenarios/goldens/links_demo_flat/ir.json",
@@ -475,6 +483,8 @@
     "scenarios/relief_demo.json",
     "scenarios/route_demo.json",
     "scenarios/s3_monastery.json",
+    "sidecar/src/regionpool.ts",
+    "sidecar/src/regions.ts",
     "tools/api-compat.mjs",
     "tools/catalogue-since-check.mjs",
     "tools/find-site.mjs",
@@ -484,7 +494,10 @@
     "tools/gate6b.mjs",
     "tools/gate6cb.mjs",
     "tools/gate6ct3a.mjs",
+    "tools/gen-palettes.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/bench-select.mjs",
+    "tools/lib/build-artifact.mjs",
     "tools/lib/d2-replay.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -515,6 +528,7 @@
     "tools/lib/shard-auto.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/step-cache.mjs",
+    "tools/lib/step-coverage.mjs",
     "tools/lib/step-inputs.mjs",
     "tools/lib/step-split.mjs",
     "tools/lib/turbo.mjs",
@@ -551,6 +565,8 @@
     "kit/test/fixtures/versions/tavern/**",
     "mod/src/client/java/**",
     "mod/src/main/java/**",
+    "mod/src/main/java/dev/larattalabs/architect/**",
+    "mod/src/test/java/**",
     "mod/src/test/resources/arvx/**",
     "mod/src/test/resources/stub-sidecar/**",
     "scenarios/bibles/**",
@@ -596,6 +612,26 @@
      "expr": "path.join(KIT, name))"
     },
     {
+     "from": "kit/test/step-cache.test.mjs",
+     "expr": ") only when a run executed it"
+    },
+    {
+     "from": "kit/tools/region.mjs",
+     "expr": "pathToFileURL(path.join(dir, f)).href)"
+    },
+    {
+     "from": "tools/lib/step-coverage.mjs",
+     "expr": ") counts when its run executed it (the"
+    },
+    {
+     "from": "tools/lib/step-inputs.mjs",
+     "expr": ")`. */"
+    },
+    {
+     "from": "tools/lib/step-inputs.mjs",
+     "expr": ") counts only when a run executed"
+    },
+    {
      "from": "kit/test/release-version.test.mjs",
      "expr": "`${path.join(t, 'kit/lib/plan/catalogue.mjs')}?${Date.now()}`)"
     },
@@ -610,10 +646,6 @@
     {
      "from": "tools/release-version.mjs",
      "expr": "${JSON.stringify(pathToFileURL(path.join(root, 'tools/catalogue-since-check.mjs')).href)})"
-    },
-    {
-     "from": "kit/tools/region.mjs",
-     "expr": "pathToFileURL(path.join(dir, f)).href)"
     },
     {
      "from": "kit/test/phase5a.test.mjs",
@@ -701,6 +733,304 @@
      "tools/release-version.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiBTest",
+    "*ApiVocTest*",
+    "*ArvxBlocksTest",
+    "*ArvxTest",
+    "*BrushesTest",
+    "*Wire4bTest*",
+    "*WireVocbTest*",
+    "api.ApiBTest",
+    "region.BrushesTest",
+    "region.volume.ArvxBlocksTest",
+    "region.volume.ArvxTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "kit/build.mjs",
+    "kit/lib/adopt.mjs",
+    "kit/lib/bible.mjs",
+    "kit/lib/blobs.mjs",
+    "kit/lib/blocks.mjs",
+    "kit/lib/check.mjs",
+    "kit/lib/colors.mjs",
+    "kit/lib/components.mjs",
+    "kit/lib/connectors/bom.mjs",
+    "kit/lib/connectors/bridge.mjs",
+    "kit/lib/connectors/bridgeGeom.mjs",
+    "kit/lib/connectors/line.mjs",
+    "kit/lib/connectors/params.mjs",
+    "kit/lib/connectors/rope.mjs",
+    "kit/lib/connectors/ropeGeom.mjs",
+    "kit/lib/connectors/style.mjs",
+    "kit/lib/connectors/t3kinds.mjs",
+    "kit/lib/connectors/templateLand.mjs",
+    "kit/lib/connectors/tunnel.mjs",
+    "kit/lib/connectors/tunnelGeom.mjs",
+    "kit/lib/connectors/wall.mjs",
+    "kit/lib/diff.mjs",
+    "kit/lib/fluids/biomes.mjs",
+    "kit/lib/fluids/body.mjs",
+    "kit/lib/fluids/course.mjs",
+    "kit/lib/fluids/ditch.mjs",
+    "kit/lib/fluids/fountain.mjs",
+    "kit/lib/fluids/gate.mjs",
+    "kit/lib/fluids/handcourse.mjs",
+    "kit/lib/fluids/handgate.mjs",
+    "kit/lib/fluids/hooks.mjs",
+    "kit/lib/fluids/irrfield.mjs",
+    "kit/lib/fluids/irrigate.mjs",
+    "kit/lib/fluids/keep.mjs",
+    "kit/lib/fluids/kinds.mjs",
+    "kit/lib/fluids/moat.mjs",
+    "kit/lib/fluids/place.mjs",
+    "kit/lib/fluids/pond.mjs",
+    "kit/lib/fluids/profile.mjs",
+    "kit/lib/fluids/quay.mjs",
+    "kit/lib/fluids/race.mjs",
+    "kit/lib/fluids/sim.mjs",
+    "kit/lib/fluids/waterfall.mjs",
+    "kit/lib/fluids/wet.mjs",
+    "kit/lib/fluids/world.mjs",
+    "kit/lib/forms/cave.mjs",
+    "kit/lib/forms/coral.mjs",
+    "kit/lib/forms/floatingIsland.mjs",
+    "kit/lib/forms/giantMushroom.mjs",
+    "kit/lib/forms/giantTree.mjs",
+    "kit/lib/forms/hooks.mjs",
+    "kit/lib/forms/iceSpike.mjs",
+    "kit/lib/forms/place.mjs",
+    "kit/lib/forms/rockSpire.mjs",
+    "kit/lib/forms/rules.mjs",
+    "kit/lib/forms/states.mjs",
+    "kit/lib/importer.mjs",
+    "kit/lib/kit.mjs",
+    "kit/lib/mask.mjs",
+    "kit/lib/massing.mjs",
+    "kit/lib/material.mjs",
+    "kit/lib/mirror.mjs",
+    "kit/lib/nbt.mjs",
+    "kit/lib/noise.mjs",
+    "kit/lib/params.mjs",
+    "kit/lib/pattern.mjs",
+    "kit/lib/plan/catalogue.mjs",
+    "kit/lib/plan/compile.mjs",
+    "kit/lib/plan/finish.mjs",
+    "kit/lib/plan/free.mjs",
+    "kit/lib/plan/palette.mjs",
+    "kit/lib/plan/schema.mjs",
+    "kit/lib/png.mjs",
+    "kit/lib/realise.mjs",
+    "kit/lib/rebuild.mjs",
+    "kit/lib/region/beside.mjs",
+    "kit/lib/region/boundary.mjs",
+    "kit/lib/region/brush.mjs",
+    "kit/lib/region/builds.mjs",
+    "kit/lib/region/check.mjs",
+    "kit/lib/region/checkBridges.mjs",
+    "kit/lib/region/checkFluids.mjs",
+    "kit/lib/region/checkForms.mjs",
+    "kit/lib/region/checkRopes.mjs",
+    "kit/lib/region/checkTunnels.mjs",
+    "kit/lib/region/checkVocab.mjs",
+    "kit/lib/region/checkWalls.mjs",
+    "kit/lib/region/districtsEmit.mjs",
+    "kit/lib/region/fixtures.mjs",
+    "kit/lib/region/followEmit.mjs",
+    "kit/lib/region/frontage.mjs",
+    "kit/lib/region/geom.mjs",
+    "kit/lib/region/layouts/grid.mjs",
+    "kit/lib/region/layouts/organic.mjs",
+    "kit/lib/region/layouts/outline.mjs",
+    "kit/lib/region/layouts/ring.mjs",
+    "kit/lib/region/layouts/spiral.mjs",
+    "kit/lib/region/light.mjs",
+    "kit/lib/region/pack.mjs",
+    "kit/lib/region/passes/districts.mjs",
+    "kit/lib/region/passes/hydrology.mjs",
+    "kit/lib/region/passes/index.mjs",
+    "kit/lib/region/passes/moves/bridge.mjs",
+    "kit/lib/region/passes/moves/gate.mjs",
+    "kit/lib/region/passes/moves/rope.mjs",
+    "kit/lib/region/passes/moves/tunnel.mjs",
+    "kit/lib/region/passes/relief.mjs",
+    "kit/lib/region/passes/route.mjs",
+    "kit/lib/region/plan.mjs",
+    "kit/lib/region/preview.mjs",
+    "kit/lib/region/program.mjs",
+    "kit/lib/region/props.mjs",
+    "kit/lib/region/raster.mjs",
+    "kit/lib/region/scatter.mjs",
+    "kit/lib/region/scatterItems.mjs",
+    "kit/lib/region/scatterPlan.mjs",
+    "kit/lib/region/siteplan.mjs",
+    "kit/lib/region/stamps.mjs",
+    "kit/lib/region/survey.mjs",
+    "kit/lib/region/survival.mjs",
+    "kit/lib/region/survivalData.mjs",
+    "kit/lib/region/synth.mjs",
+    "kit/lib/region/terraces.mjs",
+    "kit/lib/region/village.mjs",
+    "kit/lib/region/volume.mjs",
+    "kit/lib/region/voxels.mjs",
+    "kit/lib/region/vworld.mjs",
+    "kit/lib/render.mjs",
+    "kit/lib/reserved.mjs",
+    "kit/lib/schem.mjs",
+    "kit/lib/sdf.mjs",
+    "kit/lib/smalls.mjs",
+    "kit/lib/specschema.mjs",
+    "kit/lib/variation.mjs",
+    "kit/lib/vocab.mjs",
+    "kit/lib/vocab/budget.mjs",
+    "kit/lib/vocab/groups.mjs",
+    "kit/lib/vocab/rarity.mjs",
+    "kit/lib/vocab/survival.mjs",
+    "kit/lib/write.mjs",
+    "kit/regions/flat_village.mjs",
+    "kit/regions/forms_demo.mjs",
+    "kit/regions/h_core_demo.mjs",
+    "kit/regions/hy_core_demo.mjs",
+    "kit/regions/hy_gate_demo.mjs",
+    "kit/render.mjs",
+    "kit/test/adopt-pt2.test.mjs",
+    "kit/test/basestamp.test.mjs",
+    "kit/test/bible.test.mjs",
+    "kit/test/blobs.test.mjs",
+    "kit/test/blocks.test.mjs",
+    "kit/test/bridge-t3a.test.mjs",
+    "kit/test/brush-b.test.mjs",
+    "kit/test/builds-pt.test.mjs",
+    "kit/test/catalogue-c38.test.mjs",
+    "kit/test/catalogue-since.test.mjs",
+    "kit/test/check.test.mjs",
+    "kit/test/cli.test.mjs",
+    "kit/test/copies.test.mjs",
+    "kit/test/diff.test.mjs",
+    "kit/test/districts-d.test.mjs",
+    "kit/test/districts-d2.test.mjs",
+    "kit/test/even-width-hk3.test.mjs",
+    "kit/test/fixtures/schem/make.mjs",
+    "kit/test/fixtures/vocab/voc-designs.mjs",
+    "kit/test/fixtures/vocab/vocc-designs.mjs",
+    "kit/test/fl-helpers.mjs",
+    "kit/test/fl-layouts-1.test.mjs",
+    "kit/test/fl-layouts-2.test.mjs",
+    "kit/test/fl-look.test.mjs",
+    "kit/test/fl-written.mjs",
+    "kit/test/fl.test.mjs",
+    "kit/test/forms-f1.test.mjs",
+    "kit/test/forms-f3-coral.test.mjs",
+    "kit/test/forms-f3-property.test.mjs",
+    "kit/test/forms-f3.test.mjs",
+    "kit/test/forms-island.test.mjs",
+    "kit/test/gate-benches.test.mjs",
+    "kit/test/gate-history.test.mjs",
+    "kit/test/gate-split.test.mjs",
+    "kit/test/gate-turbo.test.mjs",
+    "kit/test/h-a.test.mjs",
+    "kit/test/h-batch.test.mjs",
+    "kit/test/h-core.test.mjs",
+    "kit/test/h-foundation.test.mjs",
+    "kit/test/h-helpers.mjs",
+    "kit/test/h-wet.test.mjs",
+    "kit/test/hy-a.test.mjs",
+    "kit/test/hy-b.test.mjs",
+    "kit/test/hy-c-helpers.mjs",
+    "kit/test/hy-c.test.mjs",
+    "kit/test/hy-core.test.mjs",
+    "kit/test/hy-helpers.mjs",
+    "kit/test/import.test.mjs",
+    "kit/test/irr.test.mjs",
+    "kit/test/k1-foundation.test.mjs",
+    "kit/test/kc.test.mjs",
+    "kit/test/massing.test.mjs",
+    "kit/test/mirror.test.mjs",
+    "kit/test/mp-specs.mjs",
+    "kit/test/mp.test.mjs",
+    "kit/test/orientation-c37.test.mjs",
+    "kit/test/outpost-s2.test.mjs",
+    "kit/test/params.test.mjs",
+    "kit/test/phase5a.test.mjs",
+    "kit/test/plan-helpers.mjs",
+    "kit/test/plan-k1-batch.test.mjs",
+    "kit/test/plan-k1a.test.mjs",
+    "kit/test/plan-k1b.test.mjs",
+    "kit/test/plan-ops.test.mjs",
+    "kit/test/plan-p0-asks.test.mjs",
+    "kit/test/plan-p0-det-1.test.mjs",
+    "kit/test/plan-p0-det-2.test.mjs",
+    "kit/test/plan-p0-det-3.test.mjs",
+    "kit/test/plan-p0-shared.mjs",
+    "kit/test/plan-p0-valid.test.mjs",
+    "kit/test/plan-p0.test.mjs",
+    "kit/test/plan-t3-batch.test.mjs",
+    "kit/test/plan-t3a.test.mjs",
+    "kit/test/plan-t3b.test.mjs",
+    "kit/test/ports.test.mjs",
+    "kit/test/region-6b.test.mjs",
+    "kit/test/region-fixtures.test.mjs",
+    "kit/test/region-format2.test.mjs",
+    "kit/test/region-golden.test.mjs",
+    "kit/test/region-helpers.mjs",
+    "kit/test/region-lint.test.mjs",
+    "kit/test/region-pack.test.mjs",
+    "kit/test/region-plan.test.mjs",
+    "kit/test/region-primitives.test.mjs",
+    "kit/test/region-sdf.test.mjs",
+    "kit/test/release-version.test.mjs",
+    "kit/test/relief-t1.test.mjs",
+    "kit/test/rope-k1b.test.mjs",
+    "kit/test/route-t2.test.mjs",
+    "kit/test/rp.test.mjs",
+    "kit/test/rs-b.test.mjs",
+    "kit/test/rs.test.mjs",
+    "kit/test/scatter-f2.test.mjs",
+    "kit/test/scenario-goldens.test.mjs",
+    "kit/test/schem.test.mjs",
+    "kit/test/smalls.test.mjs",
+    "kit/test/step-cache.test.mjs",
+    "kit/test/t3-foundation.test.mjs",
+    "kit/test/terraces-s3.test.mjs",
+    "kit/test/tunnel-t3b.test.mjs",
+    "kit/test/village-layout-1.test.mjs",
+    "kit/test/village-layout-2.test.mjs",
+    "kit/test/village-layout-3.test.mjs",
+    "kit/test/village-layout-4.test.mjs",
+    "kit/test/village-layout.mjs",
+    "kit/test/village-safety.test.mjs",
+    "kit/test/village.test.mjs",
+    "kit/test/voc-farfluid.test.mjs",
+    "kit/test/vocab-rules.test.mjs",
+    "kit/test/vocab.test.mjs",
+    "kit/test/vocc.test.mjs",
+    "kit/tools/components.mjs",
+    "kit/tools/preset-builds.mjs",
+    "kit/tools/slices.mjs",
+    "kit/vocab/hazards.json",
+    "kit/vocab/roles.json",
+    "kit/vocab/tiers.json",
+    "tools/catalogue-since-check.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/bench-select.mjs",
+    "tools/lib/build-artifact.mjs",
+    "tools/lib/gate-history.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/gate6cirr-game.mjs",
+    "tools/lib/gate6cvoc-b.mjs",
+    "tools/lib/p3-tier.mjs",
+    "tools/lib/shard-auto.mjs",
+    "tools/lib/step-cache.mjs",
+    "tools/lib/step-coverage.mjs",
+    "tools/lib/step-inputs.mjs",
+    "tools/lib/step-split.mjs",
+    "tools/lib/turbo.mjs",
+    "tools/release-context.mjs",
+    "tools/release-version.mjs",
+    "tools/scenarios.mjs"
+   ],
    "data": [
     "cherry",
     "dark",
@@ -717,7 +1047,8 @@
    "closure": [],
    "globs": [],
    "dynamic": [],
-   "env": []
+   "env": [],
+   "eager": []
   },
   "sim-jobs": {
    "classes": [
@@ -764,6 +1095,11 @@
     "ARCHITECT_XMX",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/apitest.mjs",
+    "tools/lib/devclient.mjs"
    ]
   },
   "sim-sets": {
@@ -811,6 +1147,11 @@
     "ARCHITECT_XMX",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/apitest.mjs",
+    "tools/lib/devclient.mjs"
    ]
   },
   "sim-massing": {
@@ -858,6 +1199,11 @@
     "ARCHITECT_XMX",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/apitest.mjs",
+    "tools/lib/devclient.mjs"
    ]
   },
   "apijars": {
@@ -916,6 +1262,12 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6a.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "0a-stub": {
@@ -959,6 +1311,10 @@
     "GATE6C0A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6c0a.mjs"
    ]
   },
   "0a-flow": {
@@ -1002,6 +1358,10 @@
     "GATE6C0A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6c0a.mjs"
    ]
   },
   "0a-budget": {
@@ -1045,6 +1405,10 @@
     "GATE6C0A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6c0a.mjs"
    ]
   },
   "0a-fit": {
@@ -1088,6 +1452,10 @@
     "GATE6C0A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6c0a.mjs"
    ]
   },
   "0a-batches": {
@@ -1131,6 +1499,10 @@
     "GATE6C0A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6c0a.mjs"
    ]
   },
   "0a-keys": {
@@ -1174,6 +1546,10 @@
     "GATE6C0A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6c0a.mjs"
    ]
   },
   "0a-cancel": {
@@ -1217,6 +1593,10 @@
     "GATE6C0A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6c0a.mjs"
    ]
   },
   "0a-pins": {
@@ -1260,6 +1640,10 @@
     "GATE6C0A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6c0a.mjs"
    ]
   },
   "0a-stopped": {
@@ -1303,6 +1687,10 @@
     "GATE6C0A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6c0a.mjs"
    ]
   },
   "0a-tiles": {
@@ -1346,6 +1734,10 @@
     "GATE6C0A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6c0a.mjs"
    ]
   },
   "mp-unit": {
@@ -1616,7 +2008,24 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*Api114Test",
+    "*ApiMPTest",
+    "*MaskPatternDriftTest",
+    "*PlanStaleTest",
+    "*sources*",
+    "api.ApiMPTest",
+    "api.MaskPatternDriftTest",
+    "region.PlanStaleTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cmp.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "mp-ingame": {
    "classes": [
@@ -1898,7 +2307,30 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*Api114Test",
+    "*ApiMPTest",
+    "*MaskPatternDriftTest",
+    "*PlanStaleTest",
+    "*sources*",
+    "api.ApiMPTest",
+    "api.MaskPatternDriftTest",
+    "region.PlanStaleTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cmp.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs",
+    "tools/scenarios.mjs"
+   ]
   },
   "sch-unit": {
    "classes": [
@@ -1944,7 +2376,20 @@
     "originMain": [
      "tools/gate6csch.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.api.ApiSchTest",
+    "dev.larattalabs.architect.library.SchematicTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "kit/lib/nbt.mjs",
+    "kit/lib/schem.mjs",
+    "tools/gate6csch.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "sch-roundtrip": {
    "classes": [
@@ -2002,7 +2447,20 @@
     "originMain": [
      "tools/gate6csch.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.api.ApiSchTest",
+    "dev.larattalabs.architect.library.SchematicTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "kit/lib/nbt.mjs",
+    "kit/lib/schem.mjs",
+    "tools/gate6csch.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "sch-refusals": {
    "classes": [
@@ -2060,7 +2518,20 @@
     "originMain": [
      "tools/gate6csch.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.api.ApiSchTest",
+    "dev.larattalabs.architect.library.SchematicTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "kit/lib/nbt.mjs",
+    "kit/lib/schem.mjs",
+    "tools/gate6csch.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "sch-placement": {
    "classes": [
@@ -2118,7 +2589,20 @@
     "originMain": [
      "tools/gate6csch.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.api.ApiSchTest",
+    "dev.larattalabs.architect.library.SchematicTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "kit/lib/nbt.mjs",
+    "kit/lib/schem.mjs",
+    "tools/gate6csch.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "sch-ingame": {
    "classes": [
@@ -2176,7 +2660,20 @@
     "originMain": [
      "tools/gate6csch.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.api.ApiSchTest",
+    "dev.larattalabs.architect.library.SchematicTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "kit/lib/nbt.mjs",
+    "kit/lib/schem.mjs",
+    "tools/gate6csch.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "v-unit": {
    "classes": [
@@ -2446,7 +2943,11 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "eager": [
+    "tools/gate6cv.mjs",
+    "tools/lib/kit-reuse.mjs"
+   ]
   },
   "v-ingame": {
    "classes": [
@@ -2735,7 +3236,17 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cv.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "w-unit": {
    "classes": [
@@ -3001,7 +3512,11 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "eager": [
+    "tools/gate6cw.mjs",
+    "tools/lib/kit-reuse.mjs"
+   ]
   },
   "w-ingame": {
    "classes": [
@@ -3287,7 +3802,17 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cw.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "f1-unit": {
    "classes": [
@@ -3560,7 +4085,13 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6cf1.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "6cf1-scenario-forms": {
    "classes": [
@@ -3812,7 +4343,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/scenarios.mjs"
+   ]
   },
   "x-unit": {
    "classes": [
@@ -4001,6 +4541,21 @@
     "GATE_KIT_TREE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "testFilters": [
+    "*Api113Test",
+    "*Api114Test",
+    "*PlanStaleTest",
+    "*RegionKeysTest",
+    "api.Api114Test",
+    "region.RegionKeysTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cx.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "x-ingame": {
@@ -4287,7 +4842,27 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*Api113Test",
+    "*Api114Test",
+    "*PlanStaleTest",
+    "*RegionKeysTest",
+    "api.Api114Test",
+    "region.RegionKeysTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cx.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "y-unit": {
    "classes": [
@@ -4327,6 +4902,29 @@
     "GATE6CY_REF",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "testFilters": [
+    "*ApiC29Test",
+    "*ApiRulesTest",
+    "*ApiY1Test",
+    "*C29CreditTest",
+    "*FeedOrderTest",
+    "*LedgerTest",
+    "*StockpileFileTest",
+    "*StockpileTest",
+    "api.ApiC29Test",
+    "api.ApiY1Test",
+    "apiimpl.ApiRulesTest",
+    "site.C29CreditTest",
+    "site.FeedOrderTest",
+    "site.StockpileFileTest",
+    "survival.StockpileTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cy.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "y-ingame": {
@@ -4381,6 +4979,29 @@
     "GATE6CY_REF",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "testFilters": [
+    "*ApiC29Test",
+    "*ApiRulesTest",
+    "*ApiY1Test",
+    "*C29CreditTest",
+    "*FeedOrderTest",
+    "*LedgerTest",
+    "*StockpileFileTest",
+    "*StockpileTest",
+    "api.ApiC29Test",
+    "api.ApiY1Test",
+    "apiimpl.ApiRulesTest",
+    "site.C29CreditTest",
+    "site.FeedOrderTest",
+    "site.StockpileFileTest",
+    "survival.StockpileTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cy.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "c29-unit": {
@@ -4421,6 +5042,29 @@
     "GATE6CY_REF",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "testFilters": [
+    "*ApiC29Test",
+    "*ApiRulesTest",
+    "*ApiY1Test",
+    "*C29CreditTest",
+    "*FeedOrderTest",
+    "*LedgerTest",
+    "*StockpileFileTest",
+    "*StockpileTest",
+    "api.ApiC29Test",
+    "api.ApiY1Test",
+    "apiimpl.ApiRulesTest",
+    "site.C29CreditTest",
+    "site.FeedOrderTest",
+    "site.StockpileFileTest",
+    "survival.StockpileTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cy.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "c29-ingame": {
@@ -4475,6 +5119,29 @@
     "GATE6CY_REF",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "testFilters": [
+    "*ApiC29Test",
+    "*ApiRulesTest",
+    "*ApiY1Test",
+    "*C29CreditTest",
+    "*FeedOrderTest",
+    "*LedgerTest",
+    "*StockpileFileTest",
+    "*StockpileTest",
+    "api.ApiC29Test",
+    "api.ApiY1Test",
+    "apiimpl.ApiRulesTest",
+    "site.C29CreditTest",
+    "site.FeedOrderTest",
+    "site.StockpileFileTest",
+    "survival.StockpileTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cy.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "y2-unit": {
@@ -4504,6 +5171,22 @@
     "GATE6CY2_OUT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "testFilters": [
+    "*ApiRulesTest",
+    "*ApiY2Test",
+    "*FullBomTest",
+    "*SiteWaitTest",
+    "ApiY2Test",
+    "FullBomTest",
+    "SiteWaitTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cy2.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "y2-ingame": {
@@ -4547,6 +5230,22 @@
     "GATE6CY2_OUT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "testFilters": [
+    "*ApiRulesTest",
+    "*ApiY2Test",
+    "*FullBomTest",
+    "*SiteWaitTest",
+    "ApiY2Test",
+    "FullBomTest",
+    "SiteWaitTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cy2.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "y2-bom": {
@@ -4590,6 +5289,22 @@
     "GATE6CY2_OUT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "testFilters": [
+    "*ApiRulesTest",
+    "*ApiY2Test",
+    "*FullBomTest",
+    "*SiteWaitTest",
+    "ApiY2Test",
+    "FullBomTest",
+    "SiteWaitTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cy2.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "t1-unit": {
@@ -4869,7 +5584,13 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6ct1.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "b-unit": {
    "classes": [
@@ -5136,7 +5857,24 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiBTest",
+    "*ArvxBlocksTest",
+    "*ArvxTest",
+    "*BrushesTest",
+    "api.ApiBTest",
+    "region.BrushesTest",
+    "region.volume.ArvxBlocksTest",
+    "region.volume.ArvxTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cb.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "b-ingame": {
    "classes": [
@@ -5421,7 +6159,29 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiBTest",
+    "*ArvxBlocksTest",
+    "*ArvxTest",
+    "*BrushesTest",
+    "api.ApiBTest",
+    "region.BrushesTest",
+    "region.volume.ArvxBlocksTest",
+    "region.volume.ArvxTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cb.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "pt-unit": {
    "classes": [
@@ -5603,6 +6363,24 @@
     "GATE6CPT_STEPS",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "testFilters": [
+    "*ApiPTTest",
+    "*JournalPtTest",
+    "*PlacedChunkTest",
+    "*PredicatePathsTest",
+    "*RecordRulesTest",
+    "api.ApiPTTest",
+    "journal.JournalPtTest",
+    "placed.PlacedChunkTest",
+    "placed.PredicatePathsTest",
+    "placed.RecordRulesTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cpt.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "c33-unit": {
@@ -5618,6 +6396,9 @@
    "env": [
     "ARCHITECT_ARTIFACTS",
     "JAVA_HOME"
+   ],
+   "eager": [
+    "tools/api-compat.mjs"
    ]
   },
   "pt-ingame": {
@@ -5887,7 +6668,30 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiPTTest",
+    "*JournalPtTest",
+    "*PlacedChunkTest",
+    "*PredicatePathsTest",
+    "*RecordRulesTest",
+    "api.ApiPTTest",
+    "journal.JournalPtTest",
+    "placed.PlacedChunkTest",
+    "placed.PredicatePathsTest",
+    "placed.RecordRulesTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cpt.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "pt-nomod": {
    "classes": [
@@ -6156,7 +6960,30 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiPTTest",
+    "*JournalPtTest",
+    "*PlacedChunkTest",
+    "*PredicatePathsTest",
+    "*RecordRulesTest",
+    "api.ApiPTTest",
+    "journal.JournalPtTest",
+    "placed.PlacedChunkTest",
+    "placed.PredicatePathsTest",
+    "placed.RecordRulesTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cpt.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "pt2-unit": {
    "classes": [
@@ -6253,6 +7080,33 @@
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PT2_V0270"
+   ],
+   "testFilters": [
+    "*AdoptTest",
+    "*ApiP0Test",
+    "*ApiPT2Test",
+    "*ApiPTTest",
+    "*ApiRulesTest",
+    "*BuildsAdoptTest",
+    "*JournalAdoptTest",
+    "*JournalPtTest",
+    "*Pt2Old027ReadTest",
+    "*java",
+    "Pt2Old027ReadTest.java",
+    "api.ApiPT2Test",
+    "api.ApiPTTest",
+    "apiimpl.ApiRulesTest",
+    "journal.JournalAdoptTest",
+    "journal.JournalPtTest",
+    "placed.BuildsAdoptTest",
+    "region.ApiP0Test",
+    "site.AdoptTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cpt2.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "pt2-ingame": {
@@ -6527,7 +7381,39 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*AdoptTest",
+    "*ApiP0Test",
+    "*ApiPT2Test",
+    "*ApiPTTest",
+    "*ApiRulesTest",
+    "*BuildsAdoptTest",
+    "*JournalAdoptTest",
+    "*JournalPtTest",
+    "*Pt2Old027ReadTest",
+    "*java",
+    "Pt2Old027ReadTest.java",
+    "api.ApiPT2Test",
+    "api.ApiPTTest",
+    "apiimpl.ApiRulesTest",
+    "journal.JournalAdoptTest",
+    "journal.JournalPtTest",
+    "placed.BuildsAdoptTest",
+    "region.ApiP0Test",
+    "site.AdoptTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cpt2.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "pt2-survival": {
    "classes": [
@@ -6801,7 +7687,39 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*AdoptTest",
+    "*ApiP0Test",
+    "*ApiPT2Test",
+    "*ApiPTTest",
+    "*ApiRulesTest",
+    "*BuildsAdoptTest",
+    "*JournalAdoptTest",
+    "*JournalPtTest",
+    "*Pt2Old027ReadTest",
+    "*java",
+    "Pt2Old027ReadTest.java",
+    "api.ApiPT2Test",
+    "api.ApiPTTest",
+    "apiimpl.ApiRulesTest",
+    "journal.JournalAdoptTest",
+    "journal.JournalPtTest",
+    "placed.BuildsAdoptTest",
+    "region.ApiP0Test",
+    "site.AdoptTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cpt2.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "tile-gravity": {
    "classes": [
@@ -7086,7 +8004,29 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiBTest",
+    "*ArvxBlocksTest",
+    "*ArvxTest",
+    "*BrushesTest",
+    "api.ApiBTest",
+    "region.BrushesTest",
+    "region.volume.ArvxBlocksTest",
+    "region.volume.ArvxTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cb.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "c31-felling": {
    "classes": [
@@ -7371,7 +8311,29 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiBTest",
+    "*ArvxBlocksTest",
+    "*ArvxTest",
+    "*BrushesTest",
+    "api.ApiBTest",
+    "region.BrushesTest",
+    "region.volume.ArvxBlocksTest",
+    "region.volume.ArvxTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cb.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "t1-ingame": {
    "classes": [
@@ -7669,7 +8631,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ct1.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "6ct1-scenario-relief": {
    "classes": [
@@ -7921,7 +8894,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/scenarios.mjs"
+   ]
   },
   "f2-unit": {
    "classes": [
@@ -8213,7 +9195,19 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.region.ApiF2Test",
+    "dev.larattalabs.architect.region.ApiT1Test",
+    "dev.larattalabs.architect.region.PlanStaleTest"
+   ],
+   "testFiltersComplete": false,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cf2.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "f2-harvest": {
    "classes": [
@@ -8517,7 +9511,24 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.region.ApiF2Test",
+    "dev.larattalabs.architect.region.ApiT1Test",
+    "dev.larattalabs.architect.region.PlanStaleTest"
+   ],
+   "testFiltersComplete": false,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cf2.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "6cf2-scenario-scatter": {
    "classes": [
@@ -8822,7 +9833,25 @@
     "repoListing": [
      "tools/gate6cf2.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.region.ApiF2Test",
+    "dev.larattalabs.architect.region.ApiT1Test",
+    "dev.larattalabs.architect.region.PlanStaleTest"
+   ],
+   "testFiltersComplete": false,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cf2.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs",
+    "tools/scenarios.mjs"
+   ]
   },
   "t2-unit": {
    "classes": [
@@ -9105,7 +10134,13 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6ct2.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "p0-unit": {
    "classes": [
@@ -9146,6 +10181,11 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CP0_OUT",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6cp0.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "c37-unit": {
@@ -9180,6 +10220,9 @@
     "GATE6B_SIDECAR_PORT",
     "GATEC37_OUT",
     "JAVA_HOME"
+   ],
+   "eager": [
+    "tools/gate6c37.mjs"
    ]
   },
   "c37-ingame": {
@@ -9436,7 +10479,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6c37.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "c38-unit": {
    "classes": [
@@ -9559,6 +10611,9 @@
     "GATE6B_SIDECAR_PORT",
     "GATEC38_OUT",
     "JAVA_HOME"
+   ],
+   "eager": [
+    "tools/gate6c38.mjs"
    ]
   },
   "c38-ingame": {
@@ -9815,7 +10870,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6c38.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "rs-unit": {
    "classes": [
@@ -9965,6 +11029,7 @@
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
@@ -10014,6 +11079,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CRS_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
@@ -10032,11 +11098,28 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiDTest*",
+    "*C29CreditTest*",
+    "*FeedOrderTest*",
+    "*IrStale*",
+    "*PlanChecksT3Test*",
+    "*RegionFluidsHYTest*",
+    "*RegionTargetsTest*",
+    "*RoadFreeCellTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6crs.mjs",
+    "tools/lib/gate-part.mjs"
+   ]
   },
   "rs-ingame": {
    "classes": [
@@ -10187,6 +11270,7 @@
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
@@ -10236,6 +11320,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CRS_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
@@ -10254,11 +11339,28 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiDTest*",
+    "*C29CreditTest*",
+    "*FeedOrderTest*",
+    "*IrStale*",
+    "*PlanChecksT3Test*",
+    "*RegionFluidsHYTest*",
+    "*RegionTargetsTest*",
+    "*RoadFreeCellTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6crs.mjs",
+    "tools/lib/gate-part.mjs"
+   ]
   },
   "rs-survival": {
    "classes": [
@@ -10409,6 +11511,7 @@
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
@@ -10458,6 +11561,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CRS_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
@@ -10476,12 +11580,270 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiDTest*",
+    "*C29CreditTest*",
+    "*FeedOrderTest*",
+    "*IrStale*",
+    "*PlanChecksT3Test*",
+    "*RegionFluidsHYTest*",
+    "*RegionTargetsTest*",
+    "*RoadFreeCellTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6crs.mjs",
+    "tools/lib/gate-part.mjs"
+   ],
    "verified": "20261022-161855-release rs-survival"
+  },
+  "rs-toggle": {
+   "classes": [
+    "gradle",
+    "jar",
+    "sidecar",
+    "world"
+   ],
+   "roots": [
+    "tools/gate6crs.mjs"
+   ],
+   "closure": [
+    "kit/lib/blocks.mjs",
+    "kit/lib/connectors/bom.mjs",
+    "kit/lib/connectors/bridge.mjs",
+    "kit/lib/connectors/bridgeGeom.mjs",
+    "kit/lib/connectors/line.mjs",
+    "kit/lib/connectors/params.mjs",
+    "kit/lib/connectors/rope.mjs",
+    "kit/lib/connectors/ropeGeom.mjs",
+    "kit/lib/connectors/style.mjs",
+    "kit/lib/connectors/t3kinds.mjs",
+    "kit/lib/connectors/templateLand.mjs",
+    "kit/lib/connectors/tunnel.mjs",
+    "kit/lib/connectors/tunnelGeom.mjs",
+    "kit/lib/connectors/wall.mjs",
+    "kit/lib/fluids/biomes.mjs",
+    "kit/lib/fluids/body.mjs",
+    "kit/lib/fluids/course.mjs",
+    "kit/lib/fluids/ditch.mjs",
+    "kit/lib/fluids/fountain.mjs",
+    "kit/lib/fluids/gate.mjs",
+    "kit/lib/fluids/handcourse.mjs",
+    "kit/lib/fluids/handgate.mjs",
+    "kit/lib/fluids/hooks.mjs",
+    "kit/lib/fluids/irrfield.mjs",
+    "kit/lib/fluids/irrigate.mjs",
+    "kit/lib/fluids/keep.mjs",
+    "kit/lib/fluids/kinds.mjs",
+    "kit/lib/fluids/moat.mjs",
+    "kit/lib/fluids/place.mjs",
+    "kit/lib/fluids/pond.mjs",
+    "kit/lib/fluids/profile.mjs",
+    "kit/lib/fluids/quay.mjs",
+    "kit/lib/fluids/race.mjs",
+    "kit/lib/fluids/sim.mjs",
+    "kit/lib/fluids/waterfall.mjs",
+    "kit/lib/fluids/wet.mjs",
+    "kit/lib/fluids/world.mjs",
+    "kit/lib/forms/cave.mjs",
+    "kit/lib/forms/coral.mjs",
+    "kit/lib/forms/floatingIsland.mjs",
+    "kit/lib/forms/giantMushroom.mjs",
+    "kit/lib/forms/giantTree.mjs",
+    "kit/lib/forms/hooks.mjs",
+    "kit/lib/forms/iceSpike.mjs",
+    "kit/lib/forms/place.mjs",
+    "kit/lib/forms/rockSpire.mjs",
+    "kit/lib/forms/rules.mjs",
+    "kit/lib/forms/states.mjs",
+    "kit/lib/kit.mjs",
+    "kit/lib/mask.mjs",
+    "kit/lib/material.mjs",
+    "kit/lib/nbt.mjs",
+    "kit/lib/noise.mjs",
+    "kit/lib/params.mjs",
+    "kit/lib/pattern.mjs",
+    "kit/lib/plan/catalogue.mjs",
+    "kit/lib/plan/compile.mjs",
+    "kit/lib/plan/finish.mjs",
+    "kit/lib/plan/free.mjs",
+    "kit/lib/plan/palette.mjs",
+    "kit/lib/plan/schema.mjs",
+    "kit/lib/png.mjs",
+    "kit/lib/realise.mjs",
+    "kit/lib/region/boundary.mjs",
+    "kit/lib/region/builds.mjs",
+    "kit/lib/region/check.mjs",
+    "kit/lib/region/checkBridges.mjs",
+    "kit/lib/region/checkFluids.mjs",
+    "kit/lib/region/checkForms.mjs",
+    "kit/lib/region/checkRopes.mjs",
+    "kit/lib/region/checkTunnels.mjs",
+    "kit/lib/region/checkVocab.mjs",
+    "kit/lib/region/checkWalls.mjs",
+    "kit/lib/region/districtsEmit.mjs",
+    "kit/lib/region/fixtures.mjs",
+    "kit/lib/region/followEmit.mjs",
+    "kit/lib/region/frontage.mjs",
+    "kit/lib/region/geom.mjs",
+    "kit/lib/region/layouts/grid.mjs",
+    "kit/lib/region/layouts/organic.mjs",
+    "kit/lib/region/layouts/outline.mjs",
+    "kit/lib/region/layouts/ring.mjs",
+    "kit/lib/region/layouts/spiral.mjs",
+    "kit/lib/region/light.mjs",
+    "kit/lib/region/pack.mjs",
+    "kit/lib/region/passes/districts.mjs",
+    "kit/lib/region/passes/hydrology.mjs",
+    "kit/lib/region/passes/index.mjs",
+    "kit/lib/region/passes/moves/bridge.mjs",
+    "kit/lib/region/passes/moves/gate.mjs",
+    "kit/lib/region/passes/moves/rope.mjs",
+    "kit/lib/region/passes/moves/tunnel.mjs",
+    "kit/lib/region/passes/relief.mjs",
+    "kit/lib/region/passes/route.mjs",
+    "kit/lib/region/plan.mjs",
+    "kit/lib/region/program.mjs",
+    "kit/lib/region/props.mjs",
+    "kit/lib/region/scatter.mjs",
+    "kit/lib/region/stamps.mjs",
+    "kit/lib/region/survey.mjs",
+    "kit/lib/region/survival.mjs",
+    "kit/lib/region/survivalData.mjs",
+    "kit/lib/region/synth.mjs",
+    "kit/lib/region/terraces.mjs",
+    "kit/lib/region/village.mjs",
+    "kit/lib/region/volume.mjs",
+    "kit/lib/region/voxels.mjs",
+    "kit/lib/region/vworld.mjs",
+    "kit/lib/sdf.mjs",
+    "kit/lib/specschema.mjs",
+    "kit/lib/vocab.mjs",
+    "kit/lib/vocab/budget.mjs",
+    "kit/lib/vocab/groups.mjs",
+    "kit/lib/vocab/rarity.mjs",
+    "kit/lib/vocab/survival.mjs",
+    "kit/regions/crater_works.mjs",
+    "kit/regions/floating_islands.mjs",
+    "kit/regions/hy_core_demo.mjs",
+    "kit/regions/plan_v0.mjs",
+    "kit/regions/rift_city.mjs",
+    "kit/schemas/mask.json",
+    "kit/schemas/pattern.json",
+    "kit/schemas/plan.json",
+    "kit/test/fixtures/plan/rs/rs02_walled.json",
+    "kit/test/fixtures/vocab/voc-designs.mjs",
+    "kit/test/fixtures/vocab/vocc-designs.mjs",
+    "kit/test/h-helpers.mjs",
+    "kit/test/plan-helpers.mjs",
+    "kit/test/region-helpers.mjs",
+    "kit/test/rs.test.mjs",
+    "kit/vocab/hazards.json",
+    "kit/vocab/roles.json",
+    "kit/vocab/tiers.json",
+    "mod/gradle.properties",
+    "scenarios/s3_monastery.json",
+    "tools/api-compat.mjs",
+    "tools/gate6crs.mjs",
+    "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/batch-0410.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/gate6chy-b.mjs",
+    "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6crs-game.mjs",
+    "tools/lib/gate6crs-kit.mjs",
+    "tools/lib/p3-tier.mjs",
+    "tools/lib/plan-cache.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/server-host.mjs",
+    "tools/lib/src-gradle.mjs",
+    "tools/lib/wsserver.mjs",
+    "tools/run-gate6b-client.sh",
+    "tools/run-headless-server.mjs"
+   ],
+   "globs": [
+    "kit/examples/cabin/**",
+    "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks/**",
+    "kit/test/fixtures/plan/hy/**",
+    "kit/test/fixtures/plan/rs/**",
+    "mod/src/test/resources/stub-sidecar/**",
+    "scenarios/bibles/**"
+   ],
+   "dynamic": [
+    {
+     "from": "tools/gate6crs.mjs",
+     "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    }
+   ],
+   "env": [
+    "ARCHITECT_ARTIFACTS",
+    "ARCHITECT_BIG_REGIONS",
+    "ARCHITECT_BOT_VIEW_DISTANCE",
+    "ARCHITECT_DEV_PORT",
+    "ARCHITECT_DEV_TOKEN",
+    "ARCHITECT_GAME_DIR",
+    "ARCHITECT_SERVER_EULA",
+    "ARCHITECT_SIMULATION_DISTANCE",
+    "ARCHITECT_XMX",
+    "GATE6B_CLIENT_SCRIPT",
+    "GATE6B_DEV_PORT",
+    "GATE6B_OUT",
+    "GATE6B_RUN",
+    "GATE6B_SIDECAR_PORT",
+    "GATE6CRS_OUT",
+    "GATE_MERGE_BASE",
+    "GATE_P3",
+    "GRADLE_USER_HOME",
+    "HEADLESS_SIDECAR",
+    "HYB_BYPASS",
+    "HYB_ONLY",
+    "HYB_WATCH",
+    "JAVA_HOME",
+    "PATH",
+    "RS_CREATIVE",
+    "RS_FIXTURE",
+    "RS_JARS",
+    "RS_KEEP",
+    "RS_ONLY",
+    "RS_S3_CLAIM",
+    "RS_VERBOSE"
+   ],
+   "flags": {
+    "originMain": [
+     "tools/lib/base-tree.mjs",
+     "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6crs-kit.mjs",
+     "tools/lib/plan-cache.mjs"
+    ]
+   },
+   "testFilters": [
+    "*ApiDTest*",
+    "*C29CreditTest*",
+    "*FeedOrderTest*",
+    "*IrStale*",
+    "*PlanChecksT3Test*",
+    "*RegionFluidsHYTest*",
+    "*RegionTargetsTest*",
+    "*RoadFreeCellTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6crs.mjs",
+    "tools/lib/gate-part.mjs"
+   ]
   },
   "rs-crash": {
    "classes": [
@@ -10632,6 +11994,7 @@
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
@@ -10681,6 +12044,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CRS_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
@@ -10699,11 +12063,28 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiDTest*",
+    "*C29CreditTest*",
+    "*FeedOrderTest*",
+    "*IrStale*",
+    "*PlanChecksT3Test*",
+    "*RegionFluidsHYTest*",
+    "*RegionTargetsTest*",
+    "*RoadFreeCellTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6crs.mjs",
+    "tools/lib/gate-part.mjs"
+   ]
   },
   "rsb-ingame": {
    "classes": [
@@ -10916,7 +12297,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*RegionTargetsTest*",
+    "*TunnelRingsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6crsb.mjs"
+   ]
   },
   "rsb-crash": {
    "classes": [
@@ -11129,7 +12519,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*RegionTargetsTest*",
+    "*TunnelRingsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6crsb.mjs"
+   ]
   },
   "p0-ingame": {
    "classes": [
@@ -11391,7 +12790,17 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cp0.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "p0-natural": {
    "classes": [
@@ -11653,7 +13062,17 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cp0.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "t2-ingame": {
    "classes": [
@@ -11955,7 +13374,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ct2.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "t3a-unit": {
    "classes": [
@@ -12265,7 +13695,12 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "eager": [
+    "tools/gate6ct3a.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/kit-reuse.mjs"
+   ]
   },
   "t3a-probe": {
    "classes": [
@@ -12594,7 +14029,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ct3a.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "t3a-ingame": {
    "classes": [
@@ -12923,7 +14369,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ct3a.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "t3a-natural": {
    "classes": [
@@ -13252,7 +14709,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ct3a.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "t3a-frozen": {
    "classes": [
@@ -13573,7 +15041,13 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6ct3a.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/kit-reuse.mjs"
+   ]
   },
   "t3a-look": {
    "classes": [
@@ -13903,6 +15377,17 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ct3a.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ],
    "verified": "20261022-161855-release t3a-look"
   },
   "k1b-unit": {
@@ -14191,7 +15676,12 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "eager": [
+    "tools/gate7ak1b.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/kit-reuse.mjs"
+   ]
   },
   "k1b-ingame": {
    "classes": [
@@ -14499,7 +15989,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate7ak1b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "k1b-natural": {
    "classes": [
@@ -14807,7 +16308,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate7ak1b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "t3b-unit": {
    "classes": [
@@ -15104,7 +16616,17 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiT3Test*",
+    "*PlanChecksT3Test*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6ct3b.mjs",
+    "tools/lib/kit-reuse.mjs"
+   ]
   },
   "t3b-ingame": {
    "classes": [
@@ -15418,7 +16940,22 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiT3Test*",
+    "*PlanChecksT3Test*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ct3b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "t3b-natural": {
    "classes": [
@@ -15732,7 +17269,22 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiT3Test*",
+    "*PlanChecksT3Test*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ct3b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "t3b-pin": {
    "classes": [
@@ -16046,7 +17598,22 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiT3Test*",
+    "*PlanChecksT3Test*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ct3b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "t3b-look": {
    "classes": [
@@ -16360,7 +17927,22 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiT3Test*",
+    "*PlanChecksT3Test*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ct3b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "h-unit": {
    "classes": [
@@ -16683,7 +18265,21 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6ch.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs"
+   ]
   },
   "h-ingame": {
    "classes": [
@@ -17026,6 +18622,25 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ch.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ],
    "verified": "20261022-161855-release h-ingame"
   },
   "h-crash": {
@@ -17368,7 +18983,26 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ch.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "h-probe": {
    "classes": [
@@ -17710,7 +19344,26 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ch.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "h-natural": {
    "classes": [
@@ -18052,7 +19705,26 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ch.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "h-cold": {
    "classes": [
@@ -18394,7 +20066,26 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ch.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "6ch-look": {
    "classes": [
@@ -18736,7 +20427,26 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ch.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "voc-unit": {
    "classes": [
@@ -18925,11 +20635,13 @@
     "scenarios/route_demo.json",
     "tools/api-compat.mjs",
     "tools/gate6cvoc.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -19010,6 +20722,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CVOC_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "JAVA",
     "JAVA_HOME",
@@ -19018,12 +20731,26 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cvoc.mjs",
+    "tools/lib/gate-part.mjs"
+   ],
    "data": [
     "deno.json",
     "deno.jsonc",
@@ -19228,11 +20955,13 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -19325,6 +21054,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CVOC_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -19335,12 +21065,31 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cvoc.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "voc-probe": {
    "classes": [
@@ -19534,11 +21283,13 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -19631,6 +21382,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CVOC_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -19641,12 +21393,31 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cvoc.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "voc-survival": {
    "classes": [
@@ -19840,11 +21611,13 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -19937,6 +21710,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CVOC_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -19947,12 +21721,31 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cvoc.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "voc-ingame": {
    "classes": [
@@ -20146,11 +21939,13 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -20243,6 +22038,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CVOC_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -20253,12 +22049,31 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cvoc.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "voc-natural": {
    "classes": [
@@ -20452,11 +22267,13 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -20549,6 +22366,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CVOC_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -20559,12 +22377,31 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cvoc.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "vocc-unit": {
    "classes": [
@@ -20753,11 +22590,13 @@
     "scenarios/route_demo.json",
     "tools/api-compat.mjs",
     "tools/gate6cvoc.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -20838,6 +22677,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CVOC_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "JAVA",
     "JAVA_HOME",
@@ -20846,12 +22686,26 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cvoc.mjs",
+    "tools/lib/gate-part.mjs"
+   ],
    "data": [
     "node_modules",
     "package.json"
@@ -21052,11 +22906,13 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -21149,6 +23005,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CVOC_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -21159,12 +23016,31 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cvoc.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "6cvoc-look": {
    "classes": [
@@ -21358,11 +23234,13 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -21455,6 +23333,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CVOC_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -21465,12 +23344,31 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cvoc.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "cu-unit": {
    "classes": [
@@ -21512,6 +23410,20 @@
     "GATE6CCU_OUT",
     "JAVA_HOME",
     "PATH"
+   ],
+   "testFilters": [
+    "*ApiCuTest*",
+    "*CopperTest*",
+    "*DeltaPropertyTest*",
+    "*JournalPropertyTest*",
+    "*JournalTest*",
+    "*RefundsAndBitsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6ccu.mjs"
    ]
   },
   "cu-measure": {
@@ -21775,7 +23687,26 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiCuTest*",
+    "*CopperTest*",
+    "*DeltaPropertyTest*",
+    "*JournalPropertyTest*",
+    "*JournalTest*",
+    "*RefundsAndBitsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ccu.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "cu-ingame": {
    "classes": [
@@ -22038,7 +23969,26 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiCuTest*",
+    "*CopperTest*",
+    "*DeltaPropertyTest*",
+    "*JournalPropertyTest*",
+    "*JournalTest*",
+    "*RefundsAndBitsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ccu.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "rp-unit": {
    "classes": [
@@ -22170,6 +24120,15 @@
     "GATE6CRP_OUT",
     "JAVA_HOME",
     "PATH"
+   ],
+   "testFilters": [
+    "*RealisedTest*",
+    "*TileGravityTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6crp.mjs"
    ]
   },
   "rp-ingame": {
@@ -22437,7 +24396,21 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*RealisedTest*",
+    "*TileGravityTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6crp.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "rp-crash": {
    "classes": [
@@ -22704,7 +24677,21 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*RealisedTest*",
+    "*TileGravityTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6crp.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "cu-survival": {
    "classes": [
@@ -22767,6 +24754,37 @@
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH"
+   ],
+   "testFilters": [
+    "*ApiC29Test",
+    "*ApiCuTest*",
+    "*ApiRulesTest",
+    "*ApiY1Test",
+    "*C29CreditTest",
+    "*CopperTest*",
+    "*DeltaPropertyTest*",
+    "*FeedOrderTest",
+    "*JournalPropertyTest*",
+    "*JournalTest*",
+    "*LedgerTest",
+    "*RefundsAndBitsTest*",
+    "*StillOursFluidsTest*",
+    "*StockpileFileTest",
+    "*StockpileTest",
+    "api.ApiC29Test",
+    "api.ApiY1Test",
+    "apiimpl.ApiRulesTest",
+    "site.C29CreditTest",
+    "site.FeedOrderTest",
+    "site.StockpileFileTest",
+    "survival.StockpileTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6ccu.mjs",
+    "tools/gate6cy.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "ha-unit": {
@@ -23038,7 +25056,10 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "eager": [
+    "tools/gate6cha.mjs"
+   ]
   },
   "ha-ingame": {
    "classes": [
@@ -23329,7 +25350,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cha.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "ha-natural": {
    "classes": [
@@ -23620,7 +25650,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cha.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "ha-cold": {
    "classes": [
@@ -23911,7 +25950,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cha.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "ha-look": {
    "classes": [
@@ -24202,7 +26250,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cha.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "hy-unit": {
    "classes": [
@@ -24503,6 +26560,21 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6chy.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs"
+   ],
    "verified": "20261022-161855-release hy-unit"
   },
   "h-holders": {
@@ -24845,7 +26917,26 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ch.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "irr-holders": {
    "classes": [
@@ -25039,6 +27130,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cirr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -25144,6 +27236,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CIRR_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -25159,13 +27252,36 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6cirr-kit.mjs",
      "tools/lib/gate6ckc-kit.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiIrrTest",
+    "*ApiVocTest*",
+    "*LotMaskTest",
+    "*PaletteRulesTest*",
+    "*PlanChecksHTest",
+    "*RegionFluidsHYTest*",
+    "dev.larattalabs.architect.apiimpl.ApiIrrTest",
+    "dev.larattalabs.architect.region.PlanChecksHTest",
+    "dev.larattalabs.architect.site.LotMaskTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cirr.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "h-rmcrash": {
    "classes": [
@@ -25507,7 +27623,26 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ch.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "hy-ingame": {
    "classes": [
@@ -25827,6 +27962,26 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6chy.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ],
    "verified": "20261022-161855-release hy-ingame"
   },
   "hy-crash": {
@@ -26146,7 +28301,27 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6chy.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "hy-natural": {
    "classes": [
@@ -26465,7 +28640,27 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6chy.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "hy-cold": {
    "classes": [
@@ -26784,7 +28979,27 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6chy.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "kc-unit": {
    "classes": [
@@ -26956,11 +29171,13 @@
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6ckc.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
@@ -27041,6 +29258,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CKC_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -27052,11 +29270,18 @@
    "flags": {
     "originMain": [
      "tools/gate6ckc.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "eager": [
+    "tools/gate6ckc.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/p3-tier.mjs"
+   ]
   },
   "kc-ingame": {
    "classes": [
@@ -27233,11 +29458,13 @@
     "tools/gate6b.mjs",
     "tools/gate6ckc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
@@ -27330,6 +29557,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CKC_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -27343,11 +29571,24 @@
    "flags": {
     "originMain": [
      "tools/gate6ckc.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ckc.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/p3-tier.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "f3-unit": {
    "classes": [
@@ -27528,12 +29769,14 @@
     "sidecar/src/jobs/systemrefs.ts",
     "tools/api-compat.mjs",
     "tools/gate6cf3.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cf3-coral.mjs",
     "tools/lib/gate6cf3-game.mjs",
     "tools/lib/gate6cf3-kit.mjs",
@@ -27623,6 +29866,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CF3_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -27634,12 +29878,24 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cf3-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.apiimpl.ApiF3Test",
+    "dev.larattalabs.architect.journal.CopperTest",
+    "dev.larattalabs.architect.journal.StillOursF3Test"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cf3.mjs",
+    "tools/lib/gate-part.mjs"
+   ]
   },
   "f3-ingame": {
    "classes": [
@@ -27825,12 +30081,14 @@
     "tools/gate6b.mjs",
     "tools/gate6cf3.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cf3-coral.mjs",
     "tools/lib/gate6cf3-game.mjs",
     "tools/lib/gate6cf3-kit.mjs",
@@ -27932,6 +30190,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CF3_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -27945,12 +30204,29 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cf3-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.apiimpl.ApiF3Test",
+    "dev.larattalabs.architect.journal.CopperTest",
+    "dev.larattalabs.architect.journal.StillOursF3Test"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cf3.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "f3-natural": {
    "classes": [
@@ -28136,12 +30412,14 @@
     "tools/gate6b.mjs",
     "tools/gate6cf3.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cf3-coral.mjs",
     "tools/lib/gate6cf3-game.mjs",
     "tools/lib/gate6cf3-kit.mjs",
@@ -28243,6 +30521,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CF3_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -28256,12 +30535,29 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cf3-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.apiimpl.ApiF3Test",
+    "dev.larattalabs.architect.journal.CopperTest",
+    "dev.larattalabs.architect.journal.StillOursF3Test"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cf3.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "f3-forest": {
    "classes": [
@@ -28442,12 +30738,14 @@
     "sidecar/src/jobs/systemrefs.ts",
     "tools/api-compat.mjs",
     "tools/gate6cf3.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cf3-coral.mjs",
     "tools/lib/gate6cf3-game.mjs",
     "tools/lib/gate6cf3-kit.mjs",
@@ -28537,6 +30835,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CF3_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -28548,12 +30847,24 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cf3-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.apiimpl.ApiF3Test",
+    "dev.larattalabs.architect.journal.CopperTest",
+    "dev.larattalabs.architect.journal.StillOursF3Test"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cf3.mjs",
+    "tools/lib/gate-part.mjs"
+   ]
   },
   "f3-look": {
    "classes": [
@@ -28739,12 +31050,14 @@
     "tools/gate6b.mjs",
     "tools/gate6cf3.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cf3-coral.mjs",
     "tools/lib/gate6cf3-game.mjs",
     "tools/lib/gate6cf3-kit.mjs",
@@ -28846,6 +31159,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CF3_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -28859,12 +31173,29 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cf3-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "dev.larattalabs.architect.apiimpl.ApiF3Test",
+    "dev.larattalabs.architect.journal.CopperTest",
+    "dev.larattalabs.architect.journal.StillOursF3Test"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cf3.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "irr-unit": {
    "classes": [
@@ -29053,6 +31384,7 @@
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6cirr.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -29146,6 +31478,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CIRR_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -29159,13 +31492,31 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6cirr-kit.mjs",
      "tools/lib/gate6ckc-kit.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiIrrTest",
+    "*ApiVocTest*",
+    "*LotMaskTest",
+    "*PaletteRulesTest*",
+    "*PlanChecksHTest",
+    "*RegionFluidsHYTest*",
+    "dev.larattalabs.architect.apiimpl.ApiIrrTest",
+    "dev.larattalabs.architect.region.PlanChecksHTest",
+    "dev.larattalabs.architect.site.LotMaskTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cirr.mjs",
+    "tools/lib/gate-part.mjs"
+   ]
   },
   "irr-ingame": {
    "classes": [
@@ -29359,6 +31710,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cirr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -29464,6 +31816,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CIRR_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -29479,13 +31832,36 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6cirr-kit.mjs",
      "tools/lib/gate6ckc-kit.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiIrrTest",
+    "*ApiVocTest*",
+    "*LotMaskTest",
+    "*PaletteRulesTest*",
+    "*PlanChecksHTest",
+    "*RegionFluidsHYTest*",
+    "dev.larattalabs.architect.apiimpl.ApiIrrTest",
+    "dev.larattalabs.architect.region.PlanChecksHTest",
+    "dev.larattalabs.architect.site.LotMaskTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cirr.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ],
    "verified": "20261022-161855-release irr-ingame"
   },
   "irr-crash": {
@@ -29680,6 +32056,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cirr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -29785,6 +32162,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CIRR_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -29800,13 +32178,36 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6cirr-kit.mjs",
      "tools/lib/gate6ckc-kit.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiIrrTest",
+    "*ApiVocTest*",
+    "*LotMaskTest",
+    "*PaletteRulesTest*",
+    "*PlanChecksHTest",
+    "*RegionFluidsHYTest*",
+    "dev.larattalabs.architect.apiimpl.ApiIrrTest",
+    "dev.larattalabs.architect.region.PlanChecksHTest",
+    "dev.larattalabs.architect.site.LotMaskTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cirr.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "irr-look": {
    "classes": [
@@ -30000,6 +32401,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cirr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -30105,6 +32507,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CIRR_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -30120,13 +32523,36 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6cirr-kit.mjs",
      "tools/lib/gate6ckc-kit.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiIrrTest",
+    "*ApiVocTest*",
+    "*LotMaskTest",
+    "*PaletteRulesTest*",
+    "*PlanChecksHTest",
+    "*RegionFluidsHYTest*",
+    "dev.larattalabs.architect.apiimpl.ApiIrrTest",
+    "dev.larattalabs.architect.region.PlanChecksHTest",
+    "dev.larattalabs.architect.site.LotMaskTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cirr.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "fl-unit": {
    "classes": [
@@ -30298,12 +32724,14 @@
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6cfl.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cfl-game.mjs",
     "tools/lib/gate6cfl-kit.mjs",
     "tools/lib/gate6chy-b.mjs",
@@ -30388,6 +32816,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CFL_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -30398,12 +32827,26 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cfl-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "testFilters": [
+    "*ApiVocTest*",
+    "*IrRoadExtTest",
+    "*Wire4bTest*",
+    "*WireVocbTest*",
+    "dev.larattalabs.architect.region.IrRoadExtTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cfl.mjs",
+    "tools/lib/gate-part.mjs"
+   ],
    "data": [
     "node_modules",
     "package.json"
@@ -30587,12 +33030,14 @@
     "tools/gate6b.mjs",
     "tools/gate6cfl.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cfl-game.mjs",
     "tools/lib/gate6cfl-kit.mjs",
     "tools/lib/gate6chy-b.mjs",
@@ -30689,6 +33134,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CFL_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -30701,12 +33147,31 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cfl-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiVocTest*",
+    "*IrRoadExtTest",
+    "*Wire4bTest*",
+    "*WireVocbTest*",
+    "dev.larattalabs.architect.region.IrRoadExtTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cfl.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "fl-natural": {
    "classes": [
@@ -30883,12 +33348,14 @@
     "tools/gate6b.mjs",
     "tools/gate6cfl.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cfl-game.mjs",
     "tools/lib/gate6cfl-kit.mjs",
     "tools/lib/gate6chy-b.mjs",
@@ -30985,6 +33452,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CFL_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -30997,12 +33465,31 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cfl-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiVocTest*",
+    "*IrRoadExtTest",
+    "*Wire4bTest*",
+    "*WireVocbTest*",
+    "dev.larattalabs.architect.region.IrRoadExtTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cfl.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "fl-look": {
    "classes": [
@@ -31179,12 +33666,14 @@
     "tools/gate6b.mjs",
     "tools/gate6cfl.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6cfl-game.mjs",
     "tools/lib/gate6cfl-kit.mjs",
     "tools/lib/gate6chy-b.mjs",
@@ -31281,6 +33770,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CFL_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -31293,12 +33783,31 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6cfl-kit.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiVocTest*",
+    "*IrRoadExtTest",
+    "*Wire4bTest*",
+    "*WireVocbTest*",
+    "dev.larattalabs.architect.region.IrRoadExtTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cfl.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "water-lint": {
    "classes": [],
@@ -31475,6 +33984,102 @@
    "env": [
     "ARCHITECT_BIG_REGIONS",
     "WATER_LINT_FULL"
+   ],
+   "eager": [
+    "kit/lib/blocks.mjs",
+    "kit/lib/connectors/bom.mjs",
+    "kit/lib/connectors/bridgeGeom.mjs",
+    "kit/lib/connectors/line.mjs",
+    "kit/lib/connectors/params.mjs",
+    "kit/lib/connectors/ropeGeom.mjs",
+    "kit/lib/connectors/style.mjs",
+    "kit/lib/connectors/tunnelGeom.mjs",
+    "kit/lib/connectors/wall.mjs",
+    "kit/lib/fluids/biomes.mjs",
+    "kit/lib/fluids/body.mjs",
+    "kit/lib/fluids/gate.mjs",
+    "kit/lib/fluids/irrfield.mjs",
+    "kit/lib/fluids/keep.mjs",
+    "kit/lib/fluids/kinds.mjs",
+    "kit/lib/fluids/place.mjs",
+    "kit/lib/fluids/sim.mjs",
+    "kit/lib/fluids/wet.mjs",
+    "kit/lib/fluids/world.mjs",
+    "kit/lib/forms/coral.mjs",
+    "kit/lib/forms/floatingIsland.mjs",
+    "kit/lib/forms/giantMushroom.mjs",
+    "kit/lib/forms/giantTree.mjs",
+    "kit/lib/forms/iceSpike.mjs",
+    "kit/lib/forms/rockSpire.mjs",
+    "kit/lib/forms/rules.mjs",
+    "kit/lib/forms/states.mjs",
+    "kit/lib/kit.mjs",
+    "kit/lib/mask.mjs",
+    "kit/lib/material.mjs",
+    "kit/lib/nbt.mjs",
+    "kit/lib/noise.mjs",
+    "kit/lib/params.mjs",
+    "kit/lib/pattern.mjs",
+    "kit/lib/realise.mjs",
+    "kit/lib/region/boundary.mjs",
+    "kit/lib/region/check.mjs",
+    "kit/lib/region/checkBridges.mjs",
+    "kit/lib/region/checkFluids.mjs",
+    "kit/lib/region/checkForms.mjs",
+    "kit/lib/region/checkRopes.mjs",
+    "kit/lib/region/checkTunnels.mjs",
+    "kit/lib/region/checkVocab.mjs",
+    "kit/lib/region/checkWalls.mjs",
+    "kit/lib/region/districtsEmit.mjs",
+    "kit/lib/region/fixtures.mjs",
+    "kit/lib/region/followEmit.mjs",
+    "kit/lib/region/geom.mjs",
+    "kit/lib/region/light.mjs",
+    "kit/lib/region/pack.mjs",
+    "kit/lib/region/passes/districts.mjs",
+    "kit/lib/region/passes/hydrology.mjs",
+    "kit/lib/region/passes/index.mjs",
+    "kit/lib/region/passes/moves/bridge.mjs",
+    "kit/lib/region/passes/moves/gate.mjs",
+    "kit/lib/region/passes/moves/rope.mjs",
+    "kit/lib/region/passes/moves/tunnel.mjs",
+    "kit/lib/region/passes/relief.mjs",
+    "kit/lib/region/passes/route.mjs",
+    "kit/lib/region/plan.mjs",
+    "kit/lib/region/program.mjs",
+    "kit/lib/region/props.mjs",
+    "kit/lib/region/scatter.mjs",
+    "kit/lib/region/stamps.mjs",
+    "kit/lib/region/survey.mjs",
+    "kit/lib/region/survival.mjs",
+    "kit/lib/region/survivalData.mjs",
+    "kit/lib/region/terraces.mjs",
+    "kit/lib/region/village.mjs",
+    "kit/lib/region/volume.mjs",
+    "kit/lib/region/voxels.mjs",
+    "kit/lib/region/vworld.mjs",
+    "kit/lib/sdf.mjs",
+    "kit/lib/specschema.mjs",
+    "kit/lib/vocab.mjs",
+    "kit/lib/vocab/budget.mjs",
+    "kit/lib/vocab/rarity.mjs",
+    "kit/lib/vocab/survival.mjs",
+    "kit/lint/corpus-0.lint.mjs",
+    "kit/lint/corpus-1.lint.mjs",
+    "kit/lint/corpus-2.lint.mjs",
+    "kit/lint/corpus-3.lint.mjs",
+    "kit/lint/corpus-4.lint.mjs",
+    "kit/lint/corpus-5.lint.mjs",
+    "kit/lint/corpus-6.lint.mjs",
+    "kit/lint/corpus-7.lint.mjs",
+    "kit/lint/corpus-8.lint.mjs",
+    "kit/lint/drain.lint.mjs",
+    "kit/lint/rules.lint.mjs",
+    "kit/lint/shard.mjs",
+    "kit/lint/water.mjs",
+    "kit/vocab/hazards.json",
+    "kit/vocab/roles.json",
+    "kit/vocab/tiers.json"
    ]
   },
   "p3-lint": {
@@ -31485,7 +34090,8 @@
    "closure": [],
    "globs": [],
    "dynamic": [],
-   "env": []
+   "env": [],
+   "eager": []
   },
   "p3-lint-long": {
    "classes": [
@@ -31495,7 +34101,8 @@
    "closure": [],
    "globs": [],
    "dynamic": [],
-   "env": []
+   "env": [],
+   "eager": []
   },
   "p3-probe-water": {
    "classes": [],
@@ -31603,6 +34210,14 @@
     "JAVA_HOME",
     "P3_REPO",
     "P3_RUN"
+   ],
+   "testFilters": [
+    "dev.larattalabs.architect.site.LedgerProbeTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/p3-probe.mjs"
    ]
   },
   "p3-probe-ledger": {
@@ -31711,6 +34326,14 @@
     "JAVA_HOME",
     "P3_REPO",
     "P3_RUN"
+   ],
+   "testFilters": [
+    "dev.larattalabs.architect.site.LedgerProbeTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/p3-probe.mjs"
    ]
   },
   "h-ingame-smoke": {
@@ -32053,7 +34676,26 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ch.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "h-probe-smoke": {
    "classes": [
@@ -32395,7 +35037,26 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ch.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "hy-ingame-smoke": {
    "classes": [
@@ -32714,7 +35375,27 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6chy.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "hy-crash-smoke": {
    "classes": [
@@ -33033,7 +35714,27 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6chy.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "hy-cold-smoke": {
    "classes": [
@@ -33352,7 +36053,27 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6chy.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "irr-ingame-smoke": {
    "classes": [
@@ -33546,6 +36267,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cirr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -33651,6 +36373,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CIRR_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -33666,13 +36389,36 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6cirr-kit.mjs",
      "tools/lib/gate6ckc-kit.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiIrrTest",
+    "*ApiVocTest*",
+    "*LotMaskTest",
+    "*PaletteRulesTest*",
+    "*PlanChecksHTest",
+    "*RegionFluidsHYTest*",
+    "dev.larattalabs.architect.apiimpl.ApiIrrTest",
+    "dev.larattalabs.architect.region.PlanChecksHTest",
+    "dev.larattalabs.architect.site.LotMaskTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cirr.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "kc-ingame-smoke": {
    "classes": [
@@ -33849,11 +36595,13 @@
     "tools/gate6b.mjs",
     "tools/gate6ckc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
@@ -33946,6 +36694,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CKC_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -33959,11 +36708,24 @@
    "flags": {
     "originMain": [
      "tools/gate6ckc.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ckc.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/p3-tier.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "voc-survival-smoke": {
    "classes": [
@@ -34157,11 +36919,13 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
@@ -34254,6 +37018,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CVOC_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -34264,12 +37029,31 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cvoc.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "y-ingame-smoke": {
    "classes": [
@@ -34323,6 +37107,29 @@
     "GATE6CY_REF",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "testFilters": [
+    "*ApiC29Test",
+    "*ApiRulesTest",
+    "*ApiY1Test",
+    "*C29CreditTest",
+    "*FeedOrderTest",
+    "*LedgerTest",
+    "*StockpileFileTest",
+    "*StockpileTest",
+    "api.ApiC29Test",
+    "api.ApiY1Test",
+    "apiimpl.ApiRulesTest",
+    "site.C29CreditTest",
+    "site.FeedOrderTest",
+    "site.StockpileFileTest",
+    "survival.StockpileTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cy.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "c29-ingame-smoke": {
@@ -34377,6 +37184,29 @@
     "GATE6CY_REF",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "testFilters": [
+    "*ApiC29Test",
+    "*ApiRulesTest",
+    "*ApiY1Test",
+    "*C29CreditTest",
+    "*FeedOrderTest",
+    "*LedgerTest",
+    "*StockpileFileTest",
+    "*StockpileTest",
+    "api.ApiC29Test",
+    "api.ApiY1Test",
+    "apiimpl.ApiRulesTest",
+    "site.C29CreditTest",
+    "site.FeedOrderTest",
+    "site.StockpileFileTest",
+    "survival.StockpileTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cy.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "6chy-look": {
@@ -34696,7 +37526,27 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ArvxFluidsTest*",
+    "*PlanChecksHTest*",
+    "*RegionFluidsHYTest*",
+    "*RegionFluidsTest*",
+    "*StillOursFluidsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6chy.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "s2-unit": {
    "classes": [
@@ -34976,7 +37826,13 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6cs2.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "s3-unit": {
    "classes": [
@@ -35169,6 +38025,7 @@
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6cs3.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/d2-replay.mjs",
@@ -35176,6 +38033,7 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
@@ -35276,6 +38134,7 @@
     "GATE6CS3_SURVEY_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -35288,12 +38147,27 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/gate6cs3-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiS2Test",
+    "*ApiS3Test",
+    "*ApiVocTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*",
+    "dev.larattalabs.architect.region.ApiS3Test"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6cs3.mjs",
+    "tools/lib/gate-part.mjs"
+   ]
   },
   "s3-plan": {
    "classes": [
@@ -35491,6 +38365,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cs3.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
     "tools/lib/d2-replay.mjs",
@@ -35498,6 +38373,7 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
@@ -35610,6 +38486,7 @@
     "GATE6CS3_SURVEY_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -35624,12 +38501,32 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/gate6cs3-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiS2Test",
+    "*ApiS3Test",
+    "*ApiVocTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*",
+    "dev.larattalabs.architect.region.ApiS3Test"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cs3.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "6c-scenario-s3": {
    "classes": [
@@ -35881,7 +38778,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/scenarios.mjs"
+   ]
   },
   "6c-scenario-s3-dev": {
    "classes": [
@@ -36133,7 +39039,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/scenarios.mjs"
+   ]
   },
   "6c-scenario-s2": {
    "classes": [
@@ -36385,7 +39300,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/scenarios.mjs"
+   ]
   },
   "6ct2-scenario-route": {
    "classes": [
@@ -36637,7 +39561,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/scenarios.mjs"
+   ]
   },
   "d-unit": {
    "classes": [
@@ -36964,7 +39897,13 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6cd.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "d-ingame": {
    "classes": [
@@ -37310,7 +40249,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cd.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "6cd-scenario-districts": {
    "classes": [
@@ -37562,7 +40512,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/scenarios.mjs"
+   ]
   },
   "k1a-unit": {
    "classes": [
@@ -37874,7 +40833,13 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate7ak1.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "k1a-ingame": {
    "classes": [
@@ -38205,7 +41170,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate7ak1.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "k1a-natural": {
    "classes": [
@@ -38536,7 +41512,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate7ak1.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "k1a-target": {
    "classes": [
@@ -38867,7 +41854,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate7ak1.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "k1a-look": {
    "classes": [
@@ -39199,6 +42197,17 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate7ak1.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ],
    "verified": "20261022-161855-release k1a-look"
   },
   "d2-ingame": {
@@ -39545,7 +42554,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cd.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "d2-findsite": {
    "classes": [
@@ -39796,7 +42816,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "x-resume": {
    "classes": [
@@ -40082,7 +43110,27 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*Api113Test",
+    "*Api114Test",
+    "*PlanStaleTest",
+    "*RegionKeysTest",
+    "api.Api114Test",
+    "region.RegionKeysTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cx.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "x-resume-full": {
    "classes": [
@@ -40368,7 +43416,27 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*Api113Test",
+    "*Api114Test",
+    "*PlanStaleTest",
+    "*RegionKeysTest",
+    "api.Api114Test",
+    "region.RegionKeysTest"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cx.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   },
   "6cv-scenario-s7": {
    "classes": [
@@ -40655,7 +43723,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cw.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/scenarios.mjs"
+   ]
   },
   "0b-unit": {
    "classes": [
@@ -40744,6 +43823,12 @@
     "COPIES_REPORT",
     "GATE6C0B_OUT",
     "GATE6C0B_RUN"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6c0b.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "0b-ingame": {
@@ -40845,6 +43930,12 @@
     "GATE6C0B_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6c0b.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "4e-megalite": {
@@ -40918,6 +44009,12 @@
     "GATE4E_THROUGHPUT_SMOKE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate4e.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "c30-ingame": {
@@ -40959,6 +44056,13 @@
     "GATE4D_OUT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate4d.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "c30-ingame-full": {
@@ -41000,6 +44104,13 @@
     "GATE4D_OUT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate4d.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "4d-all": {
@@ -41041,6 +44152,13 @@
     "GATE4D_OUT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate4d.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "4d-all-full": {
@@ -41082,6 +44200,13 @@
     "GATE4D_OUT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate4d.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/tickbar.mjs"
    ],
    "verified": "20261022-161855-release 4d-all-full"
   },
@@ -41156,6 +44281,12 @@
     "GATE4E_THROUGHPUT_SMOKE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate4e.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "4e-orders-full": {
@@ -41230,6 +44361,12 @@
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate4e.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
+   ],
    "verified": "20261022-161855-release 4e-orders-full"
   },
   "4e-crash": {
@@ -41303,6 +44440,12 @@
     "GATE4E_THROUGHPUT_SMOKE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate4e.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "4e-crash-full": {
@@ -41376,6 +44519,12 @@
     "GATE4E_THROUGHPUT_SMOKE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate4e.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "4e-throughput": {
@@ -41449,6 +44598,12 @@
     "GATE4E_THROUGHPUT_SMOKE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate4e.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "4e-throughput-smoke": {
@@ -41522,6 +44677,12 @@
     "GATE4E_THROUGHPUT_SMOKE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate4e.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "5b-chains": {
@@ -41639,6 +44800,13 @@
     "HOME",
     "JAVA_HOME",
     "PATH"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate5b.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "5b-chains-full": {
@@ -41756,6 +44924,13 @@
     "HOME",
     "JAVA_HOME",
     "PATH"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate5b.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/tickbar.mjs"
    ],
    "data": [
     "kit/lint/**"
@@ -41877,6 +45052,13 @@
     "HOME",
     "JAVA_HOME",
     "PATH"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate5b.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "6a-megaA": {
@@ -41935,6 +45117,12 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6a.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "6a-megaB": {
@@ -41993,6 +45181,12 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6a.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "6a-megaB-fast": {
@@ -42051,6 +45245,76 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6a.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
+   ]
+  },
+  "6a-resume": {
+   "classes": [
+    "jar",
+    "sidecar",
+    "world"
+   ],
+   "roots": [
+    "tools/gate6a.mjs"
+   ],
+   "closure": [
+    "kit/lib/blocks.mjs",
+    "kit/lib/kit.mjs",
+    "kit/lib/nbt.mjs",
+    "kit/lib/write.mjs",
+    "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
+    "tools/apitest.mjs",
+    "tools/gate6a-stubs.mjs",
+    "tools/gate6a.mjs",
+    "tools/gen-palettes.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/server-host.mjs",
+    "tools/lib/tickbar.mjs",
+    "tools/lib/wsserver.mjs",
+    "tools/run-gate6a-client.sh",
+    "tools/run-headless-server.mjs"
+   ],
+   "globs": [
+    "kit/examples/cabin/**",
+    "mod/src/test/resources/stub-sidecar/**"
+   ],
+   "dynamic": [],
+   "env": [
+    "APITEST_API_VERSION",
+    "APITEST_GAME_DIR",
+    "APITEST_HOME",
+    "APITEST_MODEL",
+    "APITEST_NOTES",
+    "APITEST_OUT",
+    "APITEST_REAL_MS",
+    "APITEST_REVISIONS",
+    "APITEST_SHOT_PREFIX",
+    "ARCHITECT_BOT_VIEW_DISTANCE",
+    "ARCHITECT_DEV_PORT",
+    "ARCHITECT_DEV_TOKEN",
+    "ARCHITECT_GAME_DIR",
+    "ARCHITECT_PORT",
+    "ARCHITECT_SERVER_EULA",
+    "ARCHITECT_SIMULATION_DISTANCE",
+    "ARCHITECT_XMX",
+    "GATE6A_CLIENT_SCRIPT",
+    "GATE6A_DWELL_MS",
+    "GATE6A_MEGAB_FAST",
+    "GATE6A_OUT",
+    "GATE6A_RUN",
+    "GRADLE_USER_HOME",
+    "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6a.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "6a-crash": {
@@ -42110,6 +45374,12 @@
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6a.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
+   ],
    "verified": "20261022-161855-release 6a-crash"
   },
   "6a-eflat": {
@@ -42168,6 +45438,12 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6a.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "6a-eflat-full": {
@@ -42226,6 +45502,12 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6a.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "6a-forest": {
@@ -42284,6 +45566,12 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6a.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "6b-smoke": {
@@ -42535,7 +45823,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "6b-ghost": {
    "classes": [
@@ -42786,7 +46082,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "6b-volume": {
    "classes": [
@@ -43037,7 +46341,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "6b-commands": {
    "classes": [
@@ -43288,7 +46600,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "6b-nudges": {
    "classes": [
@@ -43539,7 +46859,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "6b-pathstyle": {
    "classes": [
@@ -43790,7 +47118,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "6b-versions": {
    "classes": [
@@ -44041,7 +47377,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "6b-versionc": {
    "classes": [
@@ -44292,7 +47636,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "6b-scenario-s1": {
    "classes": [
@@ -44544,7 +47896,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/scenarios.mjs"
+   ]
   },
   "6b-scenario-s1-flat": {
    "classes": [
@@ -44796,7 +48157,16 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/scenarios.mjs"
+   ]
   },
   "6a-inv3": {
    "classes": [
@@ -44854,6 +48224,12 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6a.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "6a-staged": {
@@ -44912,6 +48288,12 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6a.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "6a-staged-full": {
@@ -44970,6 +48352,12 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6a.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "6a-heap": {
@@ -45028,6 +48416,12 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6a.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
    ]
   },
   "t3b-fixture": {
@@ -45342,7 +48736,22 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiT3Test*",
+    "*PlanChecksT3Test*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ct3b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "lint-structure": {
    "classes": [],
@@ -45463,6 +48872,9 @@
     "LINT_NO_CACHE",
     "LINT_PREFIX",
     "P2_CALIBRATION_LATEST"
+   ],
+   "eager": [
+    "tools/lint.mjs"
    ]
   },
   "lint-look": {
@@ -45584,6 +48996,9 @@
     "LINT_NO_CACHE",
     "LINT_PREFIX",
     "P2_CALIBRATION_LATEST"
+   ],
+   "eager": [
+    "tools/lint.mjs"
    ]
   },
   "lint-mutations": {
@@ -45705,6 +49120,9 @@
     "LINT_NO_CACHE",
     "LINT_PREFIX",
     "P2_CALIBRATION_LATEST"
+   ],
+   "eager": [
+    "tools/lint.mjs"
    ]
   },
   "p2-calibration": {
@@ -45946,11 +49364,13 @@
     "tools/gate6cvoc.mjs",
     "tools/gate7ak1b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6ch-core.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cvoc-a.mjs",
@@ -46075,6 +49495,7 @@
     "GATELINT_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P2_SMOKE",
     "GATE_P3",
     "GRADLE_USER_HOME",
@@ -46094,13 +49515,37 @@
     "originMain": [
      "tools/gate6ct3a.mjs",
      "tools/gate7ak1b.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
-     "tools/lib/gate6cvoc-a.mjs",
-     "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "testFilters": [
+    "*ApiHTest*",
+    "*ApiVocTest*",
+    "*PaletteRulesTest*",
+    "*RegionFluidsHYTest*",
+    "*SurvivalItemsTest*",
+    "*Wire4bTest*",
+    "*WireVocbTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate-lint.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ct3a.mjs",
+    "tools/gate6cvoc.mjs",
+    "tools/gate7ak1b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "w-ingame-smoke": {
    "classes": [
@@ -46391,7 +49836,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cw.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/p2-trim.mjs",
+    "tools/lib/run6b.mjs"
+   ]
   },
   "d2-ingame-smoke": {
    "classes": [
@@ -46737,7 +50193,18 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6cd.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/src-gradle.mjs"
+   ]
   }
  }
 }

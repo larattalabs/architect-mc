@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
-import { SIBLING_MOVED, normSiblingIr } from './batch-0410.mjs';
+import { SIBLING_MOVED, STORM_MOVED, normSiblingIr } from './batch-0410.mjs';
 import { inSlice } from './gate-part.mjs';
 import { syncBaseTree } from './base-tree.mjs';
 import * as CP from './corpus-plan.mjs'; // (gate speed 3) the plans from the run's shared store, prewarmed on every core
@@ -21,6 +21,8 @@ const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 /** §8's named exceptions: fixture -> why it moves. */
 export const EXCEPT = Object.freeze({
   'extension/e16_every_reserved_b.json': 'F3: form.giant_tree supported (f_giant_tree, a giant oak near the stone, now fits; it left the reserved list)',
+  // (fix/survival-off-storm) their trees had a log held only from above or by leaves: now a leaf or gone; the answers unchanged
+  ...Object.fromEntries(STORM_MOVED.map((f) => [f, 'fix/survival-off-storm: giantTree leaves no unsupported log (the answers unchanged, the tree cells move)'])),
 });
 
 /** The base worktree at the merge base with origin/main. */
@@ -65,6 +67,7 @@ export async function unchanged(root, { check, log = console.log, only = null, s
     const ex = EXCEPT[name] ?? null;
     out.fixtures[name] = { existsOld, same, ...(ex ? { excepted: ex } : {}), ...(err ? { err } : {}), ...(a && b && !same ? { head: a, base: b } : {}) };
     if (!existsOld) { log(`note ${name}: new on this branch`); continue; }
+    if (ex && STORM_MOVED.includes(name)) { check(!same && !!a && !!b && a.answers === b.answers && a.overall === b.overall, `${name}: excepted by name (${ex}): ${same ? 'UNCHANGED (the exception did not move)' : a && b && a.answers === b.answers && a.overall === b.overall ? 'its IR differs, its answers and overall the same, as named' : `its answers or overall moved ${JSON.stringify({ head: a, base: b })}`}`); continue; }
     if (ex) { check(!same, `${name}: excepted by name (${ex}): ${same ? 'UNCHANGED (the exception did not move)' : 'differs, as named'}`); continue; }
     if (SIBLING_MOVED[name]) { out.fixtures[name].sibling = SIBLING_MOVED[name]; log(`note ${name}: ${same ? 'byte-identical' : 'differs'}; ${SIBLING_MOVED[name]}`); continue; }
     check(same || (!a && !b), `${name}: ${same ? 'byte-identical (answers, overall, IR, first plan)' : !a && !b ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, base: b })}`}`);
