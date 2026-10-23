@@ -1096,3 +1096,15 @@ Top first. Not fixed in v0.40.1.
 - **The flat run prints "FAIL S3 14 … E-normal n/a"** on every run, back to the v0.41.0 release. It is display only: `runBad` in
   tools/scenarios.mjs excuses the flat run's exactness row when E-flat is 0, so the flat run reports 0 failures. Print it as
   recorded on the flat variant, so nobody reads it as the step's failure.
+
+## Queued from the v0.42.0 release (integration, 2026-10-23)
+
+- **pt-ingame item 15, the classifier's per-tick CPU bar (1 ms).** It missed in the release run (1.02 ms) and on a quiet re-run
+  (1.30 ms, load 2.6), and in at least 15 slice runs since 2026-10-20 (1.01-2.34 ms), where timing is recorded, not judged. Profile the
+  classifier's warm path, or re-set the budget with Noah.
+- **Run worktrees keep their design library between runs.** Shard 1 (`architect-mc-gate-run`) held a leftover `adopted_057fbe3f`, which
+  is how 6b-commands found the fill bug fixed in 0.42.0. Decide whether a run resets the library, or keep it as a free cross-step
+  check; a driver that assumes a clean library can read the wrong entry first.
+- **Benches and quiet-wait while other sessions run outside the gate slots.** Kit suites run directly (not through gate-run) don't
+  take a slot, so a turbo run's isolated benches waited up to 30 min each for quiet; mp-ingame ran NOISY. Either have agents run
+  suites through gate-run or count them in the quiet-wait.

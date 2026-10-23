@@ -24349,3 +24349,140 @@ no version set (the coordinator's at merge).
 - **The gate-verifier:** items 1, 3, 4 and 5 PASS. Its item 2 point, the untagged fresh seed 777124280, is now tagged with a repro
   (§3).
 
+## Release v0.42.0 as integrated (6c close-out A and B, the fixes on main since v0.41.0; branch `release/0.42.0`, 2026-10-23)
+
+Branch `release/0.42.0` over main 87d96dd6 (v0.41.0 plus close-out B, the two fixes and the gate tooling). Not merged, tagged or
+published: the coordinator does that after Noah approves. **Versions:** API **1.39.0**, mod **0.42.0**, kit **0.40.0**,
+catalogue **12**.
+
+### What it does for a player
+
+- **Survival towns no longer stall halfway** (close-out A, finding 1 from Steward's RC). Since 0.41.0 a survival region's later
+  stage could hold as DRIFTED once its own walls and houses were built, because the drift check compared against the bare land.
+  Each built construction target, road or lot now re-baselines its box (`RegionsImpl.constructionBuilt`). The bug shipped in 0.41.0;
+  Noah chose to ship the fix here rather than as 0.41.1.
+- **A town's routes behave around what can't be placed** (close-out A §4, §9). A street or path that would end on a lot or district
+  the plan couldn't place now says `blocked` (with the zone that blocked it) instead of being built to nowhere. District routes keep
+  out of protected areas, other regions and existing builds.
+- **Ponds pick a site clear of the lots** (§7), and a palette rule such as "copper only" can now be measured over the lots alone,
+  leaving the streets and grown forms out (§5, `over: lots`, `exempt: [ways, forms]`).
+- **Waiting parts say what they wait for, once** (§8). "The town's street waits for the town to be built", one sentence per part.
+- **`/architect survival off` no longer blames a region for chunks a player generated elsewhere** (fix/survival-off-storm). The
+  "about 1,000 chunks outside the claim" warning was a miscount; chunks are now charged to a region only inside its claim + 2 or its
+  tickets. **Grown giant trees never leave a floating log** (the same fix).
+- **S3's monastery fountain no longer reads as a leak** when a tree grew beside its spout (fix/s3-scenario: the realised M4 skips a
+  fluid body's own water). The monastery program also trims its relief's floating cells and refuses a plan that would keep one
+  (close-out B §8).
+- **Dried farmland in a survival build** is counted as built, not charged again after a restart (close-out B §5, L-V7).
+- **Region roads over their own region's blocks** count as placed instead of failing (close-out B §11, `Roads.heldByOwn`).
+- **`/architect region realise fill`** no longer picks a player's adopted build for a lot (this integration; below). Such a lot
+  failed ADOPT_REFUSED and the region ended PARTIAL.
+
+### What it does for Steward
+
+- `Regions.pinArtifact(sha, owner, opKey)`: a keyed pin that ends when that key's realise completes, or 30 days after its last use
+  (the world-start sweep). Since 1.39.0.
+- `Regions.discardPlan(planId)`: drops a plan's files and its unpinned artifacts, leaving a tombstone. Since 1.39.0.
+- The same opKey after `ARTIFACT_STALE`: a re-check and retry under one key starts the realise (a stated rule, now one function).
+- `rule.palette` schemaVersion 2 (`over`, `exempt`), catalogue 12; `blocked` answers for routes to unplaced lots; wait tags Steward
+  can match and say. Kit output changed, so a region planned on kit 0.39.0 goes `PLAN_STALE` and Steward re-checks it.
+- Steward's RC passed on close-out A (re-run on fba370c2). Steward checks the published 0.42.0; no further RC needed.
+
+### Merges
+
+1. **slice/close-out-a @ b1ec8a36**, `--no-ff` (0307079a). It already held main 87d96dd6, so there were no conflicts.
+2. Nothing else: close-out B, fix/survival-off-storm, fix/s3-scenario and the gate tooling (turbo, coverage, step cache, nightly,
+   benches, sprint, shared plans, the javap cache, the split false-PASS fix) were already on main.
+
+### Versions
+
+`node tools/release-version.mjs --api 1.39.0 --mod 0.42.0 --kit 0.40.0 --catalogue 12`, one run (7da1765d):
+- API minor (1.38.0 -> 1.39.0) for close-out A's two methods and features; kit 0.39.0 -> 0.40.0 for its kit output changes.
+- **Catalogue 12**: close-out A's own hand bump (rule.palette's schemaVersion 2). No other change since 11 touched the catalogue.
+- 4 placeholders stamped: `rule.palette` sinceApi (plan.json and the golden) and the two `Since NEXT` javadocs in `Regions`.
+- 6 goldens re-cut, tiles, cells and blobs identical: crossings_demo_flat, grove_demo, grove_demo_flat, links_demo, links_demo_flat, s3.
+- `--check`: consistent, no placeholder left.
+
+### Other changes in this integration
+
+- `apijars` runs the latest three releases: 0.41.0 (close-out A's tag build in `artifacts/gate6c-coa/v0410`, a6a947bc), 0.40.1, 0.40.0.
+- `tools/step-inputs.json`: rebuilt after the merge (68 steps reached close-out A's files), then merged from the release run's
+  traces (142 globs).
+- **Fixes the release run found** (09047ea9, 0ba02b2a):
+  - `RegionsImpl.fitLots` (the fill command) skips adopted entries. Shard 1's library held a leftover `adopted_057fbe3f`, first
+    in id order, so 6b-commands' lot_1 failed ADOPT_REFUSED. A player with an adopted build would hit the same.
+  - coa-unit's byte identity normalises the artifact's `api` and the IR's `irSha` (the version bump alone gave 276 DIFFERS).
+  - f3-unit: the five storm-moved fixtures plan the same on a base that already has the storm fix; noted, not failed (it failed the
+    same way on main since 52c2707f).
+  - p3-probe: on a turbo run's offline lane (`.../o<k>`) it now finds the run's evidence (it only climbed from `.../s<k>`).
+  - `step-cache.mjs fail-audit` read test sources at HEAD, not the audited commit, and crashed on a deleted test.
+
+### Suites (head 0ba02b2a)
+
+| Suite | Result |
+|---|---|
+| mod | `./gradlew build --offline`: 874 tests, 0 failed, 1 skipped |
+| kit | 805/0 |
+| sidecar | `npm run check`: 761/761, plus the bundle |
+| api-compat | `--gate6ccoa` clean: the 0.41.0, 0.40.1 and 0.40.0 apitest jars and the 0.41.0 jar's 1.38.0 surface |
+| apijars (in game) | the 0.41.0, 0.40.1 and 0.40.0 jars, 46 ok each, 0 FAIL |
+| versions | `release-version.mjs --check`: consistent (API 1.39.0, mod 0.42.0, kit 0.40.0, catalogue 12); the six tracked goldens re-plan byte for byte |
+
+### Gate evidence ($0)
+
+- **The release run, the first traced full run** (`artifacts/gate-runs-0420/20261023-114540-release`, `release --full` at ef8ba9d2,
+  turbo: 6 in-game shards and 3 offline lanes, 194 steps, **4h30m**): **183 PASS, 1 NOISY, 9 FAIL, 1 TIMEOUT**.
+  - The machine was shared: other sessions ran kit suites and a gate run outside the turbo hold (load p50 12, p90 58, max 138).
+    mp-ingame waited 30 min for quiet and ran NOISY (12 ok, 0 FAIL).
+  - Judged benches, all PASS: 4e-megalite, 6a-megaA, 6a-megaB (the full walk, 1h13m) and 6b-volume.
+  - The 9 FAILs and the TIMEOUT:
+    - **Fixed here** (09047ea9, 0ba02b2a): coa-unit (the version bump in the artifact), f3-unit (the storm exceptions on a base
+      that has the storm fix), p3-probe-water and p3-probe-ledger (run on an offline lane), 6b-commands (fill picked an adopted
+      build). Re-run against this run's evidence, both probes pass every row.
+    - **Known, cited:** rs-survival/p4 item 14 (RoadTerrain and natural packed ice, its own slice); 6c-scenario-s3 bars 5 and 6 on
+      a live survey (queued; passed on the re-run).
+    - **Re-run alone, passed:** 6cf2-scenario-scatter/p1 (E-normal 1 unclassified cell on the natural run; earlier turbo runs on
+      main had the same kind, `gate-runs-turbo-proof/20261022-230320-change`, 42); 6b-nudges (TIMEOUT under load, as at 0.41.0).
+    - **pt-ingame item 15, a timing bar** (the classifier's CPU per tick, max 1.02 ms, then 1.30 ms on the quiet re-run, budget
+      1 ms). Recorded rather than judged in every slice run since 2026-10-20, where it missed in at least 15 runs (1.01-2.34 ms),
+      so it is pre-existing. Carried forward, below.
+- **The re-run** (`20261023-162546-release`, head 0ba02b2a, one shard, 49 min): unit-mod (874/0), coa-unit (303 ok), f3-unit
+  (291 ok), 6cf2-scenario-scatter, 6c-scenario-s3, 6b-commands (shard 1's library still held `adopted_057fbe3f`; lot_1 placed)
+  and 6b-nudges PASS; pt-ingame FAIL on item 15 only.
+- **Step cache.** 5 inputs-map misses (c33-unit, water-lint and the three lints), merged (b0f59ad8, 142 globs). Then
+  `step-cache.mjs import`: **174 recorded, 9 not** (the judged benches, which only the nightly records; 4e-throughput's recorded
+  bars; the uncacheable umt-long, apijars, 6b-versionc and p2-calibration). The re-run added 7.
+- **coverage-select** (`--bytecode`) on the last five code commits, of 215 cacheable steps. The tool prints the map-mode count and
+  the coverage bounds; the exact coverage count comes from this run's recorded coverage (a scratch reading of each step's newest
+  coverage PASS: its set against the changed files, its loaded classes against the changed class files; no constant changed):
+
+  | commit | change | class files changed | map mode runs | coverage at least / at most | coverage, exact | pending |
+  |---|---|---|---|---|---|---|
+  | 78c47572 | coa-unit's base (1 driver) | 0 | 10 | 6 / 10 | 8 | 1 |
+  | cd170c61 | CellCond natural set (4 files) | 6 | 210 | 10 / 210 | 160 | 30 |
+  | 619398ec | realised M4 (kit check.mjs) | 0 | 214 | 18 / 214 | 163 | 30 |
+  | 73189410 | gate-chains (units whole) | 0 | 146 | 143 / 146 | 146 | 0 |
+  | 9a83771e | Roads failure message | 1 | 210 | 9 / 210 | 140 | 30 |
+
+  "Pending" are steps with no coverage PASS recorded (this run's failures, the smoke twins it didn't run, the uncacheable ones).
+  CellCond, Roads and the kit checker are loaded by most in-game steps, so coverage saves 50-70 steps on these commits, not more.
+- **fail-audit**: 734 FAIL/TIMEOUT records; 224 with no earlier PASS on an ancestor; 18 on the same commit as a PASS (flake, load or
+  environment); 469 caused by the step's own drivers, data or definition; 21 only through the whole-tree classes, of which coverage
+  **runs 16** and 5 are pending, **none skipped**; 2 holes, both known (6ct2-scenario-route after a docs-only change; pt2-ingame item
+  13 after a gate6cpt.mjs change).
+
+### Approvals
+
+- Noah: finding 1's fix ships in 0.42.0, no separate 0.41.1 (close-out A as built). Release approval pending.
+- Steward's RC on close-out A: PASS (fba370c2).
+
+### Known issues carried forward
+
+- rs-survival item 14: RoadTerrain treats natural packed ice as built (its own slice, PLAN "Queued from 6c close-out B").
+- 6c-scenario-s3 on a live survey: a route can cut a retained rim, or the relief float a cell (queued; pre-generating S3's claim is
+  proposed in PLAN "Found by fix/s3-scenario").
+- pt-ingame item 15: the classifier's per-tick CPU bar (1 ms) misses by 0.01-1.3 ms in most runs (PLAN "Queued from the v0.42.0 release").
+- 4d-all split into parts fails group undo; it runs whole (PLAN "Queued from the split false-PASS fix").
+- umt-long's new findings F9, DPT, F10 and PTS are tagged, in the undo-B queue.
+- gate6crs item 4's consumed check reads the wrong field; the kit's virtual world writes over lava; the asks-8703dbd fixtures still to
+  retire; lamp spacing on V and D streets (all in PLAN).
