@@ -577,12 +577,13 @@ steps.refusals = async () => {
   const h2 = await hash(area);
   const ov = await call('dev.region.realise', { planId: p.planId, lots: {} }, 300_000);
   out.overlap = ov.refused ?? null;
-  check(/OVERLAP/.test(json(ov.refused ?? '')) && /held since the plan/.test(json(ov.refused ?? '')) && (await hash(area)) === h2, `item 11: a site placed on the join's path after the plan: OVERLAP naming it (${json(ov.refused).slice(0, 200)}), 0 changed cells`);
+  check(/OVERLAP/.test(json(ov.refused ?? '')) && /held since the plan/.test(String(JSON.stringify(ov.refused ?? ''))) && (await hash(area)) === h2, `item 11: a site placed on the join's path after the plan: OVERLAP naming it (${json(ov.refused).slice(0, 200)}), 0 changed cells`);
   await call('dev.sites.remove', { siteId: site.siteId }).catch(() => null);
   // ---- a town in flight (PLACING): a plan beside it refuses OVERLAP_BUSY (Steward's finding), and so does the realise of a plan made
   // beside it before (its re-check, §4.4); nothing written
   const A2 = [A[0], A[1] + 400, A[2], A[3] + 400], B2 = [B[0], B[1] + 400, B[2], B[3] + 400];
   const pA2 = await planReq({ program: 'flat_village', params: { lots: TOWN_LOTS, apronLamps: false }, claim: A2, check: false });
+  await L.prepare(pA2.planId); // off the spawn area: its chunks generated first
   const rt2 = await L.realise(pA2.planId, { lots: {} });
   await L.waitRegion(rt2, 3_600_000);
   const pOld = await planReq({ program: 'districts', params: ONE('east'), claim: B2, beside: rt2, check: false });
@@ -599,7 +600,7 @@ steps.refusals = async () => {
   if (!pOld.refused) {
     const gone = await call('dev.region.realise', { planId: pOld.planId, lots: {} }, 300_000);
     out.busy.townRemoved = gone.refused ?? null;
-    check(/was removed; re-plan/.test(json(gone.refused ?? '')), `§4.2: a reach plan whose town went before its realise: OTHER, re-plan (${json(gone.refused).slice(0, 120)})`);
+    check(/was removed; re-plan/.test(String(JSON.stringify(gone.refused ?? ''))), `§4.2: a reach plan whose town went before its realise: OTHER, re-plan (${json(gone.refused).slice(0, 120)})`);
   }
   await L.waitRegion(rt3, 3_600_000);
   await leaveWorld();
