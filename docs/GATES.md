@@ -1052,6 +1052,71 @@ side (about half).
 (memory fine: no swap, 0.03-2.7 M free pages). The unit floor slowed most, so 6 concurrent runs look like too many for timing
 comparisons; functional results were unaffected (no new failure, no timing bar judged).
 
+## Sprinted game-time waits (2026-10-22)
+
+Many in-game steps wait for game time to pass: a 2-minute stand, a fluid or breach settle, hydration, a villager stand, the
+random-tick probes. `dev.wait {ms}` and `sleep` are wall time on the client and on the headless host alike (only `dev.wait
+{frames}` counts server ticks, and only headless), so those waits sat idle in real time, and under load they gave fewer ticks
+than they named. Code: `tools/lib/sprint.mjs`, `run6b.mjs` `gameWait(ms, {real, label})`; test: `kit/test/gate-sprint.test.mjs`;
+proof: `tools/sprint-proof.mjs`.
+
+- **What it does.** `ms` of game time is `ms / 50` ticks: `/tick sprint <n>`, then `/time query gametime` polled (200 ms) until
+  it has moved n ticks. Game time, not day time: it moves with `advance_time false` too.
+- **The switch.** `GATE_SPRINT=0` makes every call site run its original wait (`real`, the `L.settle` or `sleep` it replaced, with
+  the same ms). Default on. A client host (dev.ping not `headless`) always waits in real time: the look steps and the scenario
+  steps on hidden clients are unchanged.
+- **The cap.** If the game time hasn't moved n ticks within max(60 s, ms) of wall time (a frozen or paused server), the sprint is
+  stopped and the remaining ticks are waited in real time, logged `SPRINT INCOMPLETE`.
+- **The log.** Every call prints one `  (sprint) <label>: ...` line (the ticks asked and seen, the wall time; or `real time` and
+  why). Never an ok/FAIL/rec line, so the counts and the proofs don't see it.
+- **Loops.** The irr hydration loop's 10-minute cap counts the waits' game time when they sprint (wall time otherwise), so a
+  sprint can't stretch it past 12,000 ticks. voc-probe's fire loop relights every 400 ticks (its 20 s step) and keeps its
+  12,000-tick end and its 30-minute wall cap.
+
+**What sprints (all on headless hosts):** irr items 3 (hydration), 7 (farmer villagers, 5 min), 4 and the breach fix (30 s
+flows), the pad breach, item 9 (the hydration reach, 5 min); voc-probe's fire posts; f3's item 4 stands (v72, v75) and the coral
+stand; H-a flat's item 2 stand, item 13 (a minute of fire ticks), the villager stand, the removal settle; H-core's item 2 stand,
+item 6's breach settle, item 3's spout settle; H-b's removal settle; HY-core's item 3 stand, item 7's breach settle, item 3's
+negative control and item 4's escape settles, item 18 (a)'s freezing probe; HY-b's swept villager stand and the cold probe; T3b's
+stands (falling blocks still sampled every 200 ticks) and item 4's 2-minute hill stands.
+
+**What stays in real time, and why:**
+- the polls on Architect's own jobs (`waitRegion`, `dev.sites.state` loops, `waitBuilt`, the builder's rescans): WaitLimit's
+  maxWait, the sidecar's timeouts and the build grace (`graceMs`) are wall clock; PT and PT2's settles wait on them;
+- a settle right after a fresh copy or a teleport (gate6b base's 90 s, the scenarios' settle before the plan, S3's plan, P0, K1a,
+  T3a and H-b natural, VOC-b natural, H-a's pre-dump settle, F3's site copy): part of it pays for chunk activation, and a sprint
+  would give the fresh chunks fewer ticks;
+- the controls that mirror another run's span (F3 natural's no-region control, FL natural's "as long as a realise takes");
+- `settleQuiet` (already adaptive); the scenario stands (hidden clients) and the look steps (clients); the y/c29/cu/rs stockpile
+  and builder waits (wall-clock rules); timing benches and anything judged in seconds;
+- the short settles (10 s and under: dumps, kills, post-removal reads), and the release-only branches the slice runs don't take
+  (H-core and HY-core's exact-breach worlds, H-a cold): unchanged, not validated.
+
+### Measured
+
+Old against new at the same head (b5e605f4), back to back on 2 shards each, the old run with `GATE_SPRINT=0`, both after a 1h10m
+queue behind turbo runs (load 10-20, peaks 78-89 at step starts): `artifacts/gate-runs-sprint/old/20261023-003534-release` and
+`new/20261023-003538-release`, compared with `node tools/sprint-proof.mjs --old <old> --new <new> --verbose`. Every step PASSed on both
+sides with the same checks, the same statuses and the same full masked lines (0 value differences); no sprint hit its cap.
+
+| step | old | new | saved | waits: wall old -> new | sprints |
+|---|---|---|---|---|---|
+| irr-ingame-smoke (whole) | 25m38s | 11m08s | 14m30s | 900 -> 7.5 s | 10 (the hydration loop: 5 extra minutes old, 3 new; random) |
+| voc-probe | 10m21s | 3m48s | 6m33s | 600 -> 210 s | 30 (400 fire ticks at random_tick_speed 1000: 6-8 s each) |
+| f3-ingame | 10m16s | 4m16s | 6m00s | 360 -> 1.8 s | 3 |
+| ha-ingame | 8m50s | 3m28s | 5m22s | 345 -> 11 s | 6 |
+| t3b-natural | 7m48s | 1m58s | 5m49s | 360 -> 3.2 s | 14 |
+| h-ingame-smoke (whole) | 10m14s | 5m37s | 4m37s | 295 -> 12 s | 9 |
+| hy-cold-smoke | 5m09s | 1m46s | 3m23s | 240 -> 31 s | 2 (random_tick_speed 300: 15-17 s each) |
+| hy-ingame-smoke (whole) | 14m44s | 12m01s | 2m42s | 167 -> 5.3 s | 5 |
+| t3b-ingame | 2m53s | 1m46s | 1m08s | 80 -> 1.6 s | 8 |
+| **the 9 steps** | **95m53s** | **45m48s** | **50m05s** | | the runs' walls 49m39s -> 23m40s |
+
+A sprint of 2,400 ticks took 0.4-4.5 s at default rules (a villager stand the most), so the CPU a sprint burns is seconds per stand,
+not minutes. In the turbo slice (`artifacts/gate-runs-turbo-slice/20261022-212922-slice`) these waits are about 57 of its 339
+in-game step-minutes; the slice's wall was bound by the unit lanes (fl-unit/p1 20.6, s3-unit/p1 19.7, f3-unit/p1 16.6 min), so its
+wall falls by less until those shrink.
+
 ## P3: the water and survival ledger lints (2026-10-21)
 
 Noah approved replacing slow in-game checks with instant, repeatable ones wherever that's trustworthy (docs/FAST-CHECKS.md, phase P3).
@@ -1870,6 +1935,7 @@ Several agents and runners share this machine, so everything is configurable. A 
 | `--quiet-wait [N]`, `--no-quiet-wait`, `--quiet-max-min M` | | on at release (N 8), else off (load recorded only); M 30 |
 | `--slots N`, `--slots-dir DIR` | `GATE_SLOTS`, `GATE_SLOTS_DIR` | `slots.max` (4); `<LarattaLabs>/.gate-slots/` |
 | `--judge-timing` | | change/slice record timing bars; this judges them as at release |
+| | `GATE_SPRINT` | on: the drivers' game-time waits sprint on headless hosts ("Sprinted game-time waits"); `0`: every one waits in real time, as before |
 | | `GATE_SNAPSHOT_DIR` | the seed's `mod/run/saves` |
 | | `ARCHITECT_GATE_OLD_SIDECAR_PORT`/`_DEV_PORT` (gate4e/gate5b's old-version client, migration/downgrade steps only) | 8892/8893 |
 

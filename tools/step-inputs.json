@@ -73,6 +73,7 @@
     "kit/test/gate-benches.test.mjs",
     "kit/test/gate-history.test.mjs",
     "kit/test/gate-split.test.mjs",
+    "kit/test/gate-sprint.test.mjs",
     "kit/test/gate-turbo.test.mjs",
     "kit/test/h-a.test.mjs",
     "kit/test/h-batch.test.mjs",
@@ -368,6 +369,7 @@
     "kit/test/gate-benches.test.mjs",
     "kit/test/gate-history.test.mjs",
     "kit/test/gate-split.test.mjs",
+    "kit/test/gate-sprint.test.mjs",
     "kit/test/gate-turbo.test.mjs",
     "kit/test/h-a.test.mjs",
     "kit/test/h-batch.test.mjs",
@@ -526,6 +528,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/shard-auto.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/step-cache.mjs",
     "tools/lib/step-coverage.mjs",
@@ -707,6 +710,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HOME",
     "IRR_ONLY",
@@ -929,6 +933,7 @@
     "kit/test/gate-benches.test.mjs",
     "kit/test/gate-history.test.mjs",
     "kit/test/gate-split.test.mjs",
+    "kit/test/gate-sprint.test.mjs",
     "kit/test/gate-turbo.test.mjs",
     "kit/test/h-a.test.mjs",
     "kit/test/h-batch.test.mjs",
@@ -1022,6 +1027,7 @@
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/shard-auto.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/step-cache.mjs",
     "tools/lib/step-coverage.mjs",
     "tools/lib/step-inputs.mjs",
@@ -1935,6 +1941,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -1996,6 +2003,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GATE_UNIT_MOD_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -2226,6 +2234,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -2295,6 +2304,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GATE_UNIT_MOD_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -2328,6 +2338,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/scenarios.mjs"
    ]
@@ -2875,6 +2886,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
    ],
@@ -2935,6 +2947,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "SCENARIOS_ART",
     "UPDATE_GOLDEN"
    ],
@@ -3154,6 +3167,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -3225,6 +3239,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -3245,7 +3260,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "w-unit": {
@@ -3440,6 +3456,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
    ],
@@ -3503,6 +3520,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "SCENARIOS_ART",
     "UPDATE_EXPECTED",
     "UPDATE_GOLDEN"
@@ -3716,6 +3734,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -3790,6 +3809,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -3811,7 +3831,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "f1-unit": {
@@ -4015,6 +4036,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -4076,6 +4098,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "SCENARIOS_ART",
     "UPDATE_GOLDEN"
@@ -4272,6 +4295,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -4333,6 +4357,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -4351,6 +4376,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -4495,6 +4521,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh"
    ],
@@ -4539,6 +4566,7 @@
     "GATE6CX_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -4753,6 +4781,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -4832,6 +4861,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -4861,6 +4891,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -4882,6 +4913,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh"
    ],
@@ -4900,6 +4932,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CY_OUT",
     "GATE6CY_REF",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -4950,6 +4983,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -4977,6 +5011,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CY_OUT",
     "GATE6CY_REF",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -5022,6 +5057,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh"
    ],
@@ -5040,6 +5076,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CY_OUT",
     "GATE6CY_REF",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -5090,6 +5127,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -5117,6 +5155,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CY_OUT",
     "GATE6CY_REF",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -5503,6 +5542,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -5573,6 +5613,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "PATH",
     "SCENARIOS_ART",
@@ -5786,6 +5827,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -5847,6 +5889,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "SCENARIOS_ART",
@@ -6076,6 +6119,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -6148,6 +6192,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -6180,6 +6225,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -6333,6 +6379,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/nomod-server.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh"
    ],
@@ -6361,6 +6408,7 @@
     "GATE6CPT_NOMOD_PORT",
     "GATE6CPT_OUT",
     "GATE6CPT_STEPS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -6588,6 +6636,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -6658,6 +6707,7 @@
     "GATE6CPT_OUT",
     "GATE6CPT_STEPS",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -6690,6 +6740,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -6880,6 +6931,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -6950,6 +7002,7 @@
     "GATE6CPT_OUT",
     "GATE6CPT_STEPS",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -6982,6 +7035,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -7037,6 +7091,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/pt2/Pt2Old027ReadTest.java",
     "tools/run-gate6b-client.sh"
@@ -7077,6 +7132,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CPT2_OUT",
     "GATE6CPT2_STEPS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PT2_V0270"
@@ -7294,6 +7350,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/pt2/Pt2Old027ReadTest.java",
@@ -7370,6 +7427,7 @@
     "GATE6CPT2_OUT",
     "GATE6CPT2_STEPS",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PT2_V0270",
@@ -7412,6 +7470,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -7600,6 +7659,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/pt2/Pt2Old027ReadTest.java",
@@ -7676,6 +7736,7 @@
     "GATE6CPT2_OUT",
     "GATE6CPT2_STEPS",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PT2_V0270",
@@ -7718,6 +7779,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -7921,6 +7983,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -7993,6 +8056,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -8025,6 +8089,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -8228,6 +8293,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -8300,6 +8366,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -8332,6 +8399,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -8537,6 +8605,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -8618,6 +8687,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -8641,6 +8711,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -8823,6 +8894,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -8884,6 +8956,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -8902,6 +8975,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -9114,6 +9188,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/stamp-library.mjs",
     "tools/run-gate6b-client.sh",
@@ -9182,6 +9257,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "REFIND",
     "SCENARIOS_ART",
@@ -9421,6 +9497,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/stamp-library.mjs",
     "tools/lib/wsserver.mjs",
@@ -9497,6 +9574,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -9527,6 +9605,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -9743,6 +9822,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/stamp-library.mjs",
     "tools/lib/wsserver.mjs",
@@ -9819,6 +9899,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -9849,6 +9930,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/scenarios.mjs"
    ]
@@ -10053,6 +10135,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -10123,6 +10206,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "PATH",
     "SCENARIOS_ART",
@@ -10160,6 +10244,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh"
    ],
@@ -10180,6 +10265,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CP0_OUT",
+    "GATE_SPRINT",
     "JAVA_HOME"
    ],
    "gradleUse": "compile",
@@ -10204,6 +10290,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh"
    ],
    "globs": [],
@@ -10219,6 +10306,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATEC37_OUT",
+    "GATE_SPRINT",
     "JAVA_HOME"
    ],
    "eager": [
@@ -10406,6 +10494,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -10469,6 +10558,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATEC37_OUT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -10487,7 +10577,8 @@
     "tools/gate6c37.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "c38-unit": {
@@ -10594,6 +10685,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh"
    ],
    "globs": [],
@@ -10610,6 +10702,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATEC38_OUT",
+    "GATE_SPRINT",
     "JAVA_HOME"
    ],
    "eager": [
@@ -10797,6 +10890,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -10860,6 +10954,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATEC38_OUT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -10878,7 +10973,8 @@
     "tools/gate6c38.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "rs-unit": {
@@ -11043,6 +11139,7 @@
     "tools/lib/plan-cache.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -11081,6 +11178,7 @@
     "GATE6CRS_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -11284,6 +11382,7 @@
     "tools/lib/plan-cache.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -11322,6 +11421,7 @@
     "GATE6CRS_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -11525,6 +11625,7 @@
     "tools/lib/plan-cache.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -11563,6 +11664,7 @@
     "GATE6CRS_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -11767,6 +11869,7 @@
     "tools/lib/plan-cache.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -11805,6 +11908,7 @@
     "GATE6CRS_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -12008,6 +12112,7 @@
     "tools/lib/plan-cache.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -12046,6 +12151,7 @@
     "GATE6CRS_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -12248,6 +12354,7 @@
     "tools/lib/plan-cache.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -12285,6 +12392,7 @@
     "GATE_P3",
     "GATE_SLOTS",
     "GATE_SLOTS_DIR",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -12470,6 +12578,7 @@
     "tools/lib/plan-cache.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -12507,6 +12616,7 @@
     "GATE_P3",
     "GATE_SLOTS",
     "GATE_SLOTS_DIR",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -12713,6 +12823,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -12780,6 +12891,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CP0_OUT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -12799,6 +12911,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -12985,6 +13098,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -13052,6 +13166,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CP0_OUT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -13071,6 +13186,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -13280,6 +13396,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -13361,6 +13478,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -13384,6 +13502,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -13612,6 +13731,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/plan-catalogue-diff.mjs",
     "tools/release-context.mjs",
     "tools/run-gate6b-client.sh",
@@ -13681,6 +13801,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "SCENARIOS_ART",
     "T3A_WRITE_GOLDEN",
@@ -13933,6 +14054,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/plan-catalogue-diff.mjs",
     "tools/release-context.mjs",
@@ -14013,6 +14135,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -14039,7 +14162,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "t3a-ingame": {
@@ -14273,6 +14397,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/plan-catalogue-diff.mjs",
     "tools/release-context.mjs",
@@ -14353,6 +14478,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -14379,7 +14505,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "t3a-natural": {
@@ -14613,6 +14740,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/plan-catalogue-diff.mjs",
     "tools/release-context.mjs",
@@ -14693,6 +14821,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -14719,7 +14848,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "t3a-frozen": {
@@ -14949,6 +15079,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/plan-catalogue-diff.mjs",
     "tools/release-context.mjs",
@@ -15026,6 +15157,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "SCENARIOS_ART",
@@ -15280,6 +15412,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/plan-catalogue-diff.mjs",
     "tools/release-context.mjs",
@@ -15360,6 +15493,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -15386,7 +15520,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ],
    "verified": "20261022-161855-release t3a-look"
   },
@@ -15599,6 +15734,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
    ],
@@ -15665,6 +15801,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "K1B_WRITE_GOLDEN",
     "SCENARIOS_ART",
     "UPDATE_EXPECTED",
@@ -15898,6 +16035,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -15975,6 +16113,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "K1B_WRITE_GOLDEN",
@@ -15999,7 +16138,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "k1b-natural": {
@@ -16217,6 +16357,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -16294,6 +16435,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "K1B_WRITE_GOLDEN",
@@ -16318,7 +16460,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "t3b-unit": {
@@ -16539,6 +16682,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
    ],
@@ -16606,6 +16750,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "SCENARIOS_ART",
     "T3B_WRITE_FIXTURE",
     "UPDATE_EXPECTED",
@@ -16851,6 +16996,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -16927,6 +17073,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -16954,7 +17101,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "t3b-natural": {
@@ -17180,6 +17328,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -17256,6 +17405,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -17283,7 +17433,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "t3b-pin": {
@@ -17509,6 +17660,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -17585,6 +17737,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -17612,7 +17765,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "t3b-look": {
@@ -17838,6 +17992,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -17914,6 +18069,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -17941,7 +18097,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "h-unit": {
@@ -18174,6 +18331,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/release-context.mjs",
     "tools/run-gate6b-client.sh",
@@ -18251,6 +18409,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "SCENARIOS_ART",
     "UPDATE_EXPECTED",
@@ -18517,6 +18676,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -18605,6 +18765,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -18639,7 +18800,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ],
    "verified": "20261022-161855-release h-ingame"
   },
@@ -18879,6 +19041,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -18967,6 +19130,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -19001,7 +19165,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "h-probe": {
@@ -19240,6 +19405,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -19328,6 +19494,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -19362,7 +19529,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "h-natural": {
@@ -19601,6 +19769,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -19689,6 +19858,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -19723,7 +19893,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "h-cold": {
@@ -19962,6 +20133,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -20050,6 +20222,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -20084,7 +20257,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6ch-look": {
@@ -20323,6 +20497,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -20411,6 +20586,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -20445,7 +20621,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "voc-unit": {
@@ -20660,6 +20837,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -20724,6 +20902,7 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA",
     "JAVA_HOME",
     "PATH",
@@ -20981,6 +21160,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -21056,6 +21236,7 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -21088,7 +21269,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "voc-probe": {
@@ -21309,6 +21491,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -21384,6 +21567,7 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -21416,7 +21600,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "voc-survival": {
@@ -21637,6 +21822,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -21712,6 +21898,7 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -21744,7 +21931,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "voc-ingame": {
@@ -21965,6 +22153,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -22040,6 +22229,7 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -22072,7 +22262,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "voc-natural": {
@@ -22293,6 +22484,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -22368,6 +22560,7 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -22400,7 +22593,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "vocc-unit": {
@@ -22615,6 +22809,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -22679,6 +22874,7 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA",
     "JAVA_HOME",
     "PATH",
@@ -22932,6 +23128,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -23007,6 +23204,7 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -23039,7 +23237,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6cvoc-look": {
@@ -23260,6 +23459,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -23335,6 +23535,7 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -23367,7 +23568,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "cu-unit": {
@@ -23387,6 +23589,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh"
    ],
@@ -23408,6 +23611,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CCU_OUT",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "PATH"
    ],
@@ -23608,6 +23812,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -23676,6 +23881,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CCU_OUT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -23705,7 +23911,8 @@
     "tools/gate6ccu.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "cu-ingame": {
@@ -23890,6 +24097,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -23958,6 +24166,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CCU_OUT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -23987,7 +24196,8 @@
     "tools/gate6ccu.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "rp-unit": {
@@ -24095,6 +24305,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh"
    ],
@@ -24118,6 +24329,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CRP_OUT",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "PATH"
    ],
@@ -24316,6 +24528,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -24385,6 +24598,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CRP_OUT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -24409,7 +24623,8 @@
     "tools/gate6crp.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "rp-crash": {
@@ -24597,6 +24812,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -24666,6 +24882,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CRP_OUT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -24690,7 +24907,8 @@
     "tools/gate6crp.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "cu-survival": {
@@ -24718,6 +24936,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -24751,6 +24970,7 @@
     "GATE6CCU_OUT",
     "GATE6CY_OUT",
     "GATE6CY_REF",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH"
@@ -24984,6 +25204,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
    ],
@@ -25047,6 +25268,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "SCENARIOS_ART"
    ],
    "flags": {
@@ -25264,6 +25486,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -25338,6 +25561,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -25358,7 +25582,8 @@
     "tools/gate6cha.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "ha-natural": {
@@ -25564,6 +25789,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -25638,6 +25864,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -25658,7 +25885,8 @@
     "tools/gate6cha.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "ha-cold": {
@@ -25864,6 +26092,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -25938,6 +26167,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -25958,7 +26188,8 @@
     "tools/gate6cha.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "ha-look": {
@@ -26164,6 +26395,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -26238,6 +26470,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -26258,7 +26491,8 @@
     "tools/gate6cha.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-unit": {
@@ -26478,6 +26712,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/release-context.mjs",
     "tools/run-gate6b-client.sh",
@@ -26545,6 +26780,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -26813,6 +27049,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -26901,6 +27138,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -26935,7 +27173,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "irr-holders": {
@@ -27158,6 +27397,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -27238,6 +27478,7 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -27280,7 +27521,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "h-rmcrash": {
@@ -27519,6 +27761,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -27607,6 +27850,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -27641,7 +27885,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-ingame": {
@@ -27867,6 +28112,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -27945,6 +28191,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -27980,7 +28227,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ],
    "verified": "20261022-161855-release hy-ingame"
   },
@@ -28207,6 +28455,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -28285,6 +28534,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -28320,7 +28570,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-natural": {
@@ -28546,6 +28797,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -28624,6 +28876,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -28659,7 +28912,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-cold": {
@@ -28885,6 +29139,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -28963,6 +29218,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -28998,7 +29254,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "kc-unit": {
@@ -29196,6 +29453,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
    ],
@@ -29260,6 +29518,7 @@
     "GATE6CKC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -29484,6 +29743,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -29559,6 +29819,7 @@
     "GATE6CKC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -29587,7 +29848,8 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "f3-unit": {
@@ -29798,6 +30060,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -29868,6 +30131,7 @@
     "GATE6CF3_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -30111,6 +30375,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -30192,6 +30457,7 @@
     "GATE6CF3_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -30225,7 +30491,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "f3-natural": {
@@ -30442,6 +30709,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -30523,6 +30791,7 @@
     "GATE6CF3_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -30556,7 +30825,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "f3-forest": {
@@ -30767,6 +31037,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -30837,6 +31108,7 @@
     "GATE6CF3_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -31080,6 +31352,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -31161,6 +31434,7 @@
     "GATE6CF3_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -31194,7 +31468,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "irr-unit": {
@@ -31411,6 +31686,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -31480,6 +31756,7 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -31738,6 +32015,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -31818,6 +32096,7 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -31860,7 +32139,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ],
    "verified": "20261022-161855-release irr-ingame"
   },
@@ -32084,6 +32364,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -32164,6 +32445,7 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -32206,7 +32488,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "irr-look": {
@@ -32429,6 +32712,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -32509,6 +32793,7 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -32551,7 +32836,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "fl-unit": {
@@ -32752,6 +33038,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -32818,6 +33105,7 @@
     "GATE6CFL_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -33059,6 +33347,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -33136,6 +33425,7 @@
     "GATE6CFL_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -33170,7 +33460,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "fl-natural": {
@@ -33377,6 +33668,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -33454,6 +33746,7 @@
     "GATE6CFL_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -33488,7 +33781,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "fl-look": {
@@ -33695,6 +33989,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -33772,6 +34067,7 @@
     "GATE6CFL_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -33806,7 +34102,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "water-lint": {
@@ -34572,6 +34869,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -34660,6 +34958,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -34694,7 +34993,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "h-probe-smoke": {
@@ -34933,6 +35233,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -35021,6 +35322,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -35055,7 +35357,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-ingame-smoke": {
@@ -35281,6 +35584,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -35359,6 +35663,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -35394,7 +35699,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-crash-smoke": {
@@ -35620,6 +35926,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -35698,6 +36005,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -35733,7 +36041,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-cold-smoke": {
@@ -35959,6 +36268,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -36037,6 +36347,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -36072,7 +36383,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "irr-ingame-smoke": {
@@ -36295,6 +36607,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -36375,6 +36688,7 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -36417,7 +36731,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "kc-ingame-smoke": {
@@ -36621,6 +36936,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -36696,6 +37012,7 @@
     "GATE6CKC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -36724,7 +37041,8 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "voc-survival-smoke": {
@@ -36945,6 +37263,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -37020,6 +37339,7 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -37052,7 +37372,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "y-ingame-smoke": {
@@ -37078,6 +37399,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -37105,6 +37427,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CY_OUT",
     "GATE6CY_REF",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -37155,6 +37478,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -37182,6 +37506,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CY_OUT",
     "GATE6CY_REF",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -37432,6 +37757,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -37510,6 +37836,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -37545,7 +37872,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "s2-unit": {
@@ -37750,6 +38078,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -37816,6 +38145,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "SCENARIOS_ART",
     "UPDATE_EXPECTED",
@@ -38055,6 +38385,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -38136,6 +38467,7 @@
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -38396,6 +38728,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -38488,6 +38821,7 @@
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -38525,7 +38859,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6c-scenario-s3": {
@@ -38707,6 +39042,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -38768,6 +39104,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -38786,6 +39123,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -38968,6 +39306,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -39029,6 +39368,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -39047,6 +39387,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -39229,6 +39570,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -39290,6 +39632,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -39308,6 +39651,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -39490,6 +39834,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -39551,6 +39896,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -39569,6 +39915,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -39808,6 +40155,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -39884,6 +40232,7 @@
     "GATE_KIT_TREE",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "P2_CALIBRATION_LATEST",
     "PATH",
@@ -40147,6 +40496,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -40234,6 +40584,7 @@
     "GATE_KIT_TREE",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "P2_CALIBRATION_LATEST",
@@ -40259,6 +40610,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -40441,6 +40793,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -40502,6 +40855,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -40520,6 +40874,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -40751,6 +41106,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -40821,6 +41177,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "PATH",
     "SCENARIOS_ART",
@@ -41075,6 +41432,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -41156,6 +41514,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -41180,6 +41539,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -41417,6 +41777,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -41498,6 +41859,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -41522,6 +41884,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -41759,6 +42122,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -41840,6 +42204,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -41864,6 +42229,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -42101,6 +42467,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -42182,6 +42549,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -42206,6 +42574,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "verified": "20261022-161855-release k1a-look"
@@ -42452,6 +42821,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -42539,6 +42909,7 @@
     "GATE_KIT_TREE",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "P2_CALIBRATION_LATEST",
@@ -42564,6 +42935,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -42745,6 +43117,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -42806,6 +43179,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -42823,7 +43197,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "x-resume": {
@@ -43021,6 +43396,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -43100,6 +43476,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -43129,6 +43506,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -43327,6 +43705,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -43406,6 +43785,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -43435,6 +43815,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -43637,6 +44018,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -43711,6 +44093,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -43733,6 +44116,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -45752,6 +46136,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -45813,6 +46198,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -45830,7 +46216,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-ghost": {
@@ -46011,6 +46398,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -46072,6 +46460,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -46089,7 +46478,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-volume": {
@@ -46270,6 +46660,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -46331,6 +46722,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -46348,7 +46740,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-commands": {
@@ -46529,6 +46922,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -46590,6 +46984,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -46607,7 +47002,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-nudges": {
@@ -46788,6 +47184,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -46849,6 +47246,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -46866,7 +47264,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-pathstyle": {
@@ -47047,6 +47446,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -47108,6 +47508,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -47125,7 +47526,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-versions": {
@@ -47306,6 +47708,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -47367,6 +47770,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -47384,7 +47788,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-versionc": {
@@ -47565,6 +47970,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -47626,6 +48032,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -47643,7 +48050,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-scenario-s1": {
@@ -47825,6 +48233,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -47886,6 +48295,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -47904,6 +48314,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -48086,6 +48497,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -48147,6 +48559,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -48165,6 +48578,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -48647,6 +49061,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -48723,6 +49138,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -48750,7 +49166,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "lint-structure": {
@@ -49393,6 +49810,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/plan-catalogue-diff.mjs",
@@ -49498,6 +49916,7 @@
     "GATE_MERGE_BASE",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -49544,7 +49963,8 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "w-ingame-smoke": {
@@ -49748,6 +50168,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -49823,6 +50244,7 @@
     "GATE_KIT_TREE",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "P2_CALIBRATION_LATEST",
@@ -49846,7 +50268,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p2-trim.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "d2-ingame-smoke": {
@@ -50091,6 +50514,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -50178,6 +50602,7 @@
     "GATE_KIT_TREE",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "P2_CALIBRATION_LATEST",
@@ -50203,6 +50628,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   }
