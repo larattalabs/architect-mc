@@ -102,17 +102,107 @@ export function expandSplits(steps, ids) {
   return { ids: out, parts, defs };
 }
 
-/** The parents' results from their parts' rows: the worst status, the summed seconds, the parts' wall span. */
-export function parentResults(parts, rows) {
-  const rank = ['PASS', 'NOISY', 'SKIPPED', 'FAIL', 'TIMEOUT', 'ERROR', 'PENDING', 'RUNNING'];
+/**
+ * A selected set of ids (`run`: step ids, part ids) in the canonical step order, a split parent's place taken by its parts when the
+ * run splits. -> { ids, lost }: `lost` is every id of `run` the order doesn't hold (an empty list, or the caller has a bug: the
+ * 2026-10-23 turbo slices filtered by the parents-only order and so dropped every part, unnoticed).
+ */
+export function planOrder(order, steps, run, split) {
+  const full = split ? expandSplits(steps, order).ids : order;
+  const ids = full.filter((s) => run.has(s));
+  return { ids, lost: [...run].filter((s) => !ids.includes(s)) };
+}
+
+/**
+ * The parents' results from their parts' rows: the worst status, the summed seconds and ok/FAIL, the parts' wall span.
+ *
+ * No vacuous PASS (2026-10-23: a slice on main reported five split parents PASS over zero parts: the cache lookup had dropped
+ * every part from the plan). A parent is PASS only when every listed part has a real result: a PASS row with its log (and, when
+ * `logExists` is given, the log on disk), or a CACHED entry (`cached`, the summary's list) with an evidence pointer. A part with
+ * neither is missing and the parent is ERROR ("parts missing"); a parent with no parts at all is ERROR too. All parts CACHED:
+ * the parent is CACHED. `missing` names the parts without a result, `cached` the parts served by the cache.
+ */
+export function parentResults(parts, rows, cached = [], { logExists } = {}) {
+  const rank = ['PASS', 'CACHED', 'NOISY', 'SKIPPED', 'FAIL', 'TIMEOUT', 'ERROR', 'PENDING', 'RUNNING'];
+  const worse = (a, b) => (rank.indexOf(b) > rank.indexOf(a) ? b : a);
   const out = {};
   for (const [parent, ids] of Object.entries(parts)) {
     const rs = ids.map((id) => rows.find((r) => r.id === id)).filter(Boolean);
-    const status = rs.reduce((w, r) => (rank.indexOf(r.status) > rank.indexOf(w) ? r.status : w), 'PASS');
+    const hits = ids.map((id) => (cached ?? []).find((c) => c.id === id)).filter(Boolean);
+    const missing = [];
+    const problems = [];
+    let status = ids.length ? 'PASS' : 'ERROR';
+    if (!ids.length) problems.push('no parts');
+    for (const id of ids) {
+      const r = rs.find((x) => x.id === id);
+      const c = hits.find((x) => x.id === id);
+      if (r) {
+        if (r.status === 'PASS' && !r.log) {
+          status = worse(status, 'ERROR');
+          problems.push(`${id}: PASS without a log`);
+        } else if (r.status === 'PASS' && logExists && !logExists(r.log)) {
+          status = worse(status, 'ERROR');
+          problems.push(`${id}: PASS but its log ${r.log} is not on disk`);
+        } else status = worse(status, r.status);
+      } else if (c) {
+        if (!(c.log || c.run || c.evidence)) {
+          status = worse(status, 'ERROR');
+          problems.push(`${id}: CACHED without an evidence pointer`);
+        }
+      } else {
+        missing.push(id);
+        status = worse(status, 'ERROR');
+      }
+    }
+    if (missing.length) problems.unshift(`parts missing: ${missing.join(', ')} (neither run nor CACHED)`);
+    if (status === 'PASS' && ids.length && hits.length === ids.length) status = 'CACHED';
     const starts = rs.map((r) => Date.parse(r.startedAt ?? '')).filter(Number.isFinite);
     const ends = rs.map((r) => Date.parse(r.startedAt ?? '') + (r.seconds ?? 0) * 1000).filter(Number.isFinite);
     out[parent] = { parts: ids, status, stepSeconds: Math.round(rs.reduce((a, r) => a + (r.seconds ?? 0), 0)), wallSeconds: starts.length ? Math.round((Math.max(...ends) - Math.min(...starts)) / 1000) : null,
-      ok: rs.reduce((a, r) => a + (r.ok ?? 0), 0), fail: rs.reduce((a, r) => a + (r.fail ?? 0), 0) };
+      ok: rs.reduce((a, r) => a + (r.ok ?? 0), 0), fail: rs.reduce((a, r) => a + (r.fail ?? 0), 0),
+      ...(hits.length ? { cached: hits.map((c) => c.id) } : {}), ...(missing.length ? { missing } : {}), ...(problems.length ? { problems } : {}) };
   }
   return out;
+}
+
+/** Whether an aggregate's status counts as a real pass: PASS, or CACHED (a recorded PASS for the same key, with evidence). */
+export const passed = (status) => status === 'PASS' || status === 'CACHED';
+
+/**
+ * The result of one step id in a finished run, through splits and the cache: a row's status (a PASS needs its log), CACHED for a
+ * cache hit with evidence, a split parent's aggregate, or null when the run has no result for it.
+ */
+export function resultOf(id, { rows = [], cached = [], splitResults = {} } = {}) {
+  if (splitResults?.[id]) return splitResults[id].status;
+  const r = rows.find((x) => x.id === id);
+  if (r) return r.status === 'PASS' && !r.log ? 'ERROR' : r.status;
+  const c = (cached ?? []).find((x) => x.id === id);
+  if (c) return c.log || c.run || c.evidence ? 'CACHED' : 'ERROR';
+  return null;
+}
+
+/**
+ * The run-level aggregates that stand for steps not run as themselves (docs/GATES.md "Turbo", "Duplicates", "Affected-only
+ * releases"): split parents, supersededBy drops and canaries. Each must rest on a real result; returns the problems (empty: none).
+ *  - a split parent not PASS/CACHED (its parts failed or are missing);
+ *  - a step dropped as superseded whose superseding step has no real result in this run;
+ *  - a declared canary with no PASS of its own (canaries never cache);
+ *  - a run with no row and no CACHED entry at all (a PASS over nothing).
+ */
+export function aggregateProblems({ rows = [], cached = [], splitResults = {}, superseded = {}, canaries = [] } = {}) {
+  const bad = [];
+  for (const [p, r] of Object.entries(splitResults ?? {})) {
+    if (!passed(r.status)) bad.push(`split ${p}: ${r.status}${r.problems?.length ? ` (${r.problems.join('; ')})` : ''}`);
+  }
+  const ctx = { rows, cached, splitResults };
+  for (const [s, by] of Object.entries(superseded ?? {})) {
+    const st = resultOf(by, ctx);
+    if (!passed(st)) bad.push(`supersededBy: ${s} was dropped for ${by}, which ${st ? `is ${st}` : 'has no result in this run'}`);
+  }
+  for (const c of canaries ?? []) {
+    const st = resultOf(c, { rows, splitResults });
+    if (st !== 'PASS') bad.push(`canary ${c}: ${st ?? 'no result in this run'} (a canary must run and PASS)`);
+  }
+  if (!rows.length && !(cached ?? []).length) bad.push('no step ran and none was CACHED: nothing to pass');
+  return bad;
 }

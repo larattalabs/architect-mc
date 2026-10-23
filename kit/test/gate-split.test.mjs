@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { entryOf, expandSplits, parentResults, partEntryOf, sectionsOf, validateSplits } from '../../tools/lib/step-split.mjs';
+import { aggregateProblems, entryOf, expandSplits, parentResults, partEntryOf, planOrder, resultOf, sectionsOf, validateSplits } from '../../tools/lib/step-split.mjs';
 import { gatePart } from '../../tools/lib/gate-part.mjs';
 import { IRR_SECTIONS } from '../../tools/lib/gate6cirr-game.mjs';
 
@@ -68,8 +68,8 @@ test('gatePart: unset runs everything; set runs its sections; a split that leave
 
 test('parentResults: the worst status, the parts summed, the wall from first start to last end', () => {
   const rows = [
-    { id: 'a/p1', status: 'PASS', seconds: 60, startedAt: '2026-10-22T10:00:00Z', ok: 3, fail: 0 },
-    { id: 'a/p2', status: 'FAIL', seconds: 120, startedAt: '2026-10-22T10:00:30Z', ok: 2, fail: 1 },
+    { id: 'a/p1', status: 'PASS', seconds: 60, startedAt: '2026-10-22T10:00:00Z', ok: 3, fail: 0, log: 'a.p1.log' },
+    { id: 'a/p2', status: 'FAIL', seconds: 120, startedAt: '2026-10-22T10:00:30Z', ok: 2, fail: 1, log: 'a.p2.log' },
   ];
   assert.deepEqual(parentResults({ a: ['a/p1', 'a/p2'] }, rows).a, { parts: ['a/p1', 'a/p2'], status: 'FAIL', stepSeconds: 180, wallSeconds: 150, ok: 5, fail: 1 });
 });
@@ -92,4 +92,83 @@ test('the config: every split is valid; sectioned splits name each section once;
   }
   // the irr driver's sections are exactly the split's (the drivers also check this at run time: GATE_PART_ALL)
   for (const id of ['irr-ingame', 'irr-ingame-smoke']) assert.deepEqual([...sectionsOf(CHAINS.steps[id].split)].sort(), [...IRR_SECTIONS].sort(), id);
+});
+
+// ---- no vacuous PASS (2026-10-23: artifacts/gate-runs/20261023-012515-slice reported rs-survival-smoke, h-ingame-smoke,
+// hy-ingame-smoke, s3-unit and 4d-all PASS with 0 s and 0 ok/0 FAIL: the cache lookup's plan order held no part ids)
+
+const CHAIN_ORDER = Object.keys(steps); // what gate-run's ORDER is: the chain file's step ids, parents only
+
+test('planOrder: the cache lookup keeps a split parent\'s parts in the plan (main dropped them)', () => {
+  const x = expandSplits(steps, ['a', 'b', 'c']);
+  const all = { ...steps, ...x.defs };
+  const run = new Set(['a/p1', 'a/p2', 'b', 'c']);
+  // the old line, stepIds = ORDER.filter((s) => run.has(s)): every part gone, nothing said
+  assert.deepEqual(CHAIN_ORDER.filter((s) => run.has(s)), ['b', 'c']);
+  const p = planOrder(CHAIN_ORDER, all, run, true);
+  assert.deepEqual(p.ids, ['a/p1', 'a/p2', 'b', 'c']);
+  assert.deepEqual(p.lost, []);
+  // one part cached, the other runs: only the runner is planned, nothing lost
+  assert.deepEqual(planOrder(CHAIN_ORDER, all, new Set(['a/p2', 'c']), true), { ids: ['a/p2', 'c'], lost: [] });
+  // a run that doesn't split: a stray part id is reported lost, never silently dropped
+  assert.deepEqual(planOrder(CHAIN_ORDER, all, new Set(['a/p1', 'c']), false).lost, ['a/p1']);
+});
+
+test('parentResults: parts missing from the run make the parent ERROR, never PASS over nothing (the 20261023-012515 shape)', () => {
+  const rows = [{ id: 'unit-mod', status: 'PASS', seconds: 60, ok: 0, fail: 0, log: 'unit-mod.log' }];
+  const r = parentResults({ 's3-unit': ['s3-unit/p1', 's3-unit/p2', 's3-unit/p3'], '4d-all': ['4d-all/p1', '4d-all/p2'] }, rows, []);
+  assert.equal(r['s3-unit'].status, 'ERROR');
+  assert.deepEqual(r['s3-unit'].missing, ['s3-unit/p1', 's3-unit/p2', 's3-unit/p3']);
+  assert.match(r['s3-unit'].problems[0], /parts missing/);
+  assert.equal(r['4d-all'].status, 'ERROR');
+  // one part of two missing: still ERROR, though the other passed
+  const half = parentResults({ a: ['a/p1', 'a/p2'] }, [{ id: 'a/p1', status: 'PASS', seconds: 5, ok: 4, fail: 0, log: 'a.p1.log' }]);
+  assert.equal(half.a.status, 'ERROR');
+  assert.deepEqual(half.a.missing, ['a/p2']);
+  assert.equal(half.a.ok, 4);
+  // a parent with no parts at all
+  assert.equal(parentResults({ a: [] }, []).a.status, 'ERROR');
+});
+
+test('parentResults: a PASS needs its log; a CACHED part needs its evidence; ok/FAIL are the parts\' sums', () => {
+  const ok = (id, n) => ({ id, status: 'PASS', seconds: 10, startedAt: '2026-10-23T10:00:00Z', ok: n, fail: 0, log: `${id.replace('/', '.')}.log` });
+  const both = parentResults({ a: ['a/p1', 'a/p2'] }, [ok('a/p1', 3), ok('a/p2', 4)]);
+  assert.equal(both.a.status, 'PASS');
+  assert.equal(both.a.ok, 7);
+  assert.equal(both.a.fail, 0);
+  assert.equal(parentResults({ a: ['a/p1', 'a/p2'] }, [ok('a/p1', 3), { ...ok('a/p2', 4), log: undefined }]).a.status, 'ERROR');
+  const onDisk = new Set(['a.p1.log']);
+  const gone = parentResults({ a: ['a/p1', 'a/p2'] }, [ok('a/p1', 3), ok('a/p2', 4)], [], { logExists: (l) => onDisk.has(l) });
+  assert.equal(gone.a.status, 'ERROR');
+  assert.match(gone.a.problems.join(), /a\.p2\.log is not on disk/);
+  const hit = { id: 'a/p2', key: 'k', at: '2026-10-22T00:00:00Z', log: '/runs/x/a.p2.log' };
+  const mixed = parentResults({ a: ['a/p1', 'a/p2'] }, [ok('a/p1', 3)], [hit]);
+  assert.equal(mixed.a.status, 'PASS');
+  assert.deepEqual(mixed.a.cached, ['a/p2']);
+  assert.equal(parentResults({ a: ['a/p1', 'a/p2'] }, [], [hit, { ...hit, id: 'a/p1' }]).a.status, 'CACHED');
+  assert.equal(parentResults({ a: ['a/p1', 'a/p2'] }, [ok('a/p1', 3)], [{ id: 'a/p2', key: 'k' }]).a.status, 'ERROR', 'a cache hit without an evidence pointer');
+});
+
+test('aggregateProblems: split parents, supersededBy drops and canaries rest on real results; an empty run is not a PASS', () => {
+  const row = (id, status = 'PASS') => ({ id, status, log: `${id}.log` });
+  const rows = [row('b'), row('c')];
+  // the 20261023-012515 summary: the steps all PASS, the split parents over nothing -> problems (the run fails)
+  const split = parentResults({ a: ['a/p1', 'a/p2'] }, rows);
+  assert.match(aggregateProblems({ rows, splitResults: split }).join(), /split a: ERROR \(parts missing: a\/p1, a\/p2/);
+  assert.deepEqual(aggregateProblems({ rows, splitResults: parentResults({ a: ['a/p1'] }, [...rows, row('a/p1')]) }), []);
+  // supersededBy: the step kept must have a result (run, CACHED or its split parts)
+  assert.match(aggregateProblems({ rows, superseded: { 'x-flat': 'x' } }).join(), /x-flat was dropped for x, which has no result/);
+  assert.match(aggregateProblems({ rows: [...rows, row('x', 'FAIL')], superseded: { 'x-flat': 'x' } }).join(), /which is FAIL/);
+  assert.deepEqual(aggregateProblems({ rows: [...rows, row('x')], superseded: { 'x-flat': 'x' } }), []);
+  assert.deepEqual(aggregateProblems({ rows, cached: [{ id: 'x', log: 'l' }], superseded: { 'x-flat': 'x' } }), []);
+  assert.match(aggregateProblems({ rows, superseded: { 'x-flat': 'a' }, splitResults: split }).join(), /x-flat was dropped for a, which is ERROR/);
+  // canaries run and PASS: never CACHED, never absent
+  assert.match(aggregateProblems({ rows, canaries: ['probe'] }).join(), /canary probe: no result/);
+  assert.match(aggregateProblems({ rows, cached: [{ id: 'probe', log: 'l' }], canaries: ['probe'] }).join(), /canary probe/);
+  assert.deepEqual(aggregateProblems({ rows: [...rows, row('probe')], canaries: ['probe'] }), []);
+  assert.deepEqual(aggregateProblems({ rows: [...rows, row('a/p1'), row('a/p2')], splitResults: parentResults({ a: ['a/p1', 'a/p2'] }, [row('a/p1'), row('a/p2')]), canaries: ['a'] }), []);
+  // nothing ran and nothing was cached
+  assert.match(aggregateProblems({ rows: [], cached: [] }).join(), /nothing to pass/);
+  assert.deepEqual(aggregateProblems({ rows: [], cached: [{ id: 'b', log: 'l' }] }), []);
+  assert.equal(resultOf('nope', { rows }), null);
 });
