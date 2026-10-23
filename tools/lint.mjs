@@ -63,7 +63,9 @@ async function runLint(lint) {
   if (lint === 'look') await C.loadLook();
   const only = opt('--only')?.split(',');
   const list = C.cases(lint).filter((c) => !only || only.includes(c.id));
-  const jobs = Number(opt('--jobs') ?? Math.max(2, Math.min(10, Math.floor(os.cpus().length / 2))));
+  // under the gate runner: its CPU share for this step (GATE_CPU_SHARE, docs/GATES.md "CPU budget"); else half the cores, 2-10
+  const share = Number(process.env.GATE_CPU_SHARE);
+  const jobs = Number(opt('--jobs') ?? (Number.isInteger(share) && share >= 1 ? share : Math.max(2, Math.min(10, Math.floor(os.cpus().length / 2)))));
   console.log(`${lint} lint: ${list.length} case(s), ${jobs} job(s), kit ${path.relative(process.cwd(), KITDIR) || '.'}`);
   // the calibration (tools/lib/p2-trim.mjs): the lints run either way; uncalibrated, their P2 rows also run in game (the -smoke steps)
   const { calibration } = await import(pathToFileURL(path.join(ROOT, 'tools', 'lib', 'p2-trim.mjs')).href);

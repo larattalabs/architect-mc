@@ -85,6 +85,7 @@ import path from 'node:path';
 import net from 'node:net';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { budgetEnv, cpuShare, machineCores } from './lib/cpu-budget.mjs';
 import { DevClient } from './lib/devclient.mjs';
 import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFiles } from './gate-impact.mjs';
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
@@ -841,8 +842,20 @@ const portFree = (port) => new Promise((resolve) => {
   srv.listen(port, '127.0.0.1', () => srv.close(() => resolve(true)));
 });
 
-/** The children's environment: no ANTHROPIC_* / CLAUDE* at all, the shard's paths and ports, its evidence dirs. */
-function childEnv(sh, extra = {}) {
+/**
+ * The run's CPU budget (tools/lib/cpu-budget.mjs, docs/GATES.md "CPU budget"): the machine's cores split evenly over the run's
+ * workers. A turbo run owns the machine: its shards and lanes. A shared run shares it with up to --slots other runs: at least
+ * that many workers. Null until the shards are built (the auto decision builds them under the slot mutex).
+ */
+function runCpu() {
+  return shards.length ? cpuShare({ cores: machineCores(), workers: TURBO ? shards.length : Math.max(shards.length, SLOTS), conf: cfg.cpu ?? {} }) : null;
+}
+
+/**
+ * The children's environment: no ANTHROPIC_* / CLAUDE* at all, the shard's paths and ports, its evidence dirs, and the CPU share
+ * (`cpuShares` shares: a step's chain entry, default 1).
+ */
+function childEnv(sh, extra = {}, { cpuShares = 1 } = {}) {
   const env = {};
   for (const [k, v] of Object.entries(process.env)) {
     if (/^(ANTHROPIC_|CLAUDE)/.test(k) || k === 'ARCHITECT_DEV_TOKEN' || k === 'AWS_BEARER_TOKEN_BEDROCK') continue;
@@ -863,6 +876,9 @@ function childEnv(sh, extra = {}) {
     // eval sidecars (if a step starts one) on an ephemeral port, never the fixed 8894/8895 another run may hold
     ARCHITECT_EVAL_PORT: process.env.ARCHITECT_EVAL_PORT ?? '0',
   });
+  // the CPU share: node --test's concurrency, corpus-plan's pool, gradle's and vitest's workers, lint.mjs's jobs
+  const cpu = runCpu();
+  if (cpu) Object.assign(env, budgetEnv(cpu, { shares: cpuShares, env: process.env }));
   // the kit suite once per run (tools/lib/kit-reuse.mjs): unit-kit writes its JUnit report here; the drivers' kit-suite and goldens
   // checks take it when exact. Only when unit-kit is in this run.
   if (runShared.kitJunit) Object.assign(env, { GATE_KIT_RESULTS: runShared.kitJunit, GATE_KIT_TREE: runShared.kitTree });
@@ -1189,6 +1205,7 @@ function printPlan() {
     + `${shards.length > 1 ? `per shard busy ${sched.perShard.map((p) => `${p.name} ${fmtDur(p.busyMin * 60)}`).join(', ')}; ` : ''}`
     + `schedule: longest first from ${HIST.runs} past runs (${HISTORY_FILE}); benches ${ISOLATE_BENCH ? 'isolated (timing judged)' : 'not isolated (timing recorded)'}; `
     + `timeouts ${HIST_TIMEOUTS ? `from history on ${steps.filter((s) => s.effTimeoutMin < s.timeoutMin).length}/${steps.length} steps` : 'configured'} (--verbose: per step)`);
+  if (runCpu()) console.log(`cpu budget: ${runCpu().cores} cores over ${runCpu().workers} workers: share ${runCpu().share} each (node --test concurrency, plan workers, gradle and vitest workers, lint jobs)${steps.some((s) => Number(s.cpuShares) > 1) ? `; ${steps.filter((s) => Number(s.cpuShares) > 1).map((s) => `${s.id} x${s.cpuShares}`).join(', ')}` : ''}`);
 }
 
 if (!steps.length) {
@@ -1281,7 +1298,7 @@ const summary = {
   tier: tierInfo.kind === 'tier' ? { name: tierInfo.tier, range: tierInfo.range ?? null, engine: tierInfo.engine, placement: tierInfo.placement, impact: tierInfo.impact ?? null,
     rotationKey: tierInfo.rotationKey ?? null, rotationSource: tierInfo.rotationSource ?? null, rotation: tierInfo.rotation ?? null, notes: tierInfo.notes, benches: tierInfo.benches ?? null } : null,
   nightly: NIGHTLY,
-  counts: {}, setup: null, slot: slotNote, shardsAuto: autoChoice ? (({ text, ...a }) => a)(autoChoice) : null, hosts: { mode: HOSTS.mode, server: HOSTS.server.filter((id) => stepIds.some((x) => parentOf(x) === id)) }, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
+  counts: {}, setup: null, slot: slotNote, cpu: runCpu(), shardsAuto: autoChoice ? (({ text, ...a }) => a)(autoChoice) : null, hosts: { mode: HOSTS.mode, server: HOSTS.server.filter((id) => stepIds.some((x) => parentOf(x) === id)) }, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
   cache: tierInfo.cache ?? null, cached: tierInfo.cached ?? [], inputsMisses: [],
   schedule: { order: 'longest first', historyRuns: HIST.runs, historyFile: HISTORY_FILE, benches: ISOLATE_BENCH ? 'isolated' : 'not isolated (timing recorded)', historyTimeouts: HIST_TIMEOUTS },
   steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin, effectiveTimeoutMin: s.effTimeoutMin, timeoutSource: s.timeoutSource, estimateMin: Math.round(est(s) * 10) / 10, timingPolicy: recordsTiming(s) ? 'recorded' : 'judged', ...(s.parentId ? { parent: s.parentId } : {}), ...(tierInfo.why?.[s.id] ? { why: tierInfo.why[s.id] } : {}) })),
@@ -1543,7 +1560,7 @@ function junitCounts(dir) {
 function runProcess(sh, step, logFile) {
   return new Promise((resolve) => {
     const fd = fs.openSync(logFile, 'a');
-    const env = childEnv(sh, step.env ?? {});
+    const env = childEnv(sh, step.env ?? {}, { cpuShares: step.cpuShares });
     if (TRACE) {
       // the input trace (tools/lib/step-trace.mjs): every node process of the step records the source files it touches
       if (!COVERAGE) env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${pathToFileURL(path.join(SRC, 'tools', 'lib', 'step-trace.mjs')).href}`].filter(Boolean).join(' ');
@@ -1932,6 +1949,13 @@ try {
     for (const p of [sh.SIDECAR_PORT, sh.DEV_PORT]) if (!(await portFree(p))) throw new Error(`port ${p} is in use (${sh.name}; set --ports / GATE_PORTS)`);
   }
   log(`gate-run ${chainName}: ${steps.length} steps (${steps.map((s) => s.id).join(' ')}); ${shards.map((s) => `shard ${s.k} ${s.RUN} ports ${s.SIDECAR_PORT}/${s.DEV_PORT}`).join('; ')}; notify ${NOTIFY_MODE}`);
+  if (runCpu()) {
+    const c = runCpu();
+    summary.cpu = c;
+    const big = steps.filter((s) => Number(s.cpuShares) > 1).map((s) => `${s.id} x${s.cpuShares}`);
+    log(`cpu budget: ${c.cores} cores over ${c.workers} workers (${TURBO ? 'the turbo run\'s shards and lanes' : `this run's shards, at least --slots ${SLOTS}`}): `
+      + `share ${c.share} each (node --test concurrency, plan workers, gradle and vitest workers, lint jobs)${big.length ? `; ${big.join(', ')}` : ''}`);
+  }
   if (tierInfo.kind === 'tier') {
     log(`tier ${tierInfo.tier}${tierInfo.range ? ` over ${tierInfo.range}` : ''}: engine ${tierInfo.engine}, placement ${tierInfo.placement}${tierInfo.impact?.unmapped.length ? `, ${tierInfo.impact.unmapped.length} unmapped files` : ''}`);
     for (const r of tierInfo.rotation ?? []) if (r.skipped.length) log(`rotation ${r.name}: ran ${r.ran.join(' ') || '-'}, SKIPPED ${r.skipped.join(' ')} (${r.reason})`);
