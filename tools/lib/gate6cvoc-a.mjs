@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import { syncBaseTree } from './base-tree.mjs';
 import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
+import { KINDS_7A } from '../../kit/lib/connectors/kinds7a.mjs'; // (7a) the slices' own kinds (a leaf module)
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -75,7 +76,9 @@ export const LATER_EXCEPTIONS = Object.freeze({ fixtures: ['extension/e05_reserv
   catalogue: ['rule.palette', 'layout.ring', 'layout.spiral', 'layout.grid', 'layout.organic', 'locator.around', 'sketch.outline', 'form.giant_tree',
     'form.giant_mushroom', 'form.coral', 'form.roots', 'form.stalactites', 'connector.tunnel',
     // ((7a foundation) its three catalogue changes)
-    'connector.rail', 'connector.branch_walk', 'connector.span_bridge'] });
+    'connector.rail', 'connector.branch_walk', 'connector.span_bridge',
+    // ((7a slices) each 7a slice flips its own kinds reserved -> supported: expected, as f7a-foundation.test reads them)
+    ...KINDS_7A.map((k) => `connector.${k}`)] });
 
 export async function unchanged(root) {
   const { dir: mainDir, base } = baseTree(root);
