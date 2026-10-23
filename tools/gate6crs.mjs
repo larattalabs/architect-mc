@@ -1059,8 +1059,10 @@ steps.item18 = async () => {
   const g2 = await L.call('dev.chunks.generated', {});
   const r2 = await G.regionState(ctx, R.region);
   await cmd(`/forceload remove ${fxc * 16} ${fzc * 16}`);
-  out.forceload = { chunk: [fxc, fzc], generated: g2.terrain - g1.terrain, charged: (r2.generatedDuringRealiseCount ?? 0) - (r1.generatedDuringRealiseCount ?? 0), elsewhere: (r2.generatedElsewhere ?? 0) - e0 };
-  check(out.forceload.generated > 0 && out.forceload.charged === 0 && out.forceload.elsewhere >= out.forceload.generated, `item 18: a chunk ${fxc},${fzc} forceloaded far outside the claim while it builds (the RC's teleport without a player): ${out.forceload.generated} generated in the world, ${out.forceload.charged} charged to the region (v0.41.0 charged them all), ${out.forceload.elsewhere} counted as the world's`, out.forceload);
+  // (the count is new with the fix; the logged lines, at most 50 in dev.region.state, are on v0.41.0 too: the base's evidence)
+  const outsideOf = (r) => (r.generatedDuringRealise ?? []).filter((e) => /outside the claim \+ 2/.test(e));
+  out.forceload = { chunk: [fxc, fzc], generated: g2.terrain - g1.terrain, charged: (r2.generatedDuringRealiseCount ?? 0) - (r1.generatedDuringRealiseCount ?? 0), loggedOutside: outsideOf(r2).length - outsideOf(r1).length, logged: outsideOf(r2).slice(0, 4), elsewhere: (r2.generatedElsewhere ?? 0) - e0 };
+  check(out.forceload.generated > 0 && out.forceload.charged === 0 && out.forceload.loggedOutside === 0 && out.forceload.elsewhere >= out.forceload.generated, `item 18: a chunk ${fxc},${fzc} forceloaded far outside the claim while it builds (the RC's teleport without a player): ${out.forceload.generated} generated in the world, ${out.forceload.charged} charged to the region and ${out.forceload.loggedOutside} logged as its "outside the claim + 2" (v0.41.0 charged and logged them all), ${out.forceload.elsewhere} counted as the world's`, out.forceload);
   // the build goes on in its mode (CONSTRUCTION, from the stockpile) and finishes, as its twin
   const f = await G.feed(ctx, R.region, { timeoutMs: 2_400_000 });
   const ps = await G.pileState(ctx);
