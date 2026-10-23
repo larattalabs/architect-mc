@@ -31,7 +31,7 @@ import { zoneDistricts, channelForm } from './schema.mjs';
 import { CAVE, f3CaveEmit, f3CoralAnswers, f3Emit, f3Resolve, GROWN, INTO_BODY, isF3 } from '../forms/hooks.mjs';
 import { eachColumn } from '../forms/states.mjs';
 // (7a K1) walls and gates (K1a), rope bridges and auto connectors (K1b): the compiler's hooks for the four connector kinds
-import { WALL_KINDS, emitWalls, finishGates, planWalls, wallsCutAnswer, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
+import { WALL_KINDS, emitWalls, finishGates, mergeBases, planWalls, wallsBase, wallsCutAnswer, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
 import { ROPE_KINDS, emitRopes, ropeAnswer, ropeFailAnswer, ropeLeg, ropePassInput, ropeResolve } from '../connectors/rope.mjs';
 /** (7a K1) The connector kinds K1 compiles (each a supported block in catalogue 4). */
 export const K1_KINDS = Object.freeze([...WALL_KINDS, ...ROPE_KINDS]);
@@ -1498,13 +1498,15 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         const ko = [...env.protectedAreas.map((a) => rectArr(a.rect)), ...env.regions.map((a) => rectArr(a.rect)), ...env.buildRects.map((a) => rectArr(a.rect)), ...avoidRects(env, group, geom)];
         // (7a K1) the walls (the gate move) and the rope move's inputs, only when the plan has them (else T2's pass, byte for byte);
         // (6c T3) the bridge and tunnel moves' pass-level inputs, likewise
+        // ((7a K2) and an along wall's gate landings: the ground the routes meet there)
+        const wallBase = K ? wallsBase(K) : null;
         const walls = K ? wallsPassInput(K) : null, rope = K ? ropePassInput(K) : null, bridge = K ? bridgePassInput(K) : null, tunnel = K ? tunnelPassInput(K) : null;
         // (6c H) the plan's own water (a moat: the routes keep 1 off it), only when the plan has some
         const fluids = K ? fluidPassInput(K) : null;
         // (7a foundation) rows 9-11's pass-level inputs (intent.rockStair, intent.lift, intent.catwalk), each only when its hook gives one
         const t7 = {};
         if (K) for (const x of HOOKS_7A) { if (!x.intent) continue; const v = x.mod.passInput(K); if (v) t7[x.intent] = v; }
-        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(terracedPlan ? { guard: true } : {}), ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length || rope?.hard?.length ? { hard: [...env.standingHard, ...(rope?.hard ?? [])] } : {}), ...(rope?.base ? { base: rope.base } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}), ...(bridge ? { bridge } : {}), ...(tunnel ? { tunnel } : {}), ...(fluids ? { fluids } : {}), ...t7 });
+        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(terracedPlan ? { guard: true } : {}), ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length || rope?.hard?.length ? { hard: [...env.standingHard, ...(rope?.hard ?? [])] } : {}), ...(rope?.base || wallBase ? { base: mergeBases(rope?.base ?? null, wallBase) } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}), ...(bridge ? { bridge } : {}), ...(tunnel ? { tunnel } : {}), ...(fluids ? { fluids } : {}), ...t7 });
       } catch (e) {
         rollback(r, cp);
         for (const l of group) if (!answers.has(l.conn.id)) ans(l.conn, { class: 'refused', reasons: [{ code: /KEEP_OUT/.test(e.message) ? 'KEEP_OUT' : 'UNREACHABLE', message: e.message }] });
