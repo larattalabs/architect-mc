@@ -533,6 +533,7 @@ export class Region {
       if (d.rope) rec.rope = d.rope; // (7a K1b) why a rope_bridge edge found no route ({code, evidence})
       if (d.bridge) rec.bridge = d.bridge; // (6c T3) why a bridge edge found no route ({code, evidence, ...})
       if (d.tunnel) rec.tunnel = d.tunnel; // (6c T3) why a tunnel edge found no route
+      if (d.t7) rec.t7 = d.t7; // (7a CW) why a 7a row's edge found no route ({catwalk: {code, evidence}}, as the rows set it)
       metaEdges.push(rec);
       if (!d.ok) { this.note(`route ${e.id} (${e.a.name} -> ${e.b.name}): ${d.failed} (${d.note})`); res.push({ id: e.id, ok: false, failed: d.failed }); continue; }
       rec.path = d.path; rec.segments = d.segments; rec.landings = d.landings; rec.ladderCols = d.ladderCols;
@@ -549,7 +550,8 @@ export class Region {
         // (7a K1) a rope span is the links stage's (its deck, rails and posts); the route writes its approaches only; (6c T3) so are a
         // bridge's span and a tunnel's bore, but the route writes a bridge's far landing (the segment's last cell: on the walk's fill it is
         // no natural ground; the walk after the span starts from it)
-        if (g.kind === 'bridge') {
+        // ((7a CW) and a catwalk's landing, the same way: the run's deck is the links stage's)
+        if (g.kind === 'bridge' || g.kind === 'catwalk') {
           const land = cells[cells.length - 1];
           const fp = footprintOf([land], e.width).filter((q) => !taken.has(`${q[0]},${q[1]}`)).map((q) => [q[0], q[1], q[2], q[3]]);
           if (fp.length) rec.paths.push(p._routeRun(`${rid}_${n}l`, fp, mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells: [land], noRetain, fillTop, guardCols, noGuard }));
