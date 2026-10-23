@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // The nightly full gate run (docs/GATES.md "Affected-only releases"): fetch origin, move the nightly's own worktree to a detached
-// origin/main, run `release --full --no-cache` there (every candidate, every rotation option; each PASS recorded in the step
-// cache), and write a summary for the coordinator to artifacts/nightly/<date>/. No notification of any kind (Noah: no pings).
+// origin/main, run `release --full --no-cache --nightly` there (every candidate, every rotation option, and the judged benches with
+// their timing judged, isolated: a release reuses those PASSes, docs/GATES.md "Benches out of the release path"; each PASS
+// recorded in the step cache), and write a summary for the coordinator to artifacts/nightly/<date>/. No notification of any kind.
 //
 //   node tools/nightly.mjs              what the LaunchAgent runs at about 02:00 (tools/nightly-install.mjs)
+//   node tools/nightly.mjs --megab-full the full megaB walk tonight (on demand; else weekly, release.benches.megaB.weeklyDay)
 //   node tools/nightly.mjs --plan       the plan only (gate-run --plan), nothing run, nothing written but the log line
 //   node tools/nightly.mjs --misses <nightly run dir> [--release <release run dir>]
 //                                       recompute the impact-map misses of a finished nightly run (writes nothing; prints JSON)
@@ -309,7 +311,10 @@ async function runGate(args, { guard = false } = {}) {
   return { code, run, sm: run ? readJson(path.join(run, 'summary.json')) : null, pid: child.pid };
 }
 
-const first = await runGate(['tools/gate-run.mjs', 'release', '--full', '--no-cache', '--run-dir', RUN_DIR, '--out', OUT, ...(wtConf.extraArgs ?? []), ...(flag('--plan') ? ['--plan'] : [])], { guard: !flag('--plan') });
+// --nightly: the judged benches run here with their timing judged, isolated, and their PASSes are recorded for the releases to
+// reuse (docs/GATES.md "Benches out of the release path"); megaB's walk follows its schedule, --megab-full forces the full walk
+const benchArgs = ['--nightly', ...(flag('--megab-full') ? ['--megab-full'] : [])];
+const first = await runGate(['tools/gate-run.mjs', 'release', '--full', '--no-cache', ...benchArgs, '--run-dir', RUN_DIR, '--out', OUT, ...(wtConf.extraArgs ?? []), ...(flag('--plan') ? ['--plan'] : [])], { guard: !flag('--plan') });
 if (flag('--plan')) {
   summary.state = 'plan';
   writeDay();
@@ -322,7 +327,7 @@ if (first.sm?.yielded?.notStarted?.length) {
   const rest = first.sm.yielded.notStarted;
   summary.yield = { ...(summary.yield ?? {}), yieldedAt: first.sm.yielded.at, notStarted: rest.length, firstRun: first.run };
   log(`nightly: the turbo run yielded with ${rest.length} step(s) not started; running them as a one-slot run`);
-  const second = await runGate(['tools/gate-run.mjs', 'release', '--no-cache', '--no-turbo', '--only', rest.join(','), '--run-dir', RUN_DIR, '--out', OUT]);
+  const second = await runGate(['tools/gate-run.mjs', 'release', '--no-cache', '--no-turbo', '--nightly', '--only', rest.join(','), '--run-dir', RUN_DIR, '--out', OUT]);
   summary.yield.secondRun = second.run;
   runs.push(second);
 }
@@ -338,6 +343,8 @@ Object.assign(summary, {
   counts, steps: allSteps.length, slotWaitMin: Math.round(runs.reduce((a, r) => a + (r.sm?.slot?.waitedSeconds ?? 0), 0) / 6) / 10,
   notPassing: allSteps.filter((s) => s.status !== 'PASS').map((s) => ({ id: s.id, status: s.status, failLines: (s.failLines ?? s.tail ?? []).slice(0, 3), log: s.log ? path.join(s.run, s.log) : null })),
   recorded: allSteps.filter((s) => s.cache?.recorded).length, inputsMisses: runs.flatMap((r) => r.sm?.inputsMisses ?? []),
+  // the judged benches this nightly ran (a release reuses their PASSes: docs/GATES.md "Benches out of the release path")
+  benches: { ...(sm?.tier?.benches ?? {}), results: allSteps.filter((s) => (sm?.tier?.benches?.ids ?? []).includes(s.id.split('/')[0])).map((s) => ({ id: s.id, status: s.status, recorded: !!s.cache?.recorded, why: s.cache?.why ?? null })) },
 });
 
 // the impact-map misses against the last release that served steps from the cache
@@ -363,6 +370,7 @@ const md = [
   `origin/main ${String(summary.head).slice(0, 9)}; \`release --full --no-cache\`, ${summary.steps} steps in ${summary.wallMin} min${summary.slotWaitMin ? ` (${summary.slotWaitMin} min waiting for a slot)` : ''}; run \`${run ?? '-'}\`.`,
   ...(summary.yield?.yieldedAt ? [`**Yielded** at ${summary.yield.yieldedAt} (past ${summary.yield.cutoff} with ${summary.yield.queued?.length ?? '?'} run(s) queued): ${summary.yield.notStarted} step(s) ran afterwards as a one-slot run, \`${summary.yield.secondRun ?? '-'}\`.`] : []),
   `Steps: ${Object.entries(summary.counts ?? {}).map(([k, v]) => `${v} ${k}`).join(', ') || '-'}; ${summary.recorded} PASS(es) recorded in the step cache.`,
+  `Benches (timing judged, isolated; a release reuses these PASSes): ${summary.benches.results.map((b) => `${b.id} ${b.status}${b.status === 'PASS' ? (b.recorded ? ' (recorded)' : ` (NOT recorded: ${b.why})`) : ''}`).join(', ') || '-'}${summary.benches.megaB ? `; megaB: ${summary.benches.megaB.id} (${summary.benches.megaB.why})` : ''}.`,
   '',
   `**Impact-map misses: ${mm.misses.length}**${mm.release ? ` (against the last cached release ${path.basename(mm.release.run)} @ ${String(mm.release.head).slice(0, 9)})` : ' (no release has served a step from the cache yet)'}.`,
   ...mm.misses.map((m) => `- **${m.step}** ${m.nightlyStatus} at the key it was CACHED under: \`${(m.failLines[0] ?? '').replace(/`/g, "'").slice(0, 160)}\` (log \`${m.nightlyLog}\`). Paste \`misses-log.md\` into docs/GATES.md's misses log.`),

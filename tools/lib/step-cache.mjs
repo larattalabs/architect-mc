@@ -260,33 +260,50 @@ export function lookupCoverage(ctx, id, { limit = 12 } = {}) {
   es.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
   let why = 'no coverage PASS recorded';
   for (const e of es.slice(0, limit)) {
-    // a source-keyed PASS (no build artifact then): a constant inlined across classes invalidates it; a bytecode-keyed PASS
-    // sees an inlined constant in the class that uses it
-    const cc = e.coverageClasses ? new Set() : constantChanges(ctx.src, e.head, ctx.head, ctx.conf.coverage?.javaRoots ?? []);
-    if (cc === null || cc.size) {
-      why = cc === null ? `its head ${String(e.head).slice(0, 9)} is unknown here` : `a compile-time constant changed since its PASS (${[...cc].slice(0, 3).join(', ')})`;
+    const v = entryStillValid(ctx, id, e);
+    if (!v.ok) {
+      why = v.why;
       continue;
     }
-    const k = keyFor(ctx, id, { set: e.coverageSet, classes: e.coverageClasses ?? null });
-    if (!k.key) {
-      why = k.why;
-      continue;
-    }
-    if (k.key !== e.key) {
-      why = `a file its coverage holds changed since ${String(e.head).slice(0, 9)} (or its definition, toolchain or a mode)`;
-      continue;
-    }
-    for (const [rel, fpr] of Object.entries(e.external ?? {})) {
-      if (externalFingerprint(ctx.main, rel) !== fpr) {
-        why = `an archived input changed: artifacts/${rel}`;
-        e.__bad = true;
-        break;
-      }
-    }
-    if (e.__bad) continue;
     return { hit: e, why: `coverage PASS at ${e.at} (head ${String(e.head).slice(0, 9)}, ${e.coverageSet.length} set entries)` };
   }
   return { hit: null, why };
+}
+
+/**
+ * Whether one recorded PASS still holds at the context's head: -> { ok, why }. A coverage entry: its key recomputed over the set
+ * (and the loaded classes' bytecode) it recorded, and no compile-time constant changed in Java since (for a source-keyed one); a
+ * map-mode entry: the step's key here equals the entry's. Both: its archived inputs unchanged. Used by the coverage lookup and by
+ * the release's bench rule (tools/lib/bench-select.mjs: a nightly bench PASS is reused only while it holds).
+ */
+export function entryStillValid(ctx, id, e) {
+  if (!e || e.status !== 'PASS') return { ok: false, why: 'no PASS entry' };
+  if (e.mode === 'coverage' && Array.isArray(e.coverageSet)) {
+    // a source-keyed PASS (no build artifact then): a constant inlined across classes invalidates it; a bytecode-keyed PASS
+    // sees an inlined constant in the class that uses it
+    const cc = e.coverageClasses ? new Set() : constantChanges(ctx.src, e.head, ctx.head, ctx.conf.coverage?.javaRoots ?? []);
+    if (cc === null || cc.size) return { ok: false, why: cc === null ? `its head ${String(e.head).slice(0, 9)} is unknown here` : `a compile-time constant changed since its PASS (${[...cc].slice(0, 3).join(', ')})` };
+    const k = keyFor(ctx, id, { set: e.coverageSet, classes: e.coverageClasses ?? null });
+    if (!k.key) return { ok: false, why: k.why };
+    if (k.key !== e.key) return { ok: false, why: `a file its coverage holds changed since ${String(e.head).slice(0, 9)} (or its definition, toolchain, runner or a mode)` };
+  } else {
+    const k = keyFor(ctx, id);
+    if (!k.key) return { ok: false, why: k.why };
+    if (k.key !== e.key) return { ok: false, why: `its key moved since ${String(e.head).slice(0, 9)}: a file of its input set, its definition, toolchain, runner or a mode changed` };
+  }
+  for (const [rel, fpr] of Object.entries(e.external ?? {})) {
+    if (externalFingerprint(ctx.main, rel) !== fpr) return { ok: false, why: `an archived input changed: artifacts/${rel}` };
+  }
+  return { ok: true, why: e.mode === 'coverage' ? `its coverage (${e.coverageSet.length} set entries) is unchanged since ${String(e.head).slice(0, 9)}` : `its key ${String(e.key).slice(0, 12)} is unchanged since ${String(e.head).slice(0, 9)}` };
+}
+
+/** A recorded entry by its key (no checks): the entry or null. */
+export function entryByKey(ctx, id, key) {
+  try {
+    return JSON.parse(fs.readFileSync(entryFile(ctx, id, key), 'utf8'));
+  } catch {
+    return null;
+  }
 }
 
 const entryFile = (ctx, id, key) => path.join(ctx.dir, id.replace(/[^\w.@-]/g, '_'), `${key}.json`);
@@ -316,7 +333,11 @@ export function record(ctx, id, rec, opts) {
   if (!opts.key) return { stored: false, why: opts.why ?? 'no key' };
   if (rec.status !== 'PASS') return { stored: false, why: rec.status };
   if (rec.timingRecorded?.length) return { stored: false, why: 'timing bars recorded, not judged' };
-  if (opts.judgedBench) return { stored: false, why: 'a bench whose timing is judged at release is never cached' };
+  // a judged bench (tools/gate-cache.json release.benches.judged) is recorded only from the nightly, where it ran isolated with its
+  // timing judged: that PASS is what a release reuses (tools/lib/bench-select.mjs); a contended or recorded-timing PASS never serves
+  if (opts.judgedBench && !(opts.nightly && opts.timingPolicy === 'judged' && !opts.contended)) {
+    return { stored: false, why: opts.nightly ? 'a judged bench whose timing was not judged in isolation is never cached' : 'a judged bench is cached only from the nightly (judged, isolated)' };
+  }
   if (!opts.traced && !opts.untracedImport) return { stored: false, why: 'the step ran without the input trace (--no-trace)' };
   const tr = (opts.traced ? readTrace(opts.traceDir) : null) ?? new Map();
   const chk = checkTrace(ctx.map, ctx.conf, mapId(ctx.map, id), tr, { tracked: treeAt(ctx.src, ctx.head) });
@@ -333,6 +354,7 @@ export function record(ctx, id, rec, opts) {
   const e = {
     id, key: opts.key, status: 'PASS', at: rec.startedAt, recordedAt: new Date().toISOString(), head: ctx.head, tier: opts.tier,
     timingPolicy: opts.timingPolicy,
+    ...(opts.judgedBench ? { benchJudged: true, nightly: true } : {}),
     run: opts.run, log: rec.log ? path.join(opts.run, rec.log) : null, evidence: opts.ev, seconds: rec.seconds, ok: rec.ok,
     metrics: rec.metrics ?? null, traced: { paths: chk.n }, parts: opts.parts,
     external: Object.fromEntries(chk.external.map((r) => [r, externalFingerprint(ctx.main, r)])),
@@ -360,26 +382,30 @@ export function record(ctx, id, rec, opts) {
   return { stored: true, why: cov ? `recorded (coverage: ${cov.set.length} set entries, ${cov.classes} classes)` : 'recorded', file: f, key: opts.key, ...(chk.outside.length ? { outside: chk.outside } : {}) };
 }
 
-/** The last full nightly that ran to the end: artifacts/nightly/latest.json -> { startedAt, head, run } or null. */
-export function lastNightly(main) {
+/** The last full nightly that ran to the end: <root>/latest.json (root: artifacts/nightly) -> { startedAt, head, run } or null. */
+export function lastNightly(main, root = path.join(main, 'artifacts', 'nightly')) {
   try {
-    const n = JSON.parse(fs.readFileSync(path.join(main, 'artifacts', 'nightly', 'latest.json'), 'utf8'));
+    const n = JSON.parse(fs.readFileSync(path.join(root, 'latest.json'), 'utf8'));
     return n.state === 'done' ? n : null;
   } catch {
     return null;
   }
 }
 
-/** The judged benches: the release tier's own bench steps (always and rotation). Canaries at release, never cached. */
-export function judgedBenches(cfg) {
-  const isBench = (id) => (cfg.steps[id]?.resources ?? []).includes('bench');
-  const r = cfg.tiers?.release ?? {};
-  return new Set([...(r.always ?? []), ...(r.rotate ?? []).flatMap((x) => [...x.options.flat(), ...(x.when?.steps ?? [])])].filter(isBench));
+/**
+ * The judged benches (tools/gate-cache.json release.benches.judged; docs/GATES.md "Benches out of the release path"): their timing
+ * is judged in the nightly, isolated, and a release reuses that PASS while nothing they measure changed. Cached only from the nightly.
+ */
+export function judgedBenches(conf) {
+  return new Set(conf?.release?.benches?.judged ?? []);
 }
+
+/** A step's `supersededBy` as a list (one id or several: any of them in the run drops the step). */
+export const supersededList = (s) => (s?.supersededBy == null ? [] : [s.supersededBy].flat());
 
 /** The steps that are some step's `supersededBy` target: the full twins (the -full, the full ids of the -smoke steps). */
 export function fullTwins(cfg) {
-  return new Set(Object.values(cfg.steps).map((s) => s.supersededBy).filter(Boolean));
+  return new Set(Object.values(cfg.steps).flatMap(supersededList));
 }
 
 /** Whether the release range makes --full the rule: build dependency paths, gradle.properties beyond mod_version, a tag. */

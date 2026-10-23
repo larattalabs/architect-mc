@@ -1490,6 +1490,16 @@ public final class Batches {
 		return null;
 	}
 
+	/** (fix/survival-off-storm, DevBridge) Every chunk a batch's tickets hold now (packed ChunkPos), over all its holders. */
+	public static Set<Long> ticketChunks(String batchId) {
+		Set<Long> out = new java.util.HashSet<>();
+		Map<String, Set<Long>> held = TICKETS.get(batchId);
+		if (held != null) {
+			held.values().forEach(out::addAll);
+		}
+		return out;
+	}
+
 	/** A batch's ticket holders and how many chunks each holds (DevBridge). */
 	public static Map<String, Integer> ticketsOf(String batchId) {
 		Map<String, Integer> out = new java.util.TreeMap<>();

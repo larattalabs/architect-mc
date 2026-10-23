@@ -89,7 +89,7 @@ let safetyCache = null;
 
 if (cmd === 'import') {
   const cfg = resolved();
-  const JB = judgedBenches(cfg);
+  const JB = judgedBenches(conf);
   let stored = 0;
   let refused = 0;
   for (const run of runsArg.map((r) => path.resolve(r))) {
@@ -114,7 +114,7 @@ if (cmd === 'import') {
       const k = keyFor(ctx, s.id);
       const ev = sm.shards?.find((x) => x.k === s.shard)?.evidence;
       const r = record(ctx, s.id, s, { key: k.key, why: k.why, parts: k.parts, run, ev: ev ? path.join(run, ev) : run, traceDir: tdir, traced: fs.existsSync(path.join(run, 'traces')),
-        timingPolicy: policy, judgedBench: JB.has(s.id), tier: sm.tier?.name ?? sm.chain,
+        timingPolicy: s.timingPolicy ?? policy, judgedBench: JB.has(s.id), nightly: !!sm.nightly, contended: !!s.contended, tier: sm.tier?.name ?? sm.chain,
         ...(s.id === 'unit-kit' && fs.existsSync(path.join(run, 'kit-suite.junit.xml')) ? { junit: path.join(run, 'kit-suite.junit.xml'), kitTree } : {}) });
       if (r.stored) stored++;
       else refused++;
@@ -132,7 +132,7 @@ if (cmd === 'import') {
   const javaSince = fs.statSync(path.join(process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', 'libexec', 'openjdk.jdk', 'Contents', 'Home', 'release')).mtime;
   const since = opt('--since') ?? new Date(Math.max(nodeSince, javaSince)).toISOString();
   const cfg = resolved();
-  const JB = judgedBenches(cfg);
+  const JB = judgedBenches(conf);
   let stored = 0;
   const skipped = [];
   for (const run of runsArg.map((r) => path.resolve(r))) {
@@ -316,7 +316,7 @@ if (cmd === 'import') {
 } else if (cmd === 'replay') {
   const at = opt('--at') ?? 'HEAD';
   const cfg = resolved();
-  const JB = judgedBenches(cfg);
+  const JB = judgedBenches(conf);
   const target = cacheContext({ src: SRC, main: MAIN, cfg, conf, map, snapDir: SNAP, commit: git('rev-parse', at), dirty: [] });
   target.rawCfg = rawCfg;
   const served = new Map();

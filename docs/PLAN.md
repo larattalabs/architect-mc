@@ -994,3 +994,14 @@ Top first. Not fixed in v0.40.1.
   - Then drop `asksFirstPath`, `tools/lib/asks-first.mjs` and the `current` option of `asksGap`, and remove the directory.
 - **§5 left over:** the "no X" re-plan still swaps materials in parts that `exempt: [ways, forms]` leaves out of the measure. A shared
   green (`_green`) isn't classed as `ways`.
+
+## Queued from the split false-PASS fix (coordinator, 2026-10-23)
+
+- **4d-all split into parts fails group undo; whole it passes.** fix/split-false-pass's proof run
+  (artifacts/gate-runs-splitfix/20261023-042653-slice): 4d-all/p2 failed "removeGroup completes", "sites removed in reverse
+  placement order" and "the whole village back exactly"; the whole step passed 63/0 in close-out A's re-run. 4d-all and
+  4d-all-full are unsplit for now (gate-chains.json). Find whether p2 depends on state p1's sections leave behind, or whether it's
+  contention; re-split only with a split-proof pass.
+- **gate6crs item 4's "consumed 0 items" can never fail** (found by fix/survival-off-storm): it reads a top-level `consumed`
+  that `dev.stockpile.state` doesn't have (it is under `ledger`). Read `ledger.consumed` and prove the check goes red on a
+  broken variant.

@@ -24121,3 +24121,50 @@ Built by the slice's builder (mod, sidecar, gate, asks) and a kit sub-agent (§4
 | DevBridge | `SliceCoaDev` (generated headless too): `dev.coa.pinKeyed`, `.artifact`, `.discardPlan`, `.planFiles`, `.clock`, `.sweep`, `.planByKey` (docs/DEVBRIDGE.md). |
 | Gate | `tools/gate6ccoa.mjs` (`coa-unit`, `coa-ingame`; impact rule "6c close-out A"). |
 | Gate evidence | **Slice tier** (`artifacts/gate-runs/20261022-233059-slice`, head 1e6ed029, turbo, 114 steps, 1h04m): 108 PASS, 6 FAIL. Close-out A's own: **coa-unit** PASS (303 ok: kit coa and vocc tests, the asks tables, byte identity 305 of 313 with the 8 named, the mod's RealiseKeyTest, PlanRetentionTest, RegionWaitTagsTest and ApiRulesTest, the sidecar's discard test, api-compat 4/4), **coa-ingame** PASS (39 ok, 0 FAIL: items 1, 2, 3 with the day-29/day-35 sweep, 5, 8 and S-COA-5's survival flow). Also PASS: unit-mod 865/0, rs-ingame, rs-survival, f3-ingame, ha-ingame, t3b-natural, 6a-megaA, 6c-scenario-s2/s3, pt-ingame and the rest. FAIL: pt2-ingame item 13 (close-out B's, known on main); h-unit item 10 (the stale H-a table: fixed in 20437b65, ha-unit re-run by the verifier passes); rsb-crash item 11 (the build paid +4 between the clean stop and the read; paid+stock conserved, 3069 = 3069; timing-dependent as in earlier runs); 6ct1-scenario-relief (M2 4/5) and 6ct2-scenario-route (6 dirt_path cells turned to dirt), both seen failing in earlier turbo runs on main heads; sim-jobs (the helper not up after 2 s). Re-run of the last five plus ha-unit and vocc-unit: queued (see the report). **gate-verifier: PASS** (diff 15c54050...HEAD and the run's evidence; its own re-runs: the three mod test classes, ha-unit standalone). Its low finding (a discarded plan's keyed check record left behind) is fixed (`PlanChecks.checkDiscarded`, PlanRetentionTest). Spend $0.00. |
+
+## Fix: survival off under a building region, and the grove oak's floating log (branch `fix/survival-off-storm`, 2026-10-22; as built)
+
+Two findings from Steward's close-out A RC (steward-mc `docs/ARCHITECT-ASKS.md`, close-out A RC findings 2 and 4). No API change,
+no version set (the coordinator's at merge).
+
+**1. "About 1,000 chunks generated outside the claim + 2" after `/architect survival off`.**
+- *Cause:* misattribution, not a load or a generation by the region. In the RC's log (`wt-coa/artifacts/e2e/client.log`), all
+  1,000 lines charged to rg10 read "ticket none; prepare idle; player 2..16 chunks away (view 16)". Each is within 17 chunks of the
+  harness's next `/spreadplayers 11700 42000` (copperLotsFlow) and at least 172 chunks from rg10's claim. "1,000" is GEN_LOGGED's
+  cap: a view-16 spiral is about 1,089 chunks. `RegionsImpl.generatedDuringRealise` charged every chunk generated anywhere to
+  every region still PLACING. rg10 was still placing only because its props stage held for drift (close-out A's finding 1).
+- *v0.41.0:* the same attribution. Headless (`rs-toggle` over v0.41.0's mod code), the switch generated 0 chunks and the region
+  finished. A forceloaded chunk far out (81 generated) was logged as the region's "outside the claim + 2". No 0.41.1 is needed for
+  safety; the fix is to the counter.
+- *Fix:* `GenCounter` queues each chunk with its dimension. `RegionsImpl.generatedBy` charges a chunk to a region when it is in
+  that region's dimension, and lies in its claim + 2 chunks or is held by its batch's tickets. Every other chunk is the world's:
+  `generatedElsewhere`, one summary line per tick, at most 200 lines a session. Overflow (position unknown) still counts for every
+  region. `dev.region.state` adds `generatedDuringRealiseCount`, `generatedElsewhere` and `ticketsOutsideClaim2`
+  (`Batches.ticketChunks`).
+- *Mode after the switch (unchanged; RS-a's rule kept):* items keep the `construction` flag they were queued with. A survival
+  region realised in CONSTRUCTION builds on from the stockpile with the toggle off ("construction sites already placed keep
+  building").
+- *Gate:* `tools/gate6crs.mjs toggle`, item 18, step `rs-toggle`, with impact rules for GenCounter, the mixin, SurvivalWorld and
+  RS's files. rs02 is half built, then `/defaultgamemode creative` and `/architect survival off` (the RC's two commands). The
+  row checks:
+  - 20 s after the switch: 0 chunks generated in the world, 0 charged or logged outside claim + 2, and no ticket outside it;
+  - a forceloaded far chunk: generated, not charged, counted as the world's;
+  - fed on with the toggle off: it consumes from the stockpile, builds to PLACED and done, and equals its INSTANT twin;
+  - 0 chunks generated from the switch to built besides the forceload's;
+  - removed: E-flat 0.
+  `GeneratedByTest` is the unit test.
+
+**2. One floating log in the grove oak** (plan grove_pond, oak [40, 48]; `dev.region.logs` floating 1).
+- *Cause:* the generator. The RC plan's IR (pmvkaawte1d0582, seed 1a27490e33838705, 3,258 cells as baked) regenerated offline has
+  one log at 8065,97,35973 under a branch, held only from above. Realised equals virtual. M3 and F3's property test check
+  face-connectivity, which such a log passes.
+- Before the fix, 52 of 1,000 oak [40, 48] seeds had one, and 1 to 12 of 300 for every broad or flat preset.
+- *Fix:* `states.mjs unsupportedLogs`, the game check's rule made stricter: a leaf under a log does not hold it. `giantTree` turns
+  such a log into a leaf when it sits in leaves, else drops it, repeats, and prunes what that disconnects. After the fix: 0 over
+  every preset.
+- Committed fixtures and goldens:
+  - grove_demo and grove_demo_flat are re-cut (01dcd99d, 7cc6cc32);
+  - five committed plan fixtures have the same answers but a moved IR, named in `batch-0410.mjs` `STORM_MOVED`
+    (f3 r03, s01, u01, u02, valid v72).
+- *Tests:* the support rule over 200 seeds per preset in `forms-f3-property`, plus the RC seed as a fixture with its broken
+  variant (`_unsafe.unsupportedLogs`). The generator's version stays 1, as with the batch's canopy-lava fix.

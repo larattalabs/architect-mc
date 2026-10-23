@@ -15,7 +15,7 @@
 // Integer or exactly specified maths only (no trig, no Math.random, no Date): the same params and seed give byte-identical cells.
 import { fnv64, splitmix64 } from '../noise.mjs';
 import { MAX_PRIMITIVES, formCells } from './rules.mjs';
-import { AIR, columnRuns, connectedTo, fixStates, isLeaves, isLog, key, unkey } from './states.mjs';
+import { AIR, DIRS6, columnRuns, connectedTo, fixStates, isLeaves, isLog, key, unkey, unsupportedLogs } from './states.mjs';
 
 export const GENERATOR = 'giantTree';
 export const VERSION = 1;
@@ -298,6 +298,21 @@ export function giantTree(params, { groundAt = null, _unsafe = null } = {}) {
   const base = key(x0, g, z0);
   for (const k of connectedTo(cells, (k2) => k2 === base)) cells.delete(k);
   if (!cells.has(base)) throw new Error('giantTree: the trunk has no cell at its base');
+  // (fix/survival-off-storm) no log without support (states.mjs unsupportedLogs: a log under a branch's underside, or a lone log in
+  // the leaves, held only from above or by leaves): one in the leaves becomes a leaf, else it goes; then again what that let go
+  if (!_unsafe?.unsupportedLogs) {
+    for (let pass = 0; pass < 64; pass++) {
+      const loose = unsupportedLogs(cells, ground);
+      if (!loose.length) break;
+      for (const k of loose) {
+        const [x, y, z] = unkey(k);
+        const leafBy = leafState && DIRS6.some(([dx, dy, dz]) => cells.get(key(x + dx, y + dy, z + dz)) === leafState);
+        if (leafBy) cells.set(k, leafState);
+        else cells.delete(k);
+      }
+      for (const k of connectedTo(cells, (k2) => k2 === base)) cells.delete(k);
+    }
+  }
   // a soil cell under a written log, root or stem standing on the ground: dirt (a grass block under a solid block dies: §10 item 5)
   for (const [k, s] of [...cells]) {
     if (isLeaves(s)) continue;

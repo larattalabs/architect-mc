@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { cacheContext, keyFor, lookup, record } from '../../tools/lib/step-cache.mjs';
+import { cacheContext, entryByKey, entryStillValid, keyFor, lookup, record } from '../../tools/lib/step-cache.mjs';
 import { checkTrace, globRe, inputMatcher, matcher, moduleClosure, staticEntry, treeAt, widenFromTrace } from '../../tools/lib/step-inputs.mjs';
 
 const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
@@ -130,6 +130,26 @@ test('record: only a traced PASS inside its set, no bar recorded, not a judged b
   assert.equal(r.stored, true, r.why);
   assert.equal(lookup(c, 'a', k.key).hit.status, 'PASS');
   void root;
+});
+
+test('a judged bench is recorded only from the nightly, judged and isolated; entryStillValid holds until its key moves', () => {
+  const { main, ctx } = setup();
+  const c = ctx();
+  const k = keyFor(c, 'a');
+  const tdir = path.join(main, 'trace-a');
+  write(tdir, '1.txt', '# node\nm\ttools/gate-a.mjs\nr\tkit/fixtures/one.json\n');
+  const base = { key: k.key, parts: k.parts, run: main, ev: main, traceDir: tdir, traced: true, judgedBench: true, tier: 'release' };
+  // a release, a slice (recorded timing) or a contended nightly run never records a judged bench
+  assert.equal(record(c, 'a', pass(), { ...base, timingPolicy: 'judged' }).stored, false);
+  assert.equal(record(c, 'a', pass(), { ...base, timingPolicy: 'recorded', nightly: true }).stored, false);
+  assert.equal(record(c, 'a', pass(), { ...base, timingPolicy: 'judged', nightly: true, contended: true }).stored, false);
+  const r = record(c, 'a', pass(), { ...base, timingPolicy: 'judged', nightly: true });
+  assert.equal(r.stored, true, r.why);
+  const e = entryByKey(c, 'a', k.key);
+  assert.deepEqual([e.nightly, e.benchJudged, e.timingPolicy], [true, true, 'judged']);
+  assert.equal(entryStillValid(c, 'a', e).ok, true);
+  assert.equal(entryStillValid(c, 'a', { ...e, key: 'another' }).ok, false);
+  assert.match(entryStillValid(c, 'a', { ...e, key: 'another' }).why, /its key moved/);
 });
 
 test('a trace outside the set is an inputs-map miss: not recorded; merge widens the map; then it records', () => {
