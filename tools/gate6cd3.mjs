@@ -596,7 +596,10 @@ steps.refusals = async () => {
   const pA2 = await planReq({ program: 'flat_village', params: { lots: TOWN_LOTS, apronLamps: false }, claim: A2, check: false });
   const rt2 = await L.realise(pA2.planId, { lots: {} });
   await L.waitRegion(rt2, 3_600_000);
+  await cmd(`/forceload add ${A2[0]} ${A2[1]} ${A2[2]} ${A2[3]}`); // (§4 Survey: loaded chunks only; the player is 400 away)
+  await L.settle(4000);
   const pOld = await planReq({ program: 'districts', params: ONE('east'), claim: B2, beside: rt2, check: false });
+  check(!pOld.refused, `item 11: a reach plan beside the town before its removal (${String(pOld.refused ?? 'fits').slice(0, 160)})`);
   // the town again, now slowly: its retry (a fresh realise of its plan) is PLACING while we ask
   await kill();
   await undo(rt2);
@@ -613,6 +616,7 @@ steps.refusals = async () => {
     check(/was removed; re-plan/.test(String(JSON.stringify(gone.refused ?? ''))), `§4.2: a reach plan whose town went before its realise: OTHER, re-plan (${json(gone.refused).slice(0, 120)})`);
   }
   await L.waitRegion(rt3, 3_600_000);
+  await cmd(`/forceload remove ${A2[0]} ${A2[1]} ${A2[2]} ${A2[3]}`);
   await leaveWorld();
   spendZero();
   return out;
@@ -656,9 +660,13 @@ steps.steward = async () => {
   const P = await d3Town(X, Z + 400, { dip: false, cabin: false, addition: false, partial: true });
   out.partial = { region: P.region, state: P.state };
   await generateFor([P.A[2] + 1, P.A[1] + 30, P.A[2] + 90, P.A[3] - 30], { lots: TOWN_LOTS, apronLamps: false });
+  // (§4 Survey: the town's survey reads loaded chunks only; the player is 400 away, so the town's claim is force-loaded for the plan and the realise)
+  await cmd(`/forceload add ${P.A[0]} ${P.A[1]} ${P.A[2]} ${P.A[3]}`);
+  await L.settle(4000);
   const pp = await planReq({ program: 'districts', params: ONE('east'), claim: [P.A[2] + 1, P.A[1] + 30, P.A[2] + 90, P.A[3] - 30], beside: P.region, check: false });
   const rp = pp.refused ? null : await L.realise(pp.planId, { lots: {} });
   const sp = rp ? await L.waitRegion(rp, 3_600_000) : null;
+  await cmd(`/forceload remove ${P.A[0]} ${P.A[1]} ${P.A[2]} ${P.A[3]}`);
   out.partial.district = sp?.view?.state ?? pp.refused;
   check(P.state === 'PARTIAL' && sp?.view?.state === 'PLACED', `Steward's finding: a partial town (one lot failed) is a beside town: a district realised beside it (${json(out.partial)})`);
   // plan/0's endpoint.region reach: checkPlan, then realiseApproved; a stale retry under a second key across a restart
