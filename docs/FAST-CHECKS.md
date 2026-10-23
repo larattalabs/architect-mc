@@ -588,7 +588,7 @@ limits/groups/simcosts tests), 0a-stub's rows 2-4 and 0a-pins' rows 2-3 are ALRE
 second row is. Their residues became rows of `0a-flow`: the packed jar carries the helper bundle and the helper runs the sim with no SDK (0a-stub row 1,
 the only KEEP-INGAME row there), `cancelJob` gives CANCELLED and BIBLE_DONE once (0a-cancel row 2, with the "already cancelled" row, one call), and
 a helper restart runs the library GC (0a-pins: pinned v1 survives, unpinned it goes). `0a-flow`, `0a-fit` and `0a-stopped` run as `0a-session`,
-one client session. The drivers still run by name (`node tools/gate6c0a.mjs stub|budget|cancel|pins`).
+one client session. The independent review (2026-10-23) found two more residues to keep, now in 0a-flow: the log-label rows of 0a-stub (`sim costs: sim: true`, the group's final cost `sim: true`) and 0a-pins' two-owner rows (pinOwners, VERSION_GONE, one owner unpinned, idempotent unpin) - no offline test asserts them. NOT covered anywhere now: 0a-budget row 3 (no re-sent GROUP_AWAITING_APPROVAL or PAUSED_BUDGET event to the mod while extend and resume are in flight, seq strictly increasing); the offline groups.test.ts covers the pause, extend and resume in the sidecar only, and slice0a C7 the plain-flow seq rule. Run `node tools/gate6c0a.mjs budget` by hand when the mod's group event path changes. The drivers still run by name (`node tools/gate6c0a.mjs stub|budget|cancel|pins`).
 
 ## What stays in game at the slice tier (after P3)
 

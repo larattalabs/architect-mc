@@ -1184,8 +1184,8 @@ Noah approved implementing the gate audit's set D. Each item keeps its assertion
 `tools/lib/base-tree.mjs` `identicalToBase(root, { ref })`: when `git rev-parse <base>:kit` and `<base>:scenarios` equal HEAD's and nothing under
 `kit/` or `scenarios/` is uncommitted, the "every committed plan fixture is byte-identical to the merge base" loop can only agree, so the
 driver skips it and prints one check line, `unchanged: base == head (kit <sha>, scenarios <sha>), skipped`. The base is the run's
-`GATE_MERGE_BASE` (outside a gate run nothing is skipped); gate6ch-core and gate6chy-core compare with `origin/main` after their fetch, so
-they use that. A differing tree, a dirty tree or an unreadable ref never skips. `GATE_NO_UNCHANGED_SKIP=1` turns it off. Drivers: rs, coa,
+`GATE_MERGE_BASE` (outside a gate run the kit drivers skip nothing); gate6ch-core and gate6chy-core compare with `origin/main` after their fetch, so
+they use that (and skip in any run). Under the skip, kc's and f3's per-fixture lines still read "byte-identical" (a head result compared with itself); only the `unchanged: base == head` line says why. A differing tree, a dirty tree or an unreadable ref never skips. `GATE_NO_UNCHANGED_SKIP=1` turns it off. Drivers: rs, coa,
 fl, f3, kc, irr, s3 (kit), voc-c item 4, hy-core item 12, h-core item 11. kc and f3 keep their head-only work in the same loop (the M25
 census on every fixture, M18/M19) and skip only the base side (the base's census is the head's). The fixture-count assertions
 (`n >= 230` and the like) still run.

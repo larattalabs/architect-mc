@@ -276,10 +276,12 @@ const item = (l, extra = {}) => ({ key: l.key, bp: l.bp, at: l.at, rot: l.rot, m
 /** (speed audit D, B7) The prepared G4D Base: a world this driver's base() made once (the chunks of the village, the far lots, the rules) with
  * its context beside the level.dat, put back by the runner from the snapshot store (tools/gate-chains.json `restore`). */
 const BASE_MARK = 'gate4d-base.json';
+const mcVersion = () => { try { return /^minecraft_version=(.+)$/m.exec(fs.readFileSync(path.join(root, 'mod', 'gradle.properties'), 'utf8'))[1].trim(); } catch { return 'unknown'; } };
 const sha256File = (f) => createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 
 async function basePrepared(mark) {
   const m = JSON.parse(fs.readFileSync(mark, 'utf8'));
+  if (m.minecraft !== mcVersion() || m.recipe !== 1) { log(`  prepared G4D Base is stale (made for Minecraft ${m.minecraft} recipe ${m.recipe}): generating it as before`); return baseFresh(); }
   const levelSha = sha256File(path.join(SAVES, BASE, 'level.dat'));
   await openWorld(BASE);
   const rules = await setRules();
@@ -306,6 +308,10 @@ async function base() {
   await leaveWorld();
   const mark = path.join(SAVES, BASE, BASE_MARK);
   if (fs.existsSync(mark) && process.env.GATE4D_FRESH_BASE !== '1') return basePrepared(mark);
+  return baseFresh();
+}
+
+async function baseFresh() {
   fs.rmSync(path.join(SAVES, BASE), { recursive: true, force: true });
   await openWorld(BASE, { mode: 'creative', preset: 'normal', cheats: true });
   const rules = await setRules();
@@ -355,7 +361,7 @@ async function base() {
   await cmd('/save-all flush');
   await leaveWorld();
   // the context beside the level.dat: copied into the snapshot store, the next run restores this world instead of generating it
-  fs.writeFileSync(path.join(SAVES, BASE, BASE_MARK), `${JSON.stringify({ center, lots, far, rules, madeAt: new Date().toISOString() }, null, 1)}\n`);
+  fs.writeFileSync(path.join(SAVES, BASE, BASE_MARK), `${JSON.stringify({ minecraft: mcVersion(), recipe: 1, center, lots, far, rules, madeAt: new Date().toISOString() }, null, 1)}\n`);
   return { rules, center, lots, far };
 }
 

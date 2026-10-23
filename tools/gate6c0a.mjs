@@ -480,6 +480,7 @@ async function flowItem() {
     }
     const sc = await call('dev.sidecar.state');
     check(sc.status?.backend === 'sim' && sc.status?.auth === 'ok' && sc.status?.sdk === 'missing', `the helper runs the sim with no Agent SDK installed (backend ${sc.status?.backend}, auth ${sc.status?.auth}, sdk ${sc.status?.sdk})`);
+    check(/sim costs: sim: true/.test(scLog()), 'the log labels the notional costs sim: true at start');
   }
   const v = await api('api110');
   // 1.10.0 or later (a later minor appends after 1.10.0's)
@@ -523,6 +524,7 @@ async function flowItem() {
     && Math.abs(lines - done.cost.usd) < 0.001 && Math.abs(st.BIBLE.usd - 1.35) < 1e-6 && bd.bibleJobIds.includes(bdone.id),
     `C7: every stage line; totalUsd $${bd.totalUsd} = cost $${done.cost.usd} + bible $${st.BIBLE.usd} (to $0.001); the lines sum to the cost; bible jobs ${bd.bibleJobIds}`);
   check(JSON.stringify(Object.keys(done.costByKind).sort()) === JSON.stringify(['bible', 'critique', 'detail', 'massing']), `costByKind ${JSON.stringify(done.costByKind)}`);
+  check(new RegExp(`group ${gid} done: .*\\(sim: true, notional\\)`).test(scLog()), "the log labels the group's final cost sim: true");
   const logLines = scLog().split('\n').filter((l) => l.includes(`group ${gid} breakdown `));
   check(logLines.length >= 2, `the breakdown log line at awaiting approval and at the end (${logLines.length} lines)`);
   const notional = bd.totalUsd;
@@ -556,6 +558,11 @@ async function flowItem() {
       execFileSync('cp', ['-c', '-R', lib, path.join(keep, entry)]);
       try {
       await result(await api(`pin p1 ${entry} 1 steward:s1`));
+      await result(await api(`pin p2 ${entry} 1 steward:s2`));
+      const owners = await api(`pinowners ${entry} 1`);
+      check(JSON.stringify(owners) === JSON.stringify(['steward:s1', 'steward:s2']), `pinOwners ${JSON.stringify(owners)}`);
+      const gone = await result(await api('pin p3 nope_entry 1 steward:s1'));
+      check(gone.reason === 'VERSION_GONE', `pinning an unknown version: ${gone.reason}`);
       const forceAgeAndGc = async () => {
         const lp = await call('dev.launcher.state');
         if (lp.pid) process.kill(lp.pid, 'SIGKILL'); // the helper's PID, not the client's
@@ -569,15 +576,21 @@ async function flowItem() {
         await settle(4000);
         return fs.existsSync(path.join(GAME_DIR, 'architect', 'library', entry, 'versions', '1'));
       };
-      check(await forceAgeAndGc(), 'a helper restart runs the GC: a pinned v1 survives a forced-age GC');
+      check(await forceAgeAndGc(), 'a helper restart runs the GC: pinned by two owners, v1 survives a forced-age GC');
       await result(await api(`unpin u1 ${entry} 1 steward:s1`));
-      check(!(await forceAgeAndGc()), 'a helper restart runs the GC: unpinned, v1 is collected by the forced-age GC');
+      check(await forceAgeAndGc(), 'one owner unpinned: v1 still survives (the other pin holds it)');
+      await result(await api(`unpin u2 ${entry} 1 steward:s2`));
+      await result(await api(`unpin u3 ${entry} 1 steward:s2`));
+      check(!(await forceAgeAndGc()), 'both unpinned (unpin is idempotent): v1 is collected by the forced-age GC');
       } finally {
+        for (const o of ['steward:s1', 'steward:s2']) await api(`unpin uf ${entry} 1 ${o}`).catch(() => null); // a throw above leaves no pin in caller-pins.json
         fs.rmSync(lib, { recursive: true, force: true }); // this run worktree's own library entry (mod/run, a gate scratch dir)
         execFileSync('cp', ['-c', '-R', path.join(keep, entry), lib]);
         fs.rmSync(keep, { recursive: true, force: true });
         await call('dev.launcher.restart').catch(() => null); // the helper re-reads the restored library
         await until(async () => (await call('dev.launcher.state')).state === 'running', 'the helper back', 300_000).catch(() => null);
+        await until(async () => (await call('dev.sidecar.state')).status?.auth === 'ok', 'the helper linked', 120_000).catch(() => null);
+        await settle(4000);
       }
     }
   }
