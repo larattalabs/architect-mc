@@ -219,8 +219,28 @@ public final class Roads {
 				held.forEach((site, c) -> n2.add("held by its region's own " + site + " (" + c + " cells): nothing to write"));
 				return new Planned(plan, pos, vals, null, null, null, n2, List.of(), held);
 			}
+			// (6c close-out B) why its stopped columns are not its own region's: the first few, each its first cell that is not (a block no
+			// entry holds, another group's, a log or ore), for the failure's message
+			List<String> why = new ArrayList<>();
+			for (int[] col : plan.stopped()) {
+				if (why.size() >= 3) {
+					break;
+				}
+				for (int y = col[1]; y <= col[2]; y++) {
+					int k = terrain.at(col[0], y, col[3]);
+					if (k == RoadPlan.AIR || RoadPlan.ground(k) || RoadPlan.open(k)) {
+						continue;
+					}
+					String h = holder.at(col[0], y, col[3]);
+					if (k != RoadPlan.BUILT && k != RoadPlan.BUILT_OPEN || h == null || !java.util.Objects.equals(ownGroup, groupOf(h))) {
+						why.add(col[0] + "," + y + "," + col[3] + " kind " + k + " held by " + h + (h == null ? "" : " (group " + groupOf(h) + ")"));
+						break;
+					}
+				}
+			}
 			return new Planned(plan, pos, vals, null, "the road changes no cell (every column is another site's or blocked: owned " + plan.ownedBy()
-				+ ", skipped " + plan.skipped() + ", stopped columns " + plan.stopped().size() + ")", Reason.OTHER, notes, List.copyOf(layered.keySet()));
+				+ ", skipped " + plan.skipped() + ", stopped columns " + plan.stopped().size() + (why.isEmpty() ? "" : ", e.g. " + why) + ")", Reason.OTHER,
+				notes, List.copyOf(layered.keySet()));
 		}
 		return new Planned(plan, pos, vals, box, null, null, notes, List.copyOf(layered.keySet()));
 	}
