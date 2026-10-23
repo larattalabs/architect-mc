@@ -242,7 +242,9 @@ export async function seedBase(seed) {
  */
 export const CLAIM_WORLDS = Object.freeze({ '3604,-1036,3795,-845': 'G6B S3 Claim', '2508,1588,2699,1779': 'G6B S2 Claim' });
 export const CLAIM_MARK = 'gate-claim.json';
-export const claimWorldNames = () => Object.values(CLAIM_WORLDS).flatMap((n) => [n, `${n} Srv`]);
+export const CLAIM_VERSION = 'v1'; // new names beside the older store worlds (the coordinator, 2026-10-23): never replace a shared snapshot
+export const claimWorldName = (w, host = gateHost()) => `${w}${host === 'server' ? ' Srv' : ''} ${CLAIM_VERSION}`;
+export const claimWorldNames = () => Object.values(CLAIM_WORLDS).flatMap((n) => [claimWorldName(n, 'client'), claimWorldName(n, 'server')]);
 export const claimWorldFor = (seed, claim) => (String(seed) === PINNED_SEED && claim ? CLAIM_WORLDS[claim.join(',')] ?? null : null);
 const sha256File = (f) => createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 /** The prepared claim world of this host for (seed, claim) if it exists and is current -> its name; else the plain base (seedBase). */
@@ -250,7 +252,7 @@ export async function claimBase(seed, claim) {
   const base = await seedBase(seed);
   const w = claimWorldFor(seed, claim);
   if (!w) return base;
-  const name = gateHost() === 'server' ? `${w} Srv` : w;
+  const name = claimWorldName(w);
   const dir = path.join(SAVES, name);
   let why = null;
   try {
@@ -276,7 +278,7 @@ export async function makeClaimWorld(seed, claim, yRange) {
   const base = await seedBase(seed);
   const w = claimWorldFor(seed, claim);
   if (!w) throw new Error(`not a claim world: seed ${seed} claim ${claim}`);
-  const name = gateHost() === 'server' ? `${w} Srv` : w;
+  const name = claimWorldName(w);
   await fresh(name, base);
   await setRules('default');
   const cx = (claim[0] + claim[2]) / 2, cz = (claim[1] + claim[3]) / 2;

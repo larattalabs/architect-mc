@@ -403,10 +403,10 @@ function select() {
     // the full twins only the nightly runs (Noah, 2026-10-23; tools/gate-cache.json release.nightly): a release runs their smoke or
     // slice twins (in the tier's lists), the nightly (--nightly) runs the full ids
     {
-      const nf = applyNightlyFulls(want, nightlyFulls(CACHE_CONF), { nightly: NIGHTLY });
+      const nf = applyNightlyFulls(want, nightlyFulls(CACHE_CONF), { nightly: NIGHTLY || info.full.on }); // (a --full release, also the auto one for a Minecraft, build-dependency or engine change, keeps them: the calibration moments)
       for (const s of nf.dropped) delete why[s];
       for (const s of nf.added) addW(s, 'the nightly: the full twin only the nightly runs (release.nightly)');
-      info.nightlyFulls = { mode: NIGHTLY ? 'nightly' : 'release', dropped: nf.dropped, added: nf.added };
+      info.nightlyFulls = { mode: NIGHTLY ? 'nightly' : info.full.on ? 'full release' : 'release', dropped: nf.dropped, added: nf.added };
     }
     if (info.full.on) {
       let variant = null;

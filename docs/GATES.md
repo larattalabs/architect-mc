@@ -1204,7 +1204,7 @@ they stay apart; 0b-ingame uses another driver and world and was left out.
 
 `unit-sidecar` writes a JUnit report ($GATE_SIDECAR_RESULTS, one suite per test file); `tools/lib/sidecar-reuse.mjs` serves the drivers' own
 `vitest run <files>` calls from it (gate6c0b, ccoa, cd, cp0, cpt2, cs2, cs3, csch, ct1, ct2, cv, cw, 7ak1, voc-a/b/c) when the sidecar/, kit/ and
-scenarios/ trees are clean and the ones unit-sidecar ran, and every file passed with no skipped test. Otherwise it logs `sidecar: not reused
+scenarios/ trees are clean and the ones unit-sidecar ran (known gap: `mod/.../api/Limits.java` and `tools/eval.mjs`, which a couple of sidecar tests read, are not in the key; it matters only if the source and run worktrees differ there), and every file passed with no skipped test. Otherwise it logs `sidecar: not reused
 (<reason>); running <files>` and the driver runs the files as before. The unit steps wait for unit-sidecar; a cached unit-sidecar hands its
 report on; a coverage-cached driver step serves only when unit-sidecar is in the run (as kit-reuse). gate6cfl keeps its own runs (its
 `--silent=false` size-print lines are the evidence).
@@ -1215,12 +1215,12 @@ report on; a coverage-cached driver step serves only when unit-sidecar is in the
 back before the client opens it, or while it is on the title screen). `gate4d.mjs base` finds `gate4d-base.json` (the lots, the far lots, the
 centre) beside the restored level.dat and, instead of generating the world, re-opens it, sets the rules and re-fits the 12 lots (the same
 `base: lot L<i> ... fits` lines, plus one line with the level.dat sha256); a world without the marker is generated and marked as before.
-To publish: run the step once on this branch, then `cp -c -R` the run's `G4D Base` into the snapshot store.
+`restore` names `G4D Base v2` (a new store name: the shared `G4D Base` is never replaced while other runs use it); `base` copies it over `G4D Base` before opening. To publish: run the step once on this branch (it generates and marks `G4D Base`), then `cp -c -R` the run's `G4D Base` into the snapshot store as `G4D Base v2`.
 The runner records each restored world's level.dat sha256 in `<evidence>/restored-worlds.json` and the step log.
 
 ### Prepared claim worlds (B4)
 
-`G6B S3 Claim` ([3604,-1036,3795,-845]) and `G6B S2 Claim` ([2508,1588,2699,1779]), plus `... Srv` for the headless server host (a base made by the
+`G6B S3 Claim v1` ([3604,-1036,3795,-845]) and `G6B S2 Claim v1` ([2508,1588,2699,1779]), plus `G6B S3 Claim Srv v1` / `G6B S2 Claim Srv v1` for the headless server host (a base made by the
 other host generates different terrain: tools/lib/basestamp.mjs), are copies of `G6B Seed Base` (seed 2026100906) with the claim's chunks
 generated and saved, a `gate-claim.json` beside the level.dat. `tools/lib/run6b.mjs` `claimBase(seed, claim)` returns the prepared world
 when it exists and was made by the current base recipe (else the plain base, with a log line), and logs its level.dat sha256 (also
@@ -1250,7 +1250,7 @@ by the full steps once a night, not at each release; the judgement stays with th
 works from the smoke evidence: the full runs are what it calibrates against). `p3-probe-ledger` (y-ingame, cu-survival) stays in the release.
 The rule is unchanged: a probe mismatch (now in the nightly) sends the P3 rows back in game (`node tools/p3-mode.mjs ingame`).
 
-`gate-run release --plan` lists the smoke ids and no full id; `release --full --nightly --plan` lists every full id. Tests:
+`gate-run release --plan` (not `--full`) lists the smoke ids and no full id; `release --full --nightly --plan` lists every full id. Tests:
 `kit/test/gate-benches.test.mjs` ("the nightly-only full twins").
 
 ## P3: the water and survival ledger lints (2026-10-21)

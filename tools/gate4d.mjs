@@ -276,12 +276,17 @@ const item = (l, extra = {}) => ({ key: l.key, bp: l.bp, at: l.at, rot: l.rot, m
 /** (speed audit D, B7) The prepared G4D Base: a world this driver's base() made once (the chunks of the village, the far lots, the rules) with
  * its context beside the level.dat, put back by the runner from the snapshot store (tools/gate-chains.json `restore`). */
 const BASE_MARK = 'gate4d-base.json';
+const BASE_PREP = 'G4D Base v2'; // the store's prepared copy (a new name: the shared 'G4D Base' is never replaced)
 const mcVersion = () => { try { return /^minecraft_version=(.+)$/m.exec(fs.readFileSync(path.join(root, 'mod', 'gradle.properties'), 'utf8'))[1].trim(); } catch { return 'unknown'; } };
 const sha256File = (f) => createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 
 async function basePrepared(mark) {
   const m = JSON.parse(fs.readFileSync(mark, 'utf8'));
   if (m.minecraft !== mcVersion() || m.recipe !== 1) { log(`  prepared G4D Base is stale (made for Minecraft ${m.minecraft} recipe ${m.recipe}): generating it as before`); return baseFresh(); }
+  // the restored copy becomes the gate's G4D Base (the game is out of both)
+  fs.rmSync(path.join(SAVES, BASE), { recursive: true, force: true });
+  execFileSync('cp', ['-c', '-R', path.join(SAVES, BASE_PREP), path.join(SAVES, BASE)]);
+  fs.rmSync(path.join(SAVES, BASE, 'session.lock'), { force: true });
   const levelSha = sha256File(path.join(SAVES, BASE, 'level.dat'));
   await openWorld(BASE);
   const rules = await setRules();
@@ -306,7 +311,7 @@ async function basePrepared(mark) {
 
 async function base() {
   await leaveWorld();
-  const mark = path.join(SAVES, BASE, BASE_MARK);
+  const mark = path.join(SAVES, BASE_PREP, BASE_MARK);
   if (fs.existsSync(mark) && process.env.GATE4D_FRESH_BASE !== '1') return basePrepared(mark);
   return baseFresh();
 }
