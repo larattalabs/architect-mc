@@ -62,8 +62,16 @@
 // The step cache (docs/GATES.md "Affected-only releases"; tools/lib/step-cache.mjs, tools/lib/step-inputs.mjs): a tier run (not
 // --only/--from, not a named chain) skips a step whose key (its input set's git blobs, its definition, toolchain and modes) has a
 // recorded PASS and reports it CACHED with a pointer to the evidence. release adds the canaries (calibration probes, a rotating
-// big scenario, the crash suite, the judged benches) and the full twins older than the last full nightly. --full (automatic for
-// engine, Minecraft-version and build-dependency ranges) runs everything; --no-cache skips no step (a PASS is still recorded).
+// big scenario, the crash suite) and the full twins older than the last full nightly. --full (automatic for engine,
+// Minecraft-version and build-dependency ranges) runs everything; --no-cache skips no step (a PASS is still recorded).
+// The judged benches (docs/GATES.md "Benches out of the release path"; tools/lib/bench-select.mjs, gate-cache.json
+// release.benches) are not release candidates: the nightly (`release --full --nightly`, tools/nightly.mjs) runs them isolated with
+// their timing judged and records their PASSes; a release reuses each one's latest nightly PASS unless what it measures changed
+// since (its step-cache key or coverage over that PASS, or a bench-sensitive path), and then runs it. --plan, summary.json
+// (tier.benches) and SUMMARY.md list every bench as REUSED (which nightly) or RUN (why). 6a-heap is nightly only; megaB's full walk
+// runs in the nightly weekly, on demand (--megab-full) and when its sensitive core changed. The scenarios S1-S3 are cache
+// candidates at release with their timing recorded (not isolated); the nightly judges it. --nightly-dir DIR (GATE_NIGHTLY_DIR):
+// read the nightly records from DIR instead of artifacts/nightly (the selection proofs).
 // Every step runs traced (tools/lib/step-trace.mjs, <out>/traces/<step>/; --no-trace: off, nothing recorded); a PASS is recorded
 // only when its trace stayed inside its input set.
 //
@@ -82,7 +90,8 @@ import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFile
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
 import { currentHistory, definitionNow, definitionsAt, effectiveTimeout, estimateMin, loadHistory } from './lib/gate-history.mjs';
 import { autoConfig, chooseShards, describeChoice, freePairs, probeMachine } from './lib/shard-auto.mjs';
-import { autoFullWhy, cacheContext, coverageMode, fullTwins, judgedBenches, keyFor, lastNightly, lookup, lookupCoverage, manifestOf, record as recordPass } from './lib/step-cache.mjs';
+import { autoFullWhy, cacheContext, coverageMode, entryByKey, entryStillValid, fullTwins, judgedBenches, keyFor, lastNightly, lookup, lookupCoverage, manifestOf, record as recordPass, supersededList } from './lib/step-cache.mjs';
+import { benchConf, decideBench, fullBenches, latestNightlyRecords, megaBVariant, newestOf, releaseBenches } from './lib/bench-select.mjs';
 import { collect as collectCoverage, javaLogOption, snapshotStart } from './lib/step-coverage.mjs';
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
 import { entryOf, expandSplits, isPartId, parentOf, parentResults, validateSplits } from './lib/step-split.mjs';
@@ -109,7 +118,7 @@ process.on('SIGUSR2', () => {
     // before the scheduler started: the workers see `draining` when they start
   }
 });
-const VALUED = ['--assume-warm', '--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min', '--host', '--lanes'];
+const VALUED = ['--assume-warm', '--nightly-dir', '--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min', '--host', '--lanes'];
 const flag = (f) => argv.includes(f);
 const opt = (f) => {
   const i = argv.indexOf(f);
@@ -159,6 +168,70 @@ if (!cfg.chains[chainName] && !TIERS.includes(chainName)) die(`unknown chain ${c
   }
   bad.push(...validateSplits(cfg.steps));
   if (bad.length) die(`config: ${bad.join('; ')}`);
+}
+
+// ------------------------------------------------------------------ the judged benches (docs/GATES.md "Benches out of the release path")
+
+const SEED = path.resolve(opt('--seed-dir') ?? process.env.GATE_SEED_DIR ?? path.resolve(SRC, cfg.seedFrom));
+const snapDirCfg = cfg.snapshots?.dir ?? 'seed:mod/run/saves';
+const SNAP = path.resolve(process.env.GATE_SNAPSHOT_DIR ?? (snapDirCfg.startsWith('seed:') ? path.join(SEED, snapDirCfg.slice(5)) : path.resolve(SRC, snapDirCfg)));
+// tools/gate-cache.json release.benches: the judged benches (nightly, reused at release while nothing they measure changed), the
+// scenarios whose timing only the nightly judges, the nightly-only ones, megaB's weekly full walk, the bench-sensitive paths
+const BENCH = benchConf(CACHE_CONF);
+// --nightly (tools/nightly.mjs passes it with release --full): the benches' timing is judged here, isolated, and their PASSes are
+// recorded for the releases to reuse; megaB's walk follows its schedule (--megab-full: the full walk on demand)
+const NIGHTLY = flag('--nightly');
+// the nightly records a release reads (artifacts/nightly; --nightly-dir / GATE_NIGHTLY_DIR: another root, for the selection proofs)
+const NIGHTLY_ROOT = path.resolve(opt('--nightly-dir') ?? process.env.GATE_NIGHTLY_DIR ?? path.join(MAIN, 'artifacts', 'nightly'));
+// the step cache's context (keys at HEAD), made once: the bench rule needs it during the selection, the lookups after it
+let cacheCtx;
+function makeCache() {
+  if (cacheCtx === undefined) {
+    try {
+      cacheCtx = INPUT_MAP ? { ctx: cacheContext({ src: SRC, main: MAIN, cfg, conf: CACHE_CONF, map: INPUT_MAP, snapDir: SNAP }) } : { ctx: null, err: null };
+    } catch (e) {
+      cacheCtx = { ctx: null, err: e.message };
+    }
+  }
+  return cacheCtx;
+}
+/** Files changed between two commits (two-dot: what HEAD has that `from` hasn't, and the reverse), or null when `from` is unknown. */
+function changedBetween(from, to = 'HEAD') {
+  try {
+    return git(SRC, 'diff', '--name-only', from, to).split('\n').filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The release's bench rule (tools/lib/bench-select.mjs): for each judged bench, reuse the latest nightly's PASS while nothing it
+ * measures changed since (its step-cache key or coverage over that PASS, and the bench-sensitive paths), else run it. -> decisions
+ */
+function benchRule() {
+  const { ctx } = makeCache();
+  if (ctx) ctx.rawCfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+  const benches = releaseBenches(BENCH);
+  const recs = latestNightlyRecords(NIGHTLY_ROOT, benches.flatMap((b) => b.ids));
+  const out = [];
+  for (const b of benches) {
+    const latest = newestOf(recs, b.ids);
+    const changed = latest?.head ? changedBetween(latest.head) : null;
+    let valid = null;
+    if (latest?.status === 'PASS' && latest.key && ctx) {
+      const e = entryByKey(ctx, latest.id, latest.key);
+      valid = e ? (e.nightly ? entryStillValid(ctx, latest.id, e) : { ok: false, why: 'its step-cache entry is not a nightly (judged) PASS' }) : null;
+    }
+    const d = decideBench(BENCH, { bench: b.bench, ids: b.ids, latest, valid, changed, noReuse: flag('--no-cache') });
+    out.push({ bench: b.bench, ids: b.ids, ...d, changed: changed ? changed.length : null });
+  }
+  // the scenarios: ordinary cache candidates at release (timing recorded there); the nightly judges their timing
+  const srecs = latestNightlyRecords(NIGHTLY_ROOT, [...BENCH.nightlyJudged]);
+  const scenarios = [...BENCH.nightlyJudged].map((id) => {
+    const r = srecs.get(id);
+    return { id, why: r ? `timing last judged in the nightly of ${r.date} (head ${String(r.head).slice(0, 9)}): ${r.status}` : 'no nightly has judged its timing yet', reuse: r ?? null };
+  });
+  return { root: NIGHTLY_ROOT, decisions: out, scenarios };
 }
 
 // ------------------------------------------------------------------ the selection: a chain, or a tier
@@ -278,6 +351,7 @@ function select() {
     info.full = flag('--full') ? { on: true, why: ['--full'] } : autoWhy.length && !flag('--no-auto-full') ? { on: true, why: autoWhy, auto: true }
       : { on: false, why: [], ...(autoWhy.length ? { overridden: autoWhy } : {}) };
     for (const s of t.always) addW(s, 'release: always');
+    if (NIGHTLY && !info.full.on && !opt('--only')) die('--nightly is the nightly\'s release --full, or its yielded remainder with --only (tools/nightly.mjs)');
     // the candidates beyond the always list: every step an impact rule names and the slice tier's always list; the cache, not the
     // range, decides which of them run
     for (const r of cfg.impact?.rules ?? []) for (const k of ['change', 'slice']) for (const s of r[k] ?? []) if (!want.has(s)) addW(s, 'release: an impact rule names it (a candidate: it runs when its cache key misses)');
@@ -313,6 +387,25 @@ function select() {
       info.rotation.push({ name: r.name, why: r.why, ran: chosen, skipped, reason, next });
     }
     info.notes.push(...(t.notes ?? []));
+    // the judged benches (docs/GATES.md "Benches out of the release path"): never candidates; --full (the nightly) runs them with
+    // their timing judged, a release reuses the latest nightly's PASS unless what they measure changed (the bench rule)
+    for (const s of BENCH.judged) {
+      if (want.delete(s)) delete why[s];
+    }
+    if (info.full.on) {
+      let variant = null;
+      if (NIGHTLY) {
+        const full = latestNightlyRecords(NIGHTLY_ROOT, [BENCH.megaB.full]).get(BENCH.megaB.full) ?? null;
+        variant = megaBVariant(BENCH, { date: new Date(), onDemand: flag('--megab-full'), lastFull: full, changedSinceFull: full ? changedBetween(full.head) : null });
+      }
+      const fb = fullBenches(BENCH, { nightly: NIGHTLY, variant });
+      for (const s of fb.ids) addW(s, fb.why[s]);
+      info.benches = { mode: NIGHTLY ? 'nightly' : 'full', megaB: variant, ids: fb.ids };
+    } else {
+      const br = benchRule();
+      for (const d of br.decisions) if (d.run) addW(d.step, `bench rule: ${d.why}`);
+      info.benches = { mode: 'release', root: br.root, decisions: br.decisions, scenarios: br.scenarios };
+    }
   }
   // `after` dependencies come along (4e-crash needs 4e-orders' context)
   for (const s of [...want]) {
@@ -329,8 +422,8 @@ function select() {
   for (let again = true; again;) {
     again = false;
     for (const s of [...want]) {
-      const by = cfg.steps[s].supersededBy;
-      if (by && want.has(by) && !Object.entries(cfg.steps).some(([id, x]) => x.after === s && want.has(id))) {
+      const by = supersededList(cfg.steps[s]).find((b) => want.has(b));
+      if (by && !Object.entries(cfg.steps).some(([id, x]) => x.after === s && want.has(id))) {
         want.delete(s);
         info.superseded[s] = by;
         info.notes.push(`${s}: dropped, ${by} runs every assertion it runs (supersededBy)`);
@@ -381,6 +474,16 @@ const quietArg = argv[argv.indexOf('--quiet-wait') + 1];
 // Timing policy (docs/GATES.md "Policy update"): in change and slice the timing bars (driver lines `FAIL BAR ...`) are recorded, not
 // judged; at release (and in a named chain) they judge, and --quiet-wait is on by default.
 const RECORD_TIMING = (chainName === 'change' || chainName === 'slice') && !flag('--judge-timing');
+// per step (docs/GATES.md "Benches out of the release path"): besides change/slice, a step's timing bars are recorded, not judged,
+// when its entry says `"timing": "recorded"` (4e-megalite, 4e-throughput[-smoke]: their timing is folded into 6a-megaA) and, at a
+// release that is not the nightly, for the scenarios only the nightly judges (release.benches.nightlyJudged). --judge-timing judges
+const recordsTiming = (step) => {
+  if (RECORD_TIMING) return true;
+  if (flag('--judge-timing')) return false;
+  const id = parentOf(typeof step === 'string' ? step : step.id);
+  if (cfg.steps[id]?.timing === 'recorded') return true;
+  return chainName === 'release' && !NIGHTLY && BENCH.nightlyJudged.has(id);
+};
 const QUIET = flag('--quiet-wait') ? (/^\d/.test(quietArg ?? '') ? Number(quietArg) : 8) : chainName === 'release' && !flag('--no-quiet-wait') ? 8 : null;
 const QUIET_MAX_MIN = Number(opt('--quiet-max-min') ?? 30);
 if (QUIET !== null && !(QUIET > 0)) die('--quiet-wait takes a load average, e.g. --quiet-wait 8');
@@ -390,9 +493,6 @@ const NOTIFY_MODE = flag('--notify-dry-run') || process.env.GATE_NOTIFY === 'dry
 const NOTIFY_SCRIPT = process.env.GATE_NOTIFY_SCRIPT ?? path.join(os.homedir(), 'Developer', '_infra', 'discord-notify.sh');
 const RUN1 = path.resolve(opt('--run-dir') ?? process.env.GATE_RUN_DIR ?? path.resolve(SRC, cfg.runDir));
 const RUN_DIRS = (opt('--run-dirs') ?? process.env.GATE_RUN_DIRS ?? '').split(',').map((d) => d.trim()).filter(Boolean).map((d) => path.resolve(d));
-const SEED = path.resolve(opt('--seed-dir') ?? process.env.GATE_SEED_DIR ?? path.resolve(SRC, cfg.seedFrom));
-const snapDirCfg = cfg.snapshots?.dir ?? 'seed:mod/run/saves';
-const SNAP = path.resolve(process.env.GATE_SNAPSHOT_DIR ?? (snapDirCfg.startsWith('seed:') ? path.join(SEED, snapDirCfg.slice(5)) : path.resolve(SRC, snapDirCfg)));
 const RUNS_ROOT = path.resolve(opt('--out') ?? process.env.GATE_RUNS_OUT ?? path.join(MAIN, 'artifacts', 'gate-runs'));
 const LOCK = path.resolve(opt('--lock') ?? process.env.GATE_LOCK ?? path.join(RUNS_ROOT, 'gate-run.lock'));
 
@@ -402,9 +502,9 @@ const LOCK = path.resolve(opt('--lock') ?? process.env.GATE_LOCK ?? path.join(RU
 // only when they stayed inside the step's input set (tools/step-inputs.json). --no-trace turns it off (and records nothing).
 const TRACE = !flag('--no-trace');
 const RAW_CFG = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')); // the chain file as written (cfg has the hosts applied)
-// the judged benches: the release tier's own (its always list and rotation). Their timing is judged at every release, so they are
-// canaries there and never cached; the other bench steps (the slices' scenario steps) cache when they pass with no bar missed
-const JUDGED_BENCHES = judgedBenches(cfg);
+// the judged benches (tools/gate-cache.json release.benches.judged): recorded in the step cache only from the nightly (judged,
+// isolated); a release reuses that PASS through the bench rule, never through a lookup
+const JUDGED_BENCHES = judgedBenches(CACHE_CONF);
 // lookups: a tier run (not a named chain, not --only/--from: an explicit list always runs), not --no-cache, not release --full
 const CACHE_OFF_WHY = tierInfo.kind !== 'tier' ? 'a named chain runs its steps' : opt('--only') || opt('--from') ? '--only/--from: an explicit list runs'
   : flag('--no-cache') ? '--no-cache' : tierInfo.full?.on ? `release --full (${tierInfo.full.why.join('; ')})` : !INPUT_MAP ? 'no tools/step-inputs.json' : null;
@@ -412,7 +512,8 @@ let CACHE = null;
 let cacheErr = null;
 try {
   if (INPUT_MAP) {
-    CACHE = cacheContext({ src: SRC, main: MAIN, cfg, conf: CACHE_CONF, map: INPUT_MAP, snapDir: SNAP });
+    CACHE = makeCache().ctx;
+    if (!CACHE) throw new Error(makeCache().err ?? 'no cache context');
     CACHE.rawCfg = RAW_CFG;
     // the run-level build artifact (tools/lib/build-artifact.mjs): compiled once per build-input hash, the first time a coverage
     // key needs it; --no-build-artifact keeps coverage keys on sources (and the constant rule)
@@ -458,9 +559,8 @@ if (tierInfo.cache.lookup) {
       if (!present(s)) want.add(s);
     }
     for (const s of tierInfo.rotation?.find((r) => r.name === c.crashRotation)?.ran ?? []) if (present(s)) canary.set(s, 'canary: this release\'s crash suite (the rotation)');
-    if (c.judgedBenches) for (const s of want) if (JUDGED_BENCHES.has(parentOf(s))) canary.set(parentOf(s), 'canary: a bench whose timing is judged at release');
   }
-  const nightly = chainName === 'release' ? lastNightly(MAIN) : null;
+  const nightly = chainName === 'release' ? lastNightly(MAIN, NIGHTLY_ROOT) : null;
   const twins = fullTwins(cfg);
   // --assume-warm <ref> (with --plan only): what the run would select after a full nightly that passed at <ref>: a step whose key
   // at <ref> equals its key here counts as CACHED. Keys only, no recorded PASS is read or written: the selection examples
@@ -475,6 +575,11 @@ if (tierInfo.cache.lookup) {
     if (canary.has(parentOf(id))) {
       run.add(id);
       push(id, canary.get(parentOf(id)));
+      continue;
+    }
+    // a judged bench in a release is there because the bench rule selected it (what it measures changed): it runs, never cached
+    if (chainName === 'release' && JUDGED_BENCHES.has(parentOf(id))) {
+      run.add(id);
       continue;
     }
     const k = keyOf(id);
@@ -763,7 +868,8 @@ const isBench = (s) => (s.resources ?? []).includes('bench');
 // other step, keeping its client, host and resources, and its result records which steps ran next to it (`contended`). A step
 // marked `"isolate": true` runs alone in every tier (a bench with a timing check that is not a BAR line).
 const ISOLATE_BENCH = !RECORD_TIMING;
-const isIsolated = (s) => isBench(s) && (ISOLATE_BENCH || s.isolate === true);
+// per step: a bench whose timing this run records (recordsTiming: the scenarios at a release that is not the nightly) is not isolated
+const isIsolated = (s) => isBench(s) && (s.isolate === true || !recordsTiming(s));
 
 // the step-duration history (tools/lib/gate-history.mjs): built from the past runs' summary.json under the main checkout's artifacts/
 const HISTORY_FILE = path.resolve(process.env.GATE_HISTORY_FILE ?? path.join(MAIN, 'artifacts', 'gate-step-history.json'));
@@ -967,7 +1073,32 @@ function printSelection() {
     }
   }
   for (const n of tierInfo.notes ?? []) console.log(`  note: ${n}`);
+  for (const l of benchLines(tierInfo.benches)) console.log(l);
   printCache();
+}
+
+/**
+ * The judged benches' part of the selection (docs/GATES.md "Benches out of the release path"), as plain lines: at a release, each
+ * bench REUSED (from which nightly: its date, head, run dir and log) or RUN (why: the changed paths); the scenarios' last judged
+ * timing; at --full, what the nightly (or the manual full run) adds.
+ */
+function benchLines(b) {
+  if (!b) return [];
+  const lines = [];
+  if (b.mode === 'release') {
+    const reused = b.decisions.filter((d) => !d.run && !d.nightlyOnly).length;
+    lines.push(`benches (judged in the nightly; nightly records ${b.root}): ${b.decisions.filter((d) => d.run).length} to run, ${reused} reused`);
+    for (const d of b.decisions) {
+      const r = d.reuse;
+      const from = r ? ` [nightly ${r.date}, head ${String(r.head).slice(0, 9)}, ${r.status}, run ${r.run}${r.log ? `, log ${r.log}` : ''}]` : '';
+      lines.push(`  ${d.run ? 'RUN   ' : d.nightlyOnly ? 'NIGHTLY' : 'REUSED'} ${d.bench.padEnd(16)} ${d.run ? `${d.step}: ` : ''}${d.why}${d.run ? '' : from}`);
+    }
+    for (const x of b.scenarios ?? []) lines.push(`  scenario ${x.id.padEnd(16)} a cache candidate here (timing recorded at release); ${x.why}`);
+  } else {
+    lines.push(`benches (${b.mode === 'nightly' ? 'the nightly: timing judged, isolated; their PASSes recorded for the releases' : 'release --full: every judged bench, timing judged'}): ${b.ids.join(' ')}`);
+    if (b.megaB) lines.push(`  megaB: ${b.megaB.id} (${b.megaB.why})`);
+  }
+  return lines;
 }
 
 /** The cache's part of the plan: lookups on or off, --full, the canaries, and every CACHED step with its evidence. */
@@ -1113,11 +1244,12 @@ const summary = {
   source: SRC, head: null, sourceDirty: null, runDir: shards[0].RUN, lock: LOCK, ports: { sidecar: shards[0].SIDECAR_PORT, dev: shards[0].DEV_PORT }, out: OUT, notify: NOTIFY_MODE,
   shards: shards.map((s) => ({ k: s.k, runDir: s.RUN, ports: { sidecar: s.SIDECAR_PORT, dev: s.DEV_PORT }, evidence: path.relative(OUT, s.ev) || '.' })),
   tier: tierInfo.kind === 'tier' ? { name: tierInfo.tier, range: tierInfo.range ?? null, engine: tierInfo.engine, placement: tierInfo.placement, impact: tierInfo.impact ?? null,
-    rotationKey: tierInfo.rotationKey ?? null, rotationSource: tierInfo.rotationSource ?? null, rotation: tierInfo.rotation ?? null, notes: tierInfo.notes } : null,
+    rotationKey: tierInfo.rotationKey ?? null, rotationSource: tierInfo.rotationSource ?? null, rotation: tierInfo.rotation ?? null, notes: tierInfo.notes, benches: tierInfo.benches ?? null } : null,
+  nightly: NIGHTLY,
   counts: {}, setup: null, slot: slotNote, shardsAuto: autoChoice ? (({ text, ...a }) => a)(autoChoice) : null, hosts: { mode: HOSTS.mode, server: HOSTS.server.filter((id) => stepIds.includes(id)) }, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
   cache: tierInfo.cache ?? null, cached: tierInfo.cached ?? [], inputsMisses: [],
   schedule: { order: 'longest first', historyRuns: HIST.runs, historyFile: HISTORY_FILE, benches: ISOLATE_BENCH ? 'isolated' : 'not isolated (timing recorded)', historyTimeouts: HIST_TIMEOUTS },
-  steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin, effectiveTimeoutMin: s.effTimeoutMin, timeoutSource: s.timeoutSource, estimateMin: Math.round(est(s) * 10) / 10, ...(s.parentId ? { parent: s.parentId } : {}), ...(tierInfo.why?.[s.id] ? { why: tierInfo.why[s.id] } : {}) })),
+  steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin, effectiveTimeoutMin: s.effTimeoutMin, timeoutSource: s.timeoutSource, estimateMin: Math.round(est(s) * 10) / 10, timingPolicy: recordsTiming(s) ? 'recorded' : 'judged', ...(s.parentId ? { parent: s.parentId } : {}), ...(tierInfo.why?.[s.id] ? { why: tierInfo.why[s.id] } : {}) })),
   split: Object.keys(splitParts).length ? splitParts : null,
 };
 const MACHINE_LOG = path.join(OUT, 'machine.jsonl');
@@ -1495,7 +1627,7 @@ async function runStep(sh, step, rec) {
   // summed over a `&&` chain: at least one must be printed and they must add up to the FAIL lines, so a timing miss followed by an early
   // exit (the rest of the checks never ran) does not pass
   const totals = [...lines.filter((l) => !l.startsWith('# ')).join('\n').matchAll(/(\d+) FAILURE\(S\)|FAILED \((\d+)\)|(\d+) failure\(s\)|(\d+) FAILED ->/g)].map((m) => Number(m[1] ?? m[2] ?? m[3] ?? m[4]));
-  const timingOnly = RECORD_TIMING && !r.timedOut && r.code !== 0 && rec.fail > 0 && barLines.length === rec.fail && parsedFail === 0
+  const timingOnly = recordsTiming(step) && !r.timedOut && r.code !== 0 && rec.fail > 0 && barLines.length === rec.fail && parsedFail === 0
     && totals.length > 0 && totals.reduce((a, b) => a + b, 0) === rec.fail && !/^\s+at \S.*:\d+:\d+\)?\s*$/m.test(text) && (step.okLines === false || rec.ok > 0);
   if (r.timedOut) rec.status = 'TIMEOUT';
   else if (r.code === 0 && rec.fail === 0 && parsedFail === 0 && (step.okLines === false || rec.ok > 0)) rec.status = 'PASS';
@@ -1507,7 +1639,7 @@ async function runStep(sh, step, rec) {
   // a step with timing bars passing in record mode that also missed none still lists nothing; a recorded miss on a loaded box says so
   if (rec.timingRecorded) rec.timingLoad1 = { start: rec.load1.start, end: rec.load1.end };
   // --quiet-wait gave up: a bench result on a loaded box is inconclusive either way (its failLines still show any functional failure)
-  if (rec.noisy && !RECORD_TIMING && ['PASS', 'FAIL'].includes(rec.status)) {
+  if (rec.noisy && !recordsTiming(step) && ['PASS', 'FAIL'].includes(rec.status)) {
     rec.noisyOutcome = rec.status;
     rec.status = 'NOISY';
   }
@@ -1615,6 +1747,8 @@ function summaryMd() {
       for (const r of t.rotation) lines.push(`- ${r.name}: ran ${r.ran.join(' ') || '(nothing)'} (${r.reason})${r.skipped.length ? `; skipped ${r.skipped.map((s) => `${s} (next: ${r.next[s] ?? '-'})`).join(', ')}` : ''}`);
     }
     for (const n of t.notes ?? []) lines.push(`- ${n}`);
+    const bl = benchLines(t.benches);
+    if (bl.length) lines.push('', '### Benches', '', '```', ...bl, '```');
   }
   if (summary.cache) {
     const c = summary.cache;
@@ -1757,6 +1891,7 @@ try {
   if (tierInfo.kind === 'tier') {
     log(`tier ${tierInfo.tier}${tierInfo.range ? ` over ${tierInfo.range}` : ''}: engine ${tierInfo.engine}, placement ${tierInfo.placement}${tierInfo.impact?.unmapped.length ? `, ${tierInfo.impact.unmapped.length} unmapped files` : ''}`);
     for (const r of tierInfo.rotation ?? []) if (r.skipped.length) log(`rotation ${r.name}: ran ${r.ran.join(' ') || '-'}, SKIPPED ${r.skipped.join(' ')} (${r.reason})`);
+    for (const l of benchLines(tierInfo.benches)) log(l);
   }
   const head = git(SRC, 'rev-parse', 'HEAD');
   summary.head = head;
@@ -1892,7 +2027,7 @@ async function worker(sh) {
       if (load1() >= QUIET) log(`  ${step.id}: waiting for the 1-min load average ${load1()} to drop below ${QUIET} (at most ${QUIET_MAX_MIN} min)`, sh);
       while (load1() >= QUIET && Date.now() - tq < QUIET_MAX_MIN * 60_000 && !stopped) await sleep(15_000);
       rec.quietWaitSeconds = Math.round((Date.now() - tq) / 1000);
-      if (load1() >= QUIET && !RECORD_TIMING) {
+      if (load1() >= QUIET && !recordsTiming(step)) {
         rec.noisy = true;
         log(`  ${step.id}: load ${load1()} still >= ${QUIET} after ${QUIET_MAX_MIN} min: running it marked noisy (NOISY: neither passes nor fails)`, sh);
       }
@@ -1928,7 +2063,7 @@ async function worker(sh) {
         const k = keyOf(step.id);
         const r = recordPass(CACHE, step.id, rec, { key: k.key, why: k.why, parts: k.parts, run: OUT, ev: sh.ev, traceDir: path.join(OUT, 'traces', step.id), traced: TRACE,
           coverage: stepCoverage.get(step.id) ?? null,
-          timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', judgedBench: JUDGED_BENCHES.has(parentOf(step.id)), tier: chainName,
+          timingPolicy: recordsTiming(step) ? 'recorded' : 'judged', judgedBench: JUDGED_BENCHES.has(parentOf(step.id)), nightly: NIGHTLY, contended: !!rec.contended, tier: chainName,
           ...(step.id === 'unit-kit' && runShared.kitJunit ? { junit: runShared.kitJunit, kitTree: runShared.kitTree } : {}) });
         rec.cache = { key: r.key ?? k.key, recorded: r.stored, why: r.why };
         if (r.outside && !r.stored) {
