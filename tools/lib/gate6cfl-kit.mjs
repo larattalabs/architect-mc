@@ -18,6 +18,7 @@ import { SIBLING_FILES } from './batch-0410.mjs';
 import { inSlice } from './gate-part.mjs';
 import { syncBaseTree } from './base-tree.mjs';
 import * as CP from './corpus-plan.mjs'; // (gate speed 3) the plans from the run's shared store, prewarmed on every core
+import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -32,6 +33,8 @@ export const EXCEPT = Object.freeze({
   'extension/e14_sketch_outline.json': 'sketch.outline supported: the outline answers fits (the fixture moved by name)',
   'extension/e15_every_reserved_a.json': 'the six FL ids supported: z2-z5, z7 and z11 answer (they left the reserved list)',
   'extension/e16_every_reserved_b.json': 'named by §8 (its reserved list); judged as any other: it may stay byte-identical',
+  // ((7a foundation) the catalogue's three changes move these by name (e15 is FL's too: it differs either way))
+  'asks/mining_town.json': F7A_MOVED['asks/mining_town.json'],
 });
 
 /** The base worktree at the merge base with origin/main (made or moved there). */

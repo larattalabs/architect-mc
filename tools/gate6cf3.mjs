@@ -146,7 +146,7 @@ steps.unit = async () => {
   out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').filter((l) => /^(ok|FAIL)/.test(l)) };
   check(ac.status === 0, `item 13: api-compat --gate6cf3 clean against the 0.40.0, 0.39.1 and 0.39.0 apitest jars and the 0.40.0 jar's 1.37.0 surface; $0.00`, out.apicompat.tail);
   out.compact = await compactSize();
-  check(out.compact.chars < 84_000, `item 13 (recorded, S-FL-8's bound 84,000): the compact plan/0 is ${out.compact.chars} characters (${out.compact.delta >= 0 ? '+' : ''}${out.compact.delta} over the merge base's ${out.compact.base})`);
+  check(out.compact.chars < 96_000, `item 13 (recorded, the bound 96,000: S-FL-8's 84,000 moved for 7a, the coordinator 2026-10-23): the compact plan/0 is ${out.compact.chars} characters (${out.compact.delta >= 0 ? '+' : ''}${out.compact.delta} over the merge base's ${out.compact.base})`);
   // the Java units: StillOurs' F3 rows and Coral, copper's unchanged, the API's features
   const { gradle } = await import('./lib/src-gradle.mjs').catch(() => ({ gradle: null }));
   const args = ['test', '--offline', '--tests', 'dev.larattalabs.architect.journal.StillOursF3Test', '--tests', 'dev.larattalabs.architect.journal.CopperTest', '--tests', 'dev.larattalabs.architect.apiimpl.ApiF3Test'];

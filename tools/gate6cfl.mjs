@@ -148,7 +148,7 @@ steps.unit = async () => {
   out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').filter((l) => /^(ok|FAIL)/.test(l)) };
   check(ac.status === 0, `item 12: api-compat --gate6cfl clean against the 0.40.0, 0.39.1 and 0.39.0 apitest jars and the 0.40.0 jar's 1.37.0 surface (no Java beyond the version, the feature string, the road ext and the dev hook)`, out.apicompat.tail);
   out.compact = compactSize();
-  check(out.compact.compact !== null && out.compact.compact < 84_000, `item 12: the compact plan/0 is ${out.compact.compact} characters (bound 84,000, S-FL-8; the merge base's ${out.compact.before ?? '?'}: FL's delta ${out.compact.before ? out.compact.compact - out.compact.before : '?'}); $0.00`);
+  check(out.compact.compact !== null && out.compact.compact < 96_000, `item 12: the compact plan/0 is ${out.compact.compact} characters (bound 96,000: S-FL-8's 84,000 moved for 7a, the coordinator 2026-10-23; the merge base's ${out.compact.before ?? '?'}: FL's delta ${out.compact.before ? out.compact.compact - out.compact.before : '?'}); $0.00`);
   }
   spendZero();
   return out;
