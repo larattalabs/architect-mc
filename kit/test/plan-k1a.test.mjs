@@ -15,7 +15,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { asksSurvey, goldenSurvey, stewardAnchors, checkPlanLocal, FIX } from './plan-helpers.mjs';
+import { asksSurvey, goldenSurvey, stewardAnchors, checkPlanLocal, FIX, asksFirstPath } from './plan-helpers.mjs';
 import { checkRegion } from '../lib/region/check.mjs';
 import { PLAN_SCHEMA } from '../lib/plan/schema.mjs';
 
@@ -164,7 +164,7 @@ test('item 7: §9 on Steward\'s 59 recorded plans: K1 parts never malformed or u
   const tally = {}, gaps = {}, rows = [];
   let k1Parts = 0;
   for (const f of fx) {
-    const j = JSON.parse(fs.readFileSync(path.join(FIX, 'asks', f), 'utf8'));
+    const j = JSON.parse(fs.readFileSync(asksFirstPath(f), 'utf8')); // ((6c close-out A) the plans K1 judged: Steward's first recordings)
     const r = await checkPlanLocal(j.answer.plan, { survey: SV.asks.bytes, claim: SV.asks.claim, anchors: stewardAnchors(SV.asks.claim) });
     for (const a of r.check.parts) {
       tally[a.class] = (tally[a.class] ?? 0) + 1;

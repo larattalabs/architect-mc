@@ -6,6 +6,7 @@
 // mod's measure equals the kit's for each entry), Steward's pre-check (S-VOCc-2: Regions.checkPalette) and the delta re-judge
 // (S-VOCc-3). VOC-c owns this file.
 import fs from 'node:fs';
+import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
@@ -71,7 +72,7 @@ export async function asksTable(kitDir) {
   let malformed = 0;
   const counts = {};
   for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) {
-    const fx = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    const fx = JSON.parse(fs.readFileSync(firstAsk(dir, f), 'utf8')); // ((6c close-out A) the first recordings)
     const plan = fx.answer?.plan ?? fx.plan;
     const r = await H.checkPlanLocal(plan, { survey: sv.bytes, claim: sv.claim, anchors: { ...H.stewardAnchors(sv.claim), ...(fx.anchors ?? {}) } });
     const ask = f.replace(/\.json$/, '');

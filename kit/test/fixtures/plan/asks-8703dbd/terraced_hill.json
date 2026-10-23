@@ -1,0 +1,191 @@
+{
+  "prompt": "A terraced hill town with switchback streets.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "switchback_terrace_town",
+      "style": {
+        "pending": "switchback_terrace_town"
+      },
+      "zones": [
+        {
+          "id": "town",
+          "kind": "standard",
+          "required": true,
+          "label": "Terraced hill town",
+          "purpose": "home_base",
+          "program": {
+            "layout": "street",
+            "lots": [
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "hilltop_hall",
+                "label": "hilltop hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "high_ground",
+                "brief": "Crowns the top terrace and overlooks every switchback and the valley below."
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "terrace_houses",
+                "label": "terrace house",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Stepped into the slope on its own terrace with a small garden or stair frontage."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "terrace_houses",
+                "label": "terrace house",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Stepped into the slope on its own terrace with a small garden or stair frontage."
+              },
+              {
+                "id": "house_3",
+                "type": "house",
+                "role": "terrace_houses",
+                "label": "terrace house",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Stepped into the slope on its own terrace with a small garden or stair frontage."
+              },
+              {
+                "id": "house_4",
+                "type": "house",
+                "role": "terrace_houses",
+                "label": "terrace house",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Stepped into the slope on its own terrace with a small garden or stair frontage."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "hillside_cottages",
+                "label": "hillside cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Tucked beside a switchback bend on a middle terrace."
+              },
+              {
+                "id": "cottage_2",
+                "type": "cottage",
+                "role": "hillside_cottages",
+                "label": "hillside cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Tucked beside a switchback bend on a middle terrace."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "market_shop",
+                "label": "market shop",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Opens onto a wide landing on the middle terrace."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "smithy",
+                "label": "smithy",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Mid-level terrace, sheltered by a retaining wall."
+              },
+              {
+                "id": "chapel_1",
+                "type": "chapel",
+                "role": "terrace_chapel",
+                "label": "terrace chapel",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "high_ground",
+                "brief": "Small chapel on a high terrace with a view down the streets."
+              },
+              {
+                "id": "gatehouse_1",
+                "type": "gatehouse",
+                "role": "gatehouse_at_foot",
+                "label": "gatehouse at the foot",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "edge",
+                "brief": "Marks where the lowest switchback begins."
+              }
+            ]
+          },
+          "notes": "Hilltop town on existing hillside; hall on summit, houses stepping down."
+        }
+      ],
+      "connectors": [
+        {
+          "id": "switchback_street",
+          "kind": "street",
+          "required": true,
+          "label": "switchback street",
+          "from": {
+            "anchor": "claim_s"
+          },
+          "to": {
+            "part": "town"
+          },
+          "lamps": "street",
+          "notes": "Zigzags up the slope in switchbacks from the foot to the summit, lantern-lit, with stairs where steep."
+        }
+      ],
+      "forms": [
+        {
+          "id": "terraces",
+          "kind": "terrace",
+          "required": false,
+          "label": "stepped terraces",
+          "where": {
+            "inside": {
+              "part": "town"
+            }
+          },
+          "steps": 4,
+          "rise": 3,
+          "edge": "blend",
+          "notes": "Stone-retained flat steps cut into the hillside carrying the houses."
+        }
+      ]
+    },
+    "waits": [],
+    "summary": "A medium terraced hill town: one zone of 11 buildings with a hilltop hall on the summit, a chapel on a high terrace, four houses and two cottages stepping down, a market shop, a smithy and a gatehouse at the foot. A lantern-lit street zigzags up from the south, and stepped terraces are cut into the slope. The land isn't surveyed yet, so placement will adjust to the real hillside."
+  },
+  "usd": 0.03058,
+  "errors": []
+}

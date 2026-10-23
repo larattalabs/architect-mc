@@ -116,11 +116,12 @@ test('M18: vanilla\'s distance on a hand-made world (through leaves only, from #
   assert.equal(out2.metrics.M18.leaves, 0);
 });
 
-test('item 9: catalogue 11 is the golden; against catalogue 9 (catalogue-vocc.json) exactly one flip, four added ids and the tunnel\'s volume flag', () => {
-  assert.deepEqual(planCatalogue(), JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8')));
-  // ((7a foundation) catalogue 11 as v0.41.0 shipped it is archived as catalogue-pre7a.json; 7a's changes are its own tests')
-  const golden = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-pre7a.json'), 'utf8'));
-  assert.equal(golden.catalogueVersion, 11); // ((batch v0.41.0) FL's 10 and F3's 11 together: 11)
+test('item 9: catalogue 11 (archived as catalogue-b0410.json by close-out A); against catalogue 9 (catalogue-vocc.json) exactly one flip, four added ids and the tunnel\'s volume flag', () => {
+  // ((close-out A) catalogue 11 is archived as fixtures/plan/catalogue-b0410.json; the golden is catalogue 12 now: coa.test.mjs)
+  const golden = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-b0410.json'), 'utf8'));
+  assert.ok(planCatalogue().catalogueVersion >= 12);
+  assert.equal(golden.catalogueVersion, 11);
+  assert.equal(golden.api, '1.38.0');
   const prev = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-vocc.json'), 'utf8'));
   assert.equal(prev.catalogueVersion, 9);
   const d = diffCatalogues(prev, golden);
@@ -137,7 +138,7 @@ test('item 9: catalogue 11 is the golden; against catalogue 9 (catalogue-vocc.js
   for (const id of ['form.giant_tree', 'form.giant_mushroom', 'form.coral', 'form.roots', 'form.stalactites']) {
     const e = golden.entries.find((x) => x.id === id);
     assert.equal(e.state, 'supported', id);
-    assert.equal(e.sinceApi, golden.api, id);
+    assert.equal(e.sinceApi, '1.38.0', id);
   }
   // no entry waits for F3 any more
   assert.deepEqual(golden.entries.filter((e) => e.until === 'F3').map((e) => e.id), []);

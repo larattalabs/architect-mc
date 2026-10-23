@@ -459,6 +459,8 @@ export function validatePlan(plan, { anchors = [] } = {}) {
       void _k;
       if (!validateSpec(DEFS['zone.standard'], rest, '$', PLAN_SCHEMA).length) { checked = rest; entry = entryOf('zone.standard'); } else aliasNote = `zone kind ${p.kind} is an alias of ${entry.aliasOf}, supported now: write this part as a zone with program {districts: [...]} (its shape is the reserved envelope's)`;
     }
+    // ((close-out A, §5, S-K1-3) a palette rule's string scope "lots" or "all" is read as `over` (palette.mjs readPaletteRule), never malformed)
+    if (p.block === 'rule.palette' && (checked.scope === 'lots' || checked.scope === 'all')) { const { scope: _s, ...rest } = checked; void _s; checked = rest; }
     if (entry?.state === 'supported') {
       const strict = validateSpec(DEFS[defName(entry)], checked, '$', PLAN_SCHEMA);
       if (strict.length) { const f = firstError(strict); partMalformed(p, 'SCHEMA', f.path, f.message); continue; }

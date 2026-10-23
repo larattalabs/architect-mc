@@ -54,13 +54,14 @@ function wallBars(rep, msg) {
   assert.deepEqual(rep.findings.filter((f) => /^M3/.test(f.rule) && f.severity !== 'info').map((f) => f.message), [], `${msg}: M3 0`);
 }
 
-test('item 11: the catalogue: wall.along reserved -> supported, nothing else (against catalogue-pre7a.json, the foundation\'s three aside)', () => {
+test('item 11: the catalogue: wall.along reserved -> supported, nothing else of the walls\' (against catalogue-pre7a.json)', () => {
   const golden = JSON.parse(fs.readFileSync(path.join(FIX, '..', '..', '..', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
   assert.deepEqual(planCatalogue(), golden);
   const pre = readJ('catalogue-pre7a.json');
   const d = diffCatalogues(pre, golden, { pending: [{ part: 'w', block: 'wall.along' }] });
-  const F = new Set(['connector.rail', 'connector.branch_walk', 'connector.span_bridge']);
-  const mine = (xs) => xs.filter((x) => !F.has(typeof x === 'string' ? x : x.id));
+  // (K2's own: every change to a wall id; the foundation's three and what main changed since catalogue-pre7a (v0.42.0's close-out A)
+  // are theirs)
+  const mine = (xs) => xs.filter((x) => /^(wall\.|connector\.(wall|gate)$)/.test(typeof x === 'string' ? x : x.id));
   assert.deepEqual(mine(d.reservedToSupported), ['wall.along']);
   assert.deepEqual(mine(d.schemaVersionBumps), [{ id: 'wall.along', from: 0, to: 1 }]);
   assert.deepEqual([mine(d.untilChanged), mine(d.otherStateChanges), mine(d.limitsChanged), d.added, d.removed, d.retired], [[], [], [], [], [], []]);

@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { asksSurvey, stewardAnchors, checkPlanLocal, checkPlanVolumes, flatSurvey, FIX } from './plan-helpers.mjs';
+import { asksSurvey, stewardAnchors, checkPlanLocal, checkPlanVolumes, flatSurvey, FIX, asksFirstPath } from './plan-helpers.mjs';
 import { checkRegion, walkGraph, nodeReached } from '../lib/region/check.mjs';
 import { buildVirtual } from '../lib/region/vworld.mjs';
 
@@ -139,7 +139,7 @@ test('broken variants: no lining over the sand (M3:gravity, M3:tunnel), no lamps
 });
 
 /** Steward's recorded plans (fixtures/plan/asks) on the asks claim. */
-const asksPlan = (name) => JSON.parse(fs.readFileSync(path.join(FIX, 'asks', `${name}.json`), 'utf8')).answer.plan;
+const asksPlan = (name) => JSON.parse(fs.readFileSync(asksFirstPath(`${name}.json`), 'utf8')).answer.plan; // ((6c close-out A) the first recordings)
 const A = asksSurvey();
 
 test('§9: secret_tunnels\' three tunnels answer unsupported {tunnel.under, until 7b}; glass_tunnels as recorded is blocked by its zone (no ocean on the asks claim), and with the zone placed answers tunnel.under, params.width read, material noted', async () => {
