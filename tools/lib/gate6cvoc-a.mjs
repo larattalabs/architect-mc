@@ -75,7 +75,9 @@ export const LATER_EXCEPTIONS = Object.freeze({ fixtures: ['extension/e05_reserv
   catalogue: ['rule.palette', 'layout.ring', 'layout.spiral', 'layout.grid', 'layout.organic', 'locator.around', 'sketch.outline', 'form.giant_tree',
     'form.giant_mushroom', 'form.coral', 'form.roots', 'form.stalactites', 'connector.tunnel',
     // ((7a foundation) its three catalogue changes)
-    'connector.rail', 'connector.branch_walk', 'connector.span_bridge'] });
+    'connector.rail', 'connector.branch_walk', 'connector.span_bridge',
+    // ((7a K2) wall.along supported)
+    'wall.along'] });
 
 export async function unchanged(root) {
   const { dir: mainDir, base } = baseTree(root);
