@@ -1138,9 +1138,15 @@ steps.crash = async () => {
     log(`  killing the sidecar pid ${ls.pid}`);
     if (ls.pid) process.kill(ls.pid, 'SIGKILL');
     // (speed audit B) the pause is for the sidecar to be seen gone: poll for SIDECAR_UNAVAILABLE, at most the 20 s it always waited
-    for (let i = 0, t1 = Date.now(); Date.now() - t1 < 20_000; i++) {
+    // then until the region's cellsWritten has not moved for 3 s (buffered tiles finish writing, as in the old 20 s), still within the 20 s
+    for (let t1 = Date.now(), seen = false, last = -1, since = Date.now(); Date.now() - t1 < 20_000; ) {
       const s1 = await regionState(region).catch(() => null);
-      if (s1 && (JSON.stringify(s1.waiting).includes('SIDECAR_UNAVAILABLE') || s1.view?.waiting?.reason === 'SIDECAR_UNAVAILABLE')) break;
+      if (s1) {
+        seen ||= JSON.stringify(s1.waiting ?? null).includes('SIDECAR_UNAVAILABLE') || s1.view?.waiting?.reason === 'SIDECAR_UNAVAILABLE';
+        const cw = s1.view?.cellsWritten ?? -1;
+        if (cw !== last) { last = cw; since = Date.now(); }
+        if (seen && Date.now() - since >= 3000) break;
+      }
       await sleep(500);
     }
     const w = await regionState(region);

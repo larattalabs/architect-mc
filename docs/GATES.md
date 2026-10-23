@@ -1193,7 +1193,7 @@ sprints only if it counts ticks, and nothing here sprints a timeout, a presence 
 - HY's terrain settle and post-removal settle (`lib/gate6chy-b.mjs`), only when the driver sets `ctx.sprintWaits` (gate6chy.mjs).
   The settle straight after the forceload and `waitChunks` stays real (chunk activation). KC, FL, IRR, F3 and RS call the same helpers
   and keep their fixed settles.
-- 4d-all(-full)'s survival build: `/tick sprint` in 600-tick chunks with SITE_BUILT checked between them, the 25-minute wall cap
+- 4d-all(-full)'s survival build: `/tick sprint` in 100-tick chunks with SITE_BUILT checked between them, the 25-minute wall cap
   kept (`gate4d.mjs`). The builder's `nanoTime` deadlines are per-tick CPU budgets, not graces; the hopper chain is vanilla ticks.
 
 **Settles that became "until quiet"** (`settleQuiet`, at most the wait they replace; natural and fluid sites usually run to the cap
@@ -1203,13 +1203,13 @@ the settled world; a quiet end means no scheduled tick is left, so the world is 
 - 5b-chains `hash()`: tick-quiet (1 s floor, 3 s cap) instead of 3 s, and the apply's pre-hash is the last record's hash. 5b's client
   host is kept; other 5b steps keep the fixed 3 s.
 - 4e-orders and 4e-crash: the hash settle, the removal settle, the open sleeps and the crash restart's settle are quiet polls
-  (the restart's also waits for the journal to stop changing) with the same caps; connect polls are 500 ms. Other 4e steps
+  (the restart's waits at least 3 s and for the journal to stop changing) with the same caps; connect polls are 500 ms. Other 4e steps
   (throughput, migration, ...) keep their fixed waits.
 
 **Polls instead of fixed sleeps:** rp-crash's verify loop (500 ms, the 30 s cap); 6a-crash's 20 s after the sidecar kill (poll for
-SIDECAR_UNAVAILABLE; the link's reconnect backoff is capped at 5 s, so the resume bar of RG5 can come at most about 2 s sooner than
+SIDECAR_UNAVAILABLE and for cellsWritten to rest 3 s, so buffered tiles finish as in the old pause; the link's reconnect backoff is capped at 5 s, so the resume bar of RG5 can come at most about 2 s sooner than
 after a full 20 s outage); 0a-keys and 0a-batches' `killClient` (exit poll of the helper's pid, at most the 8 s); rs-survival's lv7
-polls (1 s, still 3 equal reads: the stability window is 3 s, was 9 s); 6b-versionc (v0.11.0's sidecar build cached under
+polls (1 s; the stability read needs 6 equal reads, a 6 s window, was 3 reads 3 s apart); 6b-versionc (v0.11.0's sidecar build cached under
 `artifacts/sidecar-dist-cache/` by tag commit and node version; the three 5 s settles are quiet polls, which wait the full 5 s on
 0.11.0's client because it has no `dev.ticks.pending`; the 30 s window is untouched). 6a-eflat skips the heap-GC baseline
 (`heapBaseline: false`), which only the other mega runs record.

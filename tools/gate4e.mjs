@@ -222,7 +222,7 @@ const settle = (ms = 3000) => call('dev.wait', { ms }, 20_000);
  * fails waits the full cap.
  */
 const QUIET = ['orders', 'crash'].includes(process.argv[2]); // (speed audit B) only 4e-orders and 4e-crash poll; every other step (the throughput bench, the migration clients) keeps its fixed waits
-async function settleQuiet(capMs, { box6: b = null, quietMs = 1000, extra = null, fixed = settle } = {}) {
+async function settleQuiet(capMs, { box6: b = null, quietMs = 1000, minMs = 0, extra = null, fixed = settle } = {}) {
   if (!QUIET) { await fixed(capMs); return; }
   const t0 = Date.now();
   let quietSince = null;
@@ -233,7 +233,7 @@ async function settleQuiet(capMs, { box6: b = null, quietMs = 1000, extra = null
     const quiet = p.block === 0 && p.fluid === 0 && (b ? p.boxTicking === p.boxChunks : (p.tickingChunks ?? 0) > 0) && (extra ? await extra() : true);
     if (!quiet) quietSince = null;
     else if (quietSince === null) quietSince = at;
-    if (quietSince !== null && at - quietSince >= quietMs) return;
+    if (quietSince !== null && at - quietSince >= quietMs && at >= minMs) return;
     await sleep(250);
   }
 }
@@ -549,7 +549,7 @@ async function removeInOrder(world, ids, order, h0, label) {
       break;
     }
     standing = standing.filter((x) => x !== k);
-    await settleQuiet(1500, { quietMs: 500 });
+    await settleQuiet(1500, { quietMs: 1000 });
     const now = await ownedNow(standing.map((x) => ids[x]));
     const l = leaks(snap, now);
     if (Object.keys(l).length) leaked[k] = l;
@@ -1758,7 +1758,7 @@ async function killRun(point, base, action, pre) {
   await tp(48.5, 80, 30.5);
   // (speed audit B) until the world is tick-quiet and the journal has not changed for a second, at most the 5 s it always waited
   let jPrev = null;
-  await settleQuiet(5000, { extra: async () => { const s = JSON.stringify(await journal().catch(() => null)); const same = s === jPrev; jPrev = s; return same; } });
+  await settleQuiet(5000, { minMs: 3000, extra: async () => { const s = JSON.stringify(await journal().catch(() => null)); const same = s === jPrev; jPrev = s; return same; } });
   const j = await journal();
   check(j.open && !j.unavailable, `crash ${point}: the journal opens`, { open: j.open, unavailable: j.unavailable });
   const after = journalFiles('G4E Crash');

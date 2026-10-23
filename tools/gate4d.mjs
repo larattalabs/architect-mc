@@ -731,7 +731,7 @@ async function survival() {
   const end = Date.now() + 25 * 60_000;
   let built = [];
   // (speed audit B) the build is paced by game ticks (the builder's per-tick budget, the hoppers; no wall-clock grace on this path): on a
-  // headless host it is sprinted in 600-tick chunks with SITE_BUILT checked between them (GATE_SPRINT=0 / a client: the 3 s real-time poll)
+  // headless host it is sprinted in 100-tick chunks with SITE_BUILT checked between them (GATE_SPRINT=0 / a client: the 3 s real-time poll)
   let sprint = sprintOn() && await isHeadless(call);
   let sprinted = 0;
   const sw0 = Date.now();
@@ -739,7 +739,7 @@ async function survival() {
     built = (await since()).filter((e) => e.event === 'SITE_BUILT').map((e) => e.id);
     if (sites.every((s) => built.includes(s))) break;
     if (sprint) {
-      const r = await advanceTicks({ cmd }, 600);
+      const r = await advanceTicks({ cmd }, 100);
       sprinted += Math.max(0, r.ticks);
       if (!r.ok) { log(`  (sprint) survival build: SPRINT INCOMPLETE (${r.why}) after ${sprinted} ticks: real time from here`); sprint = false; }
     } else await sleep(3000);

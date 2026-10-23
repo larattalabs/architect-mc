@@ -1006,9 +1006,9 @@ steps.lv7 = async () => {
   await C.point('dried');
   await L.leaveWorld();
   await L.openWorld(R.s.world);
-  // the site's run is made again after the load: read until its built count stops moving (3 equal reads, 1 s apart; was 3 s: speed audit B)
+  // the site's run is made again after the load: read until its built count stops moving (6 equal reads, 1 s apart (a 6 s window; was 3 reads 3 s apart): speed audit B)
   let sB = null, same = 0, last = -1;
-  for (let k = 0; k < 180 && same < 3; k++) {
+  for (let k = 0; k < 180 && same < 6; k++) {
     await sleep(1000);
     sB = await L.call('dev.site.state', { site }, 60_000).catch(() => null);
     const now = sB?.built ?? -1;
