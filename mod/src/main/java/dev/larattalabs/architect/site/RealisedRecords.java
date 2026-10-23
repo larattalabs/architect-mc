@@ -229,6 +229,19 @@ public final class RealisedRecords {
 		}
 	}
 
+	/** (6c close-out B) A region road with nothing to write: every column held by a sibling of its region (Roads.heldByOwn). */
+	static void roadHeld(QBatch b, QItem i, JsonObject held) {
+		String region = RegionItems.regionOf(b);
+		RegionsImpl.Live l = region == null ? null : RegionsImpl.live(region);
+		if (l == null) {
+			return;
+		}
+		String id = i.key.startsWith("road:") ? i.key.substring(5) : i.key;
+		JsonObject o = Realised.road("", 0, List.of(), "placing");
+		o.add("heldBy", held.deepCopy());
+		Realised.putSite(l.world(), region, 0, "roads", id, o);
+	}
+
 	/** A region road's job began (Batches): its site, its planned cells and the spans a partial road skipped. */
 	static void roadStarted(QBatch b, QItem i, String siteId, InfraPlace.Check c) {
 		String region = RegionItems.regionOf(b);

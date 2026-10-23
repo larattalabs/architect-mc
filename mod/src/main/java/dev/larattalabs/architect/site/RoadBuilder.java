@@ -239,6 +239,7 @@ public final class RoadBuilder {
 		r = new Builder.Run(probe(i), target);
 		r.name = "road " + i.id();
 		BlockState[] bs = freeOff(r, before);
+		Builder.driedFarmland(r, before); // (6c close-out B, L-V7)
 		ServerLevel level = Sites.levelOf(srv, i.dimension());
 		if (level != null) {
 			r.rescan(level);

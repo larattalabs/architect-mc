@@ -111,4 +111,68 @@ class UmtFindingsTest {
 					null, 7, false))), UmtOps.Gen.CRASH));
 		assertTrue(r.violations().stream().noneMatch(v -> v.startsWith("[UC]")), r.report());
 	}
+
+	/**
+	 * (6c close-out B, F9; umt-long on v0.40.1 and v0.41.0, PLAIN seed 604864872) A road over a site's edge clears head room (air over the
+	 * site's cobblestone and lantern). The road is removed (its undo writes the site's blocks back), then the site (its box back to air). At
+	 * the next start the road's evidence compares the world with its after, air, which the site's removal wrote: it reads as standing, the
+	 * road is recovered, and its second removal writes the site's blocks back for good. F1's kind (an upper's evidence over cells a lower's
+	 * later undo rewrote), for a road's air cells over a site, which F1's fix (Sites.evidence's laterWrite) doesn't reach.
+	 */
+	@Test
+	void f9_aRoadsHeadRoomOverASiteRemovedTopDownIsRecovered() throws Exception {
+		UmtRunner.Result r = UmtRunner.run(new UmtOps.Scenario(18750811039L, List.of(new UmtOps.Place(UmtOps.Kind.SITE, 26, 9, 8, 9, 4, 3020441061667383187L, 3,
+			null), new UmtOps.Place(UmtOps.Kind.ROAD, 33, 10, 1, 13, 4, -7512719053491803402L, 3, null)), UmtOps.Gen.PLAIN));
+		assertTrue(r.violations().stream().noneMatch(v -> v.startsWith("[F9]")), r.report());
+	}
+
+	/**
+	 * (6c close-out B, DPT; umt-long PLAIN seed 606069345) A delta of a site writes over a player's block (with its PT record) next to the
+	 * site's box. The delta's create annotates its cells with the record (JournalStore.ptSource), but its D7 commit rewrites the sections
+	 * from new cells without it (SiteDeltas: {@code new Cell(q, layer, before, after)}); the removal puts the block back without its record.
+	 */
+	@Test
+	void dpt_aDeltaOverAPlayersBlockLosesItsRecord() throws Exception {
+		UmtRunner.Result r = UmtRunner.run(new UmtOps.Scenario(18788149702L, List.of(new UmtOps.Place(UmtOps.Kind.SITE, 32, 15, 2, 3, 2, -7709475027701739650L, 3,
+			null), new UmtOps.Delta(5, 7981485692747926230L)), UmtOps.Gen.PLAIN));
+		assertTrue(r.violations().stream().noneMatch(v -> v.startsWith("[DPT]")), r.report());
+	}
+
+	/**
+	 * (6c close-out B, F10; umt-long PLAIN seed 606068584) A lot over short grass (its before), then a delta of the lot clears the grass block
+	 * under it (the delta's cell). The removal restores both in one template over the union of their boxes; the plant is restored over air
+	 * and breaks (V5), so the grass is gone though the lot's entry holds the cell. Rests on modelled template order and V5: confirm in game.
+	 */
+	@Test
+	void f10_aPlantOverADeltasCellBreaksAtTheRemoval() throws Exception {
+		UmtRunner.Result r = UmtRunner.run(new UmtOps.Scenario(18788126111L, List.of(new UmtOps.Place(UmtOps.Kind.LOT, 27, 17, 6, 3, 2, 3130843489786039882L, 0,
+			null), new UmtOps.Delta(1, -7952756831339956499L)), UmtOps.Gen.PLAIN));
+		assertTrue(r.violations().stream().noneMatch(v -> v.startsWith("[F10]")), r.report());
+	}
+
+	/**
+	 * (6c close-out B, PTS; umt-long PLAIN seed 731544100) A player's cobblestone with its PT record inside two stacked boxes of one group
+	 * (a site, then a lot over its edge), removed as a group: the block comes back without its record. Not yet isolated between the
+	 * restore's PT expectations for a lower entry (SiteJournal.restore, production) and the modelled record restore (UmtWorld.restoring).
+	 */
+	@Test
+	void pts_aPlayersBlockUnderTwoStackedBoxesLosesItsRecord() throws Exception {
+		UmtRunner.Result r = UmtRunner.run(new UmtOps.Scenario(22677867107L, List.of(new UmtOps.Place(UmtOps.Kind.SITE, 31, 10, 5, 7, 6, 2529238243948841804L, 2,
+			null), new UmtOps.Place(UmtOps.Kind.LOT, 33, 14, 3, 9, 5, 5479923252941712732L, 2, null), new UmtOps.RemoveGroup(2, null)), UmtOps.Gen.PLAIN));
+		assertTrue(r.violations().stream().noneMatch(v -> v.startsWith("[PTS]")), r.report());
+	}
+
+	/**
+	 * (6c close-out B, UC; umt-long ALL seed 777124280, found by the close-out B verifier) A road over a lot, killed at P5 after an
+	 * autosave, rolls back; the lot's removal is killed at K6 and the world goes back to the autosave, losing the rollback's writes. The
+	 * start recovers the road (it reads standing), restores the lot, then removes the road, which writes the lot's blocks back: the lot is
+	 * left half and its record KEEP. Unsaved chunks (UC) under a rollback.
+	 */
+	@Test
+	void uc_aRoadsRollbackLostToACrashBringsTheRoadBack() throws Exception {
+		UmtRunner.Result r = UmtRunner.run(new UmtOps.Scenario(24090852687L, List.of(new UmtOps.Place(UmtOps.Kind.LOT, 26, 28, 5, 3, 2, -3578255712285927539L, 2,
+			null), new UmtOps.Place(UmtOps.Kind.ROAD, 20, 27, 12, 2, 3, -5226597523096308268L, 1, new UmtOps.Crash("P5", null, 32, true)), new UmtOps.Remove(2,
+			new UmtOps.Crash("K6", null, 0, false))), UmtOps.Gen.ALL));
+		assertTrue(r.violations().stream().noneMatch(v -> v.startsWith("[UC]")) && r.violations().isEmpty(), r.report());
+	}
 }

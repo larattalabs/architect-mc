@@ -22,6 +22,10 @@ export function parseState(s) {
 }
 
 const NATURAL_CLASSES = new Set(['AIR', 'ROCK', 'SOIL', 'LOOSE', 'ICE', 'SNOW', 'WATER', 'LAVA', 'LOG', 'LEAVES', 'PLANT']);
+// (6c close-out B, the mod's natural rule: kit/test/natural-drift.test.mjs and NaturalDriftTest) bedrock and tripwire are never a natural
+// cell to write over (the mod's CellCond refuses them); a coral wall fan (no voxel class of its own) is the reef's, as the mod counts it
+const NOT_NATURAL = new Set(['minecraft:bedrock', 'minecraft:tripwire']);
+const naturalState = (name, vc) => (NATURAL_CLASSES.has(vc) && !NOT_NATURAL.has(name)) || /_coral_wall_fan$/.test(name);
 const GRAVITY = /(^minecraft:(sand|red_sand|gravel|suspicious_sand|suspicious_gravel|anvil|chipped_anvil|damaged_anvil|pointed_dripstone|scaffolding)$)|_concrete_powder$/;
 
 /** A palette of block states with the per-state facts the rules need. */
@@ -61,7 +65,7 @@ export class Palette {
     // M8 counts it only with a second block on top)
     this.barrier.push(!air && known && (coll === 'thin' || (BLOCKS[st.name].family === 'fence_gate' && st.props.open !== 'true')));
     const vc = air ? 'AIR' : voxelClassOf(st.name);
-    this.natural.push(NATURAL_CLASSES.has(vc));
+    this.natural.push(naturalState(st.name, vc));
     // (6c W) the generated FallingBlock flag, plus the other blocks that fall (Fallable: brushable sand and gravel, dripstone, scaffolding)
     this.gravity.push(GRAVITY.test(st.name) || (known && isGravity(st.name)));
     this.stairs.push(known && BLOCKS[st.name].family === 'stairs');

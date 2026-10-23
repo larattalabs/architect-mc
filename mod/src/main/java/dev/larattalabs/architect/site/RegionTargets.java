@@ -845,7 +845,9 @@ public final class RegionTargets {
 		}
 		r.unbuilt.values().removeIf(v -> v == 0);
 		r.bom.values().removeIf(v -> v == 0);
-		PLANS.put(i.id(), plan(i, r));
+		Plan pl = plan(i, r);
+		PLANS.put(i.id(), pl);
+		Builder.driedFarmland(r, beforeOf(i, pl)); // (6c close-out B, L-V7) a farmland cell that dried before a restart stays built
 		ServerLevel level = Sites.levelOf(srv, i.dimension());
 		if (level != null) {
 			r.rescan(level);

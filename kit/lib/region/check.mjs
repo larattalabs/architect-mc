@@ -16,6 +16,7 @@ import { bridgeRules } from './checkBridges.mjs';
 import { tunnelRules } from './checkTunnels.mjs';
 // (6c H) the fluid rules: M25 containment per body and wet write, M20 fire for lava bodies (checkFluids.mjs, H-core)
 import { fluidRules } from './checkFluids.mjs';
+import { FLUID_OP, fromRuns } from '../fluids/body.mjs';
 // (6c VOC-b) the vocabulary rules: M26 rarity, M27 vocabulary misuse, M20 widened (checkVocab.mjs)
 import { vocabRules } from './checkVocab.mjs';
 import { formRulesVw } from './checkForms.mjs';
@@ -62,6 +63,16 @@ class CellBytes {
   }
 }
 
+/** (M4 on a realised world) "x,y,z" -> fluid of every plan fluid body's own cells: its sources, spill and predicted flowing cells. */
+function ownFluidCells(ir) {
+  const own = new Map();
+  for (const p of ir.parts ?? []) for (const o of p.ops ?? []) {
+    if (o.op !== FLUID_OP) continue;
+    for (const [x, y, z] of [...fromRuns(o.cells), ...fromRuns(o.spill)]) own.set(`${x},${y},${z}`, o.fluid);
+    for (const [x, y, z] of o.predicted ?? []) own.set(`${x},${y},${z}`, o.fluid);
+  }
+  return own;
+}
 function finding(rule, part, stage, count, sample, message) {
   return { rule, severity: SUB_SEVERITY[rule] ?? (ERRORS.has(rule.split(':')[0]) && !(rule === 'M14' && /warning/.test(message)) ? 'error' : 'warning'), part: part ?? null, stage: stage ?? null, count, sample: sample.slice(0, 20), message };
 }
@@ -493,12 +504,18 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   // ---- M4 fluid containment
   if (want.has('M4')) time('M4', () => {
     const byPart = new Map();
+    // On a realised world, a plan fluid body's own flow (its cells, spill and predicted flowing cells, of its fluid) is not a fluid
+    // the clearing opens onto: the body writes only its sources, so its flow reads as unwritten fluid there (S3's fountain spout
+    // beside a felled trunk the fountain room cleared). The body's census and M25 judge that flow; the virtual world holds no flow,
+    // so a plan's own report is unchanged.
+    const own = world ? ownFluidCells(ir) : null;
     vw.eachWritten((x, y, z, idx, f, pi) => {
       if (!P.air[idx]) return;
       for (const [dx, dy, dz] of DIRS6) {
         const nx = x + dx, ny = y + dy, nz = z + dz;
         if (vw.flags(nx, ny, nz) & F_WRITTEN) continue;
         const n = vw.get(nx, ny, nz);
+        if (own && P.fluid[n] && own.get(`${nx},${ny},${nz}`) === (P.lava[n] ? 'lava' : 'water')) continue;
         if (P.fluid[n]) { const l = byPart.get(pi) ?? []; l.push([x, y, z]); byPart.set(pi, l); return; }
       }
     });

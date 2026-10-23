@@ -39,7 +39,12 @@ public final class Roads {
 
 	/** A road planned: its plan, the cells it changes (positions and values) and its box; or a refusal. */
 	public record Planned(RoadPlan.Plan plan, long[] positions, Value[] values, Anchors.@Nullable Bounds box, @Nullable String refusal,
-		@Nullable Reason reason, List<String> notes, List<String> layeredOver) {
+		@Nullable Reason reason, List<String> notes, List<String> layeredOver, Map<String, Integer> heldBy) {
+		public Planned(RoadPlan.Plan plan, long[] positions, Value[] values, Anchors.@Nullable Bounds box, @Nullable String refusal, @Nullable Reason reason,
+			List<String> notes, List<String> layeredOver) {
+			this(plan, positions, values, box, refusal, reason, notes, layeredOver, Map.of());
+		}
+
 		/** 6c 0c §3: the failing spans (a refusal's, or with partial the skipped ones). */
 		public List<RoadPlan.Span> spans() {
 			return plan.spans();
@@ -201,8 +206,42 @@ public final class Roads {
 		List<String> notes = new ArrayList<>(plan.notes());
 		layered.forEach((site, n) -> notes.add("on top of cell site " + site + " (" + n + " cells)"));
 		if (pos.length == 0) {
-			return new Planned(plan, pos, vals, null, "the road changes no cell (every column is another site's or blocked)", Reason.OTHER, notes,
-				List.copyOf(layered.keySet()));
+			// (6c close-out B) every column it would write is its own region's (a target, a lot or a tile of the same group wrote it): a
+			// no-op, placed, each column held by the sibling that owns it (heldBy); anything else stays a failure, as before
+			RoadTerrain terrain = new RoadTerrain(level, consent);
+			RoadPlan.Owned holder = js == null ? (x, y, z) -> null : (x, y, z) -> {
+				String[] top = topSite(js, dim, Journal.pos(x, y, z));
+				return top == null ? null : top[0];
+			};
+			Map<String, Integer> held = heldByOwn(plan, ownGroup, Roads::groupOf, terrain, holder);
+			if (held != null) {
+				List<String> n2 = new ArrayList<>(notes);
+				held.forEach((site, c) -> n2.add("held by its region's own " + site + " (" + c + " cells): nothing to write"));
+				return new Planned(plan, pos, vals, null, null, null, n2, List.of(), held);
+			}
+			// (6c close-out B) why its stopped columns are not its own region's: the first few, each its first cell that is not (a block no
+			// entry holds, another group's, a log or ore), for the failure's message
+			List<String> why = new ArrayList<>();
+			for (int[] col : plan.stopped()) {
+				if (why.size() >= 3) {
+					break;
+				}
+				for (int y = col[1]; y <= col[2]; y++) {
+					int k = terrain.at(col[0], y, col[3]);
+					if (k == RoadPlan.AIR || RoadPlan.ground(k) || RoadPlan.open(k)) {
+						continue;
+					}
+					String h = holder.at(col[0], y, col[3]);
+					if (k != RoadPlan.BUILT && k != RoadPlan.BUILT_OPEN || h == null || !java.util.Objects.equals(ownGroup, groupOf(h))) {
+						why.add(col[0] + "," + y + "," + col[3] + " " + BuiltInRegistries.BLOCK.getKey(level.getBlockState(new net.minecraft.core.BlockPos(col[0], y,
+							col[3])).getBlock()) + " (kind " + k + ") held by " + h + (h == null ? "" : " (group " + groupOf(h) + ")"));
+						break;
+					}
+				}
+			}
+			return new Planned(plan, pos, vals, null, "the road changes no cell (every column is another site's or blocked: owned " + plan.ownedBy()
+				+ ", skipped " + plan.skipped() + ", stopped columns " + plan.stopped().size() + (why.isEmpty() ? "" : ", e.g. " + why) + ")", Reason.OTHER,
+				notes, List.copyOf(layered.keySet()));
 		}
 		return new Planned(plan, pos, vals, box, null, null, notes, List.copyOf(layered.keySet()));
 	}
@@ -256,6 +295,41 @@ public final class Roads {
 		} catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
 			throw new IllegalArgumentException("not a block state: " + s);
 		}
+	}
+
+	/**
+	 * (6c close-out B) A road that writes no cell is a no-op of its own region, not a failure, only when every column it would write is
+	 * owned by an entry of its own site group ({@code ownGroup}: a region's targets, lots or tiles) and nothing else stopped a column: no
+	 * skipped span (protected, a player's build, too steep); a column skipped as blocked or kept only when every built cell in it is a
+	 * site's (RoadPlan.builtOwners), those sites its group's too; none skipped as water, steep or ore (lanterns without room may be). Returns those columns' cells per owning site, or null (a failure, as before). Pure.
+	 */
+	public static @Nullable Map<String, Integer> heldByOwn(RoadPlan.Plan plan, @Nullable String ownGroup, java.util.function.Function<String, @Nullable String> groupOf,
+		RoadPlan.World w, RoadPlan.Owned holder) {
+		if (ownGroup == null || plan.refused() || !plan.spans().isEmpty() || !plan.ops().isEmpty()) {
+			return null;
+		}
+		for (String k : plan.skipped().keySet()) {
+			if (!k.equals("blocked") && !k.equals("kept") && !k.equals("lantern")) {
+				return null;
+			}
+		}
+		Map<String, Integer> held = new java.util.TreeMap<>(plan.ownedBy());
+		for (int[] col : plan.stopped()) {
+			Map<String, Integer> by = RoadPlan.builtOwners(col, w, holder);
+			if (by == null) {
+				return null;
+			}
+			by.forEach((site, n) -> held.merge(site, n, Integer::sum));
+		}
+		if (held.isEmpty()) {
+			return null;
+		}
+		for (String site : held.keySet()) {
+			if (!ownGroup.equals(groupOf.apply(site))) {
+				return null;
+			}
+		}
+		return Map.copyOf(held);
 	}
 
 	/** 6c W: the site group a site or cell site (a region tile) belongs to, or null. */

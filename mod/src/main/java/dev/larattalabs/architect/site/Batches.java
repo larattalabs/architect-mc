@@ -547,6 +547,19 @@ public final class Batches {
 			}
 			return;
 		}
+		if (road && c.positions().length == 0 && c.spec() != null && c.spec().has("heldBy")) {
+			// (6c close-out B) every column this road would write its own region already holds: placed, nothing written; the columns
+			// recorded as held by the siblings that own them (the item's message, the region's realised record)
+			tr.done();
+			JsonObject held = c.spec().getAsJsonObject("heldBy");
+			if (RegionItems.isRegion(b)) {
+				RealisedRecords.roadHeld(b, i, held);
+			}
+			Architect.LOGGER.info("Batch {}: item {} writes nothing: every column is held by its own region ({})", b.id, i.key, held);
+			placedItem(server, b, i);
+			i.message = "held by its region's own " + held;
+			return;
+		}
 		Site.Member member = new Site.Member(b.group, b.id, i.key);
 		if (c.box() != null && !loaded(level, c.box().grow(1))) {
 			waitFor(b, i, Reason.NOT_LOADED, "the cells are not loaded on the server (walk closer)");
