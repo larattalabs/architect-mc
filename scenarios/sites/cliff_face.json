@@ -7,13 +7,54 @@
     "gamerules": "default"
   },
   "needs": {
-    "size": [128, 128],
-    "relief": [16, 90],
+    "size": [
+      128,
+      128
+    ],
+    "relief": [
+      16,
+      90
+    ],
     "waterMax": 10,
     "treesMax": 25,
     "candidates": 160,
     "step": 256,
-    "center": [0, 0],
-    "face": [24, 8]
+    "center": [
+      0,
+      0
+    ],
+    "face": [
+      24,
+      8
+    ]
+  },
+  "fixture": {
+    "claim": [
+      224,
+      608,
+      351,
+      735
+    ],
+    "biome": "wooded_badlands",
+    "run": {
+      "a": [
+        260,
+        113,
+        623
+      ],
+      "dir": [
+        1,
+        0
+      ],
+      "side": "left",
+      "n": 8,
+      "gap": 8,
+      "face": {
+        "length": 74,
+        "height": 9
+      }
+    },
+    "surveySha": "1297c9d7867a1a8d44ec6ba12760a46356ea79f09c7aef932bbcd8f29a768896",
+    "pinned": "2026-10-23"
   }
 }
