@@ -192,7 +192,9 @@ function lineOf(K, p, st, wet = null, bodies = true) {
     for (let d = r0; d <= r1; d++) order.push(d);
     const G = gridOf(K, { walkStanding: tg.standing?.id ?? null, wet, bodies });
     const pl = placeRing(G, tg.rect, order, t);
-    if (!pl.ok) return { error: { code: pl.code, message: `no clear ring round ${tg.what} at offsets ${r0}..${r1} on its ${pl.side} side (${blockerText(pl.blockers)})`, evidence: { side: pl.side, ring: [r0, r1], blockers: pl.blockers, target: arr(tg.rect) } } };
+    // ((6c D3, S-D3-6) a ring round a standing region that another standing region's reach (a district's join) blocks: {kind: region})
+    const reachBlocks = tg.standing && K.env.standing.some((a) => a !== tg.standing && Array.isArray(a.reach) && a.reach.length);
+    if (!pl.ok) return { error: { code: pl.code, message: `no clear ring round ${tg.what} at offsets ${r0}..${r1} on its ${pl.side} side (${blockerText(pl.blockers)})`, evidence: { side: pl.side, ring: [r0, r1], blockers: pl.blockers, target: arr(tg.rect), ...(reachBlocks ? { kind: 'region' } : {}) } } };
     return { ...ringOf(K, pl, t, st, notes), devs, notes, target: tg, G };
   }
   if (st.form === 'edge') {
