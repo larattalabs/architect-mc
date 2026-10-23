@@ -1056,3 +1056,23 @@ Top first. Not fixed in v0.40.1.
 - **gate6crs item 4's "consumed 0 items" can never fail** (found by fix/survival-off-storm): it reads a top-level `consumed`
   that `dev.stockpile.state` doesn't have (it is under `ledger`). Read `ledger.consumed` and prove the check goes red on a
   broken variant.
+
+## Found by fix/s3-scenario (2026-10-23)
+
+- **Why 6c-scenario-s3 failed bar 6 ("M4 3") on main, fixed in fix/s3-scenario.** No change since v0.41.0 caused it. S3's chunks
+  are not in the seed base (it holds only the spawn regions), so every scenario world generates them fresh. The cherry trees at
+  the z=-960 chunk edge come out differently from run to run. When a tree stands at (3636, 117-124, -960), the fountain room clears
+  its trunk. The cleared cells then sit beside w_fountain_spout's spill (3637, 118-120, -960), and the realised M4 counted the
+  spout's own flowing water as foreign fluid. The plan's M4 was 0, the census matched the prediction, and the after-stand dump
+  showed no inflow.
+  - The tree was present in 4 of the 11 natural runs since 2026-10-22, and M4 3 appeared in exactly those 4. One of them was on
+    776f8ea5, three commits after v0.41.0, with no kit or scenario change.
+  - v0.41.0's kit re-plans the failing survey to the same IR (b9c6c0bf6585), and its checker gives the same M4 3.
+  - The fix: on a realised world, M4 skips a neighbour that holds a plan fluid body's own fluid in that body's cells, spill or
+    predicted cells (kit/lib/region/check.mjs). Re-running `scenarios.mjs metrics` on the three failing runs turns bar 6 to ok,
+    and nothing else changes.
+- **Proposed hardening (not built): pre-generate S3's claim into the seed snapshot**, so every natural run plans over the same
+  trees (the "S3's natural scenario depends on the live survey" item above). Flowing water would still move the survey a little.
+- **The flat run prints "FAIL S3 14 … E-normal n/a"** on every run, back to the v0.41.0 release. It is display only: `runBad` in
+  tools/scenarios.mjs excuses the flat run's exactness row when E-flat is 0, so the flat run reports 0 failures. Print it as
+  recorded on the flat variant, so nobody reads it as the step's failure.
