@@ -959,6 +959,19 @@ Top first. Not fixed in v0.40.1.
 
 ## Queued from 6c close-out B (builder, 2026-10-22)
 
+- **RoadTerrain treats untouched natural packed ice (and other natural blocks) as a BUILT obstacle** (RS item 14, close-out B;
+  coordinator: its own slice, which needs fixture re-cuts and a look check).
+  - **What happens.** rs02 on a survival copy of S3's claim: road:street_e fails "the road changes no cell". All 12 of its columns
+    stop (kept 4, blocked 8) on `minecraft:packed_ice` ground at 3750,151,-999..-997, which no journal entry holds.
+  - **Cause.** `RoadTerrain.kind`'s ground lists lack natural blocks that `TerrainFit.natural` has (ice, packed ice, blue ice, calcite,
+    powder snow and others), so those fall through to BUILT. The region ends PARTIAL (96.7%).
+  - **Evidence:** `artifacts/gate-runs-coB/20261023-080517-slice` (the failure names the block). The earlier runs
+    `20261023-050602`, `20261023-061736` and `20261023-072735` show the same.
+  - **Fix:** RoadTerrain treats a solid block that `TerrainFit.natural` counts as STONE ground. That moves 4e roads over such ground
+    everywhere (S2's outpost over packed ice, among others). Re-cut the fixtures, check the look, then re-run item 14 to PLACED.
+  - `Roads.heldByOwn` (close-out B) stays. A road whose columns its own region's entries hold is a no-op; this blocker is the world's,
+    not the region's.
+
 - **Model RS's region targets in the ledger lint.** `LedgerSim` covers building targets, a road and adoption. A region-target kind,
   built through production seams (`RegionTargets.newRun`'s held cells, run bills, `soilSame`, `leaving`), would let rs-survival items
   8-10 (conservation, refunds, the mid-build removal) move to REPLACE · ledger-lint. Today they stay in game, one build each.

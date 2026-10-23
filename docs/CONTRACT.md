@@ -24022,3 +24022,20 @@ no version set (the coordinator's at merge).
     (f3 r03, s01, u01, u02, valid v72).
 - *Tests:* the support rule over 200 seeds per preset in `forms-f3-property`, plus the RC seed as a fixture with its broken
   variant (`_unsafe.unsupportedLogs`). The generator's version stays 1, as with the batch's canopy-lava fix.
+
+### 11. Region roads over their own region's cells, and item 14's state
+
+- **The rule** (coordinator's ruling (a)). `Roads.heldByOwn`: a region road that would write no cell counts as placed, as a no-op,
+  only when every column it would write is held by its own group's entries (its targets, lots or tiles). Columns may be owned (sites,
+  roads), or stopped (kept or blocked) with every built cell in their range held by such an entry (`RoadPlan.builtOwners`, the
+  journal's topmost entry).
+  - Each held column is recorded by the sibling that holds it: in the item's message, in the log, and in the realised record's
+    `roads[id].heldBy`.
+  - A foreign column, a player's block, an ore, a skipped span or a column skipped as water or steep keeps the failure, as before.
+  - Creative and survival share the path.
+  - Unit tests: `RoadsHeldTest` (all-own placed; one foreign, unheld or ore column fails; span, water and group cases).
+- **Item 14 stays failing, recorded** (coordinator).
+  - Its street_e stops on untouched `minecraft:packed_ice`: `RoadTerrain` classes natural ground blocks that `TerrainFit.natural`
+    knows as BUILT. The region ends PARTIAL (96.7%). Removal still gives E-normal 0 unclassified.
+  - Queued in PLAN as its own slice; evidence `artifacts/gate-runs-coB/20261023-080517-slice`.
+
