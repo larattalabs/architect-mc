@@ -129,12 +129,25 @@ steps.unit = async () => {
 
 steps.apicompat = async () => {
   srcGradle(root, () => execFileSync('./gradlew', ['compileJava', 'compileClientJava', '--offline', '-q'], { cwd: path.join(root, 'mod'), env: { ...process.env, JAVA_HOME, GRADLE_USER_HOME: path.join(root, '.gradle-home') }, stdio: 'ignore' }));
-  const r = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs')], { cwd: root, encoding: 'utf8', env: { ...process.env, JAVA_HOME } });
-  const t = `${r.stdout}${r.stderr}`;
-  fs.writeFileSync(path.join(OUT, 'api-compat.txt'), t);
-  check(r.status === 0 && /clean/.test(t), `item 18: api-compat against the archived apitest jars (Regions.checkBeside a default that throws, BesideVerdict and BesideJoin added): ${t.trim().split('\n').pop()}`);
+  // the three previous tags' apitest jars and the last tag's mod surface (archived by earlier gates in the main checkout's artifacts)
+  const arts = path.join(path.resolve(root, '..', 'architect-mc'), 'artifacts');
+  const env = { ...process.env, JAVA_HOME };
+  const out = {};
+  let ok = true;
+  for (const [dir, ver] of [['gate6c-coa/v0410', '0.41.0'], ['gate6c-batch/v0401', '0.40.1'], ['gate6c-fl/v0400', '0.40.0']]) {
+    const jar = path.join(arts, dir, `architect_apitest-${ver}.jar`);
+    const r = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), jar], { cwd: root, encoding: 'utf8', env, timeout: 900_000 });
+    out[ver] = `${r.stdout}${r.stderr}`.trim().split('\n').pop();
+    ok &&= r.status === 0 && fs.existsSync(jar);
+  }
+  const sj = path.join(arts, 'gate6c-coa', 'v0410', 'architect_mc-0.41.0.jar');
+  const sr = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), '--surface', sj], { cwd: root, encoding: 'utf8', env, timeout: 900_000 });
+  out.surface = `${sr.stdout}${sr.stderr}`.trim().split('\n').pop();
+  ok &&= sr.status === 0 && fs.existsSync(sj);
+  fs.writeFileSync(path.join(OUT, 'api-compat.txt'), JSON.stringify(out, null, 2));
+  check(ok, `item 18: api-compat clean against the archived 0.41.0, 0.40.1 and 0.40.0 apitest jars and 0.41.0's surface (Regions.checkBeside a default that throws; BesideVerdict, BesideJoin new): ${json(out)}`);
   spendZero();
-  return { out: t };
+  return out;
 };
 
 // ------------------------------------------------------------------ in-game helpers
