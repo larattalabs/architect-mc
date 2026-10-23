@@ -1116,3 +1116,23 @@ Top first. Not fixed in v0.40.1.
 - **An exposed written-cell set for callers:** Steward's undo checks need "cells the plan wrote" (the IR's tile cells plus lot
   boxes) after the region is removed, and today only the kit's buildVirtual gives it. Consider a dev/API read of the realised
   record's cell positions that survives removal.
+
+## Noah's ask (2026-10-23): fancier gates, piston or redstone driven
+
+Noah approved K2's walls look and asked for fancier gates. Candidate slice **GM, gate mechanisms**, after K3 (towers and
+gatehouses), since a gatehouse is the natural home for the mechanism.
+- **Kinds to consider:** a piston portcullis (sticky pistons raising a bar grid), a piston drawbridge over a moat or ditch (H/HY
+  water), double doors on a lever or button pair, a redstone-lit gate (lamps tied to the gate state), and a pressure-plate
+  sally port.
+- **What the contract must settle:**
+  - Who opens it: a player lever or button, and whether villagers' paths treat a closed gate as passable (vanilla villagers open
+    doors, not piston gates).
+  - Default state: open by day, or player-closed.
+  - Survival bill: redstone, pistons, the observer and repeater chain.
+  - Undo and journal: block states of pistons and redstone, moving blocks, and powered states at save and restore.
+  - The walk graph and the M2 movers through an open versus a closed gate.
+  - Mob safety: a closed gate seals the wall line.
+  - The look per bible.
+  - A Steward offer ("add a portcullis to the main gate").
+- **Gate:** in game, open and close cycles, an exact undo with pistons extended and retracted, villager paths with the gate open,
+  and the survival BOM.
