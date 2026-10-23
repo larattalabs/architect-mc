@@ -1110,6 +1110,48 @@ The head's corpus alone: serial 535 s, 9 workers 70 s, warm 0 s. The pool peaks 
 21 MB for two trees. What is left is each driver's own work: FL's layout tests (3m40: they read the tests' diagnostics, so unit-kit
 can't serve them), S3's sidecar and mod tests, the drivers' Gradle runs.
 
+## Speed audit A (2026-10-23): the offline and unit drivers
+
+Noah approved the audit's set A. Same assertions in every step; what moved is who computes what, and once.
+
+- **More drivers on the plan store** (`tools/lib/corpus-plan.mjs`): rs-unit (`unchanged()` and the 59 asks in creative and survival,
+  each ask's *first recording*, `CP.firstAskJobs`), coa-unit (`unchanged()`), hy-unit (item 12), h-unit (item 11), vocc-unit (item 4)
+  and voc-unit (identity: the fixtures, the asks) plan on the pool first (`CP.hyRun` / `jobHyFixture`: the one call hy, h, vocc and
+  voc-a all make, so their entries are shared), and voc-unit's census takes its whole-result extras from the store as a derive
+  (`vocCensus`, `corpus-derive.mjs`; its compile timing is the plan's own, recorded when it was planned). `plan-cache.mjs`'s
+  `planSide` is no longer used by hy and h. The kit tests `plan-p0-asks` item 11 and `plan-k1a` item 7 read the 59 asks from the
+  store inside a gate run (`CP.asksPlanner`); the determinism tests keep planning for themselves.
+- **The record carries the artifact.** coa-unit's signature compares the plan's artifact, which the lite record did not hold. The
+  store is now `calls-v2`: every record has `art` (the artifact JSON, `null` for a plan that made none), a record without it is not an
+  entry, and `artSig` throws on a result that has no `artifact` property, so nothing compares undefined with undefined
+  (`kit/test/gate-corpus-plan.test.mjs`). The first run after this lands plans cold (v1 is left alone).
+- **A pool only for a clean tree.** `prewarm` does nothing when `kit/` or `scenarios/` is dirty (nothing would be stored).
+- **kitReuse in more drivers** (`tools/lib/kit-reuse.mjs`): vocc-unit, voc-unit (vocab, vocab-rules), rs-unit (rs.test), coa-unit
+  (coa.test, vocc.test), c37-unit and c38-unit (pass/fail counts only), pt-unit, pt2-unit, rp-unit, all `waitFor: unit-kit`.
+  p0-unit (it reads the gap table), fl-unit (diagnostics) and 0b-unit (it writes the COPIES_REPORT files) keep running theirs.
+  `kitReuse` now says why whenever it falls back (no unit-kit in the run, a dirty `kit/`, a different tree, a file missing or
+  failed); the dirty rule is unchanged.
+- **Java tests from unit-mod's XML** (`tools/lib/junit-reuse.mjs`): after unit-mod passes, the runner copies its JUnit XML to
+  `<run>/unit-mod-junit` and passes `GATE_UNIT_MOD_JUNIT` and `GATE_UNIT_MOD_TREE`. 0b-unit, sch-unit, rp-unit, f3-unit and
+  rs-unit (both Java filters) take their classes' results from it when this checkout's HEAD tree is the one unit-mod ran with no
+  tracked file modified, every pattern matches a class with tests > 0, failures = 0 and errors = 0, and no `-Dumt.`/`ledger.`/
+  `arvx.write`/`mirror.write`/`c6.evidence` is set; else they run gradle as before. They `waitFor` unit-mod (it is not pulled in
+  by them). A coverage-cached PASS of such a step serves only a run that holds unit-mod.
+- **umt and p3-lint are `supersededBy: unit-mod`.** unit-mod's `./gradlew build` runs the same test task (UmtFuzzTest,
+  UmtGateMovesTest, UmtPropertiesTest, LedgerLintTest, RegionFluidsLintTest are untagged, so in `build`; the tags the task excludes
+  are excluded in both). Their finding counts are in that XML's system-out.
+- **api-compat memo.** The runner sets `GATE_APICOMPAT_MEMO` (a dir of the run); a clean check (one jar against the classes) is
+  stored under the sha of the check, the jar, every class file under the classes dirs, `api-compat.mjs`, the JDK and the dirs as
+  printed, and the next caller of the same check in the run replays its stdout. A failure is never stored.
+- **lint-mutations** runs its eight mutations side by side (each its own scratch tree; at most GATE_CPU_SHARE/2 when the
+  runner sets a share), printing in the list's order. **p2-calibration** reads t3a-probe's `probe.json` when t3a-probe passed in
+  the run on this HEAD (`tools/lib/probe-reuse.mjs`, `GATE_STEP_EVIDENCE`), replays its check lines, and runs the probe itself
+  otherwise. **umt-long** is one test class per generator (`UmtLongPlainTest` ...) on `maxParallelForks = 4`: a JVM each, the
+  same seeds (`umt.from` fixed once by the task), the task fails once at the end with every generator's failures.
+- **`--no-daemon` stays.** Nothing documents why it was added (the first runner commit has it). The gate's gradle runs are in
+  per-run worktrees under the coverage tracer's `JAVA_TOOL_OPTIONS`, which makes gradle fork a single-use daemon anyway ("To honour
+  the JVM settings ..."), so dropping the flag saves nothing there and would leave daemons holding the run worktrees.
+
 ## Sprinted game-time waits (2026-10-22)
 
 Many in-game steps wait for game time to pass: a 2-minute stand, a fluid or breach settle, hydration, a villager stand, the
@@ -1993,7 +2035,7 @@ Several agents and runners share this machine, so everything is configurable. A 
 | `--quiet-wait [N]`, `--no-quiet-wait`, `--quiet-max-min M` | | on at release (N 8), else off (load recorded only); M 30 |
 | `--slots N`, `--slots-dir DIR` | `GATE_SLOTS`, `GATE_SLOTS_DIR` | `slots.max` (4); `<LarattaLabs>/.gate-slots/` |
 | `--judge-timing` | | change/slice record timing bars; this judges them as at release |
-| | `GATE_PLAN_CACHE`, `GATE_PLAN_WORKERS`, `GATE_PLAN_CACHE_DIR` | on; the cores free now, at least 4; `<main checkout>/artifacts/plan-cache/calls-v1` ("Shared plans"). `GATE_PLAN_CACHE=0`: no store, no pool, as before |
+| | `GATE_PLAN_CACHE`, `GATE_PLAN_WORKERS`, `GATE_PLAN_CACHE_DIR` | on; the cores free now, at least 4; `<main checkout>/artifacts/plan-cache/calls-v2` ("Shared plans", "Speed audit A"). `GATE_PLAN_CACHE=0`: no store, no pool, as before |
 | | `GATE_JAVAP_CACHE`, `GATE_JAVAP_CACHE_DIR` | on; `<main checkout>/artifacts/javap-cache` (api-compat's javap answers, "Shared plans") |
 | | `GATE_SPRINT` | on: the drivers' game-time waits sprint on headless hosts ("Sprinted game-time waits"); `0`: every one waits in real time, as before |
 | | `GATE_SNAPSHOT_DIR` | the seed's `mod/run/saves` |
