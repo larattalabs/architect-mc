@@ -233,7 +233,8 @@ public final class Roads {
 					}
 					String h = holder.at(col[0], y, col[3]);
 					if (k != RoadPlan.BUILT && k != RoadPlan.BUILT_OPEN || h == null || !java.util.Objects.equals(ownGroup, groupOf(h))) {
-						why.add(col[0] + "," + y + "," + col[3] + " kind " + k + " held by " + h + (h == null ? "" : " (group " + groupOf(h) + ")"));
+						why.add(col[0] + "," + y + "," + col[3] + " " + BuiltInRegistries.BLOCK.getKey(level.getBlockState(new net.minecraft.core.BlockPos(col[0], y,
+							col[3])).getBlock()) + " (kind " + k + ") held by " + h + (h == null ? "" : " (group " + groupOf(h) + ")"));
 						break;
 					}
 				}
