@@ -11,7 +11,7 @@
 //       to the measured figures exactly; sim:fail / sim:repair / sim:usage_limit give FAILED, a repair round and HELD_USAGE;
 //       the estimate's basis says sim: true; all of it under 2 minutes at the default simStepMs (400).
 //
-//   node tools/gate6c0a.mjs flow|fit|batches|keys|cancel|pins|stopped|tiles
+//   node tools/gate6c0a.mjs flow|fit|batches|keys|cancel|pins|stopped|tiles|session
 //       the in-game items (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11) against GATE6C0A_RUN's client (see "in game" below)
 //
 // Evidence: artifacts/gate6c0a/<step>.json in the main checkout (GATE6C0A_OUT overrides), spend.json ($0.00).
@@ -447,10 +447,40 @@ const nk = (p) => `${p}${Date.now().toString(36)}${++nKey}`;
  * paused_budget while an action is in flight.
  */
 steps.flow = async () => {
+  const out = await flowItem();
+  await stopClient();
+  return out;
+};
+
+/**
+ * 0a-flow's item (the client stays up: speed audit D, "0a-session" runs fit and stopped on it). It also holds the in-game residues of
+ * the retired 0a-stub, 0a-cancel and 0a-pins (docs/FAST-CHECKS.md "0a: the retired steps"): the packed jar carries the helper and the
+ * helper runs the sim with no SDK, "cancel gives BIBLE_DONE once", and "a helper restart runs the GC" (a pin holds, no pin collects).
+ */
+async function flowItem() {
   const W = 'G6C0A Flow';
   fs.rmSync(path.join(SAVES, W), { recursive: true, force: true });
   await startClient(W, { ARCHITECT_SIM_COSTS: 'measured' });
   const out = {};
+  // (0a-stub's row 1) the packed jar carries the helper bundle; the helper the client started runs the sim, no Agent SDK
+  {
+    const ver = fs.readFileSync(path.join(root, 'mod', 'gradle.properties'), 'utf8').match(/^mod_version=(.+)$/m)[1].trim();
+    const jarRoot = process.env.GATE6C0A_RUN ? path.resolve(process.env.GATE6C0A_RUN) : root;
+    let jar = path.join(jarRoot, 'mod', 'build', 'libs', `architect_mc-${ver}.jar`);
+    if (!fs.existsSync(jar) && jarRoot !== root) jar = path.join(root, 'mod', 'build', 'libs', `architect_mc-${ver}.jar`);
+    if (check(fs.existsSync(jar), `the packed architect_mc-${ver}.jar exists (${path.relative(root, jar)})`)) {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate6c0a-jar-'));
+      try {
+        execFileSync('unzip', ['-q', jar, 'architect-sidecar/*', '-d', dir]);
+        const bundle = JSON.parse(fs.readFileSync(path.join(dir, 'architect-sidecar', 'BUNDLE.json'), 'utf8'));
+        check(bundle.modVersion === ver && !fs.existsSync(path.join(dir, 'architect-sidecar', 'node_modules')), `the packed ${path.basename(jar)} carries the helper bundle (BUNDLE.json modVersion ${bundle.modVersion}); extracted with no node_modules (no npm install)`);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    }
+    const sc = await call('dev.sidecar.state');
+    check(sc.status?.backend === 'sim' && sc.status?.auth === 'ok' && sc.status?.sdk === 'missing', `the helper runs the sim with no Agent SDK installed (backend ${sc.status?.backend}, auth ${sc.status?.auth}, sdk ${sc.status?.sdk})`);
+  }
   const v = await api('api110');
   // 1.10.0 or later (a later minor appends after 1.10.0's)
   check(v.version.localeCompare('1.10.0', undefined, { numeric: true }) >= 0, `ArchitectApi.VERSION ${v.version}; the last Reasons ${v.lastReasons}`);
@@ -506,9 +536,41 @@ steps.flow = async () => {
   check(bv.status === 'DONE' && bv.placed === 3, `a batch of the 3 details: ${bv.status}, ${bv.placed} placed`);
   const un = await result(await api(`sgremove ${bv.group} force`), 300_000);
   check(un.removed === true || (un.removed ?? []).length === 3, `undo: the batch's site group removed (${JSON.stringify(un).slice(0, 160)})`);
-  await stopClient();
+  // (0a-cancel's residue) cancelJob completes with CANCELLED and the mod fires BIBLE_DONE once (mod-side future completion: in game only)
+  await api('clear');
+  const cj = await result(await api(`bible kcb ${b64({ prompt: 'a slow town', name: 'Slow Town' })}`));
+  const cc = await result(await api(`canceljob kc1 ${cj.id}`));
+  await settle(3000);
+  const cdone = (await events()).filter((e) => e.event === 'BIBLE_DONE' && e.id === cj.id);
+  check(cc.status === 'CANCELLED' && cdone.length === 1, `cancelJob completes CANCELLED (${cc.status}); BIBLE_DONE fired once (${cdone.length})`);
+  const cc2 = await result(await api(`canceljob kc2 ${cj.id}`));
+  check(/already cancelled/.test(cc2.error ?? ''), `a second cancel fails "already cancelled" (${cc2.error})`);
+  // (0a-pins' residue) a helper restart runs the library GC: an aged version a pin holds survives it, unpinned it is collected
+  {
+    const entry = process.env.GATE6C0A_PIN_ENTRY ?? 'g5b_cap';
+    const lib = path.join(GAME_DIR, 'architect', 'library', entry);
+    if (check(fs.existsSync(path.join(lib, 'versions', '1')) && fs.existsSync(path.join(lib, 'versions', '2')), `${entry} has v1 and v2 (version folders in ${path.relative(RUN, lib)})`)) {
+      await result(await api(`pin p1 ${entry} 1 steward:s1`));
+      const forceAgeAndGc = async () => {
+        const lp = await call('dev.launcher.state');
+        if (lp.pid) process.kill(lp.pid, 'SIGKILL'); // the helper's PID, not the client's
+        await sleep(3000);
+        const jf = path.join(GAME_DIR, 'architect', 'library', entry, `${entry}.blueprint.json`);
+        const j = JSON.parse(fs.readFileSync(jf, 'utf8'));
+        for (const l of j.lineage ?? j.versions ?? []) if (l.n === 1 || l.version === 1) l.createdAt = 1;
+        fs.writeFileSync(jf, JSON.stringify(j, null, 2));
+        await call('dev.launcher.restart');
+        await until(async () => (await call('dev.launcher.state')).state === 'running', 'the helper back', 300_000);
+        await settle(4000);
+        return fs.existsSync(path.join(GAME_DIR, 'architect', 'library', entry, 'versions', '1'));
+      };
+      check(await forceAgeAndGc(), 'a helper restart runs the GC: a pinned v1 survives a forced-age GC');
+      await result(await api(`unpin u1 ${entry} 1 steward:s1`));
+      check(!(await forceAgeAndGc()), 'a helper restart runs the GC: unpinned, v1 is collected by the forced-age GC');
+    }
+  }
   return out;
-};
+}
 
 /**
  * Item 7's live-run case (6b): measured costs and a $5 budget. The soft pause (80%) comes inside a detail pass; with the sim's step
@@ -554,8 +616,12 @@ steps.budget = async () => {
 
 /** Item 3, in game: fitMassingToLot and a later fitToLot of its detail agree on one lot (same rotation, origin within 2, y equal). */
 steps.fit = async () => {
-  const W = 'G6C0A Flow';
-  await startClient(W, { ARCHITECT_SIM_COSTS: 'measured' });
+  await startClient('G6C0A Flow', { ARCHITECT_SIM_COSTS: 'measured' });
+  const out = await fitItem();
+  await stopClient();
+  return out;
+};
+async function fitItem() {
   const groups = await api('groups apitest:village/1');
   let pair = null;
   for (const id of groups) {
@@ -581,9 +647,8 @@ steps.fit = async () => {
   }
   const unknown = await api(`fitmassing mas_nope 1 ${lot} north`);
   check(unknown.ok === false && JSON.stringify(unknown.refusals).includes('UNKNOWN_BLUEPRINT'), 'an unknown massing: UNKNOWN_BLUEPRINT');
-  await stopClient();
   return out;
-};
+}
 
 /** Item 4: durable finished batches (clean stop: still DONE, no re-fire; skipSave + SIGKILL: fires once on load; ids not reused). */
 steps.batches = async () => {
@@ -737,10 +802,18 @@ steps.pins = async () => {
 /** Item 10: WORLD_STOPPED (a pending Sites.removeGroup, a Regions.remove, a Survey.volume and an unacked requestGroup; the realise). */
 steps.stopped = async () => {
   const W = 'G6C0A Stop';
+  stoppedWorld(W);
+  await startClient(W, {});
+  const out = await stoppedItem(W);
+  await stopClient();
+  return out;
+};
+function stoppedWorld(W) {
   fs.rmSync(path.join(SAVES, W), { recursive: true, force: true });
   execFileSync('cp', ['-c', '-R', path.join(SAVES, 'G6A Flat Base Prepared'), path.join(SAVES, W)]);
   fs.rmSync(path.join(SAVES, W, 'session.lock'), { force: true });
-  await startClient(W, {});
+}
+async function stoppedItem(W) {
   const K = nk('ws');
   await cmd('/tp @s 0.5 120 0.5');
   const p = await call('dev.region.plan', { program: 'region_small', claim: [-96, -96, 95, 95], surveyLoad: 'generated:64', check: false }, 600_000);
@@ -782,8 +855,35 @@ steps.stopped = async () => {
   check(otherFail.length === 0 && stillPending.length === 0 && stopped.length >= 2, `every future pending at the stop failed with reason() == WORLD_STOPPED (${stopped.join(', ')}; completed before the stop: ${Object.keys(res).filter((k) => !stopped.includes(k)).join(', ') || '-'})`, res);
   const g = await result(await api(`groupbykey wk ${OWNER} ${K}`));
   check(g?.id && g.opKey === K, `after the next load the group is found by its key (${g?.id})`);
-  await stopClient();
   return res;
+}
+
+/**
+ * (speed audit D, B6) 0a-flow, 0a-fit and 0a-stopped in ONE client session, in that order (flow first: fit reads its groups; stopped
+ * last: it leaves and reopens its world). Each item has its own world copy: flow its fresh one, fit a copy of the flow's saved world,
+ * stopped a copy of the prepared flat base. The three do not kill the client (0a-batches and 0a-keys do, and 0a-tiles starts three).
+ * Same check lines as the three steps, one boot and no stop/start between them.
+ */
+steps.session = async () => {
+  const out = {};
+  const hop = async (name, prepare) => {
+    await call('dev.world.leave', {}, 300_000);
+    await until(async () => !(await call('dev.state')).inWorld, 'out of the world', 120_000);
+    prepare();
+    await call('dev.world.open', { name }, 30_000);
+    await waitInWorld();
+  };
+  out.flow = await flowItem();
+  await hop('G6C0A Fit', () => {
+    fs.rmSync(path.join(SAVES, 'G6C0A Fit'), { recursive: true, force: true });
+    execFileSync('cp', ['-c', '-R', path.join(SAVES, 'G6C0A Flow'), path.join(SAVES, 'G6C0A Fit')]);
+    fs.rmSync(path.join(SAVES, 'G6C0A Fit', 'session.lock'), { force: true });
+  });
+  out.fit = await fitItem();
+  await hop('G6C0A Stop', () => stoppedWorld('G6C0A Stop'));
+  out.stopped = await stoppedItem('G6C0A Stop');
+  await stopClient();
+  return out;
 };
 
 /** Item 11 in game: a small region with SLOW_TILES=4 ends PLACED with the unhooked run's sha, shows TILE_SLOW, RETRY works; =2 passes inside the retries. */
