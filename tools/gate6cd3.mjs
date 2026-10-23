@@ -134,18 +134,19 @@ steps.apicompat = async () => {
   const env = { ...process.env, JAVA_HOME };
   const out = {};
   let ok = true;
-  for (const [dir, ver] of [['gate6c-coa/v0410', '0.41.0'], ['gate6c-batch/v0401', '0.40.1'], ['gate6c-fl/v0400', '0.40.0']]) {
+  // (0.42.0's: built from the tag by the D3 builder, artifacts/gate6c-d3/v0420/SOURCE.txt)
+  for (const [dir, ver] of [['gate6c-d3/v0420', '0.42.0'], ['gate6c-coa/v0410', '0.41.0'], ['gate6c-batch/v0401', '0.40.1'], ['gate6c-fl/v0400', '0.40.0']]) {
     const jar = path.join(arts, dir, `architect_apitest-${ver}.jar`);
     const r = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), jar], { cwd: root, encoding: 'utf8', env, timeout: 900_000 });
     out[ver] = `${r.stdout}${r.stderr}`.trim().split('\n').pop();
     ok &&= r.status === 0 && fs.existsSync(jar);
   }
-  const sj = path.join(arts, 'gate6c-coa', 'v0410', 'architect_mc-0.41.0.jar');
+  const sj = path.join(arts, 'gate6c-d3', 'v0420', 'architect_mc-0.42.0.jar');
   const sr = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), '--surface', sj], { cwd: root, encoding: 'utf8', env, timeout: 900_000 });
   out.surface = `${sr.stdout}${sr.stderr}`.trim().split('\n').pop();
   ok &&= sr.status === 0 && fs.existsSync(sj);
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), JSON.stringify(out, null, 2));
-  check(ok, `item 18: api-compat clean against the archived 0.41.0, 0.40.1 and 0.40.0 apitest jars and 0.41.0's surface (Regions.checkBeside a default that throws; BesideVerdict, BesideJoin new): ${json(out)}`);
+  check(ok, `item 18: api-compat clean against the archived 0.42.0, 0.41.0, 0.40.1 and 0.40.0 apitest jars and 0.42.0's surface (Regions.checkBeside a default that throws; BesideVerdict, BesideJoin new): ${json(out)}`);
   spendZero();
   return out;
 };
