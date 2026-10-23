@@ -90,8 +90,10 @@
     "kit/test/k1-foundation.test.mjs",
     "kit/test/kc.test.mjs",
     "kit/test/massing.test.mjs",
+    "kit/test/megab.test.mjs",
     "kit/test/mirror.test.mjs",
     "kit/test/mp.test.mjs",
+    "kit/test/natural-drift.test.mjs",
     "kit/test/orientation-c37.test.mjs",
     "kit/test/outpost-s2.test.mjs",
     "kit/test/params.test.mjs",
@@ -126,6 +128,7 @@
     "kit/test/rp.test.mjs",
     "kit/test/rs-b.test.mjs",
     "kit/test/rs.test.mjs",
+    "kit/test/s3-live.test.mjs",
     "kit/test/scatter-f2.test.mjs",
     "kit/test/scenario-goldens.test.mjs",
     "kit/test/schem.test.mjs",
@@ -390,9 +393,11 @@
     "kit/test/k1-foundation.test.mjs",
     "kit/test/kc.test.mjs",
     "kit/test/massing.test.mjs",
+    "kit/test/megab.test.mjs",
     "kit/test/mirror.test.mjs",
     "kit/test/mp-specs.mjs",
     "kit/test/mp.test.mjs",
+    "kit/test/natural-drift.test.mjs",
     "kit/test/orientation-c37.test.mjs",
     "kit/test/outpost-s2.test.mjs",
     "kit/test/params.test.mjs",
@@ -430,6 +435,7 @@
     "kit/test/rp.test.mjs",
     "kit/test/rs-b.test.mjs",
     "kit/test/rs.test.mjs",
+    "kit/test/s3-live.test.mjs",
     "kit/test/scatter-f2.test.mjs",
     "kit/test/scenario-goldens.test.mjs",
     "kit/test/schem.test.mjs",
@@ -514,6 +520,7 @@
     "tools/lib/gate6cirr-game.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/kit-reuse.mjs",
+    "tools/lib/megab.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
     "tools/lib/realised-virtual.mjs",
@@ -566,6 +573,7 @@
     "kit/test/fixtures/plan/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/regions/**",
+    "kit/test/fixtures/s3-live/**",
     "kit/test/fixtures/schem/**",
     "kit/test/fixtures/versions/tavern/**",
     "mod/src/client/java/**",
@@ -725,6 +733,7 @@
     "IRR_PROBE",
     "JAVA",
     "JAVA_HOME",
+    "NATURAL_DRIFT_WRITE",
     "PATH",
     "REFIND",
     "SCENARIOS_ART",
@@ -961,9 +970,11 @@
     "kit/test/k1-foundation.test.mjs",
     "kit/test/kc.test.mjs",
     "kit/test/massing.test.mjs",
+    "kit/test/megab.test.mjs",
     "kit/test/mirror.test.mjs",
     "kit/test/mp-specs.mjs",
     "kit/test/mp.test.mjs",
+    "kit/test/natural-drift.test.mjs",
     "kit/test/orientation-c37.test.mjs",
     "kit/test/outpost-s2.test.mjs",
     "kit/test/params.test.mjs",
@@ -1001,6 +1012,7 @@
     "kit/test/rp.test.mjs",
     "kit/test/rs-b.test.mjs",
     "kit/test/rs.test.mjs",
+    "kit/test/s3-live.test.mjs",
     "kit/test/scatter-f2.test.mjs",
     "kit/test/scenario-goldens.test.mjs",
     "kit/test/schem.test.mjs",
@@ -1034,6 +1046,7 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6cirr-game.mjs",
     "tools/lib/gate6cvoc-b.mjs",
+    "tools/lib/megab.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/shard-auto.mjs",
     "tools/lib/sprint.mjs",
@@ -1241,6 +1254,7 @@
     "tools/gate6a.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
@@ -11065,7 +11079,13 @@
     "tools/gate6crs.mjs"
    ],
    "closure": [
+    "kit/build.mjs",
+    "kit/check.mjs",
+    "kit/lib/bible.mjs",
     "kit/lib/blocks.mjs",
+    "kit/lib/check.mjs",
+    "kit/lib/colors.mjs",
+    "kit/lib/components.mjs",
     "kit/lib/connectors/bom.mjs",
     "kit/lib/connectors/bridge.mjs",
     "kit/lib/connectors/bridgeGeom.mjs",
@@ -11115,7 +11135,9 @@
     "kit/lib/forms/states.mjs",
     "kit/lib/kit.mjs",
     "kit/lib/mask.mjs",
+    "kit/lib/massing.mjs",
     "kit/lib/material.mjs",
+    "kit/lib/mirror.mjs",
     "kit/lib/nbt.mjs",
     "kit/lib/noise.mjs",
     "kit/lib/params.mjs",
@@ -11173,6 +11195,8 @@
     "kit/lib/region/volume.mjs",
     "kit/lib/region/voxels.mjs",
     "kit/lib/region/vworld.mjs",
+    "kit/lib/render.mjs",
+    "kit/lib/reserved.mjs",
     "kit/lib/sdf.mjs",
     "kit/lib/specschema.mjs",
     "kit/lib/vocab.mjs",
@@ -11180,11 +11204,13 @@
     "kit/lib/vocab/groups.mjs",
     "kit/lib/vocab/rarity.mjs",
     "kit/lib/vocab/survival.mjs",
+    "kit/lib/write.mjs",
     "kit/regions/crater_works.mjs",
     "kit/regions/floating_islands.mjs",
     "kit/regions/hy_core_demo.mjs",
     "kit/regions/plan_v0.mjs",
     "kit/regions/rift_city.mjs",
+    "kit/regions/s3_hill.mjs",
     "kit/schemas/mask.json",
     "kit/schemas/pattern.json",
     "kit/schemas/plan.json",
@@ -11199,6 +11225,7 @@
     "kit/vocab/roles.json",
     "kit/vocab/tiers.json",
     "mod/gradle.properties",
+    "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
@@ -11210,6 +11237,8 @@
     "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
+    "tools/lib/gallery6b.html",
+    "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
@@ -11218,15 +11247,29 @@
     "tools/lib/gate6crs-kit.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
+    "tools/lib/realised-virtual.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/scenario-districts.mjs",
+    "tools/lib/scenario-eval-worker.mjs",
+    "tools/lib/scenario-forms.mjs",
+    "tools/lib/scenario-metrics.mjs",
+    "tools/lib/scenario-relief.mjs",
+    "tools/lib/scenario-route.mjs",
+    "tools/lib/scenario-s2.mjs",
+    "tools/lib/scenario-s3.mjs",
+    "tools/lib/scenario-scatter.mjs",
+    "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
-    "tools/run-headless-server.mjs"
+    "tools/run-headless-server.mjs",
+    "tools/scenarios.mjs"
    ],
    "globs": [
+    "kit/bibles/**",
+    "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
     "kit/test/fixtures/plan/asks/**",
@@ -11247,6 +11290,34 @@
     {
      "from": "tools/lib/corpus-plan-worker.mjs",
      "expr": "j.module)"
+    },
+    {
+     "from": "kit/lib/components.mjs",
+     "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/plan.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/program.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/synth.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/preview.mjs'))"
+    },
+    {
+     "from": "tools/lib/realised-virtual.mjs",
+     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
+    },
+    {
+     "from": "kit/build.mjs",
+     "expr": "pathToFileURL(file).href)"
     }
    ],
    "env": [
@@ -11285,8 +11356,8 @@
     "RS_JARS",
     "RS_KEEP",
     "RS_ONLY",
-    "RS_S3_CLAIM",
-    "RS_VERBOSE"
+    "RS_VERBOSE",
+    "SCENARIOS_ART"
    ],
    "flags": {
     "originMain": [
@@ -11325,7 +11396,13 @@
     "tools/gate6crs.mjs"
    ],
    "closure": [
+    "kit/build.mjs",
+    "kit/check.mjs",
+    "kit/lib/bible.mjs",
     "kit/lib/blocks.mjs",
+    "kit/lib/check.mjs",
+    "kit/lib/colors.mjs",
+    "kit/lib/components.mjs",
     "kit/lib/connectors/bom.mjs",
     "kit/lib/connectors/bridge.mjs",
     "kit/lib/connectors/bridgeGeom.mjs",
@@ -11375,7 +11452,9 @@
     "kit/lib/forms/states.mjs",
     "kit/lib/kit.mjs",
     "kit/lib/mask.mjs",
+    "kit/lib/massing.mjs",
     "kit/lib/material.mjs",
+    "kit/lib/mirror.mjs",
     "kit/lib/nbt.mjs",
     "kit/lib/noise.mjs",
     "kit/lib/params.mjs",
@@ -11433,6 +11512,8 @@
     "kit/lib/region/volume.mjs",
     "kit/lib/region/voxels.mjs",
     "kit/lib/region/vworld.mjs",
+    "kit/lib/render.mjs",
+    "kit/lib/reserved.mjs",
     "kit/lib/sdf.mjs",
     "kit/lib/specschema.mjs",
     "kit/lib/vocab.mjs",
@@ -11440,11 +11521,13 @@
     "kit/lib/vocab/groups.mjs",
     "kit/lib/vocab/rarity.mjs",
     "kit/lib/vocab/survival.mjs",
+    "kit/lib/write.mjs",
     "kit/regions/crater_works.mjs",
     "kit/regions/floating_islands.mjs",
     "kit/regions/hy_core_demo.mjs",
     "kit/regions/plan_v0.mjs",
     "kit/regions/rift_city.mjs",
+    "kit/regions/s3_hill.mjs",
     "kit/schemas/mask.json",
     "kit/schemas/pattern.json",
     "kit/schemas/plan.json",
@@ -11459,6 +11542,7 @@
     "kit/vocab/roles.json",
     "kit/vocab/tiers.json",
     "mod/gradle.properties",
+    "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
@@ -11471,6 +11555,8 @@
     "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
+    "tools/lib/gallery6b.html",
+    "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
@@ -11479,15 +11565,29 @@
     "tools/lib/gate6crs-kit.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
+    "tools/lib/realised-virtual.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/scenario-districts.mjs",
+    "tools/lib/scenario-eval-worker.mjs",
+    "tools/lib/scenario-forms.mjs",
+    "tools/lib/scenario-metrics.mjs",
+    "tools/lib/scenario-relief.mjs",
+    "tools/lib/scenario-route.mjs",
+    "tools/lib/scenario-s2.mjs",
+    "tools/lib/scenario-s3.mjs",
+    "tools/lib/scenario-scatter.mjs",
+    "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
-    "tools/run-headless-server.mjs"
+    "tools/run-headless-server.mjs",
+    "tools/scenarios.mjs"
    ],
    "globs": [
+    "kit/bibles/**",
+    "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
     "kit/test/fixtures/plan/asks/**",
@@ -11508,6 +11608,34 @@
     {
      "from": "tools/lib/corpus-plan-worker.mjs",
      "expr": "j.module)"
+    },
+    {
+     "from": "kit/lib/components.mjs",
+     "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/plan.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/program.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/synth.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/preview.mjs'))"
+    },
+    {
+     "from": "tools/lib/realised-virtual.mjs",
+     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
+    },
+    {
+     "from": "kit/build.mjs",
+     "expr": "pathToFileURL(file).href)"
     }
    ],
    "env": [
@@ -11546,8 +11674,8 @@
     "RS_JARS",
     "RS_KEEP",
     "RS_ONLY",
-    "RS_S3_CLAIM",
-    "RS_VERBOSE"
+    "RS_VERBOSE",
+    "SCENARIOS_ART"
    ],
    "flags": {
     "originMain": [
@@ -11586,7 +11714,13 @@
     "tools/gate6crs.mjs"
    ],
    "closure": [
+    "kit/build.mjs",
+    "kit/check.mjs",
+    "kit/lib/bible.mjs",
     "kit/lib/blocks.mjs",
+    "kit/lib/check.mjs",
+    "kit/lib/colors.mjs",
+    "kit/lib/components.mjs",
     "kit/lib/connectors/bom.mjs",
     "kit/lib/connectors/bridge.mjs",
     "kit/lib/connectors/bridgeGeom.mjs",
@@ -11636,7 +11770,9 @@
     "kit/lib/forms/states.mjs",
     "kit/lib/kit.mjs",
     "kit/lib/mask.mjs",
+    "kit/lib/massing.mjs",
     "kit/lib/material.mjs",
+    "kit/lib/mirror.mjs",
     "kit/lib/nbt.mjs",
     "kit/lib/noise.mjs",
     "kit/lib/params.mjs",
@@ -11694,6 +11830,8 @@
     "kit/lib/region/volume.mjs",
     "kit/lib/region/voxels.mjs",
     "kit/lib/region/vworld.mjs",
+    "kit/lib/render.mjs",
+    "kit/lib/reserved.mjs",
     "kit/lib/sdf.mjs",
     "kit/lib/specschema.mjs",
     "kit/lib/vocab.mjs",
@@ -11701,11 +11839,13 @@
     "kit/lib/vocab/groups.mjs",
     "kit/lib/vocab/rarity.mjs",
     "kit/lib/vocab/survival.mjs",
+    "kit/lib/write.mjs",
     "kit/regions/crater_works.mjs",
     "kit/regions/floating_islands.mjs",
     "kit/regions/hy_core_demo.mjs",
     "kit/regions/plan_v0.mjs",
     "kit/regions/rift_city.mjs",
+    "kit/regions/s3_hill.mjs",
     "kit/schemas/mask.json",
     "kit/schemas/pattern.json",
     "kit/schemas/plan.json",
@@ -11720,6 +11860,7 @@
     "kit/vocab/roles.json",
     "kit/vocab/tiers.json",
     "mod/gradle.properties",
+    "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
@@ -11732,6 +11873,8 @@
     "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
+    "tools/lib/gallery6b.html",
+    "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
@@ -11740,15 +11883,29 @@
     "tools/lib/gate6crs-kit.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
+    "tools/lib/realised-virtual.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/scenario-districts.mjs",
+    "tools/lib/scenario-eval-worker.mjs",
+    "tools/lib/scenario-forms.mjs",
+    "tools/lib/scenario-metrics.mjs",
+    "tools/lib/scenario-relief.mjs",
+    "tools/lib/scenario-route.mjs",
+    "tools/lib/scenario-s2.mjs",
+    "tools/lib/scenario-s3.mjs",
+    "tools/lib/scenario-scatter.mjs",
+    "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
-    "tools/run-headless-server.mjs"
+    "tools/run-headless-server.mjs",
+    "tools/scenarios.mjs"
    ],
    "globs": [
+    "kit/bibles/**",
+    "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
     "kit/test/fixtures/plan/asks/**",
@@ -11769,6 +11926,34 @@
     {
      "from": "tools/lib/corpus-plan-worker.mjs",
      "expr": "j.module)"
+    },
+    {
+     "from": "kit/lib/components.mjs",
+     "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/plan.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/program.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/synth.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/preview.mjs'))"
+    },
+    {
+     "from": "tools/lib/realised-virtual.mjs",
+     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
+    },
+    {
+     "from": "kit/build.mjs",
+     "expr": "pathToFileURL(file).href)"
     }
    ],
    "env": [
@@ -11807,8 +11992,8 @@
     "RS_JARS",
     "RS_KEEP",
     "RS_ONLY",
-    "RS_S3_CLAIM",
-    "RS_VERBOSE"
+    "RS_VERBOSE",
+    "SCENARIOS_ART"
    ],
    "flags": {
     "originMain": [
@@ -11837,7 +12022,7 @@
    ],
    "verified": "20261022-161855-release rs-survival"
   },
-  "rs-toggle": {
+  "rs-survival-smoke": {
    "classes": [
     "gradle",
     "jar",
@@ -11848,7 +12033,13 @@
     "tools/gate6crs.mjs"
    ],
    "closure": [
+    "kit/build.mjs",
+    "kit/check.mjs",
+    "kit/lib/bible.mjs",
     "kit/lib/blocks.mjs",
+    "kit/lib/check.mjs",
+    "kit/lib/colors.mjs",
+    "kit/lib/components.mjs",
     "kit/lib/connectors/bom.mjs",
     "kit/lib/connectors/bridge.mjs",
     "kit/lib/connectors/bridgeGeom.mjs",
@@ -11898,7 +12089,9 @@
     "kit/lib/forms/states.mjs",
     "kit/lib/kit.mjs",
     "kit/lib/mask.mjs",
+    "kit/lib/massing.mjs",
     "kit/lib/material.mjs",
+    "kit/lib/mirror.mjs",
     "kit/lib/nbt.mjs",
     "kit/lib/noise.mjs",
     "kit/lib/params.mjs",
@@ -11956,6 +12149,8 @@
     "kit/lib/region/volume.mjs",
     "kit/lib/region/voxels.mjs",
     "kit/lib/region/vworld.mjs",
+    "kit/lib/render.mjs",
+    "kit/lib/reserved.mjs",
     "kit/lib/sdf.mjs",
     "kit/lib/specschema.mjs",
     "kit/lib/vocab.mjs",
@@ -11963,11 +12158,13 @@
     "kit/lib/vocab/groups.mjs",
     "kit/lib/vocab/rarity.mjs",
     "kit/lib/vocab/survival.mjs",
+    "kit/lib/write.mjs",
     "kit/regions/crater_works.mjs",
     "kit/regions/floating_islands.mjs",
     "kit/regions/hy_core_demo.mjs",
     "kit/regions/plan_v0.mjs",
     "kit/regions/rift_city.mjs",
+    "kit/regions/s3_hill.mjs",
     "kit/schemas/mask.json",
     "kit/schemas/pattern.json",
     "kit/schemas/plan.json",
@@ -11982,6 +12179,7 @@
     "kit/vocab/roles.json",
     "kit/vocab/tiers.json",
     "mod/gradle.properties",
+    "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
@@ -11994,6 +12192,8 @@
     "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
+    "tools/lib/gallery6b.html",
+    "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
@@ -12002,15 +12202,29 @@
     "tools/lib/gate6crs-kit.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
+    "tools/lib/realised-virtual.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/scenario-districts.mjs",
+    "tools/lib/scenario-eval-worker.mjs",
+    "tools/lib/scenario-forms.mjs",
+    "tools/lib/scenario-metrics.mjs",
+    "tools/lib/scenario-relief.mjs",
+    "tools/lib/scenario-route.mjs",
+    "tools/lib/scenario-s2.mjs",
+    "tools/lib/scenario-s3.mjs",
+    "tools/lib/scenario-scatter.mjs",
+    "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
-    "tools/run-headless-server.mjs"
+    "tools/run-headless-server.mjs",
+    "tools/scenarios.mjs"
    ],
    "globs": [
+    "kit/bibles/**",
+    "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
     "kit/test/fixtures/plan/asks/**",
@@ -12031,6 +12245,34 @@
     {
      "from": "tools/lib/corpus-plan-worker.mjs",
      "expr": "j.module)"
+    },
+    {
+     "from": "kit/lib/components.mjs",
+     "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/plan.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/program.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/synth.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/preview.mjs'))"
+    },
+    {
+     "from": "tools/lib/realised-virtual.mjs",
+     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
+    },
+    {
+     "from": "kit/build.mjs",
+     "expr": "pathToFileURL(file).href)"
     }
    ],
    "env": [
@@ -12069,8 +12311,326 @@
     "RS_JARS",
     "RS_KEEP",
     "RS_ONLY",
-    "RS_S3_CLAIM",
-    "RS_VERBOSE"
+    "RS_VERBOSE",
+    "SCENARIOS_ART"
+   ],
+   "flags": {
+    "originMain": [
+     "tools/lib/base-tree.mjs",
+     "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
+     "tools/lib/gate6crs-kit.mjs",
+     "tools/lib/plan-cache.mjs"
+    ]
+   },
+   "testFilters": [
+    "*ApiDTest*",
+    "*C29CreditTest*",
+    "*FeedOrderTest*",
+    "*IrStale*",
+    "*PlanChecksT3Test*",
+    "*RegionFluidsHYTest*",
+    "*RegionTargetsTest*",
+    "*RoadFreeCellTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6crs.mjs",
+    "tools/lib/gate-part.mjs"
+   ]
+  },
+  "rs-toggle": {
+   "classes": [
+    "gradle",
+    "jar",
+    "sidecar",
+    "world"
+   ],
+   "roots": [
+    "tools/gate6crs.mjs"
+   ],
+   "closure": [
+    "kit/build.mjs",
+    "kit/check.mjs",
+    "kit/lib/bible.mjs",
+    "kit/lib/blocks.mjs",
+    "kit/lib/check.mjs",
+    "kit/lib/colors.mjs",
+    "kit/lib/components.mjs",
+    "kit/lib/connectors/bom.mjs",
+    "kit/lib/connectors/bridge.mjs",
+    "kit/lib/connectors/bridgeGeom.mjs",
+    "kit/lib/connectors/line.mjs",
+    "kit/lib/connectors/params.mjs",
+    "kit/lib/connectors/rope.mjs",
+    "kit/lib/connectors/ropeGeom.mjs",
+    "kit/lib/connectors/style.mjs",
+    "kit/lib/connectors/t3kinds.mjs",
+    "kit/lib/connectors/templateLand.mjs",
+    "kit/lib/connectors/tunnel.mjs",
+    "kit/lib/connectors/tunnelGeom.mjs",
+    "kit/lib/connectors/wall.mjs",
+    "kit/lib/fluids/biomes.mjs",
+    "kit/lib/fluids/body.mjs",
+    "kit/lib/fluids/course.mjs",
+    "kit/lib/fluids/ditch.mjs",
+    "kit/lib/fluids/fountain.mjs",
+    "kit/lib/fluids/gate.mjs",
+    "kit/lib/fluids/handcourse.mjs",
+    "kit/lib/fluids/handgate.mjs",
+    "kit/lib/fluids/hooks.mjs",
+    "kit/lib/fluids/irrfield.mjs",
+    "kit/lib/fluids/irrigate.mjs",
+    "kit/lib/fluids/keep.mjs",
+    "kit/lib/fluids/kinds.mjs",
+    "kit/lib/fluids/moat.mjs",
+    "kit/lib/fluids/place.mjs",
+    "kit/lib/fluids/pond.mjs",
+    "kit/lib/fluids/profile.mjs",
+    "kit/lib/fluids/quay.mjs",
+    "kit/lib/fluids/race.mjs",
+    "kit/lib/fluids/sim.mjs",
+    "kit/lib/fluids/waterfall.mjs",
+    "kit/lib/fluids/wet.mjs",
+    "kit/lib/fluids/world.mjs",
+    "kit/lib/forms/cave.mjs",
+    "kit/lib/forms/coral.mjs",
+    "kit/lib/forms/floatingIsland.mjs",
+    "kit/lib/forms/giantMushroom.mjs",
+    "kit/lib/forms/giantTree.mjs",
+    "kit/lib/forms/hooks.mjs",
+    "kit/lib/forms/iceSpike.mjs",
+    "kit/lib/forms/place.mjs",
+    "kit/lib/forms/rockSpire.mjs",
+    "kit/lib/forms/rules.mjs",
+    "kit/lib/forms/states.mjs",
+    "kit/lib/kit.mjs",
+    "kit/lib/mask.mjs",
+    "kit/lib/massing.mjs",
+    "kit/lib/material.mjs",
+    "kit/lib/mirror.mjs",
+    "kit/lib/nbt.mjs",
+    "kit/lib/noise.mjs",
+    "kit/lib/params.mjs",
+    "kit/lib/pattern.mjs",
+    "kit/lib/plan/catalogue.mjs",
+    "kit/lib/plan/compile.mjs",
+    "kit/lib/plan/finish.mjs",
+    "kit/lib/plan/free.mjs",
+    "kit/lib/plan/palette.mjs",
+    "kit/lib/plan/schema.mjs",
+    "kit/lib/png.mjs",
+    "kit/lib/realise.mjs",
+    "kit/lib/region/boundary.mjs",
+    "kit/lib/region/builds.mjs",
+    "kit/lib/region/check.mjs",
+    "kit/lib/region/checkBridges.mjs",
+    "kit/lib/region/checkFluids.mjs",
+    "kit/lib/region/checkForms.mjs",
+    "kit/lib/region/checkRopes.mjs",
+    "kit/lib/region/checkTunnels.mjs",
+    "kit/lib/region/checkVocab.mjs",
+    "kit/lib/region/checkWalls.mjs",
+    "kit/lib/region/districtsEmit.mjs",
+    "kit/lib/region/fixtures.mjs",
+    "kit/lib/region/followEmit.mjs",
+    "kit/lib/region/frontage.mjs",
+    "kit/lib/region/geom.mjs",
+    "kit/lib/region/layouts/grid.mjs",
+    "kit/lib/region/layouts/organic.mjs",
+    "kit/lib/region/layouts/outline.mjs",
+    "kit/lib/region/layouts/ring.mjs",
+    "kit/lib/region/layouts/spiral.mjs",
+    "kit/lib/region/light.mjs",
+    "kit/lib/region/pack.mjs",
+    "kit/lib/region/passes/districts.mjs",
+    "kit/lib/region/passes/hydrology.mjs",
+    "kit/lib/region/passes/index.mjs",
+    "kit/lib/region/passes/moves/bridge.mjs",
+    "kit/lib/region/passes/moves/gate.mjs",
+    "kit/lib/region/passes/moves/rope.mjs",
+    "kit/lib/region/passes/moves/tunnel.mjs",
+    "kit/lib/region/passes/relief.mjs",
+    "kit/lib/region/passes/route.mjs",
+    "kit/lib/region/plan.mjs",
+    "kit/lib/region/program.mjs",
+    "kit/lib/region/props.mjs",
+    "kit/lib/region/scatter.mjs",
+    "kit/lib/region/stamps.mjs",
+    "kit/lib/region/survey.mjs",
+    "kit/lib/region/survival.mjs",
+    "kit/lib/region/survivalData.mjs",
+    "kit/lib/region/synth.mjs",
+    "kit/lib/region/terraces.mjs",
+    "kit/lib/region/village.mjs",
+    "kit/lib/region/volume.mjs",
+    "kit/lib/region/voxels.mjs",
+    "kit/lib/region/vworld.mjs",
+    "kit/lib/render.mjs",
+    "kit/lib/reserved.mjs",
+    "kit/lib/sdf.mjs",
+    "kit/lib/specschema.mjs",
+    "kit/lib/vocab.mjs",
+    "kit/lib/vocab/budget.mjs",
+    "kit/lib/vocab/groups.mjs",
+    "kit/lib/vocab/rarity.mjs",
+    "kit/lib/vocab/survival.mjs",
+    "kit/lib/write.mjs",
+    "kit/regions/crater_works.mjs",
+    "kit/regions/floating_islands.mjs",
+    "kit/regions/hy_core_demo.mjs",
+    "kit/regions/plan_v0.mjs",
+    "kit/regions/rift_city.mjs",
+    "kit/regions/s3_hill.mjs",
+    "kit/schemas/mask.json",
+    "kit/schemas/pattern.json",
+    "kit/schemas/plan.json",
+    "kit/test/fixtures/plan/rs/rs02_walled.json",
+    "kit/test/fixtures/vocab/voc-designs.mjs",
+    "kit/test/fixtures/vocab/vocc-designs.mjs",
+    "kit/test/h-helpers.mjs",
+    "kit/test/plan-helpers.mjs",
+    "kit/test/region-helpers.mjs",
+    "kit/test/rs.test.mjs",
+    "kit/vocab/hazards.json",
+    "kit/vocab/roles.json",
+    "kit/vocab/tiers.json",
+    "mod/gradle.properties",
+    "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
+    "scenarios/s3_monastery.json",
+    "tools/api-compat.mjs",
+    "tools/gate6crs.mjs",
+    "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/gallery6b.html",
+    "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/gate6chy-b.mjs",
+    "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
+    "tools/lib/gate6crs-game.mjs",
+    "tools/lib/gate6crs-kit.mjs",
+    "tools/lib/p3-tier.mjs",
+    "tools/lib/plan-cache.mjs",
+    "tools/lib/realised-virtual.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/scenario-districts.mjs",
+    "tools/lib/scenario-eval-worker.mjs",
+    "tools/lib/scenario-forms.mjs",
+    "tools/lib/scenario-metrics.mjs",
+    "tools/lib/scenario-relief.mjs",
+    "tools/lib/scenario-route.mjs",
+    "tools/lib/scenario-s2.mjs",
+    "tools/lib/scenario-s3.mjs",
+    "tools/lib/scenario-scatter.mjs",
+    "tools/lib/scenario-village.mjs",
+    "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
+    "tools/lib/wsserver.mjs",
+    "tools/run-gate6b-client.sh",
+    "tools/run-headless-server.mjs",
+    "tools/scenarios.mjs"
+   ],
+   "globs": [
+    "kit/bibles/**",
+    "kit/designs/**",
+    "kit/examples/cabin/**",
+    "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks/**",
+    "kit/test/fixtures/plan/hy/**",
+    "kit/test/fixtures/plan/rs/**",
+    "mod/src/test/resources/stub-sidecar/**",
+    "scenarios/bibles/**"
+   ],
+   "dynamic": [
+    {
+     "from": "tools/gate6crs.mjs",
+     "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
+    },
+    {
+     "from": "kit/lib/components.mjs",
+     "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/plan.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/program.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/synth.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/preview.mjs'))"
+    },
+    {
+     "from": "tools/lib/realised-virtual.mjs",
+     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
+    },
+    {
+     "from": "kit/build.mjs",
+     "expr": "pathToFileURL(file).href)"
+    }
+   ],
+   "env": [
+    "ARCHITECT_ARTIFACTS",
+    "ARCHITECT_BIG_REGIONS",
+    "ARCHITECT_BOT_VIEW_DISTANCE",
+    "ARCHITECT_DEV_PORT",
+    "ARCHITECT_DEV_TOKEN",
+    "ARCHITECT_GAME_DIR",
+    "ARCHITECT_SERVER_EULA",
+    "ARCHITECT_SIMULATION_DISTANCE",
+    "ARCHITECT_XMX",
+    "GATE6B_CLIENT_SCRIPT",
+    "GATE6B_DEV_PORT",
+    "GATE6B_OUT",
+    "GATE6B_RUN",
+    "GATE6B_SIDECAR_PORT",
+    "GATE6CRS_OUT",
+    "GATE_JAVAP_CACHE",
+    "GATE_JAVAP_CACHE_DIR",
+    "GATE_MERGE_BASE",
+    "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
+    "GRADLE_USER_HOME",
+    "HEADLESS_SIDECAR",
+    "HYB_BYPASS",
+    "HYB_ONLY",
+    "HYB_WATCH",
+    "JAVA_HOME",
+    "PATH",
+    "RS_CREATIVE",
+    "RS_FIXTURE",
+    "RS_JARS",
+    "RS_KEEP",
+    "RS_ONLY",
+    "RS_VERBOSE",
+    "SCENARIOS_ART"
    ],
    "flags": {
     "originMain": [
@@ -12109,7 +12669,13 @@
     "tools/gate6crs.mjs"
    ],
    "closure": [
+    "kit/build.mjs",
+    "kit/check.mjs",
+    "kit/lib/bible.mjs",
     "kit/lib/blocks.mjs",
+    "kit/lib/check.mjs",
+    "kit/lib/colors.mjs",
+    "kit/lib/components.mjs",
     "kit/lib/connectors/bom.mjs",
     "kit/lib/connectors/bridge.mjs",
     "kit/lib/connectors/bridgeGeom.mjs",
@@ -12159,7 +12725,9 @@
     "kit/lib/forms/states.mjs",
     "kit/lib/kit.mjs",
     "kit/lib/mask.mjs",
+    "kit/lib/massing.mjs",
     "kit/lib/material.mjs",
+    "kit/lib/mirror.mjs",
     "kit/lib/nbt.mjs",
     "kit/lib/noise.mjs",
     "kit/lib/params.mjs",
@@ -12217,6 +12785,8 @@
     "kit/lib/region/volume.mjs",
     "kit/lib/region/voxels.mjs",
     "kit/lib/region/vworld.mjs",
+    "kit/lib/render.mjs",
+    "kit/lib/reserved.mjs",
     "kit/lib/sdf.mjs",
     "kit/lib/specschema.mjs",
     "kit/lib/vocab.mjs",
@@ -12224,11 +12794,13 @@
     "kit/lib/vocab/groups.mjs",
     "kit/lib/vocab/rarity.mjs",
     "kit/lib/vocab/survival.mjs",
+    "kit/lib/write.mjs",
     "kit/regions/crater_works.mjs",
     "kit/regions/floating_islands.mjs",
     "kit/regions/hy_core_demo.mjs",
     "kit/regions/plan_v0.mjs",
     "kit/regions/rift_city.mjs",
+    "kit/regions/s3_hill.mjs",
     "kit/schemas/mask.json",
     "kit/schemas/pattern.json",
     "kit/schemas/plan.json",
@@ -12243,6 +12815,7 @@
     "kit/vocab/roles.json",
     "kit/vocab/tiers.json",
     "mod/gradle.properties",
+    "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
@@ -12255,6 +12828,8 @@
     "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
+    "tools/lib/gallery6b.html",
+    "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
@@ -12263,15 +12838,29 @@
     "tools/lib/gate6crs-kit.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
+    "tools/lib/realised-virtual.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/scenario-districts.mjs",
+    "tools/lib/scenario-eval-worker.mjs",
+    "tools/lib/scenario-forms.mjs",
+    "tools/lib/scenario-metrics.mjs",
+    "tools/lib/scenario-relief.mjs",
+    "tools/lib/scenario-route.mjs",
+    "tools/lib/scenario-s2.mjs",
+    "tools/lib/scenario-s3.mjs",
+    "tools/lib/scenario-scatter.mjs",
+    "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
-    "tools/run-headless-server.mjs"
+    "tools/run-headless-server.mjs",
+    "tools/scenarios.mjs"
    ],
    "globs": [
+    "kit/bibles/**",
+    "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
     "kit/test/fixtures/plan/asks/**",
@@ -12292,6 +12881,34 @@
     {
      "from": "tools/lib/corpus-plan-worker.mjs",
      "expr": "j.module)"
+    },
+    {
+     "from": "kit/lib/components.mjs",
+     "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/plan.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/program.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/synth.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/preview.mjs'))"
+    },
+    {
+     "from": "tools/lib/realised-virtual.mjs",
+     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
+    },
+    {
+     "from": "kit/build.mjs",
+     "expr": "pathToFileURL(file).href)"
     }
    ],
    "env": [
@@ -12330,8 +12947,8 @@
     "RS_JARS",
     "RS_KEEP",
     "RS_ONLY",
-    "RS_S3_CLAIM",
-    "RS_VERBOSE"
+    "RS_VERBOSE",
+    "SCENARIOS_ART"
    ],
    "flags": {
     "originMain": [
@@ -46403,6 +47020,7 @@
     "tools/gate6a.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
@@ -46467,6 +47085,7 @@
     "tools/gate6a.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
@@ -46531,6 +47150,7 @@
     "tools/gate6a.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
@@ -46595,6 +47215,7 @@
     "tools/gate6a.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
@@ -46659,6 +47280,7 @@
     "tools/gate6a.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
@@ -46724,6 +47346,7 @@
     "tools/gate6a.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
@@ -46788,6 +47411,7 @@
     "tools/gate6a.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
@@ -46852,6 +47476,7 @@
     "tools/gate6a.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
@@ -49540,6 +50165,7 @@
     "tools/gate6a.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
@@ -49604,6 +50230,7 @@
     "tools/gate6a.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
@@ -49668,6 +50295,7 @@
     "tools/gate6a.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
@@ -49732,6 +50360,7 @@
     "tools/gate6a.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
