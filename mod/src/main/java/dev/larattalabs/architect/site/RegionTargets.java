@@ -1558,6 +1558,9 @@ public final class RegionTargets {
 		}
 		if (i.ext.has(EXT_WAITS_FOR)) {
 			i.ext.remove(EXT_WAITS_FOR);
+			// (the verifier's note) the item no longer waits: the sentences it said are no one's
+			String prefix = b.id + "|";
+			SAYERS.entrySet().removeIf(e -> e.getKey().startsWith(prefix) && e.getValue().equals(i.key));
 		}
 		return false;
 	}
