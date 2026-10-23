@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { kitReuse } from './lib/kit-reuse.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { sidecarReuse } from './lib/sidecar-reuse.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -146,7 +147,7 @@ steps.unit = async () => {
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 1: goldens unchanged (mega_bench tiles, S1's tile shas, 6b fixtures, islands): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   out.kit = kitOnce(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `item 1: the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
-  const sc = spawnSync('npx', ['vitest', 'run', 'test/regions-village.test.ts', 'test/regions-real-kit-6b.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
+  const sc = sidecarReuse(root, ['test/regions-village.test.ts', 'test/regions-real-kit-6b.test.ts']) ?? spawnSync('npx', ['vitest', 'run', 'test/regions-village.test.ts', 'test/regions-real-kit-6b.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
   const st = `${sc.stdout}${sc.stderr}`;
   out.sidecar = { code: sc.status, summary: st.split('\n').filter((l) => /Tests|Test Files/.test(l)).join(' | ') };
   check(sc.status === 0, `item 1: sidecar keepOut and real-kit tests: ${out.sidecar.summary}`);

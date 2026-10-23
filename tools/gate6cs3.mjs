@@ -26,6 +26,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { sidecarReuse } from './lib/sidecar-reuse.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gatePart, sliceSections, slicesOf } from './lib/gate-part.mjs';
 
@@ -113,7 +114,7 @@ steps.unit = async () => {
   check(out.goldens.code === 0 && out.goldens.fail === 0, `the goldens that must not move (format-1 goldens, the scenario tile goldens, the 6b fixtures), T1/T2/D1/D2/S2's suites over the changed passes, farfluid's rule: ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   out.kit = kitOnce(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
-  const sc = spawnSync('npx', ['vitest', 'run', 'test/jobs.test.ts', 'test/vocc.test.ts', 'test/system-refs.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
+  const sc = sidecarReuse(root, ['test/jobs.test.ts', 'test/vocc.test.ts', 'test/system-refs.test.ts']) ?? spawnSync('npx', ['vitest', 'run', 'test/jobs.test.ts', 'test/vocc.test.ts', 'test/system-refs.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
   out.sidecar = { code: sc.status, summary: `${sc.stdout}${sc.stderr}`.split('\n').filter((l) => /Tests|Test Files/.test(l)).join(' | ') };
   check(sc.status === 0, `§5 (sidecar): region.terracedZones and region.monastery appended to the features; the compact plan/0 within its bound: ${out.sidecar.summary}`);
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };

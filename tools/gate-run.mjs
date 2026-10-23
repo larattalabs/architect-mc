@@ -637,6 +637,10 @@ if (tierInfo.cache.lookup) {
         if (l.hit && (INPUT_MAP.steps[parentOf(id)]?.closure ?? []).includes('tools/lib/kit-reuse.mjs') && !want.has('unit-kit')) {
           l = { hit: null, why: 'its kit tests are delegated to unit-kit (kit-reuse), which is not in this run' };
         }
+        // sidecar-reuse (tools/lib/sidecar-reuse.mjs): the same for its sidecar test files and unit-sidecar
+        if (l.hit && (INPUT_MAP.steps[parentOf(id)]?.closure ?? []).includes('tools/lib/sidecar-reuse.mjs') && !want.has('unit-sidecar')) {
+          l = { hit: null, why: 'its sidecar tests are delegated to unit-sidecar (sidecar-reuse), which is not in this run' };
+        }
       }
     }
     if (!l.hit) {
@@ -660,7 +664,7 @@ if (tierInfo.cache.lookup) {
       const s = cfg.steps[id];
       const deps = [];
       if (s.after && want.has(s.after)) deps.push([s.after, `needed by ${id}: it runs after it, in its context`]);
-      for (const w of s.waitFor ?? []) if (w !== 'unit-kit' && want.has(w)) deps.push([w, `needed by ${id}: it reads ${w}'s evidence of this run`]);
+      for (const w of s.waitFor ?? []) if (w !== 'unit-kit' && w !== 'unit-sidecar' && want.has(w)) deps.push([w, `needed by ${id}: it reads ${w}'s evidence of this run`]);
       if ((INPUT_MAP.steps[parentOf(id)]?.env ?? []).includes('GATE_UNIT_MOD_RUN') && want.has('unit-mod')) deps.push(['unit-mod', `needed by ${id}: it reads the classes unit-mod builds in this run`]);
       for (const [d, r] of deps) {
         if (run.has(d)) continue;
@@ -876,6 +880,9 @@ function childEnv(sh, extra = {}) {
   // the kit suite once per run (tools/lib/kit-reuse.mjs): unit-kit writes its JUnit report here; the drivers' kit-suite and goldens
   // checks take it when exact. Only when unit-kit is in this run.
   if (runShared.kitJunit) Object.assign(env, { GATE_KIT_RESULTS: runShared.kitJunit, GATE_KIT_TREE: runShared.kitTree });
+  // the sidecar suite once per run (tools/lib/sidecar-reuse.mjs, speed audit D B3): unit-sidecar writes its JUnit report here; the drivers'
+  // sidecar test files take pass/fail from it when exact. Only when unit-sidecar is in this run.
+  if (runShared.sidecarJunit) Object.assign(env, { GATE_SIDECAR_RESULTS: runShared.sidecarJunit, GATE_SIDECAR_TREE: runShared.sidecarTree });
   // the run worktree where unit-mod built this HEAD (gate6cmp reads its classes): set once unit-mod passed
   if (runShared.unitModRun) env.GATE_UNIT_MOD_RUN = runShared.unitModRun;
   // the merge base the drivers' "unchanged against origin/main" items compare with, fixed once per run (tools/lib/base-tree.mjs)
@@ -894,7 +901,7 @@ function childEnv(sh, extra = {}) {
   return env;
 }
 /** Run-level facts the steps' environment carries (filled in when the run starts and as steps end). */
-const runShared = { kitJunit: null, kitTree: null, unitModRun: null, mergeBase: null };
+const runShared = { kitJunit: null, kitTree: null, sidecarJunit: null, sidecarTree: null, unitModRun: null, mergeBase: null };
 const expand = (s, sh) => s.replace(/\$\{(\w+)\}/g, (_, n) => ({ RUN: sh.RUN, SRC, MAIN, OUT: sh.ev })[n] ?? '');
 const resolveCwd = (c, sh) => (!c ? SRC : c.startsWith('run:') ? path.join(sh.RUN, c.slice(4)) : c.startsWith('src:') ? path.join(SRC, c.slice(4)) : path.resolve(SRC, c));
 const getPath = (obj, p) => p.split('.').filter(Boolean).reduce((o, k) => (o == null ? undefined : o[k]), obj);
@@ -1994,6 +2001,17 @@ try {
     const m = manifestOf(CACHE);
     log(`build artifact ${m.hash ?? '?'}: ${m.ok ? `${Object.keys(m.classes ?? {}).length} classes` : `NOT available (${m.error}): coverage-mode steps record source keys`}`);
   }
+  const sidecarTreeNow = () => ['sidecar', 'kit', 'scenarios'].map((d) => git(SRC, 'rev-parse', `HEAD:${d}`).slice(0, 12)).join('.');
+  if (stepIds.includes('unit-sidecar')) {
+    runShared.sidecarJunit = path.join(OUT, 'sidecar-suite.junit.xml');
+    runShared.sidecarTree = sidecarTreeNow();
+  } else if (cachedHits.get('unit-sidecar')?.junit && cachedHits.get('unit-sidecar').kitTree === sidecarTreeNow() && fs.existsSync(cachedHits.get('unit-sidecar').junit)) {
+    // unit-sidecar is CACHED: its recorded JUnit report (the same trees) serves the drivers' sidecar test files (sidecar-reuse.mjs)
+    runShared.sidecarJunit = path.join(OUT, 'sidecar-suite.junit.xml');
+    fs.copyFileSync(cachedHits.get('unit-sidecar').junit, runShared.sidecarJunit);
+    runShared.sidecarTree = cachedHits.get('unit-sidecar').kitTree;
+    log(`unit-sidecar CACHED: its JUnit report (trees ${runShared.sidecarTree}) serves this run's sidecar-suite readers`);
+  }
   if (stepIds.includes('unit-kit')) {
     runShared.kitJunit = path.join(OUT, 'kit-suite.junit.xml');
     runShared.kitTree = git(SRC, 'rev-parse', 'HEAD:kit');
@@ -2134,7 +2152,8 @@ async function worker(sh) {
         const r = recordPass(CACHE, step.id, rec, { key: k.key, why: k.why, parts: k.parts, run: OUT, ev: sh.ev, traceDir: path.join(OUT, 'traces', step.id), traced: TRACE,
           coverage: stepCoverage.get(step.id) ?? null,
           timingPolicy: recordsTiming(step) ? 'recorded' : 'judged', judgedBench: JUDGED_BENCHES.has(parentOf(step.id)), nightly: NIGHTLY, contended: !!rec.contended, tier: chainName,
-          ...(step.id === 'unit-kit' && runShared.kitJunit ? { junit: runShared.kitJunit, kitTree: runShared.kitTree } : {}) });
+          ...(step.id === 'unit-kit' && runShared.kitJunit ? { junit: runShared.kitJunit, kitTree: runShared.kitTree } : {}),
+          ...(step.id === 'unit-sidecar' && runShared.sidecarJunit ? { junit: runShared.sidecarJunit, kitTree: runShared.sidecarTree } : {}) });
         rec.cache = { key: r.key ?? k.key, recorded: r.stored, why: r.why };
         if (r.outside && !r.stored) {
           rec.cache.outside = r.outside.slice(0, 40);

@@ -29,6 +29,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { sidecarReuse } from './lib/sidecar-reuse.mjs';
 import { fileURLToPath } from 'node:url';
 import { DevClient } from './lib/devclient.mjs';
 import { parse } from '../kit/lib/nbt.mjs';
@@ -172,7 +173,7 @@ async function unit() {
   }
   check(m.status === 0 && Object.values(junit).every((j) => j.tests > 0 && j.failures === 0 && j.errors === 0),
     `items 1-4 (mod): SchematicTest ${junit['dev.larattalabs.architect.library.SchematicTest'].tests} + ApiSchTest ${junit['dev.larattalabs.architect.api.ApiSchTest'].tests} tests pass (fixers, refusals, export round trip and goldens)`, junit);
-  const sc = run('unit-sidecar', 'npx', ['vitest', 'run', 'test/variants.test.ts'], { cwd: path.join(root, 'sidecar') });
+  const sc = sidecarReuse(root, ['test/variants.test.ts']) ?? run('unit-sidecar', 'npx', ['vitest', 'run', 'test/variants.test.ts'], { cwd: path.join(root, 'sidecar') });
   check(sc.status === 0 && /Tests\s+\d+ passed/.test(sc.out) && !/failed/.test(/Tests[^\n]*/.exec(sc.out)?.[0] ?? ''), `the sidecar's import-schem job: ${/Tests[^\n]*/.exec(sc.out)?.[0]?.trim()}`);
   // item 7: clean room
   const diff = execFileSync('git', ['-C', root, 'diff', 'origin/main...HEAD', '--', '.', ':(exclude)docs'], { maxBuffer: 256 << 20 }).toString();

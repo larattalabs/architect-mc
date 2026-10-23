@@ -50,6 +50,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { sidecarReuse } from './lib/sidecar-reuse.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { srcGradle } from './lib/src-gradle.mjs';
 
@@ -117,7 +118,7 @@ steps.unit = async () => {
   const out = {};
   out.kit = nodeTest(['kit/test/adopt-pt2.test.mjs']);
   check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 6, `item 3 (kit): the captured source gives back v1 exactly (raw states, tagged block-entity data, one part), checks as a captured source, and floors 1 changes exactly one of v1's cells (${out.kit.pass} pass, ${out.kit.fail} fail)`, out.kit.failing);
-  const sc = spawnSync('npx', ['vitest', 'run', 'test/adopt-pt2.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 600_000 });
+  const sc = sidecarReuse(root, ['test/adopt-pt2.test.ts']) ?? spawnSync('npx', ['vitest', 'run', 'test/adopt-pt2.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 600_000 });
   const st = `${sc.stdout}${sc.stderr}`;
   out.sidecar = { code: sc.status, tail: st.split('\n').slice(-6) };
   check(sc.status === 0 && /Tests\s+3 passed/.test(st), 'items 4 and 12 (sidecar, real kit): versionOf of an adopted entry ("add a floor": the sim bumps floors 0 -> 1) installs v2 by design, still adopted and captured, also with a bible (C35: ignored and noted); polish refuses adopted_polish', out.sidecar.tail);

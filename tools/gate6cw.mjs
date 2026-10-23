@@ -23,6 +23,7 @@ import path from 'node:path';
 import { kitReuse } from './lib/kit-reuse.mjs';
 import crypto from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { sidecarReuse } from './lib/sidecar-reuse.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -133,7 +134,7 @@ steps.unit = async () => {
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 12: goldens that must not move (mega_bench, S1's tile golden, the 6b fixtures' expected.json) and S7's re-committed golden: ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   out.kit = kitOnce(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
-  const sc = spawnSync('npx', ['vitest', 'run', 'test/breakdown-copy.test.ts', 'test/copies.test.ts', 'test/regions-village.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
+  const sc = sidecarReuse(root, ['test/breakdown-copy.test.ts', 'test/copies.test.ts', 'test/regions-village.test.ts']) ?? spawnSync('npx', ['vitest', 'run', 'test/breakdown-copy.test.ts', 'test/copies.test.ts', 'test/regions-village.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
   const st = `${sc.stdout}${sc.stderr}`;
   out.copy = { code: sc.status, summary: st.split('\n').filter((l) => /Tests|Test Files/.test(l)).join(' | ') };
   check(sc.status === 0, `item 1 (§2): COPY ms from each copy's span; R's other lines byte-identical; copies and village sidecar tests: ${out.copy.summary}`);

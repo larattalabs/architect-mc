@@ -19,6 +19,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { sidecarReuse } from './lib/sidecar-reuse.mjs';
 import { fileURLToPath } from 'node:url';
 import { DevClient } from './lib/devclient.mjs';
 import { srcGradle } from './lib/src-gradle.mjs';
@@ -90,7 +91,7 @@ async function unit() {
   const kc = tapCases(kit.out);
   fs.writeFileSync(path.join(OUT, 'unit-kit.log'), kit.out);
   // the sidecar suites
-  const sc = run('npx', ['vitest', 'run', 'test/copies.test.ts', 'test/versionof.test.ts', 'test/polish.test.ts', '--reporter=json', `--outputFile=${path.join(OUT, 'unit-sidecar.json')}`], path.join(root, 'sidecar'));
+  const sc = sidecarReuse(root, ['test/copies.test.ts', 'test/versionof.test.ts', 'test/polish.test.ts'], { jsonOut: path.join(OUT, 'unit-sidecar.json') }) ?? run('npx', ['vitest', 'run', 'test/copies.test.ts', 'test/versionof.test.ts', 'test/polish.test.ts', '--reporter=json', `--outputFile=${path.join(OUT, 'unit-sidecar.json')}`], path.join(root, 'sidecar'));
   fs.writeFileSync(path.join(OUT, 'unit-sidecar.log'), sc.out);
   let tests = [];
   try {
