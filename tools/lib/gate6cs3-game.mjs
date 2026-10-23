@@ -28,18 +28,23 @@ function realisedVsVirtual(vw, ir, after, before) {
   const inLot = (x, y, z) => ir.lots.some((l) => x >= l.box.minX && x <= l.box.maxX && y >= l.box.minY && y <= l.box.maxY && z >= l.box.minZ && z <= l.box.maxZ);
   const parse = (st) => { const m = /^([^[]+)(?:\[(.*)\])?$/.exec(st); return { name: m[1], props: Object.fromEntries((m[2] ? m[2].split(',') : []).map((kv) => kv.split('='))) }; };
   const same = (want, got) => { if (want === got) return true; const a = parse(want), q = parse(got); return a.name === q.name && Object.entries(a.props).every(([k, v]) => q.props[k] === v); };
-  let written = 0, differ = 0, kept = 0;
+  let written = 0, differ = 0, kept = 0, roomFlow = 0;
   const first = [];
+  // (6c close-out B) a fluid body's room (the air a fountain clears round its spout) takes the spout's falling water: the census judges
+  // the body; here a room cell holding flowing water is the body's own flow, recorded (gate-runs/20261023-061736-slice: the spout beside
+  // a felled cherry trunk, 6 room cells)
+  const flowing = (st) => /^minecraft:water\[level=([1-9]|1[0-5])\]$/.test(String(st));
   vw.eachWritten((x, y, z, idx) => {
     if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY || z < b.minZ || z > b.maxZ || inLot(x, y, z)) return;
     written++;
     const want = vw.pal.states[idx], got = after.palette[after.cells[after.at(x, y, z)]];
     if (same(want, got)) return;
     if (before && before.palette[before.cells[before.at(x, y, z)]] === got) { kept++; return; }
+    if (want === 'minecraft:air' && flowing(got) && /_room$/.test(String(ir.parts[vw.partAt(x, y, z)]?.id ?? ''))) { roomFlow++; return; }
     differ++;
     if (first.length < 12) first.push({ pos: [x, y, z], want, got });
   });
-  return { written, differ, kept, first };
+  return { written, differ, kept, roomFlow, first };
 }
 
 /** Regions.remove by the plan's owner, then its state until REMOVED (PARTIAL or FAILED end it too). */
@@ -145,7 +150,7 @@ export async function planTwin(ctx, variant) {
   const after = await decodeArwd(fs.readFileSync(dA)), before = await decodeArwd(fs.readFileSync(path.join(OUT, `${tag}-before.arwd.gz`)));
   const eq = realisedVsVirtual(vw, ir, after, before);
   out.equal = eq;
-  check(eq.written > 0 && eq.differ === 0, `item 4 (${variant}): the realised world equals the virtual one over every written cell outside the lot boxes (${eq.written} cells; ${eq.differ} differ; ${eq.kept} kept as they stood)`, eq.first);
+  check(eq.written > 0 && eq.differ === 0, `item 4 (${variant}): the realised world equals the virtual one over every written cell outside the lot boxes (${eq.written} cells; ${eq.differ} differ; ${eq.kept} kept as they stood; ${eq.roomFlow ?? 0} room cells holding a body's falling water, recorded)`, eq.first);
   const clear = clearScan({ ir, vw, meta });
   out.clear = clear.counts;
   check(clear.counts.hard + clear.counts.watch === 0, `item 4 (${variant}): M25:clear 0 on the approved plan (${json(clear.counts)})`);
