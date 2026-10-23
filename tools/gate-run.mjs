@@ -204,7 +204,7 @@ function makeCache() {
 /** Files changed between two commits (two-dot: what HEAD has that `from` hasn't, and the reverse), or null when `from` is unknown. */
 function changedBetween(from, to = 'HEAD') {
   try {
-    return git(SRC, 'diff', '--name-only', from, to).split('\n').filter(Boolean);
+    return git(SRC, 'diff', '--name-only', '--no-renames', from, to).split('\n').filter(Boolean);
   } catch {
     return null;
   }
