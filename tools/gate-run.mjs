@@ -93,6 +93,7 @@ import { autoConfig, chooseShards, describeChoice, freePairs, probeMachine } fro
 import { autoFullWhy, cacheContext, coverageMode, entryByKey, entryStillValid, fullTwins, judgedBenches, keyFor, lastNightly, lookup, lookupCoverage, manifestOf, record as recordPass, supersededList } from './lib/step-cache.mjs';
 import { benchConf, decideBench, fullBenches, latestNightlyRecords, megaBVariant, newestOf, releaseBenches } from './lib/bench-select.mjs';
 import { collect as collectCoverage, javaLogOption, snapshotStart } from './lib/step-coverage.mjs';
+import { agentOption as jacocoAgentOption, readDump as jacocoReadDump, requestDumps as jacocoRequestDumps } from './lib/jacoco.mjs';
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
 import { aggregateProblems, entryOf, expandSplits, isPartId, parentOf, parentResults, planOrder, validateSplits } from './lib/step-split.mjs';
 import { acquire as acquireMachine, chooseTurbo, describeQueue, describeTurbo, foldSamples, liveHolders, releaseAll, sampleMachine, turboConfig } from './lib/turbo.mjs';
@@ -556,6 +557,12 @@ const cachedHits = new Map(); // id -> the recorded PASS that serves it
 // coverage-based inputs (docs/GATES.md "Coverage-based inputs"): on when gate-cache.json coverage.enabled and the run traces
 const COVERAGE = TRACE && !!CACHE_CONF.coverage?.enabled && !flag('--no-coverage');
 const stepCoverage = new Map(); // id -> collect()'s result for its run
+// execution coverage (docs/GATES.md "Execution coverage (JaCoCo)"): every JVM also runs the JaCoCo agent (tools/lib/jacoco.mjs) and
+// a step keys a loaded class it never entered by its skeleton; off with --no-jacoco or coverage.jacoco.enabled false, and when the
+// pinned jars are missing or don't verify (the class-load coverage stays)
+const JACOCO_CONF = CACHE_CONF.coverage?.jacoco ?? {};
+const JACOCO_ON = COVERAGE && JACOCO_CONF.enabled !== false && !flag('--no-jacoco');
+let jacocoOff = JACOCO_ON ? null : 'off';
 tierInfo.cache = { lookup: !CACHE_OFF_WHY && !!CACHE, offWhy: CACHE_OFF_WHY ?? cacheErr, dirty: CACHE?.dirty.length ?? null, record: TRACE && !!CACHE, canaries: [] };
 if (tierInfo.cache.lookup) {
   const want = new Set(stepIds);
@@ -875,7 +882,16 @@ function childEnv(sh, extra = {}) {
     // starts (the sidecar, its workers) traces what it touches; a step's own processes trace into the step's dir (runProcess)
     const cov = path.join(sh.ev, 'coverage');
     fs.mkdirSync(path.join(cov, 'node'), { recursive: true });
-    env.JAVA_TOOL_OPTIONS = [env.JAVA_TOOL_OPTIONS, javaLogOption(cov)].filter(Boolean).join(' ');
+    let agent = null;
+    if (JACOCO_ON && !jacocoOff) {
+      const a = jacocoAgentOption(MAIN, cov, { includes: JACOCO_CONF.includes ?? 'dev.larattalabs.*' });
+      if (a.option) agent = a.option;
+      else {
+        jacocoOff = a.why;
+        log(`execution coverage (JaCoCo) is off for this run: ${a.why}; class-load coverage only`);
+      }
+    }
+    env.JAVA_TOOL_OPTIONS = [env.JAVA_TOOL_OPTIONS, javaLogOption(cov), agent].filter(Boolean).join(' ');
     env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${pathToFileURL(path.join(SRC, 'tools', 'lib', 'step-trace.mjs')).href}`].filter(Boolean).join(' ');
     env.GATE_TRACE_DIR = path.join(cov, 'node');
     env.GATE_TRACE_ROOTS = JSON.stringify([[SRC, ''], [sh.RUN, ''], [path.join(MAIN, 'artifacts'), '@artifacts/']]);
@@ -1615,12 +1631,17 @@ async function runStep(sh, step, rec) {
   const r = await runProcess(sh, step, logFile);
   if (covSnap) {
     try {
-      const c = collectCoverage(path.join(sh.ev, 'coverage'), covSnap, { prefix: CACHE_CONF.coverage?.packagePrefix ?? 'dev.larattalabs.' });
+      const covDir = path.join(sh.ev, 'coverage');
+      // execution coverage: every live agent JVM of the shard dumps what it entered (bounded wait; one that doesn't answer counts
+      // every class it loaded as entered)
+      const exec = JACOCO_ON && !jacocoOff ? await jacocoRequestDumps(covDir, { timeoutMs: (JACOCO_CONF.dumpTimeoutSec ?? 20) * 1000 }) : null;
+      if (exec?.missing.length) log(`  coverage: JVM(s) ${exec.missing.join(', ')} did not answer the dump request: their loaded classes count as entered`, sh);
+      const c = collectCoverage(covDir, covSnap, { prefix: CACHE_CONF.coverage?.packagePrefix ?? 'dev.larattalabs.', exec, readDump: jacocoReadDump });
       stepCoverage.set(step.id, c);
       const td = path.join(OUT, 'traces', step.id);
       fs.mkdirSync(td, { recursive: true });
-      fs.writeFileSync(path.join(td, 'coverage.json'), JSON.stringify({ classes: c.classes, node: Object.fromEntries([...c.node].map(([p, k]) => [p, [...k].join('')])) }));
-      rec.coverage = { classes: c.classes.length, clientPaths: c.node.size };
+      fs.writeFileSync(path.join(td, 'coverage.json'), JSON.stringify({ classes: c.classes, entered: c.entered, jvms: c.jvms, node: Object.fromEntries([...c.node].map(([p, k]) => [p, [...k].join('')])) }));
+      rec.coverage = { classes: c.classes.length, clientPaths: c.node.size, ...(c.entered ? { entered: c.entered.length, jvms: c.jvms.length, jvmsFallback: c.jvms.filter((j) => !/dump/.test(j.exec) || /stale/.test(j.exec)).length } : {}) };
     } catch (e) {
       rec.coverage = { error: e.message };
     }

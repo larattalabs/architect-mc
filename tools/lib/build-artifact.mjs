@@ -11,6 +11,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { matcher, treeAt } from './step-inputs.mjs';
+import { helpers, JACOCO, skeletons } from './jacoco.mjs';
 
 const sha = (b) => crypto.createHash('sha1').update(b).digest('hex');
 const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
@@ -22,14 +23,19 @@ const DEFAULT = {
   timeoutMin: 30,
 };
 
-/** The build inputs' hash at a commit (git blob ids) and the compiler. */
-export function buildHash(src, commit, conf, java) {
+/** The skeleton format a manifest carries (`skel`), or 'none' when the coverage helpers can't run here (then a new manifest is
+ * built once they can: a manifest without skeletons keys every loaded class by its whole class file). */
+export const skelFormat = (main) => (main && helpers(main).ok ? JACOCO.granularity : 'none');
+
+/** The build inputs' hash at a commit (git blob ids), the compiler and the manifest's skeleton format. */
+export function buildHash(src, commit, conf, java, skel = 'none') {
   const b = { ...DEFAULT, ...(conf.build ?? {}) };
   const m = matcher(b.inputs);
   const tree = treeAt(src, commit);
   const h = crypto.createHash('sha1');
   for (const p of [...tree.keys()].sort()) if (m(p)) h.update(`${p}\0${tree.get(p)}\n`);
   h.update(`java ${java}\n`);
+  if (skel !== 'none') h.update(`skel ${skel}\n`); // (no line for 'none': the manifests built before skeletons keep their hash)
   return h.digest('hex').slice(0, 24);
 }
 
@@ -65,7 +71,8 @@ const loaded = new Map();
 export function ensureBuild({ src, main, commit, conf, java, build = true, log = () => {} }) {
   const b = { ...DEFAULT, ...(conf.build ?? {}) };
   const head = git(src, 'rev-parse', commit);
-  const hash = buildHash(src, head, conf, java);
+  const skelFmt = skelFormat(main);
+  const hash = buildHash(src, head, conf, java, skelFmt);
   if (loaded.has(hash)) return loaded.get(hash);
   const dir = path.join(main, 'artifacts', 'build-cache');
   const file = path.join(dir, `${hash}.json`);
@@ -135,6 +142,14 @@ export function ensureBuild({ src, main, commit, conf, java, build = true, log =
     else {
       if (git(wt, 'rev-parse', 'HEAD') !== head) throw new Error('the build worktree moved');
       m = { ok: true, hash, head, classes: classManifest(wt, b.classDirs), log: logFile, at: new Date().toISOString(), ms: Date.now() - t0 };
+      // execution coverage: each class's skeleton digest (tools/lib/GateCovTool.java), what a class loaded but never entered is
+      // keyed by. A tool failure here is transient (not kept): the next run builds it again
+      if (skelFmt !== 'none') {
+        const sk = skeletons(main, b.classDirs.map((d) => path.join(wt, d)));
+        if (!sk) throw new Error('the class skeleton tool failed (tools/lib/GateCovTool.java)');
+        m.skel = sk;
+        m.skelFormat = skelFmt;
+      }
     }
   } catch (e) {
     m = { ok: false, hash, head, error: e.message, at: new Date().toISOString(), ms: Date.now() - t0, transient: true };
@@ -149,9 +164,19 @@ export function ensureBuild({ src, main, commit, conf, java, build = true, log =
   return m;
 }
 
-/** The bytecode digest of a step's loaded classes (sorted fqn and class-file sha; a class not in the manifest counts as "-"). */
-export function bytecodeDigest(classes, manifest) {
+/**
+ * The bytecode digest of a step's loaded classes (sorted fqn and class-file sha; a class not in the manifest counts as "-").
+ * With execution coverage (`entered`: the classes its JVMs entered), a loaded class it never entered counts by its skeleton
+ * (declarations, constants, hierarchy, annotations and the static initializer: tools/lib/GateCovTool.java) instead of its whole
+ * class file; a class with no skeleton in the manifest counts whole. The granularity is in the digest.
+ */
+export function bytecodeDigest(classes, manifest, entered = null) {
   const h = crypto.createHash('sha1');
-  for (const c of [...classes].sort()) h.update(`${c}\0${manifest.classes?.[c] ?? '-'}\n`);
+  const ent = entered ? new Set(entered) : null;
+  if (ent) h.update(`granularity ${JACOCO.granularity}\n`);
+  for (const c of [...classes].sort()) {
+    const sk = ent && !ent.has(c) ? manifest.skel?.[c] : undefined;
+    h.update(sk ? `${c}\0s:${sk}\n` : `${c}\0${manifest.classes?.[c] ?? '-'}\n`);
+  }
   return h.digest('hex');
 }
