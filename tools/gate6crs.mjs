@@ -1117,11 +1117,16 @@ steps.item14 = async () => {
   const box = [c[0] - 8, Math.max(-64, y0 - 8), c[1] - 8, c[2] + 8, Math.min(319, y1 + 24), c[3] + 8];
   await cmd('/kill @e[type=!minecraft:player]');
   const crates = Array.from({ length: 4 }, (_, k) => [c[0] + 2 + 2 * k, S.groundAt(c[0] + 2 + 2 * k, c[1] + 2) + 1, c[1] + 2]);
+  for (const q of crates) await cmd(`/setblock ${q.join(' ')} minecraft:air`); // (a plant on the ground there: the player clears the crate's cell)
   const cr = await L.call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
   check(!cr.refused, `item 14: the stockpile's 4 crates at the claim's north-west corner (${json(cr.refused ?? crates)})`);
   const snapF = await G.snap(ctx, box, `rs-${tag}-pre`);
   // ---- realised and fed to done
-  const region = await G.realise(ctx, ck.check.artifactSha, entries);
+  // the lot entries of the lots the answer placed (an adjusted town may place fewer than the plan asked)
+  const placed = new Set(((ck.check?.parts ?? []).find((a) => a.part === 'town')?.geometry?.lots ?? []).map((l) => (typeof l === 'string' ? l : l.id)));
+  const lotEntries = Object.fromEntries(Object.entries(entries).filter(([k]) => placed.has(k)));
+  out.lots = Object.keys(lotEntries);
+  const region = await G.realise(ctx, ck.check.artifactSha, lotEntries);
   out.region = region;
   const f = await G.feed(ctx, region, { fraction: 0.5, timeoutMs: 2_400_000 });
   out.state = f.last.st.view.state;
