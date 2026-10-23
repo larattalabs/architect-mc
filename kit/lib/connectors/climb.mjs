@@ -18,9 +18,10 @@ import { inferMovers, VILLAGER, footprintOf } from '../region/passes/route.mjs';
 import { zoneLots } from '../plan/schema.mjs';
 import { canonicalJson } from '../region/pack.mjs';
 import { CLIMB_KINDS, UNSAFE_EXT_7A } from './kinds7a.mjs';
-import { CLIMB, climbCells, climbLand, emitClimbs } from './climbGeom.mjs';
+import { CLIMB, climbCells, climbLand, emitClimbs, walkCols } from './climbGeom.mjs';
 import { PROFILES } from '../region/passes/moves/profiles.mjs';
 import { shapeOf } from './style.mjs';
+import { bomOf } from './bom.mjs';
 
 const isInt = Number.isInteger;
 const lotKind = (l) => { const v = l?.ext?.['architect_mc:village']; return v?.villager ?? v?.type ?? v?.role ?? null; };
@@ -233,15 +234,15 @@ export function answer(K, p, legs) {
   return out;
 }
 
-/** Columns another writer holds (other routed connectors' footprints, the lots and their aprons): the fittings keep off them. */
+/** Columns another writer holds: another routed connector's walk (its surface y), a lot and its apron (true); the fittings keep off them. */
 function takenOf(K, self) {
-  const cols = new Set();
+  const cols = new Map();
   for (const x of K.routed ?? []) {
     if (!x.meta?.ok || x.meta.id === self) continue;
-    for (const g of x.meta.segments ?? []) for (const q of footprintOf(x.meta.path.slice(g.from, g.to + 1), x.meta.width)) cols.add(`${q[0]},${q[1]}`);
+    for (const [k, y] of walkCols(x.meta)) if (!cols.has(k)) cols.set(k, y);
   }
   const lots = K.r.lots.map((l) => l.box);
-  return (x, z) => cols.has(`${x},${z}`) || lots.some((b) => x >= b.minX - 1 && x <= b.maxX + 1 && z >= b.minZ - 1 && z <= b.maxZ + 1);
+  return (x, z) => (lots.some((b) => x >= b.minX - 1 && x <= b.maxX + 1 && z >= b.minZ - 1 && z <= b.maxZ + 1) ? true : cols.get(`${x},${z}`) ?? false);
 }
 
 /** The links stage: each routed climb's fittings under a checkpoint; the graph edge's crossing; cost.bom. */
@@ -258,7 +259,7 @@ export function emit(K) {
     try {
       const idx = K.order.indexOf(p);
       const land = landOf(K);
-      const res = emitClimbs(K.r, [x.meta], { opts: { [x.meta.id]: { kind: p.kind, rails: o.rails, retaining: o.retaining, rest: o.rest, top: o.top, lamps: o.lamps } }, stage, part: `links_c${idx}`, land, taken: takenOf(K, x.meta.id), recPart: p.id });
+      const res = emitClimbs(K.r, [x.meta], { opts: { [x.meta.id]: { kind: p.kind, rails: o.rails, retaining: o.retaining, rest: o.rest, top: o.top, lamps: o.lamps, ...(Object.keys(o.unsafe).length ? { unsafe: o.unsafe } : {}) } }, stage, part: `links_c${idx}`, land, taken: takenOf(K, x.meta.id), recPart: p.id });
       K.mark(p.id, K.addedSince(cp));
       const rec = res[0];
       const ge = K.r.graph.edges.find((e) => e.id === `route_${x.meta.id}`);
@@ -290,9 +291,10 @@ function routeBom(K, e) {
   const add = (item, n) => { if (n > 0) out[item] = (out[item] ?? 0) + n; };
   let treads = 0;
   for (const g of e.segments ?? []) if (g.kind === 'stair' && !g.shared) treads += footprintOf(e.path.slice(g.from + 1, g.to + 1), e.width).length;
-  const mat = K.r.roles?.[treadOf(K) ?? 'structure'] ?? 'minecraft:cobblestone';
-  const item = String(mat).replace(/\[.*$/, '');
-  add(item.endsWith('_stairs') ? item : `${item}`, treads);
+  // (T2's _stair: the material's stairs block where it has one, else the full block)
+  const mat = String(K.r.roles?.[treadOf(K) ?? 'structure'] ?? 'minecraft:cobblestone').replace(/\[.*$/, '');
+  const tread = shapeOf(mat, 'stairs') ?? mat;
+  for (const [item, n] of Object.entries(bomOf(Array.from({ length: treads }, () => tread)))) add(item, n);
   // (the rungs are the fittings' own: climbGeom writes every one)
   return out;
 }

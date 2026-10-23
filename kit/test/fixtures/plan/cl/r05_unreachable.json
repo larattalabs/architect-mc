@@ -1,0 +1,58 @@
+{
+  "about": "(7a CL, \u00a710) a ladder whose every line crosses a protected strip (keep-out across the claim): refused UNREACHABLE",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "bands": [
+      {
+        "x0": 1080,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2095,
+        "y": 94
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1050,
+      65,
+      2048
+    ],
+    "b": [
+      1090,
+      95,
+      2048
+    ]
+  },
+  "protected": [
+    {
+      "id": "strip",
+      "rect": [
+        1060,
+        2000,
+        1070,
+        2095
+      ]
+    }
+  ],
+  "expect": {
+    "part": "ko_ladder",
+    "code": "UNREACHABLE"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "ko_ladder",
+        "kind": "ladder",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        }
+      }
+    ]
+  }
+}

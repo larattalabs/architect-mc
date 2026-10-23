@@ -96,7 +96,7 @@ function gateOf(railBlock, f) {
  * The fittings of one routed climb edge, as cells `[[x, y, z, state, what]]` (what: rail, support, cap, retain, ladder, air, deck, bracket,
  * gate, lamp) plus its records. `e`: the route pass's edge record; `o`: {kind, rails ('drops' | 'both' | 'none'), retaining ('plain' |
  * 'none'), rest (8..24), top ('gate' | 'open'), lamps (bool), roles: {rail, support, retain, cap, landing, light, post}}, `land`
- * (climbLand), `taken(x, z)` (a column another writer holds: another route, a lot, a kept column), `side` (a ladder's lateral side, or
+ * (climbLand), `taken(x, z)` (a column another writer holds: true for a lot or a kept column, another walk's surface y, else false), `side` (a ladder's lateral side, or
  * null to choose). Throws 'ANCHOR: ...' (with .evidence) when a ladder cell has no sturdy face.
  */
 export function climbCells(e, o, land, { taken = () => false } = {}) {
@@ -110,13 +110,17 @@ export function climbCells(e, o, land, { taken = () => false } = {}) {
   const put = (x, y, z, s, what) => { out.push([x, y, z, s, what]); };
   const used = new Set();
   // ---- rails beside drops (stair, landing and walk cells alike: the climb's whole footprint)
-  if (o.rails !== 'none') {
+  // (`unsafe.noRails`: the broken variant, a stair that skips its rails while claiming them; M8:climb catches it)
+  if (o.rails !== 'none' && !o.unsafe?.noRails) {
     for (const c of ec.cols) {
       if (!c.edge || e.segments[c.seg]?.shared) continue;
       for (const [dx, dz] of DIR4) {
         const ox = c.x + dx, oz = c.z + dz, k = `${ox},${oz}`;
-        if (own.has(k) || used.has(k) || taken(ox, oz)) continue;
-        const drop = c.y - land.groundAt(ox, oz);
+        // (a column another walk holds: railed only over it, when its surface stands more than 4 under this tread: the rail and its
+        // support then stand over that walk's head room)
+        const tk = taken(ox, oz);
+        if (own.has(k) || used.has(k) || tk === true || (typeof tk === 'number' && c.y - tk <= CLIMB.railDrop + 1)) continue;
+        const drop = c.y - Math.max(land.groundAt(ox, oz), typeof tk === 'number' ? tk : -Infinity);
         if (!(o.rails === 'both' ? drop >= 0 : drop > CLIMB.railDrop)) continue;
         used.add(k);
         if (drop > 0) put(ox, c.y, oz, o.roles.support, 'support');
@@ -189,7 +193,8 @@ export function climbCells(e, o, land, { taken = () => false } = {}) {
     const topRails = [];
     if (o.top !== 'open') {
       gate = [tx, ty, tz];
-      put(tx, ty, tz, gateOf(o.roles.railBlock ?? 'minecraft:oak_fence', CARD[`${fx},${fz}`]), 'gate');
+      // (`unsafe.noGate`: the broken variant, the gate recorded but not written; M10:climb catches it)
+      if (!o.unsafe?.noGate) put(tx, ty, tz, gateOf(o.roles.railBlock ?? 'minecraft:oak_fence', CARD[`${fx},${fz}`]), 'gate');
       meta.gates++;
       const [rx, rz] = [-fz, fx];
       for (const s of [1, -1]) for (let t = 1; t <= CLIMB.topRail; t++) {
@@ -210,11 +215,12 @@ export function climbCells(e, o, land, { taken = () => false } = {}) {
  * Lamp spots along a climb (W's fixture, every `every` path cells over its tread, landing and walk cells): a lantern on a post beside
  * the footprint, on whichever side stands open (the post on a support where the ground falls away). `[[x, y, z, state, what]]`.
  */
-export function climbLamps(e, land, { every = 12, light, post, support, taken = () => false, skip = new Set() } = {}) {
-  const out = [];
+export function climbLamps(e, land, { every = 12, light, post, support, taken = () => false, skip = new Set(), rails = new Map() } = {}) {
+  const out = [], lit = new Set();
   const lo = -Math.floor((e.width - 1) / 2) - 1, hi = Math.floor(e.width / 2) + 1;
   const own = new Set();
   for (const g of e.segments) for (const q of footprintOf(e.path.slice(g.from, g.to + 1), e.width)) own.add(`${q[0]},${q[1]}`);
+  for (const l of e.landings ?? []) for (const [x, z] of l.cells) own.add(`${x},${z}`);
   let since = Math.floor(every / 2);
   for (let i = 0; i < e.path.length; i++) {
     const g = e.segments.find((s) => i >= s.from && i <= s.to);
@@ -225,6 +231,8 @@ export function climbLamps(e, land, { every = 12, light, post, support, taken = 
     const ax = Math.abs(nb[0] - pv[0]) >= Math.abs(nb[2] - pv[2]) ? [0, 1] : [1, 0];
     for (const v of [hi, lo]) {
       const qx = x + ax[0] * v, qz = z + ax[1] * v, k = `${qx},${qz}`;
+      // a rail beside the walk carries the lamp on its top (a ridge's stair has no ground beside it for a post)
+      if (rails.has(k) && !lit.has(k)) { const ry = rails.get(k); out.push([qx, ry + 1, qz, light, 'lamp']); lit.add(k); since = 0; break; }
       if (own.has(k) || taken(qx, qz) || skip.has(k)) continue;
       const gq = land.groundAt(qx, qz);
       if (gq > y + 1) continue; // (a cut: the bank stands over the post)
@@ -238,6 +246,14 @@ export function climbLamps(e, land, { every = 12, light, post, support, taken = 
   return out;
 }
 
+/** A routed edge's walk columns: "x,z" -> its surface y (the footprint and the hairpin landings). */
+export function walkCols(e) {
+  const m = new Map();
+  for (const g of e.segments ?? []) if (!g.shared) for (const q of footprintOf(e.path.slice(g.from, g.to + 1), e.width)) if (!m.has(`${q[0]},${q[1]}`)) m.set(`${q[0]},${q[1]}`, q[2]);
+  for (const l of e.landings ?? []) for (const [x, z] of l.cells) m.set(`${x},${z}`, l.y);
+  return m;
+}
+
 /**
  * Emit the climbs' fittings of routed edges into part `part` (stage `stage`): `edges` the route pass's edge records, `opts` per edge id
  * ({kind, rails, retaining, rest, top, lamps}), `land` (climbLand), `taken`. Writes under the caller's checkpoint; returns per edge
@@ -246,11 +262,15 @@ export function climbLamps(e, land, { every = 12, light, post, support, taken = 
 export function emitClimbs(r, edges, { opts, stage, part = 'links_climbs', land, taken = () => false, recPart = null } = {}) {
   const res = [];
   const roles = climbRoles(r);
+  // (the other edges passed together keep their footprints and landings: no fitting of one lands on another's walk)
+  const fps = new Map(edges.filter((e) => e?.ok).map((e) => [e.id, walkCols(e)]));
+  const takenBut = (id) => (x, z) => { const t = taken(x, z); if (t !== false && t !== null && t !== undefined) return t; for (const [k, m] of fps) if (k !== id && m.has(`${x},${z}`)) return m.get(`${x},${z}`); return false; };
   for (const e of edges) {
     if (!e?.ok) continue;
+    const taken0 = takenBut(e.id);
     const o = { rails: 'drops', retaining: 'plain', rest: CLIMB.rest, top: 'gate', lamps: true, ...(opts?.[e.id] ?? {}), roles };
-    const { cells, meta } = climbCells(e, o, land, { taken });
-    const lamps = o.lamps === false ? [] : climbLamps(e, land, { every: Math.max(4, Math.floor((12 * levelOf(roles.light)) / 15)), light: roles.light, post: roles.post, support: roles.support, taken, skip: new Set(cells.filter((c) => c[4] === 'rail' || c[4] === 'support').map((c) => `${c[0]},${c[2]}`)) });
+    const { cells, meta } = climbCells(e, o, land, { taken: taken0 });
+    const lamps = o.lamps === false ? [] : climbLamps(e, land, { every: Math.max(4, Math.floor((12 * levelOf(roles.light)) / 15)), light: roles.light, post: roles.post, support: roles.support, taken: taken0, skip: new Set(cells.filter((c) => c[4] === 'rail' || c[4] === 'support').map((c) => `${c[0]},${c[2]}`)), rails: new Map(cells.filter((c) => c[4] === 'rail' && c.length === 5).map((c) => [`${c[0]},${c[2]}`, c[1]])) });
     const all = [...cells, ...lamps];
     meta.lamps += lamps.filter((c) => c[4] === 'lamp').length;
     if (all.length) {
@@ -265,7 +285,7 @@ export function emitClimbs(r, edges, { opts, stage, part = 'links_climbs', land,
       p.columns({ abs: 0 }, { abs: 0 }, cols, mats, { cond: 3 });
     }
     const written = all.filter((c) => c[3] !== null).flatMap((c) => { const n = (c.length > 5 ? c[5] : c[1]) - c[1] + 1; return Array.from({ length: n }, () => c[3]); });
-    const rec = { id: `climb_${e.id}`.slice(0, 48), part: recPart ?? e.id, kind: o.kind, edge: e.id, flights: meta.flights, hairpins: meta.hairpins, ladders: meta.ladders.map((l) => ({ at: l.at, rungs: l.rungs, landings: l.landings })), rails: meta.rails, caps: meta.caps, lamps: meta.lamps, gates: meta.gates, detail: meta.ladders, rest: o.rest, rails: o.rails,
+    const rec = { id: `climb_${e.id}`.slice(0, 48), part: recPart ?? e.id, kind: o.kind, edge: e.id, flights: meta.flights, hairpins: meta.hairpins, ladders: meta.ladders.map((l) => ({ at: l.at, rungs: l.rungs, landings: l.landings })), rails: meta.rails, caps: meta.caps, lamps: meta.lamps, gates: meta.gates, detail: meta.ladders, rest: o.rest, railsMode: o.rails,
       // (the checker reads the climb's own route: meta.route holds only the last pass's edges)
       route: { path: e.path.map((q) => [...q]), segments: e.segments.map((g) => ({ kind: g.kind, from: g.from, to: g.to, ...(g.shared ? { shared: true } : {}) })), width: e.width, landings: (e.landings ?? []).map((l) => ({ cells: l.cells.map((q) => [...q]), y: l.y })) } };
     (r.meta.climbs ??= []).push(rec);

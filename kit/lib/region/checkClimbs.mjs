@@ -66,7 +66,7 @@ export function climbRules({ vw, climbs, want, findings, metrics, finding, light
             else if ((P.barrier[n] || P.solid[n]) && dropBelow(nx, feet - 1, nz) > 3) edge = true;
           }
           if (edge) row.m8Edges++;
-          if (open && m.rails !== 'none') { row.m8Open++; bad8.push([x, feet, z]); }
+          if (open && m.railsMode !== 'none') { row.m8Open++; bad8.push([x, feet, z]); }
         }
         if (want.has('M5') && P.spawn[vw.get(x, y, z)] && P.passable[vw.get(x, feet, z)]) {
           L ??= light();
