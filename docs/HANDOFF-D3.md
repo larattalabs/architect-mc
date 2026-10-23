@@ -45,9 +45,23 @@ On disk (sidecar plan dir): `reach-survey.bin`, `held.json`, `standing.json`, an
   columns as the district's at the start of the realise, before = after = the block standing).
 - `meta.districts.join.step: "reach"`, `.junction: {kind: "end"|"side", at, side?, u?}`; `join_external.junction` the same.
 
-## State
+## State (2026-10-23)
 
-- [ ] D3-a kit
-- [ ] D3-b mod + sidecar
-- [ ] driver tools/gate6cd3.mjs, chain, impact rule, step-inputs
-- [ ] runs, verifier, as-built, Steward RC
+- [x] D3-a kit: reach step, candidates, frame/lead, IR reach, evalTile, M28/M25 foreign bodies, land.mjs, plan/0 reach, §9,
+      lit reach (ruling B), broken variants; unit tests and the parity fixture.
+- [x] D3-b mod + sidecar: reach inputs at plan (held, town survey, standing), realise re-check, TileCheck/Drift/Prepare reach,
+      hold item, land ext + standingRemoved, checkBeside + dry, features, DevBridge hooks. Compiles; Java parity green.
+- [x] Driver `tools/gate6cd3.mjs` (steps unit, apicompat, ingame, side, refusals, steward, along, kc, walled, pond, natural,
+      survival), chain 6cd3, impact rule "6c D3", step-inputs rebuilt.
+- [x] As-built section in CONTRACT.md (evidence row pending the in-game run); PLAN queue entries.
+- [ ] Slice tier run (`node tools/gate-run.mjs slice --since origin/main`) after merging origin/main once v0.42.0 is tagged.
+- [ ] Gate-verifier (re-runs items 7, 8, 10, 12).
+- [ ] Steward RC (S-D3-7) on the branch head.
+
+## Not yet proven in game (the driver is unrun)
+
+Every in-game step is written but has not run (main frozen for v0.42.0). Expect a round of driver fixes. Known soft spots:
+- item 10's "PLACING its routes stage" detection polls stage progress;
+- item 11's walled case needs C38 `gates: 0` to give a sealed ring;
+- item 13's pond town is a plan/0 town (its streets flagged); item 15 falls back to a plain district if no shore street routes;
+- item 16 feeds the stockpile with its own loop (owner test:d3).

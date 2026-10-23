@@ -24056,3 +24056,100 @@ no version set (the coordinator's at merge).
 - **The gate-verifier:** items 1, 3, 4 and 5 PASS. Its item 2 point, the untagged fresh seed 777124280, is now tagged with a repro
   (§3).
 
+
+## Phase 6c slice D3 as built (branch `slice/D3`, 2026-10-23)
+
+Built against the frozen D3 section above, with Steward's review and the coordinator's rulings. Versions are placeholders (`NEXT`):
+`Regions.checkBeside`, `BesideVerdict` and `BesideJoin` are stamped `Since NEXT`. The kit's `KIT_VERSION` moves at the release
+(`release-version.mjs`); the seam-step goldens are unchanged under the kitVersion-only rule (§10).
+
+### What was built
+
+- **Kit, the reach step** (`kit/lib/region/reach.mjs`). It runs only where D1's seam step finds no port or no dry route, and only
+  with the reach inputs (an older mod or sidecar sends none, so D1's two refusals read as before).
+  - The street network (§3.1): ends are terminal junctions whose one edge is a street (the `architect_mc:street` flag or the
+    `street_` / `st_` stem); sides are straight runs of 9 or more cells, with each run's junctions.
+  - Candidates (§3.2, §3.3): ends (the past-end cell and 3 lead cells, 3 wide) and sides (a 5-cell landing strip, a 3-deep lead and
+    a 3-cell verge contact). Side points are thinned to every 4 cells plus each district end's projection. Sides are kept at least 3
+    from run ends and junctions, the verge carries no lamp, prop, lane or other site, and the height difference is at most 1. The
+    junction's feet sit at the street's own surface in the reach survey.
+  - The choice (§2.2): `chooseReach` takes the cheapest dry route (T2 cost) in lower-bound order, with the prune, at most 48 routes
+    of 2M expansions each, and ties by end before side, then road and (x, z). Before any route, a 4-connected flood over centre
+    cells (hard columns grown by 1, approaches and leads open) skips pairs no walk can reach. It is a superset of what the route pass
+    reaches.
+  - Refusals (§2.5): `NO_JOIN: [apart|street|wall|route|budget] ...`. `wall` means a flood from the district ends never reaches a
+    candidate past another owner's held columns.
+  - The route pass gains a per-edge and pass-level `frame` (rects; outside them, and within the margin of their outer edge, is hard)
+    and a `to.lead` (the goal is reached heading against the end's facing after n straight walk cells). Absent, the pass is today's.
+  - The join is routed graded (no 4e road), in its own part `route_join`. Its footprint behind the junction cell is never its own:
+    no write lands on the street's end column or a verge.
+- **IR (reach-step plans only)**: `reach {standing, runs, rect, cells, hold, contact, lamps?, heldSha, surveySha, standingSha}`,
+  `meta.districts.join.step/.junction/.road`, and `join_external.junction`. A side T's external edge is `<town>:<roadId>`.
+  - `evalTile` writes reach columns (`compileReach`).
+  - `assembleParts` adds the tiles of reach columns.
+  - The budget pass and the plan check's artifact (`finish.mjs`) evaluate over the reach frame's survey.
+  - `MEMBERS_FORMAT2` knows `beside`, `corridor` and `reach`.
+- **Checker**: `M28:beside` (`kit/lib/region/checkBeside.mjs`) and `M25:clear` over the town's bodies, named `<town>:<id>`.
+  - M1 lets `route_join`'s paths leave the claim.
+  - M5 over the join's walk cells in the town (`metrics.M28.M5reach`).
+  - The four broken variants (`spec._unsafe`): `ignoreHeld`, `writeVerge`, `wideReach` and `noHold`, each caught in the unit tests.
+- **The land** (`kit/lib/region/land.mjs` and `region/DistrictLand.java`): equal on the parity fixture
+  (`kit/test/fixtures/d3/parity.json`: a reach end, a side T, a seam join and an outpost, with and without the town and with
+  `standingRemoved`).
+- **plan/0** (§8, §9): `endpoint.region` reaches through `chooseReach` from the leg's other end, its leg in `route_join`. The
+  answer's leg carries `junction` and its notes say `reach: true`. Standing and other-owner regions' `reach` runs are hard to later
+  plans, and C38's ring blocked by a district's reach answers `NO_ROOM {kind: region}`.
+- **Mod**:
+  - At plan: the reach inputs, as follows.
+    - `BesideReach.standing` (= `besideStanding`).
+    - `BesideReach.held` from the journal: all, the town's alone, and its terrain's alone. Terrain means its terrain tiles of
+      stages with no `props*` part.
+    - The town claim's survey (resolution 1, loaded only) as a blob.
+    - These are kept as `<planId>.reach.json` and `.reach-survey.bin`.
+  - At realise, once before any write (§4.4): the re-check. A town in flight answers OVERLAP_BUSY; a gone town answers OTHER,
+    "re-plan". A changed held set over the reach answers OVERLAP, naming the site and column. A C17 area answers PROTECTED; another
+    owner's region answers OVERLAP_OWNED. Through `realiseApproved`, every one of these answers ARTIFACT_STALE.
+  - Prepare and the estimate add the reach's chunks. Drift samples the reach columns against the reach survey. TileCheck writes
+    reach columns (it clipped everything outside the claim).
+  - The hold: one LAYER cell-site item (`architect:hold`, CELL, before = after) of every town-held cell in the hold columns, first in
+    the district's batch.
+  - `architect_mc:land` is set on every districts region at realise; `standingRemoved` is set by the town's removal.
+  - `Regions.checkBeside` is the dry plan (`DRY`): `plan0raw` without `finishPlan`, and the sidecar's `dry`.
+  - Features: `besideReach`, `besideCheck` and `districtLand`.
+  - DevBridge: `dev.region.checkBeside` and `dev.journal.columns`.
+- **Sidecar**:
+  - `region.plan` gains `besideReach` (one, or by region for a check, at most 2), written as `reach-survey[-id].bin`,
+    `held[-id].json`, `standing[-id].json` and `beside-reach.json`, with `--beside-reach` passed to the plan and the check.
+  - `dry`: its own `regions/dry/<id>` directory, removed when the run ends, with no blob published, no IR cache and no previews.
+- **Plan fixtures**: `valid/v7x_d3_endpoint_reach` (an end) and `valid/v7x_d3_district_side` (a side T), each in Steward's plan v1
+  shape with its reach inputs. The broken variants are the districts program's `_unsafe` cases in `districts-d3.test.mjs`. No
+  plan/0 fixture can carry them.
+
+### Deviations (each with the coordinator's ruling, 2026-10-23)
+
+1. **`besideReach.standing`** (§2.4/§10). The standing data the reach step needs (whole-claim footprint, streets, bodies, lamps,
+   props, lights) travels as `besideReach.standing`, and `reach.standingSha` covers it. Approved.
+2. **The reach join is lit** (ruling B). Its route lamps may stand on reach columns: unheld, off the footprint and bodies, never a
+   contact column, and none within 6 of a town lamp (N-D3-2).
+   - lightCover, given `reach`, spreads light over the town's claim, counts the town's lamp parts' own lights
+     (`standing.lights`), and holds the cover over the join's in-town walk cells on their own.
+   - The lamps' columns join `reach.runs` as `reach.lamps`. M28 accepts their writer (the lamps' `props*` part).
+3. **One reach region per plan/0 check** (§8 allows 2). A second answers `NO_FEATURE {why: reach, kind: second}`. Queued in PLAN
+   ("reach as a list").
+4. **The hold op is `reach.hold` plus one LAYER hold item**, not a tile-writer op (§12). The journal effect is the same.
+5. **Steward's in-flight rule applies at `Regions.plan` for every beside plan**, D1's seam plans included. REMOVING now answers
+   OVERLAP_BUSY where it answered OTHER.
+6. **N-D3-2 applies to reach plans only**, so seam-step plans stay byte-identical.
+7. **Item 2's held check on the pinned seam joins counts the 4e road's width.** Its verge row holds a lantern only at its spacing, so
+   it is listed apart: D1's fixture and D2's outpost share 0 written columns with the town's held set. The one verge-row column
+   (11, 55) is the farm lot's apron and a possible lantern spot of the join road. It is listed as §4.3's finding, not changed.
+
+### Evidence
+
+| item | where | result |
+|---|---|---|
+| 1, 2, 17 (kit) | `kit/test/districts-d3.test.mjs`, `districts-d3-parity.test.mjs` | 13 + 1 pass; 300 synthetic towns: 300 joined (143 at a side), 648 terrain-held contact cells; the pinned seam joins share 0 columns |
+| 1 (Java) | `DistrictLandTest` | 5/5: standing and land equal the kit's on every parity case |
+| 2 | the whole kit suite at 5ea96103 | 804 pass; the 2 failures (the realise lint's `Math.sign`, item 2's verge-row count) fixed since |
+| lints | lint-structure 57/0, lint-look 13/0, water-lint 118/0, p3-lint pass | |
+| 3-16 (in game) | `tools/gate6cd3.mjs` steps ingame, side, refusals, steward, along, kc, walled, pond, natural, survival (chain `6cd3`) | **pending**: queued behind the v0.42.0 release run; see HANDOFF-D3.md |
