@@ -97,7 +97,7 @@ test('§4: the defs (strict, read once each kind flips), NO_CLIMB, the climb dev
   const cat = planCatalogue();
   for (const k of K7.KINDS_7A) {
     const e = cat.entries.find((x) => x.id === `connector.${k}`);
-    if (e.state === 'supported') { assert.ok(e.schemaVersion >= 1 && e.def === `#/$defs/connector.${k}`, k); continue; }
+    if (e.state === 'supported') { assert.ok(e.schemaVersion >= 1 && PLAN_SCHEMA['x-catalogue'].entries.find((x) => x.id === e.id)?.def === `#/$defs/connector.${k}`, k); continue; }
     assert.equal(e.state, 'reserved', k);
   }
 });
