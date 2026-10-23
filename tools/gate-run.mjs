@@ -189,6 +189,12 @@ function makeCache() {
   if (cacheCtx === undefined) {
     try {
       cacheCtx = INPUT_MAP ? { ctx: cacheContext({ src: SRC, main: MAIN, cfg, conf: CACHE_CONF, map: INPUT_MAP, snapDir: SNAP }) } : { ctx: null, err: null };
+      if (cacheCtx.ctx) {
+        // set before the first key: the bench rule's coverage checks may need the build artifact, and its manifest is kept
+        cacheCtx.ctx.rawCfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+        cacheCtx.ctx.allowBuild = !flag('--no-build-artifact');
+        cacheCtx.ctx.log = (m) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${m}`);
+      }
     } catch (e) {
       cacheCtx = { ctx: null, err: e.message };
     }
@@ -210,18 +216,18 @@ function changedBetween(from, to = 'HEAD') {
  */
 function benchRule() {
   const { ctx } = makeCache();
-  if (ctx) ctx.rawCfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
   const benches = releaseBenches(BENCH);
   const recs = latestNightlyRecords(NIGHTLY_ROOT, benches.flatMap((b) => b.ids));
   const out = [];
   for (const b of benches) {
     const latest = newestOf(recs, b.ids);
     const changed = latest?.head ? changedBetween(latest.head) : null;
-    let valid = null;
-    if (latest?.status === 'PASS' && latest.key && ctx) {
+    // checked only when nothing else decides (a coverage entry may need the build artifact at HEAD)
+    const valid = () => {
+      if (!(latest?.status === 'PASS' && latest.key && ctx)) return null;
       const e = entryByKey(ctx, latest.id, latest.key);
-      valid = e ? (e.nightly ? entryStillValid(ctx, latest.id, e) : { ok: false, why: 'its step-cache entry is not a nightly (judged) PASS' }) : null;
-    }
+      return e ? (e.nightly ? entryStillValid(ctx, latest.id, e) : { ok: false, why: 'its step-cache entry is not a nightly (judged) PASS' }) : null;
+    };
     const d = decideBench(BENCH, { bench: b.bench, ids: b.ids, latest, valid, changed, noReuse: flag('--no-cache') });
     out.push({ bench: b.bench, ids: b.ids, ...d, changed: changed ? changed.length : null });
   }
@@ -422,7 +428,9 @@ function select() {
   for (let again = true; again;) {
     again = false;
     for (const s of [...want]) {
-      const by = supersededList(cfg.steps[s]).find((b) => want.has(b));
+      // (the nightly keeps a step a judged bench supersedes, 6a-resume: a bench's PASS never serves it, so its own PASS warms the
+      // cache for the releases)
+      const by = supersededList(cfg.steps[s]).find((b) => want.has(b) && !(NIGHTLY && BENCH.judged.has(b)));
       if (by && !Object.entries(cfg.steps).some(([id, x]) => x.after === s && want.has(id))) {
         want.delete(s);
         info.superseded[s] = by;

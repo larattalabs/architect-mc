@@ -17,6 +17,7 @@ import { globRe } from './step-inputs.mjs';
 import { parentOf } from './step-split.mjs';
 
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const TERMINAL = new Set(['PASS', 'FAIL', 'TIMEOUT', 'NOISY', 'ERROR']);
 
 /** tools/gate-cache.json release.benches -> the sets and lists the runner uses. */
 export function benchConf(conf) {
@@ -78,6 +79,7 @@ export function megaBVariant(bc, { date, onDemand = false, lastFull = null, chan
   const day = DAYS[date.getDay()];
   if (String(weeklyDay).toLowerCase().slice(0, 3) === day) return { id: full, why: `the weekly full walk (${weeklyDay}, release.benches.megaB.weeklyDay)` };
   if (!lastFull) return { id: full, why: 'no nightly has run the full walk yet' };
+  if (lastFull.status && lastFull.status !== 'PASS') return { id: full, why: `the last full walk (${lastFull.date ?? '?'}, ${String(lastFull.head).slice(0, 9)}) ended ${lastFull.status}` };
   if (changedSinceFull === null) return { id: full, why: `the files changed since the last full walk (${String(lastFull.head).slice(0, 9)}) are unknown` };
   const hits = sensitiveHits(bc, [full], changedSinceFull);
   if (hits.length) return { id: full, why: `the bench-sensitive core changed since the last full walk (${String(lastFull.head).slice(0, 9)}): ${hitText(hits)}` };
@@ -128,6 +130,8 @@ export function decideBench(bc, { bench, ids, latest, valid, changed, noReuse = 
   if (latest.status !== 'PASS') return { run: true, step: runId, why: `the latest nightly result is ${latest.status} (${last}): only a PASS is reused` };
   if (changed === null) return { run: true, step: runId, why: `the files changed since ${last} are unknown (its head is not in this repository?)` };
   if (hits.length) return { run: true, step: runId, why: `bench-sensitive code changed since ${last}: ${hitText(hits)}` };
+  // valid may be a thunk: the runner checks the entry only when nothing above decided (it may need the build artifact)
+  if (typeof valid === 'function') valid = valid();
   if (!valid) return { run: true, step: runId, why: `no step-cache entry for its PASS in ${last} (key ${latest.key ? String(latest.key).slice(0, 12) : 'none'})` };
   if (!valid.ok) return { run: true, step: runId, why: `the code it measures changed since ${last}: ${valid.why}` };
   return { run: false, step: latest.id, why: `reused: ${latest.id} PASS in ${last}, nothing it measures changed (${valid.why})`, reuse: latest };
@@ -143,7 +147,9 @@ const readJson = (f) => {
 
 /**
  * The newest nightly record of each step in `ids` (by parent id: a split step's parts fold, worst status), from the nightly root
- * (artifacts/nightly/<date>/summary.json and its runs' summary.json). Only finished nightlies count (state done). -> Map id -> record
+ * (artifacts/nightly/<date>/summary.json and its runs' summary.json). Every nightly that has runs counts, finished or not (a nightly
+ * stopped after a bench FAILed still shows that FAIL); only a step's terminal result counts (PASS, FAIL, TIMEOUT, NOISY, ERROR), not
+ * PENDING, RUNNING or SKIPPED (a yielded step never ran). -> Map id -> record
  */
 export function latestNightlyRecords(root, ids) {
   const want = new Set(ids);
@@ -154,17 +160,17 @@ export function latestNightlyRecords(root, ids) {
   } catch {
     return out;
   }
-  const rank = { PASS: 0, CACHED: 0, NOISY: 1, SKIPPED: 2, FAIL: 3, TIMEOUT: 3, ERROR: 3 };
+  const rank = { PASS: 0, NOISY: 1, FAIL: 3, TIMEOUT: 3, ERROR: 3 };
   for (const d of days) {
     const day = readJson(path.join(root, d, 'summary.json'));
-    if (!day || day.state !== 'done') continue;
+    if (!day || !(day.runs ?? (day.run ? [day.run] : [])).length) continue;
     const found = new Map();
     for (const run of day.runs ?? (day.run ? [day.run] : [])) {
       const sm = readJson(path.join(run, 'summary.json'));
       for (const s of sm?.steps ?? []) {
         const id = parentOf(s.id);
         if (!want.has(id) || out.has(id)) continue;
-        if (s.status === 'SKIPPED' && s.error === 'yielded') continue;
+        if (!TERMINAL.has(s.status)) continue;
         const prev = found.get(id);
         const rec = { id, status: s.status, date: d, head: day.head ?? sm.head, run, startedAt: day.startedAt, key: s.cache?.key ?? null, recorded: !!s.cache?.recorded, log: s.log ? path.join(run, s.log) : null };
         if (!prev || (rank[rec.status] ?? 3) > (rank[prev.status] ?? 3)) found.set(id, rec);

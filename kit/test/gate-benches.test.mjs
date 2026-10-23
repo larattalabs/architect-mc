@@ -57,7 +57,12 @@ test('the bench-sensitive paths: the placement core re-runs the mega benches, no
 });
 
 test('the release reuses the latest nightly PASS when nothing the bench measures changed', () => {
-  const d = decideBench(BC, { ...megaA, latest: pass('6a-megaA'), valid: { ok: true, why: 'key unchanged' }, changed: ['docs/GATES.md'] });
+  // valid as a thunk (the runner's): asked only once nothing else decided
+  let asked = 0;
+  const d = decideBench(BC, { ...megaA, latest: pass('6a-megaA'), valid: () => (asked++, { ok: true, why: 'key unchanged' }), changed: ['docs/GATES.md'] });
+  assert.equal(asked, 1);
+  assert.equal(decideBench(BC, { ...megaA, latest: pass('6a-megaA'), valid: () => (asked++, { ok: true, why: '' }), changed: [`${P}site/Placement.java`] }).run, true);
+  assert.equal(asked, 1, 'a sensitive change decides before the entry is checked');
   assert.equal(d.run, false);
   assert.equal(d.reuse.date, '2026-10-23');
   assert.match(d.why, /^reused: 6a-megaA PASS in the nightly of 2026-10-23 \(head abc1234de\)/);
@@ -109,6 +114,9 @@ test('the nightly: megaB full weekly, on demand, first time, and when the sensit
   assert.match(megaBVariant(BC, { date: sun, lastFull: last, changedSinceFull: [] }).why, /weekly/);
   assert.equal(megaBVariant(BC, { date: tue, onDemand: true, lastFull: last, changedSinceFull: [] }).id, '6a-megaB');
   assert.equal(megaBVariant(BC, { date: tue, lastFull: null }).id, '6a-megaB');
+  // the last full walk failed: the next nightly runs it again (not a week later)
+  assert.match(megaBVariant(BC, { date: tue, lastFull: { ...last, status: 'FAIL', date: '2026-10-25' }, changedSinceFull: [] }).why, /last full walk .* ended FAIL/);
+  assert.equal(megaBVariant(BC, { date: tue, lastFull: { ...last, status: 'PASS' }, changedSinceFull: [] }).id, '6a-megaB-fast');
   assert.equal(megaBVariant(BC, { date: tue, lastFull: last, changedSinceFull: null }).id, '6a-megaB');
   assert.equal(megaBVariant(BC, { date: tue, lastFull: last, changedSinceFull: [`${P}site/PlaceJob.java`] }).id, '6a-megaB');
   assert.equal(megaBVariant(BC, { date: tue, lastFull: last, changedSinceFull: ['kit/lib/forms/states.mjs', `${P}region/volume/VolumeSurvey.java`] }).id, '6a-megaB-fast');
@@ -118,7 +126,7 @@ test('the nightly: megaB full weekly, on demand, first time, and when the sensit
   assert.deepEqual(fullBenches(BC, { nightly: false }).ids, ['6a-megaA', '6a-megaB', '6b-volume']);
 });
 
-test('the nightly records: the newest finished nightly that ran each bench; a yielded or unfinished nightly does not count', () => {
+test('the nightly records: the newest nightly result of each bench, finished or stopped; a yielded or running step does not count', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-benches-'));
   const night = (date, state, steps, head) => {
     const run = path.join(root, `run-${date}`);
@@ -128,13 +136,16 @@ test('the nightly records: the newest finished nightly that ran each bench; a yi
     fs.writeFileSync(path.join(root, date, 'summary.json'), JSON.stringify({ date, state, head, startedAt: `${date}T02:00:00Z`, runs: [run] }));
   };
   night('2026-10-20', 'done', [{ id: '6a-megaA', status: 'PASS', cache: { key: 'a1', recorded: true } }, { id: '6a-megaB', status: 'PASS', cache: { key: 'b1' } }], 'h20');
-  night('2026-10-21', 'done', [{ id: '6a-megaA', status: 'FAIL' }, { id: '6a-megaB-fast', status: 'SKIPPED', error: 'yielded' }], 'h21');
-  night('2026-10-22', 'running', [{ id: '6a-megaA', status: 'PASS' }], 'h22');
-  const r = latestNightlyRecords(root, ['6a-megaA', '6a-megaB', '6a-megaB-fast']);
-  // megaA: the newest finished nightly failed it (an older PASS is not reused)
+  // stopped after megaA failed: the FAIL still counts (an older PASS is never reused past it)
+  night('2026-10-21', 'stopped', [{ id: '6a-megaA', status: 'FAIL' }, { id: '6a-megaB-fast', status: 'SKIPPED', error: 'yielded' }], 'h21');
+  // running: a finished step counts, a running or pending one does not
+  night('2026-10-22', 'running', [{ id: '6a-megaA', status: 'RUNNING' }, { id: '6b-volume', status: 'PASS', cache: { key: 'v1' } }, { id: '6a-heap', status: 'PENDING' }], 'h22');
+  const r = latestNightlyRecords(root, ['6a-megaA', '6a-megaB', '6a-megaB-fast', '6b-volume', '6a-heap']);
   assert.deepEqual([r.get('6a-megaA').status, r.get('6a-megaA').date, r.get('6a-megaA').head], ['FAIL', '2026-10-21', 'h21']);
   assert.deepEqual([r.get('6a-megaB').status, r.get('6a-megaB').key], ['PASS', 'b1']);
   assert.equal(r.has('6a-megaB-fast'), false, 'a yielded step never ran');
+  assert.deepEqual([r.get('6b-volume').status, r.get('6b-volume').date], ['PASS', '2026-10-22']);
+  assert.equal(r.has('6a-heap'), false, 'a pending step has no result');
   assert.equal(decideBench(BC, { ...megaA, latest: r.get('6a-megaA'), valid: null, changed: [] }).run, true);
   fs.rmSync(root, { recursive: true });
 });

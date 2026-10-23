@@ -508,7 +508,8 @@ throughput and the S1-S3 scenarios. Each ran isolated, so nothing else could run
      isolated. Only the nightly judges their timing.
 2. **megaB's full walk (about 85 min)** runs in the nightly once a week (`release.benches.megaB.weeklyDay`, `sun`: the nightly
    that starts Sunday about 02:00), on demand (`node tools/nightly.mjs --megab-full`), the first time, and when a bench-sensitive
-   group naming it changed since the last full walk. The other nightlies run `6a-megaB-fast`. Its two resilience rows run as an
+   group naming it changed since the last full walk, and again on the next nightly when the last full walk did not PASS. The other
+   nightlies run `6a-megaB-fast`. Its two resilience rows run as an
    ordinary step, **`6a-resume`** (below).
 3. **4e-megalite and 4e-throughput fold into 6a-megaA** where they overlap (the table below). They are out of the release tier.
    Their drivers and step ids stay, runnable by name (`--only 4e-megalite`, the `regress` chain). They run for their functional
@@ -519,8 +520,9 @@ throughput and the S1-S3 scenarios. Each ran isolated, so nothing else could run
 ### The bench rule (a release that is not `--full`)
 
 For each judged bench, megaB's two walks counting as one bench:
-1. The latest finished nightly that ran it (`artifacts/nightly/<date>/summary.json` and its runs) gives its result. Only that
-   result counts: if it was not a PASS, the release runs the bench. An older PASS is not used.
+1. The latest nightly that ran it (`artifacts/nightly/<date>/summary.json` and its runs, finished or stopped) gives its result: the
+   step's terminal status (PASS, FAIL, TIMEOUT, NOISY, ERROR; a yielded, pending or running step has none). Only that result
+   counts: if it was not a PASS, the release runs the bench. An older PASS is not used.
 2. The release runs the bench when any of these holds. Each reason is printed.
    - no nightly has run it yet;
    - its latest nightly result is FAIL, TIMEOUT or NOISY;
@@ -534,8 +536,10 @@ For each judged bench, megaB's two walks counting as one bench:
      the bench;
    - `--no-cache` (nothing is reused).
 3. Otherwise the release **reuses** that PASS and runs nothing for the bench.
-4. megaB runs its full walk when its sensitive paths changed, and the fast walk otherwise. When megaB (either walk) runs,
-   `6a-resume` drops: its `supersededBy` is `["6a-megaB", "6a-megaB-fast"]`, and `supersededBy` now takes a list.
+4. megaB runs its full walk when its sensitive paths changed, and the fast walk otherwise. When megaB (either walk) runs at a
+   release, `6a-resume` drops: its `supersededBy` is `["6a-megaB", "6a-megaB-fast"]`, and `supersededBy` now takes a list. The
+   nightly keeps 6a-resume beside megaB (about 25 min): a bench's PASS never serves 6a-resume, so its own nightly PASS is what lets a
+   release skip it as CACHED.
 5. 6a-heap: never run at a release (`nightlyOnly`).
 
 `--plan`, the runner log, `summary.json` (`tier.benches`) and SUMMARY.md ("Benches") list every bench:
@@ -548,6 +552,15 @@ They also show when each scenario's timing was last judged. Under `--full` they 
 - any other `--full` (by hand, or the auto rule): every judged bench but heap, and megaB's full walk.
 
 `--nightly-dir DIR` (or `GATE_NIGHTLY_DIR`, plumbing: never in a key) reads the nightly records from another root (the proofs below).
+
+**What else moves a bench's key** (so the release re-runs it although no measured code changed): the runner code (`runnerKey`), the
+toolchain, the bench's chain entry and drivers, and its modes, as for every cached step. 6b-volume and the scenarios S1-S3 also hold
+`originMain` (their closures diff against origin/main through `plan-cache.mjs` and `gate6chy-core.mjs`): a code change on origin/main
+or a new merge base since the nightly moves their keys. megaA, megaB, heap and 6a-resume hold no such flag.
+
+**In `change` and `slice`** a judged bench is now looked up like any step. A nightly PASS for the same key, or the same coverage,
+serves it as CACHED there. That PASS ran the same functional checks on the same code, isolated, so no check is lost. Before, a judged
+bench was never cached and always ran.
 
 ### The bench-sensitive paths (PROPOSED for the coordinator's review)
 
