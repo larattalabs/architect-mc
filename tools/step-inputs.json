@@ -43,7 +43,6 @@
     "gradle",
     "jar",
     "sidecar",
-    "untraced",
     "world"
    ],
    "roots": [
