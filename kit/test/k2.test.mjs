@@ -292,3 +292,17 @@ test('item 12: 3 checks of each K2 fixture give one answer set and one artifact 
   }
   void validateSchema;
 });
+
+test('item 8 (KC): an along wall past a pond keeps clear of its body (the runs step past it: adjusted), M25:clear 0', async () => {
+  const fx = readJ('k2', 'k2_kc_pond.json');
+  const r = await run(fx);
+  assert.equal(r.check.overall, 'READY', JSON.stringify(r.check.parts));
+  const w = part(r, 'edge_wall');
+  assert.equal(w.class, fx.expect.class, JSON.stringify(w));
+  assert.ok(w.deviations.some((d) => d.what === 'move'));
+  const rep = checkRegion({ ir: r.res.ir, survey: svOf(fx).bytes, blobs: (sha) => r.res.blobs.get(sha) ?? null, volumes: (r.volumes ?? []).map((v) => v.decoded ?? v), meta: r.res.meta });
+  assert.deepEqual(rep.findings.filter((f) => f.rule === 'M25:clear').map((f) => f.message), []);
+  // no wall cell on the pond's rect
+  const pr = part(r, 'pond').geometry.rect;
+  assert.equal(r.res.meta.walls[0].cells.filter(([x, z]) => x >= pr[0] && x <= pr[2] && z >= pr[1] && z <= pr[3]).length, 0);
+});
