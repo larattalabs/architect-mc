@@ -24471,10 +24471,19 @@ catalogue **12**.
   **runs 16** and 5 are pending, **none skipped**; 2 holes, both known (6ct2-scenario-route after a docs-only change; pt2-ingame item
   13 after a gate6cpt.mjs change).
 
+- **gate-verifier: PASS** at ffe66f40 (`artifacts/gate-runs-0420-verify/20261023-171758-release`: unit-mod, coa-unit 303 ok,
+  apijars 46 ok per jar, 6b-commands, rs-ingame, 5/5 PASS, 30 min). It confirmed the merge tree equals close-out A's (b1ec8a36), the
+  version diff is version-only (each re-cut IR differs from main in `kitVersion` alone), catalogue 12 is right, and the integration's
+  fixes weaken no check (the coa artifact's irSha is masked, but the IR is still compared on its own). Its own checks: the four
+  close-out A mod test classes 25/0, api-compat `--gate6ccoa` 4/4. Minor, fixed after it: apijars' `desc` in gate-chains.json named the
+  old jars. It asks that Noah accept pt-ingame item 15 (a timing bar) explicitly, and notes the P3 probes were re-run against the
+  release run's evidence, not inside a fresh run.
+
 ### Approvals
 
 - Noah: finding 1's fix ships in 0.42.0, no separate 0.41.1 (close-out A as built). Release approval pending.
 - Steward's RC on close-out A: PASS (fba370c2).
+- Needed from Noah: the release itself, and the pt-ingame item 15 timing bar carried forward.
 
 ### Known issues carried forward
 
