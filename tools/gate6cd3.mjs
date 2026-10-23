@@ -82,7 +82,7 @@ steps.start = async () => {
   const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim();
   execFileSync('git', ['-C', L.RUN, 'checkout', '-q', '--detach', head]);
   execFileSync('npm', ['run', 'build'], { cwd: path.join(L.RUN, 'sidecar'), stdio: 'ignore' });
-  await startClient(process.argv[3] ?? 'G6C D3 Lobby', { backend: 'sim' });
+  await startClient(process.argv[3] ?? 'G6B D3 Lobby', { backend: 'sim' });
   spendZero();
   return { head };
 };
@@ -293,7 +293,7 @@ const stacksOver = async (runs) => (await call('dev.journal.columns', { runs }, 
 steps.ingame = async () => {
   await ensure();
   const out = {};
-  await L.fresh('G6C D3 Ingame', FLAT);
+  await L.fresh('G6B D3 Ingame', FLAT);
   await L.setRules('exact');
   await cmd('/op @s');
   await call('dev.pt.rule', { name: 'graceMs', value: '600000' }).catch(() => null);
@@ -449,7 +449,7 @@ steps.ingame = async () => {
   const v10 = await view(rb3);
   check(v10.ext?.['architect_mc:beside']?.dangling === true, 'item 10: the district\'s join dangling once the town\'s removal finished');
   await leaveWorld();
-  await L.openWorld('G6C D3 Ingame');
+  await L.openWorld('G6B D3 Ingame');
   await kill();
   await undo(rb3);
   await L.settle(3000);
@@ -466,7 +466,7 @@ steps.ingame = async () => {
 steps.side = async () => {
   await ensure();
   const out = {};
-  await L.fresh('G6C D3 Side', FLAT);
+  await L.fresh('G6B D3 Side', FLAT);
   await L.setRules('exact');
   await cmd('/op @s');
   const X = 24000, Z = 20000;
@@ -529,7 +529,7 @@ const listDir = (d) => (fs.existsSync(d) ? fs.readdirSync(d).sort() : []);
 steps.refusals = async () => {
   await ensure();
   const out = {};
-  await L.fresh('G6C D3 Refusals', FLAT);
+  await L.fresh('G6B D3 Refusals', FLAT);
   await L.setRules('exact');
   await cmd('/op @s');
   const X = 28000, Z = 20000;
@@ -538,7 +538,7 @@ steps.refusals = async () => {
   const T = await d3Town(X, Z, { dip: false, cabin: false, addition: false });
   const A = T.A;
   const area = [A[0] - 200, -64, A[1] - 200, A[2] + 200, 160, A[3] + 200];
-  const worldDir = path.join(L.SAVES, 'G6C D3 Refusals', 'architect-regions', 'plans');
+  const worldDir = path.join(L.SAVES, 'G6B D3 Refusals', 'architect-regions', 'plans');
   const sidecarPlans = path.join(L.SIDECAR_DATA, 'regions', 'plans');
   // ---- item 12: the dry check keeps nothing
   const B = [A[2] + 1, A[1] + 30, A[2] + 90, A[3] - 30];
@@ -610,7 +610,7 @@ steps.refusals = async () => {
 steps.steward = async () => {
   await ensure();
   const out = {};
-  await L.fresh('G6C D3 Steward', FLAT);
+  await L.fresh('G6B D3 Steward', FLAT);
   await L.setRules('exact');
   await cmd('/op @s');
   const X = 32000, Z = 20000;
@@ -634,7 +634,7 @@ steps.steward = async () => {
   if (rr.refused) throw new Error(`item 6's realise refused: ${json(rr.refused)}`);
   const sr = await L.waitRegion(rr.region, 3_600_000);
   await leaveWorld();
-  await L.openWorld('G6C D3 Steward');
+  await L.openWorld('G6B D3 Steward');
   const byKey = await call('dev.region.realiseByKey', { owner: OWNER, opKey: 'drealise-1' });
   const land = (await view(rr.region)).ext?.['architect_mc:land'];
   out.real = { region: rr.region, state: sr.view.state, byKey: byKey.region?.id ?? null, land: land ? { outside: land.outside.cells, inside: land.inside.cells, v: land.v } : null };
@@ -678,7 +678,7 @@ steps.steward = async () => {
       await call('dev.cells.place', { kind: 'steward:addition', cells: [[q[0], gy + 1, q[1], 'minecraft:oak_fence']], naturalOnly: false, owner: OWNER }, 600_000);
     }
     await leaveWorld();
-    await L.openWorld('G6C D3 Steward');
+    await L.openWorld('G6B D3 Steward');
     const st = await call('dev.region.realiseApproved', { sha: ck2.check.artifactSha, opKey: 'dapprove-2' }, 300_000);
     out.stale.refused = st.refused ?? null;
     check(/ARTIFACT_STALE/.test(json(st.refused ?? '')) && !!reach, `item 6: a stale retry under a second key across a restart: ARTIFACT_STALE (${json(st.refused).slice(0, 200)})`);
@@ -693,7 +693,7 @@ steps.steward = async () => {
 steps.along = async () => {
   await ensure();
   const out = {};
-  await L.fresh('G6C D3 Along', FLAT);
+  await L.fresh('G6B D3 Along', FLAT);
   await L.setRules('exact');
   await cmd('/op @s');
   const X = 36000, Z = 20000;
@@ -745,7 +745,7 @@ steps.along = async () => {
 steps.kc = async () => {
   await ensure();
   const out = {};
-  await L.fresh('G6C D3 KC', FLAT);
+  await L.fresh('G6B D3 KC', FLAT);
   await L.setRules('exact');
   await cmd('/op @s');
   const X = 40000, Z = 20000;
@@ -795,7 +795,7 @@ async function wallRound(town, A, { gates = null, realise = true } = {}) {
 steps.walled = async () => {
   await ensure();
   const out = {};
-  await L.fresh('G6C D3 Walled', FLAT);
+  await L.fresh('G6B D3 Walled', FLAT);
   await L.setRules('exact');
   await cmd('/op @s');
   const X = 44000, Z = 20000;
@@ -842,7 +842,7 @@ steps.walled = async () => {
 steps.pond = async () => {
   await ensure();
   const out = {};
-  await L.fresh('G6C D3 Pond', FLAT);
+  await L.fresh('G6B D3 Pond', FLAT);
   await L.setRules('exact');
   await cmd('/op @s');
   const X = 48000, Z = 20000;
@@ -885,7 +885,7 @@ steps.pond = async () => {
 steps.natural = async () => {
   await ensure();
   const out = {};
-  await L.fresh('G6C D3 Natural', await L.seedBase('2026100906'));
+  await L.fresh('G6B D3 Natural', await L.seedBase('2026100906'));
   await cmd('/op @s');
   // S3's pinned claim [3604, -1036, 3795, -845]: a V town in its south-west, a district east of it joined through its claim (a shore
   // district along the river first; a plain district when no shore street routes there: recorded)
@@ -914,7 +914,7 @@ steps.natural = async () => {
   check(sd.view.state === 'PLACED', `item 15: the district ${rd} PLACED`);
   await cmd('/save-all flush');
   await leaveWorld();
-  await L.openWorld('G6C D3 Natural');
+  await L.openWorld('G6B D3 Natural');
   await cmd('/tick freeze');
   // removal: the district first, then the town; E-normal over both claims against the world before the town
   await kill();
@@ -957,7 +957,7 @@ steps.survival = async () => {
   const out = {};
   const G = await import('./lib/gate6crs-game.mjs');
   const base = await G.survivalBase({ L });
-  await L.fresh('G6C D3 Survival', base);
+  await L.fresh('G6B D3 Survival', base);
   await L.setRules('exact');
   await cmd('/op @s');
   const X = 0, Z = 0;
