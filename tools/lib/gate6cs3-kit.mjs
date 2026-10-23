@@ -24,8 +24,9 @@ export function baseTree(root) {
 
 const hasTerraces = (plan) => /"terraces":\s*[{t]/.test(JSON.stringify(plan));
 
-export async function unchanged(root, { check, log = console.log, only = null, slice = null } = {}) {
-  const { dir: mainDir, base } = baseTree(root);
+export async function unchanged(root, { check, log = console.log, only = null, slice = null, baseDir = null } = {}) {
+  // (baseDir: a test's own base tree, kit/test/gate-corpus-plan.test.mjs; a gate run always uses the merge base's worktree)
+  const { dir: mainDir, base } = baseDir ? { dir: baseDir, base: 'given' } : baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
   const { hNew, hOld } = await CP.corpusHelpers(root, mainDir);
   // ((batch v0.41.0) kitVersion and FL's street ext normalised; a fixture a sibling slice moves by name is that slice's to judge)
