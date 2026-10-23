@@ -438,3 +438,11 @@ test('coverage, execution mode (JaCoCo): a loaded class never entered counts by 
   manifest = { ok: true, hash: 'b5', classes: { [JN]: 'aa', [RF]: 'bb' } };
   assert.equal(entryStillValid(ctx(), 'g', e).ok, false, 'no skeletons: the never-entered class counts whole, so the key moves');
 });
+
+test('coverage: a hidden lambda class counts as its host (keyed by the host\'s bytecode, never its source)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-hidden-'));
+  write(dir, 'jvm-1.log', '[0.1s] dev.larattalabs.a.Roads source: x\n[0.2s] dev.larattalabs.a.Roads$$Lambda/0x000003e0025628a8 source: dev.larattalabs.a.Roads\n[0.3s] dev.larattalabs.b.Only$$Lambda/0x01 source: x\n');
+  const c = collect(dir, { t: 0, alive: new Set() }, { exec: { token: 't' }, readDump: () => ({ token: 't', entered: new Set(), uninstrumented: new Set() }) });
+  assert.deepEqual(c.classes, ['dev.larattalabs.a.Roads', 'dev.larattalabs.b.Only']);
+  assert.deepEqual(c.entered, ['dev.larattalabs.a.Roads', 'dev.larattalabs.b.Only'], 'a spun lambda means its host ran the invokedynamic: entered');
+});

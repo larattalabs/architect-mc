@@ -206,7 +206,8 @@ export async function requestDumps(dir, { timeoutMs = 15_000, pollMs = 100 } = {
   fs.writeFileSync(tmp, `${token}\n`);
   fs.renameSync(tmp, path.join(dir, 'dump.req'));
   const t0 = Date.now();
-  let pending = agentJvms(dir).filter((j) => j.alive).map((j) => j.pid);
+  // a JVM that already wrote its exit dump is done, even if its pid is alive again (reused by another process)
+  let pending = agentJvms(dir).filter((j) => j.alive && readDump(dir, j.pid)?.token !== 'exit').map((j) => j.pid);
   const answered = [];
   while (pending.length && Date.now() - t0 < timeoutMs) {
     await new Promise((r) => setTimeout(r, pollMs));
@@ -219,7 +220,7 @@ export async function requestDumps(dir, { timeoutMs = 15_000, pollMs = 100 } = {
       return alive(pid); // a JVM that died while we waited: collect decides by its exit dump
     });
   }
-  return { token, answered, missing: pending };
+  return { token, answered, missing: pending, ms: Date.now() - t0 };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

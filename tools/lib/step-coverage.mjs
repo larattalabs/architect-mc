@@ -80,7 +80,15 @@ export function collect(dir, snap, { prefix = 'dev.larattalabs.', exec = null, r
     const text = fs.readFileSync(file, 'utf8');
     if (file.endsWith('.log')) {
       const mine = [];
-      for (const m of text.matchAll(/^\[[^\]]*\]\s+(\S+)\s+source:/gm)) if (m[1].startsWith(prefix)) mine.push(m[1]);
+      const hidden = new Set();
+      // a hidden class the JVM spun for a lambda (Host$$Lambda/0x...) is its host's code: the lambda body is a method of the host
+      // and the host's bytecode keys it (the host ran the invokedynamic, so it is loaded and entered). Its name, unique per run
+      // and in no manifest, would otherwise send the host's SOURCE into the set
+      for (const m of text.matchAll(/^\[[^\]]*\]\s+(\S+)\s+source:/gm)) if (m[1].startsWith(prefix)) {
+        const h = hostOf(m[1]);
+        if (h !== m[1]) hidden.add(h);
+        mine.push(h);
+      }
       for (const c of mine) classes.add(c);
       if (entered) {
         const d = readDump ? readDump(dir, pid) : null;
@@ -88,6 +96,7 @@ export function collect(dir, snap, { prefix = 'dev.larattalabs.', exec = null, r
         jvms.push({ pid, exec: ok ? (d.token === 'exit' ? 'exit dump' : 'dump') : d ? `stale dump (${d.token})` : 'no dump: its loaded classes count as entered' });
         if (!ok) for (const c of mine) entered.add(c);
         else {
+          for (const c of hidden) entered.add(c);
           const loadedHere = new Set(mine);
           for (const c of d.entered) if (c.startsWith(prefix)) entered.add(c);
           // a class JaCoCo left uninstrumented: its execution is invisible, so it counts as entered
@@ -108,6 +117,9 @@ export function collect(dir, snap, { prefix = 'dev.larattalabs.', exec = null, r
   if (entered) for (const c of entered) classes.add(c);
   return { classes: [...classes].sort(), node, entered: entered ? [...entered].sort() : null, jvms };
 }
+
+/** A hidden class's host (`a.B$$Lambda/0x0001` and `a.B$$Lambda$12/0x...` -> `a.B`); any other name as it is. */
+export const hostOf = (name) => (name.includes('/') || name.includes('$$Lambda') ? name.replace(/\$\$Lambda.*$/, '').replace(/\/.*$/, '') : name);
 
 /** FQN of a top-level class -> its source file, over the tracked tree's Java roots. */
 export function javaIndex(tree, roots) {

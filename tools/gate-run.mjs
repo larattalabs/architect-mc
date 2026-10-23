@@ -1641,7 +1641,7 @@ async function runStep(sh, step, rec) {
       const td = path.join(OUT, 'traces', step.id);
       fs.mkdirSync(td, { recursive: true });
       fs.writeFileSync(path.join(td, 'coverage.json'), JSON.stringify({ classes: c.classes, entered: c.entered, jvms: c.jvms, node: Object.fromEntries([...c.node].map(([p, k]) => [p, [...k].join('')])) }));
-      rec.coverage = { classes: c.classes.length, clientPaths: c.node.size, ...(c.entered ? { entered: c.entered.length, jvms: c.jvms.length, jvmsFallback: c.jvms.filter((j) => !/dump/.test(j.exec) || /stale/.test(j.exec)).length } : {}) };
+      rec.coverage = { classes: c.classes.length, clientPaths: c.node.size, ...(c.entered ? { entered: c.entered.length, dumpMs: exec?.ms ?? null, jvms: c.jvms.length, jvmsFallback: c.jvms.filter((j) => !/dump/.test(j.exec) || /stale/.test(j.exec)).length } : {}) };
     } catch (e) {
       rec.coverage = { error: e.message };
     }
