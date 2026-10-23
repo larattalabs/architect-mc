@@ -526,6 +526,22 @@ may hit; a JVM reused across two steps stays cumulative; a JVM killed mid-step, 
 as entered. `kit/test/step-cache.test.mjs` covers the record and lookup path and the old entries. A changed mixin misses through
 the safety set (the coverage test above it).
 
+**Measured so far (2026-10-23).**
+- **Smoke run** with the agent on every JVM (`artifacts/gate-runs-jacoco/20261023-205940-change`): unit-mod (874 tests), t3a-look
+  (a client), and h-ingame-smoke, hy-ingame-smoke and kc-ingame-smoke on one reused headless server all PASS. Every JVM answered its
+  dump, with no fallbacks. Entered against loaded: h-ingame-smoke 575 of 660 non-hidden loaded classes; t3a-look 482; unit-mod 774 of
+  1982. Recorded offline into a scratch cache, each in-game PASS looks up again at its own head.
+- **What it narrows:** on in-game steps the classes a step loads are mostly entered too: about 87% on h-ingame-smoke. CellCond,
+  TerrainFit and Roads are entered by every in-game step in the smoke. So on cd170c61 (CellCond) and 9a83771e (Roads) the execution
+  key runs the same steps as the class-load key. Method granularity would not change that either. 9a83771e edits a failure branch
+  inside `Roads.plan`, which every road-building step runs, and the CellCond change is in the hot write conditions. Only a probe or
+  branch granularity would skip them, and JaCoCo's probes can't make that sound (see "Entered, not hit"). The gain is in steps that
+  load a class without running it: the API interfaces, registries' holders and the classes that are only type-checked.
+- **Pending:** the traced `release --full` with the agent (queued behind the slice runs). It gives the exact counts for 78c47572,
+  cd170c61, 619398ec, 73189410 and 9a83771e (`node tools/step-cache.mjs coverage-select <commits> --bytecode --exact`, which reads
+  the same entries as the class-load key and as the execution key), the per-step overhead against v0.42.0's traced full run, and
+  `fail-audit --bytecode` on the new keys. A load/exec A/B of the smoke steps is queued as well.
+
 ### Impact-map misses log
 
 Each line is a nightly's miss: the date, the step, what failed, where it was cached from, and what was done.
