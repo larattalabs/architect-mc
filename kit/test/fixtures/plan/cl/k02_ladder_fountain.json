@@ -1,0 +1,72 @@
+{
+  "about": "(7a CL, \u00a75: KC) a ladder up a 16-high face whose foot stands in a fountain's watched apron: the ladder (placed after the body) refused OVERLAP {kind: body, set: watch} before routing, so it writes nothing; the fountain fits; M25:clear 0",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "y": 64,
+    "bands": [
+      {
+        "x0": 1080,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2095,
+        "y": 80
+      }
+    ]
+  },
+  "on": "flat",
+  "anchors": {
+    "a": [
+      1070,
+      65,
+      2048
+    ],
+    "b": [
+      1090,
+      81,
+      2048
+    ],
+    "kc_fount": [
+      1081,
+      81,
+      2050
+    ]
+  },
+  "volume": {},
+  "expect": {
+    "part": "top_ladder",
+    "code": "OVERLAP"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "cl_k02",
+    "forms": [
+      {
+        "id": "fount",
+        "kind": "fountain",
+        "basin": 5,
+        "spout": 2,
+        "where": {
+          "near": {
+            "anchor": "kc_fount",
+            "within": 2
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "top_ladder",
+        "kind": "ladder",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        }
+      }
+    ]
+  }
+}

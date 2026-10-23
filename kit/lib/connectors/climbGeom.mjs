@@ -273,7 +273,17 @@ export function emitClimbs(r, edges, { opts, stage, part = 'links_climbs', land,
     const lamps = o.lamps === false ? [] : climbLamps(e, land, { every: Math.max(4, Math.floor((12 * levelOf(roles.light)) / 15)), light: roles.light, post: roles.post, support: roles.support, taken: taken0, skip: new Set(cells.filter((c) => c[4] === 'rail' || c[4] === 'support').map((c) => `${c[0]},${c[2]}`)), rails: new Map(cells.filter((c) => c[4] === 'rail' && c.length === 5).map((c) => [`${c[0]},${c[2]}`, c[1]])) });
     // ((6c KC, §5) a fluid body's cells are its own: a rail, support, lamp or cap never lands in its hard or watch sets (skipped); the
     // treads, as streets, are the route's: KC's rule there)
-    const inBody = (c) => { if (!kept) return false; for (let y = c[1]; y <= (c.length > 5 ? c[5] : c[1]); y++) if (kept(c[0], y, c[2])) return true; return false; };
+    const inBody = (c) => { if (!kept) return null; for (let y = c[1]; y <= (c.length > 5 ? c[5] : c[1]); y++) { const k = kept(c[0], y, c[2]); if (k) return { ...k, at: [c[0], y, c[2]] }; } return null; };
+    // ((6c KC, §5) a ladder's rungs, its rest landings (decks, brackets) and its top gate are never skipped: one in a body's sets refuses
+    // the part OVERLAP {kind: body} (whoever is placed later keeps clear, S-KC-1)
+    for (const c of [...cells]) {
+      if (!['ladder', 'deck', 'bracket', 'gate'].includes(c[4])) continue;
+      const k = inBody(c);
+      if (!k) continue;
+      const err = new Error(`OVERLAP: the ladder's ${c[4]} at ${k.at.join(' ')} lands in body ${k.body} (${k.set}) of part ${k.part}`);
+      err.evidence = { kind: 'body', body: k.body, part: k.part, set: k.set, at: k.at, what: c[4] };
+      throw err;
+    }
     const all = [...cells, ...lamps].filter((c) => !(['rail', 'support', 'lamp', 'post', 'cap', 'retain'].includes(c[4]) && inBody(c)));
     meta.lamps += lamps.filter((c) => c[4] === 'lamp').length;
     if (all.length) {

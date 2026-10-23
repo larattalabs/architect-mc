@@ -210,10 +210,10 @@ test('§10 item 12: the catalogue: the three flips against the foundation\'s arc
   for (const id of ['connector.ladder', 'connector.stair', 'connector.switchback']) { const e = golden.entries.find((x) => x.id === id); assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === golden.api); assert.equal(e.state, 'supported'); }
 });
 
-test('§10 item 13: determinism: three checks of each valid climb fixture identical (answers, IR)', async () => {
+test('§10 item 13: determinism: three checks of each valid climb fixture identical (answers, IR, artifact sha)', async () => {
   for (const f of read('valid', /^v7a_cl_/)) {
     const shas = [];
-    for (let i = 0; i < 3; i++) { const r = await run(f); shas.push(JSON.stringify([r.check.parts, r.res.irJson])); }
+    for (let i = 0; i < 3; i++) { const r = await run(f); shas.push(JSON.stringify([r.check.parts, r.res.irJson, r.artifactSha])); assert.match(r.artifactSha ?? '', /^[0-9a-f]{64}$/); }
     assert.ok(shas.every((x) => x === shas[0]), f.name);
   }
 });
@@ -256,4 +256,31 @@ test('§5 (item 9, KC): a stair beside a fountain keeps clear: the stair fits, t
   const rep = checkRegion({ ir: r.res.ir, survey: s.bytes, blobs: (sha) => r.res.blobs.get(sha) ?? null, volumes: r.volumes.map((v) => v.decoded ?? v), meta: r.res.meta });
   assert.deepEqual(rep.findings.filter((x) => x.rule === 'M25:clear').map((x) => x.message), []);
   assert.equal(rep.metrics.climbs.per[0].bad ?? 0, 0);
+  // k02: a ladder whose foot stands in the fountain's watched apron: OVERLAP {kind: body} before routing; nothing written; M25:clear 0
+  const g = read('cl', /^k02_/)[0];
+  const s2 = flatSurvey(g.terrain);
+  const r2 = await checkPlanVolumes(g.plan, { volume: g.volume, survey: s2.bytes, claim: s2.claim, anchors: { ...stewardAnchors(s2.claim), ...g.anchors } });
+  const lad = part(r2, 'top_ladder');
+  assert.equal(lad.class, 'refused');
+  assert.deepEqual([lad.reasons[0].code, lad.reasons[0].evidence.kind, lad.reasons[0].evidence.part], ['OVERLAP', 'body', 'fount']);
+  assert.equal(part(r2, 'fount').class, 'fits');
+  const rep2 = checkRegion({ ir: r2.res.ir, survey: s2.bytes, blobs: (sha) => r2.res.blobs.get(sha) ?? null, volumes: r2.volumes.map((v) => v.decoded ?? v), meta: r2.res.meta });
+  assert.deepEqual(rep2.findings.filter((x) => x.rule === 'M25:clear').map((x) => x.message), []);
+  assert.equal((r2.res.meta.climbs ?? []).length, 0, 'the refused ladder wrote nothing');
+});
+
+test('cost.bom: exactly the climb\'s own links part, by C26\'s rules (the cells re-counted from the virtual world)', async () => {
+  const { bomOf } = await import('../lib/connectors/bom.mjs');
+  for (const f of read('valid', /^v7a_cl_/)) {
+    const r = await run(f);
+    const { vw } = buildVirtual({ ir: r.res.ir, survey: r.survey.bytes, blobs: (sha) => r.res.blobs.get(sha) ?? null });
+    for (const a of r.check.parts) {
+      const idx = f.plan.connectors.findIndex((c) => c.id === a.part);
+      const pi = r.res.ir.parts.findIndex((q) => q.id === `links_c${idx}`);
+      assert.ok(pi >= 0, `${f.name} ${a.part}: its links part`);
+      const states = [];
+      vw.eachWritten((x, y, z) => { if (vw.partAt(x, y, z) === pi) { const st = vw.pal.states[vw.get(x, y, z)]; if (!/^minecraft:air$/.test(st)) states.push(st); } });
+      assert.deepEqual(a.cost.bom, Object.fromEntries(Object.entries(bomOf(states)).sort(([u], [v]) => (u < v ? -1 : 1))), `${f.name} ${a.part}`);
+    }
+  }
 });

@@ -221,6 +221,13 @@ async function demoRun(tag, claim, { flat }) {
   const routed = (meta.route?.edges ?? []).filter((e) => e.ok);
   out.plan = { planId: p.planId, irSha: p.irSha, routed: routed.map((e) => e.id), climbs: (meta.climbs ?? []).map((c) => ({ id: c.id, kind: c.kind, flights: c.flights, hairpins: c.hairpins, ladders: c.ladders })) };
   check(routed.length === (flat ? 3 : 2), `${tag}: climbs_demo planned ${routed.map((e) => e.id).join(', ')} (${json(out.plan.climbs)})`);
+  // item 13 (determinism): the plan's tile shas with 1 worker equal those with 4, shuffled
+  {
+    const { tileShas } = await import('./scenarios.mjs');
+    const ts = await tileShas(planDir);
+    out.tiles = { irSha: ts.irSha, workersSame: ts.workersSame, count: Object.keys(ts.tiles).length };
+    check(ts.workersSame, `item 13 (${tag}): the tiles' shas with 1 worker equal those with 4 (${out.tiles.count} tiles, IR ${String(ts.irSha).slice(0, 12)})`);
+  }
   // the box: the claim + 8 over the plan's written y span +- 8
   const { buildVirtual } = await imp('lib/region/vworld.mjs');
   const irP = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8'));
@@ -367,6 +374,11 @@ steps.ingame = async () => {
   await L.fresh('G7A CL Steward Flat', FLAT);
   await L.setRules('exact');
   out.steward = await stewardRound('v1-ladder', B.fixture(ctx, 'valid/v7a_cl_ladder.json'), { flat: true });
+  await leaveWorld();
+  // (every new kind through Regions.checkPlan then realiseApproved: the switchback's own round, on its slope)
+  await L.fresh('G7A CL Steward Switch', FLAT);
+  await L.setRules('exact');
+  out.stewardSwitch = await stewardRound('v1-switch', B.fixture(ctx, 'valid/v7a_cl_switch.json'), { flat: true });
   await leaveWorld();
   spendZero();
   return out;

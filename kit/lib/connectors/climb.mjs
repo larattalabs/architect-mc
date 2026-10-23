@@ -22,7 +22,6 @@ import { CLIMB, climbCells, climbLand, emitClimbs, walkCols } from './climbGeom.
 import { PROFILES } from '../region/passes/moves/profiles.mjs';
 import { shapeOf } from './style.mjs';
 import { keptBy } from '../fluids/keep.mjs';
-import { bomOf } from './bom.mjs';
 
 const isInt = Number.isInteger;
 const lotKind = (l) => { const v = l?.ext?.['architect_mc:village']; return v?.villager ?? v?.type ?? v?.role ?? null; };
@@ -172,9 +171,19 @@ export function resolve(K, p) {
     if (ld?.ok) {
       const land = landOf(K);
       for (const e of ld.edges) {
-        try { climbCells(e, { ...o, roles: {} }, land, { taken: takenOf(K, null) }); } catch (err) {
+        let cells;
+        try { cells = climbCells(e, { ...o, roles: {} }, land, { taken: takenOf(K, null) }).cells; } catch (err) {
           if (!/^ANCHOR:/.test(err.message)) throw err;
           return { class: 'refused', ...(notes.length ? { notes } : {}), reasons: [{ code: 'ANCHOR', message: err.message.replace(/^ANCHOR: /, ''), evidence: err.evidence ?? {} }] };
+        }
+        // ((6c KC, §5) its rungs (T2's column too), rest landings and top gate in a body's hard or watch set: OVERLAP {kind: body},
+        // before routing, so the refused ladder writes nothing (whoever is placed later keeps clear, S-KC-1)
+        const rungs = (e.ladderCols ?? []).flatMap((lc) => Array.from({ length: lc.y1 - lc.y0 + 1 }, (_, t) => [lc.x, lc.y0 + t, lc.z, null, 'ladder']));
+        for (const c of [...rungs, ...cells]) {
+          if (!['ladder', 'deck', 'bracket', 'gate'].includes(c[4])) continue;
+          const k = keptBy(K.keep, c[0], c[1], c[2]);
+          if (!k) continue;
+          return { class: 'refused', ...(notes.length ? { notes } : {}), reasons: [{ code: 'OVERLAP', message: `the ladder's ${c[4]} at ${c[0]} ${c[1]} ${c[2]} would land in body ${k.body} (${k.set}) of part ${k.part}`, evidence: { kind: 'body', body: k.body, part: k.part, set: k.set, at: [c[0], c[1], c[2]], what: c[4] } }] };
         }
       }
     }
@@ -260,7 +269,7 @@ export function emit(K) {
     try {
       const idx = K.order.indexOf(p);
       const land = landOf(K);
-      const res = emitClimbs(K.r, [x.meta], { opts: { [x.meta.id]: { kind: p.kind, rails: o.rails, retaining: o.retaining, rest: o.rest, top: o.top, lamps: o.lamps, ...(Object.keys(o.unsafe).length ? { unsafe: o.unsafe } : {}) } }, stage, part: `links_c${idx}`, land, taken: takenOf(K, x.meta.id), recPart: p.id, kept: (cx, cy, cz) => keptBy(K.keep, cx, cy, cz) !== null });
+      const res = emitClimbs(K.r, [x.meta], { opts: { [x.meta.id]: { kind: p.kind, rails: o.rails, retaining: o.retaining, rest: o.rest, top: o.top, lamps: o.lamps, ...(Object.keys(o.unsafe).length ? { unsafe: o.unsafe } : {}) } }, stage, part: `links_c${idx}`, land, taken: takenOf(K, x.meta.id), recPart: p.id, kept: (cx, cy, cz) => keptBy(K.keep, cx, cy, cz) });
       K.mark(p.id, K.addedSince(cp));
       const rec = res[0];
       const ge = K.r.graph.edges.find((e) => e.id === `route_${x.meta.id}`);
@@ -270,10 +279,10 @@ export function emit(K) {
         ge.crossing = p.kind === 'ladder' ? { type: 'ladder', rise: c.rise, landings: c.ladders.reduce((n, l) => n + l.landings, 0) }
           : p.kind === 'switchback' ? { type: 'switchback', rise: c.rise, hairpins: c.hairpins } : { type: 'stair', rise: c.rise, flights: c.flights };
       }
-      // the bill: the fittings, plus the climb's treads and rungs (the route's own stair and ladder cells)
+      // the bill: exactly the cells the climb's own links part writes (its fittings: rails, supports, rungs, landings, brackets, the
+      // gate, lamps, caps), by C26's rules; the route's treads, surface and fill are the route's (as a street's: T2's own cells)
       const bom = { ...((K.record.bom ??= {})[p.id] ?? {}) };
       for (const [item, n] of Object.entries(rec?.bom ?? {})) bom[item] = (bom[item] ?? 0) + n;
-      for (const [item, n] of Object.entries(routeBom(K, x.meta))) bom[item] = (bom[item] ?? 0) + n;
       K.record.bom[p.id] = Object.fromEntries(Object.entries(bom).sort(([u], [v]) => (u < v ? -1 : u > v ? 1 : 0)));
       // the answer's ladders gain their flights and rest landings (the emitter's)
       const a = K.answers.get(p.id);
@@ -281,23 +290,9 @@ export function emit(K) {
     } catch (e) {
       K.rollback(cp);
       const code = (/^([A-Z_]+):/.exec(e.message) ?? [])[1];
-      K.ans(p, { class: 'refused', ...(o?.notes?.length ? { notes: o.notes } : {}), reasons: [{ code: code === 'ANCHOR' ? 'ANCHOR' : 'UNREACHABLE', message: `the ${p.kind}'s fittings could not be written: ${e.message.replace(/^[A-Z_]+: /, '')}`, evidence: { edge: x.meta.id, ...(e.evidence ?? {}) } }] });
+      K.ans(p, { class: 'refused', ...(o?.notes?.length ? { notes: o.notes } : {}), reasons: [{ code: code === 'ANCHOR' || code === 'OVERLAP' ? code : 'UNREACHABLE', message: `the ${p.kind}'s fittings could not be written: ${e.message.replace(/^[A-Z_]+: /, '')}`, evidence: { edge: x.meta.id, ...(e.evidence ?? {}) } }] });
     }
   }
-}
-
-/** The climb's treads and rungs, counted from the route edge (each tread column once: the stair block of T2's stair material). */
-function routeBom(K, e) {
-  const out = {};
-  const add = (item, n) => { if (n > 0) out[item] = (out[item] ?? 0) + n; };
-  let treads = 0;
-  for (const g of e.segments ?? []) if (g.kind === 'stair' && !g.shared) treads += footprintOf(e.path.slice(g.from + 1, g.to + 1), e.width).length;
-  // (T2's _stair: the material's stairs block where it has one, else the full block)
-  const mat = String(K.r.roles?.[treadOf(K) ?? 'structure'] ?? 'minecraft:cobblestone').replace(/\[.*$/, '');
-  const tread = shapeOf(mat, 'stairs') ?? mat;
-  for (const [item, n] of Object.entries(bomOf(Array.from({ length: treads }, () => tread)))) add(item, n);
-  // (the rungs are the fittings' own: climbGeom writes every one)
-  return out;
 }
 
 export function bom(K, p) { return K.record?.bom?.[p.id] ?? null; }
