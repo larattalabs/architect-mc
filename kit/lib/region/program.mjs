@@ -553,7 +553,9 @@ export class Region {
         // ((7a CW) and a catwalk's landing, the same way: the run's deck is the links stage's)
         if (g.kind === 'bridge' || g.kind === 'catwalk') {
           const land = cells[cells.length - 1];
-          const fp = footprintOf([land], e.width).filter((q) => !taken.has(`${q[0]},${q[1]}`)).map((q) => [q[0], q[1], q[2], q[3]]);
+          // ((7a CW) a catwalk's landing: only its lanes' row across the run (the single cell's square would reach back over the deck)
+          const across = g.kind === 'catwalk' ? (q) => (g.dir[0] !== 0 ? q[0] === land[0] : q[1] === land[2]) : () => true;
+          const fp = footprintOf([land], e.width).filter((q) => across(q) && !taken.has(`${q[0]},${q[1]}`)).map((q) => [q[0], q[1], q[2], q[3]]);
           if (fp.length) rec.paths.push(p._routeRun(`${rid}_${n}l`, fp, mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells: [land], noRetain, fillTop, guardCols, noGuard }));
           return;
         }

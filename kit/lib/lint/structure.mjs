@@ -7,7 +7,7 @@
 //   S-LOTS    lots off streets: no lot box over a 4e road's walkway, a street/route/path part's written column, or a lane of another lot
 //   S-FOOT    a lamp post's foot is never a dirt path the region did not write (lamp-on-path, 52cc9606 / c494ddab): the road lanterns,
 //             the apron and square lamps
-//   S-LAND    a bridge's deck, a rope bridge's deck and a tunnel's floor land on their route's walk footprint at both ends (the even
+//   S-LAND    a bridge's deck, a rope bridge's deck, a tunnel's floor and (7a CW) a catwalk's lanes land on their route's walk footprint at both ends (the even
 //             width bugs c4f1c8f9, 9ba60b79 passed every checker rule)
 //   S-GRAV    the writer's dependents stage never clears a gravity block whose support is solid before and after (sand vanish,
 //             70fc0dd0): the tile writer's stage 3 modelled over the virtual world (TileCheck.dependents/keepsGravity)
@@ -39,7 +39,7 @@ const inRect = (r, x, z) => x >= r[0] && x <= r[2] && z >= r[1] && z <= r[3];
 const inBox = (b, x, y, z) => x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && z >= b.minZ && z <= b.maxZ;
 const nameOf = (s) => s.replace(/\[.*$/, '');
 const propsOf = (s) => (s.includes('[') ? Object.fromEntries(s.slice(s.indexOf('[') + 1, -1).split(',').map((kv) => kv.split('='))) : {});
-const GATED = /^(M1|M2|M2:villager|M2:wall|M3|M3:floating_spur|M3:gravity|M3:tunnel|M4|M4:tunnel|M8:wall|M10|M10:bridge|M10:rope|M13|M14|M20.*|M25.*|M27:state|M27:convert)$/;
+const GATED = /^(M1|M2|M2:villager|M2:wall|M3|M3:floating_spur|M3:gravity|M3:tunnel|M4|M4:tunnel|M8:wall|M10|M10:bridge|M10:rope|M10:catwalk|M13|M14|M20.*|M25.*|M27:state|M27:convert)$/;
 
 function finding(rule, count, sample, message, part = null) {
   return { rule, severity: 'error', part, stage: null, count, sample: sample.slice(0, 12), message };
@@ -141,7 +141,9 @@ export function structureLint(c, { preFix = {}, rules = null } = {}) {
 
 function landRule(c, findings) {
   const edges = (c.meta?.route?.edges ?? []).filter((e) => e.ok && Array.isArray(e.path));
-  const recs = [...(c.meta?.bridges ?? []).map((r) => ({ r, kind: 'bridge', cols: (r.cells ?? []).map(([x, , z]) => [x, z]) })), ...(c.meta?.ropes ?? []).map((r) => ({ r, kind: 'rope', cols: (r.cells ?? []).map(([x, , z]) => [x, z]) })), ...(c.meta?.tunnels ?? []).map((r) => ({ r, kind: 'tunnel', cols: (r.cells ?? []).map(([x, , z]) => [x, z]) }))];
+  const recs = [...(c.meta?.bridges ?? []).map((r) => ({ r, kind: 'bridge', cols: (r.cells ?? []).map(([x, , z]) => [x, z]) })), ...(c.meta?.ropes ?? []).map((r) => ({ r, kind: 'rope', cols: (r.cells ?? []).map(([x, , z]) => [x, z]) })), ...(c.meta?.tunnels ?? []).map((r) => ({ r, kind: 'tunnel', cols: (r.cells ?? []).map(([x, , z]) => [x, z]) })),
+    // ((7a CW) a catwalk's walk lanes: its `deckCells` (its `cells` is siteplan/1's count))
+    ...(c.meta?.catwalks ?? []).map((r) => ({ r, kind: 'catwalk', cols: (r.deckCells ?? []).map(([x, , z]) => [x, z]) }))];
   for (const { r, kind, cols } of recs) {
     if (!(r.width > 0) || !r.dir || !r.from) continue;
     // the edge whose path passes the record's near landing
@@ -314,7 +316,7 @@ export function gate(rep, bars = {}) {
   for (const f of rep.findings) {
     if (allow.has(f.rule)) continue;
     // (the corpus: the plan check's own verdict, plus the lint's rules and, for a connector fixture, the connector re-reads)
-    if (bars.corpus && f.severity !== 'error' && !f.rule.startsWith('S-') && !(bars.connectors && /^(M10|M10:bridge|M10:rope|M3:tunnel|M4:tunnel|M2:wall|M8:wall)$/.test(f.rule))) continue;
+    if (bars.corpus && f.severity !== 'error' && !f.rule.startsWith('S-') && !(bars.connectors && /^(M10|M10:bridge|M10:rope|M10:catwalk|M3:tunnel|M4:tunnel|M2:wall|M8:wall)$/.test(f.rule))) continue;
     if (f.rule === 'M5' || f.rule === 'M6' || f.rule === 'M8' || f.rule === 'M3:overhang' || f.rule === 'M26' || f.rule.startsWith('M27:') && f.severity !== 'error') continue;
     if (f.severity === 'error' || GATED.test(f.rule) || f.rule.startsWith('S-')) fails.push(`${f.rule} ${f.part ?? '-'} x${f.count}: ${f.message}`);
   }

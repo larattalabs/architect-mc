@@ -122,6 +122,13 @@ function firstFaceHolds(state, i, j, y, hf, side) {
   return true;
 }
 
+/** Whether anything stands beside deck cell 1 at y on a side (a face, site-solid or not: sand, gravel, a frozen volume's class). */
+function faceThere(state, i, j, y, hf, side) {
+  const dir = DIRS[hf], L = catwalkLanes(state.cur.width, dir, side), [rx, rz] = rightOf(dir);
+  const x = state.minX + i + dir[0] + rx * L.face, z = state.minZ + j + dir[1] + rz * L.face;
+  return !['AIR', 'PLANT', 'WATER', 'MISSING'].includes(state.land.classAt(x, y, z));
+}
+
 /** Expand the catwalk move from a state (route.mjs's special-move table: S). Candidates by heading, then run length, then side. */
 export function catwalkExpand(state, S) {
   const c = state.cur;
@@ -204,19 +211,21 @@ export function catwalkFail(state, edgeOut, inS) {
         const di = DIRS[hf][0], dj = DIRS[hf][1];
         if (i + di < 0 || j + dj < 0 || i + di >= W || j + dj >= D) continue;
         if (near(y, (i + di) + (j + dj) * W)) continue; // the cell ahead is walkable at grade: no catwalk starts here
+        const faces = SIDES.filter((sd) => faceThere(state, i, j, y, hf, sd));
+        if (!faces.length) continue; // (no face at all beside the first deck cell on either side: a run into the open, not along a face)
         for (let n = 1; n <= CATWALK.diagMax; n++) {
           const ci = i + di * (n + 1), cj = j + dj * (n + 1);
           if (ci < 0 || cj < 0 || ci >= W || cj >= D) break;
           const k2 = ci + cj * W;
           if (!inS(k2) || !near(y, k2) || (c.once && cheb(W, k2, c.goalK) > c.approach)) continue;
-          for (const side of SIDES) {
+          for (const side of faces) {
             tried++;
             const r = checkCatwalk(state.land, [minX + i, y, minZ + j], DIRS[hf], n, side, c.width, { len: { min: c.nMin, max: c.nMax } });
             if (r.code === 'NO_GAP') continue;
             gaps++;
             const code = r.ok ? 'UNREACHABLE' : r.code;
             const out = n > c.nMax || n < c.nMin ? 1 : 0;
-            const key = [out, Math.max(Math.abs(ci - gi), Math.abs(cj - gj)), -rankOf(r), n, minX + i, minZ + j, hf, side === 'left' ? 0 : 1];
+            const key = [out, -rankOf(r), Math.max(Math.abs(ci - gi), Math.abs(cj - gj)), n, minX + i, minZ + j, hf, side === 'left' ? 0 : 1];
             if (!best || cmpKey(key, best.key) < 0) best = { key, code, evidence: { ...(r.evidence ?? {}), span: n, side, from: [minX + i, y, minZ + j], to: [minX + ci, y, minZ + cj] } };
           }
         }
