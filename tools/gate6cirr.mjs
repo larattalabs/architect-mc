@@ -28,6 +28,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gatePart, sliceSections, slicesOf } from './lib/gate-part.mjs';
+import { kitReuse } from './lib/kit-reuse.mjs'; // ((gate speed 3) its kit files' results from this run's unit-kit, when exact)
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-IRR-run');
@@ -96,6 +97,7 @@ function nodeTest(files, timeout = 3_600_000) {
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };
 }
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 
 /** A JUnit result file's counts (the mod's own test run, `./gradlew test`). */
 function junit(name) {
@@ -113,7 +115,7 @@ steps.unit = async () => {
   const P = gatePart(UNIT_SECTIONS, { log });
   if (P.want('items')) {
   // item 1 (kit)
-  out.irr = nodeTest(['kit/test/irr.test.mjs']);
+  out.irr = kitOnce(['kit/test/irr.test.mjs']);
   check(out.irr.code === 0 && out.irr.fail === 0 && out.irr.pass >= 9, `item 1 (kit): detection (lot, zone, false over the zone, type-implied farms, template and district lots), the grid (every field column within 4 on 20 x 20 field sizes 3..62, 4 fronts), the mask, the lot's frame against the mod's placement table, reserved, the notes (not a farm, cold, small), M25:keep's own-lot exemption, the broken variants (M25:clear, M25:shell, M25:keep): ${out.irr.pass} pass, ${out.irr.fail} fail`, out.irr.failing);
   // item 1 (mod): the units the mod's own build ran
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };

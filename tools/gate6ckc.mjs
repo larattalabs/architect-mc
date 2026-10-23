@@ -27,6 +27,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { flAsksFilter } from './lib/fl-norm.mjs'; // (6c FL) FL's five free asks left to FL's own item 8
 import * as P3 from './lib/p3-tier.mjs';
 import { gatePart, sliceSections, slicesOf } from './lib/gate-part.mjs';
+import { kitReuse } from './lib/kit-reuse.mjs'; // ((gate speed 3) its kit files' results from this run's unit-kit, when exact)
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-KC-run');
@@ -94,6 +95,7 @@ function nodeTest(files, timeout = 3_600_000) {
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };
 }
+const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 
 steps.unit = async () => {
   const out = {};
@@ -103,7 +105,7 @@ steps.unit = async () => {
   const slice = slicesOf(P, 'unchanged', 3);
   if (P.want('items')) {
   // item 1
-  out.kc = nodeTest(['kit/test/kc.test.mjs']);
+  out.kc = kitOnce(['kit/test/kc.test.mjs']);
   check(out.kc.code === 0 && out.kc.fail === 0 && out.kc.pass >= 16, `item 1 (kit): the registry (resolve, emit, rollback), OB.BODY never WATER (no harbour fallback), every §4 row on its fixture (k01-k08, v61), OVERLAP {kind: body} with its wouldFit re-checked alone, M25:clear on each broken variant (u01-u04), the moat's berm: ${out.kc.pass} pass, ${out.kc.fail} fail`, out.kc.failing);
   }
   // item 2 (byte identity, the watch count, the head's census)
