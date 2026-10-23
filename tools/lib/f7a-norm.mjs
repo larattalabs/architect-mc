@@ -6,3 +6,8 @@ export const F7A_MOVED = Object.freeze({
   'asks/mining_town.json': '7a foundation: rail_1 answers unsupported {connector.rail, until CR} (was until 7a; S-7a-5)',
   'extension/e15_every_reserved_a.json': '7a foundation: c_rail until CR, c_branch_walk until 7b (S-7a-4, S-7a-5); c_span_bridge left the fixture (a supported alias, R25)',
 });
+
+/** The recorded parts (ask/part) whose answer the foundation moves only by its `until` (connector.rail: 7a -> CR). */
+export const F7A_ASK_PARTS = Object.freeze(['mining_town/rail_1']);
+/** An asks-table line with the foundation's `until` move normalised (the earlier drivers' tables compare through fl-norm's flAsksFilter). */
+export const f7aAskLine = (l) => (F7A_ASK_PARTS.some((p) => l.startsWith(`${p} `)) ? l.replace(/ until \S+$/, '') : l);

@@ -16043,6 +16043,7 @@
    },
    "eager": [
     "tools/gate6ct3a.mjs",
+    "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs"
    ],
@@ -16401,6 +16402,7 @@
     "tools/gate6ct3a.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
@@ -16761,6 +16763,7 @@
     "tools/gate6ct3a.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
@@ -17121,6 +17124,7 @@
     "tools/gate6ct3a.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
@@ -17469,6 +17473,7 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6ct3a.mjs",
+    "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs"
    ],
@@ -17827,6 +17832,7 @@
     "tools/gate6ct3a.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
@@ -18139,6 +18145,7 @@
    },
    "eager": [
     "tools/gate7ak1b.mjs",
+    "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs"
    ],
@@ -18474,6 +18481,7 @@
     "tools/gate7ak1b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
@@ -18811,6 +18819,7 @@
     "tools/gate7ak1b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
@@ -32837,6 +32846,7 @@
    },
    "eager": [
     "tools/gate6ckc.mjs",
+    "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
@@ -35640,6 +35650,7 @@
     "tools/gate6ckc.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
@@ -43487,6 +43498,7 @@
     "tools/gate6ckc.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
@@ -57163,6 +57175,7 @@
     "tools/gate7ak1b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
