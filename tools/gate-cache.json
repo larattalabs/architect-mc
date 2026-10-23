@@ -230,6 +230,7 @@
   "benches": {
    "$comment": "The judged benches (Noah, 2026-10-22; docs/GATES.md \"Benches out of the release path\"; tools/lib/bench-select.mjs). judged: the benches whose timing is judged; they are not release candidates. The nightly (tools/nightly.mjs: release --full --nightly) runs them isolated with their timing judged and records their PASSes in the step cache (only the nightly's: a contended or recorded-timing PASS never serves). A release reuses each bench's latest nightly result when it was a PASS, its step-cache entry still holds at HEAD (its coverage or input set, definition, toolchain, runner and modes) and no path of a sensitive group naming it changed between the nightly's head and HEAD (git diff, two-dot); otherwise the release runs it, the reason in --plan. megaB is one bench of two walks: the release runs the full walk when its sensitive paths changed, else the fast one. nightlyOnly: never run at release. nightlyJudged: the scenarios, ordinary cache candidates at release with their timing recorded there; only the nightly judges it. megaB: the nightly runs the full walk on weeklyDay (the nightly's local start day, about 02:00), on demand (nightly.mjs --megab-full), when no nightly has run it yet, and when a sensitive group naming it changed since the last full walk; the fast walk otherwise. sensitive: the bench-sensitive paths (PROPOSED 2026-10-22 for the coordinator's review), by group, each with the benches it re-runs.",
    "judged": [
+    "4e-megalite",
     "6a-megaA",
     "6a-megaB",
     "6a-megaB-fast",
@@ -264,6 +265,7 @@
       "mod/src/main/java/dev/larattalabs/architect/journal/**"
      ],
      "benches": [
+      "4e-megalite",
       "6a-megaA",
       "6a-megaB",
       "6a-megaB-fast",
@@ -282,6 +284,7 @@
       "mod/src/main/java/dev/larattalabs/architect/mixin/BlockStateUpdateMixin.java"
      ],
      "benches": [
+      "4e-megalite",
       "6a-megaA",
       "6a-megaB",
       "6a-megaB-fast",

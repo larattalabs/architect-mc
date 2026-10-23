@@ -78,8 +78,8 @@ A driver whose check mixes both is split into a functional `check` and a `bar`.
 - **`release` and the named chains:** bars judge as before, and `--quiet-wait` (load < 8) is on by default (`--no-quiet-wait` to
   turn it off). Two exceptions (2026-10-22, "Benches out of the release path"), both recorded like `change`/`slice` and never
   isolated:
-  - a step whose entry says `"timing": "recorded"` (4e-megalite, 4e-throughput, 4e-throughput-smoke: their timing is folded into
-    6a-megaA), in every tier and chain. `--judge-timing` judges them;
+  - a step whose entry says `"timing": "recorded"` (4e-throughput, 4e-throughput-smoke: their timing is folded into 6a-megaA), in
+    every tier and chain. `--judge-timing` judges them;
   - the scenarios `release.benches.nightlyJudged` names (6b-scenario-s1, 6c-scenario-s2, 6c-scenario-s3), at a release that is not
     the nightly. The nightly judges them, isolated.
 - A new timing check in a driver must use `bar(...)`, otherwise it blocks slices on machine load.
@@ -171,7 +171,7 @@ function gives `tools/step-cache.mjs replay` its keys at a past head.
 time; for unit-kit its JUnit report and kit tree) only when every one of these holds:
 - the step ended PASS;
 - no timing bar was recorded rather than judged (`timingRecorded` empty). A slice PASS with a bar missed never serves anything;
-- it is not a **judged bench** (`tools/gate-cache.json` `release.benches.judged`: 6a-megaA, 6a-megaB, 6a-megaB-fast, 6a-heap,
+- it is not a **judged bench** (`tools/gate-cache.json` `release.benches.judged`: 4e-megalite, 6a-megaA, 6a-megaB, 6a-megaB-fast, 6a-heap,
   6b-volume), unless the run is the nightly and the bench ran isolated with its timing judged. That nightly PASS is recorded with
   `nightly: true` and is what a release reuses ("Benches out of the release path"). A contended or recorded-timing PASS of a judged
   bench is never recorded. The scenario steps (S1-S3 included since 2026-10-22, and forms, relief, scatter, route, districts, s7,
@@ -497,13 +497,15 @@ throughput and the S1-S3 scenarios. Each ran isolated, so nothing else could run
 2026-10-22. Code: `tools/lib/bench-select.mjs` (the rule, pure, tested by `kit/test/gate-benches.test.mjs`); config:
 `tools/gate-cache.json` `release.benches`.
 
-1. **The judged benches leave the release path.** The judged list is 6a-megaA, 6a-megaB, 6a-megaB-fast, 6a-heap and 6b-volume.
+1. **The judged benches leave the release path.** The judged list is 4e-megalite, 6a-megaA, 6a-megaB, 6a-megaB-fast, 6a-heap and
+   6b-volume (4e-megalite added 2026-10-23, the coordinator: no bar is judged nowhere).
    - They are not release candidates (not in `tiers.release`, dropped from the impact rules' candidates).
    - The nightly (`release --full --nightly`) runs them isolated with their timing judged, and records each PASS in the step cache
      with `nightly: true`. Only those PASSes are recorded for a judged bench. A contended or recorded-timing PASS never serves.
    - A release then decides each bench with **the bench rule** below, and `--plan` prints the decision and the reason.
    - The functional checks (exactness, undo, counts) still run wherever they ran in `change` and `slice`: the impact map still
-     names megaA and volume in the region rule, timing recorded, not isolated. No check is dropped.
+     names megaA and volume in the region rule and mega-lite in the placement, sites, kit and driver rules, timing recorded, not
+     isolated. No check is dropped.
    - The scenarios S1, S2 and S3 (`nightlyJudged`) are ordinary cache candidates at a release, with their timing recorded and not
      isolated. Only the nightly judges their timing.
 2. **megaB's full walk (about 85 min)** runs in the nightly once a week (`release.benches.megaB.weeklyDay`, `sun`: the nightly
@@ -511,10 +513,14 @@ throughput and the S1-S3 scenarios. Each ran isolated, so nothing else could run
    group naming it changed since the last full walk, and again on the next nightly when the last full walk did not PASS. The other
    nightlies run `6a-megaB-fast`. Its two resilience rows run as an
    ordinary step, **`6a-resume`** (below).
-3. **4e-megalite and 4e-throughput fold into 6a-megaA** where they overlap (the table below). They are out of the release tier.
-   Their drivers and step ids stay, runnable by name (`--only 4e-megalite`, the `regress` chain). They run for their functional
-   checks where the impact map picks them, with `"timing": "recorded"`: their bars are recorded in every tier and chain, and
-   `--judge-timing` judges them.
+3. **4e-megalite and 4e-throughput fold into 6a-megaA** where they overlap (the table below). Both are out of the release tier and
+   stay runnable by name (`--only 4e-megalite`, the `regress` chain).
+   - **4e-megalite** stays a bench and is a judged bench (decision, 2026-10-23): the nightly judges the three tick bars megaA has
+     no equivalent for (one lot's undo, the 1 ms and 10 ms budgets), with its others, and a release reuses that result through the
+     bench rule like the other benches (the placement core and block-write queue groups name it). Its functional checks run where the
+     impact map picks it in `change` and `slice`, as before.
+   - **4e-throughput and 4e-throughput-smoke** run for their functional checks where the impact map picks them, with
+     `"timing": "recorded"`: their bars are recorded in every tier and chain, and `--judge-timing` judges them.
 4. **6a-heap is nightly only.** A release never runs it. `--plan` shows its last nightly result.
 
 ### The bench rule (a release that is not `--full`)
@@ -570,8 +576,8 @@ list is a guard on top, for the code whose cost the benches exist to measure. `r
 
 | group | paths | re-runs |
 |---|---|---|
-| placement core | `site/Placement`, `PlaceJob`, `TemplateWriter`, `RestoreJob`, `Groups`, `Batches`, `Sites`, `SiteJournal`, `journal/**` | megaA, megaB (full), heap |
-| block-write queue | `batch/**`, `site/RegionQueue`, `RegionItems`, `TickDeferral`, `ChunkTickets`, `region/TicketGate`, `mixin/BlockStateUpdateMixin` | megaA, megaB (full), heap |
+| placement core | `site/Placement`, `PlaceJob`, `TemplateWriter`, `RestoreJob`, `Groups`, `Batches`, `Sites`, `SiteJournal`, `journal/**` | mega-lite, megaA, megaB (full), heap |
+| block-write queue | `batch/**`, `site/RegionQueue`, `RegionItems`, `TickDeferral`, `ChunkTickets`, `region/TicketGate`, `mixin/BlockStateUpdateMixin` | mega-lite, megaA, megaB (full), heap |
 | region tiles | `region/RegionsImpl`, `TileStream`, `Packed`, `Ir`, `BlobPut`, `RegionBlobs`, `LiveBlocks`, `Realised`, `RegionStore` | megaA, megaB (full), heap |
 | scheduler | `region/PendingTicks`, `mixin/LevelTicksMixin`, `LevelTicksAccessor`, `region/MsptTrace` (the trace the tick bars read) | megaA, megaB (full), heap, volume |
 | sidecar tile path | `sidecar/src/regions.ts`, `regionpool.ts`, `region-worker.mjs`, `pool.ts`, `kit/tools/region.mjs` | megaA, megaB (full), heap |
@@ -600,7 +606,9 @@ megaB run. It is not a bench: no `bench` resource, not isolated.
 
 The relog and sidecar rows are time thresholds, though functional ones (did it resume at all, within a minute). Read them with the
 step's load, as for any step. 6a-resume runs them without isolation, beside other steps; a loaded machine could fail them where the
-isolated megaB passed. If that shows up, make 6a-resume a bench with `"isolate": true` (it then runs alone, about 25 min).
+isolated megaB passed. **The rule (the coordinator, 2026-10-23):** 6a-resume stays unisolated; if it ever fails on its relog or
+sidecar threshold under load, set `"isolate": true` on it (and the `bench` resource, so the runner isolates it: it then runs alone,
+about 25 min).
 
 **Two fixes to the shared walk (2026-10-23).** megaB failed on main for reasons unrelated to what it measures, and 6a-resume would
 inherit both:
@@ -621,15 +629,15 @@ No other row changed.
 
 | row | before | after |
 |---|---|---|
-| check: the pad, lots and 8 roads placed at 4 ms (LOAD_BOUNDED) | every tier | the same (4e-megalite, wherever the impact map picks it; a release candidate; the nightly) |
+| check: the pad, lots and 8 roads placed at 4 ms (LOAD_BOUNDED) | every tier | the same (4e-megalite, wherever the impact map picks it in change/slice; the nightly; a release whose change touches it) |
 | check: resumed across a relog | every tier | the same |
 | check: one lot's undo leaves the pad exact | every tier | the same |
 | check: the group undo is exact (hash) | every tier | the same; megaA's E-normal checks the region group undo too |
 | check: 1 ms and 10 ms placed everything | every tier | the same |
-| BAR: 4 ms Architect's own tick <= 50 | judged at release | recorded; **judged in megaA**: the realise own tick at the pinned 4 ms budget (p99 <= 25, max <= 50) |
-| BAR: the group undo's own tick | judged at release | recorded; **judged in megaA**: the group undo's own tick (and its 600 s) |
-| BAR: one lot's undo own tick | judged at release | **recorded only, no longer judged**: megaA undoes the whole region, not one layered lot |
-| BAR: 1 ms and 10 ms own tick | judged at release | **recorded only, no longer judged**: megaA runs at 4 ms only |
+| BAR: 4 ms Architect's own tick <= 50 | judged at release | judged in the nightly (and at a release that runs it); megaA judges the same at its pinned 4 ms budget |
+| BAR: the group undo's own tick | judged at release | judged in the nightly; megaA judges its group undo's own tick too |
+| BAR: one lot's undo own tick | judged at release | judged in the nightly (no megaA equivalent) |
+| BAR: 1 ms and 10 ms own tick | judged at release | judged in the nightly (no megaA equivalent) |
 | metrics cellsPerSecond4ms, groupUndoSeconds, groupUndoOwnMsMax, groupUndoMsptMax, bytesPerCell4ms | recorded | recorded (unchanged) |
 
 **4e-throughput** (village + roads at 4 ms, warm-up + median of 3 or 6) and **4e-throughput-smoke** (one run)
@@ -660,12 +668,12 @@ No other row changed.
 | 6b-volume (BAR: 0 ticks over 50 ms; checks: same sha twice, the file reads back, the five classes) | every release, region slices | nightly, a release whose change touches it, region slices |
 | 6b-scenario-s1, 6c-scenario-s2, 6c-scenario-s3 | every release, timing judged, isolated, never cached | release: a cache candidate, timing recorded, not isolated; nightly: judged, isolated |
 
-**Decisions for Noah.** Three of mega-lite's timing bars have no judged equivalent any more: one lot's undo own tick, and the own
-tick at the 1 ms and 10 ms budgets. They are recorded in every run of 4e-megalite. To judge them again, either name 4e-megalite
-in `release.benches.judged`, which makes it a nightly bench, or run `--judge-timing`.
-
-The scenario canary still rotates S1, S2, S3 and S7 at each release (`release.canaries.scenarioRotation`). It is a cache spot-check
-and its timing is recorded there. Dropping S1-S3 from it would take one more scenario off the release path.
+**Decided (the coordinator, 2026-10-23).**
+- 4e-megalite is a judged bench, so every timing bar is judged somewhere: its three bars without a megaA equivalent (one lot's
+  undo, the 1 ms and 10 ms own tick) in the nightly.
+- The scenario canary keeps rotating S1, S2, S3 and S7, one per release (`release.canaries.scenarioRotation`), timing recorded
+  there: cheap functional insurance.
+- 6a-resume stays unisolated (the rule above).
 
 ### Proofs
 
@@ -1688,8 +1696,8 @@ step runs next.
 Since 2026-10-22 the bench rotations are gone ("Benches out of the release path"): megaA, megaB, heap and volume run in the nightly
 with their timing judged, and a release runs one only when what it measures changed since that nightly (megaB: the full walk when
 its bench-sensitive core changed, else `--fast`; heap never). megaA still asserts **E-normal** (the diff after its group undo).
-mega-lite and throughput are no longer benches: their timing is folded into megaA, and they run for their functional checks where
-the impact map picks them, timing recorded. megaB's relog and sidecar-kill rows run every release as `6a-resume`.
+mega-lite is a judged bench like them (nightly; reused at release). throughput is no longer a bench: its timing is folded into
+megaA, and it runs for its functional checks where the impact map picks it, timing recorded. megaB's relog and sidecar-kill rows run every release as `6a-resume`.
 
 Always at release: units, sim suites, apijars, 4e-orders, 4d-all, 5b-chains, 5b-village, 6a-resume, 6a-eflat, 6a-forest, 6a-inv3,
 6a-staged, and the sim 6b steps (6b-smoke, -ghost, -commands, -nudges, -pathstyle, -versions, -versionc, -scenario-s1,
@@ -1741,7 +1749,7 @@ map when a slice adds a package or a gate step (`node tools/gate-impact.mjs <pat
 ### Faster runs
 
 - **mega-lite in routine tiers.** `4e-megalite` (256x256) runs where the impact map picks it (placement, sites, kit, the drivers'
-  libs), for its functional checks; since 2026-10-22 it is not a bench and its timing is recorded. The full 1000x1000 mega_bench
+  libs), for its functional checks, timing recorded there; its timing is judged in the nightly (a judged bench). The full 1000x1000 mega_bench
   (megaA) runs in the nightly, at a release whose change touches what it measures, and in slices whose diff touches region code.
 - **Prepared worlds are restored, not regenerated.** A step's `restore` worlds are APFS-cloned (`cp -c -R`, seconds, no disk) from
   the snapshot store (the seed's `mod/run/saves`, `GATE_SNAPSHOT_DIR`) before it runs. That also undoes whatever an earlier
@@ -1912,8 +1920,8 @@ that still hold an unfinished item. The relog, the sidecar kill and every bar st
 `mode: fast|full`. Compare only full-walk numbers with each other. `gate6a.mjs resume` (the step 6a-resume) is the same fast walk
 in its own world, `resume-B.json` ("Benches out of the release path").
 
-Since 2026-10-22 mega-lite and throughput carry `"timing": "recorded"`: in these chains too their bars are recorded, not judged,
-unless the run passes `--judge-timing`.
+Since 2026-10-22 throughput carries `"timing": "recorded"`: in these chains too its bars are recorded, not judged, unless the run
+passes `--judge-timing`. mega-lite's bars judge here as before.
 
 ## For agents: launch, then wait once
 

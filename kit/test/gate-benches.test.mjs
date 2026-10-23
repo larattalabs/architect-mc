@@ -20,20 +20,22 @@ const megaB = { bench: 'megaB', ids: ['6a-megaB', '6a-megaB-fast'] };
 const megaA = { bench: '6a-megaA', ids: ['6a-megaA'] };
 
 test('the config: the judged benches, heap nightly only, the scenarios judged in the nightly, megaB weekly', () => {
-  assert.deepEqual([...BC.judged].sort(), ['6a-heap', '6a-megaA', '6a-megaB', '6a-megaB-fast', '6b-volume']);
+  assert.deepEqual([...BC.judged].sort(), ['4e-megalite', '6a-heap', '6a-megaA', '6a-megaB', '6a-megaB-fast', '6b-volume']);
   assert.deepEqual([...judgedBenches(CONF)].sort(), [...BC.judged].sort());
   assert.deepEqual([...BC.nightlyOnly], ['6a-heap']);
   assert.deepEqual([...BC.nightlyJudged].sort(), ['6b-scenario-s1', '6c-scenario-s2', '6c-scenario-s3']);
   assert.equal(BC.megaB.full, '6a-megaB');
   assert.equal(BC.megaB.fast, '6a-megaB-fast');
-  assert.deepEqual(releaseBenches(BC).map((b) => b.bench), ['6a-megaA', 'megaB', '6a-heap', '6b-volume']);
+  assert.deepEqual(releaseBenches(BC).map((b) => b.bench), ['4e-megalite', '6a-megaA', 'megaB', '6a-heap', '6b-volume']);
   // every named bench is a step, and none is in the release tier's lists (they are decided by the bench rule only)
   const r = CHAINS.tiers.release;
   const listed = new Set([...r.always, ...r.rotate.flatMap((x) => [...x.options.flat(), ...(x.when?.steps ?? [])])]);
   for (const id of [...BC.judged, ...BC.nightlyJudged]) assert.ok(CHAINS.steps[id], id);
   for (const id of BC.judged) assert.ok(!listed.has(id), `${id} is still in the release tier's lists`);
-  // the folded 4e benches: no longer benches, timing recorded everywhere
-  for (const id of ['4e-megalite', '4e-throughput', '4e-throughput-smoke']) {
+  // mega-lite is a judged bench (its tick bars judged in the nightly); the folded throughput steps: no longer benches, timing recorded
+  assert.ok(CHAINS.steps['4e-megalite'].resources.includes('bench'));
+  assert.equal(CHAINS.steps['4e-megalite'].timing, undefined);
+  for (const id of ['4e-throughput', '4e-throughput-smoke']) {
     assert.ok(!(CHAINS.steps[id].resources ?? []).includes('bench'), id);
     assert.equal(CHAINS.steps[id].timing, 'recorded', id);
     assert.ok(!listed.has(id), `${id} is still in the release tier's lists`);
@@ -51,6 +53,8 @@ test('the bench-sensitive paths: the placement core re-runs the mega benches, no
   assert.deepEqual(sensitiveHits(BC, ['6b-volume'], [`${P}site/Placement.java`]), []);
   assert.equal(sensitiveHits(BC, ['6b-volume'], [`${P}region/volume/VolumeSurvey.java`])[0].group, 'volume survey');
   assert.equal(sensitiveHits(BC, ['6a-megaA'], [`${P}batch/QBatch.java`])[0].group, 'block-write queue');
+  assert.equal(sensitiveHits(BC, ['4e-megalite'], [`${P}batch/QBatch.java`])[0].group, 'block-write queue');
+  assert.deepEqual(sensitiveHits(BC, ['4e-megalite'], [`${P}region/TileStream.java`]), []);
   assert.equal(sensitiveHits(BC, megaB.ids, ['sidecar/src/regionpool.ts'])[0].group, 'sidecar tile path');
   assert.equal(sensitiveHits(BC, ['6b-volume'], [`${P}mixin/LevelTicksMixin.java`])[0].group, 'scheduler');
   assert.deepEqual(sensitiveHits(BC, ['6a-megaA'], ['docs/GATES.md', 'kit/lib/forms/states.mjs']), []);
@@ -121,9 +125,9 @@ test('the nightly: megaB full weekly, on demand, first time, and when the sensit
   assert.equal(megaBVariant(BC, { date: tue, lastFull: last, changedSinceFull: [`${P}site/PlaceJob.java`] }).id, '6a-megaB');
   assert.equal(megaBVariant(BC, { date: tue, lastFull: last, changedSinceFull: ['kit/lib/forms/states.mjs', `${P}region/volume/VolumeSurvey.java`] }).id, '6a-megaB-fast');
   const n = fullBenches(BC, { nightly: true, variant: { id: '6a-megaB-fast', why: 'fast' } });
-  assert.deepEqual(n.ids, ['6a-megaA', '6a-megaB-fast', '6a-heap', '6b-volume']);
+  assert.deepEqual(n.ids, ['4e-megalite', '6a-megaA', '6a-megaB-fast', '6a-heap', '6b-volume']);
   // a release --full that is not the nightly (by hand or the auto rule): every judged bench but heap (nightly only), megaB's full walk
-  assert.deepEqual(fullBenches(BC, { nightly: false }).ids, ['6a-megaA', '6a-megaB', '6b-volume']);
+  assert.deepEqual(fullBenches(BC, { nightly: false }).ids, ['4e-megalite', '6a-megaA', '6a-megaB', '6b-volume']);
 });
 
 test('the nightly records: the newest nightly result of each bench, finished or stopped; a yielded or running step does not count', () => {
