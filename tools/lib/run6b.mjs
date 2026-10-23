@@ -7,7 +7,8 @@ import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DevClient } from './devclient.mjs';
-import { baseCurrent as baseCurrentIn, baseRecipe, writeStamp } from './basestamp.mjs';
+import { baseCurrent as baseCurrentIn, baseRecipe, gateHost, recipeHash, writeStamp } from './basestamp.mjs';
+import { createHash } from 'node:crypto';
 import { gameWait as sprintWait } from './sprint.mjs';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -230,6 +231,67 @@ export async function ensureBase(name) {
  */
 export async function seedBase(seed) {
   return ensureBase(!seed || String(seed) === PINNED_SEED ? 'G6B Seed Base' : `G6B Seed ${seed}`);
+}
+/**
+ * (speed audit D, B4) Prepared claim worlds: a copy of the pinned seed's base with the chunks of one claim generated (and saved), served
+ * by the runner as APFS clones from the snapshot store (`restore` in tools/gate-chains.json), so the steps that copy the pinned seed and
+ * teleport to the claim stop generating its chunks. S3's claim is shared by p0-natural, t3a-natural, s3-plan, b-ingame natural,
+ * rs-survival item 14 and the s3, relief, route and districts scenarios; S2's by forms, s2 and scatter. A world made by the other
+ * host (client/server) differs, so each host has its own ("... Srv"); one made by an older base recipe is stale and not used (the
+ * step then copies the plain base and generates the chunks as before; the line says so).
+ */
+export const CLAIM_WORLDS = Object.freeze({ '3604,-1036,3795,-845': 'G6B S3 Claim', '2508,1588,2699,1779': 'G6B S2 Claim' });
+export const CLAIM_MARK = 'gate-claim.json';
+export const claimWorldNames = () => Object.values(CLAIM_WORLDS).flatMap((n) => [n, `${n} Srv`]);
+export const claimWorldFor = (seed, claim) => (String(seed) === PINNED_SEED && claim ? CLAIM_WORLDS[claim.join(',')] ?? null : null);
+const sha256File = (f) => createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+/** The prepared claim world of this host for (seed, claim) if it exists and is current -> its name; else the plain base (seedBase). */
+export async function claimBase(seed, claim) {
+  const base = await seedBase(seed);
+  const w = claimWorldFor(seed, claim);
+  if (!w) return base;
+  const name = gateHost() === 'server' ? `${w} Srv` : w;
+  const dir = path.join(SAVES, name);
+  let why = null;
+  try {
+    const mark = JSON.parse(fs.readFileSync(path.join(dir, CLAIM_MARK), 'utf8'));
+    const cur = recipeHash(baseRecipe(baseSpec(base)));
+    if (!fs.existsSync(path.join(dir, 'level.dat'))) why = 'no level.dat';
+    else if (mark.baseRecipe !== cur) why = `made by base recipe ${mark.baseRecipe}, now ${cur}`;
+    else if (mark.claim.join(',') !== claim.join(',')) why = 'another claim';
+    else {
+      const levelSha = sha256File(path.join(dir, 'level.dat'));
+      log(`  prepared claim world "${name}" for claim [${claim.join(', ')}] (level.dat sha256 ${levelSha}; made ${mark.madeAt})`);
+      try { fs.writeFileSync(path.join(OUT, `claim-world-${name.replaceAll(' ', '_')}.json`), `${JSON.stringify({ name, claim, levelDatSha256: levelSha, mark }, null, 1)}\n`); } catch { /* evidence only */ }
+      return name;
+    }
+  } catch (e) {
+    why = fs.existsSync(dir) ? `unreadable marker (${e.message})` : 'not restored from the snapshot store';
+  }
+  log(`  no prepared claim world "${name}" (${why}): the base "${base}" is copied and the claim's chunks are generated here, as before`);
+  return base;
+}
+/** Makes this host's prepared claim world for (seed, claim) from the base: chunks generated and saved, the marker written (maintenance: `gate6b claims`). */
+export async function makeClaimWorld(seed, claim, yRange) {
+  const base = await seedBase(seed);
+  const w = claimWorldFor(seed, claim);
+  if (!w) throw new Error(`not a claim world: seed ${seed} claim ${claim}`);
+  const name = gateHost() === 'server' ? `${w} Srv` : w;
+  await fresh(name, base);
+  await setRules('default');
+  const cx = (claim[0] + claim[2]) / 2, cz = (claim[1] + claim[3]) / 2;
+  // visit the centre and the four quarters, so every chunk of the claim (and the survey margin) is generated and saved
+  for (const [dx, dz] of [[0, 0], [-48, -48], [48, -48], [-48, 48], [48, 48]]) {
+    await tp(cx + dx, yRange[1], cz + dz);
+    await call('dev.waitChunks', { timeoutMs: 180_000 }, 240_000).catch(() => null);
+  }
+  await cmd('/save-all flush');
+  await leaveWorld();
+  const dir = path.join(SAVES, name);
+  const mark = { seed: String(seed), claim, preset: 'normal', baseRecipe: recipeHash(baseRecipe(baseSpec(base))), host: gateHost(), madeAt: new Date().toISOString(), levelDatSha256: sha256File(path.join(dir, 'level.dat')) };
+  fs.writeFileSync(path.join(dir, CLAIM_MARK), `${JSON.stringify(mark, null, 1)}\n`);
+  log(`  claim world "${name}" made (level.dat sha256 ${mark.levelDatSha256}); publish it: cp -c -R "${dir}" <snapshot store>/`);
+  return { name, ...mark };
 }
 export async function fresh(name, from) {
   await leaveWorld();

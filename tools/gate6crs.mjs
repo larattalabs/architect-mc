@@ -1059,7 +1059,7 @@ steps.item14 = async () => {
   const c = sc.fixture.claim;
   const claim = { minX: c[0], minZ: c[1], maxX: c[2], maxZ: c[3], minY: -64, maxY: 319 };
   // ---- the world: a fresh copy of S3's site, survival by the world (its default mode) and the toggle, settled
-  await L.fresh(`G6B RS N ${tag}`, await L.seedBase(sc.world.seed));
+  await L.fresh(`G6B RS N ${tag}`, await L.claimBase(sc.world.seed, c));
   await L.setRules('exact');
   await cmd('/weather clear');
   await cmd('/defaultgamemode survival');

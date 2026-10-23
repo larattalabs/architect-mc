@@ -365,9 +365,9 @@ const S3_PLAN = { schemaVersion: 'plan/0', planId: 'gate_p0_s3', zones: [{ id: '
 steps.natural = async () => {
   await ensure();
   const out = {};
-  await L.fresh('G6B P0 S3', await L.seedBase(SEED));
-  await L.setRules('default');
   const claim = [...S3.fixture.claim];
+  await L.fresh('G6B P0 S3', await L.claimBase(SEED, claim));
+  await L.setRules('default');
   const [cx, cz] = centre(claim);
   await tp(cx, S3.fixture.yRange[1], cz);
   await L.settle(60_000);

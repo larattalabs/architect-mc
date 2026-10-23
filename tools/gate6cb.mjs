@@ -703,8 +703,8 @@ async function dumpOf(box, name) {
 
 steps.natural = async () => {
   await ensure();
-  await freshWorld(NAT, SEED_BASE, 'exact');
   const S3 = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 'relief_demo.json'), 'utf8')).fixture.claim;
+  await freshWorld(NAT, await L.claimBase('2026100906', S3), 'exact');
   const X = S3[0] + 40, Z = S3[1] + 40;
   await tp(X + 0.5, 200, Z + 0.5);
   await call('dev.waitChunks', { timeoutMs: 120_000 }, 150_000).catch(() => {});
