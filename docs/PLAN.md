@@ -1108,3 +1108,11 @@ Top first. Not fixed in v0.40.1.
 - **Benches and quiet-wait while other sessions run outside the gate slots.** Kit suites run directly (not through gate-run) don't
   take a slot, so a turbo run's isolated benches waited up to 30 min each for quiet; mp-ingame ran NOISY. Either have agents run
   suites through gate-run or count them in the quiet-wait.
+
+## Queued (coordinator, 2026-10-23; Steward's v0.42.0 grove check)
+
+- **Removal log wording:** c982 placed 3075 cells; its removal logged "3074 cells restored, 0 kept (changed since)". The
+  missing cell is presumably the player's cobblestone, so "kept" should count it. Fix the count or the wording.
+- **An exposed written-cell set for callers:** Steward's undo checks need "cells the plan wrote" (the IR's tile cells plus lot
+  boxes) after the region is removed, and today only the kit's buildVirtual gives it. Consider a dev/API read of the realised
+  record's cell positions that survives removal.
