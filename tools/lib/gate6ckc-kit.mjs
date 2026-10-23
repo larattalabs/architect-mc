@@ -58,12 +58,13 @@ export function baseTree(root) {
   return syncBaseTree(root, dir); // (turbo) one fetch and checkout at a time; left alone at the base
 }
 
-export async function unchanged(root, { check, log = console.log, only = null, slice = null } = {}) {
-  const { dir: mainDir, base } = baseTree(root);
+export async function unchanged(root, { check, log = console.log, only = null, slice = null, baseDir = null } = {}) {
+  // (baseDir: a test's own base tree, kit/test/gate-corpus-plan.test.mjs; a gate run always uses the merge base's worktree)
+  const { dir: mainDir, base } = baseDir ? { dir: baseDir, base: 'given' } : baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
   const { hNew, hOld } = await CP.corpusHelpers(root, mainDir);
   // (the census: corpus-derive.mjs kcCensus, computed where the plan ran; without the store (GATE_PLAN_CACHE=0), here, as before)
-  const census = async (r, s) => r.derived?.kcCensus ?? DERIVE.kcCensus(r, { survey: s.bytes }, { headRoot: root });
+  const censusOf = async (r, s) => r.derived?.kcCensus ?? DERIVE.kcCensus(r, { survey: s.bytes }, { headRoot: root });
   const norm = (r) => normIrJson(r.res?.irJson);
   const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(norm(r)), first: r.first && r.first !== r ? sha256(norm(r.first)) : null });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {}, watch: [], hard: [] };
@@ -85,7 +86,7 @@ export async function unchanged(root, { check, log = console.log, only = null, s
       try {
         const { r, s } = await planFixture(hOld, mainDir, fx);
         b = sig(r);
-        const cz = await census(r, s);
+        const cz = await censusOf(r, s);
         if (cz.threw) throw new Error(cz.threw);
         if (cz.census) {
           census = cz.census;
@@ -98,7 +99,7 @@ export async function unchanged(root, { check, log = console.log, only = null, s
     // the head's census: M25:clear 0 on every fixture but the broken variants (kc/u*)
     if (headRun) try {
       const { r, s } = headRun;
-      const cz = await census(r, s);
+      const cz = await censusOf(r, s);
       if (cz.threw) throw new Error(cz.threw);
       if (cz.census) {
         const sc = cz.census;
