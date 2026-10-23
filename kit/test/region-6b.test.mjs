@@ -17,7 +17,7 @@ import { checkRegion } from '../lib/region/check.mjs';
 import { renderPreviews } from '../lib/region/preview.mjs';
 import { validateSchema } from '../lib/region/siteplan.mjs';
 import { decodeArvx, encodeArvx } from '../lib/region/volume.mjs';
-import { buildVirtual, decodeArwd, dumpWorld, encodeArwd } from '../lib/region/vworld.mjs';
+import { F_WRITTEN, buildVirtual, decodeArwd, dumpWorld, encodeArwd } from '../lib/region/vworld.mjs';
 import { makeColumns } from '../lib/region/pack.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -118,6 +118,42 @@ test('ARWD: a realised check over before/after dumps of S1\'s virtual world (pla
   assert.equal(world.worldChanges, 1, 'the world\'s own change is counted, not written');
   for (const k of ['M2', 'M3', 'M4', 'M8', 'M10']) assert.deepEqual(real.metrics[k], virt.metrics[k], `${k}: realised = virtual`);
   assert.deepEqual(real.findings.map((f) => `${f.rule}|${f.part}|${f.count}`).sort(), virt.findings.filter((f) => f.rule !== 'M1').map((f) => `${f.rule}|${f.part}|${f.count}`).sort());
+});
+
+test('M4 on a realised world: a plan fluid body\'s own flow beside a cleared cell is not a breach; any other fluid there still is', async () => {
+  // S3's fountain room cleared a felled trunk beside the fountain spout's spill: the spout writes only its source, so its flowing
+  // water read as unwritten fluid and the realised M4 counted the body's own flow (gate-runs-coB-main/20261023-072735-change)
+  const id = 'floating_islands';
+  const p = await plan(id);
+  const survey = synthSurvey(claimOf(CASES[id]), SEED);
+  const { vw } = buildVirtual({ ir: p.ir, survey, blobs: p.blobs });
+  const S = vw.pal.states;
+  let cell = null;
+  const inLot = (x, y, z) => p.ir.lots.some(({ box: b }) => x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && z >= b.minZ && z <= b.maxZ);
+  vw.eachWritten((x, y, z, idx) => {
+    if (cell || !vw.pal.air[idx] || vw.pal.air[vw.base(x, y, z)]) return; // a cell the plan cleared (solid before, air after)
+    for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]]) {
+      const n = [x + dx, y + dy, z + dz];
+      if (!(vw.flags(...n) & F_WRITTEN) && !inLot(...n) && vw.pal.air[vw.get(...n)]) { cell = n; return; }
+    }
+  });
+  assert.ok(cell, 'a cleared cell beside an unwritten air cell outside every lot');
+  let lo = Infinity, hi = -Infinity;
+  vw.eachWritten((x, y) => { if (y < lo) lo = y; if (y > hi) hi = y; });
+  const c = p.ir.claim;
+  const box = { minX: c.minX, minY: lo - 2, minZ: c.minZ, maxX: c.maxX, maxY: hi + 2, maxZ: c.maxZ };
+  const before = await decodeArwd(encodeArwd(box, (x, y, z) => S[vw.base(x, y, z)]));
+  const [fx, fy, fz] = cell;
+  const realised = async (fluidState, op) => {
+    const ir = op ? { ...p.ir, parts: [...p.ir.parts, { id: 'w_test_spout', stage: p.ir.stages[p.ir.stages.length - 1], ops: [op] }] } : p.ir;
+    const after = await decodeArwd(encodeArwd(box, (x, y, z) => (x === fx && y === fy && z === fz ? fluidState : S[vw.get(x, y, z)])));
+    return checkRegion({ ir, meta: p.meta, world: dumpWorld(before, after, c, { virtual: vw, lots: ir.lots }), prefix: false, rules: ['M4'] }).metrics.M4.breaches;
+  };
+  const spout = (fluid, where) => ({ op: 'fluid', id: 'w_test_spout', part: 'w_test_spout', fluid, cells: [], shell: [], ...where });
+  assert.ok(await realised('minecraft:water[level=8]', null) >= 1, 'a stray fluid beside a cleared cell is a breach');
+  assert.equal(await realised('minecraft:water[level=8]', spout('water', { spill: [[fx, fz, fy, fy]] })), 0, 'the body\'s own spill');
+  assert.equal(await realised('minecraft:water[level=8]', spout('water', { predicted: [[fx, fy, fz, 8]] })), 0, 'the body\'s own predicted flow');
+  assert.ok(await realised('minecraft:lava[level=2]', spout('water', { spill: [[fx, fz, fy, fy]] })) >= 1, 'another fluid in the body\'s spill is still a breach');
 });
 
 test('ARVX: the kit decoder reads the mod encoder\'s fixtures (runs, owners, sha) and round-trips its own encoding', () => {
