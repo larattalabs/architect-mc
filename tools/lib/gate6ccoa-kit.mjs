@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { normSiblingIr } from './batch-0410.mjs';
 import { syncBaseTree } from './base-tree.mjs';
+import { F7A_MOVED, f7aAskLine } from './f7a-norm.mjs'; // (7a foundation) its named movers and ask movers
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 /** The artifact compared with its kitVersion, catalogueVersion, api and irSha normalised (§5's catalogue bump moves every artifact's
@@ -59,6 +60,8 @@ export const MOVED = Object.freeze({
   'asks/mage_exiles.json': '§5: its artifact\'s palette row gains over: all (answers and IR identical)',
   'valid/v64_vocc_copper.json': '§5: the artifact\'s palette row gains over: all', 'valid/v65_vocc_nowood.json': '§5: the artifact\'s palette row gains over: all',
   'vocc/r03_entry.json': '§5: the artifact\'s palette row gains over: all', 'vocc/r04_lenient.json': '§5: the artifact\'s palette row gains over: all',
+  // ((7a foundation) the fixtures its catalogue changes move by name: tools/lib/f7a-norm.mjs)
+  ...F7A_MOVED,
 });
 /** The three lines §4 moves in the 59 asks as Steward recorded them now (Steward's own count, refused 9 -> 6). */
 export const ASKS_MOVED = Object.freeze(['redstone_gate/gate_road', 'terraced_hill/switchback_street', 'two_districts/east_street']);
@@ -87,12 +90,14 @@ export async function unit(root, { check, log, OUT, nodeTest }) {
   const before = await asksBefore(root, baseTree(root).dir), after = await asksGap(path.join(root, 'kit'), { current: true });
   fs.writeFileSync(path.join(OUT, 'coa-asks-before.txt'), before.text);
   fs.writeFileSync(path.join(OUT, 'coa-asks-after.txt'), after.text);
-  const lines = (t) => new Map(t.split('\n').filter((l) => l.includes('/') && !l.startsWith('#') && !l.startsWith('  ')).map((l) => [l.split(' ')[0], l]));
+  // ((7a foundation) its ask movers compare without their `until` (rail_1: until 7a -> CR): tools/lib/f7a-norm.mjs)
+  const lines = (t) => new Map(t.split('\n').filter((l) => l.includes('/') && !l.startsWith('#') && !l.startsWith('  ')).map((l) => [l.split(' ')[0], f7aAskLine(l)]));
+  const f7n = (t) => t.split('\n').map(f7aAskLine).join('\n');
   const lb = lines(before.text), la = lines(after.text);
   const moved = [...la].filter(([k, v]) => lb.get(k) !== v).map(([k]) => k).sort();
   out.asks = { before: before.text.split('\n')[0], after: after.text.split('\n')[0], moved };
   const cb = fs.readFileSync(path.join(F, 'asks-before.txt'), 'utf8'), ca = fs.readFileSync(path.join(F, 'asks-after.txt'), 'utf8');
-  check(before.text === cb && after.text === ca, `item 6: the 59 asks' tables equal the committed ones (fixtures/plan/coa/asks-before.txt on the base kit, asks-after.txt here): ${out.asks.before.slice(2)} -> ${out.asks.after.slice(2)}`);
+  check(f7n(before.text) === f7n(cb) && f7n(after.text) === f7n(ca), `item 6: the 59 asks' tables equal the committed ones (fixtures/plan/coa/asks-before.txt on the base kit, asks-after.txt here): ${out.asks.before.slice(2)} -> ${out.asks.after.slice(2)}`);
   check(after.malformed === 0 && JSON.stringify(moved) === JSON.stringify([...ASKS_MOVED].sort()) && moved.every((k) => / blocked DEPENDENCY/.test(la.get(k))),
     `item 6, §4: 0 malformed; exactly the three routes on an unplaced lot move refused NO_ROOM -> blocked: ${moved.join(', ')}`, moved.map((k) => [lb.get(k), la.get(k)]));
   // item 10: byte identity but the named movers
