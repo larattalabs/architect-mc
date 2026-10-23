@@ -48,7 +48,7 @@ const KIT = path.join(root, 'kit');
 const OWNER = 'test:d3';
 const JAVA_HOME = process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25';
 const imp = (p) => import(pathToFileURL(path.join(KIT, p)).href);
-const json = (o) => JSON.stringify(o).replaceAll(' ', '');
+const json = (o) => String(JSON.stringify(o) ?? 'undefined').replaceAll(' ', '');
 const STUB = 'g6a_stub_9';
 /** d3_town's lots: a hall and seven cottages (on a 160 claim its street ends lie 27 and 36 columns inside). */
 const TOWN_LOTS = [{ id: 'hall_1', type: 'hall', size: [13, 11], landmark: true }, ...Array.from({ length: 7 }, (_, i) => ({ id: `cottage_${i + 1}`, type: 'cottage', size: [9, 9] }))];
@@ -235,6 +235,7 @@ async function d3Town(X, Z, { addition = true, cabin = true, dip = true, partial
   const lots = Object.fromEntries(cottages.map((id) => [id, STUB]));
   if (partial) lots[ir.lots.find((l) => !cottages.includes(l.id) && l.id.startsWith('cottage_'))?.id ?? 'hall_1'] = 'd3_no_such_design';
   await kill();
+  await L.prepare(pa.planId); // the claim's chunks generated first (a town off the spawn area waits NOT_GENERATED otherwise)
   const region = await L.realise(pa.planId, { lots });
   const st = await L.waitRegion(region, 3_600_000);
   let additionSite = null, cabinBox = null, additionCells = [];
@@ -560,16 +561,17 @@ steps.refusals = async () => {
   const p = await planReq({ program: 'districts', params: ONE('east'), claim: B, beside: T.region, check: false });
   if (p.refused) throw new Error(`item 11's plan refused: ${p.refused}`);
   const ir = planFiles(p.planId).ir;
-  const r0 = ir.reach.rect;
+  // the area sits on a reach column (the reach's rect corner need not be one)
+  const k0 = ir.reach.runs.find((q) => !ir.reach.contact.some((c) => c[1] === q[1] && c[0] <= q[0] && q[0] <= c[2]));
   const api = async (a) => { const x = await cmd(`/apitest ${a}`); return (x.messages ?? []).find((mm) => mm.startsWith('{')) ?? null; };
-  await api(`protect ${json({ owner: OWNER, id: 'd3reach', x0: r0[0], z0: r0[1], x1: r0[0] + 2, z1: r0[1] + 2, label: 'D3_reach' })}`);
+  await api(`protect ${json({ owner: OWNER, id: 'd3reach', x0: k0[0], z0: k0[1], x1: k0[0], z1: k0[1], label: 'D3_reach' })}`);
   const h1 = await hash(area);
   const pr = await call('dev.region.realise', { planId: p.planId, lots: {} }, 300_000);
   await api('unprotect test:d3 d3reach').catch(() => null);
   out.protected = pr.refused ?? null;
+  if (!pr.refused && pr.region) await undo(pr.region).catch(() => null);
   check(/PROTECTED/.test(json(pr.refused ?? '')) && (await hash(area)) === h1, `item 11: a C17 area over the reach: PROTECTED, 0 changed cells (${json(pr.refused).slice(0, 160)})`);
   // ---- a site placed on the join's path after the plan: OVERLAP naming it
-  const k0 = ir.reach.runs.find((q) => !ir.reach.contact.some((c) => c[1] === q[1] && c[0] <= q[0] && q[0] <= c[2]));
   const sx = k0[0], sz = k0[1];
   const site = await call('dev.cells.place', { kind: 'steward:addition', cells: [[sx, T.g + 1, sz, 'minecraft:oak_fence']], naturalOnly: false, owner: OWNER }, 600_000);
   const h2 = await hash(area);
@@ -643,6 +645,7 @@ steps.steward = async () => {
   const P = await d3Town(X, Z + 400, { dip: false, cabin: false, addition: false, partial: true });
   out.partial = { region: P.region, state: P.state };
   const pp = await planReq({ program: 'districts', params: ONE('east'), claim: [P.A[2] + 1, P.A[1] + 30, P.A[2] + 90, P.A[3] - 30], beside: P.region, check: false });
+  if (!pp.refused) await L.prepare(pp.planId);
   const rp = pp.refused ? null : await L.realise(pp.planId, { lots: {} });
   const sp = rp ? await L.waitRegion(rp, 3_600_000) : null;
   out.partial.district = sp?.view?.state ?? pp.refused;

@@ -275,6 +275,9 @@ test('items 3-4 (kit): a street end continuing its line, a side T into the lot-f
   for (const k of runKeys(e.ir.reach.runs)) assert.ok(!K.lot.has(k) && !K.keep.has(k) && !K.held.has(k), k);
   const rep = check(e, EAST, town.world, R.besideReach);
   assert.deepEqual(errors(rep).map((f) => f.rule), []);
+  // the join's ends reach each other by both movers over the reach (the route metric walks into the reach columns)
+  const jm = rep.metrics.route.edges.find((x) => x.id === 'join');
+  assert.ok(jm.player && jm.villager, JSON.stringify(jm));
   assert.equal(rep.metrics.M28.outside, e.ir.reach.cells);
   // the tiles hold the reach: the realised cells outside the claim are exactly reach columns
   const cells = realiseAll(e.ir, R.after);

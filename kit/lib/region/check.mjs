@@ -88,8 +88,10 @@ function finding(rule, part, stage, count, sample, message) {
  * climbable cell); steps of 1 up (with head room for the jump), falls of at most 3, ladders and vines up and down, doors
  * and gates open. Lot boxes are obstacles (their interiors are declared, not known).
  */
-export function walkGraph(vw, starts, { mover = 'player' } = {}) {
+export function walkGraph(vw, starts, { mover = 'player', reach = false } = {}) {
   const P = vw.pal, c = vw.claim;
+  // ((6c D3) `reach`: a reach plan's join walks on into the reach columns (the route metric's graph only))
+  const inArea = reach && vw.inWalk ? (x, z) => vw.inWalk(x, z) : (x, z) => vw.inClaim(x, z);
   const cache = new Map();
   // (6c V) the `villager` mover (CONTRACT V §6): the player graph without ladders, scaffolding or bubble columns, without falls
   // over 1, with only wooden doors passable (fence gates and trapdoors closed), and no swimming
@@ -107,7 +109,7 @@ export function walkGraph(vw, starts, { mover = 'player' } = {}) {
     return !V && P.water[f] && P.air[a]; // swimming on the surface (the player only)
   };
   const stands = (x, z) => {
-    const k = (x - c.minX) + (z - c.minZ) * vw.W;
+    const k = vw.inClaim(x, z) ? (x - c.minX) + (z - c.minZ) * vw.W : `${x},${z}`;
     let l = cache.get(k);
     if (l) return l;
     const [lo, hi] = vw.colRange(x, z);
@@ -122,14 +124,14 @@ export function walkGraph(vw, starts, { mover = 'player' } = {}) {
   const reached = [];
   const push = (x, y, z) => { if (seen.add(x, y, z)) { queue.push(x, y, z); reached.push(x, y, z); } };
   for (const [x, y, z] of starts) {
-    if (!vw.inClaim(x, z)) continue;
+    if (!inArea(x, z)) continue;
     for (const yy of stands(x, z)) if (Math.abs(yy - y) <= 2) push(x, yy, z);
   }
   for (let q = 0; q < queue.length; q += 3) {
     const x = queue[q], y = queue[q + 1], z = queue[q + 2];
     for (const [dx, dz] of DIRS4) {
       const nx = x + dx, nz = z + dz;
-      if (!vw.inClaim(nx, nz)) continue;
+      if (!inArea(nx, nz)) continue;
       for (const ny of stands(nx, nz)) {
         if (ny > y + 1 || ny < y - fallMax) continue;
         // a step up needs head room for the jump, unless it is onto a stairs block (walked up without jumping)
@@ -1007,7 +1009,7 @@ export function routeRules({ ir, vw, route, want, findings, metrics, partStage, 
   const reach = (start, mover) => {
     const k = `${mover}|${start.join(',')}`;
     let g = graphs.get(k);
-    if (!g) { g = walkGraph(vw, [start], { mover }); graphs.set(k, g); }
+    if (!g) { g = walkGraph(vw, [start], { mover, reach: !!ir.reach }); graphs.set(k, g); }
     return g;
   };
   const per = [];
