@@ -114,8 +114,8 @@ test('the nightly: megaB full weekly, on demand, first time, and when the sensit
   assert.equal(megaBVariant(BC, { date: tue, lastFull: last, changedSinceFull: ['kit/lib/forms/states.mjs', `${P}region/volume/VolumeSurvey.java`] }).id, '6a-megaB-fast');
   const n = fullBenches(BC, { nightly: true, variant: { id: '6a-megaB-fast', why: 'fast' } });
   assert.deepEqual(n.ids, ['6a-megaA', '6a-megaB-fast', '6a-heap', '6b-volume']);
-  // a manual release --full (not the nightly): every judged bench, megaB's full walk
-  assert.deepEqual(fullBenches(BC, { nightly: false }).ids, ['6a-megaA', '6a-megaB', '6a-heap', '6b-volume']);
+  // a release --full that is not the nightly (by hand or the auto rule): every judged bench but heap (nightly only), megaB's full walk
+  assert.deepEqual(fullBenches(BC, { nightly: false }).ids, ['6a-megaA', '6a-megaB', '6b-volume']);
 });
 
 test('the nightly records: the newest finished nightly that ran each bench; a yielded or unfinished nightly does not count', () => {

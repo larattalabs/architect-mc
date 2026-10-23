@@ -86,19 +86,21 @@ export function megaBVariant(bc, { date, onDemand = false, lastFull = null, chan
 
 /**
  * The benches a nightly (release --full --nightly) adds: every judged bench, with megaB's walk chosen by megaBVariant.
- * A manual release --full (not the nightly) runs every judged bench and megaB's full walk. -> { ids, why: { id: reason } }
+ * A release --full that is not the nightly (by hand, or the auto --full rule) runs every judged bench but the nightly-only ones
+ * (6a-heap), and megaB's full walk. -> { ids, why: { id: reason } }
  */
 export function fullBenches(bc, { nightly, variant }) {
   const ids = [];
   const why = {};
   for (const { bench, ids: xs } of releaseBenches(bc)) {
+    if (!nightly && xs.every((x) => bc.nightlyOnly.has(x))) continue;
     if (bench === 'megaB') {
       const id = nightly ? variant.id : bc.megaB.full;
       ids.push(id);
       why[id] = nightly ? `nightly bench: ${variant.why}` : 'release --full: every judged bench, megaB\'s full walk';
     } else {
       ids.push(xs[0]);
-      why[xs[0]] = nightly ? 'nightly bench: its timing is judged here, isolated' : 'release --full: every judged bench';
+      why[xs[0]] = nightly ? 'nightly bench: its timing is judged here, isolated' : 'release --full: every judged bench (not the nightly-only ones)';
     }
   }
   return { ids, why };

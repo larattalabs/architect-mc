@@ -216,8 +216,8 @@ release tier's 60 plus what a batch's slice run covered (0.41.0's integration sl
 **Split steps** (turbo, docs/GATES.md "Turbo"): each part `<id>/p<k>` has its own key (its own entry: the section env) over its
 parent's input set, and is CACHED or run on its own; a canary or a bench the bench rule runs takes all its parts.
 
-**`--full`** runs every candidate, every rotation option and every judged bench (megaB's full walk; the nightly's `--nightly` picks
-megaB's walk by its schedule). It is **the rule, automatically,** when the release range touches one of these:
+**`--full`** runs every candidate, every rotation option and every judged bench but the nightly-only 6a-heap (megaB's full walk; the
+nightly's `--nightly` picks megaB's walk by its schedule and runs heap). It is **the rule, automatically,** when the release range touches one of these:
 - mod/build.gradle, mod/settings.gradle, the gradle wrapper, devserver/ or apitest/ build files;
 - mod/gradle.properties beyond `mod_version` (the Minecraft version or a dependency);
 - a path whose impact rule is tagged `engine`.
@@ -545,7 +545,7 @@ For each judged bench, megaB's two walks counting as one bench:
 
 They also show when each scenario's timing was last judged. Under `--full` they list what the run adds:
 - the nightly: every judged bench and megaB's walk with its reason;
-- a manual `--full`: every judged bench and the full walk.
+- any other `--full` (by hand, or the auto rule): every judged bench but heap, and megaB's full walk.
 
 `--nightly-dir DIR` (or `GATE_NIGHTLY_DIR`, plumbing: never in a key) reads the nightly records from another root (the proofs below).
 

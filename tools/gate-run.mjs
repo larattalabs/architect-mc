@@ -1096,7 +1096,7 @@ function benchLines(b) {
     }
     for (const x of b.scenarios ?? []) lines.push(`  scenario ${x.id.padEnd(16)} a cache candidate here (timing recorded at release); ${x.why}`);
   } else {
-    lines.push(`benches (${b.mode === 'nightly' ? 'the nightly: timing judged, isolated; their PASSes recorded for the releases' : 'release --full: every judged bench, timing judged'}): ${b.ids.join(' ')}`);
+    lines.push(`benches (${b.mode === 'nightly' ? 'the nightly: timing judged, isolated; their PASSes recorded for the releases' : 'release --full: every judged bench but the nightly-only ones, timing judged'}): ${b.ids.join(' ')}`);
     if (b.megaB) lines.push(`  megaB: ${b.megaB.id} (${b.megaB.why})`);
   }
   return lines;
