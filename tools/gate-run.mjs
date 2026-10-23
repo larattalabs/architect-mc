@@ -610,7 +610,8 @@ if (tierInfo.cache.lookup) {
       push(id, `cache miss (key ${k.key.slice(0, 12)}): ${l.why}`);
       continue;
     }
-    if (nightly && twins.has(parentOf(id)) && String(l.hit.at) < String(nightly.startedAt)) {
+    // (an --assume-warm hit stands for a full nightly at that ref: it is never older than the last one)
+    if (nightly && twins.has(parentOf(id)) && l.hit.tier !== 'assumed' && String(l.hit.at) < String(nightly.startedAt)) {
       run.add(id);
       push(id, `a full twin whose last PASS (${l.hit.at}) is older than the last full nightly (${nightly.startedAt})`);
       continue;
