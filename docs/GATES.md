@@ -705,7 +705,18 @@ without recorded coverage.
 `kit/test/step-cache.test.mjs` adds one: a judged bench is recorded only from the nightly, judged and isolated, and
 `entryStillValid` holds until its key moves.
 
-**(d) 6a-resume in game, with megaB-fast and megaA:** PENDING (queued).
+**(d) 6a-resume in game, with megaB-fast and megaA** (`artifacts/gate-runs-benches/`, `change --only ...`, timing recorded):
+
+| run | head | step | result | relog / sidecar resume | wall |
+|---|---|---|---|---|---|
+| `20261023-021405-change` | 46085b32 | 6a-megaA | PASS, 15 ok: "realised at the 4 ms placement budget (budgetMs 4)", realise 51389 cells/s at 4 ms, own tick p99 10.3 / max 36.6 ms, group undo 218 s, E-normal 28 mismatches (cap 1018) | - | 9m38s |
+| the same | 46085b32 | 6a-megaB-fast | stopped by hand after 1h03m: the walk was done, but a lot waiting OCCUPIED (a mob) held the final wait. That is the mob stall fixed above | - | - |
+| `20261023-045005-change` | 8ffcd670 | 6a-megaB-fast | PASS, 5 ok | 2.0 s / 1.0 s | 39m42s |
+| the same | 8ffcd670 | 6a-resume | PASS, 5 ok, `resume-B.json` and the world `G6A Resume` | 1.0 s / 2.0 s | 16m48s |
+
+The two steps' check rows are the same once the prefixes (`megaB:` / `resume:`), numbers and item keys are masked:
+`rows-diff-resume-vs-megaB-fast.txt` (made by `rows-diff.sh`, beside it). Both rows include the empty-stage fix ("every stage with
+items": ground, ways, lots-1..3). The load average was 12.5 at the start of megaB-fast and 7-9 during 6a-resume.
 
 ## Gate speed (2026-10-17): scheduling, timeouts, one kit suite
 
