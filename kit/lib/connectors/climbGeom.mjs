@@ -259,7 +259,7 @@ export function walkCols(e) {
  * ({kind, rails, retaining, rest, top, lamps}), `land` (climbLand), `taken`. Writes under the caller's checkpoint; returns per edge
  * `{edge, cells, meta, bom}`. The fittings' records go to r.meta.climbs (the siteplan's climbs rows) with the part id `meta.part`.
  */
-export function emitClimbs(r, edges, { opts, stage, part = 'links_climbs', land, taken = () => false, recPart = null } = {}) {
+export function emitClimbs(r, edges, { opts, stage, part = 'links_climbs', land, taken = () => false, recPart = null, kept = null } = {}) {
   const res = [];
   const roles = climbRoles(r);
   // (the other edges passed together keep their footprints and landings: no fitting of one lands on another's walk)
@@ -271,7 +271,10 @@ export function emitClimbs(r, edges, { opts, stage, part = 'links_climbs', land,
     const o = { rails: 'drops', retaining: 'plain', rest: CLIMB.rest, top: 'gate', lamps: true, ...(opts?.[e.id] ?? {}), roles };
     const { cells, meta } = climbCells(e, o, land, { taken: taken0 });
     const lamps = o.lamps === false ? [] : climbLamps(e, land, { every: Math.max(4, Math.floor((12 * levelOf(roles.light)) / 15)), light: roles.light, post: roles.post, support: roles.support, taken: taken0, skip: new Set(cells.filter((c) => c[4] === 'rail' || c[4] === 'support').map((c) => `${c[0]},${c[2]}`)), rails: new Map(cells.filter((c) => c[4] === 'rail' && c.length === 5).map((c) => [`${c[0]},${c[2]}`, c[1]])) });
-    const all = [...cells, ...lamps];
+    // ((6c KC, §5) a fluid body's cells are its own: a rail, support, lamp or cap never lands in its hard or watch sets (skipped); the
+    // treads, as streets, are the route's: KC's rule there)
+    const inBody = (c) => { if (!kept) return false; for (let y = c[1]; y <= (c.length > 5 ? c[5] : c[1]); y++) if (kept(c[0], y, c[2])) return true; return false; };
+    const all = [...cells, ...lamps].filter((c) => !(['rail', 'support', 'lamp', 'post', 'cap', 'retain'].includes(c[4]) && inBody(c)));
     meta.lamps += lamps.filter((c) => c[4] === 'lamp').length;
     if (all.length) {
       const p = r.parts.find((q) => q.id === part) ?? r.part(part, { stage, set: 'path' });

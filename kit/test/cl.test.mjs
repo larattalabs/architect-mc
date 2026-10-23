@@ -246,3 +246,14 @@ test('§9 (item 3): Steward\'s recorded climbs on the asks claim: the stairs ref
   assert.deepEqual(moved.map((l) => l.split(' ')[0]), ['hidden_village/cave_ladders', 'old_new_town/quarter_stair', 'sky_monastery/long_stair']);
   assert.equal(lines(after).filter((l) => / malformed/.test(l)).length, 0);
 });
+
+test('§5 (item 9, KC): a stair beside a fountain keeps clear: the stair fits, the fountain fits, 0 cells in its hard or watch sets (M25:clear 0)', async () => {
+  const { checkPlanVolumes } = await import('./plan-helpers.mjs');
+  const f = read('cl', /^k01_/)[0];
+  const s = flatSurvey(f.terrain);
+  const r = await checkPlanVolumes(f.plan, { volume: f.volume, survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...f.anchors } });
+  assert.deepEqual(r.check.parts.map((a) => [a.part, a.class]).sort(), [['foot_stair', 'fits'], ['fount', 'fits']], JSON.stringify(r.check.parts.map((a) => [a.part, a.class, a.reasons])));
+  const rep = checkRegion({ ir: r.res.ir, survey: s.bytes, blobs: (sha) => r.res.blobs.get(sha) ?? null, volumes: r.volumes.map((v) => v.decoded ?? v), meta: r.res.meta });
+  assert.deepEqual(rep.findings.filter((x) => x.rule === 'M25:clear').map((x) => x.message), []);
+  assert.equal(rep.metrics.climbs.per[0].bad ?? 0, 0);
+});

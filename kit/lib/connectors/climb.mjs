@@ -21,6 +21,7 @@ import { CLIMB_KINDS, UNSAFE_EXT_7A } from './kinds7a.mjs';
 import { CLIMB, climbCells, climbLand, emitClimbs, walkCols } from './climbGeom.mjs';
 import { PROFILES } from '../region/passes/moves/profiles.mjs';
 import { shapeOf } from './style.mjs';
+import { keptBy } from '../fluids/keep.mjs';
 import { bomOf } from './bom.mjs';
 
 const isInt = Number.isInteger;
@@ -259,7 +260,7 @@ export function emit(K) {
     try {
       const idx = K.order.indexOf(p);
       const land = landOf(K);
-      const res = emitClimbs(K.r, [x.meta], { opts: { [x.meta.id]: { kind: p.kind, rails: o.rails, retaining: o.retaining, rest: o.rest, top: o.top, lamps: o.lamps, ...(Object.keys(o.unsafe).length ? { unsafe: o.unsafe } : {}) } }, stage, part: `links_c${idx}`, land, taken: takenOf(K, x.meta.id), recPart: p.id });
+      const res = emitClimbs(K.r, [x.meta], { opts: { [x.meta.id]: { kind: p.kind, rails: o.rails, retaining: o.retaining, rest: o.rest, top: o.top, lamps: o.lamps, ...(Object.keys(o.unsafe).length ? { unsafe: o.unsafe } : {}) } }, stage, part: `links_c${idx}`, land, taken: takenOf(K, x.meta.id), recPart: p.id, kept: (cx, cy, cz) => keptBy(K.keep, cx, cy, cz) !== null });
       K.mark(p.id, K.addedSince(cp));
       const rec = res[0];
       const ge = K.r.graph.edges.find((e) => e.id === `route_${x.meta.id}`);
