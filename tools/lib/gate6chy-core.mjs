@@ -5,7 +5,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import * as P3 from './p3-tier.mjs';
 
@@ -29,52 +30,56 @@ const hasCourse = (plan) => (plan.connectors ?? []).some((c) => c && c.kind === 
  * and plans the same IR but its kitVersion, H's included; the exceptions by name. Main's kit in a detached worktree beside this one
  * (../architect-mc-HYcore-main). Fixtures with a frozen volume of their own (`volume`) run the two-plan harness on both sides.
  */
-export async function unchanged(root) {
-  const mainDir = path.resolve(root, '..', 'architect-mc-HYcore-main');
-  execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']);
-  const mainHead = execFileSync('git', ['-C', root, 'rev-parse', 'origin/main']).toString().trim();
-  if (!fs.existsSync(path.join(mainDir, '.git'))) execFileSync('git', ['-C', root, 'worktree', 'add', '-q', '--detach', mainDir, mainHead]);
-  else execFileSync('git', ['-C', mainDir, 'checkout', '-q', '--detach', mainHead]);
-  const H = (dir) => import(pathToFileURL(path.join(dir, 'kit', 'test', 'plan-helpers.mjs')).href);
-  const [hNew, hOld] = [await H(root), await H(mainDir)];
+export async function unchanged(root, { baseDir = null, only = null } = {}) {
+  // (baseDir, only: a test's own base tree and fixture filter, kit/test/gate-corpus-plan.test.mjs; a gate run: origin/main's worktree, every fixture)
+  const mainDir = baseDir ?? path.resolve(root, '..', 'architect-mc-HYcore-main');
+  let mainHead = 'given';
+  if (!baseDir) {
+    execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']);
+    mainHead = execFileSync('git', ['-C', root, 'rev-parse', 'origin/main']).toString().trim();
+    if (!fs.existsSync(path.join(mainDir, '.git'))) execFileSync('git', ['-C', root, 'worktree', 'add', '-q', '--detach', mainDir, mainHead]);
+    else execFileSync('git', ['-C', mainDir, 'checkout', '-q', '--detach', mainHead]);
+  }
+  // ((speed audit A) the corpus plan store and pool (corpus-plan.mjs) instead of plan-cache.mjs's planSide: the same call per side
+  // (CP.hyRun), planned on every core first; GATE_PLAN_CACHE=0: the plain helpers, planned one after another as before)
+  const CP = await import('./corpus-plan.mjs');
+  const { hNew, hOld } = await CP.corpusHelpers(root, mainDir);
   const out = { mainHead, fixtures: {} };
-  let same = 0, skipped = 0, cached = 0;
-  const PC = await import('./plan-cache.mjs');
-  const [treesNew, treesOld] = [PC.treesOf(root), PC.treesOf(mainDir)];
+  let same = 0, skipped = 0;
   const base = path.join(root, 'kit', 'test', 'fixtures', 'plan');
+  const todo = [];
   for (const dir of fs.readdirSync(base).filter((d) => fs.statSync(path.join(base, d)).isDirectory()).sort()) {
     for (const f of fs.readdirSync(path.join(base, dir)).filter((x) => x.endsWith('.json')).sort()) {
       const name = `${dir}/${f}`;
       const fx = JSON.parse(fs.readFileSync(path.join(base, dir, f), 'utf8'));
       const plan = fx.plan ?? fx.answer?.plan;
       if (!plan) continue;
+      if (only && !only.test(name)) continue;
       if (hasCourse(plan) && !UNCHANGED_EXCEPTIONS.includes(name)) { skipped++; continue; }
       if (!fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', dir, f))) { skipped++; continue; }
       const old = JSON.parse(fs.readFileSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', dir, f), 'utf8'));
-      const oldPlan = old.plan ?? old.answer?.plan;
-      const on = fx.on ?? (dir === 'asks' ? 'asks' : undefined);
-      const sv = (h) => (fx.terrain ? h.flatSurvey(fx.terrain) : on === 'asks' ? h.asksSurvey() : on === 'flat' ? h.flatSurvey() : on ? h.goldenSurvey(on) : h.flatSurvey());
-      const runOn = async (h, p) => {
-        const s = sv(h);
-        const o = { survey: s.bytes, claim: s.claim, anchors: { ...h.stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}) };
-        return fx.volume !== undefined && h.checkPlanVolumes ? h.checkPlanVolumes(p, { ...o, volume: fx.volume }) : h.checkPlanLocal(p, o);
-      };
-      let a, b;
-      // (gate waits, 2026-10-20) each side keyed by its kit and scenarios trees, the plan and this fixture's options (tools/lib/plan-cache.mjs)
-      const opts = { ...fx, plan: undefined, answer: undefined, on };
-      try {
-        a = await PC.planSide(root, treesNew, ['hy', name, plan, opts], () => runOn(hNew, plan));
-        b = await PC.planSide(root, treesOld, ['hy', name, oldPlan, opts], () => runOn(hOld, oldPlan));
-      } catch (e) { out.fixtures[name] = { error: String(e.message).slice(0, 200) }; continue; }
-      cached += a.cached + b.cached;
-      const eq = { answers: a.answers === b.answers, ir: a.ir === b.ir, overall: a.overall === b.overall };
-      out.fixtures[name] = eq;
-      if (eq.answers && eq.ir && eq.overall) same++;
+      todo.push({ name, fx, plan, oldPlan: old.plan ?? old.answer?.plan });
     }
   }
+  const mod = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), 'corpus-plan.mjs')).href;
+  await CP.prewarm(root, todo.flatMap((t) => [
+    { id: `hy:head:${t.name}`, module: mod, export: 'jobHyFixture', args: [root, root, t.name, false, [...CP.HEAD_DERIVE]] },
+    { id: `hy:base:${t.name}`, module: mod, export: 'jobHyFixture', args: [mainDir, root, t.name, true, [...CP.BASE_DERIVE]] },
+  ]));
+  // (a result's two hashes, as plan-cache.mjs's planSide made them; kitVersion and FL's street ext normalised)
+  const sideOf = (r) => ({ answers: createHash('sha256').update(JSON.stringify(r.check?.parts ?? r.check?.malformed ?? null)).digest('hex'), ir: createHash('sha256').update(normIrJson(r.res?.irJson ?? '')).digest('hex'), overall: r.check?.overall ?? null });
+  for (const t of todo) {
+    let a, b;
+    try {
+      a = sideOf(await CP.hyRun(hNew, t.fx, t.plan, t.name));
+      b = sideOf(await CP.hyRun(hOld, t.fx, t.oldPlan, t.name));
+    } catch (e) { out.fixtures[t.name] = { error: String(e.message).slice(0, 200) }; continue; }
+    const eq = { answers: a.answers === b.answers, ir: a.ir === b.ir, overall: a.overall === b.overall };
+    out.fixtures[t.name] = eq;
+    if (eq.answers && eq.ir && eq.overall) same++;
+  }
   out.same = same; out.n = Object.keys(out.fixtures).length; out.skipped = skipped;
-  out.cache = { sides: cached, of: 2 * out.n, trees: { new: treesNew, main: treesOld } };
-  PC.savePlanCache();
+  out.cache = { store: CP.statsLine() };
   const differing = Object.entries(out.fixtures).filter(([, v]) => !(v.answers && v.ir && v.overall));
   out.excepted = differing.map(([k]) => k).filter((k) => UNCHANGED_EXCEPTIONS.includes(k));
   out.differ = differing.filter(([k]) => !UNCHANGED_EXCEPTIONS.includes(k)).map(([k, v]) => [k, v]);

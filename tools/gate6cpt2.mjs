@@ -52,6 +52,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { srcGradle } from './lib/src-gradle.mjs';
+import { kitReuse } from './lib/kit-reuse.mjs'; // (speed audit A) the kit files unit-kit already ran in this run
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= here;
@@ -96,6 +97,8 @@ function spendZero() {
 // ------------------------------------------------------------------ offline
 
 function nodeTest(files) {
+  const re = kitReuse(root, files); // (speed audit A) unit-kit ran this file in this run
+  if (re) return re;
   const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout: 3_600_000 });
   const t = `${r.stdout}${r.stderr}`;
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);

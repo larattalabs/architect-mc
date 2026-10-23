@@ -58,19 +58,26 @@ function kitTree(root) {
  * drivers' nodeTest: { code: 0, pass, fail: 0, failing: [], names: [], notes: [], comments: [], reused }.
  */
 export function kitReuse(root, args) {
+  // (speed audit A) every fallback says why, so a driver that runs the files itself is never silent about it
+  const no = (why) => { console.log(`  kit: not reused (${why}): running ${args.filter((a) => !a.startsWith('--')).map((f) => path.basename(f)).join(' ') || 'the files'} here`); return null; };
   const file = process.env.GATE_KIT_RESULTS;
   const tree = process.env.GATE_KIT_TREE;
-  if (!file || !tree) return null;
+  if (!file || !tree) return no('no unit-kit in this run');
   const flags = args.filter((a) => a.startsWith('--'));
   const files = args.filter((a) => !a.startsWith('--'));
-  if (!files.length || flags.some((f) => !f.startsWith('--test-skip-pattern='))) return null;
-  if (kitTree(root) !== tree) return null;
+  if (!files.length) return no('no files named');
+  if (flags.some((f) => !f.startsWith('--test-skip-pattern='))) return no(`a flag the report can't stand for: ${flags.find((f) => !f.startsWith('--test-skip-pattern='))}`);
+  const kt = kitTree(root);
+  if (kt === 'dirty') return no('this checkout\'s kit/ is dirty');
+  if (kt !== tree) return no(kt === null ? 'this checkout\'s kit tree can\'t be read' : `kit tree ${kt.slice(0, 12)} is not the one unit-kit ran, ${tree.slice(0, 12)}`);
   const rep = report(file);
-  if (!rep) return null;
+  if (!rep) return no('unit-kit\'s report is missing, incomplete or has a test it can\'t place');
   let pass = 0;
   for (const f of files) {
     const e = rep[f];
-    if (!e || e.tests === 0 || e.failures > 0) return null;
+    if (!e) return no(`${f} is not in unit-kit's report`);
+    if (e.tests === 0) return no(`${f} has no tests in the report`);
+    if (e.failures > 0) return no(`${f} failed in unit-kit`);
     pass += e.tests - e.skipped;
   }
   const reused = `reused from this run's unit-kit (${path.basename(file)}, kit tree ${tree.slice(0, 12)}): ${files.length} file(s), ${pass} pass, 0 fail${flags.length ? `; the run had every test, ${flags.join(' ')} would skip some` : ''}`;

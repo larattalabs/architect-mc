@@ -3,7 +3,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import * as P3 from './p3-tier.mjs';
 
@@ -30,19 +31,24 @@ export const UNCHANGED_SKIPPED = Object.freeze(['refused/k1a_r01_wall_water.json
  */
 export const unchangedRuns = new Map();
 
-export async function unchanged(root) {
-  const mainDir = path.resolve(root, '..', 'architect-mc-H-main');
-  execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']);
-  const mainHead = execFileSync('git', ['-C', root, 'rev-parse', 'origin/main']).toString().trim();
-  if (!fs.existsSync(path.join(mainDir, '.git'))) execFileSync('git', ['-C', root, 'worktree', 'add', '-q', '--detach', mainDir, mainHead]);
-  else execFileSync('git', ['-C', mainDir, 'checkout', '-q', '--detach', mainHead]);
-  const H = (dir) => import(pathToFileURL(path.join(dir, 'kit', 'test', 'plan-helpers.mjs')).href);
-  const [hNew, hOld] = [await H(root), await H(mainDir)];
+export async function unchanged(root, { baseDir = null } = {}) {
+  // (baseDir: a test's own base tree, kit/test/gate-corpus-plan.test.mjs)
+  const mainDir = baseDir ?? path.resolve(root, '..', 'architect-mc-H-main');
+  let mainHead = 'given';
+  if (!baseDir) {
+    execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']);
+    mainHead = execFileSync('git', ['-C', root, 'rev-parse', 'origin/main']).toString().trim();
+    if (!fs.existsSync(path.join(mainDir, '.git'))) execFileSync('git', ['-C', root, 'worktree', 'add', '-q', '--detach', mainDir, mainHead]);
+    else execFileSync('git', ['-C', mainDir, 'checkout', '-q', '--detach', mainHead]);
+  }
+  // ((speed audit A) the corpus plan store and pool (corpus-plan.mjs) instead of plan-cache.mjs's planSide: the same call per side
+  // (CP.hyRun: this checkout's fixture on both sides), planned on every core first; GATE_PLAN_CACHE=0: the plain helpers, serially)
+  const CP = await import('./corpus-plan.mjs');
+  const { hNew, hOld } = await CP.corpusHelpers(root, mainDir);
   const out = { mainHead, fixtures: {} };
-  let same = 0, skipped = 0, cached = 0;
-  const PC = await import('./plan-cache.mjs');
-  const [treesNew, treesOld] = [PC.treesOf(root), PC.treesOf(mainDir)];
+  let same = 0, skipped = 0;
   const H_KINDS = ['pond', 'fountain', 'waterfall', 'quay', 'channel'];
+  const todo = [];
   for (const dir of ['valid', 'k1a', 'rope', 'refused', 't3a', 'tunnel']) {
     const fixDir = path.join(root, 'kit', 'test', 'fixtures', 'plan', dir);
     if (!fs.existsSync(fixDir)) continue;
@@ -54,24 +60,28 @@ export async function unchanged(root) {
       // (an H part, a fixture H added, or one H re-answers by name: §14 item 11's list)
       if (parts.some((c) => H_KINDS.includes(c.kind)) || /"farmPond":true/.test(JSON.stringify(fx.plan)) || !fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', dir, f))) { skipped++; continue; }
       if (fx.volume) continue; // (a frozen volume built by its own test)
-      const sv = (h) => (fx.terrain ? h.flatSurvey(fx.terrain) : fx.on === 'asks' ? h.asksSurvey() : fx.on === 'flat' ? h.flatSurvey() : fx.on ? h.goldenSurvey(fx.on) : h.flatSurvey());
-      const runOn = async (h) => { const s = sv(h); return h.checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...h.stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}) }); };
-      let a, b;
-      // (gate waits, 2026-10-20) each side keyed by its kit and scenarios trees, the plan and this fixture's options (tools/lib/plan-cache.mjs)
-      const opts = { ...fx, plan: undefined };
-      try {
-        a = await PC.planSide(root, treesNew, ['h', `${dir}/${f}`, fx.plan, opts], () => runOn(hNew));
-        b = await PC.planSide(root, treesOld, ['h', `${dir}/${f}`, fx.plan, opts], () => runOn(hOld)); // (both sides check this checkout's fixture)
-      } catch (e) { out.fixtures[`${dir}/${f}`] = { error: String(e.message).slice(0, 200) }; continue; }
-      cached += a.cached + b.cached;
-      const eq = { answers: a.answers === b.answers, ir: a.ir === b.ir, overall: a.overall === b.overall };
-      out.fixtures[`${dir}/${f}`] = eq;
-      if (eq.answers && eq.ir && eq.overall) same++;
+      todo.push({ name: `${dir}/${f}`, fx });
     }
   }
+  const mod = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), 'corpus-plan.mjs')).href;
+  await CP.prewarm(root, todo.flatMap((t) => [
+    { id: `hy:head:${t.name}`, module: mod, export: 'jobHyFixture', args: [root, root, t.name, false, [...CP.HEAD_DERIVE]] },
+    { id: `hy:hbase:${t.name}`, module: mod, export: 'jobHyFixture', args: [mainDir, root, t.name, false, [...CP.BASE_DERIVE]] },
+  ]));
+  // (a result's three comparands, as plan-cache.mjs's planSide made them; kitVersion and FL's street ext normalised)
+  const sideOf = (r) => ({ answers: createHash('sha256').update(JSON.stringify(r.check?.parts ?? r.check?.malformed ?? null)).digest('hex'), ir: createHash('sha256').update(normIrJson(r.res?.irJson ?? '')).digest('hex'), overall: r.check?.overall ?? null });
+  for (const t of todo) {
+    let a, b;
+    try {
+      a = sideOf(await CP.hyRun(hNew, t.fx, t.fx.plan, t.name));
+      b = sideOf(await CP.hyRun(hOld, t.fx, t.fx.plan, t.name)); // (both sides check this checkout's fixture)
+    } catch (e) { out.fixtures[t.name] = { error: String(e.message).slice(0, 200) }; continue; }
+    const eq = { answers: a.answers === b.answers, ir: a.ir === b.ir, overall: a.overall === b.overall };
+    out.fixtures[t.name] = eq;
+    if (eq.answers && eq.ir && eq.overall) same++;
+  }
   out.same = same; out.n = Object.keys(out.fixtures).length; out.skipped = skipped;
-  out.cache = { sides: cached, of: 2 * out.n, trees: { new: treesNew, main: treesOld } };
-  PC.savePlanCache();
+  out.cache = { store: CP.statsLine() };
   unchangedRuns.set(`${root}|${mainHead}`, { fixtures: { ...out.fixtures }, same, skipped });
   const differing = Object.entries(out.fixtures).filter(([, v]) => !(v.answers && v.ir && v.overall));
   out.excepted = differing.map(([k]) => k).filter((k) => UNCHANGED_EXCEPTIONS.includes(k));

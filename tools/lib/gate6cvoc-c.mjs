@@ -9,10 +9,11 @@ import fs from 'node:fs';
 import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson, flAsksFilter } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import { syncBaseTree } from './base-tree.mjs';
+import { kitReuse } from './kit-reuse.mjs'; // (speed audit A) the kit files unit-kit already ran in this run
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const j = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
@@ -26,6 +27,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const t0 = new Set(['extension/e16_every_reserved_b.json']); // ((6c FL) FL's movers appended, none listed twice)
 export const UNCHANGED_EXCEPTIONS = Object.freeze(['asks/desert_jungle_wall.json', 'asks/hidden_village.json', 'asks/mage_exiles.json', 'asks/old_new_town.json',
   'asks/one_block.json', 'asks/rival_families.json', 'asks/row_houses.json', 'extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json', ...FL_MOVED.filter((n) => !t0.has(n))]);
+
+// (speed audit A) unit-kit's JUnit report when it ran these exact files in this run (docs/GATES.md "Kit suite once per run"), else run them
+const kitOnce = (root, files) => kitReuse(root, files) ?? nodeTest(root, files);
 
 function nodeTest(root, files, timeout = 3_600_000) {
   const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
@@ -91,37 +95,40 @@ export async function asksTable(kitDir) {
  * the base but its kitVersion; the exceptions by name. The base's kit in `mainDir` (baseTree). A fixture with a frozen volume runs the
  * two-plan harness on both sides; a palette fixture new in VOC-c has no counterpart (skipped, counted).
  */
-export async function unchanged(root, mainDir) {
+export async function unchanged(root, mainDir, { only = null } = {}) {
   // ((gate speed 3) both sides' plans from the run's shared store (corpus-plan.mjs); GATE_PLAN_CACHE=0: as before)
+  // ((speed audit A) planned on the pool first, the identical call (CP.hyRun, the loop's own); the entries are the ones hy-unit's item 12 stores)
   const CP = await import('./corpus-plan.mjs');
-  const [hNew, hOld] = [await CP.helpers(root), await CP.helpers(mainDir)];
+  const { hNew, hOld } = await CP.corpusHelpers(root, mainDir);
   const out = { fixtures: {} };
   let same = 0, skipped = 0;
   const base = path.join(root, 'kit', 'test', 'fixtures', 'plan');
+  const todo = [];
   for (const dir of fs.readdirSync(base).filter((d) => fs.statSync(path.join(base, d)).isDirectory()).sort()) {
     for (const f of fs.readdirSync(path.join(base, dir)).filter((x) => x.endsWith('.json')).sort()) {
       const name = `${dir}/${f}`;
       const fx = JSON.parse(fs.readFileSync(path.join(base, dir, f), 'utf8'));
       const plan = fx.plan ?? fx.answer?.plan;
       if (!plan) continue;
+      if (only && !only.test(name)) continue;
       if (!fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', dir, f))) { skipped++; continue; }
       const old = JSON.parse(fs.readFileSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', dir, f), 'utf8'));
-      const oldPlan = old.plan ?? old.answer?.plan;
-      const on = fx.on ?? (dir === 'asks' ? 'asks' : undefined);
-      const sv = (h) => (fx.terrain ? h.flatSurvey(fx.terrain) : on === 'asks' ? h.asksSurvey() : on === 'flat' ? h.flatSurvey() : on ? h.goldenSurvey(on) : h.flatSurvey());
-      const runOn = async (h, p) => {
-        const s = sv(h);
-        const o = { survey: s.bytes, claim: s.claim, anchors: { ...h.stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}) };
-        return fx.volume !== undefined && h.checkPlanVolumes ? h.checkPlanVolumes(p, { ...o, volume: fx.volume }) : h.checkPlanLocal(p, o);
-      };
-      let a, b;
-      try { a = await runOn(hNew, plan); b = await runOn(hOld, oldPlan); } catch (e) { out.fixtures[name] = { error: String(e.message).slice(0, 200) }; continue; }
-      const norm = (r) => normIrJson(r.res?.irJson);
-      const answers = (r) => JSON.stringify(r.check?.parts ?? r.check?.malformed ?? null);
-      const eq = { answers: answers(a) === answers(b), ir: sha256(norm(a)) === sha256(norm(b)), overall: a.check?.overall === b.check?.overall };
-      out.fixtures[name] = eq;
-      if (eq.answers && eq.ir && eq.overall) same++;
+      todo.push({ name, fx, plan, oldPlan: old.plan ?? old.answer?.plan });
     }
+  }
+  const mod = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), 'corpus-plan.mjs')).href;
+  await CP.prewarm(root, todo.flatMap((t) => [
+    { id: `hy:head:${t.name}`, module: mod, export: 'jobHyFixture', args: [root, root, t.name, false, [...CP.HEAD_DERIVE]] },
+    { id: `hy:base:${t.name}`, module: mod, export: 'jobHyFixture', args: [mainDir, root, t.name, true, [...CP.BASE_DERIVE]] },
+  ]));
+  for (const t of todo) {
+    let a, b;
+    try { a = await CP.hyRun(hNew, t.fx, t.plan, t.name); b = await CP.hyRun(hOld, t.fx, t.oldPlan, t.name); } catch (e) { out.fixtures[t.name] = { error: String(e.message).slice(0, 200) }; continue; }
+    const norm = (r) => normIrJson(r.res?.irJson);
+    const answers = (r) => JSON.stringify(r.check?.parts ?? r.check?.malformed ?? null);
+    const eq = { answers: answers(a) === answers(b), ir: sha256(norm(a)) === sha256(norm(b)), overall: a.check?.overall === b.check?.overall };
+    out.fixtures[t.name] = eq;
+    if (eq.answers && eq.ir && eq.overall) same++;
   }
   out.same = same; out.n = Object.keys(out.fixtures).length; out.skipped = skipped;
   const differing = Object.entries(out.fixtures).filter(([, v]) => !(v.answers && v.ir && v.overall));
@@ -137,9 +144,9 @@ const unit = [
   {
     name: 'items 1, 2, 7, 8 (kit): the def and its lenient read, groups, the measure, the no-X re-plan, every refusal with its re-checked wouldFit, the artifact rows, catalogue 9, vocab/1, determinism; the suites it touches',
     async run({ root, check }) {
-      const r = nodeTest(root, ['kit/test/vocc.test.mjs']);
+      const r = kitOnce(root, ['kit/test/vocc.test.mjs']);
       check(r.code === 0 && r.fail === 0 && r.pass >= 10, `items 1, 2, 7, 8 (kit/test/vocc.test.mjs): ${r.pass} pass, ${r.fail} fail`, r.failing);
-      const s = nodeTest(root, ['kit/test/plan-p0.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/hy-core.test.mjs', 'kit/test/h-foundation.test.mjs', 'kit/test/t3-foundation.test.mjs', 'kit/test/vocab.test.mjs', 'kit/test/vocab-rules.test.mjs']);
+      const s = kitOnce(root, ['kit/test/plan-p0.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/hy-core.test.mjs', 'kit/test/h-foundation.test.mjs', 'kit/test/t3-foundation.test.mjs', 'kit/test/vocab.test.mjs', 'kit/test/vocab-rules.test.mjs']);
       check(s.code === 0 && s.fail === 0 && s.pass >= 30, `the suites VOC-c touches (P0's catalogue and fixtures, HY's and H's catalogue tests re-pointed to catalogue-hy.json, the VOC tests): ${s.pass} pass, ${s.fail} fail`, s.failing);
       return { vocc: r, suites: s };
     },

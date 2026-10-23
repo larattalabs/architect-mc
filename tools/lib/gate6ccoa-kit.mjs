@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { normSiblingIr } from './batch-0410.mjs';
 import { syncBaseTree } from './base-tree.mjs';
+import { kitReuse } from './kit-reuse.mjs'; // (speed audit A) the kit files unit-kit already ran in this run
 import * as CP from './corpus-plan.mjs'; // (speed audit A) the plans from the run's shared store, prewarmed on every core
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
@@ -95,7 +96,7 @@ async function asksBefore(root, baseDir) {
 /** coa-unit's kit half: items 4, 5, 7, 9 (kit tests), 6 (the asks tables), 10 (byte identity), the catalogue diff. */
 export async function unit(root, { check, log, OUT, nodeTest }) {
   const out = {};
-  out.kit = nodeTest(['kit/test/coa.test.mjs', 'kit/test/vocc.test.mjs']);
+  out.kit = kitReuse(root, ['kit/test/coa.test.mjs', 'kit/test/vocc.test.mjs']) ?? nodeTest(['kit/test/coa.test.mjs', 'kit/test/vocc.test.mjs']);
   check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 10, `items 4, 5, 7, 9 (kit, coa.test.mjs and vocc.test.mjs): blocked routes to an unplaced lot or district (b01, b02), rule.palette over and exempt ways/forms and the lenient string scope (p01-p03), the catalogue bump alone, the grove pond near the stone placed with 0 LEAK and the only lot-clear site chosen (n01, n02), a district route kept out of a protected rect (d01): ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   // item 6: the asks before (the base kit, these asks) and after (HEAD), both committed
   const { asksGap } = await import('./gate6chy-b.mjs');

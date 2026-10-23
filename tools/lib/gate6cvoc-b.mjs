@@ -20,7 +20,8 @@ import fs from 'node:fs';
 import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { kitReuse } from './kit-reuse.mjs'; // (speed audit A) the kit files unit-kit already ran in this run
 import * as P3 from './p3-tier.mjs';
 
 const OWNER = 'test:vocb';
@@ -70,8 +71,12 @@ function fixture(root, ...p) {
 /** Item 13 (recorded) and the census: every committed valid/ plan and the 59 asks checked; which answers gained a cost member, which
  * reports an M20 (b), M26 or M27 finding, and the compile pass's time per plan. */
 async function census(ctx) {
-  const H = await ctx.imp('test/plan-helpers.mjs');
-  const { checkRegion } = await ctx.imp('lib/region/check.mjs');
+  // ((speed audit A) the census' plan calls from the corpus store, planned on the pool first: the whole-result extras (the vocab compile
+  // timing, the M20/M26/M27 findings over the IR, blobs and volumes) are the 'vocCensus' derive (corpus-derive.mjs), computed where the plan
+  // runs and stored beside it, keyed by this head's kit tree. GATE_PLAN_CACHE=0: the plain helpers and the serial loop, as before)
+  const CP = await import('./corpus-plan.mjs');
+  const { DERIVE } = await import('./corpus-derive.mjs');
+  const H = await CP.censusHelpers(ctx.root);
   const out = { plans: {}, costRarity: [], creativeOnly: [], natural: [], m26: [], m27: {}, compileMs: {} };
   const runs = [];
   for (const d of ['valid', 'k1a', 'rope', 't3a', 't3b', 'tunnel', 'h', 'extension']) {
@@ -80,23 +85,24 @@ async function census(ctx) {
     for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json')).sort()) {
       const fx = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
       if (!fx.plan || /^v5[01]_voc/.test(f)) continue;
-      runs.push({ id: `${d}/${f}`, fx, plan: fx.plan });
+      runs.push({ id: `${d}/${f}`, fx, plan: fx.plan, d, f });
     }
   }
   const asksDir = path.join(ctx.root, 'kit', 'test', 'fixtures', 'plan', 'asks');
-  for (const f of fs.readdirSync(asksDir).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) runs.push({ id: `asks/${f}`, fx: { on: 'asks' }, plan: JSON.parse(fs.readFileSync(firstAsk(asksDir, f), 'utf8')).answer.plan }); // ((6c close-out A) the first recordings
+  for (const f of fs.readdirSync(asksDir).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) runs.push({ id: `asks/${f}`, fx: { on: 'asks' }, plan: JSON.parse(fs.readFileSync(firstAsk(asksDir, f), 'utf8')).answer.plan, d: 'asks', f }); // ((6c close-out A) the first recordings
+  const mod = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), 'corpus-plan.mjs')).href;
+  await CP.prewarm(ctx.root, runs.map((r) => ({ id: `voccensus:${r.id}`, module: mod, export: 'jobVocCensus', args: [ctx.root, r.d, r.f] })));
   for (const r of runs) {
-    const sv = r.fx.terrain ? H.flatSurvey(r.fx.terrain) : r.fx.on === 'asks' ? H.asksSurvey() : r.fx.on === 'flat' ? H.flatSurvey() : r.fx.on ? H.goldenSurvey(r.fx.on) : H.flatSurvey();
     try {
-      const c = await H.checkPlanVolumes(r.plan, { survey: sv.bytes, claim: sv.claim, anchors: { ...H.stewardAnchors(sv.claim), ...(r.fx.anchors ?? {}) }, protected: r.fx.protected ?? [], builds: r.fx.builds ?? [], volume: r.fx.volume ?? {} });
-      const v = c.res.meta.planCheck?.vocab;
-      out.compileMs[r.id] = v ? (v.first?.ms ?? 0) + v.ms : null;
+      const { c, opts } = await CP.vocCensusCall(H, r.fx, r.plan);
+      const dv = c.derived?.vocCensus ?? await DERIVE.vocCensus(c, opts, { headRoot: ctx.root });
+      if (dv.err) throw new Error(dv.err);
+      out.compileMs[r.id] = dv.compileMs;
       for (const a of c.check.parts) {
         if (a.cost?.rarity) out.costRarity.push(`${r.id}:${a.part}`);
         if (a.cost?.creativeOnly) out.creativeOnly.push(`${r.id}:${a.part}`);
       }
-      const rep = checkRegion({ ir: c.res.ir, survey: sv.bytes, blobs: (s) => c.res.blobs.get(s) ?? null, meta: c.res.meta, volumes: (c.volumes ?? []).map((x) => x.decoded), prefix: false, rules: ['M20', 'M26', 'M27'] });
-      for (const f of rep.findings) {
+      for (const f of dv.findings) {
         if (f.rule === 'M20:natural') out.natural.push(`${r.id}:${f.part}`);
         else if (f.rule === 'M26') out.m26.push(`${r.id}: ${f.message}`);
         else if (f.rule.startsWith('M27')) (out.m27[f.rule] ??= []).push(`${r.id}:${f.part ?? '-'} ${f.count}`);
@@ -126,7 +132,7 @@ const unit = [
     key: 'rules',
     name: 'items 6, 7 (kit): the building rules, the region rules, the refusals, the bibles',
     async run({ root, check }) {
-      const r = nodeTest(root, ['kit/test/vocab-rules.test.mjs']);
+      const r = kitReuse(root, ['kit/test/vocab-rules.test.mjs']) ?? nodeTest(root, ['kit/test/vocab-rules.test.mjs']);
       check(r.code === 0 && r.fail === 0 && r.pass >= 9, `items 6, 7 (kit): each broken variant caught by its rule with its cells; _unsafe.natLavaFence a warning; r01-r03 refused VOCAB, VOCAB, FIRE with evidence and nothing written; M26 on v50 0 findings and on its over-budget twin 1; the opted-in bibles' designs warn, their twins don't (metrics.rarity.over); v50's cost.rarity equals M26 (the batch test); format-2 bibles with and without rarity validate, a bad rarity names its path, built-in bibles 0 errors: ${r.pass} pass, ${r.fail} fail`, r.failing);
       return r;
     },

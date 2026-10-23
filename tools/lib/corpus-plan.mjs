@@ -200,7 +200,8 @@ export async function helpers(dir, { derive = [], headRoot = null } = {}) {
       await sleep(250);
     }
   };
-  const w = { ...h, checkPlanVolumes: wrap('checkPlanVolumes'), checkPlanLocal: wrap('checkPlanLocal'), cachedHelpers: true };
+  // (a tree whose plan-helpers has no checkPlanVolumes keeps having none: hy-unit's "h.checkPlanVolumes ?" test)
+  const w = { ...h, ...(h.checkPlanVolumes ? { checkPlanVolumes: wrap('checkPlanVolumes') } : {}), checkPlanLocal: wrap('checkPlanLocal'), cachedHelpers: true };
   memo.set(mk, w);
   return w;
 }
@@ -319,18 +320,59 @@ export async function prewarmAsks(root, dirs, shape, { fxAnchors = false, log } 
  * (speed audit A) A prewarm job for an ask's FIRST recording (asks-first.mjs: what the earlier slices' asks tables read), planned by
  * checkPlanVolumes exactly as gate6crs-kit asksTables calls it: creative, or `survival: true`.
  */
-export async function jobFirstAsk(dir, f, survival = false) {
-  const H = await helpers(dir);
-  const asks = path.join(dir, 'kit', 'test', 'fixtures', 'plan', 'asks');
+export async function jobFirstAsk(dir, f, survival = false, shape = 'checkPlanVolumes', planDir = dir, side = null, headRoot = null) {
+  // (side: 'head' | 'base' plans with that side's corpusHelpers config, so the entry is complete for the drivers that read extras)
+  const H = await helpers(dir, side ? { derive: [...(side === 'head' ? HEAD_DERIVE : BASE_DERIVE)], headRoot } : {});
+  const asks = path.join(planDir, 'kit', 'test', 'fixtures', 'plan', 'asks');
   const plan = JSON.parse(fs.readFileSync(firstAsk(asks, f), 'utf8')).answer.plan;
   const s = H.asksSurvey();
-  await H.checkPlanVolumes(plan, { survey: s.bytes, claim: s.claim, anchors: H.stewardAnchors(s.claim), volume: {}, ...(survival ? { survival: true } : {}) });
+  // ('checkPlanLocal': voc-a's identity loop, the plain check with no volume option and no survival)
+  if (shape === 'checkPlanLocal') await H.checkPlanLocal(plan, { survey: s.bytes, claim: s.claim, anchors: H.stewardAnchors(s.claim) });
+  else await H.checkPlanVolumes(plan, { survey: s.bytes, claim: s.claim, anchors: H.stewardAnchors(s.claim), volume: {}, ...(survival ? { survival: true } : {}) });
 }
 /** The jobs of jobFirstAsk for each of `modes` (false: creative, true: survival) over every ask under `dir`. */
-export function firstAskJobs(root, dir, modes) {
+/** (`planDir`: the checkout whose recordings are planned, when not `dir`'s own: voc-a plans this head's on the base too) */
+export function firstAskJobs(root, dir, modes, shape = 'checkPlanVolumes', planDir = dir, side = null) {
   const mod = pathToFileURL(path.join(HERE, 'corpus-plan.mjs')).href;
-  const a = path.join(dir, 'kit', 'test', 'fixtures', 'plan', 'asks');
+  const a = path.join(planDir, 'kit', 'test', 'fixtures', 'plan', 'asks');
   const jobs = [];
-  for (const f of fs.readdirSync(a).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) for (const m of modes) jobs.push({ id: `ask1:${m ? 'surv' : 'cre'}:${f}`, module: mod, export: 'jobFirstAsk', args: [dir, f, m] });
+  for (const f of fs.readdirSync(a).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) for (const m of modes) jobs.push({ id: `ask1:${dir === planDir ? '' : 'on:'}${shape}:${m ? 'surv' : 'cre'}:${f}`, module: mod, export: 'jobFirstAsk', args: [dir, f, m, shape, planDir, side, root] });
   return jobs;
+}
+
+/**
+ * (speed audit A) hy-unit's call (gate6chy-core unchanged()): fixture `fx`'s options with plan `p`, over h's helpers: the two-plan flow
+ * when the fixture has a frozen volume of its own and h has it, else one plan. The loop and the prewarm jobs make this one call.
+ */
+export async function hyRun(h, fx, p, name) {
+  const on = fx.on ?? (name.startsWith('asks/') ? 'asks' : undefined);
+  const s = fx.terrain ? h.flatSurvey(fx.terrain) : on === 'asks' ? h.asksSurvey() : on === 'flat' ? h.flatSurvey() : on ? h.goldenSurvey(on) : h.flatSurvey();
+  const o = { survey: s.bytes, claim: s.claim, anchors: { ...h.stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}) };
+  return fx.volume !== undefined && h.checkPlanVolumes ? h.checkPlanVolumes(p, { ...o, volume: fx.volume }) : h.checkPlanLocal(p, o);
+}
+/** A prewarm job for hyRun: `name`'s fixture options and plan from headRoot, the plan from dir's own copy when `base`. */
+export async function jobHyFixture(dir, headRoot, name, base, derive = []) {
+  const rd = (d) => JSON.parse(fs.readFileSync(path.join(d, 'kit', 'test', 'fixtures', 'plan', name), 'utf8'));
+  const fx = rd(headRoot);
+  const src = base ? rd(dir) : fx;
+  await hyRun(await helpers(dir, { derive, headRoot }), fx, src.plan ?? src.answer?.plan, name);
+}
+
+/**
+ * (speed audit A) voc-unit's census call (gate6cvoc-b census): the plan with the fixture's options through the two-plan flow, over h's
+ * helpers (with the 'vocCensus' derive for the checker's findings). `fx`: the fixture ({on: 'asks'} for an ask).
+ */
+export async function vocCensusCall(h, fx, plan) {
+  const sv = fx.terrain ? h.flatSurvey(fx.terrain) : fx.on === 'asks' ? h.asksSurvey() : fx.on === 'flat' ? h.flatSurvey() : fx.on ? h.goldenSurvey(fx.on) : h.flatSurvey();
+  const opts = { survey: sv.bytes, claim: sv.claim, anchors: { ...h.stewardAnchors(sv.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], volume: fx.volume ?? {} };
+  return { c: await h.checkPlanVolumes(plan, opts), opts };
+}
+/** The census' helpers config: one derive, this head's kit. */
+export const censusHelpers = (root) => helpers(root, { derive: ['vocCensus'], headRoot: root });
+/** A prewarm job for the census: `d`/`f` a plan fixture, or d === 'asks' an ask's first recording. */
+export async function jobVocCensus(root, d, f) {
+  const H = await censusHelpers(root);
+  const base = path.join(root, 'kit', 'test', 'fixtures', 'plan');
+  if (d === 'asks') await vocCensusCall(H, { on: 'asks' }, JSON.parse(fs.readFileSync(firstAsk(path.join(base, 'asks'), f), 'utf8')).answer.plan);
+  else { const fx = JSON.parse(fs.readFileSync(path.join(base, d, f), 'utf8')); await vocCensusCall(H, fx, fx.plan); }
 }

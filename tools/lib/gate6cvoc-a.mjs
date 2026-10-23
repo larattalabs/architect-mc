@@ -5,10 +5,12 @@ import fs from 'node:fs';
 import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import { syncBaseTree } from './base-tree.mjs';
+import { kitReuse } from './kit-reuse.mjs'; // (speed audit A) the kit files unit-kit already ran in this run
+import * as CP from './corpus-plan.mjs'; // (speed audit A) the plans from the run's shared store, prewarmed on every core
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -75,25 +77,37 @@ export const LATER_EXCEPTIONS = Object.freeze({ fixtures: ['extension/e05_reserv
 
 export async function unchanged(root) {
   const { dir: mainDir, base } = baseTree(root);
-  const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
-  const [hNew, hOld] = [await H(root), await H(mainDir)];
+  // ((speed audit A) the identity loops' plans from the corpus store, planned on the pool first (the calls below, exactly: CP.hyRun and the
+  // asks' first recordings); GATE_PLAN_CACHE=0: the plain helpers, serially, as before)
+  const { hNew, hOld } = await CP.corpusHelpers(root, mainDir);
   const out = { base, fixtures: {}, asks: {}, examples: {}, palettes: {}, goldens: {} };
   const norm = (r) => normIrJson(r.res?.irJson);
   const cmpRun = (a, b) => ({ answers: JSON.stringify(a.check.parts) === JSON.stringify(b.check.parts), ir: sha256(norm(a)) === sha256(norm(b)), overall: a.check.overall === b.check.overall });
   // the committed plan fixtures
+  const todo = [];
   for (const d of ['valid', 'k1a', 'rope', 'refused', 't3a', 't3b', 'tunnel', 'h', 'extension']) {
     const fixDir = path.join(root, 'kit', 'test', 'fixtures', 'plan', d);
     if (!fs.existsSync(fixDir)) continue;
     for (const f of fs.readdirSync(fixDir).filter((x) => x.endsWith('.json')).sort()) {
       const fx = JSON.parse(fs.readFileSync(path.join(fixDir, f), 'utf8'));
       if (!fx.plan || fx.volume || !fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', d, f))) continue;
-      const sv = (h) => (fx.terrain ? h.flatSurvey(fx.terrain) : fx.on === 'asks' ? h.asksSurvey() : fx.on === 'flat' ? h.flatSurvey() : fx.on ? h.goldenSurvey(fx.on) : h.flatSurvey());
-      const runOn = async (h) => { const s = sv(h); return h.checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...h.stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}) }); };
-      try { out.fixtures[`${d}/${f}`] = cmpRun(await runOn(hNew), await runOn(hOld)); } catch (e) { out.fixtures[`${d}/${f}`] = { error: String(e.message).slice(0, 200) }; }
+      todo.push({ name: `${d}/${f}`, fx });
     }
   }
-  // Steward's 59 recorded plans (fixtures/plan/asks), on the asks survey
+  const mod = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), 'corpus-plan.mjs')).href;
   const asksDir = path.join(root, 'kit', 'test', 'fixtures', 'plan', 'asks');
+  await CP.prewarm(root, [
+    ...todo.flatMap((t) => [
+      { id: `hy:head:${t.name}`, module: mod, export: 'jobHyFixture', args: [root, root, t.name, false, [...CP.HEAD_DERIVE]] },
+      { id: `hy:hbase:${t.name}`, module: mod, export: 'jobHyFixture', args: [mainDir, root, t.name, false, [...CP.BASE_DERIVE]] },
+    ]),
+    ...CP.firstAskJobs(root, root, [false], 'checkPlanLocal', root, 'head'),
+    ...CP.firstAskJobs(root, mainDir, [false], 'checkPlanLocal', root, 'base'),
+  ]);
+  for (const t of todo) {
+    try { out.fixtures[t.name] = cmpRun(await CP.hyRun(hNew, t.fx, t.fx.plan, t.name), await CP.hyRun(hOld, t.fx, t.fx.plan, t.name)); } catch (e) { out.fixtures[t.name] = { error: String(e.message).slice(0, 200) }; }
+  }
+  // Steward's 59 recorded plans (fixtures/plan/asks), on the asks survey
   for (const f of fs.readdirSync(asksDir).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) {
     const fx = JSON.parse(fs.readFileSync(firstAsk(asksDir, f), 'utf8')); // ((6c close-out A) the first recordings)
     const runOn = async (h) => { const s = h.asksSurvey(); return h.checkPlanLocal(fx.answer.plan, { survey: s.bytes, claim: s.claim, anchors: h.stewardAnchors(s.claim) }); };
@@ -176,7 +190,7 @@ const unit = [
     key: 'vocab-tests',
     name: 'items 1, 3, 4 (kit): the vocabulary tests',
     async run({ root, check }) {
-      const r = nodeTest(root, ['kit/test/vocab.test.mjs']);
+      const r = kitReuse(root, ['kit/test/vocab.test.mjs']) ?? nodeTest(root, ['kit/test/vocab.test.mjs']);
       check(r.code === 0 && r.fail === 0 && r.pass >= 11, `items 1, 3, 4 (kit): every block classified, every table row with a why, the hand families inside generated ones or each split listed with its evidence, palette() unchanged, one source (the drift test, no literal list, creativeOnly = the 35 plus the listed additions), the tiers the contract names, fitness and drift: ${r.pass} pass, ${r.fail} fail`, r.failing);
       const creative = JSON.parse(fs.readFileSync(path.join(root, 'mod', 'src', 'main', 'resources', 'data', 'architect_mc', 'survival_items.json'), 'utf8')).creativeOnly;
       const want = [...PHASE3_CREATIVE_ONLY, ...CREATIVE_ONLY_ADDED.map((a) => a.block)].sort();
