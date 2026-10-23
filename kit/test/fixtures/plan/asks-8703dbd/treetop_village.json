@@ -1,0 +1,313 @@
+{
+  "prompt": "A village up in the jungle canopy, the huts joined by rope bridges.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "canopy_village",
+      "style": {
+        "pending": "canopy_village"
+      },
+      "zones": [
+        {
+          "id": "canopy",
+          "kind": "standard",
+          "required": true,
+          "label": "Canopy village",
+          "purpose": "home",
+          "style": {
+            "pending": "canopy_village"
+          },
+          "notes": "Huts sit on platforms among jungle tree crowns; use existing tall trees and avoid reshaping terrain.",
+          "program": {
+            "lots": [
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "elders_hut",
+                "label": "elder's great hut",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Largest platform built around a huge jungle trunk; hub where most rope bridges meet."
+              },
+              {
+                "id": "cabin_1",
+                "type": "cabin",
+                "role": "canopy_hut",
+                "label": "canopy hut",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home on its own tree platform, linked by rope bridge."
+              },
+              {
+                "id": "cabin_2",
+                "type": "cabin",
+                "role": "canopy_hut",
+                "label": "canopy hut",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home on its own tree platform, linked by rope bridge."
+              },
+              {
+                "id": "cabin_3",
+                "type": "cabin",
+                "role": "canopy_hut",
+                "label": "canopy hut",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home on its own tree platform, linked by rope bridge."
+              },
+              {
+                "id": "cabin_4",
+                "type": "cabin",
+                "role": "canopy_hut",
+                "label": "canopy hut",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home on its own tree platform, linked by rope bridge."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "gathering_platform",
+                "label": "gathering platform",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Open communal hall with lanterns and a fire pit area."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "lookout_post",
+                "label": "lookout post",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Perch above the leaves on the tallest tree."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "storehouse",
+                "label": "storehouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Raised storage for fruit, cocoa and tools; winch and rope lift to the ground."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "healers_hut",
+                "label": "healer's hut",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Herb planters, hanging vines and potions."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "canopy_workshop",
+                "label": "canopy workshop",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Rope and bamboo crafting, trade goods."
+              }
+            ],
+            "shared": "none"
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "bridge_cabin_1",
+          "kind": "rope_bridge",
+          "required": true,
+          "label": "rope bridge",
+          "from": {
+            "part": "house_1"
+          },
+          "to": {
+            "part": "cabin_1"
+          }
+        },
+        {
+          "id": "bridge_cabin_2",
+          "kind": "rope_bridge",
+          "required": true,
+          "label": "rope bridge",
+          "from": {
+            "part": "house_1"
+          },
+          "to": {
+            "part": "cabin_2"
+          }
+        },
+        {
+          "id": "bridge_cabin_3",
+          "kind": "rope_bridge",
+          "required": true,
+          "label": "rope bridge",
+          "from": {
+            "part": "house_1"
+          },
+          "to": {
+            "part": "cabin_3"
+          }
+        },
+        {
+          "id": "bridge_cabin_4",
+          "kind": "rope_bridge",
+          "required": true,
+          "label": "rope bridge",
+          "from": {
+            "part": "house_1"
+          },
+          "to": {
+            "part": "cabin_4"
+          }
+        },
+        {
+          "id": "bridge_tavern",
+          "kind": "rope_bridge",
+          "required": true,
+          "label": "rope bridge",
+          "from": {
+            "part": "house_1"
+          },
+          "to": {
+            "part": "tavern_1"
+          }
+        },
+        {
+          "id": "bridge_tower",
+          "kind": "rope_bridge",
+          "required": true,
+          "label": "rope bridge",
+          "from": {
+            "part": "house_1"
+          },
+          "to": {
+            "part": "tower_1"
+          }
+        },
+        {
+          "id": "bridge_barn",
+          "kind": "rope_bridge",
+          "required": true,
+          "label": "rope bridge",
+          "from": {
+            "part": "house_1"
+          },
+          "to": {
+            "part": "barn_1"
+          }
+        },
+        {
+          "id": "bridge_cottage",
+          "kind": "rope_bridge",
+          "required": true,
+          "label": "rope bridge",
+          "from": {
+            "part": "tavern_1"
+          },
+          "to": {
+            "part": "cottage_1"
+          }
+        },
+        {
+          "id": "bridge_shop",
+          "kind": "rope_bridge",
+          "required": true,
+          "label": "rope bridge",
+          "from": {
+            "part": "tavern_1"
+          },
+          "to": {
+            "part": "shop_1"
+          }
+        },
+        {
+          "id": "storehouse_lift",
+          "kind": "lift",
+          "required": false,
+          "label": "storehouse winch and rope lift",
+          "from": {
+            "part": "barn_1"
+          },
+          "to": {
+            "anchor": "stone"
+          },
+          "notes": "Winch and rope lift from the raised storehouse down to the ground."
+        }
+      ],
+      "notes": "Jungle site not yet surveyed; the settlement needs tall jungle trees for platforms."
+    },
+    "waits": [
+      {
+        "part": "bridge_cabin_1",
+        "words": "Rope bridge from the elder's hut to the first canopy hut: rope bridges come with a later Architect release."
+      },
+      {
+        "part": "bridge_cabin_2",
+        "words": "Rope bridge from the elder's hut to the second canopy hut: waits for rope bridges."
+      },
+      {
+        "part": "bridge_cabin_3",
+        "words": "Rope bridge from the elder's hut to the third canopy hut: waits for rope bridges."
+      },
+      {
+        "part": "bridge_cabin_4",
+        "words": "Rope bridge from the elder's hut to the fourth canopy hut: waits for rope bridges."
+      },
+      {
+        "part": "bridge_tavern",
+        "words": "Rope bridge from the elder's hut to the gathering platform: waits for rope bridges."
+      },
+      {
+        "part": "bridge_tower",
+        "words": "Rope bridge from the elder's hut to the lookout post: waits for rope bridges."
+      },
+      {
+        "part": "bridge_barn",
+        "words": "Rope bridge from the elder's hut to the storehouse: waits for rope bridges."
+      },
+      {
+        "part": "bridge_cottage",
+        "words": "Rope bridge from the gathering platform to the healer's hut: waits for rope bridges."
+      },
+      {
+        "part": "bridge_shop",
+        "words": "Rope bridge from the gathering platform to the workshop: waits for rope bridges."
+      },
+      {
+        "part": "storehouse_lift",
+        "words": "The winch and rope lift from the storehouse to the ground: lifts come with a later Architect release."
+      }
+    ],
+    "summary": "Canopy Village is one zone of ten buildings: the elder's great hut as the central hub, four canopy huts, a gathering platform, a lookout on high ground, a storehouse, a healer's hut and a workshop. Rope bridges link them and a rope lift serves the storehouse, but these can't be built yet, so the huts are built first and the bridges are offered when Architect supports them."
+  },
+  "usd": 0.041498,
+  "errors": []
+}

@@ -10,13 +10,26 @@
       "zones": [
         {
           "id": "city",
+          "kind": "standard",
           "required": true,
           "label": "Restored End city",
           "purpose": "home_base",
+          "style": {
+            "pending": "restored_end_city"
+          },
+          "size": {
+            "preset": "M"
+          },
+          "where": {
+            "near": {
+              "anchor": "stone",
+              "within": 16
+            }
+          },
           "program": {
             "lots": [
               {
-                "id": "tower_1",
+                "id": "keep_1",
                 "type": "tower",
                 "role": "spire_keep",
                 "label": "Grand spire keep",
@@ -68,7 +81,7 @@
                 "brief": "Small purpur home with end rod lighting and a bedroom."
               },
               {
-                "id": "tower_2",
+                "id": "tower_1",
                 "type": "tower",
                 "role": "spire_tower",
                 "label": "Spire tower",
@@ -80,7 +93,7 @@
                 "brief": "Slender purpur tower with stairs and storage floors."
               },
               {
-                "id": "tower_3",
+                "id": "tower_2",
                 "type": "tower",
                 "role": "spire_tower",
                 "label": "Spire tower",
@@ -101,10 +114,11 @@
                   11
                 ],
                 "placement": "central",
+                "villager": "none",
                 "brief": "Communal hall for meals and meeting."
               },
               {
-                "id": "storage_vault_1",
+                "id": "vault_1",
                 "type": "storage_vault",
                 "role": "shulker_vault",
                 "label": "Shulker vault",
@@ -115,7 +129,7 @@
                 "brief": "Storage hall with chests and shulker-box shelves."
               },
               {
-                "id": "airship_dock_1",
+                "id": "dock_1",
                 "type": "airship_dock",
                 "role": "ship_dock",
                 "label": "Ship dock",
@@ -135,39 +149,31 @@
                   9,
                   9
                 ],
+                "villager": "job",
                 "brief": "Crafting and brewing room with anvil and brewing stands."
               }
             ],
-            "layout": "street"
-          }
-        }
-      ],
-      "connectors": [
-        {
-          "id": "dwelling_bridges",
-          "kind": "bridge",
-          "required": false,
-          "label": "Bridges between the dwellings",
-          "notes": "Purpur bridges linking the three dwellings (house_1, house_2, house_3) to each other.",
-          "from": {
-            "part": "city"
-          },
-          "to": {
-            "part": "city"
+            "layout": "street",
+            "shared": "square"
           }
         }
       ],
       "forms": [
         {
-          "id": "central_terrace",
+          "id": "terrace_1",
           "kind": "terrace",
           "required": false,
           "label": "Central terrace",
-          "notes": "Stepped terrace the towers climb over.",
           "where": {
-            "near": {
-              "anchor": "stone",
-              "within": 24
+            "adjacent": {
+              "to": {
+                "part": "city"
+              },
+              "side": "any",
+              "gap": [
+                0,
+                4
+              ]
             }
           },
           "steps": 3,
@@ -175,16 +181,11 @@
           "edge": "blend"
         }
       ],
-      "notes": "Land not surveyed; the city is laid on the site found near the stone, with the keep on high ground."
+      "notes": "Dwelling-to-dwelling bridges are left out: a bridge needs a real gap, and the lots share ground. Palette is a style taste (purpur, end stone bricks, magenta and pale yellow accents), not a hard rule."
     },
-    "waits": [
-      {
-        "part": "dwelling_bridges",
-        "words": "The bridges linking the three dwellings: bridges come with a later Architect release; the dwellings are built first and linked by street meanwhile."
-      }
-    ],
-    "summary": "A restored End city of ten buildings in one street-laid zone: a grand spire keep on high ground, two slender spire towers, three small dwellings, a gathering hall, a shulker vault, a ship dock at the edge and a workshop. A stepped central terrace is cut near the founding stone. The bridges between dwellings wait for a later release."
+    "waits": [],
+    "summary": "A restored End city as one street-laid town of ten buildings on a rise near the founding stone. The grand spire keep stands on high ground, with two spire towers, three dwellings, a gathering hall, a shulker vault, a workshop and a ship dock at the edge. A stepped terrace sits beside the town. The purpur look comes from the style. I left out the bridges between dwellings because they'd stand on the same ground."
   },
-  "usd": 0.030231,
+  "usd": 0.035385,
   "errors": []
 }

@@ -25,7 +25,7 @@ import { lintFluidState } from '../fluids/body.mjs';
 import { fluidsError } from '../fluids/place.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.39.0';
+export const KIT_VERSION = '0.40.0';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -622,7 +622,7 @@ export async function planRegion(o) {
       if (cost) meta.planCheck.vocabCells = vocabCells(irObj, scan);
       if (pal) {
         const { palettePass } = await import('../plan/palette.mjs');
-        palette = palettePass({ pc: meta.planCheck, ir: irObj, hist: scan.hist, lotBlocks: o.lotBlocks ?? {}, excludes: o.paletteExclude ?? [], from: o._paletteFrom ?? {}, swaps: paletteSwaps ?? {} });
+        palette = palettePass({ pc: meta.planCheck, ir: irObj, hist: scan.hist, lotBlocks: o.lotBlocks ?? {}, excludes: o.paletteExclude ?? [], from: o._paletteFrom ?? {}, swaps: paletteSwaps ?? {}, kinds: meta.parts ?? {} });
       }
     }
     meta.planCheck.vocab = { ms: Math.round(performance.now() - t), scanned: !!v, found: v?.found ?? [], refused: Object.keys(o.vocabRefuse ?? {}).sort(), pass: (o._vocabPass ?? 0) + 1 };

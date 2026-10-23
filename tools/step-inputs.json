@@ -12,7 +12,7 @@
    "dynamic": [],
    "env": [],
    "eager": [],
-   "verified": "20261022-161855-release unit-mod"
+   "verified": "20261023-114540-release unit-mod"
   },
   "umt": {
    "classes": [
@@ -23,7 +23,8 @@
    "globs": [],
    "dynamic": [],
    "env": [],
-   "eager": []
+   "eager": [],
+   "verified": "20261023-114540-release umt"
   },
   "umt-long": {
    "classes": [
@@ -34,7 +35,8 @@
    "globs": [],
    "dynamic": [],
    "env": [],
-   "eager": []
+   "eager": [],
+   "verified": "20261023-114540-release umt-long"
   },
   "unit-kit": {
    "classes": [
@@ -57,6 +59,7 @@
     "kit/test/catwalk-cw.test.mjs",
     "kit/test/check.test.mjs",
     "kit/test/cli.test.mjs",
+    "kit/test/coa.test.mjs",
     "kit/test/copies.test.mjs",
     "kit/test/diff.test.mjs",
     "kit/test/districts-d.test.mjs",
@@ -353,6 +356,7 @@
     "kit/test/catwalk-cw.test.mjs",
     "kit/test/check.test.mjs",
     "kit/test/cli.test.mjs",
+    "kit/test/coa.test.mjs",
     "kit/test/copies.test.mjs",
     "kit/test/diff.test.mjs",
     "kit/test/districts-d.test.mjs",
@@ -522,6 +526,7 @@
     "tools/gate6cb.mjs",
     "tools/gate6ct3a.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/bench-select.mjs",
     "tools/lib/build-artifact.mjs",
@@ -960,6 +965,7 @@
     "kit/test/catwalk-cw.test.mjs",
     "kit/test/check.test.mjs",
     "kit/test/cli.test.mjs",
+    "kit/test/coa.test.mjs",
     "kit/test/copies.test.mjs",
     "kit/test/diff.test.mjs",
     "kit/test/districts-d.test.mjs",
@@ -1072,6 +1078,7 @@
     "kit/vocab/roles.json",
     "kit/vocab/tiers.json",
     "tools/catalogue-since-check.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/bench-select.mjs",
     "tools/lib/build-artifact.mjs",
@@ -1096,9 +1103,10 @@
     "cherry",
     "dark",
     "nope",
-    "rustic"
+    "rustic",
+    "tools/lib/**"
    ],
-   "verified": "20261022-161855-release unit-kit"
+   "verified": "20261023-114540-release unit-kit"
   },
   "unit-sidecar": {
    "classes": [
@@ -1109,7 +1117,22 @@
    "globs": [],
    "dynamic": [],
    "env": [],
-   "eager": []
+   "eager": [],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "eval/briefs/v1/**",
+    "eval/fixtures/bibles/**",
+    "kit/lint/**",
+    "kit/test/**",
+    "lerna.json",
+    "mod/gradle.properties",
+    "mod/src/main/java/dev/larattalabs/architect/api/**",
+    "package.json",
+    "pnpm-workspace.yaml",
+    "tools/eval.mjs"
+   ],
+   "verified": "20261023-114540-release unit-sidecar"
   },
   "sim-jobs": {
    "classes": [
@@ -1161,7 +1184,8 @@
    "eager": [
     "tools/apitest.mjs",
     "tools/lib/devclient.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release sim-jobs"
   },
   "sim-sets": {
    "classes": [
@@ -1213,7 +1237,8 @@
    "eager": [
     "tools/apitest.mjs",
     "tools/lib/devclient.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release sim-sets"
   },
   "sim-massing": {
    "classes": [
@@ -1265,7 +1290,8 @@
    "eager": [
     "tools/apitest.mjs",
     "tools/lib/devclient.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release sim-massing"
   },
   "apijars": {
    "classes": [
@@ -1330,7 +1356,12 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "data": [
+    "kit/lint/**",
+    "kit/test/**"
+   ],
+   "verified": "20261023-114540-release apijars"
   },
   "0a-stub": {
    "classes": [
@@ -1377,7 +1408,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-stub"
   },
   "0a-flow": {
    "classes": [
@@ -1424,7 +1456,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-flow"
   },
   "0a-budget": {
    "classes": [
@@ -1471,7 +1504,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-budget"
   },
   "0a-fit": {
    "classes": [
@@ -1518,7 +1552,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-fit"
   },
   "0a-batches": {
    "classes": [
@@ -1565,7 +1600,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-batches"
   },
   "0a-keys": {
    "classes": [
@@ -1612,7 +1648,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-keys"
   },
   "0a-cancel": {
    "classes": [
@@ -1659,7 +1696,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-cancel"
   },
   "0a-pins": {
    "classes": [
@@ -1706,7 +1744,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-pins"
   },
   "0a-stopped": {
    "classes": [
@@ -1753,7 +1792,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-stopped"
   },
   "0a-tiles": {
    "classes": [
@@ -1800,7 +1840,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-tiles"
   },
   "mp-unit": {
    "classes": [
@@ -2105,7 +2146,8 @@
     "tools/gate6cmp.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release mp-unit"
   },
   "mp-ingame": {
    "classes": [
@@ -2429,6 +2471,9 @@
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/scenarios.mjs"
+   ],
+   "data": [
+    "rustic"
    ]
   },
   "sch-unit": {
@@ -2490,7 +2535,15 @@
     "tools/gate6csch.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release sch-unit"
   },
   "sch-roundtrip": {
    "classes": [
@@ -2563,7 +2616,8 @@
     "tools/gate6csch.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release sch-roundtrip"
   },
   "sch-refusals": {
    "classes": [
@@ -2636,7 +2690,8 @@
     "tools/gate6csch.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release sch-refusals"
   },
   "sch-placement": {
    "classes": [
@@ -2709,7 +2764,8 @@
     "tools/gate6csch.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release sch-placement"
   },
   "sch-ingame": {
    "classes": [
@@ -2782,7 +2838,8 @@
     "tools/gate6csch.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release sch-ingame"
   },
   "v-unit": {
    "classes": [
@@ -3072,7 +3129,15 @@
    "eager": [
     "tools/gate6cv.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release v-unit"
   },
   "v-ingame": {
    "classes": [
@@ -3388,7 +3453,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release v-ingame"
   },
   "w-unit": {
    "classes": [
@@ -3674,7 +3740,16 @@
    "eager": [
     "tools/gate6cw.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "kit/lint/**",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release w-unit"
   },
   "w-ingame": {
    "classes": [
@@ -3987,7 +4062,11 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261023-114540-release w-ingame"
   },
   "f1-unit": {
    "classes": [
@@ -4284,7 +4363,8 @@
     "tools/gate6cf1.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release f1-unit"
   },
   "6cf1-scenario-forms": {
    "classes": [
@@ -4562,7 +4642,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6cf1-scenario-forms"
   },
   "x-unit": {
    "classes": [
@@ -4777,7 +4858,8 @@
     "tools/gate6cx.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release x-unit"
   },
   "x-ingame": {
    "classes": [
@@ -5102,7 +5184,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release x-ingame"
   },
   "y-unit": {
    "classes": [
@@ -5169,7 +5252,8 @@
    "eager": [
     "tools/gate6cy.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release y-unit"
   },
   "y-ingame": {
    "classes": [
@@ -5250,7 +5334,8 @@
    "eager": [
     "tools/gate6cy.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release y-ingame"
   },
   "c29-unit": {
    "classes": [
@@ -5317,7 +5402,8 @@
    "eager": [
     "tools/gate6cy.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release c29-unit"
   },
   "c29-ingame": {
    "classes": [
@@ -5398,7 +5484,8 @@
    "eager": [
     "tools/gate6cy.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release c29-ingame"
   },
   "y2-unit": {
    "classes": [
@@ -5445,7 +5532,8 @@
     "tools/gate6cy2.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release y2-unit"
   },
   "y2-ingame": {
    "classes": [
@@ -5506,7 +5594,8 @@
     "tools/gate6cy2.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release y2-ingame"
   },
   "y2-bom": {
    "classes": [
@@ -5870,7 +5959,15 @@
     "tools/gate6ct1.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release t1-unit"
   },
   "b-unit": {
    "classes": [
@@ -6172,7 +6269,8 @@
     "tools/gate6cb.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release b-unit"
   },
   "b-ingame": {
    "classes": [
@@ -6498,7 +6596,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release b-ingame"
   },
   "pt-unit": {
    "classes": [
@@ -6715,7 +6814,8 @@
    "eager": [
     "tools/gate6cpt.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release pt-unit"
   },
   "c33-unit": {
    "classes": [],
@@ -6735,7 +6835,11 @@
    ],
    "eager": [
     "tools/api-compat.mjs"
-   ]
+   ],
+   "derived": [
+    "mod/build/**"
+   ],
+   "verified": "20261023-114540-release c33-unit"
   },
   "pt-ingame": {
    "classes": [
@@ -7357,7 +7461,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release pt-nomod"
   },
   "pt2-unit": {
    "classes": [
@@ -7485,7 +7590,15 @@
    "eager": [
     "tools/gate6cpt2.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release pt2-unit"
   },
   "pt2-ingame": {
    "classes": [
@@ -7810,7 +7923,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release pt2-ingame"
   },
   "pt2-survival": {
    "classes": [
@@ -8135,7 +8249,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release pt2-survival"
   },
   "tile-gravity": {
    "classes": [
@@ -8461,7 +8576,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release tile-gravity"
   },
   "c31-felling": {
    "classes": [
@@ -8787,7 +8903,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release c31-felling"
   },
   "t1-ingame": {
    "classes": [
@@ -9115,7 +9232,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t1-ingame"
   },
   "6ct1-scenario-relief": {
    "classes": [
@@ -9393,7 +9511,11 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ]
+   ],
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261023-114540-release 6ct1-scenario-relief"
   },
   "f2-unit": {
    "classes": [
@@ -9715,7 +9837,8 @@
     "tools/gate6cf2.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release f2-unit"
   },
   "f2-harvest": {
    "classes": [
@@ -10055,7 +10178,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release f2-harvest"
   },
   "6cf2-scenario-scatter": {
    "classes": [
@@ -10397,7 +10521,11 @@
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/scenarios.mjs"
-   ]
+   ],
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261023-114540-release 6cf2-scenario-scatter/p2"
   },
   "t2-unit": {
    "classes": [
@@ -10704,7 +10832,15 @@
     "tools/gate6ct2.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release t2-unit"
   },
   "p0-unit": {
    "classes": [
@@ -10752,7 +10888,20 @@
    "eager": [
     "tools/gate6cp0.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "gradlew",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml",
+    "tools/api-compat.mjs",
+    "tools/lib/**",
+    "tools/plan-catalogue-diff.mjs",
+    "tools/scenarios.mjs"
+   ],
+   "verified": "20261023-114540-release p0-unit"
   },
   "c37-unit": {
    "classes": [
@@ -10791,7 +10940,19 @@
    ],
    "eager": [
     "tools/gate6c37.mjs"
-   ]
+   ],
+   "data": [
+    "kit/test/**",
+    "kit/test/fixtures/ops/**",
+    "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks/**",
+    "kit/test/fixtures/village/**",
+    "kit/test/fixtures/vocab/**",
+    "tools/api-compat.mjs",
+    "tools/lib/**",
+    "tools/scenarios.mjs"
+   ],
+   "verified": "20261023-114540-release c37-unit"
   },
   "c37-ingame": {
    "classes": [
@@ -11073,7 +11234,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release c37-ingame"
   },
   "c38-unit": {
    "classes": [
@@ -11208,7 +11370,14 @@
    ],
    "eager": [
     "tools/gate6c38.mjs"
-   ]
+   ],
+   "data": [
+    "kit/test/**",
+    "tools/api-compat.mjs",
+    "tools/lib/**",
+    "tools/scenarios.mjs"
+   ],
+   "verified": "20261023-114540-release c38-unit"
   },
   "c38-ingame": {
    "classes": [
@@ -11490,7 +11659,619 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
+   ],
+   "verified": "20261023-114540-release c38-ingame"
+  },
+  "coa-unit": {
+   "classes": [
+    "gradle",
+    "jar",
+    "sidecar",
+    "world"
+   ],
+   "roots": [
+    "tools/gate6ccoa.mjs"
+   ],
+   "closure": [
+    "kit/lib/blocks.mjs",
+    "kit/lib/connectors/bom.mjs",
+    "kit/lib/connectors/bridge.mjs",
+    "kit/lib/connectors/bridgeGeom.mjs",
+    "kit/lib/connectors/catwalk.mjs",
+    "kit/lib/connectors/catwalkGeom.mjs",
+    "kit/lib/connectors/climb.mjs",
+    "kit/lib/connectors/hooks7a.mjs",
+    "kit/lib/connectors/kinds7a.mjs",
+    "kit/lib/connectors/lift.mjs",
+    "kit/lib/connectors/line.mjs",
+    "kit/lib/connectors/params.mjs",
+    "kit/lib/connectors/rockStair.mjs",
+    "kit/lib/connectors/rope.mjs",
+    "kit/lib/connectors/ropeGeom.mjs",
+    "kit/lib/connectors/spiral.mjs",
+    "kit/lib/connectors/style.mjs",
+    "kit/lib/connectors/t3kinds.mjs",
+    "kit/lib/connectors/templateLand.mjs",
+    "kit/lib/connectors/tunnel.mjs",
+    "kit/lib/connectors/tunnelGeom.mjs",
+    "kit/lib/connectors/wall.mjs",
+    "kit/lib/fluids/biomes.mjs",
+    "kit/lib/fluids/body.mjs",
+    "kit/lib/fluids/course.mjs",
+    "kit/lib/fluids/ditch.mjs",
+    "kit/lib/fluids/fountain.mjs",
+    "kit/lib/fluids/gate.mjs",
+    "kit/lib/fluids/handcourse.mjs",
+    "kit/lib/fluids/handgate.mjs",
+    "kit/lib/fluids/hooks.mjs",
+    "kit/lib/fluids/irrfield.mjs",
+    "kit/lib/fluids/irrigate.mjs",
+    "kit/lib/fluids/keep.mjs",
+    "kit/lib/fluids/kinds.mjs",
+    "kit/lib/fluids/moat.mjs",
+    "kit/lib/fluids/place.mjs",
+    "kit/lib/fluids/pond.mjs",
+    "kit/lib/fluids/profile.mjs",
+    "kit/lib/fluids/quay.mjs",
+    "kit/lib/fluids/race.mjs",
+    "kit/lib/fluids/sim.mjs",
+    "kit/lib/fluids/waterfall.mjs",
+    "kit/lib/fluids/wet.mjs",
+    "kit/lib/fluids/world.mjs",
+    "kit/lib/forms/cave.mjs",
+    "kit/lib/forms/coral.mjs",
+    "kit/lib/forms/floatingIsland.mjs",
+    "kit/lib/forms/giantMushroom.mjs",
+    "kit/lib/forms/giantTree.mjs",
+    "kit/lib/forms/hooks.mjs",
+    "kit/lib/forms/iceSpike.mjs",
+    "kit/lib/forms/place.mjs",
+    "kit/lib/forms/rockSpire.mjs",
+    "kit/lib/forms/rules.mjs",
+    "kit/lib/forms/states.mjs",
+    "kit/lib/kit.mjs",
+    "kit/lib/mask.mjs",
+    "kit/lib/material.mjs",
+    "kit/lib/nbt.mjs",
+    "kit/lib/noise.mjs",
+    "kit/lib/params.mjs",
+    "kit/lib/pattern.mjs",
+    "kit/lib/plan/catalogue.mjs",
+    "kit/lib/plan/compile.mjs",
+    "kit/lib/plan/finish.mjs",
+    "kit/lib/plan/free.mjs",
+    "kit/lib/plan/palette.mjs",
+    "kit/lib/plan/schema.mjs",
+    "kit/lib/png.mjs",
+    "kit/lib/realise.mjs",
+    "kit/lib/region/boundary.mjs",
+    "kit/lib/region/builds.mjs",
+    "kit/lib/region/check.mjs",
+    "kit/lib/region/checkBridges.mjs",
+    "kit/lib/region/checkCatwalks.mjs",
+    "kit/lib/region/checkFluids.mjs",
+    "kit/lib/region/checkForms.mjs",
+    "kit/lib/region/checkRopes.mjs",
+    "kit/lib/region/checkTunnels.mjs",
+    "kit/lib/region/checkVocab.mjs",
+    "kit/lib/region/checkWalls.mjs",
+    "kit/lib/region/districtsEmit.mjs",
+    "kit/lib/region/fixtures.mjs",
+    "kit/lib/region/followEmit.mjs",
+    "kit/lib/region/frontage.mjs",
+    "kit/lib/region/geom.mjs",
+    "kit/lib/region/layouts/grid.mjs",
+    "kit/lib/region/layouts/organic.mjs",
+    "kit/lib/region/layouts/outline.mjs",
+    "kit/lib/region/layouts/ring.mjs",
+    "kit/lib/region/layouts/spiral.mjs",
+    "kit/lib/region/light.mjs",
+    "kit/lib/region/pack.mjs",
+    "kit/lib/region/passes/districts.mjs",
+    "kit/lib/region/passes/hydrology.mjs",
+    "kit/lib/region/passes/index.mjs",
+    "kit/lib/region/passes/moves/bridge.mjs",
+    "kit/lib/region/passes/moves/catwalk.mjs",
+    "kit/lib/region/passes/moves/gate.mjs",
+    "kit/lib/region/passes/moves/lift.mjs",
+    "kit/lib/region/passes/moves/profiles.mjs",
+    "kit/lib/region/passes/moves/rockStair.mjs",
+    "kit/lib/region/passes/moves/rope.mjs",
+    "kit/lib/region/passes/moves/tunnel.mjs",
+    "kit/lib/region/passes/relief.mjs",
+    "kit/lib/region/passes/route.mjs",
+    "kit/lib/region/plan.mjs",
+    "kit/lib/region/program.mjs",
+    "kit/lib/region/props.mjs",
+    "kit/lib/region/scatter.mjs",
+    "kit/lib/region/stamps.mjs",
+    "kit/lib/region/survey.mjs",
+    "kit/lib/region/survival.mjs",
+    "kit/lib/region/survivalData.mjs",
+    "kit/lib/region/terraces.mjs",
+    "kit/lib/region/village.mjs",
+    "kit/lib/region/volume.mjs",
+    "kit/lib/region/voxels.mjs",
+    "kit/lib/region/vworld.mjs",
+    "kit/lib/sdf.mjs",
+    "kit/lib/specschema.mjs",
+    "kit/lib/vocab.mjs",
+    "kit/lib/vocab/budget.mjs",
+    "kit/lib/vocab/groups.mjs",
+    "kit/lib/vocab/rarity.mjs",
+    "kit/lib/vocab/survival.mjs",
+    "kit/regions/crater_works.mjs",
+    "kit/regions/floating_islands.mjs",
+    "kit/regions/hy_core_demo.mjs",
+    "kit/regions/plan_v0.mjs",
+    "kit/regions/rift_city.mjs",
+    "kit/schemas/mask.json",
+    "kit/schemas/pattern.json",
+    "kit/schemas/plan-catalogue.golden.json",
+    "kit/schemas/plan.json",
+    "kit/schemas/vocab-1.json",
+    "kit/test/coa.test.mjs",
+    "kit/test/fixtures/plan/vocc/r03_entry.json",
+    "kit/test/fixtures/vocab/voc-designs.mjs",
+    "kit/test/fixtures/vocab/vocc-designs.mjs",
+    "kit/test/h-helpers.mjs",
+    "kit/test/plan-helpers.mjs",
+    "kit/test/vocc.test.mjs",
+    "kit/vocab/hazards.json",
+    "kit/vocab/roles.json",
+    "kit/vocab/tiers.json",
+    "mod/gradle.properties",
+    "scenarios/s3_monastery.json",
+    "scenarios/s7_flat_village.json",
+    "tools/api-compat.mjs",
+    "tools/gate6ccoa.mjs",
+    "tools/lib/base-tree.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/f7a-norm.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/gate6ccoa-kit.mjs",
+    "tools/lib/gate6chy-b.mjs",
+    "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
+    "tools/lib/gate6crs-game.mjs",
+    "tools/lib/p3-tier.mjs",
+    "tools/lib/plan-cache.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
+    "tools/lib/wsserver.mjs",
+    "tools/run-gate6b-client.sh",
+    "tools/run-headless-server.mjs"
+   ],
+   "globs": [
+    "kit/examples/cabin/**",
+    "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
+    "kit/test/fixtures/plan/asks/**",
+    "kit/test/fixtures/plan/coa/**",
+    "kit/test/fixtures/plan/hy/**",
+    "mod/src/test/resources/stub-sidecar/**",
+    "scenarios/bibles/**"
+   ],
+   "dynamic": [
+    {
+     "from": "tools/gate6ccoa.mjs",
+     "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
+    }
+   ],
+   "env": [
+    "ARCHITECT_ARTIFACTS",
+    "ARCHITECT_BIG_REGIONS",
+    "ARCHITECT_BOT_VIEW_DISTANCE",
+    "ARCHITECT_DEV_PORT",
+    "ARCHITECT_DEV_TOKEN",
+    "ARCHITECT_GAME_DIR",
+    "ARCHITECT_SERVER_EULA",
+    "ARCHITECT_SIMULATION_DISTANCE",
+    "ARCHITECT_XMX",
+    "GATE6B_CLIENT_SCRIPT",
+    "GATE6B_DEV_PORT",
+    "GATE6B_OUT",
+    "GATE6B_RUN",
+    "GATE6B_SIDECAR_PORT",
+    "GATE6CCOA_OUT",
+    "GATE_JAVAP_CACHE",
+    "GATE_JAVAP_CACHE_DIR",
+    "GATE_MERGE_BASE",
+    "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
+    "GRADLE_USER_HOME",
+    "HEADLESS_SIDECAR",
+    "HYB_BYPASS",
+    "HYB_ONLY",
+    "HYB_WATCH",
+    "JAVA_HOME",
+    "PATH"
+   ],
+   "flags": {
+    "originMain": [
+     "tools/lib/base-tree.mjs",
+     "tools/lib/gate6ccoa-kit.mjs",
+     "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
+     "tools/lib/plan-cache.mjs"
+    ]
+   },
+   "testFilters": [
+    "*ApiRulesTest*",
+    "*PlanRetentionTest*",
+    "*RealiseKeyTest*",
+    "*RegionWaitTagsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/gate6ccoa.mjs"
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
    ]
+  },
+  "coa-ingame": {
+   "classes": [
+    "gradle",
+    "jar",
+    "sidecar",
+    "world"
+   ],
+   "roots": [
+    "tools/gate6b.mjs",
+    "tools/gate6ccoa.mjs"
+   ],
+   "closure": [
+    "kit/build.mjs",
+    "kit/check.mjs",
+    "kit/lib/bible.mjs",
+    "kit/lib/blocks.mjs",
+    "kit/lib/check.mjs",
+    "kit/lib/colors.mjs",
+    "kit/lib/components.mjs",
+    "kit/lib/connectors/bom.mjs",
+    "kit/lib/connectors/bridge.mjs",
+    "kit/lib/connectors/bridgeGeom.mjs",
+    "kit/lib/connectors/catwalk.mjs",
+    "kit/lib/connectors/catwalkGeom.mjs",
+    "kit/lib/connectors/climb.mjs",
+    "kit/lib/connectors/hooks7a.mjs",
+    "kit/lib/connectors/kinds7a.mjs",
+    "kit/lib/connectors/lift.mjs",
+    "kit/lib/connectors/line.mjs",
+    "kit/lib/connectors/params.mjs",
+    "kit/lib/connectors/rockStair.mjs",
+    "kit/lib/connectors/rope.mjs",
+    "kit/lib/connectors/ropeGeom.mjs",
+    "kit/lib/connectors/spiral.mjs",
+    "kit/lib/connectors/style.mjs",
+    "kit/lib/connectors/t3kinds.mjs",
+    "kit/lib/connectors/templateLand.mjs",
+    "kit/lib/connectors/tunnel.mjs",
+    "kit/lib/connectors/tunnelGeom.mjs",
+    "kit/lib/connectors/wall.mjs",
+    "kit/lib/fluids/biomes.mjs",
+    "kit/lib/fluids/body.mjs",
+    "kit/lib/fluids/course.mjs",
+    "kit/lib/fluids/ditch.mjs",
+    "kit/lib/fluids/fountain.mjs",
+    "kit/lib/fluids/gate.mjs",
+    "kit/lib/fluids/handcourse.mjs",
+    "kit/lib/fluids/handgate.mjs",
+    "kit/lib/fluids/hooks.mjs",
+    "kit/lib/fluids/irrfield.mjs",
+    "kit/lib/fluids/irrigate.mjs",
+    "kit/lib/fluids/keep.mjs",
+    "kit/lib/fluids/kinds.mjs",
+    "kit/lib/fluids/moat.mjs",
+    "kit/lib/fluids/place.mjs",
+    "kit/lib/fluids/pond.mjs",
+    "kit/lib/fluids/profile.mjs",
+    "kit/lib/fluids/quay.mjs",
+    "kit/lib/fluids/race.mjs",
+    "kit/lib/fluids/sim.mjs",
+    "kit/lib/fluids/waterfall.mjs",
+    "kit/lib/fluids/wet.mjs",
+    "kit/lib/fluids/world.mjs",
+    "kit/lib/forms/cave.mjs",
+    "kit/lib/forms/coral.mjs",
+    "kit/lib/forms/floatingIsland.mjs",
+    "kit/lib/forms/giantMushroom.mjs",
+    "kit/lib/forms/giantTree.mjs",
+    "kit/lib/forms/hooks.mjs",
+    "kit/lib/forms/iceSpike.mjs",
+    "kit/lib/forms/place.mjs",
+    "kit/lib/forms/rockSpire.mjs",
+    "kit/lib/forms/rules.mjs",
+    "kit/lib/forms/states.mjs",
+    "kit/lib/kit.mjs",
+    "kit/lib/mask.mjs",
+    "kit/lib/massing.mjs",
+    "kit/lib/material.mjs",
+    "kit/lib/mirror.mjs",
+    "kit/lib/nbt.mjs",
+    "kit/lib/noise.mjs",
+    "kit/lib/params.mjs",
+    "kit/lib/pattern.mjs",
+    "kit/lib/plan/catalogue.mjs",
+    "kit/lib/plan/compile.mjs",
+    "kit/lib/plan/finish.mjs",
+    "kit/lib/plan/free.mjs",
+    "kit/lib/plan/palette.mjs",
+    "kit/lib/plan/schema.mjs",
+    "kit/lib/png.mjs",
+    "kit/lib/realise.mjs",
+    "kit/lib/region/boundary.mjs",
+    "kit/lib/region/builds.mjs",
+    "kit/lib/region/check.mjs",
+    "kit/lib/region/checkBridges.mjs",
+    "kit/lib/region/checkCatwalks.mjs",
+    "kit/lib/region/checkFluids.mjs",
+    "kit/lib/region/checkForms.mjs",
+    "kit/lib/region/checkRopes.mjs",
+    "kit/lib/region/checkTunnels.mjs",
+    "kit/lib/region/checkVocab.mjs",
+    "kit/lib/region/checkWalls.mjs",
+    "kit/lib/region/districtsEmit.mjs",
+    "kit/lib/region/fixtures.mjs",
+    "kit/lib/region/followEmit.mjs",
+    "kit/lib/region/frontage.mjs",
+    "kit/lib/region/geom.mjs",
+    "kit/lib/region/layouts/grid.mjs",
+    "kit/lib/region/layouts/organic.mjs",
+    "kit/lib/region/layouts/outline.mjs",
+    "kit/lib/region/layouts/ring.mjs",
+    "kit/lib/region/layouts/spiral.mjs",
+    "kit/lib/region/light.mjs",
+    "kit/lib/region/pack.mjs",
+    "kit/lib/region/passes/districts.mjs",
+    "kit/lib/region/passes/hydrology.mjs",
+    "kit/lib/region/passes/index.mjs",
+    "kit/lib/region/passes/moves/bridge.mjs",
+    "kit/lib/region/passes/moves/catwalk.mjs",
+    "kit/lib/region/passes/moves/gate.mjs",
+    "kit/lib/region/passes/moves/lift.mjs",
+    "kit/lib/region/passes/moves/profiles.mjs",
+    "kit/lib/region/passes/moves/rockStair.mjs",
+    "kit/lib/region/passes/moves/rope.mjs",
+    "kit/lib/region/passes/moves/tunnel.mjs",
+    "kit/lib/region/passes/relief.mjs",
+    "kit/lib/region/passes/route.mjs",
+    "kit/lib/region/plan.mjs",
+    "kit/lib/region/program.mjs",
+    "kit/lib/region/props.mjs",
+    "kit/lib/region/scatter.mjs",
+    "kit/lib/region/stamps.mjs",
+    "kit/lib/region/survey.mjs",
+    "kit/lib/region/survival.mjs",
+    "kit/lib/region/survivalData.mjs",
+    "kit/lib/region/terraces.mjs",
+    "kit/lib/region/village.mjs",
+    "kit/lib/region/volume.mjs",
+    "kit/lib/region/voxels.mjs",
+    "kit/lib/region/vworld.mjs",
+    "kit/lib/render.mjs",
+    "kit/lib/reserved.mjs",
+    "kit/lib/sdf.mjs",
+    "kit/lib/specschema.mjs",
+    "kit/lib/vocab.mjs",
+    "kit/lib/vocab/budget.mjs",
+    "kit/lib/vocab/groups.mjs",
+    "kit/lib/vocab/rarity.mjs",
+    "kit/lib/vocab/survival.mjs",
+    "kit/lib/write.mjs",
+    "kit/regions/crater_works.mjs",
+    "kit/regions/floating_islands.mjs",
+    "kit/regions/hy_core_demo.mjs",
+    "kit/regions/plan_v0.mjs",
+    "kit/regions/rift_city.mjs",
+    "kit/regions/s3_hill.mjs",
+    "kit/schemas/mask.json",
+    "kit/schemas/pattern.json",
+    "kit/schemas/plan-catalogue.golden.json",
+    "kit/schemas/plan.json",
+    "kit/schemas/vocab-1.json",
+    "kit/test/coa.test.mjs",
+    "kit/test/fixtures/plan/vocc/r03_entry.json",
+    "kit/test/fixtures/vocab/voc-designs.mjs",
+    "kit/test/fixtures/vocab/vocc-designs.mjs",
+    "kit/test/h-helpers.mjs",
+    "kit/test/plan-helpers.mjs",
+    "kit/test/vocc.test.mjs",
+    "kit/vocab/hazards.json",
+    "kit/vocab/roles.json",
+    "kit/vocab/tiers.json",
+    "mod/gradle.properties",
+    "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
+    "scenarios/s3_monastery.json",
+    "scenarios/s7_flat_village.json",
+    "tools/api-compat.mjs",
+    "tools/find-site.mjs",
+    "tools/gate6a-stubs.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ccoa.mjs",
+    "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/f7a-norm.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/gallery6b.html",
+    "tools/lib/gallery6b.mjs",
+    "tools/lib/gate-part.mjs",
+    "tools/lib/gate6ccoa-kit.mjs",
+    "tools/lib/gate6chy-b.mjs",
+    "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
+    "tools/lib/gate6crs-game.mjs",
+    "tools/lib/p3-tier.mjs",
+    "tools/lib/plan-cache.mjs",
+    "tools/lib/realised-virtual.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/scenario-districts.mjs",
+    "tools/lib/scenario-eval-worker.mjs",
+    "tools/lib/scenario-forms.mjs",
+    "tools/lib/scenario-metrics.mjs",
+    "tools/lib/scenario-relief.mjs",
+    "tools/lib/scenario-route.mjs",
+    "tools/lib/scenario-s2.mjs",
+    "tools/lib/scenario-s3.mjs",
+    "tools/lib/scenario-scatter.mjs",
+    "tools/lib/scenario-village.mjs",
+    "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
+    "tools/lib/wsserver.mjs",
+    "tools/run-gate6b-client.sh",
+    "tools/run-headless-server.mjs",
+    "tools/scenarios.mjs"
+   ],
+   "globs": [
+    "kit/bibles/**",
+    "kit/designs/**",
+    "kit/examples/cabin/**",
+    "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
+    "kit/test/fixtures/plan/asks/**",
+    "kit/test/fixtures/plan/coa/**",
+    "kit/test/fixtures/plan/hy/**",
+    "mod/src/test/resources/stub-sidecar/**",
+    "scenarios/bibles/**"
+   ],
+   "dynamic": [
+    {
+     "from": "tools/gate6ccoa.mjs",
+     "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
+    },
+    {
+     "from": "kit/lib/components.mjs",
+     "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/plan.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/program.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/synth.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/preview.mjs'))"
+    },
+    {
+     "from": "tools/lib/realised-virtual.mjs",
+     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
+    },
+    {
+     "from": "kit/build.mjs",
+     "expr": "pathToFileURL(file).href)"
+    }
+   ],
+   "env": [
+    "ARCHITECT_ARTIFACTS",
+    "ARCHITECT_BIG_REGIONS",
+    "ARCHITECT_BOT_VIEW_DISTANCE",
+    "ARCHITECT_DEV_PORT",
+    "ARCHITECT_DEV_TOKEN",
+    "ARCHITECT_GAME_DIR",
+    "ARCHITECT_SERVER_EULA",
+    "ARCHITECT_SIMULATION_DISTANCE",
+    "ARCHITECT_XMX",
+    "FINDSITE_PART",
+    "FINDSITE_RESULT",
+    "FINDSITE_SEED",
+    "GATE6B_CLIENT_SCRIPT",
+    "GATE6B_DEV_PORT",
+    "GATE6B_OUT",
+    "GATE6B_RUN",
+    "GATE6B_SIDECAR_PORT",
+    "GATE6CCOA_OUT",
+    "GATE_JAVAP_CACHE",
+    "GATE_JAVAP_CACHE_DIR",
+    "GATE_MERGE_BASE",
+    "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
+    "GRADLE_USER_HOME",
+    "HEADLESS_SIDECAR",
+    "HYB_BYPASS",
+    "HYB_ONLY",
+    "HYB_WATCH",
+    "JAVA_HOME",
+    "PATH",
+    "REFIND",
+    "SCENARIOS_ART"
+   ],
+   "flags": {
+    "originMain": [
+     "tools/lib/base-tree.mjs",
+     "tools/lib/gate6ccoa-kit.mjs",
+     "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
+     "tools/lib/plan-cache.mjs"
+    ]
+   },
+   "testFilters": [
+    "*ApiRulesTest*",
+    "*PlanRetentionTest*",
+    "*RealiseKeyTest*",
+    "*RegionWaitTagsTest*"
+   ],
+   "testFiltersComplete": true,
+   "gradleUse": "tests",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/gate6ccoa.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ],
+   "verified": "20261023-114540-release coa-ingame"
   },
   "rs-unit": {
    "classes": [
@@ -11666,6 +12447,7 @@
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
@@ -11710,6 +12492,7 @@
     "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "kit/test/fixtures/plan/rs/**",
@@ -11821,7 +12604,8 @@
    "eager": [
     "tools/gate6crs.mjs",
     "tools/lib/gate-part.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rs-unit"
   },
   "rs-ingame": {
    "classes": [
@@ -11998,6 +12782,7 @@
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
@@ -12042,6 +12827,7 @@
     "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "kit/test/fixtures/plan/rs/**",
@@ -12153,7 +12939,8 @@
    "eager": [
     "tools/gate6crs.mjs",
     "tools/lib/gate-part.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rs-ingame"
   },
   "rs-survival": {
    "classes": [
@@ -12330,6 +13117,7 @@
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
@@ -12374,6 +13162,7 @@
     "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "kit/test/fixtures/plan/rs/**",
@@ -12486,7 +13275,7 @@
     "tools/gate6crs.mjs",
     "tools/lib/gate-part.mjs"
    ],
-   "verified": "20261022-161855-release rs-survival"
+   "verified": "20261023-114540-release rs-survival/p3"
   },
   "rs-survival-smoke": {
    "classes": [
@@ -12663,6 +13452,7 @@
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
@@ -12707,6 +13497,7 @@
     "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "kit/test/fixtures/plan/rs/**",
@@ -12995,6 +13786,7 @@
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
@@ -13039,6 +13831,7 @@
     "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "kit/test/fixtures/plan/rs/**",
@@ -13150,7 +13943,8 @@
    "eager": [
     "tools/gate6crs.mjs",
     "tools/lib/gate-part.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rs-toggle"
   },
   "rs-crash": {
    "classes": [
@@ -13327,6 +14121,7 @@
     "tools/api-compat.mjs",
     "tools/gate6crs.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
@@ -13371,6 +14166,7 @@
     "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "kit/test/fixtures/plan/rs/**",
@@ -13482,7 +14278,8 @@
    "eager": [
     "tools/gate6crs.mjs",
     "tools/lib/gate-part.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rs-crash"
   },
   "rsb-ingame": {
    "classes": [
@@ -13675,6 +14472,7 @@
    "globs": [
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -13740,7 +14538,8 @@
    "gradleUse": "tests",
    "eager": [
     "tools/gate6crsb.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rsb-ingame"
   },
   "rsb-crash": {
    "classes": [
@@ -13933,6 +14732,7 @@
    "globs": [
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -13998,7 +14798,8 @@
    "gradleUse": "tests",
    "eager": [
     "tools/gate6crsb.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rsb-crash"
   },
   "p0-ingame": {
    "classes": [
@@ -14287,7 +15088,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release p0-ingame"
   },
   "p0-natural": {
    "classes": [
@@ -14576,7 +15378,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release p0-natural"
   },
   "t2-ingame": {
    "classes": [
@@ -14908,7 +15711,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t2-ingame"
   },
   "t3a-unit": {
    "classes": [
@@ -15241,7 +16045,8 @@
     "tools/gate6ct3a.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3a-unit"
   },
   "t3a-probe": {
    "classes": [
@@ -15600,7 +16405,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3a-probe"
   },
   "t3a-ingame": {
    "classes": [
@@ -15959,7 +16765,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3a-ingame"
   },
   "t3a-natural": {
    "classes": [
@@ -16318,7 +17125,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3a-natural"
   },
   "t3a-frozen": {
    "classes": [
@@ -16663,7 +17471,8 @@
     "tools/gate6ct3a.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3a-frozen"
   },
   "t3a-look": {
    "classes": [
@@ -17023,7 +17832,7 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
    ],
-   "verified": "20261022-161855-release t3a-look"
+   "verified": "20261023-114540-release t3a-look"
   },
   "k1b-unit": {
    "classes": [
@@ -17332,7 +18141,8 @@
     "tools/gate7ak1b.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release k1b-unit"
   },
   "k1b-ingame": {
    "classes": [
@@ -17668,7 +18478,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release k1b-ingame"
   },
   "k1b-natural": {
    "classes": [
@@ -18004,7 +18815,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release k1b-natural"
   },
   "t3b-unit": {
    "classes": [
@@ -18327,7 +19139,8 @@
    "eager": [
     "tools/gate6ct3b.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3b-unit"
   },
   "t3b-ingame": {
    "classes": [
@@ -18673,7 +19486,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3b-ingame"
   },
   "t3b-natural": {
    "classes": [
@@ -19019,7 +19833,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3b-natural"
   },
   "t3b-pin": {
    "classes": [
@@ -19711,7 +20526,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3b-look"
   },
   "h-unit": {
    "classes": [
@@ -19930,6 +20746,7 @@
     "tools/api-compat.mjs",
     "tools/catalogue-since-check.mjs",
     "tools/gate6ch.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
@@ -20066,7 +20883,8 @@
     "tools/gate6ch.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release h-unit"
   },
   "h-ingame": {
    "classes": [
@@ -20290,6 +21108,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
@@ -20447,7 +21266,7 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
    ],
-   "verified": "20261022-161855-release h-ingame"
+   "verified": "20261023-114540-release h-ingame/p3"
   },
   "h-crash": {
    "classes": [
@@ -20671,6 +21490,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
@@ -20827,7 +21647,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release h-crash"
   },
   "h-probe": {
    "classes": [
@@ -21051,6 +21872,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
@@ -21207,7 +22029,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release h-probe"
   },
   "h-natural": {
    "classes": [
@@ -21431,6 +22254,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
@@ -21811,6 +22635,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
@@ -22191,6 +23016,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
@@ -22549,6 +23375,7 @@
     "scenarios/route_demo.json",
     "tools/api-compat.mjs",
     "tools/gate6cvoc.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -22696,7 +23523,8 @@
    ],
    "derived": [
     "node_modules/**"
-   ]
+   ],
+   "verified": "20261023-114540-release voc-unit/p3"
   },
   "voc-registry": {
    "classes": [
@@ -22903,6 +23731,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -23059,7 +23888,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release voc-registry"
   },
   "voc-probe": {
    "classes": [
@@ -23266,6 +24096,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -23422,7 +24253,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release voc-probe"
   },
   "voc-survival": {
    "classes": [
@@ -23629,6 +24461,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -23785,7 +24618,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release voc-survival"
   },
   "voc-ingame": {
    "classes": [
@@ -23992,6 +24826,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -24148,7 +24983,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release voc-ingame"
   },
   "voc-natural": {
    "classes": [
@@ -24355,6 +25191,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -24511,7 +25348,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release voc-natural"
   },
   "vocc-unit": {
    "classes": [
@@ -24713,6 +25551,7 @@
     "scenarios/route_demo.json",
     "tools/api-compat.mjs",
     "tools/gate6cvoc.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -24851,12 +25690,17 @@
     "tools/lib/gate-part.mjs"
    ],
    "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
     "node_modules",
-    "package.json"
+    "package.json",
+    "pnpm-workspace.yaml"
    ],
    "derived": [
     "node_modules/**"
-   ]
+   ],
+   "verified": "20261023-114540-release vocc-unit"
   },
   "vocc-ingame": {
    "classes": [
@@ -25063,6 +25907,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -25219,7 +26064,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release vocc-ingame"
   },
   "6cvoc-look": {
    "classes": [
@@ -25426,6 +26272,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -25582,7 +26429,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6cvoc-look"
   },
   "cu-unit": {
    "classes": [
@@ -25642,7 +26490,8 @@
    "gradleUse": "tests",
    "eager": [
     "tools/gate6ccu.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release cu-unit"
   },
   "cu-measure": {
    "classes": [
@@ -25943,7 +26792,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release cu-measure"
   },
   "cu-ingame": {
    "classes": [
@@ -26244,7 +27094,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release cu-ingame"
   },
   "rp-unit": {
    "classes": [
@@ -26396,7 +27247,8 @@
    "gradleUse": "tests",
    "eager": [
     "tools/gate6crp.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rp-unit"
   },
   "rp-ingame": {
    "classes": [
@@ -26696,7 +27548,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rp-ingame"
   },
   "rp-crash": {
    "classes": [
@@ -26996,7 +27849,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rp-crash"
   },
   "cu-survival": {
    "classes": [
@@ -27094,7 +27948,8 @@
     "tools/gate6ccu.mjs",
     "tools/gate6cy.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release cu-survival"
   },
   "ha-unit": {
    "classes": [
@@ -27283,6 +28138,7 @@
     "scenarios/goldens/relief_demo.json",
     "scenarios/s3_monastery.json",
     "tools/gate6cha.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
@@ -27578,6 +28434,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cha.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
@@ -27895,6 +28752,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cha.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
@@ -28212,6 +29070,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cha.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
@@ -28529,6 +29388,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cha.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
@@ -28904,6 +29764,7 @@
     "kit/regions/**",
     "kit/test/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "scenarios/bibles/**"
@@ -29005,7 +29866,7 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs"
    ],
-   "verified": "20261022-161855-release hy-unit"
+   "verified": "20261023-114540-release hy-unit"
   },
   "h-holders": {
    "classes": [
@@ -29229,6 +30090,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
@@ -29385,7 +30247,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release h-holders"
   },
   "irr-holders": {
    "classes": [
@@ -29592,6 +30455,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cirr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -29638,6 +30502,7 @@
     "kit/examples/cabin/**",
     "kit/test/fixtures/designs/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -29763,7 +30628,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release irr-holders"
   },
   "h-rmcrash": {
    "classes": [
@@ -29987,6 +30853,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
@@ -30143,7 +31010,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release h-rmcrash"
   },
   "hy-ingame": {
    "classes": [
@@ -30404,6 +31272,7 @@
     "kit/regions/**",
     "kit/test/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -30521,7 +31390,7 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
    ],
-   "verified": "20261022-161855-release hy-ingame"
+   "verified": "20261023-114540-release hy-ingame/p3"
   },
   "hy-crash": {
    "classes": [
@@ -30782,6 +31651,7 @@
     "kit/regions/**",
     "kit/test/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -30898,7 +31768,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release hy-crash"
   },
   "hy-natural": {
    "classes": [
@@ -31159,6 +32030,7 @@
     "kit/regions/**",
     "kit/test/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -31536,6 +32408,7 @@
     "kit/regions/**",
     "kit/test/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -31652,7 +32525,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release hy-cold"
   },
   "kc-unit": {
    "classes": [
@@ -31875,6 +32749,7 @@
     "kit/bibles/**",
     "kit/designs/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "kit/test/fixtures/plan/kc/**",
@@ -31966,7 +32841,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release kc-unit"
   },
   "7af-unit": {
    "classes": [
@@ -32500,6 +33376,7 @@
     "kit/regions/**",
     "kit/test/fixtures/lint/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "scenarios/bibles/**",
@@ -32849,6 +33726,7 @@
     "kit/regions/**",
     "kit/test/fixtures/lint/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -33214,6 +34092,7 @@
     "kit/regions/**",
     "kit/test/fixtures/lint/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -33579,6 +34458,7 @@
     "kit/regions/**",
     "kit/test/fixtures/lint/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -33944,6 +34824,7 @@
     "kit/regions/**",
     "kit/test/fixtures/lint/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -34309,6 +35190,7 @@
     "kit/regions/**",
     "kit/test/fixtures/lint/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -34655,6 +35537,7 @@
     "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "kit/test/fixtures/plan/kc/**",
@@ -34763,7 +35646,8 @@
     "tools/lib/p3-tier.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release kc-ingame"
   },
   "f3-unit": {
    "classes": [
@@ -35000,6 +35884,7 @@
     "kit/bibles/**",
     "kit/designs/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/f3/**",
     "kit/test/fixtures/plan/hy/**",
@@ -35102,7 +35987,8 @@
     "tools/gate6cf3.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261023-045735-slice f3-unit"
   },
   "f3-ingame": {
    "classes": [
@@ -35348,6 +36234,7 @@
     "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/f3/**",
     "kit/test/fixtures/plan/hy/**",
@@ -35466,7 +36353,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release f3-ingame"
   },
   "f3-natural": {
    "classes": [
@@ -35712,6 +36600,7 @@
     "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/f3/**",
     "kit/test/fixtures/plan/hy/**",
@@ -35830,7 +36719,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release f3-natural"
   },
   "f3-forest": {
    "classes": [
@@ -36067,6 +36957,7 @@
     "kit/bibles/**",
     "kit/designs/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/f3/**",
     "kit/test/fixtures/plan/hy/**",
@@ -36169,7 +37060,8 @@
     "tools/gate6cf3.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release f3-forest"
   },
   "f3-look": {
    "classes": [
@@ -36415,6 +37307,7 @@
     "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/f3/**",
     "kit/test/fixtures/plan/hy/**",
@@ -36735,6 +37628,7 @@
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6cirr.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -36777,6 +37671,7 @@
     "kit/designs/**",
     "kit/test/fixtures/designs/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "scenarios/bibles/**"
@@ -36886,7 +37781,8 @@
     "tools/gate6cirr.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release irr-unit"
   },
   "irr-ingame": {
    "classes": [
@@ -37093,6 +37989,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cirr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -37139,6 +38036,7 @@
     "kit/examples/cabin/**",
     "kit/test/fixtures/designs/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -37265,7 +38163,7 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
    ],
-   "verified": "20261022-161855-release irr-ingame"
+   "verified": "20261023-114540-release irr-ingame/p3"
   },
   "irr-crash": {
    "classes": [
@@ -37472,6 +38370,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cirr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -37518,6 +38417,7 @@
     "kit/examples/cabin/**",
     "kit/test/fixtures/designs/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -37643,7 +38543,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release irr-crash"
   },
   "irr-look": {
    "classes": [
@@ -37850,6 +38751,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cirr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -37896,6 +38798,7 @@
     "kit/examples/cabin/**",
     "kit/test/fixtures/designs/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -38181,7 +39084,6 @@
     "kit/regions/s3_hill.mjs",
     "kit/schemas/mask.json",
     "kit/schemas/pattern.json",
-    "kit/schemas/plan-catalogue.golden.json",
     "kit/schemas/plan.json",
     "kit/test/fixtures/plan/fl/asks-after.md",
     "kit/test/fixtures/plan/fl/asks-before.md",
@@ -38206,6 +39108,7 @@
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6cfl.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
@@ -38249,6 +39152,7 @@
     "kit/lib/**",
     "kit/schemas/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "scenarios/bibles/**"
@@ -38345,12 +39249,18 @@
     "tools/lib/gate-part.mjs"
    ],
    "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
     "node_modules",
-    "package.json"
+    "package.json",
+    "pnpm-workspace.yaml",
+    "tools/lib/**"
    ],
    "derived": [
     "node_modules/**"
-   ]
+   ],
+   "verified": "20261023-114540-release fl-unit"
   },
   "fl-ingame": {
    "classes": [
@@ -38511,7 +39421,6 @@
     "kit/regions/s3_hill.mjs",
     "kit/schemas/mask.json",
     "kit/schemas/pattern.json",
-    "kit/schemas/plan-catalogue.golden.json",
     "kit/schemas/plan.json",
     "kit/test/fixtures/plan/fl/asks-after.md",
     "kit/test/fixtures/plan/fl/asks-before.md",
@@ -38540,6 +39449,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cfl.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
@@ -38587,6 +39497,7 @@
     "kit/lib/**",
     "kit/schemas/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -38697,7 +39608,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release fl-ingame"
   },
   "fl-natural": {
    "classes": [
@@ -38858,7 +39770,6 @@
     "kit/regions/s3_hill.mjs",
     "kit/schemas/mask.json",
     "kit/schemas/pattern.json",
-    "kit/schemas/plan-catalogue.golden.json",
     "kit/schemas/plan.json",
     "kit/test/fixtures/plan/fl/asks-after.md",
     "kit/test/fixtures/plan/fl/asks-before.md",
@@ -38887,6 +39798,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cfl.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
@@ -38934,6 +39846,7 @@
     "kit/lib/**",
     "kit/schemas/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -39044,7 +39957,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release fl-natural"
   },
   "fl-look": {
    "classes": [
@@ -39205,7 +40119,6 @@
     "kit/regions/s3_hill.mjs",
     "kit/schemas/mask.json",
     "kit/schemas/pattern.json",
-    "kit/schemas/plan-catalogue.golden.json",
     "kit/schemas/plan.json",
     "kit/test/fixtures/plan/fl/asks-after.md",
     "kit/test/fixtures/plan/fl/asks-before.md",
@@ -39234,6 +40147,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cfl.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
@@ -39281,6 +40195,7 @@
     "kit/lib/**",
     "kit/schemas/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -39391,7 +40306,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release fl-look"
   },
   "water-lint": {
    "classes": [],
@@ -39684,7 +40600,12 @@
     "kit/vocab/hazards.json",
     "kit/vocab/roles.json",
     "kit/vocab/tiers.json"
-   ]
+   ],
+   "data": [
+    "scenarios/goldens/route_demo/**",
+    "scenarios/goldens/s7/**"
+   ],
+   "verified": "20261023-114540-release water-lint"
   },
   "p3-lint": {
    "classes": [
@@ -39695,7 +40616,8 @@
    "globs": [],
    "dynamic": [],
    "env": [],
-   "eager": []
+   "eager": [],
+   "verified": "20261023-114540-release p3-lint"
   },
   "p3-lint-long": {
    "classes": [
@@ -39706,7 +40628,8 @@
    "globs": [],
    "dynamic": [],
    "env": [],
-   "eager": []
+   "eager": [],
+   "verified": "20261023-114540-release p3-lint-long"
   },
   "p3-probe-water": {
    "classes": [],
@@ -40176,6 +41099,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
@@ -40556,6 +41480,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
@@ -40973,6 +41898,7 @@
     "kit/regions/**",
     "kit/test/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -41089,7 +42015,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-045735-slice hy-ingame-smoke"
   },
   "hy-crash-smoke": {
    "classes": [
@@ -41350,6 +42277,7 @@
     "kit/regions/**",
     "kit/test/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -41727,6 +42655,7 @@
     "kit/regions/**",
     "kit/test/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -42050,6 +42979,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cirr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -42096,6 +43026,7 @@
     "kit/examples/cabin/**",
     "kit/test/fixtures/designs/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -42453,6 +43384,7 @@
     "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "kit/test/fixtures/plan/kc/**",
@@ -42768,6 +43700,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cvoc.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -43347,6 +44280,7 @@
     "kit/regions/**",
     "kit/test/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
@@ -43767,7 +44701,15 @@
     "tools/gate6cs2.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release s2-unit"
   },
   "s3-unit": {
    "classes": [
@@ -43973,6 +44915,7 @@
     "scenarios/s3_monastery.json",
     "tools/api-compat.mjs",
     "tools/gate6cs3.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
@@ -44018,6 +44961,7 @@
     "kit/lib/region/passes/**",
     "kit/test/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "kit/test/fixtures/regions/**",
@@ -44130,7 +45074,15 @@
    "eager": [
     "tools/gate6cs3.mjs",
     "tools/lib/gate-part.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release s3-unit"
   },
   "s3-plan": {
    "classes": [
@@ -44341,6 +45293,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cs3.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
@@ -44390,6 +45343,7 @@
     "kit/lib/region/passes/**",
     "kit/test/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
     "kit/test/fixtures/plan/hy/**",
     "kit/test/fixtures/regions/**",
@@ -44518,7 +45472,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release s3-plan"
   },
   "6c-scenario-s3": {
    "classes": [
@@ -44796,6 +45751,9 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
+   ],
+   "data": [
+    "rustic"
    ]
   },
   "6c-scenario-s3-dev": {
@@ -45352,7 +46310,11 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ]
+   ],
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261023-114540-release 6c-scenario-s2"
   },
   "6ct2-scenario-route": {
    "classes": [
@@ -45630,7 +46592,11 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ]
+   ],
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261023-114540-release 6ct2-scenario-route"
   },
   "d-unit": {
    "classes": [
@@ -45981,7 +46947,15 @@
     "tools/gate6cd.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release d-unit"
   },
   "d-ingame": {
    "classes": [
@@ -46357,7 +47331,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release d-ingame"
   },
   "6cd-scenario-districts": {
    "classes": [
@@ -46635,7 +47610,11 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ]
+   ],
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261023-114540-release 6cd-scenario-districts"
   },
   "k1a-unit": {
    "classes": [
@@ -46969,7 +47948,18 @@
     "tools/gate7ak1.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "gradlew",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml",
+    "tools/api-compat.mjs",
+    "tools/plan-catalogue-diff.mjs"
+   ],
+   "verified": "20261023-114540-release k1a-unit"
   },
   "k1a-ingame": {
    "classes": [
@@ -47328,7 +48318,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release k1a-ingame"
   },
   "k1a-natural": {
    "classes": [
@@ -47687,7 +48678,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release k1a-natural"
   },
   "k1a-target": {
    "classes": [
@@ -48046,7 +49038,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release k1a-target"
   },
   "k1a-look": {
    "classes": [
@@ -48406,7 +49399,7 @@
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
-   "verified": "20261022-161855-release k1a-look"
+   "verified": "20261023-114540-release k1a-look"
   },
   "d2-ingame": {
    "classes": [
@@ -48782,7 +49775,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release d2-ingame"
   },
   "d2-findsite": {
    "classes": [
@@ -49708,7 +50702,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release x-resume-full"
   },
   "6cv-scenario-s7": {
    "classes": [
@@ -50023,7 +51018,11 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ]
+   ],
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261023-114540-release 6cv-scenario-s7"
   },
   "0b-unit": {
    "classes": [
@@ -50118,7 +51117,15 @@
     "tools/gate6c0b.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release 0b-unit"
   },
   "0b-ingame": {
    "classes": [
@@ -50225,7 +51232,11 @@
     "tools/gate6c0b.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "package.json"
+   ],
+   "verified": "20261023-114540-release 0b-ingame"
   },
   "4e-megalite": {
    "classes": [
@@ -50304,7 +51315,8 @@
     "tools/gate4e.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 4e-megalite"
   },
   "c30-ingame": {
    "classes": [
@@ -50400,7 +51412,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release c30-ingame-full"
   },
   "4d-all": {
    "classes": [
@@ -50497,7 +51510,7 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/tickbar.mjs"
    ],
-   "verified": "20261022-161855-release 4d-all-full"
+   "verified": "20261023-114540-release 4d-all-full"
   },
   "4e-orders": {
    "classes": [
@@ -50656,7 +51669,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
    ],
-   "verified": "20261022-161855-release 4e-orders-full"
+   "verified": "20261023-114540-release 4e-orders-full"
   },
   "4e-crash": {
    "classes": [
@@ -50814,7 +51827,8 @@
     "tools/gate4e.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 4e-crash-full"
   },
   "4e-throughput": {
    "classes": [
@@ -50893,7 +51907,8 @@
     "tools/gate4e.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 4e-throughput"
   },
   "4e-throughput-smoke": {
    "classes": [
@@ -51224,7 +52239,7 @@
    "data": [
     "kit/lint/**"
    ],
-   "verified": "20261022-161855-release 5b-chains-full"
+   "verified": "20261023-114540-release 5b-chains-full/p3"
   },
   "5b-village": {
    "classes": [
@@ -51348,7 +52363,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 5b-village"
   },
   "6a-megaA": {
    "classes": [
@@ -51413,7 +52429,8 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6a-megaA"
   },
   "6a-megaB": {
    "classes": [
@@ -51478,7 +52495,8 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6a-megaB"
   },
   "6a-megaB-fast": {
    "classes": [
@@ -51674,7 +52692,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
    ],
-   "verified": "20261022-161855-release 6a-crash"
+   "verified": "20261023-114540-release 6a-crash"
   },
   "6a-eflat": {
    "classes": [
@@ -51804,7 +52822,8 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6a-eflat-full"
   },
   "6a-forest": {
    "classes": [
@@ -51869,7 +52888,8 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6a-forest"
   },
   "6b-smoke": {
    "classes": [
@@ -52145,7 +53165,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6b-smoke"
   },
   "6b-ghost": {
    "classes": [
@@ -52421,7 +53442,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6b-ghost"
   },
   "6b-volume": {
    "classes": [
@@ -52697,7 +53719,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6b-volume"
   },
   "6b-commands": {
    "classes": [
@@ -53525,7 +54548,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6b-pathstyle"
   },
   "6b-versions": {
    "classes": [
@@ -53801,7 +54825,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6b-versions"
   },
   "6b-versionc": {
    "classes": [
@@ -54077,7 +55102,11 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "data": [
+    "package.json"
+   ],
+   "verified": "20261023-114540-release 6b-versionc"
   },
   "6b-scenario-s1": {
    "classes": [
@@ -54355,7 +55384,11 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ]
+   ],
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261023-114540-release 6b-scenario-s1"
   },
   "6b-scenario-s1-flat": {
    "classes": [
@@ -54698,7 +55731,8 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6a-inv3"
   },
   "6a-staged": {
    "classes": [
@@ -54828,7 +55862,8 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6a-staged-full"
   },
   "6a-heap": {
    "classes": [
@@ -55370,7 +56405,34 @@
    ],
    "eager": [
     "tools/lint.mjs"
-   ]
+   ],
+   "data": [
+    "kit/lib/**",
+    "kit/regions/**",
+    "kit/schemas/**",
+    "kit/test/**",
+    "kit/test/fixtures/plan/even/**",
+    "kit/test/fixtures/plan/f3/**",
+    "kit/test/fixtures/plan/fl/**",
+    "kit/test/fixtures/plan/h/**",
+    "kit/test/fixtures/plan/hy/**",
+    "kit/test/fixtures/plan/irr/**",
+    "kit/test/fixtures/plan/k1a/**",
+    "kit/test/fixtures/plan/kc/**",
+    "kit/test/fixtures/plan/refused/**",
+    "kit/test/fixtures/plan/rope/**",
+    "kit/test/fixtures/plan/rs/**",
+    "kit/test/fixtures/plan/t3a/**",
+    "kit/test/fixtures/plan/tunnel/**",
+    "kit/test/fixtures/plan/valid/**",
+    "kit/test/fixtures/plan/voc/**",
+    "kit/test/fixtures/plan/vocc/**",
+    "kit/test/fixtures/vocab/**",
+    "kit/vocab/**",
+    "kit/voxel_classes.json",
+    "scenarios/bibles/**"
+   ],
+   "verified": "20261023-114540-release lint-structure"
   },
   "lint-look": {
    "classes": [],
@@ -55501,7 +56563,16 @@
    ],
    "eager": [
     "tools/lint.mjs"
-   ]
+   ],
+   "data": [
+    "kit/lib/**",
+    "kit/regions/**",
+    "kit/schemas/**",
+    "kit/test/**",
+    "kit/vocab/**",
+    "kit/voxel_classes.json"
+   ],
+   "verified": "20261023-114540-release lint-look"
   },
   "lint-mutations": {
    "classes": [],
@@ -55632,7 +56703,14 @@
    ],
    "eager": [
     "tools/lint.mjs"
-   ]
+   ],
+   "data": [
+    "kit/lib/**",
+    "kit/regions/**",
+    "kit/vocab/**",
+    "kit/voxel_classes.json"
+   ],
+   "verified": "20261023-114540-release lint-mutations"
   },
   "p2-calibration": {
    "classes": [
@@ -55886,6 +56964,7 @@
     "tools/gate6cvoc.mjs",
     "tools/gate7ak1b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/corpus-derive.mjs",
@@ -56089,7 +57168,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release p2-calibration"
   },
   "w-ingame-smoke": {
    "classes": [

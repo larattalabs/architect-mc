@@ -14351,7 +14351,7 @@ parallel, released as one batch (as K1 and T3). H-c follows in the same batch if
 | The two-plan check and the guards | `PlanChecks`: the second plan runs for a plan with an H part (`H_KINDS`), meta `wet` asked (`planCheck.wetAsked`) or a `farmPond`; the guards `{part, body, kind: body \| wet, fluids: true, volume: {sha, box}, runs}` compared in `realiseApproved` with the fluid layer (`waterDiff`): a guard whose classes or fluid codes changed answers ARTIFACT_STALE naming the part. `VolumeSurvey`/`Arvx` sample and encode v3 when asked `fluids`. |
 | Readings | The watched cells' befores are in `fluids.json`, not journal entries (one record per region, saved before any write); the drain-first removal waits a full settle bound with no fluid tick before the solids. A stop in phase `writing` re-runs the live check before the tiles (§3.5: the world may have lost the shells with unsaved chunks while the journal keeps them PLACED); a body that fails then is drained (idempotent) and not written. A census and an escape drain leave another standing body's planned cells alone; a removal drains every body. Item 7's "a crash after the shells" and "mid-stage" are kill points with `+save` (the world as an autosave left it); the no-save FL1 case is gated too (every body settled or uncontained, 0 fluid outside). Item 14 (a)'s dry case is `tile-gravity` (housekeeping 2's, run by H-core's impact rule); under water a brush never takes the column. M20's reach stays {side 3, below 1, above 3}, read from 26.3's LavaFluid.randomTick and confirmed by item 13's probe. **Deviation (§4.3, recorded at the batch):** `StillOurs.fluidHolds` does not implement "a shell cell that now holds the body's fluid is the entry's": a breached shell cell holding the body's water is not counted as the shell entry's own. The removal gets there another way: the shell cells at or under the surface are in the body's watch set (the single breach's reach), so the drain-first removal restores a breached shell cell to its before state, the same target as the journal's undo; item 6's breach undo is E-flat 0. |
 | DevBridge | `SliceHDev` (also generated headless): `dev.fluid.census`, `dev.fluid.tick`, `dev.entity.damage` (`DamageLog`, a ring of 2,000), `dev.fluid.state`, TEST `dev.fluid.bypass`, `dev.fluid.beforeGate`; `dev.journal.killAt` FL1-FL3 (+save). DEVBRIDGE changelog 2026-10-18. |
-| Gate | Slice tier `artifacts/gate-runs-Hcore/20261018-223326-slice` at 550eba89 (2h10m): 76 PASS, 2 FAIL, neither in H-core's diff: `w-ingame` (s1_floating_islands' golden, failing on main on both hosts: PLAN "Queued from housekeeping 2") and `6cf2-scenario-scatter` (the known scatter flake), whose re-run `artifacts/gate-runs-Hcore/20261019-004529-change` PASSED. gate-verifier **PASS** on items 2, 3, 5, 6, 7 and 11 with its own headless re-run at 84d2d2ef, `artifacts/gate-runs-Hcore-verify/20261019-005534-change` (h-ingame 17/0, h-crash 11/0; the later commits are docs and the unit-tested farm-pond trigger). Its review defects (the removal's unbounded settle wait, the stray drain, a spill cell's level, §4.3's shell rule) were fixed or recorded in the batch: "H batch as integrated". HANDOFF-Hcore retired. Spend $0.00. |
+| Gate | Slice tier `artifacts/gate-runs-Hcore/20261018-223326-slice` at 550eba89 (2h10m): 76 PASS, 2 FAIL, neither in H-core's diff: `w-ingame` (s1_floating_islands' golden, failing on main on both hosts: PLAN "Queued from housekeeping 2") and `6cf2-scenario-scatter` (the known scatter flake), whose re-run `artifacts/gate-runs-Hcore/20261019-004529-change` PASSED. gate-verifier **PASS** on items 2, 3, 5, 6, 7 and 11 with its own headless re-run at 84d2d2ef, `artifacts/gate-runs-Hcore-verify/20261019-005534-change` (h-ingame 17/0, h-crash 11/0; the later commits are docs and the unit-tested farm-pond trigger). Its review defects (the removal's unbounded settle wait, the stray drain, a spill cell's level, §4.3's shell rule) were fixed or recorded in the batch: "H batch as integrated". HANDOFF-Hcore retired. Re-runs, `--no-split` (turbo's split false-PASS): `20261023-032705-slice` (fba370c2, the RC fix's impact plus every step split before: 66 PASS, 10 FAIL: coa-ingame's drift step missed a planned tile, f3/kc/fl-unit gate staleness on a base past their slices, the rest flakes) and `20261023-045735-slice` (0f2b9bfb: coa-ingame 45/0, f3-unit, kc-unit, fl-unit, hy-ingame-smoke, 6ct1-scenario-relief, 6b-volume, unit-sidecar, cu-unit: 9/9 PASS). hy-ingame-smoke item 14 (the push stand) failed once at fba370c2 and passed at 0f2b9bfb; close-out B is on it as a 0.41 regression (this slice doesn't touch grates). **gate-verifier delta: PASS** (5ede11ff..HEAD); its low note (SAYERS never pruned) fixed: an item that stops waiting drops its sentences. Spend $0.00. |
 
 ### Phase 6c slice H-a as built (water bodies; released in the H batch as v0.37.0: API 1.34.0 / mod 0.37.0 / kit 0.35.0 / catalogue 7; recorded 2026-10-19)
 
@@ -18593,6 +18593,10 @@ by cell, in the region's own order, and is refunded as it stands when the region
 
 ### 3. The survival check and the artifact
 
+- **(6c close-out A, §8) The rule callers need: a region builds from materials only when survival is on for the world.** That is the
+  survival toggle on **and** the world's default game mode not creative (`RegionSurvival.on`). Then it checks, bills and realises
+  in `CONSTRUCTION` from the owner's stockpile; otherwise it checks and realises in creative, whatever the toggle says. A batch
+  (`Sites.queue`) needs only the toggle. `PlanCheck.survival` answers it for each check.
 - **Mode by world.** `Regions.checkPlan` in a survival-toggle world whose default game type isn't creative checks in survival;
   elsewhere in creative, unchanged. The answer's top level carries `survival: true`. No request member (Steward checks in the
   world it builds in).
@@ -18739,6 +18743,10 @@ under its box + 8 likewise.
   `building`, `built`) and counts, so Steward neither routes villagers over an unbuilt bridge nor claims an unbuilt wall.
 - **Partial use is safe by construction** (§4.3, §6.2, §6.3): free cells of a part with paid cells wait with it, a run starts only
   with its whole bill, and a later stage waits for what it stands on.
+- **(6c close-out A, §8) Matching and saying the waits.** Tile and road items carry `architect_mc:region` and `architect_mc:part`
+  (a road's id; a tile's when one plan part writes it) and `architect_mc:parts` (a tile's plan parts), as targets do. A stage wait
+  (`SITE_BUSY`, `architect_mc:waitsFor`) carries `target`, `part`, `waiter` and `say`, a sentence to say as is ("The street waits for
+  the town wall to be built"), and the item's message starts with it.
 
 ### 9. Removal and refunds
 
@@ -20216,7 +20224,7 @@ S-7a-1 to S-7a-5 (batch level) decide §3.2's `auto` row and §4's table.
 | P0 | The reserved example is `connector.tube` (plan-p0's item 2; `extension/e02_catwalk_draft.json` renamed `e02_tube_draft.json`); e15_a drops c_span_bridge. |
 | Tests and drivers | `kit/test/f7a-foundation.test.mjs`. Old tests that read the golden now diff `catalogue-pre7a.json` (fl item 5, forms-f3 item 9); k1-foundation's role table, t3-foundation's move table and release-version's stamp list follow the new slots, rows and NEXT stamps. `tools/gate7af.mjs unit` (step `7af-unit`, impact rule "7a foundation"); `tools/lib/gate7a-kit.mjs` `unchanged()` (the shared byte-identity harness, base tree `../architect-mc-<name>-main`); `tools/lib/f7a-norm.mjs` F7A_MOVED, added to the earlier drivers' exceptions (kc, f3, fl, irr, h-core, hy-core, voc-a, voc-c, batch-0410). |
 | Deviations | The compact plan/0 measured **92,556** characters (main 83,283: +9,273; predicted 2,500-3,500): seven strict defs with connector.routed's members cost about 1.0-1.3k each. Over S-FL-8's 84,000, so the bound moves to **96,000** (coordinator, 2026-10-23, asked of Steward); gate6cfl and gate6cf3 read the new bound. The worktree is `../architect-mc-7a-foundation` (the task's), not `../architect-mc-7aF`. |
-| Gate (§7) | `7af-unit` at 9a9d0a87 (offline, `artifacts/gate7a-f`): item 1 inert, 310 of 312 committed fixtures byte-identical against main 87d96dd6, the other two exactly F7A_MOVED (asks/mining_town: rail_1 until CR; extension/e15_every_reserved_a); items 2-4 kit tests pass (the catalogue diff exactly the three entries; P0 on connector.tube; the alias); item 5 the compact plan/0 92,556. The full kit suite with the foundation: 792 tests, the 6 failures that read the old catalogue, table or slots fixed as above. $0.00. |
+| Gate (§7) | `7af-unit` **ALL 316 PASS** at 0551d9c7 (offline, `artifacts/gate7a-f`): item 1 inert, 310 of 312 committed fixtures byte-identical against main 87d96dd6, the other two exactly F7A_MOVED (asks/mining_town: rail_1 until CR; extension/e15_every_reserved_a); items 2-4 kit tests pass (the catalogue diff exactly the three entries; P0 on connector.tube; the alias); item 5 the compact plan/0 92,556. The whole kit suite 800/800 and sidecar `npm run check` 759/759 at 0551d9c7 (its compact bound 96,000 in system-refs.test). $0.00. |
 
 ## Phase 7a slice CL: climbs, stairs, switchbacks and ladders (FROZEN 2026-10-20, Steward reviewed: every default accepted)
 
@@ -23857,6 +23865,291 @@ Noah, 2026-10-21, in chat with the coordinator:
 
 Steward RC passed on F3, RS-a and RS-b.
 
+## Phase 6c close-out A: the Steward-facing API asks (FROZEN 2026-10-22, Steward reviewed)
+
+Steward's round-12 asks and its RS follow-ups, before the 6c close-out's release tier. PLAN "For the 6c close-out", "Queued
+(coordinator, 2026-10-20)" (`discardPlan`), "RS follow-ups" and "Queued from slice S3" (the first item); steward-mc
+docs/ARCHITECT-ASKS.md "Steward's refinements and the re-record (2026-10-20)". Over main v0.41.0 (a6a947bc: API 1.38.0, kit 0.39.0,
+catalogue 11).
+
+- **Branch:** `slice/close-out-a`, worktree `../architect-mc-coA`. **Spend:** $0 (kit, stub and sim only).
+- **Versions:** none set. Every addition is stamped `NEXT` (`"sinceApi": "NEXT"`, `Since NEXT.`); the coordinator numbers API, mod,
+  kit and catalogue at merge (`tools/release-version.mjs`).
+- **Scope:** §1-§9 below, one per PLAN item. **Also taken (coordinator, 2026-10-22):** every asks table, the ones made stale by
+  VOC-c (h-unit and ha-unit item 10, vocc-unit item 3) with §6's re-cut. pt2-ingame item 13 is close-out B's (`slice/close-out-b`).
+- **Not in scope:** the diagnose-and-repair command (its own contract), the lamp-spacing look slice, every `rule.*` but palette,
+  farm ponds' own site rule (§7 is `form.pond`), S3's other queued items.
+- **Steward's RC** before release: this slice changes the API Steward calls (§1, §2, §3, §8) and answers its plans give (§4, §5).
+
+### 0. Facts (main a6a947bc)
+
+- **Realise keys.** `PlanChecks.realiseApproved` refuses `ARTIFACT_UNAPPROVED`, `ARTIFACT_STALE` (IR, mode, provisional lot,
+  protection, tunnel rock, terrain) and `PALETTE` **before** it calls `Regions.realise`. A key is bound only by `realise`: in memory
+  while it starts (`REALISE_KEYS`), then on the region record (`rec.opKey`, `opHash` over the realise body, which names the plan).
+  So a refused `realiseApproved` binds nothing, and the same key with a re-checked artifact starts afresh today. It is not written
+  anywhere, and nothing tests it. Steward uses a second key (`vrealise2`) because the rule was never stated.
+- **Pins** (P0 §6, C36): `pinArtifact(sha, owner)` / `unpinArtifact` write `<sha>.pins.json {owners}`; an artifact goes (tombstone)
+  only when no pin and no non-REMOVED region holds it. A pin lives until unpinned: Steward's pin on an artifact whose build was
+  abandoned before its realise (a crash, a world deleted from under it) never goes.
+- **Plans** are never discarded: `architect-regions/plans/<id>.json` (+ `.survey.bin`, `.key.json`), `prepare-<id>.json`, and the
+  sidecar's `<data>/regions/plans/<id>/`. Every `checkPlan` makes one (0.4-0.9 MB with its survey).
+- **A route to an unplaced lot.** `endpointNode` (`kit/lib/plan/compile.mjs`) answers `{error: NO_ROOM}` in five places (a lot part;
+  a lot named as a districts, free or standard zone's port; a district not placed), and the connector loop maps every endpoint error
+  to `refused`. The zone that dropped the lot is usually `adjusted` (count).
+- **`rule.palette.scope` is taken:** `rule.common` and `rule.palette` define `scope` as an array of part ids (<= 32; the catalogue's
+  `limits.scope`), `additionalProperties: false`. `scope: "lots"` is malformed today.
+- **Ponds** (`kit/lib/fluids/pond.mjs`): `resolve` takes the first site of `scanRects(..., {limit: 1, keep: 2})` clear of the rects
+  taken so far; `emit` (after the zones' lots and the walls) writes the body and `leakCheck` refuses `LEAK` when its reach (cells,
+  shell, spill, single-breach watch, each with its face neighbours) meets a lot box, build, protected area, keep-out or another owner.
+  It never tries another site.
+- **Region waits.** Road items carry `architect_mc:region`; tile items carry only `architect_mc:tile`; targets carry
+  `architect_mc:region` and `architect_mc:part`. Stage waits (`RegionTargets.waitOn`, `RegionFluids`) wait `SITE_BUSY` with
+  `architect_mc:waitsFor {target, part}` and a message ("waits for <part> (<target>) to be built: ...").
+- **District routes.** `emitDZone` passes `routeKeepOut` (protected areas, other regions, builds) to `emitDistricts` only when a
+  district has terraces (S3, for byte identity).
+
+### 1. The same opKey after `ARTIFACT_STALE` (a stated rule; no code change expected)
+
+**Rule (new javadoc on `Regions.realiseApproved` and `ApprovedRealise.opKey`, and P0 §6 amended):**
+- A `realiseApproved` refused **before its region record is written** binds nothing to its opKey: `ARTIFACT_UNAPPROVED`,
+  `ARTIFACT_STALE`, `PALETTE`, `NOT_LOADED`, and every refusal `Regions.realise` makes before it writes the record (the survival
+  checks: `NOT_ALLOWED`, `CREATIVE_ONLY_BLOCK`).
+- **The same opKey may then realise another artifact**: the re-checked one. Steward drops `vrealise2` (and keeps looking it up for
+  builds started on an older Architect).
+- Once a realise under the key has written its region record, the key is that region's for as long as the record stands, in every
+  state (FAILED and REMOVED included): the same body returns its id; another artifact refuses `OP_KEY_CONFLICT`; `realiseByKey`
+  finds it after a restart.
+- **The re-check itself:** a `checkPlan` with an opKey returns its first answer (C20), stale or not. Re-check unkeyed (as Steward
+  does) or under a new check key.
+
+### 2. Pins that expire with their opKey
+
+```java
+// Regions (default throws "needs Architect API NEXT")
+default void pinArtifact(String artifactSha, String owner, String opKey)   // a keyed pin: it ends with the key (below). Since NEXT.
+```
+- **The key** is the realise key the caller will pass to `realiseApproved` (same owner: the plan's owner, `[A-Za-z0-9_.:-]{1,128}`).
+  One key may pin several artifacts (the check's, then the re-check's).
+- **A keyed pin ends:**
+  1. when a realise under `(owner, opKey)` writes its region record: **every** keyed pin under that key ends, on every artifact, and
+     each artifact is swept (the realised one is held by its region, so it stays; the stale ones go to tombstones). Steward needs no
+     unpin after a realise, nor the pin-next, save, unpin-old order;
+  2. on `unpinArtifact(sha, owner)`: the owner's plain and keyed pins on that sha (idempotent, as today);
+  3. at the world-start sweep, **30 days** after it was last pinned (0a's key retention) with no realise under its key.
+- **The plain pin** `pinArtifact(sha, owner)` is unchanged (it lives until unpinned).
+- **Store:** `<sha>.pins.json` gains `keyed: [{owner, opKey, at}]` beside `owners` (an old file reads as plain pins only). An older mod
+  reading a new file ignores `keyed`, so after a downgrade an artifact held only by keyed pins can be swept (noted, accepted).
+- `PlanArtifact.pins()` lists keyed pins' owners too. Feature `keyedPins`.
+
+### 3. `Regions.discardPlan` and the world-start sweep
+
+```java
+// Regions (default throws "needs Architect API NEXT")
+default CompletableFuture<Boolean> discardPlan(String planId)   // true: discarded now; false: unknown or already discarded. Since NEXT.
+```
+- **Discards** the mod's `plans/<id>.json`, `.survey.bin`, `.key.json` and `prepare-<id>.json`, and the sidecar's plan dir (new
+  protocol message `region.plan.discard {planId}`, feature `planDiscard`; with the sidecar down, the id goes to
+  `plans/discard-pending.json`, replayed at connect). Each artifact made from the plan that has no pin is swept to its tombstone.
+- **Refuses** `OVERLAP_BUSY` with `detail`:
+  - `realised`: a region record that is not REMOVED names the plan (its tiles are evaluated from it);
+  - `busy`: the plan is still planning or preparing;
+  - `pinned`: an artifact of the plan has a pin (plain or keyed). Unpin it first.
+- **A tombstone** `plans/<id>.discarded.json {discardedAt, owner?, opKey?}` stays as long as plan keys do. A keyed plan discarded:
+  the same key and body refuses `PLAN_STALE` (detail `discarded`), never re-plans silently; `planByKey` answers empty (the caller
+  discarded it); `realise` of the id refuses `PLAN_STALE` (detail `discarded`).
+- **The sweep** (world start, after the region records load): an unrealised plan, with no prepare, no pinned artifact and no region
+  naming it, is discarded **7 days** after it was made, or **30 days** if it has a plan key (0a's retention). A plan whose region was
+  REMOVED is swept on the same clock from the removal. Logged once per sweep with a count. Feature `planSweep`.
+- **D-S4:** Steward's `$0` beside check placeholders and each abandoned plan v1 check can be discarded at once.
+
+### 4. A route ending on a lot its zone couldn't place: `blocked`
+
+- Each of the five endpoint cases (§0) answers **`blocked`**, not `refused NO_ROOM`:
+  `{class: blocked, blockedBy: [<zone>], reasons: [{code: DEPENDENCY, message: "ends on lot <lot>, which zone <zone> could not place",
+  evidence: {kind: "unplaced", lot | district, zone, blockedBy: [<zone>], classes: {<zone>: <its class>}}}]}`.
+- **New meaning of `blocked` (stated in plan.json's `partAnswer` description and P0 §3):** a part is also `blocked` when it depends on
+  a **piece** of a part (a lot, a district) that the part could not place, even when that part is `fits` or `adjusted`. `blockedBy`
+  names the part; the evidence names the piece.
+- Parts that depend on such a route stay `blocked` by it (R3, as today). `overall` follows P0 §3 (a required blocked part is
+  `REQUIRED_BLOCKED`).
+- **Expected:** the three re-recorded asks Steward named (terraced_hill, redstone_gate, two_districts) move `refused NO_ROOM` ->
+  `blocked`; nothing else in the 59.
+
+### 5. `rule.palette`: what is measured (`over`) and `exempt: ways | forms`
+
+**Naming (question S-COA-1).** Steward asked for `scope: "lots" | "all"`, but `scope` already holds the rule's part ids, and the two
+combine ("only copper for the buildings of zone town"). Proposed: a **new member `over`**, with `scope` kept as it is:
+```
+rule.palette: {..., scope?: [part ids], over?: "all" | "lots", exempt?: ["terrain" | "support" | "ways" | "forms"], ...}
+```
+- **`over: "all"`** (default, today): the scope's parts and its zones' bound lots.
+- **`over: "lots"`** ("buildings only"): only the bound lots of the zones and districts in scope (all zones with no `scope`); no part's
+  cells count, so `exempt` reads nothing but the lots' pads (`support`). With only provisional lots: `fits` with `pendingLots`,
+  measured at `realiseApproved` (VOC-c §4, unchanged).
+- **Lenient read (S-K1-3):** a string `scope: "lots"` or `"all"` is read as `over` (the part scope then the whole plan), noted
+  "scope read as over"; `params.over` likewise. Never malformed.
+- **`exempt` gains** (by writer, as VOC-c's exemptions are):
+  - `ways`: the IR parts of `connector.street`, `road` and `path`, the route passes' parts, a zone's own street, lanes, square paving
+    and verges, and 4e ground roads (their surface and lamp posts);
+  - `forms`: the IR parts of `form.*` parts (terraces, spikes, spires, F3's grown forms, ponds, fountains, waterfalls; relief is
+    already `terrain`).
+  - Walls, gates, bridges, tunnels and channels still count. Default `exempt` stays `[terrain, support]`.
+- **Catalogue (NEXT, from 11):** `rule.palette` schemaVersion 1 -> 2, limits `{groups: [wood], share: [0, 1], exempt: [terrain,
+  support, ways, forms], over: [all, lots], scope: 32}`, note "measured over parts and bound lots (over: lots: bound lots only);
+  required rules are checked again at realise". Catalogue 11 archived as `fixtures/plan/catalogue-b0410.json`; the diff is exactly
+  that bump. `vocab/1`'s `compact.palette` gains "over: lots measures the buildings only; exempt ways/forms leaves the streets and
+  forms out". `plan/0#compact` stays under its bound (84,000).
+- **The artifact's `palette` rows** gain `over`; for `over: "lots"` `partsCells`/`partsFamily` are 0, so Java's
+  `PaletteRules.measure` (unchanged code) measures the lots alone.
+
+### 6. Steward's 12 re-recorded asks
+
+- Copy the 12 (`arcology`, `end_city_ruins`, `one_block`, `redstone_gate`, `rival_families`, `spiral_town`, `swamp_stilts`,
+  `terraced_hill`, `treetop_village`, `two_districts`, `underwater_domes`, `upside_down`) whole from steward-mc 0c8f4a8 (the only
+  change to `fixtures/strange-asks/plans/` since 8703dbd); `SOURCE.json` names both commits and which files come from which.
+- `fixtures/plan/coa/asks-before.txt` (the 59 with the 12 new ones, on main's kit) and `asks-after.txt` (HEAD), each with the gap
+  table. The tables other gates hold (P0's, H-a's item 10, VOC-c's item 3, T3a/T3b's, F3's and S3's "unchanged" checks) are re-cut
+  once, at the end, and each moved line is named by the item that moved it (§4, §5).
+- **Expected (Steward's own scoring on main's kit):** refused 26 -> 9 over the 59 from the re-record alone, then §4's three routes
+  `blocked`.
+
+### 7. Ponds choose a lot-clear site
+
+- `resolve` ranks up to **16** sites (`scanRects` `limit: 16`, same score), keeping the first as today's geometry.
+- **At `emit`**, the sites are tried in rank order. A site is skipped when its footprint (water + 2) meets any other part's resolved
+  geometry (every part is resolved by then), or when the body's reach meets a lot box + 1, a build, a protected area, keep-out or
+  another owner (`reachMeetsKeep`, the `LEAK` test; the body is rolled back). The first site that passes is written.
+- **Answer:** the first site: as today, byte-identical. A later one: the move judged against `move` (sites past its ceiling are never
+  ranked), `adjusted` with the deviation, the answer's geometry and the footprint the routes see are the site written. None passes:
+  `refused LEAK` for the first site, as today, with `evidence.tried`.
+- `LEAK {kind: unwritable}`, `mix`, and `FIRE`/`WATER` are unchanged (not site retries). Lava pits take the same loop.
+- **Gate:** Steward's F3 RC case (grove_pond with its pond `near: {anchor: stone, within: 40}` beside the town's lots) places with 0
+  `LEAK`; a unit test whose only lot-clear site is ranked below the first picks it.
+
+### 8. RS follow-ups: waits Steward can match and say
+
+- **Tile and road items** carry, like targets:
+  - `architect_mc:region` (tiles gain it; roads have it);
+  - `architect_mc:part`: a road's plan part; a tile's when one plan part writes it;
+  - `architect_mc:parts`: a tile's plan parts (sorted, at most 16), from the IR's part index.
+  - Items queued before this version get them at load (backfilled from the IR). `ITEM_WAITING`, `ITEM_PLACED` and `ITEM_FAILED` carry
+    the item's ext, so they show them.
+- **Stage waits** (`SITE_BUSY`, `architect_mc:waitsFor`) gain `waiter` (the waiting item's part, else `lot <id>`, `road <id>`) and
+  `say`, a sentence Steward can say as is: `"<waiter> waits for <part> to be built"`, from the plan parts' `label` (the artifact's
+  plan) else the id with `_` as spaces ("the street waits for the town wall to be built"). RegionFluids' stage waits likewise
+  (`"the village pond waits for the cottage to be built"`). The item's message starts with the same sentence.
+- **The RS contract text** (§3 and its as-built) gains the rule: *a region builds from materials (`CONSTRUCTION`, the bill, the
+  stockpile) only when survival is on for the world: the survival toggle is on **and** the world's default game mode is not creative
+  (`RegionSurvival.on`). A batch needs only the toggle.* `PlanCheck.survival` answers it per check.
+
+### 9. District routes keep out of protected areas, other regions and builds
+
+- `emitDZone` passes `routeKeepOut` (the plan's protected areas, other regions and builds) for **every** districts zone; `maxGrade`
+  stays terraced-only. Every route pass in `emitDistricts` takes it: the district streets' links, the following districts' traces, the
+  outposts' corridors and D1's joins.
+- **Moved fixtures:** every plan fixture with a districts zone and such a rect in its claim. The builder lists each one with the
+  route that moved (or `UNREACHABLE`/`KEEP_OUT` it now answers) and re-cuts it. The op goldens (`kit/test/fixtures/ops/`) must not
+  move: this is a plan-time input, not an op change (P0 §6's rule).
+
+### 10. API and compatibility
+
+- **Additive:** `Regions.pinArtifact(sha, owner, opKey)`, `Regions.discardPlan(planId)` (defaults that throw); no record, no enum value
+  (OVERLAP_BUSY, PLAN_STALE and DEPENDENCY are reused). Features `keyedPins`, `planDiscard`, `planSweep`, `regionWaitParts`.
+- **Protocol:** `region.plan.discard {planId}` -> `{ok, existed}` (sidecar; an older sidecar's unknown message leaves the dir, logged).
+- **Kit output changes** (§4, §5, §7, §9): kitVersion NEXT, so a region planned on an older kit goes `PLAN_STALE` and Steward re-checks
+  (as after every kit slice).
+- api-compat clean against the 0.41.0, 0.40.1 and 0.40.0 apitest jars.
+
+### 11. Gate (slice tier, $0): `tools/gate6ccoa.mjs`, steps `coa-unit` (no client) and `coa-ingame`
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Same key after stale (in game) | `realiseApproved(A, k)` after a block changed in a tile: ARTIFACT_STALE, nothing written; re-check -> B; `realiseApproved(B, k)` realises; after a restart `realiseByKey(k)` finds it; `(A, k)` again: OP_KEY_CONFLICT; `(B, k)` again: the same region id |
+| 2 | Keyed pins | A and B pinned under k; the realise of B under k: no keyed pin left, A tombstoned, B held by its region; a keyed pin aged 31 days (DevBridge `dev.coa.agePins`) is swept at world start, a plain one is not; an old `pins.json` reads |
+| 3 | discardPlan | an unrealised plan: every mod file and the sidecar dir gone, its unpinned artifact tombstoned, `true`, then `false`; refused `realised`, `pinned`, `busy`; a keyed plan's same-key `plan` refuses PLAN_STALE; sidecar down: replayed at connect; the sweep (forced ages: 6 and 8 days unkeyed, 29 and 31 keyed) discards exactly the old two |
+| 4 | Blocked routes | kit fixtures for the five endpoint cases: `blocked {DEPENDENCY, kind unplaced, lot/district, zone}`; dependants blocked; terraced_hill, redstone_gate, two_districts move refused -> blocked, nothing else |
+| 5 | Palette | fixtures: `over: lots` (a copper-only town whose street is cobble: fits with copper lots, refused PALETTE at realise with an oak one), `exempt: [ways, forms]`, the lenient string `scope`, params `over`; the catalogue diff is the one bump; `vocab/1` and `plan/0#compact` checks green |
+| 6 | Asks | SOURCE.json; 0 malformed; before/after tables committed; every other asks table re-cut with each moved line named |
+| 7 | Ponds | the grove_pond stone case places, 0 LEAK, `adjusted` (move); the unit test of §7; every other pond, fountain and lava fixture byte-identical |
+| 8 | Region waits (in game, survival) | rs02 half fed: ITEM_WAITING on a tile and a road carries region and part(s); a stage wait carries `waiter` and `say` built from the plan's labels; a queue saved by the base code gets the keys at load |
+| 9 | District keep-out | a fixture with a protected rect across a plain district's street route: the route keeps out (or KEEP_OUT); moved fixtures listed and re-cut; op goldens unchanged |
+| 10 | Byte identity | every committed plan fixture not named in §4-§9 plans as on origin/main but kitVersion |
+| 11 | api-compat, lints | api-compat clean (§10); lint-structure, lint-look, water-lint, p3-lint green |
+
+Plus the impact map's steps (`gate-run.mjs slice --since origin/main`).
+
+### 12. What Steward changes when this ships
+
+- Realise the re-checked artifact under the **same** key; keep `vrealise2` only in `findVillage` for old builds.
+- Pin with the realise key (`pinArtifact(sha, owner, opKey("vrealise"))`); drop the unpin after `adoptVillage` and the old-sha unpin
+  after a re-check (an abandoned build may still unpin).
+- `discardPlan` for D-S4's placeholder plans and for checks a build never realises.
+- A route answered `blocked {kind: unplaced}`: a part that waits on its lot, not a refusal to repair.
+- The plan writer: `over: "lots"` for "only copper"-style building asks (and `exempt: [ways, forms]` when the streets and forms are
+  free); then re-record the five older palette plans (Noah approved, about $0.20).
+- Say `waitsFor.say`; match tile and road waits by `architect_mc:region` / `part(s)`.
+- Re-check plans planned on an older kit (`PLAN_STALE`).
+
+### 14. Changes from Steward's review (2026-10-22; binding, they win over the sections above)
+
+- **The sweep's clock is last use, not creation** (§2, §3). A Steward build can wait weeks on a player's approvals while the player is
+  away; ageing from creation would sweep it and lose the approved designs.
+  - **`lastUsed`** is stored per plan (in `plans/<id>.json`'s sidecar record `plans/<id>.used.json`, written durably: write, fsync,
+    atomic rename) and per keyed pin (`keyed[].at` is its `lastUsed`, in `<sha>.pins.json`). Both survive restarts.
+  - **What resets it:** for a plan, `planByKey` and `plan` by its key (adopted), `checkByKey` of the check that made it, a pin or re-pin
+    of an artifact made from it, and a realise attempt on it (`realise`, `realiseApproved`, refused or not); for a keyed pin, a pin
+    or re-pin under its key, and a `realiseApproved` attempt under its key.
+  - **The sweep ages from `lastUsed`:** 7 days for an unkeyed unrealised plan, 30 days for a keyed plan and for a keyed pin. A plan made
+    before this version reads `lastUsed` as its file's modification time.
+  - Steward re-pins and looks up its keyed plans at every world start for each build it resumes.
+  - **Gate (added to items 2 and 3):** a keyed plan touched at day 29 survives a sweep at day 35, and an untouched one is swept; the same
+    for a keyed pin re-pinned at day 29.
+- **§1 amended (coordinator, 2026-10-22; Steward told):** the key is its region's in **every state but REMOVED**: `realiseByKey` is
+  empty once the region is removed, as since C20, and the same key realises afresh after an undo. Unit test `RealiseKeyTest` (a stale
+  retry under the same key, a standing region holds it, an undo frees it); in game, gate item 1 realises again under the key after the
+  undo.
+- **S-COA-1:** `over` beside `scope`, as proposed. Steward writes `over: "lots"`.
+- **S-COA-2:** all of a key's pins end at its realise, as proposed.
+- **S-COA-3:** `OVERLAP_BUSY {realised | busy | pinned}`, as proposed.
+- **S-COA-4:** `parts` plus `part`, as proposed.
+- **S-COA-5, the RC:** a Supplied plan v1 build with a stale retry under one key, keyed pins, `discardPlan` of an abandoned check,
+  waits said from `waitsFor.say`, and a palette `over: "lots"` plan. The gate covers the same flows (items 1, 2, 3, 5 and 8 in one
+  survival flow in `coa-ingame`).
+
+### 13. Questions for Steward
+
+- **S-COA-1** `over` beside `scope` (or a union type on `scope`, losing "lots of zone X")? The lenient string `scope` is read either way.
+- **S-COA-2** Keyed pins: all of a key's pins end at its realise (default), or should re-pinning a new sha under a key end the old
+  sha's pin at once? (Default keeps the old one until the realise, so a crash between your pin and your save never loses the
+  artifact you saved.) 30 days for an unrealised key: enough?
+- **S-COA-3** `discardPlan` refusals as `OVERLAP_BUSY {realised | busy | pinned}`, or would you rather have a result record and no
+  refusal? Sweep ages 7 days (unkeyed) and 30 (keyed): fine?
+- **S-COA-4** Tile waits: `parts` (a list) plus `part` when one; enough to name "which part waits"?
+- **S-COA-5** The RC: §1-§3 and §8 in a Supplied plan v1 build with a stale retry, plus a palette `over: lots` plan?
+
+### Phase 6c close-out A as built (branch `slice/close-out-a`, from main a6a947bc v0.41.0; placeholders NEXT; recorded 2026-10-22)
+
+Built by the slice's builder (mod, sidecar, gate, asks) and a kit sub-agent (§4, §5, §7, §9 on `slice/close-out-a-kit`, merged in). $0.
+
+| Area | As built |
+|---|---|
+| §1 the key after a refusal | No code change to the rule; `Regions.realiseApproved`'s javadoc states it, with §14's amendment (every state but REMOVED, as since C20). The rule is now one pure function, `RegionsImpl.keyOutcome(standingHash, startingHash, hash)` (`NEW`, `ADOPT_REGION`, `ADOPT_STARTING`, `CONFLICT`), used by `realise`; `RealiseKeyTest` (a stale retry under the same key, a standing region holds it, an undo frees it). |
+| §2 keyed pins | `Regions.pinArtifact(sha, owner, opKey)` (default throws "needs Architect API NEXT"; an invalid key throws IllegalArgumentException). `<sha>.pins.json` gains `keyed: [{owner, opKey, at}]` (written only when non-empty; an old file reads as plain pins). `PlanChecks.keyRealised` ends every keyed pin of `(owner, key)` when a keyed realise completes (from `RegionsImpl.realise`, so `realise` and `realiseApproved` alike), sweeping each artifact; `unpinArtifact` drops the owner's plain and keyed pins; a `realiseApproved` attempt under the key refreshes `at`; the world-start sweep (`sweepKeyedPins`) ends a pin 30 days after `at`, or whose key has a standing region (a crash between the record and the end). **Deviation (name):** the artifact's owners are `PlanArtifact.pinnedBy()` (the contract said `pins()`); keyed owners are listed there. |
+| §3 discardPlan, the sweep | `Regions.discardPlan(planId) -> CompletableFuture<Boolean>` (default throws), `region/PlanRetention.java`: the plan's `.json`, `.survey.bin`, `.key.json`, `.used.json` and `prepare-<id>.json`, the plan cache, the ended prepare's view; `PlanChecks.planDiscarded` sweeps its unpinned artifacts; `plans/<id>.discarded.json {discardedAt, owner?, opKey?, opHash?}`; the helper's dir by `region.plan.discard` (sidecar `regions.ts discard`, feature `region.planDiscard` -> `planDiscard`), queued in `plans/discard-pending.json` and replayed once per helper link (generation) from the regions' tick. Refusals `OVERLAP_BUSY` with detail `realised` (a non-REMOVED region names the plan), `busy`, `pinned`. **Deviation:** `busy` covers a running prepare only (a plan still planning has no id the caller knows). A keyed tombstone answers a same-key same-body `plan` `PLAN_STALE {discarded}` (another body `OP_KEY_CONFLICT`), `planByKey` empty, `realise` of the id `PLAN_STALE {discarded}`. **The sweep (§14):** `plans/<id>.used.json {lastUsed}` (RegionStore's write, fsync, rename), touched by `planByKey`, a by-key adopt of `plan`, `checkByKey` (the check's plan), a pin of an artifact of the plan, and every `realise` / `realiseApproved` attempt; absent, the plan file's mtime. At world start (after the regions and pins load) an unrealised plan with no prepare record, no pinned artifact and no standing region goes 7 days after `max(lastUsed, its REMOVED region's removal)`, 30 with a key file. **Addition:** a plan with a prepare record on disk is never swept (a bench's prepared base world). Features `keyedPins`, `planSweep`. |
+| §4 blocked routes | `kit/lib/plan/compile.mjs` `unplacedEnd` / `unplacedBlocked`: a route (the connector loop: streets, roads, paths, bridges, tunnels, rope bridges) ending on a lot or district its zone could not place answers `blocked {blockedBy: [zone], DEPENDENCY {kind: unplaced, lot|district, zone, classes}}`; a lot part, a districts zone's lot or district port, a free zone's and a standard zone's lot port. `plan.json`'s `partAnswer` description states the widened meaning. **Scope kept:** walls and gates that end on the same piece answer as before (`refused NO_ROOM`, the old message: the error's `legacy`), so §4 moves only routes. The "district not placed" branch is converted but unreachable (a named unplaced district takes the port branch). Fixtures `coa/b01`, `coa/b02`. |
+| §5 rule.palette | `over` (top level, a string `scope` "lots"/"all", `params.over`; noted "scope \"lots\" read as over"); `validatePlan` drops a string scope "lots"/"all" before the strict check (any other string stays malformed); `over: lots` measures only the bound lots in scope; `exempt` `ways` (routes, street/road/path connectors, a zone's path parts and `*_street` parts) and `forms` (every `form.*`) by writer (`irPartWriter`). Artifact rows gain `over` on every row (`partsCells`/`partsFamily` 0 for lots); Java reads rows by key (no change). Catalogue 12 (hand-bumped like F3's; the coordinator renumbers): rule.palette schemaVersion 2, limits and note as §5; catalogue 11 archived as `fixtures/plan/catalogue-b0410.json`, the diff exactly that. `vocab/1` `compact.palette` gains the sentence; `plan/0#compact` 83,579 (bound 84,000). **Not done:** the "no X" swap still swaps parts that `ways`/`forms` exempt; `_green` isn't classed as ways. Fixtures `coa/p01`-`p03`. |
+| §6 asks | The 12 from steward-mc 0c8f4a8 (all 59 now equal steward-mc main); `SOURCE.json` names both commits. **Addition:** Steward's first recordings of the 12 kept whole in `fixtures/plan/asks-8703dbd/`: the slices before close-out A judged those plans, so their kit tests (`plan-helpers.mjs asksFirstPath`: K1a item 7, K1b, T3a, T3b, VOC-c item 1) and gate asks readers (`tools/lib/asks-first.mjs`, `gate6chy-b.mjs asksGap` unless `{current: true}`) read them; on them nothing moves, so every earlier asks table holds. Tables: `coa/asks-base-old59.txt` (main's kit, the first recordings), `coa/asks-before.txt` (main's kit, the 59 now: refused 9, blocked 16), `coa/asks-after.txt` (HEAD: refused 6, blocked 19; exactly gate_road, switchback_street, east_street refused NO_ROOM -> blocked DEPENDENCY). `tools/lib/fl-norm.mjs` `COA_MOVED_FIXTURES` names close-out A's byte-identity movers for the earlier slices (folded into `FL_MOVED`). |
+| §7 ponds | `kit/lib/fluids/pond.mjs`: `resolve` ranks 16 sites (site 0 as today); `emit` writes site 0 as today, and only when its reach LEAKs (reach meets keep) rolls back (`K.checkpoint`/`K.rollback`) and tries the rescanned sites in score order, skipping a footprint (water + 2) that meets another part's geometry (zones, districts, forms, lots, planned walls, other H reservations), first lot-clear wins: `adjusted` with a move deviation, geometry and footprint follow. None: site 0's LEAK plus `evidence.tried`. **Deviations:** the 16 are taken after the footprint filter (the raw top 16 are 1-2 cell shifts of site 0); a 0-locator-move shift is recorded as the shift from site 0 with no `max`; only site 0 is tried when an overflow feeds the pond or a part placed before H emit depends on it. Main refuses the stone case (LEAK into cottage_1); `coa/n01_grove_pond_stone` (Steward's file whole, the pond near the stone) plans READY, 0 LEAK, the pond moved 28; `coa/n02` picks the only clear site (ranked below the first). No committed pond fixture moved. |
+| §8 waits | `site/RegionWaitTags.java`: tile items carry `architect_mc:region`, `architect_mc:parts` (sorted, <= 16, from a per-IR index of the IR parts' op bounds under their survival group) and `architect_mc:part` when one; road items `architect_mc:part` = the road id (as `RegionView.build.parts`). `RegionTargets.waitFor`: `architect_mc:waitsFor {target, part, waiter, say}` and the message starts with `say`; the fluids stage's barrier wait likewise (`RegionTargets.firstBuilding`). Words: a plan part's `label` from the artifact's plan, a street road "<its zone's label>'s street", a route road its connector's label (the artifact's leg edge), else the id with spaces. **Deviation:** a queue saved before this version gets the tags in the events' ext (`Views.itemEvent` backfills) but not written back. The RS contract §3 and §8 state the materials rule and the tags. Feature `regionWaitParts`. |
+| §9 district keep-out | `emitDZone` passes `routeKeepOut` for every districts zone; every route call in `districtsEmit.mjs` reads it. No committed fixture has a districts zone with a protected area, region or build, so none moved; `coa/d01_protected_route` (v18 with a protected orchard: main's link crosses it, here it keeps out). Op goldens unchanged. |
+| Byte identity | Against main a6a947bc, each fixture as committed here planned by both kits: 305 of 313 identical (answers, overall, IR, first plan, artifact; kitVersion and catalogueVersion normalised); the 8 that differ are named in `tools/lib/gate6ccoa-kit.mjs` `MOVED`: §4's three asks (`redstone_gate`, `terraced_hill`, `two_districts`: one route each blocked) and §5's artifact rows (`asks/mage_exiles`, `valid/v64`, `valid/v65`, `vocc/r03`, `vocc/r04`: `over: all` added, answers and IR identical). |
+| Steward's RC (2026-10-23) | Passed: the stale retry under one key, a restart mid-build with re-pin, copper `over: "lots"`, discardPlan with its tombstone, waits said from `waitsFor.say`. Fixed after it: **1** (a survival region's later stage held DRIFTED once its own walls and houses were built: pre-existing in RS since v0.41.0, not the stale retry; the region's items are put down unbuilt, so the after-heights baseline was the land's) by `RegionsImpl.constructionBuilt` (a built construction target, road or lot re-baselines its box), coa-ingame `drift` (rs02 with a player's pillar, ARTIFACT_STALE, the re-check realised under the same key, fed to done in 38 waves: no hold, every later stage's check 100% within 2); **3** wording (a construction road waits by its IR road id; "the road" for a road no route or street names; a route without a label by its kind; a zone labelled with a proper name, the settlement's, is "the town"/"the district"; RegionWaitTagsTest.stewardsWording); **5** one sentence per waiting part per wait (`RegionTargets` SAYERS; coa-ingame asserts it). Steward's findings 2 and 4 are another agent's. **Steward's re-run on fba370c2: PASS** (a restart mid-build, the stale retry under one key with no stage hold; 5,550 fed and 5,550 refunded; the wording said once per part, "The town's street waits for the town to be built"; `over: "lots"`; discardPlan, with planByKey and checkByKey empty after it). The later changes (gate fixes, SAYERS pruning, main merged) need no further RC; Steward checks the published 0.42.0. Finding 1's fix ships in 0.42.0 (Noah: no separate 0.41.1). |
+| Final runs (on main with close-out B, 9ca86a65/87d96dd6 merged) | `20261023-104631-slice` (45723627): **coa-ingame 45/0, hy-ingame-smoke 88/0, h-unit 12/0** (H-a's asks table passes); coa-unit failed only its byte identity, against the stale a6a947bc base (main's own storm/grove movers): its base now follows the merge base (`base-tree.mjs`), and **coa-unit 303/0** in `20261023-112319-slice` (78c47572). |
+| API | Additive: two default-throwing `Regions` methods; no record, no enum value. api-compat `--gate6ccoa` (0.41.0 built from its tag without the sidecar bundle, 0.40.1, 0.40.0 apitest jars; 0.41.0's 1.38.0 surface): 4/4 clean. |
+| DevBridge | `SliceCoaDev` (generated headless too): `dev.coa.pinKeyed`, `.artifact`, `.discardPlan`, `.planFiles`, `.clock`, `.sweep`, `.planByKey` (docs/DEVBRIDGE.md). |
+| Gate | `tools/gate6ccoa.mjs` (`coa-unit`, `coa-ingame`; impact rule "6c close-out A"). |
+| Gate evidence | **Slice tier** (`artifacts/gate-runs/20261022-233059-slice`, head 1e6ed029, turbo, 114 steps, 1h04m): 108 PASS, 6 FAIL. Close-out A's own: **coa-unit** PASS (303 ok: kit coa and vocc tests, the asks tables, byte identity 305 of 313 with the 8 named, the mod's RealiseKeyTest, PlanRetentionTest, RegionWaitTagsTest and ApiRulesTest, the sidecar's discard test, api-compat 4/4), **coa-ingame** PASS (39 ok, 0 FAIL: items 1, 2, 3 with the day-29/day-35 sweep, 5, 8 and S-COA-5's survival flow). Also PASS: unit-mod 865/0, rs-ingame, rs-survival, f3-ingame, ha-ingame, t3b-natural, 6a-megaA, 6c-scenario-s2/s3, pt-ingame and the rest. FAIL: pt2-ingame item 13 (close-out B's, known on main); h-unit item 10 (the stale H-a table: fixed in 20437b65, ha-unit re-run by the verifier passes); rsb-crash item 11 (the build paid +4 between the clean stop and the read; paid+stock conserved, 3069 = 3069; timing-dependent as in earlier runs); 6ct1-scenario-relief (M2 4/5) and 6ct2-scenario-route (6 dirt_path cells turned to dirt), both seen failing in earlier turbo runs on main heads; sim-jobs (the helper not up after 2 s). Re-run of the last five plus ha-unit and vocc-unit: queued (see the report). **gate-verifier: PASS** (diff 15c54050...HEAD and the run's evidence; its own re-runs: the three mod test classes, ha-unit standalone). Its low finding (a discarded plan's keyed check record left behind) is fixed (`PlanChecks.checkDiscarded`, PlanRetentionTest). Spend $0.00. |
+
 ## 6c close-out B as built (test hygiene and small correctness follow-ups; branch `slice/close-out-b`, 2026-10-22)
 
 No API, catalogue or version change: no `NEXT` stamp, no Steward RC. The stale asks tables (h-unit and ha-unit H-a item 10, vocc-unit
@@ -24083,3 +24376,149 @@ no version set (the coordinator's at merge).
 - **The gate-verifier:** items 1, 3, 4 and 5 PASS. Its item 2 point, the untagged fresh seed 777124280, is now tagged with a repro
   (§3).
 
+## Release v0.42.0 as integrated (6c close-out A and B, the fixes on main since v0.41.0; branch `release/0.42.0`, 2026-10-23)
+
+Branch `release/0.42.0` over main 87d96dd6 (v0.41.0 plus close-out B, the two fixes and the gate tooling). Not merged, tagged or
+published: the coordinator does that after Noah approves. **Versions:** API **1.39.0**, mod **0.42.0**, kit **0.40.0**,
+catalogue **12**.
+
+### What it does for a player
+
+- **Survival towns no longer stall halfway** (close-out A, finding 1 from Steward's RC). Since 0.41.0 a survival region's later
+  stage could hold as DRIFTED once its own walls and houses were built, because the drift check compared against the bare land.
+  Each built construction target, road or lot now re-baselines its box (`RegionsImpl.constructionBuilt`). The bug shipped in 0.41.0;
+  Noah chose to ship the fix here rather than as 0.41.1.
+- **A town's routes behave around what can't be placed** (close-out A §4, §9). A street or path that would end on a lot or district
+  the plan couldn't place now says `blocked` (with the zone that blocked it) instead of being built to nowhere. District routes keep
+  out of protected areas, other regions and existing builds.
+- **Ponds pick a site clear of the lots** (§7), and a palette rule such as "copper only" can now be measured over the lots alone,
+  leaving the streets and grown forms out (§5, `over: lots`, `exempt: [ways, forms]`).
+- **Waiting parts say what they wait for, once** (§8). "The town's street waits for the town to be built", one sentence per part.
+- **`/architect survival off` no longer blames a region for chunks a player generated elsewhere** (fix/survival-off-storm). The
+  "about 1,000 chunks outside the claim" warning was a miscount; chunks are now charged to a region only inside its claim + 2 or its
+  tickets. **Grown giant trees never leave a floating log** (the same fix).
+- **S3's monastery fountain no longer reads as a leak** when a tree grew beside its spout (fix/s3-scenario: the realised M4 skips a
+  fluid body's own water). The monastery program also trims its relief's floating cells and refuses a plan that would keep one
+  (close-out B §8).
+- **Dried farmland in a survival build** is counted as built, not charged again after a restart (close-out B §5, L-V7).
+- **Region roads over their own region's blocks** count as placed instead of failing (close-out B §11, `Roads.heldByOwn`).
+- **`/architect region realise fill`** no longer picks a player's adopted build for a lot (this integration; below). Such a lot
+  failed ADOPT_REFUSED and the region ended PARTIAL.
+
+### What it does for Steward
+
+- `Regions.pinArtifact(sha, owner, opKey)`: a keyed pin that ends when that key's realise completes, or 30 days after its last use
+  (the world-start sweep). Since 1.39.0.
+- `Regions.discardPlan(planId)`: drops a plan's files and its unpinned artifacts, leaving a tombstone. Since 1.39.0.
+- The same opKey after `ARTIFACT_STALE`: a re-check and retry under one key starts the realise (a stated rule, now one function).
+- `rule.palette` schemaVersion 2 (`over`, `exempt`), catalogue 12; `blocked` answers for routes to unplaced lots; wait tags Steward
+  can match and say. Kit output changed, so a region planned on kit 0.39.0 goes `PLAN_STALE` and Steward re-checks it.
+- Steward's RC passed on close-out A (re-run on fba370c2). Steward checks the published 0.42.0; no further RC needed.
+
+### Merges
+
+1. **slice/close-out-a @ b1ec8a36**, `--no-ff` (0307079a). It already held main 87d96dd6, so there were no conflicts.
+2. Nothing else: close-out B, fix/survival-off-storm, fix/s3-scenario and the gate tooling (turbo, coverage, step cache, nightly,
+   benches, sprint, shared plans, the javap cache, the split false-PASS fix) were already on main.
+
+### Versions
+
+`node tools/release-version.mjs --api 1.39.0 --mod 0.42.0 --kit 0.40.0 --catalogue 12`, one run (7da1765d):
+- API minor (1.38.0 -> 1.39.0) for close-out A's two methods and features; kit 0.39.0 -> 0.40.0 for its kit output changes.
+- **Catalogue 12**: close-out A's own hand bump (rule.palette's schemaVersion 2). No other change since 11 touched the catalogue.
+- 4 placeholders stamped: `rule.palette` sinceApi (plan.json and the golden) and the two `Since NEXT` javadocs in `Regions`.
+- 6 goldens re-cut, tiles, cells and blobs identical: crossings_demo_flat, grove_demo, grove_demo_flat, links_demo, links_demo_flat, s3.
+- `--check`: consistent, no placeholder left.
+
+### Other changes in this integration
+
+- `apijars` runs the latest three releases: 0.41.0 (close-out A's tag build in `artifacts/gate6c-coa/v0410`, a6a947bc), 0.40.1, 0.40.0.
+- `tools/step-inputs.json`: rebuilt after the merge (68 steps reached close-out A's files), then merged from the release run's
+  traces (142 globs).
+- **Fixes the release run found** (09047ea9, 0ba02b2a):
+  - `RegionsImpl.fitLots` (the fill command) skips adopted entries. Shard 1's library held a leftover `adopted_057fbe3f`, first
+    in id order, so 6b-commands' lot_1 failed ADOPT_REFUSED. A player with an adopted build would hit the same.
+  - coa-unit's byte identity normalises the artifact's `api` and the IR's `irSha` (the version bump alone gave 276 DIFFERS).
+  - f3-unit: the five storm-moved fixtures plan the same on a base that already has the storm fix; noted, not failed (it failed the
+    same way on main since 52c2707f).
+  - p3-probe: on a turbo run's offline lane (`.../o<k>`) it now finds the run's evidence (it only climbed from `.../s<k>`).
+  - `step-cache.mjs fail-audit` read test sources at HEAD, not the audited commit, and crashed on a deleted test.
+
+### Suites (head 0ba02b2a)
+
+| Suite | Result |
+|---|---|
+| mod | `./gradlew build --offline`: 874 tests, 0 failed, 1 skipped |
+| kit | 805/0 |
+| sidecar | `npm run check`: 761/761, plus the bundle |
+| api-compat | `--gate6ccoa` clean: the 0.41.0, 0.40.1 and 0.40.0 apitest jars and the 0.41.0 jar's 1.38.0 surface |
+| apijars (in game) | the 0.41.0, 0.40.1 and 0.40.0 jars, 46 ok each, 0 FAIL |
+| versions | `release-version.mjs --check`: consistent (API 1.39.0, mod 0.42.0, kit 0.40.0, catalogue 12); the six tracked goldens re-plan byte for byte |
+
+### Gate evidence ($0)
+
+- **The release run, the first traced full run** (`artifacts/gate-runs-0420/20261023-114540-release`, `release --full` at ef8ba9d2,
+  turbo: 6 in-game shards and 3 offline lanes, 194 steps, **4h30m**): **183 PASS, 1 NOISY, 9 FAIL, 1 TIMEOUT**.
+  - The machine was shared: other sessions ran kit suites and a gate run outside the turbo hold (load p50 12, p90 58, max 138).
+    mp-ingame waited 30 min for quiet and ran NOISY (12 ok, 0 FAIL).
+  - Judged benches, all PASS: 4e-megalite, 6a-megaA, 6a-megaB (the full walk, 1h13m) and 6b-volume.
+  - The 9 FAILs and the TIMEOUT:
+    - **Fixed here** (09047ea9, 0ba02b2a): coa-unit (the version bump in the artifact), f3-unit (the storm exceptions on a base
+      that has the storm fix), p3-probe-water and p3-probe-ledger (run on an offline lane), 6b-commands (fill picked an adopted
+      build). Re-run against this run's evidence, both probes pass every row.
+    - **Known, cited:** rs-survival/p4 item 14 (RoadTerrain and natural packed ice, its own slice); 6c-scenario-s3 bars 5 and 6 on
+      a live survey (queued; passed on the re-run).
+    - **Re-run alone, passed:** 6cf2-scenario-scatter/p1 (E-normal 1 unclassified cell on the natural run; earlier turbo runs on
+      main had the same kind, `gate-runs-turbo-proof/20261022-230320-change`, 42); 6b-nudges (TIMEOUT under load, as at 0.41.0).
+    - **pt-ingame item 15, a timing bar** (the classifier's CPU per tick, max 1.02 ms, then 1.30 ms on the quiet re-run, budget
+      1 ms). Recorded rather than judged in every slice run since 2026-10-20, where it missed in at least 15 runs (1.01-2.34 ms),
+      so it is pre-existing. Carried forward, below.
+- **The re-run** (`20261023-162546-release`, head 0ba02b2a, one shard, 49 min): unit-mod (874/0), coa-unit (303 ok), f3-unit
+  (291 ok), 6cf2-scenario-scatter, 6c-scenario-s3, 6b-commands (shard 1's library still held `adopted_057fbe3f`; lot_1 placed)
+  and 6b-nudges PASS; pt-ingame FAIL on item 15 only.
+- **Step cache.** 5 inputs-map misses (c33-unit, water-lint and the three lints), merged (b0f59ad8, 142 globs). Then
+  `step-cache.mjs import`: **174 recorded, 9 not** (the judged benches, which only the nightly records; 4e-throughput's recorded
+  bars; the uncacheable umt-long, apijars, 6b-versionc and p2-calibration). The re-run added 7.
+- **coverage-select** (`--bytecode`) on the last five code commits, of 215 cacheable steps. The tool prints the map-mode count and
+  the coverage bounds; the exact coverage count comes from this run's recorded coverage (a scratch reading of each step's newest
+  coverage PASS: its set against the changed files, its loaded classes against the changed class files; no constant changed):
+
+  | commit | change | class files changed | map mode runs | coverage at least / at most | coverage, exact | pending |
+  |---|---|---|---|---|---|---|
+  | 78c47572 | coa-unit's base (1 driver) | 0 | 10 | 6 / 10 | 8 | 1 |
+  | cd170c61 | CellCond natural set (4 files) | 6 | 210 | 10 / 210 | 160 | 30 |
+  | 619398ec | realised M4 (kit check.mjs) | 0 | 214 | 18 / 214 | 163 | 30 |
+  | 73189410 | gate-chains (units whole) | 0 | 146 | 143 / 146 | 146 | 0 |
+  | 9a83771e | Roads failure message | 1 | 210 | 9 / 210 | 140 | 30 |
+
+  "Pending" are steps with no coverage PASS recorded (this run's failures, the smoke twins it didn't run, the uncacheable ones).
+  CellCond, Roads and the kit checker are loaded by most in-game steps, so coverage saves 50-70 steps on these commits, not more.
+- **fail-audit**: 734 FAIL/TIMEOUT records; 224 with no earlier PASS on an ancestor; 18 on the same commit as a PASS (flake, load or
+  environment); 469 caused by the step's own drivers, data or definition; 21 only through the whole-tree classes, of which coverage
+  **runs 16** and 5 are pending, **none skipped**; 2 holes, both known (6ct2-scenario-route after a docs-only change; pt2-ingame item
+  13 after a gate6cpt.mjs change).
+
+- **gate-verifier: PASS** at ffe66f40 (`artifacts/gate-runs-0420-verify/20261023-171758-release`: unit-mod, coa-unit 303 ok,
+  apijars 46 ok per jar, 6b-commands, rs-ingame, 5/5 PASS, 30 min). It confirmed the merge tree equals close-out A's (b1ec8a36), the
+  version diff is version-only (each re-cut IR differs from main in `kitVersion` alone), catalogue 12 is right, and the integration's
+  fixes weaken no check (the coa artifact's irSha is masked, but the IR is still compared on its own). Its own checks: the four
+  close-out A mod test classes 25/0, api-compat `--gate6ccoa` 4/4. Minor, fixed after it: apijars' `desc` in gate-chains.json named the
+  old jars. It asks that Noah accept pt-ingame item 15 (a timing bar) explicitly, and notes the P3 probes were re-run against the
+  release run's evidence, not inside a fresh run.
+
+### Approvals
+
+- Noah: finding 1's fix ships in 0.42.0, no separate 0.41.1 (close-out A as built). Release approval pending.
+- Steward's RC on close-out A: PASS (fba370c2).
+- Needed from Noah: the release itself, and the pt-ingame item 15 timing bar carried forward.
+
+### Known issues carried forward
+
+- rs-survival item 14: RoadTerrain treats natural packed ice as built (its own slice, PLAN "Queued from 6c close-out B").
+- 6c-scenario-s3 on a live survey: a route can cut a retained rim, or the relief float a cell (queued; pre-generating S3's claim is
+  proposed in PLAN "Found by fix/s3-scenario").
+- pt-ingame item 15: the classifier's per-tick CPU bar (1 ms) misses by 0.01-1.3 ms in most runs (PLAN "Queued from the v0.42.0 release").
+- 4d-all split into parts fails group undo; it runs whole (PLAN "Queued from the split false-PASS fix").
+- umt-long's new findings F9, DPT, F10 and PTS are tagged, in the undo-B queue.
+- gate6crs item 4's consumed check reads the wrong field; the kit's virtual world writes over lava; the asks-8703dbd fixtures still to
+  retire; lamp spacing on V and D streets (all in PLAN).
