@@ -525,13 +525,13 @@ export function planWalls(K) {
   }
   for (const g of K.k1Parts.filter((q) => q.kind === 'gate')) placeAtGate(K, g);
   // ((7a K2) an along wall's gates.min gates, before routing (open gates the routes cross, on their landings: wallsBase))
-  for (const W of K.walls) if (W.form === 'along') alongMinGates(K, W);
+  for (const W of K.walls) if (W.form === 'along') alongMinGates(K, W, { early: true });
 }
 
 /** (7a K2) The longest flight a gate landing runs to meet the ground (beyond it: no landing, noted). */
 export const LANDING_FLIGHT = 40;
-/** (7a K2) How wide a landing's flight along the inner face is (cells out from the wall): a road's width. */
-export const LANDING_WIDTH = 3;
+/** (7a K2) How wide a landing's flight along the inner face is (cells out from the wall). */
+export const LANDING_WIDTH = 2;
 
 /**
  * (7a K2, the coordinator's ruling (b), 2026-10-23) A gate landing on an along wall: on each side of the wall, over the gate's lanes, the
@@ -584,25 +584,61 @@ function landingOf(K, W, g) {
   // side along the wall, rising (or falling) 1 a position in T2's pattern until the ground across its width is within 1; the shorter way
   if (climb) {
     let best = null;
-    // (straight on along the gate's run, beside the wall's inner face where the wall runs straight, else away from it as a staircase
-    // shore veers: never through a wall cell)
-    const ia = innerOf(g.a), ib = innerOf(g.b);
-    const [dx, dz] = N[facingOut(W, ia)];
-    const ux = Math.sign(ib.x - ia.x), uz = Math.sign(ib.z - ia.z);
+    // (along the wall's inner face, position by position, round its bends (a staircase shore's too), LANDING_WIDTH cells out)
+    // (a position's centre cell: the line's own, the inner course)
+    const posCell = (p) => (p >= 0 && p < W.positions.length ? W.positions[p] : null);
     for (const dir of [1, -1]) {
-      const fl = [];
-      const from = dir > 0 ? ib : ia, sx = ux * dir, sz = uz * dir;
-      let L = g.y, run = 0, rest = 0, ok = false;
-      for (let i = 1; i <= LANDING_FLIGHT + 1; i++) {
-        const bx = from.x + sx * i, bz = from.z + sz * i;
-        const lane = Array.from({ length: LANDING_WIDTH }, (_, q) => [bx - dx * (q + 1), bz - dz * (q + 1)]);
-        if (lane.some(([x, z]) => W.cellAt.has(key(x, z)) || wet(x, z))) break;
+      const fl = [], seen = new Set(cells.map((c) => key(c.x, c.z)));
+      // the flight's centre line: each position's inner neighbour (its depth 2 at an inside corner), joined 4-connected round the bends
+      const centres = [];
+      const mouth = posCell(dir > 0 ? g.b : g.a);
+      let last = null;
+      { const nb0 = posCell((dir > 0 ? g.b : g.a) + 1) ?? posCell(dir > 0 ? g.b - 1 : g.a + 1); void nb0; }
+      for (let i = 0; i <= LANDING_FLIGHT && centres.length <= LANDING_FLIGHT; i++) {
+        const p = (dir > 0 ? g.b + 1 : g.a - 1) + dir * i;
+        const c = posCell(p);
+        if (!c || W.ends.includes(p) || W.gates.some((q) => q !== g && p >= q.a - 1 && p <= q.b + 1)) break;
+        const nb = posCell(p + 1), pb = posCell(p - 1);
+        const hx = nb ? nb.x - c.x : c.x - pb.x, hz = nb ? nb.z - c.z : c.z - pb.z;
+        const dx = -hz, dz = hx; // outward: right of travel
+        let q = [c.x - dx, c.z - dz];
+        if (W.cellAt.has(key(q[0], q[1]))) q = [c.x - 2 * dx, c.z - 2 * dz];
+        if (W.cellAt.has(key(q[0], q[1]))) continue;
+        last ??= [mouth.x - dx, mouth.z - dz];
+        // join from the last centre (x first, then z; else z first), never through the wall
+        const legs = [];
+        for (const xFirst of [true, false]) {
+          const out = [];
+          let [x, z] = last;
+          const step = (ax) => { if (ax === 'x') x += Math.sign(q[0] - x); else z += Math.sign(q[1] - z); out.push([x, z]); };
+          if (xFirst) { while (x !== q[0]) step('x'); while (z !== q[1]) step('z'); } else { while (z !== q[1]) step('z'); while (x !== q[0]) step('x'); }
+          if (out.every(([a, b]) => !W.cellAt.has(key(a, b)))) { legs.push(...out); break; }
+        }
+        if (!legs.length && (q[0] !== last[0] || q[1] !== last[1])) break;
+        // (a centre met again: the loop between cut out, so the line stays a 4-connected path)
+        for (const cc of legs) {
+          const at = centres.findIndex((e) => e[0] === cc[0] && e[1] === cc[1]);
+          if (at >= 0) centres.length = at + 1; else centres.push([...cc, dx, dz]);
+        }
+        last = q;
+      }
+      let L = g.y, run = 0, rest = 0, ok = false, prev = null;
+      for (let i = 0; i < centres.length; i++) {
+        const [cx, cz, dx, dz] = centres[i];
+        if (seen.has(key(cx, cz))) break;
+        const lane = [[cx, cz]].filter(([x, z]) => !W.cellAt.has(key(x, z)));
+        if (!lane.length) break;
+        if (lane.some(([x, z]) => wet(x, z))) break;
         const G = Math.max(...lane.map(([x, z]) => S.groundAt(x, z)));
-        if (i > 1 && Math.abs(G - L) <= 1) { ok = true; break; }
-        let kind = 'stair', up = G > L;
+        if (i > 0 && Math.abs(G - L) <= 1) { ok = true; break; }
+        const up = G > L;
+        let kind = 'stair';
         if (run === 8) { kind = 'flat'; if (++rest === 2) { run = 0; rest = 0; } } else { L += up ? 1 : -1; run++; }
+        const from = prev ?? [cx + dx, cz + dz];
+        const sx = Math.sign(cx - from[0]), sz = Math.sign(cz - from[1]);
         const facing = up ? F[`${sx},${sz}`] : F[`${-sx},${-sz}`];
-        for (const [x, z] of lane) fl.push({ x, z, y: L, kind, ...(kind === 'stair' ? { facing } : {}), flight: true });
+        for (const [x, z] of lane) { seen.add(key(x, z)); fl.push({ x, z, y: L, kind, ...(kind === 'stair' && facing ? { facing } : kind === 'stair' ? { facing: F[`${-dx},${-dz}`] } : {}), flight: true }); }
+        prev = centres[i];
       }
       if (ok && (!best || fl.length < best.length)) best = fl;
     }
@@ -624,8 +660,20 @@ function landingOf(K, W, g) {
  * run whose landing fits (landingOf), else the nearest; the network crossings' gates count. A gate with no landing is noted (never
  * silent: a route the wall cuts answers UNREACHABLE {kind: wall}).
  */
-function alongMinGates(K, W) {
+function alongMinGates(K, W, { early = false } = {}) {
   if (W.form !== 'along' || W.st.sealed || W.minDone) return;
+  // (before routing, only a wall some of whose gates need a landing: a level wall's gates.min waits for the routes' crossings, as K1a's)
+  if (early) {
+    const n0 = W.positions.length, h0 = Math.max(1, Math.floor(n0 / (2 * Math.max(1, W.st.gatesMin))));
+    let level = true;
+    for (let q = 0; q < W.st.gatesMin && level; q++) {
+      const target = Math.floor((n0 * (2 * q + 1)) / (2 * W.st.gatesMin));
+      let found = false;
+      for (let a = 1; a + WALL_DEFAULTS.gateWidth < n0 - 1 && !found; a++) { const b = a + WALL_DEFAULTS.gateWidth - 1; if (Math.abs(((a + b) >> 1) - target) <= h0 && runFree(W, a, b) && crossStep(K, W, a, b) <= 1) found = true; }
+      if (!found) level = false;
+    }
+    if (level) return;
+  }
   W.minDone = true;
   const want = W.st.gatesMin - W.gates.length;
   const n = W.positions.length;

@@ -151,7 +151,7 @@ test('item 1: wall.along: gates.min 0 by default (an open wall: people walk roun
   assert.ok(far.runs.every((q) => q.offset === 5), JSON.stringify(far.runs));
 });
 
-test('item 1: wall.along on S3\'s pinned river (the shore: the land side), gates.min 2 evenly; its routes refused UNREACHABLE {kind: wall} (the K2 finding)', async () => {
+test('item 1: wall.along on S3\'s pinned river (the shore: the land side), gates.min 2 on landings, walkable both ways; its routes refused UNREACHABLE {kind: wall} (the K2 finding)', async () => {
   const fx = readJ('valid', 'v7a_k2_along_shore.json');
   const r = await run(fx);
   assert.equal(r.check.overall, 'READY');
@@ -172,6 +172,35 @@ test('item 1: wall.along on S3\'s pinned river (the shore: the land side), gates
   const tb = traceBoundary(cols, svOf(fx).claim, { shore: { minArea: 64 } });
   assert.ok(m.along.spine.every((q) => tb.spine.some((s) => s[0] === q[0] && s[1] === q[1])));
   wallBars(checkOf(fx, r), 'S3 shore');
+  // (the coordinator's ruling (b), 2026-10-23) each gate stands on a landing: its floor 2 cells each side, the flight along the inner
+  // face to the bank; the kit's player and villager through each gate both ways, from beyond the flight's top to the shore outside
+  const { buildVirtual } = await import('../lib/region/vworld.mjs');
+  const { walkGraph, nodeReached } = await import('../lib/region/check.mjs');
+  const { vw } = buildVirtual({ ir: r.res.ir, survey: svOf(fx).bytes, blobs: (sha) => r.res.blobs.get(sha) ?? null });
+  const gAt = (x, z) => cols.ground[(x - cols.minX) + (z - cols.minZ) * cols.width];
+  const cellAt = new Map(m.cells.map((c) => [`${c[0]},${c[1]}`, c]));
+  for (const g of m.gates) {
+    assert.ok(g.landing && g.landing.steps > 0, `${g.id}: a landing with its flight`);
+    assert.ok(w.notes.some((n) => n.startsWith(`gate ${g.id}:`) && /a landing levels it/.test(n)), `${g.id}: noted`);
+    const fl = g.landing.cells.filter((c) => c[1] !== g.y);
+    const top = fl.reduce((a, c) => (c[1] > a[1] ? c : a), fl[0]), low = fl.reduce((a, c) => (c[1] < a[1] ? c : a), fl[0]);
+    const xs = fl.map((c) => c[0]), zs = fl.map((c) => c[2]);
+    const alongX = Math.max(...xs) - Math.min(...xs) > Math.max(...zs) - Math.min(...zs);
+    const sx = alongX ? Math.sign(top[0] - low[0]) : 0, sz = alongX ? 0 : Math.sign(top[2] - low[2]);
+    const tops = fl.filter((c) => c[1] === top[1]).sort((a, b) => a[0] - b[0] || a[2] - b[2]);
+    const mid = tops[tops.length >> 1];
+    const inland = [mid[0] + 2 * sx, gAt(mid[0] + 2 * sx, mid[2] + 2 * sz) + 1, mid[2] + 2 * sz];
+    const cs = g.cells.map(([x, z]) => cellAt.get(`${x},${z}`)), inner = cs.find((c) => c[4] === 0);
+    const outer = cs.find((c) => c[4] === m.thickness - 1 && Math.abs(c[0] - inner[0]) + Math.abs(c[1] - inner[1]) === m.thickness - 1);
+    const outP = [outer[0] + Math.sign(outer[0] - inner[0]), g.y + 1, outer[1] + Math.sign(outer[1] - inner[1])];
+    for (const mover of ['player', 'villager']) {
+      assert.ok(nodeReached(walkGraph(vw, [inland], { mover }), outP), `${g.id}: the ${mover} from the bank (beyond the flight) through the gate to the shore`);
+      assert.ok(nodeReached(walkGraph(vw, [outP], { mover }), inland), `${g.id}: the ${mover} from the shore through the gate up to the bank`);
+    }
+    // no trench inland: the landing keeps within 6 of the wall's inner course
+    const depth = Math.max(...g.landing.cells.map((c) => Math.min(...m.cells.filter((q) => q[4] === 0).map((q) => cheb(q, [c[0], c[2]])))));
+    assert.ok(depth <= 6, `${g.id}: the landing keeps beside the wall (${depth} at most from its inner course: its flight 3 wide, straight on where the shore veers)`);
+  }
   // the routes across the stepped bank: refused UNREACHABLE {kind: wall}, naming the wall (never a bare BUDGET)
   const rf = readJ('k2', 'k2_shore_routes.json');
   const rr = await run(rf);
