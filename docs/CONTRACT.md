@@ -23894,10 +23894,12 @@ PALETTE). The old `...Last` booleans stay.
 - Ledger fuzz at 20000 seeds, on the final rule (before not dirt): **L-V7 0, 0 violating**. Mutant without the mark: L-V7 295 (306 on
   v0.41.0: the 11 between are the restart guard's false reports on unloaded targets, which it now skips) and both new tests red.
 - Tests: `lv7_driedFarmlandAfterARestartIsWrittenOnceAndPaidOnce` (full and half built), `lv7_driedFarmlandMarksOnlyCellsWhoseBeforeWasNoSoil`.
-- In game: `gate6crs.mjs lv7` (rs-survival). rs03's town (its farm field) is built first from its own bill. Three built farmland cells
-  dry to dirt, then the world is saved, left and reopened. The dried cells must still read built, dirt outstanding must never grow,
-  the rest is fed to done, the dirt consumed must be the bill's, the refund must equal the paid cells standing, conservation must be
-  exact throughout, and E-flat 0.
+- In game: `gate6crs.mjs lv7` (rs-survival), on rs02 with its lot h1 as `rs_farm` (rs_hut with a farmland row on its floor: paid
+  farmland over air, built through `Builder.run`). rs03's field farmland can't show it, because it is free, held in its target (the
+  first in-game run, `20261023-022735-slice`, found no paid farmland there). h1 is fed first from its own bill. Three farmland cells
+  dry to dirt, then the world is saved, left and reopened. Then h1's built count must be unchanged, dirt outstanding never grow, the
+  rest fed to done, the dried cells never written again, the refund equal to the paid cells standing, conservation exact throughout,
+  and E-flat 0.
 
 ### 6. The kit's natural classes against the mod's rule
 
@@ -23933,14 +23935,15 @@ PALETTE). The old `...Last` booleans stay.
 `gate6crs.mjs item14`, in the `survival` group:
 - **World:** a fresh copy of S3's site (seed base, exact rules), default mode survival, the toggle on, settled 90 s, then surveyed.
 - **Plan:** rs02's plan, with the anchors Steward would compute from that survey:
-  - the town's stone at the flattest window;
+  - the town's stone: the flattest 40x40 window with no water within 56 and 44 in from the claim's edges whose whole check (the kit's,
+    over this survey, rs02 without the rope and lift) places the town and its wall dry (the first in-game run's wall refused WATER);
   - the east gate on the claim's edge;
   - the rope's lips: the first east-west pair over a dip that the kit's own check accepts for a rope bridge.
 - **Check:** Regions.checkPlan in survival. Steward's repair drops a refused optional part (the lift); then READY.
 - **Build:** a stockpile at the north-west corner, fed to done: PLACED and built.
 - **Removal:** E-normal under `s3Classify` (S3 §6's classes, `farfluid` included), the crates' cells aside, 0 unclassified.
-- **Offline, on S3's golden survey:** town fits, in fits, the rope adjusted (lips 3728/3760 at z -876), the wall waits for its volume
-  (read in game).
+- **Offline, on S3's golden survey:** the second candidate (stone 3736,148,-992) places the town, its wall and the road; the rope is
+  adjusted (lips 3728/3760 at z -876).
 
 ### 8. S3 on a live survey
 
@@ -23966,4 +23969,10 @@ PALETTE). The old `...Last` booleans stay.
 - **The fix, in the driver** (`tools/lib/gate6chy-c.mjs` `pushStand`). Each mob's track is read at every push. A mob counts as beyond
   only when it crosses the grate's outer face with both sides of the crossing under the lintel's top (through the bars). One that
   crosses above the lintel is recorded as `over` and not judged. The check line names both counts.
+
+### 10. Gate
+
+- **The turbo runner's false PASS** (main 33aa785b). In the first slice run (`20261023-012515-slice`, 57 PASS, 3 FAIL), every split
+  step reported PASS in 0 s without running a part: rs-survival-smoke, h-ingame-smoke, hy-ingame-smoke, s3-unit and 4d-all. I reported
+  it to the coordinator, and a fix agent owns it. Those steps were re-run with `--no-split`.
 
