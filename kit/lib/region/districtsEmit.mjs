@@ -18,7 +18,7 @@ import { fixtureFor, roadLamp } from './fixtures.mjs';
 import { PASSES } from './passes/index.mjs';
 import { lampSpots } from './passes/route.mjs';
 import { placeFollow, followLots, emitFollowLots, maskRuns } from './followEmit.mjs';
-import { footprintOf } from './passes/route.mjs';
+import { edgeColumns, footprintOf } from './passes/route.mjs';
 import { LEAD, chooseReach } from './reach.mjs';
 import { keyRuns } from './beside.mjs';
 import { CHAIN_WIDTH, chainTerraces, emitTerraces, junctionOf, layoutTerraces, parseTerraces, ringOf, terraceEnds } from './terraces.mjs';
@@ -592,11 +592,17 @@ export function emitDistricts(r, intent = {}) {
   if (it.lamps !== false) {
     const extra = [], extraCap = {};
     // ((6c D3, N-D3-2) a reach join's lamps: inside this claim only, and none within LAMP_GAP of a town lamp)
-    const lampOk = reachJ ? (e, q) => e.id !== 'join' || (q.x >= claim.minX && q.x <= claim.maxX && q.z >= claim.minZ && q.z <= claim.maxZ && !reachJ.nearTownLamp(q.x, q.z)) : null;
-    if (it.routeLamps !== false && r.meta.route) for (const e of r.meta.route.edges) { const l = lampSpots(e); const sp = lampOk ? l.spots.filter((q) => lampOk(e, q)) : l.spots; extra.push(...sp); if (sp.length) extraCap[`route:${e.id}`] = l.cap; }
+    // ((6c D3, the coordinator's ruling B) a reach join is lit inside the town's claim too: its lamps may stand on reach columns (unheld,
+    // off the town's footprint and bodies, never a contact column), none within LAMP_GAP of a town lamp (N-D3-2), and the cover holds
+    // over its walk cells in the town on their own, the town's own lights counted)
+    const RL = reachJ ? reachLamps(reachJ, claim, r) : null;
+    const lampOk = RL ? (e, q) => e.id !== 'join' || ((q.x >= claim.minX && q.x <= claim.maxX && q.z >= claim.minZ && q.z <= claim.maxZ) || RL.lampOk(q.x, q.z)) && !reachJ.nearTownLamp(q.x, q.z) : null;
+    if (it.routeLamps !== false && r.meta.route) for (const e of r.meta.route.edges) { const l = lampSpots(e); const sp = lampOk ? l.spots.filter((q) => lampOk(e, q)) : l.spots; extra.push(...sp); if (sp.length) extraCap[`route:${e.id}`] = RL && e.id === 'join' ? l.cap + RL.extraCap : l.cap; }
     const fixture = it.lampFixture ? fixtureFor(it.lampFixture, r.material('rail', 'lamp post')) : lampFixture(r);
-    const cover = lightCover(r, { fixture, stage: stages.props, keepOut, reserved, laneCells, extra, extraCap });
-    lamps = { fixture: cover.fixture, perLot: cover.perLot, before: cover.before, after: cover.after, capped: cover.capped, count: cover.lamps.length };
+    if (RL) r._reachSurvey = reachJ.U;
+    const cover = lightCover(r, { fixture, stage: stages.props, keepOut, reserved, laneCells, extra, extraCap, ...(RL ? { reach: { lampOk: RL.lampOk, targets: RL.targets, lights: RL.lights, area: (x, z) => x >= reachJ.town[0] && x <= reachJ.town[2] && z >= reachJ.town[1] && z <= reachJ.town[3] } } : {}) });
+    if (RL) { delete r._reachSurvey; reachAddLamps(r, claim, cover.lamps); }
+    lamps = { fixture: cover.fixture, perLot: cover.perLot, before: cover.before, after: cover.after, capped: cover.capped, count: cover.lamps.length, ...(cover.reach ? { reach: cover.reach } : {}) };
   }
   // ---- the record
   const rectArr = (q) => [q.minX, q.minZ, q.maxX, q.maxZ];
@@ -675,6 +681,40 @@ function reachRecord(r, J, beside, unsafe = {}) {
   let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
   for (const q of runs) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[2]); z0 = Math.min(z0, q[1]); z1 = Math.max(z1, q[1]); }
   return { standing: beside.id, runs, rect: runs.length ? [x0, z0, x1, z1] : null, cells: out.size, hold: keyRuns(hold), junction: J.cand.junction, contact: keyRuns(J.cand.contact) };
+}
+
+/**
+ * (6c D3, ruling B) A reach join's lamps: `lampOk` (a lamp column outside this claim: in the town's claim, unheld, off the footprint and
+ * bodies, never a contact column or one the join writes), `targets` (the join's walk cells outside this claim: feet over its surface),
+ * `lights` (the town's own light blocks, [x, y, z, level]) and `extraCap` (more lamps for the in-town stretch: one per 10 cells of it).
+ */
+function reachLamps(J, claim, r) {
+  const inClaim = (x, z) => x >= claim.minX && x <= claim.maxX && z >= claim.minZ && z <= claim.maxZ;
+  const reachCols = new Set();
+  for (const q of r.meta.reach?.runs ?? []) for (let x = q[0]; x <= q[2]; x++) reachCols.add(`${x},${q[1]}`);
+  const contact = new Set(J.cand.contact);
+  const lampOk = (x, z) => !inClaim(x, z) && x >= J.town[0] && x <= J.town[2] && z >= J.town[1] && z <= J.town[3] && !J.hardKeys.has(`${x},${z}`) && !contact.has(`${x},${z}`) && !reachCols.has(`${x},${z}`);
+  const rec = r.meta.route.edges.find((e) => e.id === 'join');
+  const targets = [];
+  if (rec?.ok) for (const o of edgeColumns({ path: rec.path, segments: rec.segments, landings: rec.landings ?? [], width: rec.width ?? DISTRICT_ROUTE_WIDTH }).cols) if (!inClaim(o.x, o.z) && reachCols.has(`${o.x},${o.z}`)) targets.push([o.x, o.y + 1, o.z]);
+  return { lampOk, targets, lights: J.lights ?? [], extraCap: Math.max(1, Math.floor((targets.length / 3 + 9) / 10)) };
+}
+
+/** (6c D3, ruling B) The join's lamps that stand outside this claim join the reach (their columns; `lamps` names them for M28). */
+function reachAddLamps(r, claim, lamps) {
+  const out = new Set();
+  for (const l of lamps) for (const [x, , z] of l.cells) if (!(x >= claim.minX && x <= claim.maxX && z >= claim.minZ && z <= claim.maxZ)) out.add(`${x},${z}`);
+  if (!out.size) return;
+  const m = r.meta.reach;
+  const all = new Set();
+  for (const q of m.runs) for (let x = q[0]; x <= q[2]; x++) all.add(`${x},${q[1]}`);
+  for (const k of out) all.add(k);
+  m.runs = keyRuns(all);
+  m.lamps = keyRuns(out);
+  m.cells = all.size;
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (const q of m.runs) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[2]); z0 = Math.min(z0, q[1]); z1 = Math.max(z1, q[1]); }
+  m.rect = [x0, z0, x1, z1];
 }
 
 export { LOT_UNPLACED, UNPLACED };

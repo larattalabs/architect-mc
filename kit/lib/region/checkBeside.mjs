@@ -14,11 +14,13 @@ const k2 = (x, z) => `${x},${z}`;
  * The beside rules over a built virtual world `vw` of `ir`: pushes findings (M28:beside, M25:clear) and returns the metrics
  * {outside, reachCells, held, footprint, bodies, unheld, wrongWriter}.
  */
-export function besideRules({ ir, vw, besideReach, findings, finding, partStage = new Map() }) {
+export function besideRules({ ir, vw, besideReach, findings, finding, partStage = new Map(), light = null }) {
   const c = ir.claim;
   const inClaim = (x, z) => x >= c.minX && x <= c.maxX && z >= c.minZ && z <= c.maxZ;
   const reach = runKeys(ir.reach?.runs ?? []);
   const hold = runKeys(ir.reach?.hold ?? []);
+  // ((6c D3, ruling B) the join's lamps on reach columns: written by the lamps' part)
+  const lampCols = runKeys(ir.reach?.lamps ?? []);
   const K = besideReach ? reachClasses(besideReach) : null;
   const town = besideReach?.standing?.id ?? ir.reach?.standing ?? ir.beside?.id ?? '?';
   // the written cells outside the claim, per column, with their writer parts
@@ -34,7 +36,7 @@ export function besideRules({ ir, vw, besideReach, findings, finding, partStage 
   const bad = { writer: [], notReach: [], held: [], footprint: [], body: [], unheld: [] };
   for (const [k, o] of outside) {
     if (!reach.has(k)) { m.notReach++; bad.notReach.push([o.x, o.y, o.z]); continue; }
-    if ([...o.parts].some((p) => p !== 'route_join')) { m.wrongWriter++; bad.writer.push([o.x, o.y, o.z]); }
+    if ([...o.parts].some((p) => p !== 'route_join' && !(lampCols.has(k) && /^props(_|$)/.test(String(p))))) { m.wrongWriter++; bad.writer.push([o.x, o.y, o.z]); }
   }
   if (K) {
     for (const k of reach) {
@@ -64,6 +66,33 @@ export function besideRules({ ir, vw, besideReach, findings, finding, partStage 
       vw.eachWritten((x, y, z, idx, flags, part) => { if (cols.has(k2(x, z))) hit.push([x, y, z]); });
       if (hit.length) { m.bodies += hit.length; findings.push(finding('M25:clear', 'route_join', null, hit.length, hit, `body ${town}:${b.id}: ${hit.length} cell(s) written in its hard or watch columns ({body: ${town}:${b.id}})`)); }
     }
+  }
+  // M5 over the join's walk cells in the town's claim (ruling B: the dark-walk bar holds over the whole join): each reach column's top
+  // route_join cell is its floor; dark when no block light reaches the feet (the plan's lamps, and the town's own lights within their
+  // light's Manhattan reach: besideReach.standing.lights) and the floor is spawnable
+  if (light) {
+    const L = light();
+    const P = vw.pal;
+    const top = new Map();
+    vw.eachWritten((x, y, z, idx, flags, part) => {
+      if (inClaim(x, z) || ir.parts[part]?.id !== 'route_join') return;
+      const k = k2(x, z), t = top.get(k);
+      if (t === undefined || y > t) top.set(k, y);
+    });
+    const town = besideReach?.standing?.lights ?? [];
+    let dark = 0, cells = 0;
+    const sample = [];
+    for (const [k, y] of top) {
+      const [x, z] = k.split(',').map(Number);
+      if (!P.spawn[vw.get(x, y, z)] || !P.passable[vw.get(x, y + 1, z)]) continue;
+      cells++;
+      if (L.at(x, y + 1, z) > 0) continue;
+      if (town.some(([lx, ly, lz, lv]) => Math.abs(lx - x) + Math.abs(ly - y - 1) + Math.abs(lz - z) < lv)) continue;
+      dark++;
+      if (sample.length < 20) sample.push([x, y + 1, z]);
+    }
+    m.M5reach = { walkCells: cells, darkSpawnable: dark, share: cells ? dark / cells : 0 };
+    if (dark) findings.push(finding('M5', 'route_join', stage, dark, sample, `${dark} of ${cells} walk cell(s) of the join in region ${besideReach?.standing?.id ?? ir.reach?.standing ?? '?'}'s claim are dark (block light 0) and spawnable`));
   }
   m.reachRuns = keyRuns(reach).length;
   return m;

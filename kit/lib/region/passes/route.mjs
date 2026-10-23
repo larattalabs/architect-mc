@@ -712,7 +712,8 @@ export function routePass(survey, volumes, intent) {
     }
     // ((6c D3) the `to` end's `lead`: the goal's arriving heading (against its facing, cardinal) and its straight cells)
     const lead = isInt(e.to?.lead) && e.to.lead > 0 && Array.isArray(e.to.facing) ? Math.min(TURN_COOLDOWN, e.to.lead) : 0;
-    const goalH = lead ? DIRS.findIndex((d) => d[0] === -Math.sign(e.to.facing[0]) && d[1] === -Math.sign(e.to.facing[1])) : -1;
+    const sgn = (v) => (v > 0 ? 1 : v < 0 ? -1 : 0);
+    const goalH = lead ? DIRS.findIndex((d) => d[0] === -sgn(e.to.facing[0]) && d[1] === -sgn(e.to.facing[1])) : -1;
     const sctx = { G, builtY, prefer: preferE, start: ends[0], goal: ends[1], ...(goalH >= 0 && (goalH & 1) === 0 ? { goalH, goalLead: lead } : {}), Gq, w, laneW: Math.floor((w + r - 1) / r), Ld: Math.floor((Math.max(hairpinLanding, w) + r - 1) / r),
       latLo: Math.floor(lo / r), latHi: Math.floor((hi + r - 1) / r), maxCut, maxFill, stairs: (e.stairs ?? stairs) && !coarse, ladders, nearEnd, // ((6c S3) an edge's own `stairs: false`)
       ...(sp.length ? { special: sp, needFlag } : {}) };

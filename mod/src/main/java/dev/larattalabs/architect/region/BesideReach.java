@@ -205,6 +205,7 @@ public final class BesideReach {
 		Cols hard = new Cols(), watch = new Cols();
 		JsonArray list = new JsonArray();
 		Cols lamps = new Cols(), props = new Cols();
+		Map<String, int[]> lights = new java.util.LinkedHashMap<>();
 		if (ir.get("parts") instanceof JsonArray parts) {
 			for (JsonElement pe : parts) {
 				JsonObject p = pe.getAsJsonObject();
@@ -243,6 +244,16 @@ public final class BesideReach {
 						opCols(op, props);
 						if (isLamp) {
 							opCols(op, lamps);
+							if ("columns".equals(str(op, "op")) && op.get("cols") instanceof JsonArray cols && op.get("materials") instanceof JsonArray mats) {
+								for (int i = 0; i + 4 < cols.size(); i += 5) {
+									int mi = cols.get(i + 4).getAsInt();
+									int lv = mi >= 0 && mi < mats.size() ? lightLevelOf(mats.get(mi).getAsString()) : 0;
+									if (lv > 0) {
+										int x = cols.get(i).getAsInt(), y = cols.get(i + 3).getAsInt(), z = cols.get(i + 1).getAsInt();
+										lights.put(x + "," + y + "," + z, new int[] {x, y, z, lv});
+									}
+								}
+							}
 						}
 					}
 				}
@@ -290,7 +301,27 @@ public final class BesideReach {
 		o.add("bodies", bodies);
 		o.add("lamps", lamps.runs());
 		o.add("props", props.runs());
+		List<int[]> ls = new ArrayList<>(lights.values());
+		ls.sort((a, b) -> a[0] != b[0] ? Integer.compare(a[0], b[0]) : a[2] != b[2] ? Integer.compare(a[2], b[2]) : Integer.compare(a[1], b[1]));
+		JsonArray la = new JsonArray();
+		ls.forEach(q -> la.add(arr(q)));
+		o.add("lights", la);
 		return o;
+	}
+
+	/** A block state's light level as the lamps write them (the kit's lightLevelOf). */
+	static int lightLevelOf(String state) {
+		String id = state.replaceAll("\\[.*$", "");
+		if (id.matches(".*soul_(lantern|torch|campfire)$")) {
+			return 10;
+		}
+		if (id.matches("(.*:)?(lantern|glowstone|sea_lantern|shroomlight|jack_o_lantern|beacon|ochre_froglight|verdant_froglight|pearlescent_froglight|campfire|redstone_lamp)$")) {
+			return 15;
+		}
+		if (id.matches("(.*:)?(torch|wall_torch|end_rod)$")) {
+			return 14;
+		}
+		return 0;
 	}
 
 	private static void fluidCols(@Nullable JsonElement runs, Cols into) {

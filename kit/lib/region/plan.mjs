@@ -108,6 +108,8 @@ export function draftIR(r) {
   if (Object.keys(r.volumesUsed).length) ir.volumes = r.volumesUsed;
   if (Object.keys(r.blockTags).length) ir.blockTags = r.blockTags;
   if (r.floatingDecl.length) ir.floating = r.floatingDecl;
+  // ((6c D3) its reach columns are claimed land for writing in the draft's virtual world too)
+  if (reachM) ir.reach = { runs: reachM.runs };
   return { ir, blobs: (sha) => sideBytes.get(sha) };
 }
 
@@ -525,7 +527,7 @@ export async function planRegion(o) {
   if (reachM) {
     const { encodeColumns } = await import('./pack.mjs');
     const BR = RM.reachFor(besideReach, reachM.standing);
-    ir.reach = { standing: reachM.standing, runs: reachM.runs, rect: reachM.rect, cells: reachM.cells, hold: reachM.hold, contact: reachM.contact,
+    ir.reach = { standing: reachM.standing, runs: reachM.runs, rect: reachM.rect, cells: reachM.cells, hold: reachM.hold, contact: reachM.contact, ...(reachM.lamps ? { lamps: reachM.lamps } : {}),
       heldSha: sha256Hex(canonicalJson(BR.held)), surveySha: sha256Hex(encodeColumns(BR.survey)), standingSha: sha256Hex(canonicalJson(BR.standing)) };
   }
   // (6c RS) a survival plan (the world's mode): free marks and the target groups (a creative plan's IR is unchanged)
@@ -685,5 +687,6 @@ export async function planRegion(o) {
       return again;
     }
   }
-  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes };
+  // ((6c D3) a reach plan's evaluation survey (the reach frame's): the plan check's artifact evaluates its tiles over it)
+  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}) };
 }

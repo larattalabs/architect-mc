@@ -402,5 +402,5 @@ export function chooseReach({ planCols, R, beside, claim, yRange = [-64, 319], d
   const noRetain = (x, z) => !inRect(claimR, x, z) && (hardKeys.has(`${x},${z}`) || !inRect(town, x, z)) && !contact.has(`${x},${z}`);
   const lamps = [...K.lamps].map((k) => k.split(',').map(Number));
   const nearTownLamp = (x, z) => lamps.some(([lx, lz]) => Math.max(Math.abs(lx - x), Math.abs(lz - z)) <= LAMP_GAP);
-  return { best, cand: best.cand, api, U, frame, claimR, town, K, hardKeys, hard: hardRects(hardKeys, best.cand), noRetain, nearTownLamp, tried, count: candidates.length, candidates };
+  return { best, cand: best.cand, api, U, frame, claimR, town, K, hardKeys, hard: hardRects(hardKeys, best.cand), noRetain, nearTownLamp, tried, count: candidates.length, candidates, lights: R.standing.lights ?? [] };
 }

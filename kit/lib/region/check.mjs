@@ -482,7 +482,7 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   }
 
   // ---- (6c D3) M28:beside and M25:clear's foreign bodies: a districts plan with a reach into a standing town's claim
-  if (ir.reach && (want.has('M28') || want.has('M25'))) time('M28', () => { metrics.M28 = besideRules({ ir, vw, besideReach: BR, findings, finding, partStage }); });
+  if (ir.reach && (want.has('M28') || want.has('M25'))) time('M28', () => { metrics.M28 = besideRules({ ir, vw, besideReach: BR, findings, finding, partStage, ...(want.has('M5') ? { light: () => blockLight(vw) } : {}) }); });
 
   // ---- (6c VOC-b) M26, M27 and M20 widened, on every IR (checkVocab.mjs): natural lava is looked for only where the survey or a frozen
   // volume holds some

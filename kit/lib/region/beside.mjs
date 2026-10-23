@@ -86,6 +86,15 @@ export function besideData(id, standingClaim, ir, claim) {
 
 // ------------------------------------------------------------------ (6c D3) the standing data the reach step reads
 
+/** (6c D3) A block state's light level as the lamps write them (lantern 15, soul lantern 10, torch 14, soul torch 10, glowstone and the like 15), else 0. */
+export function lightLevelOf(state) {
+  const id = String(state ?? '').replace(/\[.*$/, '');
+  if (/soul_(lantern|torch|campfire)$/.test(id)) return 10;
+  if (/(^|:)(lantern|glowstone|sea_lantern|shroomlight|jack_o_lantern|beacon|ochre_froglight|verdant_froglight|pearlescent_froglight|campfire|redstone_lamp)$/.test(id)) return 15;
+  if (/(^|:)(torch|wall_torch|end_rod)$/.test(id)) return id.endsWith('end_rod') ? 14 : 14;
+  return 0;
+}
+
 /** (6c D3) A road id or graph edge path that names a street (§3.1): the `street_` stem after any prefix, or a following street (`st_<d>`). */
 export const isStreetId = (id) => typeof id === 'string' && (/(^|_)street_/.test(id) || /^(route_)?st_/.test(id));
 
@@ -150,9 +159,20 @@ export function besideStanding(id, standingClaim, ir) {
     if (op.op === 'columns' && Array.isArray(op.cols)) for (let i = 0; i + 4 < op.cols.length; i += 5) into.add(`${op.cols[i]},${op.cols[i + 1]}`);
     else if (op.bounds) for (let z = op.bounds.minZ; z <= op.bounds.maxZ; z++) for (let x = op.bounds.minX; x <= op.bounds.maxX; x++) into.add(`${x},${z}`);
   };
+  // (the lights of its lamp parts: every light block they write, [x, y, z, level], for the join's lamps to count; the kit's light levels)
+  const lights = new Map();
   for (const p of ir.parts ?? []) {
     if (!/^props(_|$)/.test(p.id)) continue;
-    for (const op of p.ops ?? []) { opCols(op, props); if (/lamp|apron/.test(p.id)) opCols(op, lamps); }
+    for (const op of p.ops ?? []) {
+      opCols(op, props);
+      if (!/lamp|apron/.test(p.id)) continue;
+      opCols(op, lamps);
+      if (op.op !== 'columns' || !Array.isArray(op.cols) || !Array.isArray(op.materials)) continue;
+      for (let i = 0; i + 4 < op.cols.length; i += 5) {
+        const lv = lightLevelOf(op.materials[op.cols[i + 4]]);
+        if (lv > 0) lights.set(`${op.cols[i]},${op.cols[i + 3]},${op.cols[i + 1]}`, [op.cols[i], op.cols[i + 3], op.cols[i + 1], lv]);
+      }
+    }
   }
   for (const r of ir.roads ?? []) {
     if (!r.lanterns) continue;
@@ -177,5 +197,6 @@ export function besideStanding(id, standingClaim, ir) {
     id, claim: [...standingClaim],
     footprint: { lots: f.lots.map((x) => [...x.rect]), keep: [...f.roads, ...f.paths, ...f.ways].map((x) => ({ kind: x.kind, id: x.id, rect: [...x.rect] })) },
     streets, bodies: { hard: keyRuns(hard), watch: keyRuns(watch), list }, lamps: keyRuns(lamps), props: keyRuns(props),
+    lights: [...lights.values()].sort((a, b) => a[0] - b[0] || a[2] - b[2] || a[1] - b[1]),
   };
 }

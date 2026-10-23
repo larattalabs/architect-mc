@@ -285,7 +285,10 @@ public final class RegionItems {
 		// (6c H §4.4) the tile's frozen heights: a dependent cleared under natural water becomes a source
 		var hts = heightsOf(r, win);
 		if (rec.brush == null) {
-			return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win).consent(consent).heights(hts); // (C31) the owner's areas bound felling
+			// ((6c D3) a reach plan's reach columns are claimed land for writing)
+			var reach = r.ir().json().get("reach") instanceof com.google.gson.JsonObject rc && rc.get("runs") instanceof com.google.gson.JsonArray runs
+				? dev.larattalabs.architect.region.BesideReach.colsOf(runs) : null;
+			return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win, reach).consent(consent).heights(hts); // (C31) the owner's areas bound felling
 		}
 		boolean pb = rec.brush.has("playerBlocks") && rec.brush.get("playerBlocks").getAsBoolean();
 		return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win, pb, dev.larattalabs.architect.region.Brushes.layerGroups(rec.owner))

@@ -240,17 +240,21 @@ test('item 2 (§10, §4.3): the pinned seam-step joins (D1\'s beside fixture, D2
     let q;
     try { q = await planBeside({ town, districts: ds, claimB: B }); } catch (e) { shared[name] = `not planned: ${e.message.slice(0, 80)}`; continue; }
     if (q.ir.reach) { shared[name] = 'a reach plan'; continue; }
-    // the join's written columns: its ops' cells and its 4e road items' width and verge
-    const cols = new Set();
+    // the join's written columns: its ops' cells and its 4e road items' width (their verge row holds only a lantern at its spacing:
+    // listed apart)
+    const cols = new Set(), verge = new Set();
     for (const c of realiseAll({ ...q.ir, parts: q.ir.parts.filter((p) => p.id === 'routes') }, town.world).values()) cols.add(`${c.x},${c.z}`);
     for (const rd of q.ir.roads.filter((r) => r.id.startsWith('route_join'))) {
       const pts = rd.points;
       for (let i = 0; i + 1 < pts.length; i++) {
-        const [a, b] = [pts[i], pts[i + 1]], h = Math.floor((rd.width ?? 3) / 2) + 1;
-        for (let x = Math.min(a[0], b[0]) - (a[2] === b[2] ? 0 : h); x <= Math.max(a[0], b[0]) + (a[2] === b[2] ? 0 : h); x++) for (let z = Math.min(a[2], b[2]) - (a[0] === b[0] ? 0 : h); z <= Math.max(a[2], b[2]) + (a[0] === b[0] ? 0 : h); z++) cols.add(`${x},${z}`);
+        const [a, b] = [pts[i], pts[i + 1]];
+        for (const [h, into] of [[Math.floor((rd.width ?? 3) / 2), cols], [Math.floor((rd.width ?? 3) / 2) + 1, verge]]) {
+          for (let x = Math.min(a[0], b[0]) - (a[2] === b[2] ? 0 : h); x <= Math.max(a[0], b[0]) + (a[2] === b[2] ? 0 : h); x++) for (let z = Math.min(a[2], b[2]) - (a[0] === b[0] ? 0 : h); z <= Math.max(a[2], b[2]) + (a[0] === b[0] ? 0 : h); z++) into.add(`${x},${z}`);
+        }
       }
     }
     shared[name] = [...cols].filter((k) => held.has(k)).length;
+    shared[`${name}_vergeRow`] = [...verge].filter((k) => !cols.has(k) && held.has(k));
   }
   console.log(`# pinned seam-step joins, columns shared with the town's held set: ${JSON.stringify(shared)}`);
   assert.equal(shared.d1_seam, 0);
@@ -287,7 +291,16 @@ test('items 3-4 (kit): a street end continuing its line, a side T into the lot-f
   assert.deepEqual(xn.junction, jn.junction);
   const verge = runKeys(R.besideReach.standing.footprint.keep.filter((p) => p.id === 'verges' || p.id === 'street_w').map((p) => p.rect));
   for (const k of runKeys(n.ir.reach.runs)) assert.ok(!verge.has(k), `${k} is no verge or road column`);
-  assert.deepEqual(errors(check(n, NORTH, town.world, R.besideReach)).map((f) => f.rule), []);
+  const rn = check(n, NORTH, town.world, R.besideReach);
+  assert.deepEqual(errors(rn).map((f) => f.rule), []);
+  // (ruling B) the join is lit inside the town too: its lamps on reach columns (none within 6 of a town lamp), M5 0 over its in-town walk
+  assert.ok((n.ir.reach.lamps ?? []).length > 0, 'lamps on reach columns');
+  assert.equal(rn.metrics.M28.M5reach.darkSpawnable, 0);
+  assert.ok(rn.metrics.M28.M5reach.walkCells > 50);
+  const K2 = reachClasses(parseBesideReach(R.besideReach));
+  const townLamps = [...K2.lamps].map((k) => k.split(',').map(Number));
+  for (const k of runKeys(n.ir.reach.lamps)) { const [x, z] = k.split(',').map(Number); assert.ok(townLamps.every(([lx, lz]) => Math.max(Math.abs(lx - x), Math.abs(lz - z)) > 6), `lamp ${k} keeps 6 from the town's lamps`); }
+  assert.equal(check(e, EAST, town.world, R.besideReach).metrics.M28.M5reach.darkSpawnable, 0);
 });
 
 test('§3.4: the contact columns: a pad\'s fill under the street end is held (reach.hold), never left to the town\'s undo', async () => {

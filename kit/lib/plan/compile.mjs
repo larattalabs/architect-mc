@@ -24,9 +24,9 @@ import { hydrologyPass } from '../region/passes/hydrology.mjs';
 import { CATALOGUE_VERSION } from './schema.mjs';
 import { keptBuilds, pickBuild, buildEndpoint, buildKeepOut } from '../region/builds.mjs';
 import { besidePorts, emitDistricts, parseDistricts, placeDistricts } from '../region/districtsEmit.mjs';
-import { reachFor, claimsMeet, reachCandidates, reachClasses, reachHardKeys, hardRects, streetNetwork, unionColumns, wallEncloses, LEAD } from '../region/reach.mjs';
-import { surveyApi } from '../region/survey.mjs';
+import { reachFor, chooseReach, LEAD } from '../region/reach.mjs';
 import { keyRuns as keyRunsOf } from '../region/beside.mjs';
+import { PASSES } from '../region/passes/index.mjs';
 import { placeFollow } from '../region/followEmit.mjs';
 import { TERRACE_GAP, layoutTerraces, parseTerraces } from '../region/terraces.mjs';
 import { levelBands } from '../region/passes/districts.mjs';
@@ -1825,24 +1825,23 @@ function reachEndpoint(env, st, op, tag, where) {
   const R = reachOf(env, st.id);
   const c = env.claim, claimR = [c.minX, c.minZ, c.maxX, c.maxZ];
   const no = (kind, message) => ({ error: { code: 'NO_FEATURE', message: `region ${st.id}: ${message}`, evidence: { why: 'reach', kind }, path: where } });
-  if (env.reachUsed && env.reachUsed !== st.id) return no('second', `a second standing region's reach in one check (${env.reachUsed} already reaches; at most one per check)`);
-  if (!claimsMeet(claimR, st.claim)) return no('apart', 'the claim neither overlaps nor touches its claim');
-  const net = streetNetwork(R.standing, st.graph);
-  if (!net.ends.length && !net.runs.length) return no('street', 'its graph has no street run');
-  const U = unionColumns(env.cols, R.survey, claimR, st.claim);
-  const api = { ...surveyApi(U, { minX: U.minX, minZ: U.minZ, maxX: U.minX + U.width - 1, maxZ: U.minZ + U.depth - 1, minY: c.minY, maxY: c.maxY }), missingAt: (x, z) => x < U.minX || z < U.minZ || x >= U.minX + U.width || z >= U.minZ + U.depth || (U.flags[(x - U.minX) + (z - U.minZ) * U.width] & 2) !== 0 };
-  const frame = [claimR, [...st.claim]];
-  const K = reachClasses(R);
-  const { candidates, dropped } = reachCandidates({ reach: R, K, api, net, frame, districtEnds: [{ x: op[0], z: op[1] }] });
-  if (!candidates.length) return no('route', `no street end or side offers a junction (${Object.entries(dropped).map(([k, v]) => `${v} ${k}`).join('; ') || 'none'})`);
-  if (wallEncloses(K, frame, [op], candidates)) return no('wall', "every street end and side is enclosed by another owner's held columns (a wall: joining through its gate is 7a's)");
-  const cheb = (q) => Math.max(Math.abs(q.at[0] - op[0]), Math.abs(q.at[2] - op[1]));
-  const cand = candidates.map((q, i) => ({ q, i })).sort((a, b) => cheb(a.q) - cheb(b.q) || a.i - b.i)[0].q;
+  if (env.reachUsed && env.reachUsed !== st.id) return no('second', `a second standing region's reach in one check (${env.reachUsed} already reaches; one per check in this build)`);
+  // (§2.2, S-D3-8) the cheapest dry route from the leg's other end (its column, feet on the ground, any heading) to a candidate
+  const S = env.S;
+  const end = { x: op[0], z: op[1], at: [op[0], S.groundAt(op[0], op[1]) + 1, op[1]], facing: null };
+  let J;
+  try {
+    J = chooseReach({ planCols: env.cols, R, beside: st, claim: claimR, yRange: [c.minY, c.maxY], districtEnds: [end], baseHard: env.standingHard, keepOut: [], maxGrade: 0.25, volumes: env.ctx.volumes ?? [], route: PASSES.route });
+  } catch (e) {
+    const m = /^NO_JOIN: \[([a-z]+)\] (.*)$/.exec(String(e.message));
+    if (!m) throw e;
+    return no(m[1], m[2]);
+  }
+  const cand = J.cand;
   env.reachUsed = st.id;
-  const hardKeys = reachHardKeys(K, claimR, st.claim);
   const name = `r_${tag}`;
   return { name, at: [...cand.at], node: { at: [...cand.at], kind: 'junction', facing: [...cand.facing] }, external: { region: st.id, node: cand.node ?? null, port: cand.port ?? null, road: cand.road, junction: cand.junction },
-    reach: { region: st.id, cand, api, U, frame, claimR, town: [...st.claim], K, hardKeys, hard: hardRects(hardKeys, cand) } };
+    reach: { region: st.id, cand, api: J.api, U: J.U, frame: J.frame, claimR, town: [...st.claim], K: J.K, hardKeys: J.hardKeys, hard: J.hard } };
 }
 
 function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
