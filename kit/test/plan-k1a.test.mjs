@@ -18,6 +18,8 @@ import path from 'node:path';
 import { asksSurvey, goldenSurvey, stewardAnchors, checkPlanLocal, FIX, asksFirstPath } from './plan-helpers.mjs';
 import { checkRegion } from '../lib/region/check.mjs';
 import { PLAN_SCHEMA } from '../lib/plan/schema.mjs';
+import { fileURLToPath } from 'node:url';
+import { asksPlanner } from '../../tools/lib/corpus-plan.mjs'; // (speed audit A) the 59 plans from the run's shared store inside a gate run
 
 const SV = { s7: goldenSurvey('s7'), s3: goldenSurvey('s3'), asks: asksSurvey() };
 const readJ = (...p) => JSON.parse(fs.readFileSync(path.join(FIX, ...p), 'utf8'));
@@ -161,9 +163,10 @@ test('item 7: §9 on Steward\'s 59 recorded plans: K1 parts never malformed or u
   const supported = new Set(PLAN_SCHEMA['x-catalogue'].entries.filter((e) => e.state === 'supported').map((e) => e.id));
   const tally = {}, gaps = {}, rows = [];
   let k1Parts = 0;
+  const planAsk = await asksPlanner(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..'), { first: true });
   for (const f of fx) {
     const j = JSON.parse(fs.readFileSync(asksFirstPath(f), 'utf8')); // ((6c close-out A) the plans K1 judged: Steward's first recordings)
-    const r = await checkPlanLocal(j.answer.plan, { survey: SV.asks.bytes, claim: SV.asks.claim, anchors: stewardAnchors(SV.asks.claim) });
+    const r = await planAsk(j.answer.plan);
     for (const a of r.check.parts) {
       tally[a.class] = (tally[a.class] ?? 0) + 1;
       if (a.class === 'unsupported') gaps[a.block] = (gaps[a.block] ?? 0) + 1;

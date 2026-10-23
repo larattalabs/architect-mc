@@ -239,6 +239,8 @@ export function poolSize(jobs) {
  */
 export async function prewarm(root, jobs, { log = () => {} } = {}) {
   if (!cacheOn() || !jobs.length) return { jobs: jobs.length, workers: 0, ms: 0, failed: 0 };
+  // (a dirty kit/ or scenarios/ is never stored: the pool's answers would be thrown away and the loop would plan them all again)
+  if (!treesOf(root)) return { jobs: jobs.length, workers: 0, ms: 0, failed: 0, skipped: 'dirty tree: nothing is stored' };
   const workers = poolSize(jobs.length);
   if (workers <= 1) return { jobs: jobs.length, workers: 1, ms: 0, failed: 0, skipped: 'one worker: the loop plans serially' };
   const { Worker } = await import('node:worker_threads');
@@ -375,4 +377,21 @@ export async function jobVocCensus(root, d, f) {
   const base = path.join(root, 'kit', 'test', 'fixtures', 'plan');
   if (d === 'asks') await vocCensusCall(H, { on: 'asks' }, JSON.parse(fs.readFileSync(firstAsk(path.join(base, 'asks'), f), 'utf8')).answer.plan);
   else { const fx = JSON.parse(fs.readFileSync(path.join(base, d, f), 'utf8')); await vocCensusCall(H, fx, fx.plan); }
+}
+
+/**
+ * (speed audit A) The kit tests that plan Steward's 59 asks with the plain check (plan-p0-asks item 11, plan-k1a item 7: they read the
+ * parts of each check and nothing else) take the answers from the store, planned on the pool first. -> async (plan) => the check result
+ * (a lite one from the store). Only inside a gate run (GATE_RUNNER) and with the store on; otherwise exactly the plain call, as before.
+ * `first`: Steward's first recordings (asks-first.mjs), else the asks as they stand. The determinism tests never use this.
+ */
+export async function asksPlanner(root, { first = false } = {}) {
+  const plain = await import(pathToFileURL(path.join(root, 'kit', 'test', 'plan-helpers.mjs')).href);
+  const s = plain.asksSurvey();
+  const optsOf = (H) => ({ survey: s.bytes, claim: s.claim, anchors: H.stewardAnchors(s.claim) });
+  if (!cacheOn() || process.env.GATE_RUNNER !== '1') return (plan) => plain.checkPlanLocal(plan, optsOf(plain));
+  if (first) await prewarm(root, firstAskJobs(root, root, [false], 'checkPlanLocal'));
+  else await prewarmAsks(root, [root], 'checkPlanLocal');
+  const H = await helpers(root);
+  return (plan) => H.checkPlanLocal(plan, optsOf(H));
 }

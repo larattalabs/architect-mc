@@ -6,7 +6,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { stewardAnchors, checkPlanLocal } from './plan-helpers.mjs';
 import { PLAN_SCHEMA } from '../lib/plan/schema.mjs';
+import { fileURLToPath } from 'node:url';
 import { read, A } from './plan-p0-shared.mjs';
+import { asksPlanner } from '../../tools/lib/corpus-plan.mjs'; // (speed audit A) the 59 plans from the run's shared store inside a gate run
 
 test('item 11: Steward\'s 59 recorded plans (whole files, fixtures/plan/asks): no crash, none malformed, answer.waits unsupported or blocked; the gap table', async () => {
   const fx = read('asks');
@@ -16,8 +18,10 @@ test('item 11: Steward\'s 59 recorded plans (whole files, fixtures/plan/asks): n
   const supported = new Set(PLAN_SCHEMA['x-catalogue'].entries.filter((e) => e.state === 'supported').map((e) => e.id));
   const tally = {}, gaps = {}, other = [];
   const anchors = stewardAnchors(A.claim);
+  // (this loop reads each check's parts only; the determinism tests keep planning for themselves)
+  const planAsk = await asksPlanner(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..'));
   for (const f of fx) {
-    const r = await checkPlanLocal(f.answer.plan, { survey: A.bytes, claim: A.claim, anchors });
+    const r = await planAsk(f.answer.plan);
     assert.notEqual(r.check.overall, 'MALFORMED', f.name);
     const waits = new Set((f.answer.waits ?? []).map((w) => w.part));
     for (const a of r.check.parts) {
