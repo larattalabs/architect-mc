@@ -2,6 +2,9 @@
 // `connectors` member whose values are role names only, so a re-skin restyles walls, gates and rope bridges without replanning:
 //   connectors?: { wall?: {body?, cap?, frame?}, gate?: {frame?, door?}, rope_bridge?: {deck?, rail?, post?, rope?},
 //                  bridge?: {deck?, rail?, pier?, arch?}, tunnel?: {lining?, portal?, floor?} }   ((6c T3) bridge and tunnel, additive)
+// (7a foundation, §5, additive) stair {tread, rail}, switchback {retaining}, ladder {ladder, landing, rail, gate}, rock_stair {tread,
+// lining, portal}, lift {shell, base, door, cap}, catwalk {deck, bracket, rail}, stairs_around {tread, rail, deck}, and wall's walk and
+// parapet (K2). Each slice states its slots' defaults; until then a slot's chain is empty (it resolves to null, which nothing reads).
 // connectorRoles() resolves it against the plan's roles with the contract's defaults, and shapeOf() gives a role's block in the
 // shape a generator needs (slab, stairs, wall block, fence, fence gate, door) from the 26.3 block tables (kit.mjs variant(), which
 // reads lib/blocks.mjs), each with its stated fallback.
@@ -9,7 +12,8 @@ import { qualify } from '../blocks.mjs';
 import { variant, WOODS } from '../kit.mjs';
 
 /** The members and their slots (role names). */
-export const CONNECTOR_SLOTS = Object.freeze({ wall: ['body', 'cap', 'frame'], gate: ['frame', 'door'], rope_bridge: ['deck', 'rail', 'post', 'rope'], bridge: ['deck', 'rail', 'pier', 'arch'], tunnel: ['lining', 'portal', 'floor'] });
+export const CONNECTOR_SLOTS = Object.freeze({ wall: ['body', 'cap', 'frame', 'walk', 'parapet'], gate: ['frame', 'door'], rope_bridge: ['deck', 'rail', 'post', 'rope'], bridge: ['deck', 'rail', 'pier', 'arch'], tunnel: ['lining', 'portal', 'floor'],
+  stair: ['tread', 'rail'], switchback: ['retaining'], ladder: ['ladder', 'landing', 'rail', 'gate'], rock_stair: ['tread', 'lining', 'portal'], lift: ['shell', 'base', 'door', 'cap'], catwalk: ['deck', 'bracket', 'rail'], stairs_around: ['tread', 'rail', 'deck'] });
 
 /**
  * The default role chain of each slot (§6, N-K1-1, N-K1-2): the first role the plan resolves wins. `door` defaults to the frame's
@@ -17,19 +21,23 @@ export const CONNECTOR_SLOTS = Object.freeze({ wall: ['body', 'cap', 'frame'], g
  * bible turns off with "none".
  */
 export const CONNECTOR_DEFAULTS = Object.freeze({
-  wall: { body: ['structure', 'foundation', 'wall'], cap: ['trim'], frame: ['trim'] },
+  wall: { body: ['structure', 'foundation', 'wall'], cap: ['trim'], frame: ['trim'], walk: [], parapet: [] }, // ((7a) walk, parapet: K2's)
   gate: { frame: ['trim'], door: [] },
   rope_bridge: { deck: ['floor', 'path'], rail: ['rail'], post: ['frame'], rope: [] },
   // (6c T3 §7, N-T3-1, N-T3-3) a bridge's deck in path then floor, rails trim (its wall variant) then rail, piers and the arch in
   // structure, foundation, wall; a tunnel's lining in foundation then structure, its portal in trim, its floor path then floor
   bridge: { deck: ['path', 'floor'], rail: ['trim', 'rail'], pier: ['structure', 'foundation', 'wall'], arch: ['structure', 'foundation', 'wall'] },
   tunnel: { lining: ['foundation', 'structure'], portal: ['trim'], floor: ['path', 'floor'] },
+  // (7a foundation) each 7a slice sets its own chains (empty until then: the slot resolves to null)
+  stair: { tread: [], rail: [] }, switchback: { retaining: [] }, ladder: { ladder: [], landing: [], rail: [], gate: [] },
+  rock_stair: { tread: [], lining: [], portal: [] }, lift: { shell: [], base: [], door: [], cap: [] }, catwalk: { deck: [], bracket: [], rail: [] },
+  stairs_around: { tread: [], rail: [], deck: [] },
 });
 
 /** A bible's `connectors` member checked: null when fine, else a message (role names must be roles of the bible). */
 export function connectorsError(c, roles = null) {
   if (c === undefined) return null;
-  if (!c || typeof c !== 'object' || Array.isArray(c)) return 'connectors must be an object { wall?, gate?, rope_bridge?, bridge?, tunnel? }';
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return `connectors must be an object { ${Object.keys(CONNECTOR_SLOTS).map((k) => `${k}?`).join(', ')} }`;
   for (const [k, v] of Object.entries(c)) {
     if (!CONNECTOR_SLOTS[k]) return `connectors: unknown member '${k}' (one of ${Object.keys(CONNECTOR_SLOTS).join(', ')})`;
     if (!v || typeof v !== 'object' || Array.isArray(v)) return `connectors.${k} must be an object { ${CONNECTOR_SLOTS[k].join(', ')} }`;

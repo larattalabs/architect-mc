@@ -90,7 +90,9 @@ test('set: every constant, the NEXT and legacy stamps, the goldens re-cut (kitVe
     const s = setVersions(t, { ...NEW, tag: TAG });
     const v = Object.fromEntries(readVersions(t).map((x) => [x.id, x.value]));
     assert.deepEqual(v, { 'ArchitectApi.VERSION': NEW.api, PLAN_API: NEW.api, 'golden api': NEW.api, mod_version: NEW.mod, KIT_VERSION: NEW.kit, EVAL_KIT_VERSION: NEW.kit, 'IrStale.KIT_VERSION': NEW.kit, 'golden kitVersion': NEW.kit, catalogueVersion: NEW.catalogue, 'golden catalogueVersion': NEW.catalogue });
-    assert.deepEqual(s.stamped.filter((x) => ['plan.json', 'plan-catalogue.golden.json', 'SliceThing.java'].includes(path.basename(x.file))).map((x) => [path.basename(x.file), x.from, x.to]), [['plan.json', 'NEXT', NEW.api], ['plan-catalogue.golden.json', 'NEXT', NEW.api], ['SliceThing.java', 'NEXT', NEW.api], ['SliceThing.java', 'NEXT', NEW.api], ['SliceThing.java', LEGACY, NEW.api]]);
+    // ((7a foundation) a slice tree's own catalogue placeholders stamp too: the catalogue files' rows counted once each)
+    const st = s.stamped.filter((x) => ['plan.json', 'plan-catalogue.golden.json', 'SliceThing.java'].includes(path.basename(x.file))).map((x) => [path.basename(x.file), x.from, x.to]);
+    assert.deepEqual(st.filter((x, i) => x[0] === 'SliceThing.java' || st.findIndex((y) => JSON.stringify(y) === JSON.stringify(x)) === i), [['plan.json', 'NEXT', NEW.api], ['plan-catalogue.golden.json', 'NEXT', NEW.api], ['SliceThing.java', 'NEXT', NEW.api], ['SliceThing.java', 'NEXT', NEW.api], ['SliceThing.java', LEGACY, NEW.api]]);
     const j = fs.readFileSync(path.join(t, 'mod/src/main/java/dev/larattalabs/architect/api/SliceThing.java'), 'utf8');
     assert.ok(j.includes(`Since ${NEW.api}. */`) && j.includes(`@since ${NEW.api} */`) && j.includes('int NEXT = 1;') && j.includes(`since ${NEW.api}, an in-flight`) && j.includes('Since 1.0.0.'), j);
     assert.deepEqual(findPlaceholders(t), []);

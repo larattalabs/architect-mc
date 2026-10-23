@@ -40,8 +40,11 @@ export const K1_KINDS = Object.freeze([...WALL_KINDS, ...ROPE_KINDS]);
 import { BRIDGE_KINDS, FALLBACK_KINDS, T3_KINDS, TUNNEL_KINDS } from '../connectors/t3kinds.mjs';
 import { bridgeAnswer, bridgeAutoLeg, bridgeFailAnswer, bridgeFallback, bridgeLeg, bridgePassInput, bridgeResolve, emitBridges } from '../connectors/bridge.mjs';
 import { emitTunnels, tunnelAnswer, tunnelAutoLeg, tunnelFailAnswer, tunnelLeg, tunnelPassInput, tunnelResolve } from '../connectors/tunnel.mjs';
-/** (6c T3) The connector kinds that get the `links` stage and the K context: K1's and T3's. */
-export const LINK_KINDS = Object.freeze([...K1_KINDS, ...T3_KINDS]);
+// (7a foundation) batch 7a's kinds (a leaf module) and its compile hook table (one loop at each call site, after K1's and T3's)
+import { KINDS_7A, ROUTED_7A } from '../connectors/kinds7a.mjs';
+import { EMIT_ORDER_7A, HOOKS_7A, hookOf } from '../connectors/hooks7a.mjs';
+/** (6c T3) The connector kinds that get the `links` stage and the K context: K1's and T3's; (7a foundation) and batch 7a's. */
+export const LINK_KINDS = Object.freeze([...K1_KINDS, ...T3_KINDS, ...KINDS_7A]);
 // (6c H) water bodies and wet structures: the generators behind one dispatcher (lib/fluids/hooks.mjs), the stage name from a leaf
 import { asksFarmPond, asksIrrigate, channelBlockOf, dropOverflows, emitOrder, fluidAnswer, fluidEmit, fluidFallbackClearance, fluidFarmPonds, fluidFootprint, fluidIrrigation, fluidPassInput, fluidResolve, fluidStageWanted, isHPart, wetBridgeFallback } from '../fluids/hooks.mjs';
 import { keptBy, registerBody, release as releaseKeep, reserve, spanOf } from '../fluids/keep.mjs';
@@ -829,7 +832,7 @@ function checkpoint(r) {
     paths: r.paths.length, nodes: r.graph.nodes.length, edges: r.graph.edges.length, graphIds: new Set(r.graphIds), forms: r.forms.length, opCount: r.opCount,
     notes: r.notes.length, passRuns: r.passRuns.length, blend: r.blendLots.length, relief: new Set(r.reliefLots), fields: { ...r.fields }, sideBlobs: { ...r.sideBlobs },
     pathIds: Object.keys(r.meta.paths), nodeIds: r.graph.nodes.length, edgeIds: r.graph.edges.length,
-    meta: JSON.stringify({ paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, route: r.meta.route ?? null, gravity: r.meta.gravity ?? null, forms: r.meta.forms ?? null, village: r.meta.village ?? null, villageZones: r.meta.villageZones ?? null, walls: r.meta.walls ?? null, ropes: r.meta.ropes ?? null, bridges: r.meta.bridges ?? null, tunnels: r.meta.tunnels ?? null }),
+    meta: JSON.stringify({ paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, route: r.meta.route ?? null, gravity: r.meta.gravity ?? null, forms: r.meta.forms ?? null, village: r.meta.village ?? null, villageZones: r.meta.villageZones ?? null, walls: r.meta.walls ?? null, ropes: r.meta.ropes ?? null, bridges: r.meta.bridges ?? null, tunnels: r.meta.tunnels ?? null, climbs: r.meta.climbs ?? null, rockStairs: r.meta.rockStairs ?? null, lifts: r.meta.lifts ?? null, catwalks: r.meta.catwalks ?? null, spirals: r.meta.spirals ?? null }),
     anchors: { ...r.anchors },
     // ((6c H) the fluid records, by length (their objects are referenced elsewhere: the bodies by the moat's pass input, the wet records
     // by their guards): a part that rolls back leaves no body, water, quay or wet record behind (null: the key was absent)
@@ -855,7 +858,7 @@ function rollback(r, c) {
   r.notes.length = c.notes; r.passRuns.length = c.passRuns; r.blendLots.length = c.blend; r.reliefLots = c.relief; r.fields = c.fields; r.sideBlobs = { ...c.sideBlobs, ...volBlobs };
   const m = JSON.parse(c.meta);
   r.meta.paths = m.paths; r.meta.lots = m.lots; r.meta.parts = m.parts;
-  for (const k of ['route', 'gravity', 'forms', 'village', 'villageZones', 'walls', 'ropes', 'bridges', 'tunnels']) { if (m[k] === null) delete r.meta[k]; else r.meta[k] = m[k]; }
+  for (const k of ['route', 'gravity', 'forms', 'village', 'villageZones', 'walls', 'ropes', 'bridges', 'tunnels', 'climbs', 'rockStairs', 'lifts', 'catwalks', 'spirals']) { if (m[k] === null) delete r.meta[k]; else r.meta[k] = m[k]; }
   r.anchors = c.anchors;
   // ((6c H) meta.wetAsked is not restored: a wet write that asked a volume it did not hold keeps the two-plan flow's ask (finish.mjs))
   if (c.fluid) { restoreList(r, '_fluidBodies', c.fluid.bodies); for (const k of ['waters', 'quays', 'wet']) restoreList(r.meta, k, c.fluid[k]); }
@@ -932,6 +935,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     if (Array.isArray(o.reasons)) o = { ...o, reasons: o.reasons.map(withEvidence) };
     const a = { part: p.id, block: p.block, class: o.class, required: p.required };
     for (const k of ['geometry', 'cost', 'provisional', 'deviations', 'reasons', 'wouldFit', 'blockedBy', 'cached', 'notes']) if (o[k] !== undefined && !(Array.isArray(o[k]) && !o[k].length)) a[k] = o[k];
+    // (7a foundation, R25) a part written as a supported alias answers as its target, with the note
+    if (p.alias && !(a.notes ?? []).includes(p.alias.note)) a.notes = [p.alias.note, ...(a.notes ?? [])];
     if (p.ext) a.ext = p.ext;
     answers.set(p.id, a);
     return a;
@@ -1446,8 +1451,12 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     // (6c T3) a bridge's or tunnel's own checks before routing (R18's self-loop, the drawbridge, movers, width)
     if (BRIDGE_KINDS.includes(p.kind)) { const stop = bridgeResolve(K, p); if (stop) { ans(p, stop); continue; } }
     if (TUNNEL_KINDS.includes(p.kind)) { const stop = tunnelResolve(K, p); if (stop) { ans(p, stop); continue; } }
-    // (6c T3, R19, S-T3-6) a tunnel's via is read leniently: the first leg (from to via[0]), the rest listed in its notes
-    const tunnelVia = TUNNEL_KINDS.includes(p.kind) && (p.part.via ?? []).length;
+    // (7a foundation) a 7a kind's own checks before routing (its hook module: R18-style self-loops, movers, NO_CLIMB, params)
+    const h7 = K ? hookOf(p.kind) : null;
+    if (h7) { const stop = h7.mod.resolve(K, p); if (stop) { ans(p, stop); continue; } }
+    // (6c T3, R19, S-T3-6) a tunnel's via is read leniently: the first leg (from to via[0]), the rest listed in its notes; (7a, R26) so is
+    // a climb's, a rock stair's, a lift's and a catwalk's
+    const tunnelVia = (TUNNEL_KINDS.includes(p.kind) || ROUTED_7A.includes(p.kind)) && (p.part.via ?? []).length;
     const ends = tunnelVia ? [p.part.from, p.part.via[0]] : [p.part.from, ...(p.part.via ?? []), p.part.to];
     if (tunnelVia) connNotes.set(p.id, [...(connNotes.get(p.id) ?? []), `via read leniently: the first leg only (to via[0]); ${p.part.via.length > 1 ? `via[1..${p.part.via.length - 1}] and ` : ''}to not read (R19)`]);
     const pts = [];
@@ -1462,7 +1471,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     const tGrade = tolOf(p.part, 'grade');
     const grade = Math.max(1 / 64, Math.min(1, q64(tGrade.max)));
     if (snapNotes.length) connNotes.set(p.id, [...(connNotes.get(p.id) ?? []), ...snapNotes]);
-    const k1 = ROPE_KINDS.includes(p.kind) ? legOptions(K, p) : BRIDGE_KINDS.includes(p.kind) ? bridgeLeg(K, p) : TUNNEL_KINDS.includes(p.kind) ? tunnelLeg(K, p) : null;
+    const k1 = ROPE_KINDS.includes(p.kind) ? legOptions(K, p) : BRIDGE_KINDS.includes(p.kind) ? bridgeLeg(K, p) : TUNNEL_KINDS.includes(p.kind) ? tunnelLeg(K, p) : h7 ? h7.mod.leg(K, p) : null;
     for (let k = 0; k + 1 < pts.length; k++) legs.push({ conn: p, k, from: pts[k], to: pts[k + 1], width: p.part.width ?? WIDTH_DEFAULT[p.kind] ?? 3, movers: p.part.movers, grade, ...(k1 ? { k1 } : {}) });
   }
   // maxEdges: legs past the cap (in order) are incomplete
@@ -1492,7 +1501,10 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         const walls = K ? wallsPassInput(K) : null, rope = K ? ropePassInput(K) : null, bridge = K ? bridgePassInput(K) : null, tunnel = K ? tunnelPassInput(K) : null;
         // (6c H) the plan's own water (a moat: the routes keep 1 off it), only when the plan has some
         const fluids = K ? fluidPassInput(K) : null;
-        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(terracedPlan ? { guard: true } : {}), ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length || rope?.hard?.length ? { hard: [...env.standingHard, ...(rope?.hard ?? [])] } : {}), ...(rope?.base ? { base: rope.base } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}), ...(bridge ? { bridge } : {}), ...(tunnel ? { tunnel } : {}), ...(fluids ? { fluids } : {}) });
+        // (7a foundation) rows 9-11's pass-level inputs (intent.rockStair, intent.lift, intent.catwalk), each only when its hook gives one
+        const t7 = {};
+        if (K) for (const x of HOOKS_7A) { if (!x.intent) continue; const v = x.mod.passInput(K); if (v) t7[x.intent] = v; }
+        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(terracedPlan ? { guard: true } : {}), ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length || rope?.hard?.length ? { hard: [...env.standingHard, ...(rope?.hard ?? [])] } : {}), ...(rope?.base ? { base: rope.base } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}), ...(bridge ? { bridge } : {}), ...(tunnel ? { tunnel } : {}), ...(fluids ? { fluids } : {}), ...t7 });
       } catch (e) {
         rollback(r, cp);
         for (const l of group) if (!answers.has(l.conn.id)) ans(l.conn, { class: 'refused', reasons: [{ code: /KEEP_OUT/.test(e.message) ? 'KEEP_OUT' : 'UNREACHABLE', message: e.message }] });
@@ -1554,6 +1566,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         }
         // ((6c T3) a bridge or tunnel leg the route pass could not span or bore answers its typed reason)
         if ((why === 'BRIDGE' || why === 'TUNNEL') && K) { ans(l.conn, why === 'BRIDGE' ? bridgeFailAnswer(K, l, m) : tunnelFailAnswer(K, l, m)); continue; }
+        // ((7a foundation) a 7a leg the pass could not route: its hook's typed refusal (null: the default answers below)
+        { const h = K ? hookOf(l.conn.kind) : null; const a = h ? h.mod.failAnswer(K, l, m) : null; if (a) { ans(l.conn, a); continue; } }
         // ((7a K1b) a rope_bridge leg the route pass could not span answers its typed reason: NO_GAP, SPAN, ...)
         ans(l.conn, why === 'ROPE' && K ? ropeFailAnswer(K, l, m) : why === 'BUDGET' ? budgetHit('maxNodes') : why === 'ROUTE_WATER'
           ? { class: 'refused', reasons: [{ code: 'WATER', message: `leg ${l.k + 1}: every route crosses water`, evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, kind: 'crossing' } }] }
@@ -1588,6 +1602,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     const extras = [];
     if (K && (BRIDGE_KINDS.includes(p.kind) || p.kind === 'auto' || ls.some((x) => x.leg.fallback))) extras.push(bridgeAnswer(K, p, ls));
     if (K && (TUNNEL_KINDS.includes(p.kind) || p.kind === 'auto')) extras.push(tunnelAnswer(K, p, ls));
+    // (7a foundation) a 7a kind's answer fields (its hook module's), merged last
+    { const h = K ? hookOf(p.kind) : null; if (h) extras.push(h.mod.answer(K, p, ls)); }
     ans(p, mergeExtras(extra ? { ...base, ...extra } : base, extras));
   }
 
@@ -1600,6 +1616,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     // (6c T3) then the bridges, then the tunnels (each part under its own checkpoint)
     emitBridges(K);
     emitTunnels(K);
+    // (7a foundation) then climbs' fittings, rock stairs, catwalks, spirals, lifts (EMIT_ORDER_7A; each part under its own checkpoint)
+    for (const h of EMIT_ORDER_7A) h.mod.emit(K);
   }
 
   // ---- (6c FL, Noah's look fix 3) the free zones' street lamps, now that every road is laid: none within LAMP_GAP of another lamp

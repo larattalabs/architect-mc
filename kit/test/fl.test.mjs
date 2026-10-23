@@ -11,7 +11,7 @@ import { FIX, ROOT, checkPlanLocal, stewardAnchors } from './plan-helpers.mjs';
 import { read, run, svOf, part, A } from './plan-p0-shared.mjs';
 import { checkRegion } from '../lib/region/check.mjs';
 import { clearRefusals } from '../lib/region/checkFluids.mjs';
-import { planCatalogue, diffCatalogues, PLAN_API } from '../lib/plan/catalogue.mjs';
+import { planCatalogue, diffCatalogues } from '../lib/plan/catalogue.mjs';
 
 const fl = read('fl');
 const byName = (n) => fl.find((f) => f.name.startsWith(n));
@@ -104,10 +104,10 @@ test('item 3: KC: a zone around a pond (v67) and around a fountain (r03): 0 M25:
 // ------------------------------------------------------------------ item 5: catalogue 10
 
 test('item 5: the golden equals catalogue 11 (the batch: FL and F3); its diff from catalogue-vocc.json (9), F3\'s entries aside, is exactly the six flips (locator.around\'s note kept and extended); no until FL left', () => {
-  const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
-  assert.deepEqual(planCatalogue(), golden);
+  assert.deepEqual(planCatalogue(), JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8')));
+  // ((7a foundation) catalogue 11 as v0.41.0 shipped it is archived as catalogue-pre7a.json; 7a's changes are its own tests')
+  const golden = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-pre7a.json'), 'utf8'));
   assert.equal(golden.catalogueVersion, 11); // ((batch v0.41.0) FL's 10 and F3's 11 together: 11)
-  assert.equal(golden.api, PLAN_API);
   const nine = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-vocc.json'), 'utf8'));
   const d = diffCatalogues(nine, golden, { pending: [{ part: 'grove', block: 'layout.ring' }] });
   const six = ['layout.grid', 'layout.organic', 'layout.ring', 'layout.spiral', 'locator.around', 'sketch.outline'];
@@ -119,7 +119,7 @@ test('item 5: the golden equals catalogue 11 (the batch: FL and F3); its diff fr
   assert.deepEqual(d.notesChanged.map((x) => x.id), ['locator.around']);
   assert.match(golden.entries.find((e) => e.id === 'locator.around').note, /^On a wall: wall\.around.*Zones: a ring street round the feature; forms: sites in the band\./);
   assert.deepEqual(d.recheck, [{ part: 'grove', block: 'layout.ring' }]);
-  for (const id of six) { const e = golden.entries.find((x) => x.id === id); assert.equal(e.state, 'supported'); assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === PLAN_API, `${id}: sinceApi ${e.sinceApi}`); assert.equal(e.schemaVersion, 1); assert.ok(e.note, id); }
+  for (const id of six) { const e = golden.entries.find((x) => x.id === id); assert.equal(e.state, 'supported'); assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === golden.api, `${id}: sinceApi ${e.sinceApi}`); assert.equal(e.schemaVersion, 1); assert.ok(e.note, id); }
   // no until FL anywhere in the kit's schemas and code (the archived catalogues aside)
   const scan = [path.join(ROOT, 'kit', 'schemas'), path.join(ROOT, 'kit', 'lib')];
   const files = scan.flatMap((d0) => fs.readdirSync(d0, { recursive: true }).map((f) => path.join(d0, f)).filter((f) => /\.(json|mjs)$/.test(f)));

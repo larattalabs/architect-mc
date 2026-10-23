@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { FIX, ROOT, checkPlanVolumes, flatSurvey, goldenSurvey, asksSurvey, stewardAnchors } from './plan-helpers.mjs';
 import { checkRegion } from '../lib/region/check.mjs';
-import { diffCatalogues, planCatalogue, PLAN_API } from '../lib/plan/catalogue.mjs';
+import { diffCatalogues, planCatalogue } from '../lib/plan/catalogue.mjs';
 import { eachColumn } from '../lib/forms/states.mjs';
 import { formRules, leafDistances } from '../lib/region/checkForms.mjs';
 import { asColumns, FLAG_TREE } from '../lib/region/pack.mjs';
@@ -117,10 +117,10 @@ test('M18: vanilla\'s distance on a hand-made world (through leaves only, from #
 });
 
 test('item 9: catalogue 11 is the golden; against catalogue 9 (catalogue-vocc.json) exactly one flip, four added ids and the tunnel\'s volume flag', () => {
-  const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
-  assert.deepEqual(planCatalogue(), golden);
-  assert.equal(golden.catalogueVersion, 11);
-  assert.equal(golden.api, PLAN_API);
+  assert.deepEqual(planCatalogue(), JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8')));
+  // ((7a foundation) catalogue 11 as v0.41.0 shipped it is archived as catalogue-pre7a.json; 7a's changes are its own tests')
+  const golden = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-pre7a.json'), 'utf8'));
+  assert.equal(golden.catalogueVersion, 11); // ((batch v0.41.0) FL's 10 and F3's 11 together: 11)
   const prev = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-vocc.json'), 'utf8'));
   assert.equal(prev.catalogueVersion, 9);
   const d = diffCatalogues(prev, golden);
@@ -137,7 +137,7 @@ test('item 9: catalogue 11 is the golden; against catalogue 9 (catalogue-vocc.js
   for (const id of ['form.giant_tree', 'form.giant_mushroom', 'form.coral', 'form.roots', 'form.stalactites']) {
     const e = golden.entries.find((x) => x.id === id);
     assert.equal(e.state, 'supported', id);
-    assert.equal(e.sinceApi, PLAN_API, id);
+    assert.equal(e.sinceApi, golden.api, id);
   }
   // no entry waits for F3 any more
   assert.deepEqual(golden.entries.filter((e) => e.until === 'F3').map((e) => e.id), []);

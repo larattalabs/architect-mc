@@ -34,12 +34,12 @@ test('lenient params: read where they map, every other key listed, lot-naming ke
 test('connector roles: the bible names roles, else the contract defaults (§6, N-K1-1, N-K1-2)', () => {
   const roles = resolveRoles({});
   const d = connectorRoles(roles, null);
-  assert.deepEqual({ wall: d.wall, gate: d.gate, rope_bridge: d.rope_bridge }, { wall: { body: 'structure', cap: 'trim', frame: 'trim' }, gate: { frame: 'trim', door: null }, rope_bridge: { deck: 'floor', rail: 'rail', post: 'frame', rope: null } });
+  assert.deepEqual({ wall: d.wall, gate: d.gate, rope_bridge: d.rope_bridge }, { wall: { body: 'structure', cap: 'trim', frame: 'trim', walk: null, parapet: null }, gate: { frame: 'trim', door: null }, rope_bridge: { deck: 'floor', rail: 'rail', post: 'frame', rope: null } });
   const g = connectorRoles(roles, { wall: { body: 'wall_alt' }, rope_bridge: { rope: 'none' } });
   assert.equal(g.wall.body, 'wall_alt');
   assert.equal(g.rope_bridge.rope, 'none');
   assert.equal(connectorsError({ wall: { body: 'nope' } }, roles), "connectors.wall.body: 'nope' is not a role of this bible");
-  assert.equal(connectorsError({ moat: {} }, roles), "connectors: unknown member 'moat' (one of wall, gate, rope_bridge, bridge, tunnel)");
+  assert.equal(connectorsError({ moat: {} }, roles), "connectors: unknown member 'moat' (one of wall, gate, rope_bridge, bridge, tunnel, stair, switchback, ladder, rock_stair, lift, catwalk, stairs_around)");
   assert.equal(shapeOf('minecraft:stone_bricks', 'wall'), 'minecraft:stone_brick_wall');
   assert.equal(shapeOf('minecraft:spruce_log', 'slab'), 'minecraft:spruce_slab');
   assert.equal(shapeOf('minecraft:glass', 'wall'), null);

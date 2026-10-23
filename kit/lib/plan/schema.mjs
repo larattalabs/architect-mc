@@ -421,8 +421,18 @@ export function validatePlan(plan, { anchors = [] } = {}) {
       if (typeof part.id !== 'string' || !/^[a-z][a-z0-9_]{0,47}$/.test(part.id)) { fail('SCHEMA', `${at}.id`, `a part needs an id matching ^[a-z][a-z0-9_]{0,47}$ (got ${JSON.stringify(part.id)})`); return; }
       if (seen.has(part.id)) { fail('SCHEMA', `${at}.id`, `id "${part.id}" is used twice (also ${seen.get(part.id)}; R1: ids are unique across the plan)`); return; }
       seen.set(part.id, at);
-      const kind = part.kind ?? (family === 'zone' ? 'standard' : undefined);
-      out.parts.push({ id: part.id, family, fam, index, path: at, kind, block: typeof kind === 'string' ? `${family}.${kind}` : null, required: part.required === true, part, ext: callerExt(part.ext), verdict: 'compile', reason: null, refs: [], lotRefs: [], deps: [] });
+      let kind = part.kind ?? (family === 'zone' ? 'standard' : undefined), checked = part, alias = null;
+      // (7a foundation, R25, S-7a-3) a supported alias (a supported connector entry with aliasOf, connector.span_bridge -> connector.bridge):
+      // the part is rewritten to its target's kind on a copy before dispatch (the caller's plan is untouched), checked against the
+      // target's def and answered with the target's block id, noted; nothing downstream sees the alias
+      const ae = family === 'connector' && typeof kind === 'string' ? entryOf(`connector.${kind}`) : null;
+      if (ae?.state === 'supported' && typeof ae.aliasOf === 'string' && ae.aliasOf.startsWith('connector.') && entryOf(ae.aliasOf)?.state === 'supported') {
+        const target = ae.aliasOf.slice('connector.'.length);
+        alias = { from: `connector.${kind}`, note: `${kind} is ${ae.aliasOf} (R25)` };
+        checked = { ...part, kind: target };
+        kind = target;
+      }
+      out.parts.push({ id: part.id, family, fam, index, path: at, kind, block: typeof kind === 'string' ? `${family}.${kind}` : null, required: part.required === true, part: checked, ext: callerExt(part.ext), verdict: 'compile', reason: null, refs: [], lotRefs: [], deps: [], ...(alias ? { alias } : {}) });
     });
     if (out.malformed) return out;
   }

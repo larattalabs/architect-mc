@@ -304,10 +304,11 @@
   },
   {
    "id": "connector.rail",
-   "sinceApi": "1.23.0",
+   "sinceApi": "NEXT",
    "schemaVersion": 0,
    "state": "reserved",
-   "until": "7a"
+   "until": "CR",
+   "note": "Minecart track between stations; carts and rails come later (S-HY-3, S-7a-5)."
   },
   {
    "id": "connector.rope_bridge",
@@ -357,17 +358,19 @@
   },
   {
    "id": "connector.branch_walk",
-   "sinceApi": "1.23.0",
+   "sinceApi": "NEXT",
    "schemaVersion": 0,
    "state": "reserved",
-   "until": "7a"
+   "until": "7b",
+   "note": "A deck along a giant tree's branches between canopy lots: needs layout.elevated and F3's branch skeleton (S-7a-4)."
   },
   {
    "id": "connector.span_bridge",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7a"
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "aliasOf": "connector.bridge",
+   "note": "A supported alias of connector.bridge (a gap with a floor within 24: the bridge's beam): the part is checked and answered as connector.bridge, noted (R25, S-7a-3)."
   },
   {
    "id": "connector.stairs_around",
