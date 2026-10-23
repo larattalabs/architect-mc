@@ -137,6 +137,66 @@ public final class RegionDev {
 							return o;
 						});
 			});
+		DevBridge.register("dev.region.checkBeside", 900_000, "{program, params?, claim: [x0,z0,x1,z1], seed?, surveyLoad?, owner?, check?, bible?, opKey?, "
+			+ "beside} - 6c D3: Regions.checkBeside (a dry beside plan, nothing kept) -> {fits, reason, code, message, join: {region, kind, step, road, node, "
+			+ "at, facing, cells, insideCells}, land, ms} or {refused}", (req, mc) -> {
+				Fields f = Fields.of(req);
+				String program = f.nonBlank("program");
+				JsonObject params = req.has("params") ? req.getAsJsonObject("params") : new JsonObject();
+				JsonArray c = req.getAsJsonArray("claim");
+				Long seed = req.has("seed") ? Long.parseUnsignedLong(req.get("seed").getAsString()) : null;
+				LoadPolicy load = load(f.optStr("surveyLoad", "loaded"));
+				String owner = f.optStr("owner", null);
+				String bible = f.optStr("bible", null);
+				String planKey = f.optStr("opKey", null);
+				String beside = f.optStr("beside", null);
+				JsonObject ext = new JsonObject();
+				if (!f.optBool("check", true)) {
+					ext.addProperty(RegionsImpl.EXT_CHECK, false);
+				}
+				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> ArchitectApi.get().regions().checkBeside(new RegionPlanRequest(program,
+					params, level, new BoundingBox(c.get(0).getAsInt(), level.getMinY(), c.get(1).getAsInt(), c.get(2).getAsInt(), level.getMaxY(), c.get(3)
+						.getAsInt()), seed, bible, null, load, owner, ext, planKey, beside)))).thenCompose(x -> x).thenCompose(x -> x).handle((v, e) -> {
+							JsonObject o = new JsonObject();
+							if (e != null) {
+								o.addProperty("refused", reason(e));
+								return o;
+							}
+							o.addProperty("fits", v.fits());
+							if (v.reason() != null) {
+								o.addProperty("reason", v.reason().name());
+							}
+							if (v.code() != null) {
+								o.addProperty("code", v.code());
+							}
+							o.addProperty("message", v.message());
+							if (v.join() != null) {
+								var j = v.join();
+								JsonObject jo = new JsonObject();
+								jo.addProperty("region", j.region());
+								jo.addProperty("kind", j.kind());
+								jo.addProperty("step", j.step());
+								jo.addProperty("road", j.road());
+								if (j.node() != null) {
+									jo.addProperty("node", j.node());
+								}
+								JsonArray at = new JsonArray();
+								at.add(j.at().getX());
+								at.add(j.at().getY());
+								at.add(j.at().getZ());
+								jo.add("at", at);
+								jo.addProperty("facing", j.facing().getName());
+								jo.addProperty("cells", j.cells());
+								jo.addProperty("insideCells", j.insideCells());
+								o.add("join", jo);
+							}
+							if (v.land() != null) {
+								o.add("land", v.land());
+							}
+							o.addProperty("ms", v.ms());
+							return o;
+						});
+			});
 		DevBridge.register("dev.region.prepare", 4 * 3_600_000L, "{planId, inFlight?, wait?: false} - phase 6a: Regions.prepare; with wait the "
 			+ "answer comes when it is done -> PrepareView + the governor's numbers", (req, mc) -> {
 				Fields f = Fields.of(req);

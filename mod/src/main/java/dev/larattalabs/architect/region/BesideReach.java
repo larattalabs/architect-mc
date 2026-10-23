@@ -492,6 +492,64 @@ public final class BesideReach {
 		}
 	}
 
+	/**
+	 * (6c D3, §14 item 9, a DevBridge read) Every active journal cell in {@code cols}, per position its stack bottom first ({@code group, site,
+	 * entry, layer, policy}), guard leaves excluded: {@code [{x, y, z, stack}]}, ordered by x, z, y. Server thread.
+	 */
+	public static JsonArray stacks(String dimension, Cols cols) throws IOException {
+		JournalStore store = WorldJournal.storeOrNull();
+		int[] rect = cols.rect();
+		JsonArray out = new JsonArray();
+		if (store == null || rect == null) {
+			return out;
+		}
+		int[] box = {rect[0], Integer.MIN_VALUE / 2, rect[1], rect[2], Integer.MAX_VALUE / 2, rect[3]};
+		TreeMap<Long, List<Object[]>> at = new TreeMap<>(); // (x, z, y) packed -> [layer, meta]
+		for (JournalStore.Meta m : store.find(mm -> mm.active() && !WorldJournal.LEAVES.equals(mm.kind()) && mm.intersects(dimension, box))) {
+			for (long key : m.sections()) {
+				int sx = SectionPos.x(key), sz = SectionPos.z(key);
+				if (sx * 16 + 15 < rect[0] || sx * 16 > rect[2] || sz * 16 + 15 < rect[1] || sz * 16 > rect[3]) {
+					continue;
+				}
+				SectionCells sc = store.section(m.id(), key);
+				if (sc == null) {
+					continue;
+				}
+				for (int k = 0; k < sc.size(); k++) {
+					long p = sc.pos(k);
+					int x = Journal.x(p), y = Journal.y(p), z = Journal.z(p);
+					if (!cols.has(x, z)) {
+						continue;
+					}
+					long ord = ((long) (x + (1 << 25)) << 38) | ((long) (z + (1 << 25)) << 12) | (y + 2048);
+					at.computeIfAbsent(ord, q -> new ArrayList<>()).add(new Object[] {sc.layer(k), m, x, y, z});
+				}
+			}
+		}
+		for (List<Object[]> l : at.values()) {
+			l.sort(java.util.Comparator.comparingLong(a -> (Long) a[0]));
+			Object[] f = l.get(0);
+			JsonObject o = new JsonObject();
+			o.addProperty("x", (Integer) f[2]);
+			o.addProperty("y", (Integer) f[3]);
+			o.addProperty("z", (Integer) f[4]);
+			JsonArray st = new JsonArray();
+			for (Object[] a : l) {
+				JournalStore.Meta m = (JournalStore.Meta) a[1];
+				JsonObject e = new JsonObject();
+				e.addProperty("group", m.group());
+				e.addProperty("site", m.site());
+				e.addProperty("entry", m.id());
+				e.addProperty("layer", (Long) a[0]);
+				e.addProperty("policy", m.policy().name());
+				st.add(e);
+			}
+			o.add("stack", st);
+			out.add(o);
+		}
+		return out;
+	}
+
 	/** Whether a journal entry's site is a region terrain tile of a stage outside {@code propsStages}. */
 	static boolean terrainTile(String siteId, Set<String> propsStages) {
 		Infra in = Infras.get(siteId);

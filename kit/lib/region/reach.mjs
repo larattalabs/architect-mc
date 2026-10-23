@@ -334,9 +334,50 @@ export function chooseReach({ planCols, R, beside, claim, yRange = [-64, 319], d
   if (!candidates.length) throw new Error(`NO_JOIN: [route] no street end or side of region ${beside.id} offers a junction (${Object.entries(dropped).map(([k, v]) => `${v} ${k}`).join('; ') || 'none'}; ${why})`);
   if (wallEncloses(K, frame, districtEnds.map((q) => [q.x, q.z]), candidates)) throw new Error(`NO_JOIN: [wall] every street end and side of region ${beside.id} is enclosed by another owner's held columns (a wall round the town: joining through its gate is 7a's) (${why})`);
   const hardKeys = reachHardKeys(K, claimR, town, { unsafe });
+  // a pair whose junction no 4-connected walk from its district end reaches (over the frame, around the hard columns and rects, every
+  // candidate's contact columns open) can't route: skipped before any dry route (a superset of what the route pass reaches)
+  const W = U.width, D = U.depth, blocked = new Uint8Array(W * D);
+  const contactAll = new Set(candidates.flatMap((c) => c.contact));
+  for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) {
+    const x = U.minX + i, z = U.minZ + j, k = i + j * W;
+    if (!frame.some((q) => inRect(q, x, z)) || (U.flags[k] & FLAG_MISSING)) blocked[k] = 1;
+  }
+  for (const k of hardKeys) { if (contactAll.has(k)) continue; const [x, z] = k.split(',').map(Number); const i = x - U.minX, j = z - U.minZ; if (i >= 0 && j >= 0 && i < W && j < D) blocked[i + j * W] = 1; }
+  for (const q of baseHard) for (let z = Math.max(q[1], U.minZ); z <= Math.min(q[3], U.minZ + D - 1); z++) for (let x = Math.max(q[0], U.minX); x <= Math.min(q[2], U.minX + W - 1); x++) blocked[(x - U.minX) + (z - U.minZ) * W] = 1;
+  // (as the route pass sees its centre cells: a cell within 1 of a hard one carries no 3-wide footprint; a district end's approach and
+  // every candidate's lead centre line are open, as the pass clears them straight out of their facing)
+  const wide = new Uint8Array(W * D);
+  for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) {
+    let b = 0;
+    for (let dj = -1; dj <= 1 && !b; dj++) for (let di = -1; di <= 1; di++) { const ni = i + di, nj = j + dj; if (ni < 0 || nj < 0 || ni >= W || nj >= D || blocked[ni + nj * W]) { b = 1; break; } }
+    wide[i + j * W] = b;
+  }
+  blocked.set(wide);
+  const open = (x, z) => { const i = x - U.minX, j = z - U.minZ; if (i >= 0 && j >= 0 && i < W && j < D) blocked[i + j * W] = 0; };
+  for (const q of districtEnds) if (Array.isArray(q.facing)) for (let t = 0; t <= 4; t++) open(q.x + q.facing[0] * t, q.z + q.facing[1] * t);
+  for (const c of candidates) for (let t = 0; t <= LEAD + 1; t++) open(c.at[0] + c.facing[0] * t, c.at[2] + c.facing[1] * t);
+  const reachFrom = (x0, z0) => {
+    const seen = new Uint8Array(W * D), st = [];
+    const i0 = x0 - U.minX, j0 = z0 - U.minZ;
+    if (i0 < 0 || j0 < 0 || i0 >= W || j0 >= D) return seen;
+    seen[i0 + j0 * W] = 1; st.push(i0 + j0 * W);
+    while (st.length) {
+      const k = st.pop(), i = k % W, j = (k - i) / W;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = i + di, nj = j + dj;
+        if (ni < 0 || nj < 0 || ni >= W || nj >= D) continue;
+        const nk = ni + nj * W;
+        if (seen[nk] || blocked[nk]) continue;
+        seen[nk] = 1; st.push(nk);
+      }
+    }
+    return seen;
+  };
+  const seenOf = districtEnds.map((q) => reachFrom(q.x, q.z));
+  const reachable = (ci, qi) => { const c = candidates[ci], i = c.at[0] - U.minX, j = c.at[2] - U.minZ; return i >= 0 && j >= 0 && i < W && j < D && seenOf[qi][i + j * W] === 1; };
   const cheb = (p, q) => Math.max(Math.abs(p[0] - q[0]), Math.abs(p[1] - q[1]));
   const pairs = [];
-  candidates.forEach((c, ci) => districtEnds.forEach((q, qi) => pairs.push({ c, ci, q, qi, bound: 10 * cheb([q.x, q.z], [c.at[0], c.at[2]]) })));
+  candidates.forEach((c, ci) => districtEnds.forEach((q, qi) => { if (reachable(ci, qi)) pairs.push({ c, ci, q, qi, bound: 10 * cheb([q.x, q.z], [c.at[0], c.at[2]]) }); }));
   pairs.sort((p, q) => p.bound - q.bound || p.ci - q.ci || p.qi - q.qi);
   let best = null, tried = 0, cut = false;
   for (const pr of pairs) {

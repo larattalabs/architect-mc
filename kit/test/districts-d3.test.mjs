@@ -151,7 +151,8 @@ test('item 1 (§2.2): the choice: cheapest by T2 cost, the lead (3 straight cell
   assert.ok(joinColumns(Jb).every((k) => !held.has(k)));
   // the cap: a district end walled in (every dry route fails) on a street with more than 48 candidates: NO_JOIN [budget]
   const longT = synthTown({ W: 200, D: 40, u0: 10, u1: 190, c: 20 });
-  const box = [[206, 14, 206, 26], [216, 14, 216, 26], [206, 14, 216, 14], [206, 26, 216, 26]];
+  // (walled in but for a 1-cell gap: a walk reaches out, a 3-wide route never does)
+  const box = [[206, 14, 206, 26], [216, 14, 216, 19], [216, 21, 216, 26], [206, 14, 216, 14], [206, 26, 216, 26]];
   assert.throws(() => chooseReach({ planCols: columnsOf(flat, 200, 0, 24, 40), R: longT.R, beside: longT.beside, claim: [200, 0, 223, 39], districtEnds: [{ x: 211, z: 20, at: [211, 65, 20], facing: [-1, 0] }], baseHard: box, route: routePass }), /NO_JOIN: \[budget\]/);
   assert.equal(REACH_DRY_MAX, 48);
   // apart: a claim neither meeting nor touching the town's
@@ -168,20 +169,21 @@ test('item 1: 300 seeded synthetic towns: every chosen join\'s reach cells unhel
   const rnd = prng(20261023);
   let joined = 0, refused = 0, sides = 0, holds = 0;
   for (let n = 0; n < 300; n++) {
+    // a 64 x 64 town, its street 30..50 long; the district's claim (40 wide) east or south of it
     const axis = rnd() < 0.5 ? 'x' : 'z';
-    const c = 30 + Math.floor(rnd() * 36), u0 = 8 + Math.floor(rnd() * 20), u1 = 60 + Math.floor(rnd() * 28);
+    const c = 22 + Math.floor(rnd() * 20), u0 = 6 + Math.floor(rnd() * 8), u1 = 40 + Math.floor(rnd() * 16);
     const lotSide = rnd() < 0.5 ? -1 : 1;
     const lots = [];
     for (let u = u0 + 2; u + 9 < u1; u += 12 + Math.floor(rnd() * 4)) { const v0 = lotSide > 0 ? c + 4 : c - 13; lots.push(axis === 'x' ? [u, v0, u + 8, v0 + 8] : [v0, u, v0 + 8, u + 8]); }
     const held = [], bodies = [], terrain = [];
-    for (let k = 0; k < 3; k++) { const x = Math.floor(rnd() * 80), z = Math.floor(rnd() * 80); held.push([x, z, x + 2 + Math.floor(rnd() * 6), z + 2 + Math.floor(rnd() * 6)]); }
-    if (rnd() < 0.3) { const x = Math.floor(rnd() * 80), z = Math.floor(rnd() * 80); bodies.push([x, z, x + 4, z + 4]); }
+    for (let k = 0; k < 3; k++) { const x = Math.floor(rnd() * 56), z = Math.floor(rnd() * 56); held.push([x, z, x + 2 + Math.floor(rnd() * 5), z + 2 + Math.floor(rnd() * 5)]); }
+    if (rnd() < 0.3) { const x = Math.floor(rnd() * 56), z = Math.floor(rnd() * 56); bodies.push([x, z, x + 4, z + 4]); }
     if (rnd() < 0.5) { const e = axis === 'x' ? [u1 + 1, c - 1, u1 + 3, c + 1] : [c - 1, u1 + 1, c + 1, u1 + 3]; terrain.push(e); }
-    const t = synthTown({ axis, c, u0, u1, mid: [Math.floor((u0 + u1) / 2)], lots, held, bodies, terrain, g: (x, z) => 64 + ((x * 7 + z * 3) % 3 === 0 ? 1 : 0) });
+    const t = synthTown({ W: 64, D: 64, axis, c, u0, u1, mid: [Math.floor((u0 + u1) / 2)], lots, held, bodies, terrain });
     const east = rnd() < 0.5;
-    const claim = east ? [96, 0, 155, 95] : [0, 96, 95, 155];
+    const claim = east ? [64, 0, 103, 63] : [0, 64, 63, 103];
     const planCols = columnsOf(flat, claim[0], claim[1], claim[2] - claim[0] + 1, claim[3] - claim[1] + 1);
-    const ex = east ? 110 + Math.floor(rnd() * 30) : 10 + Math.floor(rnd() * 70), ez = east ? 10 + Math.floor(rnd() * 70) : 110 + Math.floor(rnd() * 30);
+    const ex = east ? 72 + Math.floor(rnd() * 24) : 6 + Math.floor(rnd() * 50), ez = east ? 6 + Math.floor(rnd() * 50) : 72 + Math.floor(rnd() * 24);
     const de = [{ x: ex, z: ez, at: [ex, 65, ez], facing: east ? [-1, 0] : [0, -1] }];
     let J = null;
     try { J = chooseReach({ planCols, R: t.R, beside: t.beside, claim, districtEnds: de, route: routePass }); } catch (e) { assert.match(e.message, /^NO_JOIN: \[(route|wall|budget)\]/); refused++; continue; }
@@ -191,7 +193,7 @@ test('item 1: 300 seeded synthetic towns: every chosen join\'s reach cells unhel
     for (const k of joinColumns(J)) {
       const [x, z] = k.split(',').map(Number);
       if (x >= claim[0] && x <= claim[2] && z >= claim[1] && z <= claim[3]) continue;
-      assert.ok(x >= 0 && x <= 95 && z >= 0 && z <= 95, `town ${n}: ${k} inside the town's claim`);
+      assert.ok(x >= 0 && x <= 63 && z >= 0 && z <= 63, `town ${n}: ${k} inside the town's claim`);
       assert.ok(!K.lot.has(k) && !K.keep.has(k), `town ${n}: ${k} outside the footprint`);
       assert.ok(!K.body.has(k), `town ${n}: ${k} outside the bodies`);
       if (K.held.has(k)) { assert.ok(contact.has(k) && K.terrain.has(k), `town ${n}: ${k} held only as a terrain contact column`); holds++; }
@@ -226,6 +228,31 @@ test('items 1-2 (§2.1, §10): the two-step order: a seam-step plan is today\'s 
   assert.equal(q.meta.districts.join.step, 'reach');
   assert.equal(q.ir.reach.standing, 'rg1');
   assert.match(q.ir.reach.heldSha, /^[0-9a-f]{64}$/);
+});
+
+test('item 2 (§10, §4.3): the pinned seam-step joins (D1\'s beside fixture, D2\'s outpost) share no column with the town\'s held set', async () => {
+  const town = await d3Town();
+  const R = reachInputs({ ir: town.p.ir, world: town.world, claim: town.claim });
+  const held = runKeys(R.besideReach.held.runs);
+  const shared = {};
+  for (const [name, ds, B] of [['d1_seam', ONE('east'), [-60, 13, 11, 93]], ['d2_outpost', [{ id: 'camp', size: [40, 40], lots: 2, outpost: { gap: 40 } }], [-150, -20, 11, 130]]]) {
+    let q;
+    try { q = await planBeside({ town, districts: ds, claimB: B }); } catch (e) { shared[name] = `not planned: ${e.message.slice(0, 80)}`; continue; }
+    if (q.ir.reach) { shared[name] = 'a reach plan'; continue; }
+    // the join's written columns: its ops' cells and its 4e road items' width and verge
+    const cols = new Set();
+    for (const c of realiseAll({ ...q.ir, parts: q.ir.parts.filter((p) => p.id === 'routes') }, town.world).values()) cols.add(`${c.x},${c.z}`);
+    for (const rd of q.ir.roads.filter((r) => r.id.startsWith('route_join'))) {
+      const pts = rd.points;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const [a, b] = [pts[i], pts[i + 1]], h = Math.floor((rd.width ?? 3) / 2) + 1;
+        for (let x = Math.min(a[0], b[0]) - (a[2] === b[2] ? 0 : h); x <= Math.max(a[0], b[0]) + (a[2] === b[2] ? 0 : h); x++) for (let z = Math.min(a[2], b[2]) - (a[0] === b[0] ? 0 : h); z <= Math.max(a[2], b[2]) + (a[0] === b[0] ? 0 : h); z++) cols.add(`${x},${z}`);
+      }
+    }
+    shared[name] = [...cols].filter((k) => held.has(k)).length;
+  }
+  console.log(`# pinned seam-step joins, columns shared with the town's held set: ${JSON.stringify(shared)}`);
+  assert.equal(shared.d1_seam, 0);
 });
 
 test('items 3-4 (kit): a street end continuing its line, a side T into the lot-free side; the external edge, the reach, M28 clean', async () => {
