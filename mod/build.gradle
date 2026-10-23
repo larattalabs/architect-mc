@@ -435,6 +435,12 @@ def umtTask = { String name, String tag, String desc ->
 			exceptionFormat "full"
 			showStandardStreams = true
 		}
+		// the long fuzz: one class per generator (UmtLongTest), one JVM each, the same seeds in all of them (umt.from fixed here, once)
+		if (name == "umtLong") {
+			maxParallelForks = 4
+			def from = System.getProperty("umt.from") ?: String.valueOf(System.currentTimeMillis() % 1_000_000_000L)
+			systemProperty "umt.from", from
+		}
 	}
 }
 umtTask("umtLong", "umt-long", "UMT long fuzz: -Dumt.seeds=<count> (default 5000) per property")
