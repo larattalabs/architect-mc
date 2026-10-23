@@ -376,6 +376,9 @@ async function megaRun(name, opts = {}) {
   await fresh(name, opts.base ?? 'G6A Mega Base');
   await cmd('/architect reload').catch(() => null);
   await tp(0.5, 160, 0.5);
+  // (benches out of the release path, 2026-10-22) megaA pins the 4 ms placement budget, the budget 4e-throughput measured at:
+  // its realise cells/s bar is the throughput bar at 4 ms (4e-throughput's timing folded into megaA)
+  if (opts.budget) await cmd(`/architect budget ${opts.budget}`);
   await settle(5000);
   out.heapBaseline = await call('dev.heap.gc', {}, 120_000);
   log(`  heap baseline after GC: ${out.heapBaseline.usedMb.toFixed(0)} MB (max ${out.heapBaseline.maxMb.toFixed(0)})`);
@@ -496,7 +499,7 @@ steps.prepare = async () => {
 
 steps.megaA = async () => {
   if (!dev) await connect();
-  const r = await megaRun('G6A MegaA', { base: 'G6A Mega Base Prepared' });
+  const r = await megaRun('G6A MegaA', { base: 'G6A Mega Base Prepared', budget: 4 });
   ctx.megaA = { world: 'G6A MegaA', region: r.region, planId: r.plan.planId, box: r.box };
   saveCtx();
   // a copy of the realised world for post-mortems (the undo releases the journal's entries at the next start)
@@ -519,7 +522,8 @@ steps.megaA = async () => {
   write('megabench-A.json', r);
   const b = r;
   check(b.state.view.state === 'PLACED', `megaA: the region is ${b.state.view.state} (${JSON.stringify(b.state.items)})`);
-  bar(b.cellsPerSecond >= 15_000, `megaA: realise ${Math.round(b.cellsPerSecond)} cells/s first tile to last (bar 15k; step ${Math.round(b.stepCellsPerSecond)})`);
+  check(b.placement.budgetMs === 4, `megaA: realised at the 4 ms placement budget (budgetMs ${b.placement.budgetMs}; 4e-throughput's budget)`);
+  bar(b.cellsPerSecond >= 15_000, `megaA: realise ${Math.round(b.cellsPerSecond)} cells/s first tile to last at ${b.placement.budgetMs} ms (bar 15k, 4e-throughput's bar at 4 ms; step ${Math.round(b.stepCellsPerSecond)})`);
   // (6b, coordinator 2026-10-10) MSPT bars judge Architect's own per-tick time; the whole tick (max, p99, over 50), the vanilla
   // tick (serverMsptMax) and GC are recorded, not judged (docs/GATES.md "Tick bars"). (6c 0a, CONTRACT 0a §12) Judged on
   // dev.mspt.trace's ownCpu: p99 <= 25 ms (6a's p99 bar, on Architect's own time) and max <= 50 ms; no ownCpu fails
