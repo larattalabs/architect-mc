@@ -14,11 +14,15 @@ Resume notes for Phase 7a slice K2 (docs/CONTRACT.md "Phase 7a slice K2"). Delet
 - Gate: tools/gate7ak2.mjs (unit, ingame, natural, survival, look, report); chains k2-unit, k2-ingame, k2-natural, k2-survival,
   k2-look; impact rule "7a K2 ..."; step-inputs rebuilt.
 
+- Gate landings for along walls' gates.min on stepped banks (wall.mjs `landingOf`, `alongMinGates`, `wallsBase`, compile's base merge).
+- Offline pre-flight green at f2c6ee78: kit 811/0, k2-unit 0 failures, structure lint 59 cases 0 failing, look lint 0 failing, sidecar
+  47 files 759 tests, ApiK1Test.
+
 ## Left
 
-1. When v0.42.0 is tagged: `git merge origin/main`, rebuild step-inputs if asked, commit; then
-   `node tools/gate-run.mjs slice --since origin/main --plan`, then the run detached (nohup, own process group), one until-loop on
-   its summary.json.
+1. When v0.42.0 is tagged: `git merge origin/main`, `node tools/step-inputs.mjs check` (build if asked), commit, push; then
+   `node tools/gate-run.mjs slice --since origin/main --run-dir ../architect-mc-K2-gate --out <main>/artifacts/gate-runs-K2 --plan`,
+   then the same detached (nohup, own process group), one until-loop on its summary.json.
 2. The look gallery for Noah from `artifacts/gate7a-k2/look/` (close-ups of the walk: rail, corbels, an access landing).
 3. gate-verifier (it re-runs item 9).
 4. CONTRACT as-built with the evidence row; delete this file.
