@@ -91,7 +91,7 @@ import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
 import { currentHistory, definitionNow, definitionsAt, effectiveTimeout, estimateMin, loadHistory } from './lib/gate-history.mjs';
 import { autoConfig, chooseShards, describeChoice, freePairs, probeMachine } from './lib/shard-auto.mjs';
 import { autoFullWhy, cacheContext, coverageMode, entryByKey, entryStillValid, fullTwins, judgedBenches, keyFor, lastNightly, lookup, lookupCoverage, manifestOf, record as recordPass, supersededList } from './lib/step-cache.mjs';
-import { benchConf, decideBench, fullBenches, latestNightlyRecords, megaBVariant, newestOf, releaseBenches } from './lib/bench-select.mjs';
+import { applyNightlyFulls, benchConf, decideBench, fullBenches, latestNightlyRecords, megaBVariant, newestOf, nightlyFulls, releaseBenches } from './lib/bench-select.mjs';
 import { collect as collectCoverage, javaLogOption, snapshotStart } from './lib/step-coverage.mjs';
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
 import { aggregateProblems, entryOf, expandSplits, isPartId, parentOf, parentResults, planOrder, validateSplits } from './lib/step-split.mjs';
@@ -166,6 +166,7 @@ if (!cfg.chains[chainName] && !TIERS.includes(chainName)) die(`unknown chain ${c
       if (!cfg.steps[s]) bad.push(`tiers: unknown step ${s}`);
     }
   }
+  for (const s of nightlyFulls(CACHE_CONF)) if (!cfg.steps[s]) bad.push(`gate-cache.json release.nightly: unknown step ${s}`);
   bad.push(...validateSplits(cfg.steps));
   if (bad.length) die(`config: ${bad.join('; ')}`);
 }
@@ -397,6 +398,14 @@ function select() {
     // their timing judged, a release reuses the latest nightly's PASS unless what they measure changed (the bench rule)
     for (const s of BENCH.judged) {
       if (want.delete(s)) delete why[s];
+    }
+    // the full twins only the nightly runs (Noah, 2026-10-23; tools/gate-cache.json release.nightly): a release runs their smoke or
+    // slice twins (in the tier's lists), the nightly (--nightly) runs the full ids
+    {
+      const nf = applyNightlyFulls(want, nightlyFulls(CACHE_CONF), { nightly: NIGHTLY });
+      for (const s of nf.dropped) delete why[s];
+      for (const s of nf.added) addW(s, 'the nightly: the full twin only the nightly runs (release.nightly)');
+      info.nightlyFulls = { mode: NIGHTLY ? 'nightly' : 'release', dropped: nf.dropped, added: nf.added };
     }
     if (info.full.on) {
       let variant = null;

@@ -572,6 +572,15 @@ census reads that stay at the slice tier: h-ingame #2 (h_core_demo's four bodies
 (hy_core_demo's reaches) and item 9's five writer kinds, irr-ingame's v62 live and s01 placed checks, kc-ingame's v61. Each compares
 the realised world's fluid cells with the plan's prediction cell by cell.
 
+## Smoke at releases (Noah, 2026-10-23)
+
+The P3 smoke remainders no longer wait for a full run at each release: a release runs `5b-chains`, `h-ingame-smoke`, `hy-ingame-smoke`,
+`w-ingame-smoke`, `rs-survival-smoke`, `h-probe-smoke`, `hy-crash-smoke`, `d2-ingame-smoke`, `hy-cold-smoke` and `kc-ingame-smoke`; the
+full ids (and `4e-orders-full`, `4e-crash-full`, `p3-probe-water`) run in the nightly (`tools/gate-cache.json` `release.nightly`). So
+the groups the water and ledger lints took over (the `P3 smoke: ... left to ...` lines) are proved in game once a night, with the water
+probe beside them; the probe rule is unchanged. `irr-ingame`, `c29-ingame`, `voc-survival`, `x-resume`, `6a-eflat`, `6a-staged` and
+`c30` stay full at release. Details: docs/GATES.md "Smoke at releases".
+
 ## What stays in game at the slice tier (after P3)
 
 About 162 in-game step-minutes per slice (55% of today). It is dominated by:

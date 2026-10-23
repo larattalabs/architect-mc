@@ -211,6 +211,24 @@
   "prefixes": "^(ARCHITECT_|GATE_|G5B_|RS_|IRR_|HYB_|UPDATE_|LINT_|UMT|LEDGER|CALIBRATION_|P2_|P3_|APITEST_|T3[AB]_|K1B_|F3_|C3[078]_|GATE6)"
  },
  "release": {
+  "nightly": {
+   "$comment": "The full twins only the nightly runs (Noah, 2026-10-23; docs/GATES.md \"Smoke at releases\"). A release replaces each by its smoke or slice twin (tiers.release.always names the twin) and never runs the full id, wherever the selection got it from (the always list, an impact rule, --full). The nightly (release --full --nightly, tools/nightly.mjs) adds every id here; the twin it supersedes then drops (supersededBy). p3-probe-water reads the full h-ingame, hy-ingame and h-probe evidence of its run, so it runs with them in the nightly; p3-probe-ledger (y-ingame, cu-survival) stays in the release. Not here: irr-ingame, c29-ingame, voc-survival, x-resume, 6a-eflat, 6a-staged and c30, whose smoke saves almost nothing.",
+   "ids": [
+    "5b-chains-full",
+    "hy-ingame",
+    "h-ingame",
+    "w-ingame",
+    "rs-survival",
+    "h-probe",
+    "hy-crash",
+    "d2-ingame",
+    "hy-cold",
+    "kc-ingame",
+    "4e-orders-full",
+    "4e-crash-full",
+    "p3-probe-water"
+   ]
+  },
   "$comment": "The release tier's selection (docs/GATES.md \"Affected-only releases\", \"Benches out of the release path\"). Candidates: tiers.release.always, the rotation, and every step an impact rule names (change and slice lists), the supersededBy twins and the judged benches (benches.judged) dropped. A candidate runs when its key misses, when it is a canary, or when it is a full twin whose last PASS is older than the last full nightly. The judged benches are decided by the bench rule (benches below): the latest nightly's PASS is reused unless what the bench measures changed since.",
   "canaries": {
    "$comment": "always: the calibration probes, every release. scenarioRotation: one big scenario per release by the rotation key (a cache spot-check: it runs even when cached; at a release that is not the nightly its timing is recorded, not judged). crashRotation: the crash suite the tier's rotation picks. The judged benches are no longer canaries (2026-10-22): the bench rule decides them.",

@@ -1175,6 +1175,30 @@ not minutes. In the turbo slice (`artifacts/gate-runs-turbo-slice/20261022-21292
 in-game step-minutes; the slice's wall was bound by the unit lanes (fl-unit/p1 20.6, s3-unit/p1 19.7, f3-unit/p1 16.6 min), so its
 wall falls by less until those shrink.
 
+## Smoke at releases; the full twins run in the nightly (Noah, 2026-10-23)
+
+Noah approved (combine audit T1 and T3): **a release runs the smoke or slice twin of these full ids, not the full id**:
+
+| the release runs | in place of |
+|---|---|
+| `5b-chains` | `5b-chains-full` |
+| `h-ingame-smoke`, `hy-ingame-smoke`, `w-ingame-smoke`, `rs-survival-smoke`, `h-probe-smoke`, `hy-crash-smoke`, `d2-ingame-smoke`, `hy-cold-smoke`, `kc-ingame-smoke` | `h-ingame`, `hy-ingame`, `w-ingame`, `rs-survival`, `h-probe`, `hy-crash`, `d2-ingame`, `hy-cold`, `kc-ingame` |
+
+Left as they were (their smoke saves almost nothing): `irr-ingame`, `c29-ingame`, `voc-survival`, `x-resume`, `6a-eflat`, `6a-staged`, `c30`.
+
+**The nightly** (`release --full --nightly`) runs every full id: the ten above, `4e-orders-full` and `4e-crash-full` (main dropped them
+from releases in 47a9f68e), and `p3-probe-water`. They are `tools/gate-cache.json` `release.nightly.ids`: a release removes each of them
+from its candidates wherever they came from (the always list, an impact rule, `--full`), the nightly adds them; the smoke twin then drops
+by `supersededBy` as at any run holding both. The groups the P3 lints took over, which the smoke drivers leave out, are therefore proved
+by the full steps once a night, not at each release; the judgement stays with the verifier and the nightly summary.
+
+`p3-probe-water` reads the full h-ingame, hy-ingame and h-probe evidence of its own run, so it goes to the nightly with them (no probe
+works from the smoke evidence: the full runs are what it calibrates against). `p3-probe-ledger` (y-ingame, cu-survival) stays in the release.
+The rule is unchanged: a probe mismatch (now in the nightly) sends the P3 rows back in game (`node tools/p3-mode.mjs ingame`).
+
+`gate-run release --plan` lists the smoke ids and no full id; `release --full --nightly --plan` lists every full id. Tests:
+`kit/test/gate-benches.test.mjs` ("the nightly-only full twins").
+
 ## P3: the water and survival ledger lints (2026-10-21)
 
 Noah approved replacing slow in-game checks with instant, repeatable ones wherever that's trustworthy (docs/FAST-CHECKS.md, phase P3).
@@ -1189,8 +1213,8 @@ the row-by-row cutover are in docs/FAST-CHECKS.md ("4. Water lint" and "5. Survi
 | `p3-lint` | gradle `LedgerLintTest` + `RegionFluidsLintTest`: the survival ledger lint and the water lint's Java half (the real `RegionFluids.breachTake` and `drain`) | slice always; change through "P3 water lint" and "P3 survival ledger lint"; release |
 | `p3-lint-long` | the ledger fuzz over 20000 fresh seeds | release |
 | `<step>-smoke` (h-ingame, h-probe, hy-ingame, hy-crash, hy-cold, irr-ingame, kc-ingame, voc-survival, y-ingame, c29-ingame, rs-survival (6c close-out B)) | the full step with `GATE_P3=smoke` (y and c29: without the subcommands the lint took): the SMOKE remainder | slice and change, through the impact rules (they name the `-smoke` ids) |
-| the full ids | everything, as before | release (`tiers.release.always`), named chains, by hand |
-| `p3-probe-water` | `tools/p3-probe.mjs water` (waits for the full h-ingame, hy-ingame, h-probe of the same run): h_core_demo's census per body (0 diff), its settles within the bounds, every body's breach in its recorded reach; hy_core_demo's census; the riffle table; the fire-reach posts within M20's FIRE_REACH | release |
+| the full ids | everything, as before | the nightly (`release.nightly`, 2026-10-23: a release runs the smoke twins), named chains, by hand |
+| `p3-probe-water` | `tools/p3-probe.mjs water` (waits for the full h-ingame, hy-ingame, h-probe of the same run): h_core_demo's census per body (0 diff), its settles within the bounds, every body's breach in its recorded reach; hy_core_demo's census; the riffle table; the fire-reach posts within M20's FIRE_REACH | the nightly, with the full steps it reads (2026-10-23) |
 | `p3-probe-ledger` | `tools/p3-probe.mjs ledger` (waits for the full y-ingame and cu-survival): the store run's ledger at each event against the model's; weathering charged nothing; the measured refund == the Java model's refund of the same standing blocks (`LedgerProbeTest`) | release |
 
 `supersededBy`: a `-smoke` id is dropped when its full id is in the same run. The smoke drivers log every group they leave out as
@@ -1205,7 +1229,9 @@ A lint is trusted only while its calibration probe passes on the current Minecra
 2. Fix the lint or its model (the failing probe line names the body, the cell or the item), until the probe passes on a release run.
 3. `node tools/p3-mode.mjs smoke`, and commit it.
 
-The probe's own FAIL line says so. Only the impact rules' lists change; the release tier always runs the full ids.
+The probe's own FAIL line says so. Only the impact rules' lists change. Since 2026-10-23 `p3-probe-water` runs in the nightly (with the full
+h-ingame, hy-ingame and h-probe it reads) and a release runs the smoke twins; the coordinator reads the probe's result from the nightly
+summary, and the rule above is unchanged (`p3-probe-ledger` still runs at release).
 
 ### Mutation evidence
 
