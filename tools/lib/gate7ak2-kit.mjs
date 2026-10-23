@@ -5,6 +5,4 @@ import { F7A_MOVED } from './f7a-norm.mjs';
 
 export const K2_MOVED = Object.freeze({
   ...F7A_MOVED,
-  'asks/castle_city.json': 'K2 (§6, §8): curtain_wall\'s params.wall_walk is read as walk: true: its notes, geometry and IR change (the walk round the ring, an access at its gate); still adjusted (its gate_lot join, K3\'s)',
-  'extension/e15_every_reserved_a.json': `${F7A_MOVED['extension/e15_every_reserved_a.json']}; K2: c_wall_along left the fixture (wall.along supported)`,
 });
