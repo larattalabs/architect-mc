@@ -1080,6 +1080,17 @@ public final class PlanChecks {
 		return null;
 	}
 
+	/** (6c close-out A, §3) A discarded plan that a keyed check made: its key record goes, so checkByKey answers empty and the key checks again. */
+	static void checkDiscarded(Path world, String planId) {
+		KEYS.values().removeIf(k -> planId.equals(k.checkId()));
+		CHECKS.remove(planId);
+		try {
+			Files.deleteIfExists(checks(world).resolve(planId + ".json"));
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Plan check {}: key record not removed: {}", planId, e.toString());
+		}
+	}
+
 	/** (6c close-out A, §3) A discarded plan: every artifact made from it with no pin and no region goes to its tombstone. */
 	static void planDiscarded(Path world, String planId) {
 		Path dir = artifacts(world);

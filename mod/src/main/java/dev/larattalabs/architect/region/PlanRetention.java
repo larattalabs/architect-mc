@@ -217,6 +217,7 @@ public final class PlanRetention {
 			Prepare.forget(planId);
 		}
 		PlanChecks.planDiscarded(w, planId);
+		PlanChecks.checkDiscarded(w, planId);
 		pendingAdd(w, planId);
 		if (s != null) {
 			replaySidecar(s, true);

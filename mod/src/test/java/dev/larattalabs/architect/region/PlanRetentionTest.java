@@ -113,6 +113,11 @@ class PlanRetentionTest {
 		assertFalse(Files.exists(PlanRetention.plans(w).resolve("k_idle.survey.bin")));
 		assertFalse(Files.exists(PlanRetention.plans(w).resolve("k_idle.key.json")));
 		assertTrue(PlanRetention.discardedAt(w, "k_idle"));
+		// a keyed check's record of a discarded plan goes with it (checkByKey then answers empty)
+		Files.createDirectories(PlanChecks.checks(w));
+		RegionStore.writeJson(PlanChecks.checks(w).resolve("u_touched.json"), new JsonObject());
+		PlanRetention.discard0(null, w, "u_touched", "discarded");
+		assertFalse(Files.exists(PlanChecks.checks(w).resolve("u_touched.json")));
 		// the discarded keyed plan's key answers PLAN_STALE (its tombstone keeps the key and body hash)
 		String[] gone = PlanRetention.DISCARDED_KEYS.get(RegionKeys.scope("steward", "region.plan", "vplan:2"));
 		assertNotNull(gone);
@@ -123,7 +128,7 @@ class PlanRetentionTest {
 		assertNotNull(PlanRetention.DISCARDED_KEYS.get(RegionKeys.scope("steward", "region.plan", "vplan:2")), "after a restart too");
 		// the helper's dirs wait for its connect
 		JsonObject pend = RegionStore.readJson(PlanRetention.plans(w).resolve("discard-pending.json"));
-		assertEquals(2, pend.getAsJsonArray("plans").size());
+		assertEquals(3, pend.getAsJsonArray("plans").size()); // the two swept and the one discarded above
 	}
 
 	@Test
