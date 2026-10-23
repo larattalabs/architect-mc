@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import * as P3 from './p3-tier.mjs';
+import { identicalToBase, skippedLine } from './base-tree.mjs';
 
 /**
  * Item 11's named exceptions: the fixtures that may differ from origin/main; every other fixture must not. (The H batch's T3a r06 and
@@ -31,17 +32,22 @@ export const UNCHANGED_SKIPPED = Object.freeze(['refused/k1a_r01_wall_water.json
 export const unchangedRuns = new Map();
 
 export async function unchanged(root) {
-  const mainDir = path.resolve(root, '..', 'architect-mc-H-main');
   execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']);
   const mainHead = execFileSync('git', ['-C', root, 'rev-parse', 'origin/main']).toString().trim();
-  if (!fs.existsSync(path.join(mainDir, '.git'))) execFileSync('git', ['-C', root, 'worktree', 'add', '-q', '--detach', mainDir, mainHead]);
-  else execFileSync('git', ['-C', mainDir, 'checkout', '-q', '--detach', mainHead]);
+  // (speed audit D, K1) origin/main's kit and scenarios trees identical to HEAD's: the loop can only agree; each fixture is counted
+  // (the same filters) and recorded as equal without planning either side
+  const sk = identicalToBase(root, { ref: mainHead });
+  const mainDir = sk ? root : path.resolve(root, '..', 'architect-mc-H-main');
+  if (!sk) {
+    if (!fs.existsSync(path.join(mainDir, '.git'))) execFileSync('git', ['-C', root, 'worktree', 'add', '-q', '--detach', mainDir, mainHead]);
+    else execFileSync('git', ['-C', mainDir, 'checkout', '-q', '--detach', mainHead]);
+  }
   const H = (dir) => import(pathToFileURL(path.join(dir, 'kit', 'test', 'plan-helpers.mjs')).href);
-  const [hNew, hOld] = [await H(root), await H(mainDir)];
-  const out = { mainHead, fixtures: {} };
+  const [hNew, hOld] = sk ? [null, null] : [await H(root), await H(mainDir)];
+  const out = { mainHead, fixtures: {}, ...(sk ? { identical: skippedLine(sk, 'unchanged vs origin/main') } : {}) };
   let same = 0, skipped = 0, cached = 0;
   const PC = await import('./plan-cache.mjs');
-  const [treesNew, treesOld] = [PC.treesOf(root), PC.treesOf(mainDir)];
+  const [treesNew, treesOld] = [PC.treesOf(root), sk ? null : PC.treesOf(mainDir)];
   const H_KINDS = ['pond', 'fountain', 'waterfall', 'quay', 'channel'];
   for (const dir of ['valid', 'k1a', 'rope', 'refused', 't3a', 'tunnel']) {
     const fixDir = path.join(root, 'kit', 'test', 'fixtures', 'plan', dir);
@@ -57,6 +63,7 @@ export async function unchanged(root) {
       const sv = (h) => (fx.terrain ? h.flatSurvey(fx.terrain) : fx.on === 'asks' ? h.asksSurvey() : fx.on === 'flat' ? h.flatSurvey() : fx.on ? h.goldenSurvey(fx.on) : h.flatSurvey());
       const runOn = async (h) => { const s = sv(h); return h.checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...h.stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}) }); };
       let a, b;
+      if (sk) { out.fixtures[`${dir}/${f}`] = { answers: true, ir: true, overall: true }; same++; continue; }
       // (gate waits, 2026-10-20) each side keyed by its kit and scenarios trees, the plan and this fixture's options (tools/lib/plan-cache.mjs)
       const opts = { ...fx, plan: undefined };
       try {

@@ -11,7 +11,7 @@ import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { SIBLING_MOVED, normSiblingIr } from './batch-0410.mjs';
 import { inSlice } from './gate-part.mjs';
-import { syncBaseTree } from './base-tree.mjs';
+import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
 import * as CP from './corpus-plan.mjs'; // (gate speed 3) the plans from the run's shared store, prewarmed on every core
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
@@ -26,6 +26,15 @@ const hasTerraces = (plan) => /"terraces":\s*[{t]/.test(JSON.stringify(plan));
 
 export async function unchanged(root, { check, log = console.log, only = null, slice = null, baseDir = null } = {}) {
   // (baseDir: a test's own base tree, kit/test/gate-corpus-plan.test.mjs; a gate run always uses the merge base's worktree)
+  // (speed audit D, K1) base kit and scenarios trees identical to HEAD's: the loop can only agree
+  const sk = baseDir ? null : identicalToBase(root);
+  if (sk) {
+    const rows = fixtures(root).filter(([name], k) => !(only && !only.test(name)) && inSlice(k, slice));
+    const all = fixtures(root).filter(([name]) => !(only && !only.test(name)));
+    if (check) check(true, skippedLine(sk));
+    log(skippedLine(sk));
+    return { base: sk.base, head: sk.head, fixtures: {}, n: all.length, same: all.length, differ: [], baseWithTerraces: rows.filter(([, fx]) => hasTerraces(fx.plan)).map(([name]) => name), skipped: true, ...(slice ? { slice: { slices: slice, planned: rows.length, elsewhere: all.length - rows.length } } : {}) };
+  }
   const { dir: mainDir, base } = baseDir ? { dir: baseDir, base: 'given' } : baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
   const { hNew, hOld } = await CP.corpusHelpers(root, mainDir);

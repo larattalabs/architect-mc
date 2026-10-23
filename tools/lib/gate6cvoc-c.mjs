@@ -12,7 +12,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson, flAsksFilter } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
-import { syncBaseTree } from './base-tree.mjs';
+import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const j = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
@@ -167,6 +167,17 @@ const unit = [
   {
     name: 'item 4: byte identity: every committed plan fixture without a palette rule answers and plans as on the base (the named exceptions only)',
     async run({ root, check, OUT }) {
+      // (speed audit D, K1) base kit and scenarios trees identical to HEAD's: the loop can only agree
+      const sk = identicalToBase(root);
+      if (sk) {
+        const fxBase = path.join(root, 'kit', 'test', 'fixtures', 'plan');
+        let n = 0;
+        for (const d of fs.readdirSync(fxBase).filter((x) => fs.statSync(path.join(fxBase, x)).isDirectory())) for (const f of fs.readdirSync(path.join(fxBase, d)).filter((x) => x.endsWith('.json'))) { const fx = JSON.parse(fs.readFileSync(path.join(fxBase, d, f), 'utf8')); if (fx.plan ?? fx.answer?.plan) n++; }
+        check(true, `item 4: ${skippedLine(sk)}`);
+        check(n >= 150, `item 4: ${n} committed plan fixtures present (every dir, the asks too)`);
+        fs.writeFileSync(path.join(OUT, 'vocc-unchanged.json'), `${JSON.stringify({ skipped: true, ...sk, n }, null, 1)}\n`);
+        return { same: n, n, excepted: [], differ: [], skipped: true };
+      }
       const { dir, base } = baseTree(root);
       const out = await unchanged(root, dir);
       fs.writeFileSync(path.join(OUT, 'vocc-unchanged.json'), `${JSON.stringify(out, null, 1)}\n`);

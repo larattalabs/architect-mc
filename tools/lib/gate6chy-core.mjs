@@ -8,6 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import * as P3 from './p3-tier.mjs';
+import { identicalToBase, skippedLine } from './base-tree.mjs';
 
 /**
  * Item 12's named exceptions: fixtures HY re-answers by name. h/r08_course is a course (now HY-b's v51, the stub's UNREACHABLE until HYb
@@ -30,17 +31,22 @@ const hasCourse = (plan) => (plan.connectors ?? []).some((c) => c && c.kind === 
  * (../architect-mc-HYcore-main). Fixtures with a frozen volume of their own (`volume`) run the two-plan harness on both sides.
  */
 export async function unchanged(root) {
-  const mainDir = path.resolve(root, '..', 'architect-mc-HYcore-main');
   execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']);
   const mainHead = execFileSync('git', ['-C', root, 'rev-parse', 'origin/main']).toString().trim();
-  if (!fs.existsSync(path.join(mainDir, '.git'))) execFileSync('git', ['-C', root, 'worktree', 'add', '-q', '--detach', mainDir, mainHead]);
-  else execFileSync('git', ['-C', mainDir, 'checkout', '-q', '--detach', mainHead]);
+  // (speed audit D, K1) origin/main's kit and scenarios trees identical to HEAD's: the loop can only agree; each fixture is counted
+  // (the same filters) and recorded as equal without planning either side
+  const sk = identicalToBase(root, { ref: mainHead });
+  const mainDir = sk ? root : path.resolve(root, '..', 'architect-mc-HYcore-main');
+  if (!sk) {
+    if (!fs.existsSync(path.join(mainDir, '.git'))) execFileSync('git', ['-C', root, 'worktree', 'add', '-q', '--detach', mainDir, mainHead]);
+    else execFileSync('git', ['-C', mainDir, 'checkout', '-q', '--detach', mainHead]);
+  }
   const H = (dir) => import(pathToFileURL(path.join(dir, 'kit', 'test', 'plan-helpers.mjs')).href);
-  const [hNew, hOld] = [await H(root), await H(mainDir)];
-  const out = { mainHead, fixtures: {} };
+  const [hNew, hOld] = sk ? [null, null] : [await H(root), await H(mainDir)];
+  const out = { mainHead, fixtures: {}, ...(sk ? { identical: skippedLine(sk, 'unchanged vs origin/main') } : {}) };
   let same = 0, skipped = 0, cached = 0;
   const PC = await import('./plan-cache.mjs');
-  const [treesNew, treesOld] = [PC.treesOf(root), PC.treesOf(mainDir)];
+  const [treesNew, treesOld] = [PC.treesOf(root), sk ? null : PC.treesOf(mainDir)];
   const base = path.join(root, 'kit', 'test', 'fixtures', 'plan');
   for (const dir of fs.readdirSync(base).filter((d) => fs.statSync(path.join(base, d)).isDirectory()).sort()) {
     for (const f of fs.readdirSync(path.join(base, dir)).filter((x) => x.endsWith('.json')).sort()) {
@@ -60,6 +66,7 @@ export async function unchanged(root) {
         return fx.volume !== undefined && h.checkPlanVolumes ? h.checkPlanVolumes(p, { ...o, volume: fx.volume }) : h.checkPlanLocal(p, o);
       };
       let a, b;
+      if (sk) { out.fixtures[name] = { answers: true, ir: true, overall: true }; same++; continue; }
       // (gate waits, 2026-10-20) each side keyed by its kit and scenarios trees, the plan and this fixture's options (tools/lib/plan-cache.mjs)
       const opts = { ...fx, plan: undefined, answer: undefined, on };
       try {
