@@ -11,7 +11,7 @@
    "globs": [],
    "dynamic": [],
    "env": [],
-   "verified": "20261022-161855-release unit-mod"
+   "verified": "20261022-233059-slice unit-mod"
   },
   "umt": {
    "classes": [
@@ -705,9 +705,10 @@
     "cherry",
     "dark",
     "nope",
-    "rustic"
+    "rustic",
+    "tools/lib/**"
    ],
-   "verified": "20261022-161855-release unit-kit"
+   "verified": "20261022-233059-slice unit-kit"
   },
   "unit-sidecar": {
    "classes": [
@@ -717,7 +718,22 @@
    "closure": [],
    "globs": [],
    "dynamic": [],
-   "env": []
+   "env": [],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "eval/briefs/v1/**",
+    "eval/fixtures/bibles/**",
+    "kit/lint/**",
+    "kit/test/**",
+    "lerna.json",
+    "mod/gradle.properties",
+    "mod/src/main/java/dev/larattalabs/architect/api/**",
+    "package.json",
+    "pnpm-workspace.yaml",
+    "tools/eval.mjs"
+   ],
+   "verified": "20261022-233059-slice unit-sidecar"
   },
   "sim-jobs": {
    "classes": [
@@ -811,7 +827,8 @@
     "ARCHITECT_XMX",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "verified": "20261022-233059-slice sim-sets"
   },
   "sim-massing": {
    "classes": [
@@ -858,7 +875,8 @@
     "ARCHITECT_XMX",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "verified": "20261022-233059-slice sim-massing"
   },
   "apijars": {
    "classes": [
@@ -916,7 +934,12 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "data": [
+    "kit/lint/**",
+    "kit/test/**"
+   ],
+   "verified": "20261022-233059-slice apijars"
   },
   "0a-stub": {
    "classes": [
@@ -3560,7 +3583,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice f1-unit"
   },
   "6cf1-scenario-forms": {
    "classes": [
@@ -3812,7 +3836,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice 6cf1-scenario-forms"
   },
   "x-unit": {
    "classes": [
@@ -4001,7 +4026,8 @@
     "GATE_KIT_TREE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "verified": "20261022-233059-slice x-unit"
   },
   "x-ingame": {
    "classes": [
@@ -4287,7 +4313,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice x-ingame"
   },
   "y-unit": {
    "classes": [
@@ -4869,7 +4896,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261022-233059-slice t1-unit"
   },
   "b-unit": {
    "classes": [
@@ -5136,7 +5171,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice b-unit"
   },
   "b-ingame": {
    "classes": [
@@ -5421,7 +5457,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice b-ingame"
   },
   "pt-unit": {
    "classes": [
@@ -5603,7 +5640,8 @@
     "GATE6CPT_STEPS",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "verified": "20261022-233059-slice pt-unit"
   },
   "c33-unit": {
    "classes": [],
@@ -5887,7 +5925,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice pt-ingame"
   },
   "pt-nomod": {
    "classes": [
@@ -6156,7 +6195,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice pt-nomod"
   },
   "pt2-unit": {
    "classes": [
@@ -6253,7 +6293,15 @@
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PT2_V0270"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261022-233059-slice pt2-unit"
   },
   "pt2-ingame": {
    "classes": [
@@ -6801,7 +6849,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice pt2-survival"
   },
   "tile-gravity": {
    "classes": [
@@ -7086,7 +7135,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice tile-gravity"
   },
   "c31-felling": {
    "classes": [
@@ -7371,7 +7421,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice c31-felling"
   },
   "t1-ingame": {
    "classes": [
@@ -7669,7 +7720,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice t1-ingame"
   },
   "6ct1-scenario-relief": {
    "classes": [
@@ -7921,7 +7973,10 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "rustic"
+   ]
   },
   "f2-unit": {
    "classes": [
@@ -8213,7 +8268,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice f2-unit"
   },
   "f2-harvest": {
    "classes": [
@@ -8517,7 +8573,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice f2-harvest"
   },
   "6cf2-scenario-scatter": {
    "classes": [
@@ -9146,7 +9203,19 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CP0_OUT",
     "JAVA_HOME"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml",
+    "tools/api-compat.mjs",
+    "tools/lib/**",
+    "tools/plan-catalogue-diff.mjs",
+    "tools/scenarios.mjs"
+   ],
+   "verified": "20261022-233059-slice p0-unit"
   },
   "c37-unit": {
    "classes": [
@@ -10036,7 +10105,11 @@
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice rs-unit"
   },
   "rs-ingame": {
    "classes": [
@@ -10258,7 +10331,8 @@
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice rs-ingame"
   },
   "rs-survival": {
    "classes": [
@@ -10703,7 +10777,8 @@
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice rs-crash"
   },
   "rsb-ingame": {
    "classes": [
@@ -10916,7 +10991,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice rsb-ingame"
   },
   "rsb-crash": {
    "classes": [
@@ -11391,7 +11467,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice p0-ingame"
   },
   "p0-natural": {
    "classes": [
@@ -11653,7 +11730,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice p0-natural"
   },
   "t2-ingame": {
    "classes": [
@@ -12265,7 +12343,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice t3a-unit"
   },
   "t3a-probe": {
    "classes": [
@@ -12594,7 +12673,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice t3a-probe"
   },
   "t3a-ingame": {
    "classes": [
@@ -12923,7 +13003,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice t3a-ingame"
   },
   "t3a-natural": {
    "classes": [
@@ -13252,7 +13333,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice t3a-natural"
   },
   "t3a-frozen": {
    "classes": [
@@ -13573,7 +13655,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice t3a-frozen"
   },
   "t3a-look": {
    "classes": [
@@ -13903,7 +13986,7 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
-   "verified": "20261022-161855-release t3a-look"
+   "verified": "20261022-233059-slice t3a-look"
   },
   "k1b-unit": {
    "classes": [
@@ -14191,7 +14274,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice k1b-unit"
   },
   "k1b-ingame": {
    "classes": [
@@ -14499,7 +14583,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice k1b-ingame"
   },
   "k1b-natural": {
    "classes": [
@@ -14807,7 +14892,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice k1b-natural"
   },
   "t3b-unit": {
    "classes": [
@@ -15104,7 +15190,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice t3b-unit"
   },
   "t3b-ingame": {
    "classes": [
@@ -15418,7 +15505,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice t3b-ingame"
   },
   "t3b-natural": {
    "classes": [
@@ -15732,7 +15820,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice t3b-natural"
   },
   "t3b-pin": {
    "classes": [
@@ -16360,7 +16449,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice t3b-look"
   },
   "h-unit": {
    "classes": [
@@ -16683,7 +16773,10 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ]
   },
   "h-ingame": {
    "classes": [
@@ -17368,7 +17461,11 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice h-crash"
   },
   "h-probe": {
    "classes": [
@@ -19340,7 +19437,11 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice voc-registry"
   },
   "voc-probe": {
    "classes": [
@@ -19646,7 +19747,11 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice voc-probe"
   },
   "voc-survival": {
    "classes": [
@@ -20258,7 +20363,11 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice voc-ingame"
   },
   "voc-natural": {
    "classes": [
@@ -20564,7 +20673,11 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice voc-natural"
   },
   "vocc-unit": {
    "classes": [
@@ -20853,12 +20966,18 @@
     ]
    },
    "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
     "node_modules",
-    "package.json"
+    "package.json",
+    "pnpm-workspace.yaml",
+    "tools/lib/**"
    ],
    "derived": [
     "node_modules/**"
-   ]
+   ],
+   "verified": "20261022-233059-slice vocc-unit"
   },
   "vocc-ingame": {
    "classes": [
@@ -21164,7 +21283,11 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice vocc-ingame"
   },
   "6cvoc-look": {
    "classes": [
@@ -21470,7 +21593,11 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice 6cvoc-look"
   },
   "cu-unit": {
    "classes": [
@@ -22038,7 +22165,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice cu-ingame"
   },
   "rp-unit": {
    "classes": [
@@ -23329,7 +23457,11 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice ha-ingame"
   },
   "ha-natural": {
    "classes": [
@@ -24503,7 +24635,7 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
-   "verified": "20261022-161855-release hy-unit"
+   "verified": "20261022-233059-slice hy-unit"
   },
   "h-holders": {
    "classes": [
@@ -24845,7 +24977,11 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice h-holders"
   },
   "irr-holders": {
    "classes": [
@@ -25165,7 +25301,8 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice irr-holders"
   },
   "h-rmcrash": {
    "classes": [
@@ -25507,7 +25644,11 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice h-rmcrash"
   },
   "hy-ingame": {
    "classes": [
@@ -27950,7 +28091,11 @@
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice f3-ingame"
   },
   "f3-natural": {
    "classes": [
@@ -28261,7 +28406,11 @@
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice f3-natural"
   },
   "f3-forest": {
    "classes": [
@@ -28553,7 +28702,11 @@
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice f3-forest"
   },
   "f3-look": {
    "classes": [
@@ -29806,7 +29959,8 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice irr-crash"
   },
   "irr-look": {
    "classes": [
@@ -30706,7 +30860,11 @@
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice fl-ingame"
   },
   "fl-natural": {
    "classes": [
@@ -31002,7 +31160,11 @@
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice fl-natural"
   },
   "fl-look": {
    "classes": [
@@ -31298,7 +31460,11 @@
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice fl-look"
   },
   "water-lint": {
    "classes": [],
@@ -31475,7 +31641,12 @@
    "env": [
     "ARCHITECT_BIG_REGIONS",
     "WATER_LINT_FULL"
-   ]
+   ],
+   "data": [
+    "scenarios/goldens/route_demo/**",
+    "scenarios/goldens/s7/**"
+   ],
+   "verified": "20261022-233059-slice water-lint"
   },
   "p3-lint": {
    "classes": [
@@ -32395,7 +32566,11 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice h-probe-smoke"
   },
   "hy-ingame-smoke": {
    "classes": [
@@ -33033,7 +33208,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice hy-crash-smoke"
   },
   "hy-cold-smoke": {
    "classes": [
@@ -33352,7 +33528,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice hy-cold-smoke"
   },
   "irr-ingame-smoke": {
    "classes": [
@@ -33963,7 +34140,11 @@
      "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice kc-ingame-smoke"
   },
   "voc-survival-smoke": {
    "classes": [
@@ -34269,7 +34450,11 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice voc-survival-smoke"
   },
   "y-ingame-smoke": {
    "classes": [
@@ -35629,7 +35814,11 @@
      "tools/lib/gate6cs3-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice s3-plan"
   },
   "6c-scenario-s3": {
    "classes": [
@@ -35881,7 +36070,11 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261022-233059-slice 6c-scenario-s3"
   },
   "6c-scenario-s3-dev": {
    "classes": [
@@ -36385,7 +36578,11 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261022-233059-slice 6c-scenario-s2"
   },
   "6ct2-scenario-route": {
    "classes": [
@@ -36637,7 +36834,10 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "rustic"
+   ]
   },
   "d-unit": {
    "classes": [
@@ -36964,7 +37164,15 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261022-233059-slice d-unit"
   },
   "d-ingame": {
    "classes": [
@@ -37310,7 +37518,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice d-ingame"
   },
   "6cd-scenario-districts": {
    "classes": [
@@ -37562,7 +37771,11 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261022-233059-slice 6cd-scenario-districts"
   },
   "k1a-unit": {
    "classes": [
@@ -37874,7 +38087,17 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml",
+    "tools/api-compat.mjs",
+    "tools/plan-catalogue-diff.mjs"
+   ],
+   "verified": "20261022-233059-slice k1a-unit"
   },
   "k1a-ingame": {
    "classes": [
@@ -38205,7 +38428,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice k1a-ingame"
   },
   "k1a-natural": {
    "classes": [
@@ -38536,7 +38760,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice k1a-natural"
   },
   "k1a-target": {
    "classes": [
@@ -38867,7 +39092,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice k1a-target"
   },
   "k1a-look": {
    "classes": [
@@ -39199,7 +39425,7 @@
      "tools/lib/plan-cache.mjs"
     ]
    },
-   "verified": "20261022-161855-release k1a-look"
+   "verified": "20261022-233059-slice k1a-look"
   },
   "d2-ingame": {
    "classes": [
@@ -40082,7 +40308,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice x-resume"
   },
   "x-resume-full": {
    "classes": [
@@ -40655,7 +40882,11 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261022-233059-slice 6cv-scenario-s7"
   },
   "0b-unit": {
    "classes": [
@@ -40918,7 +41149,8 @@
     "GATE4E_THROUGHPUT_SMOKE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "verified": "20261022-233059-slice 4e-megalite"
   },
   "c30-ingame": {
    "classes": [
@@ -41156,7 +41388,8 @@
     "GATE4E_THROUGHPUT_SMOKE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "verified": "20261022-233059-slice 4e-orders"
   },
   "4e-orders-full": {
    "classes": [
@@ -41303,7 +41536,8 @@
     "GATE4E_THROUGHPUT_SMOKE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "verified": "20261022-233059-slice 4e-crash"
   },
   "4e-crash-full": {
    "classes": [
@@ -41877,7 +42111,8 @@
     "HOME",
     "JAVA_HOME",
     "PATH"
-   ]
+   ],
+   "verified": "20261022-233059-slice 5b-village"
   },
   "6a-megaA": {
    "classes": [
@@ -41935,7 +42170,8 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "verified": "20261022-233059-slice 6a-megaA"
   },
   "6a-megaB": {
    "classes": [
@@ -42168,7 +42404,8 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "verified": "20261022-233059-slice 6a-eflat"
   },
   "6a-eflat-full": {
    "classes": [
@@ -42284,7 +42521,8 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "verified": "20261022-233059-slice 6a-forest"
   },
   "6b-smoke": {
    "classes": [
@@ -42535,7 +42773,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice 6b-smoke"
   },
   "6b-ghost": {
    "classes": [
@@ -42786,7 +43025,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice 6b-ghost"
   },
   "6b-volume": {
    "classes": [
@@ -43037,7 +43277,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice 6b-volume"
   },
   "6b-commands": {
    "classes": [
@@ -43539,7 +43780,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice 6b-nudges"
   },
   "6b-pathstyle": {
    "classes": [
@@ -43790,7 +44032,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice 6b-pathstyle"
   },
   "6b-versions": {
    "classes": [
@@ -44041,7 +44284,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice 6b-versions"
   },
   "6b-versionc": {
    "classes": [
@@ -44544,7 +44788,11 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261022-233059-slice 6b-scenario-s1"
   },
   "6b-scenario-s1-flat": {
    "classes": [
@@ -44854,7 +45102,8 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "verified": "20261022-233059-slice 6a-inv3"
   },
   "6a-staged": {
    "classes": [
@@ -44912,7 +45161,8 @@
     "GATE6A_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
-   ]
+   ],
+   "verified": "20261022-233059-slice 6a-staged"
   },
   "6a-staged-full": {
    "classes": [
@@ -45463,7 +45713,33 @@
     "LINT_NO_CACHE",
     "LINT_PREFIX",
     "P2_CALIBRATION_LATEST"
-   ]
+   ],
+   "data": [
+    "kit/lib/**",
+    "kit/regions/**",
+    "kit/schemas/**",
+    "kit/test/**",
+    "kit/test/fixtures/plan/even/**",
+    "kit/test/fixtures/plan/f3/**",
+    "kit/test/fixtures/plan/fl/**",
+    "kit/test/fixtures/plan/h/**",
+    "kit/test/fixtures/plan/hy/**",
+    "kit/test/fixtures/plan/irr/**",
+    "kit/test/fixtures/plan/k1a/**",
+    "kit/test/fixtures/plan/kc/**",
+    "kit/test/fixtures/plan/refused/**",
+    "kit/test/fixtures/plan/rope/**",
+    "kit/test/fixtures/plan/rs/**",
+    "kit/test/fixtures/plan/t3a/**",
+    "kit/test/fixtures/plan/tunnel/**",
+    "kit/test/fixtures/plan/valid/**",
+    "kit/test/fixtures/plan/voc/**",
+    "kit/test/fixtures/plan/vocc/**",
+    "kit/vocab/**",
+    "kit/voxel_classes.json",
+    "scenarios/bibles/**"
+   ],
+   "verified": "20261022-233059-slice lint-structure"
   },
   "lint-look": {
    "classes": [],
@@ -45584,7 +45860,16 @@
     "LINT_NO_CACHE",
     "LINT_PREFIX",
     "P2_CALIBRATION_LATEST"
-   ]
+   ],
+   "data": [
+    "kit/lib/**",
+    "kit/regions/**",
+    "kit/schemas/**",
+    "kit/test/**",
+    "kit/vocab/**",
+    "kit/voxel_classes.json"
+   ],
+   "verified": "20261022-233059-slice lint-look"
   },
   "lint-mutations": {
    "classes": [],
@@ -45705,7 +45990,14 @@
     "LINT_NO_CACHE",
     "LINT_PREFIX",
     "P2_CALIBRATION_LATEST"
-   ]
+   ],
+   "data": [
+    "kit/lib/**",
+    "kit/regions/**",
+    "kit/vocab/**",
+    "kit/voxel_classes.json"
+   ],
+   "verified": "20261022-233059-slice lint-mutations"
   },
   "p2-calibration": {
    "classes": [
@@ -46100,7 +46392,11 @@
      "tools/lib/gate6cvoc-c.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "data": [
+    "tools/lib/**"
+   ],
+   "verified": "20261022-233059-slice p2-calibration"
   },
   "w-ingame-smoke": {
    "classes": [
@@ -46737,7 +47033,8 @@
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
-   }
+   },
+   "verified": "20261022-233059-slice d2-ingame-smoke"
   }
  }
 }
