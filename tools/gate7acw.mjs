@@ -21,9 +21,10 @@
 //                                       realised, M25:clear 0, removed
 //     survival  (cw-survival)           item 8 (RS merged): v7a_cw_cliff in survival: checked in survival, fed from a stockpile, built;
 //                                       the bills equal the check's cost.survival.bom; the world equal to its INSTANT twin; removed E-flat 0
-//     pin                               the natural site (scenarios/sites/cliff_face.json): find-site's spiral over the seed world, each
-//                                       candidate's survey through catwalks_demo's pickFace (a run along a face of at least 24 x 8, no water
-//                                       within 8); the winner recorded in the site file (commit it)
+//     pin                               the natural site (scenarios/sites/cliff_face.json): /locate biome for the cliff biomes from a spiral of
+//                                       origins, claims round each spot surveyed and read through catwalks_demo's pickFace (its first run on
+//                                       a face of at least 24 x 8, no water within 8); the winner (and its seed: CW_PIN_SEED for another
+//                                       world) recorded in the site file and <out>/cliff_face.json (commit it)
 //     natural   (cw-natural)            items 4, 5, 7 on the pinned site (a fresh copy of the seed world): catwalks_demo natural, the same
 //                                       bars, the removal's E-normal classified (0 unclassified)
 //     look      (cw-look)               item 10 (client, recorded not judged: N-CW-1): catwalks_demo flat in three bibles, from below, on it, a close-up of the rail on its bed, the lanes and the landing, and from the side
@@ -375,69 +376,75 @@ steps.survival = async () => {
 
 // ------------------------------------------------------------------ the natural site
 
+/** The biomes that have cliffs (the coordinator's list): the pin's /locate biome targets. */
+const CLIFF_BIOMES = ['stony_peaks', 'jagged_peaks', 'windswept_gravelly_hills', 'windswept_hills', 'badlands', 'eroded_badlands', 'wooded_badlands', 'stony_shore', 'meadow', 'frozen_peaks', 'windswept_forest'];
+
 steps.pin = async () => {
   await ensure();
-  const FS = await import('./find-site.mjs');
   const { surveyApi } = await imp('lib/region/survey.mjs');
   const { pickFace, FACE_BAR } = await imp('lib/connectors/catwalksDemo.mjs');
   const site = JSON.parse(fs.readFileSync(SITE_FILE, 'utf8'));
   const needs = site.needs;
-  await L.fresh('G6B CW Pin', BASE);
+  // (CW_PIN_SEED: another seed's world, recorded in the site file; default the site's own, the seed base)
+  const seed = process.env.CW_PIN_SEED ?? site.world.seed;
+  const base = seed === SEED ? BASE : await L.seedBase(seed);
+  if (seed === SEED) await L.ensureBase(BASE);
+  await L.fresh('G6B CW Pin', base);
   await L.setRules('default');
-  const [w, d] = needs.size;
-  const out = { tried: [] };
-  let found = null;
-  const [c0x, c0z] = needs.center ?? [0, 0];
-  for (const [ox0, oz0] of FS.candidates(needs.candidates, needs.step)) {
-    const ox = ox0 + c0x, oz = oz0 + c0z;
-    const x0 = ox - Math.floor(w / 2), z0 = oz - Math.floor(d / 2), x1 = x0 + w - 1, z1 = z0 + d - 1;
-    await tp(ox + 0.5, 220, oz + 0.5);
-    const r = await cmd(`/apitest survey ${x0} ${z0} ${x1} ${z1} 4 bounded:64`);
-    const key = (r.messages ?? []).find((m) => m.startsWith('{'));
-    let sample = key ? JSON.parse(key) : null;
-    for (let i = 0; sample?.pending && i < 600; i++) {
-      const g = await cmd(`/apitest get ${sample.pending}`);
-      const line = (g.messages ?? []).find((m) => m.startsWith('{'));
-      const v = line ? JSON.parse(line) : null;
-      if (v?.value) { sample = v.value; break; }
-      await L.sleep(1000);
+  const W = needs.size[0];
+  const out = { seed, spots: [], tried: [] };
+  const budgetMs = Number(process.env.CW_PIN_MINUTES ?? 60) * 60_000, t0 = Date.now();
+  // the candidates: /locate biome for each cliff biome from a spiral of origins, deduplicated (one claim per 160 cells)
+  const FS = await import('./find-site.mjs');
+  const spots = [];
+  for (const [ox, oz] of FS.candidates(Number(process.env.CW_PIN_ORIGINS ?? 9), 3072)) {
+    await tp(ox + 0.5, 200, oz + 0.5);
+    for (const b of CLIFF_BIOMES) {
+      const r = await cmd(`/locate biome minecraft:${b}`).catch(() => null);
+      const m = (r?.messages ?? []).join(' ').match(/\[(-?\d+), (?:~|-?\d+), (-?\d+)\]/);
+      if (!m) continue;
+      const at = [Number(m[1]), Number(m[2])];
+      if (!spots.some((q) => Math.abs(q.at[0] - at[0]) < 160 && Math.abs(q.at[1] - at[1]) < 160)) spots.push({ biome: b, at });
     }
-    if (!sample?.summary) continue;
-    const sm = FS.parseSummary(sample.summary);
-    const sc = FS.score(sm, needs);
-    const row = { claim: [x0, z0, x1, z1], relief: sm.max - sm.min, water: sm.water, trees: sm.trees, biomes: sm.biomes, score: sc };
-    out.tried.push(row);
-    log(`  candidate ${x0},${z0}: relief ${row.relief}, water ${sm.water}%, trees ${sm.trees}% -> ${sc}`);
-    if (sc === null) continue;
-    const sandy = Object.entries(sm.biomes).filter(([b]) => /desert|beach|badlands/.test(b)).reduce((a, [, v]) => a + v, 0);
-    if (sandy > 20) continue;
-    const file = path.join(OUT, `pin-${x0}_${z0}.arsv`);
-    await call('dev.region.survey', { claim: [x0, z0, x1, z1], surveyLoad: 'bounded:256', file }, 900_000);
-    const claim = { minX: x0, minZ: z0, maxX: x1, maxZ: z1, minY: -64, maxY: 319 };
-    const S = surveyApi(fs.readFileSync(file), claim);
-    const picks = pickFace(S, claim);
-    // the first run whose face meets §8's bar (24 x 8) and has no water within 8 of its columns
-    const ok = picks.find((q) => {
-      if (q.face.length < FACE_BAR[0] || q.face.height < FACE_BAR[1]) return false;
-      const [x, , z] = q.a;
-      for (let t = -8; t <= q.n + 9; t++) for (let v = -11; v <= 11; v++) {
-        const cx = x + q.dir[0] * t + (q.dir[0] === 0 ? v : 0), cz = z + q.dir[1] * t + (q.dir[1] === 0 ? v : 0);
-        if (cx >= x0 && cx <= x1 && cz >= z0 && cz <= z1 && S.waterAt(cx, cz)) return false;
-      }
-      return true;
-    });
-    row.picks = picks.length;
-    row.best = picks[0] ? { a: picks[0].a, n: picks[0].n, face: picks[0].face } : null;
-    log(`  candidate ${x0},${z0}: ${picks.length} run(s) along a face; best ${json(row.best)}; on the bar ${json(ok && { a: ok.a, n: ok.n, face: ok.face })}`);
-    // (the run catwalks_demo's natural variant takes: pickFace's first, which sorts the bar's runs first)
-    if (!ok || picks[0] !== ok) continue;
-    found = { claim: [x0, z0, x1, z1], run: { a: ok.a, dir: ok.dir, side: ok.side, n: ok.n, gap: ok.gap, face: ok.face }, stats: { relief: row.relief, water: sm.water, trees: sm.trees, biomes: sm.biomes, min: sm.min, max: sm.max }, surveySha: (await import('node:crypto')).createHash('sha256').update(fs.readFileSync(file)).digest('hex') };
-    break;
   }
-  check(!!found, `pin: a run along a face of at least ${needs.face?.[0] ?? 24} x ${needs.face?.[1] ?? 8} with no water within 8 (${found ? `${json(found.claim)}, ${json(found.run)}` : `none of ${out.tried.length}`})`);
+  out.spots = spots;
+  log(`  ${spots.length} cliff-biome spot(s): ${json(spots.slice(0, 40))}`);
+  let found = null;
+  for (const sp of spots) {
+    for (const [dx, dz] of [[0, 0], [-W, 0], [W, 0], [0, -W], [0, W]]) {
+      if (found || Date.now() - t0 > budgetMs) break;
+      const x0 = sp.at[0] + dx - Math.floor(W / 2), z0 = sp.at[1] + dz - Math.floor(W / 2), x1 = x0 + W - 1, z1 = z0 + W - 1;
+      await tp((x0 + x1) / 2 + 0.5, 220, (z0 + z1) / 2 + 0.5);
+      const file = path.join(OUT, `pin-${x0}_${z0}.arsv`);
+      await call('dev.region.survey', { claim: [x0, z0, x1, z1], surveyLoad: 'bounded:256', file }, 900_000);
+      const claim = { minX: x0, minZ: z0, maxX: x1, maxZ: z1, minY: -64, maxY: 319 };
+      const S = surveyApi(fs.readFileSync(file), claim);
+      const picks = pickFace(S, claim);
+      const wetNear = (q) => {
+        const [x, , z] = q.a;
+        for (let t = -8; t <= q.n + 9; t++) for (let v = -11; v <= 11; v++) {
+          const cx = x + q.dir[0] * t + (q.dir[0] === 0 ? v : 0), cz = z + q.dir[1] * t + (q.dir[1] === 0 ? v : 0);
+          if (cx >= x0 && cx <= x1 && cz >= z0 && cz <= z1 && S.waterAt(cx, cz)) return true;
+        }
+        return false;
+      };
+      const onBar = (q) => q.face.length >= FACE_BAR[0] && q.face.height >= FACE_BAR[1];
+      // (the run catwalks_demo's natural variant takes is pickFace's first: it must be on the bar and dry)
+      const first = picks[0] ?? null;
+      const row = { biome: sp.biome, claim: [x0, z0, x1, z1], picks: picks.length, first: first && { a: first.a, n: first.n, face: first.face }, onBar: !!first && onBar(first), wet: first ? wetNear(first) : null };
+      out.tried.push(row);
+      log(`  ${sp.biome} ${x0},${z0}: ${picks.length} run(s); first ${json(row.first)}; on the bar ${row.onBar}, water within 8 ${row.wet}`);
+      if (first && row.onBar && !row.wet) found = { claim: [x0, z0, x1, z1], biome: sp.biome, run: { a: first.a, dir: first.dir, side: first.side, n: first.n, gap: first.gap, face: first.face }, surveySha: (await import('node:crypto')).createHash('sha256').update(fs.readFileSync(file)).digest('hex') };
+    }
+    if (found || Date.now() - t0 > budgetMs) break;
+  }
+  check(!!found, `pin (seed ${seed}): a run along a face of at least ${FACE_BAR[0]} x ${FACE_BAR[1]} with no water within 8 in a cliff biome (${found ? `${found.biome} ${json(found.claim)}, ${json(found.run)}` : `none of ${out.tried.length} claim(s) round ${spots.length} spot(s)`})`);
   if (found) {
+    site.world = { ...site.world, seed };
     site.fixture = { ...found, pinned: new Date().toISOString().slice(0, 10) };
     fs.writeFileSync(SITE_FILE, `${JSON.stringify(site, null, 2)}\n`);
+    // (the run worktree's copy: also left where the branch's checkout can take it)
+    fs.writeFileSync(path.join(OUT, 'cliff_face.json'), `${JSON.stringify(site, null, 2)}\n`);
   }
   await leaveWorld();
   spendZero();
@@ -448,8 +455,9 @@ steps.natural = async () => {
   await ensure();
   const site = JSON.parse(fs.readFileSync(SITE_FILE, 'utf8'));
   if (!site.fixture?.claim) { check(false, 'natural: the cliff site is not pinned yet (node tools/gate7acw.mjs pin)'); return {}; }
-  await L.ensureBase(BASE);
-  await L.fresh('G6B CW Natural', BASE);
+  const nb = site.world.seed === SEED ? BASE : await L.seedBase(site.world.seed);
+  if (nb === BASE) await L.ensureBase(BASE);
+  await L.fresh('G6B CW Natural', nb);
   await L.setRules('default');
   const out = await demoRun('natural', site.fixture.claim, { kind: 'natural' });
   await leaveWorld();
