@@ -144,6 +144,10 @@ public interface ArchitectApi {
 	 * {@code sketch.outline} are compiled (lots stay axis-aligned rects with a cardinal front, their streets ordinary roads); every
 	 * street road a plan region writes carries the road ext {@code architect_mc:street: {zone, district?}} (S-FL-5), on its
 	 * batch item.
+	 * Since NEXT (7a K2), a K2 helper adds {@code "wallAlong"} ({@code region.walls.along}: plan/0's {@code wall.along}, a wall along a
+	 * shore, a biome edge or a ridge, open, its gates where routes cross and {@code gates.min} evenly) and {@code "wallWalks"}
+	 * ({@code region.walls.walk}: a wall's {@code walk} member, a railed and lit walk on its top with stairs or ladders up from the
+	 * inside, player only; the siteplan's {@code walls[].walk}, graph edges {@code type: wall_walk}). No new record or method.
 	 */
 	Set<String> features();
 }

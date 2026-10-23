@@ -101,7 +101,10 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   const golden = JSON.parse(fs.readFileSync(path.join(KIT, 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
   assert.deepEqual(planCatalogue(), golden);
   const pre = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-pre7a.json'), 'utf8'));
-  const d = diffCatalogues(pre, golden, { pending: [{ part: 'rail_1', block: 'connector.rail' }, { part: 'x', block: 'connector.span_bridge' }] });
+  const d0 = diffCatalogues(pre, golden, { pending: [{ part: 'rail_1', block: 'connector.rail' }, { part: 'x', block: 'connector.span_bridge' }] });
+  // ((7a K2) the slices' own flips (each slice's diff test judges its own): wall.along, K2's)
+  const SLICE_IDS = new Set(['wall.along']);
+  const d = Object.fromEntries(Object.entries(d0).map(([k, v]) => [k, Array.isArray(v) ? v.filter((x) => !SLICE_IDS.has(typeof x === 'string' ? x : x.id ?? x.block)) : v]));
   assert.deepEqual(d.reservedToSupported, ['connector.span_bridge']);
   assert.deepEqual(d.schemaVersionBumps, [{ id: 'connector.span_bridge', from: 0, to: 1 }]);
   assert.deepEqual(d.untilChanged, [{ id: 'connector.rail', from: '7a', to: 'CR' }, { id: 'connector.branch_walk', from: '7a', to: '7b' }]);
@@ -111,7 +114,7 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   const sb = golden.entries.find((e) => e.id === 'connector.span_bridge');
   assert.equal(sb.aliasOf, 'connector.bridge');
   // the three changed entries carry the placeholder (the merge stamps it); nothing else changed its sinceApi
-  const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(pre.entries.find((x) => x.id === e.id)));
+  const changed = golden.entries.filter((e) => !SLICE_IDS.has(e.id) && JSON.stringify(e) !== JSON.stringify(pre.entries.find((x) => x.id === e.id)));
   assert.deepEqual(changed.map((e) => e.id), ['connector.rail', 'connector.branch_walk', 'connector.span_bridge']);
   for (const e of changed) assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === golden.api, `${e.id}: ${e.sinceApi}`);
   // every reserved 7a kind still has its extension fixture; span_bridge left e15

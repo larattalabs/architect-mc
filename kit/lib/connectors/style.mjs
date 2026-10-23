@@ -21,7 +21,9 @@ export const CONNECTOR_SLOTS = Object.freeze({ wall: ['body', 'cap', 'frame', 'w
  * bible turns off with "none".
  */
 export const CONNECTOR_DEFAULTS = Object.freeze({
-  wall: { body: ['structure', 'foundation', 'wall'], cap: ['trim'], frame: ['trim'], walk: [], parapet: [] }, // ((7a) walk, parapet: K2's)
+  // ((7a K2, N-K2-1) the walk's surface in the cap's chain (trim), the parapet's wall-block course in trim then the body's chain (the
+  // first whose block has a wall variant, wall.mjs; none: a full-block parapet two high))
+  wall: { body: ['structure', 'foundation', 'wall'], cap: ['trim'], frame: ['trim'], walk: ['trim'], parapet: ['trim', 'structure', 'foundation', 'wall'] },
   gate: { frame: ['trim'], door: [] },
   rope_bridge: { deck: ['floor', 'path'], rail: ['rail'], post: ['frame'], rope: [] },
   // (6c T3 §7, N-T3-1, N-T3-3) a bridge's deck in path then floor, rails trim (its wall variant) then rail, piers and the arch in

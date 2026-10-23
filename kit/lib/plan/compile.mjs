@@ -31,7 +31,7 @@ import { zoneDistricts, channelForm } from './schema.mjs';
 import { CAVE, f3CaveEmit, f3CoralAnswers, f3Emit, f3Resolve, GROWN, INTO_BODY, isF3 } from '../forms/hooks.mjs';
 import { eachColumn } from '../forms/states.mjs';
 // (7a K1) walls and gates (K1a), rope bridges and auto connectors (K1b): the compiler's hooks for the four connector kinds
-import { WALL_KINDS, emitWalls, finishGates, planWalls, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
+import { WALL_KINDS, emitWalls, finishGates, planWalls, wallsCutAnswer, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
 import { ROPE_KINDS, emitRopes, ropeAnswer, ropeFailAnswer, ropeLeg, ropePassInput, ropeResolve } from '../connectors/rope.mjs';
 /** (7a K1) The connector kinds K1 compiles (each a supported block in catalogue 4). */
 export const K1_KINDS = Object.freeze([...WALL_KINDS, ...ROPE_KINDS]);
@@ -1568,6 +1568,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         if ((why === 'BRIDGE' || why === 'TUNNEL') && K) { ans(l.conn, why === 'BRIDGE' ? bridgeFailAnswer(K, l, m) : tunnelFailAnswer(K, l, m)); continue; }
         // ((7a foundation) a 7a leg the pass could not route: its hook's typed refusal (null: the default answers below)
         { const h = K ? hookOf(l.conn.kind) : null; const a = h ? h.mod.failAnswer(K, l, m) : null; if (a) { ans(l.conn, a); continue; } }
+        // ((7a K2) a leg an along wall cuts apart, with no gate it could open: refused UNREACHABLE {kind: wall} (never a bare BUDGET))
+        { const a = K && (why === 'BUDGET' || why === 'NO_ROUTE' || why === 'UNREACHABLE') ? wallsCutAnswer(K, l, why) : null; if (a) { ans(l.conn, a); continue; } }
         // ((7a K1b) a rope_bridge leg the route pass could not span answers its typed reason: NO_GAP, SPAN, ...)
         ans(l.conn, why === 'ROPE' && K ? ropeFailAnswer(K, l, m) : why === 'BUDGET' ? budgetHit('maxNodes') : why === 'ROUTE_WATER'
           ? { class: 'refused', reasons: [{ code: 'WATER', message: `leg ${l.k + 1}: every route crosses water`, evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, kind: 'crossing' } }] }
