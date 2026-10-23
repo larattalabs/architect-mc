@@ -24604,6 +24604,9 @@ Built against the frozen D3 section above, with Steward's review and the coordin
 | 16 (step `d3-survival`) | the same run | PASS, 5 ok / 0 FAIL |
 | 6, 11, 12 and Steward's partial town (step `d3-steward`: refusals, steward) | run `20261023-173524-6cd3` at 5e0860a9 | PASS, 17 ok / 0 FAIL |
 
+| slice tier | run `20261023-212002-slice` at 41c19d00 (after the v0.42.0 merge; load 60-100 from other sessions) | 105 PASS, 11 TIMEOUT, 5 FAIL. Every D3 step PASS (d3-unit 7/0, d3-ingame 26/0, d3-side 9/0, d3-steward 17/0, d3-walled 7/0, d3-natural 4/0 with a shore district, d3-survival 5/0), plus d-ingame, 6cd-scenario-districts, d2-ingame-smoke, p0-*, k1a-*, kc-*, unit-mod 881/0. The timeouts are SIGTERMs under load, each with 0 FAIL logged before the kill. The FAILs: unit-sidecar (versions.test.ts hook timeouts), t3b-unit (the recorded perf test), 6b-scenario-s1 (`dev.world.open` timed out), 6c-scenario-s3 (the 120 s plan cap), coa-unit item 6 (the head's asks table equals the committed asks-after.txt byte for byte; only the merge-base "before" table moved, because main now contains COA, so the check is stale) and 6cf2-scenario-scatter/p2 (7 jungle-leaf `distance` changes, not D3's code path). The rerun of these 16 steps is queued |
+| verifier | gate-verifier at 41c19d00: run `gate-runs-d3-verify/20261023-225133-6cd3` | PASS: d3-ingame 26/0 (items 7, 8, 10, 9, 14), d3-steward 17/0 (item 12, item 11, item 6, the partial town), d3-natural 4/0 (item 15). Kit D3/D1/D2/P0/golden suites green at head; diff reviewed, no defects |
+
 The first in-game round found one kit bug and four driver bugs, all fixed:
 - M2 on the join: the kit's walk graph stopped at the district's claim (fixed as above).
 - The driver read refusals through its space-stripping `json()`.

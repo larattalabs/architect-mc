@@ -56,9 +56,12 @@ On disk (sidecar plan dir): `reach-survey.bin`, `held.json`, `standing.json`, an
 - [x] As-built section in CONTRACT.md (evidence row pending the in-game run); PLAN queue entries.
 - [x] In-game steps green (2026-10-23): d3-ingame, d3-side, d3-walled, d3-natural, d3-survival (run 20261023-173030-6cd3 at
       b2b92d3d), d3-steward (20261023-173524-6cd3 at 5e0860a9), d3-unit (20261023-173830-6cd3). Evidence rows in the as-built.
-- [ ] Slice tier run (`node tools/gate-run.mjs slice --since origin/main`) after merging origin/main once v0.42.0 is tagged
-      (not tagged at 17:45 on 2026-10-23; origin/main still 87d96dd6).
-- [ ] Gate-verifier (re-runs items 7, 8, 10, 12).
+- [x] Merged origin/main (v0.42.0) at 89b29157; head 41c19d00 pushed. step-inputs rebuilt (230 steps). Kit 819/0, gradle build
+      green, lints green, sidecar regions tests green.
+- [~] Slice tier `20261023-212002-slice`: every D3 step PASS; 11 load TIMEOUTs and 5 FAILs, none on D3's paths (see the as-built
+      evidence). Their rerun is queued (`--only` the 16 steps, out `artifacts/gate-runs-d3/<ts>-slice`, lock
+      `../architect-mc-D3-gate.lock`).
+- [x] Gate-verifier PASS at 41c19d00 (items 7, 8, 10, 12 and 15 rerun).
 - [ ] Steward RC (S-D3-7) on the branch head.
 
 ## Notes from the first in-game round
