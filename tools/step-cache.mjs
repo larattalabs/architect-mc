@@ -46,7 +46,7 @@ const readSummary = (run) => JSON.parse(fs.readFileSync(path.join(run, 'summary.
 
 /** The part of a step's set every mode keeps (coverage mode included): its drivers' closure, its data, the runner, the classes
  * coverage doesn't replace (gradle), and the coverage safety set; for a step not in coverage mode, its whole set. */
-async function anyModeMatcher(id, tree) {
+async function anyModeMatcher(id, tree, commit = 'HEAD') {
   const { safetyGlobs, setMatcher } = await import('./lib/step-coverage.mjs');
   const { inputMatcher } = await import('./lib/step-inputs.mjs');
   const mid = map.steps[id] ? id : parentOf(id);
@@ -67,7 +67,8 @@ async function anyModeMatcher(id, tree) {
     // sources; a compile-only gradle run keeps nothing (the build artifact compiles the same sources)
     const { testSourcesMatching, javaTestRefs } = await import('./lib/step-coverage.mjs');
     const narrow = keepGradle && e.testFiltersComplete && !argv.includes('--whole-test-tree');
-    const show = (f) => execFileSync('git', ['-C', SRC, 'show', `HEAD:${f}`], { encoding: 'utf8', maxBuffer: 64 << 20 });
+    // (release v0.42.0) read the sources at the tree's own commit: fail-audit walks past heads whose test files HEAD may no longer have
+    const show = (f) => execFileSync('git', ['-C', SRC, 'show', `${commit}:${f}`], { encoding: 'utf8', maxBuffer: 64 << 20 });
     let gradleKeep = [];
     if (narrow) {
       const files = testSourcesMatching(e.testFilters ?? [], tree, conf.coverage?.testRoots ?? ['mod/src/test/java'], show);
@@ -200,7 +201,7 @@ if (cmd === 'import') {
       const b = keyFor(ch, id).key;
       if (a === b) continue;
       row.mapRuns++;
-      const am = await anyModeMatcher(id, treeAt(SRC, head));
+      const am = await anyModeMatcher(id, treeAt(SRC, head), head);
       const all = inputMatcher(map, conf, id);
       if (!am.cov || delta.some((p) => am.m(p)) || !delta.some((p) => all(p))) {
         row.staticRuns++; // not a coverage-mode step, or its drivers, data, runner, the safety set, a mode or flag moved: it runs
@@ -289,7 +290,7 @@ if (cmd === 'import') {
       continue;
     }
     const e = map.steps[mid];
-    const am = await anyModeMatcher(f.id, tAt(SRC, f.head));
+    const am = await anyModeMatcher(f.id, tAt(SRC, f.head), f.head);
     const stat = am.cov ? am.m : setMatcher([...(e.closure ?? []), ...(e.globs ?? []), ...(e.data ?? []), ...(conf2.runnerKey?.files ?? [])]);
     const all = inputMatcher(map, conf2, mid);
     const sHit = am.cov ? delta.filter((p) => stat(p)) : delta.filter((p) => all(p) || stat(p));

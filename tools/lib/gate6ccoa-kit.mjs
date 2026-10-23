@@ -12,8 +12,10 @@ import { normSiblingIr } from './batch-0410.mjs';
 import { syncBaseTree } from './base-tree.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
-/** The artifact compared with its kitVersion and catalogueVersion normalised (§5's catalogue bump moves every artifact's number). */
-const normArt = (a) => normSiblingIr(JSON.stringify(a ?? null)).replace(/"catalogueVersion":\d+/g, '"catalogueVersion":"*"');
+/** The artifact compared with its kitVersion, catalogueVersion, api and irSha normalised (§5's catalogue bump moves every artifact's
+ *  number; a release's version bump moves its api and kitVersion, and so the IR's sha: release v0.42.0). */
+const normArt = (a) => normSiblingIr(JSON.stringify(a ?? null)).replace(/"catalogueVersion":\d+/g, '"catalogueVersion":"*"').replace(/"api":"\d+\.\d+\.\d+"/g, '"api":"*"')
+  .replace(/"irSha":"[0-9a-f]{64}"/g, '"irSha":"*"'); // (the IR itself is compared kitVersion-normalised above; its sha holds the kitVersion)
 
 /** The base worktree ../architect-mc-coA-base at the merge base of HEAD and origin/main (base-tree.mjs: the run's GATE_MERGE_BASE under gate-run). */
 export function baseTree(root) {
