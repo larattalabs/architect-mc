@@ -1089,21 +1089,30 @@ Top first. Not fixed in v0.40.1.
 
 ## Queued from slice K2 (builder, 2026-10-23)
 
-- **Auto gates where routes cross can't open on stepped natural banks (45° staircase shores); K1a's gate move needs a straight flat
-  run** (the K2 finding; the coordinator's ruling 2026-10-23: its own item, K1a's gate move unchanged in K2).
-  - **What happens.** `v7a_k2_along_shore` (a wall along S3's pinned river, distance [3, 6]) fits, but the shore is a 45° staircase:
-    the wall's line is mostly runs of 1-3 cells, and where it does run straight (7-9 cells) the bank drops 7-10 blocks across the
-    wall's 4 cells (inside, two courses, outside). K1a's gate move opens only on a straight run perpendicular to the route, held flat
-    at the route's y. Probe (25 spine points, every 8th spine cell, a path from a point 12 inland along the normal to the shore cell):
-    without the wall 11 of 25 route (adjusted), 11 run out of budget, 3 refuse on the bank itself; with the wall 0 route: the same 11
-    and 13 more answer refused UNREACHABLE {kind: wall}, 1 (spine cell 0, the window's end) BUDGET either way.
-  - **Its evenly placed gates are ledges.** gates.min 2 finds no level run within half the spacing: river_wall_g1 has its floor at 64
-    with the ground inside at 74 (the bank cut 9 high behind it), g2 its floor at 89 with the inside at 93-98 and the outside at 84
-    then 63; the kit's player and villager movers get through neither, either way. The wall's answer says so per gate ("the ground
-    steps N across the wall there ... no walk through it until a gate landing levels it").
-  - **What K2 ships instead.** S3's fixture takes `gates.min: 2`, placed evenly with a level run preferred within half the spacing (none
-    on this bank, so its gates are ledges); a route the wall cuts answers `refused UNREACHABLE {kind: wall, walls, round}` naming the
-    wall (`wallsCutAnswer`, never a bare BUDGET). The auto-gates-where-routes-cross bar runs on the flat biome-edge fixture.
-  - **Likely fix (not built):** a gate landing that terraces a short flat run on both sides of the wall (cut and fill to the route's
-    y over the gate's depth plus 2), as T3's bridge abutments do, so the gate move finds its flat run; and gates.min placing on a
-    landing it makes when no level run exists.
+- **Routes joining gate landings** (the K2 finding; the coordinator's rulings (b) and (i), 2026-10-23, then the fallback (ii)).
+  - **The limit.** Auto gates where routes cross can't open on stepped natural banks (45° staircase shores): K1a's gate move needs a
+    straight run perpendicular to the route held flat across the wall at the route's y, and S3's river bank drops 7-10 blocks across
+    the wall's 4 cells wherever the line runs straight (it is mostly runs of 1-3 cells). K1a's gate move is unchanged.
+  - **What K2 ships.** An along wall's gates.min gates are placed before routing when the bank is stepped (a level wall's wait for the
+    routes, as K1a's), each on a gate landing: the gate's floor 2 cells each side, outside lanes ending at the water's edge (at most 2
+    above it), inside a 1-wide flight along the wall's inner face (round its bends) up to the bank, open sides over a drop of more than 1
+    filled and fenced; the cells are the wall's own part (undo journaled). On S3 (`v7a_k2_along_shore`, gates.min 2) both gates have
+    landings (flights of 4 and 16 steps, within 8 of the wall) and the kit's player and villager pass each both ways. A gate whose
+    landing doesn't fit is noted per gate; a route the wall cuts answers `refused UNREACHABLE {kind: wall, walls, round}`.
+  - **Probe** (25 spine points, every 8th spine cell, a path from a point 12 inland along the normal to the shore cell): without the
+    wall 11 of 25 route (adjusted), 11 run out of budget, 3 refuse on the bank itself. With the wall and its landings, 0 route: 24
+    answer UNREACHABLE {kind: wall} (the 11 among them), 1 (spine cell 0) BUDGET either way. (Same before the landings.)
+  - **Why routes don't join.** The landings go to the route pass as its `base` (the ground they make, merged with rope.base), but (1) an
+    endpoint inside a landing keeps its survey y, so the edge starts off the base's ground; (2) T2's gate move wants the route at the
+    gate's floor on the cell before the wall, and the floor is the shore's level (62-64) under a bank of 75-90: a route reaches it only
+    down the landing's flight, which follows the wall's face round staircase bends, not T2's straight flights of 2..8 then 2 flat cells.
+    Probe pair 144 routed directly: without the wall 45 cells; with the wall and the base, the 2M-node budget spent.
+  - **Likely fix:** T2 learns the landing as a fixed segment (a "gate approach" special move from the flight's top cell through the gate
+    to the outside cell, cost by length), and endpoints read the base's ground. Or a terraced gate landing a route can join along its
+    length (cut and fill a bench along the wall at the flight's levels).
+- **A shared lamp helper with M17 (soul lanterns near snow and ice)** (the coordinator, 2026-10-23): K1a's gate lamps and K2's walk lamps
+  place the bible's light with no M17 swap (a light over 11 within reach of snow layers or ice melts them). Lift a helper (scatter.mjs
+  already clears its reach) and use it in both.
+- **K1a bug: dark gate-walk cells under a level-10 light** (found by K2's look variants, not fixed in K2): v30 in g7ak1_infernal (soul
+  lantern, light 10) on S7's flat claim: M5 5 dark spawnable cells on the east gate's walk (1559-1560, 66, -3077..-3075), with or
+  without a walk. K1a's one lamp a side doesn't cover a 3-wide gate's depth at light 10.
