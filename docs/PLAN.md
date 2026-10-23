@@ -959,6 +959,16 @@ Top first. Not fixed in v0.40.1.
 
 ## Queued from 6c close-out B (builder, 2026-10-22)
 
+- **S3's natural run: a monastery route cuts a retained terrace rim on some live surveys** (close-out B's final slice).
+  - 6c-scenario-s3 failed bar 5 twice on B (`gate-runs/20261023-093624-slice`, `gate-runs-coB/20261023-103229-slice`): "rims
+    546/549 retained (3 open)" at the guest house's level 102 (3662,98..99,-900..-898). routes_monastery's stair cut runs through the
+    rim.
+  - The run's survey re-planned with main's kit (f0649fb7) gives the same IR (programSha aside), so this is S3's survey dependence, not
+    B's. Main's own run on another survey passed.
+  - Harden the program so its route never cuts a retained rim, or refuse such a plan, as close-out B's S3_STRUCTURE does for M3.
+- **6ct1-scenario-relief's realised == virtual row** shows 17 relief cells dirt_path -> dirt (3668,114,-937 and others) both on B
+  (`20261023-093624-slice`) and on the 032705 run before B's CellCond change. Not B's; find the second path write.
+
 - **RoadTerrain treats untouched natural packed ice (and other natural blocks) as a BUILT obstacle** (RS item 14, close-out B;
   coordinator: its own slice, which needs fixture re-cuts and a look check).
   - **What happens.** rs02 on a survival copy of S3's claim: road:street_e fails "the road changes no cell". All 12 of its columns

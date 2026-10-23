@@ -24044,4 +24044,15 @@ no version set (the coordinator's at merge).
   - Its street_e stops on untouched `minecraft:packed_ice`: `RoadTerrain` classes natural ground blocks that `TerrainFit.natural`
     knows as BUILT. The region ends PARTIAL (96.7%). Removal still gives E-normal 0 unclassified.
   - Queued in PLAN as its own slice; evidence `artifacts/gate-runs-coB/20261023-080517-slice`.
+- **The final slice at 34aab6bc** (`gate-runs/20261023-093624-slice`, turbo): 87 PASS, 4 FAIL, 1 TIMEOUT.
+  - rs-survival-smoke/p4: item 14, recorded (§11). Its L-V7 rows pass.
+  - 6c-scenario-s3: rims 3 open on this run's live survey. Main's kit plans the same IR from it (PLAN).
+  - 6ct1-scenario-relief: pre-existing, the same 17 cells as an earlier run.
+  - h-unit: item 10's asks table, which close-out A owns.
+  - 6b-nudges: timed out under load; passed on re-run (`gate-runs-coB/20261023-102947-slice`).
+  - pt2-ingame item 13, hy-ingame-smoke (the push stand), rs-unit, rs-ingame, rs-crash, rsb, umt, p3-lint, water-lint, unit-mod,
+    unit-kit, s3-plan and s3-unit all pass.
+- **umt-long:** fresh seeds 777123000, 555000111 and 913370000 (2000 per generator each) pass with the final tagger.
+- **The gate-verifier:** items 1, 3, 4 and 5 PASS. Its item 2 point, the untagged fresh seed 777124280, is now tagged with a repro
+  (§3).
 
