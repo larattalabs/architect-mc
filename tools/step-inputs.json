@@ -70,6 +70,7 @@
     "kit/test/forms-f3-property.test.mjs",
     "kit/test/forms-f3.test.mjs",
     "kit/test/forms-island.test.mjs",
+    "kit/test/gate-benches.test.mjs",
     "kit/test/gate-history.test.mjs",
     "kit/test/gate-split.test.mjs",
     "kit/test/gate-turbo.test.mjs",
@@ -364,6 +365,7 @@
     "kit/test/forms-f3-property.test.mjs",
     "kit/test/forms-f3.test.mjs",
     "kit/test/forms-island.test.mjs",
+    "kit/test/gate-benches.test.mjs",
     "kit/test/gate-history.test.mjs",
     "kit/test/gate-split.test.mjs",
     "kit/test/gate-turbo.test.mjs",
@@ -481,6 +483,7 @@
     "scenarios/relief_demo.json",
     "scenarios/route_demo.json",
     "scenarios/s3_monastery.json",
+    "sidecar/src/regionpool.ts",
     "sidecar/src/regions.ts",
     "tools/api-compat.mjs",
     "tools/catalogue-since-check.mjs",
@@ -493,6 +496,7 @@
     "tools/gate6ct3a.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/bench-select.mjs",
     "tools/lib/build-artifact.mjs",
     "tools/lib/d2-replay.mjs",
     "tools/lib/devclient.mjs",
@@ -922,6 +926,7 @@
     "kit/test/forms-f3-property.test.mjs",
     "kit/test/forms-f3.test.mjs",
     "kit/test/forms-island.test.mjs",
+    "kit/test/gate-benches.test.mjs",
     "kit/test/gate-history.test.mjs",
     "kit/test/gate-split.test.mjs",
     "kit/test/gate-turbo.test.mjs",
@@ -1009,6 +1014,7 @@
     "kit/vocab/tiers.json",
     "tools/catalogue-since-check.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/bench-select.mjs",
     "tools/lib/build-artifact.mjs",
     "tools/lib/gate-history.mjs",
     "tools/lib/gate-part.mjs",
@@ -45184,6 +45190,70 @@
    ]
   },
   "6a-megaB-fast": {
+   "classes": [
+    "jar",
+    "sidecar",
+    "world"
+   ],
+   "roots": [
+    "tools/gate6a.mjs"
+   ],
+   "closure": [
+    "kit/lib/blocks.mjs",
+    "kit/lib/kit.mjs",
+    "kit/lib/nbt.mjs",
+    "kit/lib/write.mjs",
+    "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
+    "tools/apitest.mjs",
+    "tools/gate6a-stubs.mjs",
+    "tools/gate6a.mjs",
+    "tools/gen-palettes.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/server-host.mjs",
+    "tools/lib/tickbar.mjs",
+    "tools/lib/wsserver.mjs",
+    "tools/run-gate6a-client.sh",
+    "tools/run-headless-server.mjs"
+   ],
+   "globs": [
+    "kit/examples/cabin/**",
+    "mod/src/test/resources/stub-sidecar/**"
+   ],
+   "dynamic": [],
+   "env": [
+    "APITEST_API_VERSION",
+    "APITEST_GAME_DIR",
+    "APITEST_HOME",
+    "APITEST_MODEL",
+    "APITEST_NOTES",
+    "APITEST_OUT",
+    "APITEST_REAL_MS",
+    "APITEST_REVISIONS",
+    "APITEST_SHOT_PREFIX",
+    "ARCHITECT_BOT_VIEW_DISTANCE",
+    "ARCHITECT_DEV_PORT",
+    "ARCHITECT_DEV_TOKEN",
+    "ARCHITECT_GAME_DIR",
+    "ARCHITECT_PORT",
+    "ARCHITECT_SERVER_EULA",
+    "ARCHITECT_SIMULATION_DISTANCE",
+    "ARCHITECT_XMX",
+    "GATE6A_CLIENT_SCRIPT",
+    "GATE6A_DWELL_MS",
+    "GATE6A_MEGAB_FAST",
+    "GATE6A_OUT",
+    "GATE6A_RUN",
+    "GRADLE_USER_HOME",
+    "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6a.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/tickbar.mjs"
+   ]
+  },
+  "6a-resume": {
    "classes": [
     "jar",
     "sidecar",
