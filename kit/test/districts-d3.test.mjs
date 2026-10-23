@@ -151,9 +151,10 @@ test('item 1 (§2.2): the choice: cheapest by T2 cost, the lead (3 straight cell
   assert.ok(joinColumns(Jb).every((k) => !held.has(k)));
   // the cap: a district end walled in (every dry route fails) on a street with more than 48 candidates: NO_JOIN [budget]
   const longT = synthTown({ W: 200, D: 40, u0: 10, u1: 190, c: 20 });
-  // (walled in but for a 1-cell gap: a walk reaches out, a 3-wide route never does)
-  const box = [[206, 14, 206, 26], [216, 14, 216, 19], [216, 21, 216, 26], [206, 14, 216, 14], [206, 26, 216, 26]];
-  assert.throws(() => chooseReach({ planCols: columnsOf(flat, 200, 0, 24, 40), R: longT.R, beside: longT.beside, claim: [200, 0, 223, 39], districtEnds: [{ x: 211, z: 20, at: [211, 65, 20], facing: [-1, 0] }], baseHard: box, route: routePass }), /NO_JOIN: \[budget\]/);
+  // (ringed by water: a walk reaches out over it, no route crosses it: every dry route fails, and the 49th is never run)
+  const pc = columnsOf(flat, 200, 0, 24, 40);
+  for (let j = 0; j < 40; j++) for (let i = 0; i < 24; i++) { const d = Math.max(Math.abs(200 + i - 211), Math.abs(j - 20)); if (d >= 5 && d <= 7) pc.flags[i + j * 24] = 1; }
+  assert.throws(() => chooseReach({ planCols: pc, R: longT.R, beside: longT.beside, claim: [200, 0, 223, 39], districtEnds: [{ x: 211, z: 20, at: [211, 65, 20], facing: [-1, 0] }], route: routePass }), /NO_JOIN: \[budget\]/);
   assert.equal(REACH_DRY_MAX, 48);
   // apart: a claim neither meeting nor touching the town's
   assert.throws(() => chooseReach({ planCols: columnsOf(flat, 98, 0, 60, 96), R: t.R, beside: t.beside, claim: [98, 0, 157, 95], districtEnds: [end(110, 48)], route: routePass }), /NO_JOIN: \[apart\]/);
