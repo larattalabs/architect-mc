@@ -2,8 +2,11 @@
 // fixture's site (its terrain over the flat base, its sand), Regions.checkPlan and realiseApproved in survival, the stockpile and its
 // feeding, the INSTANT twin (the same plan realised in a creative world, its box snapshotted), the conservation sum, removal and the
 // survival region's state (dev.rs.*). Used by tools/gate6crs.mjs; every item is a function of `ctx` and runs on a fresh world copy.
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { sharedOnce, sharedRoot } from './run-shared.mjs';
 
 export const OWNER = 'test:rs';
 /** The survival base: the flat preset, survival, cheats, exact rules, the survival toggle on (made by the host that runs it). */
@@ -209,20 +212,38 @@ export async function remove(ctx, region) {
 
 // ------------------------------------------------------------------ the INSTANT twin
 
+const headMemo = new Map();
+const headOf = (root) => { if (!headMemo.has(root)) headMemo.set(root, execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim()); return headMemo.get(root); };
+
 /**
  * The fixture's INSTANT twin: a creative flat world, the same terrain and plan, checked and realised there (INSTANT) with the same lot
- * entries, waited for PLACED, the box snapshotted: {file, box, view}. Kept per fixture for the step (one twin per site).
+ * entries, waited for PLACED, the box snapshotted: {file, box, view, region, check}. `toggleOn`: the survival toggle switched on in the
+ * creative world after its terrain (item 3's latent bug: rs01; adds `toggle`, `items`, `failed`). Built once per fixture, entries and
+ * toggle (speed set C): kept in this process, and in a gate run for every step and part of it (tools/lib/run-shared.mjs; the snapshot
+ * is then a file of the run's shared dir), whatever tag the caller names it by.
  */
-export async function twin(ctx, tag, fx, entries = {}) {
-  const s = await site(ctx, `${tag} twin`, fx, { creative: true });
-  if (Object.keys(entries).length) await designs(ctx);
-  const ck = await check(ctx, `${tag}-twin`, s);
-  if (!ck.check?.artifactSha) throw new Error(`twin ${tag}: no artifact (${ck.check?.overall})`);
-  const region = await realise(ctx, ck.check.artifactSha, entries);
-  const st = await ctx.L.waitRegion(region, 3_600_000, (x) => shoo(ctx, x));
-  const box = boxOf(s.W);
-  const file = await snap(ctx, box, `rs-${tag}-twin`);
-  return { file, box, view: st.view, region, check: ck };
+export async function twin(ctx, tag, fx, entries = {}, { toggleOn = false } = {}) {
+  const key = crypto.createHash('sha1').update(JSON.stringify([fx, entries, toggleOn, headOf(ctx.root)])).digest('hex');
+  const t = await sharedOnce('rs-twin', key, async () => {
+    const s = await site(ctx, `${tag} twin`, fx, { creative: true });
+    if (Object.keys(entries).length) await designs(ctx);
+    let toggle = null;
+    if (toggleOn) {
+      await ctx.L.call('dev.survival.set', { on: true });
+      toggle = await ctx.L.call('dev.survival.state', {});
+    }
+    const ck = await check(ctx, `${tag}-twin`, s);
+    if (!ck.check?.artifactSha) throw new Error(`twin ${tag}: no artifact (${ck.check?.overall})`);
+    const region = await realise(ctx, ck.check.artifactSha, entries);
+    const st = await ctx.L.waitRegion(region, 3_600_000, (x) => shoo(ctx, x));
+    const failed = toggleOn ? (await regionState(ctx, region)).failed ?? {} : null;
+    const box = boxOf(s.W);
+    const file = sharedRoot() ? path.join(sharedRoot(), 'rs-twin', `${key}.snap.gz`) : path.join(ctx.OUT, `rs-${tag}-twin.snap.gz`);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    await ctx.L.call('dev.region.hash', { box, mode: 'snap', file }, 3_600_000);
+    return { file, box, view: st.view, items: st.items, region, check: ck, ...(toggleOn ? { toggle, failed } : {}) };
+  }, { onHit: (v) => fs.existsSync(v.file), log: ctx.log });
+  return t;
 }
 
 /** A survival world's diff from its twin's snapshot, the stockpile's crates (and items lying about) set aside. */
@@ -230,7 +251,7 @@ export async function twinDiff(ctx, box, file, crates) {
   const d = await diff(ctx, box, file);
   const crateCells = new Set(crates.map((c) => c.join(',')));
   const rest = d.list.filter((m) => !crateCells.has(m.pos) && !String(m.now).startsWith('architect_mc:construction_crate'));
-  fs.writeFileSync(`${file}.diff.json`, `${JSON.stringify(rest)}\n`); // the whole list, for the evidence
+  fs.writeFileSync(path.join(ctx.OUT, `${path.basename(file)}.diff.json`), `${JSON.stringify(rest)}\n`); // the whole list, for the evidence (the caller's dir: the snapshot may be the run's shared one)
   return { mismatches: d.mismatches - (d.list.length - rest.length), list: rest.slice(0, 16), all: d.mismatches };
 }
 
