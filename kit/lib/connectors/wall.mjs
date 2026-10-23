@@ -840,6 +840,8 @@ export function emitWalls(K) {
       K.record.bom[W.id] = out.bom;
       for (const g of W.gates) if (g.part) K.record.bom[g.part] = out.gateBom.get(g.id) ?? {};
       K.answers.get(W.id).geometry = out.geometry;
+      // ((7a K2) the walk's notes (its dead ends, an access it had no room for))
+      if (out.notes?.length) K.answers.get(W.id).notes = mergeNotes([...(K.answers.get(W.id).notes ?? []), ...out.notes]);
       for (const g of W.gates) if (g.part && K.answers.get(g.part)) K.answers.get(g.part).geometry = { wall: W.id, at: g.at, width: g.width, height: g.h, door: g.door, frame: g.frame, cells: g.cells.length };
     } catch (e) {
       K.rollback(cp);
@@ -1033,7 +1035,6 @@ function emitWall(K, W) {
     walkOut = emitWalk({ K, W, top: T, S2: WK.S2, put, get: (x, y, z) => ops.get(`${x},${y},${z}`), has: (c) => capCells.has(key(c.x, c.z)), roles, cr, body, opening, walkSet, stubs: new Set(stubCells(W).map(([x, z]) => key(x, z))), lampFoot, fixture });
     if (walkOut.refuse) throw Object.assign(new Error(walkOut.refuse.message), { reason: walkOut.refuse });
     for (const q of walkOut.lamps) lampCells.push(q);
-    W.notes.push(...walkOut.notes);
   }
   // ---- the graph: a node per gate (kind gate, its wall the ref; §8's additive wire shape)
   for (const g of W.gates) {
@@ -1120,7 +1121,7 @@ function emitWall(K, W) {
     geometry.waterGates = wgOut.map(({ course, cells, lintel }) => ({ course, cells: cells.length, lintel }));
     if (!geometry.crossing) geometry.crossing = { type: 'wall', over: 'course', gate: 'water', course: wgOut[0].course };
   }
-  return { meta, record, geometry, bom: bomOf(states), gateBom };
+  return { meta, record, geometry, bom: bomOf(states), gateBom, notes: walkOut?.notes ?? [] };
 }
 
 /** The heading out of the wall at a cell (from its inner course to its outer). */

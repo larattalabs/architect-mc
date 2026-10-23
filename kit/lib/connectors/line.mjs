@@ -415,7 +415,7 @@ export function alongLine(G, spine, nrm, { sign, dist: [lo, hi], t, reach = ALON
   const seen = Array.from({ length: nRuns }, () => []);
   const clsOf = (k) => (k < 0 ? OB.OUT_OF_CLAIM : G.ob[k]);
   // a cell's Chebyshev distance to the spine (its cells within +-24 of index i)
-  const spineDist = (c, i) => { let m = Infinity; for (let q = Math.max(0, i - 24); q <= Math.min(spine.length - 1, i + 24); q++) m = Math.min(m, Math.max(Math.abs(spine[q][0] - c[0]), Math.abs(spine[q][1] - c[1]))); return m; };
+  const spineDist = (c, i) => { let m = Infinity; for (let q = Math.max(0, i - 28); q <= Math.min(spine.length - 1, i + 28); q++) m = Math.min(m, Math.max(Math.abs(spine[q][0] - c[0]), Math.abs(spine[q][1] - c[1]))); return m; };
   // a run's own pre-check: every course of every offset cell clear (walk cells allowed: crossings, judged on the built line)
   const runBlockers = (r, d) => {
     const b = new Set();
@@ -527,7 +527,7 @@ export function alongLine(G, spine, nrm, { sign, dist: [lo, hi], t, reach = ALON
     }
     // bump each blocked run past its offset (the classes found there remembered for the refusal)
     for (const [r, cls] of [...bad].sort((a, b) => a[0] - b[0])) {
-      seen[r].push(new Set(cls));
+      if (cls.size) seen[r].push(new Set(cls));
       idx[r]++;
       if (!advance(r)) return refuse(r);
     }
