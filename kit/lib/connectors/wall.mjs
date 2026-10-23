@@ -1261,7 +1261,10 @@ function emitWall(K, W) {
   let walkOut = null;
   if (WK) {
     const lampFoot = new Set(lampCells.map(([x, , z]) => key(x, z)));
-    walkOut = emitWalk({ K, W, top: T, S2: WK.S2, put, get: (x, y, z) => ops.get(`${x},${y},${z}`), has: (c) => capCells.has(key(c.x, c.z)), roles, cr, body, opening, walkSet, stubs: new Set(stubCells(W).map(([x, z]) => key(x, z))), lampFoot, fixture });
+    // (the gate landings' columns: no access flight or rail over them)
+    const landing = new Map();
+    for (const g of W.gates) if (g.landing?.ok) for (const c of g.landing.cells) landing.set(key(c.x, c.z), Math.max(c.y, landing.get(key(c.x, c.z)) ?? -32768));
+    walkOut = emitWalk({ K, W, top: T, S2: WK.S2, put, landing, get: (x, y, z) => ops.get(`${x},${y},${z}`), has: (c) => capCells.has(key(c.x, c.z)), roles, cr, body, opening, walkSet, stubs: new Set(stubCells(W).map(([x, z]) => key(x, z))), lampFoot, fixture });
     if (walkOut.refuse) throw Object.assign(new Error(walkOut.refuse.message), { reason: walkOut.refuse });
     for (const q of walkOut.lamps) lampCells.push(q);
   }

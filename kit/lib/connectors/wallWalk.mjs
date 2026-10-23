@@ -134,7 +134,7 @@ export function emitWalk(E) {
   // ---- accesses
   const blockedCol = (x, z) => {
     const g = W.G.at(x, z);
-    return g < 0 || W.G.ob[g] !== 0 || W.cellAt.has(key(x, z)) || walkSet.has(key(x, z)) || opening.has(key(x, z)) || lampFoot.has(key(x, z)) || (K.props ?? []).some((q) => (q.cells ?? []).some((cc) => cc[0] === x && cc[2] === z));
+    return g < 0 || W.G.ob[g] !== 0 || W.cellAt.has(key(x, z)) || walkSet.has(key(x, z)) || opening.has(key(x, z)) || lampFoot.has(key(x, z)) || (E.landing?.has(key(x, z)) ?? false) || (K.props ?? []).some((q) => (q.cells ?? []).some((cc) => cc[0] === x && cc[2] === z));
   };
   const taken = new Set(); // columns accesses use (with their band's cells: no second access in them)
   const straightRun = (ps) => {
@@ -279,6 +279,9 @@ export function emitWalk(E) {
       if (g < 0 || W.G.ob[g] !== 0) continue;
       if (S2[i] - 2 * (stand(x, z) + 1) <= 6) continue; // the drop is 3 or less: open
       const Y = top[i];
+      // (over a gate landing's column: its steps' head room, as an access's)
+      const ly = E.landing?.get(k);
+      if (ly !== undefined && Y < ly + 4) continue;
       const ac = accessCols.get(k);
       if (ac !== undefined && Y < ac + 4) continue; // over an access's step: its head room (3 clear, the kit mover's step down)
       if (corbels.some((q) => q[0] === x && q[2] === z)) continue;

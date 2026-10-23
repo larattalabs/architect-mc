@@ -576,14 +576,16 @@ function camsOf(meta) {
   }
   return cams;
 }
-async function lookRound(out, dir, tag, plan, claim, bible, from = BASE) {
-  await L.fresh(`G6B K2 Look ${tag}`, from);
-  await L.setRules('gallery');
+async function lookRound(out, dir, tag, plan, claim, bible, from = BASE, site = null) {
+  if (!site) {
+    await L.fresh(`G6B K2 Look ${tag}`, from);
+    await L.setRules('gallery');
+  }
   const [cx, cz] = centre(claim);
   await tp(cx, 140, cz);
-  await L.settle(20_000);
+  await L.settle(site ? 3000 : 20_000);
   await cmd('/kill @e[type=!minecraft:player]');
-  const c = await checkPlan(plan, claim, { anchors: anchorsOf(claim), bible });
+  const c = await checkPlan(plan, claim, { anchors: site?.anchors ?? anchorsOf(claim), bible });
   const o = { overall: c.overall, parts: c.parts.map((p) => `${p.part}:${p.class}`), artifactSha: c.artifactSha, bible };
   out[tag] = o;
   check(['READY'].includes(c.overall), `look (${tag}): checks ${c.overall} (${o.parts.join(' ')})`);
@@ -620,6 +622,16 @@ steps.look = async () => {
   for (const b of LOOK_BIBLES) installBible(b);
   for (const bible of LOOK_BIBLES) await lookRound(out, dir, `walk_${bible}`, WALK, [...S7.fixture.claim], bible);
   await lookRound(out, dir, 'shore_g6cv_village', { ...SHORE, connectors: SHORE.connectors.map((c) => ({ ...c, walk: true })) }, [...S3.fixture.claim], 'g6cv_village');
+  // (the coordinator's ask) a shore gate on its landing: k2/k2_look_bank's stepped bank built over the flat base (RS's terrain builder)
+  {
+    const G = await import('./lib/gate6crs-game.mjs');
+    const core = await import('./lib/gate6chy-core.mjs');
+    const B = await import('./lib/gate6chy-b.mjs');
+    const ctx = { L, OUT, KIT, imp, json, root, check, log, core, B };
+    const fx = readFx('k2', 'k2_look_bank.json');
+    const site = await G.site(ctx, 'k2 look bank', fx, { creative: true, rules: 'gallery' });
+    await lookRound(out, dir, 'bank_landing_g6cv_village', site.wp.plan, site.W.claim, 'g6cv_village', FLAT, { anchors: site.wp.anchors });
+  }
   fs.writeFileSync(path.join(dir, 'look.json'), JSON.stringify(out, null, 2));
   spendZero();
   return out;

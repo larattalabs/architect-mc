@@ -240,7 +240,7 @@ async function k2Walk() {
   const edge = read('valid', 'v7a_k2_along_edge.json');
   const walked = (fx, walk) => ({ ...fx, name: `${fx.name}+walk:${JSON.stringify(walk)}`, plan: { ...fx.plan, connectors: fx.plan.connectors.map((c, i) => (i === 0 ? { ...c, walk } : c)) } });
   const castle = read('asks', 'castle_city.json');
-  const cases = [read('valid', 'v7a_k2_walk.json'), read('valid', 'v7a_k2_along_shore.json'), walked(edge, true), walked(edge, { access: 'ladder' }), { name: 'asks/castle_city.json', on: 'asks', plan: castle.answer.plan }];
+  const cases = [read('valid', 'v7a_k2_walk.json'), read('valid', 'v7a_k2_along_shore.json'), read('k2', 'k2_look_bank.json'), walked(edge, true), walked(edge, { access: 'ladder' }), { name: 'asks/castle_city.json', on: 'asks', plan: castle.answer.plan }];
   const out = { ok: [], fails: [], recorded: [] };
   for (const fx of cases) {
     const p = await p0Of(fx, S);
