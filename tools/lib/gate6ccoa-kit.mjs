@@ -9,19 +9,15 @@ import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { normSiblingIr } from './batch-0410.mjs';
+import { syncBaseTree } from './base-tree.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 /** The artifact compared with its kitVersion and catalogueVersion normalised (§5's catalogue bump moves every artifact's number). */
 const normArt = (a) => normSiblingIr(JSON.stringify(a ?? null)).replace(/"catalogueVersion":\d+/g, '"catalogueVersion":"*"');
 
-/** The base worktree (made at the merge base with origin/main when missing; an existing one is used as it stands). */
+/** The base worktree ../architect-mc-coA-base at the merge base of HEAD and origin/main (base-tree.mjs: the run's GATE_MERGE_BASE under gate-run). */
 export function baseTree(root) {
-  const dir = path.resolve(root, '..', 'architect-mc-coA-base');
-  if (!fs.existsSync(path.join(dir, '.git'))) {
-    const base = execFileSync('git', ['-C', root, 'merge-base', 'HEAD', 'origin/main']).toString().trim();
-    execFileSync('git', ['-C', root, 'worktree', 'add', '-q', '--detach', dir, base]);
-  }
-  return { dir, base: execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD']).toString().trim() };
+  return syncBaseTree(root, path.resolve(root, '..', 'architect-mc-coA-base'));
 }
 
 export async function unchanged(root, { check = null, log = console.log, only = null, moved = {} } = {}) {
