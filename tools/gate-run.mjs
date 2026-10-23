@@ -85,7 +85,7 @@ import { autoConfig, chooseShards, describeChoice, freePairs, probeMachine } fro
 import { autoFullWhy, cacheContext, coverageMode, fullTwins, judgedBenches, keyFor, lastNightly, lookup, lookupCoverage, manifestOf, record as recordPass } from './lib/step-cache.mjs';
 import { collect as collectCoverage, javaLogOption, snapshotStart } from './lib/step-coverage.mjs';
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
-import { entryOf, expandSplits, isPartId, parentOf, parentResults, validateSplits } from './lib/step-split.mjs';
+import { aggregateProblems, entryOf, expandSplits, isPartId, parentOf, parentResults, planOrder, validateSplits } from './lib/step-split.mjs';
 import { acquire as acquireMachine, chooseTurbo, describeQueue, describeTurbo, foldSamples, liveHolders, releaseAll, sampleMachine, turboConfig } from './lib/turbo.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -352,6 +352,12 @@ if (opt('--only')) {
   stepIds = cfg.chains[chainName] ? stepIds.filter((s) => only.includes(s)) : ORDER.filter((s) => only.includes(s));
 }
 if (opt('--from')) stepIds = stepIds.slice(Math.max(0, stepIds.indexOf(opt('--from'))));
+// a supersededBy drop stands for its step only where that step would have run: --only/--from narrow the map with the plan
+if (tierInfo.superseded && (opt('--only') || opt('--from'))) {
+  const only = opt('--only')?.split(',').map(parentOf);
+  const from = opt('--from') ? ORDER.indexOf(opt('--from')) : -1;
+  for (const s of Object.keys(tierInfo.superseded)) if ((only && !only.includes(s)) || (from >= 0 && ORDER.indexOf(s) < from)) delete tierInfo.superseded[s];
+}
 
 // turbo (docs/GATES.md "Turbo"): --turbo, or by default a tier run (change | slice | release) of at least shards.turbo.minSteps
 // steps; --no-turbo turns it off. A turbo run waits for the whole machine and holds it, runs up to shards.turbo.max in-game shards
@@ -362,6 +368,8 @@ const TURBO = !flag('--no-turbo') && (flag('--turbo') || (TIERS.includes(chainNa
 // every step whole. The selection above names parents only; the parts replace them here.
 const SPLIT = onlyParts.length > 0 || flag('--split') || (TURBO && !flag('--no-split'));
 let splitParts = {};
+// every split parent's configured part count (a parent with fewer parts in the run is PARTIAL)
+const splitTotals = () => Object.fromEntries(Object.keys(splitParts).map((k) => [k, cfg.steps[k]?.split?.parts?.length ?? splitParts[k].length]));
 if (SPLIT) {
   const x = expandSplits(cfg.steps, stepIds);
   Object.assign(cfg.steps, x.defs);
@@ -455,7 +463,15 @@ if (tierInfo.cache.lookup) {
     if (rot.length) {
       const s = rot[tierInfo.rotationKey % rot.length];
       canary.set(s, `canary: this release's big scenario (${rot.join(' / ')} rotate; key ${tierInfo.rotationKey})`);
-      if (!present(s)) want.add(s);
+      if (!present(s)) {
+        // a split canary added here runs as its parts in a run that splits, like any selected split step (2026-10-23)
+        if (SPLIT && cfg.steps[s]?.split) {
+          const x = expandSplits(cfg.steps, [s]);
+          Object.assign(cfg.steps, x.defs);
+          splitParts[s] = x.parts[s];
+          for (const id of x.ids) want.add(id);
+        } else want.add(s);
+      }
     }
     for (const s of tierInfo.rotation?.find((r) => r.name === c.crashRotation)?.ran ?? []) if (present(s)) canary.set(s, 'canary: this release\'s crash suite (the rotation)');
     if (c.judgedBenches) for (const s of want) if (JUDGED_BENCHES.has(parentOf(s))) canary.set(parentOf(s), 'canary: a bench whose timing is judged at release');
@@ -531,7 +547,13 @@ if (tierInfo.cache.lookup) {
       }
     }
   }
-  stepIds = ORDER.filter((s) => run.has(s));
+  // the plan in the canonical order, split parents as their parts (2026-10-23: ORDER alone holds no part ids, so this line
+  // dropped every part of every split step from turbo slices while their parents reported PASS over nothing)
+  const planned = planOrder(ORDER, cfg.steps, run, SPLIT);
+  stepIds = planned.ids;
+  const lost = planned.lost;
+  if (lost.length) die(`internal: the cache lookup would drop ${lost.join(', ')} from the plan (neither run nor CACHED)`);
+  tierInfo.cache.canariesDeclared = [...canary.keys()];
   tierInfo.cache.canaries = [...canary.keys()].filter((s) => [...run].some((x) => parentOf(x) === s));
   tierInfo.cached = [...cachedHits].map(([id, e]) => ({ id, key: e.key, at: e.at, head: e.head, run: e.run, log: e.log, evidence: e.evidence, tier: e.tier }));
   tierInfo.cache.nightly = nightly ? { startedAt: nightly.startedAt, head: nightly.head, run: nightly.run } : null;
@@ -984,7 +1006,7 @@ function printCache() {
 }
 
 function printPlan() {
-  { const hs = HOSTS.server.filter((id) => stepIds.includes(id)); console.log(`hosts: --host ${HOSTS.mode}; headless: ${hs.length ? hs.join(' ') : 'none'}`); }
+  { const hs = HOSTS.server.filter((id) => stepIds.some((x) => parentOf(x) === id)); console.log(`hosts: --host ${HOSTS.mode}; headless: ${hs.length ? hs.join(' ') : 'none'}`); }
   const head = git(SRC, 'rev-parse', '--short', 'HEAD');
   printSelection();
   console.log(`${tierInfo.kind === 'tier' ? 'tier' : 'chain'} ${chainName}: ${steps.length} steps, worst case ${fmtDur(totalTimeout * 60)} of step timeouts (+ client starts, ${cfg.clientStartMin} min cap each)`);
@@ -1031,6 +1053,10 @@ function printPlan() {
 
 if (!steps.length) {
   if (!PLAN && tierInfo.cached?.length) console.log('every selected step is CACHED: nothing to run');
+  // nothing runs: every split parent's parts must be CACHED with evidence (no vacuous PASS, 2026-10-23)
+  const bad = aggregateProblems({ rows: [], cached: tierInfo.cached ?? [], splitResults: parentResults(splitParts, [], tierInfo.cached ?? [], { total: splitTotals() }), partialOk: onlyParts.length > 0 })
+    .filter((p) => !p.startsWith('no step ran'));
+  if (!PLAN && bad.length) die(`nothing to run, but: ${bad.join('; ')}`);
   printSelection();
   console.log(`${chainName}: nothing to run (${tierInfo.kind === 'tier' ? 'the diff maps to no gate step' : 'empty selection'}).`);
   process.exit(0);
@@ -1114,11 +1140,12 @@ const summary = {
   shards: shards.map((s) => ({ k: s.k, runDir: s.RUN, ports: { sidecar: s.SIDECAR_PORT, dev: s.DEV_PORT }, evidence: path.relative(OUT, s.ev) || '.' })),
   tier: tierInfo.kind === 'tier' ? { name: tierInfo.tier, range: tierInfo.range ?? null, engine: tierInfo.engine, placement: tierInfo.placement, impact: tierInfo.impact ?? null,
     rotationKey: tierInfo.rotationKey ?? null, rotationSource: tierInfo.rotationSource ?? null, rotation: tierInfo.rotation ?? null, notes: tierInfo.notes } : null,
-  counts: {}, setup: null, slot: slotNote, shardsAuto: autoChoice ? (({ text, ...a }) => a)(autoChoice) : null, hosts: { mode: HOSTS.mode, server: HOSTS.server.filter((id) => stepIds.includes(id)) }, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
+  counts: {}, setup: null, slot: slotNote, shardsAuto: autoChoice ? (({ text, ...a }) => a)(autoChoice) : null, hosts: { mode: HOSTS.mode, server: HOSTS.server.filter((id) => stepIds.some((x) => parentOf(x) === id)) }, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
   cache: tierInfo.cache ?? null, cached: tierInfo.cached ?? [], inputsMisses: [],
   schedule: { order: 'longest first', historyRuns: HIST.runs, historyFile: HISTORY_FILE, benches: ISOLATE_BENCH ? 'isolated' : 'not isolated (timing recorded)', historyTimeouts: HIST_TIMEOUTS },
   steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin, effectiveTimeoutMin: s.effTimeoutMin, timeoutSource: s.timeoutSource, estimateMin: Math.round(est(s) * 10) / 10, ...(s.parentId ? { parent: s.parentId } : {}), ...(tierInfo.why?.[s.id] ? { why: tierInfo.why[s.id] } : {}) })),
   split: Object.keys(splitParts).length ? splitParts : null,
+  superseded: tierInfo.superseded && Object.keys(tierInfo.superseded).length ? tierInfo.superseded : null,
 };
 const MACHINE_LOG = path.join(OUT, 'machine.jsonl');
 const machineSamples = [];
@@ -1639,6 +1666,10 @@ function summaryMd() {
     lines.push('', '## Split steps (each part runs its share of the parent\'s assertions)', '', '| parent | parts | status | step time | wall (first start to last end) | ok/FAIL |', '|---|---|---|---|---|---|');
     for (const [p, r] of Object.entries(summary.splitResults)) lines.push(`| ${p} | ${r.parts.length} | ${r.status} | ${fmtDur(r.stepSeconds)} | ${r.wallSeconds != null ? fmtDur(r.wallSeconds) : '-'} | ${r.ok}/${r.fail} |`);
   }
+  if (summary.aggregateProblems?.length) {
+    lines.push('', `## Aggregate failures (${summary.aggregateProblems.length}): a split parent, supersededBy drop or canary without a real result`, '');
+    for (const p of summary.aggregateProblems) lines.push(`- ${p}`);
+  }
   const rec = summary.steps.filter((s) => s.timingRecorded?.length);
   if (rec.length) {
     lines.push('', '## Timing bars recorded, not judged (change/slice policy)', '',
@@ -1691,15 +1722,19 @@ function notify() {
 async function finish(state, error) {
   if (sampler) clearInterval(sampler);
   if (machineSamples.length) summary.machine = foldSamples(machineSamples);
-  if (summary.split) summary.splitResults = parentResults(summary.split, summary.steps);
   summary.state = state;
   if (error) summary.error = error;
   summary.endedAt = new Date().toISOString();
   summary.durationSeconds = (Date.now() - t0) / 1000;
   for (const s of summary.steps) if (['PENDING', 'RUNNING'].includes(s.status)) s.status = 'SKIPPED';
+  // the aggregates (split parents, supersededBy drops, canaries) rest on real results or the run fails (no vacuous PASS)
+  if (summary.split) summary.splitResults = parentResults(summary.split, summary.steps, summary.cached, { logExists: (l) => fs.existsSync(path.join(OUT, l)), total: splitTotals() });
+  summary.aggregateProblems = aggregateProblems({ rows: summary.steps, cached: summary.cached, splitResults: summary.splitResults ?? {}, superseded: summary.superseded ?? {},
+    canaries: summary.cache?.canariesDeclared ?? [], partialOk: onlyParts.length > 0 });
+  for (const p of summary.aggregateProblems) log(`AGGREGATE FAIL: ${p}`);
   writeSummary();
   const c = summary.counts;
-  const clean = state === 'done' && !error;
+  const clean = state === 'done' && !error && !summary.aggregateProblems.length;
   summary.verdict = clean && (c.PASS ?? 0) === summary.steps.length ? 'PASS'
     : clean && (c.PASS ?? 0) + (c.NOISY ?? 0) === summary.steps.length ? 'INCONCLUSIVE' : 'FAIL';
   writeSummary();
