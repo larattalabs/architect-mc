@@ -71,6 +71,7 @@
     "kit/test/forms-f3.test.mjs",
     "kit/test/forms-island.test.mjs",
     "kit/test/gate-benches.test.mjs",
+    "kit/test/gate-corpus-plan.test.mjs",
     "kit/test/gate-history.test.mjs",
     "kit/test/gate-split.test.mjs",
     "kit/test/gate-turbo.test.mjs",
@@ -366,6 +367,7 @@
     "kit/test/forms-f3.test.mjs",
     "kit/test/forms-island.test.mjs",
     "kit/test/gate-benches.test.mjs",
+    "kit/test/gate-corpus-plan.test.mjs",
     "kit/test/gate-history.test.mjs",
     "kit/test/gate-split.test.mjs",
     "kit/test/gate-turbo.test.mjs",
@@ -668,6 +670,10 @@
      "expr": "pathToFileURL(path.join(KIT, rel)).href)"
     },
     {
+     "from": "kit/test/gate-corpus-plan.test.mjs",
+     "expr": "pathToFileURL(path.join(ROOT, 'tools', 'lib', `${d}.mjs`)).href)"
+    },
+    {
      "from": "kit/test/districts-d2.test.mjs",
      "expr": "path.join(ROOT, 'tools', 'lib', 'd2-replay.mjs'))"
     },
@@ -927,6 +933,7 @@
     "kit/test/forms-f3.test.mjs",
     "kit/test/forms-island.test.mjs",
     "kit/test/gate-benches.test.mjs",
+    "kit/test/gate-corpus-plan.test.mjs",
     "kit/test/gate-history.test.mjs",
     "kit/test/gate-split.test.mjs",
     "kit/test/gate-turbo.test.mjs",
@@ -11032,11 +11039,15 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate6crs-kit.mjs",
     "tools/lib/p3-tier.mjs",
@@ -11061,6 +11072,14 @@
     {
      "from": "tools/gate6crs.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -11081,6 +11100,9 @@
     "GATE6CRS_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -11100,6 +11122,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -11273,11 +11296,15 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate6crs-kit.mjs",
     "tools/lib/p3-tier.mjs",
@@ -11302,6 +11329,14 @@
     {
      "from": "tools/gate6crs.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -11322,6 +11357,9 @@
     "GATE6CRS_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -11341,6 +11379,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -11514,11 +11553,15 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate6crs-kit.mjs",
     "tools/lib/p3-tier.mjs",
@@ -11543,6 +11586,14 @@
     {
      "from": "tools/gate6crs.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -11563,6 +11614,9 @@
     "GATE6CRS_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -11582,6 +11636,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -11756,11 +11811,15 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate6crs-kit.mjs",
     "tools/lib/p3-tier.mjs",
@@ -11785,6 +11844,14 @@
     {
      "from": "tools/gate6crs.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -11805,6 +11872,9 @@
     "GATE6CRS_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -11824,6 +11894,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -11997,11 +12068,15 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate6crs-kit.mjs",
     "tools/lib/p3-tier.mjs",
@@ -12026,6 +12101,14 @@
     {
      "from": "tools/gate6crs.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -12046,6 +12129,9 @@
     "GATE6CRS_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -12065,6 +12151,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -12237,11 +12324,17 @@
     "tools/gate-chains.json",
     "tools/gate6crsb.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate6crsb-game.mjs",
     "tools/lib/p3-tier.mjs",
@@ -12265,6 +12358,14 @@
     {
      "from": "tools/gate6crsb.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -12282,7 +12383,11 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CRSB_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GATE_SLOTS",
     "GATE_SLOTS_DIR",
     "GRADLE_USER_HOME",
@@ -12294,7 +12399,9 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -12459,11 +12566,17 @@
     "tools/gate-chains.json",
     "tools/gate6crsb.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate6crsb-game.mjs",
     "tools/lib/p3-tier.mjs",
@@ -12487,6 +12600,14 @@
     {
      "from": "tools/gate6crsb.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -12504,7 +12625,11 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CRSB_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GATE_SLOTS",
     "GATE_SLOTS_DIR",
     "GRADLE_USER_HOME",
@@ -12516,7 +12641,9 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -20637,12 +20764,16 @@
     "tools/gate6cvoc.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -20708,6 +20839,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -20724,6 +20863,9 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "JAVA",
     "JAVA_HOME",
     "PATH",
@@ -20733,6 +20875,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -20957,12 +21100,16 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -21033,6 +21180,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -21056,6 +21211,9 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -21067,6 +21225,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -21285,12 +21444,16 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -21361,6 +21524,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -21384,6 +21555,9 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -21395,6 +21569,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -21613,12 +21788,16 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -21689,6 +21868,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -21712,6 +21899,9 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -21723,6 +21913,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -21941,12 +22132,16 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -22017,6 +22212,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -22040,6 +22243,9 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -22051,6 +22257,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -22269,12 +22476,16 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -22345,6 +22556,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -22368,6 +22587,9 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -22379,6 +22601,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -22592,12 +22815,16 @@
     "tools/gate6cvoc.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -22663,6 +22890,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -22679,6 +22914,9 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "JAVA",
     "JAVA_HOME",
     "PATH",
@@ -22688,6 +22926,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -22908,12 +23147,16 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -22984,6 +23227,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -23007,6 +23258,9 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -23018,6 +23272,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -23236,12 +23491,16 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -23312,6 +23571,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -23335,6 +23602,9 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -23346,6 +23616,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -26454,7 +26725,11 @@
     "tools/api-compat.mjs",
     "tools/catalogue-since-check.mjs",
     "tools/gate6chy.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -26463,6 +26738,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -26527,6 +26803,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -26544,7 +26828,11 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -26556,7 +26844,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -27132,6 +27422,9 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -27181,6 +27474,14 @@
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
     },
     {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
+    },
+    {
      "from": "kit/lib/components.mjs",
      "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
     },
@@ -27211,10 +27512,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -27238,6 +27535,9 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -27842,7 +28142,11 @@
     "tools/gate6b.mjs",
     "tools/gate6chy.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -27851,6 +28155,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -27920,6 +28225,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -27944,7 +28257,11 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -27958,7 +28275,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -28182,7 +28501,11 @@
     "tools/gate6b.mjs",
     "tools/gate6chy.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -28191,6 +28514,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -28260,6 +28584,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -28284,7 +28616,11 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -28298,7 +28634,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -28521,7 +28859,11 @@
     "tools/gate6b.mjs",
     "tools/gate6chy.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -28530,6 +28872,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -28599,6 +28942,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -28623,7 +28974,11 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -28637,7 +28992,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -28860,7 +29217,11 @@
     "tools/gate6b.mjs",
     "tools/gate6chy.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -28869,6 +29230,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -28938,6 +29300,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -28962,7 +29332,11 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -28976,7 +29350,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -29173,6 +29549,9 @@
     "tools/gate6ckc.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -29242,8 +29621,12 @@
      "expr": "pathToFileURL(file).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -29260,6 +29643,9 @@
     "GATE6CKC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -29460,6 +29846,9 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -29534,8 +29923,12 @@
      "expr": "pathToFileURL(file).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -29559,6 +29952,9 @@
     "GATE6CKC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -29772,6 +30168,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -29821,6 +30220,14 @@
      "expr": "pathToFileURL(coralLib).href)).coralItems(ctx)"
     },
     {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
+    },
+    {
      "from": "kit/lib/components.mjs",
      "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
     },
@@ -29847,10 +30254,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -29868,6 +30271,9 @@
     "GATE6CF3_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -30084,6 +30490,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -30138,6 +30547,14 @@
      "expr": "pathToFileURL(coralLib).href)).coralItems(ctx)"
     },
     {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
+    },
+    {
      "from": "kit/lib/components.mjs",
      "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
     },
@@ -30164,10 +30581,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -30192,6 +30605,9 @@
     "GATE6CF3_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -30415,6 +30831,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -30469,6 +30888,14 @@
      "expr": "pathToFileURL(coralLib).href)).coralItems(ctx)"
     },
     {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
+    },
+    {
      "from": "kit/lib/components.mjs",
      "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
     },
@@ -30495,10 +30922,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -30523,6 +30946,9 @@
     "GATE6CF3_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -30741,6 +31167,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -30790,6 +31219,14 @@
      "expr": "pathToFileURL(coralLib).href)).coralItems(ctx)"
     },
     {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
+    },
+    {
      "from": "kit/lib/components.mjs",
      "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
     },
@@ -30816,10 +31253,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -30837,6 +31270,9 @@
     "GATE6CF3_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -31053,6 +31489,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -31107,6 +31546,14 @@
      "expr": "pathToFileURL(coralLib).href)).coralItems(ctx)"
     },
     {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
+    },
+    {
      "from": "kit/lib/components.mjs",
      "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
     },
@@ -31133,10 +31580,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -31161,6 +31604,9 @@
     "GATE6CF3_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -31386,6 +31832,9 @@
     "tools/gate6cirr.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -31430,6 +31879,14 @@
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
     },
     {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
+    },
+    {
      "from": "kit/lib/components.mjs",
      "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
     },
@@ -31460,10 +31917,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -31480,6 +31933,9 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -31712,6 +32168,9 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -31761,6 +32220,14 @@
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
     },
     {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
+    },
+    {
      "from": "kit/lib/components.mjs",
      "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
     },
@@ -31791,10 +32258,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -31818,6 +32281,9 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -32058,6 +32524,9 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -32107,6 +32576,14 @@
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
     },
     {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
+    },
+    {
      "from": "kit/lib/components.mjs",
      "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
     },
@@ -32137,10 +32614,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -32164,6 +32637,9 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -32403,6 +32879,9 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -32452,6 +32931,14 @@
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
     },
     {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
+    },
+    {
      "from": "kit/lib/components.mjs",
      "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
     },
@@ -32482,10 +32969,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -32509,6 +32992,9 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -32727,6 +33213,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -32800,8 +33289,12 @@
      "expr": "pathToFileURL(file).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -32818,6 +33311,9 @@
     "GATE6CFL_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -33033,6 +33529,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -33111,8 +33610,12 @@
      "expr": "pathToFileURL(file).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -33136,6 +33639,9 @@
     "GATE6CFL_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -33351,6 +33857,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -33429,8 +33938,12 @@
      "expr": "pathToFileURL(file).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -33454,6 +33967,9 @@
     "GATE6CFL_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -33669,6 +34185,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -33747,8 +34266,12 @@
      "expr": "pathToFileURL(file).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -33772,6 +34295,9 @@
     "GATE6CFL_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -35256,7 +35782,11 @@
     "tools/gate6b.mjs",
     "tools/gate6chy.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -35265,6 +35795,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -35334,6 +35865,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -35358,7 +35897,11 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -35372,7 +35915,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -35595,7 +36140,11 @@
     "tools/gate6b.mjs",
     "tools/gate6chy.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -35604,6 +36153,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -35673,6 +36223,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -35697,7 +36255,11 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -35711,7 +36273,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -35934,7 +36498,11 @@
     "tools/gate6b.mjs",
     "tools/gate6chy.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -35943,6 +36511,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -36012,6 +36581,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -36036,7 +36613,11 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -36050,7 +36631,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -36269,6 +36852,9 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -36318,6 +36904,14 @@
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
     },
     {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
+    },
+    {
      "from": "kit/lib/components.mjs",
      "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
     },
@@ -36348,10 +36942,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -36375,6 +36965,9 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -36597,6 +37190,9 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -36671,8 +37267,12 @@
      "expr": "pathToFileURL(file).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -36696,6 +37296,9 @@
     "GATE6CKC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -36921,12 +37524,16 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -36997,6 +37604,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -37020,6 +37635,9 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -37031,6 +37649,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -37407,7 +38026,11 @@
     "tools/gate6b.mjs",
     "tools/gate6chy.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -37416,6 +38039,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -37485,6 +38109,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -37509,7 +38141,11 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -37523,7 +38159,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -38028,6 +38666,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/d2-replay.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -38114,8 +38755,12 @@
      "expr": "pathToFileURL(path.join(root, 'kit', p)).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -38136,6 +38781,9 @@
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -38368,6 +39016,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/d2-replay.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -38459,8 +39110,12 @@
      "expr": "pathToFileURL(path.join(root, 'kit', p)).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -38488,6 +39143,9 @@
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -49366,6 +50024,9 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -49373,6 +50034,7 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6ch-core.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -49462,6 +50124,14 @@
      "expr": "`data:text/javascript"
     },
     {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
+    },
+    {
      "from": "tools/gate6ct3a.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
     },
@@ -49498,6 +50168,9 @@
     "GATE_MERGE_BASE",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -49518,6 +50191,7 @@
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
