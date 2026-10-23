@@ -109,7 +109,8 @@ export function walkGraph(vw, starts, { mover = 'player', reach = false } = {}) 
     return !V && P.water[f] && P.air[a]; // swimming on the surface (the player only)
   };
   const stands = (x, z) => {
-    const k = vw.inClaim(x, z) ? (x - c.minX) + (z - c.minZ) * vw.W : `${x},${z}`;
+    // (a reach column outside the claim keys apart; without `reach` the key is main's, so a plan without a reach reads the same)
+    const k = reach && !vw.inClaim(x, z) ? `${x},${z}` : (x - c.minX) + (z - c.minZ) * vw.W;
     let l = cache.get(k);
     if (l) return l;
     const [lo, hi] = vw.colRange(x, z);
@@ -1014,7 +1015,8 @@ export function routeRules({ ir, vw, route, want, findings, metrics, partStage, 
   };
   const per = [];
   let unP = [], unV = [], ladV = [], gradeBad = [], windows = 0, bad = 0, maxRise = 0;
-  const stands = (graph ?? reach(ir.anchors?.entrance ?? [0, 0, 0], 'player')).stands;
+  // ((6c D3) a reach plan grades its join over the reach-aware graph's columns; any other plan as before)
+  const stands = (ir.reach ? reach(ir.anchors?.entrance ?? [0, 0, 0], 'player') : graph ?? reach(ir.anchors?.entrance ?? [0, 0, 0], 'player')).stands;
   for (const e of route.edges ?? []) {
     if (!e.ok) { per.push({ id: e.id, ok: false, failed: e.failed }); continue; }
     const a = e.path[0], b = e.path[e.path.length - 1];

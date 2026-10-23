@@ -909,8 +909,8 @@ steps.natural = async () => {
   const out = {};
   await L.fresh('G6B D3 Natural', await L.seedBase('2026100906'));
   await cmd('/op @s');
-  // S3's pinned claim [3604, -1036, 3795, -845]: a V town in its south-west, a district east of it joined through its claim (a shore
-  // district along the river first; a plain district when no shore street routes there: recorded)
+  // S3's pinned claim [3604, -1036, 3795, -845]: a V town in its south-west, a shore district east of it along the river, joined
+  // through the town's claim
   const A = [3604, -956, 3699, -861];
   const all = [A[0] - 8, -64, A[1] - 8, 3795 + 8, 260, -845 + 8];
   await tp(3700, 140, -900);
@@ -924,13 +924,14 @@ steps.natural = async () => {
   const rt = await L.realise(pa.planId, { lots: {} });
   await L.waitRegion(rt, 3_600_000);
   const B = [3700, -930, 3795, -845];
-  let p = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'quay', size: [80, 20], lots: 2, follow: { shore: {} } }] } }, claim: B, beside: rt, check: false });
-  out.shore = p.refused ?? 'planned';
-  if (p.refused) p = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'east', size: [40, 40], lots: 3 }] } }, claim: B, beside: rt, check: false });
-  if (p.refused) throw new Error(`the natural district refused: ${p.refused}`);
+  // (D2's quay round on this claim: 64 x 24, minArea 64, two 7 x 7 cottages)
+  const quay = { id: 'quay', size: [64, 24], follow: { shore: { minArea: 64 } }, lots: [1, 2].map((i) => ({ id: `quay_${i}`, type: 'cottage', size: [7, 7] })) };
+  const p = await planReq({ program: 'districts', params: { spec: { districts: [quay] } }, claim: B, beside: rt, check: false });
+  if (p.refused) throw new Error(`item 15's shore district refused: ${p.refused}`);
   const f = planFiles(p.planId);
   out.join = f.meta.districts.join;
-  check(f.meta.districts.join?.step === 'reach', `item 15: the district beside the natural town joined through its claim (${json(out.join?.junction)}; a shore district: ${out.shore})`);
+  out.shore = { street: (f.meta.districts.follow?.quay?.street ?? []).length };
+  check(f.meta.districts.join?.step === 'reach' && out.shore.street > 0, `item 15: a shore district beside the natural town, joined through its claim (${json(out.join?.junction)}; its shore street ${out.shore.street} cells)`);
   const rd = await L.realise(p.planId, { lots: {} });
   const sd = await L.waitRegion(rd, 3_600_000);
   check(sd.view.state === 'PLACED', `item 15: the district ${rd} PLACED`);

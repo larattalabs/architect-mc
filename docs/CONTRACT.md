@@ -24092,8 +24092,10 @@ Built against the frozen D3 section above, with Steward's review and the coordin
 - **Checker**: `M28:beside` (`kit/lib/region/checkBeside.mjs`) and `M25:clear` over the town's bodies, named `<town>:<id>`.
   - M1 lets `route_join`'s paths leave the claim.
   - M2's route metric walks the join into its reach: the virtual world carries the reach columns as a walk area
-    (`VWorld.setReach`/`inWalk`), read only by the route metric's graph (`walkGraph(..., {reach: true})`). Every other rule keeps
-    to the claim, and a seam-step plan has no reach, so its report is unchanged.
+    (`VWorld.setReach`/`inWalk`), read only by the route metric's graphs (`walkGraph(..., {reach: true})`, also its grade). Every
+    other rule keeps to the claim. Without `reach` the walk graph is main's code path (same cache key, same area), and VWorld's
+    reach columns exist only for an IR with `reach`, so a seam-step plan's report is unchanged by construction. The unit test fails
+    without the fix (`player: false` on the join).
   - M5 over the join's walk cells in the town (`metrics.M28.M5reach`).
   - The four broken variants (`spec._unsafe`): `ignoreHeld`, `writeVerge`, `wideReach` and `noHold`, each caught in the unit tests.
 - **The land** (`kit/lib/region/land.mjs` and `region/DistrictLand.java`): equal on the parity fixture
