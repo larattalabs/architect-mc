@@ -273,25 +273,37 @@ public final class Roads {
 
 	/**
 	 * (6c close-out B) A road that writes no cell is a no-op of its own region, not a failure, only when every column it would write is
-	 * owned by an entry of its own site group ({@code ownGroup}: a region's targets, lots or tiles) and nothing else stopped a column (no
-	 * skipped span: protected, a player's build, too steep; no column skipped as blocked, kept, water, steep or ore; only lanterns
-	 * without room may be left out). Returns those columns' cells per owning site, or null (a failure, as before). Pure.
+	 * owned by an entry of its own site group ({@code ownGroup}: a region's targets, lots or tiles) and nothing else stopped a column: no
+	 * skipped span (protected, a player's build, too steep); a column skipped as blocked or kept only when every built cell in it is a
+	 * site's (RoadPlan.builtOwners), those sites its group's too; none skipped as water, steep or ore (lanterns without room may be). Returns those columns' cells per owning site, or null (a failure, as before). Pure.
 	 */
 	public static @Nullable Map<String, Integer> heldByOwn(RoadPlan.Plan plan, @Nullable String ownGroup, java.util.function.Function<String, @Nullable String> groupOf) {
-		if (ownGroup == null || plan.refused() || plan.ownedBy().isEmpty() || !plan.spans().isEmpty() || !plan.ops().isEmpty()) {
+		if (ownGroup == null || plan.refused() || !plan.spans().isEmpty() || !plan.ops().isEmpty()) {
 			return null;
 		}
-		for (String k : plan.skipped().keySet()) {
-			if (!k.equals("lantern")) {
+		// a column stopped (blocked, kept) counts only when every built cell in it is a site's (RoadPlan.builtOwners)
+		int stopped = 0;
+		for (var e : plan.skipped().entrySet()) {
+			if (e.getKey().equals("blocked") || e.getKey().equals("kept")) {
+				stopped += e.getValue();
+			} else if (!e.getKey().equals("lantern")) {
 				return null;
 			}
 		}
-		for (String site : plan.ownedBy().keySet()) {
+		if (stopped != plan.blockedHeld()) {
+			return null;
+		}
+		Map<String, Integer> held = new java.util.TreeMap<>(plan.ownedBy());
+		plan.blockedBy().forEach((site, n) -> held.merge(site, n, Integer::sum));
+		if (held.isEmpty()) {
+			return null;
+		}
+		for (String site : held.keySet()) {
 			if (!ownGroup.equals(groupOf.apply(site))) {
 				return null;
 			}
 		}
-		return Map.copyOf(plan.ownedBy());
+		return Map.copyOf(held);
 	}
 
 	/** 6c W: the site group a site or cell site (a region tile) belongs to, or null. */

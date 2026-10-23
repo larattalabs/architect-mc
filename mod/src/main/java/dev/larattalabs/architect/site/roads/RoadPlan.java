@@ -176,10 +176,15 @@ public final class RoadPlan {
 	 * @param ownedBy columns left as they are per owning site
 	 */
 	public record Plan(List<Op> ops, List<Cell> cells, @Nullable String refusal, @Nullable String reason, Map<String, Integer> skipped,
-		Map<String, Integer> ownedBy, int centre, int[] lanterns, List<Span> spans) {
+		Map<String, Integer> ownedBy, int centre, int[] lanterns, List<Span> spans, Map<String, Integer> blockedBy, int blockedHeld) {
 		public Plan(List<Op> ops, List<Cell> cells, @Nullable String refusal, @Nullable String reason, Map<String, Integer> skipped,
 			Map<String, Integer> ownedBy, int centre, int[] lanterns) {
 			this(ops, cells, refusal, reason, skipped, ownedBy, centre, lanterns, List.of());
+		}
+
+		public Plan(List<Op> ops, List<Cell> cells, @Nullable String refusal, @Nullable String reason, Map<String, Integer> skipped,
+			Map<String, Integer> ownedBy, int centre, int[] lanterns, List<Span> spans) {
+			this(ops, cells, refusal, reason, skipped, ownedBy, centre, lanterns, spans, Map.of(), 0);
 		}
 
 		public List<String> notes() {
@@ -423,6 +428,8 @@ public final class RoadPlan {
 		boolean partial, @Nullable OwnFoot ownFoot, @Nullable Lamp lamp, @Nullable BuildAt builds) {
 		Map<String, Integer> skipped = new LinkedHashMap<>();
 		Map<String, Integer> ownedBy = new LinkedHashMap<>();
+		Map<String, Integer> blockedBy = new LinkedHashMap<>();
+		int blockedHeld = 0;
 		if (xs.length < 2 || xs.length > MAX_POINTS) {
 			return refused("a road takes 2-" + MAX_POINTS + " points (got " + xs.length + ")", "OTHER");
 		}
@@ -687,6 +694,13 @@ public final class RoadPlan {
 				} else {
 					bump(skipped, "blocked");
 				}
+				// (6c close-out B) whose built cells stopped it: when every built cell of the column's range is a site's, counted per site
+				// (Roads.heldByOwn: a road whose columns its own region holds is a no-op, not a failure); the skip itself is unchanged
+				Map<String, Integer> by = builtOwners(c, w, owned);
+				if (by != null) {
+					by.forEach((site, cnt) -> blockedBy.merge(site, cnt, Integer::sum));
+					blockedHeld++;
+				}
 				continue;
 			}
 			String site = null;
@@ -708,7 +722,32 @@ public final class RoadPlan {
 			lanterns(line, t, keep, width, accepted, w, owned, protect, ownFoot, lamp, ops, lan, skipped);
 		}
 		int[] la = lan.stream().mapToInt(Integer::intValue).toArray();
-		return new Plan(List.copyOf(ops), List.copyOf(cells), null, null, skipped, ownedBy, n, la, List.copyOf(spans));
+		return new Plan(List.copyOf(ops), List.copyOf(cells), null, null, skipped, ownedBy, n, la, List.copyOf(spans), Map.copyOf(blockedBy), blockedHeld);
+	}
+
+	/**
+	 * (6c close-out B) The sites whose cells are the built cells (BUILT, BUILT_OPEN) of a stopped column's range (one under the lower of its
+	 * feet and old ground, to its headroom), counted per site; null when the range holds no built cell or any built cell no site owns
+	 * (a player's block, a natural log or ore is never a site's). Pure.
+	 */
+	static @Nullable Map<String, Integer> builtOwners(Col c, World w, Owned owned) {
+		int y0 = Math.min(c.feet, c.groundFeet) - 1, y1 = Math.max(c.feet, c.groundFeet) + HEADROOM;
+		Map<String, Integer> by = new java.util.TreeMap<>();
+		for (int y = y0; y <= y1; y++) {
+			int k = w.at(c.x, y, c.z);
+			if (k != BUILT && k != BUILT_OPEN) {
+				if (k == AIR || ground(k) || open(k) || clearable(k)) {
+					continue;
+				}
+				return null; // a log, ore or another block no site owns stopped it too
+			}
+			String site = owned.at(c.x, y, c.z);
+			if (site == null) {
+				return null;
+			}
+			by.merge(site, 1, Integer::sum);
+		}
+		return by.isEmpty() ? null : by;
 	}
 
 	private static long key(int x, int z) {
