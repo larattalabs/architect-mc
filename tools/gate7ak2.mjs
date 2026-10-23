@@ -599,10 +599,11 @@ async function lookRound(out, dir, tag, plan, claim, bible, from = BASE, site = 
   check(st.view.state === 'PLACED', `look (${tag}): realised (${st.view.cellsWritten} cells)`);
   await L.settle(5000);
   o.after = await shoot(cams, path.join(dir, tag, 'after'));
-  // (the coordinator's ask) the walk at dusk: its lamps lit
+  // (the coordinator's ask) the walk at night: its lamps lit
   if (cams.cam_walk || cams.cam_access) {
-    await cmd('/time set 13000');
-    await L.settle(3000);
+    // (night: the lamps' light the only light; 13000 still reads as day in the shots)
+    await cmd('/time set 18000');
+    await L.settle(5000);
     o.dusk = await shoot(Object.fromEntries(Object.entries(cams).filter(([k]) => ['cam_walk', 'cam_access', 'cam_high'].includes(k))), path.join(dir, tag, 'dusk'));
     await cmd('/time set 6000');
   }
