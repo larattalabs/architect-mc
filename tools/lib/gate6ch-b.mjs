@@ -25,6 +25,7 @@
 // Run H-b's items on their own: `node tools/gate6chb.mjs <step> [item ...]` (the same context; the verifier's re-runs of the undo
 // and villager items: ingame, natural, cold). Through `node tools/gate6ch.mjs <step>` they run after H-core's and H-a's items.
 import fs from 'node:fs';
+import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { kitReuse } from './kit-reuse.mjs';
@@ -60,7 +61,7 @@ async function hbAsks(ctx) {
   const s = H.asksSurvey();
   const out = { plans: 0, wet: [], water: [] };
   for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) {
-    const plan = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')).answer.plan;
+    const plan = JSON.parse(fs.readFileSync(firstAsk(dir, f), 'utf8')).answer.plan; // ((6c close-out A) the first recordings)
     const r = await H.checkPlanVolumes(plan, { survey: s.bytes, claim: s.claim, anchors: H.stewardAnchors(s.claim), volume: {} });
     out.plans++;
     if ((r.first.res.meta?.wet ?? []).length) out.wet.push(f);

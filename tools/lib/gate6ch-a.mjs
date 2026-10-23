@@ -27,9 +27,10 @@
 //
 // Run H-a's items on their own: `node tools/gate6cha.mjs <step> [item ...]`.
 import fs from 'node:fs';
+import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson, flAsksFilter } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import { kitReuse } from './kit-reuse.mjs';
 import * as P3 from './p3-tier.mjs';
 
@@ -120,7 +121,7 @@ async function haAsks(ctx) {
   const tally = {}, gaps = {}, classes = [];
   let malformed = 0, untilH = 0;
   for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) {
-    const plan = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')).answer.plan;
+    const plan = JSON.parse(fs.readFileSync(firstAsk(dir, f), 'utf8')).answer.plan; // ((6c close-out A) the first recordings)
     const r = await H.checkPlanVolumes(plan, { survey: s.bytes, claim: s.claim, anchors: H.stewardAnchors(s.claim), volume: {} });
     for (const a of r.check.parts) {
       tally[a.class] = (tally[a.class] ?? 0) + 1;
@@ -135,10 +136,13 @@ async function haAsks(ctx) {
   fs.writeFileSync(path.join(ctx.OUT, 'ha-asks-gap.txt'), text);
   const committed = fs.readFileSync(path.join(ctx.KIT, 'test', 'fixtures', 'plan', 'h', 'asks-gap-after-ha.txt'), 'utf8');
   const before = fs.readFileSync(path.join(ctx.KIT, 'test', 'fixtures', 'plan', 'h', 'asks-gap-before.txt'), 'utf8');
-  const lines = (t) => new Map(t.split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/')).map((l) => [l.split(' ')[0], l]));
+  // ((6c close-out A, PLAN "Stale asks tables after VOC-c") what later slices moved is theirs: VOC-c's palette rules (its item 3) and FL's five
+  // free asks with the free-layout rows (its item 8), compared without them, as KC's and HY-b's asks items do)
+  const later = (t) => flAsksFilter(t).split('\n').filter((l) => !/rule\.palette/.test(l)).join('\n');
+  const lines = (t) => new Map(later(t).split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/')).map((l) => [l.split(' ')[0], l]));
   const lb = lines(before), la = lines(text);
   const moved = [...la].filter(([k, v]) => lb.get(k) !== v).map(([k]) => k).sort();
-  ctx.check(text === committed && malformed === 0 && untilH === 0 && j(moved) === j(['hidden_village/waterfall_curtain', 'redstone_gate/moat']), `item 10 (H-a): the 59 asks' gap table equals fixtures/plan/h/asks-gap-after-ha.txt (form.waterfall 1 -> 0, connector.channel 1 -> 0 from v0.36.0's); ${malformed} malformed, ${untilH} until H; the parts whose class moved: ${moved.join(', ')}`);
+  ctx.check(later(text) === later(committed) && malformed === 0 && untilH === 0 && j(moved) === j(['hidden_village/waterfall_curtain', 'redstone_gate/moat']), `item 10 (H-a): the 59 asks' gap table equals fixtures/plan/h/asks-gap-after-ha.txt but VOC-c's palette rules and FL's free asks (form.waterfall 1 -> 0, connector.channel 1 -> 0 from v0.36.0's); ${malformed} malformed, ${untilH} until H; the parts whose class moved: ${moved.join(', ')}`);
   return { tally, moved };
 }
 

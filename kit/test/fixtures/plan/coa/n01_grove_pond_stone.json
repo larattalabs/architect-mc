@@ -1,0 +1,108 @@
+{
+ "about": "(close-out A §7, gate item 7) Steward's F3 RC case: steward-mc fixtures/plans/grove_pond.json (read-only, copied whole) with its pond near the stone within 40 (beside the town's lots) on the asks claim. Main refuses the pond LEAK (its first site's reach meets lot cottage_1) and blocks the reef; here the pond moves to the first ranked site clear of the town and its lots: adjusted (move), 0 LEAK, the reef grown in it",
+ "on": "asks",
+ "source": {
+  "repo": "steward-mc",
+  "commit": "0efca7e",
+  "file": "fixtures/plans/grove_pond.json",
+  "change": "forms[pond].where = {near: {anchor: stone, within: 40}}"
+ },
+ "prompt": "A small farming hamlet whose farm has a little pond (H, farmPond).",
+ "answer": {
+  "plan": {
+   "schemaVersion": "plan/0",
+   "planId": "grove_pond",
+   "style": {
+    "pending": "farm_hamlet"
+   },
+   "zones": [
+    {
+     "id": "town",
+     "kind": "standard",
+     "required": true,
+     "label": "the hamlet",
+     "farmPond": true,
+     "program": {
+      "template": "flat_village",
+      "params": {
+       "lots": [
+        {
+         "id": "farm_1",
+         "type": "farm",
+         "role": "farm",
+         "label": "a wheat farm",
+         "size": [
+          13,
+          14
+         ]
+        },
+        {
+         "id": "cottage_1",
+         "type": "cottage",
+         "role": "cottage",
+         "label": "a farmer's cottage",
+         "size": [
+          13,
+          14
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "forms": [
+    {
+     "id": "great_oak",
+     "kind": "giant_tree",
+     "preset": "oak",
+     "required": true,
+     "label": "the great oak",
+     "where": {
+      "near": {
+       "anchor": "stone",
+       "within": 40
+      }
+     },
+     "height": [
+      40,
+      48
+     ]
+    },
+    {
+     "id": "pond",
+     "kind": "pond",
+     "required": true,
+     "label": "the village pond",
+     "where": {
+      "near": {
+       "anchor": "stone",
+       "within": 40
+      }
+     },
+     "size": {
+      "w": 11,
+      "d": 9
+     },
+     "depth": 3,
+     "edge": "built"
+    },
+    {
+     "id": "reef",
+     "kind": "coral",
+     "required": false,
+     "label": "coral in the pond",
+     "where": {
+      "inside": {
+       "part": "pond"
+      }
+     },
+     "count": 3,
+     "cover": 0.4
+    }
+   ]
+  },
+  "waits": [],
+  "summary": "A hamlet under a great oak, with a village pond grown with coral."
+ }
+}

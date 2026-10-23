@@ -1056,6 +1056,16 @@ Top first. Not fixed in v0.40.1.
 - **The P3 cutover for RS's rows** (rs `-smoke` twins) was not done in the batch. **Done in close-out B:** `rs-survival-smoke` (SMOKE
   only: the ledger lint doesn't model region targets; docs/FAST-CHECKS.md "P3 cutover").
 
+## Queued from close-out A (builder, 2026-10-22)
+
+- **Retire `kit/test/fixtures/plan/asks-8703dbd/`.** It holds Steward's first recordings of the 12 asks re-recorded at steward-mc 0c8f4a8.
+  The slices before close-out A still judge those plans; the readers are listed in its README.
+  - Re-cut those slices' committed asks tables and test expectations to the new recordings: K1a item 7, K1b, T3a §9, T3b §9, VOC-c
+    items 1 and 3, H-a item 10, and the HY-b/KC/F3/S3/RS/FL asks items.
+  - Then drop `asksFirstPath`, `tools/lib/asks-first.mjs` and the `current` option of `asksGap`, and remove the directory.
+- **§5 left over:** the "no X" re-plan still swaps materials in parts that `exempt: [ways, forms]` leaves out of the measure. A shared
+  green (`_green`) isn't classed as `ways`.
+
 ## Queued from the split false-PASS fix (coordinator, 2026-10-23)
 
 - **4d-all split into parts fails group undo; whole it passes.** fix/split-false-pass's proof run
@@ -1087,11 +1097,21 @@ Top first. Not fixed in v0.40.1.
   tools/scenarios.mjs excuses the flat run's exactness row when E-flat is 0, so the flat run reports 0 failures. Print it as
   recorded on the flat variant, so nobody reads it as the step's failure.
 
+## Queued from the v0.42.0 release (integration, 2026-10-23)
+
+- **pt-ingame item 15, the classifier's per-tick CPU bar (1 ms).** It missed in the release run (1.02 ms) and on a quiet re-run
+  (1.30 ms, load 2.6), and in at least 15 slice runs since 2026-10-20 (1.01-2.34 ms), where timing is recorded, not judged. Profile the
+  classifier's warm path, or re-set the budget with Noah.
+- **Run worktrees keep their design library between runs.** Shard 1 (`architect-mc-gate-run`) held a leftover `adopted_057fbe3f`, which
+  is how 6b-commands found the fill bug fixed in 0.42.0. Decide whether a run resets the library, or keep it as a free cross-step
+  check; a driver that assumes a clean library can read the wrong entry first.
+- **Benches and quiet-wait while other sessions run outside the gate slots.** Kit suites run directly (not through gate-run) don't
+  take a slot, so a turbo run's isolated benches waited up to 30 min each for quiet; mp-ingame ran NOISY. Either have agents run
+  suites through gate-run or count them in the quiet-wait.
+
 ## Queued from slice D3 (builder, 2026-10-23)
 
 - **Reach as a list (coordinator's ruling, D3).** plan/0's `endpoint.region` allows one standing region's reach per check; a second
   that needs the reach answers `NO_FEATURE {why: reach, kind: second}` (CONTRACT D3 §8 allows 2). The IR's `reach` is one member;
   making it a list touches the evaluator (`compileReach`), M28:beside, the land, the mod's re-check, TileCheck, Drift and Prepare.
-- **`Regions.discardPlan` and the world-start plan sweep** (CONTRACT D3 §7.3, proposed there): the dry beside check removes the
-  reason to make throwaway plans, but every `Regions.plan` is still kept forever.
 - **A T on a diagonal or turning street** (D3's deferred list): side junctions only on axis-aligned runs of 9+ cells today.

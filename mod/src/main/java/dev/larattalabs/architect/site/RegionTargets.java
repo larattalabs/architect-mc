@@ -1545,7 +1545,9 @@ public final class RegionTargets {
 			if (!earlier || !meets(t.box(), roi)) {
 				continue;
 			}
-			waitOn(b, i, t.id(), is(t) ? partOf(t) : "road " + t.id());
+			// (Steward's RC finding 3) a road by its IR road id (its item key road:<id>), never the construction road's own id
+			String rk = tm == null ? null : tm.itemKey();
+			waitOn(b, i, t.id(), is(t) ? partOf(t) : "road " + (rk != null && rk.startsWith("road:") ? rk.substring(5) : t.id()));
 			return true;
 		}
 		if (fluids) {
@@ -1558,19 +1560,81 @@ public final class RegionTargets {
 		}
 		if (i.ext.has(EXT_WAITS_FOR)) {
 			i.ext.remove(EXT_WAITS_FOR);
+			// (the verifier's note) the item no longer waits: the sentences it said are no one's
+			String prefix = b.id + "|";
+			SAYERS.entrySet().removeIf(e -> e.getKey().startsWith(prefix) && e.getValue().equals(i.key));
 		}
 		return false;
 	}
 
 	private static void waitOn(dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i, String target, @Nullable String part) {
+		waitFor(b, i, target, part, Batches::waitFor, "waits for " + (part == null ? target : part + " (" + target + ")")
+			+ " to be built: a survival region builds what stands on a part only once it is built");
+	}
+
+	/** How a wait is put on an item (a {@link Batches#waitFor} or a stage's). */
+	interface Waiter {
+		void wait(dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i, dev.larattalabs.architect.api.Reason why, String msg);
+	}
+
+	/**
+	 * (6c close-out A, §8) A stage wait on {@code i}: SITE_BUSY with {@code architect_mc:waitsFor {target, part, waiter, say}} (the
+	 * sentence a caller can say as is, from the plan parts' labels), the message starting with that sentence.
+	 */
+	static void waitFor(dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i, String target, @Nullable String part, Waiter how,
+		String detail) {
+		String region = RegionItems.regionOf(b);
+		var l = region == null ? null : dev.larattalabs.architect.region.RegionsImpl.live(region);
+		String waiter = RegionWaitTags.waiterOf(b, i);
+		String say = RegionWaitTags.say(l, waiter, part == null ? target : part);
 		JsonObject w = new JsonObject();
 		w.addProperty("target", target);
 		if (part != null) {
 			w.addProperty("part", part);
 		}
+		if (waiter != null) {
+			w.addProperty("waiter", waiter);
+		}
+		// (Steward's RC finding 5) one sentence per waiting part per wait: the first of its items to wait for this target says it; the
+		// others carry the wait without `say` (the sayer passes on only when it stops waiting for the target)
+		String sk = b.id + "|" + (waiter == null ? i.key : waiter) + "|" + target;
+		String sayer = SAYERS.get(sk);
+		var si = sayer == null ? null : b.item(sayer);
+		boolean says = sayer == null || sayer.equals(i.key) || si == null || !(si.ext.get(EXT_WAITS_FOR) instanceof JsonObject sw && target.equals(
+			sw.has("target") ? sw.get("target").getAsString() : null));
+		if (says) {
+			SAYERS.put(sk, i.key);
+			w.addProperty("say", say);
+		}
 		i.ext.add(EXT_WAITS_FOR, w);
-		Batches.waitFor(b, i, dev.larattalabs.architect.api.Reason.SITE_BUSY, "waits for " + (part == null ? target : part + " (" + target + ")")
-			+ " to be built: a survival region builds what stands on a part only once it is built");
+		how.wait(b, i, dev.larattalabs.architect.api.Reason.SITE_BUSY, (says ? say + ": " : "") + detail);
+	}
+
+	/** (Steward's RC finding 5) batch|waiter|target -> the item key that says the wait's sentence. Server thread. */
+	private static final Map<String, String> SAYERS = new java.util.HashMap<>();
+
+	/**
+	 * (6c close-out A, §8) A group's first target, lot (a construction site) or construction road still building, with its part
+	 * ({@code {id, part}}: a target's plan part, {@code lot <lot id>}, {@code road <road id>}), or null.
+	 */
+	public static @Nullable String[] firstBuilding(String groupId) {
+		for (Infra i : Infras.all()) {
+			if (is(i) && groupId.equals(i.group()) && i.building()) {
+				return new String[] {i.id(), partOf(i)};
+			}
+		}
+		for (Site s : Sites.all()) {
+			if (groupId.equals(s.group()) && s.building()) {
+				return new String[] {s.id(), s.ext().has("architect_mc:lot") ? "lot " + s.ext().get("architect_mc:lot").getAsString() : null};
+			}
+		}
+		for (Infra i : Infras.all()) {
+			if (groupId.equals(i.group()) && i.building() && !is(i)) {
+				String key = i.member() == null ? null : i.member().itemKey();
+				return new String[] {i.id(), key != null && key.startsWith("road:") ? "road " + key.substring(5) : null};
+			}
+		}
+		return null;
 	}
 
 	/** An item's region of interest [x0, z0, x1, z1]: a tile's columns and one tile around; a lot's or a road's box + 8. */

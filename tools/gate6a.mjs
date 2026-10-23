@@ -790,12 +790,12 @@ steps.heap = async () => {
 
 steps.apijars = async () => {
   const runs = [
-    // (batch v0.41.0, over v0.40.1: main's latest three releases) the unchanged 0.40.1, 0.40.0 and 0.39.1 jars (API 1.37.0, 1.37.0, 1.36.0),
-    // each with its tag's tools/apitest.mjs, each built from its tag (0.40.1 in artifacts/gate6c-batch/, 0.40.0 F3's in gate6c-f3/, 0.39.1
-    // the CU batch's in gate6c-batchcu/)
+    // (release v0.42.0, over v0.41.0: main's latest three releases) the unchanged 0.41.0, 0.40.1 and 0.40.0 jars (API 1.38.0, 1.37.0,
+    // 1.37.0), each with its tag's tools/apitest.mjs, each built from its tag (0.41.0 close-out A's in artifacts/gate6c-coa/, 0.40.1 the
+    // batch's in gate6c-batch/, 0.40.0 F3's in gate6c-f3/)
+    { api: '1.38.0', key: '0410', dir: path.join(MAIN, 'artifacts', 'gate6c-coa', 'v0410'), jar: 'architect_apitest-0.41.0.jar', world: 'G6A Jar0410' },
     { api: '1.37.0', key: '0401', dir: path.join(MAIN, 'artifacts', 'gate6c-batch', 'v0401'), jar: 'architect_apitest-0.40.1.jar', world: 'G6A Jar0401' },
     { api: '1.37.0', key: '0400', dir: path.join(MAIN, 'artifacts', 'gate6c-f3', 'v0400'), jar: 'architect_apitest-0.40.0.jar', world: 'G6A Jar0400' },
-    { api: '1.36.0', key: '0391', dir: path.join(MAIN, 'artifacts', 'gate6c-batchcu', 'v0391'), jar: 'architect_apitest-0.39.1.jar', world: 'G6A Jar0391' },
   ];
   const mods = path.join(GAME_DIR, 'mods');
   const out = {};

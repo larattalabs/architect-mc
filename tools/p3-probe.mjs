@@ -32,12 +32,12 @@ const ok = (cond, msg, detail) => {
 };
 const json = (x) => JSON.stringify(x);
 
-/** The run's evidence dir: --run, else P3_RUN (the step's ${OUT}); a shard's dir (…/s2) climbs to the run. */
+/** The run's evidence dir: --run, else P3_RUN (the step's ${OUT}); a shard's or an offline lane's dir (…/s2, …/o2: turbo) climbs to the run. */
 function runDir() {
   let d = opt('--run') ?? process.env.P3_RUN;
   if (!d) throw new Error('no run dir: --run <dir> or P3_RUN');
   d = path.resolve(d);
-  if (/\/s\d+$/.test(d)) d = path.dirname(d);
+  if (/\/[so]\d+$/.test(d)) d = path.dirname(d);
   return d;
 }
 

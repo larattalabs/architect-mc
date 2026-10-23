@@ -132,11 +132,14 @@ steps.unit = async () => {
   const lines = (t) => new Map(t.split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/')).map((l) => [l.split(' ')[0], l]));
   const lb = lines(before.text), la = lines(after.text);
   // ((batch v0.41.0) the five asks FL moves by name are FL's to judge)
-  const { FL_MOVED_ASKS } = await import('./lib/fl-norm.mjs');
+  const { FL_MOVED_ASKS, flAsksFilter } = await import('./lib/fl-norm.mjs');
   const flAsk = (k) => FL_MOVED_ASKS.includes(`${k.split('/')[0]}.json`);
   const moved = [...la].filter(([k, v]) => lb.get(k) !== v && !flAsk(k)).map(([k]) => k);
   const cb = fs.existsSync(path.join(F, 'asks-before.md')) ? fs.readFileSync(path.join(F, 'asks-before.md'), 'utf8') : null, ca = fs.existsSync(path.join(F, 'asks-after.md')) ? fs.readFileSync(path.join(F, 'asks-after.md'), 'utf8') : null;
-  out.asks = { moved, malformedBefore: before.malformed, malformedAfter: after.malformed, parts: la.size, committed: before.text === cb && after.text === ca };
+  // ((6c close-out A) the tables compared without what later slices moved: FL's five free asks and their rows (fl-norm flAsksFilter), VOC-c's
+  // palette rules; the base may already be past F3, so its table may equal either committed one)
+  const later = (t) => (t == null ? null : flAsksFilter(t).split('\n').filter((l) => !/rule\.palette/.test(l)).join('\n'));
+  out.asks = { moved, malformedBefore: before.malformed, malformedAfter: after.malformed, parts: la.size, committed: (later(before.text) === later(cb) || later(before.text) === later(ca)) && later(after.text) === later(ca) };
   check(after.malformed === 0 && moved.length === 0 && la.size > 0 && out.asks.committed, `§9: the 59 asks on the merge base and on this head (fixtures/plan/f3/asks-before.md, asks-after.md): ${after.malformed} malformed, ${moved.length} part(s) moved class of ${la.size}; no recorded plan names an F3 block`, moved);
   // item 11: determinism (IR and blob shas over 3 plans) on v72, v75 and grove_demo (flat)
   out.determinism = await determinism();

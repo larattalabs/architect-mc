@@ -1153,6 +1153,19 @@ export class Regions {
     return { planId, dropped };
   }
 
+  /**
+   * (6c close-out A, §3) region.plan.discard {planId} -> {planId, existed}: the plan's sessions and caches released, then its dir
+   * (<data>/regions/plans/<planId>/) removed. Refused while the plan is being planned. Idempotent: an unknown plan answers existed false.
+   */
+  discard(planId: string): { planId: string; existed: boolean } {
+    if (this.planning.has(planId)) throw new ClientError(`plan ${planId} is still being planned`);
+    this.release(planId, undefined, false);
+    const d = this.planDir(planId);
+    const existed = fs.existsSync(d);
+    if (existed) fs.rmSync(d, { recursive: true, force: true });
+    return { planId, existed };
+  }
+
   clientGone(client: ClientHandle): void {
     for (const [k, s] of this.sessions) {
       if (s.client.id !== client.id) continue;

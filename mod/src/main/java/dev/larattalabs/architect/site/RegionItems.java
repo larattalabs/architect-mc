@@ -269,6 +269,18 @@ public final class RegionItems {
 	 * (6c H) A region stage waits on its queued items (the fluids stage's gate: a player or a mob in a body's box): ITEM_WAITING with
 	 * the reason, never counted against a wait limit it does not have.
 	 */
+	/**
+	 * (6c close-out A, §8) A stage's items wait SITE_BUSY for a target, lot or road still building, each with its {@code
+	 * architect_mc:waitsFor {target, part, waiter, say}} ({@link RegionTargets#waitFor}).
+	 */
+	public static void waitStageFor(QBatch b, String stage, String target, @org.jspecify.annotations.Nullable String part, String detail) {
+		for (QItem i : b.inStage(stage)) {
+			if (i.status == QItem.Status.QUEUED || i.status == QItem.Status.WAITING) {
+				RegionTargets.waitFor(b, i, target, part, Batches::waitFor, detail);
+			}
+		}
+	}
+
 	public static void waitStage(QBatch b, String stage, Reason why, String msg) {
 		for (QItem i : b.inStage(stage)) {
 			if (i.status == QItem.Status.QUEUED || i.status == QItem.Status.WAITING) {

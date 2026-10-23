@@ -251,6 +251,9 @@ public final class PlanChecks {
 		String key = java.util.Objects.requireNonNull(dev.larattalabs.architect.apiimpl.Wire0a.opKey(opKey), "opKey");
 		Keyed k = KEYS.get(RegionKeys.scope(owner, "region.checkPlan", key));
 		MinecraftServer s = server;
+		if (k != null) {
+			PlanRetention.touch(k.checkId()); // (6c close-out A) a lookup by key is a use of the check's plan
+		}
 		return k == null || s == null ? Optional.empty() : Optional.ofNullable(load(s, k.checkId()));
 	}
 
@@ -908,13 +911,240 @@ public final class PlanChecks {
 		return Optional.empty();
 	}
 
+	/** Every owner pinning the artifact: its plain pins, then (6c close-out A) its keyed pins' owners. */
 	private static Set<String> pins(Path dir, String sha) throws IOException {
+		Set<String> out = plainPins(dir, sha);
+		for (JsonObject k : keyedPins(dir, sha)) {
+			out.add(k.get("owner").getAsString());
+		}
+		return out;
+	}
+
+	private static Set<String> plainPins(Path dir, String sha) throws IOException {
 		Set<String> out = new LinkedHashSet<>();
 		JsonObject p = RegionStore.readJson(dir.resolve(sha + ".pins.json"));
 		if (p != null && p.get("owners") instanceof JsonArray a) {
 			a.forEach(e -> out.add(e.getAsString()));
 		}
 		return out;
+	}
+
+	/** (6c close-out A, §2) The artifact's keyed pins: {@code [{owner, opKey, at}]} ({@code at}: the pin's last use). */
+	private static List<JsonObject> keyedPins(Path dir, String sha) throws IOException {
+		List<JsonObject> out = new ArrayList<>();
+		JsonObject p = RegionStore.readJson(dir.resolve(sha + ".pins.json"));
+		if (p != null && p.get("keyed") instanceof JsonArray a) {
+			for (JsonElement e : a) {
+				if (e instanceof JsonObject o && o.get("owner") instanceof JsonElement ow && ow.isJsonPrimitive() && o.get("opKey") instanceof JsonElement k
+					&& k.isJsonPrimitive()) {
+					out.add(o);
+				}
+			}
+		}
+		return out;
+	}
+
+	/** Writes the pins file: {@code owners} (sorted) and, when there are any, {@code keyed} (sorted by owner then key). */
+	private static void writePins(Path dir, String sha, Set<String> owners, List<JsonObject> keyed) throws IOException {
+		JsonObject o = new JsonObject();
+		JsonArray a = new JsonArray();
+		owners.stream().sorted().forEach(a::add);
+		o.add("owners", a);
+		if (!keyed.isEmpty()) {
+			JsonArray k = new JsonArray();
+			keyed.stream().sorted(java.util.Comparator.<JsonObject, String>comparing(x -> x.get("owner").getAsString()).thenComparing(x -> x.get("opKey")
+				.getAsString())).forEach(k::add);
+			o.add("keyed", k);
+		}
+		RegionStore.writeJson(dir.resolve(sha + ".pins.json"), o);
+	}
+
+	/** The artifacts' shas with a pins file. */
+	private static List<String> pinned(Path dir) throws IOException {
+		if (!Files.isDirectory(dir)) {
+			return List.of();
+		}
+		try (var st = Files.list(dir)) {
+			return st.map(x -> x.getFileName().toString()).filter(n -> n.endsWith(".pins.json")).map(n -> n.substring(0, n.length() - ".pins.json".length()))
+				.filter(x -> SHA.matcher(x).matches()).sorted().toList();
+		}
+	}
+
+	/** The plan an artifact realises from (its meta's planId), or null. */
+	private static @Nullable String planOf(Path dir, String sha) throws IOException {
+		JsonObject meta = RegionStore.readJson(dir.resolve(sha + ".meta.json"));
+		return meta == null || !meta.has("planId") ? null : meta.get("planId").getAsString();
+	}
+
+	/**
+	 * (6c close-out A, §2) A keyed pin: {@code (owner, opKey)} holds the artifact until the key's realise ({@link #keyRealised}), an
+	 * unpin, or the world-start sweep {@link PlanRetention#KEYED_MS} after its last use. A re-pin refreshes its last use. Server thread.
+	 */
+	static void pinKeyed(String sha, String owner, String opKey) {
+		MinecraftServer s = server;
+		String key = dev.larattalabs.architect.apiimpl.Wire0a.opKey(opKey);
+		if (s != null) {
+			pinKeyedAt(s.getWorldPath(LevelResource.ROOT), sha, owner, key);
+		}
+	}
+
+	/** {@link #pinKeyed} in a world dir (tests). */
+	static void pinKeyedAt(Path world, String sha, @Nullable String owner, @Nullable String key) {
+		if (key == null || !SHA.matcher(sha).matches() || owner == null || owner.isBlank()) {
+			return;
+		}
+		Path dir = artifacts(world);
+		try {
+			if (!Files.isRegularFile(dir.resolve(sha + ".json"))) {
+				return; // unknown or removed: nothing to pin (idempotent)
+			}
+			List<JsonObject> keyed = new ArrayList<>(keyedPins(dir, sha));
+			keyed.removeIf(k -> owner.equals(k.get("owner").getAsString()) && key.equals(k.get("opKey").getAsString()));
+			JsonObject k = new JsonObject();
+			k.addProperty("owner", owner);
+			k.addProperty("opKey", key);
+			k.addProperty("at", PlanRetention.now());
+			keyed.add(k);
+			writePins(dir, sha, plainPins(dir, sha), keyed);
+			PlanRetention.touchAt(world, planOf(dir, sha));
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Artifact {} keyed pin: {}", sha, e.toString());
+		}
+	}
+
+	/**
+	 * (6c close-out A, §2) Rewrites every keyed pin of {@code (owner, key)}: {@code end} drops them (the key's realise wrote its region
+	 * record) and sweeps their artifacts; else their last use is now (a realise attempt under the key). Server thread.
+	 */
+	static void keyed(@Nullable String owner, String key, boolean end) {
+		MinecraftServer s = server;
+		if (s != null) {
+			keyedAt(s.getWorldPath(LevelResource.ROOT), owner, key, end);
+		}
+	}
+
+	/** {@link #keyed} in a world dir (tests). */
+	static void keyedAt(Path world, @Nullable String owner, String key, boolean end) {
+		if (owner == null) {
+			return;
+		}
+		Path dir = artifacts(world);
+		try {
+			for (String sha : pinned(dir)) {
+				List<JsonObject> keyed = new ArrayList<>(keyedPins(dir, sha));
+				boolean hit = false;
+				for (var it = keyed.iterator(); it.hasNext();) {
+					JsonObject k = it.next();
+					if (owner.equals(k.get("owner").getAsString()) && key.equals(k.get("opKey").getAsString())) {
+						hit = true;
+						if (end) {
+							it.remove();
+						} else {
+							k.addProperty("at", PlanRetention.now());
+						}
+					}
+				}
+				if (!hit) {
+					continue;
+				}
+				writePins(dir, sha, plainPins(dir, sha), keyed);
+				if (end) {
+					sweep(dir, sha, pins(dir, sha));
+				}
+			}
+		} catch (IOException | RuntimeException e) {
+			Architect.LOGGER.warn("Keyed pins of {}: {}", key, e.toString());
+		}
+	}
+
+	/** (6c close-out A, §2) A realise wrote its region record: a keyed one ends every keyed pin under its key. Server thread. */
+	static void keyRealised(@Nullable String regionId) {
+		RegionsImpl.Live l = regionId == null ? null : RegionsImpl.live(regionId);
+		if (l != null && l.rec().opKey != null) {
+			keyed(l.rec().owner, l.rec().opKey, true);
+		}
+	}
+
+	/**
+	 * (6c close-out A, §2) The world-start sweep of keyed pins: a pin whose key has a region (a crash between the record and the pins'
+	 * end) or whose last use is past {@link PlanRetention#KEYED_MS} ends; its artifact is swept. Returns how many ended.
+	 */
+	static int sweepKeyedPins(MinecraftServer s) {
+		return sweepKeyedPinsAt(s.getWorldPath(LevelResource.ROOT));
+	}
+
+	/** {@link #sweepKeyedPins} in a world dir (tests). */
+	static int sweepKeyedPinsAt(Path world) {
+		Path dir = artifacts(world);
+		long now = PlanRetention.now();
+		int n = 0;
+		try {
+			for (String sha : pinned(dir)) {
+				List<JsonObject> keyed = new ArrayList<>(keyedPins(dir, sha));
+				int before = keyed.size();
+				keyed.removeIf(k -> {
+					String owner = k.get("owner").getAsString(), key = k.get("opKey").getAsString();
+					long at = k.has("at") ? k.get("at").getAsLong() : 0;
+					return now - at > PlanRetention.KEYED_MS || RegionsImpl.INSTANCE.realiseByKey(owner, key).isPresent();
+				});
+				if (keyed.size() == before) {
+					continue;
+				}
+				n += before - keyed.size();
+				writePins(dir, sha, plainPins(dir, sha), keyed);
+				sweep(dir, sha, pins(dir, sha));
+			}
+		} catch (IOException | RuntimeException e) {
+			Architect.LOGGER.warn("Keyed pins sweep: {}", e.toString());
+		}
+		if (n > 0) {
+			Architect.LOGGER.info("Artifacts: {} keyed pin(s) ended at the world start", n);
+		}
+		return n;
+	}
+
+	/** (6c close-out A, §3) A pinned artifact made from the plan (its sha), or null: the plan is held. */
+	static @Nullable String pinnedArtifactOf(Path world, String planId) {
+		Path dir = artifacts(world);
+		try {
+			for (String sha : pinned(dir)) {
+				if (Files.isRegularFile(dir.resolve(sha + ".json")) && planId.equals(planOf(dir, sha)) && !pins(dir, sha).isEmpty()) {
+					return sha;
+				}
+			}
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Artifacts of plan {}: {}", planId, e.toString());
+		}
+		return null;
+	}
+
+	/** (6c close-out A, §3) A discarded plan that a keyed check made: its key record goes, so checkByKey answers empty and the key checks again. */
+	static void checkDiscarded(Path world, String planId) {
+		KEYS.values().removeIf(k -> planId.equals(k.checkId()));
+		CHECKS.remove(planId);
+		try {
+			Files.deleteIfExists(checks(world).resolve(planId + ".json"));
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Plan check {}: key record not removed: {}", planId, e.toString());
+		}
+	}
+
+	/** (6c close-out A, §3) A discarded plan: every artifact made from it with no pin and no region goes to its tombstone. */
+	static void planDiscarded(Path world, String planId) {
+		Path dir = artifacts(world);
+		if (!Files.isDirectory(dir)) {
+			return;
+		}
+		try (var st = Files.list(dir)) {
+			for (String n : st.map(x -> x.getFileName().toString()).filter(x -> x.endsWith(".meta.json")).sorted().toList()) {
+				String sha = n.substring(0, n.length() - ".meta.json".length());
+				if (SHA.matcher(sha).matches() && planId.equals(planOf(dir, sha))) {
+					sweep(dir, sha, pins(dir, sha));
+				}
+			}
+		} catch (IOException | RuntimeException e) {
+			Architect.LOGGER.warn("Artifacts of discarded plan {}: {}", planId, e.toString());
+		}
 	}
 
 	/** The standing regions realised from an artifact (their record's ext names it). */
@@ -943,17 +1173,17 @@ public final class PlanChecks {
 			if (!Files.isRegularFile(dir.resolve(sha + ".json"))) {
 				return; // unknown or removed: nothing to pin (idempotent)
 			}
-			Set<String> pins = pins(dir, sha);
-			boolean changed = on ? pins.add(owner) : pins.remove(owner);
+			Set<String> plain = plainPins(dir, sha);
+			List<JsonObject> keyed = new ArrayList<>(keyedPins(dir, sha));
+			// (6c close-out A) an unpin drops the owner's keyed pins on this artifact too
+			boolean changed = on ? plain.add(owner) : plain.remove(owner) | keyed.removeIf(k -> owner.equals(k.get("owner").getAsString()));
 			if (changed) {
-				JsonObject o = new JsonObject();
-				JsonArray a = new JsonArray();
-				pins.stream().sorted().forEach(a::add);
-				o.add("owners", a);
-				RegionStore.writeJson(dir.resolve(sha + ".pins.json"), o);
+				writePins(dir, sha, plain, keyed);
 			}
-			if (!on) {
-				sweep(dir, sha, pins);
+			if (on) {
+				PlanRetention.touch(planOf(dir, sha)); // (6c close-out A) a pin is a use of the artifact's plan
+			} else {
+				sweep(dir, sha, pins(dir, sha));
 			}
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Artifact {} pins: {}", sha, e.toString());
@@ -1027,6 +1257,11 @@ public final class PlanChecks {
 		RegionsImpl.PlanRec p = RegionsImpl.planRec(planId);
 		if (p == null) {
 			return refused(Reason.ARTIFACT_UNAPPROVED, "artifact " + sha.substring(0, 12) + ": its plan " + planId + " is gone");
+		}
+		// (6c close-out A, §14) a realise attempt is a use of the plan, and of the keyed pins under its key
+		PlanRetention.touch(planId);
+		if (r.opKey() != null && r.opKey().matches("[A-Za-z0-9_.:-]{1,128}")) {
+			keyed(p.owner(), r.opKey(), false);
 		}
 		if (!p.irSha().equals(body.getAsJsonObject("region").get("irSha").getAsString())) {
 			return refused(Reason.ARTIFACT_STALE, "artifact " + sha.substring(0, 12) + ": its plan's IR is not the artifact's");

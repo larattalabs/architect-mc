@@ -10,6 +10,7 @@
 //                        must not change, and its cost.survival); written to OUT and compared with the committed tables
 import { sampleIndex } from '../../kit/lib/region/survey.mjs';
 import fs from 'node:fs';
+import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -119,7 +120,7 @@ export async function asksTables(root, { check, OUT }) {
   const moved = [];
   let malformed = 0, refusedSurvival = 0;
   for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) {
-    const plan = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')).answer.plan;
+    const plan = JSON.parse(fs.readFileSync(firstAsk(dir, f), 'utf8')).answer.plan; // ((6c close-out A) the first recordings)
     const c = await H.checkPlanVolumes(plan, { survey: s.bytes, claim: s.claim, anchors: H.stewardAnchors(s.claim), volume: {} });
     const v = await H.checkPlanVolumes(plan, { survey: s.bytes, claim: s.claim, anchors: H.stewardAnchors(s.claim), volume: {}, survival: true });
     const cls = Object.fromEntries(c.check.parts.map((a) => [a.part, a.class]));
