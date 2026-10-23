@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import { syncBaseTree } from './base-tree.mjs';
+import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -67,10 +68,13 @@ export function baseTree(root) {
  * extension/e05 and e16 (rule.palette supported, VOC-c), and the catalogue entries they flip (rule.palette; the catalogueVersion moves).
  */
 export const LATER_EXCEPTIONS = Object.freeze({ fixtures: ['extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json', ...FL_MOVED.filter((n) => !n.startsWith('asks/'))],
-  asks: ['desert_jungle_wall.json', 'hidden_village.json', 'mage_exiles.json', 'old_new_town.json', 'one_block.json', 'rival_families.json', 'row_houses.json', ...FL_MOVED_ASKS],
+  asks: ['desert_jungle_wall.json', 'hidden_village.json', 'mage_exiles.json', 'old_new_town.json', 'one_block.json', 'rival_families.json', 'row_houses.json', ...FL_MOVED_ASKS,
+    ...Object.keys(F7A_MOVED).filter((n) => n.startsWith('asks/')).map((n) => n.slice(5))], // ((7a foundation) its named movers)
   // ((batch v0.41.0) F3's catalogue changes too: form.giant_tree flipped, four forms added, the tunnel's volume flag)
   catalogue: ['rule.palette', 'layout.ring', 'layout.spiral', 'layout.grid', 'layout.organic', 'locator.around', 'sketch.outline', 'form.giant_tree',
-    'form.giant_mushroom', 'form.coral', 'form.roots', 'form.stalactites', 'connector.tunnel'] });
+    'form.giant_mushroom', 'form.coral', 'form.roots', 'form.stalactites', 'connector.tunnel',
+    // ((7a foundation) its three catalogue changes)
+    'connector.rail', 'connector.branch_walk', 'connector.span_bridge'] });
 
 export async function unchanged(root) {
   const { dir: mainDir, base } = baseTree(root);
