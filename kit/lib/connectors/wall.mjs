@@ -529,7 +529,9 @@ export function planWalls(K) {
 }
 
 /** (7a K2) The longest flight a gate landing runs to meet the ground (beyond it: no landing, noted). */
-export const LANDING_FLIGHT = 48;
+export const LANDING_FLIGHT = 40;
+/** (7a K2) How wide a landing's flight along the inner face is (cells out from the wall): a road's width. */
+export const LANDING_WIDTH = 3;
 
 /**
  * (7a K2, the coordinator's ruling (b), 2026-10-23) A gate landing on an along wall: on each side of the wall, over the gate's lanes, the
@@ -540,40 +542,73 @@ export const LANDING_FLIGHT = 48;
 function landingOf(K, W, g) {
   const t = W.st.thickness, S = K.env.S, cells = [];
   const F = { '1,0': 'east', '-1,0': 'west', '0,1': 'south', '0,-1': 'north' };
+  const N = { east: [1, 0], west: [-1, 0], south: [0, 1], north: [0, -1] };
+  const wet = (x, z) => { const q = W.G.at(x, z); return q >= 0 && W.G.ob[q] === OB.WATER; };
+  const innerOf = (p) => W.cells.find((c) => c.pos === p && c.depth === 0);
+  let climb = false;
   for (let p = g.a; p <= g.b; p++) {
-    const inner = W.cells.find((c) => c.pos === p && c.depth === 0), outer = W.cells.find((c) => c.pos === p && c.depth === t - 1) ?? inner;
+    const inner = innerOf(p), outer = W.cells.find((c) => c.pos === p && c.depth === t - 1) ?? inner;
     if (!inner) return { ok: false, why: 'no inner course' };
-    const [dx, dz] = { east: [1, 0], west: [-1, 0], south: [0, 1], north: [0, -1] }[facingOut(W, inner)];
-    for (const side of [-1, 1]) {
-      const from = side < 0 ? inner : outer, ex = dx * side, ez = dz * side;
-      let L = g.y, k = 1;
-      // (the shore: a landing that reaches the water's edge level with it ends there, a quay)
-      const wet = (x, z) => { const q = W.G.at(x, z); return q >= 0 && W.G.ob[q] === OB.WATER; };
-      let shore = false;
-      for (; k <= 2; k++) {
-        const x = from.x + ex * k, z = from.z + ez * k;
-        // (outside, a lane that meets the water ends there: the gate opens onto the shore; inside, water is no landing)
-        if (wet(x, z)) { if (side > 0 && L - S.groundAt(x, z) <= 2 && L >= S.groundAt(x, z)) { shore = true; break; } return { ok: false, why: side > 0 ? `a drop of ${L - S.groundAt(x, z)} to the water` : 'water' }; }
-        cells.push({ x, z, y: g.y, kind: 'flat', ...(side > 0 ? { out: true, k } : {}) });
-      }
-      let run = 0, rest = 0;
-      for (; !shore; k++) {
-        const x = from.x + ex * k, z = from.z + ez * k, G = S.groundAt(x, z);
-        // (a lane down to the shore meets the water at its level, else it ends over a drop: no landing)
-        if (side > 0 && wet(x, z)) { if (L - G <= 2 && L >= G) break; return { ok: false, why: `a drop of ${L - G} to the water` }; }
-        if (Math.abs(G - L) <= 1) break;
-        if (k > 2 + LANDING_FLIGHT) return { ok: false, why: `the ground steps ${Math.abs(S.groundAt(from.x + ex * 3, from.z + ez * 3) - g.y)}: a flight longer than ${LANDING_FLIGHT}` };
-        // (as T2's stair move climbs: flights of at most 8, then 2 flat cells, so a route over the landing (the pass's base) follows it)
-        if (run === 8) { cells.push({ x, z, y: L, kind: 'flat' }); if (++rest === 2) { run = 0; rest = 0; } continue; }
-        const up = G > L;
-        L += up ? 1 : -1;
-        run++;
-        cells.push({ x, z, y: L, kind: 'stair', facing: up ? F[`${ex},${ez}`] : F[`${-ex},${-ez}`] });
-      }
+    const [dx, dz] = N[facingOut(W, inner)];
+    // inside: the gate's mouth, 2 cells at its floor; past it, a ground more than 1 off it takes the flight along the inner face (below)
+    for (let k = 1; k <= 2; k++) {
+      const x = inner.x - dx * k, z = inner.z - dz * k;
+      if (wet(x, z)) return { ok: false, why: 'water' };
+      cells.push({ x, z, y: g.y, kind: 'flat' });
+    }
+    if (Math.abs(S.groundAt(inner.x - dx * 3, inner.z - dz * 3) - g.y) > 1) climb = true;
+    // outside: 2 cells at the floor, then (where the ground is more than 1 off it) a flight straight out to the ground; a lane that meets
+    // the water at most 2 under the floor ends there (the gate opens onto the shore)
+    let L = g.y, k = 1, shore = false;
+    for (; k <= 2; k++) {
+      const x = outer.x + dx * k, z = outer.z + dz * k;
+      if (wet(x, z)) { if (L - S.groundAt(x, z) <= 2 && L >= S.groundAt(x, z)) { shore = true; break; } return { ok: false, why: `a drop of ${L - S.groundAt(x, z)} to the water` }; }
+      cells.push({ x, z, y: g.y, kind: 'flat', out: true, k });
+    }
+    let run = 0, rest = 0;
+    for (; !shore; k++) {
+      const x = outer.x + dx * k, z = outer.z + dz * k, G = S.groundAt(x, z);
+      if (wet(x, z)) { if (L - G <= 2 && L >= G) break; return { ok: false, why: `a drop of ${L - G} to the water` }; }
+      if (Math.abs(G - L) <= 1) break;
+      if (k > 2 + LANDING_FLIGHT) return { ok: false, why: `the ground steps ${Math.abs(S.groundAt(outer.x + dx * 3, outer.z + dz * 3) - g.y)} outside: a flight longer than ${LANDING_FLIGHT}` };
+      // (as T2's stair move climbs: flights of at most 8, then 2 flat cells, so a route over the landing (the pass's base) follows it)
+      if (run === 8) { cells.push({ x, z, y: L, kind: 'flat' }); if (++rest === 2) { run = 0; rest = 0; } continue; }
+      const up = G > L;
+      L += up ? 1 : -1;
+      run++;
+      cells.push({ x, z, y: L, kind: 'stair', facing: up ? F[`${dx},${dz}`] : F[`${-dx},${-dz}`] });
     }
   }
-  // (outside, at least one lane steps off the gate onto land)
   if (!cells.some((c) => c.out && c.k === 1)) return { ok: false, why: 'water at the gate' };
+  // inside, the flight along the inner face (the coordinator's ruling (i)): LANDING_WIDTH cells deep beside the wall, from the gate's
+  // side along the wall, rising (or falling) 1 a position in T2's pattern until the ground across its width is within 1; the shorter way
+  if (climb) {
+    let best = null;
+    // (straight on along the gate's run, beside the wall's inner face where the wall runs straight, else away from it as a staircase
+    // shore veers: never through a wall cell)
+    const ia = innerOf(g.a), ib = innerOf(g.b);
+    const [dx, dz] = N[facingOut(W, ia)];
+    const ux = Math.sign(ib.x - ia.x), uz = Math.sign(ib.z - ia.z);
+    for (const dir of [1, -1]) {
+      const fl = [];
+      const from = dir > 0 ? ib : ia, sx = ux * dir, sz = uz * dir;
+      let L = g.y, run = 0, rest = 0, ok = false;
+      for (let i = 1; i <= LANDING_FLIGHT + 1; i++) {
+        const bx = from.x + sx * i, bz = from.z + sz * i;
+        const lane = Array.from({ length: LANDING_WIDTH }, (_, q) => [bx - dx * (q + 1), bz - dz * (q + 1)]);
+        if (lane.some(([x, z]) => W.cellAt.has(key(x, z)) || wet(x, z))) break;
+        const G = Math.max(...lane.map(([x, z]) => S.groundAt(x, z)));
+        if (i > 1 && Math.abs(G - L) <= 1) { ok = true; break; }
+        let kind = 'stair', up = G > L;
+        if (run === 8) { kind = 'flat'; if (++rest === 2) { run = 0; rest = 0; } } else { L += up ? 1 : -1; run++; }
+        const facing = up ? F[`${sx},${sz}`] : F[`${-sx},${-sz}`];
+        for (const [x, z] of lane) fl.push({ x, z, y: L, kind, ...(kind === 'stair' ? { facing } : {}), flight: true });
+      }
+      if (ok && (!best || fl.length < best.length)) best = fl;
+    }
+    if (!best) return { ok: false, why: `the ground steps ${Math.abs(S.groundAt(innerOf(g.a).x, innerOf(g.a).z) - g.y)} inside and no flight along the wall's inner face meets it within ${LANDING_FLIGHT}` };
+    cells.push(...best);
+  }
   for (const c of cells) {
     const k = W.G.at(c.x, c.z);
     if (k < 0) return { ok: false, why: 'the claim\'s margin' };
@@ -647,7 +682,8 @@ function alongMinGates(K, W) {
  * routes cross an along wall's gates.min gates at their floors.
  */
 export function wallsBase(K) {
-  const cs = (K.walls ?? []).flatMap((W) => W.gates.filter((g) => g.landing?.ok).flatMap((g) => g.landing.cells));
+  // (the landing's cells and the gate's own opening: its floor through the wall's depth)
+  const cs = (K.walls ?? []).flatMap((W) => W.gates.filter((g) => g.landing?.ok).flatMap((g) => [...g.landing.cells, ...g.cells.map(([x, z]) => ({ x, z, y: g.y }))]));
   if (!cs.length) return null;
   const minX = Math.min(...cs.map((c) => c.x)), minZ = Math.min(...cs.map((c) => c.z)), width = Math.max(...cs.map((c) => c.x)) - minX + 1, depth = Math.max(...cs.map((c) => c.z)) - minZ + 1;
   const values = new Array(width * depth).fill(0);
