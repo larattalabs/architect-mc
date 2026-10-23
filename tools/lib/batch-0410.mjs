@@ -3,10 +3,14 @@
 // moves by name differs there too. It is judged by that slice's own item, so the others skip it (named) and normalise what that slice adds
 // to every IR (FL's street ext). Nothing here changes what a slice judges of its own changes.
 //   normSiblingIr(json)  an IR's JSON with kitVersion normalised and FL's S-FL-5 street ext dropped (fl-norm.mjs normIrJson)
-//   SIBLING_MOVED        fixture -> the slice that moves it by name (FL's §8 list; F3's §8 exception)
+//   SIBLING_MOVED        fixture -> the slice that moves it by name (FL's §8 list; F3's §8 exception; fix/survival-off-storm's trees)
 //   siblingAsks(text)    an asks table without the five asks FL moves by name (fl-norm.mjs flAsksFilter)
 //   SIBLING_FILES        files a sibling changes that a slice's "untouched" item lists (S3's terraced districts in districtsEmit.mjs)
 import { FL_MOVED, flAsksFilter, normIrJson } from './fl-norm.mjs';
+
+/** (fix/survival-off-storm) The committed fixtures whose giant trees had a log the fix turns to a leaf or drops: same answers, the IR moves. */
+export const STORM_MOVED = Object.freeze(['f3/r03_tree_near_natural.json', 'f3/s01_steward_glade.json', 'f3/u01_tree_in_body.json', 'f3/u02_leaf_not_persistent.json',
+  'valid/v72_f3_grove.json']);
 
 export const normSiblingIr = (json) => normIrJson(json);
 export const siblingAsks = (text) => flAsksFilter(text);
@@ -14,6 +18,7 @@ export const siblingAsks = (text) => flAsksFilter(text);
 export const SIBLING_MOVED = Object.freeze({
   ...Object.fromEntries(FL_MOVED.map((f) => [f, 'FL moves it by name (CONTRACT "Phase 6c slice FL" §8: a free layout, locator.around or sketch.outline supported)'])),
   'extension/e16_every_reserved_b.json': 'F3 moves it by name (CONTRACT "Phase 6c slice F3" §8: form.giant_tree supported)',
+  ...Object.fromEntries(STORM_MOVED.map((f) => [f, 'fix/survival-off-storm moves it: giantTree leaves no unsupported log (a log held only from above or by leaves becomes a leaf or goes); judged by f3-unit'])),
 });
 
 export const SIBLING_FILES = Object.freeze({

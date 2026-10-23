@@ -275,15 +275,19 @@ async function liveChecks(ctx, o) {
   // (hydration is a random tick's doing: each cell's first comes after 68 s on average at the default speed 3, so after 2 minutes
   // about 1 in 6 cells has had none yet; counted at 2 minutes (recorded), then every minute until all are moist (at most 10 minutes))
   const t0 = Date.now();
-  await L.settle(120_000);
+  // (gate speed 3) game time, sprinted: the 10-minute cap counts the waits' game time when they sprint (GATE_SPRINT=0: wall time)
+  let gameMs = 0, sprinted = true;
+  const wait = async (ms, label) => { const w = await L.gameWait(ms, { label }); gameMs += w.gameMs; sprinted &&= w.mode === 'sprint'; };
+  const elapsed = () => (sprinted ? gameMs : Date.now() - t0);
+  await wait(120_000, 'irr item 3 hydration, 2 minutes');
   const moist2 = await countBlock(ctx, field, 'minecraft:farmland[moisture=7]');
   let wet = moist2;
-  while (wet < field.length && Date.now() - t0 < 600_000) { await L.settle(60_000); wet = await countBlock(ctx, field, 'minecraft:farmland[moisture=7]'); }
+  while (wet < field.length && elapsed() < 600_000) { await wait(60_000, 'irr item 3 hydration, a minute more'); wet = await countBlock(ctx, field, 'minecraft:farmland[moisture=7]'); }
   const farm = await countBlock(ctx, field, 'minecraft:farmland');
   const cWet = await countBlock(ctx, control, 'minecraft:farmland[moisture=7]');
-  const out = { hydration: { field: field.length, farmland: farm, moist7At2min: moist2, moist7: wet, control: control.length, controlMoist7: cWet, seconds: (Date.now() - t0) / 1000 } };
+  const out = { hydration: { field: field.length, farmland: farm, moist7At2min: moist2, moist7: wet, control: control.length, controlMoist7: cWet, seconds: elapsed() / 1000 } };
   check(true, `item 3 (recorded): after 2 minutes at default rules ${moist2} of ${field.length} field cells moisture=7 (a random tick each; vanilla)`);
-  check(farm === field.length && wet === field.length, `item 3 (v62 f1): every farmland cell of the field moisture=7 at default rules (${wet}/${field.length} after ${Math.round((Date.now() - t0) / 1000)} s, farmland ${farm})`);
+  check(farm === field.length && wet === field.length, `item 3 (v62 f1): every farmland cell of the field moisture=7 at default rules (${wet}/${field.length} after ${Math.round(elapsed() / 1000)} s, farmland ${farm})`);
   check(cWet === 0, `item 3 (the control): the same field without irrigation is dry (${cWet} of ${control.length} moisture=7)`);
   // crops on the moist farmland (the design's wheat, on the field and on the sources' farmland sides)
   const crops = await countBlock(ctx, field.map(([x, y, z]) => [x, y + 1, z]), 'minecraft:wheat');
@@ -295,7 +299,7 @@ async function liveChecks(ctx, o) {
   const mid = field[Math.floor(field.length / 2)];
   for (let i = 0; i < 3; i++) await L.cmd(`/summon minecraft:villager ${mid[0] + 0.5 + i} ${mid[1] + 1} ${mid[2] + 0.5} {Tags:["irr_farmer"],PersistenceRequired:1b,VillagerData:{profession:"minecraft:farmer",level:2,type:"minecraft:plains"}}`);
   const ripe0 = await countBlock(ctx, field.map(([x, y, z]) => [x, y + 1, z]), 'minecraft:wheat[age=7]');
-  await L.settle(300_000);
+  await L.gameWait(300_000, { label: 'irr item 7 farmer villagers, 5 minutes' });
   const drown = await L.call('dev.entity.damage', { since, type: 'drown' }, 60_000).catch((e) => ({ error: String(e.message ?? e) }));
   const alive = await L.cmd('/execute if entity @e[type=minecraft:villager,tag=irr_farmer]');
   const n = Number((/(\d+)/.exec(String(alive.messages?.join(' ') ?? alive.result ?? '')) ?? [0, 0])[1]);
@@ -339,7 +343,7 @@ async function breach(ctx, o, lotId = 'f2') {
   const box = [b.minX - 10, lot.floorY - 3, b.minZ - 10, b.maxX + 10, lot.floorY + 3, b.maxZ + 10];
   const before = await fluidsIn(ctx, box);
   await L.cmd(`/setblock ${side.join(' ')} minecraft:air destroy`);
-  await L.settle(30_000);
+  await L.gameWait(30_000, { label: 'irr item 4 breach flow' });
   const now = await fluidsIn(ctx, box);
   const added = [...now.keys()].filter((k) => !before.has(k)).map((k) => k.split(',').map(Number));
   const outside = added.filter(([x, , z]) => x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ);
@@ -465,7 +469,7 @@ async function spareForeign(ctx, o) {
     await L.cmd(`/fill ${x} ${y + 2} ${z} ${x} ${y + 1} ${z} minecraft:air`);
     await L.cmd(`/setblock ${x} ${y} ${z} minecraft:air`);
   }
-  await L.settle(30_000);
+  await L.gameWait(30_000, { label: 'irr breach fix: the trench flow' });
   await L.cmd('/kill @e[type=minecraft:item]');
   const now = await fluidsIn(ctx, B);
   const foreign = new Set([...pond, well].map(k3));
@@ -766,7 +770,7 @@ export async function ingame(ctx) {
       const box = [b.minX - 12, lot.floorY - 4, b.minZ - 12, b.maxX + 12, lot.floorY + 2, b.maxZ + 12];
       const before = await fluidsIn(ctx, box);
       await L.cmd(`/setblock ${C.sides[0].join(' ')} minecraft:air destroy`);
-      await L.settle(30_000);
+      await L.gameWait(30_000, { label: 'irr pad breach flow' });
       const now = await fluidsIn(ctx, box);
       const added = [...now.keys()].filter((k) => !before.has(k)).map((k) => k.split(',').map(Number));
       const outside = added.filter(([x, , z]) => x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ);
@@ -802,7 +806,7 @@ export async function probe(ctx) {
     if (dy < 0) await L.cmd(`/setblock ${wx} ${y} ${wz} minecraft:air`);
     out[tag] = { x0, z0, n, water: [wx, y + dy, wz] };
   }
-  await L.settle(300_000); // (5 minutes: about 1 cell in 80 has had no random tick yet)
+  await L.gameWait(300_000, { label: 'irr item 9 hydration reach, 5 minutes' }); // (5 minutes: about 1 cell in 80 has had no random tick yet)
   for (const [tag, x0, z0, n] of plots) {
     let wet = 0, cells = 0, far = [];
     for (let x = x0; x < x0 + n; x++) for (let z = z0; z < z0 + n; z++) {

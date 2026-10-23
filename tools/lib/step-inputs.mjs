@@ -181,6 +181,80 @@ function rootWiden(r, has) {
   return `${path.posix.dirname(r)}/**`;
 }
 
+/** The argument text of each gradlew invocation in a module: the bracketed args array after `gradlew'`, or the rest of a shell
+ * string (`./gradlew compileJava ...`). */
+export function gradlewCalls(t) {
+  const out = [];
+  const bracket = (str, at) => {
+    let depth = 0;
+    let i = at;
+    for (; i < str.length; i++) {
+      if (str[i] === '[') depth++;
+      else if (str[i] === ']' && --depth === 0) break;
+    }
+    return str.slice(at + 1, i);
+  };
+  for (const m of t.matchAll(/gradlew/g)) {
+    const rest = t.slice(m.index + 7, m.index + 2000);
+    const open = /^['"`]?\s*,\s*\[/.exec(rest);
+    const named = /^['"`]?\s*,\s*(\w+)\s*[,)]/.exec(rest);
+    if (open) out.push(bracket(rest, open[0].length - 1));
+    else if (named) {
+      // an args variable: its array literal in the module (the last definition before the call), else unreadable
+      const defs = [...t.slice(0, m.index).matchAll(new RegExp(`(?:const|let|var)\\s+${named[1]}\\s*=\\s*\\[`, 'g'))];
+      const d = defs.at(-1);
+      // a parameter of the nearest enclosing function by that name shadows any definition: unreadable
+      const fns = [...t.slice(d ? d.index : 0, m.index).matchAll(/function\s*\w*\s*\(([^)]*)\)|\(([^()]*)\)\s*=>|(\w+)\s*=>/g)];
+      const shadow = fns.some((f) => (f[1] ?? f[2] ?? f[3] ?? '').split(',').map((x) => x.trim().split(/[\s=]/)[0]).includes(named[1]));
+      out.push(d && !shadow ? bracket(t, d.index + d[0].length - 1) : 'test /*unreadable args*/');
+    } else if (/[./]$/.test(t.slice(Math.max(0, m.index - 1), m.index))) out.push(rest.slice(0, Math.max(0, rest.search(/[`'"\n]/)) || 200)); // a shell command `./gradlew ...` (not a message that names gradlew)
+  }
+  return out;
+}
+
+/** The gradle tasks a call's argument text names: quoted literals and shell words, less flags and --tests values. */
+const COMPILE_ONLY = new Set(['compileJava', 'compileClientJava', 'compileTestJava', 'classes', 'testClasses', 'jar', 'processResources', 'headlessLaunch', ':devserver:classes', ':apitest:classes', ':devserver:jar', ':apitest:jar', 'remapJar']);
+export function gradleTasks(a) {
+  const toks = [...a.matchAll(/(['"])([^'"\s]+)\1|(?:^|\s)([\w:.-]+)(?=\s|$)/g)].map((m) => m[2] ?? m[3]).filter(Boolean);
+  const out = [];
+  for (let i = 0; i < toks.length; i++) {
+    const x = toks[i];
+    if (x === '--tests' || x === '-x' || x === '--exclude-task') {
+      i++;
+      continue;
+    }
+    if (x.startsWith('-') || /[/=]/.test(x) || x === 'cd' || x === 'mod' || x === '&&') continue;
+    if (/^[a-z:][\w:]*$/i.test(x)) out.push(x);
+  }
+  return out;
+}
+
+const EAGER_RE = /(?:^|[^\w.$])(?:import|export)\s[^'"`;]*?\sfrom\s*(['"])([^'"\n]+)\1|(?:^|[^\w.$])import\s*(['"])([^'"\n]+)\3/gm;
+/** The eager closure of roots: static `import`/`export ... from` only (always loaded with the module), never `import()`. */
+export function eagerClosure(roots, has, readText) {
+  const seen = new Set();
+  const st = [...roots];
+  while (st.length) {
+    const f = st.pop();
+    if (seen.has(f)) continue;
+    seen.add(f);
+    if (!/\.(mjs|js|cjs)$/.test(f)) continue;
+    let t = '';
+    try {
+      t = readText(f);
+    } catch {
+      continue;
+    }
+    for (const m of t.matchAll(EAGER_RE)) {
+      const sp = m[2] ?? m[4];
+      if (!sp?.startsWith('.')) continue;
+      const r = path.posix.normalize(path.posix.join(path.posix.dirname(f), sp));
+      if (has.has(r)) st.push(r);
+    }
+  }
+  return seen;
+}
+
 /** The roots a chain entry runs: the tools/… and kit/… files its shell or cmd names, and the globs it passes to node (kit/test/*.test.mjs). */
 export function stepRoots(entry) {
   const text = entry.shell ?? (entry.cmd ?? []).join(' ');
@@ -253,6 +327,52 @@ export function staticEntry(id, entry, conf, files, opts) {
     if (/['"]ls-files['"]|git ls-files/.test(t)) (flags.repoListing ??= []).push(f);
   }
   for (const k of ['originMain', 'lastTag', 'repoListing']) if (flags[k]) flags[k].sort();
+  // the Java test filters its source-checkout gradle runs can use (`--tests <pattern>`): every literal pattern in the modules that
+  // run gradle tests; a run with no --tests at all, or one built from a template, makes them incomplete (the whole test tree counts)
+  const testFilters = new Set();
+  let filtersComplete = true;
+  let runsTests = false;
+  let runsGradle = false;
+  for (const f of cl.files) {
+    if (!/\.mjs$/.test(f) || !f.startsWith('tools/') || runner.has(f)) continue;
+    let t = '';
+    try {
+      t = readText(f);
+    } catch {
+      continue;
+    }
+    // comments name gradlew calls too (src-gradle.mjs's header): only code counts
+    t = t.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
+    if (!/gradlew/.test(t)) continue;
+    runsGradle = true;
+    // each gradlew invocation: its argument text up to the call's end; a `test` task makes it a test run, else compile only
+    const calls = gradlewCalls(t);
+    // a call runs tests unless every task it names is a known compile-only one (build, check, umtLong, :x:test... all run tests)
+    const testCalls = calls.filter((a) => gradleTasks(a).some((task) => !COMPILE_ONLY.has(task)));
+    if (!testCalls.length) continue;
+    runsTests = true;
+    let template = false;
+    for (const a of testCalls) {
+      if (!/--tests/.test(a)) filtersComplete = false;
+      if (gradleTasks(a).some((task) => task !== 'test' && !COMPILE_ONLY.has(task))) filtersComplete = false; // build/check: every test
+      // a template is unreadable, except `*${t.split('.').pop()}` over the literal test names the module holds
+      for (const tm of a.matchAll(/--tests['"]?\s*,\s*`([^`]*)`/g)) {
+        if (/^\*\$\{\w+\.split\('\.'\)\.pop\(\)\}$/.test(tm[1])) template = true;
+        else filtersComplete = false;
+      }
+      // a shell string's unquoted filters
+      for (const tm of a.matchAll(/--tests\s+([\w.$*]+)/g)) testFilters.add(tm[1]);
+    }
+    // pt2's template turns a literal 'site.AdoptTest' into `*AdoptTest`, which gradle matches in any package
+    if (template) for (const m of t.matchAll(/(['"])([\w$]+(?:\.[\w$]+)+)\1/g)) if (/Test/.test(m[2])) testFilters.add(`*${m[2].split('.').pop()}`);
+    // every literal that can be a filter: one with a wildcard or "Test" in it (javaTests(['*IrStale*', ...]) passes them on)
+    for (const m of t.matchAll(/(['"])([\w.$*]+)\1/g)) if (/\*|Test/.test(m[2]) && /[A-Za-z]/.test(m[2])) testFilters.add(m[2]);
+    for (const m of t.matchAll(/['"]--tests['"]\s*,\s*(['"])([^'"]+)\1/g)) testFilters.add(m[2]);
+  }
+  if (!runsTests) filtersComplete = false;
+  // the eager closure: what the drivers' top-level (static) imports always load. A lazy import() counts only when a run executed
+  // it (its trace), which is what a coverage-mode key uses; the full closure above stays the CI check's
+  const eager = eagerClosure(roots.filter((r) => has.has(r)), has, readText);
   return {
     classes: [...classes].sort(),
     roots,
@@ -261,6 +381,9 @@ export function staticEntry(id, entry, conf, files, opts) {
     dynamic: cl.dynamic,
     env: [...cl.env].sort(),
     ...(Object.keys(flags).length ? { flags } : {}),
+    ...(runsTests ? { testFilters: [...testFilters].sort(), testFiltersComplete: filtersComplete } : {}),
+    ...(runsGradle ? { gradleUse: runsTests ? 'tests' : 'compile' } : {}),
+    eager: [...eager].sort(),
   };
 }
 

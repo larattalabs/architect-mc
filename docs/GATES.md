@@ -15,7 +15,9 @@ node tools/gate-run.mjs release --release v0.12.0 --full           # every candi
                                                                   #   --no-auto-full: the cache's own selection anyway)
 node tools/gate-run.mjs slice  --since origin/main --no-cache      # run every selected step (a PASS is still recorded); --no-trace: no trace, no record
 node tools/step-inputs.mjs check                                 # CI: every driver's imports inside its recorded input set
-node tools/nightly.mjs                                           # the nightly: release --full --no-cache on origin/main (LaunchAgent at 02:00)
+node tools/nightly.mjs                                           # the nightly: release --full --no-cache --nightly on origin/main (LaunchAgent at 02:00):
+                                                                  #   the judged benches run there, and a release reuses their PASSes ("Benches out of the release path")
+node tools/nightly.mjs --megab-full                              # the nightly with megaB's full walk on demand (else weekly)
 node tools/gate-run.mjs slice  --since origin/main --shards 3 --ports 8896:8897,8898:8899,8900:8901   # a fixed shard count, as before
 node tools/gate-run.mjs quick                                    # a named chain (quick | regress | engine), as before (bars judged)
 node tools/gate-run.mjs change --since origin/main --slots 2     # at most 2 gate runs on the machine at once (default slots.max, 4)
@@ -31,7 +33,8 @@ from each slice's own focused items, the verifier's code review and Steward's re
 1. **Timing bars never block a slice.** In `change` and `slice` a bench step's timing bars (MSPT, own-tick max, cells/s,
    p99, wall, heap, quiet-dependent gaps such as apijars' SITE_PROGRESS gap) are **recorded, not judged**; its functional checks
    (exactness, undo, counts) still judge. Timing bars are judged once per batch at `release`, with `--quiet-wait` (now on by
-   default there) and Noah's CI runners paused. *Implemented:* see "Timing bars" below.
+   default there) and Noah's CI runners paused. *Implemented:* see "Timing bars" below. (Since 2026-10-22 the judged benches'
+   timing is judged in the nightly, and a release reuses it: "Benches out of the release path".)
 2. **`slice` = `change` + the slice's own focused steps.** The unit suites, apijars/api-compat, the impact map's steps for the
    changed paths, and the slice's own gate steps (found by the impact rule of the slice's driver, e.g. `tools/gate6cw.mjs` ->
    `w-unit`, `w-ingame`, `6cv-scenario-s7`). No `quick` regression suite per slice; the full regression runs once per
@@ -73,7 +76,12 @@ A driver whose check mixes both is split into a functional `check` and a `bar`.
   `--quiet-wait` still waits in these tiers but never turns a step NOISY, so a functional FAIL is never swallowed. Any
   functional `FAIL` makes the step FAIL as before. `--judge-timing` judges the bars in these tiers.
 - **`release` and the named chains:** bars judge as before, and `--quiet-wait` (load < 8) is on by default (`--no-quiet-wait` to
-  turn it off).
+  turn it off). Two exceptions (2026-10-22, "Benches out of the release path"), both recorded like `change`/`slice` and never
+  isolated:
+  - a step whose entry says `"timing": "recorded"` (4e-throughput, 4e-throughput-smoke: their timing is folded into 6a-megaA), in
+    every tier and chain. `--judge-timing` judges them;
+  - the scenarios `release.benches.nightlyJudged` names (6b-scenario-s1, 6c-scenario-s2, 6c-scenario-s3), at a release that is not
+    the nightly. The nightly judges them, isolated.
 - A new timing check in a driver must use `bar(...)`, otherwise it blocks slices on machine load.
 
 ### Slot lock: at most N gate runs on the machine (`slots.max`, 4)
@@ -163,10 +171,11 @@ function gives `tools/step-cache.mjs replay` its keys at a past head.
 time; for unit-kit its JUnit report and kit tree) only when every one of these holds:
 - the step ended PASS;
 - no timing bar was recorded rather than judged (`timingRecorded` empty). A slice PASS with a bar missed never serves anything;
-- it is not a **judged bench**: a bench step of the release tier's own lists (always and rotation: megalite, throughput, megaA,
-  megaB, heap, volume, s1, s2, s3). Their timing is judged at every release, so they are canaries there and never cached. The
-  slices' scenario steps (forms, relief, scatter, route, districts, s7, mp-ingame) are ordinary candidates: they cache when they pass
-  with no bar missed;
+- it is not a **judged bench** (`tools/gate-cache.json` `release.benches.judged`: 4e-megalite, 6a-megaA, 6a-megaB, 6a-megaB-fast, 6a-heap,
+  6b-volume), unless the run is the nightly and the bench ran isolated with its timing judged. That nightly PASS is recorded with
+  `nightly: true` and is what a release reuses ("Benches out of the release path"). A contended or recorded-timing PASS of a judged
+  bench is never recorded. The scenario steps (S1-S3 included since 2026-10-22, and forms, relief, scatter, route, districts, s7,
+  mp-ingame) are ordinary candidates: they cache when they pass with no bar missed;
 - it ran traced, and every source path its trace touched is inside its set. Otherwise the run reports an **inputs-map miss**
   (`summary.json` `inputsMisses`, SUMMARY.md, the runner log) and the PASS is not recorded. The fix is
   `node tools/step-inputs.mjs merge <run dir>`, a review of the globs it adds, and a commit; `node tools/step-cache.mjs import <run dir>`
@@ -190,8 +199,10 @@ release tier's 60 plus what a batch's slice run covered (0.41.0's integration sl
 2. **it is a canary** (tools/gate-cache.json `release.canaries`), cached or not:
    - the calibration probes p2-calibration, p3-probe-water and p3-probe-ledger;
    - one big scenario, rotating 6b-scenario-s1, 6c-scenario-s2, 6c-scenario-s3, 6cv-scenario-s7 by the release's rotation key;
-   - the crash suite the existing rotation picks;
-   - the judged benches;
+   - the crash suite the existing rotation picks.
+
+   The judged benches are no longer canaries (2026-10-22): they are not candidates at all, and the bench rule decides them ("Benches
+   out of the release path");
 3. **it is a full twin whose last PASS is older than the last full nightly**. A full twin is any `supersededBy` target: the -full
    steps and the full ids of the -smoke steps. The nightly's start comes from `artifacts/nightly/latest.json`;
 4. **a running step needs it from this run**:
@@ -203,10 +214,10 @@ release tier's 60 plus what a batch's slice run covered (0.41.0's integration sl
    the kit-suite readers (kit-reuse.mjs checks the tree).
 
 **Split steps** (turbo, docs/GATES.md "Turbo"): each part `<id>/p<k>` has its own key (its own entry: the section env) over its
-parent's input set, and is CACHED or run on its own; a canary or a judged bench takes all its parts.
+parent's input set, and is CACHED or run on its own; a canary or a bench the bench rule runs takes all its parts.
 
-**`--full`** runs every candidate and every rotation option (the full megaB and throughput stand for their --fast/-smoke variants). It
-is **the rule, automatically,** when the release range touches one of these:
+**`--full`** runs every candidate, every rotation option and every judged bench but the nightly-only 6a-heap (megaB's full walk; the
+nightly's `--nightly` picks megaB's walk by its schedule and runs heap). It is **the rule, automatically,** when the release range touches one of these:
 - mod/build.gradle, mod/settings.gradle, the gradle wrapper, devserver/ or apitest/ build files;
 - mod/gradle.properties beyond `mod_version` (the Minecraft version or a dependency);
 - a path whose impact rule is tagged `engine`.
@@ -214,7 +225,8 @@ is **the rule, automatically,** when the release range touches one of these:
 `--plan` prints why. Run a manual `release --full` every few weeks as well, and after any toolchain or machine change the key can't
 see (a new JDK build is in the key; a changed snapshot world is in the key by its level.dat).
 
-What a CACHED step does not do: it does not re-measure. Its timing bars were recorded with its PASS; the judged benches always run.
+What a CACHED step does not do: it does not re-measure. Its timing bars were recorded with its PASS. The judged benches' timing comes
+from the nightly, reused only while nothing they measure changed ("Benches out of the release path").
 
 ### The nightly (`tools/nightly.mjs`)
 
@@ -224,15 +236,17 @@ At about 02:00 it:
    for an idle machine first, without taking a queue ticket, so it never queues ahead of a run;
 2. fetches origin and moves its own worktree (`../architect-mc-nightly`, detached) to origin/main. The main checkout is never
    checked out or pulled. A nightly worktree with local changes skips the night;
-3. runs `release --full --no-cache --turbo` there (`nightly.extraArgs`), in its own run dirs (`../architect-mc-nightrun[-s<k>]`)
+3. runs `release --full --no-cache --nightly --turbo` there (`nightly.extraArgs`; `--megab-full` passes on), in its own run dirs (`../architect-mc-nightrun[-s<k>]`)
    and out dir (`artifacts/gate-runs-nightly/`). As a turbo run it holds the whole machine: a run started during the night waits in
    the queue for it (FIFO), and nothing is killed. **The yield guard** (`nightly.yieldAfter`, 05:30 local): past it, with another run
    queued, the nightly sends its runner SIGUSR2. The runner starts no new step, lets its running steps finish, and ends `stopped`
    with `yielded` (the steps not started are SKIPPED, error "yielded"). The nightly then runs those steps as a normal one-slot run
-   (`release --no-cache --no-turbo --only ...`), which queues like any run. The summary records the yield, both runs and the
-   combined verdict;
+   (`release --no-cache --no-turbo --nightly --only ...`), which queues like any run. The summary records the yield, both runs and
+   the combined verdict. `--nightly` makes the judged benches run isolated with their timing judged and records their PASSes for the
+   releases ("Benches out of the release path");
 4. writes `artifacts/nightly/<date>/SUMMARY.md`, `summary.json` (head, verdict, counts, wall, slot wait, what didn't pass, PASSes
-   recorded), `impact-map-misses.json`, `misses-log.md`, and `artifacts/nightly/latest.json` when the run finished.
+   recorded, the benches it ran and whether each PASS was recorded, megaB's walk and why), `impact-map-misses.json`, `misses-log.md`,
+   and `artifacts/nightly/latest.json` when the run finished.
 
 It sends no notification of any kind; the coordinator reads the summary. It never kills anything:
 - one nightly at a time: `artifacts/nightly/nightly.lock` holds the pid, and a second nightly exits at once ("already active");
@@ -260,6 +274,179 @@ node tools/nightly-install.mjs --uninstall
 
 The plist runs `node <checkout>/tools/nightly.mjs` at 02:00. Its environment is PATH (the mise node, Homebrew, system), HOME and
 JAVA_HOME, nothing else: no `ANTHROPIC_*`, no `GATE_NOTIFY`. Logs go to `~/Library/Logs/architect-nightly.log`.
+
+### Coverage-based inputs (2026-10-22; code and offline proofs, no in-game run yet)
+
+The whole-tree classes made any mod/src/main or kit/lib change re-run every in-game step. In **coverage mode**
+(`tools/lib/step-coverage.mjs`, `gate-cache.json` `coverage`, on by default; `--no-coverage` turns it off) an in-game step's PASS is
+keyed by what that run touched. The key covers:
+- **Java classes.** Every JVM of the shard logs its class loads (`JAVA_TOOL_OPTIONS=-Xlog:class+load` into
+  `<run>/coverage/jvm-<pid>.log`). A step owns the logs of the JVMs alive at its start (a reused client counts with everything it
+  loaded before) and of the JVMs written during it. Each class maps to its source file; a class with no file of its own widens to
+  its package's files.
+  - Loaded is a superset of executed, which is JaCoCo's class level. It needs no agent: JaCoCo isn't in the gradle cache, and adding it
+    would mean a download. JaCoCo can replace it later.
+- **Node files.** The step's own trace, plus the trace of the client the runner started: the sidecar and its workers.
+  - The tracer follows worker threads through a wrapper that also gives the tracer's environment to a worker started with
+    `env: {}` (the region pool).
+  - The kit tools the sidecar spawns with `minimalEnv` are not traced; their closures are in the safety set.
+  - The region CLI runs under Node's permission model, where no tracer can load. A step whose client stats `kit/tools/region.mjs`
+    (the sidecar's `runKit`, just before it spawns the CLI) gets the CLI's closure and every region program
+    (`coverage.whenTouched`). A kit test guards that contract.
+  - It records `mkdirSync` as evidence of a gradle run in the source checkout.
+  - The JVM log never rotates (`filecount=0`).
+- **The step's static, non-class inputs.** Its drivers' module closure and its traced data. The `gradle` class is kept only when
+  the run took the source checkout's gradle lock.
+- **The safety set**, always in (`coverage.always` and the closures of `coverage.alwaysRoots`), with the reason for each group in
+  `coverage.why`:
+  - build files and resources;
+  - mixins (applied as bytes, never loaded under their own name);
+  - the `*Registry*`, `*Codec*`, `*Serial*` and `*Nbt*` sources, and the fabric.mod.json entrypoints;
+  - devserver (its generated hooks);
+  - `sidecar/src` (one esbuild bundle);
+  - the kit tools the sidecar spawns with a minimal environment (untraced), the kit data it reads, the region worker, and
+    kit/lib/region/plan.mjs (the KIT_INFO probe reads its constants);
+  - the kit files the jar carries.
+- **The runner's own code** (`runnerKey`: gate-run.mjs, hosts, splits, turbo, shard-auto, gate-history, the tracer) is in every
+  key, coverage or not. The fail audit below found 8 past FAILs that only a runner change explains.
+
+**The run-level build artifact** (`tools/lib/build-artifact.mjs`, `gate-cache.json` `build`) is the design that makes a Java change
+cheap.
+- **What it is:** the mod (main, client, test), devserver and apitest classes, compiled once per hash of their inputs (all of
+  mod/, devserver/ and apitest/, plus the kit files the build reads and the compiler), offline, in `../architect-mc-buildcache`.
+  A manifest of every class file's digest goes to `artifacts/build-cache/<hash>.json`. A build of 1283 classes takes about 40 s
+  and is byte-identical across worktrees.
+- **What a coverage-mode key holds instead of the build:** the bytecode digests of the classes its run loaded, instead of their
+  Java sources. It keeps the `gradle` class only when its run took the source checkout's gradle lock: gradle may serve those
+  tests from its cache with no class log, and a `--tests` filter takes new test classes by name.
+  - A source edit that compiles to the same bytecode, or a change to a class the step never loaded, leaves the key alone.
+  - A constant inlined into a loaded class changes that class's bytecode, so the global constant rule only applies to PASSes
+    recorded without an artifact.
+- **The guard:** a build that fails, or can't run, gives no coverage key, so every coverage-mode step runs.
+  - A compile failure is kept in the manifest cache. A timeout, a lock problem or a dirty cache worktree is not, so the next run
+    retries.
+  - The build environment drops `LAB_UI_DIR`, `ORG_GRADLE_PROJECT_*` and the gate's tracing variables.
+- **Not the whole artifact's hash** in every key. That hash moves on any Java change, which would put the floor back at "every
+  step". The per-class digests are that guard at the granularity a step actually consumes.
+- **The gradle-cwd steps** (unit-mod, umt, p3-lint) are the build and its whole test suite, so they keep the whole trees.
+- **Not yet done:** clients still compile their own run worktree (loom `runClient`). Making them load the shared classes would only
+  save time, and needs an in-game run to prove; the keys don't depend on who compiles.
+- `--no-build-artifact` keeps coverage keys on sources.
+
+A coverage PASS is looked up by recomputing its key over the set it recorded (`lookupCoverage`, the newest twelve PASSes of the step):
+- a changed file in the set re-runs the step, and that run re-records its coverage;
+- a changed file outside the set skips it;
+- **a constant variable changed in any Java file** invalidates every coverage PASS, because javac inlines constants into the
+  classes that use them. A constant variable is a `final` field or local of a primitive or String type with an initialiser, or any
+  such field in an interface or annotation. Every one is parsed from both versions of each changed file, across lines and
+  concatenations (`constantDecls`).
+
+**Auto `--full`, narrowed (PROPOSED, awaiting approval).** The impact rules' `engine` tag no longer forces `--full`. Instead it is
+forced by the Minecraft or dependency versions, the build files, and a named engine list (`release.autoFull.enginePaths`):
+- the journal and its store: `journal/**`;
+- the block-write queues: `batch/**`, `site/RegionQueue`, `TickDeferral`, `ChunkTickets`;
+- the placement and removal core: `site/TemplateWriter`, `PlaceJob`, `RestoreJob`, `InfraJob`, `SiteJournal`, `Sites`, `Groups`,
+  `Batches`, `Placement`, `placement/Reconcile` and `region/RegionsImpl`;
+- the files the UMT rule names as undo-critical: `site/FluidRearm`, `TileCheck`, `LotMask`;
+- placement tracking: `placed/**`;
+- the world-update mixins: `mixin/**` and the mixins json.
+
+kit/lib/** and region/RegionFluids.java no longer force it: the coordinator ruled RegionFluids not engine, though the UMT rule lists
+it.
+
+**Proofs (offline; the exact counts need the first traced turbo run, which records every step's coverage).**
+- **A real JVM** (`./gradlew test --tests *IrRoadExtTest` with the class-load log): 353 `dev.larattalabs` classes, every one mapped
+  to its source. The coverage set it gives an in-game entry holds 91 of the 345 mod/src/main files.
+- **5 recent commits: the design as built** (`tools/step-cache.mjs coverage-select <commits> --bytecode`). Both sides are compiled
+  and the changed class files listed. A coverage-mode step is keyed by:
+  - **its drivers' eager closure.** That is the top-level `import`s, which always load. A lazy `import()` counts only when its run
+    executed it, because the trace records it.
+    - Guard: a driver edit that starts executing a lazy path changes the driver file, which is in the eager set, so the step
+      re-runs and is re-traced (kit test "drivers count by their eager imports").
+    - The CI check still walks the full static closure (`closure` in the map; `eager` is new).
+  - **gradle runs in the source checkout, three cases:**
+    - **compile only** (`compileJava` for api-compat): the build artifact compiled the same sources. The class files the driver then
+      reads are keyed by their bytecode (`classReads`).
+    - **tests with readable filters** (`gateRerunTests` makes the JVM run and log; the runner sets it only for these steps):
+      - the test sources the patterns select at each commit (`@tests:<pattern>`; Gradle also matches Class.method, so a wildcard
+        selects every test file whose name or text holds its fragments);
+      - the repo paths those test sources name (`javaTestRefs`): literal `"../X/..."` and `Path.of("..", "X", ...)` paths for
+        any X (kit, sidecar, scenarios, ...), a node module's closure, or a directory's tree. A source that builds a path any other
+        way (`Path.of("..", var)`, `Path.of("..")`, `resolve(var)`) makes the whole repository its input;
+      - the test resources;
+      - the loaded bytecode.
+    - **otherwise:** the whole build and test tree. That now applies to 3 steps only: f2-unit, f2-harvest and
+      6cf2-scenario-scatter, whose `gradle(args)` wrapper passes a parameter.
+  - **gradle runs, as recognised:**
+    - A run is any `gradlew` the step's node processes launched: srcGradle's lock, or the tracer's record of the launch (kind
+      `x`; `spawnSync('./gradlew', ...)` called directly counts).
+    - A call is a test run unless every task it names is compile-only (compileJava, classes, testClasses, jar, headlessLaunch,
+      ...). build, check, umtLong and `:x:test` run tests.
+    - An `args` variable is resolved to its nearest array literal before the call.
+    - A message string that names gradlew is not a call.
+  - **kit-reuse** (a driver whose closure loads kit-reuse.mjs, eagerly or through `await import`) delegates its kit tests to unit-kit. Its coverage
+    PASS serves only a run that holds unit-kit, which re-runs on any kit change.
+  - **`coverage.lazyAlways`** (gate6a-stubs.mjs) lists lazy paths that run state, not code, decides: they stay in.
+  - **The 8 drivers that were unreadable:** f1, t1, t2, p0, s2, d and k1a only compile (api-compat), and pt2's
+    `*${t.split('.').pop()}` template ranges over literal names, so it is readable. Gradle calls are now read from the code (comments
+    stripped), with an `args` variable resolved to its array literal.
+
+  "At least" is what runs whatever the recorded coverage says. Of the 210 cacheable steps:
+
+  | commit | change | class files changed | map mode runs | coverage at least |
+  |---|---|---|---|---|
+  | e5dafb64 | kit isLeaves (kit/lib/forms/states.mjs) | 0 | 209 | 15 |
+  | 0bb0c89e | RS realised provenance (11 files) | 14 | 204 | 15 |
+  | f5c73633 | RegionHash (5 files) | 6 | 204 | 9 |
+  | 8b4da151 | RS-b farmland (3 files) | 5 | 204 | 10 |
+  | 4d891398 | RP verify (1 Java file) | 2 | 204 | 8 |
+
+  - **Who is in the floor:**
+    - unit-mod, umt, p3-lint and p3-lint-long (the build and its tests);
+    - f2-unit (its filters are unreadable);
+    - sch-unit, pt2-unit and rs-unit, whose selected Java tests build repo paths opaquely (ApiP0Test's `Path.of("..", file)`), so
+      the whole repo is their input;
+    - the steps whose eager drivers or data moved: the RS steps for 0bb0c89e, rsb for 8b4da151;
+    - for the kit change: unit-kit, water-lint, the lints and x-unit, which load it eagerly, and mp-unit.
+  - **Above the floor**, a step runs only if its run loaded a changed class or a changed node file, a lazily imported driver module
+    included (f5c73633 changed `gate6ch-holders.mjs`, which only `gate6ch.mjs holders` loads).
+  - **Before:** 157 and 20-30 with the full closure, and 35-50 with the gradle class kept.
+- **Why the kit change ran 157 before** (measured): 143 of the 157 held kit/lib/forms/states.mjs only through lazy `import()`s
+  in shared drivers that most runs never execute. The main one is `gate6b.mjs base` → `scenarios.mjs` → `kit/lib/region/check.mjs`.
+  The eager-closure rule above, approved and built, takes the floor to 15.
+
+  The earlier bound, which kept the gradle class (`--source-gradle`):
+- **The same 5 commits, source keys** (`tools/step-cache.mjs coverage-select <commit>...`, against each parent).
+  "Coverage at least" is the steps whose drivers, data, runner or safety set moved, which run in any mode; the rest are decided
+  by their recorded coverage. Of the 210 cacheable steps:
+
+  | commit | change | map mode runs | coverage at least, worst case | coverage at least, in-game steps without gradle (`--gradle-in-game-off`) |
+  |---|---|---|---|---|
+  | e5dafb64 | kit isLeaves (1 kit/lib file) | 209 | 169 | 157 |
+  | 0bb0c89e | RS realised provenance (11 files: Java, kit, drivers) | 204 | 118 | 40 |
+  | f5c73633 | RegionHash (5 files) | 204 | 118 | 50 |
+  | 8b4da151 | RS-b farmland (3 files) | 204 | 118 | 37 |
+  | 4d891398 | RP verify (1 Java file) | 204 | 118 | 35 |
+
+  - A Java-only change now runs as few as the client-less steps that build the mod in the source checkout, plus whatever touched
+    the changed classes.
+  - A change to a widely imported kit module (kit/lib/blocks or check) still runs most steps, because the drivers themselves import
+    it. Node coverage is at file level, as specified.
+- **History** (`tools/step-cache.mjs fail-audit`, every FAIL or TIMEOUT in artifacts/ against the step's last earlier PASS on an
+  ancestor commit). 626 records on 2026-10-22; the count grows as runs land:
+  - 197 have no earlier PASS on an ancestor;
+  - 10 came on the same commit as a PASS: no code change, so a flake, load or environment;
+  - 415 had their cause in the step's drivers, data, definition, runner or safety set, so they run in every mode. That count leans
+    on the large safety set (devserver and sidecar sources, the Registry/Codec/Serial/Nbt globs);
+  - **2 are decided by coverage**, pending its first recording: t3b-ingame after a TileCheck.java change, and sim-jobs after the
+    kit/lib/lint changes;
+  - 2 have no change in the step's set at all:
+    - 6ct2-scenario-route's change was docs only;
+    - pt2-ingame failed item 13 (the one known on main) after a change to tools/gate6cpt.mjs, which is not in its set. The audit
+      can't tell whether that change caused it.
+  - So the coverage half of the proof is still to come: only 2 of 626 records depend on coverage, and none has been recorded
+    yet.
+  - Before the runner joined the keys, the audit found 10 such holes. The 8 explained by runner changes are why `runnerKey` exists.
 
 ### Impact-map misses log
 
@@ -302,6 +489,242 @@ real release has run against a warm cache yet.
 - **The analysis cache**: `step-cache.mjs import-history --into artifacts/step-cache-history` over every run since the toolchain's
   install (2026-10-21 18:16Z, node 24.22.1) recorded 66 untraced entries for the 13 verified steps (514 older runs skipped). Without
   the verified-set rule it was 435. GATE_STEP_CACHE_DIR points a plan at it; the live cache never takes untraced entries.
+
+## Benches out of the release path (Noah, 2026-10-22)
+
+A release re-judged every bench's timing on the release machine: megaA (11 min), megaB (25 or 85 min), heap, volume, mega-lite,
+throughput and the S1-S3 scenarios. Each ran isolated, so nothing else could run beside it. Noah approved four changes on
+2026-10-22. Code: `tools/lib/bench-select.mjs` (the rule, pure, tested by `kit/test/gate-benches.test.mjs`); config:
+`tools/gate-cache.json` `release.benches`.
+
+1. **The judged benches leave the release path.** The judged list is 4e-megalite, 6a-megaA, 6a-megaB, 6a-megaB-fast, 6a-heap and
+   6b-volume (4e-megalite added 2026-10-23, the coordinator: no bar is judged nowhere).
+   - They are not release candidates (not in `tiers.release`, dropped from the impact rules' candidates).
+   - The nightly (`release --full --nightly`) runs them isolated with their timing judged, and records each PASS in the step cache
+     with `nightly: true`. Only those PASSes are recorded for a judged bench. A contended or recorded-timing PASS never serves.
+   - A release then decides each bench with **the bench rule** below, and `--plan` prints the decision and the reason.
+   - The functional checks (exactness, undo, counts) still run wherever they ran in `change` and `slice`: the impact map still
+     names megaA and volume in the region rule and mega-lite in the placement, sites, kit and driver rules, timing recorded, not
+     isolated. No check is dropped.
+   - The scenarios S1, S2 and S3 (`nightlyJudged`) are ordinary cache candidates at a release, with their timing recorded and not
+     isolated. Only the nightly judges their timing.
+2. **megaB's full walk (about 85 min)** runs in the nightly once a week (`release.benches.megaB.weeklyDay`, `sun`: the nightly
+   that starts Sunday about 02:00), on demand (`node tools/nightly.mjs --megab-full`), the first time, and when a bench-sensitive
+   group naming it changed since the last full walk, and again on the next nightly when the last full walk did not PASS. The other
+   nightlies run `6a-megaB-fast`. Its two resilience rows run as an
+   ordinary step, **`6a-resume`** (below).
+3. **4e-megalite and 4e-throughput fold into 6a-megaA** where they overlap (the table below). Both are out of the release tier and
+   stay runnable by name (`--only 4e-megalite`, the `regress` chain).
+   - **4e-megalite** stays a bench and is a judged bench (decision, 2026-10-23): the nightly judges the three tick bars megaA has
+     no equivalent for (one lot's undo, the 1 ms and 10 ms budgets), with its others, and a release reuses that result through the
+     bench rule like the other benches (the placement core and block-write queue groups name it). Its functional checks run where the
+     impact map picks it in `change` and `slice`, as before.
+   - **4e-throughput and 4e-throughput-smoke** run for their functional checks where the impact map picks them, with
+     `"timing": "recorded"`: their bars are recorded in every tier and chain, and `--judge-timing` judges them.
+4. **6a-heap is nightly only.** A release never runs it. `--plan` shows its last nightly result.
+
+### The bench rule (a release that is not `--full`)
+
+For each judged bench, megaB's two walks counting as one bench:
+1. The latest nightly that ran it (`artifacts/nightly/<date>/summary.json` and its runs, finished or stopped) gives its result: the
+   step's terminal status (PASS, FAIL, TIMEOUT, NOISY, ERROR; a yielded, pending or running step has none). Only that result
+   counts: if it was not a PASS, the release runs the bench. An older PASS is not used.
+2. The release runs the bench when any of these holds. Each reason is printed.
+   - no nightly has run it yet;
+   - its latest nightly result is FAIL, TIMEOUT or NOISY;
+   - a path of a bench-sensitive group naming it changed between the nightly's head and HEAD (`git diff <head> HEAD`, two-dot, so a
+     commit the nightly had and HEAD lacks counts too);
+   - its step-cache entry from that nightly no longer holds at HEAD (`entryStillValid`):
+     - a coverage entry (an in-game step, once coverage is recorded) is checked by recomputing its key over the set it recorded
+       and the loaded classes' bytecode;
+     - a map-mode entry is checked by its key at HEAD.
+     Either way the key covers the definition, the toolchain, the runner code and the modes, so a change to any of them re-runs
+     the bench;
+   - `--no-cache` (nothing is reused).
+3. Otherwise the release **reuses** that PASS and runs nothing for the bench.
+4. megaB runs its full walk when its sensitive paths changed, and the fast walk otherwise. When megaB (either walk) runs at a
+   release, `6a-resume` drops: its `supersededBy` is `["6a-megaB", "6a-megaB-fast"]`, and `supersededBy` now takes a list. The
+   nightly keeps 6a-resume beside megaB (about 25 min): a bench's PASS never serves 6a-resume, so its own nightly PASS is what lets a
+   release skip it as CACHED.
+5. 6a-heap: never run at a release (`nightlyOnly`).
+
+`--plan`, the runner log, `summary.json` (`tier.benches`) and SUMMARY.md ("Benches") list every bench:
+- **REUSED**, with the nightly's date, head, run dir and log;
+- **RUN**, with the reason and the changed paths;
+- **NIGHTLY** (heap), with its last result.
+
+They also show when each scenario's timing was last judged. Under `--full` they list what the run adds:
+- the nightly: every judged bench and megaB's walk with its reason;
+- any other `--full` (by hand, or the auto rule): every judged bench but heap, and megaB's full walk.
+
+`--nightly-dir DIR` (or `GATE_NIGHTLY_DIR`, plumbing: never in a key) reads the nightly records from another root (the proofs below).
+
+**What else moves a bench's key** (so the release re-runs it although no measured code changed): the runner code (`runnerKey`), the
+toolchain, the bench's chain entry and drivers, and its modes, as for every cached step. 6b-volume and the scenarios S1-S3 also hold
+`originMain` (their closures diff against origin/main through `plan-cache.mjs` and `gate6chy-core.mjs`): a code change on origin/main
+or a new merge base since the nightly moves their keys. megaA, megaB, heap and 6a-resume hold no such flag.
+
+**In `change` and `slice`** a judged bench is now looked up like any step. A nightly PASS for the same key, or the same coverage,
+serves it as CACHED there. That PASS ran the same functional checks on the same code, isolated, so no check is lost. Before, a judged
+bench was never cached and always ran.
+
+### The bench-sensitive paths (PROPOSED for the coordinator's review)
+
+The coverage, or the input set while coverage is not yet recorded, already re-runs a bench whose measured code changed. This short
+list is a guard on top, for the code whose cost the benches exist to measure. `release.benches.sensitive` (paths under
+`mod/src/main/java/dev/larattalabs/architect/` unless shown):
+
+| group | paths | re-runs |
+|---|---|---|
+| placement core | `site/Placement`, `PlaceJob`, `TemplateWriter`, `RestoreJob`, `Groups`, `Batches`, `Sites`, `SiteJournal`, `journal/**` | mega-lite, megaA, megaB (full), heap |
+| block-write queue | `batch/**`, `site/RegionQueue`, `RegionItems`, `TickDeferral`, `ChunkTickets`, `region/TicketGate`, `mixin/BlockStateUpdateMixin` | mega-lite, megaA, megaB (full), heap |
+| region tiles | `region/RegionsImpl`, `TileStream`, `Packed`, `Ir`, `BlobPut`, `RegionBlobs`, `LiveBlocks`, `Realised`, `RegionStore` | megaA, megaB (full), heap |
+| scheduler | `region/PendingTicks`, `mixin/LevelTicksMixin`, `LevelTicksAccessor`, `region/MsptTrace` (the trace the tick bars read) | megaA, megaB (full), heap, volume |
+| sidecar tile path | `sidecar/src/regions.ts`, `regionpool.ts`, `region-worker.mjs`, `pool.ts`, `kit/tools/region.mjs` | megaA, megaB (full), heap |
+| volume survey | `region/volume/**`, `region/RegionSurvey` | volume |
+
+Heap is listed so the nightly's megaB choice and the plan read the same groups. A release never runs heap.
+
+### `6a-resume`: megaB's resilience rows as an ordinary step
+
+`node tools/gate6a.mjs resume`: the configuration-B walk that `megaB` runs, shared code (`walkB`), on the fast walk (8 s dwell,
+then straight to unfinished cells), in its own world (`G6A Resume`) and evidence (`gate6a/resume-B.json`), so it never clobbers a
+megaB run. It is not a bench: no `bench` resource, not isolated.
+- **Where it runs:** `tiers.release.always` (a cache candidate), and the slice lists of the region, placement-and-batch and
+  sidecar-region impact rules.
+- **Its rows are megaB's rows**, the same `check` calls with the same thresholds; only the prefix differs. None is a BAR in either
+  step:
+
+| megaB row (`megaB: ...`) | 6a-resume row (`resume: ...`) | threshold |
+|---|---|---|
+| `${state}, N failed items` | the same | PLACED and 0 failed |
+| `resumed S s after the player reached a waiting lots-2 item after the relog (item)` | the same | S <= 60 |
+| `resumed S s after the sidecar came back, at a waiting ways item (item)` | the same | S <= 30 |
+| `REGION_PROGRESS events for every stage with items (...)` | the same | every stage with items seen |
+| `per-stage seconds and chunks loaded {...}` | the same | every stage recorded |
+| metrics `mode`, `wallSeconds`, `relogResumeSeconds`, `sidecarResumeSeconds` | the same, from `resume-B.json` | recorded |
+
+The relog and sidecar rows are time thresholds, though functional ones (did it resume at all, within a minute). Read them with the
+step's load, as for any step. 6a-resume runs them without isolation, beside other steps; a loaded machine could fail them where the
+isolated megaB passed. **The rule (the coordinator, 2026-10-23):** 6a-resume stays unisolated; if it ever fails on its relog or
+sidecar threshold under load, set `"isolate": true` on it (and the `bench` resource, so the runner isolates it: it then runs alone,
+about 25 min).
+
+**Two fixes to the shared walk (2026-10-23).** megaB failed on main for reasons unrelated to what it measures, and 6a-resume would
+inherit both:
+- **The empty stage.** MEGA's plan now has an empty `lots-4` (0 items). It places nothing, so it has no PLACING event, and the
+  REGION_PROGRESS row failed the full walk on 2026-10-22 (`gate-runs-0410/20261022-043748-release`) for that stage alone. The row
+  now asks for every stage *with items*. The per-stage record keeps each stage's item count.
+- **The mob stall.** A lot waiting OCCUPIED holds a mob in its box (a resting polar bear) and never starts. It stalled the walk's
+  final wait for its whole hour (`gate-runs/20261017-232136-slice`, and this branch's first proof run). The walk now clears the mobs
+  while it waits, as megaRun has since 6c W.
+
+No other row changed.
+
+### The fold: every metric and assertion, before and after
+
+"Judged" means the release (before) or the nightly (after) judged it. "Recorded" means it is printed and kept, never failing a run.
+
+**4e-megalite** (256x256 pad, lots and roads through the batch queue; stub sidecar, 4e client)
+
+| row | before | after |
+|---|---|---|
+| check: the pad, lots and 8 roads placed at 4 ms (LOAD_BOUNDED) | every tier | the same (4e-megalite, wherever the impact map picks it in change/slice; the nightly; a release whose change touches it) |
+| check: resumed across a relog | every tier | the same |
+| check: one lot's undo leaves the pad exact | every tier | the same |
+| check: the group undo is exact (hash) | every tier | the same; megaA's E-normal checks the region group undo too |
+| check: 1 ms and 10 ms placed everything | every tier | the same |
+| BAR: 4 ms Architect's own tick <= 50 | judged at release | judged in the nightly (and at a release that runs it); megaA judges the same at its pinned 4 ms budget |
+| BAR: the group undo's own tick | judged at release | judged in the nightly; megaA judges its group undo's own tick too |
+| BAR: one lot's undo own tick | judged at release | judged in the nightly (no megaA equivalent) |
+| BAR: 1 ms and 10 ms own tick | judged at release | judged in the nightly (no megaA equivalent) |
+| metrics cellsPerSecond4ms, groupUndoSeconds, groupUndoOwnMsMax, groupUndoMsptMax, bytesPerCell4ms | recorded | recorded (unchanged) |
+
+**4e-throughput** (village + roads at 4 ms, warm-up + median of 3 or 6) and **4e-throughput-smoke** (one run)
+
+| row | before | after |
+|---|---|---|
+| check: the measured runs placed everything | release (rotation) and slice | the same (slice placement rule; a release candidate; the nightly) |
+| BAR: the measured runs' own tick max <= 50 | judged at release | recorded; **judged in megaA** (own tick at 4 ms) |
+| BAR: median >= 15k cells/s at 4 ms | judged at release (placement-touching) | recorded; **judged in megaA**: "realise >= 15k cells/s first tile to last at 4 ms", with a new check that megaA ran at the 4 ms budget (`budgetMs`). The workload differs (megaA realises a 1000x1000 region, throughput a village), so this is the same bar on megaA's workload |
+| smoke: check placed everything; BAR own tick | release (rotation), change (driver rule) | the same; the BAR recorded; the smoke drops when 4e-throughput runs too (`supersededBy`) |
+| metrics medianCellsPerSecond, spread; smoke cellsPerSecond, mode | recorded | recorded (unchanged) |
+
+**6a-megaA** (unchanged rows, one added)
+
+| row | before | after |
+|---|---|---|
+| check: PLACED; 0 failed items; no chunk generated during realise; journal <= 1 byte/cell and index <= 8 MB; wire <= 4 bytes/cell; group undo completes; E-normal | every release, region slices | nightly, a release whose change touches what it measures, region slices (unchanged there) |
+| BAR: realise >= 15k cells/s; own tick p99 <= 25 and max <= 50; liveness 45 min; held-ticket wait <= 30 s; index commit p99 <= 100 ms; writer starved <= 5%; group undo <= 600 s and its own tick | judged every release | judged in the nightly, and at a release that runs it |
+| **new** check: realised at the 4 ms placement budget (`budgetMs`; the driver pins `/architect budget 4`) | - | everywhere megaA runs |
+| metrics cellsPerSecond, msptMax, undoMsptMax, wholeTickP99, wholeTickMax, undoSeconds, mismatches; **new** budgetMs | recorded | recorded |
+
+**6a-megaB / -fast, 6a-heap, 6b-volume, the scenarios S1-S3**: no row changes. Where they run:
+
+| step | before | after |
+|---|---|---|
+| 6a-megaB / 6a-megaB-fast | every release (full on engine releases, else alternating) | nightly (fast daily, full weekly, on demand or on a sensitive change); a release whose change touches them; the resilience rows every release as 6a-resume |
+| 6a-heap (check: completes under the capped -Xmx; BAR: heap <= baseline + 1 GB) | every other release | nightly only |
+| 6b-volume (BAR: 0 ticks over 50 ms; checks: same sha twice, the file reads back, the five classes) | every release, region slices | nightly, a release whose change touches it, region slices |
+| 6b-scenario-s1, 6c-scenario-s2, 6c-scenario-s3 | every release, timing judged, isolated, never cached | release: a cache candidate, timing recorded, not isolated; nightly: judged, isolated |
+
+**Decided (the coordinator, 2026-10-23).**
+- 4e-megalite is a judged bench, so every timing bar is judged somewhere: its three bars without a megaA equivalent (one lot's
+  undo, the 1 ms and 10 ms own tick) in the nightly.
+- The scenario canary keeps rotating S1, S2, S3 and S7, one per release (`release.canaries.scenarioRotation`), timing recorded
+  there: cheap functional insurance.
+- 6a-resume stays unisolated (the rule above).
+
+### Proofs
+
+No real nightly has run with `--nightly` yet, so the selection proofs fake one.
+- **Where:** `artifacts/gate-runs-benches/selection/` holds the outputs, with the two scripts that made them: `fake-nightly.mjs` and
+  `proofs-ab.sh`.
+- **The fake nightly** (`fake-nightly.mjs <checkout> <out> <date>`) is one finished nightly at the branch head (173dc25d), with every
+  bench a PASS.
+  - Its step-cache entries are keyed exactly as gate-run keys them there.
+  - The in-game judged benches are **coverage entries**: a hand-picked set (the drivers' closure and a few Java sources) and their
+    classes' bytecode from the run-level build artifact. They are fake sets, so the reuse goes through the coverage branch of the
+    rule (`entryStillValid`).
+- **How the plans read it:** `GATE_NIGHTLY_DIR` and `GATE_STEP_CACHE_DIR` point at it. Each plan is
+  `release --since 173dc25d --assume-warm 173dc25d --plan` on a throwaway commit over the head, in a throwaway worktree.
+  `--assume-warm` makes every other step CACHED, so the plan shows what a warm release would run.
+
+| proof | the change | the benches (`--plan`) | release steps |
+|---|---|---|---|
+| (a) | one line in docs/GATES.md | **0 to run, 3 reused**: megaA, megaB (its fast walk) and volume REUSED from the nightly of 2026-10-23 (head 173dc25d7), each "its coverage (N set entries) is unchanged", with its run dir and log; heap NIGHTLY (last result PASS); S1-S3 "timing last judged in the nightly of 2026-10-23: PASS" | 11: the canaries, the probes' evidence steps and the uncacheable ones; no bench |
+| (b) | a comment in site/Placement.java (placement core) | the auto `--full` rule fires (Placement.java is on the engine list): megaA, megaB's full walk and volume, not heap | 201 (--full) |
+| (b), `--no-auto-full` | the same | **2 to run, 1 reused**: megaA RUN and megaB RUN as the **full** walk, both "bench-sensitive code changed since the nightly of 2026-10-23: placement core (site/Placement.java)"; volume REUSED (its coverage holds no Placement code); heap NIGHTLY | 158 |
+| (b2) | a comment in region/Heights.java: in megaA's and megaB's coverage, not on the sensitive list, not in volume's coverage | **2 to run, 1 reused**: megaA RUN and megaB RUN as the **fast** walk, "a file its coverage holds changed since 173dc25d7"; volume REUSED | 158 |
+
+The release step counts beyond the benches come from `--assume-warm`'s map-mode keys: a Java change re-keys every in-game step
+without recorded coverage.
+
+**(c) The unit tests.** `kit/test/gate-benches.test.mjs` has 8 tests:
+- the config (no judged bench left in the release lists);
+- the sensitive groups;
+- reuse;
+- every reason to run;
+- megaB's walk at a release and in the nightly (weekly, on demand, first time, after a failed full walk, on a sensitive change);
+- heap nightly only;
+- a manual `--full`;
+- reading the nightly records (a stopped nightly's FAIL wins over an older PASS; yielded, pending and running steps don't count).
+
+`kit/test/step-cache.test.mjs` adds one: a judged bench is recorded only from the nightly, judged and isolated, and
+`entryStillValid` holds until its key moves.
+
+**(d) 6a-resume in game, with megaB-fast and megaA** (`artifacts/gate-runs-benches/`, `change --only ...`, timing recorded):
+
+| run | head | step | result | relog / sidecar resume | wall |
+|---|---|---|---|---|---|
+| `20261023-021405-change` | 46085b32 | 6a-megaA | PASS, 15 ok: "realised at the 4 ms placement budget (budgetMs 4)", realise 51389 cells/s at 4 ms, own tick p99 10.3 / max 36.6 ms, group undo 218 s, E-normal 28 mismatches (cap 1018) | - | 9m38s |
+| the same | 46085b32 | 6a-megaB-fast | stopped by hand after 1h03m: the walk was done, but a lot waiting OCCUPIED (a mob) held the final wait. That is the mob stall fixed above | - | - |
+| `20261023-045005-change` | 8ffcd670 | 6a-megaB-fast | PASS, 5 ok | 2.0 s / 1.0 s | 39m42s |
+| the same | 8ffcd670 | 6a-resume | PASS, 5 ok, `resume-B.json` and the world `G6A Resume` | 1.0 s / 2.0 s | 16m48s |
+
+The two steps' check rows are the same once the prefixes (`megaB:` / `resume:`), numbers and item keys are masked:
+`rows-diff-resume-vs-megaB-fast.txt` (made by `rows-diff.sh`, beside it). Both rows include the empty-stage fix ("every stage with
+items": ground, ways, lots-1..3). The load average was 12.5 at the start of megaB-fast and 7-9 during 6a-resume.
 
 ## Gate speed (2026-10-17): scheduling, timeouts, one kit suite
 
@@ -629,6 +1052,71 @@ side (about half).
 (memory fine: no swap, 0.03-2.7 M free pages). The unit floor slowed most, so 6 concurrent runs look like too many for timing
 comparisons; functional results were unaffected (no new failure, no timing bar judged).
 
+## Sprinted game-time waits (2026-10-22)
+
+Many in-game steps wait for game time to pass: a 2-minute stand, a fluid or breach settle, hydration, a villager stand, the
+random-tick probes. `dev.wait {ms}` and `sleep` are wall time on the client and on the headless host alike (only `dev.wait
+{frames}` counts server ticks, and only headless), so those waits sat idle in real time, and under load they gave fewer ticks
+than they named. Code: `tools/lib/sprint.mjs`, `run6b.mjs` `gameWait(ms, {real, label})`; test: `kit/test/gate-sprint.test.mjs`;
+proof: `tools/sprint-proof.mjs`.
+
+- **What it does.** `ms` of game time is `ms / 50` ticks: `/tick sprint <n>`, then `/time query gametime` polled (200 ms) until
+  it has moved n ticks. Game time, not day time: it moves with `advance_time false` too.
+- **The switch.** `GATE_SPRINT=0` makes every call site run its original wait (`real`, the `L.settle` or `sleep` it replaced, with
+  the same ms). Default on. A client host (dev.ping not `headless`) always waits in real time: the look steps and the scenario
+  steps on hidden clients are unchanged.
+- **The cap.** If the game time hasn't moved n ticks within max(60 s, ms) of wall time (a frozen or paused server), the sprint is
+  stopped and the remaining ticks are waited in real time, logged `SPRINT INCOMPLETE`.
+- **The log.** Every call prints one `  (sprint) <label>: ...` line (the ticks asked and seen, the wall time; or `real time` and
+  why). Never an ok/FAIL/rec line, so the counts and the proofs don't see it.
+- **Loops.** The irr hydration loop's 10-minute cap counts the waits' game time when they sprint (wall time otherwise), so a
+  sprint can't stretch it past 12,000 ticks. voc-probe's fire loop relights every 400 ticks (its 20 s step) and keeps its
+  12,000-tick end and its 30-minute wall cap.
+
+**What sprints (all on headless hosts):** irr items 3 (hydration), 7 (farmer villagers, 5 min), 4 and the breach fix (30 s
+flows), the pad breach, item 9 (the hydration reach, 5 min); voc-probe's fire posts; f3's item 4 stands (v72, v75) and the coral
+stand; H-a flat's item 2 stand, item 13 (a minute of fire ticks), the villager stand, the removal settle; H-core's item 2 stand,
+item 6's breach settle, item 3's spout settle; H-b's removal settle; HY-core's item 3 stand, item 7's breach settle, item 3's
+negative control and item 4's escape settles, item 18 (a)'s freezing probe; HY-b's swept villager stand and the cold probe; T3b's
+stands (falling blocks still sampled every 200 ticks) and item 4's 2-minute hill stands.
+
+**What stays in real time, and why:**
+- the polls on Architect's own jobs (`waitRegion`, `dev.sites.state` loops, `waitBuilt`, the builder's rescans): WaitLimit's
+  maxWait, the sidecar's timeouts and the build grace (`graceMs`) are wall clock; PT and PT2's settles wait on them;
+- a settle right after a fresh copy or a teleport (gate6b base's 90 s, the scenarios' settle before the plan, S3's plan, P0, K1a,
+  T3a and H-b natural, VOC-b natural, H-a's pre-dump settle, F3's site copy): part of it pays for chunk activation, and a sprint
+  would give the fresh chunks fewer ticks;
+- the controls that mirror another run's span (F3 natural's no-region control, FL natural's "as long as a realise takes");
+- `settleQuiet` (already adaptive); the scenario stands (hidden clients) and the look steps (clients); the y/c29/cu/rs stockpile
+  and builder waits (wall-clock rules); timing benches and anything judged in seconds;
+- the short settles (10 s and under: dumps, kills, post-removal reads), and the release-only branches the slice runs don't take
+  (H-core and HY-core's exact-breach worlds, H-a cold): unchanged, not validated.
+
+### Measured
+
+Old against new at the same head (b5e605f4), back to back on 2 shards each, the old run with `GATE_SPRINT=0`, both after a 1h10m
+queue behind turbo runs (load 10-20, peaks 78-89 at step starts): `artifacts/gate-runs-sprint/old/20261023-003534-release` and
+`new/20261023-003538-release`, compared with `node tools/sprint-proof.mjs --old <old> --new <new> --verbose`. Every step PASSed on both
+sides with the same checks, the same statuses and the same full masked lines (0 value differences); no sprint hit its cap.
+
+| step | old | new | saved | waits: wall old -> new | sprints |
+|---|---|---|---|---|---|
+| irr-ingame-smoke (whole) | 25m38s | 11m08s | 14m30s | 900 -> 7.5 s | 10 (the hydration loop: 5 extra minutes old, 3 new; random) |
+| voc-probe | 10m21s | 3m48s | 6m33s | 600 -> 210 s | 30 (400 fire ticks at random_tick_speed 1000: 6-8 s each) |
+| f3-ingame | 10m16s | 4m16s | 6m00s | 360 -> 1.8 s | 3 |
+| ha-ingame | 8m50s | 3m28s | 5m22s | 345 -> 11 s | 6 |
+| t3b-natural | 7m48s | 1m58s | 5m49s | 360 -> 3.2 s | 14 |
+| h-ingame-smoke (whole) | 10m14s | 5m37s | 4m37s | 295 -> 12 s | 9 |
+| hy-cold-smoke | 5m09s | 1m46s | 3m23s | 240 -> 31 s | 2 (random_tick_speed 300: 15-17 s each) |
+| hy-ingame-smoke (whole) | 14m44s | 12m01s | 2m42s | 167 -> 5.3 s | 5 |
+| t3b-ingame | 2m53s | 1m46s | 1m08s | 80 -> 1.6 s | 8 |
+| **the 9 steps** | **95m53s** | **45m48s** | **50m05s** | | the runs' walls 49m39s -> 23m40s |
+
+A sprint of 2,400 ticks took 0.4-4.5 s at default rules (a villager stand the most), so the CPU a sprint burns is seconds per stand,
+not minutes. In the turbo slice (`artifacts/gate-runs-turbo-slice/20261022-212922-slice`) these waits are about 57 of its 339
+in-game step-minutes; the slice's wall was bound by the unit lanes (fl-unit/p1 20.6, s3-unit/p1 19.7, f3-unit/p1 16.6 min), so its
+wall falls by less until those shrink.
+
 ## P3: the water and survival ledger lints (2026-10-21)
 
 Noah approved replacing slow in-game checks with instant, repeatable ones wherever that's trustworthy (docs/FAST-CHECKS.md, phase P3).
@@ -877,6 +1365,34 @@ check whose part line lacks a value the whole step has (`n/a`, `none`, `missing`
 The other status differences in the proof runs are failures known on main, on one side only: 4d's "shared crate" (4 of 98 runs
 before), 4d's "stages: undo" (8 of 199), 4d-all-full's "group undo" (22 of 94), S3's safety, scatter_cave's exactness (6 of 42). hy-ingame's item 14 push stand (a mob beyond the grate) failed on both sides at this head (0 of 24 before
 today), so it is not a split problem; it is reported to the coordinator.
+
+### Measured: the slice at turbo
+
+The baseline's 110 steps (`artifacts/gate-runs-0410/20261022-020720-slice`: **2h18m** on 3 shards, 414 step-minutes) run as
+`slice --files tools/gate-run.mjs --only <the same 110 ids>` at turbo, head c8bc281a (`artifacts/gate-runs-turbo-slice/
+20261022-212922-slice`): 9 in-game shards + 3 offline lanes, 130 steps after the splits, **58m08s wall** (2.4x faster),
+651 step-minutes. Every worker was busy 53-58 min, so the run is throughput-bound: the step time grows with the load (median
+about 1.3-1.5x, load p50 35, p90 71, max 93; 52 GB available at least, no swap, gate processes 38 GB, the largest process 5.2 GB);
+the longest single part was 20.6 min (fl-unit's slice 1). The next gain is less work (the step cache, a shared plan cache for the
+byte-identity loops), not more shards.
+
+119 PASS, 11 FAIL. Split problems, fixed after this run (and re-proven below): kc-unit/p3 and f3-unit/p1 raced on their merge-base
+worktree's checkout (`tools/lib/base-tree.mjs` now locks it and leaves a tree at the base alone); 6cf2-scenario-scatter/p2 and
+6c-scenario-s3/p2 lacked their flat run's E-flat (a flat/natural pair now stays in one part). Known on main: pt2-ingame item 13,
+h-unit item 10, f3-unit's e16 exception and fl-unit's item 8 (both also in the affected-only release's whole runs of v0.41.0),
+sim-jobs' launcher reuse (7 of 93 runs), 4d's shared crate, 6b-scenario-s1's E-normal (2 of 62), S3's checker and structure
+(in the 0410 slices too), scatter_cave's realised == virtual (2 of 19).
+
+**Proof of the unit slices and the 6cf2 split** (head 65715bfe, turbo, 3 shards + 3 lanes; whole
+`artifacts/gate-runs-turbo-proof/20261022-222818-change`, split `-230320-change`): irr-unit 304/304 checks, f3-unit 311/311, fl-unit
+317/317, voc-unit 12/12, 6cf2-scenario-scatter 22/22 (now 2 parts): equal, and the full masked lines too except where noted.
+kc-unit 324/324: the same checks; one recorded line ("the watch count: N fixtures ... (none)") lists only its slice's fixtures, as
+expected of a recorded count. s3-unit 308/308: the same checks, but asks/redstone_gate.json DIFFERS in part 2 (its first plan's IR):
+origin/main moved to 15c54050 during the run, so the parts that started later took the new merge base (65715bfe, this head) and
+moved the shared base worktree while another part was planning on it. gate-run now fetches once and fixes the run's merge base
+(`GATE_MERGE_BASE`, recorded as `summary.mergeBase`); `tools/lib/base-tree.mjs` uses it and never fetches mid-run. Drivers that
+make their base worktree themselves (gate6ch-core, gate6chy-core, gate6ch-a, gate6ct3a, gate7ak1b, gate6chya) still fetch per step;
+their steps are not split.
 
 **Server and world reuse: not done.** In the 2h18m baseline slice, client and server starts, world switches and snapshot
 restores took 10.0 of 414 step-minutes and the steps' own `gate6b.mjs base` 6.5: 4% together, under the 10% that would pay
@@ -1225,7 +1741,7 @@ Gates are tiered by risk. Run the cheapest tier that covers the change, and the 
 |---|---|---|---|
 | `change` | the three unit suites (mod `gradlew build`, kit, sidecar vitest) + the steps the impact map gives the changed paths. Timing bars recorded, not judged. A docs-only diff runs nothing. | every commit or small change, while iterating | minutes (a journal change: ~16 min; a driver change: ~7 min) |
 | `slice` | the unit suites + `apijars` (api-compat) + the change and slice steps of the impact, i.e. the slice's own gate steps. **No `quick`.** Timing bars recorded, not judged. A docs-only diff runs nothing. | before a slice merges | a journal slice: ~28 min on one shard; a driver-only slice: its own steps + ~5 min |
-| `release` | everything, with the duplicate heavy checks rotated (below); timing bars **judged**, `--quiet-wait` on by default; then the full independent gate-verifier | once per release batch (or weekly), unattended and overnight | 2-3 h on 3 shards (a 6b-sized release: ~2h20m estimated) |
+| `release` | everything, with the duplicate heavy checks rotated (below); timing bars **judged**, `--quiet-wait` on by default; the judged benches reused from the nightly unless what they measure changed ("Benches out of the release path"); then the full independent gate-verifier | once per release batch (or weekly), unattended and overnight | 2-3 h on 3 shards (a 6b-sized release: ~2h20m estimated) |
 
 Pick the range with `--since <ref>` (the diff `<ref>...HEAD`, from the merge base), `--range A...B`, or `--files a,b`.
 `release` with no range uses the last tag reachable from HEAD; with no tag at all it counts as engine- and placement-touching.
@@ -1240,15 +1756,17 @@ step runs next.
 | check | rule |
 |---|---|
 | crash suite | one per release: `4e-crash` and `6a-crash` alternate |
-| mega_bench A | `6a-megaA` every release. It also asserts **E-normal** (the diff after its group undo), so E-normal needs no step of its own |
-| mega_bench B | full walk (`6a-megaB`) on engine-touching releases; otherwise full and `--fast` alternate |
 | E-flat | `6a-eflat` every release |
-| heap | `6a-heap` every other release, opposite the full megaB |
-| throughput | warm-up + median of 3 (`4e-throughput`) only when realise/placement changed (the `placement` tag); otherwise one smoke run (`4e-throughput-smoke`: recorded, not judged) |
 
-Always at release: units, sim suites, apijars, mega-lite, 4e-orders, 4d-all, 5b-chains, 5b-village, 6a-megaA, 6a-eflat, 6a-forest,
-6a-inv3, 6a-staged, and the sim 6b steps (6b-smoke, -ghost, -volume, -commands, -nudges, -pathstyle, -versions, -versionc,
--scenario-s1, -scenario-s1-flat).
+Since 2026-10-22 the bench rotations are gone ("Benches out of the release path"): megaA, megaB, heap and volume run in the nightly
+with their timing judged, and a release runs one only when what it measures changed since that nightly (megaB: the full walk when
+its bench-sensitive core changed, else `--fast`; heap never). megaA still asserts **E-normal** (the diff after its group undo).
+mega-lite is a judged bench like them (nightly; reused at release). throughput is no longer a bench: its timing is folded into
+megaA, and it runs for its functional checks where the impact map picks it, timing recorded. megaB's relog and sidecar-kill rows run every release as `6a-resume`.
+
+Always at release: units, sim suites, apijars, 4e-orders, 4d-all, 5b-chains, 5b-village, 6a-resume, 6a-eflat, 6a-forest, 6a-inv3,
+6a-staged, and the sim 6b steps (6b-smoke, -ghost, -commands, -nudges, -pathstyle, -versions, -versionc, -scenario-s1,
+-scenario-s1-flat). Each is a candidate: it runs when its cache key misses.
 
 The 6b steps run `tools/gate6b.mjs` and `tools/scenarios.mjs` on the `6b` client (`tools/run-gate6b-client.sh`, always the sim
 backend), each after `gate6b.mjs base` (idempotent: it creates the pinned-seed G6B worlds in the run dir the first time). The
@@ -1268,14 +1786,14 @@ its tags. Every matching rule counts. The main rules:
 | paths | change | slice adds |
 |---|---|---|
 | `journal/**` (engine) | unit-mod, 4e-orders, 4e-crash, 6a-eflat | |
-| `region/**` (engine, placement) | unit-mod, 6a-staged | 6a-megaA, 6a-inv3, 6b-ghost, 6b-volume, 6b-nudges, 6b-versions |
-| `placement/**`, `batch/**` (engine, placement) | unit-mod, 4e-megalite | 4e-orders, 4e-throughput, 4d-all, 5b-chains |
+| `region/**` (engine, placement) | unit-mod, 6a-staged | 6a-megaA, 6a-inv3, 6b-ghost, 6b-volume, 6b-nudges, 6b-versions, 6a-resume |
+| `placement/**`, `batch/**` (engine, placement) | unit-mod, 4e-megalite | 4e-orders, 4e-throughput, 4d-all, 5b-chains, 6a-resume |
 | `delta/**` (placement) | unit-mod, 5b-village | 5b-chains |
 | `site/**` | unit-mod, 4e-megalite | 4e-orders, 4d-all, 5b-village, 6b-pathstyle |
 | `api/**`, `apiimpl/**` | unit-mod, apijars | sim-jobs, sim-sets, sim-massing, 4d-all |
 | `survival/**` | unit-mod, apijars | 4d-all |
 | `sidecar/**` | unit-sidecar, sim-jobs, sim-sets, sim-massing | |
-| `sidecar/src/region*` (engine) | unit-sidecar | 6a-staged, 6a-inv3 |
+| `sidecar/src/region*` (engine) | unit-sidecar | 6a-staged, 6a-inv3, 6a-resume |
 | `kit/**` | unit-kit | sim-sets, sim-massing, 4e-megalite, 6b-smoke, 6b-ghost, 6b-scenario-s1-flat (dropped when 6b-scenario-s1 runs too) |
 | `kit/lib/region/**`, `kit/regions/**` (engine) | unit-kit, 6a-inv3 | 6a-staged, 6a-eflat, 6b-versions, 6b-scenario-s1, 6cv-scenario-s7 |
 | `scenarios/**` | unit-kit, 6b-scenario-s1-flat | 6b-scenario-s1 (s1-flat then drops), 6cv-scenario-s7 |
@@ -1295,8 +1813,9 @@ map when a slice adds a package or a gate step (`node tools/gate-impact.mjs <pat
 
 ### Faster runs
 
-- **mega-lite in routine tiers.** `4e-megalite` (256x256) is in every tier. The full 1000x1000 mega_bench runs at release, and megaA
-  also in slices whose diff touches region code.
+- **mega-lite in routine tiers.** `4e-megalite` (256x256) runs where the impact map picks it (placement, sites, kit, the drivers'
+  libs), for its functional checks, timing recorded there; its timing is judged in the nightly (a judged bench). The full 1000x1000 mega_bench
+  (megaA) runs in the nightly, at a release whose change touches what it measures, and in slices whose diff touches region code.
 - **Prepared worlds are restored, not regenerated.** A step's `restore` worlds are APFS-cloned (`cp -c -R`, seconds, no disk) from
   the snapshot store (the seed's `mod/run/saves`, `GATE_SNAPSHOT_DIR`) before it runs. That also undoes whatever an earlier
   step left in them.
@@ -1309,8 +1828,8 @@ map when a slice adds a package or a gate step (`node tools/gate-impact.mjs <pat
   - `waitFor` waits for steps on any shard;
   - a `stopOnFail` step (unit-mod) is a barrier.
 
-  A `bench` step (timing or MSPT bars: mega-lite, throughput, megaA/B, heap, the scenarios) runs alone only where timing is
-  judged; elsewhere it schedules like any other step. The order is longest first from the step history. See "Gate speed" above.
+  A `bench` step (timing or MSPT bars: megaA/B, heap, volume, the scenarios) runs alone only where its timing is judged; elsewhere
+  it schedules like any other step. The order is longest first from the step history. See "Gate speed" above.
 
 ### Bench steps: tick bars, load, exclusivity
 
@@ -1343,7 +1862,8 @@ map when a slice adds a package or a gate step (`node tools/gate-impact.mjs <pat
   `--quiet-max-min` minutes (default 30). If it never drops, the step runs marked noisy and ends **NOISY**: inconclusive, neither
   pass nor fail (its outcome and fail lines are kept, so a functional failure still shows). A run whose only non-PASS steps are
   NOISY has the verdict `INCONCLUSIVE`; re-run those steps on a quiet box.
-- **Benches are exclusive where timing is judged** (`release`, the named chains, `--judge-timing`, `"isolate": true`). There a
+- **Benches are exclusive where timing is judged** (`release`, the named chains, `--judge-timing`, `"isolate": true`; not the
+  scenarios at a release that is not the nightly, whose timing is recorded there). There a
   bench step starts only when no other step is running on any shard, nothing else starts while it runs, and the other shards'
   idle clients are stopped first. In `change`/`slice` it runs next to other steps and records `contended` and `ranWith`;
   `--quiet-wait` then waits only before isolated benches. Across runners on the same machine there is no
@@ -1415,6 +1935,7 @@ Several agents and runners share this machine, so everything is configurable. A 
 | `--quiet-wait [N]`, `--no-quiet-wait`, `--quiet-max-min M` | | on at release (N 8), else off (load recorded only); M 30 |
 | `--slots N`, `--slots-dir DIR` | `GATE_SLOTS`, `GATE_SLOTS_DIR` | `slots.max` (4); `<LarattaLabs>/.gate-slots/` |
 | `--judge-timing` | | change/slice record timing bars; this judges them as at release |
+| | `GATE_SPRINT` | on: the drivers' game-time waits sprint on headless hosts ("Sprinted game-time waits"); `0`: every one waits in real time, as before |
 | | `GATE_SNAPSHOT_DIR` | the seed's `mod/run/saves` |
 | | `ARCHITECT_GATE_OLD_SIDECAR_PORT`/`_DEV_PORT` (gate4e/gate5b's old-version client, migration/downgrade steps only) | 8892/8893 |
 
@@ -1462,7 +1983,11 @@ bench step, alone), so expect about 6 min on a quiet box. Sharding pays off in `
 
 `gate6a.mjs megaB --fast` dwells 8 s per waypoint instead of 30 s and, after a stage's first lap, teleports only to the cells
 that still hold an unfinished item. The relog, the sidecar kill and every bar stay the same, and `megabench-B.json` records
-`mode: fast|full`. Compare only full-walk numbers with each other.
+`mode: fast|full`. Compare only full-walk numbers with each other. `gate6a.mjs resume` (the step 6a-resume) is the same fast walk
+in its own world, `resume-B.json` ("Benches out of the release path").
+
+Since 2026-10-22 throughput carries `"timing": "recorded"`: in these chains too its bars are recorded, not judged, unless the run
+passes `--judge-timing`. mega-lite's bars judge here as before.
 
 ## For agents: launch, then wait once
 

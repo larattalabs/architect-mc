@@ -1,7 +1,8 @@
 // The drivers' merge-base worktrees (../architect-mc-<X>-main, for "byte-identical against the merge base" items), made or moved
 // there under a lock (docs/GATES.md "Turbo": split steps). A split unit step's parts start together: unlocked, one part's checkout
 // rewrote the tree while another part read it ("Cannot find module .../plan-helpers.mjs"), and their concurrent `git fetch`es
-// raced for the ref lock. Now one process fetches and checks out at a time, and a tree already at the base is left alone.
+// raced for the ref lock. Now one process fetches and checks out at a time, and a tree already at the base is left alone; under
+// gate-run the base is the run's GATE_MERGE_BASE, fixed when it starts (origin/main moving mid-run moved the tree under readers).
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -49,12 +50,17 @@ export function withDirLock(dir, fn) {
 /** -> { dir, base }: `dir` (a detached worktree of root's repository) at the merge base of HEAD and origin/main. */
 export function syncBaseTree(root, dir, { fetchOptional = false } = {}) {
   return withDirLock(dir, () => {
-    try {
-      execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']);
-    } catch (e) {
-      if (!fetchOptional) throw e; // (offline: the last fetched origin/main)
+    // a gate run fixes the merge base once (GATE_MERGE_BASE): every step and part of the run compares with the same commit, and
+    // none fetches while another reads the tree
+    let base = process.env.GATE_MERGE_BASE?.trim() || null;
+    if (!base) {
+      try {
+        execFileSync('git', ['-C', root, 'fetch', '-q', 'origin', 'main']);
+      } catch (e) {
+        if (!fetchOptional) throw e; // (offline: the last fetched origin/main)
+      }
+      base = execFileSync('git', ['-C', root, 'merge-base', 'HEAD', 'origin/main']).toString().trim();
     }
-    const base = execFileSync('git', ['-C', root, 'merge-base', 'HEAD', 'origin/main']).toString().trim();
     if (!fs.existsSync(path.join(dir, '.git'))) execFileSync('git', ['-C', root, 'worktree', 'add', '-q', '--detach', dir, base]);
     else if (execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD']).toString().trim() !== base) execFileSync('git', ['-C', dir, 'checkout', '-q', '--detach', base]);
     return { dir, base };

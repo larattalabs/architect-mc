@@ -9,7 +9,7 @@ import { primitiveCount } from '../lib/realise.mjs';
 import { MAX_PRIMITIVES } from '../lib/forms/rules.mjs';
 import { PRESETS as TREE_PRESETS, giantTree } from '../lib/forms/giantTree.mjs';
 import { PRESETS as MUSH_PRESETS, giantMushroom } from '../lib/forms/giantMushroom.mjs';
-import { connectedTo, eachColumn, isLeaves, lintStates, unkey } from '../lib/forms/states.mjs';
+import { connectedTo, eachColumn, isLeaves, lintStates, unkey, unsupportedLogs } from '../lib/forms/states.mjs';
 
 const SEEDS = 200;
 
@@ -21,6 +21,9 @@ function props(gen, at) {
   for (const [k, s] of gen.cells) if (isLeaves(s) && !/persistent=true/.test(s)) { out.bad.push(`${k} not persistent`); break; }
   const floating = connectedTo(gen.cells, (k) => k === `${at[0]},${at[1]},${at[2]}`);
   if (floating.length) out.bad.push(`${floating.length} floating cell(s)`);
+  // (fix/survival-off-storm) every log held as the game's dev.region.logs reads it (a log under it, a log beside it, or solid under it)
+  const loose = unsupportedLogs(gen.cells, () => at[1]);
+  if (loose.length) out.bad.push(`${loose.length} unsupported log(s): ${loose.slice(0, 3).join(' ')}`);
   const cols = new Set();
   eachColumn(gen.columns, (x, z) => cols.add(`${x},${z}`));
   for (const k of gen.cells.keys()) { const [x, , z] = unkey(k); if (!cols.has(`${x},${z}`)) { out.bad.push(`${k} outside the mask`); break; } }
@@ -51,6 +54,22 @@ test('item 1: giantTree, 200 seeds per preset: ops at most 32 primitives, lint S
   const a = giantTree({ at: [5, 70, -3], preset: 'jungle', seed: 'x' }), b = giantTree({ at: [5, 70, -3], preset: 'jungle', seed: 'x' });
   assert.deepEqual([...a.cells], [...b.cells]);
   assert.deepEqual(a.columns, b.columns);
+});
+
+// (fix/survival-off-storm) Steward's RC grove (plan grove_pond: a giant oak of height [40, 48], plan pmvkaawte1d0582): one log at
+// 8065,97,35973 hung under a branch, held only from above (dev.region.logs floating 1). Before the fix 52 of 1000 oak seeds at
+// [40, 48] had one; the generator now turns such a log into a leaf (or drops it).
+test('fix: no unsupported log: the RC grove oak (seed 1a27490e33838705) and oak [40, 48] over 300 seeds; the broken variant caught', () => {
+  const rc = giantTree({ at: [8068, 64, 35968], preset: 'oak', height: [40, 48], seed: '1a27490e33838705' });
+  assert.deepEqual(unsupportedLogs(rc.cells, () => 64), []);
+  assert.equal(rc.cells.size, 3258, 'the RC tree: its cell count as baked (vox_f_great_oak_1, 3258 cells)');
+  const bad = giantTree({ at: [8068, 64, 35968], preset: 'oak', height: [40, 48], seed: '1a27490e33838705' }, { _unsafe: { unsupportedLogs: true } });
+  assert.ok(unsupportedLogs(bad.cells, () => 64).includes('8065,97,35973'), 'the broken variant keeps the RC\'s floating log');
+  for (let i = 0; i < 300; i++) {
+    const at = [0, 64, 0];
+    const g = giantTree({ at, preset: 'oak', height: [40, 48], seed: `s${i}` });
+    assert.deepEqual(unsupportedLogs(g.cells, () => 64), [], `oak [40, 48] seed s${i}`);
+  }
 });
 
 test('item 1: giantMushroom, 200 seeds per preset: ops at most 32 primitives, every face as vanilla sets it, nothing floating, the mask holds every cell', () => {
