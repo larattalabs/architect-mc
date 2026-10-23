@@ -136,8 +136,9 @@ steps.unit = async () => {
   const u = await K.unchanged(root, { check, log, base: 'K2', except: K2_MOVED });
   out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, moved: u.moved };
   fs.writeFileSync(path.join(OUT, 'k2-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
-  const asksMoved = u.moved.filter((f) => f.startsWith('asks/'));
-  check(JSON.stringify(asksMoved) === JSON.stringify(['asks/castle_city.json']) && !u.differ.length, `item 3 (§8): of Steward's recorded plans only castle_city's answer changes (by its walk): moved ${json(asksMoved)}`);
+  const { F7A_MOVED } = await import('./lib/f7a-norm.mjs');
+  const asksMoved = u.moved.filter((f) => f.startsWith('asks/') && !(f in F7A_MOVED));
+  check(JSON.stringify(asksMoved) === JSON.stringify(['asks/castle_city.json']) && !u.differ.length, `item 3 (§8): of Steward's recorded plans only castle_city's answer changes (by its walk): moved ${json(asksMoved)} (the foundation's own aside: F7A_MOVED)`);
   // the compact plan/0 (recorded; the bound is 96,000)
   out.compact = compactOf(path.join(root, 'kit'));
   check(out.compact !== null && out.compact <= 96_000, `the compact plan/0: ${out.compact} characters (the bound 96,000, the coordinator's 2026-10-23)`);
