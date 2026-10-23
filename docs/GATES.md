@@ -2079,5 +2079,5 @@ passes `--judge-timing`. mega-lite's bars judge here as before.
 
 Releases run the slice subsets `4e-orders` and `4e-crash` (crash rotation), not `4e-orders-full` and `4e-crash-full`. The extra orders
 and kill points (the 22 orders and K1, K2, K4, K5, K6, K8) are covered by the undo model (`UmtGateMovesTest.orders4e_*`,
-`crash4e_*`). About 12 minutes saved per release. The -full twins stay defined, and still run in the `regress` and `engine` chains
-and in the nightly's `--full` run.
+`crash4e_*`). About 12 minutes saved per release. The -full twins stay defined and run only in the named `regress` and `engine`
+chains. The nightly doesn't run them either.
