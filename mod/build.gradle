@@ -128,6 +128,15 @@ test {
 	}
 }
 
+// The gate runner (docs/GATES.md "Coverage-based inputs") sets -PgateRerunTests (ORG_GRADLE_PROJECT_gateRerunTests): every test
+// task then really runs in a JVM, never UP-TO-DATE or FROM-CACHE, so the JVM logs the classes the tests load
+if (project.hasProperty("gateRerunTests")) {
+	tasks.withType(Test).configureEach {
+		outputs.upToDateWhen { false }
+		outputs.cacheIf { false }
+	}
+}
+
 // The kit's palettes for the Variants dialog (tools/gen-palettes.mjs -> assets/architect_mc/palettes.json). Needs node;
 // without it (or if the kit fails to load) the jar has no palettes.json and the mod uses its built-in list
 // (dev.larattalabs.architect.library.Palettes.FALLBACK), so the build stays green offline and node-less.
