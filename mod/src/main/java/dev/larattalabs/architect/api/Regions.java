@@ -228,7 +228,7 @@ public interface Regions {
 	 * (every keyed pin under the key, on every artifact: the realised one is then held by its region, the others go to their tombstones),
 	 * on {@link #unpinArtifact}, or at the world-start sweep 30 days after its last use (a pin or re-pin under the key, or a
 	 * {@link #realiseApproved} attempt under it). Idempotent; a re-pin refreshes its last use. Unknown or removed artifacts: nothing.
-	 * Server thread. Since NEXT.
+	 * Server thread. Since 1.39.0.
 	 */
 	default void pinArtifact(String artifactSha, String owner, String opKey) {
 		throw new UnsupportedOperationException("Regions.pinArtifact(sha, owner, opKey) needs Architect API NEXT");
@@ -242,7 +242,7 @@ public interface Regions {
 	 * being prepared or checked) or {@code pinned} (an artifact of it has a pin: unpin it first). A tombstone stays: a keyed plan's same
 	 * key and body then refuses {@link Reason#PLAN_STALE} (detail {@code discarded}), {@link #planByKey} answers empty, and a
 	 * {@link #realise} of the id refuses PLAN_STALE. The world-start sweep discards an unrealised plan 7 days after its last use (30
-	 * with a plan key). Since NEXT.
+	 * with a plan key). Since 1.39.0.
 	 */
 	default CompletableFuture<Boolean> discardPlan(String planId) {
 		throw new UnsupportedOperationException("Regions.discardPlan needs Architect API NEXT");

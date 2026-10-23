@@ -1,7 +1,7 @@
 {
  "catalogueVersion": 12,
- "api": "1.38.0",
- "kitVersion": "0.39.0",
+ "api": "1.39.0",
+ "kitVersion": "0.40.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -823,7 +823,7 @@
   },
   {
    "id": "rule.palette",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.39.0",
    "schemaVersion": 2,
    "state": "supported",
    "limits": {
