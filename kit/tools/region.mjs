@@ -41,7 +41,7 @@ const readJson = (f, what) => {
 };
 
 async function plan(argv) {
-  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1, 'plan-cache': 1, beside: 1, biomes: 1, 'lot-blocks': 1, survival: 'flag', node: 1 }); // (6c RS) --survival: plan in survival (the world's mode)
+  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1, 'plan-cache': 1, beside: 1, 'beside-reach': 1, biomes: 1, 'lot-blocks': 1, survival: 'flag', node: 1 }); // (6c RS) --survival: plan in survival (the world's mode)
   if (pos.length !== 1) throw new Usage('plan <program.mjs> --survey s.bin --claim minX,minZ,maxX,maxZ[,minY,maxY] [...]');
   if (!opts.survey || !opts.claim) throw new Usage('plan needs --survey and --claim');
   const params = opts.params ? readJson(opts.params, '--params') : {};
@@ -88,6 +88,8 @@ async function plan(argv) {
   }
   // (6c D1) a standing region the plan lays out beside: a file holding {id, claim, lots, keep, graph} (the mod's region.plan beside)
   const beside = opts.beside ? readJson(opts.beside, '--beside') : null;
+  // (6c D3) the reach inputs beside it (--beside-reach <f>: {survey, held, standing}, each a file next to it or inline)
+  const besideReach = opts['beside-reach'] ? loadBesideReach(opts['beside-reach']) : null;
   // (6c D2) the plan's biome grid (a file: {minX, minZ, res: 4, width, depth, palette, ids})
   const biomes = opts.biomes ? readJson(opts.biomes, '--biomes') : null;
   // (6c VOC-c) the bound lots' block histograms (a file: {lot: {block: n}}; the mod's, for a plan with a palette rule)
@@ -99,7 +101,7 @@ async function plan(argv) {
     if (!/^[0-9a-f]{64}$/.test(key)) return null;
     try { return JSON.parse(fs.readFileSync(path.join(opts['plan-cache'], `${key}.json`), 'utf8')); } catch { return null; }
   } : null;
-  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(biomes ? { biomes } : {}), ...(lotBlocks ? { lotBlocks } : {}), ...(opts.survival ? { survival: true } : {}), ...(opts.node ? { node: opts.node } : {}) });
+  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(besideReach ? { besideReach } : {}), ...(biomes ? { biomes } : {}), ...(lotBlocks ? { lotBlocks } : {}), ...(opts.survival ? { survival: true } : {}), ...(opts.node ? { node: opts.node } : {}) });
   if (opts['blobs-out'] && res.blobs.size) {
     fs.mkdirSync(opts['blobs-out'], { recursive: true });
     for (const [sha, bytes] of res.blobs) fs.writeFileSync(path.join(opts['blobs-out'], `${sha}.bin`), bytes);
@@ -181,11 +183,22 @@ function loadPlan(pos, opts) {
   return { ir, irText, survey, blobs, volumes, meta, dir };
 }
 
+/**
+ * (6c D3) `--beside-reach <f>`: a JSON file `{survey, held, standing}`; `survey` a file name (ARSV, next to it), `held` and `standing`
+ * inline or file names (JSON, next to it). The sidecar keeps reach-survey.bin, held.json and standing.json in the plan's directory.
+ */
+function loadBesideReach(f) {
+  const o = readJson(f, '--beside-reach');
+  const dir = path.dirname(f);
+  const file = (v, json) => (typeof v === 'string' ? (json ? JSON.parse(fs.readFileSync(path.resolve(dir, v), 'utf8')) : fs.readFileSync(path.resolve(dir, v))) : v);
+  try { return { survey: file(o.survey, false), held: file(o.held, true), standing: file(o.standing, true) }; } catch (e) { throw new Usage(`--beside-reach: ${e.message}`); }
+}
+
 function check(argv) {
-  const { pos, opts } = parseArgs(argv, { survey: 1, blobs: 1, volumes: 1, meta: 1, out: 1, json: 'flag', 'no-prefix': 'flag', 'plan-id': 1 });
+  const { pos, opts } = parseArgs(argv, { survey: 1, blobs: 1, volumes: 1, meta: 1, out: 1, json: 'flag', 'no-prefix': 'flag', 'plan-id': 1, 'beside-reach': 1 });
   if (pos.length !== 1 || !opts.survey) throw new Usage('check <ir.json> --survey s.bin [--blobs dir] [--volumes dir] [--meta meta.json] [--out dir] [--json]');
   const L = loadPlan(pos, opts);
-  const report = checkRegion({ ir: L.ir, survey: L.survey, blobs: L.blobs, volumes: L.volumes, meta: L.meta, prefix: !opts['no-prefix'], planId: opts['plan-id'] });
+  const report = checkRegion({ ir: L.ir, survey: L.survey, blobs: L.blobs, volumes: L.volumes, meta: L.meta, prefix: !opts['no-prefix'], planId: opts['plan-id'], ...(opts['beside-reach'] ? { besideReach: loadBesideReach(opts['beside-reach']) } : {}) });
   delete report._world;
   report.irSha = createHash('sha256').update(L.irText).digest('hex');
   const out = opts.out ?? L.dir;

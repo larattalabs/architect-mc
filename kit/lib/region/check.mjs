@@ -5,6 +5,9 @@
 import { blockState } from './program.mjs';
 import { F_WALK, F_WRITTEN, buildVirtual } from './vworld.mjs';
 import { fillMissing } from './plan.mjs';
+import { parseBesideReach, unionColumns } from './reach.mjs';
+import { besideRules } from './checkBeside.mjs';
+import { asColumns } from './pack.mjs';
 import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
 import { decodeVoxels } from './voxels.mjs';
 import { VC, classAt, decodeArvx } from './volume.mjs';
@@ -22,11 +25,12 @@ import { vocabRules } from './checkVocab.mjs';
 import { formRulesVw } from './checkForms.mjs';
 
 
-export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17', 'M20', 'M25', 'M26', 'M27', 'M18', 'M19'];
+export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17', 'M20', 'M25', 'M26', 'M27', 'M18', 'M19', 'M28'];
 /** (6c V) The parts a flat village's components emit (the M1 lot-box rule applies to them only). */
 const VILLAGE_PARTS = /^(square|green|verges|lanes|props_[a-z]+)$/;
 // (6c H) M25 (containment) and M20 (fire, run for lava bodies only) are errors
-const ERRORS = new Set(['M1', 'M13', 'M14', 'M20', 'M25']);
+// ((6c D3) M28:beside, a districts plan's writes into a standing town's claim, is an error)
+const ERRORS = new Set(['M1', 'M13', 'M14', 'M20', 'M25', 'M28']);
 // (6c VOC-b) per sub-rule severities over the rule's own: M27's state and convert are errors (the rest of M27 and M26 warnings); M20 (b),
 // natural lava near a plan-written flammable, is a warning
 const SUB_SEVERITY = Object.freeze({ 'M27:state': 'error', 'M27:convert': 'error', 'M20:natural': 'warning' });
@@ -374,7 +378,7 @@ export const MELT = Object.freeze({ ice: 10, snow: 11 });
  * meta.json). Or `world` (a realised dump world) with `ir` and `meta` for the rule inputs. Options: `prefix` (M2/M3 after
  * each stage, default true), `rules` (a subset). Returns the report (kit/REGIONS.md "The checker report").
  */
-export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, world = null, prefix = true, rules = RULES, planId } = {}) {
+export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, world = null, prefix = true, rules = RULES, planId, besideReach = null } = {}) {
   const t0 = performance.now();
   const ms = { perRule: {} };
   const findings = [];
@@ -382,6 +386,10 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   const time = (rule, fn) => { const t = performance.now(); const r = fn(); ms.perRule[rule] = Math.round((ms.perRule[rule] ?? 0) + performance.now() - t); return r; };
   const want = new Set(rules);
   let vw = world, clipped = {};
+  // ((6c D3) a reach plan is built over the reach frame's survey (its reach columns lie in the town's claim); `besideReach`: the plan's
+  // reach inputs, parsed, the standing data M28 reads)
+  const BR = besideReach ? parseBesideReach(besideReach) : null;
+  if (!vw && ir.reach && BR) survey = unionColumns(fillMissing(survey).columns, asColumns(BR.survey), [ir.claim.minX, ir.claim.minZ, ir.claim.maxX, ir.claim.maxZ], BR.standing.claim);
   if (!vw) {
     const filled = fillMissing(survey).columns;
     let tPrefix = 0, lastWritten = -1, lastSup = null;
@@ -415,7 +423,8 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
     const c = ir.claim;
     const inside = (x, z) => x >= c.minX && x <= c.maxX && z >= c.minZ && z <= c.maxZ;
     for (const l of ir.lots ?? []) if (!inside(l.box.minX, l.box.minZ) || !inside(l.box.maxX, l.box.maxZ)) findings.push(finding('M1', l.part, l.stage, 1, [[l.box.minX, l.box.minY, l.box.minZ]], `lot ${l.id} leaves the claim`));
-    for (const p of ir.paths ?? []) if (!inside(p.box.minX, p.box.minZ) || !inside(p.box.maxX, p.box.maxZ)) findings.push(finding('M1', p.part, p.stage, 1, [[p.box.minX, p.box.minY, p.box.minZ]], `path ${p.id} leaves the claim`));
+    // ((6c D3) a reach plan's join paths reach into the town's claim: M28:beside judges their cells)
+    for (const p of ir.paths ?? []) if ((!inside(p.box.minX, p.box.minZ) || !inside(p.box.maxX, p.box.maxZ)) && !(ir.reach && p.part === 'route_join')) findings.push(finding('M1', p.part, p.stage, 1, [[p.box.minX, p.box.minY, p.box.minZ]], `path ${p.id} leaves the claim`));
     for (const [n, a] of Object.entries(ir.anchors ?? {})) if (!inside(a[0], a[2])) findings.push(finding('M1', null, null, 1, [a], `anchor ${n} is outside the claim`));
     // ((6c FL) K5 for road items, which no op writes: a road's cells (its centre line and width) inside a lot box; a street is laid off
     // every lot box + 1, as V lays it, so this fires only on a broken layout (FL's lotOnStreet))
@@ -471,6 +480,9 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   if ((want.has('M25') || want.has('M20')) && (ir.parts.some((p) => (p.ops ?? []).some((o) => o.op === 'fluid')) || (Array.isArray(meta?.wet) && meta.wet.length))) {
     time('M25', () => fluidRules({ ir, vw, meta, vols: irVolumes(ir, volumes, blobs), want, findings, metrics, partStage, finding }));
   }
+
+  // ---- (6c D3) M28:beside and M25:clear's foreign bodies: a districts plan with a reach into a standing town's claim
+  if (ir.reach && (want.has('M28') || want.has('M25'))) time('M28', () => { metrics.M28 = besideRules({ ir, vw, besideReach: BR, findings, finding, partStage }); });
 
   // ---- (6c VOC-b) M26, M27 and M20 widened, on every IR (checkVocab.mjs): natural lava is looked for only where the survey or a frozen
   // volume holds some
