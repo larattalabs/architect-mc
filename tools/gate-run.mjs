@@ -83,6 +83,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
+import { createHash } from 'node:crypto';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DevClient } from './lib/devclient.mjs';
@@ -1489,7 +1490,9 @@ async function ensureClient(sh, step, beforeStart = async () => {}) {
  * client's own world is never replaced under it; with a client up, the restore happens on the title screen. */
 async function restoreWorlds(sh, step) {
   const own = cfg.clients[step.client]?.world;
-  const worlds = (step.restore ?? []).filter((w) => w !== own);
+  // (speed audit D, B7) the client's own world may be restored too: with no client up it is put back before the client opens it; with a
+  // client up the client is on the title screen (left above) and reopens it below
+  const worlds = step.restore ?? [];
   if (!worlds.length) return;
   const saves = path.join(sh.GAME_DIR, 'saves');
   const up = clientProcs(sh).length > 0;
@@ -1501,6 +1504,7 @@ async function restoreWorlds(sh, step) {
   try {
     const t = Date.now();
     const done = [];
+    const shas = {};
     for (const w of worlds) {
       const src = path.join(SNAP, w);
       const dst = path.join(saves, w);
@@ -1513,8 +1517,21 @@ async function restoreWorlds(sh, step) {
       execFileSync('cp', ['-c', '-R', src, dst]);
       fs.rmSync(path.join(dst, 'session.lock'), { force: true });
       done.push(w);
+      // (speed audit D, B4/B7) the restored world's level.dat sha256 is step evidence: <evidence>/restored-worlds.json and the log line
+      shas[w] = createHash('sha256').update(fs.readFileSync(path.join(dst, 'level.dat'))).digest('hex');
     }
-    if (done.length) log(`  restored ${done.map((w) => `"${w}"`).join(', ')} from snapshots in ${((Date.now() - t) / 1000).toFixed(1)} s`, sh);
+    if (done.length) {
+      log(`  restored ${done.map((w) => `"${w}" (level.dat sha256 ${shas[w].slice(0, 16)})`).join(', ')} from snapshots in ${((Date.now() - t) / 1000).toFixed(1)} s`, sh);
+      try {
+        const ef = path.join(sh.ev, 'restored-worlds.json');
+        const prev = fs.existsSync(ef) ? JSON.parse(fs.readFileSync(ef, 'utf8')) : {};
+        prev[step.id] = { ...(prev[step.id] ?? {}), ...Object.fromEntries(done.map((w) => [w, { levelDatSha256: shas[w], snapshot: path.join(SNAP, w) }])) };
+        fs.mkdirSync(sh.ev, { recursive: true });
+        fs.writeFileSync(ef, `${JSON.stringify(prev, null, 1)}\n`);
+      } catch (e) {
+        log(`  (restored-worlds.json not written: ${e.message})`, sh);
+      }
+    }
   } finally {
     if (dev) {
       await dev.call('dev.world.open', { name: cfg.clients[sh.current]?.world ?? own }, { timeoutMs: 60_000 });
