@@ -79,6 +79,10 @@ export function emitWalk(E) {
   const st = W.st, wk = st.walk, t = st.thickness, n = W.positions.length;
   const notes = [];
   const stand = (x, z) => K.stand(x, z);
+  // the broken variants (the wall part's ext architect_mc:unsafe; kit tests and the lint only): `noRail` leaves the inner rail out
+  // (M8:walk), `parapetGap: n` leaves n positions of the parapet out (M8:walk), `noLamps` the walk's lamps (M5:walk), `lowCorbel` lays
+  // the corbels one under the walk (M2:walk: the walk's edge a ledge, M3 floating rails)
+  const unsafe = W.p.part.ext?.['architect_mc:unsafe'] ?? {};
   // ---- the blocks
   const walkRole = roles[cr.wall?.walk] ?? roles[cr.wall?.cap] ?? roles.trim ?? body;
   const walkFull = walkRole;
@@ -123,6 +127,7 @@ export function emitWalk(E) {
       walkCells.push([c.x, Y + 1, c.z, i]);
     } else {
       put(c.x, Y, c.z, body);
+      if (Number.isInteger(unsafe.parapetGap) && i >= (n >> 1) && i < (n >> 1) + unsafe.parapetGap) continue;
       if (par) { put(c.x, Y + 1, c.z, '#parapet'); parapetAt.set(k, Y + 1); parCells.push([c.x, Y + 1, c.z]); if (st.crenels && (i & 1) === 0) put(c.x, Y + 2, c.z, '#merlon'); } else { put(c.x, Y + 1, c.z, parFull); put(c.x, Y + 2, c.z, parFull); parCells.push([c.x, Y + 1, c.z]); }
     }
   }
@@ -248,7 +253,7 @@ export function emitWalk(E) {
         if (k >= 1) { const [rx, rz] = s.rail; for (let y = Math.min(s.y - 1, K.env.S.groundAt(rx, rz) - 2); y <= s.y; y++) put(rx, y, rz, body); put(rx, s.y + 1, rz, '#rail'); railCells.push([rx, s.y + 1, rz]); accessCols.set(key(rx, rz), s.y + 2); }
       });
       // its light: the fixture's light on the rail, at the flight's middle (and every `every` steps more)
-      if (wk.lamps !== 'none' && st.lamps !== 'none' && a.steps.length > 1) {
+      if (wk.lamps !== 'none' && st.lamps !== 'none' && !unsafe.noLamps && a.steps.length > 1) {
         const ev = Math.max(4, Math.floor((12 * fixture.level) / 15));
         for (let k = Math.max(1, a.steps.length >> 1); k < a.steps.length; k += ev) {
           const q = a.steps[k];
@@ -262,7 +267,7 @@ export function emitWalk(E) {
   }
   // ---- the inner rail on its corbels: where the inside ground is more than 3 below the walk (open over an access where its own steps
   // need the head room)
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < n && !unsafe.noRail; i++) {
     const c = inner[i];
     if (!c || !E.has(c) || ends.has(i) || stubs.has(key(c.x, c.z))) continue;
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -284,7 +289,7 @@ export function emitWalk(E) {
   }
   // ---- the lamps: on the parapet's top in a crenel gap, every floor(12 * level / 15) positions
   const lamps = [];
-  if (wk.lamps !== 'none' && st.lamps !== 'none') {
+  if (wk.lamps !== 'none' && st.lamps !== 'none' && !unsafe.noLamps) {
     const light = fixture.kind === 'hanging_lantern' ? fixture.light.replace('hanging=true', 'hanging=false') : fixture.light;
     const every = Math.max(4, Math.floor((12 * fixture.level) / 15));
     const want = [];

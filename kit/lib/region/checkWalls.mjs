@@ -12,8 +12,8 @@
 //            landing from its own foot (up), and from the walk every access's foot (down)
 //   M8:walk  (warning) every walk cell's edges: a neighbour that is no walk cell is a 1.5 barrier at the feet (the parapet, a rail, a
 //            stub's wall), or a drop of at most 3 (the inner edge where the ground is near)
-//   M6       2 clear over every walk cell (its head room)
-//   M5       0 dark spawnable walk cells (and flight steps)
+//   M6:walk  2 clear over every walk cell (its head room)
+//   M5:walk  0 dark spawnable walk cells (and flight steps)
 // An access's cells (its steps, their rail, a ladder, the corbels) are no ground beside the wall for M8:wall (the flight is the way up).
 // A joined lot's box is an obstacle to the movers, so a wall that joins one is `provisional` (the answer's). Called by checkRegion
 // (check.mjs), which passes `finding`; the virtual world is left as it was found.
@@ -218,10 +218,27 @@ export function walkRules({ vw, w, part, stage, light, want, findings, finding }
   }
   // ---- M8:walk: every edge of a walk cell a 1.5 barrier or a drop of at most 3
   const open = [];
-  for (const [x, y, z] of cells) {
+  // the walk's level area: its cells and any standable cell at their level the player steps onto beside them (a gap in the parapet
+  // makes the outer course a ledge: its own edges are judged), at most 2 off the walk
+  // (an access's column, a ladder's top: the way down, no ledge)
+  const accessCols = new Set(wk.accesses.flatMap((a) => [...(a.steps ?? []).map((q) => `${q[0]},${q[2]}`), ...(a.cells ? [`${a.cells[0]},${a.cells[2]}`] : [])]));
+  const stand = (x, y, z) => !accessCols.has(`${x},${z}`) && !P.climb[vw.get(x, y - 1, z)] && P.passable[vw.get(x, y, z)] && P.passable[vw.get(x, y + 1, z)] && (P.floor[vw.get(x, y - 1, z)] || P.half[vw.get(x, y - 1, z)]);
+  const area = cells.map(([x, y, z]) => [x, y, z, 0]);
+  const inArea = new Set(cells.map(([x, y, z]) => `${x},${y},${z}`));
+  for (let q = 0; q < area.length; q++) {
+    const [x, y, z, d] = area[q];
+    if (d >= 2) continue;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const k = `${x + dx},${y},${z + dz}`;
+      if (inArea.has(k) || isWalk.has(`${x + dx},${y + 1},${z + dz}`) || isWalk.has(`${x + dx},${y - 1},${z + dz}`)) continue;
+      if (!stand(x + dx, y, z + dz) || P.barrier[vw.get(x + dx, y - 1, z + dz)]) continue;
+      inArea.add(k); area.push([x + dx, y, z + dz, d + 1]);
+    }
+  }
+  for (const [x, y, z] of area) {
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const nx = x + dx, nz = z + dz;
-      if (isWalk.has(`${nx},${y},${nz}`) || isWalk.has(`${nx},${y + 1},${nz}`) || isWalk.has(`${nx},${y - 1},${nz}`)) continue;
+      if (inArea.has(`${nx},${y},${nz}`) || isWalk.has(`${nx},${y + 1},${nz}`) || isWalk.has(`${nx},${y - 1},${nz}`)) continue;
       const a = vw.get(nx, y, nz);
       if (P.barrier[a] || (!P.passable[a] && !P.passable[vw.get(nx, y + 1, nz)])) continue;
       // a step or a drop of at most 3 (a floor within 3 under the feet: the flight's steps, the ground)
@@ -235,13 +252,13 @@ export function walkRules({ vw, w, part, stage, light, want, findings, finding }
   // ---- M6: 2 clear over every walk cell
   const low = cells.filter(([x, y, z]) => !P.passable[vw.get(x, y, z)] || !P.passable[vw.get(x, y + 1, z)]);
   m.headroom = { bad: low.length };
-  if (low.length && want.has('M6')) findings.push(finding('M6', part, stage, low.length, low, `wall ${w.id}: ${low.length} walk cell(s) without 2 clear over them`));
+  if (low.length && want.has('M6')) findings.push(finding('M6:walk', part, stage, low.length, low, `wall ${w.id}: ${low.length} walk cell(s) without 2 clear over them`));
   // ---- M5: 0 dark spawnable walk cells and flight steps
   if (light) {
     const steps = wk.accesses.flatMap((a) => (a.steps ?? []).map(([x, y, z]) => [x, y + 1, z]));
     const dark = [...cells, ...steps].filter(([x, y, z]) => P.spawn[vw.get(x, y - 1, z)] && !(light.at(x, y, z) > 0));
     m.dark = dark.length;
-    if (dark.length) findings.push(finding('M5', part, stage, dark.length, dark, `wall ${w.id}: ${dark.length} dark spawnable walk cell(s) or flight step(s)`));
+    if (dark.length) findings.push(finding('M5:walk', part, stage, dark.length, dark, `wall ${w.id}: ${dark.length} dark spawnable walk cell(s) or flight step(s)`));
   }
   return m;
 }

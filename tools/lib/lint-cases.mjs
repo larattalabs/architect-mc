@@ -159,7 +159,8 @@ function structureCases() {
   out.push({ id: 'fx:tunnel_hill', covers: ['t3b-natural (the hill bore re-read: cover, shell, M3/M4:tunnel)'], run: async () => { const { loadFixture } = await kimp('lib/lint/vworld-fixtures.mjs'); const F = loadFixture('tunnel_hill'); const r = await structure({ ...F, name: 'tunnel_hill' }, { m5: null }); return { ok: [`${summary(r.rep)}; tunnels ${JSON.stringify(r.rep.metrics.tunnels ?? null).slice(0, 160)}`], fails: r.fails, recorded: r.recorded }; } });
   out.push({ id: 'd2:crest', covers: ['d2-ingame #7', 'd2-ingame #9 (the crest instance)', 'd2-ingame #5', 'd2-ingame #12'], run: d2Crest });
   out.push({ id: 'pathbibles', covers: ['w-ingame #8', 'w-ingame #9'], run: pathBibles });
-  for (const [dir, n] of [['kc', 1], ['irr', 1], ['rope', 1], ['tunnel', 2], ['t3a', 2], ['k1a', 1], ['refused', 1], ['voc', 1], ['vocc', 1], ['h', 2], ['hy', 3], ['valid', 6], ['fl', 2], ['f3', 2], ['rs', 1]]) {
+  out.push({ id: 'k2:walk', covers: ['k2-ingame #6 (the walk, realised: the player round it and up and down every access, M8 on walk cells, M5, M3, head room)', 'k2-natural #7 (along, realised)'], run: k2Walk });
+  for (const [dir, n] of [['kc', 1], ['irr', 1], ['rope', 1], ['tunnel', 2], ['t3a', 2], ['k1a', 1], ['refused', 1], ['voc', 1], ['vocc', 1], ['h', 2], ['hy', 3], ['valid', 6], ['fl', 2], ['f3', 2], ['rs', 1], ['k2', 1]]) {
     for (let k = 0; k < n; k++) out.push({ id: `p0:${dir}${n > 1 ? `/${k + 1}` : ''}`, covers: P0COVERS[dir] ?? [], run: () => corpus(dir, k, n) });
   }
   for (const w of ['bridge', 'rope', 'tunnel']) out.push({ id: `even:${w}`, covers: EVENCOVERS[w], run: () => evenFuzz(w) });
@@ -171,11 +172,13 @@ const P0COVERS = {
   kc: ['kc-ingame #6', 'voc-ingame (wall through the fountain)'], k1a: ['k1a-natural #4', 'k1a-target #5'], refused: ['4d-all #16', 'v-ingame #7 (refusal half)', 'd2-ingame #12'],
   t3a: ['t3a-ingame #3', 't3a-natural #4', 't3a-frozen #4'], tunnel: ['t3b-ingame #4'], rope: ['k1b-ingame #4'], voc: ['voc-ingame #5', 'voc-ingame #10'],
   vocc: ['vocc-ingame #3', 'vocc-ingame #8', 'vocc-ingame #9'], irr: ['irr-ingame #1'], h: ['h-ingame #23'], valid: ['Steward-shaped plans (risk 6)'],
+  k2: ['k2-unit (the refusal set: NO_FEATURE, NO_ROOM {class, walk, access}, UNREACHABLE {kind: wall})'],
 };
 const EVENCOVERS = { bridge: ['even-width bridges (c4f1c8f9)'], rope: ['even-width ropes (9ba60b79)'], tunnel: ['even-width tunnels (9ba60b79)'] };
 
 // (the corpus gates the lint's own S- rules and error findings; the connector re-reads are gated on the scenario plans and the fuzz)
-const CONNECTOR_DIRS = new Set([]);
+// ((7a K2) k2: the walks' and along walls' re-reads gate in the corpus too: M2/M8/M6/M5:walk, M2:wall, M8:wall, M3)
+const CONNECTOR_DIRS = new Set(['k2']);
 /** The corpus: every fixture of a plan/0 dir (the k-th of n slices); broken variants must be caught, refusals must be the expected code. */
 async function corpus(dir, k, n) {
   const files = fs.readdirSync(path.join(KIT, 'test', 'fixtures', 'plan', dir)).filter((f) => f.endsWith('.json') && f !== 'SOURCE.json').sort().filter((_, i) => i % n === k);
@@ -220,6 +223,44 @@ async function corpus(dir, k, n) {
   }
   if (!res.fails.length) res.ok.unshift(`${files.length} fixture(s) of plan/${dir} clean (broken variants caught, refusals as expected)`);
   return res;
+}
+
+// ------------------------------------------------------------------ (7a K2) the wall walks and the along walls
+
+/**
+ * K2's structural bars over the virtual world, gated (not the corpus's error-only gate): the walk fixtures (v30's village walked with
+ * corner towers, the biome-edge wall walked with flights and with ladders), S3's shore wall and castle_city's recorded curtain wall
+ * (its wall_walk read): M2:walk (the player round the whole walk, up and down every access), M8:walk (the parapet continuous, the rail
+ * where the drop is over 3), M6:walk (head room), M5:walk, M3, M2:wall and M8:wall.
+ */
+async function k2Walk() {
+  const S = await kimp('test/plan-p0-shared.mjs');
+  const fixRoot = path.join(KIT, 'test', 'fixtures', 'plan');
+  const read = (...p) => ({ name: p.join('/'), ...JSON.parse(fs.readFileSync(path.join(fixRoot, ...p), 'utf8')) });
+  const edge = read('valid', 'v7a_k2_along_edge.json');
+  const walked = (fx, walk) => ({ ...fx, name: `${fx.name}+walk:${JSON.stringify(walk)}`, plan: { ...fx.plan, connectors: fx.plan.connectors.map((c, i) => (i === 0 ? { ...c, walk } : c)) } });
+  const castle = read('asks', 'castle_city.json');
+  const cases = [read('valid', 'v7a_k2_walk.json'), read('valid', 'v7a_k2_along_shore.json'), walked(edge, true), walked(edge, { access: 'ladder' }), { name: 'asks/castle_city.json', on: 'asks', plan: castle.answer.plan }];
+  const out = { ok: [], fails: [], recorded: [] };
+  for (const fx of cases) {
+    const p = await p0Of(fx, S);
+    if (!p.c) { out.fails.push(`${fx.name}: no plan (${p.check?.overall})`); continue; }
+    const r = await structure({ ...p.c, name: `k2:${fx.name}` }, { m5: null, corpus: true, connectors: true });
+    const walls = Object.entries(r.rep.metrics.walls ?? {});
+    const walks = walls.filter(([, m]) => m.walk).map(([id, m]) => `${id}: walk ${m.walk.reached}/${m.walk.cells} reached, ${m.walk.accessesUp}/${m.walk.accesses} up, ${m.walk.accessesDown} down, edges ${m.walk.edges.bad}, head room ${m.walk.headroom.bad}, dark ${m.walk.dark ?? '-'}`);
+    for (const l of r.fails) out.fails.push(`${fx.name}: ${l}`);
+    out.recorded.push(...r.recorded.map((l) => `${fx.name}: ${l}`));
+    if (!r.fails.length) out.ok.push(`${fx.name}: clean (${walks.join('; ') || walls.map(([id, m]) => `${id}: ${m.cells} cells, ${m.gates} gates`).join('; ')})`);
+  }
+  // the broken variants (the walk's ext architect_mc:unsafe): each must FAIL the lint on its rule
+  const v30w = read('valid', 'v7a_k2_walk.json');
+  for (const [unsafe, rule] of [[{ noRail: true }, 'M8:walk'], [{ parapetGap: 3 }, 'M8:walk'], [{ noLamps: true }, 'M5:walk']]) {
+    const fx = { ...v30w, name: `${v30w.name}+unsafe:${JSON.stringify(unsafe)}`, plan: { ...v30w.plan, connectors: v30w.plan.connectors.map((c, i) => (i === 0 ? { ...c, ext: { 'architect_mc:unsafe': unsafe } } : c)) } };
+    const p = await p0Of(fx, S);
+    const r = await structure({ ...p.c, name: `k2:${fx.name}` }, { m5: null, corpus: true, connectors: true });
+    (r.fails.some((l) => l.startsWith(`${rule} `)) ? out.ok : out.fails).push(`${fx.name}: the broken variant ${r.fails.some((l) => l.startsWith(`${rule} `)) ? `caught (${rule})` : `NOT caught by ${rule} (${r.fails.join('; ').slice(0, 200)})`}`);
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ D2's crest on S3's pinned survey (d2-ingame boundary's crest round)
