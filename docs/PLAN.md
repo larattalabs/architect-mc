@@ -992,3 +992,6 @@ Top first. Not fixed in v0.40.1.
   placement order" and "the whole village back exactly"; the whole step passed 63/0 in close-out A's re-run. 4d-all and
   4d-all-full are unsplit for now (gate-chains.json). Find whether p2 depends on state p1's sections leave behind, or whether it's
   contention; re-split only with a split-proof pass.
+- **gate6crs item 4's "consumed 0 items" can never fail** (found by fix/survival-off-storm): it reads a top-level `consumed`
+  that `dev.stockpile.state` doesn't have (it is under `ledger`). Read `ledger.consumed` and prove the check goes red on a
+  broken variant.
