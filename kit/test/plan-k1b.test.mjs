@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { asksSurvey, stewardAnchors, checkPlanLocal, flatSurvey, FIX } from './plan-helpers.mjs';
+import { asksSurvey, stewardAnchors, checkPlanLocal, flatSurvey, FIX, asksFirstPath } from './plan-helpers.mjs';
 import { checkRegion } from '../lib/region/check.mjs';
 import { encodeArvx, decodeArvx, VC } from '../lib/region/volume.mjs';
 import { surveyApi } from '../lib/region/survey.mjs';
@@ -102,7 +102,7 @@ test('auto: walking round a short ditch is cheaper than a span; across a long ra
 });
 
 /** Steward's recorded plans (fixtures/plan/asks) on the asks claim. */
-const asksPlan = (name) => JSON.parse(fs.readFileSync(path.join(FIX, 'asks', `${name}.json`), 'utf8')).answer.plan;
+const asksPlan = (name) => JSON.parse(fs.readFileSync(asksFirstPath(`${name}.json`), 'utf8')).answer.plan; // ((6c close-out A) the first recordings)
 const A = asksSurvey();
 const asks = (plan) => checkPlanLocal(plan, { survey: A.bytes, claim: A.claim, anchors: stewardAnchors(A.claim) });
 

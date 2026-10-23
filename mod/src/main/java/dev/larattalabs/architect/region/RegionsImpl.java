@@ -180,6 +180,7 @@ public final class RegionsImpl implements Regions {
 			actionsTick(s);
 			Brushes.tick(s);
 			RegionFluids.tick(s); // (6c H) the fluids stage: forced ticks, settle and census, the escape guard
+			PlanRetention.replaySidecar(s, false); // (6c close-out A) discarded plans' helper dirs, once per helper link
 		});
 	}
 
@@ -191,6 +192,7 @@ public final class RegionsImpl implements Regions {
 		PLAN_KEYS.clear();
 		REALISE_KEYS.clear();
 		TOMBS.clear();
+		PlanRetention.loadTombstones(w); // (6c close-out A) discarded keyed plans
 		if (!Files.isDirectory(root)) {
 			return;
 		}
@@ -237,6 +239,9 @@ public final class RegionsImpl implements Regions {
 		Prepare.resumeAll(s);
 		PlanChecks.started(s); // (6c P0) check keys, artifacts, pins and tombstones
 		TOMBS.values().forEach(t -> PlanChecks.regionRemoved(t, true)); // (C36) a REMOVED region whose artifact is still held, unpinned
+		// (6c close-out A, §2, §3, §14) keyed pins past their last use (or whose key has its region), then unrealised plans past theirs
+		PlanChecks.sweepKeyedPins(s);
+		PlanRetention.sweep(s);
 		reconcilePending = true;
 		Architect.LOGGER.info("Regions: {} loaded", REGIONS.size());
 	}
@@ -289,6 +294,27 @@ public final class RegionsImpl implements Regions {
 		return List.copyOf(REGIONS.values());
 	}
 
+	/** (6c close-out A) A discarded plan leaves the plan cache. */
+	static void forgetPlan(String planId) {
+		PLANS.remove(planId);
+	}
+
+	/** (6c close-out A) A discarded keyed plan's key leaves the registry (its tombstone answers it: {@link PlanRetention#DISCARDED_KEYS}). */
+	static void dropPlanKey(String scope) {
+		PLAN_KEYS.remove(scope);
+	}
+
+	/** (6c close-out A) The latest removal of a REMOVED region realised from the plan (the sweep's clock), else 0. */
+	static long removedAtOfPlan(String planId) {
+		long t = 0;
+		for (RegionRec r : TOMBS.values()) {
+			if (planId.equals(r.planId)) {
+				t = Math.max(t, r.removedAt);
+			}
+		}
+		return t;
+	}
+
 	static @Nullable PlanRec planRec(String planId) {
 		PlanRec p = PLANS.get(planId);
 		if (p != null || server == null) {
@@ -331,6 +357,13 @@ public final class RegionsImpl implements Regions {
 		}
 		String hash = RegionKeys.hash(RegionKeys.planBody(r));
 		String scope = RegionKeys.scope(r.owner(), "region.plan", key);
+		// (6c close-out A, §3) a discarded keyed plan: the same body refuses PLAN_STALE (never planned again silently); another, OP_KEY_CONFLICT
+		String[] gone = PlanRetention.DISCARDED_KEYS.get(scope);
+		if (gone != null && !PLAN_KEYS.containsKey(scope)) {
+			return CompletableFuture.failedFuture(gone[1].equals(hash) ? new RegionException(Reason.PLAN_STALE, "plan " + gone[0] + " of opKey \"" + key
+				+ "\" was discarded", PlanRetention.DISCARDED) : new dev.larattalabs.architect.api.ArchitectRefused(Reason.OP_KEY_CONFLICT, "opKey \"" + key
+					+ "\" (region.plan" + (r.owner() == null ? "" : ", " + r.owner()) + ") was used for another plan (" + gone[0] + ", discarded)"));
+		}
 		CompletableFuture<RegionPlan> mine = new CompletableFuture<>();
 		KeyedPlan[] prior = {null};
 		PLAN_KEYS.compute(scope, (k, old) -> {
@@ -348,6 +381,7 @@ public final class RegionsImpl implements Regions {
 			}
 			if (kp.planId() != null) {
 				PlanRec pr = planRec(kp.planId());
+				PlanRetention.touch(kp.planId()); // (6c close-out A) adopted by its key: a use
 				Architect.LOGGER.info("Region plan {}: adopted by opKey {}", kp.planId(), key);
 				return CompletableFuture.completedFuture(view(pr));
 			}
@@ -419,6 +453,18 @@ public final class RegionsImpl implements Regions {
 		PlanChecks.pin(artifactSha, owner, false);
 	}
 
+	/** (6c close-out A, §2) A keyed pin ({@link PlanChecks#pinKeyed}). */
+	@Override
+	public void pinArtifact(String artifactSha, String owner, String opKey) {
+		PlanChecks.pinKeyed(artifactSha, owner, opKey);
+	}
+
+	/** (6c close-out A, §3) {@link PlanRetention#discard}. */
+	@Override
+	public CompletableFuture<Boolean> discardPlan(String planId) {
+		return PlanRetention.discard(planId);
+	}
+
 	/** (6c B) One brush stroke as a region ({@link Brushes}). */
 	@Override
 	public CompletableFuture<RegionView> brush(dev.larattalabs.architect.api.BrushRequest r) {
@@ -431,6 +477,9 @@ public final class RegionsImpl implements Regions {
 		String key = java.util.Objects.requireNonNull(dev.larattalabs.architect.apiimpl.Wire0a.opKey(opKey), "opKey");
 		KeyedPlan kp = PLAN_KEYS.get(RegionKeys.scope(owner, "region.plan", key));
 		PlanRec p = kp == null || kp.planId() == null ? null : planRec(kp.planId());
+		if (p != null) {
+			PlanRetention.touch(p.planId()); // (6c close-out A) a lookup by key is a use
+		}
 		return p == null ? Optional.empty() : Optional.of(view(p));
 	}
 
@@ -1076,6 +1125,7 @@ public final class RegionsImpl implements Regions {
 		} catch (IllegalArgumentException e) {
 			return CompletableFuture.failedFuture(e);
 		}
+		PlanRetention.touch(r.planId()); // (6c close-out A) a realise attempt is a use of its plan
 		if (key == null) {
 			return realise0(s, r);
 		}
@@ -1085,20 +1135,19 @@ public final class RegionsImpl implements Regions {
 			String hash = RegionKeys.hash(RegionKeys.realiseBody(r));
 			String scope = RegionKeys.scope(owner, "region.realise", key);
 			Live live = regionByKey(owner, key);
-			if (live != null) {
-				if (!hash.equals(live.rec().opHash)) {
-					throw conflict(key, owner, live.rec().id);
-				}
-				Architect.LOGGER.info("Region {}: realise adopted by opKey {} ({})", live.rec().id, key, live.rec().state.name().toLowerCase(java.util.Locale.ROOT));
-				return CompletableFuture.completedFuture(live.rec().id);
-			}
 			KeyedRealise kr = REALISE_KEYS.get(scope);
-			if (kr != null) {
-				if (!kr.hash().equals(hash)) {
-					throw conflict(key, owner, null);
+			switch (keyOutcome(live == null ? null : live.rec().opHash, kr == null ? null : kr.hash(), hash)) {
+				case CONFLICT -> throw conflict(key, owner, live == null ? null : live.rec().id);
+				case ADOPT_REGION -> {
+					Architect.LOGGER.info("Region {}: realise adopted by opKey {} ({})", live.rec().id, key, live.rec().state.name().toLowerCase(java.util.Locale.ROOT));
+					return CompletableFuture.completedFuture(live.rec().id);
 				}
-				Architect.LOGGER.info("Realise adopted by opKey {} (still starting)", key);
-				return kr.future();
+				case ADOPT_STARTING -> {
+					Architect.LOGGER.info("Realise adopted by opKey {} (still starting)", key);
+					return kr.future();
+				}
+				case NEW -> {
+				}
 			}
 			CompletableFuture<String> mine = new CompletableFuture<>();
 			REALISE_KEYS.put(scope, new KeyedRealise(hash, mine));
@@ -1109,12 +1158,31 @@ public final class RegionsImpl implements Regions {
 				} else if (holdNextRealise) {
 					holdNextRealise = false; // DevBridge: the region record is saved, the caller's future never completes (it fails at a stop)
 				} else {
+					PlanChecks.keyRealised(id); // (6c close-out A, §2) the key's region record is written: its keyed pins end
 					mine.complete(id);
 				}
 				return null;
 			}));
 			return mine;
 		}).thenCompose(f -> f);
+	}
+
+	/** (6c close-out A, §1) What a keyed realise does with its key. */
+	enum KeyOutcome { NEW, ADOPT_REGION, ADOPT_STARTING, CONFLICT }
+
+	/**
+	 * (6c close-out A, §1 and its §14 amendment) The realise key rule, pure: {@code standingHash} is the body hash of the standing region
+	 * realised under the key (null when none: never realised, refused before its record, or REMOVED, as since C20), {@code startingHash}
+	 * the one still starting under it (null when none). The same body adopts, another conflicts, and no holder starts afresh.
+	 */
+	static KeyOutcome keyOutcome(@Nullable String standingHash, @Nullable String startingHash, String hash) {
+		if (standingHash != null) {
+			return standingHash.equals(hash) ? KeyOutcome.ADOPT_REGION : KeyOutcome.CONFLICT;
+		}
+		if (startingHash != null) {
+			return startingHash.equals(hash) ? KeyOutcome.ADOPT_STARTING : KeyOutcome.CONFLICT;
+		}
+		return KeyOutcome.NEW;
 	}
 
 	/** (6c X) Hold the next keyed realise's future after its region record is saved (the gate's item 3). */
@@ -1173,6 +1241,9 @@ public final class RegionsImpl implements Regions {
 
 	private String realise0(MinecraftServer s, RealiseRequest r, Drift.@Nullable Result drift, @Nullable String reserved, @Nullable String blobError) {
 		PlanRec p = planRec(r.planId());
+		if (p == null && PlanRetention.discarded(r.planId())) {
+			throw new RegionException(Reason.PLAN_STALE, "region plan " + r.planId() + " was discarded", PlanRetention.DISCARDED);
+		}
 		if (p == null) {
 			throw refusal(Reason.OTHER, "no region plan " + r.planId());
 		}
@@ -1413,6 +1484,7 @@ public final class RegionsImpl implements Regions {
 		int[] t = Ir.tile(key);
 		JsonObject ext = new JsonObject();
 		ext.addProperty(RegionItems.EXT_TILE, stage + "|" + set + "|" + key);
+		dev.larattalabs.architect.site.RegionWaitTags.tagTile(ext, rec.id, p.ir(), stage, set, key); // (6c close-out A, §8) its region and parts
 		// (6c RS, §5) the flags from the region's mode (the latent bug: queued creative-only, a toggle switched on failed them)
 		QItem q = new QItem(tileKey(stage, set, key), stage, after, "tile", rec.dimension, Heights.TILE * t[0], rec.claim[1], Heights.TILE * t[1], 0, false,
 			ext, null, rec.survival(), dev.larattalabs.architect.survival.SurvivalWorld.on());
@@ -1491,6 +1563,7 @@ public final class RegionsImpl implements Regions {
 		if (road.ext() != null && road.ext().has(STREET_EXT) && road.ext().get(STREET_EXT).isJsonObject()) {
 			q.ext.add(STREET_EXT, road.ext().get(STREET_EXT).deepCopy());
 		}
+		dev.larattalabs.architect.site.RegionWaitTags.tagRoad(q.ext, rec.id, road.id()); // (6c close-out A, §8) its region and part
 		return q;
 	}
 
@@ -1838,6 +1911,55 @@ public final class RegionsImpl implements Regions {
 		}
 		dev.larattalabs.architect.site.RealisedRecords.itemDone(l, b, i); // (RP)
 		dirty(l);
+	}
+
+	/**
+	 * (6c close-out A, Steward's RC finding 1) A construction target, road or lot of a region's group built: the heights over its box
+	 * become the later stages' drift baseline. A survival region's items are put down unbuilt (their heights at put-down are the land's),
+	 * so without this a later stage's check counted the region's own walls and houses as land changed since planning and held. No region
+	 * for the group: nothing.
+	 */
+	public static void constructionBuilt(MinecraftServer s, @Nullable String groupId, dev.larattalabs.architect.placement.Anchors.@Nullable Bounds box) {
+		if (groupId == null || box == null) {
+			return;
+		}
+		for (Live l : REGIONS.values()) {
+			if (groupId.equals(l.rec().groupId)) {
+				ServerLevel level = l.level(s);
+				if (level != null) {
+					Heights.snapshotAfter(level, l.world(), l.rec().id, box.minX(), box.minZ(), box.maxX(), box.maxZ());
+				}
+				return;
+			}
+		}
+	}
+
+	/**
+	 * DevBridge (close-out A, Steward's RC finding 1): a region's stage drift check run now, as before the stage starts, and its record's
+	 * drift entries -> {ok, message, sampled, within2, over8InLots, drift: {stage: entry}}. Server thread.
+	 */
+	public static CompletableFuture<JsonObject> stageDriftNow(String regionId, String stage) {
+		Live l = REGIONS.get(regionId);
+		MinecraftServer s = server;
+		ServerLevel level = l == null || s == null ? null : l.level(s);
+		if (level == null) {
+			return CompletableFuture.failedFuture(new IllegalArgumentException("no region " + regionId + " loaded"));
+		}
+		return Drift.checkStage(level, l, stage).thenApply(r -> {
+			JsonObject o = new JsonObject();
+			o.addProperty("ok", r.ok());
+			o.addProperty("message", r.message());
+			o.addProperty("sampled", r.sampled());
+			o.addProperty("within2", r.within2());
+			o.addProperty("over8InLots", r.over8InLots());
+			JsonObject d = new JsonObject();
+			l.rec().drift.forEach(d::addProperty);
+			o.add("drift", d);
+			com.google.gson.JsonArray st = new com.google.gson.JsonArray();
+			l.rec().stages.keySet().forEach(st::add);
+			o.add("stages", st);
+			return o;
+		});
 	}
 
 	/** The heights a placed item left over its columns: the later stages' drift baseline ({@link Heights#snapshotAfter}). */

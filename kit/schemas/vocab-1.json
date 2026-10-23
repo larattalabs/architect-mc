@@ -8300,6 +8300,6 @@
     "warped"
    ]
   },
-  "palette": "rule.palette {family, share} measures a family's share of written blocks; family is a family or group named here; 'only X' is share [1, 1], 'no X' is share [0, 0]"
+  "palette": "rule.palette {family, share} measures a family's share of written blocks; family is a family or group named here; 'only X' is share [1, 1], 'no X' is share [0, 0]; over: lots measures the buildings only; exempt ways/forms leaves the streets and forms out"
  }
 }

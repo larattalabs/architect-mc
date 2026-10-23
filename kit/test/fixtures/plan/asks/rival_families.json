@@ -3,41 +3,42 @@
   "answer": {
     "plan": {
       "schemaVersion": "plan/0",
-      "planId": "the_feuding_banks",
+      "planId": "feuding_banks",
       "style": {
         "pending": "feuding_banks"
       },
-      "notes": "One estate on each bank of the river, no bridge. Lots are written west bank first, then east bank. Buildings are laid out in one region for now; the bank split and family colours are carried as pending rules.",
       "zones": [
         {
-          "id": "estates",
-          "kind": "standard",
-          "required": true,
-          "label": "The two estates",
+          "id": "west_bank",
+          "label": "West bank estate",
           "purpose": "farming",
-          "notes": "Straddles the river: west-bank lots go west of the water, east-bank lots east. Guard towers face the water; no shared market or tavern.",
+          "required": true,
+          "style": {
+            "pending": "feuding_banks"
+          },
           "where": {
-            "near": {
+            "along": {
               "feature": {
                 "water": {
-                  "body": "river",
-                  "pick": "largest"
+                  "body": "river"
                 }
               },
-              "within": 24
+              "side": "left",
+              "distance": [
+                6,
+                24
+              ]
             }
           },
           "size": {
-            "preset": "L"
+            "preset": "M"
           },
           "program": {
-            "layout": "street",
-            "shared": "none",
             "lots": [
               {
                 "id": "manor_house_1",
                 "type": "manor_house",
-                "role": "west_manor",
+                "role": "manor",
                 "label": "west bank manor",
                 "size": [
                   17,
@@ -45,104 +46,55 @@
                 ],
                 "landmark": true,
                 "placement": "high_ground",
-                "villager": "dwelling",
-                "brief": "Seat of the first family on the west bank, in its own colours and banners; windows and balcony face the river and the rival manor."
-              },
-              {
-                "id": "manor_house_2",
-                "type": "manor_house",
-                "role": "east_manor",
-                "label": "east bank manor",
-                "size": [
-                  17,
-                  15
-                ],
-                "landmark": true,
-                "placement": "high_ground",
-                "villager": "dwelling",
-                "brief": "Seat of the second family on the east bank, in contrasting colours and banners; faces the first manor across the water."
+                "brief": "Seat of the first family in its own colours and banners, windows and balcony facing the river and the rival manor."
               },
               {
                 "id": "cottage_1",
                 "type": "cottage",
                 "role": "farmhouse",
-                "label": "west family farmhouse",
+                "label": "family farmhouse",
                 "size": [
                   13,
                   11
                 ],
-                "landmark": false,
                 "villager": "dwelling",
-                "brief": "West bank farmer's home by the fields."
-              },
-              {
-                "id": "cottage_2",
-                "type": "cottage",
-                "role": "farmhouse",
-                "label": "east family farmhouse",
-                "size": [
-                  13,
-                  11
-                ],
-                "landmark": false,
-                "villager": "dwelling",
-                "brief": "East bank farmer's home by the fields."
+                "brief": "A farmer's home by the fields."
               },
               {
                 "id": "barn_1",
                 "type": "barn",
-                "role": "crop_barn",
-                "label": "west crop fields and barn",
+                "role": "barn",
+                "label": "crop fields and barn",
                 "size": [
                   17,
                   15
                 ],
-                "landmark": false,
                 "placement": "edge",
                 "villager": "farm",
-                "brief": "West bank barn with fields and animal pens behind the manor."
-              },
-              {
-                "id": "barn_2",
-                "type": "barn",
-                "role": "crop_barn",
-                "label": "east crop fields and barn",
-                "size": [
-                  17,
-                  15
-                ],
-                "landmark": false,
-                "placement": "edge",
-                "villager": "farm",
-                "brief": "East bank barn with fields and animal pens behind the manor."
+                "brief": "Barn with fields and animal pens behind the manor."
               },
               {
                 "id": "tower_1",
                 "type": "tower",
                 "role": "guard_house",
-                "label": "west bank guard house",
+                "label": "guard house",
                 "size": [
                   9,
                   9
                 ],
-                "landmark": false,
                 "placement": "near_water",
-                "villager": "none",
-                "brief": "West bank watchtower on the riverside, watching the river and the crossing."
+                "brief": "Watches the river and the crossing."
               },
               {
-                "id": "tower_2",
-                "type": "tower",
-                "role": "guard_house",
-                "label": "east bank guard house",
+                "id": "cottage_2",
+                "type": "cottage",
+                "role": "retainer",
+                "label": "retainers' cottage",
                 "size": [
                   9,
                   9
                 ],
-                "landmark": false,
-                "placement": "near_water",
-                "villager": "none",
-                "brief": "East bank watchtower on the riverside, watching the river and the crossing."
+                "villager": "dwelling"
               },
               {
                 "id": "cottage_3",
@@ -153,22 +105,100 @@
                   9,
                   9
                 ],
-                "landmark": false,
-                "villager": "dwelling",
-                "brief": "West bank home of servants and farmhands."
+                "villager": "dwelling"
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "barracks",
+                "label": "guard barracks",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Near the manor, with beds and armour racks."
+              }
+            ],
+            "layout": "street",
+            "shared": "none"
+          }
+        },
+        {
+          "id": "east_bank",
+          "label": "East bank estate",
+          "purpose": "farming",
+          "required": true,
+          "style": {
+            "pending": "feuding_banks"
+          },
+          "where": {
+            "along": {
+              "feature": {
+                "water": {
+                  "body": "river"
+                }
+              },
+              "side": "right",
+              "distance": [
+                6,
+                24
+              ]
+            }
+          },
+          "size": {
+            "preset": "M"
+          },
+          "program": {
+            "lots": [
+              {
+                "id": "manor_house_2",
+                "type": "manor_house",
+                "role": "manor",
+                "label": "east bank manor",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "high_ground",
+                "brief": "Seat of the second family in contrasting colours and banners, facing the first manor across the water."
               },
               {
                 "id": "cottage_4",
                 "type": "cottage",
-                "role": "retainer",
-                "label": "retainers' cottage",
+                "role": "farmhouse",
+                "label": "family farmhouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "villager": "dwelling",
+                "brief": "A farmer's home by the fields."
+              },
+              {
+                "id": "barn_2",
+                "type": "barn",
+                "role": "barn",
+                "label": "crop fields and barn",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "edge",
+                "villager": "farm",
+                "brief": "Barn with fields and animal pens behind the manor."
+              },
+              {
+                "id": "tower_2",
+                "type": "tower",
+                "role": "guard_house",
+                "label": "guard house",
                 "size": [
                   9,
                   9
                 ],
-                "landmark": false,
-                "villager": "dwelling",
-                "brief": "West bank home of servants and farmhands."
+                "placement": "near_water",
+                "brief": "Watches the river and the crossing."
               },
               {
                 "id": "cottage_5",
@@ -179,9 +209,7 @@
                   9,
                   9
                 ],
-                "landmark": false,
-                "villager": "dwelling",
-                "brief": "East bank home of servants and farmhands."
+                "villager": "dwelling"
               },
               {
                 "id": "cottage_6",
@@ -192,82 +220,35 @@
                   9,
                   9
                 ],
-                "landmark": false,
-                "villager": "dwelling",
-                "brief": "East bank home of servants and farmhands."
-              },
-              {
-                "id": "house_1",
-                "type": "house",
-                "role": "barracks",
-                "label": "west guard barracks",
-                "size": [
-                  13,
-                  11
-                ],
-                "landmark": false,
-                "villager": "job",
-                "brief": "West bank barracks near the manor, with beds and armour racks."
+                "villager": "dwelling"
               },
               {
                 "id": "house_2",
                 "type": "house",
                 "role": "barracks",
-                "label": "east guard barracks",
+                "label": "guard barracks",
                 "size": [
                   13,
                   11
                 ],
-                "landmark": false,
-                "villager": "job",
-                "brief": "East bank barracks near the manor, with beds and armour racks."
+                "brief": "Near the manor, with beds and armour racks."
               }
-            ]
+            ],
+            "layout": "street",
+            "shared": "none"
           }
         }
       ],
-      "rules": [
-        {
-          "id": "family_colours",
-          "kind": "palette",
-          "required": false,
-          "label": "Family colours and banners",
-          "scope": [
-            "estates"
-          ],
-          "notes": "West bank buildings in one family's colours and banners, east bank in a contrasting set; the two palettes must not mix.",
-          "family": "family_colours",
-          "exempt": [
-            "terrain",
-            "support"
-          ]
-        },
-        {
-          "id": "mirrored_banks",
-          "kind": "shape",
-          "required": false,
-          "label": "Mirrored estates on each bank",
-          "scope": [
-            "estates"
-          ],
-          "notes": "The two banks mirror each other across the river, with manors facing and towers on the water edge.",
-          "shape": "symmetric",
-          "level": "footprint"
-        }
-      ]
+      "notes": "Two mirrored estates on opposite banks of a river; no bridge, no shared market. Family colours and banners come from the style bible."
     },
     "waits": [
       {
-        "part": "family_colours",
-        "words": "Each family's own colours and banners: palette rules come with a later Architect release; the estates are built first in the rustic style and the colours are applied when they can be."
-      },
-      {
-        "part": "mirrored_banks",
-        "words": "Strict mirrored halves on each bank: shape rules come with a later release; the lots are written with bank notes and the layout is not guaranteed to mirror yet."
+        "part": "west_bank",
+        "words": "The plan needs a river nearby to split the two estates; if the land has none, the banks can't be placed."
       }
     ],
-    "summary": "The Feuding Banks is one farming settlement of 14 buildings across a river: a manor, farmhouse, barn, guard tower, two retainers' cottages and a barracks for each family, with no bridge and no shared market. It is placed near the largest river and sized at 64x64 so both banks fit. Family colours and the strict mirrored layout are kept as pending rules until Architect supports them."
+    "summary": "The Feuding Banks is two mirrored family estates on opposite sides of a river. Each bank has a manor on high ground, a farmhouse, a barn with fields, a guard tower by the water, two retainers' cottages and a barracks. There's no bridge and no shared market. Each family's colours and banners come from the style, which is made after this plan. The land hasn't been surveyed, so I'm assuming a river is nearby."
   },
-  "usd": 0.042653,
+  "usd": 0.228808,
   "errors": []
 }

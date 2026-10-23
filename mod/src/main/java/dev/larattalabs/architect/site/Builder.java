@@ -1389,6 +1389,8 @@ public final class Builder {
 		PROGRESS.remove(s.id());
 		Site now = Sites.get(s.id());
 		dev.larattalabs.architect.apiimpl.ApiEvents.built(srv, now != null ? now : done);
+		// (6c close-out A) a survival region's lot built: its heights become the later stages' drift baseline
+		dev.larattalabs.architect.region.RegionsImpl.constructionBuilt(srv, s.group(), s.restoreBox());
 	}
 
 	// ------------------------------------------------------------------ ghost sync

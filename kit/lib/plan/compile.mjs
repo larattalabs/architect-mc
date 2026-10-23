@@ -1182,7 +1182,10 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         // ((6c S3) a terraced zone's routes keep its grade tolerance; every other zone as before)
         // ((6c S3) the broken variant `unretained` (the zone's ext architect_mc:unsafe): no retaining ring or rail on any terraced lot)
         ...(p.part.ext?.['architect_mc:unsafe']?.unretained === true ? { _unsafeUnretained: true } : {}),
-        ...(z.ds.some((d) => d.terraces) ? { maxGrade: tolOf(p.part, 'grade').max, routeKeepOut: [...env.protectedAreas.map((a) => rectArr(a.rect)), ...env.regions.map((a) => rectArr(a.rect)), ...env.buildRects.map((a) => rectArr(a.rect))] } : {}),
+        ...(z.ds.some((d) => d.terraces) ? { maxGrade: tolOf(p.part, 'grade').max } : {}),
+        // ((6c close-out A, §9) every districts zone's routes keep out of the plan's protected areas, other regions and builds: the
+        // district links, the following districts' streets, the outposts' joins and the terraced joins (S3 passed it for terraces only))
+        routeKeepOut: [...env.protectedAreas.map((a) => rectArr(a.rect)), ...env.regions.map((a) => rectArr(a.rect)), ...env.buildRects.map((a) => rectArr(a.rect))],
       });
       for (const k of out.reserved) reserved.add(k);
       laneCells.push(...out.laneCells);
@@ -1376,6 +1379,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   const makeK = () => ({
     env, ctx, r, plan: P.plan, V, order, byId, k1Parts, geom, res, zoneEmit, lotZone, answers, ans, depState, okClass, timeUp, stageOf, notes, partOf, tolOf, judge,
     checkpoint: () => checkpoint(r), rollback: (c) => rollback(r, c), addedSince: (c) => addedSince(r, c), mark, endpointNode: (e, other, conn, where) => endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where),
+    // ((close-out A, §4) a wall's or gate's endpoint on a piece its zone could not place: blocked, as a route's)
+    unplacedBlocked: (err) => unplacedBlocked(err, answers),
     record: {}, routed: [], overflows, keep, props: propsPlanned,
   });
   let K = k1Parts.length ? makeK() : null;
@@ -1458,7 +1463,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       if (e.error) err = e.error; else pts.push(e);
     }
     const snapNotes = pts.filter((q) => q.snapped).map((q) => `anchor ${q.snapped.anchor} lies inside zone ${q.snapped.zone}: the route ends at the zone's street end`);
-    if (err) { ans(p, { class: 'refused', reasons: [err] }); continue; }
+    if (err) { ans(p, unplacedBlocked(err, answers) ?? { class: 'refused', reasons: [err] }); continue; }
     const tGrade = tolOf(p.part, 'grade');
     const grade = Math.max(1 / 64, Math.min(1, q64(tGrade.max)));
     if (snapNotes.length) connNotes.set(p.id, [...(connNotes.get(p.id) ?? []), ...snapNotes]);
@@ -1689,6 +1694,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     // ((6c IRR) the irrigated lots' cells by the plan's lot id: the artifact's lots[].irrigation (only when a lot is irrigated)
     ...(irrigationByLot.size ? { irrigation: Object.fromEntries(irrigationByLot) } : {}),
     ...(paletteRules.length ? { palette: paletteRules } : {}),
+    // ((close-out A, §5) a palette rule exempting ways or forms reads its parts' writers by the plan parts' blocks)
+    ...(paletteRules.some((x) => x.read.exempt.includes('ways') || x.read.exempt.includes('forms')) ? { paletteBlocks: Object.fromEntries(V.parts.filter((p) => p.block).map((p) => [p.id, p.block])) } : {}),
     anchors: Object.fromEntries([...env.anchors.entries()].map(([k, v]) => [k, [v[0], env.S.groundAt(v[0], v[1]) + 1, v[1]]])),
   } };
 }
@@ -1767,6 +1774,25 @@ function freeEnds(L) {
 }
 
 /**
+ * (close-out A, §4) An endpoint on a piece (a lot, a district) its zone could not place: a DEPENDENCY error naming the piece and the zone;
+ * the caller answers `blocked` by the zone (unplacedBlocked), never `refused`.
+ */
+function unplacedEnd(kind, id, zone, legacy = null) {
+  // (`legacy`: the error before close-out A, for the walls and gates that end on the same piece: §4 is a route's rule, so they answer as before)
+  return { code: 'DEPENDENCY', message: `ends on ${kind} ${id}, which zone ${zone} could not place`, evidence: { kind: 'unplaced', [kind]: id, zone, blockedBy: [zone] }, ...(legacy ? { legacy } : {}) };
+}
+
+/**
+ * (close-out A, §4) The answer of a part whose endpoint is unplacedEnd's: blocked by the zone, the zone's class in the evidence (P0 §3's
+ * DEPENDENCY evidence); null for any other error (it stays refused).
+ */
+export function unplacedBlocked(err, answers) {
+  if (err?.code !== 'DEPENDENCY' || err.evidence?.kind !== 'unplaced') return null;
+  const zone = err.evidence.zone;
+  return { class: 'blocked', blockedBy: [zone], reasons: [{ code: 'DEPENDENCY', message: err.message, evidence: { ...err.evidence, classes: { [zone]: answers.get(zone)?.class ?? null } } }] };
+}
+
+/**
  * A route end for an endpoint: `{name, at, node?}` (a node in the pass's `nodes`, or a lot / graph id), or `{error}`.
  * `other`: the leg's other endpoint (a zone's default port is its street end nearer to it).
  */
@@ -1797,7 +1823,7 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
   if (e.part !== undefined) {
     if (lotZone.has(e.part)) {
       const n = lotNode(e.part);
-      return n ? { ...n, at: r.meta.lots[e.part].entrance } : { error: { code: 'NO_ROOM', message: `lot ${e.part} was not placed (unplaced in its zone)`, path: where } };
+      return n ? { ...n, at: r.meta.lots[e.part].entrance } : { error: unplacedEnd('lot', e.part, lotZone.get(e.part), { code: 'NO_ROOM', message: `lot ${e.part} was not placed (unplaced in its zone)`, path: where }) };
     }
     const g = geom.get(e.part);
     const z = zoneEmit.get(e.part);
@@ -1806,12 +1832,19 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
       const out = z.districts, op = posOf(other);
       const port = e.port ?? null;
       const ids = Object.keys(out.ends);
-      if (port && !ZONE_PORTS.includes(port) && !ids.includes(port)) { const n = lotNode(port); return n ? { ...n, at: r.meta.lots[port].entrance } : { error: { code: 'NO_ROOM', message: `port ${port}: not placed (unplaced in its zone)`, path: where } }; }
+      if (port && !ZONE_PORTS.includes(port) && !ids.includes(port)) {
+        const n = lotNode(port);
+        if (n) return { ...n, at: r.meta.lots[port].entrance };
+        // ((close-out A, §4) a lot of the zone or one of its districts the zone could not place: blocked by the zone)
+        if (lotZone.get(port) === e.part) return { error: unplacedEnd('lot', port, e.part, { code: 'NO_ROOM', message: `port ${port}: not placed (unplaced in its zone)`, path: where }) };
+        if ((out.data.unplaced ?? []).some((u) => u.id === port)) return { error: unplacedEnd('district', port, e.part, { code: 'NO_ROOM', message: `port ${port}: not placed (unplaced in its zone)`, path: where }) };
+        return { error: { code: 'NO_ROOM', message: `port ${port}: not placed (unplaced in its zone)`, path: where } };
+      }
       const d0 = Object.keys(out.data.bells)[0];
       if (port === 'bell') { const b = out.data.bells[d0]; return feet(b[0], b[2], `b_${tag}`); }
       const dist = (q) => Math.max(Math.abs(q[0] - op[0]), Math.abs(q[1] - op[1]));
       const did = ids.includes(port ?? '') ? port : port === 'start' || port === 'end' ? d0 : [...ids].sort((p1, p2) => dist([out.data.bells[p1][0], out.data.bells[p1][2]]) - dist([out.data.bells[p2][0], out.data.bells[p2][2]]) || cmp(p1, p2))[0];
-      if (!out.ends[did]) return { error: { code: 'NO_ROOM', message: `district ${port} was not placed`, path: where } };
+      if (!out.ends[did]) return { error: unplacedEnd('district', did ?? port, e.part, { code: 'NO_ROOM', message: `district ${port} was not placed`, path: where }) };
       const en = out.ends[did];
       // ((6c S3) a terraced district's ends are its lots: the nearest of them all)
       const pick = port === 'start' ? en[0] : port === 'end' ? en[1] : en[0]?.terraced ? [...en].sort((p1, p2) => dist([p1.x, p1.z]) - dist([p2.x, p2.z]) || p1.k - p2.k)[0] : dist([en[1].x, en[1].z]) < dist([en[0].x, en[0].z]) ? en[1] : en[0];
@@ -1823,7 +1856,7 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
       // (6c FL, §2.4) a free layout: its lots, bell and hub; start (the street cell nearest the claim's centre, or an open street's first
       // end) and end (the farthest, or its last end); else the street cell nearest the leg's other end
       const port = e.port ?? null;
-      if (port && !ZONE_PORTS.includes(port) && port !== 'hub') { const n = lotNode(port); return n ? { ...n, at: r.meta.lots[port].entrance } : { error: { code: 'NO_ROOM', message: `port ${port}: the lot was not placed`, path: where } }; }
+      if (port && !ZONE_PORTS.includes(port) && port !== 'hub') { const n = lotNode(port); return n ? { ...n, at: r.meta.lots[port].entrance } : { error: unplacedEnd('lot', port, e.part, { code: 'NO_ROOM', message: `port ${port}: the lot was not placed`, path: where }) }; }
       if (port === 'bell' || port === 'hub') return feet(z.L.res.bell[0], z.L.res.bell[2], `b_${tag}`);
       const ends = freeEnds(z.L);
       let pick;
@@ -1836,7 +1869,7 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
     }
     if (z) {
       const port = e.port ?? null;
-      if (port && !ZONE_PORTS.includes(port)) { const n = lotNode(port); return n ? { ...n, at: r.meta.lots[port].entrance } : { error: { code: 'NO_ROOM', message: `port ${port}: the lot was not placed`, path: where } }; }
+      if (port && !ZONE_PORTS.includes(port)) { const n = lotNode(port); return n ? { ...n, at: r.meta.lots[port].entrance } : { error: unplacedEnd('lot', port, e.part, { code: 'NO_ROOM', message: `port ${port}: the lot was not placed`, path: where }) }; }
       if (port === 'bell') return feet(z.L.res.bell[0], z.L.res.bell[2], `b_${tag}`);
       // the street's ends: the cell past each end along the street axis
       const o = z.L.orientation, sv = z.L.road.sv;

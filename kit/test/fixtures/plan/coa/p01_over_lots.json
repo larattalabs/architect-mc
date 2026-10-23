@@ -1,0 +1,78 @@
+{
+ "about": "(close-out A §5) over: lots, a copper-only town whose street is cobblestone (g6cvoc_copper with path cobblestone): only the bound lots are measured (fits, the street out of the measure; over: all refuses TOLERANCE on the street); an oak lot refuses TOLERANCE at check; with no bound histogram the lots are pending and the artifact row has over lots, partsCells and partsFamily 0, so the realise-time measure is the lots alone (copper passes, oak fails)",
+ "on": "flat",
+ "volume": {},
+ "style": {
+  "roles": {
+   "wall": "minecraft:copper_block",
+   "wall_alt": "minecraft:cut_copper",
+   "trim": "minecraft:waxed_cut_copper",
+   "roof": "minecraft:cut_copper",
+   "floor": "minecraft:spruce_planks",
+   "frame": "minecraft:spruce_log",
+   "accent": "minecraft:copper_bulb",
+   "light": "minecraft:copper_lantern",
+   "glass": "minecraft:glass",
+   "foundation": "minecraft:stone_bricks",
+   "path": "minecraft:cobblestone",
+   "rail": "minecraft:spruce_fence",
+   "structure": "minecraft:stone_bricks",
+   "rock": "minecraft:stone",
+   "surface": "minecraft:grass_block",
+   "subsurface": "minecraft:dirt",
+   "rubble": "minecraft:andesite"
+  }
+ },
+ "lotDesigns": {
+  "h1": "vocc_copper_cabin",
+  "h2": "vocc_copper_cabin"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "coa_p01",
+  "zones": [
+   {
+    "id": "town",
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 24
+     }
+    },
+    "program": {
+     "lots": [
+      {
+       "id": "h1",
+       "type": "house",
+       "size": [
+        9,
+        11
+       ],
+       "entry": "vocc_copper_cabin"
+      },
+      {
+       "id": "h2",
+       "type": "house",
+       "size": [
+        9,
+        11
+       ],
+       "entry": "vocc_copper_cabin"
+      }
+     ],
+     "shared": "none"
+    }
+   }
+  ],
+  "rules": [
+   {
+    "id": "copper_buildings",
+    "kind": "palette",
+    "required": true,
+    "label": "only copper for the buildings",
+    "family": "copper",
+    "over": "lots"
+   }
+  ]
+ }
+}

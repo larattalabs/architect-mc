@@ -622,7 +622,7 @@ export async function planRegion(o) {
       if (cost) meta.planCheck.vocabCells = vocabCells(irObj, scan);
       if (pal) {
         const { palettePass } = await import('../plan/palette.mjs');
-        palette = palettePass({ pc: meta.planCheck, ir: irObj, hist: scan.hist, lotBlocks: o.lotBlocks ?? {}, excludes: o.paletteExclude ?? [], from: o._paletteFrom ?? {}, swaps: paletteSwaps ?? {} });
+        palette = palettePass({ pc: meta.planCheck, ir: irObj, hist: scan.hist, lotBlocks: o.lotBlocks ?? {}, excludes: o.paletteExclude ?? [], from: o._paletteFrom ?? {}, swaps: paletteSwaps ?? {}, kinds: meta.parts ?? {} });
       }
     }
     meta.planCheck.vocab = { ms: Math.round(performance.now() - t), scanned: !!v, found: v?.found ?? [], refused: Object.keys(o.vocabRefuse ?? {}).sort(), pass: (o._vocabPass ?? 0) + 1 };

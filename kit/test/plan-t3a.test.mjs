@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { asksSurvey, stewardAnchors, checkPlanLocal, checkPlanVolumes, flatSurvey, FIX } from './plan-helpers.mjs';
+import { asksSurvey, stewardAnchors, checkPlanLocal, checkPlanVolumes, flatSurvey, FIX, asksFirstPath } from './plan-helpers.mjs';
 import { checkRegion } from '../lib/region/check.mjs';
 import { encodeArvx, decodeArvx, VC } from '../lib/region/volume.mjs';
 import { surveyApi } from '../lib/region/survey.mjs';
@@ -167,7 +167,7 @@ test('a bridge landing at a K1 gate: the gate move ends outside the wall, the sp
 });
 
 /** Steward's recorded plans (fixtures/plan/asks) on the asks claim. */
-const asksPlan = (name) => JSON.parse(fs.readFileSync(path.join(FIX, 'asks', `${name}.json`), 'utf8')).answer.plan;
+const asksPlan = (name) => JSON.parse(fs.readFileSync(asksFirstPath(`${name}.json`), 'utf8')).answer.plan; // ((6c close-out A) the first recordings)
 const A = asksSurvey();
 const asks = (plan) => checkPlanLocal(plan, { survey: A.bytes, claim: A.claim, anchors: stewardAnchors(A.claim) });
 
@@ -203,7 +203,7 @@ test('§9: the gap tables (committed before and after); no recorded part changes
   const dir = path.join(FIX, 'asks');
   const gaps = {};
   for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json')) {
-    const r = await asks(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')).answer.plan);
+    const r = await asks(JSON.parse(fs.readFileSync(asksFirstPath(f), 'utf8')).answer.plan);
     for (const a of r.check.parts) if (a.class === 'unsupported') gaps[a.block] = (gaps[a.block] ?? 0) + 1;
   }
   for (const [block, n] of Object.entries(gaps)) assert.match(after, new RegExp(`${block.replace('.', '\\.')}\\s+${n}\\n`), `${block} ${n}`);

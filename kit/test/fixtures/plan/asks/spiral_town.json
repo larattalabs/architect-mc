@@ -12,10 +12,13 @@
           "id": "hill_town",
           "kind": "standard",
           "required": true,
-          "label": "Spiral hill town",
+          "label": "Spiral Hill Town",
           "purpose": "pilgrimage",
           "style": {
             "pending": "spiral_hill_town"
+          },
+          "size": {
+            "preset": "M"
           },
           "where": {
             "near": {
@@ -24,7 +27,7 @@
             }
           },
           "program": {
-            "layout": "street",
+            "layout": "spiral",
             "lots": [
               {
                 "id": "temple_1",
@@ -37,6 +40,7 @@
                 ],
                 "landmark": true,
                 "placement": "high_ground",
+                "villager": "none",
                 "brief": "Crowns the hill, visible from every turn of the spiral; broad steps and a terrace overlooking the town."
               },
               {
@@ -49,6 +53,7 @@
                   9
                 ],
                 "placement": "edge",
+                "villager": "none",
                 "brief": "Marks the start of the spiral road at the foot of the hill."
               },
               {
@@ -60,6 +65,7 @@
                   9,
                   9
                 ],
+                "villager": "dwelling",
                 "brief": "Stepped along the spiral road, facing uphill toward the temple."
               },
               {
@@ -71,6 +77,7 @@
                   9,
                   9
                 ],
+                "villager": "dwelling",
                 "brief": "Stepped along the spiral road, facing uphill toward the temple."
               },
               {
@@ -82,6 +89,7 @@
                   9,
                   9
                 ],
+                "villager": "dwelling",
                 "brief": "Stepped along the spiral road, facing uphill toward the temple."
               },
               {
@@ -93,6 +101,7 @@
                   9,
                   9
                 ],
+                "villager": "dwelling",
                 "brief": "Stepped along the spiral road, facing uphill toward the temple."
               },
               {
@@ -104,6 +113,7 @@
                   9,
                   9
                 ],
+                "villager": "dwelling",
                 "brief": "Small home tucked between the turns of the road."
               },
               {
@@ -115,6 +125,7 @@
                   9,
                   9
                 ],
+                "villager": "dwelling",
                 "brief": "Small home tucked between the turns of the road."
               },
               {
@@ -126,6 +137,7 @@
                   13,
                   11
                 ],
+                "villager": "job",
                 "brief": "Rest stop at the lower third of the climb."
               },
               {
@@ -138,6 +150,7 @@
                   9
                 ],
                 "placement": "central",
+                "villager": "trading_hall",
                 "brief": "Along the road, selling offerings and goods."
               },
               {
@@ -150,6 +163,7 @@
                   9
                 ],
                 "placement": "central",
+                "villager": "trading_hall",
                 "brief": "Along the road, selling offerings and goods."
               },
               {
@@ -161,6 +175,7 @@
                   9,
                   9
                 ],
+                "villager": "none",
                 "brief": "Small shrine at the midpoint of the climb."
               },
               {
@@ -173,80 +188,27 @@
                   9
                 ],
                 "placement": "high_ground",
+                "villager": "none",
                 "brief": "Just below the temple, overlooking the spiral."
               }
             ]
-          }
-        }
-      ],
-      "connectors": [
-        {
-          "id": "spiral_road",
-          "kind": "street",
-          "required": true,
-          "label": "spiral road",
-          "from": {
-            "part": "hill_town",
-            "port": "gatehouse_1"
           },
-          "via": [
-            {
-              "part": "hill_town",
-              "port": "tavern_1"
-            },
-            {
-              "part": "hill_town",
-              "port": "chapel_1"
-            }
-          ],
-          "to": {
-            "part": "hill_town",
-            "port": "temple_1"
-          },
-          "width": 3,
-          "lamps": "street",
-          "notes": "Main road climbs from the gatehouse at the foot, past the inn and shrine, to the temple, winding around the slope in a rising spiral."
+          "notes": "The road should wind around the hill in a rising spiral to the summit; needs a hill near the stone."
         }
       ],
-      "forms": [
-        {
-          "id": "hill_relief",
-          "kind": "relief",
-          "required": false,
-          "around": [
-            "hill_town",
-            "spiral_road"
-          ],
-          "notes": "Blend the slope into the lots and the road so the climb is smooth."
-        }
-      ],
-      "rules": [
-        {
-          "id": "spiral_shape",
-          "kind": "shape",
-          "required": true,
-          "label": "spiral road shape",
-          "scope": [
-            "spiral_road"
-          ],
-          "params": {
-            "shape": "spiral",
-            "turns": "about 1.5 to 2 around the hill",
-            "direction": "rising to the summit"
-          },
-          "notes": "The road should wind around the hill in a rising spiral; no shape rule can enforce this yet."
-        }
-      ],
-      "notes": "Existing hill to be found near the stone; the temple takes the summit."
+      "connectors": [],
+      "forms": [],
+      "rules": [],
+      "notes": "The spiral layout is reserved, so the town waits until layout.spiral exists. A hill must be found near the stone."
     },
     "waits": [
       {
-        "part": "spiral_shape",
-        "words": "The spiral shape of the road: shape rules come with a later Architect release. The road is built climbing from the gatehouse to the temple by the best route; the true spiral is offered when it can be checked."
+        "part": "hill_town",
+        "words": "The spiral road and the town laid up the hill wait for the spiral layout; no street layout stands in for it."
       }
     ],
-    "summary": "A medium pilgrimage hill town: one street zone with a summit temple, gatehouse at the foot, four townhouses, two cottages, a pilgrim's inn, two market shops, a wayside shrine and a watchtower below the temple. A street climbs from the gatehouse past the inn and shrine to the temple, with relief blending the slope. The strict spiral shape waits for a later release."
+    "summary": "A pilgrimage town of twelve buildings that climbs a hill on a rising spiral road. A grand temple sits at the summit. A gatehouse starts the road at the foot. The pilgrim's inn, shops, a wayside shrine, homes and a watchtower line the climb. Spiral layouts aren't built yet, so the plan holds the town as one spiral-layout zone that waits. I didn't swap in a plain street."
   },
-  "usd": 0.036704,
+  "usd": 0.038473,
   "errors": []
 }

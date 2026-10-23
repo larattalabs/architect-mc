@@ -1076,7 +1076,22 @@
    "globs": [],
    "dynamic": [],
    "env": [],
-   "eager": []
+   "eager": [],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "eval/briefs/v1/**",
+    "eval/fixtures/bibles/**",
+    "kit/lint/**",
+    "kit/test/**",
+    "lerna.json",
+    "mod/gradle.properties",
+    "mod/src/main/java/dev/larattalabs/architect/api/**",
+    "package.json",
+    "pnpm-workspace.yaml",
+    "tools/eval.mjs"
+   ],
+   "verified": "20261023-045735-slice unit-sidecar"
   },
   "sim-jobs": {
    "classes": [
@@ -9060,7 +9075,11 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ]
+   ],
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261023-045735-slice 6ct1-scenario-relief"
   },
   "f2-unit": {
    "classes": [
@@ -24644,7 +24663,8 @@
    "gradleUse": "tests",
    "eager": [
     "tools/gate6ccu.mjs"
-   ]
+   ],
+   "verified": "20261023-045735-slice cu-unit"
   },
   "cu-measure": {
    "classes": [
@@ -30709,7 +30729,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs"
-   ]
+   ],
+   "verified": "20261023-045735-slice kc-unit"
   },
   "kc-ingame": {
    "classes": [
@@ -31360,7 +31381,8 @@
     "tools/gate6cf3.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261023-045735-slice f3-unit"
   },
   "f3-ingame": {
    "classes": [
@@ -34477,12 +34499,18 @@
     "tools/lib/gate-part.mjs"
    ],
    "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
     "node_modules",
-    "package.json"
+    "package.json",
+    "pnpm-workspace.yaml",
+    "tools/lib/**"
    ],
    "derived": [
     "node_modules/**"
-   ]
+   ],
+   "verified": "20261023-045735-slice fl-unit"
   },
   "fl-ingame": {
    "classes": [
@@ -37103,7 +37131,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-045735-slice hy-ingame-smoke"
   },
   "hy-crash-smoke": {
    "classes": [
@@ -48305,7 +48334,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-045735-slice 6b-volume"
   },
   "6b-commands": {
    "classes": [
