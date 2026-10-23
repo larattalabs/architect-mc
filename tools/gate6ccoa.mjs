@@ -406,12 +406,14 @@ steps.drift = async () => {
   await call('dev.coa.pinKeyed', { sha: a.artifactSha, owner: G.OWNER, opKey: VK });
   await G.pile(ctx, s, 6);
   // the player's 3-block pillar on a planned tile (outside the lots), as in Steward's RC
-  const [x0, z0, x1, z1] = s.W.claim;
-  const px = x0 + 6, pz = z1 - 6;
+  // (in the town zone's rect, on its street: a planned tile, outside the lots)
+  const town = (a.parts ?? []).find((p) => p.part === 'town')?.geometry;
+  const [px, pz] = town?.rect ? [(town.rect[0] + town.rect[2]) >> 1, (town.rect[1] + town.rect[3]) >> 1] : [(s.W.claim[0] + s.W.claim[2]) >> 1, (s.W.claim[1] + s.W.claim[3]) >> 1];
   const gy = await groundAt(planDir(a.checkId), px, pz);
   await cmd(`/fill ${px} ${gy + 1} ${pz} ${px} ${gy + 3} ${pz} minecraft:cobblestone`);
   const st1 = await call('dev.region.realiseApproved', { sha: a.artifactSha, opKey: VK, ...(Object.keys(entries).length ? { lotEntries: entries } : {}) }, 300_000);
-  check(st1.reason === 'ARTIFACT_STALE', `finding 1: the pillar makes the artifact stale (${st1.refused?.slice(0, 120)})`);
+  check(st1.reason === 'ARTIFACT_STALE', `finding 1: the pillar at ${px} ${gy + 1}..${gy + 3} ${pz} makes the artifact stale (${(st1.refused ?? `realised ${st1.region}`).slice(0, 120)})`);
+  if (st1.region) { await G.remove(ctx, st1.region); return out; }
   const b = await chk();
   await call('dev.coa.pinKeyed', { sha: b.artifactSha, owner: G.OWNER, opKey: VK });
   const rr = await call('dev.region.realiseApproved', { sha: b.artifactSha, opKey: VK, ...(Object.keys(entries).length ? { lotEntries: entries } : {}) }, 300_000);
