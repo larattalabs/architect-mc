@@ -657,7 +657,43 @@ and its timing is recorded there. Dropping S1-S3 from it would take one more sce
 
 ### Proofs
 
-PENDING
+No real nightly has run with `--nightly` yet, so the selection proofs fake one.
+- **Where:** `artifacts/gate-runs-benches/selection/` holds the outputs, with the two scripts that made them: `fake-nightly.mjs` and
+  `proofs-ab.sh`.
+- **The fake nightly** (`fake-nightly.mjs <checkout> <out> <date>`) is one finished nightly at the branch head (173dc25d), with every
+  bench a PASS.
+  - Its step-cache entries are keyed exactly as gate-run keys them there.
+  - The in-game judged benches are **coverage entries**: a hand-picked set (the drivers' closure and a few Java sources) and their
+    classes' bytecode from the run-level build artifact. They are fake sets, so the reuse goes through the coverage branch of the
+    rule (`entryStillValid`).
+- **How the plans read it:** `GATE_NIGHTLY_DIR` and `GATE_STEP_CACHE_DIR` point at it. Each plan is
+  `release --since 173dc25d --assume-warm 173dc25d --plan` on a throwaway commit over the head, in a throwaway worktree.
+  `--assume-warm` makes every other step CACHED, so the plan shows what a warm release would run.
+
+| proof | the change | the benches (`--plan`) | release steps |
+|---|---|---|---|
+| (a) | one line in docs/GATES.md | **0 to run, 3 reused**: megaA, megaB (its fast walk) and volume REUSED from the nightly of 2026-10-23 (head 173dc25d7), each "its coverage (N set entries) is unchanged", with its run dir and log; heap NIGHTLY (last result PASS); S1-S3 "timing last judged in the nightly of 2026-10-23: PASS" | 11: the canaries, the probes' evidence steps and the uncacheable ones; no bench |
+| (b) | a comment in site/Placement.java (placement core) | the auto `--full` rule fires (Placement.java is on the engine list): megaA, megaB's full walk and volume, not heap | 201 (--full) |
+| (b), `--no-auto-full` | the same | **2 to run, 1 reused**: megaA RUN and megaB RUN as the **full** walk, both "bench-sensitive code changed since the nightly of 2026-10-23: placement core (site/Placement.java)"; volume REUSED (its coverage holds no Placement code); heap NIGHTLY | 158 |
+| (b2) | a comment in region/Heights.java: in megaA's and megaB's coverage, not on the sensitive list, not in volume's coverage | **2 to run, 1 reused**: megaA RUN and megaB RUN as the **fast** walk, "a file its coverage holds changed since 173dc25d7"; volume REUSED | 158 |
+
+The release step counts beyond the benches come from `--assume-warm`'s map-mode keys: a Java change re-keys every in-game step
+without recorded coverage.
+
+**(c) The unit tests.** `kit/test/gate-benches.test.mjs` has 8 tests:
+- the config (no judged bench left in the release lists);
+- the sensitive groups;
+- reuse;
+- every reason to run;
+- megaB's walk at a release and in the nightly (weekly, on demand, first time, after a failed full walk, on a sensitive change);
+- heap nightly only;
+- a manual `--full`;
+- reading the nightly records (a stopped nightly's FAIL wins over an older PASS; yielded, pending and running steps don't count).
+
+`kit/test/step-cache.test.mjs` adds one: a judged bench is recorded only from the nightly, judged and isolated, and
+`entryStillValid` holds until its key moves.
+
+**(d) 6a-resume in game, with megaB-fast and megaA:** PENDING (queued).
 
 ## Gate speed (2026-10-17): scheduling, timeouts, one kit suite
 
