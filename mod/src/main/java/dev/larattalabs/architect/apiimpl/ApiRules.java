@@ -25,7 +25,9 @@ public final class ApiRules {
 		"compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites",
 		"stackQuery", "entryVersions", "blueprintDelta", "deltaApply", "siteRevert", "deltaPreview", "regionPrepare", "generatedOnly", "cellConditions",
 		"chunkBound", "surveyVolume", "regionNudge", "regionOpKeys", "lotExt", "frozenWater", "siteWaiting", "fullBom", "stockpile",
-		"schematics", "targetPause", "removalLeavesFeed", "builds", "adopt", "planCatalogueView", "weatheringOurs");
+		"schematics", "targetPause", "removalLeavesFeed", "builds", "adopt", "planCatalogueView", "weatheringOurs",
+		// (6c D3, D-S3) every districts region's land in its ext (architect_mc:land)
+		"districtLand");
 
 	private ApiRules() {
 	}
@@ -86,6 +88,8 @@ public final class ApiRules {
 					case "region.terracedZones" -> "terracedZones"; // 6c S3: plan/0's terraces member (a zone or district laid down the slope as levels)
 					case "region.monastery" -> "scenarioS3"; // 6c S3: the helper's kit bundles the terraced_monastery program (S3's scenario)
 					case "plan.layouts" -> "freeLayouts"; // 6c FL: plan/0's layout.ring, .spiral, .grid, .organic, locator.around and sketch.outline
+					case "region.plan.besideReach" -> "besideReach"; // 6c D3: the join reaches into a standing town's claim (ends and side T junctions)
+					case "region.plan.dry" -> "besideCheck"; // 6c D3: Regions.checkBeside, a dry beside plan that keeps nothing
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

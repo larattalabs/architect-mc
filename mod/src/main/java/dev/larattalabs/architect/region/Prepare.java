@@ -108,6 +108,21 @@ public final class Prepare {
 		return out;
 	}
 
+	/** (6c D3, §2.3) The chunks of claim + 2 chunks, plus a reach plan's reach rect + 2 chunks (each once, the claim's first). */
+	public static List<Long> chunksOf(Ir ir) {
+		List<Long> out = chunksOf(ir.claim());
+		if (ir.json().get("reach") instanceof com.google.gson.JsonObject rc && rc.get("rect") instanceof com.google.gson.JsonArray q && q.size() == 4) {
+			java.util.LinkedHashSet<Long> all = new java.util.LinkedHashSet<>(out);
+			for (int cx = (q.get(0).getAsInt() >> 4) - 2; cx <= (q.get(2).getAsInt() >> 4) + 2; cx++) {
+				for (int cz = (q.get(1).getAsInt() >> 4) - 2; cz <= (q.get(3).getAsInt() >> 4) + 2; cz++) {
+					all.add(ChunkPos.pack(cx, cz));
+				}
+			}
+			out = new ArrayList<>(all);
+		}
+		return out;
+	}
+
 	static CompletableFuture<PrepareView> start(MinecraftServer s, RegionsImpl.PlanRec p, @Nullable Integer inFlight) {
 		hook();
 		Run r = RUNS.get(p.planId());
@@ -116,7 +131,7 @@ public final class Prepare {
 			if (level == null) {
 				return CompletableFuture.failedFuture(new IllegalStateException(p.dimension() + " is not loaded"));
 			}
-			List<Long> all = chunksOf(p.claim());
+			List<Long> all = chunksOf(p.ir());
 			List<ServerPlayer> players = level.players();
 			int px = players.isEmpty() ? (p.claim()[0] + p.claim()[3]) >> 5 : players.get(0).getBlockX() >> 4;
 			int pz = players.isEmpty() ? (p.claim()[2] + p.claim()[5]) >> 5 : players.get(0).getBlockZ() >> 4;

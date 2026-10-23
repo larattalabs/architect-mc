@@ -121,7 +121,7 @@ export interface KitInfo {
   /** KINDS_FORMAT2, [] without one */
   irKinds: string[];
   /** the plan CLI takes --blobs-out / --volumes; the kit has check, preview, catalogue (tools/region.mjs and the modules) */
-  caps: { blobsOut: boolean; volumes: boolean; check: boolean; preview: boolean; catalogue: boolean; keepOut: boolean; stamps: boolean; planCache?: boolean; beside?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean };
+  caps: { blobsOut: boolean; volumes: boolean; check: boolean; preview: boolean; catalogue: boolean; keepOut: boolean; stamps: boolean; planCache?: boolean; beside?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; besideReach?: boolean };
 }
 
 /** (6b) The side blob shas a format-2 IR names (`blobs: {name: {sha, bytes, kind}}`); format-1 blobs are inline: none. */
@@ -238,6 +238,11 @@ export class Regions {
     return path.join(this.plansDir(), planId);
   }
 
+  /** (6c D3) A dry plan's temporary directory: <data>/regions/dry/<id> (deleted when its run ends). */
+  dryDir(planId: string): string {
+    return path.join(this.host.config.dataDir, 'regions', 'dry', planId);
+  }
+
   /** (6b) The side-blob cache: <data>/regions/blobs/<sha>.bin */
   blobCacheDir(): string {
     return path.join(this.host.config.dataDir, 'regions', 'blobs');
@@ -273,6 +278,7 @@ export class Regions {
       biomes: /['"]?biomes['"]?\s*:\s*1/.test(tool), // (6c D2) the claim's biome grid (--biomes)
       lotBlocks: tool.includes("'lot-blocks'"), // (6c VOC-c) the bound lots' block histograms (--lot-blocks)
       survival: tool.includes("survival: 'flag'"), // (6c RS) a plan in survival (--survival: the world's mode)
+      besideReach: tool.includes("'beside-reach'"), // (6c D3) the reach inputs beside a standing region (--beside-reach)
     };
     const perm = permissionFlag();
     try {
@@ -360,9 +366,16 @@ export class Regions {
     const lotBlocks = info.caps.lotBlocks && msg.lotBlocks && Object.keys(msg.lotBlocks).length ? msg.lotBlocks : null;
     // (6c RS) the world's mode: a survival plan (an older kit has no --survival and plans in creative: the mod refuses its IR at realise)
     const survival = !!info.caps.survival && msg.survival === true;
-    const planId = `p${this.host.now().toString(36)}${crypto.randomBytes(3).toString('hex')}`;
-    fs.mkdirSync(this.planDir(planId), { recursive: true });
-    const dir = fs.realpathSync(this.planDir(planId));
+    // (6c D3) the reach inputs (an older kit has no --beside-reach: its plan fails NO_JOIN as D1's did); each survey blob read now
+    const reachIn = info.caps.besideReach && msg.besideReach ? msg.besideReach : null;
+    const reachOne = (q: { surveyBlobId: string }) => this.host.blobs.read(q.surveyBlobId);
+    const reachSurveys = reachIn ? ('surveyBlobId' in reachIn ? { '': reachOne(reachIn as { surveyBlobId: string }) } : Object.fromEntries(Object.entries(reachIn as Record<string, { surveyBlobId: string }>).map(([id, q]) => [id, reachOne(q)]))) : null;
+    // (6c D3, §7.1) a dry plan (Regions.checkBeside): its own directory, deleted when the run ends; nothing kept, no blob published
+    const dry = msg.dry === true;
+    const planId = `${dry ? 'd' : 'p'}${this.host.now().toString(36)}${crypto.randomBytes(3).toString('hex')}`;
+    const root = dry ? this.dryDir(planId) : this.planDir(planId);
+    fs.mkdirSync(root, { recursive: true });
+    const dir = fs.realpathSync(root);
     fs.copyFileSync(program.file, path.join(dir, 'program.mjs'));
     const passes = declaredPasses(fs.readFileSync(program.file, 'utf8'));
     // (6c P0) a plan check: the owner's per-part cache (read by the kit), filled after the check
@@ -378,6 +391,19 @@ export class Regions {
     if (hasBible) fs.writeFileSync(path.join(dir, 'bible.json'), JSON.stringify({ ...(bible ? { id: bible.id, version: bible.version } : {}), roles, ...(patterns ? { patterns } : {}), ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}) }));
     if (keepOut.length) fs.writeFileSync(path.join(dir, 'keepout.json'), JSON.stringify(keepOut));
     if (beside) fs.writeFileSync(path.join(dir, 'beside.json'), JSON.stringify(beside));
+    // (6c D3, §2.4) the reach inputs kept with the plan: reach-survey.bin, held.json, standing.json, named by beside-reach.json (a plan
+    // check's per region: reach-survey-<id>.bin, ...)
+    if (reachIn && reachSurveys) {
+      const files = (id: string, q: { held: unknown; standing: unknown }) => {
+        const sfx = id ? `-${id}` : '';
+        fs.writeFileSync(path.join(dir, `reach-survey${sfx}.bin`), reachSurveys[id]!);
+        fs.writeFileSync(path.join(dir, `held${sfx}.json`), JSON.stringify(q.held));
+        fs.writeFileSync(path.join(dir, `standing${sfx}.json`), JSON.stringify(q.standing));
+        return { survey: `reach-survey${sfx}.bin`, held: `held${sfx}.json`, standing: `standing${sfx}.json` };
+      };
+      const idx = 'surveyBlobId' in reachIn ? files('', reachIn as { held: unknown; standing: unknown }) : Object.fromEntries(Object.entries(reachIn as Record<string, { held: unknown; standing: unknown }>).map(([id, q]) => [id, files(id, q)]));
+      fs.writeFileSync(path.join(dir, 'beside-reach.json'), JSON.stringify(idx));
+    }
     if (biomes) fs.writeFileSync(path.join(dir, 'biomes.json'), JSON.stringify(biomes));
     if (lotBlocks) fs.writeFileSync(path.join(dir, 'lotblocks.json'), JSON.stringify(lotBlocks));
     const request = {
@@ -394,6 +420,8 @@ export class Regions {
       ...(volumes.length ? { volumes: volumes.map((v) => ({ ...(v.name ? { name: v.name } : {}), sha: v.sha, blobId: v.blobId, box: v.box })) } : {}),
       ...(keepOut.length ? { keepOut } : {}),
       ...(beside ? { beside: { id: beside.id } } : {}),
+      ...(reachIn ? { besideReach: true } : {}),
+      ...(dry ? { dry: true } : {}),
       ...(passes.length ? { passes } : {}),
       ...(planCache ? { planCheck: true } : {}),
       ...(survival ? { survival: true } : {}),
@@ -402,7 +430,12 @@ export class Regions {
     fs.writeFileSync(path.join(dir, 'request.json'), JSON.stringify(request, null, 2));
     this.host.log.info(`region plan ${planId}: ${program.label}, claim ${msg.claim.minX},${msg.claim.minZ}..${msg.claim.maxX},${msg.claim.maxZ} y ${msg.claim.minY}..${msg.claim.maxY}, seed ${seed}${bible ? `, bible ${bible.id} v${bible.version}` : ''}${volumes.length ? `, ${volumes.length} volume${volumes.length === 1 ? '' : 's'}` : ''}${check ? '' : ', no check'}${passes.length ? `, passes ${passes.join(', ')} (${Math.round(this.cfg.passPlanMs / 1000)} s, ${this.cfg.passPlanHeapMb} MB)` : ''}`);
     this.planning.add(planId);
-    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0, beside: !!beside, biomes: !!biomes, lotBlocks: !!lotBlocks, survival, passes, planCache, previewViews: msg.previewViews, timeoutMs: msg.timeoutMs, heapMb: msg.heapMb })).finally(() => this.planning.delete(planId));
+    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0, beside: !!beside, besideReach: !!reachIn, dry, biomes: !!biomes, lotBlocks: !!lotBlocks, survival, passes, planCache, previewViews: msg.previewViews, timeoutMs: msg.timeoutMs, heapMb: msg.heapMb }))
+      .finally(() => {
+        this.planning.delete(planId);
+        // (6c D3, §7.1) a dry plan keeps nothing: its directory goes, success or failure
+        if (dry) fs.rmSync(dir, { recursive: true, force: true });
+      });
     this.running.add(p);
     void p.finally(() => this.running.delete(p));
     return { planId, seed };
@@ -505,7 +538,7 @@ export class Regions {
     return keys.length;
   }
 
-  planArgs(dir: string, program: ProgramRef, o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; volumes?: boolean; keepOut?: boolean; beside?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; planCache?: string }): string[] {
+  planArgs(dir: string, program: ProgramRef, o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; volumes?: boolean; keepOut?: boolean; beside?: boolean; besideReach?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; planCache?: string }): string[] {
     const c = o.claim;
     const caps = this.kitInfo().caps;
     return [
@@ -523,6 +556,7 @@ export class Regions {
       ...(o.volumes ? ['--volumes', path.join(dir, 'volumes')] : []),
       ...(o.keepOut ? ['--keep-out', path.join(dir, 'keepout.json')] : []),
       ...(o.beside ? ['--beside', path.join(dir, 'beside.json')] : []),
+      ...(o.besideReach ? ['--beside-reach', path.join(dir, 'beside-reach.json')] : []),
       ...(o.biomes ? ['--biomes', path.join(dir, 'biomes.json')] : []),
       ...(o.lotBlocks ? ['--lot-blocks', path.join(dir, 'lotblocks.json')] : []),
       ...(o.survival ? ['--survival'] : []),
@@ -536,7 +570,9 @@ export class Regions {
 
   /** (6b) `check <ir.json> --survey <f> [--blobs <dir>] [--volumes <dir>] --out <planDir> --json` */
   checkArgs(dir: string): string[] {
-    return ['check', path.join(dir, 'ir.json'), '--survey', path.join(dir, 'survey.bin'), ...this.sideDirArgs(dir), '--out', dir, '--json'];
+    // ((6c D3) a reach plan's check reads the reach inputs: its reach columns lie in the town's claim, M28:beside reads the held set)
+    const reach = fs.existsSync(path.join(dir, 'beside-reach.json')) && this.kitInfo().caps.besideReach ? ['--beside-reach', path.join(dir, 'beside-reach.json')] : [];
+    return ['check', path.join(dir, 'ir.json'), '--survey', path.join(dir, 'survey.bin'), ...this.sideDirArgs(dir), ...reach, '--out', dir, '--json'];
   }
 
   /** (6b) `preview <ir.json> --survey <f> [--blobs <dir>] [--volumes <dir>] --views a,b [--axes <f>] --out <planDir> --json` */
@@ -590,7 +626,7 @@ export class Regions {
     planId: string,
     dir: string,
     program: ProgramRef,
-    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean; beside?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; passes?: string[]; planCache?: string; previewViews?: readonly string[]; timeoutMs?: number; heapMb?: number },
+    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean; beside?: boolean; besideReach?: boolean; dry?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; passes?: string[]; planCache?: string; previewViews?: readonly string[]; timeoutMs?: number; heapMb?: number },
   ): Promise<void> {
     const t0 = Date.now();
     const fail = (message: string) => {
@@ -654,7 +690,8 @@ export class Regions {
         files.set(b.sha, f);
       }
       const blobIds = new Map<string, string>();
-      const blobs = side.map((b) => {
+      // ((6c D3) a dry plan publishes no blob: its side blobs are listed without one)
+      const blobs = o.dry ? side.map((b) => ({ name: b.name, sha: b.sha, bytes: fs.statSync(files.get(b.sha)!).size, kind: b.kind })) : side.map((b) => {
         let id = blobIds.get(b.sha);
         if (!id) {
           id = this.host.blobs.putBytes(fs.readFileSync(files.get(b.sha)!), REGION_BLOB_KIND, 'bin');
@@ -663,15 +700,15 @@ export class Regions {
         return { name: b.name, sha: b.sha, bytes: fs.statSync(files.get(b.sha)!).size, kind: b.kind, blobId: id };
       });
       const json = bytes.toString('utf8');
-      this.cacheIr(irSha, json, planId, files);
-      const inline = bytes.length <= IR_INLINE_BYTES;
+      if (!o.dry) this.cacheIr(irSha, json, planId, files);
+      const inline = o.dry || bytes.length <= IR_INLINE_BYTES;
       const irBlobId = inline ? undefined : this.host.blobs.putBytes(bytes, 'region.ir', 'json');
       const irFormat = ir.format as number;
       const requires = Array.isArray(ir.requires) ? ir.requires.map(String) : [];
       const needVolumes = Array.isArray(kitPlan.needVolumes) ? kitPlan.needVolumes : Array.isArray(out.needVolumes) ? out.needVolumes : [];
       this.host.log.info(`region plan ${planId} planned in ${ms} ms: IR format ${irFormat}, ${bytes.length} bytes, sha ${irSha.slice(0, 12)}${irBlobId ? `, blob ${irBlobId}` : ''}${blobs.length ? `, ${blobs.length} side blob${blobs.length === 1 ? '' : 's'}` : ''}`);
       // (6b) the checker, then the previews: their own limit, together
-      const checked = o.check ? await this.checkAndRender(planId, dir, o.previewViews) : {};
+      const checked = o.check ? await this.checkAndRender(planId, dir, o.dry ? [] : o.previewViews) : {};
       // (6c P0) a plan check's answer and artifact (the kit wrote plancheck.json, artifact.json, classmap.png), its cache entries
       let planCheck: Record<string, unknown> | undefined;
       if (o.planCache && fs.existsSync(path.join(dir, 'plancheck.json'))) {
@@ -748,7 +785,7 @@ export class Regions {
       if (c.ok) out.report = c.report;
       else errors.push(`check: ${c.message}`);
     } else errors.push('check: the kit has no checker yet');
-    if (caps.preview) {
+    if (caps.preview && views.length) {
       this.progress(planId, 'rendering');
       const p = await this.runPreview(dir, views, undefined, end - Date.now());
       out.renderMs = p.ms;
@@ -756,7 +793,7 @@ export class Regions {
         out.previews = p.paths;
         if (p.sitePlan) out.sitePlan = p.sitePlan;
       } else errors.push(`previews: ${p.message}`);
-    } else errors.push('previews: the kit has no renderer yet');
+    } else if (views.length) errors.push('previews: the kit has no renderer yet');
     if (errors.length) {
       out.checkError = errors.join('; ');
       this.host.log.warn(`region plan ${planId}: ${truncate(out.checkError, 300)}`);

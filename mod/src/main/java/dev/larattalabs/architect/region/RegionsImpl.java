@@ -452,48 +452,64 @@ public final class RegionsImpl implements Regions {
 	}
 
 	private CompletableFuture<RegionPlan> plan0(RegionPlanRequest r, MinecraftServer s, @Nullable String opKey, @Nullable String opHash) {
+		return plan0raw(r, s).thenCompose(o -> onServer(s, () -> finishPlan(r, (JsonObject) o[0], (JsonObject) o[1], (byte[]) o[2], opKey, opHash))).thenCompose(
+			f -> f);
+	}
+
+	/** {@link #plan0} up to the planned message: {planned, ir, survey} (a dry plan stops here: nothing is kept). */
+	private CompletableFuture<Object[]> plan0raw(RegionPlanRequest r, MinecraftServer s) {
 		if (r.level().dimension() != Level.OVERWORLD) {
-			return failed(Reason.NOT_ALLOWED, "regions are Overworld only in this version");
+			return failedRaw(Reason.NOT_ALLOWED, "regions are Overworld only in this version");
 		}
 		BoundingBox c = r.claim();
 		int big = Boolean.getBoolean("architect.dev.bigRegions") ? 2048 : 1024;
 		if (c.getXSpan() > big || c.getZSpan() > big) {
-			return failed(Reason.REGION_LIMIT, "the claim is " + c.getXSpan() + "x" + c.getZSpan() + " columns (at most " + big + "x" + big + ")");
+			return failedRaw(Reason.REGION_LIMIT, "the claim is " + c.getXSpan() + "x" + c.getZSpan() + " columns (at most " + big + "x" + big + ")");
 		}
 		// 6c V: the owner's protected areas that meet the claim go to the plan as keepOut (a program that honours them records them
 		// in its IR); the claim is judged against them at accept and at realise (protectedClaim with the IR's honoured set). 0c refused
 		// here at once; a program that reads no keepOut is now refused at accept, with the same reason.
 		TileStream.Link link = TileStream.link;
 		if (link == null || !link.connected()) {
-			return failed(Reason.SIDECAR_UNAVAILABLE, "the helper (sidecar) is not connected");
+			return failedRaw(Reason.SIDECAR_UNAVAILABLE, "the helper (sidecar) is not connected");
 		}
 		// (6c D1) beside a standing region: it must stand (same dimension, same owner), and the claim may overlap it only in a seam of at
 		// most 16 columns, never over its lots, roads or paths (OVERLAP, nothing planned); the plan reads its footprint and graph
+		CompletableFuture<@Nullable Void> reachReady = CompletableFuture.completedFuture(null);
 		if (r.beside() != null) {
 			Live st = REGIONS.get(r.beside());
-			if (st == null || st.rec().state == RegionState.REMOVING || st.rec().state == RegionState.REMOVED) {
-				return failed(Reason.OTHER, "beside: no standing region " + r.beside());
+			if (st == null || st.rec().state == RegionState.REMOVED) {
+				return failedRaw(Reason.OTHER, "beside: no standing region " + r.beside());
+			}
+			// (6c D3, Steward's finding) a town in flight is busy (PREPARING, PLACING, REMOVING); PLACED, PARTIAL and FAILED with cells
+			// standing are valid beside towns, at plan, at checkBeside and at realise
+			String busy = besideBusy(st);
+			if (busy != null) {
+				return failedRaw(Reason.OVERLAP_BUSY, "beside: region " + r.beside() + " is " + busy);
 			}
 			if (!st.rec().dimension.equals(Sites.dimensionId(r.level()))) {
-				return failed(Reason.NOT_ALLOWED, "beside: region " + r.beside() + " is in " + st.rec().dimension);
+				return failedRaw(Reason.NOT_ALLOWED, "beside: region " + r.beside() + " is in " + st.rec().dimension);
 			}
 			if (!java.util.Objects.equals(st.rec().owner, r.owner())) {
-				return failed(Reason.OVERLAP_OWNED, "beside: region " + r.beside() + " is " + (st.rec().owner == null ? "the player's" : st.rec().owner + "'s"));
+				return failedRaw(Reason.OVERLAP_OWNED, "beside: region " + r.beside() + " is " + (st.rec().owner == null ? "the player's" : st.rec().owner + "'s"));
 			}
 			int[] sc = st.rec().claim; // [x0, y0, z0, x1, y1, z1]
 			int[] standing = {sc[0], sc[2], sc[3], sc[5]}, mine = {c.minX(), c.minZ(), c.maxX(), c.maxZ()};
 			String seam = BesideCheck.seamProblem(standing, st.ir().json(), mine);
 			if (seam != null) {
-				return failed(Reason.OVERLAP, "beside " + r.beside() + ": " + seam);
+				return failedRaw(Reason.OVERLAP, "beside " + r.beside() + ": " + seam);
 			}
 			BESIDE.put(r, BesideCheck.besideData(r.beside(), standing, st.ir().json(), mine));
+			// (6c D3, §2.4) the reach inputs: the town claim's survey (resolution 1, loaded chunks only), the held columns over its claim
+			// (the journal now) and its standing data; the plan reads them only when its seam step finds no join
+			reachReady = reachInputs(r, st, standing);
 		}
 		// (6c D2) the claim's biome grid (4x4, loaded chunks): a program following a biome edge reads it (ctx.biomes)
 		BIOMES.put(r, BiomeGrid.sample(r.level(), c.minX(), c.minZ(), c.maxX(), c.maxZ()));
 		warnKitMismatch();
 		int res = (long) c.getXSpan() * c.getZSpan() <= 256L * 256 ? 1 : 4;
 		progress(s, null, "planning");
-		CompletableFuture<RegionPlan> out = RegionSurvey.sample(r.level(), c.minX(), c.minZ(), c.maxX(), c.maxZ(), res, r.surveyLoad()).thenCompose(cols -> {
+		CompletableFuture<Object[]> out = reachReady.thenCompose(rv -> RegionSurvey.sample(r.level(), c.minX(), c.minZ(), c.maxX(), c.maxZ(), res, r.surveyLoad())).thenCompose(cols -> {
 			byte[] survey = cols.encode();
 			String surveySha = Packed.sha256(survey);
 			return BlobPut.put(link, survey, "survey").thenCompose(blobId -> planOnce(link, r, blobId, surveySha, survey, null).thenCompose(o -> {
@@ -548,9 +564,11 @@ public final class RegionsImpl implements Regions {
 					});
 				});
 			}));
-		}).thenCompose(o -> onServer(s, () -> finishPlan(r, (JsonObject) o[0], (JsonObject) o[1], (byte[]) o[2], opKey, opHash))).thenCompose(f -> f);
+		});
 		out.whenComplete((p, e) -> {
 			BESIDE.remove(r);
+			REACH.remove(r);
+			REACH_SURVEY.remove(r);
 			BIOMES.remove(r);
 			if (e != null) {
 				progress(s, null, "failed");
@@ -559,8 +577,100 @@ public final class RegionsImpl implements Regions {
 		return out;
 	}
 
+	private static CompletableFuture<Object[]> failedRaw(Reason reason, String message) {
+		return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(reason, message));
+	}
+
+	/** (6c D3, §7) Dry plans in flight (by request identity): planOnce sends {@code dry: true}; nothing is kept. */
+	private static final java.util.Set<RegionPlanRequest> DRY = java.util.Collections.synchronizedSet(java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>()));
+
+	/**
+	 * (6c D3, D-S4, §7) The dry beside check: exactly {@link #plan}'s path (the beside checks, both surveys, the held set, the kit's plan
+	 * and check) with {@code dry: true}; nothing is kept (no plan id, record, file, opKey entry, blob, write, ticket or prepare). The
+	 * verdict: fits with the join and the land, or the reason and message the plan would have failed with and the kit's named code.
+	 */
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.BesideVerdict> checkBeside(RegionPlanRequest r) {
+		if (r.beside() == null) {
+			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.NOT_ALLOWED,
+				"checkBeside needs a request beside a standing region (RegionPlanRequest.beside)"));
+		}
+		MinecraftServer s = r.level().getServer();
+		server = s;
+		long t0 = System.nanoTime();
+		String limit = dev.larattalabs.architect.apiimpl.FieldLimits.lotExt(r.params());
+		if (limit != null) {
+			return CompletableFuture.completedFuture(BesideVerdicts.failed(Reason.FIELD_LIMIT, limit, t0));
+		}
+		DRY.add(r);
+		String keyNote = r.opKey() != null ? " (the request's opKey is ignored: a dry check keeps nothing)" : "";
+		CompletableFuture<dev.larattalabs.architect.api.BesideVerdict> out = plan0raw(r, s).handle((o, e) -> {
+			if (e != null) {
+				Throwable t = e instanceof java.util.concurrent.CompletionException && e.getCause() != null ? e.getCause() : e;
+				Reason reason = t instanceof dev.larattalabs.architect.api.ArchitectRefused ar ? ar.reason() : null;
+				return BesideVerdicts.failed(reason, String.valueOf(t.getMessage()) + keyNote, t0);
+			}
+			Live st = REGIONS.get(r.beside());
+			int[] tc = st == null ? null : st.rec().claim;
+			JsonObject town = st == null ? null : st.ir().json();
+			return BesideVerdicts.fits(r.beside(), (JsonObject) o[1], tc == null ? null : new int[] {tc[0], tc[2], tc[3], tc[5]}, town, keyNote, t0);
+		});
+		out.whenComplete((v, e) -> DRY.remove(r));
+		return out;
+	}
+
 	/** (6c D1) The beside data of a plan in flight (by request identity), read by planOnce for its region.plan message. */
 	private static final Map<RegionPlanRequest, JsonObject> BESIDE = java.util.Collections.synchronizedMap(new java.util.IdentityHashMap<>());
+	/**
+	 * (6c D3) The reach inputs of a plan in flight (by request identity): {@code {surveyBlobId, held, standing}} for the region.plan message's
+	 * {@code besideReach}, and the survey bytes ({@code _survey}, kept with the plan when its IR has a reach). A plan check's map
+	 * {regionId: inputs} for its endpoint.region regions.
+	 */
+	static final Map<RegionPlanRequest, JsonObject> REACH = java.util.Collections.synchronizedMap(new java.util.IdentityHashMap<>());
+	static final Map<RegionPlanRequest, Map<String, byte[]>> REACH_SURVEY = java.util.Collections.synchronizedMap(new java.util.IdentityHashMap<>());
+
+	/** (6c D3, Steward's finding) Why a standing region is no beside town now (in flight), or null: PLACED, PARTIAL and FAILED are. */
+	static @Nullable String besideBusy(Live st) {
+		RegionState s = st.rec().state;
+		return s == RegionState.PREPARING || s == RegionState.PLACING || s == RegionState.REMOVING ? s.name() : null;
+	}
+
+	/**
+	 * (6c D3, §2.4) One standing region's reach inputs for a plan over {@code r}'s claim: its claim's survey (resolution 1, loaded chunks
+	 * only) uploaded as a blob, the held columns over its claim from the journal (by owner: its own group's, its terrain's) and its
+	 * standing data. Put in {@link #REACH} (keyed by the region id when {@code map}).
+	 */
+	static CompletableFuture<@Nullable Void> reachInputs(RegionPlanRequest r, Live st, int[] standing) {
+		return reachInputs(r, st, standing, false);
+	}
+
+	static CompletableFuture<@Nullable Void> reachInputs(RegionPlanRequest r, Live st, int[] standing, boolean map) {
+		TileStream.Link link = TileStream.link;
+		ServerLevel level = r.level();
+		JsonObject held;
+		try {
+			held = BesideReach.held(Sites.dimensionId(level), standing, st.rec().groupId, BesideReach.propsStages(st.ir().json()), null);
+		} catch (IOException e) {
+			return CompletableFuture.failedFuture(refusal(Reason.JOURNAL_UNAVAILABLE, "beside: the held columns could not be read (" + e.getMessage() + ")"));
+		}
+		JsonObject std = BesideReach.standing(st.rec().id, standing, st.ir().json());
+		return RegionSurvey.sample(level, standing[0], standing[1], standing[2], standing[3], 1, LoadPolicy.LOADED_ONLY).thenCompose(cols -> {
+			byte[] bytes = cols.encode();
+			return BlobPut.put(link, bytes, "survey").thenAccept(blobId -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("surveyBlobId", blobId);
+				o.addProperty("surveySha", Packed.sha256(bytes));
+				o.add("held", held);
+				o.add("standing", std);
+				if (map) {
+					REACH.computeIfAbsent(r, k -> new JsonObject()).add(st.rec().id, o);
+				} else {
+					REACH.put(r, o);
+				}
+				REACH_SURVEY.computeIfAbsent(r, k -> new java.util.concurrent.ConcurrentHashMap<>()).put(st.rec().id, bytes);
+			});
+		});
+	}
 	/** (6c D2) The biome grid of a plan in flight (by request identity), read by planOnce. */
 	private static final Map<RegionPlanRequest, JsonObject> BIOMES = java.util.Collections.synchronizedMap(new java.util.IdentityHashMap<>());
 
@@ -675,6 +785,15 @@ public final class RegionsImpl implements Regions {
 		JsonObject bd = r.beside() != null ? BESIDE.get(r) : null;
 		if (bd != null) {
 			m.add("beside", bd.deepCopy());
+		}
+		// (6c D3, §7) a dry plan (checkBeside): the helper keeps nothing
+		if (DRY.contains(r)) {
+			m.addProperty("dry", true);
+		}
+		// (6c D3, §2.4) the reach inputs (an older helper ignores the member; its plan then fails NO_JOIN as D1's did)
+		JsonObject reach = REACH.get(r);
+		if (reach != null) {
+			m.add("besideReach", reach.deepCopy());
 		}
 		JsonObject bg = BIOMES.get(r);
 		if (bg != null) {
@@ -822,7 +941,7 @@ public final class RegionsImpl implements Regions {
 		@Nullable String opHash) {
 		Ir ir = Ir.of(irJson);
 		String planId = planned.get("planId").getAsString();
-		List<Long> chunks = Prepare.chunksOf(ir.claim());
+		List<Long> chunks = Prepare.chunksOf(ir); // (6c D3) and a reach plan's reach
 		ServerLevel level = r.level();
 		List<CompletableFuture<Boolean>> qs = new ArrayList<>();
 		for (long ck : chunks) {
@@ -842,6 +961,9 @@ public final class RegionsImpl implements Regions {
 				Path w = level.getServer().getWorldPath(LevelResource.ROOT);
 				RegionStore.writeJson(RegionStore.plan(w, planId), planToJson(p));
 				RegionStore.write(RegionStore.plan(w, planId).resolveSibling(planId + ".survey.bin"), survey);
+				// (6c D3, §2.4, §4.4) a reach plan keeps its reach inputs: the held columns and standing data it was planned on, and the
+				// town claim's survey (the realise re-checks the held set and drifts the reach columns against them)
+				saveReach(w, planId, r, irJson);
 				if (opKey != null) {
 					// (6c X, C20) the key file (small, so a world start finds every key without reading the IRs)
 					JsonObject k = new JsonObject();
@@ -858,6 +980,39 @@ public final class RegionsImpl implements Regions {
 			}
 			return view(p);
 		}));
+	}
+
+	/** (6c D3) {@code <planId>.reach.json} ({held, standing, surveySha}) and {@code <planId>.reach-survey.bin}, when the IR has a reach. */
+	static void saveReach(Path w, String planId, RegionPlanRequest r, JsonObject irJson) throws IOException {
+		if (!(irJson.get("reach") instanceof JsonObject rc) || !(rc.get("standing") instanceof JsonElement se)) {
+			return;
+		}
+		String town = se.getAsString();
+		JsonObject in = REACH.get(r);
+		if (in != null && !in.has("held") && in.get(town) instanceof JsonObject one) {
+			in = one; // a plan check's map
+		}
+		Map<String, byte[]> sv = REACH_SURVEY.get(r);
+		if (in == null || sv == null || sv.get(town) == null) {
+			return;
+		}
+		JsonObject o = new JsonObject();
+		o.addProperty("standing", town);
+		o.add("held", in.get("held").deepCopy());
+		o.add("standingData", in.get("standing").deepCopy());
+		o.addProperty("surveySha", str(in, "surveySha"));
+		RegionStore.writeJson(RegionStore.plan(w, planId).resolveSibling(planId + ".reach.json"), o);
+		RegionStore.write(RegionStore.plan(w, planId).resolveSibling(planId + ".reach-survey.bin"), sv.get(town));
+	}
+
+	/** (6c D3) A plan's kept reach inputs ({held, standingData, surveySha, standing}), or null. */
+	static @Nullable JsonObject reachOf(Path w, String planId) {
+		try {
+			Path f = RegionStore.plan(w, planId).resolveSibling(planId + ".reach.json");
+			return java.nio.file.Files.exists(f) ? RegionStore.readJson(f) : null;
+		} catch (IOException | RuntimeException e) {
+			return null;
+		}
 	}
 
 	static RegionPlan view(PlanRec p) {
@@ -1213,6 +1368,14 @@ public final class RegionsImpl implements Regions {
 		if (prot != null) {
 			throw refusal(Reason.PROTECTED, prot);
 		}
+		// (6c D3, §2.3, §4.4) a reach plan, re-checked once before any write: its town stands (not in flight), the held set over its reach
+		// as planned, its reach columns clear of the owner's areas and of other owners' regions
+		if (stroke == null && ir.json().get("reach") instanceof JsonObject reach) {
+			String[] rw = reachRecheck(p, reach);
+			if (rw != null) {
+				throw refusal(Reason.valueOf(rw[0]), rw[1]);
+			}
+		}
 		// another owner's standing region over the claim
 		for (Live l : REGIONS.values()) {
 			if (l.rec().state != RegionState.REMOVING && overlaps(l.rec().claim, ir.claim()) && !java.util.Objects.equals(l.rec().owner, p.owner())
@@ -1271,6 +1434,16 @@ public final class RegionsImpl implements Regions {
 			}
 			rec.ext.add(EXT_CORRIDOR, o);
 		}
+		// (6c D3, D-S3, §6) every districts region: the land it takes (architect_mc:land), from its IR
+		int[] townClaim = null;
+		if (rec.beside != null && REGIONS.get(rec.beside) instanceof Live tl) {
+			int[] tc = tl.rec().claim;
+			townClaim = new int[] {tc[0], tc[2], tc[3], tc[5]};
+		}
+		JsonObject land = DistrictLand.of(ir.json(), townClaim, null);
+		if (land != null) {
+			rec.ext.add(DistrictLand.EXT_LAND, land);
+		}
 		if (stroke != null) {
 			rec.brush = stroke.deepCopy(); // (6c B) the stroke's kind and destruction rule, read by every tile check
 		}
@@ -1284,6 +1457,12 @@ public final class RegionsImpl implements Regions {
 		}
 		List<String> stages = r.stages() == null ? ir.stages() : r.stages().stream().filter(ir.stages()::contains).toList();
 		List<QItem> items = new ArrayList<>();
+		// (6c D3, §3.4) the hold: every town-held cell of the reach's contact columns journaled as this region's (before = after, the block
+		// standing), one cell site item first in the batch, so the town's undo never writes a join column
+		QItem hold = ir.json().get("reach") instanceof JsonObject rh ? holdItem(level, rec, rh, stages.isEmpty() ? null : stages.get(0)) : null;
+		if (hold != null) {
+			items.add(hold);
+		}
 		int maxNeed = 36;
 		Map<String, List<String>> tilesOfStage = new HashMap<>();
 		for (String st : stages) {
@@ -1403,6 +1582,103 @@ public final class RegionsImpl implements Regions {
 				+ "from its owner's stockpile (create one first); the bill: " + (bom != null && bom.isJsonObject() ? bom.toString() : cells[2] + " paid cells")
 				+ (lots ? ", and its lots' designs" : ""));
 		}
+	}
+
+	/**
+	 * (6c D3, §2.3, §4.4) A reach plan's re-check at realise (once, before any write): {reason, message} or null. The town stands and is
+	 * not in flight (Steward's finding: PLACED, PARTIAL and FAILED are beside towns); every reach column outside the contact columns is
+	 * unheld (a site placed on the join's path, a player's build), a contact column held only by the town's terrain and held by the plan;
+	 * no reach column in the owner's protected areas or in another owner's region.
+	 */
+	static String @Nullable [] reachRecheck(PlanRec p, JsonObject reach) {
+		String town = str(reach, "standing");
+		Live st = town == null ? null : REGIONS.get(town);
+		if (st == null || st.rec().state == RegionState.REMOVED) {
+			return new String[] {"OTHER", "beside: region " + town + " was removed; re-plan"};
+		}
+		String busy = besideBusy(st);
+		if (busy != null) {
+			return new String[] {"OVERLAP_BUSY", "beside: region " + town + " is " + busy};
+		}
+		BesideReach.Cols cols = BesideReach.colsOf(reach.getAsJsonArray("runs"));
+		BesideReach.Cols contact = BesideReach.colsOf(reach.get("contact") instanceof JsonArray ca ? ca : new JsonArray());
+		BesideReach.Cols hold = BesideReach.colsOf(reach.get("hold") instanceof JsonArray ha ? ha : new JsonArray());
+		int[] rect = cols.rect();
+		if (rect == null) {
+			return null;
+		}
+		// the owner's protected areas and other owners' regions over the reach
+		for (JsonElement e : reach.getAsJsonArray("runs")) {
+			JsonArray q = e.getAsJsonArray();
+			int[] box = {q.get(0).getAsInt(), -2048, q.get(1).getAsInt(), q.get(2).getAsInt(), 2047, q.get(3).getAsInt()};
+			String prot = protectedClaim(p.dimension(), p.owner(), box);
+			if (prot != null) {
+				return new String[] {"PROTECTED", prot + " (the join's reach at " + box[0] + ".." + box[3] + ", " + box[2] + ")"};
+			}
+			for (Live l : REGIONS.values()) {
+				if (l.rec().state != RegionState.REMOVING && l.rec().state != RegionState.REMOVED && overlaps(l.rec().claim, box) && !java.util.Objects.equals(l
+					.rec().owner, p.owner())) {
+					return new String[] {"OVERLAP_OWNED", "the join's reach at " + box[0] + ".." + box[3] + ", " + box[2] + " lies in region " + l.rec().id + " of "
+						+ (l.rec().owner == null ? "the player" : l.rec().owner)};
+				}
+			}
+		}
+		// the held set over the reach: as planned
+		BesideReach.Held h;
+		try {
+			h = BesideReach.scan(p.dimension(), rect, st.rec().groupId, BesideReach.propsStages(st.ir().json()), null);
+		} catch (IOException e) {
+			return new String[] {"JOURNAL_UNAVAILABLE", "the held columns over the join's reach could not be read (" + e.getMessage() + ")"};
+		}
+		String[] bad = {null};
+		cols.forEach((x, z) -> {
+			if (bad[0] != null) {
+				return;
+			}
+			int c = h.at(x, z);
+			boolean ok = c == 0 ? !hold.has(x, z) || !contact.has(x, z) : contact.has(x, z) && c == 2 && hold.has(x, z);
+			if (c == 0 && hold.has(x, z)) {
+				ok = true; // a hold column the town no longer holds (its terrain undone by hand): nothing to hold, nothing written
+			}
+			if (!ok) {
+				String site = h.siteAt(x, z);
+				bad[0] = "the join's reach column " + x + ", " + z + " is held since the plan" + (site == null ? "" : " by " + Sites.describe(site))
+					+ (contact.has(x, z) ? " (a contact column held by more than the town's terrain)" : "") + "; re-plan";
+			}
+		});
+		// a contact column the town's terrain holds now that the plan did not hold
+		contact.forEach((x, z) -> {
+			if (bad[0] == null && h.at(x, z) == 2 && !hold.has(x, z)) {
+				bad[0] = "the contact column " + x + ", " + z + " is held by region " + town + "'s terrain since the plan; re-plan";
+			}
+		});
+		return bad[0] == null ? null : new String[] {"OVERLAP", bad[0]};
+	}
+
+	/**
+	 * (6c D3, §3.4) The hold item of a reach plan: a cell site (architect:hold, CELL, LAYER) of every cell the town's active entries hold in
+	 * the reach's hold columns, each written as the block the journal says stands there (its top town cell's after): before = after, nothing
+	 * changes in the world, and the cell is this region's, on top. Null when no town cell stands in them.
+	 */
+	@Nullable QItem holdItem(ServerLevel level, RegionRec rec, JsonObject reach, @Nullable String stage) {
+		String town = str(reach, "standing");
+		Live st = town == null ? null : REGIONS.get(town);
+		if (st == null || !(reach.get("hold") instanceof JsonArray ha) || ha.isEmpty() || stage == null) {
+			return null;
+		}
+		BesideReach.Cols hold = BesideReach.colsOf(ha);
+		java.util.TreeMap<Long, net.minecraft.world.level.block.state.BlockState> cells = new java.util.TreeMap<>();
+		try {
+			BesideReach.townCells(Sites.dimensionId(level), hold, st.rec().groupId, cells);
+		} catch (IOException e) {
+			throw refusal(Reason.JOURNAL_UNAVAILABLE, "the hold cells could not be read (" + e.getMessage() + ")");
+		}
+		if (cells.isEmpty()) {
+			return null;
+		}
+		List<dev.larattalabs.architect.api.CellWrite> ws = new ArrayList<>();
+		cells.forEach((pos, state) -> ws.add(new dev.larattalabs.architect.api.CellWrite(BlockPos.of(pos), state, null)));
+		return dev.larattalabs.architect.site.RegionQueue.holdItem(level, rec.id, "hold:reach", stage, ws, rec.owner);
 	}
 
 	static String tileKey(String stage, String set, String key) {
@@ -2403,6 +2679,10 @@ public final class RegionsImpl implements Regions {
 			note.addProperty("dangling", true);
 			note.addProperty("since", at);
 			o.rec().ext.add(EXT_BESIDE, note);
+			// (6c D3, §6, S-D3-3) its land: standingRemoved set, inside and outside kept (the cells are still the district's)
+			if (o.rec().ext.get(DistrictLand.EXT_LAND) instanceof JsonObject land) {
+				land.addProperty("standingRemoved", at);
+			}
 			save(o);
 			Architect.LOGGER.info("Region {}: its join's end at region {} is dangling (the standing region was removed)", o.rec().id, id);
 			SiteEvents.REGION_STATE.invoker().onState(view(o));
