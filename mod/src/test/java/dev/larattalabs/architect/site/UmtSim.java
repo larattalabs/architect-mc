@@ -332,6 +332,8 @@ final class UmtSim {
 	final List<Anchors.Bounds> siteBoxes = new ArrayList<>();
 	/** (6c close-out B) Cells a standing check tagged UC: the world diff at the same cell is UC's fallout. */
 	final LongOpenHashSet ucCells = new LongOpenHashSet();
+	/** (6c close-out B, UC's road fallout) Every cell a road wrote. */
+	final LongOpenHashSet roadCells = new LongOpenHashSet();
 	/** (6c close-out B, [F9]) Cells a road wrote air at over a block (its head room over a lower site's cell). */
 	final LongOpenHashSet roadAir = new LongOpenHashSet();
 	/** (6c close-out B, [DPT], [F10]) Cells a site delta wrote. */
@@ -410,6 +412,12 @@ final class UmtSim {
 		if (now == initial.get(p) && initial.record(p) != null && world.record(p) == null && siteBoxes.stream().filter(b -> b.contains(BlockPos.getX(p),
 			BlockPos.getY(p), BlockPos.getZ(p))).count() >= 2) {
 			return "[PTS] ";
+		}
+		// (6c close-out B, UC's road fallout; umt-long ALL seed 777124280) a crash lost a road's rollback writes (the world back to an autosave
+		// before it), the start recovers the road over a lot the next removal restores, and the road's second removal writes the lot's
+		// blocks back: a road cell left holding another entry's block after a crash that reverted the world
+		if (!reverted.isEmpty() && roadCells.contains(p)) {
+			return "[UC] ";
 		}
 		if (ucCells.contains(p)) {
 			return "[UC] "; // the standing check's UC cell (a crash lost its writes), seen again at the end
@@ -755,6 +763,9 @@ final class UmtSim {
 
 	private void placeTarget(Rec rec, Map<Long, BlockState> target, @Nullable Crash c) throws Exception {
 		target.keySet().forEach(k -> everWritten.add(k.longValue()));
+		if (rec.kind == Kind.ROAD) {
+			target.keySet().forEach(k -> roadCells.add(k.longValue())); // (every cell it plans: a crash may stop its writes part way)
+		}
 		markStacked(rec, target.keySet());
 		JournalStore s = store;
 		long layer = s.newLayer();

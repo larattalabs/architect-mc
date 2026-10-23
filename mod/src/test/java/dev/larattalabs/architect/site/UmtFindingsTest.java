@@ -161,4 +161,18 @@ class UmtFindingsTest {
 			null), new UmtOps.Place(UmtOps.Kind.LOT, 33, 14, 3, 9, 5, 5479923252941712732L, 2, null), new UmtOps.RemoveGroup(2, null)), UmtOps.Gen.PLAIN));
 		assertTrue(r.violations().stream().noneMatch(v -> v.startsWith("[PTS]")), r.report());
 	}
+
+	/**
+	 * (6c close-out B, UC; umt-long ALL seed 777124280, found by the close-out B verifier) A road over a lot, killed at P5 after an
+	 * autosave, rolls back; the lot's removal is killed at K6 and the world goes back to the autosave, losing the rollback's writes. The
+	 * start recovers the road (it reads standing), restores the lot, then removes the road, which writes the lot's blocks back: the lot is
+	 * left half and its record KEEP. Unsaved chunks (UC) under a rollback.
+	 */
+	@Test
+	void uc_aRoadsRollbackLostToACrashBringsTheRoadBack() throws Exception {
+		UmtRunner.Result r = UmtRunner.run(new UmtOps.Scenario(24090852687L, List.of(new UmtOps.Place(UmtOps.Kind.LOT, 26, 28, 5, 3, 2, -3578255712285927539L, 2,
+			null), new UmtOps.Place(UmtOps.Kind.ROAD, 20, 27, 12, 2, 3, -5226597523096308268L, 1, new UmtOps.Crash("P5", null, 32, true)), new UmtOps.Remove(2,
+			new UmtOps.Crash("K6", null, 0, false))), UmtOps.Gen.ALL));
+		assertTrue(r.violations().stream().noneMatch(v -> v.startsWith("[UC]")) && r.violations().isEmpty(), r.report());
+	}
 }

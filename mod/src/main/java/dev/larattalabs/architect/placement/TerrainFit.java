@@ -227,9 +227,9 @@ public final class TerrainFit {
 		}
 		if (natural(s)) {
 			f |= NATURAL;
-		} else if (s.is(BlockTags.LEAVES) || MUSHROOM_CAP.contains(s.getBlock())) {
+		} else if (s.is(BlockTags.LEAVES)) {
 			f |= TREE | LEAVES;
-		} else if (s.is(BlockTags.LOGS) || s.is(Blocks.MUSHROOM_STEM)) {
+		} else if (s.is(BlockTags.LOGS)) {
 			f |= TREE;
 		}
 		return f;
@@ -248,26 +248,8 @@ public final class TerrainFit {
 			|| s.is(Blocks.SWEET_BERRY_BUSH) || s.is(BlockTags.ORES)
 			// (6c S3) the generated ice (frozen lakes, glaciers, ice spikes): the kit's voxel class ICE is natural, so a write planned over it
 			// (a route cut into a glacier) replaced it in the plan's virtual world while the realise kept it
-			|| s.is(Blocks.ICE) || s.is(Blocks.PACKED_ICE) || s.is(Blocks.BLUE_ICE)
-			// (6c close-out B, NaturalDriftTest) every other block the kit's voxel classes count natural (ROCK, PLANT, ICE): what world
-			// generation puts there, so a plan's write over it lands as in its virtual world
-			|| s.is(BlockTags.TERRACOTTA) || s.is(BlockTags.CORAL_BLOCKS) || s.is(BlockTags.CROPS) || s.is(BlockTags.CAVE_VINES) || NATURAL_ALSO.contains(s.getBlock());
+			|| s.is(Blocks.ICE) || s.is(Blocks.PACKED_ICE) || s.is(Blocks.BLUE_ICE);
 	}
-
-	/** (6c close-out B) The kit's natural blocks that no tag above holds (kit/test/fixtures/natural/conds.json; NaturalDriftTest). */
-	private static final java.util.Set<net.minecraft.world.level.block.Block> NATURAL_ALSO = java.util.Set.of(Blocks.DEAD_BRAIN_CORAL_BLOCK,
-		Blocks.DEAD_BUBBLE_CORAL_BLOCK, Blocks.DEAD_FIRE_CORAL_BLOCK, Blocks.DEAD_HORN_CORAL_BLOCK, Blocks.DEAD_TUBE_CORAL_BLOCK, Blocks.AMETHYST_BLOCK,
-		Blocks.BUDDING_AMETHYST, Blocks.CALCITE, Blocks.DRIPSTONE_BLOCK, Blocks.SMOOTH_BASALT, Blocks.MAGMA_BLOCK, Blocks.OBSIDIAN, Blocks.CRYING_OBSIDIAN,
-		Blocks.GILDED_BLACKSTONE, Blocks.SOUL_SOIL, Blocks.END_STONE, Blocks.INFESTED_STONE, Blocks.INFESTED_COBBLESTONE, Blocks.INFESTED_STONE_BRICKS,
-		Blocks.INFESTED_MOSSY_STONE_BRICKS, Blocks.INFESTED_CRACKED_STONE_BRICKS, Blocks.INFESTED_CHISELED_STONE_BRICKS, Blocks.INFESTED_DEEPSLATE,
-		Blocks.ATTACHED_MELON_STEM, Blocks.ATTACHED_PUMPKIN_STEM, Blocks.BROWN_MUSHROOM, Blocks.RED_MUSHROOM, Blocks.CRIMSON_FUNGUS, Blocks.WARPED_FUNGUS,
-		Blocks.FIREFLY_BUSH, Blocks.FROGSPAWN, Blocks.LILY_PAD, Blocks.NETHER_WART, Blocks.PALE_HANGING_MOSS, Blocks.SCULK_VEIN, Blocks.SMALL_DRIPLEAF,
-		Blocks.TWISTING_VINES, Blocks.TWISTING_VINES_PLANT, Blocks.WEEPING_VINES, Blocks.WEEPING_VINES_PLANT, Blocks.BAMBOO_SAPLING, Blocks.BAMBOO, Blocks.COCOA,
-		Blocks.POINTED_DRIPSTONE, Blocks.SULFUR_SPIKE, Blocks.TURTLE_EGG, Blocks.FROSTED_ICE);
-
-	/** (6c close-out B) Huge mushrooms' blocks: a tree's (the kit's class LEAVES; the stem LOG). */
-	private static final java.util.Set<net.minecraft.world.level.block.Block> MUSHROOM_CAP = java.util.Set.of(Blocks.BROWN_MUSHROOM_BLOCK,
-		Blocks.RED_MUSHROOM_BLOCK, Blocks.NETHER_WART_BLOCK, Blocks.WARPED_WART_BLOCK, Blocks.SHROOMLIGHT);
 
 	/** A growable list of cell triples. */
 	private static final class Cells {

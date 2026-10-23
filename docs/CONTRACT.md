@@ -23868,6 +23868,10 @@ PALETTE). The old `...Last` booleans stay.
     - **F10** (6 seeds): a plant over a delta's cell breaks at the removal. It rests on modelled code: confirm in game.
 - A third, fresh seed (731542907) found two more kinds. A world difference at a cell the standing check had tagged UC is UC's fallout
   (now tagged UC). **PTS** is new: a player's block under two stacked boxes loses its PT record (tag, repro, undo-B queue).
+- The verifier's fresh seed (777123000) found one more kind, also tagged UC's (seed 777124280, `uc_aRoadsRollbackLostToACrashBringsTheRoadBack`).
+  A road over a lot is killed at P5 after an autosave, so it rolls back. The lot's removal is then killed at K6, which loses the
+  rollback's writes. The start recovers the road, and the road's second removal writes the lot's blocks back. Tagged: a road cell
+  holding another entry's block after a crash reverted the world.
 - `UmtLongTest` runs all four generators and fails once at the end.
 - After: `umtLong -Dumt.seeds=5000` passes from 604863162 and from 606067551 (20000 scenarios each). The CI set's pin is unchanged
   (`ci-baseline.txt` not rewritten). `umtFindings` fails its 10 repros, as it should. The fresh seed's re-run waits for the coordinator's go (machine quiet).
@@ -23907,13 +23911,15 @@ PALETTE). The old `...Last` booleans stay.
   IF_SOLID_NATURAL in the virtual world, plus the vanilla block tags the mod reads.
 - `NaturalDriftTest` binds those tags (and water and lava's fluid tags), then compares `CellCond.passes` block for block. It found 162
   differences.
-- **The mod moves:**
-  - `TerrainFit.natural` gains terracotta, coral blocks (and the dead ones), crops and cave vines (by tag), and a named set: amethyst,
-    calcite, dripstone, smooth basalt, magma, obsidian, crying obsidian, gilded blackstone, soul soil, end stone, the infested stones,
-    stems, mushrooms, fungi, lily pad, nether wart, the vines, bamboo, cocoa, pointed dripstone, sulfur spike, turtle egg, frosted ice
-    and others.
-  - Huge mushrooms' blocks are a tree's (TREE, LEAVES; the stem TREE).
+- **The mod moves, in its write conditions only** (`CellCond.alsoNatural`, read by IF_NATURAL, ALWAYS_OURS and IF_SOLID_NATURAL):
+  - terracotta, coral blocks (and the dead ones), crops and cave vines (by tag);
+  - a named set: amethyst, calcite, dripstone, smooth basalt, magma, obsidian, crying obsidian, gilded blackstone, soul soil, end stone,
+    the infested stones, stems, mushrooms, fungi, lily pad, nether wart, the vines, bamboo, cocoa, pointed dripstone, sulfur spike,
+    turtle egg, frosted ice, huge mushrooms' blocks;
   - IF_SOLID_NATURAL takes a tree's solid cells.
+  - `TerrainFit.natural` (building placement's clearing and approaches) is unchanged. Putting the set there first moved route_demo's
+    route surface: a path written one cell high over another turned it to dirt. That showed in 6ct2-scenario-route's realised ==
+    virtual row twice at 3ec2cdfd, and passed with TerrainFit as main (bisect run `gate-runs-coB/20261023-092036`).
 - **The kit moves:** the virtual world never counts bedrock or tripwire natural, and counts coral wall fans natural.
 - **Kept, named in `EXCEPTIONS`:**
   - 7 plants whose "solid" differs (the mod's `isSolid` against the kit's collision; only a carve's lining writes IF_SOLID_NATURAL,
@@ -23928,7 +23934,7 @@ PALETTE). The old `...Last` booleans stay.
     IF_NATURAL write through a lava cell lands in the plan's virtual world, while the mod skips it and the cell stays lava. Relief keeps
     lava columns fixed (FLAG_LAVA), so the risk is in underground carves through a frozen volume's LAVA cells. It is not fixed here,
     because the fix moves the virtual world (byte identity): queued in PLAN.
-- The placement change goes through the placement impact rule. The kit suite is 738/0 and the mod build is green.
+- The kit suite is 738/0 and the mod build is green.
 
 ### 7. RS item 14
 

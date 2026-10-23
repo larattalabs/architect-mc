@@ -236,7 +236,7 @@ finding's repro moves to `UmtPropertiesTest` (F1, F4 and F6 in undo hardening A,
 **The tagger after close-out B.** Two kinds the long run had left untagged are known findings' fallout, now tagged: a standing cell a written
 gravity block fell from, which its holder's undo then left (F3's cascade: `checkStanding` tags the cell when an entry wrote a gravity block
 exactly there), and farmland that ends as dirt (V3's other half, or V7; the journal holds farmland and dirt as one block, so no undo tells them apart:
-tagged LP). F9, DPT, F10 and PTS are new (above). A world difference at a cell the standing check already tagged UC is UC's fallout (tagged UC). `umtLong` now runs all four generators and fails once at the end (before, PLAIN's first
+tagged LP). F9, DPT, F10 and PTS are new (above). A world difference at a cell the standing check already tagged UC is UC's fallout (tagged UC), as is a road cell holding another entry's block after a crash reverted the world (a road's rollback lost, the road recovered and removed again: `uc_aRoadsRollbackLostToACrashBringsTheRoadBack`). `umtLong` now runs all four generators and fails once at the end (before, PLAIN's first
 failure hid CRASH, DRIFT and ALL).
 
 F1, F4 and DRAIN reproduced against production code with only glue modelled. F5, F6, F7 and UC need a crash that loses world writes,
