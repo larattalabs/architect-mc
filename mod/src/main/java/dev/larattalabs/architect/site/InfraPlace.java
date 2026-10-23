@@ -159,6 +159,12 @@ public final class InfraPlace {
 		if (partial) {
 			spec.addProperty("partial", true);
 		}
+		if (!p.heldBy().isEmpty()) {
+			// (6c close-out B) a no-op of its own region: every column held by a sibling (Roads.heldByOwn)
+			JsonObject h = new JsonObject();
+			p.heldBy().forEach(h::addProperty);
+			spec.add("heldBy", h);
+		}
 		return new Check(List.of(), p.notes(), p.positions(), p.values(), p.box(), hits, spec, p.spans());
 	}
 
