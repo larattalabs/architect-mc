@@ -25,7 +25,11 @@ const DEFAULT = {
 
 /** The skeleton format a manifest carries (`skel`), or 'none' when the coverage helpers can't run here (then a new manifest is
  * built once they can: a manifest without skeletons keys every loaded class by its whole class file). */
-export const skelFormat = (main) => (main && helpers(main).ok ? JACOCO.granularity : 'none');
+export const skelFormat = (main) => {
+  const h = main ? helpers(main) : null;
+  // the tool's own source hash too: a change to GateCovTool.java rebuilds every manifest, never reuses an old skeleton
+  return h?.ok ? `${JACOCO.granularity}+${h.hash}` : 'none';
+};
 
 /** The build inputs' hash at a commit (git blob ids), the compiler and the manifest's skeleton format. */
 export function buildHash(src, commit, conf, java, skel = 'none') {

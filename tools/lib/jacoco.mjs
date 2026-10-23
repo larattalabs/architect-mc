@@ -192,6 +192,14 @@ export function readDump(dir, pid) {
     else if (line.startsWith('e ')) out.entered.add(line.slice(2).replaceAll('/', '.'));
     else if (line.startsWith('u ')) out.uninstrumented.add(line.slice(2).replaceAll('/', '.'));
   }
+  // the agent's start (its .agent marker): a dump older than the JVM it is named for is an earlier JVM's (a reused pid)
+  try {
+    const m = /started (\d+)/.exec(fs.readFileSync(path.join(dir, `jvm-${pid}.agent`), 'utf8'));
+    out.started = m ? Number(m[1]) : null;
+  } catch {
+    out.started = null;
+  }
+  if (out.started == null || out.at < out.started) out.token = `stale:${out.token}`;
   return out;
 }
 

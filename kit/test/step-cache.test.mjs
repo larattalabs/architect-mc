@@ -446,3 +446,18 @@ test('coverage: a hidden lambda class counts as its host (keyed by the host\'s b
   assert.deepEqual(c.classes, ['dev.larattalabs.a.Roads', 'dev.larattalabs.b.Only']);
   assert.deepEqual(c.entered, ['dev.larattalabs.a.Roads', 'dev.larattalabs.b.Only'], 'a spun lambda means its host ran the invokedynamic: entered');
 });
+
+test('coverage: a dump older than its JVM\'s agent start (a reused pid) is stale: that JVM counts every loaded class as entered', async () => {
+  const { readDump } = await import('../../tools/lib/jacoco.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-pid-'));
+  write(dir, 'jvm-7.log', '[0.1s] dev.larattalabs.a.A source: x\n[0.1s] dev.larattalabs.a.B source: x\n[0.1s] dev.larattalabs.a.mixin.Helper source: x\n');
+  write(dir, 'jvm-7.entered', '# token exit\n# at 1000\ne dev/larattalabs/a/A\n');
+  write(dir, 'jvm-7.agent', 'pid 7\nstarted 2000\n');
+  let c = collect(dir, { t: 0, alive: new Set() }, { exec: { token: 't' }, readDump });
+  assert.match(c.jvms[0].exec, /stale/);
+  assert.deepEqual(c.entered, ['dev.larattalabs.a.A', 'dev.larattalabs.a.B', 'dev.larattalabs.a.mixin.Helper']);
+  // the same dump written after the agent started is this JVM's: A entered; B loaded only; a mixin-package class always entered
+  write(dir, 'jvm-7.agent', 'pid 7\nstarted 500\n');
+  c = collect(dir, { t: 0, alive: new Set() }, { exec: { token: 't' }, readDump });
+  assert.deepEqual(c.entered, ['dev.larattalabs.a.A', 'dev.larattalabs.a.mixin.Helper']);
+});

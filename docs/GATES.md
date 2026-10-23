@@ -512,6 +512,13 @@ of entered). Unchanged: the safety set (mixins, which JaCoCo never sees, registr
 files), the constant rule for source-keyed PASSes, `classReads` (a class file a node process read counts as entered), the
 node-file coverage, and the gradle-cwd steps (unit-mod, umt, p3-lint), which keep the whole trees.
 
+**Hardening (gate-verifier, 2026-10-23).** The agent deletes its pid's old files at start, and a dump older than its JVM's
+agent start is stale (a reused pid never inherits another JVM's exit dump). A project class in a mixin package that loads as a class
+(an accessor, a helper: never instrumented) counts as entered. The manifest's skeleton format carries the skeleton tool's source
+hash, so a change to GateCovTool.java rebuilds every manifest. **A hidden lambda class** (`Host$$Lambda/0x...`) counts as its host,
+loaded and entered: its name is in no manifest, so before it sent the host's SOURCE into the set (this narrows the class-load
+reading too). Residual, judged marginal: classes first entered by shutdown hooks after a JVM's exit dump.
+
 **Tests** (`kit/test/step-jacoco.test.mjs`: real javac fixtures under the real agent; skipped where the jars aren't fetched, as on
 CI): a changed entered method misses, a method that threw before any probe is entered and misses, a changed `<clinit>`, constant,
 added member, interface or default method of a loaded-but-not-entered class misses; a never-entered body and a never-loaded class

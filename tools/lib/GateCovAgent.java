@@ -63,6 +63,8 @@ public final class GateCovAgent {
 			}
 			if (dir == null || jar == null || pkg == null) throw new IllegalArgumentException("dir, jar and pkg are required: " + args);
 			Files.createDirectories(dir);
+			// a pid reused in the same coverage dir: an earlier JVM's files must never stand for this one
+			for (String ext : new String[] {".entered", ".agent-error", ".agent"}) Files.deleteIfExists(dir.resolve("jvm-" + pid + ext));
 			prefix = includes.replace(".*", "").replace('.', '/') + "/";
 			inst.appendToSystemClassLoaderSearch(new JarFile(jar));
 			ClassLoader sys = ClassLoader.getSystemClassLoader();

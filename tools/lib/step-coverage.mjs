@@ -97,6 +97,8 @@ export function collect(dir, snap, { prefix = 'dev.larattalabs.', exec = null, r
         if (!ok) for (const c of mine) entered.add(c);
         else {
           for (const c of hidden) entered.add(c);
+          // a project class in a mixin package that loaded as a class (an accessor, a helper) is never instrumented: entered
+          for (const c of mine) if (c.includes('.mixin.')) entered.add(c);
           const loadedHere = new Set(mine);
           for (const c of d.entered) if (c.startsWith(prefix)) entered.add(c);
           // a class JaCoCo left uninstrumented: its execution is invisible, so it counts as entered
