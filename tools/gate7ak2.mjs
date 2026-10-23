@@ -428,7 +428,7 @@ steps.natural = async () => {
   const moved = (ans.deviations ?? []).filter((d) => d.what === 'move');
   check(far.length === 0 || moved.length > 0, `item 7: every line cell within distance [${dist}] of the spine (each run's offset in range along its normals: D2's Chebyshev measure; a cell within one of it on the staircase shore), or the recorded move deviation (${far.length} cells outside; deviations ${json(moved)})`, far.slice(0, 8));
   const { decodeArwd } = await imp('lib/region/vworld.mjs');
-  const dmp = await decodeArwd(fs.readFileSync(out.R.after));
+  const dmp = out.R.after; void decodeArwd; // (realisedWalls's decoded after-dump)
   const at = (x, y, z) => dmp.palette[dmp.cells[dmp.at(x, y, z)]] ?? '';
   // 0 cells in water: no wall column stands over water in the re-read world (its foot to its top)
   let wet = 0;
