@@ -1006,7 +1006,7 @@ function printCache() {
 }
 
 function printPlan() {
-  { const hs = HOSTS.server.filter((id) => stepIds.includes(id)); console.log(`hosts: --host ${HOSTS.mode}; headless: ${hs.length ? hs.join(' ') : 'none'}`); }
+  { const hs = HOSTS.server.filter((id) => stepIds.some((x) => parentOf(x) === id)); console.log(`hosts: --host ${HOSTS.mode}; headless: ${hs.length ? hs.join(' ') : 'none'}`); }
   const head = git(SRC, 'rev-parse', '--short', 'HEAD');
   printSelection();
   console.log(`${tierInfo.kind === 'tier' ? 'tier' : 'chain'} ${chainName}: ${steps.length} steps, worst case ${fmtDur(totalTimeout * 60)} of step timeouts (+ client starts, ${cfg.clientStartMin} min cap each)`);
@@ -1140,7 +1140,7 @@ const summary = {
   shards: shards.map((s) => ({ k: s.k, runDir: s.RUN, ports: { sidecar: s.SIDECAR_PORT, dev: s.DEV_PORT }, evidence: path.relative(OUT, s.ev) || '.' })),
   tier: tierInfo.kind === 'tier' ? { name: tierInfo.tier, range: tierInfo.range ?? null, engine: tierInfo.engine, placement: tierInfo.placement, impact: tierInfo.impact ?? null,
     rotationKey: tierInfo.rotationKey ?? null, rotationSource: tierInfo.rotationSource ?? null, rotation: tierInfo.rotation ?? null, notes: tierInfo.notes } : null,
-  counts: {}, setup: null, slot: slotNote, shardsAuto: autoChoice ? (({ text, ...a }) => a)(autoChoice) : null, hosts: { mode: HOSTS.mode, server: HOSTS.server.filter((id) => stepIds.includes(id)) }, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
+  counts: {}, setup: null, slot: slotNote, shardsAuto: autoChoice ? (({ text, ...a }) => a)(autoChoice) : null, hosts: { mode: HOSTS.mode, server: HOSTS.server.filter((id) => stepIds.some((x) => parentOf(x) === id)) }, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
   cache: tierInfo.cache ?? null, cached: tierInfo.cached ?? [], inputsMisses: [],
   schedule: { order: 'longest first', historyRuns: HIST.runs, historyFile: HISTORY_FILE, benches: ISOLATE_BENCH ? 'isolated' : 'not isolated (timing recorded)', historyTimeouts: HIST_TIMEOUTS },
   steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin, effectiveTimeoutMin: s.effTimeoutMin, timeoutSource: s.timeoutSource, estimateMin: Math.round(est(s) * 10) / 10, ...(s.parentId ? { parent: s.parentId } : {}), ...(tierInfo.why?.[s.id] ? { why: tierInfo.why[s.id] } : {}) })),
