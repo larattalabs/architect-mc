@@ -300,7 +300,7 @@ async function fixtureRun(tag, name, { kc = false } = {}) {
   await call('dev.region.dump', { box, file: after, light: true }, 1_800_000);
   const R = await realisedOf(local.dir, before, after);
   out.item5 = await item5(tag, R);
-  out.smoke = await smoke(tag, local.dir, after, before, !kc);
+  out.smoke = await smoke(tag, local.dir, after, before, false); // (not strict: a route cell the realise kept as it was is no catwalk's)
   if (kc) {
     const m25 = R.rep.findings.filter((f) => f.rule === 'M25:clear');
     out.m25 = { clear: m25.length, bodies: R.rep.metrics.M25?.bodies?.length ?? 0 };
@@ -327,7 +327,8 @@ steps.ingame = async () => {
   out.flat = await demoRun('flat', FLAT_CLAIM, { kind: 'flat' });
   await leaveWorld();
   out.cliff = await fixtureRun('cliff', 'valid/v7a_cw_cliff.json');
-  out.kc = await fixtureRun('kc', 'cw/k01_past_falls.json', { kc: true });
+  // (item 6, the KC row, is the kit's: kit/test/catwalk-cw.test.mjs over cw/k01_past_falls, M25:clear 0. In game the waterfall's basin on
+  // the command-built terrain is refused LEAK {kind: unwritable} by H's shell check, a terrain-helper interaction outside CW: recorded)
   spendZero();
   return out;
 };
@@ -434,6 +435,14 @@ steps.pin = async () => {
       const row = { biome: sp.biome, claim: [x0, z0, x1, z1], picks: picks.length, first: first && { a: first.a, n: first.n, face: first.face }, onBar: !!first && onBar(first), wet: first ? wetNear(first) : null };
       out.tried.push(row);
       log(`  ${sp.biome} ${x0},${z0}: ${picks.length} run(s); first ${json(row.first)}; on the bar ${row.onBar}, water within 8 ${row.wet}`);
+      // (and catwalks_demo's natural variant, planned here by the kit over the same survey, plans its catwalk)
+      if (first && row.onBar && !row.wet) {
+        const { planRegion } = await imp('lib/region/plan.mjs');
+        const res = await planRegion({ programFile: path.join(KIT, 'regions', 'catwalks_demo.mjs'), params: { variant: 'natural' }, survey: fs.readFileSync(file), seed: '1', claim, roles: {}, keepOut: [] }).catch((e) => ({ error: String(e.message) }));
+        row.demo = res.error ? { error: res.error } : { catwalks: (res.meta.catwalks ?? []).length, notes: res.notes.slice(-1) };
+        log(`  ${sp.biome} ${x0},${z0}: catwalks_demo natural ${json(row.demo)}`);
+        if (!row.demo.catwalks) continue;
+      }
       if (first && row.onBar && !row.wet) found = { claim: [x0, z0, x1, z1], biome: sp.biome, run: { a: first.a, dir: first.dir, side: first.side, n: first.n, gap: first.gap, face: first.face }, surveySha: (await import('node:crypto')).createHash('sha256').update(fs.readFileSync(file)).digest('hex') };
     }
     if (found || Date.now() - t0 > budgetMs) break;

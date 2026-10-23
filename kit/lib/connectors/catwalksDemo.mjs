@@ -13,6 +13,8 @@ import { rightOf, surveyLand } from './ropeGeom.mjs';
 /** The flat variant's layout over a claim's north-west corner (offsets from the claim's min corner). */
 /** §8's natural site bar: a face at least 24 long and 8 high. */
 export const FACE_BAR = Object.freeze([24, 8]);
+/** The natural variant's pad length out from each end of the run (the nodes stand at its far cell). */
+export const PAD = 9;
 export const FLAT = Object.freeze({ cliff: 20, shelf: 8, depth: 30, bay: [60, 75], W: 160, D: 96, from: [48, 36], to: [87, 36] });
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
 
@@ -37,10 +39,17 @@ export function pickFace(S, claim, { width = 2, min = 8, max = 24, padMax = 8, m
         if (S.waterAt(x, z)) continue;
         for (let n = max; n >= min; n--) {
           const [lx, lz] = at(n + 1, L.inner);
-          if (!inside(lx, lz) || !inside(...at(0, L.outer))) continue;
-          // the pads: both ends' lanes at most padMax under y, none over it, no water
+          if (!inside(...at(n + PAD, L.inner)) || !inside(...at(1 - PAD, L.outer))) continue;
+          // the pads: each end's landing lanes at most padMax under y, none over it, no water; the walks out from them PAD cells along
+          // the run within the route's cut and fill (4) of y, dry (the route's land ramps to an end's y within 8 of it, so the nodes stand
+          // PAD - 1 out: the run's first cell is then no walk at grade)
           const ends = [0, n + 1].flatMap((i) => L.lanes.map((v) => { const [px, pz] = at(i, v); return { x: px, z: pz, g: S.groundAt(px, pz), w: S.waterAt(px, pz) }; }));
           if (ends.some((e) => e.w || e.g > y || y - e.g > padMax)) continue;
+          let walk = true;
+          for (let t = 1; t < PAD && walk; t++) for (const i of [-t, n + 1 + t]) for (const v of L.lanes) { const [px, pz] = at(i, v); if (S.waterAt(px, pz) || Math.abs(S.groundAt(px, pz) - y) > 4) walk = false; }
+          if (!walk) continue;
+          // route row 10 tries a run only where the cell ahead (the run's first cell on the centre line) is no walk at grade
+          if (S.groundAt(...at(1, 0)) >= y - 4) continue;
           const padLand = { ...land, groundAt: (px, pz) => (ends.some((e) => e.x === px && e.z === pz) ? y : land.groundAt(px, pz)) };
           const c = checkCatwalk(padLand, [x, y, z], dir, n, side, width);
           if (!c.ok) continue;
@@ -123,11 +132,11 @@ export function naturalSection(ctx, r, base, P) {
     if (e.g < y) cols.push(e.x, e.z, y, y, 1);
   }
   if (cols.length) { pad._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: mats, cond: 0, walk: false }); (r.meta.parts.pads ??= {}).kind = 'add'; }
-  // the nodes on the run's centre line at both ends (the walk cells the route starts and lands on, feet one over)
+  // the nodes on the run's centre line at the pads' far ends (feet one over)
   const node = (i) => [c.a[0] + c.dir[0] * i, y + 1, c.a[2] + c.dir[1] * i];
-  const nodes = { face_a: { at: node(0), kind: 'junction' }, face_b: { at: node(c.n + 1), kind: 'junction' } };
+  const nodes = { face_a: { at: node(1 - PAD), kind: 'junction' }, face_b: { at: node(c.n + PAD), kind: 'junction' } };
   r.meta.catwalksDemo = { variant: 'natural', run: { a: c.a, dir: c.dir, side: c.side, n: c.n, gap: c.gap, pad: c.pad }, candidates: picks.length };
-  return { nodes, edges: [edgeOf('face_a', 'face_b', 0)], note: `natural: a run of ${c.n} along the face at ${c.a.join(',')} heading ${c.dir.join(',')} (the face ${c.side}), ${c.gap} deck cell(s) over a drop, pads ${c.pad} cell(s) of fill` };
+  return { nodes, edges: [edgeOf('face_a', 'face_b', 16)], note: `natural: a run of ${c.n} along the face at ${c.a.join(',')} heading ${c.dir.join(',')} (the face ${c.side}), ${c.gap} deck cell(s) over a drop, pads ${c.pad} cell(s) of fill` };
 }
 
 /** The catwalks the route pass found, emitted in `stage` (part `links_catwalks`). */
