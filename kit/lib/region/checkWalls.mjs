@@ -7,6 +7,14 @@
 //            least 2 above any standable ground within 2 of it on either side (half blocks: a jump is 1.25); a tree beside the wall
 //            (its trunk, its leaves) is not ground
 //   M6       each gate's opening `h` clear (doors and fence gates are passable) over a floor, the walk cell at its y
+//   (7a K2) a wall's walk (meta walls[].walk: wallWalk.mjs):
+//   M2:walk  (warning) the kit's player mover from the accesses' feet reaches every walk cell (round the whole walk) and each access's
+//            landing from its own foot (up), and from the walk every access's foot (down)
+//   M8:walk  (warning) every walk cell's edges: a neighbour that is no walk cell is a 1.5 barrier at the feet (the parapet, a rail, a
+//            stub's wall), or a drop of at most 3 (the inner edge where the ground is near)
+//   M6       2 clear over every walk cell (its head room)
+//   M5       0 dark spawnable walk cells (and flight steps)
+// An access's cells (its steps, their rail, a ladder, the corbels) are no ground beside the wall for M8:wall (the flight is the way up).
 // A joined lot's box is an obstacle to the movers, so a wall that joins one is `provisional` (the answer's). Called by checkRegion
 // (check.mjs), which passes `finding`; the virtual world is left as it was found.
 import { blockLight, nodeReached, walkGraph, walkNodes } from './check.mjs';
@@ -65,7 +73,11 @@ export function wallRules({ ir, vw, walls, meta, want, findings, metrics, partSt
     // the ground a mover stands on (the wall's own lamps aside: a post beside a gate is not ground)
     const pi = ir.parts.findIndex((p) => p.id === part);
     const TREE = /_(log|wood|leaves|stem|hyphae)$|mushroom_block$/;
-    const standY = (x, z, yMax, ground = false) => highest(vw, x, z, yMax - 24, yMax, (i, y) => P.floor[i] && P.passable[vw.get(x, y + 1, z)] && P.passable[vw.get(x, y + 2, z)] && !(vw.partAt(x, y, z) === pi && !(vw.flags(x, y, z) & F_WALK)) && !(ground && TREE.test(P.states[i].replace(/\[.*$/, ''))));
+    // ((7a K2) a walk's accesses and corbels: the way up, no terrain beside the wall)
+    const accessCol = new Set();
+    for (const a of w.walk?.accesses ?? []) { for (const q of a.steps ?? []) accessCol.add(key(q[0], q[2])); for (const q of a.rail ?? []) accessCol.add(key(q[0], q[2])); if (a.cells) accessCol.add(key(a.cells[0], a.cells[2])); }
+    for (const q of w.walk?.corbels ?? []) accessCol.add(key(q[0], q[2]));
+    const standY = (x, z, yMax, ground = false) => (ground && accessCol.has(key(x, z)) ? null : highest(vw, x, z, yMax - 24, yMax, (i, y) => P.floor[i] && P.passable[vw.get(x, y + 1, z)] && P.passable[vw.get(x, y + 2, z)] && !(vw.partAt(x, y, z) === pi && !(vw.flags(x, y, z) & F_WALK)) && !(ground && TREE.test(P.states[i].replace(/\[.*$/, '')))));
     // ---- M5 over the gates' walk cells and the wall's top: 0 dark spawnable cells
     if (light) {
       const dark = [];
@@ -121,6 +133,7 @@ export function wallRules({ ir, vw, walls, meta, want, findings, metrics, partSt
       }
       if (w.joined?.length) m.closure.provisional = { joined: w.joined };
     }
+    if (w.walk) m.walk = walkRules({ vw, w, part, stage, light, want, findings, finding });
     out[w.id] = m;
   }
   metrics.walls = out;
@@ -177,4 +190,58 @@ export function closure(ir, vw, meta, w, gateCell) {
     res[mover] = { leaks, leakSample, nodes: inside.length + outside.length, across, missed, inside: inside.length, outside: outside.length };
   }
   return res;
+}
+
+/**
+ * (7a K2) A wall walk's rules (the header's M2:walk, M8:walk, M6, M5) over its meta (`w.walk`: cells [[x, feet y, z, pos]], accesses
+ * [{kind, foot, at, steps?, cells?}]): metrics `{cells, reached, accessesUp, accessesDown, edges: {bad}, headroom: {bad}, dark}`.
+ */
+export function walkRules({ vw, w, part, stage, light, want, findings, finding }) {
+  const P = vw.pal, wk = w.walk;
+  const cells = wk.cells.map(([x, y, z]) => [x, y, z]);
+  const isWalk = new Set(cells.map(([x, y, z]) => `${x},${y},${z}`));
+  const m = { cells: cells.length, accesses: wk.accesses.length };
+  // ---- M2:walk: round the whole walk from the accesses' feet, each access up from its own foot, and down to every foot
+  const feet = wk.accesses.map((a) => a.foot);
+  const g = walkGraph(vw, feet, { mover: 'player' });
+  const missed = cells.filter((c) => !g.seen.has(c[0], c[1], c[2]));
+  m.reached = cells.length - missed.length;
+  const up = wk.accesses.map((a) => nodeReached(walkGraph(vw, [a.foot], { mover: 'player' }), a.at));
+  const down = walkGraph(vw, cells.slice(0, 1).concat(wk.accesses.map((a) => a.at)), { mover: 'player' });
+  const downOk = wk.accesses.map((a) => nodeReached(down, a.foot));
+  m.accessesUp = up.filter(Boolean).length;
+  m.accessesDown = downOk.filter(Boolean).length;
+  if (want.has('M2')) {
+    if (missed.length) findings.push(finding('M2:walk', part, stage, missed.length, missed, `wall ${w.id}: ${missed.length} of ${cells.length} walk cell(s) not reached by the player from its accesses`));
+    const badA = wk.accesses.filter((a, i) => !up[i] || !downOk[i]);
+    if (badA.length) findings.push(finding('M2:walk', part, stage, badA.length, badA.map((a) => a.foot), `wall ${w.id}: ${badA.length} access(es) the player can't climb up and down (${badA.map((a) => a.kind).join(', ')})`));
+  }
+  // ---- M8:walk: every edge of a walk cell a 1.5 barrier or a drop of at most 3
+  const open = [];
+  for (const [x, y, z] of cells) {
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, nz = z + dz;
+      if (isWalk.has(`${nx},${y},${nz}`) || isWalk.has(`${nx},${y + 1},${nz}`) || isWalk.has(`${nx},${y - 1},${nz}`)) continue;
+      const a = vw.get(nx, y, nz);
+      if (P.barrier[a] || (!P.passable[a] && !P.passable[vw.get(nx, y + 1, nz)])) continue;
+      // a step or a drop of at most 3 (a floor within 3 under the feet: the flight's steps, the ground)
+      let ok = false;
+      for (let yy = y + 1; yy >= y - 3 && !ok; yy--) if (P.passable[vw.get(nx, yy, nz)] && (P.floor[vw.get(nx, yy - 1, nz)] || P.half[vw.get(nx, yy - 1, nz)] || P.climb[vw.get(nx, yy, nz)])) ok = true;
+      if (!ok) open.push([nx, y, nz]);
+    }
+  }
+  m.edges = { bad: open.length };
+  if (open.length && want.has('M8')) findings.push(finding('M8:walk', part, stage, open.length, open, `wall ${w.id}: ${open.length} walk edge(s) with no rail or parapet over a drop of more than 3`));
+  // ---- M6: 2 clear over every walk cell
+  const low = cells.filter(([x, y, z]) => !P.passable[vw.get(x, y, z)] || !P.passable[vw.get(x, y + 1, z)]);
+  m.headroom = { bad: low.length };
+  if (low.length && want.has('M6')) findings.push(finding('M6', part, stage, low.length, low, `wall ${w.id}: ${low.length} walk cell(s) without 2 clear over them`));
+  // ---- M5: 0 dark spawnable walk cells and flight steps
+  if (light) {
+    const steps = wk.accesses.flatMap((a) => (a.steps ?? []).map(([x, y, z]) => [x, y + 1, z]));
+    const dark = [...cells, ...steps].filter(([x, y, z]) => P.spawn[vw.get(x, y - 1, z)] && !(light.at(x, y, z) > 0));
+    m.dark = dark.length;
+    if (dark.length) findings.push(finding('M5', part, stage, dark.length, dark, `wall ${w.id}: ${dark.length} dark spawnable walk cell(s) or flight step(s)`));
+  }
+  return m;
 }

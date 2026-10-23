@@ -656,7 +656,8 @@ export class Region {
     if (typeof id !== 'string' || !/^[a-z][a-z0-9_:.-]{0,63}$/.test(id)) throw new Error(`graph node id '${id}' is not valid`);
     if (this.graphIds.has(id)) throw new Error(`graph id '${id}' is used twice`);
     // (7a K1) a gate in a wall is a node too
-    if (!['lot', 'plaza', 'junction', 'gate'].includes(kind)) throw new Error(`graph node ${id}: kind must be lot, plaza, junction or gate`);
+    // ((7a K2) a wall walk's access (a flight or a ladder up its inner face) too)
+    if (!['lot', 'plaza', 'junction', 'gate', 'access'].includes(kind)) throw new Error(`graph node ${id}: kind must be lot, plaza, junction, gate or access`);
     this.graphIds.add(id);
     const n = { id, kind, ref, level: 0, at: [...at], ports: ports.map((p) => ({ name: p.name, at: [...p.at], facing: p.facing, width: p.width })) };
     this.graph.nodes.push(n);
@@ -668,7 +669,8 @@ export class Region {
     if (this.graphIds.has(id)) throw new Error(`graph id '${id}' is used twice`);
     // (7a K1) a rope bridge's edge (with its crossing: {type: rope_bridge, over: gap|water, depth}); (6c T3) a bridge's and a tunnel's
     // ((7a foundation) and a 7a connector's: its kind (P0: "7a's edge `type` is the connector `kind`"), with its crossing)
-    if (!['road', 'path', 'rope_bridge', 'bridge', 'tunnel', ...KINDS_7A].includes(type)) throw new Error(`graph edge ${id}: type must be road, path, rope_bridge, bridge, tunnel or a 7a connector kind (${KINDS_7A.join(', ')})`);
+    // ((7a K2) and a wall walk's run between two accesses: wall_walk)
+    if (!['road', 'path', 'rope_bridge', 'bridge', 'tunnel', 'wall_walk', ...KINDS_7A].includes(type)) throw new Error(`graph edge ${id}: type must be road, path, rope_bridge, bridge, tunnel, wall_walk or a 7a connector kind (${KINDS_7A.join(', ')})`);
     // (6c D1) an external edge's `to` is another region's port, `<regionId>:<node>.<port>` (CONTRACT D §3; 7a types it)
     if (external && !/^[A-Za-z0-9_.-]{1,64}:[a-z][a-z0-9_:.-]{0,63}\.[a-z][a-z0-9_]{0,63}$/.test(String(to))) throw new Error(`graph edge ${id}: an external edge's to must be <region>:<node>.<port>`);
     for (const end of external ? [from] : [from, to]) {

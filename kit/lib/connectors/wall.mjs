@@ -29,6 +29,7 @@ import { COND } from '../region/program.mjs';
 import { askWet, noteWet, underwaterBlock, underwaterOk, wetKind, wetRuns, wetWallFallback } from '../fluids/wet.mjs';
 import { waterGates } from '../fluids/gate.mjs';
 import { keptColumns } from '../fluids/keep.mjs';
+import { emitWalk, walkLevels, walkOf } from './wallWalk.mjs';
 
 /** The kinds this module compiles. */
 export const WALL_KINDS = Object.freeze(['wall', 'gate']);
@@ -173,9 +174,12 @@ function settingsOf(K, p) {
   if (form === 'along' && (P.read.closed !== undefined)) P.notes.push(`params.closed not read (an along wall is open)`);
   const namesGate = GATE_KEYS.some((k) => w.params?.[k] !== undefined && !(k === 'gates' && w.params[k] === 0));
   const sealed = gatesMax === 0 || (closedWritten === true && !gateParts(K, p.id).length && !namesGate);
+  // ((7a K2, §1) the walk: the member, else params.wall_walk; with no thickness given the wall is walk.width + 1 thick (the outer course
+  // the parapet))
+  const walk = walkOf(w, P.read);
   return {
-    form, P, closed, sealed, gatesMin: sealed ? 0 : gatesMin, gatesMax: sealed ? 0 : Math.max(gatesMax, gatesMin),
-    height: w.height ?? P.read.height ?? WALL_DEFAULTS.height, thickness: w.thickness ?? WALL_DEFAULTS.thickness,
+    form, P, closed, sealed, gatesMin: sealed ? 0 : gatesMin, gatesMax: sealed ? 0 : Math.max(gatesMax, gatesMin), walk,
+    height: w.height ?? P.read.height ?? WALL_DEFAULTS.height, thickness: w.thickness ?? (walk ? walk.width + 1 : WALL_DEFAULTS.thickness),
     crenels: w.crenels ?? WALL_DEFAULTS.crenels, corners: w.corners ?? WALL_DEFAULTS.corners, lamps: w.lamps ?? P.read.lamps ?? 'gates',
   };
 }
@@ -443,6 +447,16 @@ export function planWalls(K) {
     const dep = K.depState(p);
     if (dep) { K.ans(p, dep); continue; }
     const st = settingsOf(K, p);
+    // ((7a K2, §1) a walk needs thickness >= walk.width + 1 (the outer course is the parapet): a given thickness too thin is refused
+    // NO_ROOM {why: walk}, the thicker wall its wouldFit (re-checked alone)
+    if (st.walk && st.thickness < st.walk.width + 1) {
+      const need = st.walk.width + 1, frag = { ...p.part, thickness: need };
+      const L2 = lineOf(K, { ...p, part: frag }, { ...st, thickness: need });
+      K.ans(p, { class: 'refused', notes: [...st.P.notes], reasons: [{ code: 'NO_ROOM', message: `a ${st.walk.width}-wide walk needs a wall at least ${need} thick (its outer course the parapet); thickness ${st.thickness} is too thin`, evidence: { why: 'walk', thickness: st.thickness, need, width: st.walk.width } }], ...(L2.error ? {} : { wouldFit: [{ part: p.id, fragment: frag, notes: [`thickness ${need}: the walk on the inner ${st.walk.width} course${st.walk.width > 1 ? 's' : ''}, the parapet on the outer (re-checked alone: its line fits)`] }] }) });
+      continue;
+    }
+    if (st.walk && p.part.walk === undefined) st.P.notes.push('params.wall_walk read as walk: true');
+    if (st.walk && p.part.thickness === undefined && st.thickness !== WALL_DEFAULTS.thickness) st.P.notes.push(`thickness ${st.thickness}: walk.width + 1`);
     // ((6c KC) the broken variant `wallThroughBody` (ext architect_mc:unsafe): the old wall grid, the bodies' footprints left out; M25:clear
     // catches it)
     const blind = p.part.ext?.['architect_mc:unsafe']?.wallThroughBody === true;
@@ -830,7 +844,7 @@ export function emitWalls(K) {
     } catch (e) {
       K.rollback(cp);
       metaWalls.length && (K.r.meta.walls = [...metaWalls]);
-      K.ans(W.p, { class: 'refused', reasons: [{ code: 'NO_ROOM', message: `the wall's emission failed: ${e.message}`, evidence: { wall: W.id } }], notes: W.answer?.notes });
+      K.ans(W.p, { class: 'refused', reasons: [e.reason ?? { code: 'NO_ROOM', message: `the wall's emission failed: ${e.message}`, evidence: { wall: W.id } }], notes: W.answer?.notes });
       for (const g of W.gates) if (g.part && K.answers.has(g.part)) K.answers.set(g.part, { ...K.answers.get(g.part), class: 'blocked', blockedBy: [W.id], reasons: [{ code: 'DEPENDENCY', message: `depends on ${W.id}, which is not fits or adjusted`, evidence: { blockedBy: [W.id] } }] });
     }
   }
@@ -871,6 +885,9 @@ function emitWall(K, W) {
     }
     if (!changed) break;
   }
+  // ((7a K2, §3) a walk: its surface ramps over the raised tops (within one half block a cell), the wall's top the walk's)
+  const WK = st.walk ? walkLevels(T, W.closed) : null;
+  if (WK) for (let i = 0; i < n; i++) T[i] = WK.top[i];
   // ---- the cells
   const ops = new Map(); // "x,y,z" -> state | null (air)
   const put = (x, y, z, s) => ops.set(`${x},${y},${z}`, s);
@@ -960,12 +977,14 @@ function emitWall(K, W) {
   // and lamps along the top
   let topLamps = false;
   for (const [k, cc] of capCells) {
+    if (WK) break; // ((7a K2) a walk wall's top course is the walk's: wallWalk.mjs)
     if (cc.merlon && capWall) continue;
     const [x, z] = k.split(',').map(Number);
     put(x, cc.y, z, capSlab ? slabState(capSlab) : capWall ? wallState(capWall, {}) : cap);
     if (!capSlab && !capWall) topLamps = true;
   }
   for (const [k, cc] of capCells) {
+    if (WK) break;
     if (!(cc.merlon && capWall)) continue;
     const [x, z] = k.split(',').map(Number);
     const joins = (dx, dz) => { const o = capCells.get(key(x + dx, z + dz)); return !!o && o.y === cc.y && o.merlon; };
@@ -998,8 +1017,8 @@ function emitWall(K, W) {
       if (spot) for (const q of fixtureCells(fixture, spot).cells) lampCells.push(q);
     }
   }
-  // lamps along the top (lamps: every, or a cap with neither variant)
-  if (st.lamps === 'every' || topLamps) {
+  // lamps along the top (lamps: every, or a cap with neither variant; (7a K2) a walk has its own, on the parapet)
+  if (!WK && (st.lamps === 'every' || topLamps)) {
     const every = Math.max(4, Math.floor((12 * fixture.level) / 15));
     for (let i = 0; i < n; i += every) {
       const c = cellsOfPos[i].find((q) => q.depth === 0 && !opening.has(key(q.x, q.z)) && capCells.has(key(q.x, q.z)));
@@ -1007,10 +1026,24 @@ function emitWall(K, W) {
       for (const q of fixtureCells(fixture, [c.x, capCells.get(key(c.x, c.z)).y + 1, c.z]).cells) lampCells.push(q);
     }
   }
+  // ---- ((7a K2, §3) the walk: the courses on the top, the parapet, the inner rail on its corbels, the accesses, the lamps)
+  let walkOut = null;
+  if (WK) {
+    const lampFoot = new Set(lampCells.map(([x, , z]) => key(x, z)));
+    walkOut = emitWalk({ K, W, top: T, S2: WK.S2, put, get: (x, y, z) => ops.get(`${x},${y},${z}`), has: (c) => capCells.has(key(c.x, c.z)), roles, cr, body, opening, walkSet, stubs: new Set(stubCells(W).map(([x, z]) => key(x, z))), lampFoot, fixture });
+    if (walkOut.refuse) throw Object.assign(new Error(walkOut.refuse.message), { reason: walkOut.refuse });
+    for (const q of walkOut.lamps) lampCells.push(q);
+    W.notes.push(...walkOut.notes);
+  }
   // ---- the graph: a node per gate (kind gate, its wall the ref; §8's additive wire shape)
   for (const g of W.gates) {
     const c0 = W.cells.find((c) => c.pos === ((g.a + g.b) >> 1)) ?? W.cells[0];
     r.graphNode({ id: `gate:${g.id}`.slice(0, 64), kind: 'gate', ref: W.id, at: g.at, ports: [{ name: 'gate', at: g.at, facing: facingOut(W, c0), width: g.width }] });
+  }
+  // ((7a K2, §3) the walk's accesses (kind access) and its runs between them (type wall_walk, player only)
+  if (walkOut) {
+    for (const a of walkOut.nodes) r.graphNode({ id: a.id, kind: 'access', ref: W.id, at: a.at, ports: [{ name: 'walk', at: a.at, facing: 'up', width: st.walk.width }] });
+    for (const e of walkOut.edges) r.graphEdge({ id: e.id, from: `${e.from}.walk`, to: `${e.to}.walk`, type: 'wall_walk', width: st.walk.width, path: `w_${W.id}`.slice(0, 48), stage: K.stageOf('links'), movers: ['player'] });
   }
   // ---- the ops: one part per wall in the links stage, absolute y
   const part = r.part(`w_${W.id}`.slice(0, 48), { stage: K.stageOf('links') });
@@ -1054,6 +1087,7 @@ function emitWall(K, W) {
   if (wgOut.length) meta.waterGates = wgOut;
   const record = { id: W.id, form: W.form, closed: W.closed, sealed: st.sealed, line, cells: W.cells.length, top: [Math.min(...T), Math.max(...T)], gates: gatesOut.map(({ cells, ...g }) => { void cells; return g; }) };
   const geometry = { form: W.form, line, closed: W.closed, height: st.height, thickness: t, cells: W.cells.length, top: [Math.min(...T), Math.max(...T)], gates: gatesOut.map((g) => ({ id: g.id, at: g.at, width: g.width, door: g.door, auto: g.auto, kind: g.kind })), ...(W.I ? { ring: arr(W.I) } : {}), ...(W.joined.length ? { joined: W.joined } : {}), ...(st.sealed ? { sealed: true } : {}) };
+  if (walkOut) { meta.walk = walkOut.meta; geometry.walk = walkOut.geometry; record.walk = { width: st.walk.width, runs: walkOut.edges.length, accesses: walkOut.meta.accesses.length }; }
   // ((7a K2, §2, §7) an along wall: its spine (corners), the window used and each run's offset; meta and siteplan carry the spine)
   if (W.along) {
     const sp = W.along.spine, corners = sp.filter((q, i) => i === 0 || i === sp.length - 1 || (sp[i - 1][0] !== sp[i + 1][0] && sp[i - 1][1] !== sp[i + 1][1]));
