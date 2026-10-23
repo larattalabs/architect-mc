@@ -433,7 +433,7 @@ export class Region {
       const k1 = {};
       // ((6c T3) and the bridge and tunnel rows': `once` and the opaque per-edge `t3` options)
       // ((7a foundation) and the 7a rows' opaque per-edge `t7` options and the edge's `profile` over the built-in moves)
-      for (const key of ['spans', 'spanOnce', 'span', 'approach', 'once', 't3', 't7', 'profile']) if (e[key] !== undefined) k1[key] = e[key];
+      for (const key of ['spans', 'spanOnce', 'span', 'approach', 'once', 't3', 't7', 'profile', 'hairpinLanding', 'stairMaterial']) if (e[key] !== undefined) k1[key] = e[key]; // ((7a CL) and a switchback's own landing depth, a climb's tread role)
       return { id, a, b, width: e.width ?? 3, type: e.type ?? ((e.width ?? 3) >= 5 ? 'road' : 'path'), movers, ladders: ladders && (!movers.includes(VILLAGER) || !!it._unsafe?.villagerLadders), ...(Array.isArray(e.prefer) && e.prefer.length ? { prefer: e.prefer.map((q) => [q[0], q[q.length - 1]]) } : {}), ...(e.stairs === false ? { stairs: false } : {}), k1 };
     });
     if (new Set(edges.map((e) => e.id)).size !== edges.length) throw new Error(`${what}: edge ids must be unique`);
@@ -578,7 +578,7 @@ export class Region {
         } else if (g.kind === 'stair') {
           // the flight's ground (cut above, fill below), then the treads
           p._routeRun(`${rid}_${n}g`, fpOf(si), mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells, noSurface: true, register: false, noRetain, fillTop });
-          const st = p.stair([cells[0], cells[cells.length - 1]], { width: e.width, landingEvery: 8, carve: true, material: mats.stair, id: `${rid}_${n}`, ...(mats.guard ? { railing: mats.guard, railSkip: (x, z) => priorCols.has(`${x},${z}`) } : {}) });
+          const st = p.stair([cells[0], cells[cells.length - 1]], { width: e.width, landingEvery: 8, carve: true, material: e.k1?.stairMaterial ?? mats.stair, id: `${rid}_${n}`, ...(mats.guard ? { railing: mats.guard, railSkip: (x, z) => priorCols.has(`${x},${z}`) } : {}) });
           rec.paths.push(st.id);
         } else if (g.kind === 'ladder') {
           ladderSegs.push(n);

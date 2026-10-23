@@ -60,10 +60,11 @@ test('§3.1: the profiles are frozen by name and shape, each equal to the pass\'
   for (const n of PROFILE_NAMES) {
     const p = PROFILES[n];
     assert.deepEqual(Object.keys(p).sort(), ['cost', 'ladderMax', 'ladders', 'stairs']);
-    assert.deepEqual({ ...COST, ...p.cost }, { ...COST }, n);
-    assert.equal(p.ladderMax, LADDER_MAX);
-    assert.equal(p.stairs, true);
-    assert.equal(p.ladders, true);
+    // ((7a CL) CL set the values (cl.test.mjs judges them): each cost a member of COST, the flags booleans)
+    for (const k of Object.keys(p.cost)) assert.ok(k in COST, `${n}.${k}`);
+    assert.ok(Number.isInteger(p.ladderMax) && p.ladderMax >= LADDER_MAX);
+    assert.equal(typeof p.stairs, 'boolean');
+    assert.equal(typeof p.ladders, 'boolean');
   }
   // a slope and a cliff (a player-only edge may ladder): the same route with each profile and without
   const W = 64, D = 48;
@@ -74,7 +75,8 @@ test('§3.1: the profiles are frozen by name and shape, each equal to the pass\'
   assert.ok(out0.edges.every((e) => e.ok), JSON.stringify(out0.failed));
   assert.ok(out0.edges[0].segments.some((g) => g.kind === 'ladder') && out0.edges[1].segments.some((g) => g.kind === 'stair' || g.kind === 'landing'), 'the case climbs');
   const base = JSON.stringify(out0);
-  for (const n of PROFILE_NAMES) assert.equal(JSON.stringify(routePass(s, [], { edges: edges.map((e) => ({ ...e, profile: n })) }).data), base, n);
+  // ((7a CL) without a profile the pass is T2's; an edge with CL's profiles is cl.test.mjs's)
+  assert.equal(JSON.stringify(routePass(s, [], { edges: edges.map((e) => ({ ...e, profile: null })) }).data), base);
   assert.throws(() => routePass(s, [], { edges: [{ ...edges[0], profile: 'escalator' }] }), /profile must be one of stair, switchback, ladder/);
 });
 
@@ -94,7 +96,7 @@ test('§4: the defs (strict, read once each kind flips), NO_CLIMB, the climb dev
   for (const r of ['R25 ', 'R26 ', 'R27 ']) assert.equal(rules.filter((x) => x.startsWith(r)).length, 1, r);
   // every 7a kind but the alias stays reserved (each slice flips its own)
   const cat = planCatalogue();
-  for (const k of K7.KINDS_7A) assert.equal(cat.entries.find((e) => e.id === `connector.${k}`).state, 'reserved', k);
+  for (const k of K7.KINDS_7A) assert.equal(cat.entries.find((e) => e.id === `connector.${k}`).state, K7.CLIMB_KINDS.includes(k) ? 'supported' : 'reserved', k); // ((7a CL) its three flipped)
 });
 
 test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.json exactly §4\'s three entries', () => {
@@ -102,22 +104,24 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   assert.deepEqual(planCatalogue(), golden);
   const pre = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-pre7a.json'), 'utf8'));
   const d = diffCatalogues(pre, golden, { pending: [{ part: 'rail_1', block: 'connector.rail' }, { part: 'x', block: 'connector.span_bridge' }] });
-  assert.deepEqual(d.reservedToSupported, ['connector.span_bridge']);
-  assert.deepEqual(d.schemaVersionBumps, [{ id: 'connector.span_bridge', from: 0, to: 1 }]);
+  // ((7a CL) the slices' flips are their own tests': here the foundation's three entries alone)
+  const fo = (xs) => xs.filter((x) => !K7.KINDS_7A.includes(String(x.id ?? x).replace(/^connector\./, '')));
+  assert.deepEqual(fo(d.reservedToSupported), ['connector.span_bridge']);
+  assert.deepEqual(fo(d.schemaVersionBumps), [{ id: 'connector.span_bridge', from: 0, to: 1 }]);
   assert.deepEqual(d.untilChanged, [{ id: 'connector.rail', from: '7a', to: 'CR' }, { id: 'connector.branch_walk', from: '7a', to: '7b' }]);
-  assert.deepEqual(d.notesChanged.map((x) => x.id), ['connector.rail', 'connector.branch_walk']);
-  assert.deepEqual([d.added, d.removed, d.retired, d.otherStateChanges, d.limitsChanged], [[], [], [], [], []]);
+  assert.deepEqual(fo(d.notesChanged).map((x) => x.id), ['connector.rail', 'connector.branch_walk']);
+  assert.deepEqual([d.added, d.removed, d.retired, d.otherStateChanges, fo(d.limitsChanged)], [[], [], [], [], []]);
   assert.deepEqual(d.recheck, [{ part: 'x', block: 'connector.span_bridge' }]);
   const sb = golden.entries.find((e) => e.id === 'connector.span_bridge');
   assert.equal(sb.aliasOf, 'connector.bridge');
   // the three changed entries carry the placeholder (the merge stamps it); nothing else changed its sinceApi
-  const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(pre.entries.find((x) => x.id === e.id)));
+  const changed = fo(golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(pre.entries.find((x) => x.id === e.id))));
   assert.deepEqual(changed.map((e) => e.id), ['connector.rail', 'connector.branch_walk', 'connector.span_bridge']);
   for (const e of changed) assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === golden.api, `${e.id}: ${e.sinceApi}`);
   // every reserved 7a kind still has its extension fixture; span_bridge left e15
   const ext = new Set(read('extension').flatMap((f) => (f.expect.all ?? [f.expect]).map((x) => x.block)));
   assert.ok(!ext.has('connector.span_bridge'));
-  for (const id of ['connector.rail', 'connector.branch_walk', 'connector.tube', ...K7.KINDS_7A.map((k) => `connector.${k}`)]) assert.ok(ext.has(id), id);
+  for (const id of ['connector.rail', 'connector.branch_walk', 'connector.tube', ...K7.KINDS_7A.filter((k) => !K7.CLIMB_KINDS.includes(k)).map((k) => `connector.${k}`)]) assert.ok(ext.has(id), id);
 });
 
 test('§7 item 4: a span_bridge part answers as the same bridge part, block connector.bridge, with the note (R25); the caller\'s plan untouched', async () => {

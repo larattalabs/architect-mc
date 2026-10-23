@@ -705,7 +705,7 @@ export function routePass(survey, volumes, intent) {
     // (7a foundation) the edge's profile: its costs over COST, its stairs and ladders ANDed with the pass's, its ladder limit
     const prof = e.profile === undefined || e.profile === null ? null : PROFILES[e.profile];
     if (e.profile !== undefined && e.profile !== null && !prof) throw new Error(`route ${e.id}: profile must be one of ${Object.keys(PROFILES).join(', ')}`);
-    const sctx = { G, builtY, prefer: preferE, start: ends[0], goal: ends[1], Gq, w, laneW: Math.floor((w + r - 1) / r), Ld: Math.floor((Math.max(hairpinLanding, w) + r - 1) / r),
+    const sctx = { G, builtY, prefer: preferE, start: ends[0], goal: ends[1], Gq, w, laneW: Math.floor((w + r - 1) / r), Ld: Math.floor((Math.max(isInt(e.hairpinLanding) && e.hairpinLanding >= 1 && e.hairpinLanding <= 16 ? e.hairpinLanding : hairpinLanding, w) + r - 1) / r), // ((7a CL) an edge's own landing depth: a switchback's `landing`)
       latLo: Math.floor(lo / r), latHi: Math.floor((hi + r - 1) / r), maxCut, maxFill, stairs: (e.stairs ?? stairs) && !coarse && (!prof || prof.stairs), ladders: ladders && (!prof || prof.ladders), nearEnd, // ((6c S3) an edge's own `stairs: false`)
       ...(prof ? { cost: { ...COST, ...prof.cost }, ladderMax: prof.ladderMax } : {}),
       ...(sp.length ? { special: sp, needFlag } : {}) };

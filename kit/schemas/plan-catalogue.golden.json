@@ -290,17 +290,40 @@
   },
   {
    "id": "connector.ladder",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7a"
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "rise": [
+     2,
+     48
+    ],
+    "rest": [
+     8,
+     24
+    ],
+    "movers": [
+     "player"
+    ]
+   },
+   "note": "A climb up a face, player-only by kind (S-7a-8), a rest landing every rest rungs, a fence gate at the top; ends rising under 2: refused NO_CLIMB with a path."
   },
   {
    "id": "connector.stair",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7a"
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "width": [
+     1,
+     5
+    ],
+    "flight": [
+     2,
+     8
+    ]
+   },
+   "note": "A climb in stair flights, railed beside drops; ends rising under 2: refused NO_CLIMB with a path; a climb the grade walks: adjusted (deviation climb)."
   },
   {
    "id": "connector.rail",
@@ -344,10 +367,20 @@
   },
   {
    "id": "connector.switchback",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7a"
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "width": [
+     1,
+     5
+    ],
+    "landing": [
+     3,
+     7
+    ]
+   },
+   "note": "A climb on hairpin landings, no flights, its retaining walls capped; ends rising under 2: refused NO_CLIMB with a path."
   },
   {
    "id": "connector.lift",
