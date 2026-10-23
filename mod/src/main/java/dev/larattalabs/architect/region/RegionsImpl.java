@@ -1587,12 +1587,41 @@ public final class RegionsImpl implements Regions {
 	private static final Map<String, List<String>> GENERATED = new HashMap<>();
 	static final int GEN_LOGGED = 1000;
 
+	/** Chunks generated in the world while a region realised that were no region's (a player's view, a forceload): counted, never charged. */
+	private static long generatedElsewhere;
+	/** Of those, the ones logged (one line per tick, at most this many lines a session). */
+	private static int elsewhereLogged;
+	static final int ELSEWHERE_LOGGED = 200;
+
+	/**
+	 * Whether a chunk generated while a region realised is that region's (fix/survival-off-storm): in its dimension, and in its claim
+	 * + 2 chunks or held by one of its batch's tickets. Anything else (a player's view after a teleport, a forceload, another mod) is
+	 * the world's, not the region's: before this every chunk generated anywhere was charged to every region still placing. Pure.
+	 */
+	static boolean generatedBy(String regionDimension, int[] claim, @Nullable String batchId, String dimension, long chunk, @Nullable String holder) {
+		if (!regionDimension.equals(dimension)) {
+			return false;
+		}
+		if (holder != null && batchId != null && holder.startsWith(batchId + "/")) {
+			return true;
+		}
+		int cx = net.minecraft.world.level.ChunkPos.getX(chunk);
+		int cz = net.minecraft.world.level.ChunkPos.getZ(chunk);
+		return inClaimPlus2(claim, cx, cz);
+	}
+
+	static boolean inClaimPlus2(int[] c, int cx, int cz) {
+		return cx >= (c[0] >> 4) - 2 && cx <= (c[3] >> 4) + 2 && cz >= (c[2] >> 4) - 2 && cz <= (c[5] >> 4) + 2;
+	}
+
 	/**
 	 * Every tick: whether a region realises (the mixin queues generated chunks only then), and the chunks generated during a
-	 * realise since the last tick, attributed and logged whatever {@code ARCHITECT_TRACE_JOBS} says: the first 1000 per region
+	 * realise since the last tick, attributed and logged whatever {@code ARCHITECT_TRACE_JOBS} says. A chunk is a region's when
+	 * {@link #generatedBy} says so: those count in its {@code stats.generatedDuringRealise} and the first 1000 per region are logged
 	 * with their position, the Architect ticket holding them (if any), whether a prepare runs, the nearest player's distance in
-	 * chunks against the view distance, and whether they lie in the claim + 2 chunks. Counted always
-	 * ({@code stats.generatedDuringRealise}). The gate's "0 generated during realise" and its unexplained 161 are what this is for.
+	 * chunks against the view distance. The rest are the world's ({@link #generatedElsewhere}, one summary line per tick). Chunks
+	 * the queue dropped (overflow, position unknown) still count for every region realising. The gate's "0 generated during
+	 * realise" and its unexplained 161 are what this is for.
 	 */
 	private static void generatedDuringRealise(MinecraftServer s) {
 		List<Live> running = new ArrayList<>();
@@ -1603,36 +1632,74 @@ public final class RegionsImpl implements Regions {
 			}
 		}
 		GenCounter.realising(!running.isEmpty());
-		long[] gen = GenCounter.drain();
-		if (gen.length <= 1 && gen[0] == 0 || running.isEmpty()) {
+		List<GenCounter.Gen> gen = GenCounter.drain();
+		long dropped = GenCounter.dropped();
+		if (gen.isEmpty() && dropped == 0 || running.isEmpty()) {
 			return;
 		}
 		int view = s.getPlayerList().getViewDistance();
 		boolean preparing = Prepare.running();
-		for (Live l : running) {
-			RegionRec rec = l.rec();
-			long n = (rec.stats.has("generatedDuringRealise") ? rec.stats.get("generatedDuringRealise").getAsLong() : 0) + gen.length - 1 + gen[0];
-			rec.stats.addProperty("generatedDuringRealise", n);
-			List<String> list = GENERATED.computeIfAbsent(rec.id, k -> new ArrayList<>());
-			int[] c = rec.claim;
-			for (int k = 1; k < gen.length && list.size() < GEN_LOGGED; k++) {
-				int cx = net.minecraft.world.level.ChunkPos.getX(gen[k]);
-				int cz = net.minecraft.world.level.ChunkPos.getZ(gen[k]);
-				String holder = Batches.ticketHolder(gen[k]);
-				int near = Integer.MAX_VALUE;
-				for (var p : s.getPlayerList().getPlayers()) {
+		long[] mine = new long[running.size()];
+		long elsewhere = 0;
+		String sample = null;
+		for (GenCounter.Gen g : gen) {
+			int cx = net.minecraft.world.level.ChunkPos.getX(g.chunk());
+			int cz = net.minecraft.world.level.ChunkPos.getZ(g.chunk());
+			String holder = Batches.ticketHolder(g.chunk());
+			int near = Integer.MAX_VALUE;
+			for (var p : s.getPlayerList().getPlayers()) {
+				if (Sites.dimensionId(p.level()).equals(g.dimension())) {
 					near = Math.min(near, Math.max(Math.abs((p.getBlockX() >> 4) - cx), Math.abs((p.getBlockZ() >> 4) - cz)));
 				}
-				boolean inClaim = cx >= (c[0] >> 4) - 2 && cx <= (c[3] >> 4) + 2 && cz >= (c[2] >> 4) - 2 && cz <= (c[5] >> 4) + 2;
-				String e = cx + "," + cz + " ticket " + (holder == null ? "none" : holder) + "; prepare " + (preparing ? "running" : "idle") + "; player "
-					+ (near == Integer.MAX_VALUE ? "none" : near + " chunks away (view " + view + ")") + "; " + (inClaim ? "in" : "outside") + " the claim + 2";
-				list.add(e);
-				Architect.LOGGER.info("Region {}: chunk {} generated during realise (#{}): {}", rec.id, cx + "," + cz, list.size(), e);
 			}
-			if (gen[0] > 0) {
-				Architect.LOGGER.info("Region {}: {} more chunks generated during realise (not attributed: queue full)", rec.id, gen[0]);
+			String e = cx + "," + cz + " ticket " + (holder == null ? "none" : holder) + "; prepare " + (preparing ? "running" : "idle") + "; player "
+				+ (near == Integer.MAX_VALUE ? "none" : near + " chunks away (view " + view + ")");
+			boolean any = false;
+			for (int k = 0; k < running.size(); k++) {
+				RegionRec rec = running.get(k).rec();
+				if (!generatedBy(rec.dimension, rec.claim, rec.batchId, g.dimension(), g.chunk(), holder)) {
+					continue;
+				}
+				any = true;
+				mine[k]++;
+				List<String> list = GENERATED.computeIfAbsent(rec.id, x -> new ArrayList<>());
+				if (list.size() < GEN_LOGGED) {
+					String le = e + "; " + (inClaimPlus2(rec.claim, cx, cz) ? "in" : "outside") + " the claim + 2";
+					list.add(le);
+					Architect.LOGGER.info("Region {}: chunk {} generated during realise (#{}): {}", rec.id, cx + "," + cz, list.size(), le);
+				}
+			}
+			if (!any) {
+				elsewhere++;
+				if (sample == null) {
+					sample = g.dimension() + " " + e;
+				}
 			}
 		}
+		for (int k = 0; k < running.size(); k++) {
+			RegionRec rec = running.get(k).rec();
+			long add = mine[k] + dropped;
+			if (add > 0) {
+				long n = (rec.stats.has("generatedDuringRealise") ? rec.stats.get("generatedDuringRealise").getAsLong() : 0) + add;
+				rec.stats.addProperty("generatedDuringRealise", n);
+			}
+			if (dropped > 0) {
+				Architect.LOGGER.info("Region {}: {} more chunks generated during realise (not attributed: queue full)", rec.id, dropped);
+			}
+		}
+		if (elsewhere > 0) {
+			generatedElsewhere += elsewhere;
+			if (elsewhereLogged < ELSEWHERE_LOGGED) {
+				elsewhereLogged++;
+				Architect.LOGGER.info("{} chunks generated in the world while {} region(s) realised, none in a realising region's claim + 2 or tickets "
+					+ "(not charged to a region; {} this session), e.g. {}", elsewhere, running.size(), generatedElsewhere, sample);
+			}
+		}
+	}
+
+	/** Chunks generated while a region realised that were no region's (this session). */
+	public static long generatedElsewhere() {
+		return generatedElsewhere;
 	}
 
 	/** The chunks generated while the region realised that were logged (at most 1000), for DevBridge and {@code generated.json}. */
@@ -2568,6 +2635,14 @@ public final class RegionsImpl implements Regions {
 		var held = dev.larattalabs.architect.site.Batches.ticketsOf(l.rec().batchId);
 		held.forEach((k, v) -> tk.addProperty(k, v));
 		o.add("tickets", tk);
+		// (fix/survival-off-storm) the chunks its tickets hold outside its claim + 2 chunks (the gate's bar: 0)
+		int outside = 0;
+		for (long c : dev.larattalabs.architect.site.Batches.ticketChunks(l.rec().batchId)) {
+			if (!inClaimPlus2(l.rec().claim, net.minecraft.world.level.ChunkPos.getX(c), net.minecraft.world.level.ChunkPos.getZ(c))) {
+				outside++;
+			}
+		}
+		o.addProperty("ticketsOutsideClaim2", outside);
 		o.addProperty("ticketBound", l.rec().maxChunks);
 		com.google.gson.JsonArray lw = new com.google.gson.JsonArray();
 		RegionItems.LONG_WAITS.forEach(lw::add);
@@ -2579,6 +2654,8 @@ public final class RegionsImpl implements Regions {
 		com.google.gson.JsonArray gd = new com.google.gson.JsonArray();
 		generatedLog(regionId).stream().limit(50).forEach(gd::add);
 		o.add("generatedDuringRealise", gd);
+		o.addProperty("generatedDuringRealiseCount", l.rec().stats.has("generatedDuringRealise") ? l.rec().stats.get("generatedDuringRealise").getAsLong() : 0);
+		o.addProperty("generatedElsewhere", generatedElsewhere);
 		o.addProperty("tilesReceived", TileStream.RECEIVED.get());
 		o.addProperty("wireBytes", TileStream.WIRE_BYTES.get());
 		o.addProperty("wireCells", TileStream.WIRE_CELLS.get());

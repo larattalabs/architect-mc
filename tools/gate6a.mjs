@@ -376,6 +376,9 @@ async function megaRun(name, opts = {}) {
   await fresh(name, opts.base ?? 'G6A Mega Base');
   await cmd('/architect reload').catch(() => null);
   await tp(0.5, 160, 0.5);
+  // (benches out of the release path, 2026-10-22) megaA pins the 4 ms placement budget, the budget 4e-throughput measured at:
+  // its realise cells/s bar is the throughput bar at 4 ms (4e-throughput's timing folded into megaA)
+  if (opts.budget) await cmd(`/architect budget ${opts.budget}`);
   await settle(5000);
   out.heapBaseline = await call('dev.heap.gc', {}, 120_000);
   log(`  heap baseline after GC: ${out.heapBaseline.usedMb.toFixed(0)} MB (max ${out.heapBaseline.maxMb.toFixed(0)})`);
@@ -496,7 +499,7 @@ steps.prepare = async () => {
 
 steps.megaA = async () => {
   if (!dev) await connect();
-  const r = await megaRun('G6A MegaA', { base: 'G6A Mega Base Prepared' });
+  const r = await megaRun('G6A MegaA', { base: 'G6A Mega Base Prepared', budget: 4 });
   ctx.megaA = { world: 'G6A MegaA', region: r.region, planId: r.plan.planId, box: r.box };
   saveCtx();
   // a copy of the realised world for post-mortems (the undo releases the journal's entries at the next start)
@@ -519,7 +522,8 @@ steps.megaA = async () => {
   write('megabench-A.json', r);
   const b = r;
   check(b.state.view.state === 'PLACED', `megaA: the region is ${b.state.view.state} (${JSON.stringify(b.state.items)})`);
-  bar(b.cellsPerSecond >= 15_000, `megaA: realise ${Math.round(b.cellsPerSecond)} cells/s first tile to last (bar 15k; step ${Math.round(b.stepCellsPerSecond)})`);
+  check(b.placement.budgetMs === 4, `megaA: realised at the 4 ms placement budget (budgetMs ${b.placement.budgetMs}; 4e-throughput's budget)`);
+  bar(b.cellsPerSecond >= 15_000, `megaA: realise ${Math.round(b.cellsPerSecond)} cells/s first tile to last at ${b.placement.budgetMs} ms (bar 15k, 4e-throughput's bar at 4 ms; step ${Math.round(b.stepCellsPerSecond)})`);
   // (6b, coordinator 2026-10-10) MSPT bars judge Architect's own per-tick time; the whole tick (max, p99, over 50), the vanilla
   // tick (serverMsptMax) and GC are recorded, not judged (docs/GATES.md "Tick bars"). (6c 0a, CONTRACT 0a §12) Judged on
   // dev.mspt.trace's ownCpu: p99 <= 25 ms (6a's p99 bar, on Architect's own time) and max <= 50 ms; no ownCpu fails
@@ -558,10 +562,16 @@ steps.megaA = async () => {
  * The full walk (the default) is the engine tier: docs/GATES.md.
  */
 const MEGAB_FAST = process.argv.includes('--fast') || process.env.GATE6A_MEGAB_FAST === '1';
-const MEGAB_DWELL_MS = Number(process.env.GATE6A_DWELL_MS || (MEGAB_FAST ? 8_000 : 30_000));
-steps.megaB = async () => {
+/**
+ * The configuration-B walk, shared by `megaB` (the bench: full or --fast, isolated where its timing is judged) and `resume` (the
+ * functional resilience step, docs/GATES.md "Benches out of the release path"): `fast` the walk's mode, `name` its world, `file`
+ * its evidence, `label` the check lines' prefix. Every check is a functional `check` (none is a BAR); megaB and resume assert the
+ * same rows with the same thresholds, only the prefix differs.
+ */
+async function walkB({ fast, name, file, label }) {
+  const MEGAB_FAST = fast;
+  const MEGAB_DWELL_MS = Number(process.env.GATE6A_DWELL_MS || (fast ? 8_000 : 30_000));
   if (!dev) await connect();
-  const name = 'G6A MegaB';
   await fresh(name, 'G6A Mega Base Prepared');
   await cmd('/architect reload').catch(() => null);
   await tp(0.5, 160, 0.5);
@@ -674,14 +684,18 @@ steps.megaB = async () => {
       if (sp.state === 'PLACED' || sp.state === 'PARTIAL' || ++lap > (MEGAB_FAST ? 60 : 6)) break;
     }
     const g1 = await counters();
-    out.stages[stage] = { seconds: (Date.now() - s0) / 1000, chunksLoaded: g1.loads - g0.loads, generated: g1.terrain - g0.terrain };
+    out.stages[stage] = { items: keys.length, seconds: (Date.now() - s0) / 1000, chunksLoaded: g1.loads - g0.loads, generated: g1.terrain - g0.terrain };
     log(`  stage ${stage} done in ${out.stages[stage].seconds.toFixed(0)} s, ${out.stages[stage].chunksLoaded} chunks loaded`);
   }
-  const st = await waitRegion(region, 3_600_000);
+  // (2026-10-23) a lot waiting OCCUPIED holds a mob in its box (4e's rule: it would be buried) and never starts: the gate clears
+  // the mobs, as megaRun does since 6c W (a resting polar bear stalled megaB's last lot for its whole hour on 10-17 and 10-23)
+  const st = await waitRegion(region, 3_600_000, async (s) => {
+    if (s.waiting?.OCCUPIED) { out.mobsCleared = (out.mobsCleared ?? 0) + 1; await cmd('/kill @e[type=!minecraft:player]'); }
+  });
   out.state = st;
   out.wallSeconds = (Date.now() - t0) / 1000;
   out.events.push(...(await api('revents').catch(() => [])));
-  write('megabench-B.json', out);
+  write(file, out);
   // per-stage progress events (S9): REGION_PROGRESS events whose stage list shows each stage moving (tilesDone rising or PLACING)
   const seen = {};
   for (const e of out.events.filter((x) => x.event === 'REGION_PROGRESS' && x.id === region)) {
@@ -691,14 +705,27 @@ steps.megaB = async () => {
     }
   }
   const failed = Object.keys(st.failed ?? {});
-  check(failed.length === 0 && st.view.state === 'PLACED', `megaB: ${st.view.state}, ${failed.length} failed items`, st.failed);
-  check(out.relog?.resumedSeconds != null && out.relog.resumedSeconds <= 60, `megaB: resumed ${out.relog?.resumedSeconds} s after the player reached a waiting lots-2 item after the relog (${out.relog?.item})`);
-  check(out.sidecarKill?.resumedSeconds != null && out.sidecarKill.resumedSeconds <= 30, `megaB: resumed ${out.sidecarKill?.resumedSeconds} s after the sidecar came back, at a waiting ways item (${out.sidecarKill?.item})`);
-  check(ir.stages.every((n) => seen[n] > 0), `megaB: REGION_PROGRESS events for every stage (${JSON.stringify(seen)}; ${out.events.length} events in all)`);
-  check(Object.keys(out.stages).length === ir.stages.length && Object.values(out.stages).every((x) => x.chunksLoaded >= 0), `megaB: per-stage seconds and chunks loaded ${JSON.stringify(out.stages)}`);
+  check(failed.length === 0 && st.view.state === 'PLACED', `${label}: ${st.view.state}, ${failed.length} failed items`, st.failed);
+  check(out.relog?.resumedSeconds != null && out.relog.resumedSeconds <= 60, `${label}: resumed ${out.relog?.resumedSeconds} s after the player reached a waiting lots-2 item after the relog (${out.relog?.item})`);
+  check(out.sidecarKill?.resumedSeconds != null && out.sidecarKill.resumedSeconds <= 30, `${label}: resumed ${out.sidecarKill?.resumedSeconds} s after the sidecar came back, at a waiting ways item (${out.sidecarKill?.item})`);
+  // (2026-10-23) a stage with no items (MEGA's lots-4) places nothing and so has no PLACING event: the row asks for every stage
+  // with items (it failed megaB on 10-22 for the empty lots-4 alone)
+  const withItems = ir.stages.filter((n) => (out.stages[n]?.items ?? 1) > 0);
+  check(withItems.every((n) => seen[n] > 0), `${label}: REGION_PROGRESS events for every stage with items (${withItems.join(',')}: ${JSON.stringify(seen)}; ${out.events.length} events in all)`);
+  check(Object.keys(out.stages).length === ir.stages.length && Object.values(out.stages).every((x) => x.chunksLoaded >= 0), `${label}: per-stage seconds and chunks loaded ${JSON.stringify(out.stages)}`);
   await leaveWorld();
   return out;
-};
+}
+
+steps.megaB = () => walkB({ fast: MEGAB_FAST, name: 'G6A MegaB', file: 'megabench-B.json', label: 'megaB' });
+
+/**
+ * `resume`: megaB's resilience rows as an ordinary (non-bench) step, on the fast walk in its own world and evidence file
+ * (resume-B.json; the runner adds resume.json), so it never clobbers a megaB run's: the region placed with 0 failed items, resumed within 60 s after a relog in the
+ * middle of lots-2, resumed within 30 s after a sidecar kill in the middle of ways, REGION_PROGRESS for every stage, the per-stage
+ * record. The same checks and thresholds as megaB (the release tier's 6a-resume; the bench itself runs in the nightly).
+ */
+steps.resume = () => walkB({ fast: true, name: 'G6A Resume', file: 'resume-B.json', label: 'resume' });
 
 // ------------------------------------------------------------------ gate 3: chunk status without loading, its cost
 
