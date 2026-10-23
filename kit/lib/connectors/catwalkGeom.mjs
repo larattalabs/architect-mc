@@ -56,7 +56,7 @@ export function catwalkLanes(width, dir, side) {
   const face = right ? hi + 1 : lo - 1, inner = right ? hi : lo, outer = right ? lo : hi, bed = right ? lo - 1 : hi + 1, s = right ? 1 : -1;
   const lanes = [];
   for (let d = 1; d <= width; d++) lanes.push(face - s * d);
-  return { lo, hi, face, inner, outer, bed, toward: [rx * s, rz * s], step: s, lanes };
+  return { lo, hi, face, inner, outer, bed, toward: [rx * s + 0, rz * s + 0], step: s, lanes };
 }
 
 /** The deck cells that carry a bracket: 1, n and every `every` between (1, 1 + every, ...). */
