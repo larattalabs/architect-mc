@@ -34,6 +34,7 @@ import dev.larattalabs.architect.journal.WorldJournal;
 import dev.larattalabs.architect.placement.Anchors;
 import dev.larattalabs.architect.placement.Blueprint;
 import dev.larattalabs.architect.placement.Blueprints;
+import dev.larattalabs.architect.site.Adopt;
 import dev.larattalabs.architect.site.Batches;
 import dev.larattalabs.architect.site.RegionItems;
 import dev.larattalabs.architect.site.SiteGroupRec;
@@ -2660,7 +2661,10 @@ public final class RegionsImpl implements Regions {
 			for (int t = 0; t < entries.size(); t++) {
 				String e = entries.get((k + t) % entries.size());
 				Blueprint bp = Blueprints.get(e);
-				if (bp != null && LotFitting.fit(bp, new Anchors.Bounds(b[0], b[1], b[2], b[3], b[4], b[5]), l.front(), true, 0, true).fits()
+				// (release v0.42.0) an adopted build's entry is the player's house, never placed elsewhere (Sites refuses it ADOPT_REFUSED):
+				// never a fill candidate
+				Blueprints.Entry en = bp != null ? Blueprints.entry(e) : null;
+				if (bp != null && (en == null || !Adopt.isAdoptedEntry(en.json())) && LotFitting.fit(bp, new Anchors.Bounds(b[0], b[1], b[2], b[3], b[4], b[5]), l.front(), true, 0, true).fits()
 					&& bp.sizeY() <= b[4] - b[1] + 1) {
 					out.put(l.id(), e);
 					break;
