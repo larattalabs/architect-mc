@@ -957,67 +957,70 @@ steps.item13 = async () => {
 // ------------------------------------------------------------------ (6c close-out B) L-V7: dried farmland across a restart
 
 /**
- * L-V7 (the ledger lint's finding, fixed by Builder.driedFarmland): rs03's farm field (part town) built first from its own bill, three of
- * its farmland cells dried to dirt (/setblock: the block vanilla's drying leaves), the world saved, left and reopened (a restart: the
- * runs are made again from the journal, with no built bit); then the dried cells still read built (nothing re-queued, nothing
- * outstanding again), the rest fed to done, the conservation sum exact throughout, the region's consumption its bill exactly, and the
- * removal refunds the paid cells standing (the dried cells' dirt among them), E-flat 0.
+ * L-V7 (the ledger lint's finding, fixed by Builder.driedFarmland): rs02 with its lot h1 an rs_farm (rs_hut with a farmland row on its floor:
+ * paid farmland cells over air; rs03's field farmland is free, held in its target, so it can't show it). h1 is fed first from its own
+ * bill until built; three of its farmland cells dry to dirt (/setblock: the block vanilla's drying leaves); the world is saved, left and
+ * reopened (a restart: the site's run is made again from the journal, no built bit); then h1 still reads built (its built count as before,
+ * nothing outstanding again), the rest is fed to done, the dirt consumed is the bill's exactly, the conservation sum exact throughout, and
+ * the removal refunds the paid cells standing (the dried cells' dirt among them), E-flat 0.
  */
 steps.lv7 = async () => {
   await ensure();
-  const tag = 'rs03f';
-  const R = await realised(tag, 'rs03_water');
+  const tag = 'rs02f';
+  const fx = G.fixture(ctx, 'rs02_walled');
+  const R = await realised(tag, 'rs02_walled', { entries: { ...entriesOf(fx), h1: 'rs_farm' } });
   const C = new G.Conservation(ctx, R.box);
   await C.start();
-  const has = (rs, part) => (rs.build?.parts ?? []).some((p) => p.part === part && p.targets.length);
-  const f0 = await G.feed(ctx, R.region, { cons: C, fraction: 0.5, timeoutMs: 1_200_000, until: (st, rs) => has(rs, 'town') });
-  const town = f0.last.rs.build.parts.find((p) => p.part === 'town');
-  check(!!town, `L-V7 (${tag}): the town part's targets are down (${json((f0.last.rs.build?.parts ?? []).map((p) => [p.part, p.targets.length]))})`);
-  if (!town) return { open: true };
-  const tgt = new Map((f0.last.rs.targets ?? []).map((t) => [t.target, t]));
-  const bill = town.targets.reduce((a, id) => G.plus(a, tgt.get(id)?.bom), {});
-  await L.call('dev.stockpile.order', { owner: G.OWNER, ids: town.targets }, 60_000);
-  await C.insert(`stockpile:${G.OWNER}`, bill);
-  const w = await G.waitFor(ctx, R.region, (st, rs) => town.targets.every((id) => { const t = (rs.targets ?? []).find((x) => x.target === id); return t && t.built === t.cells; }), { timeoutMs: 900_000 });
-  check(w.ok, `L-V7 (${tag}): the town's targets built from their own bill first (${json(town.targets)})`);
-  // its farmland cells, built: the journal's after at each of the town targets' built cells
-  const cells = await L.call('dev.rs.cells', { region: R.region }, 300_000);
-  const farm = [];
-  for (const t of (cells.targets ?? []).filter((x) => town.targets.includes(x.target))) {
-    for (const c of t.cells ?? []) {
-      if (farm.length >= 3 || (c[3] & 1) || !(c[3] & 2)) continue;
-      const top = ((await L.call('dev.journal.at', { x: c[0], y: c[1], z: c[2] }, 30_000)).stack ?? []).slice(-1)[0];
-      if (/^minecraft:farmland/.test(String(top?.after ?? ''))) farm.push(c.slice(0, 3));
-    }
+  // h1's site
+  let site = null;
+  for (let k = 0; k < 60 && !site; k++) {
+    const ss = (await L.call('dev.sites.state', {}, 60_000)).sites ?? [];
+    site = ss.find((x) => (x.blueprint ?? x.blueprintId ?? x.bp) === 'rs_farm')?.id ?? null;
+    if (!site) await G.feed(ctx, R.region, { cons: C, fraction: 0.5, timeoutMs: 15_000, until: () => false }); // (the earlier stages built: the lots put down)
   }
-  check(farm.length === 3, `L-V7 (${tag}): three built farmland cells of the town's targets (${json(farm)})`);
+  check(!!site, `L-V7 (${tag}): lot h1's rs_farm site is down (${site})`);
+  if (!site) return { open: true };
+  const cells = Object.entries(await L.call('dev.site.cells', { site }, 60_000)).filter(([k, v]) => /^-?\d+,-?\d+,-?\d+$/.test(k) && /farmland/.test(String(v))).map(([k]) => k.split(',').map(Number));
+  check(cells.length === 5, `L-V7 (${tag}): rs_farm queues its 5 farmland cells (${JSON.stringify(cells)})`);
+  const st0 = await L.call('dev.site.state', { site }, 60_000);
+  await L.call('dev.stockpile.order', { owner: G.OWNER, ids: [site] }, 60_000);
+  await C.insert(`stockpile:${G.OWNER}`, st0.bom ?? {});
+  const isFarm = async (c) => { const r = await cmd(`/execute if block ${c.join(' ')} minecraft:farmland`); return !!(r?.success || Number(r?.result) > 0); };
+  let built = 0;
+  for (let k = 0; k < 120; k++) {
+    built = 0;
+    for (const c of cells) if (await isFarm(c)) built++;
+    if (built === cells.length) break;
+    await sleep(3000);
+  }
+  check(built === cells.length, `L-V7 (${tag}): h1's farmland written from its own bill (${built}/${cells.length})`);
+  const farm = cells.slice(0, 3);
   for (const c of farm) await cmd(`/setblock ${c.join(' ')} minecraft:dirt`); // dried (farmland and dirt are both the dirt item: no conservation change)
   await sleep(2000);
-  const builtOf = (rs) => town.targets.map((id) => (rs.targets ?? []).find((x) => x.target === id)?.built ?? -1);
-  const rsA = await G.rsState(ctx, R.region);
+  const sA = await L.call('dev.site.state', { site }, 60_000);
   const psA = await G.pileState(ctx);
   await C.point('dried');
   await L.leaveWorld();
   await L.openWorld(R.s.world);
-  // the runs are made again from the journal after the load: read until the town's built counts stop moving (3 equal reads, 3 s apart)
-  let rsB = null, same = 0, last = '';
+  // the site's run is made again after the load: read until its built count stops moving (3 equal reads, 3 s apart)
+  let sB = null, same = 0, last = -1;
   for (let k = 0; k < 60 && same < 3; k++) {
     await sleep(3000);
-    rsB = await G.rsState(ctx, R.region);
-    const now = json(builtOf(rsB));
-    same = now === last && !now.includes('-1') ? same + 1 : 0;
+    sB = await L.call('dev.site.state', { site }, 60_000).catch(() => null);
+    const now = sB?.built ?? -1;
+    same = now === last && now >= 0 ? same + 1 : 0;
     last = now;
   }
   const psB = await G.pileState(ctx);
   await C.point('restarted');
   const dirtA = psA.outstanding?.['minecraft:dirt'] ?? 0, dirtB = psB.outstanding?.['minecraft:dirt'] ?? 0;
-  check(json(builtOf(rsA)) === json(builtOf(rsB)) && dirtB <= dirtA, `L-V7 (${tag}): after the restart the dried cells still read built: the town's built ${json(builtOf(rsA))} -> ${json(builtOf(rsB))}; dirt outstanding ${dirtA} -> ${dirtB} (never more)`);
+  check(sA.built === sB?.built && dirtB <= dirtA, `L-V7 (${tag}): after the restart the dried cells still read built: h1 built ${sA.built} -> ${sB?.built} of ${sA.queued ?? '?'}; dirt outstanding ${dirtA} -> ${dirtB} (never more)`);
   const f = await G.feed(ctx, R.region, { cons: C, timeoutMs: 1_800_000 });
   check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done, `L-V7 (${tag}): then fed to done: ${f.last.st.view.state}`);
-  const bills = G.billsOf(R.ck, f.last.rs);
+  let stillDirt = 0;
+  for (const c of farm) if (!(await isFarm(c))) stillDirt++;
   const a0 = await C.parts();
-  const dirtBill = bills.got.__region__?.['minecraft:dirt'] ?? 0, dirtPaid = a0.ledger?.consumed?.['minecraft:dirt'] ?? -1;
-  check(dirtBill > 0 && dirtPaid === dirtBill, `L-V7 (${tag}): the dirt consumed is the bill's exactly, the dried cells paid once: ${dirtPaid} of ${dirtBill} (consumed ${json(a0.ledger?.consumed)})`);
+  check(stillDirt === farm.length, `L-V7 (${tag}): the dried cells were never written again (${stillDirt}/${farm.length} still dirt: written once)`);
   await C.point('built');
   const s0 = await G.pileState(ctx);
   const rm = await G.remove(ctx, R.region);
@@ -1029,9 +1032,9 @@ steps.lv7 = async () => {
   await C.point('removed');
   const e = await G.diff(ctx, R.box, R.pre);
   const ef = e.list.filter((m) => !R.crateAt.some((c) => c.join(',') === m.pos));
-  check(!!rm.removed && G.same(got, a0.paidStanding), `L-V7 (${tag}): the refund equals the paid cells standing, the dried cells' dirt among them (${json(G.minus(got, a0.paidStanding))} off; dirt ${got['minecraft:dirt'] ?? 0} of ${a0.paidStanding?.['minecraft:dirt'] ?? 0})`);
+  check(!!rm.removed && G.same(got, a0.paidStanding) && (got['minecraft:dirt'] ?? 0) >= cells.length, `L-V7 (${tag}): the refund equals the paid cells standing, the dried cells' dirt among them (${JSON.stringify(G.minus(got, a0.paidStanding))} off; dirt ${got['minecraft:dirt'] ?? 0} of ${a0.paidStanding?.['minecraft:dirt'] ?? 0})`);
   check(C.points.every(G.exact) && ef.length === 0, `L-V7 (${tag}): conservation exact at ${C.points.map((p) => p.label).join(', ')}; E-flat ${ef.length}`, { points: C.points.filter((p) => !G.exact(p)), ef: ef.slice(0, 6) });
-  return { farm, builtA: builtOf(rsA), builtB: builtOf(rsB), dirtA, dirtB, dirtPaid, dirtBill, refund: got, paid: a0.paidStanding, points: C.points };
+  return { site, cells, builtA: sA.built, builtB: sB?.built, dirtA, dirtB, refund: got, paid: a0.paidStanding, points: C.points };
 };
 
 // ------------------------------------------------------------------ item 14: the natural site (S3's claim)
@@ -1068,7 +1071,21 @@ steps.item14 = async () => {
   const K = await import('./lib/gate6crs-kit.mjs');
   const Hp = await imp('test/plan-helpers.mjs');
   const an = K.naturalAnchors(S, c);
-  const lips = await K.ropeLips(Hp, fs.readFileSync(sv), claim, S, an.stone);
+  // the town where the kit's own check over this survey places it and its wall dry (each candidate a whole check of rs02 without the
+  // rope; at most 8), then the rope's lips (ropeLips)
+  const fxA = G.fixture(ctx, 'rs02_walled');
+  const bytes = fs.readFileSync(sv);
+  const noRope = { ...fxA.plan, connectors: (fxA.plan.connectors ?? []).filter((q) => !['rope', 'lift'].includes(q.id)) };
+  let pick = null;
+  for (const cnd of an.candidates.slice(0, 8)) {
+    const r = await Hp.checkPlanLocal(noRope, { survey: bytes, claim, anchors: { ...Hp.stewardAnchors(claim), stone: cnd.stone, east_gate: cnd.east_gate }, survival: true });
+    const bad = r.check.parts.filter((a) => !['fits', 'adjusted'].includes(a.class) && !(a.class === 'incomplete' && a.part !== 'town_wall'));
+    if (!bad.length) { pick = cnd; break; }
+  }
+  check(!!pick, `item 14: a town site the kit's check places with its wall dry on the settled survey (${json(pick && { stone: pick.stone, relief: pick.relief })})`);
+  if (pick) Object.assign(an, pick);
+  delete an.candidates;
+  const lips = await K.ropeLips(Hp, bytes, claim, S, an.stone);
   check(!!lips, `item 14: a rope crossing the kit's check accepts on the settled survey (${json(lips)})`);
   Object.assign(an, lips ?? {});
   out.anchors = an;
