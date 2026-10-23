@@ -1,23 +1,28 @@
 # HANDOFF: slice CW (catwalks along a face)
 
-Branch `slice/CW`, worktree `../architect-mc-CW`, off `origin/7a/foundation` (merged 97766cf6). Contract: docs/CONTRACT.md "Phase 7a
-slice CW". Delete this file when the slice gate passes.
+Branch `slice/CW`, worktree `../architect-mc-CW`, off `origin/7a/foundation` (merged through 0551d9c7). Contract: docs/CONTRACT.md "Phase
+7a slice CW"; the as-built section follows it (its Gate row pending). Delete this file when the slice gate passes.
 
-## State
+## Done (offline, $0)
 
-- Kit built and unit-tested: `connectors/catwalkGeom.mjs` (geometry, `catwalkRun`, `emitRouteCatwalks`), `region/passes/moves/catwalk.mjs`
-  (route row 10), `connectors/catwalk.mjs` (the compile hooks), `region/checkCatwalks.mjs` (M10:catwalk, M5catwalk in check.mjs),
-  the catalogue flip (`connector.catwalk` supported, schemaVersion 1, `sinceApi: NEXT`), style chains (N-CW-1), the feature `catwalks`
-  (sidecar `region.catwalks`, ApiRules, ApiCWTest), `kit/regions/catwalks_demo.mjs` with `connectors/catwalksDemo.mjs`.
-- Fixtures: `valid/v7a_cw_cliff.json`, `cw/` (r01-r05 refusals, u01-u03 broken variants, k01 KC), `even/ew03_catwalk_even_width.json`.
-- Lint: S-LAND reads catwalks, `M10:catwalk` gated, `even:catwalk`, `p0:cw`, writer kind `catwalks`.
-- Shared-file edits (small, in CW's own lines): program.mjs (the catwalk landing row like a bridge's far landing; `rec.t7`), check.mjs,
-  structure.mjs, lint-cases.mjs, writers.mjs, style.mjs, plan.json, gate-chains.json, f7a-foundation.test.mjs (the 7a flips left out
-  of the foundation's own three-entry diff: CL and K2 need the same), e15.
-- Gate driver `tools/gate7acw.mjs`; chains cw-unit, cw-ingame, cw-survival, cw-pin, cw-natural, cw-look.
+- Kit: geometry, route row 10, compile hooks, M10:catwalk/M5catwalk, the catalogue flip, style chains, catwalks_demo, fixtures (valid/v7a_cw_cliff,
+  cw/ r01-r05 u01-u03 k01, even/ew03), the lint's catwalk cases, the `catwalks` feature (one Java line, ApiCWTest).
+- cw-unit locally: unit 4/4 items; unchanged 310 of 312 byte-identical, the 2 the foundation's F7A_MOVED.
+- Shared edits pushed to 7a/foundation as 5ef1bc02 (`rec.t7`; the f7a test's diff rule): CL merges it.
 
-## Left
+## Queued
 
-1. Main is frozen for v0.42.0; after it is tagged: merge origin/main, run `cw-pin` once (commit the pinned `scenarios/sites/cliff_face.json`),
-   then the slice tier (`node tools/gate-run.mjs slice --since origin/main --plan`), and `cw-look` for the gallery (N-CW-1).
-2. Gate-verifier; as-built evidence row in CONTRACT.md.
+- `gate-run 7acw-pin` (PID 4264, its own process group): log `<main>/artifacts/gate7a-cw/pin-run.log`, run worktree `../architect-mc-CW-run`,
+  ports 8936/8937, lock `<main>/artifacts/gate-runs/cw.lock`, evidence `<main>/artifacts/gate-runs/<ts>-7acw-pin/`. It waits for the
+  v0.42.0 release's machine hold. **It writes `scenarios/sites/cliff_face.json` in the run worktree**: copy it to this branch and commit it
+  before any other run reuses `../architect-mc-CW-run`. If no candidate of 160 meets the bar, report it (do not lower FACE_BAR or the
+  `picks[0] === ok` rule).
+
+## After v0.42.0 is tagged
+
+1. Merge origin/main; commit the pinned site.
+2. `node tools/gate-run.mjs slice --since origin/main` (about 81 steps: route.mjs and program.mjs hit "kit: region synthesis"); it holds
+   cw-ingame, cw-survival, cw-natural, t2-unit, k1b-unit and cw-unit.
+3. `node tools/gate-run.mjs 7acw-look ...` (a client), then the gallery for Noah (N-CW-1; the close-up: the rail on its bed, the lanes,
+   a landing).
+4. Gate-verifier (re-runs item 7); fill the as-built Gate row; push; "ready to merge".

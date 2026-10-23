@@ -362,7 +362,7 @@ steps.survival = async () => {
   check(differ.length === 0, `item 8: the check's cost.survival.bom against the targets' bills put down, per part: ${differ.length ? differ.map((p) => `${p} ${json(G.minus(bills.want[p], bills.got[p]))}`).join('; ') : 'equal, item for item (BOM exact)'}`, bills);
   const d = await G.twinDiff(ctx, T.box, T.file, crateAt);
   out.twin = d;
-  check(d.mismatches === 0, `item 8: the survival build equals its INSTANT twin cell for cell (the crates aside; brackets carried under their deck cells, BuildOrder bottom up): ${d.mismatches} differ`, d.list);
+  check(d.mismatches === 0, `item 8: the survival build equals its INSTANT twin cell for cell (the crates aside): ${d.mismatches} differ (brackets before the deck cells they carry is by construction, not observed here: BuildOrder builds bottom up and every bracket is at y - 1 under its deck cell at y, kit/test/catwalk-cw.test.mjs)`, d.list);
   const rm = await G.remove(ctx, region);
   const e = await G.diff(ctx, box, pre);
   const ef = e.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
