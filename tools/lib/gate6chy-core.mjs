@@ -275,7 +275,7 @@ export async function ingame(ctx) {
     check(Object.values(c1).every((c) => c.ok && c.ticks === 0), `item 3: every body's census equals its prediction exactly (sources; the fall's lip, column and landing; the spillway's film; the feed's spillway), 0 fluid outside its cells, spill and joins, no fluid tick (${json(Object.entries(c1).map(([k, v]) => [k, v.sources, v.flowing, v.mismatch.length, v.outsideCount]))})`, out.census);
     const bound = new Map(r.bodies.map((b) => [b.id, b.settleTicks]));
     check(fl.every((x) => x.settledAt <= bound.get(x.body)), `item 3: each body settled within its settleTicks (${json(fl.map((x) => [x.body, x.settledAt, bound.get(x.body)]))})`);
-    await sleep(P3.standMs(120_000)); // (P3 smoke: 30 s; the physics is the census's: no fluid tick scheduled)
+    await L.gameWait(P3.standMs(120_000), { real: sleep, label: 'hy item 3 stand' }); // (P3 smoke: 30 s; the physics is the census's: no fluid tick scheduled)
     const c2 = {};
     for (const b of r.bodies) c2[b.id] = await censusOf(ctx, b, before, r.bodies);
     out.stand = Object.fromEntries(Object.entries(c2).map(([k, v]) => [k, { ok: v.ok, mismatch: v.mismatch, outside: v.outside }]));
@@ -291,7 +291,7 @@ export async function ingame(ctx) {
     // (P3 smoke: the bank's breach only, the calibration instance; the water lint's W3 sweeps every shell, lining and weir cell offline)
     if (P3.smoke) P3.skipped(ctx.log, 'item 7: the weir and lining breaches', 'the water lint W3 (every shell, lining and weir cell of hy_core_demo and the HY corpus)');
     for (const c of P3.smoke ? [bank] : [bank, weir, lining]) if (c) await L.cmd(`/setblock ${c[0]} ${c[1]} ${c[2]} minecraft:air`);
-    await sleep(Math.max(...r.bodies.map((b) => b.settleTicks)) * 50 * 2 + 3000);
+    await L.gameWait(Math.max(...r.bodies.map((b) => b.settleTicks)) * 50 * 2 + 3000, { real: sleep, label: 'hy item 7 breach settle' });
     const allowed = new Set(r.bodies.flatMap((o) => [...o.cells, ...o.spill, ...o.watch, ...o.joins, ...o.predicted, ...o.planJoins.flatMap((q) => q.cells)]).map(k3));
     const nowF = await fluidsIn(ctx, box);
     const beyond = [...nowF].filter(([k, s]) => /^minecraft:water/.test(s) && !allowed.has(k) && !before.has(k));
@@ -358,7 +358,7 @@ export async function ingame(ctx) {
     const head = rows.find((x) => x.body === 'stream_r1');
     out.negativeOrder = { state: r2.view?.state, order: r2.fstate?.order, rows: rows.map((x) => [x.body, x.state, x.reason]) };
     check(r2.view?.state === 'PARTIAL' && head?.state === 'drained' && /^escaped/.test(head.reason ?? '') && (r2.fstate?.order ?? [])[0] === 'stream_r1', `item 3 (negative control, _unsafe.wrongOrder): the head written first (${json(r2.fstate?.order)}): its fall pours into r2's empty basin, the guard drains it (${json(head)}), PARTIAL (${json(out.negativeOrder.rows)})`);
-    await sleep(Math.max(...r2.bodies.map((b) => b.settleTicks)) * 50 + 2000);
+    await L.gameWait(Math.max(...r2.bodies.map((b) => b.settleTicks)) * 50 + 2000, { real: sleep, label: 'hy item 3 negative control settle' });
     const st = await strayFluid(ctx, r2.bodies.filter((b) => rows.find((x) => x.body === b.id)?.state === 'drained'), beforeO);
     check(st.n === 0, `item 3 (wrong order): 0 water left in the drained bodies' watch boxes (${st.n})`, st.left);
     await L.leaveWorld();
@@ -374,7 +374,7 @@ export async function ingame(ctx) {
     check(r.view?.state === 'PARTIAL' && rows.stream_r2?.state === 'drained' && rows.stream_r2.escaped === true, `item 4: predict_short on the middle reach: the guard drains r2, escaped, naming ${json(rows.stream_r2?.at)}; PARTIAL (${r.view?.state})`);
     check(rows.stream_r1?.state === 'drained' && rows.stream_r1.reason === 'upstream of stream_r2' && rows.w_feed?.state === 'drained' && rows.w_feed.reason === 'upstream of stream_r2', `item 4 (§3.3, S-HY-6): its upstream closure drains with it, across parts: r1 ${json([rows.stream_r1?.state, rows.stream_r1?.reason])}, the feed ${json([rows.w_feed?.state, rows.w_feed?.reason])}`);
     check(rows.stream_r3?.state === 'settled', `item 4: the downstream reach stands (r3 ${rows.stream_r3?.state})`);
-    await sleep(Math.max(...r.bodies.map((b) => b.settleTicks)) * 50 + 2000);
+    await L.gameWait(Math.max(...r.bodies.map((b) => b.settleTicks)) * 50 + 2000, { real: sleep, label: 'hy item 4 escape guard settle' });
     const drained = r.bodies.filter((b) => b.id !== 'stream_r3');
     const r3 = r.bodies.find((b) => b.id === 'stream_r3');
     const st = await strayFluid(ctx, drained, new Map([...before0, ...r3.cells.map((c) => [k3(c), 'r3']), ...r3.predicted.map((c) => [k3(c), 'r3'])]));
@@ -569,7 +569,7 @@ export async function cold(ctx) {
   const box = [X - 2, g, Z - 3, X + 21, s + 2, Z + 3];
   const before = await fluidsIn(ctx, box);
   await L.cmd('/gamerule random_tick_speed 300');
-  await sleep(120_000);
+  await L.gameWait(120_000, { real: sleep, label: 'hy item 18 (a) freezing probe, 2 minutes' });
   await L.cmd('/gamerule random_tick_speed 0');
   const after = await fluidsIn(ctx, box);
   const froze = { source: 0, flowing: 0, falling: 0, sourceCells: 0, flowingCells: 0 };

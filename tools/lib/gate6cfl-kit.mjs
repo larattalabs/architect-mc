@@ -17,6 +17,7 @@ import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { SIBLING_FILES } from './batch-0410.mjs';
 import { inSlice } from './gate-part.mjs';
 import { syncBaseTree } from './base-tree.mjs';
+import * as CP from './corpus-plan.mjs'; // (gate speed 3) the plans from the run's shared store, prewarmed on every core
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -50,15 +51,22 @@ export function normIr(json) {
   return JSON.stringify(ir);
 }
 
-export async function unchanged(root, { check, log = console.log, only = null, slice = null } = {}) {
-  const { dir: mainDir, base } = baseTree(root);
+export async function unchanged(root, { check, log = console.log, only = null, slice = null, baseDir = null } = {}) {
+  // (baseDir: a test's own base tree, kit/test/gate-corpus-plan.test.mjs; a gate run always uses the merge base's worktree)
+  const { dir: mainDir, base } = baseDir ? { dir: baseDir, base: 'given' } : baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
-  const [hNew, hOld] = [await H(root), await H(mainDir)];
+  const { hNew, hOld } = await CP.corpusHelpers(root, mainDir);
   const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(normIr(r.res.irJson)), first: r.first && r.first !== r ? sha256(normIr(r.first.res.irJson)) : null });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {}, added: [], streetsMarked: 0 };
+  const all = fixtures(root);
+  const oldOf = (name) => {
+    const oldFx = JSON.parse(fs.readFileSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name), 'utf8'));
+    return { ...oldFx, plan: oldFx.plan ?? oldFx.answer?.plan, on: oldFx.on ?? (name.startsWith('asks/') ? 'asks' : undefined) };
+  };
+  await CP.prewarm(root, CP.fixtureJobs(root, all.filter(([name], k) => !(only && !only.test(name)) && fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name)) && inSlice(k, slice)).flatMap(([name, fx]) => [[root, root, fx, 'head', name], [mainDir, mainDir, oldOf(name), 'base', name]])), { log });
   let i = -1;
   let elsewhere = 0; // (a split unit step) fixtures another part plans: counted, not planned here
-  for (const [name, fx] of fixtures(root)) {
+  for (const [name, fx] of all) {
     i++;
     if (only && !only.test(name)) continue;
     if (!fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name))) { out.added.push(name); continue; }
@@ -83,6 +91,7 @@ export async function unchanged(root, { check, log = console.log, only = null, s
   out.namedMoved = rows.filter(([, r]) => !r.same && r.named).map(([k]) => k);
   if (!only) check(out.n >= 230, `${out.n} committed fixtures planned on both (every dir, the 59 asks included)`);
   check(out.differ.length === 0, `${out.same} of ${out.n} byte-identical; moved, all named: ${out.namedMoved.join(', ') || 'none'}; new on this branch (not compared): ${out.added.length}`);
+  log(CP.statsLine());
   return out;
 }
 
@@ -128,8 +137,8 @@ async function asksTable(h) {
 /** §9: the asks before (the base) and after (this head), written to fixtures/plan/fl/; the five free zones and the gap table. */
 export async function asks(root, { check, write = true }) {
   const { dir } = baseTree(root);
-  const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
-  const before = await asksTable(await H(dir)), after = await asksTable(await H(root));
+  await CP.prewarmAsks(root, [dir, root], 'checkPlanLocal');
+  const before = await asksTable(await CP.helpers(dir)), after = await asksTable(await CP.helpers(root));
   if (write) {
     fs.writeFileSync(path.join(root, 'kit', 'test', 'fixtures', 'plan', 'fl', 'asks-before.md'), before.text);
     fs.writeFileSync(path.join(root, 'kit', 'test', 'fixtures', 'plan', 'fl', 'asks-after.md'), after.text);

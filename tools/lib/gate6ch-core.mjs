@@ -234,7 +234,7 @@ export async function ingame(ctx) {
     out.census = Object.fromEntries(Object.entries(c1).map(([k, v]) => [k, { ok: v.ok, sources: v.sources, flowing: v.flowing, mismatch: v.mismatch, outside: v.outside, ticks: v.ticks }]));
     check(Object.values(c1).every((c) => c.ok && c.ticks === 0), `item 2: every body's census equals its prediction exactly (sources, flowing levels), 0 fluid outside its cells, spill and joins, no fluid tick scheduled (${json(Object.entries(c1).map(([k, v]) => [k, v.sources, v.flowing, v.mismatch.length, v.outsideCount]))})`);
     // the stand: 2 minutes at default rules (random ticks, fire, spawns): the census unchanged (P3 smoke: 30 s; the physics is the census's)
-    await sleep(P3.standMs(120_000));
+    await L.gameWait(P3.standMs(120_000), { real: sleep, label: 'h item 2 stand' });
     const c2 = {};
     for (const b of d.bodies) c2[b.id] = await censusOf(ctx, b, before, d.bodies);
     out.stand = Object.fromEntries(Object.entries(c2).map(([k, v]) => [k, { ok: v.ok, mismatch: v.mismatch, outside: v.outside }]));
@@ -246,7 +246,7 @@ export async function ingame(ctx) {
     if (P3.smoke) P3.skipped(log, `item 6: the single breach of ${d.bodies.filter((b) => b.id !== 'pond').map((b) => b.id).join(', ')}`, 'the water lint W3 (kit/lint)');
     const opened = {};
     for (const b of breached) { const c = breachCell(b); opened[b.id] = c; if (c) await L.cmd(`/setblock ${c[0]} ${c[1]} ${c[2]} minecraft:air`); }
-    await sleep(Math.max(...breached.map((b) => b.settleTicks)) * 50 * 2 + 3000);
+    await L.gameWait(Math.max(...breached.map((b) => b.settleTicks)) * 50 * 2 + 3000, { real: sleep, label: 'h item 6 breach settle' });
     const c3 = {};
     for (const b of breached) {
       const c = await censusOf(ctx, b, before, d.bodies);
@@ -332,7 +332,7 @@ export async function ingame(ctx) {
     const fs1 = (r.fluids ?? []).find((x) => x.body === 'spout');
     out.escape = { state: r.view.state, spout: fs1 };
     check(r.view.state === 'PARTIAL' && fs1?.state === 'drained' && fs1.escaped === true && (fs1.at ?? []).length >= 1, `item 3: predict_short (a spill declared one cell short): the guard drains the spout, escaped names the cell ${json(fs1?.at)}, the region PARTIAL (${r.view.state})`);
-    await sleep(spout.settleTicks * 50 + 2000);
+    await L.gameWait(spout.settleTicks * 50 + 2000, { real: sleep, label: 'h item 3 the escape guard, the spout settles' });
     const c = await L.call('dev.fluid.census', { box: boxAround([...spout.cells, ...spout.spill], 1) }, 60_000);
     const water = c.fluids.filter(([x, y, z, s]) => s.startsWith('minecraft:water') && !(d.bodies.find((b) => b.id === 'spout_basin').cells.some((q) => q[0] === x && q[1] === y && q[2] === z)));
     out.escape.after = water.length;

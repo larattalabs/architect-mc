@@ -13,6 +13,8 @@ import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { SIBLING_MOVED, STORM_MOVED, normSiblingIr } from './batch-0410.mjs';
 import { inSlice } from './gate-part.mjs';
 import { syncBaseTree } from './base-tree.mjs';
+import * as CP from './corpus-plan.mjs'; // (gate speed 3) the plans from the run's shared store, prewarmed on every core
+import { DERIVE } from './corpus-derive.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -29,18 +31,22 @@ export function baseTree(root) {
   return syncBaseTree(root, dir); // (turbo) one fetch and checkout at a time; left alone at the base
 }
 
-export async function unchanged(root, { check, log = console.log, only = null, slice = null } = {}) {
-  const { dir: mainDir, base } = baseTree(root);
+export async function unchanged(root, { check, log = console.log, only = null, slice = null, baseDir = null } = {}) {
+  // (baseDir: a test's own base tree, kit/test/gate-corpus-plan.test.mjs; a gate run always uses the merge base's worktree)
+  const { dir: mainDir, base } = baseDir ? { dir: baseDir, base: 'given' } : baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
-  const [hNew, hOld] = [await H(root), await H(mainDir)];
-  const { checkRegion } = await import(pathToFileURL(path.join(root, 'kit', 'lib', 'region', 'check.mjs')).href);
+  const { hNew, hOld } = await CP.corpusHelpers(root, mainDir);
+  // (M18/M19: corpus-derive.mjs f3M18M19, computed where the plan ran; without the store (GATE_PLAN_CACHE=0), here, as before)
+  const m1819 = async (r, s) => r.derived?.f3M18M19 ?? DERIVE.f3M18M19(r, { survey: s.bytes }, { headRoot: root });
   // ((batch v0.41.0) kitVersion and FL's street ext normalised; a fixture a sibling slice moves by name is that slice's to judge)
   const norm = (r) => normSiblingIr(r.res.irJson);
   const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(norm(r)), first: r.first && r.first !== r ? sha256(norm(r.first)) : null });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {}, m18: {}, m19: {} };
+  const all = fixtures(root);
+  await CP.prewarm(root, CP.fixtureJobs(root, all.filter(([name], k) => !(only && !only.test(name)) && inSlice(k, slice)).flatMap(([name, fx]) => [[root, root, fx, 'head', name], ...(fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name)) ? [[mainDir, mainDir, fx, 'base', name]] : [])])), { log });
   let i = -1;
   let elsewhere = 0; // (a split unit step) fixtures another part plans: counted, not planned here
-  for (const [name, fx] of fixtures(root)) {
+  for (const [name, fx] of all) {
     i++;
     if (only && !only.test(name)) continue;
     // (counted as the whole loop's rows count: those on the base)
@@ -52,13 +58,11 @@ export async function unchanged(root, { check, log = console.log, only = null, s
       try { const { r } = await planFixture(hOld, mainDir, fx); b = sig(r); } catch (e) { err = (err ? `${err}; ` : '') + `base: ${String(e.message).slice(0, 160)}`; }
     }
     // M18 and M19 on this head's IR (recorded; predicted 0, any finding named)
-    if (headRun) try {
-      const { r, s } = headRun;
-      const rep = checkRegion({ ir: r.res.ir, survey: s.bytes, blobs: (sha) => r.res.blobs.get(sha) ?? null, volumes: (r.volumes ?? []).map((v) => v.decoded ?? v), meta: r.res.meta, rules: ['M18', 'M19'] });
-      const f18 = rep.findings.filter((f) => f.rule === 'M18'), f19 = rep.findings.filter((f) => f.rule === 'M19');
-      out.m18[name] = { count: f18.reduce((x, f) => x + f.count, 0), parts: f18.map((f) => f.part), leaves: rep.metrics.M18?.leaves ?? 0 };
-      out.m19[name] = { count: f19.reduce((x, f) => x + f.count, 0), parts: f19.map((f) => f.part) };
-    } catch (e) { out.m18[name] = { err: String(e.message).slice(0, 160) }; }
+    if (headRun) {
+      const m = await m1819(headRun.r, headRun.s);
+      if (m.err !== undefined) out.m18[name] = { err: m.err };
+      else { out.m18[name] = m.m18; out.m19[name] = m.m19; }
+    }
     const same = !!a && !!b && a.answers === b.answers && a.overall === b.overall && a.ir === b.ir && a.first === b.first;
     const ex = EXCEPT[name] ?? null;
     out.fixtures[name] = { existsOld, same, ...(ex ? { excepted: ex } : {}), ...(err ? { err } : {}), ...(a && b && !same ? { head: a, base: b } : {}) };
@@ -78,5 +82,6 @@ export async function unchanged(root, { check, log = console.log, only = null, s
   const m18 = Object.entries(out.m18).filter(([, v]) => v.count > 0), m19 = Object.entries(out.m19).filter(([, v]) => v.count > 0);
   log(`M18 (recorded): ${m18.length} fixture(s) with findings: ${m18.map(([k, v]) => `${k} (${v.count}: ${v.parts.join(', ')})`).join('; ') || 'none'}`);
   log(`M19 (recorded): ${m19.length} fixture(s) with findings: ${m19.map(([k, v]) => `${k} (${v.count}: ${v.parts.join(', ')})`).join('; ') || 'none'}`);
+  log(CP.statsLine());
   return out;
 }

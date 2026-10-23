@@ -251,7 +251,7 @@ export async function realiseF3(ctx, tag, fx, o = {}) {
     await L.cmd('/gamerule random_tick_speed 3');
     await L.cmd('/gamerule advance_time true');
     const drips0 = [...g.cells.values()].filter((s) => /pointed_dripstone/.test(s)).length;
-    await sleep(o.stand * 1000);
+    await L.gameWait(o.stand * 1000, { real: sleep, label: `f3 item 4 (${tag}) stand, ${o.stand} s` });
     await L.cmd('/gamerule random_tick_speed 0');
     await L.cmd('/gamerule advance_time false');
     const stood = await dumpOf(ctx, boxOfCells(g.cells, 3), `f3-${tag}-stood`);
