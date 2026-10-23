@@ -1,12 +1,12 @@
 // (fast checks P2, docs/FAST-CHECKS.md "Precondition for every REPLACE row") The writer kind of every cell a plan writes: the unit the
 // realised == virtual SMOKE row counts by, so a lint over the virtual world is trusted per writer kind only while one in-game cell diff
 // of that kind holds at the slice tier. The kinds: ground, relief, street, route, forms, lots, props, scatter, walls, bridges (beam,
-// arch, slab), rope, tunnels, fluids. Shared by tools/lib/realised-virtual.mjs (the in-game row) and the lints' coverage map.
+// arch, slab), rope, tunnels, fluids, (7a CW) catwalks. Shared by tools/lib/realised-virtual.mjs (the in-game row) and the lints' coverage map.
 //
 // A cell's kind comes from the plan meta's connector records first (a bridge, tunnel, rope or wall record names its part and box: its
 // cells inside that box are the connector's), then from the part's ops (fluid, scatter, relief, voxels), then its stage and id.
 
-export const WRITER_KINDS = Object.freeze(['ground', 'relief', 'street', 'route', 'forms', 'lots', 'props', 'scatter', 'walls', 'bridges', 'rope', 'tunnels', 'fluids']);
+export const WRITER_KINDS = Object.freeze(['ground', 'relief', 'street', 'route', 'forms', 'lots', 'props', 'scatter', 'walls', 'bridges', 'rope', 'tunnels', 'fluids', 'catwalks']);
 
 const inBox = (b, x, y, z) => b && x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && z >= b.minZ && z <= b.maxZ;
 
@@ -40,6 +40,7 @@ export function writerKinds(ir, meta = null) {
   for (const t of meta?.tunnels ?? []) recs.push({ kind: 'tunnels', sub: null, part: t.part, box: t.box }, ...(t.liningPart ? [{ kind: 'tunnels', sub: 'lining', part: t.liningPart, box: t.box }] : []));
   for (const r of meta?.ropes ?? []) recs.push({ kind: 'rope', sub: 'slab', part: r.part, box: r.box ?? null });
   for (const w of meta?.walls ?? []) recs.push({ kind: 'walls', sub: null, part: w.part ?? null, box: w.box ?? null });
+  for (const c of meta?.catwalks ?? []) recs.push({ kind: 'catwalks', sub: null, part: c.part, box: c.box }); // (7a CW)
   const kinds = ir.parts.map((p) => partKind(ir, p));
   return (x, y, z, pi) => {
     const p = ir.parts[pi];

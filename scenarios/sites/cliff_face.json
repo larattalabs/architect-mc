@@ -1,0 +1,19 @@
+{
+  "id": "cliff_face",
+  "purpose": "slice CW's natural cliff (docs/CONTRACT.md \"Phase 7a slice CW\" §8): a straight run along a face of rock at least 24 long and 8 high with no water within 8, the run catwalks_demo's natural variant takes (its pickFace's first: the face bar first); pinned by tools/gate7acw.mjs pin (find-site's spiral and summary, then each candidate's survey through pickFace)",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "default"
+  },
+  "needs": {
+    "size": [128, 128],
+    "relief": [16, 90],
+    "waterMax": 10,
+    "treesMax": 25,
+    "candidates": 160,
+    "step": 256,
+    "center": [0, 0],
+    "face": [24, 8]
+  }
+}

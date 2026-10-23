@@ -10,14 +10,15 @@
 //                at most 4 apart between
 //   rails        a barrier (M8's 1.5) on the bed at y + 1 past the outer lane, for every deck cell
 //   head room    2 passable cells over every lane (M6)
-//   the face     no face cell (y .. y + 2 beside the deck) changed: a catwalk cuts nothing
+//   the face     no face cell (y .. y + 2 beside the deck) written by the catwalk's part and changed: a catwalk cuts nothing
 // It records per catwalk the counts as metrics (`metrics.catwalks.per`); M8 and M6 findings name the rails and the head room too, as
 // the bridges' rules do. Called by checkRegion (check.mjs), which passes `finding`; leaves `vw` as it found it.
 import { rightOf } from '../connectors/ropeGeom.mjs';
 import { CATWALK } from '../connectors/catwalkGeom.mjs';
+import { F_WRITTEN } from './vworld.mjs';
 
 /** The catwalk rules: findings `M10:catwalk` (and M8, M6) and `metrics.catwalks`. */
-export function catwalkRules({ vw, catwalks, want, findings, metrics, finding }) {
+export function catwalkRules({ ir, vw, catwalks, want, findings, metrics, finding }) {
   const P = vw.pal, out = [];
   const push = (rule, m, count, sample, message) => { if (want.has(rule.replace(/:.*$/, ''))) findings.push(finding(rule, m.part ?? null, m.stage ?? null, count, sample, message)); };
   const firm = (b) => P.solid[b] && !P.fluid[b] && !P.gravity[b];
@@ -25,6 +26,9 @@ export function catwalkRules({ vw, catwalks, want, findings, metrics, finding })
     const pid = m.id, { n, from, dir, y } = m;
     const [x0, , z0] = from, [dx, dz] = dir, [rx, rz] = rightOf(dir);
     const step = m.side === 'right' ? 1 : -1;
+    // (a face cell the catwalk's own part wrote: another part's write there, a cliff the program raised, is the land it stands on)
+    const pi = ir?.parts ? ir.parts.findIndex((q) => q.id === m.part) : -1;
+    const own = (x, yy, z) => (vw.flags(x, yy, z) & F_WRITTEN) !== 0 && (pi < 0 || vw.partAt(x, yy, z) === pi);
     const at = (i, v) => [x0 + dx * i + rx * v, z0 + dz * i + rz * v];
     const lanes = Array.from({ length: m.width }, (_, k) => m.face - step * (k + 1));
     // a walk surface at y: a floor with two passable cells over it
@@ -61,7 +65,7 @@ export function catwalkRules({ vw, catwalks, want, findings, metrics, finding })
       if (lanes.every((v) => { const [x, z] = at(i, v); return P.passable[vw.get(x, y + 1, z)] && P.passable[vw.get(x, y + 2, z)]; })) row.headroom++;
       else { const [lx, lz] = at(i, lanes[0]); low.push([lx, y + 1, lz]); }
       // the face: never written (its state before and after equal)
-      for (let yy = y; yy <= y + 2; yy++) if (vw.get(fx, yy, fz) !== vw.base(fx, yy, fz)) { row.faceWritten++; faceHit.push([fx, yy, fz]); }
+      for (let yy = y; yy <= y + 2; yy++) if (own(fx, yy, fz) && vw.get(fx, yy, fz) !== vw.base(fx, yy, fz)) { row.faceWritten++; faceHit.push([fx, yy, fz]); }
     }
     if (n - lastSupport > row.maxGap) row.maxGap = n - lastSupport;
     const every = CATWALK.bracketEvery;
