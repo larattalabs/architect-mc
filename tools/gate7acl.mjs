@@ -63,7 +63,7 @@ export const CL_MOVED = Object.freeze({
   ...F7A_MOVED,
   'asks/old_new_town.json': 'CL: quarter_stair answers refused NO_CLIMB (was unsupported until 7a)',
   'asks/sky_monastery.json': 'CL: long_stair answers refused NO_CLIMB (was unsupported until 7a)',
-  'asks/hidden_village.json': 'CL: cave_ladders answers refused NO_ROOM, its tower_1 unplaced (was unsupported until 7a)',
+  'asks/hidden_village.json': 'CL: cave_ladders answers blocked DEPENDENCY, its tower_1 unplaced in the zone (was unsupported until 7a)',
   'extension/e15_every_reserved_a.json': 'the foundation (rail until CR, branch_walk until 7b) and CL (c_ladder, c_stair, c_switchback left the fixture)',
 });
 
@@ -150,7 +150,7 @@ steps.unit = async () => {
   check(after.malformed === 0 && JSON.stringify(moved) === JSON.stringify(['hidden_village/cave_ladders', 'old_new_town/quarter_stair', 'sky_monastery/long_stair']) && out.asks.committedAfter,
     `item 3: the 59 asks on the merge base and on this head: 0 malformed; exactly the three climbs move (${moved.join(', ')}; the foundation's rail_1 aside); the after table equals fixtures/plan/cl/asks-gap-after.txt: ${out.asks.committedAfter}`);
   // item 15: api-compat ($0)
-  const flag = process.env.GATE7ACL_APICOMPAT ?? '--gate6ccoa';
+  const flag = process.env.GATE7ACL_APICOMPAT ?? '--gate7acl';
   const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', flag], { cwd: root, encoding: 'utf8', timeout: 900_000, env: { ...process.env, PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
   out.apicompat = { flag, code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').filter((l) => /^(ok|FAIL)/.test(l)) };
   check(ac.status === 0, `item 15: api-compat ${flag} clean (CL adds a feature only: no record, method or enum value); $0.00`, out.apicompat.tail);

@@ -1,0 +1,488 @@
+{
+ "about": "(close-out A §4) a ring (free layout) that places 26 of 40 lots, and a districts zone whose district small places 4 of 8 lots and whose district huge places nowhere: roads to ring port g40, quarters port q8 (a lot) and quarters port huge (a district) answer blocked by their zone (DEPENDENCY, kind unplaced, lot or district). Main answered each refused NO_ROOM",
+ "on": "asks",
+ "plan": {
+  "schemaVersion": "plan/0",
+  "zones": [
+   {
+    "id": "ring",
+    "tolerance": {
+     "count": {
+      "max": 40
+     }
+    },
+    "program": {
+     "layout": "ring",
+     "lots": [
+      {
+       "id": "g1",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g2",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g3",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g4",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g5",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g6",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g7",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g8",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g9",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g10",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g11",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g12",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g13",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g14",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g15",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g16",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g17",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g18",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g19",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g20",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g21",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g22",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g23",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g24",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g25",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g26",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g27",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g28",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g29",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g30",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g31",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g32",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g33",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g34",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g35",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g36",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g37",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g38",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g39",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      },
+      {
+       "id": "g40",
+       "type": "house",
+       "size": [
+        17,
+        15
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "id": "quarters",
+    "tolerance": {
+     "count": {
+      "max": 20
+     }
+    },
+    "program": {
+     "districts": [
+      {
+       "id": "small",
+       "size": {
+        "w": 40,
+        "d": 40
+       },
+       "lots": [
+        {
+         "id": "q1",
+         "type": "house",
+         "size": [
+          11,
+          11
+         ]
+        },
+        {
+         "id": "q2",
+         "type": "house",
+         "size": [
+          11,
+          11
+         ]
+        },
+        {
+         "id": "q3",
+         "type": "house",
+         "size": [
+          11,
+          11
+         ]
+        },
+        {
+         "id": "q4",
+         "type": "house",
+         "size": [
+          11,
+          11
+         ]
+        },
+        {
+         "id": "q5",
+         "type": "house",
+         "size": [
+          11,
+          11
+         ]
+        },
+        {
+         "id": "q6",
+         "type": "house",
+         "size": [
+          11,
+          11
+         ]
+        },
+        {
+         "id": "q7",
+         "type": "house",
+         "size": [
+          11,
+          11
+         ]
+        },
+        {
+         "id": "q8",
+         "type": "house",
+         "size": [
+          11,
+          11
+         ]
+        }
+       ]
+      },
+      {
+       "id": "huge",
+       "size": {
+        "w": 256,
+        "d": 256
+       },
+       "levelBand": "high",
+       "lots": [
+        {
+         "id": "u1",
+         "type": "house",
+         "size": [
+          9,
+          9
+         ]
+        },
+        {
+         "id": "u2",
+         "type": "house",
+         "size": [
+          9,
+          9
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "r_free",
+    "kind": "road",
+    "from": {
+     "anchor": "stone"
+    },
+    "to": {
+     "part": "ring",
+     "port": "g40"
+    }
+   },
+   {
+    "id": "r_dlot",
+    "kind": "road",
+    "from": {
+     "anchor": "stone"
+    },
+    "to": {
+     "part": "quarters",
+     "port": "q8"
+    }
+   },
+   {
+    "id": "r_dist",
+    "kind": "road",
+    "from": {
+     "anchor": "stone"
+    },
+    "to": {
+     "part": "quarters",
+     "port": "huge"
+    }
+   }
+  ]
+ }
+}

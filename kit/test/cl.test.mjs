@@ -220,7 +220,7 @@ test('§10 item 13: determinism: three checks of each valid climb fixture identi
 
 void CLIMB;
 
-test('§9 (item 3): Steward\'s recorded climbs on the asks claim: the stairs refused NO_CLIMB with a path wouldFit that fits alone; cave_ladders refused NO_ROOM (its tower_1 unplaced); the committed gap tables', async () => {
+test('§9 (item 3): Steward\'s recorded climbs on the asks claim: the stairs refused NO_CLIMB with a path wouldFit that fits alone; cave_ladders blocked DEPENDENCY (its tower_1 unplaced in the zone); the committed gap tables', async () => {
   const { asksSurvey } = await import('./plan-helpers.mjs');
   const s = asksSurvey();
   const ask = (name) => JSON.parse(fs.readFileSync(path.join(FIX, 'asks', `${name}.json`), 'utf8')).answer.plan;
@@ -236,7 +236,7 @@ test('§9 (item 3): Steward\'s recorded climbs on the asks claim: the stairs ref
     assert.equal(part(alone, id).class, 'fits', `${name}/${id}: the path alone: ${JSON.stringify(part(alone, id))}`);
   }
   const hv = part(await checkPlanLocal(ask('hidden_village'), { survey: s.bytes, claim: s.claim, anchors }), 'cave_ladders');
-  assert.deepEqual([hv.class, hv.reasons[0].code], ['refused', 'NO_ROOM']);
+  assert.deepEqual([hv.class, hv.reasons[0].code, hv.reasons[0].evidence.lot], ['blocked', 'DEPENDENCY', 'tower_1']);
   const before = fs.readFileSync(path.join(FIX, 'cl', 'asks-gap-before.txt'), 'utf8'), after = fs.readFileSync(path.join(FIX, 'cl', 'asks-gap-after.txt'), 'utf8');
   assert.match(before, /connector\.stair +2\n/);
   assert.match(before, /connector\.ladder +1\n/);

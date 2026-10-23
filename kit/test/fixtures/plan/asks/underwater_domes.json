@@ -13,29 +13,24 @@
           "kind": "standard",
           "required": true,
           "label": "Dome colony",
-          "purpose": "colony",
+          "purpose": "home_base",
           "style": {
             "pending": "drowned_dome_colony"
           },
           "where": {
-            "near": {
-              "feature": {
-                "water": {
-                  "body": "ocean",
-                  "pick": "largest"
-                }
-              },
-              "within": 32
+            "inside": {
+              "part": "seabed"
             }
           },
+          "size": {
+            "preset": "M"
+          },
           "program": {
-            "layout": "street",
-            "shared": "none",
             "lots": [
               {
                 "id": "great_dome_1",
                 "type": "great_dome",
-                "role": "central_habitat",
+                "role": "habitat",
                 "label": "central habitat dome",
                 "size": [
                   23,
@@ -109,7 +104,7 @@
               {
                 "id": "gatehouse_1",
                 "type": "gatehouse",
-                "role": "airlock",
+                "role": "gatehouse",
                 "label": "air-lock gatehouse",
                 "size": [
                   9,
@@ -117,7 +112,7 @@
                 ],
                 "placement": "edge",
                 "villager": "none",
-                "brief": "Entrance chamber with doors and a bubble column lift to the surface."
+                "brief": "Entrance chamber with doors and bubble column lift to the surface."
               },
               {
                 "id": "smithy_1",
@@ -157,62 +152,65 @@
                 "villager": "trading_hall",
                 "brief": "Shared eating and trading space lit by sea lanterns."
               }
-            ]
-          }
+            ],
+            "layout": "street",
+            "shared": "none"
+          },
+          "notes": "Meant for the sea floor; waits on the seabed site."
         }
       ],
       "connectors": [
         {
-          "id": "glass_tunnels",
-          "kind": "tunnel",
+          "id": "glass_tubes",
+          "kind": "tube",
           "required": false,
-          "label": "Glass tunnels between domes",
+          "label": "glass tunnels between domes",
           "from": {
-            "anchor": "stone"
+            "part": "gatehouse_1"
           },
           "to": {
-            "part": "colony"
+            "part": "great_dome_1"
           },
-          "notes": "Glass tunnels linking the domes, radiating from the great dome.",
-          "params": {
-            "material": "glass",
-            "width": 3
-          }
+          "width": 3,
+          "notes": "Underwater glass passages; also meant to join the central dome to the pods, farm, forge, tower and market."
         }
       ],
       "forms": [
         {
-          "id": "sea_floor",
+          "id": "seabed",
           "kind": "seabed_site",
           "required": true,
-          "label": "Sea-floor site",
+          "label": "sea-floor site",
           "where": {
-            "inside": {
-              "part": "colony"
+            "near": {
+              "anchor": "stone",
+              "within": 128
             }
           },
-          "notes": "The colony sits on the ocean bed under deep water, flooded, with domes sealed and air-filled.",
-          "params": {
-            "medium": "underwater",
-            "depth": "deep_ocean",
-            "floor": "existing_seabed"
-          }
+          "size": {
+            "preset": "M"
+          },
+          "notes": "A deep, fairly flat patch of ocean floor where the domes stand under water, using the existing seabed."
         }
       ],
-      "notes": "Underwater colony: needs a deep ocean area with a fairly flat floor."
+      "notes": "Underwater building is not yet supported; the site, glass tunnels and zone wait. Gatehouse bubble column lift and kelp planters are for the lot designs."
     },
     "waits": [
       {
-        "part": "sea_floor",
-        "words": "The underwater setting: building on and under the ocean, with sealed air-filled domes, isn't something Architect can do yet. The colony is placed near the largest ocean it finds and the sea-floor form is kept pending."
+        "part": "seabed",
+        "words": "Building on the sea floor under water isn't possible yet, so the whole colony waits for it."
       },
       {
-        "part": "glass_tunnels",
-        "words": "The glass tunnels between domes: tunnels come with a later Architect release; the domes are built first and the tunnels are offered when they can be."
+        "part": "colony",
+        "words": "The domes sit on the sea-floor site, so they wait for it too."
+      },
+      {
+        "part": "glass_tubes",
+        "words": "Glass tunnels through water between the domes wait for a later Architect release."
       }
     ],
-    "summary": "A medium colony of ten buildings in one zone near the largest ocean: a great central dome, four residential pods, a kelp farm dome, a smithy, a market and mess dome, an air-lock gatehouse at the edge and an observation tower on high ground. Styled prismarine, glass, sea lanterns and copper. The underwater setting and the glass tunnels between domes can't be built yet and stay pending."
+    "summary": "You asked for a colony of glass domes on the sea floor: a great central dome, four residential pods, a kelp farm dome, a forge, a market and mess dome, an air-lock gatehouse and an observation tower. All of it is written into the plan. Architect can't build under water yet, so the sea-floor site, the domes and the glass tunnels between them wait until it can."
   },
-  "usd": 0.036636,
+  "usd": 0.04184,
   "errors": []
 }

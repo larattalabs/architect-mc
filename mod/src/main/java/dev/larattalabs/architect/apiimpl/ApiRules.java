@@ -25,7 +25,9 @@ public final class ApiRules {
 		"compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites",
 		"stackQuery", "entryVersions", "blueprintDelta", "deltaApply", "siteRevert", "deltaPreview", "regionPrepare", "generatedOnly", "cellConditions",
 		"chunkBound", "surveyVolume", "regionNudge", "regionOpKeys", "lotExt", "frozenWater", "siteWaiting", "fullBom", "stockpile",
-		"schematics", "targetPause", "removalLeavesFeed", "builds", "adopt", "planCatalogueView", "weatheringOurs");
+		"schematics", "targetPause", "removalLeavesFeed", "builds", "adopt", "planCatalogueView", "weatheringOurs",
+		// 6c close-out A: keyed artifact pins, the world-start plan sweep, region item waits with their region and parts
+		"keyedPins", "planSweep", "regionWaitParts");
 
 	private ApiRules() {
 	}
@@ -85,6 +87,7 @@ public final class ApiRules {
 					case "plan.forms2" -> "formsTrees"; // 6c F3: form.giant_tree, form.giant_mushroom (with formsCave and formsWater, below)
 					case "region.terracedZones" -> "terracedZones"; // 6c S3: plan/0's terraces member (a zone or district laid down the slope as levels)
 					case "region.monastery" -> "scenarioS3"; // 6c S3: the helper's kit bundles the terraced_monastery program (S3's scenario)
+					case "region.planDiscard" -> "planDiscard"; // 6c close-out A: the helper removes a discarded plan's dir (Regions.discardPlan)
 					case "plan.layouts" -> "freeLayouts"; // 6c FL: plan/0's layout.ring, .spiral, .grid, .organic, locator.around and sketch.outline
 					case "region.climbs" -> "climbConnectors"; // 7a CL: plan/0's connector.stair, connector.switchback and connector.ladder (since NEXT)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
