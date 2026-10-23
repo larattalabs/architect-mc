@@ -302,7 +302,7 @@ async function removeRun(ctx, tag, run, { kind }) {
   await L.settle(5000);
   const rm = await L.call('dev.region.remove', { region: run.realise.region, requester: OWNER }, 4 * 3_600_000);
   const bound = Math.max(...run.bodies.map((b) => b.settleTicks ?? 100), 100);
-  await L.settle(Math.max(15_000, bound * 50 * 2));
+  await L.gameWait(Math.max(15_000, bound * 50 * 2), { label: `ha ${tag}: the removal's fluids settle` });
   const diff = await L.call('dev.region.hash', { box: run.box, mode: 'diff', file: run.snapF }, 4 * 3_600_000);
   const exact = { kind, box: run.box, removed: rm.removed, restored: rm.restored, mismatches: diff.mismatches, classes: diff.classes, list: (diff.list ?? []).slice(0, 200) };
   fs.writeFileSync(path.join(OUT, `ha-${tag}-exact.json`), `${JSON.stringify({ ...exact, list: diff.list ?? [] }, null, 2)}\n`);
@@ -381,7 +381,7 @@ async function villagers(ctx, tag, run) {
     const c = centreOf(b);
     if (c) { await L.cmd(`/summon minecraft:villager ${c[0] + 0.5} ${c[1]} ${c[2] + 0.5} {Tags:["ha_stand","ha_swim"]}`); placed.push({ body: b.id, at: [c[0], c[1], c[2]], swim: true }); }
   }
-  await L.settle(120_000);
+  await L.gameWait(120_000, { label: `ha ${tag}: the villager stand, 2 minutes` });
   const dmg = await L.call('dev.entity.damage', { since, type: 'drown' }, 60_000).catch((e) => ({ error: String(e.message ?? e) }));
   const alive = await L.cmd('/execute if entity @e[type=minecraft:villager,tag=ha_stand]');
   const n = Number((/(\d+)/.exec(String(alive.messages?.join(' ') ?? '')) ?? [0, 0])[1]);
@@ -422,14 +422,14 @@ async function haFlat(ctx) {
   const m25 = run.R.rep.findings.filter((f) => /^M25|^M20|^M17/.test(f.rule));
   check(!m25.length, `item 1 (flat): M25, M20 and M17 0 on the realised world (${m25.map((f) => `${f.rule} ${f.message}`).join('; ').slice(0, 300) || 'none'})`);
   // a 2-minute stand at default rules adds nothing (P3 smoke: 30 s)
-  await L.settle(P3.standMs(120_000));
+  await L.gameWait(P3.standMs(120_000), { label: 'ha flat: item 2 stand' });
   const stand = {};
   for (const b of run.bodies) stand[b.id] = await census(ctx, b, run.before, run.bodies);
   check(Object.values(stand).every((c) => c.ok), `item 2 (flat): after a ${P3.standMs(120_000) / 1000} s stand at default rules every census still equals its prediction (${json(Object.fromEntries(Object.entries(stand).map(([k, c]) => [k, c.ok ? true : { m: c.mismatch, x: c.outside }])))})`);
   // item 13 (bodies): the lava pit with fire ticks on and random ticks at 300: no fire block in the claim
   await L.cmd('/gamerule random_tick_speed 300');
   await L.cmd('/gamerule do_fire_tick true').catch(() => null);
-  await L.settle(60_000);
+  await L.gameWait(60_000, { label: 'ha flat: item 13 the lava pit, a minute of fire ticks' });
   const pit = run.bodies.find((b) => b.fluid === 'lava');
   const afterF = path.join(ctx.OUT, 'ha-flat-fire.arwd.gz');
   await L.call('dev.region.dump', { box: run.box, file: afterF, light: true }, 1_800_000);

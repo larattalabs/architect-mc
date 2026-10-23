@@ -12,7 +12,7 @@
    "dynamic": [],
    "env": [],
    "eager": [],
-   "verified": "20261022-233059-slice unit-mod"
+   "verified": "20261022-161855-release unit-mod"
   },
   "umt": {
    "classes": [
@@ -71,8 +71,10 @@
     "kit/test/forms-f3.test.mjs",
     "kit/test/forms-island.test.mjs",
     "kit/test/gate-benches.test.mjs",
+    "kit/test/gate-corpus-plan.test.mjs",
     "kit/test/gate-history.test.mjs",
     "kit/test/gate-split.test.mjs",
+    "kit/test/gate-sprint.test.mjs",
     "kit/test/gate-turbo.test.mjs",
     "kit/test/h-a.test.mjs",
     "kit/test/h-batch.test.mjs",
@@ -366,8 +368,10 @@
     "kit/test/forms-f3.test.mjs",
     "kit/test/forms-island.test.mjs",
     "kit/test/gate-benches.test.mjs",
+    "kit/test/gate-corpus-plan.test.mjs",
     "kit/test/gate-history.test.mjs",
     "kit/test/gate-split.test.mjs",
+    "kit/test/gate-sprint.test.mjs",
     "kit/test/gate-turbo.test.mjs",
     "kit/test/h-a.test.mjs",
     "kit/test/h-batch.test.mjs",
@@ -526,6 +530,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/shard-auto.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/step-cache.mjs",
     "tools/lib/step-coverage.mjs",
@@ -668,6 +673,10 @@
      "expr": "pathToFileURL(path.join(KIT, rel)).href)"
     },
     {
+     "from": "kit/test/gate-corpus-plan.test.mjs",
+     "expr": "pathToFileURL(path.join(ROOT, 'tools', 'lib', `${d}.mjs`)).href)"
+    },
+    {
      "from": "kit/test/districts-d2.test.mjs",
      "expr": "path.join(ROOT, 'tools', 'lib', 'd2-replay.mjs'))"
     },
@@ -707,6 +716,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HOME",
     "IRR_ONLY",
@@ -927,8 +937,10 @@
     "kit/test/forms-f3.test.mjs",
     "kit/test/forms-island.test.mjs",
     "kit/test/gate-benches.test.mjs",
+    "kit/test/gate-corpus-plan.test.mjs",
     "kit/test/gate-history.test.mjs",
     "kit/test/gate-split.test.mjs",
+    "kit/test/gate-sprint.test.mjs",
     "kit/test/gate-turbo.test.mjs",
     "kit/test/h-a.test.mjs",
     "kit/test/h-batch.test.mjs",
@@ -1022,6 +1034,7 @@
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/shard-auto.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/step-cache.mjs",
     "tools/lib/step-coverage.mjs",
     "tools/lib/step-inputs.mjs",
@@ -1035,10 +1048,9 @@
     "cherry",
     "dark",
     "nope",
-    "rustic",
-    "tools/lib/**"
+    "rustic"
    ],
-   "verified": "20261022-233059-slice unit-kit"
+   "verified": "20261022-161855-release unit-kit"
   },
   "unit-sidecar": {
    "classes": [
@@ -1064,7 +1076,7 @@
     "pnpm-workspace.yaml",
     "tools/eval.mjs"
    ],
-   "verified": "20261022-233059-slice unit-sidecar"
+   "verified": "20261023-045735-slice unit-sidecar"
   },
   "sim-jobs": {
    "classes": [
@@ -1168,8 +1180,7 @@
    "eager": [
     "tools/apitest.mjs",
     "tools/lib/devclient.mjs"
-   ],
-   "verified": "20261022-233059-slice sim-sets"
+   ]
   },
   "sim-massing": {
    "classes": [
@@ -1221,8 +1232,7 @@
    "eager": [
     "tools/apitest.mjs",
     "tools/lib/devclient.mjs"
-   ],
-   "verified": "20261022-233059-slice sim-massing"
+   ]
   },
   "apijars": {
    "classes": [
@@ -1286,12 +1296,7 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ],
-   "data": [
-    "kit/lint/**",
-    "kit/test/**"
-   ],
-   "verified": "20261022-233059-slice apijars"
+   ]
   },
   "0a-stub": {
    "classes": [
@@ -1958,6 +1963,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -2019,6 +2025,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GATE_UNIT_MOD_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -2249,6 +2256,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -2318,6 +2326,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GATE_UNIT_MOD_RUN",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -2351,6 +2360,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/scenarios.mjs"
    ]
@@ -2898,6 +2908,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
    ],
@@ -2958,6 +2969,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "SCENARIOS_ART",
     "UPDATE_GOLDEN"
    ],
@@ -3177,6 +3189,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -3248,6 +3261,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -3268,7 +3282,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "w-unit": {
@@ -3463,6 +3478,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
    ],
@@ -3526,6 +3542,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "SCENARIOS_ART",
     "UPDATE_EXPECTED",
     "UPDATE_GOLDEN"
@@ -3739,6 +3756,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -3813,6 +3831,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -3834,7 +3853,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "f1-unit": {
@@ -4038,6 +4058,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -4099,6 +4120,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "SCENARIOS_ART",
     "UPDATE_GOLDEN"
@@ -4114,8 +4136,7 @@
     "tools/gate6cf1.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice f1-unit"
+   ]
   },
   "6cf1-scenario-forms": {
    "classes": [
@@ -4296,6 +4317,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -4357,6 +4379,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -4375,9 +4398,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ],
-   "verified": "20261022-233059-slice 6cf1-scenario-forms"
+   ]
   },
   "x-unit": {
    "classes": [
@@ -4520,6 +4543,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh"
    ],
@@ -4564,6 +4588,7 @@
     "GATE6CX_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -4581,8 +4606,7 @@
     "tools/gate6cx.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice x-unit"
+   ]
   },
   "x-ingame": {
    "classes": [
@@ -4779,6 +4803,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -4858,6 +4883,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -4887,9 +4913,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice x-ingame"
+   ]
   },
   "y-unit": {
    "classes": [
@@ -4909,6 +4935,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh"
    ],
@@ -4927,6 +4954,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CY_OUT",
     "GATE6CY_REF",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -4977,6 +5005,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -5004,6 +5033,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CY_OUT",
     "GATE6CY_REF",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -5049,6 +5079,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh"
    ],
@@ -5067,6 +5098,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CY_OUT",
     "GATE6CY_REF",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -5117,6 +5149,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -5144,6 +5177,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CY_OUT",
     "GATE6CY_REF",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -5530,6 +5564,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -5600,6 +5635,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "PATH",
     "SCENARIOS_ART",
@@ -5617,15 +5653,7 @@
     "tools/gate6ct1.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "data": [
-    "deno.json",
-    "deno.jsonc",
-    "lerna.json",
-    "package.json",
-    "pnpm-workspace.yaml"
-   ],
-   "verified": "20261022-233059-slice t1-unit"
+   ]
   },
   "b-unit": {
    "classes": [
@@ -5821,6 +5849,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -5882,6 +5911,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "SCENARIOS_ART",
@@ -5909,8 +5939,7 @@
     "tools/gate6cb.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice b-unit"
+   ]
   },
   "b-ingame": {
    "classes": [
@@ -6112,6 +6141,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -6184,6 +6214,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -6216,9 +6247,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice b-ingame"
+   ]
   },
   "pt-unit": {
    "classes": [
@@ -6370,6 +6401,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/nomod-server.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh"
    ],
@@ -6398,6 +6430,7 @@
     "GATE6CPT_NOMOD_PORT",
     "GATE6CPT_OUT",
     "GATE6CPT_STEPS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -6418,8 +6451,7 @@
    "eager": [
     "tools/gate6cpt.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice pt-unit"
+   ]
   },
   "c33-unit": {
    "classes": [],
@@ -6626,6 +6658,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -6696,6 +6729,7 @@
     "GATE6CPT_OUT",
     "GATE6CPT_STEPS",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -6728,9 +6762,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice pt-ingame"
+   ]
   },
   "pt-nomod": {
    "classes": [
@@ -6919,6 +6953,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -6989,6 +7024,7 @@
     "GATE6CPT_OUT",
     "GATE6CPT_STEPS",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -7021,9 +7057,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice pt-nomod"
+   ]
   },
   "pt2-unit": {
    "classes": [
@@ -7077,6 +7113,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/pt2/Pt2Old027ReadTest.java",
     "tools/run-gate6b-client.sh"
@@ -7117,6 +7154,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CPT2_OUT",
     "GATE6CPT2_STEPS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PT2_V0270"
@@ -7147,15 +7185,7 @@
    "eager": [
     "tools/gate6cpt2.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "data": [
-    "deno.json",
-    "deno.jsonc",
-    "lerna.json",
-    "package.json",
-    "pnpm-workspace.yaml"
-   ],
-   "verified": "20261022-233059-slice pt2-unit"
+   ]
   },
   "pt2-ingame": {
    "classes": [
@@ -7342,6 +7372,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/pt2/Pt2Old027ReadTest.java",
@@ -7418,6 +7449,7 @@
     "GATE6CPT2_OUT",
     "GATE6CPT2_STEPS",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PT2_V0270",
@@ -7460,6 +7492,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -7648,6 +7681,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/pt2/Pt2Old027ReadTest.java",
@@ -7724,6 +7758,7 @@
     "GATE6CPT2_OUT",
     "GATE6CPT2_STEPS",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PT2_V0270",
@@ -7766,9 +7801,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice pt2-survival"
+   ]
   },
   "tile-gravity": {
    "classes": [
@@ -7970,6 +8005,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -8042,6 +8078,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -8074,9 +8111,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice tile-gravity"
+   ]
   },
   "c31-felling": {
    "classes": [
@@ -8278,6 +8315,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -8350,6 +8388,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -8382,9 +8421,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice c31-felling"
+   ]
   },
   "t1-ingame": {
    "classes": [
@@ -8588,6 +8627,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -8669,6 +8709,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -8692,9 +8733,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice t1-ingame"
+   ]
   },
   "6ct1-scenario-relief": {
    "classes": [
@@ -8875,6 +8916,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -8936,6 +8978,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -8954,11 +8997,13 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ],
    "data": [
     "rustic"
-   ]
+   ],
+   "verified": "20261023-045735-slice 6ct1-scenario-relief"
   },
   "f2-unit": {
    "classes": [
@@ -9169,6 +9214,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/stamp-library.mjs",
     "tools/run-gate6b-client.sh",
@@ -9237,6 +9283,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "REFIND",
     "SCENARIOS_ART",
@@ -9262,8 +9309,7 @@
     "tools/gate6cf2.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice f2-unit"
+   ]
   },
   "f2-harvest": {
    "classes": [
@@ -9477,6 +9523,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/stamp-library.mjs",
     "tools/lib/wsserver.mjs",
@@ -9553,6 +9600,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -9583,9 +9631,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice f2-harvest"
+   ]
   },
   "6cf2-scenario-scatter": {
    "classes": [
@@ -9800,6 +9848,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/stamp-library.mjs",
     "tools/lib/wsserver.mjs",
@@ -9876,6 +9925,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -9906,6 +9956,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/scenarios.mjs"
    ]
@@ -10110,6 +10161,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -10180,6 +10232,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "PATH",
     "SCENARIOS_ART",
@@ -10217,6 +10270,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh"
    ],
@@ -10237,25 +10291,14 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CP0_OUT",
+    "GATE_SPRINT",
     "JAVA_HOME"
    ],
    "gradleUse": "compile",
    "eager": [
     "tools/gate6cp0.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "data": [
-    "deno.json",
-    "deno.jsonc",
-    "lerna.json",
-    "package.json",
-    "pnpm-workspace.yaml",
-    "tools/api-compat.mjs",
-    "tools/lib/**",
-    "tools/plan-catalogue-diff.mjs",
-    "tools/scenarios.mjs"
-   ],
-   "verified": "20261022-233059-slice p0-unit"
+   ]
   },
   "c37-unit": {
    "classes": [
@@ -10273,6 +10316,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh"
    ],
    "globs": [],
@@ -10288,6 +10332,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATEC37_OUT",
+    "GATE_SPRINT",
     "JAVA_HOME"
    ],
    "eager": [
@@ -10475,6 +10520,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -10538,6 +10584,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATEC37_OUT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -10556,7 +10603,8 @@
     "tools/gate6c37.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "c38-unit": {
@@ -10663,6 +10711,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh"
    ],
    "globs": [],
@@ -10679,6 +10728,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATEC38_OUT",
+    "GATE_SPRINT",
     "JAVA_HOME"
    ],
    "eager": [
@@ -10866,6 +10916,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -10929,6 +10980,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATEC38_OUT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -10947,7 +10999,8 @@
     "tools/gate6c38.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "rs-unit": {
@@ -11101,17 +11154,22 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate6crs-kit.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -11130,6 +11188,14 @@
     {
      "from": "tools/gate6crs.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -11150,6 +11216,10 @@
     "GATE6CRS_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -11169,6 +11239,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -11188,11 +11259,7 @@
    "eager": [
     "tools/gate6crs.mjs",
     "tools/lib/gate-part.mjs"
-   ],
-   "data": [
-    "tools/lib/**"
-   ],
-   "verified": "20261022-233059-slice rs-unit"
+   ]
   },
   "rs-ingame": {
    "classes": [
@@ -11346,17 +11413,22 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate6crs-kit.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -11375,6 +11447,14 @@
     {
      "from": "tools/gate6crs.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -11395,6 +11475,10 @@
     "GATE6CRS_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -11414,6 +11498,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -11433,8 +11518,7 @@
    "eager": [
     "tools/gate6crs.mjs",
     "tools/lib/gate-part.mjs"
-   ],
-   "verified": "20261022-233059-slice rs-ingame"
+   ]
   },
   "rs-survival": {
    "classes": [
@@ -11588,17 +11672,22 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate6crs-kit.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -11617,6 +11706,14 @@
     {
      "from": "tools/gate6crs.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -11637,6 +11734,10 @@
     "GATE6CRS_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -11656,6 +11757,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -11830,17 +11932,22 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate6crs-kit.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -11859,6 +11966,14 @@
     {
      "from": "tools/gate6crs.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -11879,6 +11994,10 @@
     "GATE6CRS_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -11898,6 +12017,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -12071,17 +12191,22 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate6crs-kit.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -12100,6 +12225,14 @@
     {
      "from": "tools/gate6crs.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -12120,6 +12253,10 @@
     "GATE6CRS_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -12139,6 +12276,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/gate6crs-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -12158,8 +12296,7 @@
    "eager": [
     "tools/gate6crs.mjs",
     "tools/lib/gate-part.mjs"
-   ],
-   "verified": "20261022-233059-slice rs-crash"
+   ]
   },
   "rsb-ingame": {
    "classes": [
@@ -12312,17 +12449,24 @@
     "tools/gate-chains.json",
     "tools/gate6crsb.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate6crsb-game.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -12340,6 +12484,14 @@
     {
      "from": "tools/gate6crsb.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -12357,9 +12509,14 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CRSB_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GATE_SLOTS",
     "GATE_SLOTS_DIR",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -12369,7 +12526,9 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -12381,8 +12540,7 @@
    "gradleUse": "tests",
    "eager": [
     "tools/gate6crsb.mjs"
-   ],
-   "verified": "20261022-233059-slice rsb-ingame"
+   ]
   },
   "rsb-crash": {
    "classes": [
@@ -12535,17 +12693,24 @@
     "tools/gate-chains.json",
     "tools/gate6crsb.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
+    "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate6crsb-game.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -12563,6 +12728,14 @@
     {
      "from": "tools/gate6crsb.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -12580,9 +12753,14 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CRSB_OUT",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
     "GATE_SLOTS",
     "GATE_SLOTS_DIR",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -12592,7 +12770,9 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -12789,6 +12969,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -12856,6 +13037,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CP0_OUT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -12875,9 +13057,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice p0-ingame"
+   ]
   },
   "p0-natural": {
    "classes": [
@@ -13062,6 +13244,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -13129,6 +13312,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CP0_OUT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -13148,9 +13332,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice p0-natural"
+   ]
   },
   "t2-ingame": {
    "classes": [
@@ -13358,6 +13542,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -13439,6 +13624,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -13462,6 +13648,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -13690,6 +13877,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/plan-catalogue-diff.mjs",
     "tools/release-context.mjs",
     "tools/run-gate6b-client.sh",
@@ -13759,6 +13947,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "SCENARIOS_ART",
     "T3A_WRITE_GOLDEN",
@@ -13778,8 +13967,7 @@
     "tools/gate6ct3a.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs"
-   ],
-   "verified": "20261022-233059-slice t3a-unit"
+   ]
   },
   "t3a-probe": {
    "classes": [
@@ -14012,6 +14200,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/plan-catalogue-diff.mjs",
     "tools/release-context.mjs",
@@ -14092,6 +14281,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -14118,9 +14308,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice t3a-probe"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "t3a-ingame": {
    "classes": [
@@ -14353,6 +14543,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/plan-catalogue-diff.mjs",
     "tools/release-context.mjs",
@@ -14433,6 +14624,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -14459,9 +14651,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice t3a-ingame"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "t3a-natural": {
    "classes": [
@@ -14694,6 +14886,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/plan-catalogue-diff.mjs",
     "tools/release-context.mjs",
@@ -14774,6 +14967,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -14800,9 +14994,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice t3a-natural"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "t3a-frozen": {
    "classes": [
@@ -15031,6 +15225,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/plan-catalogue-diff.mjs",
     "tools/release-context.mjs",
@@ -15108,6 +15303,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "SCENARIOS_ART",
@@ -15129,8 +15325,7 @@
     "tools/gate6ct3a.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs"
-   ],
-   "verified": "20261022-233059-slice t3a-frozen"
+   ]
   },
   "t3a-look": {
    "classes": [
@@ -15363,6 +15558,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/plan-catalogue-diff.mjs",
     "tools/release-context.mjs",
@@ -15443,6 +15639,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -15469,9 +15666,10 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ],
-   "verified": "20261022-233059-slice t3a-look"
+   "verified": "20261022-161855-release t3a-look"
   },
   "k1b-unit": {
    "classes": [
@@ -15682,6 +15880,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
    ],
@@ -15748,6 +15947,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "K1B_WRITE_GOLDEN",
     "SCENARIOS_ART",
     "UPDATE_EXPECTED",
@@ -15764,8 +15964,7 @@
     "tools/gate7ak1b.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs"
-   ],
-   "verified": "20261022-233059-slice k1b-unit"
+   ]
   },
   "k1b-ingame": {
    "classes": [
@@ -15982,6 +16181,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -16059,6 +16259,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "K1B_WRITE_GOLDEN",
@@ -16083,9 +16284,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice k1b-ingame"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "k1b-natural": {
    "classes": [
@@ -16302,6 +16503,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -16379,6 +16581,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "K1B_WRITE_GOLDEN",
@@ -16403,9 +16606,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice k1b-natural"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "t3b-unit": {
    "classes": [
@@ -16625,6 +16828,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
    ],
@@ -16692,6 +16896,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "SCENARIOS_ART",
     "T3B_WRITE_FIXTURE",
     "UPDATE_EXPECTED",
@@ -16712,8 +16917,7 @@
    "eager": [
     "tools/gate6ct3b.mjs",
     "tools/lib/kit-reuse.mjs"
-   ],
-   "verified": "20261022-233059-slice t3b-unit"
+   ]
   },
   "t3b-ingame": {
    "classes": [
@@ -16938,6 +17142,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -17014,6 +17219,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -17041,9 +17247,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice t3b-ingame"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "t3b-natural": {
    "classes": [
@@ -17268,6 +17474,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -17344,6 +17551,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -17371,9 +17579,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice t3b-natural"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "t3b-pin": {
    "classes": [
@@ -17598,6 +17806,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -17674,6 +17883,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -17701,7 +17911,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "t3b-look": {
@@ -17927,6 +18138,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -18003,6 +18215,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -18030,9 +18243,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice t3b-look"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "h-unit": {
    "classes": [
@@ -18264,6 +18477,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/release-context.mjs",
     "tools/run-gate6b-client.sh",
@@ -18341,6 +18555,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "SCENARIOS_ART",
     "UPDATE_EXPECTED",
@@ -18369,9 +18584,6 @@
     "tools/gate6ch.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs"
-   ],
-   "data": [
-    "tools/lib/**"
    ]
   },
   "h-ingame": {
@@ -18610,6 +18822,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -18698,6 +18911,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -18732,7 +18946,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ],
    "verified": "20261022-161855-release h-ingame"
   },
@@ -18972,6 +19187,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -19060,6 +19276,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -19094,12 +19311,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "data": [
-    "tools/lib/**"
-   ],
-   "verified": "20261022-233059-slice h-crash"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "h-probe": {
    "classes": [
@@ -19337,6 +19551,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -19425,6 +19640,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -19459,7 +19675,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "h-natural": {
@@ -19698,6 +19915,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -19786,6 +20004,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -19820,7 +20039,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "h-cold": {
@@ -20059,6 +20279,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -20147,6 +20368,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -20181,7 +20403,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6ch-look": {
@@ -20420,6 +20643,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -20508,6 +20732,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -20542,7 +20767,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "voc-unit": {
@@ -20734,12 +20960,16 @@
     "tools/gate6cvoc.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -20757,6 +20987,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -20805,6 +21036,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -20821,6 +21060,10 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "JAVA",
     "JAVA_HOME",
     "PATH",
@@ -20830,6 +21073,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -21054,12 +21298,16 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -21078,6 +21326,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -21130,6 +21379,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -21153,6 +21410,10 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -21164,6 +21425,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -21185,12 +21447,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "data": [
-    "tools/lib/**"
-   ],
-   "verified": "20261022-233059-slice voc-registry"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "voc-probe": {
    "classes": [
@@ -21386,12 +21645,16 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -21410,6 +21673,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -21462,6 +21726,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -21485,6 +21757,10 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -21496,6 +21772,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -21517,12 +21794,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "data": [
-    "tools/lib/**"
-   ],
-   "verified": "20261022-233059-slice voc-probe"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "voc-survival": {
    "classes": [
@@ -21718,12 +21992,16 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -21742,6 +22020,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -21794,6 +22073,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -21817,6 +22104,10 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -21828,6 +22119,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -21849,7 +22141,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "voc-ingame": {
@@ -22046,12 +22339,16 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -22070,6 +22367,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -22122,6 +22420,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -22145,6 +22451,10 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -22156,6 +22466,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -22177,12 +22488,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "data": [
-    "tools/lib/**"
-   ],
-   "verified": "20261022-233059-slice voc-ingame"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "voc-natural": {
    "classes": [
@@ -22378,12 +22686,16 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -22402,6 +22714,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -22454,6 +22767,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -22477,6 +22798,10 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -22488,6 +22813,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -22509,12 +22835,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "data": [
-    "tools/lib/**"
-   ],
-   "verified": "20261022-233059-slice voc-natural"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "vocc-unit": {
    "classes": [
@@ -22705,12 +23028,16 @@
     "tools/gate6cvoc.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -22728,6 +23055,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -22776,6 +23104,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -22792,6 +23128,10 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "JAVA",
     "JAVA_HOME",
     "PATH",
@@ -22801,6 +23141,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -22820,18 +23161,12 @@
     "tools/lib/gate-part.mjs"
    ],
    "data": [
-    "deno.json",
-    "deno.jsonc",
-    "lerna.json",
     "node_modules",
-    "package.json",
-    "pnpm-workspace.yaml",
-    "tools/lib/**"
+    "package.json"
    ],
    "derived": [
     "node_modules/**"
-   ],
-   "verified": "20261022-233059-slice vocc-unit"
+   ]
   },
   "vocc-ingame": {
    "classes": [
@@ -23027,12 +23362,16 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -23051,6 +23390,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -23103,6 +23443,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -23126,6 +23474,10 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -23137,6 +23489,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -23158,12 +23511,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "data": [
-    "tools/lib/**"
-   ],
-   "verified": "20261022-233059-slice vocc-ingame"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "6cvoc-look": {
    "classes": [
@@ -23359,12 +23709,16 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -23383,6 +23737,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -23435,6 +23790,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -23458,6 +23821,10 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -23469,6 +23836,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -23490,12 +23858,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "data": [
-    "tools/lib/**"
-   ],
-   "verified": "20261022-233059-slice 6cvoc-look"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "cu-unit": {
    "classes": [
@@ -23514,6 +23879,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh"
    ],
@@ -23535,6 +23901,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CCU_OUT",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "PATH"
    ],
@@ -23551,7 +23918,8 @@
    "gradleUse": "tests",
    "eager": [
     "tools/gate6ccu.mjs"
-   ]
+   ],
+   "verified": "20261023-045735-slice cu-unit"
   },
   "cu-measure": {
    "classes": [
@@ -23735,6 +24103,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -23803,6 +24172,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CCU_OUT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -23832,7 +24202,8 @@
     "tools/gate6ccu.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "cu-ingame": {
@@ -24017,6 +24388,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -24085,6 +24457,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CCU_OUT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -24114,9 +24487,9 @@
     "tools/gate6ccu.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice cu-ingame"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "rp-unit": {
    "classes": [
@@ -24223,6 +24596,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh"
    ],
@@ -24246,6 +24620,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CRP_OUT",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "PATH"
    ],
@@ -24444,6 +24819,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -24513,6 +24889,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CRP_OUT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -24537,7 +24914,8 @@
     "tools/gate6crp.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "rp-crash": {
@@ -24725,6 +25103,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -24794,6 +25173,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CRP_OUT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -24818,7 +25198,8 @@
     "tools/gate6crp.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "cu-survival": {
@@ -24846,6 +25227,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -24879,6 +25261,7 @@
     "GATE6CCU_OUT",
     "GATE6CY_OUT",
     "GATE6CY_REF",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH"
@@ -25112,6 +25495,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
    ],
@@ -25175,6 +25559,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "SCENARIOS_ART"
    ],
    "flags": {
@@ -25392,6 +25777,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -25466,6 +25852,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -25486,12 +25873,9 @@
     "tools/gate6cha.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "data": [
-    "tools/lib/**"
-   ],
-   "verified": "20261022-233059-slice ha-ingame"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "ha-natural": {
    "classes": [
@@ -25696,6 +26080,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -25770,6 +26155,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -25790,7 +26176,8 @@
     "tools/gate6cha.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "ha-cold": {
@@ -25996,6 +26383,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -26070,6 +26458,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -26090,7 +26479,8 @@
     "tools/gate6cha.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "ha-look": {
@@ -26296,6 +26686,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -26370,6 +26761,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -26390,7 +26782,8 @@
     "tools/gate6cha.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-unit": {
@@ -26586,7 +26979,11 @@
     "tools/api-compat.mjs",
     "tools/catalogue-since-check.mjs",
     "tools/gate6chy.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -26595,6 +26992,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -26610,6 +27008,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/release-context.mjs",
     "tools/run-gate6b-client.sh",
@@ -26659,6 +27058,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -26676,7 +27083,12 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -26688,7 +27100,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -26707,7 +27121,7 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs"
    ],
-   "verified": "20261022-233059-slice hy-unit"
+   "verified": "20261022-161855-release hy-unit"
   },
   "h-holders": {
    "classes": [
@@ -26945,6 +27359,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -27033,6 +27448,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -27067,12 +27483,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "data": [
-    "tools/lib/**"
-   ],
-   "verified": "20261022-233059-slice h-holders"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "irr-holders": {
    "classes": [
@@ -27268,6 +27681,9 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -27294,6 +27710,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -27315,6 +27732,14 @@
     {
      "from": "tools/gate6cirr.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     },
     {
      "from": "kit/lib/components.mjs",
@@ -27347,10 +27772,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -27374,6 +27795,10 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -27416,9 +27841,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice irr-holders"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "h-rmcrash": {
    "classes": [
@@ -27656,6 +28081,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -27744,6 +28170,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -27778,12 +28205,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "data": [
-    "tools/lib/**"
-   ],
-   "verified": "20261022-233059-slice h-rmcrash"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "hy-ingame": {
    "classes": [
@@ -27983,7 +28407,11 @@
     "tools/gate6b.mjs",
     "tools/gate6chy.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -27992,6 +28420,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -28008,6 +28437,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -28061,6 +28491,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -28085,7 +28523,12 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -28099,7 +28542,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -28121,7 +28566,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ],
    "verified": "20261022-161855-release hy-ingame"
   },
@@ -28323,7 +28769,11 @@
     "tools/gate6b.mjs",
     "tools/gate6chy.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -28332,6 +28782,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -28348,6 +28799,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -28401,6 +28853,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -28425,7 +28885,12 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -28439,7 +28904,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -28461,7 +28928,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-natural": {
@@ -28662,7 +29130,11 @@
     "tools/gate6b.mjs",
     "tools/gate6chy.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -28671,6 +29143,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -28687,6 +29160,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -28740,6 +29214,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -28764,7 +29246,12 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -28778,7 +29265,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -28800,7 +29289,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-cold": {
@@ -29001,7 +29491,11 @@
     "tools/gate6b.mjs",
     "tools/gate6chy.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -29010,6 +29504,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -29026,6 +29521,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -29079,6 +29575,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -29103,7 +29607,12 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -29117,7 +29626,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -29139,7 +29650,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "kc-unit": {
@@ -29314,6 +29826,9 @@
     "tools/gate6ckc.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -29337,6 +29852,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
    ],
@@ -29383,8 +29899,12 @@
      "expr": "pathToFileURL(file).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -29401,6 +29921,10 @@
     "GATE6CKC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -29422,7 +29946,8 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/p3-tier.mjs"
-   ]
+   ],
+   "verified": "20261023-045735-slice kc-unit"
   },
   "kc-ingame": {
    "classes": [
@@ -29601,6 +30126,9 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -29625,6 +30153,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -29675,8 +30204,12 @@
      "expr": "pathToFileURL(file).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -29700,6 +30233,10 @@
     "GATE6CKC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -29728,7 +30265,8 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "f3-unit": {
@@ -29913,6 +30451,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -29939,6 +30480,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -29960,6 +30502,14 @@
     {
      "from": "tools/gate6cf3.mjs",
      "expr": "pathToFileURL(coralLib).href)).coralItems(ctx)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     },
     {
      "from": "kit/lib/components.mjs",
@@ -29988,10 +30538,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -30009,6 +30555,10 @@
     "GATE6CF3_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -30036,7 +30586,8 @@
    "eager": [
     "tools/gate6cf3.mjs",
     "tools/lib/gate-part.mjs"
-   ]
+   ],
+   "verified": "20261023-045735-slice f3-unit"
   },
   "f3-ingame": {
    "classes": [
@@ -30225,6 +30776,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -30252,6 +30806,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -30277,6 +30832,14 @@
     {
      "from": "tools/gate6cf3.mjs",
      "expr": "pathToFileURL(coralLib).href)).coralItems(ctx)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     },
     {
      "from": "kit/lib/components.mjs",
@@ -30305,10 +30868,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -30333,6 +30892,10 @@
     "GATE6CF3_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -30366,9 +30929,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice f3-ingame"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "f3-natural": {
    "classes": [
@@ -30557,6 +31120,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -30584,6 +31150,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -30609,6 +31176,14 @@
     {
      "from": "tools/gate6cf3.mjs",
      "expr": "pathToFileURL(coralLib).href)).coralItems(ctx)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     },
     {
      "from": "kit/lib/components.mjs",
@@ -30637,10 +31212,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -30665,6 +31236,10 @@
     "GATE6CF3_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -30698,9 +31273,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice f3-natural"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "f3-forest": {
    "classes": [
@@ -30884,6 +31459,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -30910,6 +31488,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -30931,6 +31510,14 @@
     {
      "from": "tools/gate6cf3.mjs",
      "expr": "pathToFileURL(coralLib).href)).coralItems(ctx)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     },
     {
      "from": "kit/lib/components.mjs",
@@ -30959,10 +31546,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -30980,6 +31563,10 @@
     "GATE6CF3_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -31007,8 +31594,7 @@
    "eager": [
     "tools/gate6cf3.mjs",
     "tools/lib/gate-part.mjs"
-   ],
-   "verified": "20261022-233059-slice f3-forest"
+   ]
   },
   "f3-look": {
    "classes": [
@@ -31197,6 +31783,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -31224,6 +31813,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -31249,6 +31839,14 @@
     {
      "from": "tools/gate6cf3.mjs",
      "expr": "pathToFileURL(coralLib).href)).coralItems(ctx)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     },
     {
      "from": "kit/lib/components.mjs",
@@ -31277,10 +31875,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -31305,6 +31899,10 @@
     "GATE6CF3_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -31338,7 +31936,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "irr-unit": {
@@ -31530,6 +32129,9 @@
     "tools/gate6cirr.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -31555,6 +32157,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -31572,6 +32175,14 @@
     {
      "from": "tools/gate6cirr.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     },
     {
      "from": "kit/lib/components.mjs",
@@ -31604,10 +32215,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -31624,6 +32231,10 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -31856,6 +32467,9 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -31882,6 +32496,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -31903,6 +32518,14 @@
     {
      "from": "tools/gate6cirr.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     },
     {
      "from": "kit/lib/components.mjs",
@@ -31935,10 +32558,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -31962,6 +32581,10 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -32004,7 +32627,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ],
    "verified": "20261022-161855-release irr-ingame"
   },
@@ -32202,6 +32826,9 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -32228,6 +32855,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -32249,6 +32877,14 @@
     {
      "from": "tools/gate6cirr.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     },
     {
      "from": "kit/lib/components.mjs",
@@ -32281,10 +32917,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -32308,6 +32940,10 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -32350,9 +32986,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice irr-crash"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "irr-look": {
    "classes": [
@@ -32548,6 +33184,9 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -32574,6 +33213,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -32595,6 +33235,14 @@
     {
      "from": "tools/gate6cirr.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     },
     {
      "from": "kit/lib/components.mjs",
@@ -32627,10 +33275,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -32654,6 +33298,10 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -32696,7 +33344,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "fl-unit": {
@@ -32872,6 +33521,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -32897,6 +33549,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -32945,8 +33598,12 @@
      "expr": "pathToFileURL(file).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -32963,6 +33620,10 @@
     "GATE6CFL_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -32993,12 +33654,18 @@
     "tools/lib/gate-part.mjs"
    ],
    "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
     "node_modules",
-    "package.json"
+    "package.json",
+    "pnpm-workspace.yaml",
+    "tools/lib/**"
    ],
    "derived": [
     "node_modules/**"
-   ]
+   ],
+   "verified": "20261023-045735-slice fl-unit"
   },
   "fl-ingame": {
    "classes": [
@@ -33178,6 +33845,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -33204,6 +33874,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -33256,8 +33927,12 @@
      "expr": "pathToFileURL(file).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -33281,6 +33956,10 @@
     "GATE6CFL_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -33315,9 +33994,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice fl-ingame"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "fl-natural": {
    "classes": [
@@ -33497,6 +34176,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -33523,6 +34205,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -33575,8 +34258,12 @@
      "expr": "pathToFileURL(file).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -33600,6 +34287,10 @@
     "GATE6CFL_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -33634,12 +34325,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "data": [
-    "tools/lib/**"
-   ],
-   "verified": "20261022-233059-slice fl-natural"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "fl-look": {
    "classes": [
@@ -33819,6 +34507,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -33845,6 +34536,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -33897,8 +34589,12 @@
      "expr": "pathToFileURL(file).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -33922,6 +34618,10 @@
     "GATE6CFL_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -33956,9 +34656,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice fl-look"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "water-lint": {
    "classes": [],
@@ -34231,12 +34931,7 @@
     "kit/vocab/hazards.json",
     "kit/vocab/roles.json",
     "kit/vocab/tiers.json"
-   ],
-   "data": [
-    "scenarios/goldens/route_demo/**",
-    "scenarios/goldens/s7/**"
-   ],
-   "verified": "20261022-233059-slice water-lint"
+   ]
   },
   "p3-lint": {
    "classes": [
@@ -34728,6 +35423,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -34816,6 +35512,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -34850,7 +35547,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "h-probe-smoke": {
@@ -35089,6 +35787,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -35177,6 +35876,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -35211,12 +35911,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "data": [
-    "tools/lib/**"
-   ],
-   "verified": "20261022-233059-slice h-probe-smoke"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "hy-ingame-smoke": {
    "classes": [
@@ -35416,7 +36113,11 @@
     "tools/gate6b.mjs",
     "tools/gate6chy.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -35425,6 +36126,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -35441,6 +36143,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -35494,6 +36197,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -35518,7 +36229,12 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -35532,7 +36248,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -35554,8 +36272,10 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
-   ]
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ],
+   "verified": "20261023-045735-slice hy-ingame-smoke"
   },
   "hy-crash-smoke": {
    "classes": [
@@ -35755,7 +36475,11 @@
     "tools/gate6b.mjs",
     "tools/gate6chy.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -35764,6 +36488,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -35780,6 +36505,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -35833,6 +36559,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -35857,7 +36591,12 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -35871,7 +36610,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -35893,9 +36634,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice hy-crash-smoke"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "hy-cold-smoke": {
    "classes": [
@@ -36095,7 +36836,11 @@
     "tools/gate6b.mjs",
     "tools/gate6chy.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -36104,6 +36849,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -36120,6 +36866,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -36173,6 +36920,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -36197,7 +36952,12 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -36211,7 +36971,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -36233,9 +36995,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice hy-cold-smoke"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "irr-ingame-smoke": {
    "classes": [
@@ -36431,6 +37193,9 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -36457,6 +37222,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -36478,6 +37244,14 @@
     {
      "from": "tools/gate6cirr.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     },
     {
      "from": "kit/lib/components.mjs",
@@ -36510,10 +37284,6 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/gate6ckc-kit.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
     }
    ],
    "env": [
@@ -36537,6 +37307,10 @@
     "GATE6CIRR_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -36579,7 +37353,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "kc-ingame-smoke": {
@@ -36759,6 +37534,9 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -36783,6 +37561,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -36833,8 +37612,12 @@
      "expr": "pathToFileURL(file).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -36858,6 +37641,10 @@
     "GATE6CKC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -36886,9 +37673,9 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice kc-ingame-smoke"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "voc-survival-smoke": {
    "classes": [
@@ -37084,12 +37871,16 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -37108,6 +37899,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -37160,6 +37952,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -37183,6 +37983,10 @@
     "GATE6CVOC_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -37194,6 +37998,7 @@
     "originMain": [
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -37215,12 +38020,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "data": [
-    "tools/lib/**"
-   ],
-   "verified": "20261022-233059-slice voc-survival-smoke"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "y-ingame-smoke": {
    "classes": [
@@ -37245,6 +38047,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -37272,6 +38075,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CY_OUT",
     "GATE6CY_REF",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -37322,6 +38126,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -37349,6 +38154,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CY_OUT",
     "GATE6CY_REF",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -37574,7 +38380,11 @@
     "tools/gate6b.mjs",
     "tools/gate6chy.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -37583,6 +38393,7 @@
     "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-c.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/plan-cache.mjs",
@@ -37599,6 +38410,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/release-context.mjs",
@@ -37652,6 +38464,14 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -37676,7 +38496,12 @@
     "GATE6CHY_SKIP_CORE",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -37690,7 +38515,9 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6chy.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -37712,7 +38539,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "s2-unit": {
@@ -37917,6 +38745,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -37983,6 +38812,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "SCENARIOS_ART",
     "UPDATE_EXPECTED",
@@ -38195,6 +39025,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/d2-replay.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -38222,6 +39055,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -38281,8 +39115,12 @@
      "expr": "pathToFileURL(path.join(root, 'kit', p)).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -38303,6 +39141,10 @@
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -38535,6 +39377,9 @@
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/batch-0410.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/d2-replay.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -38563,6 +39408,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -38626,8 +39472,12 @@
      "expr": "pathToFileURL(path.join(root, 'kit', p)).href)"
     },
     {
-     "from": "tools/lib/gate6ckc-kit.mjs",
+     "from": "tools/lib/corpus-derive.mjs",
      "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     }
    ],
    "env": [
@@ -38655,6 +39505,10 @@
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -38692,9 +39546,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice s3-plan"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "6c-scenario-s3": {
    "classes": [
@@ -38875,6 +39729,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -38936,6 +39791,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -38954,12 +39810,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ],
-   "data": [
-    "rustic"
-   ],
-   "verified": "20261022-233059-slice 6c-scenario-s3"
+   ]
   },
   "6c-scenario-s3-dev": {
    "classes": [
@@ -39140,6 +39993,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -39201,6 +40055,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -39219,6 +40074,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -39401,6 +40257,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -39462,6 +40319,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -39480,12 +40338,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ],
-   "data": [
-    "rustic"
-   ],
-   "verified": "20261022-233059-slice 6c-scenario-s2"
+   ]
   },
   "6ct2-scenario-route": {
    "classes": [
@@ -39666,6 +40521,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -39727,6 +40583,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -39745,10 +40602,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ],
-   "data": [
-    "rustic"
    ]
   },
   "d-unit": {
@@ -39987,6 +40842,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -40063,6 +40919,7 @@
     "GATE_KIT_TREE",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "P2_CALIBRATION_LATEST",
     "PATH",
@@ -40082,15 +40939,7 @@
     "tools/gate6cd.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "data": [
-    "deno.json",
-    "deno.jsonc",
-    "lerna.json",
-    "package.json",
-    "pnpm-workspace.yaml"
-   ],
-   "verified": "20261022-233059-slice d-unit"
+   ]
   },
   "d-ingame": {
    "classes": [
@@ -40334,6 +41183,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -40421,6 +41271,7 @@
     "GATE_KIT_TREE",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "P2_CALIBRATION_LATEST",
@@ -40446,9 +41297,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice d-ingame"
+   ]
   },
   "6cd-scenario-districts": {
    "classes": [
@@ -40629,6 +41480,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -40690,6 +41542,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -40708,12 +41561,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ],
-   "data": [
-    "rustic"
-   ],
-   "verified": "20261022-233059-slice 6cd-scenario-districts"
+   ]
   },
   "k1a-unit": {
    "classes": [
@@ -40943,6 +41793,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -41013,6 +41864,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "JAVA_HOME",
     "PATH",
     "SCENARIOS_ART",
@@ -41031,17 +41883,7 @@
     "tools/gate7ak1.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "data": [
-    "deno.json",
-    "deno.jsonc",
-    "lerna.json",
-    "package.json",
-    "pnpm-workspace.yaml",
-    "tools/api-compat.mjs",
-    "tools/plan-catalogue-diff.mjs"
-   ],
-   "verified": "20261022-233059-slice k1a-unit"
+   ]
   },
   "k1a-ingame": {
    "classes": [
@@ -41277,6 +42119,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -41358,6 +42201,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -41382,9 +42226,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice k1a-ingame"
+   ]
   },
   "k1a-natural": {
    "classes": [
@@ -41620,6 +42464,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -41701,6 +42546,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -41725,9 +42571,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice k1a-natural"
+   ]
   },
   "k1a-target": {
    "classes": [
@@ -41963,6 +42809,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -42044,6 +42891,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -42068,9 +42916,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice k1a-target"
+   ]
   },
   "k1a-look": {
    "classes": [
@@ -42306,6 +43154,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -42387,6 +43236,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "PATH",
@@ -42411,9 +43261,10 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
-   "verified": "20261022-233059-slice k1a-look"
+   "verified": "20261022-161855-release k1a-look"
   },
   "d2-ingame": {
    "classes": [
@@ -42657,6 +43508,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -42744,6 +43596,7 @@
     "GATE_KIT_TREE",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "P2_CALIBRATION_LATEST",
@@ -42769,6 +43622,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -42950,6 +43804,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -43011,6 +43866,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -43028,7 +43884,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "x-resume": {
@@ -43226,6 +44083,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -43305,6 +44163,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -43334,9 +44193,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice x-resume"
+   ]
   },
   "x-resume-full": {
    "classes": [
@@ -43533,6 +44392,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -43612,6 +44472,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -43641,6 +44502,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -43843,6 +44705,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -43917,6 +44780,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -43939,12 +44803,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ],
-   "data": [
-    "rustic"
-   ],
-   "verified": "20261022-233059-slice 6cv-scenario-s7"
+   ]
   },
   "0b-unit": {
    "classes": [
@@ -44225,8 +45086,7 @@
     "tools/gate4e.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ],
-   "verified": "20261022-233059-slice 4e-megalite"
+   ]
   },
   "c30-ingame": {
    "classes": [
@@ -44498,8 +45358,7 @@
     "tools/gate4e.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ],
-   "verified": "20261022-233059-slice 4e-orders"
+   ]
   },
   "4e-orders-full": {
    "classes": [
@@ -44658,8 +45517,7 @@
     "tools/gate4e.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ],
-   "verified": "20261022-233059-slice 4e-crash"
+   ]
   },
   "4e-crash-full": {
    "classes": [
@@ -45272,8 +46130,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/tickbar.mjs"
-   ],
-   "verified": "20261022-233059-slice 5b-village"
+   ]
   },
   "6a-megaA": {
    "classes": [
@@ -45337,8 +46194,7 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ],
-   "verified": "20261022-233059-slice 6a-megaA"
+   ]
   },
   "6a-megaB": {
    "classes": [
@@ -45659,8 +46515,7 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ],
-   "verified": "20261022-233059-slice 6a-eflat"
+   ]
   },
   "6a-eflat-full": {
    "classes": [
@@ -45788,8 +46643,7 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ],
-   "verified": "20261022-233059-slice 6a-forest"
+   ]
   },
   "6b-smoke": {
    "classes": [
@@ -45969,6 +46823,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -46030,6 +46885,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -46047,9 +46903,9 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice 6b-smoke"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "6b-ghost": {
    "classes": [
@@ -46229,6 +47085,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -46290,6 +47147,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -46307,9 +47165,9 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice 6b-ghost"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "6b-volume": {
    "classes": [
@@ -46489,6 +47347,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -46550,6 +47409,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -46567,9 +47427,10 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ],
-   "verified": "20261022-233059-slice 6b-volume"
+   "verified": "20261023-045735-slice 6b-volume"
   },
   "6b-commands": {
    "classes": [
@@ -46749,6 +47610,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -46810,6 +47672,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -46827,7 +47690,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-nudges": {
@@ -47008,6 +47872,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -47069,6 +47934,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -47086,9 +47952,9 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice 6b-nudges"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "6b-pathstyle": {
    "classes": [
@@ -47268,6 +48134,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -47329,6 +48196,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -47346,9 +48214,9 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice 6b-pathstyle"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "6b-versions": {
    "classes": [
@@ -47528,6 +48396,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -47589,6 +48458,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -47606,9 +48476,9 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "verified": "20261022-233059-slice 6b-versions"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "6b-versionc": {
    "classes": [
@@ -47788,6 +48658,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -47849,6 +48720,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -47866,7 +48738,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-scenario-s1": {
@@ -48048,6 +48921,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -48109,6 +48983,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -48127,12 +49002,9 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ],
-   "data": [
-    "rustic"
-   ],
-   "verified": "20261022-233059-slice 6b-scenario-s1"
+   ]
   },
   "6b-scenario-s1-flat": {
    "classes": [
@@ -48313,6 +49185,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -48374,6 +49247,7 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -48392,6 +49266,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -48457,8 +49332,7 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ],
-   "verified": "20261022-233059-slice 6a-inv3"
+   ]
   },
   "6a-staged": {
    "classes": [
@@ -48522,8 +49396,7 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ],
-   "verified": "20261022-233059-slice 6a-staged"
+   ]
   },
   "6a-staged-full": {
    "classes": [
@@ -48876,6 +49749,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -48952,6 +49826,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "REFIND",
@@ -48979,7 +49854,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "lint-structure": {
@@ -49104,33 +49980,7 @@
    ],
    "eager": [
     "tools/lint.mjs"
-   ],
-   "data": [
-    "kit/lib/**",
-    "kit/regions/**",
-    "kit/schemas/**",
-    "kit/test/**",
-    "kit/test/fixtures/plan/even/**",
-    "kit/test/fixtures/plan/f3/**",
-    "kit/test/fixtures/plan/fl/**",
-    "kit/test/fixtures/plan/h/**",
-    "kit/test/fixtures/plan/hy/**",
-    "kit/test/fixtures/plan/irr/**",
-    "kit/test/fixtures/plan/k1a/**",
-    "kit/test/fixtures/plan/kc/**",
-    "kit/test/fixtures/plan/refused/**",
-    "kit/test/fixtures/plan/rope/**",
-    "kit/test/fixtures/plan/rs/**",
-    "kit/test/fixtures/plan/t3a/**",
-    "kit/test/fixtures/plan/tunnel/**",
-    "kit/test/fixtures/plan/valid/**",
-    "kit/test/fixtures/plan/voc/**",
-    "kit/test/fixtures/plan/vocc/**",
-    "kit/vocab/**",
-    "kit/voxel_classes.json",
-    "scenarios/bibles/**"
-   ],
-   "verified": "20261022-233059-slice lint-structure"
+   ]
   },
   "lint-look": {
    "classes": [],
@@ -49254,16 +50104,7 @@
    ],
    "eager": [
     "tools/lint.mjs"
-   ],
-   "data": [
-    "kit/lib/**",
-    "kit/regions/**",
-    "kit/schemas/**",
-    "kit/test/**",
-    "kit/vocab/**",
-    "kit/voxel_classes.json"
-   ],
-   "verified": "20261022-233059-slice lint-look"
+   ]
   },
   "lint-mutations": {
    "classes": [],
@@ -49387,14 +50228,7 @@
    ],
    "eager": [
     "tools/lint.mjs"
-   ],
-   "data": [
-    "kit/lib/**",
-    "kit/regions/**",
-    "kit/vocab/**",
-    "kit/voxel_classes.json"
-   ],
-   "verified": "20261022-233059-slice lint-mutations"
+   ]
   },
   "p2-calibration": {
    "classes": [
@@ -49637,6 +50471,9 @@
     "tools/gen-palettes.mjs",
     "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/corpus-derive.mjs",
+    "tools/lib/corpus-plan-worker.mjs",
+    "tools/lib/corpus-plan.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
@@ -49644,6 +50481,7 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6ch-core.mjs",
     "tools/lib/gate6chy-core.mjs",
+    "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-a.mjs",
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/gate6cvoc-c.mjs",
@@ -49664,6 +50502,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/plan-catalogue-diff.mjs",
@@ -49733,6 +50572,14 @@
      "expr": "`data:text/javascript"
     },
     {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
+    },
+    {
      "from": "tools/gate6ct3a.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
     },
@@ -49769,6 +50616,10 @@
     "GATE_MERGE_BASE",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_PLAN_CACHE",
+    "GATE_PLAN_CACHE_DIR",
+    "GATE_PLAN_WORKERS",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
     "JAVA_HOME",
@@ -49789,6 +50640,7 @@
      "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
+     "tools/lib/gate6ckc-kit.mjs",
      "tools/lib/plan-cache.mjs"
     ]
    },
@@ -49815,12 +50667,9 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
-   ],
-   "data": [
-    "tools/lib/**"
-   ],
-   "verified": "20261022-233059-slice p2-calibration"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "w-ingame-smoke": {
    "classes": [
@@ -50023,6 +50872,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
     "tools/run-headless-server.mjs",
@@ -50098,6 +50948,7 @@
     "GATE_KIT_TREE",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "P2_CALIBRATION_LATEST",
@@ -50121,7 +50972,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p2-trim.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "d2-ingame-smoke": {
@@ -50366,6 +51218,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -50453,6 +51306,7 @@
     "GATE_KIT_TREE",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
     "P2_CALIBRATION_LATEST",
@@ -50478,9 +51332,9 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ],
-   "verified": "20261022-233059-slice d2-ingame-smoke"
+   ]
   }
  }
 }

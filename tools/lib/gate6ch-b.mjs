@@ -255,7 +255,7 @@ async function wetRun(ctx, tag, { claim, plan, anchors, kind, bible = null, expe
   await L.cmd('/kill @e[type=!minecraft:player]');
   await L.settle(5000);
   const rm = await L.call('dev.region.remove', { region: rr.region, requester: OWNER }, 4 * 3_600_000);
-  await L.settle(15_000);
+  await L.gameWait(15_000, { label: `h-b ${tag}: the removal settles` });
   const diff = await L.call('dev.region.hash', { box, mode: 'diff', file: snapF }, 4 * 3_600_000);
   const cells = (box[3] - box[0] + 1) * (box[4] - box[1] + 1) * (box[5] - box[2] + 1);
   out.exact = { kind: kind === 'flat' ? 'E-flat' : 'E-normal', box, cells, snapCells: snap.cells, removed: rm.removed, restored: rm.restored, mismatches: diff.mismatches, classes: diff.classes, list: (diff.list ?? []).slice(0, 200) };

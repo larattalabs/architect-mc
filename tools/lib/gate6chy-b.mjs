@@ -339,7 +339,7 @@ async function sweptStand(ctx, r) {
     const step = Math.max(1, Math.floor(rim.length / 4));
     for (const c of rim.filter((_, i) => i % step === 0).slice(0, 4)) { await L.cmd(`/summon minecraft:villager ${c[0] + 0.5} ${c[1] + 1} ${c[2] + 0.5} {Tags:["hyb_stand"],PersistenceRequired:1b}`); placed.push({ swim: false, at: c }); }
   }
-  await L.settle(120_000);
+  await L.gameWait(120_000, { label: 'hy-b villager stand, 2 minutes' });
   const drown = await L.call('dev.entity.damage', { since, type: 'drown' }, 60_000).catch((e) => ({ error: String(e.message ?? e) }));
   const fall = await L.call('dev.entity.damage', { since, type: 'fall' }, 60_000).catch((e) => ({ error: String(e.message ?? e) }));
   const alive = await L.cmd('/execute if entity @e[type=minecraft:villager,tag=hyb_stand]');
@@ -368,7 +368,10 @@ async function sweptStand(ctx, r) {
  * unsupported blocks, every part's class), the malformed count and the answers naming until HY.
  */
 export async function asksGap(kitDir, { current = false } = {}) {
-  const H = await import(pathToFileURL(path.join(kitDir, 'test', 'plan-helpers.mjs')).href);
+  // ((gate speed 3) the 59 plans from the run's shared store (corpus-plan.mjs), prewarmed on every core; GATE_PLAN_CACHE=0: as before)
+  const CP = await import('./corpus-plan.mjs');
+  await CP.prewarmAsks(path.dirname(kitDir), [path.dirname(kitDir)], 'checkPlanVolumes');
+  const H = await CP.helpers(path.dirname(kitDir));
   const dir = path.join(kitDir, 'test', 'fixtures', 'plan', 'asks');
   // ((6c close-out A) the slices before it judged Steward's first recordings: the 12 it re-recorded since come from asks-8703dbd/ when the kit
   // has them; `current` reads asks/ as it stands, close-out A's own item 6)
@@ -527,7 +530,7 @@ export const items = {
             const box = ctx.core.boxAround(r.bodies.flatMap((b) => [...b.cells, ...b.spill]), 1);
             const at0 = new Map((await L.call('dev.fluid.census', { box }, 600_000)).fluids.map(([x, y, z, s]) => [`${x},${y},${z}`, s]));
             await L.cmd('/gamerule random_tick_speed 300');
-            await sleep(120_000);
+            await L.gameWait(120_000, { real: sleep, label: 'hy-b cold probe, 2 minutes' });
             await L.cmd('/gamerule random_tick_speed 0');
             const at1 = new Map((await L.call('dev.fluid.census', { box }, 600_000)).fluids.map(([x, y, z, s]) => [`${x},${y},${z}`, s]));
             const froze = {};

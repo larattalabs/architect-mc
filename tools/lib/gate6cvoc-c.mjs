@@ -60,7 +60,10 @@ export function baseTree(root) {
  * a palette rule's measure (cells, family, share) after it. `kitDir`: a checkout whose kit runs (this one, or the base's).
  */
 export async function asksTable(kitDir) {
-  const H = await import(pathToFileURL(path.join(kitDir, 'kit', 'test', 'plan-helpers.mjs')).href);
+  // ((gate speed 3) the 59 plans from the run's shared store (corpus-plan.mjs), prewarmed on every core; GATE_PLAN_CACHE=0: as before)
+  const CP = await import('./corpus-plan.mjs');
+  await CP.prewarmAsks(kitDir, [kitDir], 'checkPlanLocal', { fxAnchors: true });
+  const H = await CP.helpers(kitDir);
   const sv = H.asksSurvey();
   const dir = path.join(kitDir, 'kit', 'test', 'fixtures', 'plan', 'asks');
   const lines = [];
@@ -89,8 +92,9 @@ export async function asksTable(kitDir) {
  * two-plan harness on both sides; a palette fixture new in VOC-c has no counterpart (skipped, counted).
  */
 export async function unchanged(root, mainDir) {
-  const H = (dir) => import(pathToFileURL(path.join(dir, 'kit', 'test', 'plan-helpers.mjs')).href);
-  const [hNew, hOld] = [await H(root), await H(mainDir)];
+  // ((gate speed 3) both sides' plans from the run's shared store (corpus-plan.mjs); GATE_PLAN_CACHE=0: as before)
+  const CP = await import('./corpus-plan.mjs');
+  const [hNew, hOld] = [await CP.helpers(root), await CP.helpers(mainDir)];
   const out = { fixtures: {} };
   let same = 0, skipped = 0;
   const base = path.join(root, 'kit', 'test', 'fixtures', 'plan');

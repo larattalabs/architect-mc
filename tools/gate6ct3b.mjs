@@ -270,7 +270,8 @@ async function realiseAndRead(tag, { planDir, claim, box, start, standMs = 120_0
   out.realise = { region, state: st.view.state, cells: st.record?.cellsWritten ?? st.view.cellsWritten };
   check(st.view.state === 'PLACED', `${tag}: realised (${st.view.state}, ${out.realise.cells} cells)`);
   // the stand: the band and the bore's surroundings stay put (falling blocks counted every 10 s)
-  for (let t = 0; t < standMs; t += 10_000) { await sleep(10_000); falling = Math.max(falling, await fallingNow()); }
+  // (gate speed 3: each 10 s is 200 ticks, sprinted; GATE_SPRINT=0: wall time)
+  for (let t = 0; t < standMs; t += 10_000) { await L.gameWait(10_000, { real: sleep, label: `t3b ${tag} stand, 200 ticks` }); falling = Math.max(falling, await fallingNow()); }
   out.falling = falling;
   check(falling === 0, `item 2 (${tag}): 0 falling-block entities during the realise and a ${standMs / 1000} s stand (max seen ${falling})`);
   await call('dev.region.dump', { box, file: after, light: true }, 1_800_000);
@@ -491,7 +492,7 @@ steps.natural = async () => {
       const r = await call('dev.region.realiseApproved', { sha: c2.check.artifactSha }, 300_000);
       const st = await L.waitRegion(r.region, 3_600_000);
       res.state = st.view.state;
-      await sleep(120_000);
+      await L.gameWait(120_000, { real: sleep, label: `t3b item 4 (hill, ${kind}) stand, 2 minutes` });
       // the void and cut after a 2-minute stand: dry (a dump over the bore's box)
       const g = c2.check.parts.find((a) => a.part === 'bore').geometry.tunnels[0];
       const box = [Math.min(g.from[0], g.to[0]) - 1, Math.min(g.from[1], g.to[1]), zl - 3, Math.max(g.from[0], g.to[0]) + 1, Math.max(g.from[1], g.to[1]) + 6, zl + 3];
