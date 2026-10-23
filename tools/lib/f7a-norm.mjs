@@ -8,3 +8,8 @@ export const F7A_MOVED = Object.freeze({
   // ((7a K2) the slices' own movers, each slice its line: K2 reads castle_city's params.wall_walk (its walk round the ring))
   'asks/castle_city.json': '7a K2: curtain_wall\'s params.wall_walk read as walk: true (its notes, geometry and IR; still adjusted)',
 });
+
+/** The recorded parts (ask/part) whose answer the foundation moves only by its `until` (connector.rail: 7a -> CR). */
+export const F7A_ASK_PARTS = Object.freeze(['mining_town/rail_1']);
+/** An asks-table line with the foundation's `until` move normalised (the earlier drivers' tables compare through fl-norm's flAsksFilter). */
+export const f7aAskLine = (l) => (F7A_ASK_PARTS.some((p) => l.startsWith(`${p} `)) ? l.replace(/ until \S+$/, '') : l);

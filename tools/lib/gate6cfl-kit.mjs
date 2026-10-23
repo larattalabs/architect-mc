@@ -20,7 +20,7 @@ import { SIBLING_FILES } from './batch-0410.mjs';
 import { inSlice } from './gate-part.mjs';
 import { syncBaseTree } from './base-tree.mjs';
 import * as CP from './corpus-plan.mjs'; // (gate speed 3) the plans from the run's shared store, prewarmed on every core
-import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
+import { F7A_MOVED, f7aAskLine } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -151,7 +151,8 @@ export async function asks(root, { check, write = true }) {
     fs.writeFileSync(path.join(root, 'kit', 'test', 'fixtures', 'plan', 'fl', 'asks-before.md'), before.text);
     fs.writeFileSync(path.join(root, 'kit', 'test', 'fixtures', 'plan', 'fl', 'asks-after.md'), after.text);
   }
-  const moved = after.rows.filter((r) => !before.rows.includes(r));
+  // ((7a foundation) its ask movers' `until` normalised on both sides: tools/lib/f7a-norm.mjs)
+  const moved = after.rows.map(f7aAskLine).filter((r) => !before.rows.map(f7aAskLine).includes(r));
   const five = ['around_my_tree/grove', 'nomad_camp/camp', 'ring_city/ring_town', 'grid_city/grid_city', 'organic_hamlet/hamlet'];
   // ((6c close-out A) a base past FL (main since v0.41.0): the free zones already answer there, so nothing moves; noted)
   const pastFL = !before.gaps['layout.ring'] && !before.gaps['layout.grid'] && !before.gaps['layout.organic'];
