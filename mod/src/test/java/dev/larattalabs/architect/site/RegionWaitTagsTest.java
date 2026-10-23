@@ -58,6 +58,43 @@ class RegionWaitTagsTest {
 		// without a plan's labels: the ids with spaces
 		assertEquals("Street e waits for town wall to be built", RegionWaitTags.say(null, "street_e", "town_wall"));
 		// a lot and a road read their id (their plan label when the region has one)
-		assertEquals("Cottage 1 waits for street e to be built", RegionWaitTags.say(null, "lot cottage_1", "road street_e"));
+		assertEquals("Cottage 1 waits for the road to be built", RegionWaitTags.say(null, "lot cottage_1", "road street_e")); // (a road is never its raw id)
+	}
+
+	private static final String ROADS_IR = """
+		{"format":2,"id":"t2","kitVersion":"0","seed":"1","claim":{"minX":0,"minY":-64,"minZ":0,"maxX":255,"maxY":319,"maxZ":255},
+		 "stages":["ground"],"tiles":{},"parts":[],
+		 "roads":[{"id":"r28","stage":"ground","points":[[0,64,0],[9,64,0]],"width":3},
+		  {"id":"street_e","stage":"ground","points":[[0,64,0],[9,64,0]],"width":3,"ext":{"architect_mc:street":{"zone":"market"}}},
+		  {"id":"street_d","stage":"ground","points":[[0,64,0],[9,64,0]],"width":3,"ext":{"architect_mc:street":{"zone":"quarters","district":"d_crafts"}}},
+		  {"id":"route_c0l0_1","stage":"ground","points":[[0,64,0],[9,64,0]],"width":3},
+		  {"id":"route_c1l0_1","stage":"ground","points":[[0,64,0],[9,64,0]],"width":3}]}
+		""";
+	private static final String BODY = """
+		{"plan":{"schemaVersion":"plan/0","planId":"p",
+		  "zones":[{"id":"market","label":"Marketwall","program":{"lots":[]}},{"id":"hamlet","label":"the hamlet","program":{"lots":[]}},
+		           {"id":"quarters","program":{"districts":[]}}],
+		  "connectors":[{"id":"lane","kind":"street"},{"id":"gate_road","kind":"road","label":"the gate road"},{"id":"town_wall","kind":"wall","label":"the town wall"}]},
+		 "parts":[{"part":"lane","geometry":{"legs":[{"edge":"c0l0"}]}},{"part":"gate_road","geometry":{"legs":[{"edge":"c1l0"}]}}]}
+		""";
+
+	@Test
+	void stewardsWording() {
+		Ir ir = Ir.of(JsonParser.parseString(ROADS_IR).getAsJsonObject());
+		JsonObject body = JsonParser.parseString(BODY).getAsJsonObject();
+		// a road no route or street names: never its raw id
+		assertEquals("The town wall waits for the road to be built", RegionWaitTags.sayOf(ir, body, "town_wall", "road r28"));
+		assertEquals("The town wall waits for the road to be built", RegionWaitTags.sayOf(ir, body, "town_wall", "road zz9"));
+		// a zone labelled with the settlement's name is the town; its street the town's street
+		assertEquals("The town's street waits for the town to be built", RegionWaitTags.sayOf(ir, body, "road street_e", "market"));
+		assertEquals("The district's street waits for the town wall to be built", RegionWaitTags.sayOf(ir, body, "road street_d", "town_wall"));
+		// a descriptive label is said as written
+		assertEquals("the hamlet", RegionWaitTags.wordsOf(ir, body, "hamlet"));
+		// a route road: its connector's label, else its kind
+		assertEquals("the gate road", RegionWaitTags.wordsOf(ir, body, "road route_c1l0_1"));
+		assertEquals("the street", RegionWaitTags.wordsOf(ir, body, "road route_c0l0_1"));
+		assertEquals("the district", RegionWaitTags.wordsOf(ir, body, "quarters"));
+		// no plan: ids with spaces, never underscores
+		assertEquals("Lane waits for town wall to be built", RegionWaitTags.sayOf(null, null, "lane", "town_wall"));
 	}
 }

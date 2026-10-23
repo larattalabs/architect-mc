@@ -1846,6 +1846,55 @@ public final class RegionsImpl implements Regions {
 		dirty(l);
 	}
 
+	/**
+	 * (6c close-out A, Steward's RC finding 1) A construction target, road or lot of a region's group built: the heights over its box
+	 * become the later stages' drift baseline. A survival region's items are put down unbuilt (their heights at put-down are the land's),
+	 * so without this a later stage's check counted the region's own walls and houses as land changed since planning and held. No region
+	 * for the group: nothing.
+	 */
+	public static void constructionBuilt(MinecraftServer s, @Nullable String groupId, dev.larattalabs.architect.placement.Anchors.@Nullable Bounds box) {
+		if (groupId == null || box == null) {
+			return;
+		}
+		for (Live l : REGIONS.values()) {
+			if (groupId.equals(l.rec().groupId)) {
+				ServerLevel level = l.level(s);
+				if (level != null) {
+					Heights.snapshotAfter(level, l.world(), l.rec().id, box.minX(), box.minZ(), box.maxX(), box.maxZ());
+				}
+				return;
+			}
+		}
+	}
+
+	/**
+	 * DevBridge (close-out A, Steward's RC finding 1): a region's stage drift check run now, as before the stage starts, and its record's
+	 * drift entries -> {ok, message, sampled, within2, over8InLots, drift: {stage: entry}}. Server thread.
+	 */
+	public static CompletableFuture<JsonObject> stageDriftNow(String regionId, String stage) {
+		Live l = REGIONS.get(regionId);
+		MinecraftServer s = server;
+		ServerLevel level = l == null || s == null ? null : l.level(s);
+		if (level == null) {
+			return CompletableFuture.failedFuture(new IllegalArgumentException("no region " + regionId + " loaded"));
+		}
+		return Drift.checkStage(level, l, stage).thenApply(r -> {
+			JsonObject o = new JsonObject();
+			o.addProperty("ok", r.ok());
+			o.addProperty("message", r.message());
+			o.addProperty("sampled", r.sampled());
+			o.addProperty("within2", r.within2());
+			o.addProperty("over8InLots", r.over8InLots());
+			JsonObject d = new JsonObject();
+			l.rec().drift.forEach(d::addProperty);
+			o.add("drift", d);
+			com.google.gson.JsonArray st = new com.google.gson.JsonArray();
+			l.rec().stages.keySet().forEach(st::add);
+			o.add("stages", st);
+			return o;
+		});
+	}
+
 	/** The heights a placed item left over its columns: the later stages' drift baseline ({@link Heights#snapshotAfter}). */
 	private static void snapshotAfter(Live l, QItem i) {
 		ServerLevel level = l.level(server);

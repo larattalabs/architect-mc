@@ -63,6 +63,12 @@ public final class SliceCoaDev {
 			});
 		DevBridge.register("dev.coa.sweep", 60_000, "{} - (6c close-out A) the world-start sweeps now: keyed pins, then unrealised plans -> {pinsEnded, "
 			+ "plans}", (req, mc) -> ServerTasks.callOnServer(PlanRetention::sweepNow));
+		DevBridge.register("dev.coa.stageDrift", 120_000, "{region, stage} - (6c close-out A, Steward's RC finding 1) the stage's drift check run now (as "
+			+ "before the stage starts) and the record's drift entries -> {ok, message, sampled, within2, over8InLots, drift, stages}", (req, mc) -> {
+				Fields f = Fields.of(req);
+				String region = f.nonBlank("region"), stage = f.nonBlank("stage");
+				return ServerTasks.callOnServer(s -> dev.larattalabs.architect.region.RegionsImpl.stageDriftNow(region, stage)).thenCompose(x -> x);
+			});
 		DevBridge.register("dev.coa.planByKey", 10_000, "{owner?, opKey} - (6c close-out A) Regions.planByKey (a use of the plan) -> {planId} or {planId: "
 			+ "null}", (req, mc) -> {
 				Fields f = Fields.of(req);

@@ -12,6 +12,7 @@
 //     discard   (item 3)                creative: discardPlan (files, helper dir, artifacts, refusals, the keyed tombstone), the last-use sweep
 //     waits     (item 8, S-COA-5)       survival: Steward's RC flow (a stale retry under one key, keyed pins, an abandoned check discarded,
 //                                       the waits said from waitsFor.say, tile and road waits matched by region and part)
+//     drift     (Steward's RC finding 1) survival: a stale retry under one key, rs02 built through its later stages with no hold
 //     palette   (item 5 in game)        creative: an `over: "lots"` plan, READY; realiseApproved with an off-family lot refuses PALETTE
 //     ingame    (coa-ingame)            keys, discard, waits, palette
 //     report                            REPORT.md over the step JSONs
@@ -363,12 +364,77 @@ steps.waits = async () => {
   const ev = (await api('events 0')).filter((e) => e.event === 'ITEM_WAITING');
   const mine = ev.filter((e) => e.ext?.['architect_mc:region'] === region);
   const said = mine.filter((e) => e.ext?.['architect_mc:waitsFor']?.say);
-  out.events = { itemWaiting: ev.length, region: mine.length, said: said.length, first: said[0] && { key: said[0].itemKey, waitsFor: said[0].ext['architect_mc:waitsFor'], message: said[0].message } };
+  out.events = { itemWaiting: ev.length, region: mine.length, said: said.length, first: said[0] && { key: said[0].key ?? said[0].itemKey, waitsFor: said[0].ext['architect_mc:waitsFor'], message: said[0].message } };
   check(mine.length > 0 && mine.every((e) => e.ext['architect_mc:part'] || (e.ext['architect_mc:parts'] ?? []).length || e.ext['architect_mc:lot']), `item 8: ITEM_WAITING for the region's tiles and roads carries the region and the part(s) (${mine.length} event(s))`);
   check(said.length > 0 && said.every((e) => /waits for .+ to be built/.test(e.ext['architect_mc:waitsFor'].say) && /\(plan label\)/.test(e.ext['architect_mc:waitsFor'].say) && !/_/.test(e.ext['architect_mc:waitsFor'].say) && e.message.startsWith(e.ext['architect_mc:waitsFor'].say)), `item 8: a stage wait says, from the plan's labels and with no id, ${json(out.events.first?.waitsFor?.say)} (waiter ${json(out.events.first?.waitsFor?.waiter)}); the message starts with it`);
+  // (Steward's RC finding 5) one sentence per waiting part per wait: no two items of one part say the same wait
+  const sayers = new Map();
+  for (const e of said) { const w = e.ext['architect_mc:waitsFor']; const k = `${w.waiter}|${w.target}`; if (!sayers.has(k)) sayers.set(k, new Set()); sayers.get(k).add(e.key ?? e.itemKey); }
+  const many = [...sayers].filter(([, v]) => v.size > 1).map(([k, v]) => `${k}: ${[...v].join(', ')}`);
+  check(said.length > 0 && many.length === 0, `finding 5: one sentence per waiting part per wait (${sayers.size} part/target wait(s); said by more than one item: ${many.join('; ') || 'none'})`);
   check(f.last?.st?.view?.state === 'PLACED', `S-COA-5: fed to PLACED (${f.waves} waves)`);
   await G.remove(ctx, region);
   out.sawStage = sawStage;
+  return out;
+};
+
+// ------------------------------------------------------------------ Steward's RC finding 1: no stage hold after a survival build
+
+/** The lots' bound entries of a fixture's plan (as RS's gate reads them). */
+function entriesOf(fx) {
+  const out = {};
+  const walk = (o) => { if (Array.isArray(o)) o.forEach(walk); else if (o && typeof o === 'object') { if (o.id && typeof o.entry === 'string') out[o.id] = o.entry; Object.values(o).forEach(walk); } };
+  walk(fx.plan);
+  return out;
+}
+
+/**
+ * Steward's walled town in survival (rs02: a wall, a gate, cottages as construction sites, then the street's props): a player's pillar
+ * makes the artifact stale, the re-check is realised under the same key, and the build is fed to done. No stage holds DRIFTED, and every
+ * later stage's drift check run once the build is done compares the region's own built walls and houses as the baseline (all within 2).
+ */
+steps.drift = async () => {
+  await ensure();
+  const out = {};
+  const fx = G.fixture(ctx, 'rs02_walled');
+  const entries = entriesOf(fx);
+  const s = await G.site(ctx, 'coa_drift', fx);
+  if (Object.keys(entries).length) await G.designs(ctx);
+  const VK = `steward.coa.${Date.now().toString(36)}.vrealise`;
+  const chk = async () => (await call('dev.region.checkPlan', { plan: s.wp.plan, claim: s.W.claim, owner: G.OWNER, anchors: s.wp.anchors, load: 'generate' }, 1_800_000)).check;
+  const a = await chk();
+  await call('dev.coa.pinKeyed', { sha: a.artifactSha, owner: G.OWNER, opKey: VK });
+  await G.pile(ctx, s, 6);
+  // the player's 3-block pillar on a planned tile (outside the lots), as in Steward's RC
+  const [x0, z0, x1, z1] = s.W.claim;
+  const px = x0 + 6, pz = z1 - 6;
+  const gy = await groundAt(planDir(a.checkId), px, pz);
+  await cmd(`/fill ${px} ${gy + 1} ${pz} ${px} ${gy + 3} ${pz} minecraft:cobblestone`);
+  const st1 = await call('dev.region.realiseApproved', { sha: a.artifactSha, opKey: VK, ...(Object.keys(entries).length ? { lotEntries: entries } : {}) }, 300_000);
+  check(st1.reason === 'ARTIFACT_STALE', `finding 1: the pillar makes the artifact stale (${st1.refused?.slice(0, 120)})`);
+  const b = await chk();
+  await call('dev.coa.pinKeyed', { sha: b.artifactSha, owner: G.OWNER, opKey: VK });
+  const rr = await call('dev.region.realiseApproved', { sha: b.artifactSha, opKey: VK, ...(Object.keys(entries).length ? { lotEntries: entries } : {}) }, 300_000);
+  check(!!rr.region, `finding 1: the re-check realised under the same key (${rr.region ?? rr.refused})`);
+  if (!rr.region) return out;
+  let held = null;
+  const f = await G.feed(ctx, rr.region, { fraction: 0.5, timeoutMs: 2_400_000, until: (st, rs) => {
+    if (!held && (st.view?.waiting?.reason === 'DRIFTED' || /DRIFTED/.test(JSON.stringify(st.view?.waiting ?? {})))) held = st.view.waiting;
+    return st.view.state === 'PLACED' && rs.build?.done;
+  } });
+  out.feed = { waves: f.waves, state: f.last?.st?.view?.state, done: f.last?.rs?.build?.done };
+  check(!held && out.feed.state === 'PLACED' && out.feed.done, `finding 1: fed to done (${f.waves} waves) with no stage held for land change (${json(held)}; ${out.feed.state}, done ${out.feed.done})`);
+  const first = await call('dev.coa.stageDrift', { region: rr.region, stage: 'ground' });
+  out.recordDrift = first.drift;
+  check(Object.values(first.drift ?? {}).every((v) => !String(v).startsWith('held')), `finding 1: no stage's drift entry reads held (${json(first.drift)})`);
+  out.stages = {};
+  for (const stage of (first.stages ?? []).slice(1)) {
+    const d = await call('dev.coa.stageDrift', { region: rr.region, stage });
+    out.stages[stage] = { ok: d.ok, message: d.message };
+  }
+  const bad = Object.entries(out.stages).filter(([, d]) => !d.ok || !/^(\d+) of \1 sampled|no sampled column/.test(d.message));
+  check(Object.keys(out.stages).length > 0 && bad.length === 0, `finding 1: with the build done, every later stage's drift check finds the land as the region built it (every sampled column within 2): ${json(out.stages)}`);
+  await G.remove(ctx, rr.region);
   return out;
 };
 
@@ -382,7 +448,7 @@ steps.palette = async () => {
 
 steps.ingame = async () => {
   const out = {};
-  for (const s of ['keys', 'discard', 'waits', 'palette']) {
+  for (const s of ['keys', 'discard', 'waits', 'drift', 'palette']) {
     try { out[s] = await steps[s](); } catch (e) { check(false, `${s}: ${String(e?.message ?? e).slice(0, 300)}`); }
   }
   spendZero();

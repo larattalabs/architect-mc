@@ -1543,7 +1543,9 @@ public final class RegionTargets {
 			if (!earlier || !meets(t.box(), roi)) {
 				continue;
 			}
-			waitOn(b, i, t.id(), is(t) ? partOf(t) : "road " + t.id());
+			// (Steward's RC finding 3) a road by its IR road id (its item key road:<id>), never the construction road's own id
+			String rk = tm == null ? null : tm.itemKey();
+			waitOn(b, i, t.id(), is(t) ? partOf(t) : "road " + (rk != null && rk.startsWith("road:") ? rk.substring(5) : t.id()));
 			return true;
 		}
 		if (fluids) {
@@ -1588,10 +1590,23 @@ public final class RegionTargets {
 		if (waiter != null) {
 			w.addProperty("waiter", waiter);
 		}
-		w.addProperty("say", say);
+		// (Steward's RC finding 5) one sentence per waiting part per wait: the first of its items to wait for this target says it; the
+		// others carry the wait without `say` (the sayer passes on only when it stops waiting for the target)
+		String sk = b.id + "|" + (waiter == null ? i.key : waiter) + "|" + target;
+		String sayer = SAYERS.get(sk);
+		var si = sayer == null ? null : b.item(sayer);
+		boolean says = sayer == null || sayer.equals(i.key) || si == null || !(si.ext.get(EXT_WAITS_FOR) instanceof JsonObject sw && target.equals(
+			sw.has("target") ? sw.get("target").getAsString() : null));
+		if (says) {
+			SAYERS.put(sk, i.key);
+			w.addProperty("say", say);
+		}
 		i.ext.add(EXT_WAITS_FOR, w);
-		how.wait(b, i, dev.larattalabs.architect.api.Reason.SITE_BUSY, say + ": " + detail);
+		how.wait(b, i, dev.larattalabs.architect.api.Reason.SITE_BUSY, (says ? say + ": " : "") + detail);
 	}
+
+	/** (Steward's RC finding 5) batch|waiter|target -> the item key that says the wait's sentence. Server thread. */
+	private static final Map<String, String> SAYERS = new java.util.HashMap<>();
 
 	/**
 	 * (6c close-out A, §8) A group's first target, lot (a construction site) or construction road still building, with its part

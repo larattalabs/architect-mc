@@ -141,57 +141,129 @@ public final class RegionWaitTags {
 	 * {@code _} as spaces. {@code lot <id>} and {@code road <id>} read their id's label likewise.
 	 */
 	public static String words(RegionsImpl.@Nullable Live l, @Nullable String part) {
+		return wordsOf(l == null ? null : l.ir(), l == null ? null : artifactBody(l), part);
+	}
+
+	/** {@link #words} over a region's IR and its artifact's body (either null: ids only). Testable. */
+	static String wordsOf(@Nullable Ir ir, @Nullable JsonObject body, @Nullable String part) {
 		if (part == null || part.isBlank()) {
 			return "an earlier part";
 		}
-		String id = part.startsWith("lot ") || part.startsWith("road ") ? part.substring(part.indexOf(' ') + 1) : part;
-		JsonObject plan = l == null ? null : planOf(l);
+		boolean road = part.startsWith("road ");
+		String id = part.startsWith("lot ") || road ? part.substring(part.indexOf(' ') + 1) : part;
+		JsonObject plan = body != null && body.get("plan") instanceof JsonObject p ? p : null;
 		String label = plan == null ? null : labelOf(plan, id, 0);
-		if (label == null && l != null) {
-			label = roadWords(l, plan, id);
+		JsonObject zone = plan == null ? null : partOf(plan, id);
+		if (label != null && zone != null && isZone(plan, zone) && namesTheSettlement(label)) {
+			return isDistricts(zone) ? "the district" : "the town"; // (Steward's RC finding 3) "Marketwall" is the town
+		}
+		if (label == null && ir != null) {
+			label = roadWords(ir, body, plan, id);
+		}
+		if (label == null && plan != null && partOf(plan, id) != null) {
+			label = kindWords(plan, id);
+		}
+		if (label == null && road) {
+			return "the road"; // (Steward's RC finding 3) never a road's raw id
 		}
 		return label != null ? label : id.replace('_', ' ');
 	}
 
 	/**
-	 * A region road's words: a zone's (or a district's) street road ({@code architect_mc:street {zone, district?}}) is "<its label>'s
-	 * street"; a route road ({@code route_c<n>l<k>[_<i>]}) is its connector's label, found by the leg's edge in the artifact's answers.
-	 * Null when the id is no road of the region.
+	 * A region road's words: a zone's (or a district's) street road ({@code architect_mc:street {zone, district?}}) is "<its words>'s
+	 * street"; a route road ({@code route_c<n>l<k>[_<i>]}) is its connector's label, found by the leg's edge in the artifact's answers,
+	 * else its kind; any other road of the region "the road". Null when the id is no road of the region.
 	 */
-	static @Nullable String roadWords(RegionsImpl.Live l, @Nullable JsonObject plan, String id) {
-		for (Ir.Road r : l.ir().roads()) {
+	static @Nullable String roadWords(Ir ir, @Nullable JsonObject body, @Nullable JsonObject plan, String id) {
+		for (Ir.Road r : ir.roads()) {
 			if (!r.id().equals(id)) {
 				continue;
 			}
 			if (r.ext() != null && r.ext().get("architect_mc:street") instanceof JsonObject st) {
-				String owner = st.get("district") instanceof JsonElement d && d.isJsonPrimitive() ? d.getAsString()
-					: st.get("zone") instanceof JsonElement z && z.isJsonPrimitive() ? z.getAsString() : null;
-				String ol = owner == null || plan == null ? null : labelOf(plan, owner, 0);
-				return (ol != null ? ol : owner != null ? owner.replace('_', ' ') : "the town") + "'s street";
+				boolean district = st.get("district") instanceof JsonElement d && d.isJsonPrimitive();
+				String owner = district ? st.get("district").getAsString() : st.get("zone") instanceof JsonElement z && z.isJsonPrimitive() ? z.getAsString() : null;
+				if (district) {
+					// a district is no plan part: its own label when it has a descriptive one, else "the district"
+					String dl = plan == null ? null : labelOf(plan, owner, 0);
+					return (dl != null && !namesTheSettlement(dl) ? dl : "the district") + "'s street";
+				}
+				return (owner == null ? "the town" : wordsOf(ir, body, owner)) + "'s street";
 			}
 			java.util.regex.Matcher m = java.util.regex.Pattern.compile("^route_(c\\d+l\\d+)(_\\d+)?$").matcher(id);
-			JsonObject body = artifactBody(l);
 			if (m.matches() && body != null && body.get("parts") instanceof JsonArray parts) {
 				for (JsonElement pe : parts) {
 					if (pe instanceof JsonObject p && p.get("geometry") instanceof JsonObject g && g.get("legs") instanceof JsonArray legs) {
 						for (JsonElement le : legs) {
 							if (le instanceof JsonObject leg && m.group(1).equals(str(leg, "edge")) && str(p, "part") != null) {
 								String pl = plan == null ? null : labelOf(plan, str(p, "part"), 0);
-								return pl != null ? pl : str(p, "part").replace('_', ' ');
+								return pl != null ? pl : kindWords(plan, str(p, "part"));
 							}
 						}
 					}
 				}
 			}
-			return null;
+			// (Steward's RC finding 3) a road of no route or street the plan names: never its raw id
+			return "the road";
 		}
 		return null;
 	}
 
+	/**
+	 * (Steward's RC finding 3) A plan part's words when it has no label: a zone "the town" ("the district" for a districts zone), a
+	 * connector by its kind ("the street", "the road", "the path", "the wall", ...), else its id with spaces.
+	 */
+	static String kindWords(@Nullable JsonObject plan, String id) {
+		JsonObject p = plan == null ? null : partOf(plan, id);
+		if (p != null) {
+			if (isZone(plan, p)) {
+				return isDistricts(p) ? "the district" : "the town";
+			}
+			if (p.get("kind") instanceof JsonElement k && k.isJsonPrimitive()) {
+				return "the " + k.getAsString().replace('_', ' ');
+			}
+		}
+		return id.replace('_', ' ');
+	}
+
+	private static @Nullable JsonObject partOf(JsonObject plan, String id) {
+		for (String fam : new String[] {"zones", "connectors", "forms", "rules"}) {
+			if (plan.get(fam) instanceof JsonArray a) {
+				for (JsonElement e : a) {
+					if (e instanceof JsonObject o && id.equals(str(o, "id"))) {
+						return o;
+					}
+				}
+			}
+		}
+		return null;
+	}
+
+	private static boolean isZone(JsonObject plan, JsonObject p) {
+		return plan.get("zones") instanceof JsonArray a && a.contains(p);
+	}
+
+	private static boolean isDistricts(JsonObject zone) {
+		return zone.get("program") instanceof JsonObject pr && (pr.has("districts") || "districts".equals(str(pr, "template")));
+	}
+
+	/**
+	 * (Steward's RC finding 3) A zone's label that names the settlement (a proper name: no article, such as "Marketwall") reads as "the
+	 * town" / "the district" from the zone's kind; a descriptive label ("the hamlet", "a market square") is said as written.
+	 */
+	static boolean namesTheSettlement(String label) {
+		String t = label.strip();
+		return !t.isEmpty() && !t.matches("(?i)^(the|a|an)\\b.*") && Character.isUpperCase(t.codePointAt(0));
+	}
+
 	/** The sentence a stage wait says: {@code "<waiter> waits for <part> to be built"}. */
 	public static String say(RegionsImpl.@Nullable Live l, @Nullable String waiter, @Nullable String part) {
-		String w = waiter == null ? "this part" : words(l, waiter);
-		return capital(w) + " waits for " + words(l, part) + " to be built";
+		return sayOf(l == null ? null : l.ir(), l == null ? null : artifactBody(l), waiter, part);
+	}
+
+	/** {@link #say} over a region's IR and its artifact's body. Testable. */
+	static String sayOf(@Nullable Ir ir, @Nullable JsonObject body, @Nullable String waiter, @Nullable String part) {
+		String w = waiter == null ? "this part" : wordsOf(ir, body, waiter);
+		return capital(w) + " waits for " + wordsOf(ir, body, part) + " to be built";
 	}
 
 	/** The waiting item's part: its {@code architect_mc:part}, else its first {@code parts}, else its lot ({@code lot <id>}), road, or null. */

@@ -497,6 +497,8 @@ public final class RoadBuilder {
 		Architect.LOGGER.info("{} {}: built ({} cells); crate leftovers {}", target ? "Region target" : "Construction road", road.id(), r.size(), left);
 		PROGRESS.remove(road.id());
 		dev.larattalabs.architect.apiimpl.ApiEvents.builtInfra(srv, done);
+		// (6c close-out A) a survival region's target or road built: its heights become the later stages' drift baseline
+		dev.larattalabs.architect.region.RegionsImpl.constructionBuilt(srv, group, done.box());
 	}
 
 	private static void syncGhosts(MinecraftServer srv) {
