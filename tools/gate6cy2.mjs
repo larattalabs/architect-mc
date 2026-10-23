@@ -317,14 +317,7 @@ async function waiting() {
   const file = fs.existsSync(wf) ? JSON.parse(fs.readFileSync(wf, 'utf8')) : null;
   check(file?.waits?.[D] === sinceD, `D: waits.json holds D's waitingSince ${sinceD} after the clean stop`, file);
   await openWorld('GY2 Wait');
-  // (speed audit B) was sleep(8000): until the starve threshold (100 ticks) has passed in game time, so a builder tick has claimed D's
-  // restored wait (a duplicate start or a reset since would show); at most the 8 s
-  {
-    const gt = () => siteState(D).then((s) => s.wait?.gameTime ?? null).catch(() => null);
-    const g0 = await gt();
-    if (g0 === null) await sleep(8000);
-    else for (const t1 = Date.now(); Date.now() - t1 < 8000 && ((await gt()) ?? g0) - g0 < 100; ) await sleep(250);
-  }
+  await sleep(8_000);
   const stD2 = await siteState(D);
   check(stD2.wait.waiting === true && stD2.wait.waitingSince === sinceD, `D: after the reload it still waits since ${sinceD} (${stD2.wait.waitingSince})`, stD2.wait);
   check((await waitEvents(D, 'SITE_WAITING')).filter((e) => e.wait.waiting).length === startsD, `D: no duplicate start event after the reload (${startsD})`);

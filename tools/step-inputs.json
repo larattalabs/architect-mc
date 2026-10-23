@@ -1282,6 +1282,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6a-client.sh",
@@ -1315,6 +1316,7 @@
     "GATE6A_MEGAB_FAST",
     "GATE6A_OUT",
     "GATE6A_RUN",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -1322,6 +1324,7 @@
    "eager": [
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ],
    "data": [
@@ -46952,6 +46955,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-headless-server.mjs"
@@ -46971,6 +46975,7 @@
     "ARCHITECT_XMX",
     "C30_N",
     "GATE4D_OUT",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -46979,6 +46984,7 @@
     "tools/gate4d.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ]
   },
@@ -47000,6 +47006,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-headless-server.mjs"
@@ -47019,6 +47026,7 @@
     "ARCHITECT_XMX",
     "C30_N",
     "GATE4D_OUT",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -47027,6 +47035,7 @@
     "tools/gate4d.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ],
    "verified": "20261023-114540-release c30-ingame-full"
@@ -47049,6 +47058,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-headless-server.mjs"
@@ -47068,6 +47078,7 @@
     "ARCHITECT_XMX",
     "C30_N",
     "GATE4D_OUT",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -47076,6 +47087,7 @@
     "tools/gate4d.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ]
   },
@@ -47097,6 +47109,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-headless-server.mjs"
@@ -47116,6 +47129,7 @@
     "ARCHITECT_XMX",
     "C30_N",
     "GATE4D_OUT",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -47124,6 +47138,7 @@
     "tools/gate4d.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ],
    "verified": "20261023-114540-release 4d-all-full"
@@ -48004,6 +48019,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6a-client.sh",
@@ -48037,6 +48053,7 @@
     "GATE6A_MEGAB_FAST",
     "GATE6A_OUT",
     "GATE6A_RUN",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -48044,6 +48061,7 @@
    "eager": [
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ],
    "verified": "20261023-114540-release 6a-megaA"
@@ -48070,6 +48088,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6a-client.sh",
@@ -48103,6 +48122,7 @@
     "GATE6A_MEGAB_FAST",
     "GATE6A_OUT",
     "GATE6A_RUN",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -48110,6 +48130,7 @@
    "eager": [
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ],
    "verified": "20261023-114540-release 6a-megaB"
@@ -48136,6 +48157,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6a-client.sh",
@@ -48169,6 +48191,7 @@
     "GATE6A_MEGAB_FAST",
     "GATE6A_OUT",
     "GATE6A_RUN",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -48176,6 +48199,7 @@
    "eager": [
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ]
   },
@@ -48201,6 +48225,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6a-client.sh",
@@ -48234,6 +48259,7 @@
     "GATE6A_MEGAB_FAST",
     "GATE6A_OUT",
     "GATE6A_RUN",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -48241,6 +48267,7 @@
    "eager": [
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ]
   },
@@ -48266,6 +48293,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6a-client.sh",
@@ -48299,6 +48327,7 @@
     "GATE6A_MEGAB_FAST",
     "GATE6A_OUT",
     "GATE6A_RUN",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -48306,6 +48335,7 @@
    "eager": [
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ],
    "verified": "20261023-114540-release 6a-crash"
@@ -48332,6 +48362,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6a-client.sh",
@@ -48365,6 +48396,7 @@
     "GATE6A_MEGAB_FAST",
     "GATE6A_OUT",
     "GATE6A_RUN",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -48372,6 +48404,7 @@
    "eager": [
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ]
   },
@@ -48397,6 +48430,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6a-client.sh",
@@ -48430,6 +48464,7 @@
     "GATE6A_MEGAB_FAST",
     "GATE6A_OUT",
     "GATE6A_RUN",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -48437,6 +48472,7 @@
    "eager": [
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ],
    "verified": "20261023-114540-release 6a-eflat-full"
@@ -48463,6 +48499,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6a-client.sh",
@@ -48496,6 +48533,7 @@
     "GATE6A_MEGAB_FAST",
     "GATE6A_OUT",
     "GATE6A_RUN",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -48503,6 +48541,7 @@
    "eager": [
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ],
    "verified": "20261023-114540-release 6a-forest"
@@ -51166,6 +51205,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6a-client.sh",
@@ -51199,6 +51239,7 @@
     "GATE6A_MEGAB_FAST",
     "GATE6A_OUT",
     "GATE6A_RUN",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -51206,6 +51247,7 @@
    "eager": [
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ],
    "verified": "20261023-114540-release 6a-inv3"
@@ -51232,6 +51274,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6a-client.sh",
@@ -51265,6 +51308,7 @@
     "GATE6A_MEGAB_FAST",
     "GATE6A_OUT",
     "GATE6A_RUN",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -51272,6 +51316,7 @@
    "eager": [
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ]
   },
@@ -51297,6 +51342,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6a-client.sh",
@@ -51330,6 +51376,7 @@
     "GATE6A_MEGAB_FAST",
     "GATE6A_OUT",
     "GATE6A_RUN",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -51337,6 +51384,7 @@
    "eager": [
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ],
    "verified": "20261023-114540-release 6a-staged-full"
@@ -51363,6 +51411,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/megab.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6a-client.sh",
@@ -51396,6 +51445,7 @@
     "GATE6A_MEGAB_FAST",
     "GATE6A_OUT",
     "GATE6A_RUN",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -51403,6 +51453,7 @@
    "eager": [
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/tickbar.mjs"
    ]
   },

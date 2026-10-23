@@ -125,7 +125,7 @@ async function waitInWorld(timeoutMs = 600_000) {
     const st = await call('dev.state').catch(() => ({}));
     if (st.inWorld && st.ready) {
       await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => {});
-      await settleQuiet(2000, { quietMs: 500 });
+      await settleQuiet(2000, { quietMs: 500, fixed: sleep });
       return st;
     }
     await sleep(500);
@@ -221,7 +221,9 @@ const settle = (ms = 3000) => call('dev.wait', { ms }, 20_000);
  * `extra()` true, when given: a further condition such as a stable journal); at most `capMs`, the fixed settle it replaces. A call that
  * fails waits the full cap.
  */
-async function settleQuiet(capMs, { box6: b = null, quietMs = 1000, extra = null } = {}) {
+const QUIET = ['orders', 'crash'].includes(process.argv[2]); // (speed audit B) only 4e-orders and 4e-crash poll; every other step (the throughput bench, the migration clients) keeps its fixed waits
+async function settleQuiet(capMs, { box6: b = null, quietMs = 1000, extra = null, fixed = settle } = {}) {
+  if (!QUIET) { await fixed(capMs); return; }
   const t0 = Date.now();
   let quietSince = null;
   while (Date.now() - t0 < capMs) {
@@ -296,7 +298,7 @@ async function openWorld(name, opts = {}) {
     const st = await call('dev.state').catch(() => ({}));
     if (st.inWorld && st.ready) {
       await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => {});
-      await settleQuiet(2000, { quietMs: 500 });
+      await settleQuiet(2000, { quietMs: 500, fixed: sleep });
       return;
     }
   }

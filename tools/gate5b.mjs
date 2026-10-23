@@ -232,8 +232,10 @@ async function settleTickQuiet(box, capMs = 3000, quietMs = 1000) {
     await sleep(250);
   }
 }
+const QUIET = process.argv[2] === 'chains'; // (speed audit B) only 5b-chains polls for quiet; the other steps keep the fixed 3 s
 async function hash(box, exclude = [], cells = false) {
-  await settleTickQuiet(box);
+  if (QUIET) await settleTickQuiet(box);
+  else await settle();
   return call('dev.region.hash', { box, exclude, cells }, 300_000);
 }
 const grow = (b, n) => [b[0] - n, b[1] - n, b[2] - n, b[3] + n, b[4] + n, b[5] + n];
