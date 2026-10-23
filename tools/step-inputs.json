@@ -12,7 +12,7 @@
    "dynamic": [],
    "env": [],
    "eager": [],
-   "verified": "20261022-161855-release unit-mod"
+   "verified": "20261023-114540-release unit-mod"
   },
   "umt": {
    "classes": [
@@ -23,7 +23,8 @@
    "globs": [],
    "dynamic": [],
    "env": [],
-   "eager": []
+   "eager": [],
+   "verified": "20261023-114540-release umt"
   },
   "umt-long": {
    "classes": [
@@ -34,7 +35,8 @@
    "globs": [],
    "dynamic": [],
    "env": [],
-   "eager": []
+   "eager": [],
+   "verified": "20261023-114540-release umt-long"
   },
   "unit-kit": {
    "classes": [
@@ -1068,9 +1070,10 @@
     "cherry",
     "dark",
     "nope",
-    "rustic"
+    "rustic",
+    "tools/lib/**"
    ],
-   "verified": "20261022-161855-release unit-kit"
+   "verified": "20261023-114540-release unit-kit"
   },
   "unit-sidecar": {
    "classes": [
@@ -1096,7 +1099,7 @@
     "pnpm-workspace.yaml",
     "tools/eval.mjs"
    ],
-   "verified": "20261023-045735-slice unit-sidecar"
+   "verified": "20261023-114540-release unit-sidecar"
   },
   "sim-jobs": {
    "classes": [
@@ -1148,7 +1151,8 @@
    "eager": [
     "tools/apitest.mjs",
     "tools/lib/devclient.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release sim-jobs"
   },
   "sim-sets": {
    "classes": [
@@ -1200,7 +1204,8 @@
    "eager": [
     "tools/apitest.mjs",
     "tools/lib/devclient.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release sim-sets"
   },
   "sim-massing": {
    "classes": [
@@ -1252,7 +1257,8 @@
    "eager": [
     "tools/apitest.mjs",
     "tools/lib/devclient.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release sim-massing"
   },
   "apijars": {
    "classes": [
@@ -1317,7 +1323,12 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "data": [
+    "kit/lint/**",
+    "kit/test/**"
+   ],
+   "verified": "20261023-114540-release apijars"
   },
   "0a-stub": {
    "classes": [
@@ -1364,7 +1375,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-stub"
   },
   "0a-flow": {
    "classes": [
@@ -1411,7 +1423,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-flow"
   },
   "0a-budget": {
    "classes": [
@@ -1458,7 +1471,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-budget"
   },
   "0a-fit": {
    "classes": [
@@ -1505,7 +1519,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-fit"
   },
   "0a-batches": {
    "classes": [
@@ -1552,7 +1567,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-batches"
   },
   "0a-keys": {
    "classes": [
@@ -1599,7 +1615,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-keys"
   },
   "0a-cancel": {
    "classes": [
@@ -1646,7 +1663,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-cancel"
   },
   "0a-pins": {
    "classes": [
@@ -1693,7 +1711,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-pins"
   },
   "0a-stopped": {
    "classes": [
@@ -1740,7 +1759,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-stopped"
   },
   "0a-tiles": {
    "classes": [
@@ -1787,7 +1807,8 @@
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0a.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 0a-tiles"
   },
   "mp-unit": {
    "classes": [
@@ -2078,7 +2099,8 @@
     "tools/gate6cmp.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release mp-unit"
   },
   "mp-ingame": {
    "classes": [
@@ -2388,6 +2410,9 @@
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/scenarios.mjs"
+   ],
+   "data": [
+    "rustic"
    ]
   },
   "sch-unit": {
@@ -2449,7 +2474,15 @@
     "tools/gate6csch.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release sch-unit"
   },
   "sch-roundtrip": {
    "classes": [
@@ -2522,7 +2555,8 @@
     "tools/gate6csch.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release sch-roundtrip"
   },
   "sch-refusals": {
    "classes": [
@@ -2595,7 +2629,8 @@
     "tools/gate6csch.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release sch-refusals"
   },
   "sch-placement": {
    "classes": [
@@ -2668,7 +2703,8 @@
     "tools/gate6csch.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release sch-placement"
   },
   "sch-ingame": {
    "classes": [
@@ -2741,7 +2777,8 @@
     "tools/gate6csch.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release sch-ingame"
   },
   "v-unit": {
    "classes": [
@@ -3017,7 +3054,15 @@
    "eager": [
     "tools/gate6cv.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release v-unit"
   },
   "v-ingame": {
    "classes": [
@@ -3319,7 +3364,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release v-ingame"
   },
   "w-unit": {
    "classes": [
@@ -3591,7 +3637,16 @@
    "eager": [
     "tools/gate6cw.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "kit/lint/**",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release w-unit"
   },
   "w-ingame": {
    "classes": [
@@ -3890,7 +3945,11 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261023-114540-release w-ingame"
   },
   "f1-unit": {
    "classes": [
@@ -4173,7 +4232,8 @@
     "tools/gate6cf1.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release f1-unit"
   },
   "6cf1-scenario-forms": {
    "classes": [
@@ -4437,7 +4497,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6cf1-scenario-forms"
   },
   "x-unit": {
    "classes": [
@@ -4645,7 +4706,8 @@
     "tools/gate6cx.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release x-unit"
   },
   "x-ingame": {
    "classes": [
@@ -4956,7 +5018,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release x-ingame"
   },
   "y-unit": {
    "classes": [
@@ -5023,7 +5086,8 @@
    "eager": [
     "tools/gate6cy.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release y-unit"
   },
   "y-ingame": {
    "classes": [
@@ -5104,7 +5168,8 @@
    "eager": [
     "tools/gate6cy.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release y-ingame"
   },
   "c29-unit": {
    "classes": [
@@ -5171,7 +5236,8 @@
    "eager": [
     "tools/gate6cy.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release c29-unit"
   },
   "c29-ingame": {
    "classes": [
@@ -5252,7 +5318,8 @@
    "eager": [
     "tools/gate6cy.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release c29-ingame"
   },
   "y2-unit": {
    "classes": [
@@ -5299,7 +5366,8 @@
     "tools/gate6cy2.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release y2-unit"
   },
   "y2-ingame": {
    "classes": [
@@ -5360,7 +5428,8 @@
     "tools/gate6cy2.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release y2-ingame"
   },
   "y2-bom": {
    "classes": [
@@ -5710,7 +5779,15 @@
     "tools/gate6ct1.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release t1-unit"
   },
   "b-unit": {
    "classes": [
@@ -5998,7 +6075,8 @@
     "tools/gate6cb.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release b-unit"
   },
   "b-ingame": {
    "classes": [
@@ -6310,7 +6388,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release b-ingame"
   },
   "pt-unit": {
    "classes": [
@@ -6514,7 +6593,8 @@
    "eager": [
     "tools/gate6cpt.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release pt-unit"
   },
   "c33-unit": {
    "classes": [],
@@ -6534,7 +6614,11 @@
    ],
    "eager": [
     "tools/api-compat.mjs"
-   ]
+   ],
+   "derived": [
+    "mod/build/**"
+   ],
+   "verified": "20261023-114540-release c33-unit"
   },
   "pt-ingame": {
    "classes": [
@@ -7128,7 +7212,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release pt-nomod"
   },
   "pt2-unit": {
    "classes": [
@@ -7256,7 +7341,15 @@
    "eager": [
     "tools/gate6cpt2.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release pt2-unit"
   },
   "pt2-ingame": {
    "classes": [
@@ -7567,7 +7660,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release pt2-ingame"
   },
   "pt2-survival": {
    "classes": [
@@ -7878,7 +7972,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release pt2-survival"
   },
   "tile-gravity": {
    "classes": [
@@ -8190,7 +8285,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release tile-gravity"
   },
   "c31-felling": {
    "classes": [
@@ -8502,7 +8598,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release c31-felling"
   },
   "t1-ingame": {
    "classes": [
@@ -8816,7 +8913,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t1-ingame"
   },
   "6ct1-scenario-relief": {
    "classes": [
@@ -9084,7 +9182,7 @@
    "data": [
     "rustic"
    ],
-   "verified": "20261023-045735-slice 6ct1-scenario-relief"
+   "verified": "20261023-114540-release 6ct1-scenario-relief"
   },
   "f2-unit": {
    "classes": [
@@ -9392,7 +9490,8 @@
     "tools/gate6cf2.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release f2-unit"
   },
   "f2-harvest": {
    "classes": [
@@ -9718,7 +9817,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release f2-harvest"
   },
   "6cf2-scenario-scatter": {
    "classes": [
@@ -10046,7 +10146,11 @@
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/scenarios.mjs"
-   ]
+   ],
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261023-114540-release 6cf2-scenario-scatter/p2"
   },
   "t2-unit": {
    "classes": [
@@ -10339,7 +10443,15 @@
     "tools/gate6ct2.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release t2-unit"
   },
   "p0-unit": {
    "classes": [
@@ -10387,7 +10499,20 @@
    "eager": [
     "tools/gate6cp0.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "gradlew",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml",
+    "tools/api-compat.mjs",
+    "tools/lib/**",
+    "tools/plan-catalogue-diff.mjs",
+    "tools/scenarios.mjs"
+   ],
+   "verified": "20261023-114540-release p0-unit"
   },
   "c37-unit": {
    "classes": [
@@ -10426,7 +10551,19 @@
    ],
    "eager": [
     "tools/gate6c37.mjs"
-   ]
+   ],
+   "data": [
+    "kit/test/**",
+    "kit/test/fixtures/ops/**",
+    "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks/**",
+    "kit/test/fixtures/village/**",
+    "kit/test/fixtures/vocab/**",
+    "tools/api-compat.mjs",
+    "tools/lib/**",
+    "tools/scenarios.mjs"
+   ],
+   "verified": "20261023-114540-release c37-unit"
   },
   "c37-ingame": {
    "classes": [
@@ -10694,7 +10831,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release c37-ingame"
   },
   "c38-unit": {
    "classes": [
@@ -10822,7 +10960,14 @@
    ],
    "eager": [
     "tools/gate6c38.mjs"
-   ]
+   ],
+   "data": [
+    "kit/test/**",
+    "tools/api-compat.mjs",
+    "tools/lib/**",
+    "tools/scenarios.mjs"
+   ],
+   "verified": "20261023-114540-release c38-unit"
   },
   "c38-ingame": {
    "classes": [
@@ -11090,7 +11235,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release c38-ingame"
   },
   "coa-unit": {
    "classes": [
@@ -11341,6 +11487,13 @@
    "gradleUse": "tests",
    "eager": [
     "tools/gate6ccoa.mjs"
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
    ]
   },
   "coa-ingame": {
@@ -11665,7 +11818,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release coa-ingame"
   },
   "rs-unit": {
    "classes": [
@@ -11984,7 +12138,8 @@
    "eager": [
     "tools/gate6crs.mjs",
     "tools/lib/gate-part.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rs-unit"
   },
   "rs-ingame": {
    "classes": [
@@ -12304,7 +12459,8 @@
    "eager": [
     "tools/gate6crs.mjs",
     "tools/lib/gate-part.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rs-ingame"
   },
   "rs-survival": {
    "classes": [
@@ -12625,7 +12781,7 @@
     "tools/gate6crs.mjs",
     "tools/lib/gate-part.mjs"
    ],
-   "verified": "20261022-161855-release rs-survival"
+   "verified": "20261023-114540-release rs-survival/p3"
   },
   "rs-survival-smoke": {
    "classes": [
@@ -13265,7 +13421,8 @@
    "eager": [
     "tools/gate6crs.mjs",
     "tools/lib/gate-part.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rs-toggle"
   },
   "rs-crash": {
    "classes": [
@@ -13585,7 +13742,8 @@
    "eager": [
     "tools/gate6crs.mjs",
     "tools/lib/gate-part.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rs-crash"
   },
   "rsb-ingame": {
    "classes": [
@@ -13830,7 +13988,8 @@
    "gradleUse": "tests",
    "eager": [
     "tools/gate6crsb.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rsb-ingame"
   },
   "rsb-crash": {
    "classes": [
@@ -14075,7 +14234,8 @@
    "gradleUse": "tests",
    "eager": [
     "tools/gate6crsb.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rsb-crash"
   },
   "p0-ingame": {
    "classes": [
@@ -14350,7 +14510,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release p0-ingame"
   },
   "p0-natural": {
    "classes": [
@@ -14625,7 +14786,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release p0-natural"
   },
   "t2-ingame": {
    "classes": [
@@ -14943,7 +15105,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t2-ingame"
   },
   "t3a-unit": {
    "classes": [
@@ -15262,7 +15425,8 @@
     "tools/gate6ct3a.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3a-unit"
   },
   "t3a-probe": {
    "classes": [
@@ -15607,7 +15771,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3a-probe"
   },
   "t3a-ingame": {
    "classes": [
@@ -15952,7 +16117,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3a-ingame"
   },
   "t3a-natural": {
    "classes": [
@@ -16297,7 +16463,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3a-natural"
   },
   "t3a-frozen": {
    "classes": [
@@ -16628,7 +16795,8 @@
     "tools/gate6ct3a.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3a-frozen"
   },
   "t3a-look": {
    "classes": [
@@ -16974,7 +17142,7 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
    ],
-   "verified": "20261022-161855-release t3a-look"
+   "verified": "20261023-114540-release t3a-look"
   },
   "k1b-unit": {
    "classes": [
@@ -17269,7 +17437,8 @@
     "tools/gate7ak1b.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release k1b-unit"
   },
   "k1b-ingame": {
    "classes": [
@@ -17591,7 +17760,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release k1b-ingame"
   },
   "k1b-natural": {
    "classes": [
@@ -17913,7 +18083,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release k1b-natural"
   },
   "t3b-unit": {
    "classes": [
@@ -18222,7 +18393,8 @@
    "eager": [
     "tools/gate6ct3b.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3b-unit"
   },
   "t3b-ingame": {
    "classes": [
@@ -18554,7 +18726,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3b-ingame"
   },
   "t3b-natural": {
    "classes": [
@@ -18886,7 +19059,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3b-natural"
   },
   "t3b-pin": {
    "classes": [
@@ -19550,7 +19724,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release t3b-look"
   },
   "h-unit": {
    "classes": [
@@ -19892,7 +20067,8 @@
     "tools/gate6ch.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release h-unit"
   },
   "h-ingame": {
    "classes": [
@@ -20260,7 +20436,7 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
    ],
-   "verified": "20261022-161855-release h-ingame"
+   "verified": "20261023-114540-release h-ingame/p3"
   },
   "h-crash": {
    "classes": [
@@ -20627,7 +20803,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release h-crash"
   },
   "h-probe": {
    "classes": [
@@ -20994,7 +21171,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release h-probe"
   },
   "h-natural": {
    "classes": [
@@ -22431,7 +22609,8 @@
    ],
    "derived": [
     "node_modules/**"
-   ]
+   ],
+   "verified": "20261023-114540-release voc-unit/p3"
   },
   "voc-registry": {
    "classes": [
@@ -22781,7 +22960,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release voc-registry"
   },
   "voc-probe": {
    "classes": [
@@ -23131,7 +23311,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release voc-probe"
   },
   "voc-survival": {
    "classes": [
@@ -23481,7 +23662,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release voc-survival"
   },
   "voc-ingame": {
    "classes": [
@@ -23831,7 +24013,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release voc-ingame"
   },
   "voc-natural": {
    "classes": [
@@ -24181,7 +24364,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release voc-natural"
   },
   "vocc-unit": {
    "classes": [
@@ -24508,12 +24692,17 @@
     "tools/lib/gate-part.mjs"
    ],
    "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
     "node_modules",
-    "package.json"
+    "package.json",
+    "pnpm-workspace.yaml"
    ],
    "derived": [
     "node_modules/**"
-   ]
+   ],
+   "verified": "20261023-114540-release vocc-unit"
   },
   "vocc-ingame": {
    "classes": [
@@ -24863,7 +25052,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release vocc-ingame"
   },
   "6cvoc-look": {
    "classes": [
@@ -25213,7 +25403,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6cvoc-look"
   },
   "cu-unit": {
    "classes": [
@@ -25274,7 +25465,7 @@
    "eager": [
     "tools/gate6ccu.mjs"
    ],
-   "verified": "20261023-045735-slice cu-unit"
+   "verified": "20261023-114540-release cu-unit"
   },
   "cu-measure": {
    "classes": [
@@ -25561,7 +25752,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release cu-measure"
   },
   "cu-ingame": {
    "classes": [
@@ -25848,7 +26040,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release cu-ingame"
   },
   "rp-unit": {
    "classes": [
@@ -25993,7 +26186,8 @@
    "gradleUse": "tests",
    "eager": [
     "tools/gate6crp.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rp-unit"
   },
   "rp-ingame": {
    "classes": [
@@ -26279,7 +26473,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rp-ingame"
   },
   "rp-crash": {
    "classes": [
@@ -26565,7 +26760,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release rp-crash"
   },
   "cu-survival": {
    "classes": [
@@ -26663,7 +26859,8 @@
     "tools/gate6ccu.mjs",
     "tools/gate6cy.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release cu-survival"
   },
   "ha-unit": {
    "classes": [
@@ -28496,7 +28693,7 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs"
    ],
-   "verified": "20261022-161855-release hy-unit"
+   "verified": "20261023-114540-release hy-unit"
   },
   "h-holders": {
    "classes": [
@@ -28863,7 +29060,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release h-holders"
   },
   "irr-holders": {
    "classes": [
@@ -29229,7 +29427,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release irr-holders"
   },
   "h-rmcrash": {
    "classes": [
@@ -29596,7 +29795,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release h-rmcrash"
   },
   "hy-ingame": {
    "classes": [
@@ -29961,7 +30161,7 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
    ],
-   "verified": "20261022-161855-release hy-ingame"
+   "verified": "20261023-114540-release hy-ingame/p3"
   },
   "hy-crash": {
    "classes": [
@@ -30325,7 +30525,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release hy-crash"
   },
   "hy-natural": {
    "classes": [
@@ -31053,7 +31254,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release hy-cold"
   },
   "kc-unit": {
    "classes": [
@@ -31355,7 +31557,7 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs"
    ],
-   "verified": "20261023-045735-slice kc-unit"
+   "verified": "20261023-114540-release kc-unit"
   },
   "kc-ingame": {
    "classes": [
@@ -31682,7 +31884,8 @@
     "tools/lib/p3-tier.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release kc-ingame"
   },
   "f3-unit": {
    "classes": [
@@ -32360,7 +32563,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release f3-ingame"
   },
   "f3-natural": {
    "classes": [
@@ -32711,7 +32915,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release f3-natural"
   },
   "f3-forest": {
    "classes": [
@@ -33037,7 +33242,8 @@
     "tools/gate6cf3.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release f3-forest"
   },
   "f3-look": {
    "classes": [
@@ -33729,7 +33935,8 @@
     "tools/gate6cirr.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release irr-unit"
   },
   "irr-ingame": {
    "classes": [
@@ -34096,7 +34303,7 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
    ],
-   "verified": "20261022-161855-release irr-ingame"
+   "verified": "20261023-114540-release irr-ingame/p3"
   },
   "irr-crash": {
    "classes": [
@@ -34462,7 +34669,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release irr-crash"
   },
   "irr-look": {
    "classes": [
@@ -35150,7 +35358,7 @@
    "derived": [
     "node_modules/**"
    ],
-   "verified": "20261023-045735-slice fl-unit"
+   "verified": "20261023-114540-release fl-unit"
   },
   "fl-ingame": {
    "classes": [
@@ -35484,7 +35692,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release fl-ingame"
   },
   "fl-natural": {
    "classes": [
@@ -35818,7 +36027,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release fl-natural"
   },
   "fl-look": {
    "classes": [
@@ -36152,7 +36362,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release fl-look"
   },
   "water-lint": {
    "classes": [],
@@ -36425,7 +36636,12 @@
     "kit/vocab/hazards.json",
     "kit/vocab/roles.json",
     "kit/vocab/tiers.json"
-   ]
+   ],
+   "data": [
+    "scenarios/goldens/route_demo/**",
+    "scenarios/goldens/s7/**"
+   ],
+   "verified": "20261023-114540-release water-lint"
   },
   "p3-lint": {
    "classes": [
@@ -36436,7 +36652,8 @@
    "globs": [],
    "dynamic": [],
    "env": [],
-   "eager": []
+   "eager": [],
+   "verified": "20261023-114540-release p3-lint"
   },
   "p3-lint-long": {
    "classes": [
@@ -36447,7 +36664,8 @@
    "globs": [],
    "dynamic": [],
    "env": [],
-   "eager": []
+   "eager": [],
+   "verified": "20261023-114540-release p3-lint-long"
   },
   "p3-probe-water": {
    "classes": [],
@@ -40365,7 +40583,15 @@
     "tools/gate6cs2.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release s2-unit"
   },
   "s3-unit": {
    "classes": [
@@ -40716,7 +40942,15 @@
    "eager": [
     "tools/gate6cs3.mjs",
     "tools/lib/gate-part.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release s3-unit"
   },
   "s3-plan": {
    "classes": [
@@ -41092,7 +41326,8 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release s3-plan"
   },
   "6c-scenario-s3": {
    "classes": [
@@ -41356,6 +41591,9 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
+   ],
+   "data": [
+    "rustic"
    ]
   },
   "6c-scenario-s3-dev": {
@@ -41884,7 +42122,11 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ]
+   ],
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261023-114540-release 6c-scenario-s2"
   },
   "6ct2-scenario-route": {
    "classes": [
@@ -42148,7 +42390,11 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ]
+   ],
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261023-114540-release 6ct2-scenario-route"
   },
   "d-unit": {
    "classes": [
@@ -42485,7 +42731,15 @@
     "tools/gate6cd.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release d-unit"
   },
   "d-ingame": {
    "classes": [
@@ -42847,7 +43101,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release d-ingame"
   },
   "6cd-scenario-districts": {
    "classes": [
@@ -43111,7 +43366,11 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ]
+   ],
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261023-114540-release 6cd-scenario-districts"
   },
   "k1a-unit": {
    "classes": [
@@ -43431,7 +43690,18 @@
     "tools/gate7ak1.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "gradlew",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml",
+    "tools/api-compat.mjs",
+    "tools/plan-catalogue-diff.mjs"
+   ],
+   "verified": "20261023-114540-release k1a-unit"
   },
   "k1a-ingame": {
    "classes": [
@@ -43776,7 +44046,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release k1a-ingame"
   },
   "k1a-natural": {
    "classes": [
@@ -44121,7 +44392,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release k1a-natural"
   },
   "k1a-target": {
    "classes": [
@@ -44466,7 +44738,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release k1a-target"
   },
   "k1a-look": {
    "classes": [
@@ -44812,7 +45085,7 @@
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
-   "verified": "20261022-161855-release k1a-look"
+   "verified": "20261023-114540-release k1a-look"
   },
   "d2-ingame": {
    "classes": [
@@ -45174,7 +45447,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release d2-ingame"
   },
   "d2-findsite": {
    "classes": [
@@ -46058,7 +46332,8 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release x-resume-full"
   },
   "6cv-scenario-s7": {
    "classes": [
@@ -46359,7 +46634,11 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ]
+   ],
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261023-114540-release 6cv-scenario-s7"
   },
   "0b-unit": {
    "classes": [
@@ -46454,7 +46733,15 @@
     "tools/gate6c0b.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "deno.json",
+    "deno.jsonc",
+    "lerna.json",
+    "package.json",
+    "pnpm-workspace.yaml"
+   ],
+   "verified": "20261023-114540-release 0b-unit"
   },
   "0b-ingame": {
    "classes": [
@@ -46561,7 +46848,11 @@
     "tools/gate6c0b.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/src-gradle.mjs"
-   ]
+   ],
+   "data": [
+    "package.json"
+   ],
+   "verified": "20261023-114540-release 0b-ingame"
   },
   "4e-megalite": {
    "classes": [
@@ -46640,7 +46931,8 @@
     "tools/gate4e.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 4e-megalite"
   },
   "c30-ingame": {
    "classes": [
@@ -46736,7 +47028,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release c30-ingame-full"
   },
   "4d-all": {
    "classes": [
@@ -46833,7 +47126,7 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/tickbar.mjs"
    ],
-   "verified": "20261022-161855-release 4d-all-full"
+   "verified": "20261023-114540-release 4d-all-full"
   },
   "4e-orders": {
    "classes": [
@@ -46992,7 +47285,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
    ],
-   "verified": "20261022-161855-release 4e-orders-full"
+   "verified": "20261023-114540-release 4e-orders-full"
   },
   "4e-crash": {
    "classes": [
@@ -47150,7 +47443,8 @@
     "tools/gate4e.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 4e-crash-full"
   },
   "4e-throughput": {
    "classes": [
@@ -47229,7 +47523,8 @@
     "tools/gate4e.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 4e-throughput"
   },
   "4e-throughput-smoke": {
    "classes": [
@@ -47560,7 +47855,7 @@
    "data": [
     "kit/lint/**"
    ],
-   "verified": "20261022-161855-release 5b-chains-full"
+   "verified": "20261023-114540-release 5b-chains-full/p3"
   },
   "5b-village": {
    "classes": [
@@ -47684,7 +47979,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 5b-village"
   },
   "6a-megaA": {
    "classes": [
@@ -47749,7 +48045,8 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6a-megaA"
   },
   "6a-megaB": {
    "classes": [
@@ -47814,7 +48111,8 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6a-megaB"
   },
   "6a-megaB-fast": {
    "classes": [
@@ -48010,7 +48308,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
    ],
-   "verified": "20261022-161855-release 6a-crash"
+   "verified": "20261023-114540-release 6a-crash"
   },
   "6a-eflat": {
    "classes": [
@@ -48140,7 +48438,8 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6a-eflat-full"
   },
   "6a-forest": {
    "classes": [
@@ -48205,7 +48504,8 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6a-forest"
   },
   "6b-smoke": {
    "classes": [
@@ -48467,7 +48767,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6b-smoke"
   },
   "6b-ghost": {
    "classes": [
@@ -48729,7 +49030,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6b-ghost"
   },
   "6b-volume": {
    "classes": [
@@ -48992,7 +49294,7 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
    ],
-   "verified": "20261023-045735-slice 6b-volume"
+   "verified": "20261023-114540-release 6b-volume"
   },
   "6b-commands": {
    "classes": [
@@ -49778,7 +50080,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6b-pathstyle"
   },
   "6b-versions": {
    "classes": [
@@ -50040,7 +50343,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6b-versions"
   },
   "6b-versionc": {
    "classes": [
@@ -50302,7 +50606,11 @@
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "data": [
+    "package.json"
+   ],
+   "verified": "20261023-114540-release 6b-versionc"
   },
   "6b-scenario-s1": {
    "classes": [
@@ -50566,7 +50874,11 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
-   ]
+   ],
+   "data": [
+    "rustic"
+   ],
+   "verified": "20261023-114540-release 6b-scenario-s1"
   },
   "6b-scenario-s1-flat": {
    "classes": [
@@ -50895,7 +51207,8 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6a-inv3"
   },
   "6a-staged": {
    "classes": [
@@ -51025,7 +51338,8 @@
     "tools/gate6a.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/tickbar.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release 6a-staged-full"
   },
   "6a-heap": {
    "classes": [
@@ -51546,7 +51860,34 @@
    ],
    "eager": [
     "tools/lint.mjs"
-   ]
+   ],
+   "data": [
+    "kit/lib/**",
+    "kit/regions/**",
+    "kit/schemas/**",
+    "kit/test/**",
+    "kit/test/fixtures/plan/even/**",
+    "kit/test/fixtures/plan/f3/**",
+    "kit/test/fixtures/plan/fl/**",
+    "kit/test/fixtures/plan/h/**",
+    "kit/test/fixtures/plan/hy/**",
+    "kit/test/fixtures/plan/irr/**",
+    "kit/test/fixtures/plan/k1a/**",
+    "kit/test/fixtures/plan/kc/**",
+    "kit/test/fixtures/plan/refused/**",
+    "kit/test/fixtures/plan/rope/**",
+    "kit/test/fixtures/plan/rs/**",
+    "kit/test/fixtures/plan/t3a/**",
+    "kit/test/fixtures/plan/tunnel/**",
+    "kit/test/fixtures/plan/valid/**",
+    "kit/test/fixtures/plan/voc/**",
+    "kit/test/fixtures/plan/vocc/**",
+    "kit/test/fixtures/vocab/**",
+    "kit/vocab/**",
+    "kit/voxel_classes.json",
+    "scenarios/bibles/**"
+   ],
+   "verified": "20261023-114540-release lint-structure"
   },
   "lint-look": {
    "classes": [],
@@ -51670,7 +52011,16 @@
    ],
    "eager": [
     "tools/lint.mjs"
-   ]
+   ],
+   "data": [
+    "kit/lib/**",
+    "kit/regions/**",
+    "kit/schemas/**",
+    "kit/test/**",
+    "kit/vocab/**",
+    "kit/voxel_classes.json"
+   ],
+   "verified": "20261023-114540-release lint-look"
   },
   "lint-mutations": {
    "classes": [],
@@ -51794,7 +52144,14 @@
    ],
    "eager": [
     "tools/lint.mjs"
-   ]
+   ],
+   "data": [
+    "kit/lib/**",
+    "kit/regions/**",
+    "kit/vocab/**",
+    "kit/voxel_classes.json"
+   ],
+   "verified": "20261023-114540-release lint-mutations"
   },
   "p2-calibration": {
    "classes": [
@@ -52238,7 +52595,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261023-114540-release p2-calibration"
   },
   "w-ingame-smoke": {
    "classes": [
