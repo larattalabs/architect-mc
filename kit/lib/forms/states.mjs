@@ -9,7 +9,7 @@
 import { BLOCKS, hasTag, qualify } from '../blocks.mjs';
 
 export const AIR = 'minecraft:air';
-const DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+export const DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
 const FACES = [['east', 1, 0, 0], ['west', -1, 0, 0], ['up', 0, 1, 0], ['down', 0, -1, 0], ['south', 0, 0, 1], ['north', 0, 0, -1]];
 export const key = (x, y, z) => `${x},${y},${z}`;
 export const unkey = (k) => k.split(',').map(Number);
@@ -175,6 +175,32 @@ export function connectedTo(cells, root) {
   const dropped = [];
   for (const [k, s] of cells) if (s !== AIR && !seen.has(k)) dropped.push(k);
   return dropped.sort();
+}
+
+/**
+ * (fix/survival-off-storm, Steward's RC: one floating log in a giant oak) The logs of `cells` with no support as the game's own
+ * check reads it (DevBridge `dev.region.logs`): a log is held by a log in the 3x3 under it, by a log in the 8 cells beside it, or by
+ * a solid cell right under it. Stricter than that check: a leaf under a log does not hold it. `groundAt(x, z)` is the plan ground's
+ * top block (a cell at or under it is the ground's, solid). Face-connectivity (M3) passes a log that hangs from the log above it or
+ * sits in leaves; this does not. Returns the keys, sorted.
+ */
+export function unsupportedLogs(cells, groundAt) {
+  const out = [];
+  for (const [k, s] of cells) {
+    if (!isLog(s)) continue;
+    const [x, y, z] = unkey(k);
+    let held = false;
+    for (let dx = -1; dx <= 1 && !held; dx++) {
+      for (let dz = -1; dz <= 1 && !held; dz++) {
+        const below = cells.get(key(x + dx, y - 1, z + dz));
+        if (below && isLog(below)) held = true;
+        else if (dx === 0 && dz === 0) held = y - 1 <= groundAt(x, z) || (!!below && below !== AIR && !isLeaves(below));
+        else { const side = cells.get(key(x + dx, y, z + dz)); held = !!side && isLog(side); }
+      }
+    }
+    if (!held) out.push(k);
+  }
+  return out.sort();
 }
 
 /**
