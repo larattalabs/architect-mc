@@ -1052,6 +1052,64 @@ side (about half).
 (memory fine: no swap, 0.03-2.7 M free pages). The unit floor slowed most, so 6 concurrent runs look like too many for timing
 comparisons; functional results were unaffected (no new failure, no timing bar judged).
 
+## Shared plans (2026-10-23): the unit drivers plan the corpus once, on every core
+
+The turbo slice (`artifacts/gate-runs-turbo-slice/20261022-212922-slice`, 650 step-minutes) was bound by offline unit steps
+(fl-unit/p1 20.6, s3-unit/p1 19.7, f3-unit/p1 16.6, kc-unit/p1 14 min). Their time went to the same plans, again and again:
+fl/s3/f3/kc/irr-unit each planned all 313 committed fixtures on this head and on the merge base, one after another (one tree is
+535-700 s of single-thread CPU; the 25 slowest fixtures are 60% of it), and the 59 asks once more for their tables (FL 5m50, S3
+4m50, KC 2m). api-compat, run by most unit drivers, spent 1.5-4 min starting one JVM per class.
+
+- **The plan store** (`tools/lib/corpus-plan.mjs`): `helpers(dir)` is a tree's `plan-helpers.mjs` with `checkPlanVolumes` and
+  `checkPlanLocal` answered from a store keyed by the exact call: its shape, the plan, every option (the survey as its sha;
+  options equal to the defaults dropped), the tree's kit and scenarios trees (clean only: a dirty tree is never cached), Node's
+  version and `ARCHITECT_BIG_REGIONS`. An entry is the check, the IR's JSON and the first plan's, as the call returned them; a hit
+  and a miss both return the result rebuilt from the entry, so the drivers' signatures read the same thing either way. One gzipped
+  file per entry, written atomically under its own lock: concurrent drivers (and split parts) share each other's work, and the
+  base's entries hold for every run on that base. An error is never stored.
+- **The pool:** before its loop a driver plans its fixtures on `worker_threads` (`prewarm`, longest first by the last run's times;
+  at least 4 workers, at most cores - 1). Its loop then reads every answer from the store.
+- **Extras that need the whole result** (KC's M25:clear census, F3's M18/M19: `tools/lib/corpus-derive.mjs`, the drivers' code
+  moved) are computed where the plan runs and stored beside it, keyed by the head's kit tree too.
+- **Where:** the `unchanged()` loops of `gate6ckc-kit`, `gate6cs3-kit`, `gate6cf3-kit`, `gate6cirr-kit`, `gate6cfl-kit` and VOC-c's;
+  the asks tables (`gate6chy-b` asksGap, FL's and VOC-c's asksTable). HY's and H's loops keep `plan-cache.mjs` (their own key).
+- **api-compat** caches each javap answer by the class file's sha (a JDK class by name) and the JDK's real path, and runs its
+  checks side by side.
+- **f3/kc/irr-unit** take their kit files from unit-kit (`kitReuse`, `waitFor: unit-kit`), as the other drivers do.
+- **Off:** `GATE_PLAN_CACHE=0` (the old path), `GATE_PLAN_WORKERS=1` (no pool), `GATE_JAVAP_CACHE=0`.
+
+**Proof.**
+- Records: all 313 fixtures, the whole check JSON, the IR, the first plan and the extras, byte-identical between the serial path and
+  the store (cold through the pool, warm), on this head and on the base a6a947bc (`scratchpad proof.mjs`, 2026-10-22).
+- `kit/test/gate-corpus-plan.test.mjs`: each driver's `unchanged()` on three small fixtures through the store cold, warm and off:
+  every check passes and the three passes print the same lines. (It catches the bug the record proof missed: KC's census helper
+  shadowed by the loop's own `census`, every census "not a function".)
+- Runs (`--no-split`, 3 shards, change tier; `node <speed3runs>/compare.mjs`, split-proof's mask): the masked check lines of
+  fl/s3/f3/irr-unit and, after the census fix, kc-unit, identical old against new; their FAILs are main's at that head, on both
+  sides. api-compat: each sub-check's whole output equal with and without the cache (3 apitest jars, 3 surfaces).
+
+**Measured** (whole steps, `--no-split`, 3 shards, load 10-25). Lever A: the turbo head 65715bfe against the store, without
+unit-kit in the run. Then main with lever A (0ff6eda9, its store filled by that run) against main plus the javap cache and the kit
+reuse (d5782c8a, the same store), unit-kit in both:
+
+| step | before | store cold | store warm | main (A) | + javap cache, kit reuse |
+|---|---|---|---|---|---|
+| kc-unit | 19m27 | 4m34 | 1m36 | 2m04 | 9s |
+| f3-unit | 22m18 | 4m33 | 1m45 | 6m05 | 5s |
+| irr-unit | 11m49 | 50s | 1m23 | 39s | 4s |
+| fl-unit | 22m16 | 5m43 | 7m10 | 7m05 | 3m52 |
+| s3-unit | 17m03 | 8m08 | 14m19 (its own kit suite: no unit-kit) | 1m01 | 32s |
+| run (3 shards) | 40m14 | 13m17 | 16m06 | 7m39 (unit-kit 4m02) | 4m57 (unit-kit 3m51) |
+
+The masked check lines are identical in every pair, but one: s3-unit's api-compat line (a FAIL on both sides at that head: the
+run worktree's mod classes were missing) prints the output's last line, which on the old side was a javap JVM's `Picked up
+JAVA_TOOL_OPTIONS` banner (the coverage tracer's) and on the new side, its javap answers cached, the last MISSING entry; the
+api-compat outputs are otherwise the same.
+
+The head's corpus alone: serial 535 s, 9 workers 70 s, warm 0 s. The pool peaks at about 3.9 GB with 8 workers; the store is about
+21 MB for two trees. What is left is each driver's own work: FL's layout tests (3m40: they read the tests' diagnostics, so unit-kit
+can't serve them), S3's sidecar and mod tests, the drivers' Gradle runs.
+
 ## Sprinted game-time waits (2026-10-22)
 
 Many in-game steps wait for game time to pass: a 2-minute stand, a fluid or breach settle, hydration, a villager stand, the
@@ -1353,7 +1411,7 @@ release; `node tools/split-proof.mjs --whole <A> --parts <B>`):
 | 5b-chains-full | 31.4 | 3 | the 21 scripts (fixed + 20 seeds), each from its own world; E1 over each part's states | 3 names / 13 lines: equal |
 | rs-survival | 23.2 | 3 | items 5; 9; 8 and 10 | 11/11: equal |
 | 6cf2-scenario-scatter | 12.2 | 2 | harvest, then scatter_demo flat and natural; harvest, then scatter_cave (a shell split) | see below |
-| irr-unit, kc-unit, f3-unit, fl-unit, s3-unit | 14-36 under turbo | 3 | the byte-identity fixture loop in 3 round-robin slices (the first part also runs every other item) | proof below (the turbo slice against the whole runs) |
+| irr-unit, kc-unit, f3-unit, fl-unit, s3-unit | 14-36 under turbo | **whole again** (2026-10-23) | was: the byte-identity fixture loop in 3 round-robin slices. With the shared plans each whole step is 0.2-7.5 min ("Shared plans"), so the split is dropped; the drivers keep their sections (`GATE_PART_SECTIONS` still works by hand) | proof below (the turbo slice against the whole runs) |
 | voc-unit | 27-34 under turbo | 3 | item 5 (byte identity); item 13 and the census; the rest | proof below |
 
 **Not split, and why (found by the proof):** a scenario's natural run reads its flat run's E-flat from the same evidence dir
@@ -1935,6 +1993,8 @@ Several agents and runners share this machine, so everything is configurable. A 
 | `--quiet-wait [N]`, `--no-quiet-wait`, `--quiet-max-min M` | | on at release (N 8), else off (load recorded only); M 30 |
 | `--slots N`, `--slots-dir DIR` | `GATE_SLOTS`, `GATE_SLOTS_DIR` | `slots.max` (4); `<LarattaLabs>/.gate-slots/` |
 | `--judge-timing` | | change/slice record timing bars; this judges them as at release |
+| | `GATE_PLAN_CACHE`, `GATE_PLAN_WORKERS`, `GATE_PLAN_CACHE_DIR` | on; the cores free now, at least 4; `<main checkout>/artifacts/plan-cache/calls-v1` ("Shared plans"). `GATE_PLAN_CACHE=0`: no store, no pool, as before |
+| | `GATE_JAVAP_CACHE`, `GATE_JAVAP_CACHE_DIR` | on; `<main checkout>/artifacts/javap-cache` (api-compat's javap answers, "Shared plans") |
 | | `GATE_SPRINT` | on: the drivers' game-time waits sprint on headless hosts ("Sprinted game-time waits"); `0`: every one waits in real time, as before |
 | | `GATE_SNAPSHOT_DIR` | the seed's `mod/run/saves` |
 | | `ARCHITECT_GATE_OLD_SIDECAR_PORT`/`_DEV_PORT` (gate4e/gate5b's old-version client, migration/downgrade steps only) | 8892/8893 |
