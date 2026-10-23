@@ -88,3 +88,38 @@ test('the store\'s record carries the artifact (coa-unit compares it): cold, war
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// (speed audit A) hy-unit's item 12, h-unit's item 11 and vocc-unit's item 4 over the store: each loop's per-fixture comparison, this
+// checkout against itself, cold, warm and off, is the same table, every fixture the same.
+test('hy, h-core and vocc-c identity loops: the store cold, warm and off give the same tables, all identical', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'corpus-plan-hy-'));
+  const run = async (env) => {
+    const saved = { ...process.env };
+    Object.assign(process.env, env);
+    try {
+      const hy = await import(pathToFileURL(path.join(ROOT, 'tools', 'lib', 'gate6chy-core.mjs')).href);
+      const hc = await import(pathToFileURL(path.join(ROOT, 'tools', 'lib', 'gate6ch-core.mjs')).href);
+      const vc = await import(pathToFileURL(path.join(ROOT, 'tools', 'lib', 'gate6cvoc-c.mjs')).href);
+      const a = await hy.unchanged(ROOT, { baseDir: ROOT, only: /^(valid\/v01_[a-z_]+|extension\/e01_[a-z_]+|asks\/pirate_cove)\.json$/ });
+      const b = await hc.unchanged(ROOT, { baseDir: ROOT });
+      const c = await vc.unchanged(ROOT, ROOT, { only: /^(valid\/v01_[a-z_]+|asks\/pirate_cove)\.json$/ });
+      return { hy: a.fixtures, h: b.fixtures, vocc: c.fixtures };
+    } finally {
+      for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+      Object.assign(process.env, saved);
+    }
+  };
+  try {
+    const cold = await run({ GATE_PLAN_CACHE_DIR: dir, GATE_PLAN_WORKERS: '2' });
+    const warm = await run({ GATE_PLAN_CACHE_DIR: dir, GATE_PLAN_WORKERS: '1' });
+    const off = await run({ GATE_PLAN_CACHE: '0' });
+    for (const k of ['hy', 'h', 'vocc']) {
+      assert.ok(Object.keys(cold[k]).length >= 1, `${k}: fixtures compared (${Object.keys(cold[k]).length})`);
+      for (const [n, v] of Object.entries(cold[k])) assert.ok(v.answers && v.ir && v.overall, `${k} ${n}: identical to itself (${JSON.stringify(v)})`);
+      assert.deepEqual(warm[k], cold[k], `${k}: warm = cold`);
+      assert.deepEqual(off[k], cold[k], `${k}: off = cold`);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
