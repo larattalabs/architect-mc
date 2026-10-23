@@ -70,6 +70,19 @@ class DistrictLandTest {
 	}
 
 	@Test
+	void verdictCodes() {
+		assertEquals("NO_JOIN [route]", BesideVerdicts.code(null, "NO_JOIN: [route] no route from a district to region rg1's 9 street end(s)"));
+		assertEquals("NO_JOIN [apart]", BesideVerdicts.code(null, "Error: NO_JOIN: [apart] this claim neither overlaps nor touches region rg1's claim"));
+		assertEquals("NO_JOIN", BesideVerdicts.code(null, "NO_JOIN: no street end of region rg1 lies inside this claim"));
+		assertEquals("NO_ROOM", BesideVerdicts.code(null, "NO_ROOM: no district could be placed (east: no_candidate)"));
+		assertEquals("OVERLAP", BesideVerdicts.code(dev.larattalabs.architect.api.Reason.OVERLAP, "beside rg1: the claim overlaps the standing region's 20 columns deep"));
+		assertNull(BesideVerdicts.code(null, "something else"));
+		assertEquals(15, BesideReach.lightLevelOf("minecraft:lantern[hanging=false,waterlogged=false]"));
+		assertEquals(10, BesideReach.lightLevelOf("minecraft:soul_lantern[hanging=false]"));
+		assertEquals(0, BesideReach.lightLevelOf("minecraft:oak_fence[east=false]"));
+	}
+
+	@Test
 	void colsRuns() {
 		BesideReach.Cols c = new BesideReach.Cols();
 		c.add(3, 1);
