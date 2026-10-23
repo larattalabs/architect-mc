@@ -706,6 +706,9 @@ export function finishGates(K) {
         const mid = W.positions[(best.a + best.b) >> 1];
         W.gates.push(makeGate(W, { a: best.a, b: best.b, y: K.env.S.groundAt(mid.x, mid.z), h: WALL_DEFAULTS.gateHeight, auto: true, kind: 'min' }));
         added++;
+        // (no level run: the gate stands where the ground steps across the wall; said in the answer, never silent: the K2 finding)
+        const step = crossStep(K, W, best.a, best.b);
+        if (step > 1) W.notes.push(`gate ${W.gates[W.gates.length - 1].id}: the ground steps ${step} across the wall there (no level run within half the spacing): no walk through it until a gate landing levels it`);
       }
       if (added < want) W.notes.push(`gates.min ${W.st.gatesMin}: room for ${W.gates.length}`);
       continue;

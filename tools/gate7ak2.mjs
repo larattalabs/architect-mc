@@ -311,6 +311,7 @@ steps.ingame = async () => {
   // ---- item 5: vanilla villagers through the gates both ways, from every lot inside to each gate's outside; the paths meet the wall
   // only at gate cells (the hard bar)
   const wallCells = new Set(w.cells.map((q) => `${q[0]},${q[1]}`));
+  const topAt = new Map(w.cells.map((q) => [`${q[0]},${q[1]}`, q[2]]));
   const gateCells = new Set(w.gates.flatMap((g) => g.cells.map(([x, z]) => `${x},${z}`)));
   const [x0, z0, x1, z1] = w.inside, t = w.thickness;
   const isOut = (x, z) => x < x0 - (t - 1) || x > x1 + (t - 1) || z < z0 - (t - 1) || z > z1 + (t - 1);
@@ -326,7 +327,8 @@ steps.ingame = async () => {
   for (const [id, e] of lots) for (const [gi, o] of outside.entries()) {
     const there = await call('dev.nav.villager', { from: e, to: o, range: 256, cells: true }, 120_000);
     const back = await call('dev.nav.villager', { from: o, to: e, range: 256, cells: true }, 120_000);
-    for (const p of [...(there.cells ?? []), ...(back.cells ?? [])]) if (wallCells.has(`${p[0]},${p[2]}`) && !gateCells.has(`${p[0]},${p[2]}`)) wallHits++;
+    // (a path cell through the wall's body: a wall column, not a gate's, under its top; one on the walk itself is not a crossing)
+    for (const p of [...(there.cells ?? []), ...(back.cells ?? [])]) if (wallCells.has(`${p[0]},${p[2]}`) && !gateCells.has(`${p[0]},${p[2]}`) && p[1] < topAt.get(`${p[0]},${p[2]}`)) wallHits++;
     out.nav[`${id}>g${gi}`] = [!!there.canReach, !!back.canReach, there.nodes ?? 0, back.nodes ?? 0];
   }
   const navs = Object.values(out.nav);

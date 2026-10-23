@@ -1094,9 +1094,13 @@ Top first. Not fixed in v0.40.1.
   - **What happens.** `v7a_k2_along_shore` (a wall along S3's pinned river, distance [3, 6]) fits, but the shore is a 45° staircase:
     the wall's line is mostly runs of 1-3 cells, and where it does run straight (7-9 cells) the bank drops 7-10 blocks across the
     wall's 4 cells (inside, two courses, outside). K1a's gate move opens only on a straight run perpendicular to the route, held flat
-    at the route's y. Probe: 25 spine points (every 8th spine cell, an inland point 12 along the normal to the shore cell): with the
-    wall, every inland-to-quay path ends BUDGET or UNREACHABLE; without it, the same pairs route (5 of 16 fits or adjusted on the
-    first probe, the rest steep-bank misses of their own).
+    at the route's y. Probe (25 spine points, every 8th spine cell, a path from a point 12 inland along the normal to the shore cell):
+    without the wall 11 of 25 route (adjusted), 11 run out of budget, 3 refuse on the bank itself; with the wall 0 route: the same 11
+    and 13 more answer refused UNREACHABLE {kind: wall}, 1 (spine cell 0, the window's end) BUDGET either way.
+  - **Its evenly placed gates are ledges.** gates.min 2 finds no level run within half the spacing: river_wall_g1 has its floor at 64
+    with the ground inside at 74 (the bank cut 9 high behind it), g2 its floor at 89 with the inside at 93-98 and the outside at 84
+    then 63; the kit's player and villager movers get through neither, either way. The wall's answer says so per gate ("the ground
+    steps N across the wall there ... no walk through it until a gate landing levels it").
   - **What K2 ships instead.** S3's fixture takes `gates.min: 2`, placed evenly with a level run preferred within half the spacing (none
     on this bank, so its gates are ledges); a route the wall cuts answers `refused UNREACHABLE {kind: wall, walls, round}` naming the
     wall (`wallsCutAnswer`, never a bare BUDGET). The auto-gates-where-routes-cross bar runs on the flat biome-edge fixture.
