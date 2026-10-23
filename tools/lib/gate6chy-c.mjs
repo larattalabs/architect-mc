@@ -111,23 +111,42 @@ async function pushStand(ctx, G, tag) {
   const y = G.body.level - 1;
   const mid = G.lanes[(G.lanes.length - 1) >> 1];
   const spots = [['zombie', mid + 0.5], ['zombie', mid + 1.0], ['villager', mid + 0.5], ['villager', mid], ['spider', mid + 0.5]];
-  for (const [t, lat] of spots) {
+  for (const [i, [t, lat]] of spots.entries()) {
     const [x, z] = G.along === 'z' ? [lat, startV + 0.5] : [startV + 0.5, lat];
-    await L.cmd(`/summon minecraft:${t} ${x} ${y} ${z} {PersistenceRequired:1b,Tags:["hyc_push"],Silent:1b}`);
+    await L.cmd(`/summon minecraft:${t} ${x} ${y} ${z} {PersistenceRequired:1b,Tags:["hyc_push","hyc_push_${i}"],Silent:1b}`);
   }
   const m = G.along === 'z' ? `0.0d,0.0d,${(0.35 * out).toFixed(2)}d` : `${(0.35 * out).toFixed(2)}d,0.0d,0.0d`;
+  // (6c close-out B) each mob's track, read at every push: a mob is judged beyond only when it crossed the grate's outer face
+  // under the lintel (through the bars). A spider that climbs the wall and walks over the lintel (vanilla: spiders climb any wall)
+  // crosses above it: recorded as `over`, not judged (turbo-proof runs 162049 and 170841: the spider at y 65 on the wall's far side)
+  const lintelTop = G.wg.lintel + 1;
+  const along = (v) => (G.along === 'z' ? v[2] : v[0]);
+  const past = (a) => (out > 0 ? a > G.hi + 1 : a < G.lo);
+  const posOf = async (i) => {
+    const r = (await L.cmd(`/execute as @e[tag=hyc_push_${i}] run data get entity @s Pos`)).messages ?? [];
+    const v = (/\[([^\]]*)\]/.exec(r[0] ?? '')?.[1] ?? '').split(',').map((q) => Number.parseFloat(q));
+    return v.length === 3 && v.every(Number.isFinite) ? v : null;
+  };
+  const track = spots.map(() => ({ last: null, crossed: null }));
+  const sample = async () => {
+    for (let i = 0; i < spots.length; i++) {
+      const v = await posOf(i);
+      const tr = track[i];
+      if (v && tr.crossed === null && past(along(v)) && (tr.last === null || !past(along(tr.last)))) tr.crossed = { y: v[1], under: Math.max(v[1], tr.last?.[1] ?? v[1]) < lintelTop }; // both sides of the crossing under the lintel
+      if (v) tr.last = v;
+    }
+  };
   const t0 = Date.now();
-  while (Date.now() - t0 < 20_000) { await L.cmd(`/execute as @e[tag=hyc_push] run data merge entity @s {Motion:[${m}]}`); await sleep(150); }
-  const pos = (await L.cmd('/execute as @e[tag=hyc_push] run data get entity @s Pos')).messages ?? [];
-  const mobs = pos.map((p, i) => {
-    const v = (/\[([^\]]*)\]/.exec(p)?.[1] ?? '').split(',').map((s) => Number.parseFloat(s));
-    const a = G.along === 'z' ? v[2] : v[0];
-    const beyond = out > 0 ? a > G.hi + 1 : a < G.lo;
-    return { pos: v.map((q) => Math.round(q * 100) / 100), beyond };
-  });
+  while (Date.now() - t0 < 20_000) {
+    await L.cmd(`/execute as @e[tag=hyc_push] run data merge entity @s {Motion:[${m}]}`);
+    await sample(); // (every push, about 150 ms apart: a crossing is seen on both sides)
+    await sleep(150);
+  }
+  await sample();
+  const mobs = track.map((tr, i) => ({ type: spots[i][0], pos: tr.last ? tr.last.map((q) => Math.round(q * 100) / 100) : null, beyond: !!tr.last && past(along(tr.last)) && (tr.crossed?.under ?? true), over: !!tr.last && past(along(tr.last)) && tr.crossed?.under === false })).filter((q) => q.pos);
   await L.cmd('/kill @e[tag=hyc_push]');
   await L.cmd('/time set 6000');
-  return { tag, summoned: spots.length, alive: mobs.length, beyond: mobs.filter((q) => q.beyond).length, mobs };
+  return { tag, summoned: spots.length, alive: mobs.length, beyond: mobs.filter((q) => q.beyond).length, over: mobs.filter((q) => q.over).length, mobs };
 }
 
 /** Vanilla's villager from the reach's inside bank to its outside bank: canReach, and no path cell in the grate's columns. */
@@ -202,7 +221,7 @@ async function gateIngame(ctx) {
     check(Object.values(out.nav).every((v) => !v.error && v.throughGrate === 0), `item 14: vanilla dev.nav.villager from the reach's inside to its outside (bank and water) never paths through the grate or under the lintel (${json(out.nav)})`);
     // the push stand
     out.push = await pushStand(ctx, G, 'grate');
-    check(out.push.alive >= 3 && out.push.beyond === 0, `item 14: the push stand: ${out.push.alive} of ${out.push.summoned} mobs (zombies, villagers, a spider) pushed at the grate from inside for 20 s, ${out.push.beyond} beyond it (${json(out.push.mobs.map((q) => q.pos))})`);
+    check(out.push.alive >= 3 && out.push.beyond === 0, `item 14: the push stand: ${out.push.alive} of ${out.push.summoned} mobs (zombies, villagers, a spider) pushed at the grate from inside for 20 s, ${out.push.beyond} through it (crossed its outer face under the lintel); ${out.push.over ?? 0} over the wall above the lintel, recorded (${json(out.push.mobs.map((q) => q.pos))})`);
     const rm = await core.removeWait(ctx, r.region);
     await sleep(3000);
     const df = await core.diff(ctx, box, file);

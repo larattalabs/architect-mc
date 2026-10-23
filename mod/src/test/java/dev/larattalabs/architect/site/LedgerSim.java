@@ -389,6 +389,7 @@ final class LedgerSim {
 			queue[i] = boxIdx[ord[i]];
 		}
 		Builder.Run r = new Builder.Run(siteOf(t, queue), cells);
+		Builder.driedFarmland(r, cellsOf(box, t.before)); // (6c close-out B, L-V7) production's seam: Builder.run, RoadBuilder.run, RegionTargets.newRun
 		if (t.road) {
 			RoadBuilder.freeOff(r, cellsOf(box, t.before));
 		}
@@ -928,10 +929,10 @@ final class LedgerSim {
 				t.run = runOf(t);
 				rescan(t);
 				t.deltaBill = billBefore;
-				// (batch v0.41.0, RS-b's S-CU-3 rule) a farmland cell the builder wrote and that dried stays built only while its run holds
-				// the built bit (Builder.Run.matches); the restart's run rescans the world and reads the dried cell as not built: L-V7 again,
-				// on the restart path only (production's rescan: its cost outstanding, the deconstruct drops it as the player's)
-				if (old != null && t.run != null) {
+				// (batch v0.41.0, RS-b's S-CU-3 rule) a farmland cell the builder wrote and that dried stays built while its run holds the built
+				// bit (Builder.Run.matches); the restart's run has none. (6c close-out B) Builder.driedFarmland marks it from the befores, so
+				// the restart's run reads it as built too; this guard reports L-V7 if a run made after a restart reads it as not built again
+				if (old != null && t.run != null && !t.unloaded) { // (an unloaded target is not rescanned: nothing is read as built yet)
 					for (long p : new TreeSet<>(t.paid)) {
 						int qo = old.queuePos(BlockPos.of(p)), qn = t.run.queuePos(BlockPos.of(p));
 						BlockState now = at(p);

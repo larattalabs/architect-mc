@@ -1,0 +1,104 @@
+{
+ "id": "terraced_monastery",
+ "params": {
+  "fountain": true,
+  "gradePct": 20,
+  "retain": "wall",
+  "rise": 3,
+  "scatter": true,
+  "scatterPct": 30,
+  "spires": 2
+ },
+ "seed": "5638267085663388350",
+ "claim": {
+  "maxX": 3795,
+  "maxY": 287,
+  "maxZ": -845,
+  "minX": 3604,
+  "minY": -35,
+  "minZ": -1036
+ },
+ "roles": {
+  "accent": "minecraft:waxed_cut_copper",
+  "floor": "minecraft:spruce_planks",
+  "foundation": "minecraft:stone_bricks",
+  "frame": "minecraft:spruce_log",
+  "glass": "minecraft:glass_pane",
+  "glow": "minecraft:sea_lantern",
+  "light": "minecraft:soul_lantern",
+  "path": "minecraft:stone_bricks",
+  "rail": "minecraft:spruce_fence",
+  "rock": "minecraft:stone",
+  "roof": "minecraft:deepslate_tiles",
+  "rubble": "minecraft:cobblestone",
+  "structure": "minecraft:stone_bricks",
+  "subsurface": "minecraft:dirt",
+  "surface": "minecraft:grass_block",
+  "trim": "minecraft:deepslate_bricks",
+  "wall": "minecraft:stone_bricks",
+  "wall_alt": "minecraft:mossy_stone_bricks"
+ },
+ "kitVersion": "0.39.0",
+ "keepOut": [],
+ "volumes": {
+  "vol_1": {
+   "blob": "vol_1",
+   "blocks": true,
+   "box": {
+    "maxX": 3649,
+    "maxY": 127,
+    "maxZ": -947,
+    "minX": 3625,
+    "minY": 107,
+    "minZ": -971
+   },
+   "fluids": true,
+   "sha": "b20a7f6de25410adaf3caafb802362e9d59352d5472d7cc1d3d4152b10e1d67e"
+  },
+  "vol_2": {
+   "blob": "vol_2",
+   "blocks": true,
+   "box": {
+    "maxX": 3646,
+    "maxY": 129,
+    "maxZ": -950,
+    "minX": 3628,
+    "minY": 110,
+    "minZ": -968
+   },
+   "fluids": true,
+   "sha": "5d6ed1496c8110703a3aeb462177e7fe6fd08854f3bc87977652bc46e30b8f29"
+  },
+  "vol_3": {
+   "blob": "vol_3",
+   "box": {
+    "maxX": 3795,
+    "maxY": 188,
+    "maxZ": -845,
+    "minX": 3604,
+    "minY": 50,
+    "minZ": -1036
+   },
+   "sha": "222cfd63322a1ae226890634c858205f73eaea12457afd96a0b87fa95818b200"
+  }
+ },
+ "blobs": {
+  "vol_1": {
+   "bytes": 2989,
+   "kind": "volume",
+   "sha": "652ba12f0d15edc323b45233588b7bab2afedc36050caf09115e010a58430e58"
+  },
+  "vol_2": {
+   "bytes": 1896,
+   "kind": "volume",
+   "sha": "d9edac15756bf47fd2c0516dd587a2838af26a557929f2e9adcb389ce171f5ba"
+  },
+  "vol_3": {
+   "bytes": 136656,
+   "kind": "volume",
+   "sha": "d9dfd2958ddc254b60e6a8d1a158deee9a85debec5c4216c986bedc4a07b2a21"
+  }
+ },
+ "irSha": "afc7092eaf47 (main a6a947bc)",
+ "run": "gate-runs-0410/20261021-180501-slice (6c-scenario-s3 natural)"
+}

@@ -326,6 +326,18 @@ final class UmtSim {
 	/** Over the JVM: injected noise the in-game rule names noise, injected noise it doesn't, real differences it would hide. */
 	static final java.util.concurrent.atomic.AtomicLong[] NOISE_STATS = {new java.util.concurrent.atomic.AtomicLong(), new java.util.concurrent.atomic.AtomicLong(),
 		new java.util.concurrent.atomic.AtomicLong()};
+	/** (6c close-out B, F3's fallout) The exact cells an entry wrote a gravity block at. */
+	final LongOpenHashSet fallAt = new LongOpenHashSet();
+	/** (6c close-out B, PTS) Every site's and lot's box. */
+	final List<Anchors.Bounds> siteBoxes = new ArrayList<>();
+	/** (6c close-out B) Cells a standing check tagged UC: the world diff at the same cell is UC's fallout. */
+	final LongOpenHashSet ucCells = new LongOpenHashSet();
+	/** (6c close-out B, UC's road fallout) Every cell a road wrote. */
+	final LongOpenHashSet roadCells = new LongOpenHashSet();
+	/** (6c close-out B, [F9]) Cells a road wrote air at over a block (its head room over a lower site's cell). */
+	final LongOpenHashSet roadAir = new LongOpenHashSet();
+	/** (6c close-out B, [DPT], [F10]) Cells a site delta wrote. */
+	final LongOpenHashSet deltaWritten = new LongOpenHashSet();
 	/** Every cell a plan ever wrote (an entry's cell), for the noise rule. */
 	final LongOpenHashSet everWritten = new LongOpenHashSet();
 	/** Positions some entry wrote a gravity block at, and the cells below them. */
@@ -379,6 +391,41 @@ final class UmtSim {
 		if ((pathAfter.contains(p) || initial.get(p).is(Blocks.DIRT_PATH)) && (now.is(Blocks.DIRT) || now.is(Blocks.GRASS_BLOCK))) {
 			return "[LP] ";
 		}
+		// (6c close-out B) V3's other half: farmland the world itself turned into dirt (a later solid write over it, V3; or dried, V7) and
+		// that ends as dirt. The journal holds farmland and dirt as one block (StillOurs), so no undo tells them apart: LP's kind (umt-long
+		// DRIFT seed 604865978). Only where the world's own conversion happened (UmtWorld.farmlandTurned): an undo's miss stays unexplained
+		if (initial.get(p).is(Blocks.FARMLAND) && now.is(Blocks.DIRT) && world.farmlandTurned.contains(p)) {
+			return "[LP] ";
+		}
+		// (6c close-out B, F9) a road's head room (air it wrote over a lower site's block): the road removed first, then the site, the road's
+		// evidence reads the site's restored air as its own after and recovers it at the next start; its re-removal writes the site's blocks back
+		if (roadAir.contains(p) && initial.get(p).isAir() && !now.isAir()) {
+			return "[F9] ";
+		}
+		// (6c close-out B, DPT) a player's block a delta wrote over comes back without its PT record (SiteDeltas' D7 rewrites the cells
+		// without the records the create annotated)
+		if (deltaWritten.contains(p) && now == initial.get(p) && initial.record(p) != null && world.record(p) == null) {
+			return "[DPT] ";
+		}
+		// (6c close-out B, PTS) a player's block with a PT record in two or more sites' boxes comes back without its record (stacked
+		// boxes, removed one by one or as a group)
+		if (now == initial.get(p) && initial.record(p) != null && world.record(p) == null && siteBoxes.stream().filter(b -> b.contains(BlockPos.getX(p),
+			BlockPos.getY(p), BlockPos.getZ(p))).count() >= 2) {
+			return "[PTS] ";
+		}
+		// (6c close-out B, UC's road fallout; umt-long ALL seed 777124280) a crash lost a road's rollback writes (the world back to an autosave
+		// before it), the start recovers the road over a lot the next removal restores, and the road's second removal writes the lot's
+		// blocks back: a road cell left holding another entry's block after a crash that reverted the world
+		if (!reverted.isEmpty() && roadCells.contains(p)) {
+			return "[UC] ";
+		}
+		if (ucCells.contains(p)) {
+			return "[UC] "; // the standing check's UC cell (a crash lost its writes), seen again at the end
+		}
+		// (6c close-out B, F10) a plant an entry holds (F8's is no entry's) whose support a delta of the site changed: it breaks at the removal
+		if (UmtVanilla.decor(initial.get(p)) && now.isAir() && everWritten.contains(p) && deltaWritten.contains(BlockPos.offset(p, Direction.DOWN))) {
+			return "[F10] ";
+		}
 		if ((UmtVanilla.decor(initial.get(p)) || UmtVanilla.decor(now)) && !everWritten.contains(p)) {
 			return "[F8] "; // V5: a plant, carpet or litter on a cell a write changed broke; it was no entry's cell
 		}
@@ -402,7 +449,10 @@ final class UmtSim {
 		Anchors.Bounds box = new Anchors.Bounds(p.x(), y0, p.z(), p.x() + p.w() - 1, y0 + p.h(), p.z() + p.d() - 1);
 		Rec rec = new Rec(id, p.kind(), p.group(), box, nextRec);
 		switch (p.kind()) {
-			case SITE, LOT -> placeSite(rec, r, p.crash(), p.kind() == Kind.LOT);
+			case SITE, LOT -> {
+				siteBoxes.add(box); // (6c close-out B, PTS)
+				placeSite(rec, r, p.crash(), p.kind() == Kind.LOT);
+			}
 			case ROAD, TILE -> placeCells(rec, r, p.crash());
 		}
 	}
@@ -588,6 +638,7 @@ final class UmtSim {
 				pathAfter.add(e.getKey().longValue());
 			}
 			if (e.getValue().getBlock() instanceof net.minecraft.world.level.block.FallingBlock) {
+				fallAt.add(e.getKey().longValue());
 				for (long q = e.getKey(); BlockPos.getY(q) > UmtWorld.Y0 - 4; q = BlockPos.offset(q, Direction.DOWN)) {
 					fallAfter.add(q);
 				}
@@ -712,6 +763,9 @@ final class UmtSim {
 
 	private void placeTarget(Rec rec, Map<Long, BlockState> target, @Nullable Crash c) throws Exception {
 		target.keySet().forEach(k -> everWritten.add(k.longValue()));
+		if (rec.kind == Kind.ROAD) {
+			target.keySet().forEach(k -> roadCells.add(k.longValue())); // (every cell it plans: a crash may stop its writes part way)
+		}
 		markStacked(rec, target.keySet());
 		JournalStore s = store;
 		long layer = s.newLayer();
@@ -737,9 +791,13 @@ final class UmtSim {
 				pathAfter.add(e.getKey().longValue());
 			}
 			if (e.getValue().getBlock() instanceof net.minecraft.world.level.block.FallingBlock) {
+				fallAt.add(e.getKey().longValue());
 				for (long q = e.getKey(); BlockPos.getY(q) > UmtWorld.Y0 - 4; q = BlockPos.offset(q, Direction.DOWN)) {
 					fallAfter.add(q);
 				}
+			}
+			if (rec.kind == Kind.ROAD && e.getValue().isAir() && !world.get(e.getKey()).isAir()) {
+				roadAir.add(e.getKey().longValue());
 			}
 			world.write(e.getKey(), e.getValue(), null, Sites.CELL_FLAGS);
 		}
@@ -980,8 +1038,13 @@ final class UmtSim {
 					if (!world.holdsOurs(cell.pos(), cell.after())) {
 						BlockState now = world.get(cell.pos());
 						boolean lp = WorldJournal.state(cell.after()).is(Blocks.DIRT_PATH) && (now.is(Blocks.DIRT) || now.is(Blocks.GRASS_BLOCK));
+						// (6c close-out B) and F3's fallout: a cell a written gravity block fell from (or below one), whose holder's undo then saw
+						// the fallen cell as not its own and left it (the standing site's cell under it stays air)
 						boolean f3 = now.getBlock() instanceof net.minecraft.world.level.block.FallingBlock || WorldJournal.state(cell.after())
-							.getBlock() instanceof net.minecraft.world.level.block.FallingBlock;
+							.getBlock() instanceof net.minecraft.world.level.block.FallingBlock || fallAt.contains(cell.pos());
+						if (!lp && !f3 && !phantom.contains(x.id) && !f7.contains(x.id) && !reverted.isEmpty()) {
+							ucCells.add(cell.pos());
+						}
 						violations.add((lp ? "[LP] " : f3 ? "[F3] " : phantom.contains(x.id) ? "[F6] " : f7.contains(x.id) ? "[F7] " : reverted.isEmpty() ? "" : "[UC] ")
 							+ when + ": standing " + x.id + "'s cell " + BlockPos.of(cell.pos()).toShortString() + " should hold " + cell.after()
 							+ ", holds " + world.get(cell.pos()));
@@ -1020,6 +1083,7 @@ final class UmtSim {
 			}
 		}
 		cellsTo.keySet().forEach(k -> everWritten.add(k.longValue()));
+		cellsTo.keySet().forEach(k -> deltaWritten.add(k.longValue()));
 		markStacked(x, cellsTo.keySet());
 		JournalStore s = store;
 		long layer = s.newLayer();
@@ -1068,6 +1132,7 @@ final class UmtSim {
 				to = next.get().withPropertiesOf(s); // weathering
 			} else if (s.is(Blocks.FARMLAND)) {
 				to = Blocks.DIRT.defaultBlockState(); // dried, trampled
+				world.farmlandTurned.add(p);
 			} else if (s.is(Blocks.DIRT)) {
 				to = Blocks.GRASS_BLOCK.defaultBlockState(); // grass spread
 			} else if (s.is(Blocks.GRASS_BLOCK)) {

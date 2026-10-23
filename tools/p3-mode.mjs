@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const P3_STEPS = Object.freeze(['h-ingame', 'h-probe', 'hy-ingame', 'hy-crash', 'hy-cold', 'irr-ingame', 'kc-ingame', 'voc-survival', 'y-ingame', 'c29-ingame']);
+export const P3_STEPS = Object.freeze(['h-ingame', 'h-probe', 'hy-ingame', 'hy-crash', 'hy-cold', 'irr-ingame', 'kc-ingame', 'voc-survival', 'y-ingame', 'c29-ingame', 'rs-survival']); // (6c close-out B: rs-survival, RS's rows)
 const FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'gate-chains.json');
 
 /** The mode of the config text: 'smoke', 'ingame' or 'mixed' (the impact rules' lists). */

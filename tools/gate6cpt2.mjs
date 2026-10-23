@@ -394,7 +394,7 @@ steps.adopt = async () => {
   const y = gy + 1;
   const out = {};
   const ap = await api('apipt2');
-  check(ap.adopt === true && ap.adoptRefusedLast && ap.adoptedLast, `item 13: apitest apipt2 through the public API: version ${ap.version}, feature adopt, ADOPT_REFUSED and ADOPTED appended`, ap);
+  check(ap.adopt === true && ap.adoptRefusedAppended === true && ap.adoptedAppended === true, `item 13: apitest apipt2 through the public API: version ${ap.version}, feature adopt, ADOPT_REFUSED appended right after PLAYER_BUILD and ADOPTED right after PROVISIONAL (order-independent: later slices append after them; Reason has ${ap.reasons?.length} values, last ${ap.reasons?.slice(-1)[0]})`, ap);
   const cab = await buildCabin(X, y, Z);
   // a natural block inside a column span (void: not the site's)
   await cmd(`/setblock ${X + 2} ${y + 1} ${Z + 2} minecraft:dirt`);

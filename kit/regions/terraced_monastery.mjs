@@ -27,6 +27,7 @@ import { buildVirtual, F_WALK } from '../lib/region/vworld.mjs';
 import { walkKinds } from '../lib/realise.mjs';
 import { supportCheck, walkGraph } from '../lib/region/check.mjs';
 import { classAt, VC } from '../lib/region/volume.mjs';
+import { voxelClassOf } from '../lib/blocks.mjs';
 
 export const id = 'terraced_monastery';
 export const description = 'S3\'s monastery: three terraced districts down the mountainside, a garden fountain, spires and a lookout (6c S3).';
@@ -234,10 +235,18 @@ function walkVolume(r, ctx) {
 
 /** The decor a trim takes out when it floats (rails, posts, lanterns): never a structural cell. */
 const TRIM_DECOR = /(_fence|_fence_gate|lantern|torch|_wall)(\[|$)/;
+/**
+ * (6c close-out B) The relief's own natural cells a trim takes out when they float: soil, rock, loose blocks, snow and plants the relief
+ * wrote (its blended edge over a later pass's cut: a live survey without a tree's flag let the blend reach over a stair flight's head room
+ * cut, run gate-runs-0410/20261021-180501-slice). Never a structural cell, never another part's.
+ */
+const TRIM_NATURAL = new Set(['ROCK', 'SOIL', 'LOOSE', 'SNOW', 'PLANT']);
+const reliefPart = (id) => /^relief/.test(String(id ?? ''));
 
 /**
  * The trim: a rail, post or lantern of the plan's own that stands on nothing (M3: another part's later write took its support, as a
- * route's head room cut under a stair railing's foot) is taken out (air, ours), up to 3 rounds (a lantern on a removed post). Returns
+ * route's head room cut under a stair railing's foot), or a natural cell of the relief's own (TRIM_NATURAL), is taken out (air, ours), up
+ * to 3 rounds (a lantern on a removed post, a plant on a removed grass block). Returns
  * the cells taken out.
  */
 function trimFloating(r, ctx, { stage }) {
@@ -247,7 +256,10 @@ function trimFloating(r, ctx, { stage }) {
     const cols = [];
     for (const f of supportCheck(vw, ir, null).findings) {
       if (f.rule !== 'M3') continue;
-      for (const [x, y, z] of f.sample ?? f.cells ?? []) if (TRIM_DECOR.test(vw.pal.states[vw.get(x, y, z)] ?? '')) cols.push(x, z, y, y, 0);
+      for (const [x, y, z] of f.sample ?? f.cells ?? []) {
+        const st = vw.pal.states[vw.get(x, y, z)] ?? '';
+        if (TRIM_DECOR.test(st) || (reliefPart(f.part) && reliefPart(ir.parts[vw.partAt(x, y, z)]?.id) && TRIM_NATURAL.has(voxelClassOf(st)))) cols.push(x, z, y, y, 0);
+      }
     }
     if (!cols.length) break;
     const part = r.parts.find((q) => q.id === 'mon_trim') ?? r.part('mon_trim', { stage });
@@ -519,6 +531,13 @@ export default function terracedMonastery(ctx) {
   info2.lamps = { fixture: cover.fixture, count: cover.lamps.length, before: cover.before, after: cover.after, capped: cover.capped, sunk: sunk.size, moved: sunk.moved, dropped: sunk.dropped };
 
   info2.trimmed = trimFloating(r, ctx, { stage: decor });
+  // (6c close-out B) a survey the program accepts answers no M3: what the trim leaves floating refuses the plan here (the program's own
+  // check, as the spring's below), never an answer with a structure finding
+  {
+    const { ir: dIr, vw } = draftWorld(r, ctx);
+    const left = supportCheck(vw, dIr, null).findings.filter((f) => f.rule === 'M3');
+    if (left.length) throw new Error(`S3_STRUCTURE: ${left.map((f) => `${f.rule} ${f.part} ${f.count} at ${JSON.stringify(f.sample?.slice(0, 3))}`).join('; ')} after the trim: this survey can't carry the monastery as planned`);
+  }
 
   // ---- the spring's columns: nothing of the plan is written there (the program's own check; the broken variant is caught here)
   if (keepOut.length) {

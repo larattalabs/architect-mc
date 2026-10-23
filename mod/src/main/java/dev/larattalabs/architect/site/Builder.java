@@ -418,11 +418,20 @@ public final class Builder {
 			// (6c RS-b, S-CU-3) a farmland cell the builder wrote (built already) that dried or was trampled to dirt stays built: it costs
 			// dirt either way, and the builder could never write over the dirt (not free), so the cell would wait for ever and its dirt
 			// fall out of the stock's sum. Never a cell not built yet: farmland planned over the ground's own dirt is still to be written.
-			if (built.get(i) && target[i].is(net.minecraft.world.level.block.Blocks.FARMLAND) && now.is(net.minecraft.world.level.block.Blocks.DIRT)) {
+			// (6c close-out B, L-V7) after a restart the run has no built bit: a farmland cell whose before (the target entry's, at put-down)
+			// was not dirt holds dirt only because its farmland dried, so it counts as built as it did before the stop: written once, paid
+			// once ({@link Builder#driedFarmland})
+			if ((built.get(i) || tilled.get(i)) && target[i].is(net.minecraft.world.level.block.Blocks.FARMLAND) && now.is(net.minecraft.world.level.block.Blocks.DIRT)) {
 				return true;
 			}
 			return Copper.is(now, target[i].getBlock());
 		}
+
+		/**
+		 * (6c close-out B, L-V7) Queued farmland cells whose before was not dirt: dirt there is the builder's farmland dried
+		 * ({@link #driedFarmland}). Derived from the journal's befores whenever a run is made, so it survives a restart.
+		 */
+		final BitSet tilled = new BitSet();
 
 		/** (6c RS) A built survival region target's run: soil cells (dirt, grass, podzol, mycelium, farmland) are one block (grass spreads, farmland dries). */
 		boolean soilSame;
@@ -531,6 +540,26 @@ public final class Builder {
 		return Direction.DOWN;
 	}
 
+	/**
+	 * (6c close-out B, L-V7) Marks the run's queued farmland cells whose before ({@code before}: the target entry's befores over the run's
+	 * box, as {@link SiteJournal#beforeOf} reads them) was not dirt as {@link Run#tilled}: dirt standing there now is the builder's farmland
+	 * dried (vanilla turns farmland into dirt; grass, podzol or mycelium go to dirt only under a solid block, which a field's cell never
+	 * has below its crop), so a run made after a restart reads it as built, as the run before the stop did (its built bit). A farmland cell
+	 * over the ground's own dirt is not marked: that dirt may be the ground's, still to be written. Call before the first rescan. Pure: the
+	 * survival ledger lint's seam (LedgerSim.runOf calls it).
+	 */
+	static void driedFarmland(Run r, @Nullable Cells before) {
+		if (before == null) {
+			return;
+		}
+		for (int q = 0; q < r.size(); q++) {
+			int k = r.queue[q];
+			if (r.target[q].is(Blocks.FARMLAND) && k >= 0 && k < before.size() && !before.states[k].is(Blocks.DIRT)) {
+				r.tilled.set(q);
+			}
+		}
+	}
+
 	// ------------------------------------------------------------------ lookups
 
 	static @Nullable Run run(MinecraftServer server, Site s) {
@@ -549,6 +578,8 @@ public final class Builder {
 			return null;
 		}
 		r = new Run(s, target);
+		dev.larattalabs.architect.journal.JournalStore.Meta main = SiteJournal.main(s.id());
+		driedFarmland(r, main == null ? null : SiteJournal.beforeOf(main.id(), s.restoreBox()));
 		ServerLevel level = Sites.levelOf(server, s);
 		if (level != null) {
 			r.rescan(level);

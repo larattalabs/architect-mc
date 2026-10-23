@@ -38,7 +38,7 @@ export async function survivalBase(ctx) {
 
 // ------------------------------------------------------------------ the lot designs
 
-/** rs_hut (7x5x9: planks, cobblestone floor, a door, glass, a torch, one copper block in its back wall: item 9's weathered cell) and rs_shed (cobblestone, a door, a lantern): small bills. */
+/** rs_hut (7x5x9: planks, cobblestone floor, a door, glass, a torch, one copper block in its back wall: item 9's weathered cell), rs_shed (cobblestone, a door, a lantern) and rs_farm (rs_hut, a farmland row inside: L-V7): small bills. */
 export async function designs(ctx) {
   const { Blueprint, palette } = await ctx.imp('lib/kit.mjs');
   const { writeBlueprint } = await ctx.imp('lib/write.mjs');
@@ -48,12 +48,14 @@ export async function designs(ctx) {
     const bp = new Blueprint({ id, name: id, description: `RS ${id}`, type: 'custom', profile: ['door', 'lit'], size: [X + 1, H + 1, Z + 5], origin: [0, 0, 0], groundY: 1, front: 'south', palette: p, approach: false, interior: [1, 1, 1, X - 1, H - 1, Z - 1] });
     bp.part('main', () => bp.room([0, 0, 0, X, H, Z], { wall, floor: 'minecraft:cobblestone', ceiling: 'minecraft:oak_planks', corners: 'minecraft:oak_log' }));
     bp.part('openings', () => { bp.door(3, 1, Z, 'south'); bp.set(1, 2, Z, 'minecraft:glass_pane'); bp.set(5, 2, Z, 'minecraft:glass_pane'); bp.set(3, 3, 1, 'minecraft:wall_torch', { facing: 'south' }); if (id === 'rs_hut') bp.set(3, 3, 0, 'minecraft:copper_block'); });
+    // (6c close-out B, L-V7) rs_farm: rs_hut with a farmland row inside, on its floor (paid farmland cells over air: gate6crs lv7)
+    if (id === 'rs_farm') bp.part('farm', () => { for (let x = 1; x <= 5; x++) bp.set(x, 1, 2, 'minecraft:farmland'); });
     bp.part('approach', () => bp.floor(2, Z + 1, 4, Z + 4, 0, 'minecraft:gravel'));
     bp.spot('entrance', 3, Z + 1, 180);
     bp.spot('spawn', 3, Z + 3, 180);
     return bp;
   };
-  for (const [id, wall] of [['rs_hut', 'minecraft:oak_planks'], ['rs_shed', 'minecraft:cobblestone']]) {
+  for (const [id, wall] of [['rs_hut', 'minecraft:oak_planks'], ['rs_shed', 'minecraft:cobblestone'], ['rs_farm', 'minecraft:oak_planks']]) {
     const dir = path.join(ctx.L.LIBRARY, id);
     fs.rmSync(dir, { recursive: true, force: true });
     writeBlueprint(make(id, wall), dir);
