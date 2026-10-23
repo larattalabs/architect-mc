@@ -30,6 +30,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gatePart, sliceSections, slicesOf } from './lib/gate-part.mjs';
 import { kitReuse } from './lib/kit-reuse.mjs'; // ((gate speed 3) its kit files' results from this run's unit-kit, when exact)
+import { javaReuse } from './lib/junit-reuse.mjs'; // (speed audit A) the Java tests unit-mod already ran in this run
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-F3-run');
@@ -154,7 +155,9 @@ steps.unit = async () => {
   const { gradle } = await import('./lib/src-gradle.mjs').catch(() => ({ gradle: null }));
   const args = ['test', '--offline', '--tests', 'dev.larattalabs.architect.journal.StillOursF3Test', '--tests', 'dev.larattalabs.architect.journal.CopperTest', '--tests', 'dev.larattalabs.architect.apiimpl.ApiF3Test'];
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
-  const jr = gradle ? await gradle(path.join(root, 'mod'), args, { env }) : spawnSync('./gradlew', args, { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 });
+  // ((speed audit A) unit-mod's XML when it ran these classes in this run on this tree)
+  const re = javaReuse(root, ['dev.larattalabs.architect.journal.StillOursF3Test', 'dev.larattalabs.architect.journal.CopperTest', 'dev.larattalabs.architect.apiimpl.ApiF3Test']);
+  const jr = re ? { status: 0, stdout: `${re.reused}\n`, stderr: '' } : gradle ? await gradle(path.join(root, 'mod'), args, { env }) : spawnSync('./gradlew', args, { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 });
   out.java = { code: jr.status ?? jr.code, tail: `${jr.stdout ?? ''}${jr.stderr ?? ''}`.split('\n').slice(-8) };
   check((jr.status ?? jr.code) === 0, `Java units: StillOursF3Test (mushroom faces and dripstone thickness volatile, Coral.canonical equal to the kit's 40 rows, a dead coral holds the live one), CopperTest, ApiF3Test: gradle exit ${jr.status ?? jr.code}`, out.java.tail);
   }

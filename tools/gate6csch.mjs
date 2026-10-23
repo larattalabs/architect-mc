@@ -34,6 +34,7 @@ import { DevClient } from './lib/devclient.mjs';
 import { parse } from '../kit/lib/nbt.mjs';
 import { parseSchem, schemToStructure, structureCells, sortedState, canonTag } from '../kit/lib/schem.mjs';
 import { srcGradle } from './lib/src-gradle.mjs';
+import { javaReuse } from './lib/junit-reuse.mjs'; // (speed audit A) the Java tests unit-mod already ran in this run
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -161,14 +162,17 @@ async function unit() {
   const kf = /ℹ fail (\d+)/.exec(k.out)?.[1];
   check(k.status === 0 && kf === '0', `items 1-4 (kit): kit/test/schem.test.mjs ${kp} pass, ${kf} fail (round trip of every example, determinism + goldens, v2/v3, refusals)`);
   const env = { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(RUN ?? root, '.gradle-home') };
-  const m = srcGradle(root, () => run('unit-mod', './gradlew', ['--offline', '--no-daemon', 'test', '--tests', 'dev.larattalabs.architect.library.SchematicTest', '--tests',
+  // ((speed audit A) unit-mod's XML when it ran these classes in this run on this tree)
+  const reusedJava = javaReuse(root, ['dev.larattalabs.architect.library.SchematicTest', 'dev.larattalabs.architect.api.ApiSchTest']);
+  const m = reusedJava ? { status: 0 } : srcGradle(root, () => run('unit-mod', './gradlew', ['--offline', '--no-daemon', 'test', '--tests', 'dev.larattalabs.architect.library.SchematicTest', '--tests',
     'dev.larattalabs.architect.api.ApiSchTest'], { cwd: path.join(RUN ?? root, 'mod'), env }));
   const dirs = path.join(RUN ?? root, 'mod', 'build', 'test-results', 'test');
   const junit = {};
   for (const n of ['dev.larattalabs.architect.library.SchematicTest', 'dev.larattalabs.architect.api.ApiSchTest']) {
+    const rr = reusedJava?.files.find((q) => q.name === n);
     const f = path.join(dirs, `TEST-${n}.xml`);
-    const x = fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '';
-    junit[n] = { tests: Number(/tests="(\d+)"/.exec(x)?.[1] ?? 0), failures: Number(/failures="(\d+)"/.exec(x)?.[1] ?? -1), errors: Number(/errors="(\d+)"/.exec(x)?.[1] ?? -1) };
+    const x = rr || !fs.existsSync(f) ? '' : fs.readFileSync(f, 'utf8');
+    junit[n] = rr ? { tests: rr.tests, failures: rr.failures, errors: rr.errors } : { tests: Number(/tests="(\d+)"/.exec(x)?.[1] ?? 0), failures: Number(/failures="(\d+)"/.exec(x)?.[1] ?? -1), errors: Number(/errors="(\d+)"/.exec(x)?.[1] ?? -1) };
   }
   check(m.status === 0 && Object.values(junit).every((j) => j.tests > 0 && j.failures === 0 && j.errors === 0),
     `items 1-4 (mod): SchematicTest ${junit['dev.larattalabs.architect.library.SchematicTest'].tests} + ApiSchTest ${junit['dev.larattalabs.architect.api.ApiSchTest'].tests} tests pass (fixers, refusals, export round trip and goldens)`, junit);

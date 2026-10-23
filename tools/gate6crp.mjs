@@ -25,6 +25,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs'; // (speed audit A) the kit files unit-kit already ran in this run
+import { javaReuse } from './lib/junit-reuse.mjs'; // (speed audit A) the Java tests unit-mod already ran in this run
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-rp-run');
@@ -197,6 +198,8 @@ steps.base = async () => {
 // ------------------------------------------------------------------ offline
 
 async function javaTests(patterns, minTests) {
+  const re = javaReuse(root, patterns);
+  if (re) return { ...re, ok: re.tests >= minTests };
   const { srcGradle } = await import('./lib/src-gradle.mjs');
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
   const args = ['test', '--offline', '-q', ...patterns.flatMap((p) => ['--tests', p])];

@@ -396,6 +396,34 @@ if (!jar) {
   process.exit(2);
 }
 const javap = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', 'javap') : 'javap';
+// (speed audit A) A per-run memo of whole clean checks: the runner sets GATE_APICOMPAT_MEMO to a dir of the run, and the rs, fl, f3,
+// c38, k1a ... drivers' api-compat calls that check the same jar against the same classes in one run answer from it. The key is
+// everything the answer reads: the check (surface or references), the jar's bytes, every class file under the classes dirs (their
+// paths and bytes), the dirs as printed, this script's bytes, and the javap in use. Only a clean exit is stored (a failure prints
+// javap's stderr too: it always re-runs), and the entry is the stdout of that run, replayed as is. No dir set: no memo.
+const MEMO_DIR = process.env.GATE_APICOMPAT_MEMO && process.env.GATE_APICOMPAT_MEMO !== '0' ? process.env.GATE_APICOMPAT_MEMO : null;
+let memoFile = null;
+const memoLines = [];
+if (MEMO_DIR && fs.existsSync(path.resolve(jar))) {
+  try {
+    const h = crypto.createHash('sha256');
+    h.update(JSON.stringify([surface, path.basename(jar), classDirs.map((d) => path.relative(root, d)), process.env.JAVA_HOME ?? '', process.version]));
+    h.update(fs.readFileSync(path.resolve(jar)));
+    h.update(fs.readFileSync(fileURLToPath(import.meta.url)));
+    const files = [];
+    const walkDir = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const q = path.join(d, e.name); if (e.isDirectory()) walkDir(q); else if (e.name.endsWith('.class')) files.push(q); } };
+    for (const d of classDirs) if (fs.existsSync(d)) walkDir(d);
+    if (!files.length) throw new Error('no class files: nothing to key on');
+    for (const f of files.sort()) { h.update(path.relative(root, f)); h.update(fs.readFileSync(f)); }
+    memoFile = path.join(MEMO_DIR, `${h.digest('hex')}.txt`);
+    if (fs.existsSync(memoFile)) {
+      process.stdout.write(fs.readFileSync(memoFile, 'utf8'));
+      process.exit(0);
+    }
+    const log0 = console.log.bind(console);
+    console.log = (...a) => { memoLines.push(a.map(String).join(' ')); log0(...a); };
+  } catch { memoFile = null; }
+}
 // ((gate speed 3) javap's answer for a class file is a pure function of the file's bytes, the flags and the JDK: one JVM per class
 // cost 1.5-4 min a run, re-done by every driver's api-compat. Cached by exactly those (the class file's sha, or a JDK class's name
 // with the JDK's real path), in <main checkout>/artifacts/javap-cache (untracked; a miss runs javap as before; an error is never
@@ -541,3 +569,11 @@ if (missing.length) {
   process.exit(1);
 }
 console.log('every referenced api member exists with the same descriptor');
+if (memoFile) {
+  try {
+    fs.mkdirSync(path.dirname(memoFile), { recursive: true });
+    const tmpm = `${memoFile}.${process.pid}.tmp`;
+    fs.writeFileSync(tmpm, `${memoLines.join('\n')}\n`);
+    fs.renameSync(tmpm, memoFile);
+  } catch { /* a memo: never fails the check */ }
+}

@@ -624,6 +624,10 @@ if (tierInfo.cache.lookup) {
         l = c.hit ? c : { hit: null, why: `${l.why}; coverage: ${c.why}` };
         // kit-reuse (tools/lib/kit-reuse.mjs): such a driver's kit tests are unit-kit's report, so its coverage PASS serves only
         // a run that holds unit-kit (which re-runs on any kit change and fails the run when they fail)
+        // (junit-reuse: the same for a driver that takes its Java tests from unit-mod's XML)
+        if (l.hit && (INPUT_MAP.steps[parentOf(id)]?.closure ?? []).includes('tools/lib/junit-reuse.mjs') && !want.has('unit-mod')) {
+          l = { hit: null, why: 'its Java tests are delegated to unit-mod (junit-reuse), which is not in this run' };
+        }
         if (l.hit && (INPUT_MAP.steps[parentOf(id)]?.closure ?? []).includes('tools/lib/kit-reuse.mjs') && !want.has('unit-kit')) {
           l = { hit: null, why: 'its kit tests are delegated to unit-kit (kit-reuse), which is not in this run' };
         }
@@ -650,7 +654,7 @@ if (tierInfo.cache.lookup) {
       const s = cfg.steps[id];
       const deps = [];
       if (s.after && want.has(s.after)) deps.push([s.after, `needed by ${id}: it runs after it, in its context`]);
-      for (const w of s.waitFor ?? []) if (w !== 'unit-kit' && want.has(w)) deps.push([w, `needed by ${id}: it reads ${w}'s evidence of this run`]);
+      for (const w of s.waitFor ?? []) if (w !== 'unit-kit' && w !== 'unit-mod' && want.has(w)) deps.push([w, `needed by ${id}: it reads ${w}'s evidence of this run`]);
       if ((INPUT_MAP.steps[parentOf(id)]?.env ?? []).includes('GATE_UNIT_MOD_RUN') && want.has('unit-mod')) deps.push(['unit-mod', `needed by ${id}: it reads the classes unit-mod builds in this run`]);
       for (const [d, r] of deps) {
         if (run.has(d)) continue;
@@ -860,6 +864,8 @@ function childEnv(sh, extra = {}) {
     ARCHITECT_SHOTS_DIR: path.join(OUT, 'shots'),
     JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25',
     GATE_RUNNER: '1',
+    // api-compat's per-run memo of clean checks (tools/api-compat.mjs): the run's, shared by every step and shard
+    GATE_APICOMPAT_MEMO: path.join(RUN_OUT, 'apicompat-memo'),
     // eval sidecars (if a step starts one) on an ephemeral port, never the fixed 8894/8895 another run may hold
     ARCHITECT_EVAL_PORT: process.env.ARCHITECT_EVAL_PORT ?? '0',
   });
@@ -868,6 +874,8 @@ function childEnv(sh, extra = {}) {
   if (runShared.kitJunit) Object.assign(env, { GATE_KIT_RESULTS: runShared.kitJunit, GATE_KIT_TREE: runShared.kitTree });
   // the run worktree where unit-mod built this HEAD (gate6cmp reads its classes): set once unit-mod passed
   if (runShared.unitModRun) env.GATE_UNIT_MOD_RUN = runShared.unitModRun;
+  // the mod's Java tests once per run (tools/lib/junit-reuse.mjs): unit-mod's JUnit XML, copied when it passed, and the tree it ran
+  if (runShared.unitModJunit) Object.assign(env, { GATE_UNIT_MOD_JUNIT: runShared.unitModJunit, GATE_UNIT_MOD_TREE: runShared.unitModTree });
   // the merge base the drivers' "unchanged against origin/main" items compare with, fixed once per run (tools/lib/base-tree.mjs)
   if (runShared.mergeBase && !process.env.GATE_MERGE_BASE) env.GATE_MERGE_BASE = runShared.mergeBase;
   if (COVERAGE && sh.ev) {
@@ -884,7 +892,7 @@ function childEnv(sh, extra = {}) {
   return env;
 }
 /** Run-level facts the steps' environment carries (filled in when the run starts and as steps end). */
-const runShared = { kitJunit: null, kitTree: null, unitModRun: null, mergeBase: null };
+const runShared = { kitJunit: null, kitTree: null, unitModRun: null, unitModJunit: null, unitModTree: null, mergeBase: null };
 const expand = (s, sh) => s.replace(/\$\{(\w+)\}/g, (_, n) => ({ RUN: sh.RUN, SRC, MAIN, OUT: sh.ev })[n] ?? '');
 const resolveCwd = (c, sh) => (!c ? SRC : c.startsWith('run:') ? path.join(sh.RUN, c.slice(4)) : c.startsWith('src:') ? path.join(SRC, c.slice(4)) : path.resolve(SRC, c));
 const getPath = (obj, p) => p.split('.').filter(Boolean).reduce((o, k) => (o == null ? undefined : o[k]), obj);
@@ -1260,6 +1268,7 @@ const releaseLock = () => {
 
 const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-');
 const OUT = path.join(RUNS_ROOT, `${stamp}-${chainName}`);
+const RUN_OUT = OUT; // (childEnv's own `OUT` is the shard's evidence dir)
 for (const sh of shards) {
   sh.ev = shards.length > 1 ? path.join(OUT, sh.name) : OUT;
   sh.clientLog = path.join(OUT, shards.length > 1 ? `client-${sh.name}.log` : 'client.log');
@@ -2087,7 +2096,20 @@ async function worker(sh) {
       rec.contended = ov.length > 0;
       if (ov.length) log(`  ${step.id}: bench step ran next to ${ov.join(' ')} (contended: its timing is recorded only)`, sh);
     }
-    if (step.id === 'unit-mod' && rec.status === 'PASS') runShared.unitModRun = sh.RUN;
+    if (step.id === 'unit-mod' && rec.status === 'PASS') {
+      runShared.unitModRun = sh.RUN;
+      // (junit-reuse.mjs) its XML now, before a later step's filtered gradle run in this worktree rewrites the results dir
+      try {
+        const from = path.join(sh.RUN, 'mod', 'build', 'test-results', 'test'), to = path.join(OUT, 'unit-mod-junit');
+        fs.rmSync(to, { recursive: true, force: true });
+        fs.mkdirSync(to, { recursive: true });
+        for (const f of fs.readdirSync(from).filter((x) => x.endsWith('.xml'))) fs.copyFileSync(path.join(from, f), path.join(to, f));
+        runShared.unitModTree = git(sh.RUN, 'rev-parse', 'HEAD^{tree}');
+        runShared.unitModJunit = to;
+      } catch (e) {
+        log(`  unit-mod's JUnit XML not kept (${e.message}): its readers run their tests`, sh);
+      }
+    }
     // the step cache: record the PASS under its key (step-cache.mjs decides whether it may: trace inside the set, no bar recorded, ...)
     if (CACHE) {
       try {
