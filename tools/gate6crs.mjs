@@ -1030,6 +1030,8 @@ steps.item18 = async () => {
     return !!w && w.built > w.cells / 4 && w.state !== 'built';
   } });
   const mid = (await G.rsState(ctx, R.region)).build;
+  const consumed = (ps) => sum(ps.ledger?.consumed ?? ps.consumed);
+  const c0 = consumed(await G.pileState(ctx));
   const g0 = await L.call('dev.chunks.generated', {});
   const r0 = await G.regionState(ctx, R.region);
   const n0 = r0.generatedDuringRealiseCount ?? 0;
@@ -1068,8 +1070,8 @@ steps.item18 = async () => {
   const ps = await G.pileState(ctx);
   const d = await G.twinDiff(ctx, T.box, T.file, R.crateAt);
   const r3 = await G.regionState(ctx, R.region);
-  out.finish = { state: f.last.st.view.state, done: f.last.rs.build?.done, percent: f.last.rs.build?.percent, consumed: sum(ps.consumed), twin: d.mismatches, charged: (r3.generatedDuringRealiseCount ?? 0) - n0 - out.forceload.charged };
-  check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done && d.mismatches === 0 && sum(ps.consumed) > 0, `item 18: fed on with the toggle off, it builds from the stockpile as it was realised (CONSTRUCTION; ${sum(ps.consumed)} items consumed in all) to ${f.last.st.view.state}, done ${f.last.rs.build?.done}: equal to its INSTANT twin (${d.mismatches} differ)`, d.list);
+  out.finish = { state: f.last.st.view.state, done: f.last.rs.build?.done, percent: f.last.rs.build?.percent, consumedBefore: c0, consumedAfter: consumed(ps), fedAfter: sum(f.inserted), twin: d.mismatches, charged: (r3.generatedDuringRealiseCount ?? 0) - n0 - out.forceload.charged };
+  check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done && d.mismatches === 0 && consumed(ps) > c0, `item 18: fed on with the toggle off (${sum(f.inserted)} items), it builds from the stockpile as it was realised (CONSTRUCTION: ${c0} items consumed at the switch, ${consumed(ps)} at the end) to ${f.last.st.view.state}, done ${f.last.rs.build?.done}: equal to its INSTANT twin (${d.mismatches} differ)`, d.list);
   const g3 = await L.call('dev.chunks.generated', {});
   out.finish.generatedSinceSwitch = g3.terrain - g0.terrain - out.forceload.generated;
   check(out.finish.generatedSinceSwitch === 0 && out.finish.charged === 0, `item 18: from the switch to built: ${out.finish.generatedSinceSwitch} chunk(s) generated besides the forceload's, ${out.finish.charged} charged to the region`, out.finish);
