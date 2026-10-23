@@ -23919,7 +23919,7 @@ PALETTE). The old `...Last` booleans stay.
   - IF_SOLID_NATURAL takes a tree's solid cells.
   - `TerrainFit.natural` (building placement's clearing and approaches) is unchanged. Putting the set there first moved route_demo's
     route surface: a path written one cell high over another turned it to dirt. That showed in 6ct2-scenario-route's realised ==
-    virtual row twice at 3ec2cdfd, and passed with TerrainFit as main (bisect run `gate-runs-coB/20261023-092036`).
+    virtual row twice at 3ec2cdfd, and passed with TerrainFit as main (bisect run `gate-runs-coB/20261023-092039`).
 - **The kit moves:** the virtual world never counts bedrock or tripwire natural, and counts coral wall fans natural.
 - **Kept, named in `EXCEPTIONS`:**
   - 7 plants whose "solid" differs (the mod's `isSolid` against the kit's collision; only a carve's lining writes IF_SOLID_NATURAL,
@@ -24049,7 +24049,7 @@ no version set (the coordinator's at merge).
   - 6c-scenario-s3: rims 3 open on this run's live survey. Main's kit plans the same IR from it (PLAN).
   - 6ct1-scenario-relief: pre-existing, the same 17 cells as an earlier run.
   - h-unit: item 10's asks table, which close-out A owns.
-  - 6b-nudges: timed out under load; passed on re-run (`gate-runs-coB/20261023-102947-slice`).
+  - 6b-nudges: timed out under load; passed on re-run (`gate-runs-coB/20261023-102936-slice`).
   - pt2-ingame item 13, hy-ingame-smoke (the push stand), rs-unit, rs-ingame, rs-crash, rsb, umt, p3-lint, water-lint, unit-mod,
     unit-kit, s3-plan and s3-unit all pass.
 - **umt-long:** fresh seeds 777123000, 555000111 and 913370000 (2000 per generator each) pass with the final tagger.

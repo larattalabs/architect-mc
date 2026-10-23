@@ -960,7 +960,7 @@ Top first. Not fixed in v0.40.1.
 ## Queued from 6c close-out B (builder, 2026-10-22)
 
 - **S3's natural run: a monastery route cuts a retained terrace rim on some live surveys** (close-out B's final slice).
-  - 6c-scenario-s3 failed bar 5 twice on B (`gate-runs/20261023-093624-slice`, `gate-runs-coB/20261023-103229-slice`): "rims
+  - 6c-scenario-s3 failed bar 5 twice on B (`gate-runs/20261023-093624-slice`, `gate-runs-coB/20261023-103203-slice`): "rims
     546/549 retained (3 open)" at the guest house's level 102 (3662,98..99,-900..-898). routes_monastery's stair cut runs through the
     rim.
   - The run's survey re-planned with main's kit (f0649fb7) gives the same IR (programSha aside), so this is S3's survey dependence, not
