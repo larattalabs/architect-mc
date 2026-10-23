@@ -933,6 +933,7 @@
     "kit/test/gate-benches.test.mjs",
     "kit/test/gate-history.test.mjs",
     "kit/test/gate-split.test.mjs",
+    "kit/test/gate-sprint.test.mjs",
     "kit/test/gate-turbo.test.mjs",
     "kit/test/h-a.test.mjs",
     "kit/test/h-batch.test.mjs",
@@ -1026,6 +1027,7 @@
     "tools/lib/gate6cvoc-b.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/shard-auto.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/step-cache.mjs",
     "tools/lib/step-coverage.mjs",
     "tools/lib/step-inputs.mjs",
@@ -2336,6 +2338,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/scenarios.mjs"
    ]
@@ -3257,7 +3260,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "w-unit": {
@@ -3827,7 +3831,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "f1-unit": {
@@ -4371,6 +4376,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -4885,6 +4891,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -6218,6 +6225,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -6732,6 +6740,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -7026,6 +7035,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -7460,6 +7470,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -7768,6 +7779,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -8077,6 +8089,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -8386,6 +8399,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -8697,6 +8711,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -8960,6 +8975,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -9589,6 +9605,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -9913,6 +9930,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/scenarios.mjs"
    ]
@@ -10559,7 +10577,8 @@
     "tools/gate6c37.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "c38-unit": {
@@ -10954,7 +10973,8 @@
     "tools/gate6c38.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "rs-unit": {
@@ -11849,6 +11869,7 @@
     "tools/lib/plan-cache.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -11887,6 +11908,7 @@
     "GATE6CRS_OUT",
     "GATE_MERGE_BASE",
     "GATE_P3",
+    "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
     "HYB_BYPASS",
@@ -12889,6 +12911,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -13163,6 +13186,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -13478,6 +13502,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -14137,7 +14162,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "t3a-ingame": {
@@ -14479,7 +14505,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "t3a-natural": {
@@ -14821,7 +14848,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "t3a-frozen": {
@@ -15492,7 +15520,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ],
    "verified": "20261022-161855-release t3a-look"
   },
@@ -16109,7 +16138,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "k1b-natural": {
@@ -16430,7 +16460,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "t3b-unit": {
@@ -17070,7 +17101,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "t3b-natural": {
@@ -17401,7 +17433,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "t3b-pin": {
@@ -17732,7 +17765,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "t3b-look": {
@@ -18063,7 +18097,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "h-unit": {
@@ -18765,7 +18800,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ],
    "verified": "20261022-161855-release h-ingame"
   },
@@ -19129,7 +19165,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "h-probe": {
@@ -19492,7 +19529,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "h-natural": {
@@ -19855,7 +19893,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "h-cold": {
@@ -20218,7 +20257,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6ch-look": {
@@ -20581,7 +20621,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "voc-unit": {
@@ -21228,7 +21269,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "voc-probe": {
@@ -21558,7 +21600,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "voc-survival": {
@@ -21888,7 +21931,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "voc-ingame": {
@@ -22218,7 +22262,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "voc-natural": {
@@ -22548,7 +22593,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "vocc-unit": {
@@ -23191,7 +23237,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6cvoc-look": {
@@ -23521,7 +23568,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "cu-unit": {
@@ -23863,7 +23911,8 @@
     "tools/gate6ccu.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "cu-ingame": {
@@ -24147,7 +24196,8 @@
     "tools/gate6ccu.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "rp-unit": {
@@ -24573,7 +24623,8 @@
     "tools/gate6crp.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "rp-crash": {
@@ -24856,7 +24907,8 @@
     "tools/gate6crp.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "cu-survival": {
@@ -25530,7 +25582,8 @@
     "tools/gate6cha.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "ha-natural": {
@@ -25832,7 +25885,8 @@
     "tools/gate6cha.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "ha-cold": {
@@ -26134,7 +26188,8 @@
     "tools/gate6cha.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "ha-look": {
@@ -26436,7 +26491,8 @@
     "tools/gate6cha.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-unit": {
@@ -27117,7 +27173,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "irr-holders": {
@@ -27464,7 +27521,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "h-rmcrash": {
@@ -27827,7 +27885,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-ingame": {
@@ -28168,7 +28227,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ],
    "verified": "20261022-161855-release hy-ingame"
   },
@@ -28510,7 +28570,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-natural": {
@@ -28851,7 +28912,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-cold": {
@@ -29192,7 +29254,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "kc-unit": {
@@ -29785,7 +29848,8 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "f3-unit": {
@@ -30427,7 +30491,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "f3-natural": {
@@ -30760,7 +30825,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "f3-forest": {
@@ -31402,7 +31468,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "irr-unit": {
@@ -32072,7 +32139,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ],
    "verified": "20261022-161855-release irr-ingame"
   },
@@ -32420,7 +32488,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "irr-look": {
@@ -32767,7 +32836,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "fl-unit": {
@@ -33390,7 +33460,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "fl-natural": {
@@ -33710,7 +33781,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "fl-look": {
@@ -34030,7 +34102,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "water-lint": {
@@ -34920,7 +34993,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "h-probe-smoke": {
@@ -35283,7 +35357,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-ingame-smoke": {
@@ -35624,7 +35699,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-crash-smoke": {
@@ -35965,7 +36041,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "hy-cold-smoke": {
@@ -36306,7 +36383,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "irr-ingame-smoke": {
@@ -36653,7 +36731,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "kc-ingame-smoke": {
@@ -36962,7 +37041,8 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "voc-survival-smoke": {
@@ -37292,7 +37372,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "y-ingame-smoke": {
@@ -37791,7 +37872,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "s2-unit": {
@@ -38777,7 +38859,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6c-scenario-s3": {
@@ -39040,6 +39123,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -39303,6 +39387,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -39566,6 +39651,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -39829,6 +39915,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -40523,6 +40610,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -40786,6 +40874,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -41450,6 +41539,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -41794,6 +41884,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -42138,6 +42229,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -42482,6 +42574,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "verified": "20261022-161855-release k1a-look"
@@ -42842,6 +42935,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -43103,7 +43197,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "x-resume": {
@@ -43411,6 +43506,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -43719,6 +43815,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -44019,6 +44116,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -46118,7 +46216,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-ghost": {
@@ -46379,7 +46478,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-volume": {
@@ -46640,7 +46740,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-commands": {
@@ -46901,7 +47002,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-nudges": {
@@ -47162,7 +47264,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-pathstyle": {
@@ -47423,7 +47526,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-versions": {
@@ -47684,7 +47788,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-versionc": {
@@ -47945,7 +48050,8 @@
     "tools/gate6b.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "6b-scenario-s1": {
@@ -48208,6 +48314,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -48471,6 +48578,7 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ]
   },
@@ -49058,7 +49166,8 @@
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "lint-structure": {
@@ -49854,7 +49963,8 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "w-ingame-smoke": {
@@ -50158,7 +50268,8 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p2-trim.mjs",
-    "tools/lib/run6b.mjs"
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
    ]
   },
   "d2-ingame-smoke": {
@@ -50517,6 +50628,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   }
