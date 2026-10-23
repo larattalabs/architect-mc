@@ -17,6 +17,7 @@ import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { SIBLING_MOVED, normSiblingIr, siblingAsks } from './batch-0410.mjs';
 import { syncBaseTree } from './base-tree.mjs';
+import * as CP from './corpus-plan.mjs'; // (speed audit A) the plans from the run's shared store, prewarmed on every core
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -53,12 +54,16 @@ const norm = (s) => s.replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"');
 // ((batch v0.41.0) the IR with FL's street ext normalised too; a fixture a sibling slice moves by name is that slice's to judge)
 const sig = (r) => ({ answers: sha256(norm(JSON.stringify(r.check.parts))), overall: r.check.overall, ir: sha256(normSiblingIr(r.res.irJson)), first: r.first && r.first !== r ? sha256(normSiblingIr(r.first.res.irJson)) : null });
 
-export async function unchanged(root, { check, log = console.log, only = null } = {}) {
-  const { dir: mainDir, base } = baseTree(root);
-  const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
-  const [hNew, hOld] = [await H(root), await H(mainDir)];
+export async function unchanged(root, { check, log = console.log, only = null, baseDir = null } = {}) {
+  // (baseDir: a test's own base tree, kit/test/gate-corpus-plan.test.mjs; a gate run always uses the merge base's worktree)
+  const { dir: mainDir, base } = baseDir ? { dir: baseDir, base: 'given' } : baseTree(root);
+  // ((speed audit A) the same two-plan calls (planFixture here, survival off) answered from the shared store: the corpus plans on the
+  // pool first. GATE_PLAN_CACHE=0: the plain helpers and the serial loop, as before)
+  const { hNew, hOld } = await CP.corpusHelpers(root, mainDir);
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {} };
-  for (const [name, fx] of fixtures(root)) {
+  const all = fixtures(root);
+  await CP.prewarm(root, CP.fixtureJobs(root, all.filter(([name]) => !(only && !only.test(name))).flatMap(([name, fx]) => [[root, root, fx, 'head', name], ...(fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name)) ? [[mainDir, mainDir, fx, 'base', name]] : [])])), { log });
+  for (const [name, fx] of all) {
     if (only && !only.test(name)) continue;
     const existsOld = fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name));
     let a = null, b = null, err = null;
@@ -76,6 +81,7 @@ export async function unchanged(root, { check, log = console.log, only = null } 
   out.differ = rows.filter(([, r]) => !r.same && !r.sibling).map(([k]) => k);
   if (!only) check(out.n >= 230, `item 2: ${out.n} committed fixtures planned in creative on both trees (every dir, the 59 asks included)`);
   check(out.differ.length === 0, `item 2: ${out.same} of ${out.n} committed plan fixtures byte-identical in creative to the merge base ${base.slice(0, 10)}`);
+  log(CP.statsLine());
   return out;
 }
 
@@ -113,8 +119,10 @@ export async function asksTables(root, { check, OUT }) {
   const committed = fs.existsSync(path.join(F, 'asks-creative.md')) ? fs.readFileSync(path.join(F, 'asks-creative.md'), 'utf8') : null;
   check(committed === after.text, `item 2 (§11): fixtures/plan/rs/asks-creative.md is this table${committed === null ? ' (missing)' : ''}`);
   // survival: every part's class as in creative, its cost.survival summary
-  const H = await import(pathToFileURL(path.join(root, 'kit', 'test', 'plan-helpers.mjs')).href);
+  // ((speed audit A) the 118 calls (creative and survival, each ask's first recording) from the shared store, prewarmed on the pool)
+  const H = await CP.helpers(root);
   const dir = path.join(root, 'kit', 'test', 'fixtures', 'plan', 'asks');
+  await CP.prewarm(root, CP.firstAskJobs(root, root, [false, true]));
   const s = H.asksSurvey();
   const lines = [];
   const moved = [];

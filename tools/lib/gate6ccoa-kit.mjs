@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { normSiblingIr } from './batch-0410.mjs';
 import { syncBaseTree } from './base-tree.mjs';
+import * as CP from './corpus-plan.mjs'; // (speed audit A) the plans from the run's shared store, prewarmed on every core
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 /** The artifact compared with its kitVersion, catalogueVersion, api and irSha normalised (§5's catalogue bump moves every artifact's
@@ -17,18 +18,32 @@ const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const normArt = (a) => normSiblingIr(JSON.stringify(a ?? null)).replace(/"catalogueVersion":\d+/g, '"catalogueVersion":"*"').replace(/"api":"\d+\.\d+\.\d+"/g, '"api":"*"')
   .replace(/"irSha":"[0-9a-f]{64}"/g, '"irSha":"*"'); // (the IR itself is compared kitVersion-normalised above; its sha holds the kitVersion)
 
+/**
+ * The artifact's signature. The artifact is part of what this step compares: a result that carries none (a result with no `artifact`
+ * property, as opposed to a plan that made none: null) throws here, so it can never compare as undefined against undefined.
+ * (kit/test/gate-corpus-plan.test.mjs)
+ */
+export function artSig(r) {
+  if (!r || !('artifact' in r) || r.artifact === undefined) throw new Error('the plan result carries no artifact (nothing to compare)');
+  return sha256(normArt(r.artifact));
+}
+
 /** The base worktree ../architect-mc-coA-base at the merge base of HEAD and origin/main (base-tree.mjs: the run's GATE_MERGE_BASE under gate-run). */
 export function baseTree(root) {
   return syncBaseTree(root, path.resolve(root, '..', 'architect-mc-coA-base'));
 }
 
-export async function unchanged(root, { check = null, log = console.log, only = null, moved = {} } = {}) {
-  const { dir: baseDir, base } = baseTree(root);
-  const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
-  const [hNew, hOld] = [await H(root), await H(baseDir)];
-  const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(normSiblingIr(r.res.irJson)), first: r.first && r.first !== r ? sha256(normSiblingIr(r.first.res?.irJson ?? JSON.stringify(r.first))) : null, art: sha256(normArt(r.artifact)) });
+export async function unchanged(root, { check = null, log = console.log, only = null, moved = {}, baseDir: given = null } = {}) {
+  // (baseDir: a test's own base tree, kit/test/gate-corpus-plan.test.mjs; a gate run always uses the merge base's worktree)
+  const { dir: baseDir, base } = given ? { dir: given, base: 'given' } : baseTree(root);
+  // ((speed audit A) the same two-plan calls through the shared store, prewarmed on the pool; the record carries the artifact `art`
+  // compares: corpus-plan.mjs SCHEMA calls-v2. GATE_PLAN_CACHE=0: the plain helpers and the serial loop, as before)
+  const { hNew, hOld } = await CP.corpusHelpers(root, baseDir);
+  const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(normSiblingIr(r.res.irJson)), first: r.first && r.first !== r ? sha256(normSiblingIr(r.first.res?.irJson ?? JSON.stringify(r.first))) : null, art: artSig(r) });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {} };
-  for (const [name, fx] of fixtures(root)) {
+  const all = fixtures(root);
+  await CP.prewarm(root, CP.fixtureJobs(root, all.filter(([name]) => !(only && !only.test(name))).flatMap(([name, fx]) => [[root, root, fx, 'head', name], ...(fs.existsSync(path.join(baseDir, 'kit', 'test', 'fixtures', 'plan', name)) ? [[baseDir, baseDir, fx, 'base', name]] : [])])), { log });
+  for (const [name, fx] of all) {
     if (only && !only.test(name)) continue;
     const existsOld = fs.existsSync(path.join(baseDir, 'kit', 'test', 'fixtures', 'plan', name));
     let a = null, b = null, err = null;
@@ -44,6 +59,7 @@ export async function unchanged(root, { check = null, log = console.log, only = 
   out.n = rows.length;
   out.same = rows.filter(([, r]) => r.same).length;
   out.differ = rows.filter(([, r]) => !r.same).map(([k]) => k);
+  log(CP.statsLine());
   return out;
 }
 

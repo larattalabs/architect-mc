@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 // one cheap fixture with a body (KC's census and F3's M18/M19 run on it), one ask, one plain valid plan
 const ONLY = /^(kc\/u02_lamp_on_rim|asks\/pirate_cove|valid\/v01_[a-z_]+)\.json$/;
-const DRIVERS = ['gate6ckc-kit', 'gate6cs3-kit', 'gate6cf3-kit', 'gate6cirr-kit', 'gate6cfl-kit'];
+const DRIVERS = ['gate6ckc-kit', 'gate6cs3-kit', 'gate6cf3-kit', 'gate6cirr-kit', 'gate6cfl-kit', 'gate6crs-kit', 'gate6ccoa-kit'];
 
 async function pass(env) {
   const saved = { ...process.env };
@@ -46,6 +46,45 @@ test('the drivers\' unchanged() loops: the store cold, warm and off print the sa
       assert.deepEqual(off[d], cold[d], `${d}: off = cold`);
     }
   } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// (speed audit A) coa-unit's signatures compare the plan's artifact, which the lite record must carry: through the store, cold and
+// warm, it equals the artifact of the uncached call, is not empty for a plan that makes one, and a record without it is re-planned.
+test('the store\'s record carries the artifact (coa-unit compares it): cold, warm and uncached equal; an artifact-less result throws', async () => {
+  const { artSig } = await import(pathToFileURL(path.join(ROOT, 'tools', 'lib', 'gate6ccoa-kit.mjs')).href);
+  assert.throws(() => artSig({}), /no artifact/);
+  assert.throws(() => artSig({ check: {}, res: {} }), /no artifact/);
+  assert.doesNotThrow(() => artSig({ artifact: null }));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'corpus-plan-art-'));
+  const saved = { ...process.env };
+  try {
+    const CP = await import(pathToFileURL(path.join(ROOT, 'tools', 'lib', 'corpus-plan.mjs')).href);
+    const { fixtures, planFixture } = await import(pathToFileURL(path.join(ROOT, 'tools', 'lib', 'gate6ckc-kit.mjs')).href);
+    const [name, fx] = fixtures(ROOT).find(([n]) => /^valid\/v01_/.test(n));
+    process.env.GATE_PLAN_CACHE_DIR = dir;
+    const plain = await import(pathToFileURL(path.join(ROOT, 'kit', 'test', 'plan-helpers.mjs')).href);
+    const truth = (await planFixture(plain, ROOT, fx)).r;
+    assert.ok(truth.artifact, `${name}: the uncached plan makes an artifact`);
+    const H = await CP.helpers(ROOT);
+    for (const pass of ['cold', 'warm']) {
+      const r = (await planFixture(H, ROOT, fx)).r;
+      assert.ok(r.artifact, `${pass}: the artifact is there`);
+      assert.deepEqual(r.artifact, truth.artifact, `${pass}: the artifact equals the uncached one`);
+      assert.equal(artSig(r), artSig(truth), `${pass}: its signature equals`);
+    }
+    // (an entry from a store that predates the artifact has no `art`: it is not an entry)
+    const zlib = await import('node:zlib');
+    const files = [];
+    (function walk(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) e.isDirectory() ? walk(path.join(d, e.name)) : /\.json\.gz$/.test(e.name) && files.push(path.join(d, e.name)); })(dir);
+    assert.ok(files.length > 0, 'the store wrote entries');
+    for (const f of files) { const v = JSON.parse(zlib.gunzipSync(fs.readFileSync(f)).toString('utf8')); delete v.art; fs.writeFileSync(f, zlib.gzipSync(JSON.stringify(v))); }
+    const again = (await planFixture(await CP.helpers(ROOT, { headRoot: ROOT, derive: [] }), ROOT, fx)).r;
+    assert.deepEqual(again.artifact, truth.artifact, 'an entry without art is re-planned, never served as an absent artifact');
+  } finally {
+    for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+    Object.assign(process.env, saved);
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });

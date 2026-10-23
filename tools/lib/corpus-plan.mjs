@@ -19,7 +19,7 @@
 // share each other's work within a run; the base's entries stay valid for every run on that base.
 //
 // Switches: GATE_PLAN_CACHE=0 (the exact old path: no store, no pool), GATE_PLAN_WORKERS=<n> (1: no pool, the loop plans serially),
-// GATE_PLAN_CACHE_DIR (the store; default <main checkout>/artifacts/plan-cache/calls-v1, untracked; deleting it only costs a re-run).
+// GATE_PLAN_CACHE_DIR (the store; default <main checkout>/artifacts/plan-cache/calls-v2, untracked; deleting it only costs a re-run).
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -27,9 +27,12 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { firstAsk } from './asks-first.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const SCHEMA = 'calls-v1';
+// (speed audit A) v2: a record carries the plan's artifact (`art`), which coa-unit's signatures compare. A v1 entry has none and is
+// never read (a different directory), so no signature can compare an absent artifact with an absent artifact.
+const SCHEMA = 'calls-v2';
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -82,6 +85,11 @@ const entryFile = (dir, trees, key) => path.join(storeDir(dir), trees, key.slice
 function readEntry(file) {
   try { return JSON.parse(zlib.gunzipSync(fs.readFileSync(file)).toString('utf8')); } catch { return null; }
 }
+/** A plan record: an entry that carries its artifact (any other is a miss, re-planned and rewritten). */
+function readRecord(file) {
+  const e = readEntry(file);
+  return e && typeof e.art === 'string' ? e : null;
+}
 function writeEntry(file, v) {
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -116,7 +124,10 @@ export const stats = { hit: 0, miss: 0, waited: 0, uncached: 0, deriveMiss: 0 };
 
 function record(r) {
   const first = r.first == null ? { kind: 'none' } : r.first === r ? { kind: 'self' } : { kind: 'obj', check: JSON.stringify(r.first.check), irJson: r.first.res?.irJson ?? null };
-  return { check: JSON.stringify(r.check), irJson: r.res?.irJson ?? null, first, asked: r.asked ?? null };
+  // (speed audit A) the artifact as the call returned it (null: the plan made none, a legitimate answer); a result with no `artifact`
+  // property at all is a different thing and is never stored
+  if (!('artifact' in r)) throw new Error('corpus-plan: the plan result carries no artifact property');
+  return { check: JSON.stringify(r.check), irJson: r.res?.irJson ?? null, first, asked: r.asked ?? null, art: JSON.stringify(r.artifact ?? null) };
 }
 function lite(rec, derived) {
   const r = { check: JSON.parse(rec.check), res: { irJson: rec.irJson }, cached: true };
@@ -124,6 +135,7 @@ function lite(rec, derived) {
   else if (rec.first.kind === 'obj') r.first = { check: JSON.parse(rec.first.check), res: { irJson: rec.first.irJson } };
   else r.first = undefined;
   if (rec.asked) r.asked = rec.asked;
+  r.artifact = JSON.parse(rec.art); // (speed audit A) a record without `art` is not an entry (readRecord)
   r.derived = derived ?? {};
   return r;
 }
@@ -162,7 +174,7 @@ export async function helpers(dir, { derive = [], headRoot = null } = {}) {
     const dKey = (n) => sha256(JSON.stringify([key, n, headTrees, dSrc]));
     const dFile = (n) => entryFile(dir, trees, dKey(n));
     for (let waited = false; ;) {
-      const rec = readEntry(file);
+      const rec = readRecord(file);
       const ds = rec ? Object.fromEntries(derive.map((n) => [n, readEntry(dFile(n))])) : null;
       if (rec && derive.every((n) => ds[n])) {
         if (waited) stats.waited++; else stats.hit++;
@@ -171,7 +183,7 @@ export async function helpers(dir, { derive = [], headRoot = null } = {}) {
       if (tryLock(file)) {
         try {
           // (re-read under the lock: another process may have just written it)
-          const again = readEntry(file);
+          const again = readRecord(file);
           const dsAgain = again ? Object.fromEntries(derive.map((n) => [n, readEntry(dFile(n))])) : null;
           if (again && derive.every((n) => dsAgain[n])) { stats.hit++; return lite(again, Object.fromEntries(derive.map((n) => [n, dsAgain[n].v]))); }
           if (again) stats.deriveMiss++; else stats.miss++;
@@ -301,4 +313,24 @@ export async function prewarmAsks(root, dirs, shape, { fxAnchors = false, log } 
     for (const f of fs.readdirSync(a).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) jobs.push({ id: `ask:${shape}:${f}`, module: mod, export: 'jobAsk', args: [dir, shape, f, fxAnchors] });
   }
   return prewarm(root, jobs, { log });
+}
+
+/**
+ * (speed audit A) A prewarm job for an ask's FIRST recording (asks-first.mjs: what the earlier slices' asks tables read), planned by
+ * checkPlanVolumes exactly as gate6crs-kit asksTables calls it: creative, or `survival: true`.
+ */
+export async function jobFirstAsk(dir, f, survival = false) {
+  const H = await helpers(dir);
+  const asks = path.join(dir, 'kit', 'test', 'fixtures', 'plan', 'asks');
+  const plan = JSON.parse(fs.readFileSync(firstAsk(asks, f), 'utf8')).answer.plan;
+  const s = H.asksSurvey();
+  await H.checkPlanVolumes(plan, { survey: s.bytes, claim: s.claim, anchors: H.stewardAnchors(s.claim), volume: {}, ...(survival ? { survival: true } : {}) });
+}
+/** The jobs of jobFirstAsk for each of `modes` (false: creative, true: survival) over every ask under `dir`. */
+export function firstAskJobs(root, dir, modes) {
+  const mod = pathToFileURL(path.join(HERE, 'corpus-plan.mjs')).href;
+  const a = path.join(dir, 'kit', 'test', 'fixtures', 'plan', 'asks');
+  const jobs = [];
+  for (const f of fs.readdirSync(a).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) for (const m of modes) jobs.push({ id: `ask1:${m ? 'surv' : 'cre'}:${f}`, module: mod, export: 'jobFirstAsk', args: [dir, f, m] });
+  return jobs;
 }
