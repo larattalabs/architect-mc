@@ -5,7 +5,7 @@
 import { blockState } from './program.mjs';
 import { F_WALK, F_WRITTEN, buildVirtual } from './vworld.mjs';
 import { fillMissing } from './plan.mjs';
-import { parseBesideReach, unionColumns } from './reach.mjs';
+import { parseReachInput, reachFor, unionColumns } from './reach.mjs';
 import { besideRules } from './checkBeside.mjs';
 import { asColumns } from './pack.mjs';
 import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
@@ -388,7 +388,7 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   let vw = world, clipped = {};
   // ((6c D3) a reach plan is built over the reach frame's survey (its reach columns lie in the town's claim); `besideReach`: the plan's
   // reach inputs, parsed, the standing data M28 reads)
-  const BR = besideReach ? parseBesideReach(besideReach) : null;
+  const BR = besideReach && ir.reach ? reachFor(parseReachInput(besideReach), ir.reach.standing) : null;
   if (!vw && ir.reach && BR) survey = unionColumns(fillMissing(survey).columns, asColumns(BR.survey), [ir.claim.minX, ir.claim.minZ, ir.claim.maxX, ir.claim.maxZ], BR.standing.claim);
   if (!vw) {
     const filled = fillMissing(survey).columns;

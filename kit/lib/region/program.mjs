@@ -437,6 +437,7 @@ export class Region {
       if (isInt(e.lead) && e.lead > 0) d3.lead = e.lead;
       if (e.graded === true) d3.graded = true;
       if (typeof e.part === 'string') d3.part = e.part;
+      if (e.keepBehind === true) d3.keepBehind = true;
       return { id, a, b, width: e.width ?? 3, type: e.type ?? ((e.width ?? 3) >= 5 ? 'road' : 'path'), movers, ladders: ladders && (!movers.includes(VILLAGER) || !!it._unsafe?.villagerLadders), ...(Array.isArray(e.prefer) && e.prefer.length ? { prefer: e.prefer.map((q) => [q[0], q[q.length - 1]]) } : {}), ...(e.stairs === false ? { stairs: false } : {}), k1, d3 };
     });
     if (new Set(edges.map((e) => e.id)).size !== edges.length) throw new Error(`${what}: edge ids must be unique`);
@@ -561,7 +562,7 @@ export class Region {
       const ec = edgeColumns({ path: d.path, segments: d.segments, landings: d.landings, width: e.width });
       // ((6c D3) an edge with a `lead` meets its junction square on: no column behind the junction cell (the street's end column, a verge)
       // is its; absent: as before)
-      if (e.d3.lead && Array.isArray(e.b.facing)) {
+      if (e.d3.lead && !e.d3.keepBehind && Array.isArray(e.b.facing)) {
         const [gx, , gz] = e.b.at, [fx, fz] = e.b.facing;
         const behind = (o) => (o.x - gx) * fx + (o.z - gz) * fz < 0;
         ec.cols = ec.cols.filter((o) => !behind(o));

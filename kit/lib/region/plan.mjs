@@ -371,7 +371,8 @@ export async function planRegion(o) {
   let besideRead = false;
   // (6c D3) the reach inputs beside a standing region (the town claim's survey, the held columns, the standing data): read only by the
   // reach step (a seam-step plan's IR is unchanged); recorded in the IR's `reach` when the reach step chose the join
-  const besideReach = beside && o.besideReach ? (await import('./reach.mjs')).parseBesideReach(o.besideReach) : null;
+  const RM = o.besideReach ? await import('./reach.mjs') : null;
+  const besideReach = RM ? RM.parseReachInput(o.besideReach) : null;
   // (6c D2) the plan's biome grid (one biome per 4x4 columns: the game's storage, C28): read through ctx.biomes, recorded when read
   const biomes = o.biomes ? parseBiomes(o.biomes) : null;
   let biomesRead = false;
@@ -523,8 +524,9 @@ export async function planRegion(o) {
   // (6c D3, §2.3) the reach: the join's columns outside the claim and the contact columns it holds, with the shas of the reach inputs
   if (reachM) {
     const { encodeColumns } = await import('./pack.mjs');
+    const BR = RM.reachFor(besideReach, reachM.standing);
     ir.reach = { standing: reachM.standing, runs: reachM.runs, rect: reachM.rect, cells: reachM.cells, hold: reachM.hold, contact: reachM.contact,
-      heldSha: sha256Hex(canonicalJson(besideReach.held)), surveySha: sha256Hex(encodeColumns(besideReach.survey)), standingSha: sha256Hex(canonicalJson(besideReach.standing)) };
+      heldSha: sha256Hex(canonicalJson(BR.held)), surveySha: sha256Hex(encodeColumns(BR.survey)), standingSha: sha256Hex(canonicalJson(BR.standing)) };
   }
   // (6c RS) a survival plan (the world's mode): free marks and the target groups (a creative plan's IR is unchanged)
   if (o.survival) markSurvival(ir, r, ctx.__id);
@@ -538,7 +540,8 @@ export async function planRegion(o) {
   // ---- the exact budget: every tile of every change-set over the survey
   const tBudget = performance.now();
   // ((6c D3) a reach plan's budget reads the reach frame's survey: the claim's columns are the plan survey's own)
-  const evalSurvey = reachM ? (await import('./reach.mjs')).unionColumns(survey, besideReach.survey, [claim.minX, claim.minZ, claim.maxX, claim.maxZ], besideReach.standing.claim) : survey;
+  const reachIn = reachM ? RM.reachFor(besideReach, reachM.standing) : null;
+  const evalSurvey = reachM ? RM.unionColumns(survey, reachIn.survey, [claim.minX, claim.minZ, claim.maxX, claim.maxZ], reachIn.standing.claim) : survey;
   let cells = 0, removed = 0, added = 0, evaluated = 0, cellLo = Infinity, cellHi = -Infinity;
   const perStage = {};
   const sv = ir.survival ? {} : null; // (6c RS) per group: free, held, paid cells and creative-only blocks over the survey

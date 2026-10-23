@@ -24,6 +24,9 @@ import { hydrologyPass } from '../region/passes/hydrology.mjs';
 import { CATALOGUE_VERSION } from './schema.mjs';
 import { keptBuilds, pickBuild, buildEndpoint, buildKeepOut } from '../region/builds.mjs';
 import { besidePorts, emitDistricts, parseDistricts, placeDistricts } from '../region/districtsEmit.mjs';
+import { reachFor, claimsMeet, reachCandidates, reachClasses, reachHardKeys, hardRects, streetNetwork, unionColumns, wallEncloses, LEAD } from '../region/reach.mjs';
+import { surveyApi } from '../region/survey.mjs';
+import { keyRuns as keyRunsOf } from '../region/beside.mjs';
 import { placeFollow } from '../region/followEmit.mjs';
 import { TERRACE_GAP, layoutTerraces, parseTerraces } from '../region/terraces.mjs';
 import { levelBands } from '../region/passes/districts.mjs';
@@ -150,16 +153,19 @@ export function makeEnv(ctx, P, t0 = performance.now()) {
   const keepOut = (ctx.keepOut ?? []).map(arrRect);
   const protectedAreas = (P.protected ?? []).map((a) => ({ id: a.id, rect: arrRect(a.rect) }));
   const regions = (P.regions ?? []).map((a) => ({ id: a.id, rect: arrRect(a.rect) }));
+  // ((6c D3, §9) another owner's region's reach runs: hard as its rect is)
+  const regionReach = (P.regions ?? []).flatMap((a) => (Array.isArray(a.reach) ? a.reach : [])).map(arrRect);
   // (D1) the owner's standing regions beside the claim (endpoint.region): their footprint (lots grown by 1, roads, paths, ways) is hard
   const standing = (P.standing ?? []).filter((a) => a && typeof a.id === 'string').map((a) => ({ ...a, lots: a.lots ?? [], keep: a.keep ?? [], graph: a.graph ?? { nodes: [], edges: [] } }));
-  const standingHard = standing.flatMap((a) => [...a.lots.map((q) => [q[0] - 1, q[1] - 1, q[2] + 1, q[3] + 1]), ...a.keep]);
+  // ((6c D3, §9) a standing region's reach (a district's join in a town's claim, row runs) is hard wherever it lies)
+  const standingHard = standing.flatMap((a) => [...a.lots.map((q) => [q[0] - 1, q[1] - 1, q[2] + 1, q[3] + 1]), ...a.keep, ...(Array.isArray(a.reach) ? a.reach : [])]);
   // 6c PT: the players' kept builds; each build (grown by 1) and its door aprons are keep-out for zones (S-PT-4; the plan request
   // names no consent, so every kept build), the builds' own rects for routes (a road may run on a door's apron)
   const builds = keptBuilds(P.builds ?? []).filter((b) => Array.isArray(b.bounds) && b.bounds.length === 6);
   const buildRects = builds.map((b) => ({ id: b.id, rect: { minX: b.bounds[0], minZ: b.bounds[2], maxX: b.bounds[3], maxZ: b.bounds[5] } }));
   const buildKeep = buildKeepOut(builds, { claim }).map(arrRect);
   // columns no zone may take: keep-out (the owner's areas), every protected area, other owners' regions (grown by 1), builds
-  const hard = [...keepOut, ...protectedAreas.map((a) => a.rect), ...regions.map((a) => a.rect)].map((q) => grow(q, 1)).concat(buildKeep).concat(standingHard.map(arrRect));
+  const hard = [...keepOut, ...protectedAreas.map((a) => a.rect), ...regions.map((a) => a.rect), ...regionReach].map((q) => grow(q, 1)).concat(buildKeep).concat(standingHard.map(arrRect));
   const blocked = new Uint8Array(W * D), water = new Uint8Array(W * D);
   for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) {
     const x = cols.minX + i * r, z = cols.minZ + j * r, k = i + j * W;
@@ -1480,7 +1486,14 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       if (timeUp()) { for (const l of group) if (!answers.has(l.conn.id)) ans(l.conn, budgetHit('maxMs')); group = []; break; }
       const cp = checkpoint(r);
       const part = `routes_${grades.indexOf(g)}`;
-      const edges = group.map((l, i) => ({ id: `c${conns.indexOf(l.conn)}l${l.k}`, from: l.from.name, to: l.to.name, width: l.width, ...(l.movers ? { movers: l.movers } : {}), ...(l.k1 ?? {}), _i: i }));
+      // ((6c D3, §8) a leg ending in a standing region's claim (endpoint.region's reach): routed over the reach frame, into its junction
+      // (its lead), graded, in its own part route_join; a reach `from` is routed from the other end)
+      const reachLeg = (l) => l.from.reach ?? l.to.reach ?? null;
+      const edges = group.map((l, i) => {
+        const rl = reachLeg(l), flip = !!l.from.reach;
+        return { id: `c${conns.indexOf(l.conn)}l${l.k}`, from: flip ? l.to.name : l.from.name, to: flip ? l.from.name : l.to.name, width: l.width, ...(l.movers ? { movers: l.movers } : {}), ...(l.k1 ?? {}), ...(rl ? { frame: rl.frame, lead: LEAD, graded: true, part: 'route_join' } : {}), _i: i };
+      });
+      const RL = group.map(reachLeg).find((x) => x) ?? null;
       const nodes = {};
       for (const l of group) for (const e of [l.from, l.to]) if (e.node) nodes[e.name] = e.node;
       let out;
@@ -1492,7 +1505,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         const walls = K ? wallsPassInput(K) : null, rope = K ? ropePassInput(K) : null, bridge = K ? bridgePassInput(K) : null, tunnel = K ? tunnelPassInput(K) : null;
         // (6c H) the plan's own water (a moat: the routes keep 1 off it), only when the plan has some
         const fluids = K ? fluidPassInput(K) : null;
-        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(terracedPlan ? { guard: true } : {}), ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length || rope?.hard?.length ? { hard: [...env.standingHard, ...(rope?.hard ?? [])] } : {}), ...(rope?.base ? { base: rope.base } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}), ...(bridge ? { bridge } : {}), ...(tunnel ? { tunnel } : {}), ...(fluids ? { fluids } : {}) });
+        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(terracedPlan ? { guard: true } : {}), ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length || rope?.hard?.length ? { hard: [...env.standingHard, ...(rope?.hard ?? [])] } : {}), ...(rope?.base ? { base: rope.base } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}), ...(bridge ? { bridge } : {}), ...(tunnel ? { tunnel } : {}), ...(fluids ? { fluids } : {}),
+          ...(RL ? { survey: RL.api, frame: [RL.claimR], hard: [...env.standingHard, ...(rope?.hard ?? []), ...RL.hard], noRetain: (x, z) => !(x >= RL.claimR[0] && x <= RL.claimR[2] && z >= RL.claimR[1] && z <= RL.claimR[3]) && (RL.hardKeys.has(`${x},${z}`) || !(x >= RL.town[0] && x <= RL.town[2] && z >= RL.town[1] && z <= RL.town[3])) && !RL.cand.contact.includes(`${x},${z}`) } : {}) });
       } catch (e) {
         rollback(r, cp);
         for (const l of group) if (!answers.has(l.conn.id)) ans(l.conn, { class: 'refused', reasons: [{ code: /KEEP_OUT/.test(e.message) ? 'KEEP_OUT' : 'UNREACHABLE', message: e.message }] });
@@ -1516,7 +1530,14 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
           if (!en.external) continue;
           const n = r.graph.nodes.find((x) => x.id === en.name);
           const id = `x_${en.name}`.slice(0, 64);
-          if (n && !r.graphIds.has(id)) r.graphEdge({ id, from: `${n.id}.${n.ports[0].name}`, to: `${en.external.region}:${en.external.node}.${en.external.port}`, type: 'road', width: l.width, path: part, stage: stageOf('routes'), external: true });
+          // ((6c D3, §3.5) a reach junction: an end as D1 plus its junction, a side `<region>:<roadId>` with its junction)
+          const to = en.external.node ? `${en.external.region}:${en.external.node}.${en.external.port}` : `${en.external.region}:${en.external.road}`;
+          if (n && !r.graphIds.has(id)) r.graphEdge({ id, from: `${n.id}.${n.ports[0].name}`, to, type: 'road', width: l.width, path: en.reach ? 'route_join' : part, stage: stageOf('routes'), external: true, ...(en.external.junction ? { junction: en.external.junction } : {}) });
+        }
+        // ((6c D3) the reach: the leg's written columns outside the claim and the contact columns it holds)
+        if (RL) {
+          const i = group.findIndex((l) => reachLeg(l) === RL);
+          r.meta.reach = reachMeta(r, RL, edges[i].id);
         }
         // a route pass's part is shared by its connectors (their legs' cells are told apart in finish.mjs by the edge's roads and paths)
         for (const x of r.parts.slice(cp.parts)) partOf[x.id] = `routes:${group.map((l) => l.conn.id).filter((v, i, a) => a.indexOf(v) === i).join(',')}`;
@@ -1574,8 +1595,12 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       const straight = Math.max(1, Math.abs(a[0] - b[0]) + Math.abs(a[2] - b[2]));
       const det = q64((meta.length - 1) / straight);
       worst = Math.max(worst, det);
-      return { edge, from: a, to: b, length: meta.length, rise: meta.rise, detour: det, segments: meta.segments.length, path: corners(meta.path) };
+      // ((6c D3, §8) a leg into a standing region's claim: its junction (only then)
+      const jx = leg.to.reach ? leg.to.external?.junction : leg.from.reach ? leg.from.external?.junction : null;
+      return { edge, from: a, to: b, length: meta.length, rise: meta.rise, detour: det, segments: meta.segments.length, path: corners(meta.path), ...(jx ? { junction: jx } : {}) };
     });
+    // ((6c D3, §8) the answer notes the reach)
+    if (ls.some(({ leg }) => leg.to.reach || leg.from.reach)) connNotes.set(p.id, [...(connNotes.get(p.id) ?? []), 'reach: true (the road enters the standing region\'s claim to its street)']);
     // detour is a ratio (1 = straight): a deviation only past the asked max
     const dv = worst > tDet.max ? [{ what: 'detour', value: worst, max: tDet.max, exceeds: true }] : [];
     const klass = worst > tDet.ceiling ? 'refused' : dv.length ? 'adjusted' : 'fits';
@@ -1770,6 +1795,56 @@ function freeEnds(L) {
  * A route end for an endpoint: `{name, at, node?}` (a node in the pass's `nodes`, or a lot / graph id), or `{error}`.
  * `other`: the leg's other endpoint (a zone's default port is its street end nearer to it).
  */
+/** (6c D3) A reach leg's record (as the districts pass's reachRecord): its written columns outside the claim, the contact columns held. */
+function reachMeta(r, RL, edgeId) {
+  const rec = r.meta.route.edges.find((e) => e.id === edgeId);
+  const c = RL.claimR, out = new Set();
+  for (const q of rec?.written ?? []) for (let x = q[0]; x <= q[2]; x++) if (!(x >= c[0] && x <= c[2] && q[1] >= c[1] && q[1] <= c[3])) out.add(`${x},${q[1]}`);
+  const contact = new Set(RL.cand.contact);
+  for (const k of out) if (RL.hardKeys.has(k) && !contact.has(k)) throw new Error(`UNREACHABLE: the leg into region ${RL.region} writes ${k}, a column it or another site holds`);
+  const hold = RL.cand.hold.filter((k) => contact.has(k));
+  for (const k of hold) out.add(k);
+  const runs = keyRunsOf(out);
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (const q of runs) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[2]); z0 = Math.min(z0, q[1]); z1 = Math.max(z1, q[1]); }
+  return { standing: RL.region, runs, rect: runs.length ? [x0, z0, x1, z1] : null, cells: out.size, hold: keyRunsOf(hold), junction: RL.cand.junction, contact: keyRunsOf(RL.cand.contact) };
+}
+
+/** (6c D3) The reach inputs for a standing region: ctx.besideReach, one (its standing id) or a map {regionId: inputs}; null without. */
+function reachOf(env, id) {
+  return reachFor(env.ctx.besideReach ?? null, id);
+}
+
+/**
+ * (6c D3, §8) endpoint.region's reach step: the candidates over the check's claim and the standing region's (its street ends and sides,
+ * §3), the one nearest the leg's other end (Chebyshev, then the candidates' order: ends first). The node is the junction cell, facing away
+ * from the street; the leg routes over the reach frame with its lead into it (`reach` on the endpoint). At most one standing region per
+ * check takes the reach (a second refuses NO_FEATURE {why: reach}).
+ */
+function reachEndpoint(env, st, op, tag, where) {
+  const R = reachOf(env, st.id);
+  const c = env.claim, claimR = [c.minX, c.minZ, c.maxX, c.maxZ];
+  const no = (kind, message) => ({ error: { code: 'NO_FEATURE', message: `region ${st.id}: ${message}`, evidence: { why: 'reach', kind }, path: where } });
+  if (env.reachUsed && env.reachUsed !== st.id) return no('second', `a second standing region's reach in one check (${env.reachUsed} already reaches; at most one per check)`);
+  if (!claimsMeet(claimR, st.claim)) return no('apart', 'the claim neither overlaps nor touches its claim');
+  const net = streetNetwork(R.standing, st.graph);
+  if (!net.ends.length && !net.runs.length) return no('street', 'its graph has no street run');
+  const U = unionColumns(env.cols, R.survey, claimR, st.claim);
+  const api = { ...surveyApi(U, { minX: U.minX, minZ: U.minZ, maxX: U.minX + U.width - 1, maxZ: U.minZ + U.depth - 1, minY: c.minY, maxY: c.maxY }), missingAt: (x, z) => x < U.minX || z < U.minZ || x >= U.minX + U.width || z >= U.minZ + U.depth || (U.flags[(x - U.minX) + (z - U.minZ) * U.width] & 2) !== 0 };
+  const frame = [claimR, [...st.claim]];
+  const K = reachClasses(R);
+  const { candidates, dropped } = reachCandidates({ reach: R, K, api, net, frame, districtEnds: [{ x: op[0], z: op[1] }] });
+  if (!candidates.length) return no('route', `no street end or side offers a junction (${Object.entries(dropped).map(([k, v]) => `${v} ${k}`).join('; ') || 'none'})`);
+  if (wallEncloses(K, frame, [op], candidates)) return no('wall', "every street end and side is enclosed by another owner's held columns (a wall: joining through its gate is 7a's)");
+  const cheb = (q) => Math.max(Math.abs(q.at[0] - op[0]), Math.abs(q.at[2] - op[1]));
+  const cand = candidates.map((q, i) => ({ q, i })).sort((a, b) => cheb(a.q) - cheb(b.q) || a.i - b.i)[0].q;
+  env.reachUsed = st.id;
+  const hardKeys = reachHardKeys(K, claimR, st.claim);
+  const name = `r_${tag}`;
+  return { name, at: [...cand.at], node: { at: [...cand.at], kind: 'junction', facing: [...cand.facing] }, external: { region: st.id, node: cand.node ?? null, port: cand.port ?? null, road: cand.road, junction: cand.junction },
+    reach: { region: st.id, cand, api, U, frame, claimR, town: [...st.claim], K, hardKeys, hard: hardRects(hardKeys, cand) } };
+}
+
 function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
   const S = env.S;
   const feet = (x, z, name, facing = null) => ({ name, at: [x, S.groundAt(x, z) + 1, z], node: { at: [x, S.groundAt(x, z) + 1, z], kind: 'junction', ...(facing ? { facing } : {}) } });
@@ -1863,6 +1938,9 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
     if (!st) return { error: { code: 'NO_FEATURE', message: `region ${e.region} is not a standing region of this owner beside the claim`, path: where } };
     const c = env.claim;
     const ports = besidePorts(st).filter((q) => q.end[0] >= c.minX && q.end[0] <= c.maxX && q.end[1] >= c.minZ && q.end[1] <= c.maxZ && (!e.port || q.node === e.port));
+    // ((6c D3, §8) no street end in the seam: the reach step, over the check's claim plus the region's, to an end or a side (with the
+    // reach inputs the mod sends for it; else as before)
+    if (!ports.length && !e.port && reachOf(env, st.id)) return reachEndpoint(env, st, posOf(other), tag, where);
     if (!ports.length) return { error: { code: 'NO_FEATURE', message: `region ${e.region} has no street end${e.port ? ` ${e.port}` : ''} inside the claim (the seam must hold the cell past it)`, path: where } };
     const op = posOf(other);
     const q = [...ports].sort((a, b) => Math.max(Math.abs(a.end[0] - op[0]), Math.abs(a.end[1] - op[1])) - Math.max(Math.abs(b.end[0] - op[0]), Math.abs(b.end[1] - op[1])) || cmp(a.node, b.node))[0];

@@ -111,7 +111,8 @@ function gridOf(K, { allowZones = [], walkStanding = null, wet = null, bodies = 
   const forms = r.forms.flatMap((f) => (f.columns ? Array.from({ length: f.columns.length / 3 }, (_, i) => ({ minX: f.columns[3 * i + 1], minZ: f.columns[3 * i], maxX: f.columns[3 * i + 2], maxZ: f.columns[3 * i] })) : f.bounds ? [f.bounds] : []));
   const protectedR = [...env.protectedAreas.map((a) => a.rect), ...env.keepOut];
   const st = walkStanding ? env.standing.find((a) => a.id === walkStanding) : null;
-  const standingHard = st ? env.standing.flatMap((a) => (a === st ? a.lots.map((q) => [q[0] - 1, q[1] - 1, q[2] + 1, q[3] + 1]) : [...a.lots.map((q) => [q[0] - 1, q[1] - 1, q[2] + 1, q[3] + 1]), ...a.keep])) : env.standingHard;
+  // ((6c D3, §9, S-D3-6) another standing region's reach (a district's join in the town's claim) is an obstacle too: the ring keeps off it)
+  const standingHard = st ? env.standing.flatMap((a) => (a === st ? a.lots.map((q) => [q[0] - 1, q[1] - 1, q[2] + 1, q[3] + 1]) : [...a.lots.map((q) => [q[0] - 1, q[1] - 1, q[2] + 1, q[3] + 1]), ...a.keep, ...(Array.isArray(a.reach) ? a.reach : [])])) : env.standingHard;
   const overlap = [...zoneRects, ...lots, ...forms, ...env.regions.map((a) => grow(a.rect, 1)), ...env.buildRects.map((a) => grow(a.rect, 1)), ...standingHard.map(rect)];
   const walkCells = [...K.walk];
   if (st) for (const q of st.keep) for (let z = q[1]; z <= q[3]; z++) for (let x = q[0]; x <= q[2]; x++) walkCells.push([x, z, env.S.groundAt(x, z)]);

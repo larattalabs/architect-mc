@@ -4,7 +4,7 @@
 // side as a T junction, §3.2) with their contact columns (§3.4), and the obstacles the reach step routes around (§5). Plan time only,
 // pure, deterministic (integer geometry; ties by kind, road id, x, z).
 import { FLAG_MISSING, FLAG_WATER, asColumns, makeColumns } from './pack.mjs';
-import { sampleIndex } from './survey.mjs';
+import { sampleIndex, surveyApi } from './survey.mjs';
 import { isStreetId, keyRuns, runKeys } from './beside.mjs';
 
 /** At most this many dry routes in the reach step (§2.2). */
@@ -44,6 +44,25 @@ export function parseBesideReach(o) {
     held: { runs: (h.runs ?? []).map((q) => [...q]), town: (h.town ?? []).map((q) => [...q]), terrain: (h.terrain ?? []).map((q) => [...q]) },
     standing: JSON.parse(JSON.stringify(st)),
   };
+}
+
+/**
+ * The reach inputs as a plan gets them: one (a districts plan beside a town: `{survey, held, standing}`) or, for a plan check whose
+ * endpoint.region names standing regions, a map {regionId: inputs} (at most 2). Returns the parsed one or map.
+ */
+export function parseReachInput(o) {
+  if (o && typeof o === 'object' && !Array.isArray(o) && o.survey !== undefined) return parseBesideReach(o);
+  if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('besideReach must be an object');
+  const ids = Object.keys(o).sort();
+  if (ids.length > 2) throw new Error('besideReach: at most 2 standing regions per plan');
+  return Object.fromEntries(ids.map((id) => [id, parseBesideReach(o[id])]));
+}
+
+/** The reach inputs of one standing region from a parsed besideReach (one or a map), or null. */
+export function reachFor(R, id) {
+  if (!R) return null;
+  if (R.survey) return R.standing?.id === id ? R : null;
+  return R[id] ?? null;
 }
 
 /**
@@ -190,7 +209,9 @@ export function reachCandidates({ reach, K, api, net, frame, districtEnds = [], 
     for (let t = 0; t <= LEAD; t++) for (let v = -1; v <= 1; v++) keys.push(`${q.end[0] + dx * t + px * v},${q.end[1] + dz * t + pz * v}`);
     const p = tryContact(keys);
     if (p) { drop(`end: ${p}`); continue; }
-    out.push({ kind: 'end', road: q.road, node: q.node, port: q.port, at: feet(q.end[0], q.end[1]), facing: [dx, dz], contact: keys, hold: keys.filter((k) => K.terrain.has(k)), junction: { kind: 'end', at: feet(q.end[0], q.end[1]) } });
+    // the junction's feet at the street's own surface (its end cell in the survey after the town): the join meets it level
+    const at = [q.end[0], api.groundAt(q.at[0], q.at[2]) + 1, q.end[1]];
+    out.push({ kind: 'end', road: q.road, node: q.node, port: q.port, at, facing: [dx, dz], contact: keys, hold: keys.filter((k) => K.terrain.has(k)), junction: { kind: 'end', at: [...at] } });
   }
   // ---- street sides (§3.2)
   for (const run of net.runs) {
@@ -229,7 +250,9 @@ export function reachCandidates({ reach, K, api, net, frame, districtEnds = [], 
         const contact = [...strip, ...lead];
         const fs = axis === 'x' ? [0, s] : [s, 0];
         const sideName = axis === 'x' ? (s > 0 ? 's' : 'n') : (s > 0 ? 'e' : 'w');
-        out.push({ kind: 'side', road: run.road, side: sideName, u, at: feet(ex, ez), facing: fs, contact, verge, hold: contact.filter((k) => K.terrain.has(k)), junction: { kind: 'side', at: feet(ex, ez), side: sideName, u } });
+        // (E's feet at the verge's surface: the T meets the street level, E's floor within 1 of it)
+        const at = [ex, api.groundAt(gx, gz) + 1, ez];
+        out.push({ kind: 'side', road: run.road, side: sideName, u, at, facing: fs, contact, verge, hold: contact.filter((k) => K.terrain.has(k)), junction: { kind: 'side', at: [...at], side: sideName, u } });
       }
     }
   }
@@ -287,3 +310,56 @@ export function wallEncloses(K, frame, starts, candidates) {
 export const claimsMeet = (a, b) => meets([a[0] - 1, a[1] - 1, a[2] + 1, a[3] + 1], b);
 
 export { rectOf, inRect };
+
+/**
+ * (6c D3, §2.2) The reach step's choice (pure): over the reach frame (`claim` and the standing region's claim), the candidates of its
+ * street network, and the cheapest dry route (T2 cost) from a district end (`districtEnds`: [{x, z, at, facing}]) to one. Pairs go in
+ * order of their 10-a-cell lower bound and stop once the bound can't win; at most REACH_DRY_MAX dry routes of REACH_EXPANDED expansions
+ * each. Ties: the candidates' order (ends first, road id, x, z). Throws `NO_JOIN: [kind] ...` (apart, street, wall, route, budget).
+ * `route`: the route pass (passes/route.mjs routePass). Returns {best: {end, dry}, cand, api, U, frame, claimR, town, K, hardKeys, hard,
+ * noRetain, nearTownLamp, tried, count, candidates}.
+ */
+export function chooseReach({ planCols, R, beside, claim, yRange = [-64, 319], districtEnds, baseHard = [], clearTrees = [], keepOut = [], maxGrade = 0.25, volumes = [], seamPorts = 0, unsafe = {}, route }) {
+  const claimR = [...claim], town = [...beside.claim];
+  const why = seamPorts ? `no dry route from a district to its ${seamPorts} street end(s) in the seam` : 'no street end of it lies inside this claim';
+  if (!claimsMeet(claimR, town)) throw new Error(`NO_JOIN: [apart] this claim neither overlaps nor touches region ${beside.id}'s claim, so the join can't reach into it (${why})`);
+  const net = streetNetwork(R.standing, beside.graph);
+  if (!net.ends.length && !net.runs.length) throw new Error(`NO_JOIN: [street] region ${beside.id}'s graph has no street run (${why})`);
+  const U = unionColumns(planCols, R.survey, claimR, town);
+  const api = { ...surveyApi(U, { minX: U.minX, minZ: U.minZ, maxX: U.minX + U.width - 1, maxZ: U.minZ + U.depth - 1, minY: yRange[0], maxY: yRange[1] }),
+    missingAt: (x, z) => x < U.minX || z < U.minZ || x >= U.minX + U.width || z >= U.minZ + U.depth || (U.flags[(x - U.minX) + (z - U.minZ) * U.width] & FLAG_MISSING) !== 0 };
+  const frame = [claimR, town];
+  const K = reachClasses(R);
+  const { candidates, dropped } = reachCandidates({ reach: R, K, api, net, frame, districtEnds, unsafe });
+  if (!candidates.length) throw new Error(`NO_JOIN: [route] no street end or side of region ${beside.id} offers a junction (${Object.entries(dropped).map(([k, v]) => `${v} ${k}`).join('; ') || 'none'}; ${why})`);
+  if (wallEncloses(K, frame, districtEnds.map((q) => [q.x, q.z]), candidates)) throw new Error(`NO_JOIN: [wall] every street end and side of region ${beside.id} is enclosed by another owner's held columns (a wall round the town: joining through its gate is 7a's) (${why})`);
+  const hardKeys = reachHardKeys(K, claimR, town, { unsafe });
+  const cheb = (p, q) => Math.max(Math.abs(p[0] - q[0]), Math.abs(p[1] - q[1]));
+  const pairs = [];
+  candidates.forEach((c, ci) => districtEnds.forEach((q, qi) => pairs.push({ c, ci, q, qi, bound: 10 * cheb([q.x, q.z], [c.at[0], c.at[2]]) })));
+  pairs.sort((p, q) => p.bound - q.bound || p.ci - q.ci || p.qi - q.qi);
+  let best = null, tried = 0, cut = false;
+  for (const pr of pairs) {
+    if (best && pr.bound >= best.dry.cost) break;
+    if (tried >= REACH_DRY_MAX) { cut = true; break; }
+    tried++;
+    const out = route(U, volumes, {
+      edges: [{ id: 'dry', from: { at: pr.q.at, facing: pr.q.facing }, to: { at: pr.c.at, facing: pr.c.facing, lead: LEAD }, width: 3, movers: ['player', 'villager'], ladders: false, frame }],
+      maxGrade, hairpinLanding: 3, stairs: true, maxCut: 4, maxFill: 4, margin: 2, hard: [...baseHard, ...hardRects(hardKeys, pr.c)], keepOut, prefer: [], clearTrees,
+      maxExpanded: REACH_EXPANDED, frame: [claimR],
+    });
+    const e = out.data.edges[0];
+    if (!e.ok) continue;
+    if (!best || e.cost < best.dry.cost || (e.cost === best.dry.cost && pr.ci < best.ci)) best = { end: pr.q, dry: { cost: e.cost, length: e.length }, ci: pr.ci, cand: pr.c, path: e.path };
+  }
+  if (!best) {
+    if (cut) throw new Error(`NO_JOIN: [budget] ${REACH_DRY_MAX} dry routes into region ${beside.id} found none (${candidates.length} candidate(s), ${pairs.length} pair(s); ${why})`);
+    throw new Error(`NO_JOIN: [route] no route from a district to region ${beside.id}'s ${candidates.length} street end(s) and side(s) within the grade and the obstacles (${tried} tried; ${why})`);
+  }
+  const contact = new Set(best.cand.contact);
+  // a retaining column outside this claim only where the reach may write (never a held column, the footprint or a body)
+  const noRetain = (x, z) => !inRect(claimR, x, z) && (hardKeys.has(`${x},${z}`) || !inRect(town, x, z)) && !contact.has(`${x},${z}`);
+  const lamps = [...K.lamps].map((k) => k.split(',').map(Number));
+  const nearTownLamp = (x, z) => lamps.some(([lx, lz]) => Math.max(Math.abs(lx - x), Math.abs(lz - z)) <= LAMP_GAP);
+  return { best, cand: best.cand, api, U, frame, claimR, town, K, hardKeys, hard: hardRects(hardKeys, best.cand), noRetain, nearTownLamp, tried, count: candidates.length, candidates };
+}
