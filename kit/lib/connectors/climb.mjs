@@ -207,6 +207,16 @@ function treadOf(K) {
 
 export function passInput() { return null; }
 
+/**
+ * (the coordinator's ruling, 2026-10-23) The grade-limited minimum length of a switchback's or a stair's leg: its ends' rise over the leg's
+ * grade (max(straight, rise / grade) is what tolerance.detour is judged against); a ladder's length is not the grade's (null).
+ */
+export function minLength(p, leg) {
+  if (p.kind !== 'switchback' && p.kind !== 'stair') return null;
+  const rise = Math.abs((leg.to.at?.[1] ?? 0) - (leg.from.at?.[1] ?? 0));
+  return Math.ceil(rise / Math.max(1 / 64, leg.grade));
+}
+
 /** A ladder leg the pass could not route whose ends rise more than 48: SPAN; anything else answers as the default. */
 export function failAnswer(K, l, m) {
   if (l.conn.kind !== 'ladder') return null;

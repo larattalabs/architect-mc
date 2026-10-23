@@ -1,5 +1,5 @@
 {
-  "about": "(7a CL, \u00a710) a slope rising 1 in 2 (40 high; synthSlope's grade as terrain bands): a switchback, 2 wide, villagers, zigzagging on hairpin landings with no flight (its detour within 4)",
+  "about": "(7a CL, \u00a710) a slope rising 1 in 2 (40 high; synthSlope's grade as terrain bands): a switchback, 2 wide, villagers, zigzagging on hairpin landings with no flight; its detour judged against the grade-limited minimum length (max(straight, rise / grade): the coordinator's ruling, 2026-10-23), so at the default detour.max 2 it fits",
   "terrain": {
     "W": 160,
     "D": 96,
@@ -315,12 +315,7 @@
         "to": {
           "anchor": "b"
         },
-        "width": 2,
-        "tolerance": {
-          "detour": {
-            "max": 4
-          }
-        }
+        "width": 2
       }
     ]
   }

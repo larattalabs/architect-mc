@@ -1585,7 +1585,11 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     let worst = 0;
     const legsOut = ls.map(({ leg, meta, edge }) => {
       const a = leg.from.at, b = leg.to.at;
-      const straight = Math.max(1, Math.abs(a[0] - b[0]) + Math.abs(a[2] - b[2]));
+      const straight0 = Math.max(1, Math.abs(a[0] - b[0]) + Math.abs(a[2] - b[2]));
+      // ((7a CL, the coordinator's ruling 2026-10-23) a climb whose length its grade sets (a switchback, a stair) is judged against the
+      // grade-limited minimum length (its hook's minLength), not the straight line; every other route as T2's)
+      const h7m = K ? hookOf(p.kind) : null;
+      const straight = h7m?.mod.minLength ? Math.max(straight0, h7m.mod.minLength(p, leg)) : straight0;
       const det = q64((meta.length - 1) / straight);
       worst = Math.max(worst, det);
       return { edge, from: a, to: b, length: meta.length, rise: meta.rise, detour: det, segments: meta.segments.length, path: corners(meta.path) };

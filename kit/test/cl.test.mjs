@@ -284,3 +284,15 @@ test('cost.bom: exactly the climb\'s own links part, by C26\'s rules (the cells 
     }
   }
 });
+
+test('the coordinator\'s ruling (2026-10-23): a switchback\'s detour is judged against its grade-limited minimum length: v7a_cl_switch fits at the default detour.max; one forced round a strip wanders past it: adjusted', async () => {
+  const v = read('valid', /^v7a_cl_switch/)[0];
+  assert.equal(v.plan.connectors[0].tolerance, undefined, 'the default tolerance');
+  const a = part(await run(v), 'slope_switch');
+  assert.equal(a.class, 'fits', JSON.stringify(a.deviations));
+  const leg = a.geometry.legs[0], straight = Math.abs(leg.from[0] - leg.to[0]) + Math.abs(leg.from[2] - leg.to[2]);
+  assert.ok((leg.length - 1) / straight > 2, `it is longer than twice the straight line (${leg.length - 1} / ${straight}): only the grade-limited minimum lets it fit`);
+  const w = part(await run(read('cl', /^a02_/)[0]), 'slope_switch');
+  assert.equal(w.class, 'adjusted');
+  assert.deepEqual(w.deviations.map((d) => [d.what, d.exceeds]), [['detour', true]]);
+});
