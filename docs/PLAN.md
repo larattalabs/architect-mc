@@ -1153,3 +1153,11 @@ gatehouses), since a gatehouse is the natural home for the mechanism.
   independent runs on 2026-10-24 (speed-audit-c's branch run and speed-audit-b's new run). Neither changed that code, and it had
   passed in about 18 earlier logs. If the nightly shows it again, treat it as a real race in the reopen-during-removal path, not
   a flake.
+
+## UI track (Noah, 2026-10-24; audit notes in the coordinator's scratchpad, summarised here)
+Decisions: pickers are FULL-SCREEN browsers where it makes sense (search, family rail, swatches or preview sheets, detail pane), built to grow later (favourites, tags, compare); inline they are compact chip rows (current + recents + "more…"). UI-1 and Steward's UI-3 fixes start now, alongside 7a. Noah glances at a mock before UI-2 (https://claude.ai/artifact/6ZC5ktBTis9Y6xDPoeHN4j). Rebindable placement keys deferred.
+- UI-1 (lab-ui 0.2.0): tokens, Button/Chip, ScrollList, ChipRow +N, CollapsibleSection, Tooltip, EmptyState, Confirm, CompactPicker + PickerScreen, ChatPager; TextFieldView/TextModel/Toasts moved in.
+- UI-2a (Architect): palette pickers (roof 36, stone 35, wood/accent 13), bible/style picker, design form (folding sections, scroll body, pinned footer), searchable Type/Tag/Collection/Bible/Import popups, Variants scroll, library detail Place/Edit/⋯ with Delete behind Confirm.
+- UI-2b (Architect): paged chat lists (list, reload, build list, stockpile list, batches, groups, history, unknown-design error), clickable Undo on "Placed", placement HUD state chips + "?" legend + visible force-armed + icons instead of colour words, one progress strip, quieter launcher (debounce ready, plain errors), one colour palette.
+- UI-3 (Steward, its own slice): dead toasts, inbox lines/terminal rows, Describe-again keeps words, Enter-to-start confirm, capped part offers with plain copy, allowance chips; card compaction, buildings filter/grouping, board ordering on 0.2.0.
+- Later: rebindable placement keys (Esc opens pause when not placing); a terms glossary (design/blueprint/site/build/crate/stockpile).
