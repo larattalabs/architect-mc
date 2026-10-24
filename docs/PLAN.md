@@ -1191,3 +1191,10 @@ Slices: U0 kit (S), U1 wire + Steward review (M), U2 StyleForm model with Java/J
   that needs the reach answers `NO_FEATURE {why: reach, kind: second}` (CONTRACT D3 §8 allows 2). The IR's `reach` is one member;
   making it a list touches the evaluator (`compileReach`), M28:beside, the land, the mod's re-check, TileCheck, Drift and Prepare.
 - **A T on a diagonal or turning street** (D3's deferred list): side junctions only on axis-aligned runs of 9+ cells today.
+
+## UI/UX roadmap additions (Noah, 2026-10-24)
+- **Now:** U3 also covers the Library screen, the rest of the old UI-2a: a grid with more rows; detail as Place / Edit / ⋯ with Delete behind Confirm; searchable Type, Tag, Collection and Import pop-ups; job progress visible from the Library; massing approval by mouse too; and no dead ends. The Library and the editor are designed together.
+- **Now:** a nightly UI gallery. The nightly captures every Architect screen and HUD state at GUI scale 2 and 4 into artifacts/nightly/<date>/ui/. The coordinator runs design-critic over them in the morning review (no API key in the nightly). It reuses the UI-1 and UI-2b screenshot drivers.
+- **Next, after U3:** a shared Jobs & spend panel across Architect and Steward: what's running, cost so far, usage-limit holds, what needs you, with links into either mod. Then safety on big actions: confirm before placing large builds (threshold) and before `/architect remove`, and an undo hotkey.
+- **Before anyone else plays ("player-ready" pass):** first-run guidance (a guided first build, "?" keys, a one-line "what's this" per screen) and an accessibility pack (colour-blind-safe ghost palette, text-size option, rebindable placement keys).
+- **Steward (after its district move and lab-ui 0.2.0 pass):** the talk log persists, the start takes fewer steps, the settlement screen gets keyboard navigation, a map legend, and a note for older building history.
