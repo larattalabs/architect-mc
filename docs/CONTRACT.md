@@ -24999,3 +24999,85 @@ surface still resolve.
   the brief's materials line reads the roles. U3's previews and U4's A/B should expect this.
 - `sidecar/src/claude/contract.ts` (the design agent's contract excerpt) still lists the ten older presets. That is prompt text, so
   it is left for a deliberate follow-up.
+
+## Release v0.44.0 as integrated (7a CL, 7a K2, Style unification U0+U1, gate tooling; branch `release/0.44.0`, 2026-10-24, DEV MODE)
+
+Branch `release/0.44.0` over origin/main c0c0a0cb: slice/CL (36badab7, merged before this cut), then slice/K2 (085ba8f2),
+slice/U01 (b49c449f), chore/ui-gallery-2 (b6154208) and chore/speed-audit-d (39aca192), in that order. Not merged, tagged or
+published: the coordinator does that. DEV MODE: a cheap tag, no release-tier run. **Versions:** API **1.41.0**, mod **0.44.0**,
+kit **0.42.0**, catalogue **14**.
+
+### What it does for a player
+
+- **Climbs** (CL): stairs, switchbacks and ladders up slopes and cliffs, with rails beside the drops, rest landings on long
+  ladders and a gate at the top. Villagers take stairs and switchbacks; ladders are for players.
+- **Walls along a boundary** (K2): a wall can follow a shore, a biome edge or a ridge, with evenly spaced gates (on a landing
+  where the bank is stepped). **Wall walks**: a railed, lit walk along the top of a wall, reached by stairs or ladders.
+- **Styles** (U0+U1): sixteen built-in Styles (six new: medieval, nordic, japanese, cozy, fantasy, modern) with tags and a
+  blurb; a design can take just a Style's materials; hand-made Styles can be saved with no Claude call.
+
+### What it does for Steward
+
+- Features `climbConnectors` (sidecar `region.climbs`), `wallAlong` and `wallWalks` (`region.walls.along`,
+  `region.walls.walk`), and the helper features `palette.roles` and `bible.save`.
+- Java, since 1.41.0 (additive): `DesignRequest.palette` with `withPalette`/`withStyle`, the `Bible` Style fields and
+  `editable()`, `Bibles.save` and `Bibles.usable`, three `Limits` constants, and `Library.makeVariant`'s roles shape. Steward's
+  RC passed on U01 (b49c449f); CL and K2 add features only.
+- plan/0: `connector.stair`, `connector.switchback`, `connector.ladder` and `wall.along` reserved -> supported; the wall's `walk`
+  member. Catalogue 14.
+- Kit output changed, so a region planned on kit 0.41.0 goes `PLAN_STALE` and Steward re-checks it.
+
+### Merge resolutions
+
+- K2 into CL: the protocol FEATURES list and its two test pins, ApiRules' feature names, the structure lint's GATED and
+  connector-corpus lists and the lint corpus dirs, all unions in merge order (catwalks, D3's two, CL's climbs, K2's walls.along
+  and walls.walk). gate7a-kit.mjs keeps main's `mergedIf` and CL's `landed` (K2 changed nothing there). e15's body merged
+  cleanly off both slices' flips; no tool writes e15, so it was checked against the merged x-catalogue's reserved set (every
+  reserved id but the compiler-only tunnel.under and channel.aqueduct in e15 or e16) and by plan-p0. cl.test's catalogue diff
+  leaves K2's wall ids to k2.test; k2.test reads wall.along's sinceApi as NEXT or the stamped api.
+- U01: FEATURES again (then palette.roles, bible.save), devserver genHooks (SliceClDev and SliceU1Dev), PLAN.md (both sections).
+- ui-gallery-2: clean. speed-audit-d: step-inputs.json (generated) rebuilt; every traced entry from both sides kept.
+
+### Versions
+
+`node tools/release-version.mjs --api 1.41.0 --mod 0.44.0 --kit 0.42.0 --catalogue 14`, one run:
+- API minor (1.40.0 -> 1.41.0) for U1's methods and the five features (CONTRACT "Java API": a minor adds methods); kit
+  0.41.0 -> 0.42.0 for the kit output changes.
+- **Catalogue 14**: CL and K2 changed entries and left the number at 13. Catalogue 13 (v0.43.0's golden) archived as
+  `fixtures/plan/catalogue-v0430.json`.
+- 29 placeholders stamped (four sinceApi in plan.json and the golden each, the features javadoc, U1's Bible, Bibles,
+  DesignRequest, Library and Limits members, ApiRules, SliceClDev). By hand: `Bible.editable`'s line-wrapped "Since NEXT"
+  (the tool reads one line), and ApiK1Test's and ApiCLTest's javadoc.
+- 6 goldens re-cut, tiles, cells and blobs identical: crossings_demo_flat, grove_demo, grove_demo_flat, links_demo,
+  links_demo_flat, s3.
+- `--check` (strict, release context): consistent. `catalogue-since-check`: every sinceApi at or below 1.41.0.
+
+### Suites
+
+| Suite | Result |
+|---|---|
+| mod | `./gradlew build --offline` at 552aa44e: 903 tests, 0 failed, 1 skipped (LedgerLintTest 14/14 and RegionFluidsLintTest 2/2, p3-lint, among them); lab-ui 0.2.0 from `../lab-ui` at its tag |
+| kit | `node --test kit/test/*.test.mjs` at 552aa44e: 890/892. The two: f7a-foundation item 2 (the foundation's entries, stamped 1.40.0 in v0.43.0, read as NEXT or the golden's api) and sidecar-reuse (its temp repo lacked the two paths speed-audit-d added to the tree key; failing on speed-audit-d's head too). Both fixed in 400339d1; those files and the catalogue tests re-run 56/56 |
+| sidecar | `npm run check`: 768/768, plus the bundle |
+| lints | lint-structure 64 cases, 0 failing; lint-look 13, 0 failing; water-lint 126/126. fix/cl-theme (the themed-blocks check) is not in this release, so neither CL's nor K2's blocks were checked against the themed rule |
+| api-compat | the 0.43.0, 0.42.0 and 0.41.0 apitest jars and the 0.43.0 mod jar's 1.40.0 surface: clean |
+| step-inputs | `check`: 252 steps, every closure inside its recorded set |
+
+### In game (DEV MODE: the steps whose resolutions touched behaviour)
+
+`gate-run change --only ... --turbo --no-split --no-cache`, ports 8896-8901, run dir `../architect-mc-rel0440-run`:
+- `20261024-073241-change` at 552aa44e: **u1-ingame 29/0, cl-ingame 40/0, k2-ingame 24/0** PASS (the resolutions touched
+  ApiRules' feature names, the FEATURES snapshot and genHooks). cl-unit and k2-unit failed on f7a-foundation item 2 (fixed in
+  400339d1).
+- `20261024-074218-change` at 400339d1: **cl-unit 353/0 PASS**. **k2-unit 350/5**: every FAIL is integration staleness, not a
+  defect. Its byte identity (item 2) and Steward's recorded plans (item 3) compare against origin/main, which lacks CL, so CL's
+  three named movers (asks/hidden_village, asks/old_new_town, asks/sky_monastery, exactly CL's own item 2 exceptions) differ
+  besides K2's castle_city. The nightly on main after the merge is the clean check.
+
+### Known issues carried forward
+
+- Everything listed under v0.43.0's, and CL's and K2's queued items (PLAN).
+- fix/cl-theme (lint-look's themed-blocks check and CL's theme fixes) is not in this release; K2's walls and walk have not been
+  checked against the themed rule either.
+- `Regions.pinArtifact`'s and `Regions.discardPlan`'s default-method messages still say "needs Architect API NEXT" (unstamped
+  since close-out A; runtime text, not javadoc, so release-version leaves it).
