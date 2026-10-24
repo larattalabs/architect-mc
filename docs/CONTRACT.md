@@ -25008,6 +25008,11 @@ slice/U01 (b49c449f), chore/ui-gallery-2 (b6154208) and chore/speed-audit-d (39a
 published: the coordinator does that. DEV MODE: a cheap tag, no release-tier run. **Versions:** API **1.41.0**, mod **0.44.0**,
 kit **0.42.0**, catalogue **14**.
 
+**As tagged and published (coordinator).** Tag `v0.44.0` is main 39ebf034 (the release branch plus the AGENTS rule and the `Regions` default
+messages naming API 1.39.0). The GitHub Packages jar `architect_mc-0.44.0.jar` (sha256 7b3fbcf6…, built by CI from the tag) is what Gradle
+resolves. It differs from `artifacts/release-0440/v0440/` (c40d8cb3…, built at 552aa44e) only by build stamps, the nested lab_ui jar's manifest,
+and the post-552aa44e commits (kit tests; `Regions.class` error strings). Steward's post-release check passed on the published jar (stub 82, free 43).
+
 ### What it does for a player
 
 - **Climbs** (CL): stairs, switchbacks and ladders up slopes and cliffs, with rails beside the drops, rest landings on long
