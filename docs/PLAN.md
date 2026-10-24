@@ -1162,6 +1162,22 @@ gatehouses), since a gatehouse is the natural home for the mechanism.
   ROUTE_WATER. CL keeps the ends open for climb edges only (byte identity). Fixing it for every edge may route edges that fail today:
   a small slice of its own, with the fixtures it moves named.
 
+## Queued from the theme rule (CL theme fix, 2026-10-24)
+
+The structure lint's S-THEME rule (Noah: "everything should be themed / fit") found these writers using blocks no role gives. Each is
+a known exception in `kit/lib/lint/theme.mjs` `THEME_KNOWN` (recorded, not gated) until its fix lands:
+- **T3's tunnel lamp** (`connectors/tunnelGeom.mjs` flush light): a light role that can't sit flush in the lining (a lantern) falls
+  back to glowstone. Use the nearest role with a full-block emitter, or a lantern in a niche. Hits crossings_demo, tunnel_hill, the
+  tunnel p0 fixtures and the even-width tunnels.
+- **route_demo's lamps** (`kit/regions/route_demo.mjs`, `fixtureFor('minecraft:soul_lantern', ...)`): read the light role instead. The
+  soul lantern's level 10 sets the lamp spacing, so the route_demo goldens re-cut.
+- **forms_demo's lamp posts** (`kit/regions/forms_demo.mjs`, a spruce fence and a soul lantern): W's fixture for the light and rail
+  roles. The forms_demo golden re-cuts.
+- **HY-c's water-gate grate** (`fluids/gate.mjs` `GRATE_STATE`, iron bars): functional (still water passes, mobs don't). Either
+  allow it as functional, or take a bars or pane role when the bible names one.
+- **VOC-c's no-wood swaps** (`plan/palette.mjs`): an iron trapdoor on planters and an iron door in wall gates. The rule's own choice;
+  a bible with a metal role could name it.
+
 ## UI track (Noah, 2026-10-24; audit notes in the coordinator's scratchpad, summarised here)
 Decisions: pickers are FULL-SCREEN browsers where it makes sense (search, family rail, swatches or preview sheets, detail pane), built to grow later (favourites, tags, compare); inline they are compact chip rows (current + recents + "more…"). UI-1 and Steward's UI-3 fixes start now, alongside 7a. Mock APPROVED by Noah 2026-10-24 (https://claude.ai/artifact/6ZC5ktBTis9Y6xDPoeHN4j): compact row max 4 chips, rail/grid/detail browser, preview in the detail pane (world-ghost preview later), form opens Basics + Palette, Features/Rules/Parameters closed with counts. Rebindable placement keys deferred.
 - UI-1 (lab-ui 0.2.0): tokens, Button/Chip, ScrollList, ChipRow +N, CollapsibleSection, Tooltip, EmptyState, Confirm, CompactPicker + PickerScreen, ChatPager; TextFieldView/TextModel/Toasts moved in.

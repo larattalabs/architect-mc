@@ -71,6 +71,7 @@ function protectRects(c) {
  * [build records], plan (the plan/0 request, for S-FARM), answers (the check's parts, for S-FARM)}. Returns {findings, metrics,
  * world: {vw, lant}, ms}.
  */
+import { themeOffenders, knownTheme } from './theme.mjs';
 export function structureLint(c, { preFix = {}, rules = null } = {}) {
   const t0 = performance.now();
   const want = (r) => !rules || rules.includes(r);
@@ -136,6 +137,16 @@ export function structureLint(c, { preFix = {}, rules = null } = {}) {
   if (want('S-DOOR')) doorRule(c, findings);
   // ---- S-FARM
   if (want('S-FARM') && c.plan) farmRule(c, findings);
+  // ---- S-THEME (Noah, 2026-10-24): every written block outside the lots traces to a role or the functional allowlist
+  if (want('S-THEME')) {
+    const t = themeOffenders(c.ir, vw);
+    metrics.theme = { cells: t.cells, offenders: t.offenders.map((o) => `${o.part} ${o.block} x${o.count}`) };
+    for (const o of t.offenders) {
+      const k = knownTheme(o);
+      if (k) findings.push({ ...finding('T-THEME-KNOWN', o.count, o.sample, `${o.part} writes ${o.block} (x${o.count}): a known exception (${k.why})`), severity: 'info', theme: o });
+      else findings.push({ ...finding('S-THEME', o.count, o.sample, `${o.part} writes ${o.block} (x${o.count}), which no role of the plan gives (themes) and is not a functional block`), severity: 'warning', theme: o });
+    }
+  }
   return { findings, metrics, world: W, ms: Math.round(performance.now() - t0) };
 }
 

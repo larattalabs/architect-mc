@@ -345,3 +345,28 @@ test('Noah\'s look: every climb fence joins its neighbours and stands on somethi
   }
   assert.ok(total > 40, `fences checked: ${total}`);
 });
+
+test('Noah\'s theme rule: every block the climbs write traces to a bible role (or a functional block), in the three gallery bibles, and the half-steps match the treads', async () => {
+  const { themeOffenders } = await import('../lib/lint/theme.mjs');
+  const { resolveRoles } = await import('../lib/region/plan.mjs');
+  const s = flatSurvey({ W: 240, D: 176 });
+  const seen = {};
+  for (const b of [null, 'g7ak1_coastal', 'g7ak1_infernal']) {
+    const bib = b ? JSON.parse(fs.readFileSync(path.join(ROOT, 'scenarios', 'bibles', `${b}.json`), 'utf8')) : {};
+    const p = await planRegion({ programFile: path.join(ROOT, 'kit', 'regions', 'climbs_demo.mjs'), survey: s.bytes, claim: s.claim, seed: '1', params: { variant: 'flat' }, roles: bib.roles ?? {}, connectors: bib.connectors ?? undefined });
+    const { vw } = buildVirtual({ ir: p.ir, survey: s.bytes, blobs: (sha) => p.blobs?.get?.(sha) ?? null });
+    assert.deepEqual(themeOffenders(p.ir, vw).offenders, [], `${b ?? 'default'}: unthemed blocks`);
+    const roles = resolveRoles(bib.roles ?? {}, {});
+    const slabs = new Set(), treads = new Set();
+    vw.eachWritten((x, y, z, idx, f, part) => {
+      const id = p.ir.parts[part]?.id ?? '', n = vw.pal.states[idx].replace(/\[.*$/, '');
+      if (/^links/.test(id) && /_slab$/.test(n)) slabs.add(n);
+      if (/^route/.test(id) && /_stairs$/.test(n)) treads.add(n.replace(/_stairs$/, ''));
+    });
+    // the half-step: the path role's slab where it has one, else the treads' block's slab (one block family with the flight)
+    const pathSlab = `${roles.path.replace(/\[.*$/, '').replace(/s$/, '')}_slab`;
+    assert.ok([...slabs].some((q) => q === pathSlab || [...treads].some((t) => q === `${t}_slab`)), `${b ?? 'default'}: half-steps ${[...slabs]} vs treads ${[...treads]}`);
+    seen[b ?? 'default'] = [...slabs].sort().join(',');
+  }
+  assert.equal(new Set(Object.values(seen)).size, 3, `the three bibles' slabs differ: ${JSON.stringify(seen)}`);
+});
