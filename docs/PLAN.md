@@ -1161,3 +1161,6 @@ Decisions: pickers are FULL-SCREEN browsers where it makes sense (search, family
 - UI-2b (Architect): paged chat lists (list, reload, build list, stockpile list, batches, groups, history, unknown-design error), clickable Undo on "Placed", placement HUD state chips + "?" legend + visible force-armed + icons instead of colour words, one progress strip, quieter launcher (debounce ready, plain errors), one colour palette.
 - UI-3 (Steward, its own slice): dead toasts, inbox lines/terminal rows, Describe-again keeps words, Enter-to-start confirm, capped part offers with plain copy, allowance chips; card compaction, buildings filter/grouping, board ordering on 0.2.0.
 - Later: rebindable placement keys (Esc opens pause when not placing); a terms glossary (design/blueprint/site/build/crate/stockpile).
+
+## Queued (coordinator, 2026-10-24; Steward ask)
+- DevBridge `dev.key`: send a key release after the press, like a real tap, with an optional hold time. Steward's card Start now needs two presses and counts a held key once; a press with no release lapses after 3 s, so it works today but isn't exact. Small; batch it with the next tooling slice.
