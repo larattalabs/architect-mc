@@ -24,6 +24,36 @@ node tools/gate-run.mjs change --since origin/main --slots 2     # at most 2 gat
 node tools/gate-impact.mjs --since origin/main                   # just the change-impact report
 ```
 
+## DEV MODE (Noah, 2026-10-24): the rules in force until Noah starts playing or before a public release
+
+These override the tier, verifier and RC rules below for as long as dev mode is on.
+
+**A slice merges when these pass:**
+- unit tests;
+- the instant lints (lint-structure, lint-look, water-lint, p3-lint);
+- the slice's OWN in-game steps.
+No regression suite, impact steps or before/after comparison runs per slice. Use `gate-run change --only <the slice's own steps>`.
+
+**The gate-verifier is review only.** It reads the diff and the evidence. It re-runs checks only when the slice touches undo,
+the journal, removal, crash recovery or survival accounting. Those stay strict, because they lose a player's work.
+
+**Steward RC only when the API Steward calls changes.** Otherwise Steward picks up the next tag.
+
+**Galleries only for slices whose point is the look.** Noah glances; the merge doesn't wait. Look fixes are follow-ups.
+
+**Releases are cheap tags,** cut whenever Steward needs something or every day or two. No release-tier run before a tag.
+
+**The full set runs nightly** (tools/nightly.mjs). Whatever it finds is fixed forward the next morning.
+
+**No new test-tooling projects** unless something is actually broken.
+
+**Keep the machine for product:**
+- at most 3-4 agents running gates at once;
+- no duplicate before/after runs: compare against recorded history instead;
+- commit before running (the runner tests a frozen snapshot).
+
+**To return to release mode:** Noah says so. Then the full tiers, verifier re-runs and Steward RCs come back.
+
 ## Policy update (Noah, 2026-10-12): cut what has only cost time
 
 Evidence from 0a-X: every timing-bar failure on a slice was machine load (0a's three benches, 0b's 4d-all, 0c's three,
