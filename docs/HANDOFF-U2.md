@@ -1,6 +1,6 @@
 # U2 (Style unification: the StyleForm model): handoff
 
-Branch `slice/U2`, off `origin/slice/U01` (merged up to its RC fix b49c449f: `Bible.modOwned()` / `isModOwner()`). The binding text is
+Branch `slice/U2`, off `origin/slice/U01` (merged up to its RC fix b49c449f: `Bible.modOwned()` / `isModOwner()`), with main v0.44.0 (39ebf034) merged in. The binding text is
 docs/CONTRACT.md "Style unification U2" (end of the file). No API change: no Steward RC needed (DEV MODE). Not merged to main.
 
 ## What changed
@@ -64,6 +64,8 @@ Run `artifacts/gate-runs-U2/20261024-064303-change/` (main checkout), `gate-run 
 run dir (`../architect-mc-U2-run`) and lock; the machine at load ~30 throughout.
 - **u2-ingame: PASS, 27/27** (client, sim, $0; `gate6b/u2-ingame.json`): designs d85 (medieval) and the birch mix done and built of
   their materials; `bib_u2_birch_daub` v1 saved (hand, basedOn medieval v1); variant `gen_u2_daub_cabin_u2_birch_daub` built of it.
+- **After merging main v0.44.0** (`artifacts/gate-runs-U2/20261024-075034-change/`, at 865039a7): unit-mod PASS (909, 0 failures),
+  unit-kit PASS (897/897), **u2-ingame PASS 33/33**; `step-inputs check` 253 steps clean.
 - **Re-run after the remix fix** (`artifacts/gate-runs-U2/20261024-071032-change/`, at d3f49e5c): **u2-ingame PASS, 33/33**, now also
   5: Remix… of the materials-only design (medieval picked, palette, no bible) and 6: Massing first with medieval (massing d89 without
   a palette, its detail pass `fromMassing` + palette medieval, done and built of it); unit-mod PASS (908, 0 failures).
