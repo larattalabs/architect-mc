@@ -145,10 +145,10 @@ steps.variants = async () => {
   const { planRegion } = await imp('lib/region/plan.mjs');
   const { decodeColumns, encodeColumns, FLAG_FROZEN, FLAG_WATER } = await imp('lib/region/pack.mjs');
   const out = {};
-  // gravity off: the kit test's broken variant (village-safety.test.mjs), run alone and named
-  const g = nodeTest(['--test-name-pattern', 'gravity broken variant', 'kit/test/village-safety.test.mjs']);
-  out.gravityOff = g;
-  check(g.code === 0 && g.pass === 1, `variant: a gravel verge over a 2-deep gap with the rule off -> M3:gravity on the verges (${g.names.join('; ')})`);
+  // gravity off: the kit test's broken variant ('gravity broken variant', kit/test/village-safety.test.mjs) is w-unit's item 1/3/4 row, which
+  // runs that file whole; it was run alone and named here as well (speed set C: dropped, a repeat of the same test)
+  out.gravityOff = 'w-unit (kit/test/village-safety.test.mjs, "gravity broken variant")';
+  log('  variant: the gravity broken variant is w-unit\'s (village-safety.test.mjs runs whole there)');
   // FROZEN ignored: the frozen site's survey with its FROZEN columns read as ground (V's reading) plans clean, its street over ice
   const f = path.join(OUT, 'frozen-survey.bin');
   if (!fs.existsSync(f)) { out.frozenIgnored = 'run the frozen step first (it writes frozen-survey.bin)'; check(false, `variant: FROZEN ignored: ${out.frozenIgnored}`); return out; }
@@ -279,6 +279,18 @@ steps.lampsoff = async () => {
 
 // ------------------------------------------------------------------ item 5: road lanterns with three path bibles
 
+/** S7's flat run in S7's own bible, made by another step of this gate run at this head and finished: its run dir, else null. */
+function sharedS7Flat() {
+  try {
+    if (!process.env.GATE_RUN_SHARED) return null;
+    const ix = JSON.parse(fs.readFileSync(path.join(process.env.GATE_RUN_SHARED, 'scenario-runs', `${S7.id}.flat.${S7.bible}.json`), 'utf8'));
+    const need = ['metrics.json', 'run.json', 'evidence.sha', 'raw/plan/ir.json', 'raw/plan/meta.json', 'raw/plan/survey.bin', 'raw/before.arwd.gz', 'raw/after.arwd.gz'];
+    if (ix.head !== execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim() || !need.every((f) => fs.existsSync(path.join(ix.out, f)))) return null;
+    const run = readJ(ix.out, 'run.json');
+    return run.variant === 'flat' && run.bible === S7.bible && run.state === 'PLACED' ? ix.out : null;
+  } catch { return null; }
+}
+
 steps.pathbibles = async () => {
   await ensure();
   // (S7's own fixture bible, coarse dirt, run here too: the step stands alone on a fresh run worktree)
@@ -289,7 +301,11 @@ steps.pathbibles = async () => {
   const out = {};
   for (const [blk, bible] of bibles) {
     let dir;
-    { const r = scenario(['run', 's7', '--phase', PHASE, '--flat', '--bible', bible]); dir = latest(`s7-${bible}`, true); out[`${blk}Exit`] = r.code; }
+    // (speed set C) S7 flat in its own bible (g6cv_village, the coarse dirt) is 6cv-scenario-s7's flat run: when that step of this gate run
+    // has finished it at this head, its run is read here; otherwise (not in this run, not finished, another head) it is run as before
+    const shared = blk === 'coarse_dirt' ? sharedS7Flat() : null;
+    if (shared) { dir = shared; out[`${blk}Reused`] = shared; log(`  pathbibles: ${blk}: S7 flat reused from 6cv-scenario-s7's run ${shared}`); }
+    else { const r = scenario(['run', 's7', '--phase', PHASE, '--flat', '--bible', bible]); dir = latest(`s7-${bible}`, true); out[`${blk}Exit`] = r.code; }
     if (!dir) { check(false, `pathbibles: no flat run for ${blk}`); continue; }
     const { ir, meta, world } = await runWorld(dir);
     const m = readJ(dir, 'metrics.json');
