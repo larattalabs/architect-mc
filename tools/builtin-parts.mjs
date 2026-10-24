@@ -210,8 +210,10 @@ async function jobs() {
     const c = await Conn.open(PORT, data);
     for (let i = 0; i < 120 && c.status?.auth === 'checking'; i++) await sleep(1000);
     log(`auth: ${JSON.stringify(c.auth())}`);
-    for (const s of STYLES) {
-      if (only && !only.includes(s)) continue;
+    // the Styles with shape hints first (a stop at the cap leaves the plain palettes), or the --only order
+    const order = only ?? [...STYLES.filter((s) => builtinBible(s).roofLanguage), ...STYLES.filter((s) => !builtinBible(s).roofLanguage)];
+    for (const s of order) {
+      if (!STYLES.includes(s)) throw new Error(`${s} is not a built-in without parts`);
       if (fs.existsSync(path.join(OUT, 'parts', s, 'components.mjs'))) {
         log(`${s}: already done, skipped`);
         continue;
