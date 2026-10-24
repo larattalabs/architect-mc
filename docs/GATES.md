@@ -537,10 +537,32 @@ the safety set (the coverage test above it).
   inside `Roads.plan`, which every road-building step runs, and the CellCond change is in the hot write conditions. Only a probe or
   branch granularity would skip them, and JaCoCo's probes can't make that sound (see "Entered, not hit"). The gain is in steps that
   load a class without running it: the API interfaces, registries' holders and the classes that are only type-checked.
-- **Pending:** the traced `release --full` with the agent (queued behind the slice runs). It gives the exact counts for 78c47572,
-  cd170c61, 619398ec, 73189410 and 9a83771e (`node tools/step-cache.mjs coverage-select <commits> --bytecode --exact`, which reads
-  the same entries as the class-load key and as the execution key), the per-step overhead against v0.42.0's traced full run, and
-  `fail-audit --bytecode` on the new keys. A load/exec A/B of the smoke steps is queued as well.
+- **Conclusion (coordinator, 2026-10-23): a core Java change runs every in-game step, and no sound key changes that.** The edits
+  that matter (CellCond, Roads, TerrainFit) are in classes and methods every in-game step executes. Class level can't skip them, and
+  neither could method level. So the traced `release --full` that would give exact counts for the five v0.42.0 commits was not run:
+  the counts would match the class-load key's on the Java commits. 78c47572, 619398ec and 73189410 are driver and kit (node)
+  changes, which JaCoCo doesn't touch. Method-level entry probes are not worth building.
+- **What execution coverage does narrow:** classes a step loads but never runs (API interfaces, event types, classes only
+  type-checked) count by their skeleton, so a body edit there no longer reruns the step. Separately, the hidden-lambda fix
+  stops loaded lambdas from sending their host's source into the set. That narrows the existing class-load key too.
+- **fail-audit --bytecode** (partial: only the 4 smoke steps carry execution coverage), 776 FAIL/TIMEOUT records:
+  - 234 have no earlier PASS on an ancestor;
+  - 18 are on the same commit as a PASS;
+  - 501 were caused by a change in the step's own drivers, data or definition;
+  - 21 came only through the whole-tree classes. Of those, 17 run under the class-load key, all through the set, and 4 are
+    pending. None is skipped. None of the 21 is on a step with execution coverage, so no record exercises the execution key yet;
+  - the same 2 known holes (a docs-only change; gate6cpt.mjs for pt2-ingame).
+- **Overhead:** measured three ways on a shared machine, where load swamps the effect.
+  - **The smoke steps, agent on (A) against agent off (B)**, in seconds: unit-mod 85 / 116, t3a-look 147 / 180, h-ingame-smoke
+    349 / 474, hy-ingame-smoke 557 / 728, kc-ingame-smoke 63 / 91. The agent-off run was slower on every step, but it ran under a
+    1-min load of 17-96 against 17-20 for A. The difference is load, and the JaCoCo cost is below what this run can resolve.
+  - **The heaviest case, the mod's whole test suite** (`./gradlew test --rerun-tasks`, 874 tests: every class exercised is
+    instrumented), interleaved, three each. CPU (user) was 310 and 296 s with the agent and 282, 284 and 297 s without:
+    **about +5% CPU**. One agent-on sample lost its child accounting. Wall time, at load 32-52, ran 156-223 s either way.
+  - **Per-step dump wait** (`summary.json` `coverage.dumpMs`) is recorded from this commit on.
+  - In-game steps spend most of their CPU in Minecraft, which is not instrumented, so their share is smaller than the test suite's.
+    **Decision (coordinator's rule, under ~5%): the agent stays on everywhere** (`coverage.jacoco.enabled`). If a judged timing
+    bar starts to miss, set `enabled: false` and turn it on only in the nightly's full run.
 
 ### Impact-map misses log
 
