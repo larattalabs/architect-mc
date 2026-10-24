@@ -8,6 +8,7 @@
 //   "moved by name by FL or a later slice"): the 12 asks Steward re-recorded (their input changed; earlier slices' asks tables read
 //   Steward's first recordings: kit/test/fixtures/plan/asks-8703dbd, plan-helpers.mjs asksFirstPath, asks-first.mjs) and the fixtures
 //   close-out A's items 4, 5, 7 and 9 move.
+import { f7aAskLine } from './f7a-norm.mjs'; // (7a foundation) its ask movers' until normalised
 export const COA_REREC_ASKS = Object.freeze(['arcology', 'end_city_ruins', 'one_block', 'redstone_gate', 'rival_families', 'spiral_town', 'swamp_stilts',
   'terraced_hill', 'treetop_village', 'two_districts', 'underwater_domes', 'upside_down'].map((a) => `asks/${a}.json`));
 export const COA_MOVED_FIXTURES = Object.freeze([...COA_REREC_ASKS, 'asks/mage_exiles.json', 'valid/v64_vocc_copper.json', 'valid/v65_vocc_nowood.json',
@@ -43,7 +44,8 @@ export function flAsksFilter(text) {
     if (head && !l.startsWith(' ')) inBlock = asks.includes(head[1]) && head[2] === ' ';
     if (head && asks.includes(head[1])) continue;
     if (inBlock && l.startsWith('  ')) continue;
-    out.push(l);
+    // ((7a foundation) the foundation's ask movers compare without their `until` (rail_1: until 7a -> CR): tools/lib/f7a-norm.mjs)
+    out.push(f7aAskLine(l));
   }
   return out.join('\n');
 }

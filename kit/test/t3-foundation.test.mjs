@@ -45,8 +45,8 @@ test('catalogue 6: the golden, and the K1 -> T3 diff is exactly the two flips, a
   void planCatalogue; void PLAN_API;
 });
 
-test('the special-move table: gate, rope, then bridge (7) and tunnel (8), each off without an edge that asks', () => {
-  assert.deepEqual(SPECIAL_MOVES.map((m) => [m.name, m.code, m.segment, m.flag]), [['gate', 5, 'gate', false], ['rope', 6, 'rope', true], ['bridge', 7, 'bridge', true], ['tunnel', 8, 'tunnel', true]]);
+test('the special-move table: gate, rope, then bridge (7) and tunnel (8), each off without an edge that asks ((7a foundation) rows 9-11 after them: f7a-foundation.test.mjs)', () => {
+  assert.deepEqual(SPECIAL_MOVES.slice(0, 4).map((m) => [m.name, m.code, m.segment, m.flag]), [['gate', 5, 'gate', false], ['rope', 6, 'rope', true], ['bridge', 7, 'bridge', true], ['tunnel', 8, 'tunnel', true]]);
   for (const m of SPECIAL_MOVES) for (const f of ['init', 'active', 'needsFlag', 'blocks', 'expand', 'cells', 'commit']) assert.equal(typeof m[f], 'function', `${m.name}.${f}`);
   for (const m of SPECIAL_MOVES.slice(1)) assert.equal(typeof m.fail, 'function', `${m.name}.fail`);
   const env = { W: 4, D: 4, r: 1, minX: 0, minZ: 0, flags: new Uint8Array(16), G: new Int16Array(16) };

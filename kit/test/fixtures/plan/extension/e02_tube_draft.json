@@ -1,9 +1,9 @@
 {
-  "about": "a reserved 7a kind in its draft shape (K1 moved it off connector.wall, which ships, to connector.catwalk, which stays reserved)",
+  "about": "a reserved kind in its draft shape (K1 moved it off connector.wall, which ships, to connector.catwalk; the 7a foundation moved it to connector.tube, the longest-lived reservation (until UW), since CW flips connector.catwalk)",
   "on": "s7",
   "expect": {
     "part": "walk",
-    "block": "connector.catwalk"
+    "block": "connector.tube"
   },
   "plan": {
     "schemaVersion": "plan/0",
@@ -35,7 +35,7 @@
     "connectors": [
       {
         "id": "walk",
-        "kind": "catwalk",
+        "kind": "tube",
         "from": {
           "part": "town"
         },
