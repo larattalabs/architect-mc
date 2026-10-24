@@ -66,7 +66,7 @@ describe('U5a: the hints as guidance (pure)', () => {
     const req = DesignRequest.parse(request({ palette: { bible: { id: 'medieval', version: 1, roles } } }));
     const b = designBrief(req, 'gen_x', { renderer: false, examples: ['cabin'], styleHints: hints });
     expect(b).toContain("## The Style's look: Medieval (guidance)");
-    expect(b).toContain('- description: Dark oak timber framing with pale daub walls.');
+    expect(b).toContain('- in short: Dark oak timber framing with pale daub walls.');
     expect(b).toContain('- roofs: lean toward steep gables, jettied upper floors.');
     expect(b).toContain('- proportions: lean toward a roof pitch of about 1.5');
     expect(b).toContain('- silhouette: lean toward tall and narrow.');

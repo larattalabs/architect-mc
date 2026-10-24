@@ -143,9 +143,9 @@ steps.ingame = async () => {
   const d1 = s1.sent?.designId ? await designDone(s1.sent.designId) : { status: 'NONE' };
   check(d1.status === 'DONE' && !!d1.entryId, '2: the hybrid design is done', { status: d1.status, error: d1.error });
   const b1 = d1.designId ? brief(d1.designId) : '';
-  data.hybridBrief = b1.split('\n').filter((l) => /Style's look|lean toward|description:/.test(l));
+  data.hybridBrief = b1.split('\n').filter((l) => /Style's look|lean toward|in short:/.test(l));
   check(/## The Style's look: Medieval \(guidance\)/.test(b1) && /lean toward steep gables, jettied upper floors/.test(b1) && /Dark oak timber framing/.test(b1),
-    '2: the brief carries the Style\'s look as guidance (description, roof language, proportions)', data.hybridBrief);
+    '2: the brief carries the Style\'s look as guidance (the blurb, roof language, proportions)', data.hybridBrief);
   check(SET_MODE.every((re) => !re.test(b1)) && !/\*\*Restraint\*\*/.test(b1), '2: no set-mode text in the brief (no components, no "follow it", no restraint)');
   if (d1.entryId) check(!fs.existsSync(path.join(LIB, d1.entryId, 'bible')), '2: the entry has no bible/ folder');
 

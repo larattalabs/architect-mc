@@ -340,7 +340,7 @@ export function styleHintLines(h: StyleHints | undefined): string[] {
     `## The Style's look: ${h.name} (guidance)`,
     '',
     `The player picked the Style \`${h.id}\`. Its materials are above; here is the look it is known for. Lean toward it where it suits the type and the request; the shapes, the layout and the details stay your call.`,
-    ...(h.blurb ? [`- description: ${h.blurb}`] : []),
+    ...(h.blurb ? [`- in short: ${h.blurb}`] : []),
     ...(h.roofLanguage ? [`- roofs: lean toward ${h.roofLanguage}.`] : []),
     ...(props.length ? [`- proportions: lean toward ${props.join('; ')}.`] : []),
     ...(h.silhouette ? [`- silhouette: lean toward ${h.silhouette}.`] : []),
