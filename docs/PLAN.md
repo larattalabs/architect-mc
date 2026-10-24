@@ -923,6 +923,14 @@ integrated". Fixed before the RC: IRR's breach sweep (the verifier's finding 2).
 
 Top first. Not fixed in v0.40.1.
 
+- **Long fuzz, DRIFT generator: Place SITE then Place ROAD, then a remove (found 2026-10-24 by umt-long, seed 804021437).** A fresh
+  clock-seeded `umtLong` run failed `UmtLongDriftTest` with an unexplained violation on a two-op world: `Place[kind=SITE, x=15, z=30,
+  w=7, d=8, h=5, group=1]` then `Place[kind=ROAD, x=15, z=36, w=7, d=2, h=3, group=2]`, then `finish` removes r2 (30 cells, box
+  null) and s1. The other three generators passed on the same seeds. Not diagnosed: whether it is a model gap or a journal bug.
+  - Repro (deterministic per seed, 20 s): in `mod/`, `./gradlew --offline umtLong -Dumt.from=804021437 -Dumt.seeds=1`
+    (only `UmtLongDriftTest` fails; the report prints the minimal ops and trace).
+  - Found with the new one-JVM-per-generator `umtLong`, but unrelated to it: the seed fails the same when run alone, and
+    `UmtFuzzTest.fuzz` is unchanged. Pin as a known finding or fix the model, then drop the repro into `UmtFindingsTest`.
 - **DPT: a delta over a player's block loses its PT record.** `SiteDeltas`' D7 commit rewrites the delta's sections from
   `new Cell(q, layer, before, after)`, which drops the PT records its create annotated (`JournalStore.ptSource`). The removal puts the
   player's block back without its record. Production code; UMT mirrors it.
