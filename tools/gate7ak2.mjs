@@ -430,10 +430,20 @@ steps.natural = async () => {
   const { decodeArwd } = await imp('lib/region/vworld.mjs');
   const dmp = out.R.after; void decodeArwd; // (realisedWalls's decoded after-dump)
   const at = (x, y, z) => dmp.palette[dmp.cells[dmp.at(x, y, z)]] ?? '';
-  // 0 cells in water: no wall column stands over water in the re-read world (its foot to its top)
+  // 0 cells in water: over the wall's own written range of each column (its lowest cell the realise changed, to its top + 3), no water
+  // in the re-read world, and no water there before (a wall block standing where water was); water under that range (a flooded cave
+  // under the footing, untouched) is no wall in water (the verifier's finding, 2026-10-24)
+  const pre = await decodeArwd(fs.readFileSync(out.before));
+  const was = (x, y, z) => pre.palette[pre.cells[pre.at(x, y, z)]] ?? '';
   let wet = 0;
-  for (const [x, z, T] of w.cells) for (let y = T - 24; y <= T + 3; y++) if (/^minecraft:water/.test(at(x, y, z))) { wet++; break; }
-  check(wet === 0, `item 7: 0 wall cells in water (re-read: no water in a wall column, its foot to its top; ${w.cells.length} columns)`);
+  const wetAt = [];
+  for (const [x, z, T] of w.cells) {
+    let foot = null;
+    for (let y = T - 40; y <= T + 3; y++) if (was(x, y, z) !== at(x, y, z)) { foot = y; break; }
+    if (foot === null) continue;
+    for (let y = foot; y <= T + 3; y++) if (/^minecraft:water/.test(at(x, y, z)) || /^minecraft:water/.test(was(x, y, z))) { wet++; if (wetAt.length < 8) wetAt.push([x, y, z]); break; }
+  }
+  check(wet === 0, `item 7: 0 wall cells in water (re-read: no water, before or after, over each wall column's written range, its lowest changed cell to its top; ${w.cells.length} columns)`, wetAt);
   // the free ends' posts: an end position stands 1 over its neighbour position
   const topOf = (pos) => Math.max(...w.cells.filter((c) => c[3] === pos).map((c) => { for (let y = c[2] + 4; y >= c[2] - 4; y--) if (!/^minecraft:(air|cave_air)$/.test(at(c[0], y, c[1]))) return y; return -Infinity; }));
   const posts = w.ends.map((e) => ({ end: e, top: topOf(e), beside: topOf(e === 0 ? 1 : e - 1) }));
