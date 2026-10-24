@@ -8,7 +8,7 @@
 //   door_surround  frame posts either side of the door, a trim lintel above, a doorstep outside
 //   lantern_post   a fence post on a foundation block with a lantern on top
 //   roof_trim      a row of top slabs (accent wood) under the eave, a shadow line along the roof edge
-//   chimney        a stone column with a trim cap and a smoking campfire
+//   chimney        a stone column with a trim cap and a stone slab on top (no campfire: S-THEME, every block from the roles)
 
 /** The horizontal step along a wall that faces `facing` (to the right, seen from outside). */
 function along(bp, facing) {
@@ -75,5 +75,5 @@ export function chimney(bp, at) {
   const top = at.top ?? at.y + 8;
   bp.fill([at.x, at.y, at.z, at.x, top - 1, at.z], p.stone);
   bp.set(at.x, top, at.z, p.stoneTrim);
-  bp.set(at.x, top + 1, at.z, 'minecraft:campfire', { lit: 'true', signal_fire: 'false', facing: 'north' });
+  bp.set(at.x, top + 1, at.z, p.stoneSlab, { type: 'bottom' });
 }

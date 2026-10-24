@@ -1287,3 +1287,12 @@ Queued from U5:
 - (b) cozy's plaster is white_terracotta (the same salmon);
 - (c) parts jobs get their own estimate kind once measured;
 - (d) a promotion tool for authored built-in parts.
+
+### Built-in parts + A/B (chore/builtin-parts, 2026-10-24, PAID $18.39 of $40; CONTRACT "Built-in parts")
+- (d) done: `tools/builtin-parts.mjs` (jobs, check, promote). All 15 built-ins got parts for $6.33, then were approved and promoted
+  into `kit/bibles/<id>/`. Every built-in now has its own parts. The component check and the brief follow S-THEME, and rustic's
+  campfire is gone.
+- A/B (hybrid vs own parts, $12.07): own parts won 5 of 6 pairs, with fit 4.00 vs 3.50, quality 3.83 vs 3.00 and variety 4 vs 3.
+- **For Noah:** default "Use this style's parts" on for every built-in (recommended), or keep it off. This branch keeps it off.
+- Queued: japanese's set-mode accent share (R1B 0.171) is worth a look; parts jobs have their own estimate kind now that 15 are
+  measured ($0.25-0.72, 1-3 min; the estimate said at most $1.16-1.55).

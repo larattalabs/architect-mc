@@ -122,7 +122,8 @@ describe('U5a: the sidecar (sim)', () => {
   it('a materials-only design gets its Style hints; no bible files, no restraint', async () => {
     h = await harness();
     const med = h.sc.bibleIndex.get('medieval')!;
-    expect(med.parts).toEqual([]);
+    // (built-in parts, 2026-10-24) medieval has its own parts now (the kit ships them); a materials-only request still runs the hybrid
+    expect(med.parts?.length).toBeGreaterThanOrEqual(5);
     expect(med.roofLanguage).toBe('steep gables, jettied upper floors');
     const d = await done(h, h.sc.requestDesign(DesignRequest.parse(request({ name: 'Daub House', palette: { bible: { id: 'medieval', version: 1, roles: med.roles } } }))).id);
     const b = brief(h.sc, d.id);
@@ -138,11 +139,14 @@ describe('U5a: the sidecar (sim)', () => {
     expect(brief(h.sc, i.id)).not.toContain("The Style's look");
   });
 
-  it("a built-in without parts as the bible: the hybrid (no rustic components, no restraint); rustic keeps its own", async () => {
+  it("a Style without parts as the bible: the hybrid (no rustic components, no restraint); a built-in uses its OWN parts", async () => {
     h = await harness();
-    const d = await done(h, h.sc.requestDesign(DesignRequest.parse(request({ name: 'Set Med', bible: 'medieval' }))).id);
+    // (built-in parts, 2026-10-24) every built-in has its own parts now: a hand-made Style without parts is the hybrid case
+    const med0 = h.sc.bibleIndex.get('medieval')!;
+    const plainStyle = h.sc.bibleIndex.save({ bible: { name: 'Plain Daub', roles: med0.roles, roofLanguage: 'steep gables, jettied upper floors', basedOn: { id: 'medieval', version: 1 } } });
+    const d = await done(h, h.sc.requestDesign(DesignRequest.parse(request({ name: 'Set Med', bible: plainStyle.id }))).id);
     const b = brief(h.sc, d.id);
-    expect(b).toContain('## The Style: Medieval');
+    expect(b).toContain('## The Style: Plain Daub');
     for (const re of SET_MODE_TEXT) expect(b).not.toMatch(re);
     const scratch = path.join(h.sc.config.dataDir, 'designs', d.id, 'bible');
     expect(fs.existsSync(path.join(scratch, 'bible.json'))).toBe(true);
@@ -155,23 +159,30 @@ describe('U5a: the sidecar (sim)', () => {
     expect(brief(h.sc, r.id)).toMatch(/Follow it over your own taste/);
     expect(h.sc.setMode(r)).toBe(true);
     expect(h.sc.bibleIndex.get('rustic')!.parts).toHaveLength(5);
+    // medieval named as the bible: set mode with medieval's own library (the kit's), never rustic's
+    const m = await done(h, h.sc.requestDesign(DesignRequest.parse(request({ name: 'Set Med Parts', bible: 'medieval' }))).id);
+    expect(h.sc.setMode(m)).toBe(true);
+    const mine = fs.readFileSync(path.join(KIT, 'bibles', 'medieval', 'components.mjs'), 'utf8');
+    expect(fs.readFileSync(path.join(h.sc.config.dataDir, 'designs', m.id, 'bible', 'components.mjs'), 'utf8')).toBe(mine);
+    expect(mine).not.toBe(fs.readFileSync(path.join(KIT, 'bibles', 'rustic', 'components.mjs'), 'utf8'));
   });
 
   it('an entry made in set mode before U5 with a Style that has no parts still builds when designed again (its own library)', async () => {
     h = await harness();
-    // a set-mode tavern (rustic's library in its bible/), then made to look like a pre-U5 one: pinned to cherry (no parts now), its
-    // source importing the library it was built with
+    // a set-mode tavern (rustic's library in its bible/), then made to look like a pre-U5 one: pinned to a hand-made Style (no parts;
+    // every built-in has parts since 2026-10-24), its source importing the library it was built with
+    const cherry = h.sc.bibleIndex.save({ bible: { name: 'Hand Cherry', roles: h.sc.bibleIndex.get('cherry')!.roles } }).id;
     const d = await done(h, h.sc.requestDesign(DesignRequest.parse(request({ type: 'tavern', name: 'Old Set Inn', bible: 'rustic', maxSize: { x: 64, y: 64, z: 64 } }))).id);
     const e = d.blueprintId!;
     const dir = path.join(h.sc.config.libraryDir, e);
     expect(fs.existsSync(path.join(dir, 'bible', 'components.mjs'))).toBe(true);
     const jf = path.join(dir, `${e}.blueprint.json`);
     const j = JSON.parse(fs.readFileSync(jf, 'utf8')) as Record<string, unknown>;
-    fs.writeFileSync(jf, JSON.stringify({ ...j, bible: { id: 'cherry', version: 1 }, request: { ...(j.request as object), bible: 'cherry', bibleVersion: 1 } }));
+    fs.writeFileSync(jf, JSON.stringify({ ...j, bible: { id: cherry, version: 1 }, request: { ...(j.request as object), bible: cherry, bibleVersion: 1 } }));
     const src = path.join(dir, `${e}.mjs`);
     fs.writeFileSync(src, `import * as C from '../../bible/components.mjs';\nif (typeof C.window !== 'function') throw new Error('no library');\n${fs.readFileSync(src, 'utf8')}`);
     const v = h.sc.requestDesign(DesignRequest.parse(request({ type: 'tavern', notes: 'add a lean-to', maxSize: { x: 64, y: 64, z: 64 }, versionOf: { entryId: e } })));
-    expect(v.request.bible).toBe('cherry');
+    expect(v.request.bible).toBe(cherry);
     const vd = await done(h, v.id);
     expect(h.sc.setMode(vd)).toBe(false);
     const b = brief(h.sc, vd.id);
@@ -180,8 +191,8 @@ describe('U5a: the sidecar (sim)', () => {
     // the new version keeps the library its source imports
     expect(fs.existsSync(path.join(dir, 'bible', 'components.mjs'))).toBe(true);
     expect(JSON.parse(fs.readFileSync(jf, 'utf8')).version).toBe(2);
-    // a fresh design with cherry gets no library
-    const f = await done(h, h.sc.requestDesign(DesignRequest.parse(request({ name: 'Fresh Cherry', bible: 'cherry' }))).id);
+    // a fresh design with that Style gets no library
+    const f = await done(h, h.sc.requestDesign(DesignRequest.parse(request({ name: 'Fresh Cherry', bible: cherry }))).id);
     expect(fs.existsSync(path.join(h.sc.config.dataDir, 'designs', f.id, 'bible', 'components.mjs'))).toBe(false);
   });
 
@@ -255,8 +266,8 @@ describe('U5b: "Add parts…" (bible.parts, sim)', () => {
     const dir = path.join(h.sc.config.biblesDir, 'bib_medieval_parts', 'versions', '1');
     expect(fs.readdirSync(dir).sort()).toEqual(['bible.json', 'bible.md', 'components.mjs', 'sheet.png']);
     expect(JSON.parse(fs.readFileSync(path.join(dir, 'bible.json'), 'utf8'))).toMatchObject({ partsOf: { id: 'medieval', version: 1 } });
-    // the built-in is unchanged: no parts, and set mode never runs for it
-    expect(h.sc.bibleIndex.get('medieval')!.parts).toEqual([]);
+    // the built-in is unchanged: its parts are the kit's, no installed version
+    expect(h.sc.bibleIndex.get('medieval')!.parts).toEqual(med.parts);
     expect(h.sc.bibleIndex.versions('medieval')).toEqual([]);
     // a design with the copy as its bible: set mode with its own parts
     const d = await done(h, h.sc.requestDesign(DesignRequest.parse(request({ name: 'Parts House', bible: 'bib_medieval_parts' }))).id);

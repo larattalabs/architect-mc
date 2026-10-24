@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // Style unification U5 in-game step (DEV MODE: the slice's own step), on a CLIENT (the editor, the Style browser, the Style editor
 // and Add parts are client screens; the sim sidecar, no Claude: $0):
-//   1. Medieval's new wall: white_concrete (white_terracotta rendered salmon), wall_alt still calcite; no parts of its own;
-//   2. the hybrid default: a design with medieval from the Design tab is materials only (palette, no bible, no parts toggle); the
+//   1. Medieval's new wall: white_concrete (white_terracotta rendered salmon), wall_alt still calcite; its own parts (since the
+//      built-in parts, 2026-10-24: the kit ships kit/bibles/medieval/components.mjs);
+//   2. the hybrid default: a design with medieval from the Design tab is materials only (palette, no bible; the parts toggle offered
+//      and off, the built-ins' default); the
 //      sidecar's BRIEF.md carries the Style's look as guidance ("lean toward steep gables…") and no set-mode text; no bible/ folder;
-//   3. "Add parts…" through the sim ($0): the Style browser says "No parts · Add parts…", the + New style menu opens Add parts with the
-//      helper's estimate first, Draft parts runs a sim bible job that puts the parts on a hand-made copy of the built-in (basedOn
-//      medieval, its roles, tags and hints); the built-in itself stays without parts; the browser then says "Parts: 5";
+//   3. "Add parts…" through the sim ($0): the Style browser says "Parts: 5" for medieval, the + New style menu opens Add parts
+//      (Redraft) with the helper's estimate first, Draft parts runs a sim bible job that puts the parts on a hand-made copy of the
+//      built-in (basedOn medieval, its roles, tags and hints); the built-in itself stays the kit's; the copy says "Parts: 5";
 //      the Style editor of a hand-made Style shows "No parts · Add parts…" and its button adds parts as v2 (v1 byte-unchanged);
 //      a mod's Style is refused through the API (Bibles.addParts) unless the caller is its owner;
 //   4. "Use this style's parts": offered only for a Style with its own parts, off by default for the copy; on, the request is set mode
@@ -128,7 +130,7 @@ steps.ingame = async () => {
   data.medieval = med;
   check(med.roles?.wall === 'minecraft:white_concrete' && med.roles?.wall_alt === 'minecraft:calcite' && med.roles.wall !== med.roles.wall_alt,
     '1: medieval\'s wall is white_concrete (off white_terracotta), wall_alt calcite', { wall: med.roles?.wall, wall_alt: med.roles?.wall_alt });
-  check(Array.isArray(med.parts) && med.parts.length === 0 && med.builtin === true, '1: the built-in medieval has no parts of its own', med.parts);
+  check(Array.isArray(med.parts) && med.parts.length === 5 && med.builtin === true, '1: the built-in medieval has its own parts (the kit ships them)', med.parts);
   const rustic = await call('dev.style.get', { style: 'rustic' });
   check(rustic.parts?.length === 5, '1: rustic has its own parts (the kit ships them)', rustic.parts);
 
@@ -136,8 +138,8 @@ steps.ingame = async () => {
   await call('dev.ui.open', { tab: 'design' });
   await call('dev.design.fill', { reset: true, buildingType: 'cabin', style: 'medieval', size: 'M', name: `U5 Hybrid ${tag}`, massingFirst: false });
   let f = await form();
-  check(f.partsOffered === false && !f.request?.bible && f.request?.palette?.bible?.roles?.wall === 'minecraft:white_concrete',
-    '2: medieval on the Design tab: materials only (palette, new wall), no bible, no parts toggle', { partsOffered: f.partsOffered, bible: f.request?.bible });
+  check(f.partsOffered === true && f.useParts === false && !f.request?.bible && f.request?.palette?.bible?.roles?.wall === 'minecraft:white_concrete',
+    '2: medieval on the Design tab: materials only (palette, new wall), no bible; the parts toggle offered, off', { partsOffered: f.partsOffered, useParts: f.useParts, bible: f.request?.bible });
   await shotOne('editor_hybrid');
   const s1 = await call('dev.design.submit', {}, 30_000);
   const d1 = s1.sent?.designId ? await designDone(s1.sent.designId) : { status: 'NONE' };
@@ -153,8 +155,8 @@ steps.ingame = async () => {
   await call('dev.u3.browser.open', { for: 'design' });
   await call('dev.u3.browser', { select: 'medieval' });
   let b = await call('dev.u3.state');
-  check(b.details?.includes('No parts · Add parts… (+ New style): on your copy'), '3: the browser: medieval has no parts, Add parts… offered', b.details);
-  await shotOne('browser_no_parts');
+  check(b.details?.includes('Parts: 5'), '3: the browser: medieval has its own parts ("Parts: 5")', b.details);
+  await shotOne('browser_builtin_parts');
   await call('dev.u3.browser', { menu: 'new' });
   await shotOne('browser_menu_parts');
   await call('dev.u3.browser', { item: 'parts' });
@@ -180,7 +182,7 @@ steps.ingame = async () => {
     && cj?.roofLanguage === 'steep gables, jettied upper floors' && JSON.stringify(cj?.tags) === JSON.stringify(med.tags),
     '3: the copy keeps medieval\'s roles, hints and tags, based on it, with 5 parts', cj ? { origin: cj.origin, basedOn: cj.basedOn, parts: cj.parts } : cdir);
   check(fs.existsSync(path.join(cdir, 'components.mjs')) && fs.existsSync(path.join(cdir, 'sheet.png')), '3: the copy has its components.mjs and the job\'s sheet.png');
-  check(!fs.existsSync(path.join(BIBLES, 'medieval')) && ((await call('dev.style.get', { style: 'medieval' })).parts ?? []).length === 0, '3: the built-in medieval stays the kit\'s, without parts');
+  check(!fs.existsSync(path.join(BIBLES, 'medieval')) && ((await call('dev.style.get', { style: 'medieval' })).parts ?? []).length === 5, '3: the built-in medieval stays the kit\'s (its kit parts, no installed version)');
   await call('dev.u3.browser.open', { for: 'design' });
   await until('the copy in the browser', async () => ((await call('dev.u3.browser', { select: copyId }).catch(() => null))?.selected === copyId ? true : null), 30_000);
   b = await call('dev.u3.state');
@@ -236,9 +238,11 @@ steps.ingame = async () => {
   await call('dev.design.fill', { parts: false });
   f = await form();
   check(f.useParts === false && !f.request?.bible && f.request?.palette?.bible?.id === copyId, '4: off again: the palette (materials only)');
-  await call('dev.design.fill', { bible: 'medieval' });
+  // (every built-in has parts now) a hand-made Style without parts
+  const plainStyle = await call('dev.style.save', { style: { name: `U5 Plain ${tag}`, roles: med.roles } });
+  await call('dev.design.fill', { bible: plainStyle.styleId });
   f = await form();
-  check(f.partsOffered === false, '4: a Style without parts: no toggle');
+  check(f.partsOffered === false, '4: a Style without parts: no toggle', { style: plainStyle.styleId, partsOffered: f.partsOffered });
 
   // ---- 5. Medieval's wall in built cells: the parts job's test frame in the copy's roles
   const kitUrl = (rel) => pathToFileURL(path.join(L.RUN, 'kit', rel)).href;

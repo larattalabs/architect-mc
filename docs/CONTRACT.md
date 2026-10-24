@@ -25320,3 +25320,165 @@ them). Cozy's plaster is white_terracotta too: left as authored (not in this sli
   - the parts toggle only for a Style with parts (off by default; on = set mode, its brief with the components);
   - the test frame in the copy's roles built of white_concrete.
 - `u1-ingame` and `u2-ingame` expect medieval's new wall.
+
+## Built-in parts: the 15 built-ins get their own parts, then the hybrid vs own-parts A/B (as run, 2026-10-24, PAID, caps $25 + $15)
+
+PLAN "After U4" item 3 and U5's queued (d). Branch `chore/builtin-parts` (off main f05674a0). Approved by Noah on 2026-10-24: Part 1 at
+most $25, Part 2 at most $15, $40 in all. Both parts ran on Noah's claude login (`authSource` "claude login (personal use)"; the env
+scrubbed of `ANTHROPIC_*`/`CLAUDE*`). No API key was used. Evidence (not committed): `artifacts/gate-runs-parts/` holds
+`spend.json`, `parts/<style>/`, `ab/` (runs, metrics.json, blind/, blind-key.json, verdicts.json), `gate/` and `gallery/`.
+Gallery (private): https://claude.ai/artifact/L2o4fy3axuyybWXGGF5bRf.
+
+**Spend: $18.39 of $40.** Part 1 cost $6.33 of $25: 15 of 15 jobs done on the first try, no retries. Part 2 cost $12.07 of $15:
+12 of 12 runs done, no retries.
+
+**1. Before paying ($0): the brief and the check now follow S-THEME.**
+- The components brief allowed "decor blocks (chains, lanterns, iron bars, campfires, flower pots, ...)". Rustic's reference, which every
+  parts job starts from, ended its chimney in a campfire. Neither fits the theme rule.
+- Changes:
+  - The brief (`claude/bible.ts` `componentsBrief`) now says every block comes from the roles, their shapes, the light role's lantern,
+    or the functional allowlist.
+  - `lib/components.mjs` `checkComponents` warns `S-THEME: writes <block> (xN)` for any block a part writes that `traceRole` (connectors/
+    style.mjs) cannot trace. It compares against the bare frame and uses the same allowlist as the structure lint.
+  - Rustic's chimney cap is now a stone slab instead of the campfire.
+- Rustic's reference library re-skinned under modern still warns, because `p.log` is `birch_log` and no modern role names it. The
+  reference test now requires no S-THEME warnings only under rustic's own roles.
+- **The parts test house** (`buildPartsHouse`) is the test frame with every part placed at once. It has a window on each of the four
+  walls, the door surround, lantern posts at the front and the back, roof trim along both eaves, and a chimney on each side. This
+  covers the facings the single-slot frame never reached (it was south only).
+- **The signal for built-ins.** An "Add parts" copy of a built-in has no prose. Its pass sees the name, blurb, roof language,
+  proportions and roles. Nothing was added: adding motifs to STYLE_META would also change the hybrid brief (arm A) and the parity
+  fixture. A sim dry run confirmed the japanese copy's bible.md reads "paper-white walls … wide eaves" and modern's reads
+  "glass-heavy, under flat roofs".
+
+**2. Part 1: Add parts on each built-in** (`tools/builtin-parts.mjs jobs`).
+- The jobs ran through sidecar op `bible.parts` in a dev helper dir (`artifacts/gate-runs-parts/helper`, port 8902), with
+  `budgetUsd` set to $1.55 per job.
+- Before each job, the guard required part-1 spend + $1.55 + $0.15 to stay within $25.
+- Each job made a hand-made copy `bib_<style>_parts`. The Styles with shape hints ran first.
+
+| Style | $ | min | parts (one line each, from the library's header) |
+|---|---|---|---|
+| medieval | 0.42 | 1.4 | timber-framed windows with open shutters; frame door posts under an accent hood; hanging-lantern frame post; frame eave beam on brackets; banded stone stack |
+| nordic | 0.47 | 1.7 | log-lintel windows with shutters; a steep roof-stair gable hood over the door; hanging lantern; corbels and a fascia board; banded stack |
+| japanese | 0.38 | 1.4 | **shoji** panes between frame posts under a small tile hood; tile door hood; a stone **toro** lantern; a flared eave (roof slab); a slim vent chimney |
+| cozy | 0.40 | 1.5 | small log-framed windows with shutters; a hood and a hanging lantern at the door; mossy-foot lantern post; soffit and fascia; cobble chimney with a pot |
+| fantasy | 0.72 | 3.0 | purpur **arched** windows with a pillar keystone; an arched door with a shroomlight keystone; a mushroom-cap shroomlight post; eaves **curling up** at the ends; a turret chimney with a **witch-hat** cap |
+| modern | 0.40 | 1.8 | windows in a **flush quartz frame** under a thin slab brow; a slab **canopy** door with a set-in light; a slim **bollard**; a soffit line with lights; a flue |
+| oak | 0.33 | 1.3 | log-framed windows with spruce shutters; a spruce stair hood; hanging-lantern post; a stepped cornice; banded stone-brick chimney |
+| birch | 0.45 | 1.7 | birch log frames with dark oak shutters; a slab hood; an andesite lantern post; a pale **soffit line** under the dark eave; andesite flue |
+| dark | 0.31 | 1.3 | calcite reveals under deepslate lintels; a calcite tympanum over the door; hanging lantern; spruce corbels; deepslate stack |
+| desert | 0.45 | 1.7 | sandstone reveals with jungle shutters; a hood on corbels; a sandstone pedestal lantern; **viga** log ends under the eave; a vent chimney |
+| brick | 0.42 | 1.7 | brick surrounds with deepslate lintels; brick jambs and a tiled hood; a brick-plinth lantern post; dark oak corbels; a corbelled brick collar |
+| cherry | 0.38 | 1.5 | cherry log jambs with little stair hoods; a stair canopy; a tuff-plinth bracket lantern; brackets on the window rhythm; a tuff chimney pot |
+| mangrove | 0.46 | 1.4 | packed-mud lintels and mud-brick sills; a slab hood; a mud-brick lantern base; log brackets; a mud-brick column |
+| crimson | 0.47 | 1.8 | stem jambs under nether-brick hoods; lanterns under the door hood; a two-armed blackstone post; blackstone corbels; banded blackstone shaft |
+| fortress | 0.25 | 1.0 | stone-brick surrounds with corbel sills; a stone hood; a stone-wall lantern post; a trim cornice with corbels; a banded column |
+
+- **The review** (`check`, $0) ran on every library with the built-in's roles. All 15 passed with no errors, no warnings and no S-THEME
+  findings. Every parts test house passed the checker with no errors or warnings, so all four facings are clean. All 15 were approved.
+- Line overlap with rustic's file is 0.57-0.74. That figure counts shared boilerplate (the `along`/`axisProps` helpers and loops). Read
+  side by side, the sheets and houses show distinct parts per Style (gallery).
+- Each library is five parts. No job added an extra component.
+- **Promotion** (`promote --all`) copied each `components.mjs` to `kit/bibles/<id>/components.mjs` with a provenance header. Before
+  copying, it checks:
+  - the copy's roles equal the built-in's;
+  - the strict check passes (no error, no warning);
+  - the parts house passes.
+
+**3. The kit and sidecar treat built-ins as having parts.** A built-in has parts only if the kit ships a library for it, which is now
+all 16.
+- `builtinBible().components` is the library's exported component names (`libraryComponentNames`, read from the source), so a
+  promoted library with extra parts would list them.
+- The sidecar's and Java's `partsOf` already follow the kit (the `componentsFile` and the wire `parts`), so no code change was needed
+  there.
+- New kit test (`bible.test.mjs`): every library the kit ships passes its own roles with no warnings (S-THEME included), its parts
+  house is clean, and `builtinBible` lists what the library exports.
+- **The toggle default is unchanged.** "Use this style's parts" stays off for built-ins (`StyleForm` partsDefault), so parts are
+  opt-in.
+- **Behaviour change, by the U5 rule:** a request whose `bible` names a built-in (`withBible`, a group, a remix) now runs set mode with
+  that Style's own library instead of the hybrid. The nightly sets that pass oak or birch as `bible` (apitest, p4c-ui, p5a-ui, gate6cv,
+  gate6c0b) go back to set mode. Their sim designs never import components, so no failure is expected; this is recorded for the
+  nightly reader. Steward passes no built-in ids as a bible (U5 §4).
+
+**4. Fixtures and tests moved.**
+- No kit golden or byte fixture moved: the parity fixture, palettes-fallback.json and the preset goldens are unchanged. Kit: 899 of 899.
+- `sidecar/test/styles-u5.test.ts`:
+  - medieval now has its parts;
+  - the hybrid-as-bible case uses a hand-made Style without parts;
+  - the medieval-as-bible case asserts set mode with medieval's own library (not rustic's);
+  - the pre-U5 entry case pins to a hand-made Style instead of cherry;
+  - the copy case expects the built-in to keep the kit's parts.
+- `tools/gateu5.mjs` (u5-ingame):
+  - medieval has 5 parts;
+  - on the Design tab the toggle is offered and off (the hybrid);
+  - the browser says "Parts: 5" (shot `browser_builtin_parts` instead of `browser_no_parts`);
+  - "a Style without parts: no toggle" uses a fresh hand-made Style.
+- `kit/test/bible.test.mjs`: the reference test filters S-THEME warnings outside rustic, plus the new S-THEME and library test.
+
+**5. Part 2: the A/B** (`tools/partsab.mjs`, port 8903). The harness is ported from `tools/u4ab.mjs` and shares `spend.json`
+(`part2`). Each run's guard required part-2 spend + $1.50 + $0.10 to stay within $15.
+- **Six requests, six built-ins with parts:**
+  - japanese cottage (tea house, 11x11x11);
+  - modern shop (gallery, 17x12x13);
+  - nordic tavern (longhouse inn, 21x15x13);
+  - desert house (courtyard, 15x12x15);
+  - fantasy tower (alchemist, 11x24x11);
+  - brick smithy (forge, 13x12x11).
+- **Arms.** A is the hybrid default: `palette: {bible: {id, version, roles}}`, materials plus "The Style's look (guidance)". B is
+  `bible: <id>`, set mode: the Style's own `components.mjs`, the bible section and `--restraint`.
+- **Arms confirmed in a sim dry run.** A's BRIEF.md has the guidance and no bible section. B's has "Follow it over your own taste",
+  the components, and a scratch `bible/components.mjs` byte-equal to `kit/bibles/japanese/components.mjs`. The paid runs confirm the
+  same in `metrics.json`: A had 0 component calls and the guidance in every brief; B made 70 calls and imported the library in every
+  design.
+- **The pass:** SMALL, as in U4 (effort small: Opus at medium effort, 40 turns, 2 rounds, a $1.50 cap), identical in both arms.
+  Runs went one at a time in pairs.
+- **Cost:** A averaged $1.00 per run, B $1.01.
+- **Judge:** the design-critic agent, blind. The 36 renders were relabelled X01-X12 (seed 2410) with the arms as unlabelled sets P and
+  Q. The judge got each Style's description and roles, and no design files. The key (P = A, Q = B) was opened after `verdicts.json`
+  was saved.
+
+| request | A fit / quality | B fit / quality | better | B component calls | B restraint warnings (`check.mjs --restraint`) |
+|---|---|---|---|---|---|
+| R1 japanese tea house | 4 / 3 | 3 / 3 | A, slightly | 7 | accent share 0.171 > 0.12; one window north, east, west |
+| R2 modern gallery | 4 / 3 | 4 / 4 | B, slightly | 7 | - |
+| R3 nordic longhouse inn | 3 / 3 | 5 / 4 | B, clearly | 14 | - |
+| R4 desert courtyard house | 4 / 3 | 4 / 4 | B, slightly | 23 | - |
+| R5 fantasy alchemist tower | 3 / 3 | 4 / 4 | B, slightly | 9 | south one window; detail noise 0.489 |
+| R6 brick forge | 3 / 3 | 4 / 4 | B, slightly | 10 | south one window; detail noise 0.426 |
+| **mean** | **3.50 / 3.00** | **4.00 / 3.83** | B 5, A 1 | 70 | 3 of 6 |
+
+- **Variety** within an arm: B 4/5, A 3/5. This reverses U4's B 3 / A 4.
+  - The judge on A: a lantern-topped chimney twice, small slit windows three times, the same potted planters four times, and plain
+    deepslate roofs dominating.
+  - On B: a more varied set of silhouettes (a balcony, porch posts, a courtyard, a shopfront); planters and lamps recur.
+  - Block-shape similarity within the arm: A 0.858, B 0.845.
+- **Off-role blocks.** Share of blocks no role traces to: A 6.4% (R1A 23%: the tea house garden), B 4.1%.
+- **Checker.** All 12 passed (`check: OK`). The only warnings are B's restraint warnings above; A runs no restraint check.
+
+**Verdict.**
+- With each Style's own parts, set mode beats the hybrid on fit (+0.50), quality (+0.83) and variety. It won 5 of 6 pairs, one of
+  them clearly.
+- U4's variety cost came from every Style sharing rustic's parts. With per-Style parts that cost is gone in this sample.
+- n = 1 per cell and one judge, so the result is directional.
+- B triggers restraint warnings on half its designs. These are warnings only and do not block.
+
+**Recommendation.** Default "Use this style's parts" **on** for every built-in, not per Style.
+- Six pairs give one observation per Style, too few to split on.
+- The one A win (japanese) was slight and came with B's accent-share warning. It is a candidate for a later look, not a carve-out now.
+- Flipping it is one line, `StyleForm.Style.of`'s `partsDefault` (true for `builtin`), plus the kit twin and a regenerated parity
+  fixture. It is left for Noah's decision; this branch keeps the U5 default (off).
+- If wanted first: a cheap confirmation is 6 more pairs on the other Styles at SMALL, about $12.
+
+**6. Gate (DEV MODE): `20261024-225935-change` at 8b037347, PASS 8/8 in 12m58s.**
+- Ports 8904/8905. Run dir `../architect-mc-builtin-parts-run`. Out `artifacts/gate-runs-parts/gate/`.
+- Results:
+  - unit-mod: 923 tests, 0 failures;
+  - unit-kit: 899 of 899;
+  - unit-sidecar: 784 (`npm run check` clean too);
+  - **u5-ingame: 31 of 31**, with the new kit parts;
+  - lint-structure: 177;
+  - lint-look: 14;
+  - water-lint: 126;
+  - p3-lint: 16.
+- `./gradlew build --offline` in the worktree: BUILD SUCCESSFUL.

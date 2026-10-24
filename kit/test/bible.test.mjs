@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { loadDesign } from '../build.mjs';
 import { BUILTIN_BIBLES, builtinBible, builtinComponentsFile, validateBible } from '../lib/bible.mjs';
 import { checkBlueprint } from '../lib/check.mjs';
-import { buildFrame, checkComponents, loadComponents, REQUIRED_COMPONENTS } from '../lib/components.mjs';
+import { buildFrame, buildPartsHouse, checkComponents, loadComponents, REQUIRED_COMPONENTS } from '../lib/components.mjs';
 import { AUTHORED_STYLES, Blueprint, CORE_ROLES, MACRO_ROLES, PALETTES, PALETTE_PRESETS, palette, resolvePalette } from '../lib/kit.mjs';
 import { decodePng } from '../lib/png.mjs';
 import { presetBuilds, FIXTURE } from '../tools/preset-builds.mjs';
@@ -276,7 +276,30 @@ test('the reference components pass their frames under every built-in bible and 
     const r = await checkComponents(REF, palette({ bible: n }));
     assert.ok(r.ok, `${n.id ?? n}: ${r.errors.join(' | ')}`);
     assert.deepEqual(r.components.map((c) => c.name).sort(), [...REQUIRED_COMPONENTS].sort());
-    assert.deepEqual(r.warnings, [], `${n.id ?? n}`);
+    // (S-THEME) the reference re-skinned under another bible may write a palette block that bible has no role for (modern: p.log
+    // is birch_log): reported, and only rustic's own roles must be clean
+    assert.deepEqual(r.warnings.filter((w) => n === 'rustic' || !/S-THEME/.test(w)), [], `${n.id ?? n}`);
+  }
+});
+
+test('(S-THEME) the component check warns on a block no role gives; every library the kit ships is clean under its own roles', async () => {
+  const f = path.join(tmp, 'decor.mjs');
+  fs.writeFileSync(f, `${fs.readFileSync(REF, 'utf8')}\nexport function brazier(bp, at) { bp.set(at.x, at.y, at.z, 'minecraft:campfire', { lit: 'true' }); }\n`);
+  const r = await checkComponents(f, PALETTES.rustic);
+  assert.ok(r.ok && r.warnings.some((w) => /^brazier: S-THEME: writes campfire \(x1\)/.test(w)), r.warnings.join(' | '));
+  for (const n of BUILTIN_BIBLES) {
+    const file = builtinComponentsFile(n);
+    if (!file) continue;
+    const p = palette({ bible: n });
+    const c = await checkComponents(file, p);
+    assert.ok(c.ok, `${n}: ${c.errors.join(' | ')}`);
+    assert.deepEqual(c.warnings, [], n);
+    // the parts test house: every part at once, windows on all four walls, both eaves, a chimney either side
+    const L = await loadComponents(file);
+    const h = checkBlueprint(buildPartsHouse(p, L.components, L.meta));
+    assert.deepEqual([h.errors, h.warnings], [[], []], `${n} parts house`);
+    // what builtinBible lists is what the library exports
+    assert.deepEqual([...builtinBible(n).components].sort(), [...L.components.keys()].sort(), n);
   }
 });
 
