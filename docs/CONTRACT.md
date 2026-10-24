@@ -25196,3 +25196,69 @@ Every empty state (no designs, no match, nothing placed, no jobs, helper down) c
 **8. Theming.** Swatches and sheets are the Style's own blocks: the `colors` table that tools/gen-palettes.mjs adds to
 `palettes-fallback.json` (the side face's average from the game's textures, kit/lib/colors.mjs, for every block the Style table, the
 presets and the common role candidates name), else the block's map colour.
+
+## Style unification U4: materials only vs bible set mode, the A/B (as run, 2026-10-24, PAID, cap $20)
+
+Answers docs/STYLE-UNIFY.md question 1. Branch `chore/u4-ab`, tooling only (`tools/u4ab.mjs`). The product default is unchanged.
+The coordinator decides with Noah. Evidence (not committed): `artifacts/gate-runs-U4/`, with `spend.json`, `runs/<R?A|B>/` (the
+entry's .mjs, blueprint, nbt, the iso/front/top previews, the design record, BRIEF.md, check.txt), `metrics.json`, `verdicts.json`,
+`blind-key.json` and `u4ab.log`. Gallery: https://claude.ai/artifact/YAy1FMDVgCUTz1GSjst1vX (private).
+
+**Setup.**
+- Six requests, each with its own built-in Style: medieval house, japanese chapel, modern workshop (`shop`), nordic tavern,
+  fantasy tower, fortress gatehouse. Three of the Styles are wall-defined.
+- Each request ran twice with the same type, size, features, notes and `style`:
+  - A: `palette: {bible: {id, version, roles}}`, materials only;
+  - B: `bible: <id>`, set mode. B's brief adds the bible section, `bible/bible.json` (the shape hints) and rustic's
+    `components.mjs`, plus `--restraint`. The sim dry run confirmed this by diffing the two BRIEF.md files.
+- The helper ran on the claude login (`authSource` "claude login (personal use)"), on port 8899, with one design at a time, in pairs.
+- **Deviation.** Every run was the SMALL pass (`effort: small`: Opus at medium effort, 40 turns, 2 rounds, a $1.50 cap), in both
+  arms. Twelve standard passes ($2.2-3.6 each in the 0b bench) don't fit $20. Absolute quality is below a standard design, but
+  the comparison is like for like.
+
+**Spend: $10.67 of $20.** 12 of 12 runs done, no failures and no retries. The helper estimated $0.60-1.50 per run; actual runs cost
+$0.62-1.11. A averaged $0.85 per run, B $0.93.
+
+**Judge.** The `design-critic` agent judged blind:
+- the 36 renders were copied to a separate folder as X01-X12, shuffled (seed 4242), with the arms as unlabelled sets P and Q;
+- it got the requested Style's description and roles, and no design files;
+- the key (P = A, Q = B) was opened after its verdicts were saved.
+It reviewed every iso and front view, and top views for 4 of the 12. Fit and quality are scored 1-5.
+
+| request | A fit / quality | B fit / quality | better | B's checker (restraint) |
+|---|---|---|---|---|
+| R1 medieval house | 3 / 3 | 5 / 4 | B, clearly | OK |
+| R2 japanese chapel | 3 / 3 | 4 / 4 | B, slightly | north: 1 window, under 2 |
+| R3 modern workshop | 4 / 4 | 4 / 4 | B, slightly | OK |
+| R4 nordic tavern | 3 / 3 | 3 / 3 | A, slightly | east and west: 1 window each |
+| R5 fantasy tower | 3 / 4 | 4 / 3 | B, slightly | detailNoise 0.452 > 0.42 |
+| R6 fortress gatehouse | 4 / 3 | 4 / 4 | B, slightly | east and west: 0 windows |
+| **mean** | **3.33 / 3.33** | **4.00 / 3.67** | B 5, A 1 | |
+
+- **Variety** within an arm: A scored 4/5, B 3/5.
+  - B: the medieval house and nordic tavern share the corbel sills, the lantern-post porch, the lantern-topped chimney and a gable
+    stub, and are "nearly the same kit". The modern workshop got rustic's campfire chimney. Lantern-post entrances appear on three
+    of the six.
+  - A: a lantern-topped chimney twice, planters twice, stone sills three times.
+- **Objective.** B made 54 component calls (window 28, door_surround 8, lantern_post 8, roof_trim 7, chimney 3), and all six import
+  `bible/components.mjs`. A made none. Block-shape similarity within each arm was 0.838 for A and 0.842 for B, too coarse to show
+  shared details. Share of blocks outside the Style's roles: A 3.8%, B 3.7%.
+- **Checker.** Every design passed (`check: OK`). The four warnings are all B's restraint checks. A runs no restraint check, so those
+  warnings have no A counterpart.
+- **Observed.** Medieval's `wall` role (white_terracotta) renders pink-beige. The judge read A's medieval walls as "salmon", while B
+  leaned on calcite (wall_alt). This is a Style roles matter, not an arm matter.
+
+**Verdict.**
+- B scores higher per building (fit +0.67, quality +0.33, 5 of 6 pairs, only one of them clear).
+- B costs variety, as the worry said: the shared rustic components make different Styles look alike.
+- Evidence is n = 1 per cell and one judge, so it is directional.
+- Most of B's fit lead plausibly comes from the shape hints rather than the components. B's work dir carries `bible.json`, with
+  `roofLanguage` ("steep gables, jettied upper floors"), proportions and the blurb. A's brief carries roles only: none of those
+  words appear in A's BRIEF.md.
+
+**Recommendation: hybrid.**
+- Keep built-in and hand-made Styles materials-only, with no shared components and no "follow it over your own taste". Add the
+  Style's shape hints (blurb, `roofLanguage`, proportions; motifs where authored) to the materials brief as guidance.
+- Required components only for a Style that authors its own: Claude-made bibles and sets, as today. Never rustic's reference
+  components on another Style.
+- Optionally, a cheap follow-up A/B: A plus hints vs B, about $11 at SMALL. It would confirm that the hints close the fit gap.
