@@ -888,6 +888,8 @@ function childEnv(sh, extra = {}, { cpuShares = null } = {}) {
     ARCHITECT_SHOTS_DIR: path.join(OUT, 'shots'),
     JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25',
     GATE_RUNNER: '1',
+    // (speed set C) a dir every shard and part of this run shares, new for each run: work several steps need is done once (tools/lib/run-shared.mjs)
+    GATE_RUN_SHARED: RUN_SHARED_DIR,
     // eval sidecars (if a step starts one) on an ephemeral port, never the fixed 8894/8895 another run may hold
     ARCHITECT_EVAL_PORT: process.env.ARCHITECT_EVAL_PORT ?? '0',
   });
@@ -1304,6 +1306,7 @@ const releaseLock = () => {
 
 const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-');
 const OUT = path.join(RUNS_ROOT, `${stamp}-${chainName}`);
+const RUN_SHARED_DIR = path.join(OUT, 'shared');
 for (const sh of shards) {
   sh.ev = shards.length > 1 ? path.join(OUT, sh.name) : OUT;
   sh.clientLog = path.join(OUT, shards.length > 1 ? `client-${sh.name}.log` : 'client.log');

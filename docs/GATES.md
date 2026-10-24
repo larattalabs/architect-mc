@@ -24,6 +24,36 @@ node tools/gate-run.mjs change --since origin/main --slots 2     # at most 2 gat
 node tools/gate-impact.mjs --since origin/main                   # just the change-impact report
 ```
 
+## DEV MODE (Noah, 2026-10-24): the rules in force until Noah starts playing or before a public release
+
+These override the tier, verifier and RC rules below for as long as dev mode is on.
+
+**A slice merges when these pass:**
+- unit tests;
+- the instant lints (lint-structure, lint-look, water-lint, p3-lint);
+- the slice's OWN in-game steps.
+No regression suite, impact steps or before/after comparison runs per slice. Use `gate-run change --only <the slice's own steps>`.
+
+**The gate-verifier is review only.** It reads the diff and the evidence. It re-runs checks only when the slice touches undo,
+the journal, removal, crash recovery or survival accounting. Those stay strict, because they lose a player's work.
+
+**Steward RC only when the API Steward calls changes.** Otherwise Steward picks up the next tag.
+
+**Galleries only for slices whose point is the look.** Noah glances; the merge doesn't wait. Look fixes are follow-ups.
+
+**Releases are cheap tags,** cut whenever Steward needs something or every day or two. No release-tier run before a tag.
+
+**The full set runs nightly** (tools/nightly.mjs). Whatever it finds is fixed forward the next morning.
+
+**No new test-tooling projects** unless something is actually broken.
+
+**Keep the machine for product:**
+- at most 3-4 agents running gates at once;
+- no duplicate before/after runs: compare against recorded history instead;
+- commit before running (the runner tests a frozen snapshot).
+
+**To return to release mode:** Noah says so. Then the full tiers, verifier re-runs and Steward RCs come back.
+
 ## Policy update (Noah, 2026-10-12): cut what has only cost time
 
 Evidence from 0a-X: every timing-bar failure on a slice was machine load (0a's three benches, 0b's 4d-all, 0c's three,
@@ -1087,7 +1117,8 @@ the same assertions; only idle time and pure duplication went. The before/after 
   0 of the 12 baseline slices.
 - **The natural scenario settles** stay at 90 s in effect (above): never quiet within the cap.
 - **gate6a's in-assertion sleeps** (staged's 90 s "still waits without maxWait", the sidecar-kill pauses) are the assertions'
-  own time windows.
+  own time windows. (Speed audit B, below, made 6a-crash's RG5 pause after the sidecar kill a poll for SIDECAR_UNAVAILABLE, at most the
+  20 s; staged's 90 s and the other pauses stay.)
 
 ### Duplicates (`supersededBy`)
 
@@ -1290,6 +1321,84 @@ A sprint of 2,400 ticks took 0.4-4.5 s at default rules (a villager stand the mo
 not minutes. In the turbo slice (`artifacts/gate-runs-turbo-slice/20261022-212922-slice`) these waits are about 57 of its 339
 in-game step-minutes; the slice's wall was bound by the unit lanes (fl-unit/p1 20.6, s3-unit/p1 19.7, f3-unit/p1 16.6 min), so its
 wall falls by less until those shrink.
+
+## Speed audit B: in-game waits (2026-10-23)
+
+Noah approved the in-game-wait items of the 2026-10-23 audit (`artifacts/audit-findings-2026-10-23.md`, G1-G8). Branch
+`chore/speed-audit-b`. Every check keeps its assertions; only idle time went. The rule of "Sprinted game-time waits" holds: a wait
+sprints only if it counts ticks, and nothing here sprints a timeout, a presence limit, a bench or a wall-clock rule.
+
+**Sprinted (headless hosts only; `GATE_SPRINT=0` or a client: the original wait)**
+- `tools/scenarios.mjs` natural stand: `L.gameWait(120_000, {real: L.settle, label: 'stand'})`. Only 6cd-scenario-districts and
+  6cf2-scenario-scatter run it headless; the client scenarios keep the real wait.
+- 6a-forest's 2-minute stand at random_tick_speed 3 (`gate6a.mjs`).
+- h-probe's lava loop: the 24 samples 5 s apart are 24 `gameWait(5000)` (`lib/gate6ch-core.mjs`).
+- rs item 7's 10 s starve (`gate6crs.mjs`; the audit named it "rs-crash ~576": it is item 7, rs-ingame; rs-crash's item 11 is unchanged).
+  WaitCalc's 100-tick threshold counts builder ticks of game time (`survival/WaitCalc.java`; no wall clock in `survival/` or
+  `site/Builder.java`), so this is a tick wait, not the wall-clock builder rule of the list above.
+- HY's terrain settle and post-removal settle (`lib/gate6chy-b.mjs`), only when the driver sets `ctx.sprintWaits` (gate6chy.mjs).
+  The settle straight after the forceload and `waitChunks` stays real (chunk activation). KC, FL, IRR, F3 and RS call the same helpers
+  and keep their fixed settles.
+- 4d-all(-full)'s survival build: `/tick sprint` in 100-tick chunks with SITE_BUILT checked between them, the 25-minute wall cap
+  kept (`gate4d.mjs`). The builder's `nanoTime` deadlines are per-tick CPU budgets, not graces; the hopper chain is vanilla ticks.
+
+**Settles that became "until quiet"** (`settleQuiet`, at most the wait they replace; natural and fluid sites usually run to the cap
+as in "Waits that became wait until done", so the saving there is nil and the point is parity): rs item 14 and s3-plan (90 s),
+t3a-frozen's natural settle (60 s), voc-natural (30 s), 6b-commands (90 s). The goldens and surveys these steps read are cut from
+the settled world; a quiet end means no scheduled tick is left, so the world is the one the cap would have given.
+- 5b-chains `hash()`: tick-quiet (1 s floor, 3 s cap) instead of 3 s, and the apply's pre-hash is the last record's hash. 5b's client
+  host is kept; other 5b steps keep the fixed 3 s.
+- 4e-orders and 4e-crash: the hash settle, the removal settle, the open sleeps and the crash restart's settle are quiet polls
+  (the restart's waits at least 3 s and for the journal to stop changing) with the same caps; connect polls are 500 ms. Other 4e steps
+  (throughput, migration, ...) keep their fixed waits.
+
+**Polls instead of fixed sleeps:** rp-crash's verify loop (500 ms, the 30 s cap); 6a-crash's 20 s after the sidecar kill (poll for
+SIDECAR_UNAVAILABLE and for cellsWritten to rest 3 s, so buffered tiles finish as in the old pause; the link's reconnect backoff is capped at 5 s, so the resume bar of RG5 can come at most about 2 s sooner than
+after a full 20 s outage); 0a-keys and 0a-batches' `killClient` (exit poll of the helper's pid, at most the 8 s); rs-survival's lv7
+polls (1 s; the stability read needs 6 equal reads, a 6 s window, was 3 reads 3 s apart); 6b-versionc (v0.11.0's sidecar build cached under
+`artifacts/sidecar-dist-cache/` by tag commit and node version; the three 5 s settles are quiet polls, which wait the full 5 s on
+0.11.0's client because it has no `dev.ticks.pending`; the 30 s window is untouched). 6a-eflat skips the heap-GC baseline
+(`heapBaseline: false`), which only the other mega runs record.
+
+**Kept in real time, with the reason**
+- f3-ingame (`gate6cf3.mjs` 300/303, `lib/gate6cf3-game.mjs` 172-174) and fl-natural's control (`lib/gate6cfl-game.mjs`): the
+  controls that mirror another run's span and the settle after a site copy, listed above.
+- pt2-ingame's settles (and PT's): `Builds` detects with wall-clock `debounceMs` (5 s), `demoteGapMs` and `graceMs`
+  (`System.currentTimeMillis`), and the 6 s settle is that debounce plus a second.
+- y2-ingame's 8 s after the reload: a re-emitted start edge shows only EVENT_TICKS (20) after D's first builder tick, which follows
+  the 100-tick threshold, so about 160 ticks are needed; no saving, left as it was.
+- the first settle in HY's `buildTerrain` (chunk activation), t3a/voc natural caps are their own (60 s/30 s, not 90 s).
+
+### Measured (speed audit B)
+
+`change --only <24 steps> --no-split --no-cache --no-turbo` (normal queue, load 100-160), three runs of drivers from: origin/main 596b89a8
+(`artifacts/gate-runs-spB/old`, 20 PASS / 4 FAIL), this branch at 41d0b22a (`new`, 22 / 2) and the branch with `GATE_SPRINT=0` on the 9
+sprinted steps (`new0`, 8 / 1). Compared by `ok`/`FAIL`/`rec` check names and statuses (split-proof's mask): **no check present on one side only
+and no status difference caused by a changed wait**; the exceptions are all main's own intermittents, present with the waits unchanged:
+- 6cf2-scenario-scatter, item 8 natural exactness: FAIL in old (2 unclassified) and in new0 (1 unclassified, real-time stand), ok in new (0).
+- 4d-all "group undo": FAIL in old (the known intermittent), ok in new and new0.
+- rs-survival-smoke item 14 (PARTIAL at 96.7%) and y2-ingame fail identically in old and new. Item 10 (rs02m2 "region reads REMOVING after the reopen:
+  REMOVED") failed once, in new only; item 10 uses none of the changed waits (a removal that finished before the read), so it is listed, not reverted.
+
+| step | old | new | new0 (`GATE_SPRINT=0`) |
+|---|---|---|---|
+| 6a-forest | 2.6 | 0.5 | 2.5 |
+| h-probe | 2.8 | 1.0 | 2.8 |
+| 6cf2-scenario-scatter | 11.6 | 6.3 | 11.0 |
+| 6cd-scenario-districts | 9.5 | 5.2 | 7.0 |
+| 4d-all (6855 ticks sprinted in 17.8 s) | 12.4 | 8.3 | 13.2 |
+| 5b-chains | 6.0 | 2.5 | |
+| 4e-orders-full | 10.2 | 6.0 | |
+| 4e-crash-full | 13.3 | 8.9 | |
+| 6a-crash | 9.1 | 6.1 | |
+| s3-plan | 7.8 | 4.4 | |
+| rp-crash / t3a-frozen / 0a-batches | 3.8 / 3.1 / 2.3 | 2.8 / 2.1 / 1.7 | |
+| rs-ingame, rs-survival-smoke, hy-ingame-smoke | 14.0, 20.7, 13.4 | 13.3, 19.1, 11.8 | 13.5, -, 15.5 |
+| the rest (6a-eflat, 6b-versionc, 6b-commands, voc-natural, y2, 0a-keys, hy-crash/cold) | | within a minute | |
+
+Minutes, one run each under heavy load, so small differences are noise. The natural stand sprinted 2400 ticks in 1.4 s. The quiet settles ended early
+only on flat or settled worlds (s3-plan 10 s flat, 81 s natural; rs item 14 82 s); t3a, voc-natural and 6b-commands ran to their caps, as expected.
+
 
 ## P3: the water and survival ledger lints (2026-10-21)
 
@@ -1589,10 +1698,12 @@ release; `node tools/split-proof.mjs --whole <A> --parts <B>`):
 |---|---|---|---|---|
 | irr-ingame / irr-ingame-smoke | 29.4 / 26.7 | 3 | worlds: v62 live; v62 exact + the breach fix + 5 (a); the lamp path, s01 with its control, v63, d01, irrUnmasked, the pad, the probe | 34/34, 29/29: equal, full masked lines too |
 | h-ingame / h-ingame-smoke | 15.5 / 12.3 | 3 / 2 | H-core; H-a flat; H-a exact, farm, H-b flat | 19/19, 16/16: equal |
-| hy-ingame / hy-ingame-smoke | 21.7 / 14.7 | 3 / 2 | HY-core; the riffle table, villagers, HY-c's water gate and v58; item 9's kinds | 31/31, 24/24: equal |
+| hy-ingame / hy-ingame-smoke | 21.7 / 14.7 | 4 / 2 | HY-core; the riffle table, villagers, HY-c's water gate and v58; item 9's kinds in two sections (item9a, item9b: every other fixture), each its own part (smoke: with core, and with the villagers part) (set C) | 31/31, 24/24: equal (before set C, 3 / 2 parts) |
 | 4d-all / 4d-all-full | 13.1 / 15.3 | 2 | base, then survival; base, then the other nine sub-steps (stages and gap0 with waiting) | 23/23: same checks |
 | 5b-chains-full | 31.4 | 3 | the 21 scripts (fixed + 20 seeds), each from its own world; E1 over each part's states | 3 names / 13 lines: equal |
-| rs-survival | 23.2 | 3 | items 5; 9; 8 and 10 | 11/11: equal |
+| rs-survival | 23.2 | 4 (set C) | rs02 + rs02r; rs03; village + item 10; L-V7 + item 14 (sections are builds, not items: "Speed set C") | 11/11: equal (before set C, items 5; 9; 8 and 10) |
+| rsb-crash | 10.4 | 2 (set C) | rs04crash; rs03stop | "Speed set C" |
+| 0a-tiles | 7.1 | 3 (set C) | the unhooked run; SLOW_TILES=4; SLOW_TILES=2 | "Speed set C" |
 | 6cf2-scenario-scatter | 12.2 | 2 | harvest, then scatter_demo flat and natural; harvest, then scatter_cave (a shell split) | see below |
 | irr-unit, kc-unit, f3-unit, fl-unit, s3-unit | 14-36 under turbo | **whole again** (2026-10-23) | was: the byte-identity fixture loop in 3 round-robin slices. With the shared plans each whole step is 0.2-7.5 min ("Shared plans"), so the split is dropped; the drivers keep their sections (`GATE_PART_SECTIONS` still works by hand) | proof below (the turbo slice against the whole runs) |
 | voc-unit | 27-34 under turbo | 3 | item 5 (byte identity); item 13 and the census; the rest | proof below |
@@ -1639,6 +1750,36 @@ their steps are not split.
 restores took 10.0 of 414 step-minutes and the steps' own `gate6b.mjs base` 6.5: 4% together, under the 10% that would pay
 for a warm-server-per-shard reset and its proof. Under turbo the starts grow (28.7 of 447 step-minutes at 12 shards, 6%;
 16.5 of 339 at 9, 5%), still under 10%; a reset proven clean (world hash, entities, journal) is not worth its risk at that.
+
+## Speed set C (2026-10-23): fixtures built once, serial loops split
+
+Noah approved the audit's set C on 2026-10-23 (`artifacts/audit-findings-2026-10-23.md`, `findings6.md`, `findings8.md`): the same
+work was being done several times in a run, and a few steps ran independent sections serially. Each change keeps its assertions; the
+three lines that go are listed, with where each is kept.
+
+**Work done once per run: `tools/lib/run-shared.mjs`.** The runner gives every step `GATE_RUN_SHARED`, a directory under the run's own
+dir (all shards, new for each run: nothing is reused across runs or heads). `sharedOnce(ns, key, build)` memoises in the process
+and, with the directory, across the run: the first caller takes `<key>.lock` (mkdir), builds, publishes `<key>.json` by rename; the
+others wait for it. A builder that throws drops its lock and publishes nothing (a waiter then builds for itself); a lock of a dead
+pid is taken over; a waiter builds for itself after 50 minutes. `kit/test/gate-run-shared.test.mjs` covers it.
+
+| change | what | assertions |
+|---|---|---|
+| RS INSTANT twin (`tools/lib/gate6crs-game.mjs` `twin`) | built once per fixture, lot entries, survival-toggle state and head: in the process and, through `GATE_RUN_SHARED`, in the run. rs02_walled's twin was built by items 5, 8, 9, 11 and 18 (5 times), rs03_water's by items 5 and 9. The snapshot is then a file of the shared dir; `twinDiff` writes its `.diff.json` into the caller's dir | none changed; a caller still diffs its world against the snapshot |
+| rs-survival builds | item 5's rs02 was item 8's rs02c without its conservation sum, item 5's rs03 was item 9's rs03r before its keep hook (the smoke tier already built each once, as rs02c and rs03r). Each is built once with the sum on (`Conservation.insert` and the default feed send the same `dev.crate.insert {exact: true}`). Sections are now the builds: `rs02` (items 3, 5, 8), `rs03` (3, 5, 9), `village`, `rs02r` (9), `item10`, `lv7`, `item14` | the lines `item 5 (rs02): ...`, `item 3 (rs02, ...`, `item 5 (rs03): ...` and `item 3 (rs03, ...` are the surviving `(rs02c)` and `(rs03r)` lines (the same check over the same build, the tag aside). One thing is not the same: rs03's E-flat after the removal is read after rs03r's keep hook (a player's block, a weathered copper cell), as item 9 already does and as the smoke tier did |
+| rs-ingame `latent` | `latent` (creative rs01, survival toggle switched on, checked and realised) and item 4's twin were two builds of one site. The twin takes `toggleOn` for rs01: built once with the toggle on, `latent` reads its answers, item 4 diffs against it. (The toggle is per world, `architect-world.json`, and the creative base has it off, so the twin was not already the latent world: item 4's reference is now the toggle-on one.) The region's removal at the end of `latent` is gone (no check followed it) | none dropped |
+| rsb-crash | `rs04crash` and `rs03stop` are two parts | none |
+| hy-ingame item 9 | 11 fixtures in one section: `item9a` (v50 v52 v54 v56 v57b steward), `item9b` (v51 v53 v55 v57 v59); smoke: v50 v54 v56 / v51 v55 | none |
+| 0a-tiles | `unhooked`, `slow4`, `slow2` are three parts. The two slow runs are judged against the unhooked run's sha: it is run once per gate run, by whichever part asks first (`sharedOnce`), the others wait for it | none |
+| h-rmcrash (`tools/lib/gate6ch-holders.mjs`) | `setUp` (fresh world, h_core_demo planned and realised, the stair site layered) ran for each of 4 kill points to the same state. It runs once; each point is a copy of the saved world, opened, with its own settled and precondition checks (the stair's stack in the copy, its waterlogged block, the region PLACED) | none; `h-holders` runs `setUp` once, nothing to share |
+| 6b-versions | each of versiona's two runs and versionb's two plans planned and prepared the same rift_city claim: versiona prepares it once in a copy of the flat base that both runs copy; versionb plans and prepares it once for both doctored plans. (A prepare is per world: versiona and versionb are two processes in two worlds, nothing is shared between them) | none |
+| sch-placement, sch-refusals | one step `sch-placement` (placement, then refusals) in one sim client | the refusals' lines are in `sch-placement` |
+| w-ingame pathbibles | S7 flat with the coarse-dirt bible (g6cv_village) is `6cv-scenario-s7`'s flat run: when that run of the same gate run has finished at this head (`scenarios.mjs` lists a finished run in `GATE_RUN_SHARED/scenario-runs/`), pathbibles reads it; else it runs it as before | none |
+| w-ingame variants | the gravity broken variant was run alone and named here; `w-unit` runs `village-safety.test.mjs` whole (item 1/3/4, which holds `gravity broken variant`) | the line `variant: a gravel verge over a 2-deep gap with the rule off` is gone from w-ingame; w-unit's `items 1, 3, 4 (kit)` line holds the test |
+
+**Not done, and why.** 6cf2-scenario-scatter's harvest: the whole step is 10 s per part (`harvest` 2 s for the 72 stamps twice, in the
+slice run of 2026-10-22); its second stamping pass is the "same bytes" determinism check, so a copy would remove the assertion for
+nothing saved.
 
 ## Fast checks P1 (2026-10-21): the undo assertions move to the undo model
 
