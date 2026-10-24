@@ -17,6 +17,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs'; // (speed audit A) the kit files unit-kit already ran in this run
 import assert from 'node:assert/strict';
+import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-c38-run');
@@ -58,7 +59,7 @@ steps.unit = async () => {
   const kitFiles = 'kit/test/catalogue-c38.test.mjs kit/test/plan-p0.test.mjs kit/test/plan-p0-valid.test.mjs kit/test/plan-p0-det-1.test.mjs kit/test/plan-p0-det-2.test.mjs kit/test/plan-p0-det-3.test.mjs kit/test/plan-p0-asks.test.mjs'.split(' ');
   // (speed audit A) the pass/fail counts are all this reads: unit-kit's report when it ran these exact files in this run
   const re = kitReuse(root, kitFiles);
-  const k = re ? { code: 0, out: `kit: ${re.reused}\nℹ pass ${re.pass}\nℹ fail 0\n` } : sh(`node --test ${kitFiles.join(' ')}`);
+  const k = re ? { code: 0, out: `kit: ${re.reused}\nℹ pass ${re.pass}\nℹ fail 0\n` } : sh(`node --test ${testConcurrencyArgs().join(' ')} ${kitFiles.join(' ')}`);
   fs.writeFileSync(path.join(OUT, 'unit-kit.log'), k.out);
   const pass = Number(/^ℹ pass (\d+)/m.exec(k.out)?.[1] ?? 0), fail = Number(/^ℹ fail (\d+)/m.exec(k.out)?.[1] ?? 1);
   out.kit = { pass, fail };

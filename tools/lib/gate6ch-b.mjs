@@ -29,6 +29,7 @@ import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { kitReuse } from './kit-reuse.mjs';
+import { testConcurrencyArgs } from './cpu-budget.mjs';
 
 const OWNER = 'test:hb';
 const FLAT = 'G6B Flat Base', BASE = 'G6B Seed Base', FROZEN_SEED = '2026101102';
@@ -41,7 +42,7 @@ function nodeTest(root, files, timeout = 3_600_000) {
   // (gate waits, 2026-10-20) pass/fail-only kit files: this run's unit-kit report when it is exact (tools/lib/kit-reuse.mjs)
   const reused = kitReuse(root, files);
   if (reused) return reused;
-  const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
+  const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), ...files], { cwd: root, encoding: 'utf8', timeout });
   const t = `${r.stdout}${r.stderr}`;
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };

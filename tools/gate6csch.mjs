@@ -35,6 +35,7 @@ import { parse } from '../kit/lib/nbt.mjs';
 import { parseSchem, schemToStructure, structureCells, sortedState, canonTag } from '../kit/lib/schem.mjs';
 import { srcGradle } from './lib/src-gradle.mjs';
 import { javaReuse } from './lib/junit-reuse.mjs'; // (speed audit A) the Java tests unit-mod already ran in this run
+import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -157,7 +158,7 @@ function run(label, file, args, opts = {}) {
 }
 
 async function unit() {
-  const k = run('unit-kit', 'node', ['--test', 'kit/test/schem.test.mjs']);
+  const k = run('unit-kit', 'node', ['--test', ...testConcurrencyArgs(), 'kit/test/schem.test.mjs']);
   const kp = /ℹ pass (\d+)/.exec(k.out)?.[1];
   const kf = /ℹ fail (\d+)/.exec(k.out)?.[1];
   check(k.status === 0 && kf === '0', `items 1-4 (kit): kit/test/schem.test.mjs ${kp} pass, ${kf} fail (round trip of every example, determinism + goldens, v2/v3, refusals)`);

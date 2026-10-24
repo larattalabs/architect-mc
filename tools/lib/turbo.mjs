@@ -20,7 +20,7 @@ import { spawnSync } from 'node:child_process';
 import { availableMemGB } from './shard-auto.mjs';
 
 export const TURBO_DEFAULTS = {
-  max: 9, // shards.turbo.max: the knee (docs/GATES.md "Turbo": measured 3/6/9/12, 2026-10-22)
+  max: 6, // shards.turbo.max: 6 since 2026-10-24 (docs/GATES.md "Frozen source and the CPU budget"; the knee by wall was 9: "Turbo", measured 3/6/9/12)
   minSteps: 20, // a tier run (change | slice | release) of at least this many steps is turbo by default
   offlineLanes: 3, // lanes for the client-less steps (units, lints), beside the in-game shards
   portRange: [8940, 8999], // turbo port pairs (the lanes get a pair too, unused by their steps but never shared)

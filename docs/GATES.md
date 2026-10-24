@@ -1436,7 +1436,74 @@ coordinator's agents' editors (load 4.5, 7, 4.8 and 9 at the starts; about 1-3 c
   3 shards), both on lanes, because their byte-identity loops plan every committed fixture on both trees, CPU-bound. Hence the
   unit splits below.
 - **Decision:** `shards.turbo.max` 9 and `shards.turbo.offlineLanes` 3 (12 workers): the knee by wall, and the largest count with
-  no new failure.
+  no new failure. **Changed to 6 on 2026-10-24** ("Frozen source and the CPU budget"): about 7.6% more wall for half the load, and no client-start
+  burst that overruns dev.world.open.
+
+### Frozen source and the CPU budget (2026-10-24)
+
+**What failed.** K2's and CW's turbo slices (`artifacts/gate-runs-K2/20261023-175925-slice`, `artifacts/gate-runs/
+20261023-193332-slice`: 9 shards + 3 lanes) TIMED OUT the same eight unit steps, none related to the slices: t1, t2, coa, t3a,
+h, hy, d and k1a-unit. 6c-scenario-s3 and 6cd-scenario-districts refused plans after 120 s. CW took 86 min, with load p50 83,
+p90 117 and max 147 on 18 cores.
+
+**Why.** Both agents committed kit changes in their source checkouts during their own runs. K2 went from 9a81564a to 6fcbba52, CW
+from 1ba6e423 to dd40a975. The drivers ran from that working tree, so kit-reuse refused for every driver ("Kit suite once per
+run": the tree is not the one unit-kit ran; CW logged no "kit: reused" line). Each unit driver then re-ran the 824-test kit
+suite with node --test's default concurrency, cores - 1 = 17 files at once.
+- That put 45-65 node --test children on the machine at once (a throwaway per-process CPU sampler, 15 s: ps CPU-time deltas,
+  with iostat for the whole machine). Load went to 100-150 with the CPU at 18/18.
+- The readers' history timeouts are 2 x a p90 recorded on the reuse path, so they don't cover a re-run of the kit suite.
+
+**Frozen source** (`tools/lib/frozen-source.mjs`). The runner now creates, or reuses, a detached worktree of the source at the
+run's HEAD, `<run dir>-src`. It APFS-clones `.gradle-home` and `sidecar/node_modules` into it from the source checkout, else from
+the main checkout (`frozenSourceSeed`).
+- Every step whose cwd is not `run:` runs there: the drivers and the offline lanes' unit steps. Its `${SRC}` and the step
+  trace's roots point there too.
+- kit-reuse compares the frozen source's kit tree with unit-kit's, which is the same HEAD for the whole run. A commit in the
+  source checkout mid-run changes nothing the run reads, and the step cache keeps recording; its HEAD-moved and dirty checks
+  read the frozen source.
+- A frozen source with modified tracked files is refused, as a run dir is. A dirty `kit/` there still makes kit-reuse refuse.
+- `--no-frozen-source`: the drivers run from this checkout, as before.
+
+**The slow-path guard.** A kit-suite reader (`waitFor` unit-kit) that will re-run the kit suite itself gets its configured
+timeout, not the history's. That happens when unit-kit did not PASS, or when the frozen source's `kit/` is dirty. The runner
+logs which (`kitReaderSlowPath`).
+
+**The CPU budget** (`tools/lib/cpu-budget.mjs`, `cpu` in `gate-chains.json`). The machine's cores (`GATE_CPU_CORES`; 18 here)
+are split over the run's workers: a turbo run's shards and lanes, a shared run's shards but at least `--slots`. Each worker gets
+`floor(cores / workers)`, at least `minShare` 2. A step's children get its share (its `cpuShares`, default 1; unit-kit 6)
+through the environment, on steps only: client starts and setup builds keep their defaults.
+- `GATE_TEST_CONCURRENCY` sets `--test-concurrency` on every `node --test` the gates run. That covers the drivers'
+  `testConcurrencyArgs()` (outside kitReuse's file list, which would refuse any flag) and the unit-kit and water-lint shells.
+- `VITEST_MAX_WORKERS` caps the sidecar's vitest.
+- `GRADLE_OPTS -Dorg.gradle.workers.max` caps gradle ("Using N worker leases" at --info, with `--no-daemon` too).
+- `GATE_PLAN_WORKERS` gets the share but at least 4, corpus-plan's own floor.
+- A value the runner was started with wins. Outside the runner every tool keeps its default.
+- `kit/test/gate-cpu-budget.test.mjs` checks the arithmetic and that `--test-concurrency=1` really serialises node --test. It
+  checks that every driver and chain shell passes the share, and that kit-reuse still hits. `gate-frozen-source.test.mjs`
+  checks the frozen source.
+
+**Measured** (the same 37 steps: unit-kit, the seven units and two scenarios above, five more unit steps, lint-structure and 15
+in-game steps; turbo, 9 shards + 3 lanes, `--no-cache`, cold plan caches, the source frozen by hand, so kit-reuse hit in both):
+
+| run | wall | load p50 / p90 / max | TIMEOUT | not passing |
+|---|---|---|---|---|
+| main dfb8897e (`artifacts/gate-runs-cpu/20261023-225537-slice`) | 32.2 min | 49 / 99 / 180 | 0 | coa-unit item 6, 4e-crash (no 4e-orders in the set) |
+| first budget, flat share 2 everywhere (`-235753-slice`) | 34.0 min | 63 / 95 / 126 | 0 | the same two, plus 6c-scenario-s2 and 6ct2-scenario-route: dev.world.open's 10 s in the 9-client start burst |
+
+- **With kit-reuse working, the load is the in-game shards.** The steady load and the start burst come from 9 game JVMs: the
+  23:00 peak of 180 was 9 client starts (about 13 cores of game JVMs) beside unit-kit. No child-side cap at 9 shards gets the
+  load near 18.
+- **A flat share of 2 cost wall time on the critical path.** unit-kit went from 796 to 1148 s, and hy-unit, which waits for
+  it, started 6 min later. lint-structure went from 57 to 183 s, and voc-unit's parts from 1.4 to 1.8x, on a nearly idle
+  machine.
+- The drivers' plan pools averaged about 2 cores in every sampled run (threads inside long-lived processes, which ps sees
+  fully), and gradle about 0.5. Neither is a load source.
+- Hence the shape above: node --test capped, the plan pool's floor kept at 4, lint jobs left alone, unit-kit at 6 shares, the
+  budget on steps only.
+- **Hence `shards.turbo.max` 6 and staggered client starts** (`shards.clientStaggerSec`, 8 s apart in a sharded run). The knee
+  measured 6 shards at 33.7 min against 31.3 at 9, with load p50 29 against 52 and max 58 against 91. The next real slice
+  is the field proof against the 58-minute turbo baseline below.
 
 ### What is split
 
@@ -1999,8 +2066,10 @@ The runner never calls Claude. The independent gate-verifier is launched by the 
    this checkout's HEAD for every run. On a worktree's first run, `.gradle-home`, `sidecar/node_modules` and `mod/run` (the gate
    worlds, the prepared mega worlds and the library) are APFS-cloned from the seed (`../architect-mc-6a-run`). The seed is
    read-only; nothing is written back to it. The sidecar is then built.
-   **The clients run the committed HEAD. The drivers (`tools/*.mjs`) run from this checkout's working tree.** `--plan` warns
-   when the tree is dirty, so commit before a run.
+   **The clients run the committed HEAD, and so do the drivers (`tools/*.mjs`):** they run from the frozen source, a detached
+   worktree `<run dir>-src` at the run's HEAD ("Frozen source and the CPU budget"), not from this checkout. Uncommitted changes are not tested
+   (`--plan` and the runner say so), so commit before a run. `--no-frozen-source` runs the drivers from this checkout's
+   working tree, as before 2026-10-24.
 5. **Steps.** Each step names its client: one of `cfg.clients`, `none` (unit tests) or `self` (the step starts its own clients, as
    apijars does). Each step runs in its own process group, with its effective timeout: from the step history (max(2 x p90,
    10 min), at most the configured `timeoutMin`, with at least 5 samples) or the configured one (see "Gate speed").
@@ -2023,8 +2092,9 @@ Several agents and runners share this machine, so everything is configurable. A 
 |---|---|---|
 | `--turbo`, `--no-turbo` | | turbo for a tier run of at least 20 steps (`shards.turbo.minSteps`): the whole machine ("Turbo") |
 | `--lanes N` | | turbo: `shards.turbo.offlineLanes` (3) offline lanes for the client-less steps |
+| `--no-frozen-source` | | the drivers run from the frozen source `<run dir>-src` at HEAD ("Frozen source and the CPU budget"); this flag: from this checkout's working tree |
 | `--split`, `--no-split` | | split steps run as parts in turbo runs; `--split` outside turbo too |
-| `--shards N\|auto` | | turbo: auto up to `shards.turbo.max` (9), N at most 9; shared: auto for `slice`/`release` over 20 steps (`shards.auto.minSteps`), else 1; N at most `shards.max` (6) |
+| `--shards N\|auto` | | turbo: auto up to `shards.turbo.max` (6; 9 before 2026-10-24, "Frozen source and the CPU budget"), N at most 6; shared: auto for `slice`/`release` over 20 steps (`shards.auto.minSteps`), else 1; N at most `shards.max` (6) |
 | `--ports S:D[,S:D...]` (every shard's sidecar:DevBridge pair) | `GATE_PORTS`; or `ARCHITECT_GATE_SIDECAR_PORT`/`ARCHITECT_GATE_DEV_PORT` for shard 1 and `GATE_SHARD_PORTS` for shards 2.. | auto: free pairs of `shards.auto.portRange` (8980-8999); else shard 1: 8890:8891; shards 2..: **none, name them** |
 | | `GATE_AUTO_PROBE` (JSON: `load1`, `load5`, `freeGB`, `cores`) | the machine now; overrides fields of auto's probe (marked INJECTED) |
 | `--run-dir DIR` (shard k>1: `DIR-s<k>`) | `GATE_RUN_DIR` | `../architect-mc-gate-run` |
@@ -2035,7 +2105,9 @@ Several agents and runners share this machine, so everything is configurable. A 
 | `--quiet-wait [N]`, `--no-quiet-wait`, `--quiet-max-min M` | | on at release (N 8), else off (load recorded only); M 30 |
 | `--slots N`, `--slots-dir DIR` | `GATE_SLOTS`, `GATE_SLOTS_DIR` | `slots.max` (4); `<LarattaLabs>/.gate-slots/` |
 | `--judge-timing` | | change/slice record timing bars; this judges them as at release |
-| | `GATE_PLAN_CACHE`, `GATE_PLAN_WORKERS`, `GATE_PLAN_CACHE_DIR` | on; the cores free now, at least 4; `<main checkout>/artifacts/plan-cache/calls-v2` ("Shared plans", "Speed audit A"). `GATE_PLAN_CACHE=0`: no store, no pool, as before |
+| | `GATE_PLAN_CACHE`, `GATE_PLAN_WORKERS`, `GATE_PLAN_CACHE_DIR` | on; under the runner the step's CPU share, at least 4 ("Frozen source and the CPU budget"), else the cores free now, at least 4; `<main checkout>/artifacts/plan-cache/calls-v2` ("Shared plans"). `GATE_PLAN_CACHE=0`: no store, no pool, as before |
+| | `GATE_CPU_CORES` | the machine's cores (`hw.ncpu`, 18 here): the run's CPU budget ("Frozen source and the CPU budget") |
+| | `GATE_TEST_CONCURRENCY`, `VITEST_MAX_WORKERS`, `GRADLE_OPTS` (`-Dorg.gradle.workers.max`), `GATE_CPU_SHARE` (recorded) | set by the runner for each step to its CPU share; a value the runner was started with is kept; outside the runner: each tool's own default |
 | | `GATE_JAVAP_CACHE`, `GATE_JAVAP_CACHE_DIR` | on; `<main checkout>/artifacts/javap-cache` (api-compat's javap answers, "Shared plans") |
 | | `GATE_SPRINT` | on: the drivers' game-time waits sprint on headless hosts ("Sprinted game-time waits"); `0`: every one waits in real time, as before |
 | | `GATE_SNAPSHOT_DIR` | the seed's `mod/run/saves` |
