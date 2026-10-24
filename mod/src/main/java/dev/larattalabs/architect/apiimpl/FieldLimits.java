@@ -199,6 +199,43 @@ public final class FieldLimits {
 		return count(path + ".cells", r.cells(), DesignRequest.MAX_RESERVED);
 	}
 
+	/** (Style unification U1) A palette's bounds: a preset name, inputs, or roles inline (at most PALETTE_ROLES_MAX). */
+	static @Nullable String palette(String path, com.google.gson.@Nullable JsonElement p) {
+		if (p == null || p.isJsonNull()) {
+			return null;
+		}
+		if (p.isJsonPrimitive()) {
+			return len(path, p.getAsString(), Limits.PALETTE_PRESET_MAX, false);
+		}
+		if (!p.isJsonObject()) {
+			return path + ": a preset name, palette inputs or {bible: {id, version, roles}}";
+		}
+		com.google.gson.JsonObject o = p.getAsJsonObject();
+		if (o.has("bible") && o.get("bible").isJsonObject() && o.getAsJsonObject("bible").has("roles") && o.getAsJsonObject("bible").get("roles").isJsonObject()) {
+			com.google.gson.JsonObject roles = o.getAsJsonObject("bible").getAsJsonObject("roles");
+			if (roles.size() > Limits.PALETTE_ROLES_MAX) {
+				return path + ".bible.roles: at most " + Limits.PALETTE_ROLES_MAX + " roles (" + roles.size() + ")";
+			}
+			for (var e : roles.entrySet()) {
+				String why = e.getValue().isJsonPrimitive() ? len(path + ".bible.roles." + e.getKey(), e.getValue().getAsString(), Limits.PALETTE_BLOCK_MAX, false)
+					: path + ".bible.roles." + e.getKey() + ": a block id";
+				if (why != null) {
+					return why;
+				}
+			}
+			return null;
+		}
+		for (String k : List.of("preset", "wood", "stone", "roof", "accent")) {
+			if (o.has(k) && o.get(k).isJsonPrimitive()) {
+				String why = len(path + "." + k, o.get(k).getAsString(), k.equals("preset") ? Limits.PALETTE_PRESET_MAX : Limits.PALETTE_BLOCK_MAX, false);
+				if (why != null) {
+					return why;
+				}
+			}
+		}
+		return null;
+	}
+
 	public static @Nullable String design(String path, DesignRequest r) {
 		String p = path.isEmpty() ? "" : path + ".";
 		String why = first(len(p + "style", r.style(), Limits.STYLE_MAX, true), len(p + "materials", r.materials(), Limits.MATERIALS_MAX, true), count(p
@@ -206,7 +243,8 @@ public final class FieldLimits {
 				false), len(p + "remix", r.remix(), Limits.REMIX_MAX, false), count(p + "profile", r.profile(), Limits.PROFILE_MAX), len(p + "owner", r.owner(),
 					Limits.OWNER_MAX, true), ext(p + "ext", r.ext()), model(p + "model", r.model()), len(p + "group", r.group(), Limits.GROUP_ID_MAX, false),
 			context(p + "context", r.context()), critique(p + "critique", r.critique()), len(p + "versionOf.entryId", r.versionOf(), Limits.VERSION_OF_ENTRY_MAX,
-				false), len(p + "versionOf.siteId", r.versionOfSite(), Limits.VERSION_OF_SITE_MAX, false), reserved(p + "reserved", r.reserved()));
+				false), len(p + "versionOf.siteId", r.versionOfSite(), Limits.VERSION_OF_SITE_MAX, false), reserved(p + "reserved", r.reserved()),
+			palette(p + "palette", r.palette()));
 		if (why != null) {
 			return why;
 		}
