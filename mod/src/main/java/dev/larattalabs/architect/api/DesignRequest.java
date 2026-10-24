@@ -36,7 +36,7 @@ import org.jspecify.annotations.Nullable;
  *     (an irrigated farm's sources, their beds and farmland sides and the air over each: the plan-check artifact's
  *     {@code lots[].irrigation.lotCells}), in the lot's frame ({@link Reserved}); the design job leaves them and its checker refuses a
  *     design writing one; null = none. The realise drops any block there anyway
- * @param palette (since NEXT, a helper with {@code "palette.roles"}; Style unification U1) materials only: the design builds with
+ * @param palette (since 1.41.0, a helper with {@code "palette.roles"}; Style unification U1) materials only: the design builds with
  *     this palette and its default palette is it: a preset name ({@link JsonPrimitive}), palette inputs ({@code {wood?, stone?,
  *     roof?, accent?}}) or a Style's roles inline ({@code {bible: {id, version, roles}}}, {@link #withStyle}). Never bible set mode
  *     (no shared components, no restraint): {@code bible} excludes it (both set: refused). The entry records it as its
@@ -120,7 +120,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 
 	/**
 	 * A copy built with this palette, materials only (null = none): a preset name, inputs, or {@code {bible: {id, version, roles}}}.
-	 * Since NEXT.
+	 * Since 1.41.0.
 	 */
 	public DesignRequest withPalette(@Nullable JsonElement p) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
@@ -129,13 +129,13 @@ public record DesignRequest(String type, String style, @Nullable String material
 
 	/**
 	 * A copy built with a Style's materials only ({@code palette: {bible: {id, version, roles}}} from {@code s}), never bible set mode:
-	 * a built-in or hand-made Style's roles, with the designer's own shapes and details. Since NEXT.
+	 * a built-in or hand-made Style's roles, with the designer's own shapes and details. Since 1.41.0.
 	 */
 	public DesignRequest withStyle(Bible s) {
 		return withPalette(stylePalette(s.id(), s.version(), s.roles()));
 	}
 
-	/** The palette JSON of a Style's roles: {@code {bible: {id, version, roles}}}. Since NEXT. */
+	/** The palette JSON of a Style's roles: {@code {bible: {id, version, roles}}}. Since 1.41.0. */
 	public static JsonObject stylePalette(String id, int version, java.util.Map<String, String> roles) {
 		JsonObject r = new JsonObject();
 		roles.forEach(r::addProperty);
