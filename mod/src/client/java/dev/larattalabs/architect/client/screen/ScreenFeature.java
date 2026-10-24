@@ -31,8 +31,21 @@ public final class ScreenFeature {
 	public static void init() {
 		Keys.ensureRegistered();
 		SiteCommands.screenOpener = player -> Minecraft.getInstance().execute(() -> ArchitectScreen.open(null));
+		SiteCommands.libraryOpener = (player, site) -> Minecraft.getInstance().execute(() -> ArchitectScreen.openPlaced(site)); // UI-2b
 		DesignFeature.reopen = tab -> ArchitectScreen.open(ArchitectScreen.Tab.of(tab));
 		ClientTickEvents.END_CLIENT_TICK.register(mc -> Guard.run("architect_mc:screen.key", () -> {
+			while (Keys.siteHud.consumeClick()) {
+				// UI-2b: the construction HUD full -> one line -> hidden
+				var m = dev.larattalabs.architect.client.design.UiPrefs.siteHud().next();
+				dev.larattalabs.architect.client.design.UiPrefs.setSiteHud(m);
+				if (mc.player != null) {
+					mc.gui.hud.setOverlayMessage(net.minecraft.network.chat.Component.literal("Construction HUD: " + switch (m) {
+						case FULL -> "full";
+						case LINE -> "one line";
+						case HIDDEN -> "hidden (" + Keys.label(Keys.siteHud) + " shows it again)";
+					}), false);
+				}
+			}
 			while (Keys.screen.consumeClick()) {
 				if (mc.player != null && mc.gui.screen() == null && !BuildPlacement.active() && !PlotMarker.active()) {
 					ArchitectScreen.open(null);

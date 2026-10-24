@@ -154,8 +154,26 @@ public final class BuildPlacement {
 	/** The key of the verdict request in flight, or null: at most one at a time, a reply for an old key is dropped. */
 	private static @Nullable String verdictAsked;
 	private static long ticks;
+	/** UI-2b: the HUD's key legend and the refusals' detail, toggled by "?" (or H); kept across placements this session. */
+	private static boolean legend;
+	/** UI-2b: the last "Placed" chat line (with its [Undo] / [Open in Library] links), for the DevBridge. */
+	private static net.minecraft.network.chat.@Nullable Component lastChat;
 
 	private BuildPlacement() {
+	}
+
+	/** Whether the HUD shows the full key legend and the refusals' detail. */
+	public static boolean legend() {
+		return legend;
+	}
+
+	public static void setLegend(boolean on) {
+		legend = on;
+	}
+
+	/** Phase 4e "Place on top" is armed: the next Enter places on top of the site it overlaps. */
+	static boolean layerArmed() {
+		return active && layerArmed;
 	}
 
 	// ------------------------------------------------------------------ lifecycle
@@ -194,7 +212,7 @@ public final class BuildPlacement {
 		Blueprint b = Blueprints.get(blueprintId);
 		GhostModel.Cells c = TemplateCells.of(blueprintId);
 		if (b == null || c == null) {
-			throw new IllegalArgumentException("Unknown design '" + blueprintId + "' (known: " + Blueprints.ids() + ")");
+			throw new IllegalArgumentException(dev.larattalabs.architect.site.DidYouMean.message(blueprintId, Blueprints.ids()));
 		}
 		cancelQuietly();
 		PlotMarker.cancelQuietly();
@@ -426,7 +444,7 @@ public final class BuildPlacement {
 						? new Result(true, placed.id(), "Construction site " + placed.id() + " (" + b.name() + ") placed: feed its crate (right-click it, "
 							+ "or hoppers); it builds as the items arrive")
 						: new Result(true, placed.id(), "Placed " + placed.id() + " (" + b.name() + ")" + (note == null ? "" : " (" + note + ")")
-						+ ". Undo: Library > Placed > Remove, or /architect remove " + placed.id());
+						+ ". Undo: the [Undo] link in chat, or Library > Placed > Remove");
 				}
 			} catch (Sites.SiteException e) {
 				r = new Result(false, null, e.getMessage());
@@ -454,9 +472,18 @@ public final class BuildPlacement {
 		inFlight = null;
 		lastResult = r;
 		if (r.placed()) {
+			boolean moved = moving != null;
+			boolean construction = r.message().startsWith("Construction site");
 			cancelQuietly();
 			setStatus(r.message(), false);
-			Toasts.push(Toasts.Level.INFO, "Placed", r.message());
+			// UI-2b: a short toast (the old one cut off the undo hint), the whole line with its links in chat
+			Toasts.push(Toasts.Level.INFO, moved ? "Moved" : construction ? "Construction site placed" : "Placed", refused.bp().name() + " (" + r.buildingId()
+				+ ")" + (moved ? "" : ". Undo: [Undo] in chat"));
+			lastChat = placedChat(r, moved, construction);
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.gui != null && mc.gui.hud != null) {
+				mc.gui.hud.getChat().addClientSystemMessage(lastChat);
+			}
 			return;
 		}
 		// refused: stay in placement mode; over block entities, a second confirm with Shift may force it
@@ -487,6 +514,36 @@ public final class BuildPlacement {
 			: " - Shift+Enter places anyway (they come back on remove)" : "") + (layerArmed ? " - Enter again places on top of it (Place on top)" : "");
 		setStatus(msg, true);
 		Toasts.push(Toasts.Level.WARN, "Not placed", msg);
+	}
+
+	/**
+	 * The "Placed" chat line (UI-2b): the message, then [Undo] (runs {@code /architect remove <site>}: the terrain comes back; a
+	 * construction site is taken down and its blocks refunded) and [Open in Library] ({@code /architect library <site>}). A move
+	 * has no [Undo] (moving it back is another move).
+	 */
+	static net.minecraft.network.chat.Component placedChat(Result r, boolean moved, boolean construction) {
+		String id = r.buildingId();
+		net.minecraft.network.chat.MutableComponent m = net.minecraft.network.chat.Component.literal(r.message().replace(
+			". Undo: the [Undo] link in chat, or Library > Placed > Remove", "") + " ");
+		if (!moved && id != null) {
+			m.append(link("[Undo]", "/architect remove " + id, construction ? "Take the construction site down (its blocks come back to you)"
+				: "Remove it: the ground comes back as it was")).append(" ");
+		}
+		if (id != null) {
+			m.append(link("[Open in Library]", "/architect library " + id, "Show it in Library > Placed here"));
+		}
+		return m;
+	}
+
+	private static net.minecraft.network.chat.Component link(String text, String command, String hover) {
+		return net.minecraft.network.chat.Component.literal(text).withStyle(st -> st.withColor(net.minecraft.ChatFormatting.AQUA).withUnderlined(true)
+			.withClickEvent(new net.minecraft.network.chat.ClickEvent.RunCommand(command))
+			.withHoverEvent(new net.minecraft.network.chat.HoverEvent.ShowText(net.minecraft.network.chat.Component.literal(hover + "\n" + command))));
+	}
+
+	/** The last "Placed" chat line, or null. */
+	static net.minecraft.network.chat.@Nullable Component lastChat() {
+		return lastChat;
 	}
 
 	// ------------------------------------------------------------------ per tick
@@ -936,6 +993,22 @@ public final class BuildPlacement {
 		o.addProperty("active", active);
 		o.addProperty("status", status);
 		o.addProperty("statusError", statusError);
+		// UI-2b: the HUD as drawn last frame (rows as plain text, chips in [..]), the legend, the armed choices, the Placed chat line
+		o.addProperty("legend", legend);
+		o.addProperty("layerArmed", layerArmed);
+		o.addProperty("forceArmedNow", forceArmed);
+		com.google.gson.JsonArray hud = new com.google.gson.JsonArray();
+		PlacementHud.lastRows.forEach(hud::add);
+		o.add("hud", hud);
+		int[] rect = PlacementHud.lastRect;
+		if (rect != null) {
+			com.google.gson.JsonArray r = new com.google.gson.JsonArray();
+			for (int i : rect) {
+				r.add(i);
+			}
+			o.add("hudRect", r);
+		}
+		o.add("lastChat", dev.larattalabs.architect.client.dev.ChatJson.of(lastChat));
 		if (lastResult != null) {
 			JsonObject r = new JsonObject();
 			r.addProperty("placed", lastResult.placed());

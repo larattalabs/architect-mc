@@ -34,14 +34,18 @@ import org.jspecify.annotations.Nullable;
  * /architect remove &lt;site&gt; [force|forget]
  *                                   restore the terrain (force: although the player's things are inside, they are lost;
  *                                   forget: only drop the record, the blocks stay)
- * /architect reload                 reload the library (bundled + yours)
- * /architect list                   list the library and the sites in this world
+ * /architect reload                 reload the library (bundled + yours): the count, and [show] for the problems
+ * /architect reload problems [page] [filter]
+ *                                   the last reload's problems, paged
+ * /architect list [page] [filter]   the library's designs and this world's sites, paged (8 a page, [‹ prev] [next ›])
+ * /architect library [site]         open the Library on this world's sites (singleplayer), the site selected
  * /architect survival [on|off]      show / change this world's survival toggle (changing it needs permission level 2)
  * /architect site finish &lt;site&gt;     build a construction site's remaining cells at once, free (permission 2, creative mode)
  * /architect site state &lt;site&gt;      a construction site's progress and what it still needs
- * /architect batches                the placement batches of this world (phase 4d)
+ * /architect batches [page] [filter]
+ *                                   the placement batches of this world (phase 4d), paged
  * /architect batch cancel &lt;batch&gt;   cancel a batch: placed items stay, the one placing rolls back, the rest are dropped
- * /architect groups                 the site groups and their stages
+ * /architect groups [page] [filter]  the site groups (their stages and sites as hover text), paged
  * /architect group remove &lt;group&gt; [force]
  *                                   take a group's sites down, last placed first (force: a group another mod owns)
  * /architect group approve|skip|undo &lt;group&gt; &lt;stage&gt; [force]
@@ -63,6 +67,8 @@ public final class SiteCommands {
 	 * the client thread itself); it stays null on a dedicated server.
 	 */
 	public static volatile @Nullable Consumer<ServerPlayer> screenOpener;
+	/** Opens the Library on the placed sites with a site selected (null = none); installed by the client like {@link #screenOpener}. */
+	public static volatile java.util.function.@Nullable BiConsumer<ServerPlayer, @Nullable String> libraryOpener;
 
 	private SiteCommands() {
 	}
@@ -70,17 +76,12 @@ public final class SiteCommands {
 	public static void init() {
 		CommandRegistrationCallback.EVENT.register((dispatcher, registry, env) -> dispatcher.register(Commands.literal("architect")
 			.executes(SiteCommands::open)
-			.then(Commands.literal("list").executes(SiteCommands::list))
-			.then(Commands.literal("reload").executes(ctx -> {
-				Blueprints.reload(ctx.getSource().getServer());
-				List<String> problems = Blueprints.lastProblems();
-				ctx.getSource().sendSuccess(() -> Component.literal("Reloaded " + Blueprints.ids().size() + " design(s) " + Blueprints.ids()
-					+ (problems.isEmpty() ? "" : "; skipped " + problems.size() + ":")), false);
-				for (String p : problems) {
-					ctx.getSource().sendFailure(Component.literal("  " + p));
-				}
-				return Blueprints.ids().size();
-			}))
+			.then(Commands.literal("list").executes(SiteCommands::list).then(Commands.argument(ChatLists.ARG, StringArgumentType.greedyString()).executes(SiteCommands::list)))
+			.then(Commands.literal("reload").executes(SiteCommands::reload)
+				.then(Commands.literal("problems").executes(SiteCommands::reloadProblems).then(Commands.argument(ChatLists.ARG, StringArgumentType.greedyString()).executes(SiteCommands::reloadProblems))))
+			.then(Commands.literal("library").executes(ctx -> library(ctx, null))
+				.then(Commands.argument("site", StringArgumentType.word()).suggests(SiteCommands::siteIds)
+					.executes(ctx -> library(ctx, StringArgumentType.getString(ctx, "site")))))
 			.then(Commands.literal("place")
 				.then(Commands.argument("id", StringArgumentType.word())
 					.suggests((ctx, b) -> {
@@ -128,15 +129,16 @@ public final class SiteCommands {
 						.then(Commands.argument("version", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1))
 							.executes(ctx -> revert(ctx, com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "version"))))))
 				.then(Commands.literal("history")
-					.then(Commands.argument("site", StringArgumentType.word()).suggests(SiteCommands::siteIds).executes(SiteCommands::history))))
-			.then(Commands.literal("batches").executes(SiteCommands::batches))
+					.then(Commands.argument("site", StringArgumentType.word()).suggests(SiteCommands::siteIds).executes(SiteCommands::history)
+						.then(Commands.argument(ChatLists.ARG, StringArgumentType.greedyString()).executes(SiteCommands::history)))))
+			.then(Commands.literal("batches").executes(SiteCommands::batches).then(Commands.argument(ChatLists.ARG, StringArgumentType.greedyString()).executes(SiteCommands::batches)))
 			.then(Commands.literal("batch")
 				.then(Commands.literal("cancel")
 					.then(Commands.argument("batch", StringArgumentType.word()).suggests((ctx, b) -> {
 						Batches.all().stream().filter(x -> x.running()).forEach(x -> b.suggest(x.id));
 						return b.buildFuture();
 					}).executes(SiteCommands::batchCancel))))
-			.then(Commands.literal("groups").executes(SiteCommands::groups))
+			.then(Commands.literal("groups").executes(SiteCommands::groups).then(Commands.argument(ChatLists.ARG, StringArgumentType.greedyString()).executes(SiteCommands::groups)))
 			.then(Commands.literal("group")
 				.then(Commands.literal("remove")
 					.then(Commands.argument("group", StringArgumentType.word()).suggests(SiteCommands::suggestGroups)
@@ -149,7 +151,7 @@ public final class SiteCommands {
 				.then(Commands.argument("points", StringArgumentType.greedyString()).executes(SiteCommands::road)))
 			.then(Commands.literal("journal").executes(SiteCommands::journal))
 			.then(Commands.literal("stockpile") // 6c Y1 (C24)
-				.then(Commands.literal("list").executes(SiteCommands::stockpiles))
+				.then(Commands.literal("list").executes(SiteCommands::stockpiles).then(Commands.argument(ChatLists.ARG, StringArgumentType.greedyString()).executes(SiteCommands::stockpiles)))
 				.then(Commands.literal("removecrate")
 					.then(Commands.argument("pos", net.minecraft.commands.arguments.coordinates.BlockPosArgument.blockPos())
 						.executes(ctx -> removeCrate(ctx, false))
@@ -188,14 +190,17 @@ public final class SiteCommands {
 			ctx.getSource().sendSuccess(() -> Component.literal("No placement batches in this world"), false);
 			return 0;
 		}
+		List<Component> lines = new java.util.ArrayList<>();
 		for (dev.larattalabs.architect.batch.QBatch b : all) {
 			long placed = b.items.stream().filter(i -> i.status == dev.larattalabs.architect.batch.QItem.Status.PLACED).count();
 			long failed = b.items.stream().filter(i -> i.status == dev.larattalabs.architect.batch.QItem.Status.FAILED).count();
 			long waiting = b.items.stream().filter(i -> i.status == dev.larattalabs.architect.batch.QItem.Status.WAITING).count();
-			ctx.getSource().sendSuccess(() -> Component.literal(b.id + " (group " + b.group + "): " + b.status.name().toLowerCase(Locale.ROOT) + ", "
+			lines.add(Component.literal(b.id + " (group " + b.group + "): " + b.status.name().toLowerCase(Locale.ROOT) + ", "
 				+ placed + "/" + b.items.size() + " placed" + (failed > 0 ? ", " + failed + " failed" : "") + (waiting > 0 ? ", " + waiting + " waiting" : "")
-				+ (b.note.isEmpty() ? "" : " (" + b.note + ")")), false);
+				+ (b.note.isEmpty() ? "" : " (" + b.note + ")")));
 		}
+		ctx.getSource().sendSuccess(() -> Component.literal(all.size() + " placement batch" + (all.size() == 1 ? "" : "es") + " in this world:"), false);
+		ChatLists.send(ctx.getSource(), lines, ChatLists.args(ctx), "/architect batches");
 		return all.size();
 	}
 
@@ -217,14 +222,26 @@ public final class SiteCommands {
 			ctx.getSource().sendSuccess(() -> Component.literal("No site groups in this world"), false);
 			return 0;
 		}
+		List<Component> lines = new java.util.ArrayList<>();
 		for (SiteGroupRec g : all) {
+			// one short line a group; the stage list and the site ids are its hover text (a long group no longer floods chat)
 			StringBuilder st = new StringBuilder();
+			java.util.Map<String, Integer> byState = new java.util.LinkedHashMap<>();
 			for (SiteGroupRec.StageRec x : g.stages()) {
-				st.append(st.isEmpty() ? "" : ", ").append(x.name()).append(" ").append(x.state().name().toLowerCase(Locale.ROOT));
+				String state = x.state().name().toLowerCase(Locale.ROOT);
+				st.append(st.isEmpty() ? "" : "\n").append(x.name()).append(": ").append(state);
+				byState.merge(state, 1, Integer::sum);
 			}
-			ctx.getSource().sendSuccess(() -> Component.literal(g.id() + (g.owner() == null ? "" : " (owned by " + g.owner() + ")") + ": " + g.state() + ", "
-				+ g.sites().size() + " site(s) " + g.sites() + "; stages: " + st), false);
+			StringBuilder counts = new StringBuilder();
+			byState.forEach((k, n) -> counts.append(counts.isEmpty() ? "" : ", ").append(n).append(" ").append(k));
+			String hover = "Sites: " + String.join(", ", g.sites()) + (st.isEmpty() ? "" : "\nStages:\n" + st);
+			lines.add(Component.literal(g.id() + (g.owner() == null ? "" : " (owned by " + g.owner() + ")") + ": " + g.state().toString().toLowerCase(Locale.ROOT)
+				+ ", " + g.sites().size() + " site" + (g.sites().size() == 1 ? "" : "s") + (counts.isEmpty() ? "" : "; stages " + counts))
+				.withStyle(x -> x.withHoverEvent(new net.minecraft.network.chat.HoverEvent.ShowText(Component.literal(hover)))));
 		}
+		ctx.getSource().sendSuccess(() -> Component.literal(all.size() + " site group" + (all.size() == 1 ? "" : "s") + " in this world (hover a line for its "
+			+ "stages):"), false);
+		ChatLists.send(ctx.getSource(), lines, ChatLists.args(ctx), "/architect groups");
 		return all.size();
 	}
 
@@ -300,10 +317,16 @@ public final class SiteCommands {
 			ctx.getSource().sendSuccess(() -> Component.literal("No stockpiles in this world"), false);
 			return 0;
 		}
+		List<Component> lines = new java.util.ArrayList<>();
 		for (Stockpiles.Pile p : all) {
-			ctx.getSource().sendSuccess(() -> Component.literal(p.owner() + ": " + p.crates().size() + " crate(s) in " + p.dimension() + ", stock "
-				+ p.ledger().stock() + ", feed order " + p.order()), false);
+			String stock = String.valueOf(p.ledger().stock());
+			lines.add(Component.literal(p.owner() + ": " + p.crates().size() + " crate" + (p.crates().size() == 1 ? "" : "s") + " in " + p.dimension()
+				+ ", feeds " + p.order().size() + " site" + (p.order().size() == 1 ? "" : "s") + " (hover for the stock)")
+				.withStyle(x -> x.withHoverEvent(new net.minecraft.network.chat.HoverEvent.ShowText(Component.literal("Stock: " + stock + "\nFeed order: "
+					+ p.order())))));
 		}
+		ctx.getSource().sendSuccess(() -> Component.literal(all.size() + " stockpile" + (all.size() == 1 ? "" : "s") + " in this world:"), false);
+		ChatLists.send(ctx.getSource(), lines, ChatLists.args(ctx), "/architect stockpile list");
 		return all.size();
 	}
 
@@ -409,26 +432,110 @@ public final class SiteCommands {
 		return 1;
 	}
 
+	/**
+	 * {@code /architect list [page] [filter]}: the library's designs and this world's sites, one line each, paged ({@link ChatLists}).
+	 * A site's check or note is its line's hover text (marked "· check" / "· note"), so a page break or the filter never separates
+	 * them. Click a design to put {@code /architect place <id>} in the chat box.
+	 */
 	private static int list(CommandContext<CommandSourceStack> ctx) {
 		var all = Blueprints.entries();
-		ctx.getSource().sendSuccess(() -> Component.literal(all.size() + " design(s) in the library" + (all.isEmpty()
-			? " (yours: " + Blueprints.userDir() + ")" : ":")), false);
+		var sites = Sites.all();
+		List<Component> lines = new java.util.ArrayList<>();
 		for (Blueprints.Entry e : all) {
 			Blueprint bp = e.blueprint();
-			ctx.getSource().sendSuccess(() -> Component.literal(String.format(Locale.ROOT, "  %s  \"%s\"  %s  %dx%dx%d  front %s  [%s]", bp.id(),
-				bp.name(), bp.type(), bp.sizeX(), bp.sizeY(), bp.sizeZ(), bp.front(), e.bundled() ? "bundled" : "yours")), false);
+			lines.add(Component.literal(String.format(Locale.ROOT, "design %s \"%s\" %s %dx%dx%d [%s]", bp.id(), bp.name(), bp.type(), bp.sizeX(),
+				bp.sizeY(), bp.sizeZ(), e.bundled() ? "bundled" : "yours")).withStyle(x -> x
+				.withClickEvent(new net.minecraft.network.chat.ClickEvent.SuggestCommand("/architect place " + bp.id()))
+				.withHoverEvent(new net.minecraft.network.chat.HoverEvent.ShowText(Component.literal("Entrance faces " + bp.front()
+					+ "\nClick: /architect place " + bp.id())))));
 		}
-		var sites = Sites.all();
-		ctx.getSource().sendSuccess(() -> Component.literal(sites.size() + " site(s) in this world" + (sites.isEmpty() ? "" : ":")), false);
 		for (Site b : sites) {
-			ctx.getSource().sendSuccess(() -> Component.literal(String.format(Locale.ROOT, "  %s  %s  %s  box %s", b.id(), b.blueprint(), b.rotation(),
-				Anchors.str(b.box()))), false);
 			Sites.Report r = Sites.reports().get(b.id());
-			if (r != null) {
-				ctx.getSource().sendSuccess(() -> Component.literal("    " + (r.problem() ? "check: " : "note: ") + r.message()), false);
-			}
+			String text = String.format(Locale.ROOT, "site %s (%s) %s at %s", b.id(), b.blueprint(), b.rotation().replace('_', ' ').toLowerCase(Locale.ROOT),
+				b.box().minX() + " " + b.box().minY() + " " + b.box().minZ()) + (r == null ? "" : r.problem() ? " · check" : " · note");
+			String hover = "Box " + Anchors.str(b.box()) + (r == null ? "" : "\n" + (r.problem() ? "Check: " : "Note: ") + r.message());
+			lines.add(Component.literal(text).withStyle(x -> {
+				var st = x.withHoverEvent(new net.minecraft.network.chat.HoverEvent.ShowText(Component.literal(hover)));
+				return r != null && r.problem() ? st.withColor(net.minecraft.ChatFormatting.GOLD) : st;
+			}));
+		}
+		ctx.getSource().sendSuccess(() -> Component.literal(all.size() + " design" + (all.size() == 1 ? "" : "s") + " in the library, " + sites.size()
+			+ " site" + (sites.size() == 1 ? "" : "s") + " in this world" + (all.isEmpty() ? " (your designs go in " + Blueprints.userDir() + ")" : ":")), false);
+		if (!lines.isEmpty()) {
+			ChatLists.send(ctx.getSource(), lines, ChatLists.args(ctx), "/architect list");
 		}
 		return sites.size();
+	}
+
+	/** {@code /architect reload}: the count, and a link to the problems (they no longer flood chat). */
+	private static int reload(CommandContext<CommandSourceStack> ctx) {
+		Blueprints.reload(ctx.getSource().getServer());
+		List<String> problems = Blueprints.lastProblems();
+		int n = Blueprints.ids().size();
+		net.minecraft.network.chat.MutableComponent m = Component.literal("Reloaded " + n + " design" + (n == 1 ? "" : "s"));
+		if (!problems.isEmpty()) {
+			m.append("; skipped " + problems.size() + " with problems ").append(Component.literal("[show]").withStyle(x -> x
+				.withColor(net.minecraft.ChatFormatting.AQUA).withUnderlined(true)
+				.withClickEvent(new net.minecraft.network.chat.ClickEvent.RunCommand("/architect reload problems"))
+				.withHoverEvent(new net.minecraft.network.chat.HoverEvent.ShowText(Component.literal("/architect reload problems")))));
+		}
+		ctx.getSource().sendSuccess(() -> m, false);
+		return n;
+	}
+
+	/** {@code /architect reload problems [page] [filter]}: the last reload's problems, paged (it does not reload again). */
+	private static int reloadProblems(CommandContext<CommandSourceStack> ctx) {
+		List<String> problems = Blueprints.lastProblems();
+		if (problems.isEmpty()) {
+			ctx.getSource().sendSuccess(() -> Component.literal("The last reload had no problems"), false);
+			return 0;
+		}
+		List<Component> lines = new java.util.ArrayList<>();
+		for (String p : problems) {
+			lines.add(Component.literal(p).withStyle(net.minecraft.ChatFormatting.GOLD));
+		}
+		ctx.getSource().sendSuccess(() -> Component.literal(problems.size() + " design" + (problems.size() == 1 ? "" : "s") + " skipped at the last reload:"),
+			false);
+		ChatLists.send(ctx.getSource(), lines, ChatLists.args(ctx), "/architect reload problems");
+		return problems.size();
+	}
+
+	/**
+	 * Opens the Library screen on this world's placed sites, with {@code site} selected (the "Placed" chat line's [Open in Library]
+	 * link). Singleplayer only, like the screen.
+	 */
+	private static int library(CommandContext<CommandSourceStack> ctx, @Nullable String site) {
+		CommandSourceStack src = ctx.getSource();
+		java.util.function.BiConsumer<ServerPlayer, String> opener = libraryOpener;
+		ServerPlayer player = src.getPlayer();
+		if (opener == null || player == null || !src.getServer().isSingleplayerOwner(player.nameAndId())) {
+			src.sendFailure(Component.literal("The Library screen runs in singleplayer; here use /architect list"));
+			return 0;
+		}
+		if (site != null && Sites.get(site) == null) {
+			src.sendFailure(Component.literal("No site " + site + " (see /architect list)"));
+			return 0;
+		}
+		opener.accept(player, site);
+		return 1;
+	}
+
+	/** "Unknown design 'x'. Did you mean [a], [b]? See [/architect list]": each a click that puts its place command in the chat box. */
+	static Component unknownDesign(String id) {
+		List<String> close = DidYouMean.suggest(id, Blueprints.ids(), DidYouMean.MAX);
+		net.minecraft.network.chat.MutableComponent m = Component.literal("Unknown design '" + id + "'.");
+		if (!close.isEmpty()) {
+			m.append(" Did you mean ");
+			for (int i = 0; i < close.size(); i++) {
+				String c = close.get(i);
+				m.append(i == 0 ? "" : ", ").append(Component.literal(c).withStyle(x -> x.withUnderlined(true)
+					.withClickEvent(new net.minecraft.network.chat.ClickEvent.SuggestCommand("/architect place " + c))
+					.withHoverEvent(new net.minecraft.network.chat.HoverEvent.ShowText(Component.literal("/architect place " + c)))));
+			}
+			m.append("?");
+		}
+		return m.append(" See ").append(Component.literal("/architect list").withStyle(x -> x.withUnderlined(true)
+			.withClickEvent(new net.minecraft.network.chat.ClickEvent.RunCommand("/architect list")))).append(".");
 	}
 
 	private static int place(CommandContext<CommandSourceStack> ctx) {
@@ -436,7 +543,7 @@ public final class SiteCommands {
 		String bpId = StringArgumentType.getString(ctx, "id");
 		Blueprint bp = Blueprints.get(bpId);
 		if (bp == null) {
-			src.sendFailure(Component.literal("Unknown design '" + bpId + "' (known: " + Blueprints.ids() + ")"));
+			src.sendFailure(unknownDesign(bpId));
 			return 0;
 		}
 		String args;
@@ -705,9 +812,13 @@ public final class SiteCommands {
 		int v = SiteDeltas.versionOf(src.getServer(), b);
 		int head = SiteDeltas.headVersion(b.blueprint());
 		src.sendSuccess(() -> Component.literal(id + " (" + b.blueprint() + ") stands at v" + v + (head > v ? "; v" + head + " available" : "")), false);
+		List<Component> lines = new java.util.ArrayList<>();
 		for (Site.History h : SiteDeltas.history(src.getServer(), id)) {
-			src.sendSuccess(() -> Component.literal("  v" + h.version() + " " + h.kind() + (h.revertible() ? "" : " (not undoable)") + " " + java.time.Instant
-				.ofEpochMilli(h.appliedAt())), false);
+			lines.add(Component.literal("v" + h.version() + " " + h.kind() + (h.revertible() ? "" : " (not undoable)") + " " + java.time.Instant
+				.ofEpochMilli(h.appliedAt())));
+		}
+		if (!lines.isEmpty()) {
+			ChatLists.send(src, lines, ChatLists.args(ctx), "/architect site history " + id);
 		}
 		return 1;
 	}

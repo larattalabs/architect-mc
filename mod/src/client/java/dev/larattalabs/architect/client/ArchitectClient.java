@@ -9,7 +9,6 @@ import dev.larattalabs.architect.client.placement.PlacementFeature;
 import dev.larattalabs.architect.client.screen.ScreenFeature;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.sounds.SoundSource;
 
