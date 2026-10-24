@@ -130,7 +130,9 @@ steps.unit = async () => {
   const F = path.join(KIT, 'test', 'fixtures', 'plan', 'f3');
   fs.writeFileSync(path.join(OUT, 'f3-asks-before.md'), before.text);
   fs.writeFileSync(path.join(OUT, 'f3-asks-after.md'), after.text);
-  const lines = (t) => new Map(t.split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/')).map((l) => [l.split(' ')[0], l]));
+  // ((7a foundation) its ask movers compare without their `until`: tools/lib/f7a-norm.mjs)
+  const { f7aAskLine } = await import('./lib/f7a-norm.mjs');
+  const lines = (t) => new Map(t.split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/')).map((l) => [l.split(' ')[0], f7aAskLine(l)]));
   const lb = lines(before.text), la = lines(after.text);
   // ((batch v0.41.0) the five asks FL moves by name are FL's to judge)
   const { FL_MOVED_ASKS, flAsksFilter } = await import('./lib/fl-norm.mjs');
