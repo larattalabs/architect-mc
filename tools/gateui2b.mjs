@@ -11,6 +11,7 @@
 //                                      armed, place on top with the grouped refusals), the construction HUD full / one line / hidden,
 //                                      the crate's two-press Deconstruct, the helper's progress strip, shot at GUI scale 2 and 4; the
 //                                      launcher's plain summary and its one ready toast
+//     gallery                          the nightly UI gallery (docs/GATES.md "UI gallery"): every screen / HUD / in-world piece at GUI scale 2 and 4
 //     report                           REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate-ui2b/<step>.json in the main checkout (GATEUI2B_OUT overrides), all.log, the shots in <out>/shots (and
@@ -293,6 +294,320 @@ steps.ingame = async () => {
   await call('dev.gui.scale', { scale: 0 });
   spendZero();
   return out;
+};
+
+// ---------------------------------------------------------------- the nightly UI gallery (docs/GATES.md "UI gallery")
+// Every Architect screen, HUD state and in-world piece at GUI scale 2 and 4, as stable-named PNGs plus index.json, for the
+// morning design-critic review. $0 (sim sidecar), a fixed world (the pinned-seed flat base), fixed camera positions, fixed
+// form contents. Non-blocking by design: each state is captured on its own; a failure is listed in index.json "failed", the rest
+// carry on. GATEUIG_BUDGET_MIN (default 9): states not started by then are listed under "skipped". GATEUIG_DEST: also copy the
+// shots and index.json there (the nightly's artifacts/nightly/<date>/ui).
+const GAL_DIR = path.join(OUT, 'ui');
+const GAL = { shots: [], failed: [], skipped: [], notes: [] };
+let galT0 = 0;
+const galBudgetMs = Number(process.env.GATEUIG_BUDGET_MIN ?? 9) * 60_000;
+const galOver = () => Date.now() - galT0 > galBudgetMs;
+const tryc = (control) => call('dev.ui.click', { control }).then(() => true, () => false);
+const errMsg = (e) => String(e?.message ?? e).replace(/\s+/g, ' ').slice(0, 300);
+
+async function galCap(kind, screen, state, scale) {
+  const r = await call('dev.screenshot', { name: `uig_${screen}_${state}_s${scale}`, hideHud: false, frames: 4, waitChunks: false }, 120_000);
+  fs.mkdirSync(GAL_DIR, { recursive: true });
+  const file = `${screen}__${state}__s${scale}.png`;
+  fs.copyFileSync(r.path, path.join(GAL_DIR, file));
+  GAL.shots.push({ kind, screen, state, scale, file, width: r.width, height: r.height });
+  log(`  shot ${file} (${r.width}x${r.height})`);
+}
+/** One state at each scale. `setup(scale)` runs after the scale is set (once, at the first scale, with `once`; a GUI screen re-lays
+ * out on a scale change and drops its popups, so screens set up per scale). */
+async function sec(kind, screen, state, setup, { scales = [2, 4], once = false, closeScreen = true } = {}) {
+  let first = true;
+  for (const s of scales) {
+    if (galOver()) { GAL.skipped.push({ kind, screen, state, scale: s, why: 'time budget' }); continue; }
+    try {
+      if (closeScreen) await call('dev.screen', { open: null });
+      await call('dev.gui.scale', { scale: s });
+      await sleep(350);
+      if (!once || first) await setup(s);
+      first = false;
+      await sleep(450);
+      if (closeScreen === false || kind === 'ui') {
+        const ui = await call('dev.ui.state').catch(() => null);
+        if (ui?.controls) log(`  ${screen}/${state} s${s} controls: ${ui.controls.map((c) => c.id).join(' ').slice(0, 400)}`);
+      }
+      await galCap(kind, screen, state, s);
+    } catch (e) {
+      GAL.failed.push({ kind, screen, state, scale: s, error: errMsg(e) });
+      log(`  FAILED ${screen}/${state} s${s}: ${errMsg(e)}`);
+    }
+  }
+}
+const openTab = async (tab) => {
+  await call('dev.ui.open', { tab });
+  await sleep(350);
+  await tryc('variant:cancel');
+  if (tab === 'library') await call('dev.library.filter', { reset: true }).catch(() => null);
+};
+
+steps.gallery = async () => {
+  await ensure();
+  galT0 = Date.now();
+  GAL.shots = []; GAL.failed = []; GAL.skipped = [];
+  fs.rmSync(GAL_DIR, { recursive: true, force: true });
+  const SEED = '2026100906';
+  const CAM = ORIGIN; // every world camera is an offset from the ghost box minimum: the same view each night
+  const cam = async (dx, dy, dz, ax = 6, ay = 4, az = 6) => {
+    await call('dev.camera', { x: CAM[0] + dx, y: CAM[1] + dy, z: CAM[2] + dz, lookAt: { x: CAM[0] + ax, y: CAM[1] + ay, z: CAM[2] + az }, mode: 'spectator', closePause: true }, 30_000);
+    await call('dev.hud', { hidden: false });
+    await sleep(1200);
+  };
+  await L.fresh('G6B UIG', FLAT);
+  await L.setRules('exact');
+  await cmd('/time set 6000');
+  await cmd('/weather clear');
+  await L.tp(9.5, 72, 0.5, 0, 25);
+  await cmd('/gamemode creative');
+  await call('dev.ui2b.siteHud', { mode: 'full' });
+  spendZero();
+
+  // library identity, so a changed grid is explained (the run's library can differ night to night)
+  const lib0 = await call('dev.library.state').catch(() => ({}));
+  const cards0 = lib0.cards ?? lib0.visible ?? [];
+  const ids0 = cards0.map((c) => c.id ?? c).sort();
+  GAL.library = { count: ids0.length, ids: ids0.slice(0, 80) };
+  const pick = ids0.includes('cabin') ? 'cabin' : ids0[0];
+  const designs0 = (await call('dev.sidecar.state').catch(() => ({}))).designs?.length ?? null;
+
+  // ================================================================ Library
+  await sec('ui', 'library', 'grid', async () => openTab('library'));
+  await sec('ui', 'library', 'filter_type', async () => { await openTab('library'); await call('dev.ui.click', { control: 'filter:type' }); });
+  {
+    // the Tag pop-up is enabled only when the library has user tags; without any, say so instead of failing
+    await openTab('library');
+    const ui = await call('dev.ui.state').catch(() => ({ controls: [] }));
+    if (ui.controls?.some((c) => c.id === 'filter:tag' && c.enabled !== false && c.state !== 'disabled')) await sec('ui', 'library', 'filter_tag', async () => { await openTab('library'); await call('dev.ui.click', { control: 'filter:tag' }); });
+    else GAL.skipped.push({ kind: 'ui', screen: 'library', state: 'filter_tag', scale: null, why: 'no user tags in this library: the Tag pop-up is disabled' });
+  }
+  await sec('ui', 'library', 'filter_collection', async () => { await openTab('library'); await call('dev.ui.click', { control: 'filter:collection' }); });
+  await sec('ui', 'library', 'sort', async () => { await openTab('library'); if (!(await tryc('sort'))) GAL.notes.push('library/sort: sort chips are not folded at this scale; the chips are in the grid shot'); });
+  await sec('ui', 'library', 'starred_empty', async () => { await openTab('library'); await call('dev.library.filter', { favorites: true }); });
+  await sec('ui', 'library', 'search', async () => { await openTab('library'); await call('dev.library.filter', { text: 'tower' }); });
+  await sec('ui', 'library', 'detail', async () => { await openTab('library'); await call('dev.library.select', { entry: pick }); });
+  await sec('ui', 'library', 'detail_rename', async () => { await openTab('library'); await call('dev.library.select', { entry: pick }); await call('dev.ui.click', { control: 'rename' }); });
+  await sec('ui', 'library', 'detail_tags', async () => { await openTab('library'); await call('dev.library.select', { entry: pick }); await call('dev.ui.click', { control: 'tags' }); });
+  await sec('ui', 'library', 'variants_form', async () => { await openTab('library'); await call('dev.library.select', { entry: pick }); await call('dev.library.variants.open', { entry: pick }); });
+  for (const f of ['wood', 'stone', 'roof', 'accent']) {
+    await sec('ui', 'library', `variants_palette_${f}`, async () => {
+      await openTab('library'); await call('dev.library.select', { entry: pick }); await call('dev.library.variants.open', { entry: pick });
+      await call('dev.ui.click', { control: `palette:${f}` });
+    });
+  }
+  await sec('ui', 'library', 'variants_changed', async () => {
+    await openTab('library'); await call('dev.library.select', { entry: pick }); await call('dev.library.variants.open', { entry: pick });
+    const vs = await call('dev.library.state').catch(() => ({}));
+    const presets = vs.variants?.presets ?? vs.variantForm?.presets ?? [];
+    const p = typeof presets[1] === 'string' ? presets[1] : presets[1]?.name ?? presets[1]?.id;
+    if (p) await call('dev.library.variants.set', { preset: p }); else await call('dev.library.variants.set', { steps: {} });
+  });
+  await tryc('variant:cancel');
+  await sec('ui', 'library', 'import_dialog', async () => { await openTab('library'); await call('dev.library.import.list'); });
+  await tryc('import:cancel');
+
+  // ================================================================ Design tab
+  const FORM = { reset: true, buildingType: 'cabin', style: 'rustic', materials: 'oak and stone', size: 'M', name: 'Gallery Cabin', notes: 'a small cabin by the road' };
+  await sec('ui', 'design', 'default', async () => { await openTab('design'); await call('dev.design.fill', { reset: true }); });
+  await sec('ui', 'design', 'filled', async () => { await openTab('design'); await call('dev.design.fill', FORM); });
+  await sec('ui', 'design', 'size_custom', async () => { await openTab('design'); await call('dev.design.fill', { ...FORM, size: 'custom', custom: [11, 7, 9] }); });
+  await sec('ui', 'design', 'size_large_options', async () => { await openTab('design'); await call('dev.design.fill', { ...FORM, size: 'L' }); });
+  await sec('ui', 'design', 'type_other', async () => { await openTab('design'); await call('dev.design.fill', { ...FORM, openType: 'windmill' }); await tryc('type:other'); });
+  await sec('ui', 'design', 'profile_popup', async () => { await openTab('design'); await call('dev.design.fill', { ...FORM, openType: 'windmill' }); await tryc('type:other'); await call('dev.ui.click', { control: 'design:profile' }); });
+  await sec('ui', 'design', 'bible_popup', async () => { await openTab('design'); await call('dev.design.fill', FORM); await call('dev.ui.click', { control: 'design:bible' }); });
+  await sec('ui', 'design', 'remix', async () => { await openTab('library'); await call('dev.library.remix', { entry: pick }); });
+  await sec('ui', 'design', 'set_dialog', async () => { await openTab('design'); await call('dev.set.open'); });
+  await sec('ui', 'design', 'set_dialog_filled', async () => {
+    await openTab('design'); await call('dev.set.open');
+    await call('dev.set.fill', { name: 'Gallery hamlet', prompt: 'a quiet hamlet by a river', items: [{ type: 'tower', name: 'Watchtower', role: 'landmark' }, { type: 'cabin', name: 'Ferry cabin' }, { type: 'gatehouse', name: 'Ford gate' }], concurrency: 2 });
+    await sleep(1200);
+  });
+  await call('dev.set.close').catch(() => null);
+
+  // ================================================================ Designs tab (a sim design: $0)
+  await sec('ui', 'designs', 'before', async () => openTab('designs'));
+  let madeEntry = null;
+  try {
+    await openTab('design');
+    await call('dev.design.fill', FORM);
+    const sent = await call('dev.design.submit', {}, 30_000);
+    const id = sent.sent?.designId;
+    const end = Date.now() + 90_000;
+    let d;
+    while (Date.now() < end) {
+      d = (await call('dev.sidecar.state')).designs?.find((x) => x.id === id);
+      if (d && ['done', 'failed', 'error'].includes(d.status)) break;
+      await sleep(1000);
+    }
+    madeEntry = d?.blueprintId ?? null;
+    GAL.notes.push(`designs: sim design ${id} ended ${d?.status}`);
+    await sec('ui', 'designs', 'detail', async () => { await openTab('designs'); if (id) await call('dev.ui.click', { control: `design:${id}` }); });
+  } catch (e) { GAL.failed.push({ kind: 'ui', screen: 'designs', state: 'detail', scale: null, error: errMsg(e) }); }
+  if (madeEntry) await call('dev.library.delete', { entry: madeEntry }).catch(() => null);
+  GAL.library.designsBefore = designs0;
+
+  // ================================================================ Status tab
+  await sec('ui', 'status', 'tab', async () => openTab('status'));
+  await sec('ui', 'status', 'helper_strip', async () => {
+    await call('dev.ui2b.helperPreview', { label: 'Installing the design helper (about 200 MB, first run only)…', npm: 'added 212 packages in 41s' });
+    await openTab('status');
+  });
+  await call('dev.ui2b.helperPreview', { label: null }).catch(() => null);
+
+  // ================================================================ placement HUD and the placement ghost's colour categories
+  await call('dev.screen', { open: null });
+  const start = async (o = ORIGIN) => { await call('dev.build.cancel').catch(() => null); await call('dev.build.start', { blueprint: 'cabin', origin: o, ground: true, turns: 0 }); };
+  const chestAt = async (on) => {
+    const st0 = await buildState();
+    const b = boxOf(st0);
+    await cmd(`/setblock ${b.min[0] + 3} ${b.min[1] + 2} ${b.min[2] + 3} minecraft:${on ? 'chest' : 'air'}`);
+    return b;
+  };
+  await sec('world', 'ghost', 'checking', async () => { await start(); }, { scales: [4], closeScreen: false });
+  await sec('world', 'ghost', 'normal', async () => { await start(); await cam(6, 16, 34); await waitVerdict(); }, { once: true, closeScreen: false });
+  await sec('ui', 'placement_hud', 'legend', async () => { await call('dev.build.legend', { on: true }); await sleep(200); }, { closeScreen: false });
+  await call('dev.build.legend', { on: false }).catch(() => null);
+  // replaced: the ghost over blocks that will be replaced (a stone slab laid in its box)
+  await sec('world', 'ghost', 'replaced', async () => {
+    await start(); await waitVerdict();
+    const b = boxOf(await buildState());
+    await cmd(`/fill ${b.min[0] + 1} ${b.min[1]} ${b.min[2] + 1} ${b.min[0] + 9} ${b.min[1] + 1} ${b.min[2] + 7} minecraft:stone`);
+    await start(); await cam(6, 16, 34); await waitVerdict();
+  }, { once: true, closeScreen: false });
+  await call('dev.build.cancel').catch(() => null);
+  await cmd(`/fill ${ORIGIN[0] - 2} ${ORIGIN[1] - 1} ${ORIGIN[2] - 2} ${ORIGIN[0] + 16} ${ORIGIN[1] + 3} ${ORIGIN[2] + 14} minecraft:air`);
+  await cmd(`/fill ${ORIGIN[0] - 2} ${ORIGIN[1] - 1} ${ORIGIN[2] - 2} ${ORIGIN[0] + 16} ${ORIGIN[1] - 1} ${ORIGIN[2] + 14} minecraft:grass_block`).catch(() => null);
+  // a block entity in the way (a chest): the refusal and the force chip
+  await sec('world', 'ghost', 'block_entity', async () => {
+    await start(); await waitVerdict(); await chestAt(true);
+    await start(); await waitVerdict();
+    await call('dev.build.confirm', {}, 60_000).catch(() => null);
+    await sleep(300); await cam(6, 16, 34);
+  }, { once: true, closeScreen: false });
+  await sec('ui', 'placement_hud', 'force_armed', async () => { await call('dev.hud', { hidden: false }); }, { closeScreen: false });
+  await chestAt(false).catch(() => null);
+  // refused: below the world's floor, where no placement can stand
+  await sec('world', 'ghost', 'refused', async () => {
+    await call('dev.build.cancel').catch(() => null);
+    await call('dev.build.start', { blueprint: 'cabin', origin: [ORIGIN[0], -70, ORIGIN[2]], ground: false, turns: 0 });
+    await waitVerdict(); await cam(6, 16, 34, 6, 4, 6);
+  }, { once: true, closeScreen: false });
+  await call('dev.build.cancel').catch(() => null);
+
+  // ================================================================ toasts, the paged chat list, Library > Placed
+  const row = [];
+  const place = async (o, scale) => {
+    await call('dev.build.start', { blueprint: 'cabin', origin: o, ground: true, turns: 0 });
+    await waitVerdict();
+    const r = await call('dev.build.confirm', {}, 60_000);
+    if (r.placed) row.push(r.siteId);
+    return r;
+  };
+  await sec('ui', 'toast', 'placed', async (s) => { await place([ORIGIN[0], 64, ORIGIN[2]], s); await call('dev.screen', { open: null }); }, { closeScreen: false });
+  await call('dev.ui2b.toasts').then((t) => { GAL.toasts = t; }, () => null);
+  // place on top: the same design over the site just placed (refused for the overlap; Place on top armed)
+  await sec('world', 'ghost', 'place_on_top', async () => { await start(); await waitVerdict(); await sleep(400); await cam(6, 16, 34); }, { once: true, closeScreen: false });
+  await call('dev.build.cancel').catch(() => null);
+  // the first site is needed above; a row of 6 more makes the list longer than one page
+  for (let i = 1; i < 7 && !galOver(); i++) {
+    await call('dev.build.cancel').catch(() => null);
+    await place([40 + i * 16, 64, 40]).catch(() => null);
+  }
+  await call('dev.build.cancel').catch(() => null);
+  // a clicked link runs the command as a player: its output lands in the real chat (dev.command's does not)
+  const listChat = async (page) => { await call('dev.ui2b.click', { value: `/architect list${page > 1 ? ` ${page}` : ''}` }); await call('dev.screen', { open: 'chat' }); await sleep(500); };
+  await sec('ui', 'chat', 'list_page1', () => listChat(1), { closeScreen: false });
+  await sec('ui', 'chat', 'list_page2', () => listChat(2), { closeScreen: false });
+  await call('dev.screen', { open: null });
+  await sec('ui', 'library', 'placed', async () => {
+    await openTab('library'); await call('dev.ui.click', { control: 'library:placed' });
+    if (row[0]) await call('dev.ui.click', { control: `site:${row[0]}` }).catch(() => null);
+  });
+  for (const id of row) await chat(`/architect remove ${id}`).catch(() => null);
+  await sleep(2000);
+
+  // ================================================================ plot markers and the region ghost (world)
+  await call('dev.screen', { open: null });
+  await L.tp(9.5, 72, 0.5, 0, 25); await cmd('/gamemode creative');
+  const plotCam = async () => { await call('dev.camera', { x: 22, y: 78, z: 52, lookAt: { x: 29, y: 63, z: 17 }, mode: 'spectator', closePause: true }, 30_000); await call('dev.hud', { hidden: false }); await sleep(1200); };
+  await sec('world', 'plot', 'first_corner', async () => {
+    await openTab('design'); await call('dev.design.fill', FORM);
+    await call('dev.plot.start', {});
+    await call('dev.plot.corner', { x: 20, y: 63, z: 10 });
+    await plotCam();
+  }, { once: true, closeScreen: false });
+  await sec('world', 'plot', 'marked', async () => {
+    await call('dev.plot.corner', { x: 38, y: 63, z: 24, front: 'south', confirm: true });
+    await call('dev.screen', { open: null });
+    await plotCam();
+  }, { once: true, closeScreen: false });
+  await call('dev.plot.cancel', {}).catch(() => null);
+  await call('dev.design.fill', { reset: true }).catch(() => null);
+  try {
+    const claim = [-60, -60, 59, 59];
+    const p = await L.plan('crater_works', claim, { surveyLoad: 'bounded:256' });
+    await call('dev.region.ghost', { planId: p.planId }, 120_000);
+    await sleep(6000);
+    const rc = async () => call('dev.camera', { x: -40, y: 90, z: 20, yaw: 180, pitch: 35, mode: 'spectator', closePause: true }, 30_000).then(() => sleep(2500));
+    await sec('world', 'region_ghost', 'plan', rc, { once: true, closeScreen: false });
+    await call('dev.region.ghost', { off: true }, 30_000);
+  } catch (e) { GAL.failed.push({ kind: 'world', screen: 'region_ghost', state: 'plan', scale: null, error: errMsg(e) }); }
+  await call('dev.release', {}).catch(() => null);
+
+  // ================================================================ the survival crate in the world, SiteHud, CrateScreen
+  let siteB = null;
+  try {
+    await L.tp(9.5, 72, 0.5, 0, 25); await cmd('/gamemode creative');
+    await call('dev.survival.set', { on: true });
+    await call('dev.build.start', { blueprint: 'cabin', origin: ORIGIN, ground: true, turns: 0 });
+    await waitVerdict();
+    siteB = (await call('dev.build.confirm', {}, 60_000)).siteId;
+    for (let i = 0; i < 40 && (await buildState()).hudRect; i++) await sleep(300);
+  } catch (e) { GAL.failed.push({ kind: 'world', screen: 'sitehud', state: 'setup', scale: null, error: errMsg(e) }); }
+  if (siteB) {
+    for (const mode of ['full', 'line', 'hidden']) {
+      await sec('world', 'sitehud', mode, async () => { await call('dev.ui2b.siteHud', { mode }); await cam(6, 12, 30); }, { closeScreen: false });
+    }
+    await call('dev.ui2b.siteHud', { mode: 'full' });
+    await sec('ui', 'crate', 'screen', async () => { await call('dev.crate.open', { site: siteB }); await sleep(600); });
+    await sec('ui', 'crate', 'confirm_armed', async () => {
+      await call('dev.crate.open', { site: siteB }); await sleep(600);
+      await call('dev.crate.press', { control: 'deconstruct' }); await sleep(200);
+    });
+    await call('dev.screen', { open: null });
+    await call('dev.site.deconstruct', { site: siteB, force: true }).catch(() => null);
+  }
+  await call('dev.survival.set', { on: false }).catch(() => null);
+  await call('dev.release', {}).catch(() => null);
+  await call('dev.gui.scale', { scale: 0 }).catch(() => null);
+
+  const index = {
+    schema: 1, date: new Date().toISOString().slice(0, 10), head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(),
+    world: { name: 'G6B UIG', base: FLAT, seed: SEED, time: 6000, weather: 'clear', camera: 'offsets from the ghost box minimum', sidecar: 'sim ($0)' },
+    scales: [2, 4], seconds: Math.round((Date.now() - galT0) / 1000), budgetMin: galBudgetMs / 60_000,
+    counts: { shots: GAL.shots.length, failed: GAL.failed.length, skipped: GAL.skipped.length },
+    library: GAL.library, notes: GAL.notes,
+    shots: GAL.shots, failed: GAL.failed, skipped: GAL.skipped,
+  };
+  fs.mkdirSync(GAL_DIR, { recursive: true });
+  fs.writeFileSync(path.join(GAL_DIR, 'index.json'), `${JSON.stringify(index, null, 1)}\n`);
+  if (process.env.GATEUIG_DEST) {
+    const dest = path.resolve(process.env.GATEUIG_DEST);
+    fs.mkdirSync(dest, { recursive: true });
+    for (const f of fs.readdirSync(GAL_DIR)) fs.copyFileSync(path.join(GAL_DIR, f), path.join(dest, f));
+    log(`copied ${fs.readdirSync(GAL_DIR).length} files to ${dest}`);
+  }
+  // non-blocking: failures are in index.json; only "nothing captured" fails the step
+  check(GAL.shots.length > 0, `UI gallery: ${GAL.shots.length} shots, ${GAL.failed.length} failed, ${GAL.skipped.length} skipped, ${index.seconds} s`, index.counts);
+  spendZero();
+  return index.counts;
 };
 
 steps.report = async () => {
