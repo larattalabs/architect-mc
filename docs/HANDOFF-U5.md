@@ -42,6 +42,10 @@ Branch `slice/U5`, off `origin/main` (72e8939f, U3 merged; U4's `chore/u4-ab` is
   Nothing else to migrate. A small promotion tool is the natural first item of that slice.
 - **Estimate per Style:** **$1.16-1.55 and 5-8 min** (the seed bible-job basis; no bible job has been measured on this machine). It is an
   upper bound: the parts job skips the drafting pass. At most about $17-23 for the 15. PLAN said $20-40; confirm the cap with Noah first.
+- **"Use this style's parts" default:** on when picked for a **Claude-made** Style (today's set mode kept), off for every other Style
+  with parts (a built-in's copy, a hand-made Style after Add parts). This follows PLAN's "built-in and hand-made" wording. The task's
+  "the default stays U5a's hybrid" could also mean off for every Style. Flipping it is one line: `StyleForm.Style.of`'s `partsDefault`,
+  with the kit twin and the parity fixture regenerated.
 - **Steward RC:** not needed in DEV MODE. Nothing Steward constructs or calls changed shape. Its Claude-made settlement bibles keep set
   mode. CONTRACT §4 has the reasoning and the greps.
 
@@ -69,6 +73,12 @@ All $0 (sim). Ports 8900/8901, run dir `../architect-mc-U5-run` (frozen source `
   - lint-structure 177, lint-look 14, water-lint 126, p3-lint 16.
 - **Run 2, `20261024-190638-change`** at 4acb427c (the brief's blurb line renamed "in short:"): `--only unit-sidecar,u5-ingame`. **PASS
   2/2** (783; 31/31).
+- **After the runs** (bd414be6, a fix the gate's sim designs cannot reach, because they never import components): an entry made in set
+  mode before U5 with a Style that has no parts now, designed again, keeps its own library (`styles-u5.test.ts`: it fails without the
+  fix with ERR_MODULE_NOT_FOUND on `bible/components.mjs`). `npm run check` at bd414be6: tsc clean, 784 tests.
+- **Nightly expectation:** apitest, p4c-ui, p5a-ui, gate6cv and gate6c0b design sets with built-in bibles (oak, birch). These now run
+  the hybrid. Their sim designs never import components and none of their checks reads a set's `bible/components.mjs`, so no failure
+  is expected (grepped). groups.test.ts's set-mode group moved to rustic.
 - **Shots** (`gate6b/shots/` of each run): editor_hybrid, browser_no_parts, browser_menu_parts, add_parts (the estimate "about
   $1.16-1.55, 5-8 min (at most)"), browser_parts ("Parts: 5"), style_editor_no_parts, editor_parts_off, editor_parts_on (the chip, the
   note and the provenance line).

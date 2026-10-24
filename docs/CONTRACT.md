@@ -25229,6 +25229,10 @@ gets another Style's components:
 - A request whose `bible` names a Style **without parts** (Steward's or any API caller's `withBible`, a group, a remix) gets the same:
   - the Style's roles as the materials (`bible/bible.json`, `palette({bible})`) and its hints as guidance;
   - no `components.mjs` in the scratch dir or the entry, and no restraint check (`setMode(d)` gates `--restraint`).
+- **An entry made in set mode before U5** with a Style that has no parts now (a built-in other than rustic, or a hand-made Style: both
+  got the kit's reference library then, and the entry's source imports it) is designed again (versionOf, polish, a report critique)
+  with **its own** `bible/components.mjs`, the library it was built with. Its source still builds. The design stays out of set mode
+  (the hybrid brief, no restraint). That file belongs to the entry; no Style gets it (`sidecar.ts` `designBible`, `entryComponents`).
 - **Set mode is unchanged for a Style with its own parts** (Claude-made bibles, rustic, a Style after "Add parts"): the 4b/5a section,
   word for word, with its components and restraint (`bibleSection` with `parts` true or absent).
 - Units: `sidecar/test/styles-u5.test.ts` covers the brief (hints present; no component, restraint or "follow it" text), the hybrid
