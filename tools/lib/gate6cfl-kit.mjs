@@ -37,6 +37,8 @@ export const EXCEPT = Object.freeze({
   'extension/e16_every_reserved_b.json': 'named by §8 (its reserved list); judged as any other: it may stay byte-identical',
   // ((7a foundation) the catalogue's three changes move these by name (e15 is FL's too: it differs either way))
   'asks/mining_town.json': F7A_MOVED['asks/mining_town.json'],
+  'asks/castle_city.json': F7A_MOVED['asks/castle_city.json'], // ((7a K2) its walk)
+  'k1a/unread_keys.json': '7a K2: the fixture swaps params.wall_walk (read now) for wall_height (its third unread key); planned from each tree\'s own copy, it differs',
 });
 
 /** The base worktree at the merge base with origin/main (made or moved there). */

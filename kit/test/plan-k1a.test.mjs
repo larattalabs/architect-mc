@@ -145,7 +145,9 @@ test('item 6: castle_city\'s gate_lot answers adjusted with a join deviation (S-
   assert.equal(w.class, 'adjusted');
   const j = w.deviations.find((d) => d.kind === 'join' && d.lot === 'gatehouse_1');
   assert.ok(j && j.what === 'join' && j.value > 0 && j.key === 'gate_lot', JSON.stringify(w.deviations));
-  for (const k of ['corner_lots', 'gate_lot', 'wall_walk']) assert.ok(w.notes.includes(`params.${k} not read`), JSON.stringify(w.notes));
+  // ((7a K2) wall_walk is read now: walk: true, the walk laid round the ring)
+  for (const k of ['corner_lots', 'gate_lot']) assert.ok(w.notes.includes(`params.${k} not read`), JSON.stringify(w.notes));
+  assert.ok(!w.notes.includes('params.wall_walk not read'), JSON.stringify(w.notes));
   assert.ok(!w.notes.some((n) => /^sealed/.test(n)), 'a gate_lot names a gate: not sealed');
   assert.ok(w.geometry.gates.length >= 1, 'gates.min 1');
 });

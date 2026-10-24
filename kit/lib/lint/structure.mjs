@@ -20,7 +20,7 @@
 //             one with no farm lot says so (65d61b0b)
 //
 // `gate(report, bars)` turns a report into FAIL lines: every error finding, the gated warnings (M2, M2:villager, M3 and its
-// sub-rules but overhang, M4, M10*, M2:wall, M8:wall, M6 on a connector), M5 over the walk area at most `bars.m5` (default 1%), and
+// sub-rules but overhang, M4, M10*, M2:wall, M8:wall, M6 on a connector; (7a K2) a wall walk's M2:walk, M8:walk, M6:walk and M5:walk), M5 over the walk area at most `bars.m5` (default 1%), and
 // every S- rule finding.
 //
 // `preFix` reproduces a historical bug inside the lint's own models (the reverted-code mutation of a Java-side fix the lint can only
@@ -39,9 +39,7 @@ const inRect = (r, x, z) => x >= r[0] && x <= r[2] && z >= r[1] && z <= r[3];
 const inBox = (b, x, y, z) => x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && z >= b.minZ && z <= b.maxZ;
 const nameOf = (s) => s.replace(/\[.*$/, '');
 const propsOf = (s) => (s.includes('[') ? Object.fromEntries(s.slice(s.indexOf('[') + 1, -1).split(',').map((kv) => kv.split('='))) : {});
-// ((7a CL) and the climbs' own bars: M10:climb (flights, rungs against a solid face, rest landings, the top gate), M8:climb (rails beside
-// a stair's drops), M5:climb (no dark tread, landing or walk cell of a climb))
-const GATED = /^(M1|M2|M2:villager|M2:wall|M3|M3:floating_spur|M3:gravity|M3:tunnel|M4|M4:tunnel|M8:wall|M10|M10:bridge|M10:rope|M10:catwalk|M10:climb|M8:climb|M5:climb|M13|M14|M20.*|M25.*|M27:state|M27:convert)$/;
+const GATED = /^(M1|M2|M2:villager|M2:wall|M2:walk|M8:walk|M6:walk|M5:walk|M3|M3:floating_spur|M3:gravity|M3:tunnel|M4|M4:tunnel|M8:wall|M10|M10:bridge|M10:rope|M10:catwalk|M10:climb|M8:climb|M5:climb|M13|M14|M20.*|M25.*|M27:state|M27:convert)$/;
 
 function finding(rule, count, sample, message, part = null) {
   return { rule, severity: 'error', part, stage: null, count, sample: sample.slice(0, 12), message };
@@ -318,7 +316,7 @@ export function gate(rep, bars = {}) {
   for (const f of rep.findings) {
     if (allow.has(f.rule)) continue;
     // (the corpus: the plan check's own verdict, plus the lint's rules and, for a connector fixture, the connector re-reads)
-    if (bars.corpus && f.severity !== 'error' && !f.rule.startsWith('S-') && !(bars.connectors && /^(M10|M10:bridge|M10:rope|M10:catwalk|M10:climb|M8:climb|M5:climb|M3:tunnel|M4:tunnel|M2:wall|M8:wall)$/.test(f.rule))) continue;
+    if (bars.corpus && f.severity !== 'error' && !f.rule.startsWith('S-') && !(bars.connectors && /^(M10|M10:bridge|M10:rope|M10:catwalk|M10:climb|M8:climb|M5:climb|M3:tunnel|M4:tunnel|M2:wall|M8:wall|M2:walk|M8:walk|M6:walk|M5:walk|M3)$/.test(f.rule))) continue;
     if (f.rule === 'M5' || f.rule === 'M6' || f.rule === 'M8' || f.rule === 'M3:overhang' || f.rule === 'M26' || f.rule.startsWith('M27:') && f.severity !== 'error') continue;
     if (f.severity === 'error' || GATED.test(f.rule) || f.rule.startsWith('S-')) fails.push(`${f.rule} ${f.part ?? '-'} x${f.count}: ${f.message}`);
   }

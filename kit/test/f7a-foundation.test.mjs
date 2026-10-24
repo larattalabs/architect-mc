@@ -111,7 +111,8 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   const d = diffCatalogues(pre, golden, { pending: [{ part: 'rail_1', block: 'connector.rail' }, { part: 'x', block: 'connector.span_bridge' }] });
   // ((7a slices) each 7a slice flips its own kinds reserved -> supported (CW: connector.catwalk): those flips are the slices' and are
   // left out here, so this item keeps checking exactly the foundation's three entries whichever slices have merged)
-  const flipped = new Set(K7.KINDS_7A.map((k) => `connector.${k}`).filter((id) => golden.entries.find((e) => e.id === id)?.state === 'supported'));
+  // ((7a K2) and K2's wall.along)
+  const flipped = new Set([...K7.KINDS_7A.map((k) => `connector.${k}`), 'wall.along'].filter((id) => golden.entries.find((e) => e.id === id)?.state === 'supported'));
   const own = (l, f = (x) => x) => l.filter((x) => !flipped.has(f(x)));
   assert.deepEqual(own(d.reservedToSupported), ['connector.span_bridge']);
   assert.deepEqual(own(d.schemaVersionBumps, (x) => x.id), [{ id: 'connector.span_bridge', from: 0, to: 1 }]);

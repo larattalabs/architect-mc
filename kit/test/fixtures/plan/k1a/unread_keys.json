@@ -1,12 +1,12 @@
 {
-  "about": "(7a K1a, S-K1-3) a wall with three recorded keys it doesn't read: each listed by name in its notes (towers names a lot: a join deviation too)",
+  "about": "(7a K1a, S-K1-3) a wall with three recorded keys it doesn't read ((7a K2) wall_walk is read now, so wall_height stands in for it): each listed by name in its notes (towers names a lot: a join deviation too)",
   "on": "asks",
   "expect": {
     "w": "adjusted",
     "notes": [
       "params.material not read",
       "params.towers not read",
-      "params.wall_walk not read"
+      "params.wall_height not read"
     ]
   },
   "plan": {
@@ -63,7 +63,7 @@
         },
         "params": {
           "material": "stone",
-          "wall_walk": true,
+          "wall_height": 7,
           "towers": [
             "h1"
           ]

@@ -95,6 +95,8 @@ public final class ApiRules {
 					case "region.plan.besideReach" -> "besideReach"; // 6c D3: the join reaches into a standing town's claim (ends and side T junctions)
 					case "region.plan.dry" -> "besideCheck"; // 6c D3: Regions.checkBeside, a dry beside plan that keeps nothing
 					case "region.climbs" -> "climbConnectors"; // 7a CL: plan/0's connector.stair, connector.switchback and connector.ladder (since NEXT)
+					case "region.walls.along" -> "wallAlong"; // 7a K2: plan/0's wall.along (a wall along a shore, biome edge or ridge)
+					case "region.walls.walk" -> "wallWalks"; // 7a K2: a wall's walk member (a railed, lit walk on the top, player only)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

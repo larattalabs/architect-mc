@@ -79,7 +79,9 @@ export const LATER_EXCEPTIONS = Object.freeze({ fixtures: ['extension/e05_reserv
     // ((7a foundation) its three catalogue changes)
     'connector.rail', 'connector.branch_walk', 'connector.span_bridge',
     // ((7a slices) each 7a slice flips its own kinds reserved -> supported: expected, as f7a-foundation.test reads them)
-    ...KINDS_7A.map((k) => `connector.${k}`)] });
+    ...KINDS_7A.map((k) => `connector.${k}`),
+    // ((7a K2) wall.along supported)
+    'wall.along'] });
 
 export async function unchanged(root) {
   const { dir: mainDir, base } = baseTree(root);
