@@ -18,6 +18,8 @@ docs/CONTRACT.md "Style unification U2" (end of the file). No API change: no Ste
   Style bible list routes Claude-made to set mode and the rest to materials only; a Wood/Stone/Roof/Accent dropdown row; "custom mix ·
   based on X" with Revert and Save as style…; ✦ on suggested features; the palette sent (helpers with `palette.roles`); the palette
   kept off a massing and added to its detail pass (`MassingReview`); a remix of a materials-only entry picks its Style.
+- **Fixed on the way (remix):** a Remix… of a materials-only entry set `bible` from its pin and so went out in set mode; the prefill
+  now leaves `bible` empty when the entry's request has a palette (as the sidecar's `setModePin`) and picks the entry's Style.
 - **Fixed on the way (a U1 bug):** the Variants footer (`LibraryTab.summary`) read every palette value as a string and threw on
   `{bible: {...}}`; it is `VariantForm.summary` now, with a test.
 - **`sidecar/src/claude/contract.ts`** lists the 16 built-in Styles; `variants.test.ts` holds it equal to the kit's presets.
@@ -62,6 +64,9 @@ Run `artifacts/gate-runs-U2/20261024-064303-change/` (main checkout), `gate-run 
 run dir (`../architect-mc-U2-run`) and lock; the machine at load ~30 throughout.
 - **u2-ingame: PASS, 27/27** (client, sim, $0; `gate6b/u2-ingame.json`): designs d85 (medieval) and the birch mix done and built of
   their materials; `bib_u2_birch_daub` v1 saved (hand, basedOn medieval v1); variant `gen_u2_daub_cabin_u2_birch_daub` built of it.
+- **Re-run after the remix fix** (`artifacts/gate-runs-U2/20261024-071032-change/`, at d3f49e5c): **u2-ingame PASS, 33/33**, now also
+  5: Remix… of the materials-only design (medieval picked, palette, no bible) and 6: Massing first with medieval (massing d89 without
+  a palette, its detail pass `fromMassing` + palette medieval, done and built of it); unit-mod PASS (908, 0 failures).
 - **unit-mod** PASS (908 tests, 0 failures: `StyleFormTest` replays all 24 form sequences, `StyleRolesTest`, `VariantFormTest`).
 - **unit-kit** PASS (870/870; `styles.test.mjs` with the form tests and the fixture-freshness check).
 - **Lints:** lint-structure (155), lint-look (14), water-lint (123), p3-lint (16): all PASS.

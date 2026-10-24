@@ -25016,12 +25016,14 @@ No API change, no new screens (U3 builds the UI on lab-ui 0.2.0). Mod-internal a
   as style… (named "<Style> mix"; U3 adds the name field). Features suggested by the Style are marked ✦.
 - **Massing first:** a massing has no materials, so the Design tab keeps the palette off the massing request and adds it to the detail
   pass on Approve (MassingReview, as the critique).
-- **Remix** of a materials-only entry picks its Style (roles inline).
+- **Remix** of a materials-only entry picks its Style (roles inline) and never sets `bible` from its pin (the pin only names the
+  Style, as the sidecar's `setModePin`), so it is not set mode.
 - `sidecar/src/claude/contract.ts` lists the 16 built-in Styles; a vitest holds the line equal to the kit's `PALETTE_PRESETS`.
 
 **3. Gate (DEV MODE):** units (kit `styles.test.mjs`, `StyleFormTest`, `VariantFormTest`, the sidecar's `variants.test.ts`), the
 instant lints, and `u2-ingame` (`tools/gateu2.mjs ingame`; client, sim, $0): the Design tab with medieval, free text, a custom mix,
-Save as style…, and a variant re-skin with the saved Style.
+Save as style…, a variant re-skin with the saved Style, Remix… of the materials-only design, and Massing first with a Style (the
+palette on the detail pass only).
 
 **4. Left for U3 / U4.**
 - U3: the Style browser and editor, a name field for Save as style…, words alongside a picked Style, "More roles" (StyleForm's
