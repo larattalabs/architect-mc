@@ -140,7 +140,7 @@ describe.skipIf(!hasKit)('U1 materials only, variants with roles, bible.save (si
     expect(s1.bible).toMatchObject({ origin: 'hand', tags: ['cold'], suggestedFeatures: ['chimney'], basedOn: { id: 'medieval', version: 1 }, builtin: false });
     const dir = path.join(h.sc.config.biblesDir, 'bib_alpine_timber');
     const v1 = hashTree(path.join(dir, 'versions', '1'));
-    expect(Object.keys(v1).sort()).toEqual(['bible.json', 'components.mjs']);
+    expect(Object.keys(v1).sort()).toEqual(['bible.json']);
     const s2 = h.sc.bibleIndex.save({ id: 'bib_alpine_timber', bible: { name: 'Alpine Timber', roles: { ...MEDIEVAL, light: 'minecraft:soul_lantern' } } });
     expect(s2.version).toBe(2);
     expect(hashTree(path.join(dir, 'versions', '1'))).toEqual(v1);

@@ -421,6 +421,15 @@ export class Estimates {
     const wait = ctx.limitUntil && ctx.limitUntil > ctx.now ? ctx.limitUntil - ctx.now : 0;
     return { usdLow: r2(pj.usd[0]), usdHigh: r2(pj.usd[1]), minutesLow: r1((pj.ms[0] + wait) / MIN), minutesHigh: r1((pj.ms[1] + wait) / MIN), basis: [pj.basis, ...(wait ? [`a usage limit holds new turns for ${Math.ceil(wait / MIN)} min`] : [])].join('; ') };
   }
+
+  /**
+   * (Style unification U5b) An "Add parts" job (bible.parts): the components pass of a bible job, without its drafting pass. Not
+   * measured on its own yet (parts jobs are not recorded), so this is the bible job's estimate as an upper bound, saying so.
+   */
+  bibleParts(ctx: EstimateCtx, model?: string): Estimate {
+    const e = this.bible(model ? { model } : {}, ctx);
+    return { ...e, basis: `Add parts: at most a bible job (it skips the drafting pass; not measured on its own yet): ${e.basis}` };
+  }
 }
 
 export type MixKind = 'bible' | 'original' | 'adapted' | 'copy' | 'small' | 'change';

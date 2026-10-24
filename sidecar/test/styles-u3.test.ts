@@ -22,7 +22,7 @@ const MEDIEVAL = {
 describe('bible.check (wire)', () => {
   it('is a feature and a message: a Style, an optional scope', () => {
     expect(FEATURES).toContain('bible.check');
-    expect(FEATURES[FEATURES.length - 1]).toBe('bible.check');
+    expect(FEATURES.indexOf('bible.check')).toBe(FEATURES.indexOf('bible.save') + 1);
     expect(BibleCheckMsg.safeParse({ v: 1, type: 'bible.check', bible: { name: 'X', roles: MEDIEVAL } }).success).toBe(true);
     expect(BibleCheckMsg.safeParse({ v: 1, type: 'bible.check', bible: { name: 'X', roles: MEDIEVAL }, scope: 'settlement' }).success).toBe(true);
     expect(BibleCheckMsg.safeParse({ v: 1, type: 'bible.check', bible: { name: 'X' }, scope: 'town' }).success).toBe(false);
