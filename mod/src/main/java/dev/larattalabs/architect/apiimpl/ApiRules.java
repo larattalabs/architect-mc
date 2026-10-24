@@ -91,6 +91,7 @@ public final class ApiRules {
 					case "region.monastery" -> "scenarioS3"; // 6c S3: the helper's kit bundles the terraced_monastery program (S3's scenario)
 					case "region.planDiscard" -> "planDiscard"; // 6c close-out A: the helper removes a discarded plan's dir (Regions.discardPlan)
 					case "plan.layouts" -> "freeLayouts"; // 6c FL: plan/0's layout.ring, .spiral, .grid, .organic, locator.around and sketch.outline
+					case "region.catwalks" -> "catwalks"; // 7a CW: plan/0's connector.catwalk (the face form; route row 10)
 					case "region.plan.besideReach" -> "besideReach"; // 6c D3: the join reaches into a standing town's claim (ends and side T junctions)
 					case "region.plan.dry" -> "besideCheck"; // 6c D3: Regions.checkBeside, a dry beside plan that keeps nothing
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));

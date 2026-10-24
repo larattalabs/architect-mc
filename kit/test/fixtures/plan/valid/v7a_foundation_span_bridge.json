@@ -1,0 +1,49 @@
+{
+  "about": "(7a foundation, R25, S-7a-3) v35's ravine road written as connector.span_bridge, the supported alias of connector.bridge: it answers as v35's bridge (block connector.bridge, a beam of 28 with 3 piers), noted \"span_bridge is connector.bridge (R25)\"",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2036,
+        "x1": 1159,
+        "z1": 2063,
+        "y": 52
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1080,
+      65,
+      2026
+    ],
+    "b": [
+      1080,
+      65,
+      2074
+    ]
+  },
+  "covers": [
+    "connector.span_bridge"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "ravine_road",
+        "kind": "span_bridge",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        },
+        "width": 3
+      }
+    ]
+  }
+}

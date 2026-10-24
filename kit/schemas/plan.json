@@ -31,7 +31,10 @@
     "R21 channels (H): a connector.channel has exactly one path form: where.around (channel.moat) or from/via/to (channel.course); none or both is malformed (SCHEMA) (HY widens it: R24). params is read leniently and never makes an H part malformed: width, depth, fluid, drop and torches/lamps are read when no first-class member says otherwise, lake on a pond is a note only, and every other key (material, existing, mechanism) is listed by name in the part's notes",
     "R22 lava (H): fluid lava (a member on form.pond, or params.fluid elsewhere) is allowed only on form.pond, a lined pit 1..2 deep; anywhere else it answers refused FIRE with evidence.kind lava and the water shape as a wouldFit",
     "R23 ice (H): ice applies only where the biome freezes at the body's surface (the kit's biome table, freezes); elsewhere it is noted, not read. A body in a freezing biome is capped with ice unless ice: false, which is refused WATER {kind: freezes} unless every surface cell is lit to block light 10 or more",
-    "R24 courses (HY, R21 widened): a connector.channel has exactly one path form: where.around (channel.moat), from/via/to (channel.course; with a lot {part: <lot>} in via it is a mill race, channel.race) or where.along (channel.ditch); none or two is malformed (SCHEMA). from must stand at least as high as to: an uphill course is refused UNREACHABLE {kind: uphill} with the part with from and to swapped as its wouldFit (never swapped silently). params is read leniently and never makes a course malformed: width, depth, drop, look and flow are read when no first-class member says otherwise; mill, wheel, sluice, lock and material are listed by name in the part's notes, never read"
+    "R24 courses (HY, R21 widened): a connector.channel has exactly one path form: where.around (channel.moat), from/via/to (channel.course; with a lot {part: <lot>} in via it is a mill race, channel.race) or where.along (channel.ditch); none or two is malformed (SCHEMA). from must stand at least as high as to: an uphill course is refused UNREACHABLE {kind: uphill} with the part with from and to swapped as its wouldFit (never swapped silently). params is read leniently and never makes a course malformed: width, depth, drop, look and flow are read when no first-class member says otherwise; mill, wheel, sluice, lock and material are listed by name in the part's notes, never read",
+    "R25 supported aliases (7a, S-7a-3): an alias on a supported entry (aliasOf on a supported connector entry, connector.span_bridge -> connector.bridge): the part is checked against the target's def and answers with the target's block id, noted (\"span_bridge is connector.bridge (R25)\"); nothing downstream sees the alias",
+    "R26 routed 7a connectors (7a): climbs (stair, switchback, ladder), rock stairs, lifts and catwalks are routed connectors (from, to); via is read leniently as R19: the first leg (from to via[0]) is used and the rest noted, never malformed",
+    "R27 spiral hosts (7a SA): a connector.stairs_around names its host in around.feature.part, a form part of kind rock_spire, ice_spike, giant_tree or giant_mushroom (an implicit dependency, R3); another part answers refused NO_FEATURE {why: host}"
   ],
   "x-defaults": {
     "about": "Defaults the compiler applies when a member is absent. A contract promise wins over a part's tolerance where both apply (for example C27's within 4 cells for a boundary-following district, once D2 is supported).",
@@ -106,14 +109,14 @@
       { "id": "connector.gate", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.gate", "limits": { "width": [1, 5], "height": [2, 6], "doors": ["none", "door", "fence_gate"] } },
       { "id": "connector.ladder", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
       { "id": "connector.stair", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
-      { "id": "connector.rail", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.rail", "sinceApi": "NEXT", "schemaVersion": 0, "state": "reserved", "until": "CR", "note": "Minecart track between stations; carts and rails come later (S-HY-3, S-7a-5)." },
       { "id": "connector.rope_bridge", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.rope_bridge", "limits": { "span": [8, 40], "width": [1, 3], "villagerMinWidth": 2, "approach": 32 } },
-      { "id": "connector.catwalk", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.catwalk", "sinceApi": "NEXT", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.catwalk", "limits": { "length": [3, 32], "width": [1, 2], "villagerMinWidth": 2, "approach": 32, "bracketEvery": 4, "outerEdge": 2 }, "note": "CW: the face form: a level deck shelf on brackets along a cliff or a steep bank, railed on its open side, where a walk would cut deep or go a long way round; never over water (WATER). Decks between buildings at height wait for 7b." },
       { "id": "connector.rock_stair", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
       { "id": "connector.switchback", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
       { "id": "connector.lift", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
-      { "id": "connector.branch_walk", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
-      { "id": "connector.span_bridge", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.branch_walk", "sinceApi": "NEXT", "schemaVersion": 0, "state": "reserved", "until": "7b", "note": "A deck along a giant tree's branches between canopy lots: needs layout.elevated and F3's branch skeleton (S-7a-4)." },
+      { "id": "connector.span_bridge", "sinceApi": "NEXT", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.bridge", "aliasOf": "connector.bridge", "note": "A supported alias of connector.bridge (a gap with a floor within 24: the bridge's beam): the part is checked and answered as connector.bridge, noted (R25, S-7a-3)." },
       { "id": "connector.stairs_around", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
       { "id": "wall.line", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall through from, via[] and to (each leg searched by T2's A* with a wall profile); a lot endpoint is a joined lot." },
       { "id": "wall.around", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall round a part, build or protected area, or (K1-target) one of the owner's standing regions, around {feature: {region}} (where.around on a wall: the wall's own member, not locator.around; its region not feature.region)." },
@@ -692,6 +695,179 @@
       }
     },
 
+    "connector.stair": {
+      "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
+      "description": "(7a CL) A climb in stair flights (T2's stair profile), railed beside drops. Ends rising under 2: refused NO_CLIMB (a path wouldFit); walked within the grade: adjusted (deviation climb). R26.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "stair" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
+        "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" } },
+        "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "lamps": { "enum": ["none", "few", "street"] },
+        "width": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "rails": { "enum": ["drops", "both", "none"] },
+        "params": { "type": "object" }
+      }
+    },
+
+    "connector.switchback": {
+      "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
+      "description": "(7a CL) A climb on hairpins, no flights (T2's switchback profile), retaining walls in the bible's role (none: T2's). NO_CLIMB as a stair. R26.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "switchback" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
+        "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" } },
+        "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "lamps": { "enum": ["none", "few", "street"] },
+        "width": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "landing": { "type": "integer", "minimum": 3, "maximum": 7 },
+        "retaining": { "enum": ["plain", "none"] },
+        "params": { "type": "object" }
+      }
+    },
+
+    "connector.ladder": {
+      "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
+      "description": "(7a CL) A climb up a face to 48 (T2's ladder profile), player-only (movers naming villager: refused MOVER), a rest landing every rest rungs, a fence gate on top; every rung against a sturdy face (else ANCHOR). NO_CLIMB as a stair. R26.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "ladder" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
+        "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" } },
+        "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "rest": { "type": "integer", "minimum": 8, "maximum": 24 },
+        "top": { "enum": ["gate", "open"] },
+        "params": { "type": "object" }
+      }
+    },
+
+    "connector.rock_stair": {
+      "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
+      "description": "(7a RK) A stair flight carved into rising ground (route row 11); needs a frozen volume. R26.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "rock_stair" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
+        "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" } },
+        "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "lamps": { "enum": ["none", "few", "street"] },
+        "width": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "height": { "type": "integer", "minimum": 2, "maximum": 4 },
+        "rise": { "type": "object", "additionalProperties": false, "properties": { "min": { "type": "integer", "minimum": 2, "maximum": 48 }, "max": { "type": "integer", "minimum": 2, "maximum": 48 } } },
+        "landing": { "type": "integer", "minimum": 4, "maximum": 12 },
+        "approach": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "lining": { "enum": ["exposed", "all"] },
+        "portal": { "enum": ["plain", "arch"] },
+        "params": { "type": "object" }
+      }
+    },
+
+    "connector.lift": {
+      "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
+      "description": "(7a LF) A bubble column against a face (route row 9), player-only; down: a second column. R26.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "lift" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
+        "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" } },
+        "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "rise": { "type": "object", "additionalProperties": false, "properties": { "min": { "type": "integer", "minimum": 4, "maximum": 64 }, "max": { "type": "integer", "minimum": 4, "maximum": 64 } } },
+        "down": { "type": "boolean" },
+        "approach": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "params": { "type": "object" }
+      }
+    },
+
+    "connector.catwalk": {
+      "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
+      "description": "(7a CW) A bracketed deck along a face (route row 10). R26.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "catwalk" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" } },
+        "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" } },
+        "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "lamps": { "enum": ["none", "few", "street"] },
+        "width": { "type": "integer", "minimum": 1, "maximum": 2 },
+        "length": { "type": "object", "additionalProperties": false, "properties": { "min": { "type": "integer", "minimum": 3, "maximum": 32 }, "max": { "type": "integer", "minimum": 3, "maximum": 32 } } },
+        "approach": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "params": { "type": "object" }
+      }
+    },
+
+    "connector.stairs_around": {
+      "type": "object", "required": ["id", "kind", "from", "around"], "additionalProperties": false,
+      "description": "(7a SA) A spiral stair round a form part (R27: a rock_spire, ice_spike, giant_tree or giant_mushroom) up to a lookout.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "stairs_around" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "around": { "type": "object", "required": ["feature"], "additionalProperties": false, "properties": { "feature": { "type": "object", "required": ["part"], "additionalProperties": false, "properties": { "part": { "$ref": "#/$defs/id" } } } } },
+        "top": { "oneOf": [{ "enum": ["summit", "canopy"] }, { "type": "object", "required": ["y"], "additionalProperties": false, "properties": { "y": { "type": "integer" } } }] },
+        "width": { "type": "integer", "minimum": 1, "maximum": 2 },
+        "rails": { "enum": ["outer", "none"] },
+        "lamps": { "enum": ["none", "few", "street"] },
+        "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] } },
+        "params": { "type": "object" }
+      }
+    },
+
     "connector.channel": {
       "type": "object", "required": ["id", "kind"], "additionalProperties": false,
       "description": "(H, HY) A channel of water. One path form (R21, R24): where.around (channel.moat: a level ring round a feature at ring offsets, default [6, 12], width 1..7 (default 5) and depth 1..4 (default 3), surface 1 under the ground, sunk and lined; closed: false leaves the side facing the claim's centre capped); from/via/to (channel.course: water that follows the land from a head down to a tail, as level reaches joined by falls and spillways, width 1..5 and depth 1..3, look natural (a stream, default) or built (a canal), flow pools (default), level or riffles, drop the highest single fall 1..8 (default 6); with a lot ({part: <lot>}) in via it is a mill race, channel.race); or where.along (channel.ditch: a level irrigation ditch 1 x 1 along the sides of a lot or zone, outside its box). from must stand at least as high as to (else refused UNREACHABLE uphill, with the swapped wouldFit). Streets, roads and paths cross a moat or a course on T3's bridge fallback (clearance 1 over plan water), landing at a wall's gate. params read leniently (R21, R24): width, depth, drop, look, flow; mill, wheel, sluice, lock and material noted, never read.",
@@ -951,7 +1127,7 @@
         "def": { "type": "string" },
         "draft": { "type": "string" },
         "limits": { "type": "object" },
-        "aliasOf": { "$ref": "#/$defs/blockId", "description": "A reserved alias: the answer names this block id instead of the entry's own, so one idea has one block id." },
+        "aliasOf": { "$ref": "#/$defs/blockId", "description": "An alias: the answer names this block id instead of the entry's own, so one idea has one block id. On a reserved entry (R4c) the part answers unsupported under the target; on a supported entry (R25, 7a) the part is checked against the target's def and answered as the target, noted." },
         "note": { "$ref": "#/$defs/text500" }
       }
     },
@@ -969,7 +1145,7 @@
     "reason": {
       "type": "object", "required": ["code"], "additionalProperties": false,
       "properties": {
-        "code": { "enum": ["SCHEMA", "UNKNOWN_REF", "CYCLE", "EXTENSION_BOUND", "UNSUPPORTED", "NO_FEATURE", "NO_ROOM", "OUT_OF_CLAIM", "OVERLAP", "PROTECTED", "KEEP_OUT", "TOO_STEEP", "WATER", "UNREACHABLE", "TOLERANCE", "DEPENDENCY", "BUDGET", "CANCELLED", "LIMIT", "NO_GAP", "SPAN", "ANCHOR", "HEADROOM", "MOVER", "NO_COVER", "VOLUME", "LEAK", "FIRE", "VOCAB", "PALETTE", "SURVIVAL"] },
+        "code": { "enum": ["SCHEMA", "UNKNOWN_REF", "CYCLE", "EXTENSION_BOUND", "UNSUPPORTED", "NO_FEATURE", "NO_ROOM", "OUT_OF_CLAIM", "OVERLAP", "PROTECTED", "KEEP_OUT", "TOO_STEEP", "WATER", "UNREACHABLE", "TOLERANCE", "DEPENDENCY", "BUDGET", "CANCELLED", "LIMIT", "NO_GAP", "SPAN", "ANCHOR", "HEADROOM", "MOVER", "NO_COVER", "VOLUME", "LEAK", "FIRE", "VOCAB", "PALETTE", "SURVIVAL", "NO_CLIMB"] },
         "message": { "type": "string" },
         "path": { "type": "string", "description": "SCHEMA: the JSON path of the first error." },
         "block": { "$ref": "#/$defs/blockId" },
@@ -988,7 +1164,7 @@
         "geometry": { "type": "object", "description": "Resolved, in world cells: rect or polygon, y, lots (LotSpec shape), path polylines, form bounds." },
         "cost": { "type": "object", "description": "For a provisional part (a building without a library entry, or a pending style) the range form is used and the artifact also records the part's fit box (R13). {cells, removed, added, tiles, chunksToGenerate, bom?} exact, or {range: {cells: [min, max], bom?}} when provisional." },
         "provisional": { "type": "boolean" },
-        "deviations": { "type": "array", "items": { "type": "object", "required": ["what", "value"], "properties": { "what": { "enum": ["move", "size", "rotate", "count", "grade", "detour", "sketch", "join", "crossing", "material"] }, "value": { "type": "number" }, "max": { "type": "number" }, "exceeds": { "type": "boolean" } } } },
+        "deviations": { "type": "array", "items": { "type": "object", "required": ["what", "value"], "properties": { "what": { "enum": ["move", "size", "rotate", "count", "grade", "detour", "sketch", "join", "crossing", "material", "climb"] }, "value": { "type": "number" }, "max": { "type": "number" }, "exceeds": { "type": "boolean" } } } },
         "reasons": { "type": "array", "items": { "$ref": "#/$defs/reason" } },
         "wouldFit": { "type": "array", "maxItems": 4, "items": { "type": "object", "description": "A concrete alternative as a plan fragment (for example a smaller size, another where) with its own geometry and cost." } },
         "blockedBy": { "type": "array", "items": { "$ref": "#/$defs/id" } },

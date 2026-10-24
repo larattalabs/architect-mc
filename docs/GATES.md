@@ -314,8 +314,8 @@ keyed by what that run touched. The key covers:
   `<run>/coverage/jvm-<pid>.log`). A step owns the logs of the JVMs alive at its start (a reused client counts with everything it
   loaded before) and of the JVMs written during it. Each class maps to its source file; a class with no file of its own widens to
   its package's files.
-  - Loaded is a superset of executed, which is JaCoCo's class level. It needs no agent: JaCoCo isn't in the gradle cache, and adding it
-    would mean a download. JaCoCo can replace it later.
+  - Loaded is a superset of executed. Since 2026-10-23 every JVM also runs JaCoCo, and a class the step's JVMs loaded but never
+    entered counts only by its skeleton ("Execution coverage (JaCoCo)" below).
 - **Node files.** The step's own trace, plus the trace of the client the runner started: the sidecar and its workers.
   - The tracer follows worker threads through a wrapper that also gives the tracer's environment to a worker started with
     `env: {}` (the region pool).
@@ -477,6 +477,122 @@ it.
   - So the coverage half of the proof is still to come: only 2 of 626 records depend on coverage, and none has been recorded
     yet.
   - Before the runner joined the keys, the audit found 10 such holes. The 8 explained by runner changes are why `runnerKey` exists.
+
+### Execution coverage (JaCoCo) (2026-10-23)
+
+v0.42.0's first traced full run showed that the class-load set is too broad: booting the mod loads most classes, so a core Java
+change still selected 140-160 of the 215 cacheable steps (CellCond 160, Roads 140). Execution coverage keys a step by the classes
+its JVMs **entered** instead. Code: `tools/lib/jacoco.mjs` (pins, fetch, the helpers), `tools/lib/GateCovAgent.java` (the
+per-JVM agent), `tools/lib/GateCovTool.java` (skeleton digests), `collect` in step-coverage.mjs, `bytecodeDigest` in
+build-artifact.mjs; config `gate-cache.json` `coverage.jacoco`. Gate and test tooling only: nothing of it is in the mod, its jar or
+its build.
+
+**JaCoCo** (Noah approved the download, 2026-10-23): 0.8.15, from Maven Central, sha1 checked against Central's and pinned by
+sha256 in `tools/lib/jacoco.mjs`:
+
+| jar | sha256 |
+|---|---|
+| `org.jacoco.agent-0.8.15-runtime.jar` | `fb5b0036a0899ea97edfa0fc2c7985b55f3f7c5695028163e5e60d4f3cf6075d` |
+| `org.jacoco.cli-0.8.15-nodeps.jar` | `d2b74b20b415163c1f53261e7c5ef4445b788327094208ff821e0c2baf9bc8f1` |
+
+They live in `<main checkout>/artifacts/vendor/jacoco/0.8.15/` (untracked; one copy for every worktree and the nightly's;
+`GATE_JACOCO_DIR` overrides). `node tools/lib/jacoco.mjs fetch` downloads and verifies them, `status` checks. The runtime agent's
+internal package (`internal_bac9136`, its Premain-Class) is version-specific and pinned with the jar. The two helpers compile on
+first use into `<vendor>/helpers/<hash of their sources and the JDK>/`. **A missing jar, a sha256 mismatch or a failed compile
+turns execution coverage off for the run** (logged once); the class-load coverage stays, so nothing is keyed wrongly.
+
+**What a JVM does.** The runner adds `-javaagent:gate-cov-agent.jar=dir=<run>/coverage/<shard>;...` to `JAVA_TOOL_OPTIONS`, next
+to the class-load log: every JVM of the shard gets it (the headless server, the client, gradle and its test JVMs). The agent:
+1. starts JaCoCo with `output=none`, `includes=dev.larattalabs.*`, `excludes=*.mixin.*`, `inclnolocationclasses=true` (only the
+   project's classes are instrumented; JaCoCo writes nothing itself);
+2. notes every project class that came out of JaCoCo's transformer without `$jacocoInit` (a class with no code, or one JaCoCo
+   refused): such a class counts as entered;
+3. dumps `jvm-<pid>.entered` (temp file and rename) when the runner writes a new token to `dump.req`, and at exit. It never resets,
+   so a client reused across steps stays cumulative, as the class-load log is.
+
+**Entered, not hit.** JaCoCo marks an instruction only once the probe after it runs, so a method that throws before its first probe
+has no hits although it ran (a parser calling an `expect()` that throws, the exception caught upstream). The JaCoCo store, though,
+registers a class the moment any of its instrumented methods (or `<clinit>`) starts: `$jacocoInit` runs first. The agent reads the
+store directly (`RuntimeData.collect`), because the stock dump drops classes with no hits. So "entered" = in the store.
+
+**Granularity: class, not method.** Method level was not adopted: JaCoCo has no per-method entry signal, and a method with no hits
+may still have run (above). A key that dropped "unhit" method bodies could serve a stale PASS. The class is the finest level with a
+sound "entered" bit.
+
+**At a step's end** the runner writes a new token, waits (bounded, `coverage.jacoco.dumpTimeoutSec`, 20 s) until every live agent
+JVM of the shard has dumped it, and `collect` takes, per JVM in the step's window (alive at its start, or begun since):
+- its dump when it answers this token or is its exit dump: the classes it entered, plus those JaCoCo left uninstrumented;
+- **otherwise every class its class-load log shows** (no agent, an agent error, killed before it could answer, no answer in time).
+  The class-load log is both the loaded set and the fail-safe.
+
+**The key** (`bytecodeDigest(loaded, manifest, entered)`), over the step's loaded classes:
+- an **entered** class: its whole class-file digest, as before;
+- a class **loaded but never entered**: its **skeleton** digest: the class with every method body removed except `<clinit>`'s.
+  That keeps the flags, super class and interfaces (`instanceof` reads the hierarchy without initialising the class), the fields
+  and their constant values, every member's declaration and flags (an added override or default method changes dispatch without
+  touching an entered body), annotations, and the InnerClasses, NestHost/NestMembers, PermittedSubclasses and Record attributes.
+  Debug attributes and frames are dropped. It is digested over a class file re-written from the parsed class, so constant-pool
+  order plays no part. A class with no skeleton in the manifest counts whole;
+- a class never loaded: nothing.
+
+The granularity string (`entered-class/jacoco-0.8.15/skel-v1`) is in the digest; the entry records `coverageEntered`,
+`coverageGranularity` and each JVM's dump state (`coverageJvms`). The build manifest carries `skel` (the format is in its hash, so
+the manifests built before rebuild once). Class-load PASSes recorded before stay valid under their own rule (loaded is a superset
+of entered). Unchanged: the safety set (mixins, which JaCoCo never sees, registries, serialization, resources, entrypoints, build
+files), the constant rule for source-keyed PASSes, `classReads` (a class file a node process read counts as entered), the
+node-file coverage, and the gradle-cwd steps (unit-mod, umt, p3-lint), which keep the whole trees.
+
+**Hardening (gate-verifier, 2026-10-23).** The agent deletes its pid's old files at start, and a dump older than its JVM's
+agent start is stale (a reused pid never inherits another JVM's exit dump). A project class in a mixin package that loads as a class
+(an accessor, a helper: never instrumented) counts as entered. The manifest's skeleton format carries the skeleton tool's source
+hash, so a change to GateCovTool.java rebuilds every manifest. **A hidden lambda class** (`Host$$Lambda/0x...`) counts as its host,
+loaded and entered: its name is in no manifest, so before it sent the host's SOURCE into the set (this narrows the class-load
+reading too). Residual, judged marginal: classes first entered by shutdown hooks after a JVM's exit dump.
+
+**Tests** (`kit/test/step-jacoco.test.mjs`: real javac fixtures under the real agent; skipped where the jars aren't fetched, as on
+CI): a changed entered method misses, a method that threw before any probe is entered and misses, a changed `<clinit>`, constant,
+added member, interface or default method of a loaded-but-not-entered class misses; a never-entered body and a never-loaded class
+may hit; a JVM reused across two steps stays cumulative; a JVM killed mid-step, and one whose agent failed, count every loaded class
+as entered. `kit/test/step-cache.test.mjs` covers the record and lookup path and the old entries. A changed mixin misses through
+the safety set (the coverage test above it).
+
+**Measured so far (2026-10-23).**
+- **Smoke run** with the agent on every JVM (`artifacts/gate-runs-jacoco/20261023-205940-change`): unit-mod (874 tests), t3a-look
+  (a client), and h-ingame-smoke, hy-ingame-smoke and kc-ingame-smoke on one reused headless server all PASS. Every JVM answered its
+  dump, with no fallbacks. Entered against loaded: h-ingame-smoke 575 of 660 non-hidden loaded classes; t3a-look 482; unit-mod 774 of
+  1982. Recorded offline into a scratch cache, each in-game PASS looks up again at its own head.
+- **What it narrows:** on in-game steps the classes a step loads are mostly entered too: about 87% on h-ingame-smoke. CellCond,
+  TerrainFit and Roads are entered by every in-game step in the smoke. So on cd170c61 (CellCond) and 9a83771e (Roads) the execution
+  key runs the same steps as the class-load key. Method granularity would not change that either. 9a83771e edits a failure branch
+  inside `Roads.plan`, which every road-building step runs, and the CellCond change is in the hot write conditions. Only a probe or
+  branch granularity would skip them, and JaCoCo's probes can't make that sound (see "Entered, not hit"). The gain is in steps that
+  load a class without running it: the API interfaces, registries' holders and the classes that are only type-checked.
+- **Conclusion (coordinator, 2026-10-23): a core Java change runs every in-game step, and no sound key changes that.** The edits
+  that matter (CellCond, Roads, TerrainFit) are in classes and methods every in-game step executes. Class level can't skip them, and
+  neither could method level. So the traced `release --full` that would give exact counts for the five v0.42.0 commits was not run:
+  the counts would match the class-load key's on the Java commits. 78c47572, 619398ec and 73189410 are driver and kit (node)
+  changes, which JaCoCo doesn't touch. Method-level entry probes are not worth building.
+- **What execution coverage does narrow:** classes a step loads but never runs (API interfaces, event types, classes only
+  type-checked) count by their skeleton, so a body edit there no longer reruns the step. Separately, the hidden-lambda fix
+  stops loaded lambdas from sending their host's source into the set. That narrows the existing class-load key too.
+- **fail-audit --bytecode** (partial: only the 4 smoke steps carry execution coverage), 776 FAIL/TIMEOUT records:
+  - 234 have no earlier PASS on an ancestor;
+  - 18 are on the same commit as a PASS;
+  - 501 were caused by a change in the step's own drivers, data or definition;
+  - 21 came only through the whole-tree classes. Of those, 17 run under the class-load key, all through the set, and 4 are
+    pending. None is skipped. None of the 21 is on a step with execution coverage, so no record exercises the execution key yet;
+  - the same 2 known holes (a docs-only change; gate6cpt.mjs for pt2-ingame).
+- **Overhead:** measured three ways on a shared machine, where load swamps the effect.
+  - **The smoke steps, agent on (A) against agent off (B)**, in seconds: unit-mod 85 / 116, t3a-look 147 / 180, h-ingame-smoke
+    349 / 474, hy-ingame-smoke 557 / 728, kc-ingame-smoke 63 / 91. The agent-off run was slower on every step, but it ran under a
+    1-min load of 17-96 against 17-20 for A. The difference is load, and the JaCoCo cost is below what this run can resolve.
+  - **The heaviest case, the mod's whole test suite** (`./gradlew test --rerun-tasks`, 874 tests: every class exercised is
+    instrumented), interleaved, three each. CPU (user) was 310 and 296 s with the agent and 282, 284 and 297 s without:
+    **about +5% CPU**. One agent-on sample lost its child accounting. Wall time, at load 32-52, ran 156-223 s either way.
+  - **Per-step dump wait** (`summary.json` `coverage.dumpMs`) is recorded from this commit on.
+  - In-game steps spend most of their CPU in Minecraft, which is not instrumented, so their share is smaller than the test suite's.
+    **Decision (coordinator's rule, under ~5%): the agent stays on everywhere** (`coverage.jacoco.enabled`). If a judged timing
+    bar starts to miss, set `enabled: false` and turn it on only in the nightly's full run.
 
 ### Impact-map misses log
 
@@ -1001,7 +1117,8 @@ the same assertions; only idle time and pure duplication went. The before/after 
   0 of the 12 baseline slices.
 - **The natural scenario settles** stay at 90 s in effect (above): never quiet within the cap.
 - **gate6a's in-assertion sleeps** (staged's 90 s "still waits without maxWait", the sidecar-kill pauses) are the assertions'
-  own time windows.
+  own time windows. (Speed audit B, below, made 6a-crash's RG5 pause after the sidecar kill a poll for SIDECAR_UNAVAILABLE, at most the
+  20 s; staged's 90 s and the other pauses stay.)
 
 ### Duplicates (`supersededBy`)
 
@@ -1204,6 +1321,84 @@ A sprint of 2,400 ticks took 0.4-4.5 s at default rules (a villager stand the mo
 not minutes. In the turbo slice (`artifacts/gate-runs-turbo-slice/20261022-212922-slice`) these waits are about 57 of its 339
 in-game step-minutes; the slice's wall was bound by the unit lanes (fl-unit/p1 20.6, s3-unit/p1 19.7, f3-unit/p1 16.6 min), so its
 wall falls by less until those shrink.
+
+## Speed audit B: in-game waits (2026-10-23)
+
+Noah approved the in-game-wait items of the 2026-10-23 audit (`artifacts/audit-findings-2026-10-23.md`, G1-G8). Branch
+`chore/speed-audit-b`. Every check keeps its assertions; only idle time went. The rule of "Sprinted game-time waits" holds: a wait
+sprints only if it counts ticks, and nothing here sprints a timeout, a presence limit, a bench or a wall-clock rule.
+
+**Sprinted (headless hosts only; `GATE_SPRINT=0` or a client: the original wait)**
+- `tools/scenarios.mjs` natural stand: `L.gameWait(120_000, {real: L.settle, label: 'stand'})`. Only 6cd-scenario-districts and
+  6cf2-scenario-scatter run it headless; the client scenarios keep the real wait.
+- 6a-forest's 2-minute stand at random_tick_speed 3 (`gate6a.mjs`).
+- h-probe's lava loop: the 24 samples 5 s apart are 24 `gameWait(5000)` (`lib/gate6ch-core.mjs`).
+- rs item 7's 10 s starve (`gate6crs.mjs`; the audit named it "rs-crash ~576": it is item 7, rs-ingame; rs-crash's item 11 is unchanged).
+  WaitCalc's 100-tick threshold counts builder ticks of game time (`survival/WaitCalc.java`; no wall clock in `survival/` or
+  `site/Builder.java`), so this is a tick wait, not the wall-clock builder rule of the list above.
+- HY's terrain settle and post-removal settle (`lib/gate6chy-b.mjs`), only when the driver sets `ctx.sprintWaits` (gate6chy.mjs).
+  The settle straight after the forceload and `waitChunks` stays real (chunk activation). KC, FL, IRR, F3 and RS call the same helpers
+  and keep their fixed settles.
+- 4d-all(-full)'s survival build: `/tick sprint` in 100-tick chunks with SITE_BUILT checked between them, the 25-minute wall cap
+  kept (`gate4d.mjs`). The builder's `nanoTime` deadlines are per-tick CPU budgets, not graces; the hopper chain is vanilla ticks.
+
+**Settles that became "until quiet"** (`settleQuiet`, at most the wait they replace; natural and fluid sites usually run to the cap
+as in "Waits that became wait until done", so the saving there is nil and the point is parity): rs item 14 and s3-plan (90 s),
+t3a-frozen's natural settle (60 s), voc-natural (30 s), 6b-commands (90 s). The goldens and surveys these steps read are cut from
+the settled world; a quiet end means no scheduled tick is left, so the world is the one the cap would have given.
+- 5b-chains `hash()`: tick-quiet (1 s floor, 3 s cap) instead of 3 s, and the apply's pre-hash is the last record's hash. 5b's client
+  host is kept; other 5b steps keep the fixed 3 s.
+- 4e-orders and 4e-crash: the hash settle, the removal settle, the open sleeps and the crash restart's settle are quiet polls
+  (the restart's waits at least 3 s and for the journal to stop changing) with the same caps; connect polls are 500 ms. Other 4e steps
+  (throughput, migration, ...) keep their fixed waits.
+
+**Polls instead of fixed sleeps:** rp-crash's verify loop (500 ms, the 30 s cap); 6a-crash's 20 s after the sidecar kill (poll for
+SIDECAR_UNAVAILABLE and for cellsWritten to rest 3 s, so buffered tiles finish as in the old pause; the link's reconnect backoff is capped at 5 s, so the resume bar of RG5 can come at most about 2 s sooner than
+after a full 20 s outage); 0a-keys and 0a-batches' `killClient` (exit poll of the helper's pid, at most the 8 s); rs-survival's lv7
+polls (1 s; the stability read needs 6 equal reads, a 6 s window, was 3 reads 3 s apart); 6b-versionc (v0.11.0's sidecar build cached under
+`artifacts/sidecar-dist-cache/` by tag commit and node version; the three 5 s settles are quiet polls, which wait the full 5 s on
+0.11.0's client because it has no `dev.ticks.pending`; the 30 s window is untouched). 6a-eflat skips the heap-GC baseline
+(`heapBaseline: false`), which only the other mega runs record.
+
+**Kept in real time, with the reason**
+- f3-ingame (`gate6cf3.mjs` 300/303, `lib/gate6cf3-game.mjs` 172-174) and fl-natural's control (`lib/gate6cfl-game.mjs`): the
+  controls that mirror another run's span and the settle after a site copy, listed above.
+- pt2-ingame's settles (and PT's): `Builds` detects with wall-clock `debounceMs` (5 s), `demoteGapMs` and `graceMs`
+  (`System.currentTimeMillis`), and the 6 s settle is that debounce plus a second.
+- y2-ingame's 8 s after the reload: a re-emitted start edge shows only EVENT_TICKS (20) after D's first builder tick, which follows
+  the 100-tick threshold, so about 160 ticks are needed; no saving, left as it was.
+- the first settle in HY's `buildTerrain` (chunk activation), t3a/voc natural caps are their own (60 s/30 s, not 90 s).
+
+### Measured (speed audit B)
+
+`change --only <24 steps> --no-split --no-cache --no-turbo` (normal queue, load 100-160), three runs of drivers from: origin/main 596b89a8
+(`artifacts/gate-runs-spB/old`, 20 PASS / 4 FAIL), this branch at 41d0b22a (`new`, 22 / 2) and the branch with `GATE_SPRINT=0` on the 9
+sprinted steps (`new0`, 8 / 1). Compared by `ok`/`FAIL`/`rec` check names and statuses (split-proof's mask): **no check present on one side only
+and no status difference caused by a changed wait**; the exceptions are all main's own intermittents, present with the waits unchanged:
+- 6cf2-scenario-scatter, item 8 natural exactness: FAIL in old (2 unclassified) and in new0 (1 unclassified, real-time stand), ok in new (0).
+- 4d-all "group undo": FAIL in old (the known intermittent), ok in new and new0.
+- rs-survival-smoke item 14 (PARTIAL at 96.7%) and y2-ingame fail identically in old and new. Item 10 (rs02m2 "region reads REMOVING after the reopen:
+  REMOVED") failed once, in new only; item 10 uses none of the changed waits (a removal that finished before the read), so it is listed, not reverted.
+
+| step | old | new | new0 (`GATE_SPRINT=0`) |
+|---|---|---|---|
+| 6a-forest | 2.6 | 0.5 | 2.5 |
+| h-probe | 2.8 | 1.0 | 2.8 |
+| 6cf2-scenario-scatter | 11.6 | 6.3 | 11.0 |
+| 6cd-scenario-districts | 9.5 | 5.2 | 7.0 |
+| 4d-all (6855 ticks sprinted in 17.8 s) | 12.4 | 8.3 | 13.2 |
+| 5b-chains | 6.0 | 2.5 | |
+| 4e-orders-full | 10.2 | 6.0 | |
+| 4e-crash-full | 13.3 | 8.9 | |
+| 6a-crash | 9.1 | 6.1 | |
+| s3-plan | 7.8 | 4.4 | |
+| rp-crash / t3a-frozen / 0a-batches | 3.8 / 3.1 / 2.3 | 2.8 / 2.1 / 1.7 | |
+| rs-ingame, rs-survival-smoke, hy-ingame-smoke | 14.0, 20.7, 13.4 | 13.3, 19.1, 11.8 | 13.5, -, 15.5 |
+| the rest (6a-eflat, 6b-versionc, 6b-commands, voc-natural, y2, 0a-keys, hy-crash/cold) | | within a minute | |
+
+Minutes, one run each under heavy load, so small differences are noise. The natural stand sprinted 2400 ticks in 1.4 s. The quiet settles ended early
+only on flat or settled worlds (s3-plan 10 s flat, 81 s natural; rs item 14 82 s); t3a, voc-natural and 6b-commands ran to their caps, as expected.
+
 
 ## P3: the water and survival ledger lints (2026-10-21)
 
@@ -1503,10 +1698,12 @@ release; `node tools/split-proof.mjs --whole <A> --parts <B>`):
 |---|---|---|---|---|
 | irr-ingame / irr-ingame-smoke | 29.4 / 26.7 | 3 | worlds: v62 live; v62 exact + the breach fix + 5 (a); the lamp path, s01 with its control, v63, d01, irrUnmasked, the pad, the probe | 34/34, 29/29: equal, full masked lines too |
 | h-ingame / h-ingame-smoke | 15.5 / 12.3 | 3 / 2 | H-core; H-a flat; H-a exact, farm, H-b flat | 19/19, 16/16: equal |
-| hy-ingame / hy-ingame-smoke | 21.7 / 14.7 | 3 / 2 | HY-core; the riffle table, villagers, HY-c's water gate and v58; item 9's kinds | 31/31, 24/24: equal |
+| hy-ingame / hy-ingame-smoke | 21.7 / 14.7 | 4 / 2 | HY-core; the riffle table, villagers, HY-c's water gate and v58; item 9's kinds in two sections (item9a, item9b: every other fixture), each its own part (smoke: with core, and with the villagers part) (set C) | 31/31, 24/24: equal (before set C, 3 / 2 parts) |
 | 4d-all / 4d-all-full | 13.1 / 15.3 | 2 | base, then survival; base, then the other nine sub-steps (stages and gap0 with waiting) | 23/23: same checks |
 | 5b-chains-full | 31.4 | 3 | the 21 scripts (fixed + 20 seeds), each from its own world; E1 over each part's states | 3 names / 13 lines: equal |
-| rs-survival | 23.2 | 3 | items 5; 9; 8 and 10 | 11/11: equal |
+| rs-survival | 23.2 | 4 (set C) | rs02 + rs02r; rs03; village + item 10; L-V7 + item 14 (sections are builds, not items: "Speed set C") | 11/11: equal (before set C, items 5; 9; 8 and 10) |
+| rsb-crash | 10.4 | 2 (set C) | rs04crash; rs03stop | "Speed set C" |
+| 0a-tiles | 7.1 | 3 (set C) | the unhooked run; SLOW_TILES=4; SLOW_TILES=2 | "Speed set C" |
 | 6cf2-scenario-scatter | 12.2 | 2 | harvest, then scatter_demo flat and natural; harvest, then scatter_cave (a shell split) | see below |
 | irr-unit, kc-unit, f3-unit, fl-unit, s3-unit | 14-36 under turbo | **whole again** (2026-10-23) | was: the byte-identity fixture loop in 3 round-robin slices. With the shared plans each whole step is 0.2-7.5 min ("Shared plans"), so the split is dropped; the drivers keep their sections (`GATE_PART_SECTIONS` still works by hand) | proof below (the turbo slice against the whole runs) |
 | voc-unit | 27-34 under turbo | 3 | item 5 (byte identity); item 13 and the census; the rest | proof below |
@@ -1553,6 +1750,36 @@ their steps are not split.
 restores took 10.0 of 414 step-minutes and the steps' own `gate6b.mjs base` 6.5: 4% together, under the 10% that would pay
 for a warm-server-per-shard reset and its proof. Under turbo the starts grow (28.7 of 447 step-minutes at 12 shards, 6%;
 16.5 of 339 at 9, 5%), still under 10%; a reset proven clean (world hash, entities, journal) is not worth its risk at that.
+
+## Speed set C (2026-10-23): fixtures built once, serial loops split
+
+Noah approved the audit's set C on 2026-10-23 (`artifacts/audit-findings-2026-10-23.md`, `findings6.md`, `findings8.md`): the same
+work was being done several times in a run, and a few steps ran independent sections serially. Each change keeps its assertions; the
+three lines that go are listed, with where each is kept.
+
+**Work done once per run: `tools/lib/run-shared.mjs`.** The runner gives every step `GATE_RUN_SHARED`, a directory under the run's own
+dir (all shards, new for each run: nothing is reused across runs or heads). `sharedOnce(ns, key, build)` memoises in the process
+and, with the directory, across the run: the first caller takes `<key>.lock` (mkdir), builds, publishes `<key>.json` by rename; the
+others wait for it. A builder that throws drops its lock and publishes nothing (a waiter then builds for itself); a lock of a dead
+pid is taken over; a waiter builds for itself after 50 minutes. `kit/test/gate-run-shared.test.mjs` covers it.
+
+| change | what | assertions |
+|---|---|---|
+| RS INSTANT twin (`tools/lib/gate6crs-game.mjs` `twin`) | built once per fixture, lot entries, survival-toggle state and head: in the process and, through `GATE_RUN_SHARED`, in the run. rs02_walled's twin was built by items 5, 8, 9, 11 and 18 (5 times), rs03_water's by items 5 and 9. The snapshot is then a file of the shared dir; `twinDiff` writes its `.diff.json` into the caller's dir | none changed; a caller still diffs its world against the snapshot |
+| rs-survival builds | item 5's rs02 was item 8's rs02c without its conservation sum, item 5's rs03 was item 9's rs03r before its keep hook (the smoke tier already built each once, as rs02c and rs03r). Each is built once with the sum on (`Conservation.insert` and the default feed send the same `dev.crate.insert {exact: true}`). Sections are now the builds: `rs02` (items 3, 5, 8), `rs03` (3, 5, 9), `village`, `rs02r` (9), `item10`, `lv7`, `item14` | the lines `item 5 (rs02): ...`, `item 3 (rs02, ...`, `item 5 (rs03): ...` and `item 3 (rs03, ...` are the surviving `(rs02c)` and `(rs03r)` lines (the same check over the same build, the tag aside). One thing is not the same: rs03's E-flat after the removal is read after rs03r's keep hook (a player's block, a weathered copper cell), as item 9 already does and as the smoke tier did |
+| rs-ingame `latent` | `latent` (creative rs01, survival toggle switched on, checked and realised) and item 4's twin were two builds of one site. The twin takes `toggleOn` for rs01: built once with the toggle on, `latent` reads its answers, item 4 diffs against it. (The toggle is per world, `architect-world.json`, and the creative base has it off, so the twin was not already the latent world: item 4's reference is now the toggle-on one.) The region's removal at the end of `latent` is gone (no check followed it) | none dropped |
+| rsb-crash | `rs04crash` and `rs03stop` are two parts | none |
+| hy-ingame item 9 | 11 fixtures in one section: `item9a` (v50 v52 v54 v56 v57b steward), `item9b` (v51 v53 v55 v57 v59); smoke: v50 v54 v56 / v51 v55 | none |
+| 0a-tiles | `unhooked`, `slow4`, `slow2` are three parts. The two slow runs are judged against the unhooked run's sha: it is run once per gate run, by whichever part asks first (`sharedOnce`), the others wait for it | none |
+| h-rmcrash (`tools/lib/gate6ch-holders.mjs`) | `setUp` (fresh world, h_core_demo planned and realised, the stair site layered) ran for each of 4 kill points to the same state. It runs once; each point is a copy of the saved world, opened, with its own settled and precondition checks (the stair's stack in the copy, its waterlogged block, the region PLACED) | none; `h-holders` runs `setUp` once, nothing to share |
+| 6b-versions | each of versiona's two runs and versionb's two plans planned and prepared the same rift_city claim: versiona prepares it once in a copy of the flat base that both runs copy; versionb plans and prepares it once for both doctored plans. (A prepare is per world: versiona and versionb are two processes in two worlds, nothing is shared between them) | none |
+| sch-placement, sch-refusals | one step `sch-placement` (placement, then refusals) in one sim client | the refusals' lines are in `sch-placement` |
+| w-ingame pathbibles | S7 flat with the coarse-dirt bible (g6cv_village) is `6cv-scenario-s7`'s flat run: when that run of the same gate run has finished at this head (`scenarios.mjs` lists a finished run in `GATE_RUN_SHARED/scenario-runs/`), pathbibles reads it; else it runs it as before | none |
+| w-ingame variants | the gravity broken variant was run alone and named here; `w-unit` runs `village-safety.test.mjs` whole (item 1/3/4, which holds `gravity broken variant`) | the line `variant: a gravel verge over a 2-deep gap with the rule off` is gone from w-ingame; w-unit's `items 1, 3, 4 (kit)` line holds the test |
+
+**Not done, and why.** 6cf2-scenario-scatter's harvest: the whole step is 10 s per part (`harvest` 2 s for the 72 stamps twice, in the
+slice run of 2026-10-22); its second stamping pass is the "same bytes" determinism check, so a copy would remove the assertion for
+nothing saved.
 
 ## Fast checks P1 (2026-10-21): the undo assertions move to the undo model
 

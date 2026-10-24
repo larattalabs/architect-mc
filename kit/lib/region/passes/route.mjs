@@ -17,6 +17,11 @@ import { ropeActive, ropeCells, ropeCommit, ropeExpand, ropeFail, ropeInit, rope
 // (6c T3) the bridge row (T3a's file) and the tunnel row (T3b's file): each file owns its row's hooks, this table only lists them
 import { bridgeActive, bridgeCells, bridgeCommit, bridgeExpand, bridgeFail, bridgeInit, bridgeNeedsFlag } from './moves/bridge.mjs';
 import { tunnelActive, tunnelBlocks, tunnelCells, tunnelCommit, tunnelExpand, tunnelFail, tunnelInit, tunnelNeedsFlag, tunnelPrune } from './moves/tunnel.mjs';
+// (7a foundation) rows 9 lift (LF's file), 10 catwalk (CW's), 11 rock_stair (RK's), and the edge profiles over the built-in moves (CL's)
+import { liftActive, liftBlocks, liftCells, liftCommit, liftExpand, liftFail, liftInit, liftNeedsFlag } from './moves/lift.mjs';
+import { catwalkActive, catwalkBlocks, catwalkCells, catwalkCommit, catwalkExpand, catwalkFail, catwalkInit, catwalkNeedsFlag } from './moves/catwalk.mjs';
+import { rockStairActive, rockStairBlocks, rockStairCells, rockStairCommit, rockStairExpand, rockStairFail, rockStairInit, rockStairNeedsFlag } from './moves/rockStair.mjs';
+import { PROFILES } from './moves/profiles.mjs';
 
 /** The 8 headings (x east, z south): E, SE, S, SW, W, NW, N, NE. Even headings are cardinal. */
 export const DIRS = Object.freeze([[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]);
@@ -71,6 +76,11 @@ const isInt = Number.isInteger;
  * walks at most `approach` (default 16) at each end. A row with `crossesWater` (the bridge) has its edges' coarse corridor found over the
  * claim without the water obstacle, so a corridor exists across a river the row may span. An edge's T3 options ride in `edge.t3` ({bridge: {...}, tunnel: {...}}, opaque
  * to this pass), the pass-level inputs in `intent.bridge` and `intent.tunnel`.
+ * (7a foundation) Rows 9 (lift), 10 (catwalk) and 11 (rock_stair) follow tunnel, opt-in the same way (`spans`, `once`); an edge's 7a
+ * options ride in `edge.t7` ({lift, catwalk, rock_stair}, opaque here), the pass-level inputs in `intent.lift`, `intent.catwalk` and
+ * `intent.rockStair`. An edge's `profile` ('stair' | 'switchback' | 'ladder', moves/profiles.mjs) merges its costs over COST and sets
+ * its stairs, ladders and ladder limit for that edge's search only; absent, the search is T2's byte for byte. `auto` lists none of
+ * rows 9-11 (S-7a-1).
  * Order and ties: a state's moves are relaxed walk, stair, hairpin, ladder, then each active special row in table order; a row
  * relaxes its candidates in its own fixed order (the gate move: at most one, straight ahead; the rope move: K1b's, by span length
  * ascending). The heap breaks ties by (f, g, x, z, heading, k, d, flag), the flag last, so an unflagged state wins a tie.
@@ -82,9 +92,14 @@ export const SPECIAL_MOVES = Object.freeze([
   Object.freeze({ name: 'rope', code: 6, segment: 'rope', flag: true, init: ropeInit, active: ropeActive, needsFlag: ropeNeedsFlag, blocks: () => null, expand: ropeExpand, cells: ropeCells, commit: ropeCommit, fail: ropeFail }),
   Object.freeze({ name: 'bridge', code: 7, segment: 'bridge', flag: true, crossesWater: true, init: bridgeInit, active: bridgeActive, needsFlag: bridgeNeedsFlag, blocks: () => null, expand: bridgeExpand, cells: bridgeCells, commit: bridgeCommit, fail: bridgeFail }),
   Object.freeze({ name: 'tunnel', code: 8, segment: 'tunnel', flag: true, init: tunnelInit, active: tunnelActive, needsFlag: tunnelNeedsFlag, blocks: tunnelBlocks, expand: tunnelExpand, cells: tunnelCells, commit: tunnelCommit, fail: tunnelFail, prune: tunnelPrune }),
+  // (7a foundation) rows 9-11 (docs/CONTRACT.md "Phase 7a foundation" §3.2), each in its slice's file; the foundation's inits return null
+  Object.freeze({ name: 'lift', code: 9, segment: 'lift', flag: true, init: liftInit, active: liftActive, needsFlag: liftNeedsFlag, blocks: liftBlocks, expand: liftExpand, cells: liftCells, commit: liftCommit, fail: liftFail }),
+  Object.freeze({ name: 'catwalk', code: 10, segment: 'catwalk', flag: true, init: catwalkInit, active: catwalkActive, needsFlag: catwalkNeedsFlag, blocks: catwalkBlocks, expand: catwalkExpand, cells: catwalkCells, commit: catwalkCommit, fail: catwalkFail }),
+  Object.freeze({ name: 'rock_stair', code: 11, segment: 'rock_stair', flag: true, init: rockStairInit, active: rockStairActive, needsFlag: rockStairNeedsFlag, blocks: rockStairBlocks, expand: rockStairExpand, cells: rockStairCells, commit: rockStairCommit, fail: rockStairFail }),
 ]);
 
-/** (6c T3) The row an edge uses exactly once: `once` ('rope' | 'bridge' | 'tunnel'), or K1b's `spanOnce` read as 'rope'; else null. */
+/** (6c T3) The row an edge uses exactly once: `once` ('rope' | 'bridge' | 'tunnel'; (7a) 'lift' | 'catwalk' | 'rock_stair'), or K1b's
+ * `spanOnce` read as 'rope'; else null. */
 export const onceOf = (edge) => (typeof edge?.once === 'string' ? edge.once : edge?.spanOnce ? 'rope' : null);
 
 /**
@@ -237,6 +252,8 @@ function corridorOf(env, blockedW, si, sj, ti, tj, maxGrade, radius = CORRIDOR) 
  */
 function search(env, ctx) {
   const { W, D } = env;
+  // (7a foundation) the edge's profile (moves/profiles.mjs): its costs merged over COST and its ladder limit; absent, COST itself
+  const C = ctx.cost ?? COST, LMAX = ctx.ladderMax ?? LADDER_MAX;
   const { G, corridor, blockedW, blocked1, builtY, prefer, start, goal, Gq, w, laneW, Ld, latLo, latHi, maxCut, maxFill, stairs, ladders, nearEnd, maxStates = 24_000_000, maxExpand = Infinity } = ctx;
   // (7a K1) the special moves this edge searches with, the flag bit (F = 2 when a row may set it) and whether the goal needs it
   const special = ctx.special ?? [], F = special.some((x) => x.m.flag) ? 2 : 1, needFlag = !!ctx.needFlag;
@@ -332,14 +349,14 @@ function search(env, ctx) {
         const y2 = builtY[nk];
         if (Math.abs(y2 - y) > 1) continue;
         if (diag && ((builtY[ck] !== NONE && Math.abs(builtY[ck] - y2) > 1) || (builtY[ck] === NONE && dOf(y2, ck) < 0))) continue;
-        relax(s, nk, h2, dh ? 0 : Math.min(kk + 1, TURN_COOLDOWN), y2 * FP, Math.floor((diag ? COST.diag : COST.step) / 3) + (dh ? COST.turn : 0), 4, 0, true);
+        relax(s, nk, h2, dh ? 0 : Math.min(kk + 1, TURN_COOLDOWN), y2 * FP, Math.floor((diag ? C.diag : C.step) / 3) + (dh ? C.turn : 0), 4, 0, true);
         continue;
       }
       let nq = 0;
       const toward = Math.max(q - Gq, Math.min(q + Gq, G[nk] * FP));
       qs[nq++] = toward;
       for (const c of [q - Gq, q, q + Gq]) if (c !== toward) qs[nq++] = c;
-      let len = diag ? COST.diag : COST.step;
+      let len = diag ? C.diag : C.step;
       if (prefer[nk]) len = Math.floor(len / 3);
       for (let t = 0; t < nq; t++) {
         const q2 = qs[t], y2 = yOf(q2);
@@ -350,7 +367,7 @@ function search(env, ctx) {
           cf += Math.abs(y2 - G[ck]);
         }
         if (fpBuilt(nk, y2, false)) continue;
-        relax(s, nk, h2, dh ? 0 : Math.min(kk + 1, TURN_COOLDOWN), q2, len + (dh ? COST.turn : 0) + COST.grade * Math.abs(y2 - y) + COST.cutFill * cf * w, 0, 0);
+        relax(s, nk, h2, dh ? 0 : Math.min(kk + 1, TURN_COOLDOWN), q2, len + (dh ? C.turn : 0) + C.grade * Math.abs(y2 - y) + C.cutFill * cf * w, 0, 0);
       }
     }
     // stair flights: n cells rising (or falling) 1 each, then 2 flat cells; cardinal, within 45 degrees of the heading
@@ -380,8 +397,8 @@ function search(env, ctx) {
             // (hysteresis: a flight over preferred cells costs a third, as a walk does)
             let pref = 1;
             for (let t = 1; t <= n + 2 && pref; t++) { const pi = i + di * t, pj = j + dj * t; if (!prefer[pi + pj * W]) pref = 0; }
-            const fc = COST.flight + COST.stair * n + COST.step * 2 + COST.cutFill * (cf + cf2) * w;
-            relax(s, last, hf, 2, yn * FP, (pref ? Math.floor(fc / 3) : fc) + (hf !== h ? COST.turn : 0), 1, n * 2 + (sg > 0 ? 1 : 0));
+            const fc = C.flight + C.stair * n + C.step * 2 + C.cutFill * (cf + cf2) * w;
+            relax(s, last, hf, 2, yn * FP, (pref ? Math.floor(fc / 3) : fc) + (hf !== h ? C.turn : 0), 1, n * 2 + (sg > 0 ? 1 : 0));
           }
         }
       }
@@ -407,7 +424,7 @@ function search(env, ctx) {
           if (ei < 0 || ej < 0 || ei >= W || ej >= D) continue;
           const ek = ei + ej * W;
           if (!inS(ek) || builtY[ek] !== NONE) continue;
-          relax(s, ek, (h + 4) & 7, 0, y * FP, COST.hairpin + COST.landing * cnt + COST.step * (laneW + 2) + COST.cutFill * cf, 2, side > 0 ? 1 : 0);
+          relax(s, ek, (h + 4) & 7, 0, y * FP, C.hairpin + C.landing * cnt + C.step * (laneW + 2) + C.cutFill * cf, 2, side > 0 ? 1 : 0);
         }
       }
       // ladders (player-only edges): up a cliff face ahead, or down one; the walk meets the land at both feet
@@ -415,7 +432,7 @@ function search(env, ctx) {
         const ni = i + di, nj = j + dj;
         if (ni >= 0 && nj >= 0 && ni < W && nj < D) {
           const nk = ni + nj * W, rise = G[nk] - y;
-          if (inS(nk) && builtY[nk] === NONE && !nearEnd[k] && !nearEnd[nk] && Math.abs(rise) >= 2 && Math.abs(rise) <= LADDER_MAX) relax(s, nk, h, 2, G[nk] * FP, COST.ladder + COST.ladderPer * Math.abs(rise), 3, rise > 0 ? 1 : 0);
+          if (inS(nk) && builtY[nk] === NONE && !nearEnd[k] && !nearEnd[nk] && Math.abs(rise) >= 2 && Math.abs(rise) <= LMAX) relax(s, nk, h, 2, G[nk] * FP, C.ladder + C.ladderPer * Math.abs(rise), 3, rise > 0 ? 1 : 0);
         }
       }
     }
@@ -714,8 +731,12 @@ export function routePass(survey, volumes, intent) {
     const lead = isInt(e.to?.lead) && e.to.lead > 0 && Array.isArray(e.to.facing) ? Math.min(TURN_COOLDOWN, e.to.lead) : 0;
     const sgn = (v) => (v > 0 ? 1 : v < 0 ? -1 : 0);
     const goalH = lead ? DIRS.findIndex((d) => d[0] === -sgn(e.to.facing[0]) && d[1] === -sgn(e.to.facing[1])) : -1;
+    // (7a foundation) the edge's profile: its costs over COST, its stairs and ladders ANDed with the pass's, its ladder limit
+    const prof = e.profile === undefined || e.profile === null ? null : PROFILES[e.profile];
+    if (e.profile !== undefined && e.profile !== null && !prof) throw new Error(`route ${e.id}: profile must be one of ${Object.keys(PROFILES).join(', ')}`);
     const sctx = { G, builtY, prefer: preferE, start: ends[0], goal: ends[1], ...(goalH >= 0 && (goalH & 1) === 0 ? { goalH, goalLead: lead } : {}), Gq, w, laneW: Math.floor((w + r - 1) / r), Ld: Math.floor((Math.max(hairpinLanding, w) + r - 1) / r),
-      latLo: Math.floor(lo / r), latHi: Math.floor((hi + r - 1) / r), maxCut, maxFill, stairs: (e.stairs ?? stairs) && !coarse, ladders, nearEnd, // ((6c S3) an edge's own `stairs: false`)
+      latLo: Math.floor(lo / r), latHi: Math.floor((hi + r - 1) / r), maxCut, maxFill, stairs: (e.stairs ?? stairs) && !coarse && (!prof || prof.stairs), ladders: ladders && (!prof || prof.ladders), nearEnd, // ((6c S3) an edge's own `stairs: false`)
+      ...(prof ? { cost: { ...COST, ...prof.cost }, ladderMax: prof.ladderMax } : {}),
       ...(sp.length ? { special: sp, needFlag } : {}) };
     // ---- the moves as 4-connected centre cells with their surface y, and segments
     const toPath = (res) => {

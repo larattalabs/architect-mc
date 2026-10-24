@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import * as P3 from './p3-tier.mjs';
+import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
 
 /**
  * Item 11's named exceptions: the fixtures that may differ from origin/main; every other fixture must not. (The H batch's T3a r06 and
@@ -14,7 +15,7 @@ import * as P3 from './p3-tier.mjs';
  * column onto the route's side (lo/hi -1..0, not 0..1) and their answers' cell counts and IRs differ; the overall answers are the same.
  */
 // ((6c HY) h/r08_course (a course: HY-b's v51) and extension/e15 (channel.course left the reserved list) by name, though this loop reads neither dir)
-export const UNCHANGED_EXCEPTIONS = Object.freeze(['valid/v33_rope_bridge.json', 'valid/v34_auto.json', 'h/r08_course.json', 'extension/e15_every_reserved_a.json', ...FL_MOVED.filter((n) => n !== 'extension/e15_every_reserved_a.json')]);
+export const UNCHANGED_EXCEPTIONS = Object.freeze(['valid/v33_rope_bridge.json', 'valid/v34_auto.json', 'h/r08_course.json', 'extension/e15_every_reserved_a.json', ...FL_MOVED.filter((n) => n !== 'extension/e15_every_reserved_a.json'), ...Object.keys(F7A_MOVED).filter((n) => !FL_MOVED.includes(n))]); // ((7a foundation) its named movers)
 /** Fixtures the comparison skips by name: refused/k1a_r01 runs the two-plan harness (its `volume`; H-b re-answers it WATER deep). */
 export const UNCHANGED_SKIPPED = Object.freeze(['refused/k1a_r01_wall_water.json']);
 
@@ -596,7 +597,8 @@ export async function probe(ctx) {
     let prev = { fire: [], gone: new Set() };
     const direct = [], spread = [];
     for (let i = 0; i < 24; i++) {
-      await sleep(5000);
+      // (speed audit B) 5 s of game time: 100 ticks sprinted on a headless host (GATE_SPRINT=0 / a client: the original sleep(5000))
+      await L.gameWait(5000, { real: sleep, label: i === 0 ? 'h-probe lava sample (x24)' : `h-probe lava sample ${i}` });
       const cur = await sample(i);
       for (const p of posts) {
         const k = k3([p.x, p.y, p.z]);
