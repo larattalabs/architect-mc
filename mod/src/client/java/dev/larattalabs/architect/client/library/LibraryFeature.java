@@ -653,7 +653,10 @@ public final class LibraryFeature {
 		}
 		// the bible it was built with (phase 4b)
 		// (U2, as the sidecar's setModePin) a materials-only entry's pin only names the Style its roles came from: not set mode
-		f.bible = r != null && r.has("palette") ? null : c.bible();
+		// (U5b) an entry made in set mode: its Style picked with its parts on (when the Style still has them)
+		String setBible = r != null && r.has("palette") ? null : c.bible();
+		var setStyle = setBible == null ? java.util.Optional.<dev.larattalabs.architect.api.Bible>empty() : dev.larattalabs.architect.client.design.SetFeature
+			.bible(setBible);
 		// (Style unification U2) a materials-only entry: its Style's roles inline; else the style chip or the words
 		var entryStyle = r != null && r.has("palette") && r.get("palette").isJsonObject() && r.getAsJsonObject("palette").has("bible")
 			? dev.larattalabs.architect.library.VariantForm.entryStyle(r.getAsJsonObject("palette"), palettes()) : null;
@@ -661,6 +664,9 @@ public final class LibraryFeature {
 			f.styleForm.pick(entryStyle);
 			f.styleText.clear();
 			f.ownWordsMode = false;
+		} else if (setStyle.isPresent()) {
+			f.pickBible(setStyle.get());
+			f.setUseParts(true);
 		} else if (r != null && r.has("style") && r.get("style").isJsonPrimitive()) {
 			String style = r.get("style").getAsString();
 			if (DesignSpec.find(DesignSpec.STYLES, style) != null) {

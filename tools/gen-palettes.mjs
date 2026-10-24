@@ -176,6 +176,9 @@ function formCases(sets) {
   fs.ashfall = formStyle({ id: 'bib_ashfall', name: 'Ashfall', version: 3, kind: 'bible', roles: sets['bible:ashfall'], suggestedFeatures: ['basement', 'chimney'], tags: ['nether', 'foundry'] });
   fs.cottage = formStyle({ id: 'bib_stone_cottage', name: 'Stone cottage', version: 2, kind: 'bible', roles: sets['mix:stone_cottage'], suggestedFeatures: ['garden', 'chimney', 'porch', 'balcony'], tags: ['rustic', 'stone'] });
   fs.inputs = formStyle({ kind: 'inputs', inputs: { wood: 'cherry', stone: 'bricks', roof: 'deepslate_tiles', accent: 'oak' } });
+  // (U5b) Styles with their own parts: a Claude-made one (on by default) and a built-in's hand-made copy with parts added (off)
+  fs.ashfallParts = formStyle({ id: 'bib_ashfall', name: 'Ashfall', version: 4, kind: 'bible', roles: sets['bible:ashfall'], suggestedFeatures: ['basement'], tags: ['nether'], parts: 6, partsDefault: true });
+  fs.medievalParts = formStyle({ id: 'bib_medieval_parts', name: 'Medieval (parts)', version: 1, kind: 'bible', roles: PALETTES.medieval.roles, suggestedFeatures: ['chimney', 'balcony'], tags: ['medieval'], parts: 5 });
   const forms = [];
   const run = (name, start, ops) => {
     let st = formNew({ ...start, style: start.style ? fs[start.style] : null });
@@ -212,6 +215,10 @@ function formCases(sets) {
   run('variant: an entry with plain inputs', { mode: 'variant', style: 'inputs' }, [
     ['main', 'roof', 'spruce'], ['role', 'light', 'glowstone'], ['main', 'roof', 'deepslate_tiles'], ['pick', 'cherry'], ['main', 'stone', 'cobblestone']]);
   run('variant: an entry with no palette', { mode: 'variant' }, [['main', 'wood', 'oak'], ['pick', 'dark'], ['main', 'accent', 'birch'], ['unpick']]);
+  run('new: parts: a Claude-made Style starts on, a copy with parts starts off, a mix sends the palette, refusals', { mode: 'new', features: [] }, [
+    ['pick', 'ashfallParts'], ['parts', false], ['parts', true], ['main', 'wood', 'oak'], ['revert'], ['pick', 'medievalParts'], ['parts', true], ['pick', 'medievalParts'],
+    ['pick', 'medieval'], ['parts', true], ['pick', 'ashfallParts'], ['unpick'], ['parts', true]]);
+  run('variant: parts are refused (they are in the design\'s code)', { mode: 'variant', style: 'ashfallParts' }, [['parts', true], ['main', 'wood', 'oak'], ['pick', 'medievalParts']]);
   // every built-in Style: picked on a new form, each row edited once
   for (const n of Object.keys(PALETTES)) {
     run(`new: ${n}, each row`, { mode: 'new', features: [] }, [['pick', n], ['main', 'wood', 'jungle'], ['main', 'stone', 'polished_blackstone_bricks'], ['main', 'roof', 'cut_copper'],

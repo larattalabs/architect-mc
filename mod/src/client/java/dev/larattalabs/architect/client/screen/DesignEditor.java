@@ -186,6 +186,17 @@ final class DesignEditor {
 	}
 
 	/** A chip as a control; returns its width. */
+	/** (U5b) Where a Style's parts came from: "7 parts · drafted with the Style by Claude · v3" / "added with Add parts… (Medieval v1)". */
+	static String partsProvenance(StyleForm.@org.jspecify.annotations.Nullable Style st) {
+		if (st == null || st.parts() <= 0) {
+			return "";
+		}
+		Bible b = st.id() == null ? null : SetFeature.bible(st.id()).filter(x -> x.version() == st.version()).orElse(null);
+		String from = b == null ? "" : b.builtin() ? " · shipped with the kit" : "claude".equals(b.origin()) ? " · drafted with the Style by Claude"
+			: " · added with Add parts…" + b.basedOn().map(p -> " (based on " + p.id() + " v" + p.version() + ")").orElse("");
+		return st.parts() + " part" + (st.parts() == 1 ? "" : "s") + from + " · v" + st.version();
+	}
+
 	private int chip(GuiGraphicsExtractor g, String id, Chip c, int x, int y, int mx, int my) {
 		int w = c.draw(g, font(), x, y, mx, my(my));
 		s.control(id, c.label(), c, c.isSelected());
@@ -561,10 +572,11 @@ final class DesignEditor {
 		}
 		// ---- Style
 		String styleSummary = f.ownWords() ? (f.styleText.value().isBlank() ? "your own words" : "“" + f.styleText.value() + "”")
-			: f.bible != null ? SetFeature.bible(f.bible).map(Bible::name).orElse(f.bible) + " (Claude-made: its own materials)" : f.styleForm.base() == null
-				? "none" : nameOf(f.styleForm.base()) + (f.noteSent().isEmpty() ? "" : " · “" + f.noteSent() + "”");
+			: f.styleForm.base() == null ? "none" : nameOf(f.styleForm.base()) + (f.bible() != null ? " · its parts" : "") + (f.noteSent().isEmpty() ? ""
+				: " · “" + f.noteSent() + "”");
 		y += header(g, style, "style", styleSummary, x, y, iw, mx, my);
-		String cur = f.bible != null ? f.bible : f.styleForm.base() == null ? null : f.styleForm.base().id();
+		String cur = f.styleForm.base() == null ? null : f.styleForm.base().id();
+		Runnable partsToggle = () -> f.setUseParts(!f.styleForm.usePartsChosen());
 		if (style.open()) {
 			int sx = x + 4;
 			label(g, "Style", sx, y + 2);
@@ -574,7 +586,7 @@ final class DesignEditor {
 				s.textField(g, Focus.STYLE, styleTextView, f.styleText, sx + LABEL_W, y, iw - 4 - LABEL_W, new TextFieldView.Style(null, 0,
 					"your own words instead of a Style, e.g. art deco seaside", null, f.styleText.length() + "/" + DesignSpec.MAX_STYLE, UiStyle.mutedText(), 1));
 			} else {
-				String with = cur == null ? "a Style" : f.bible != null ? SetFeature.bible(f.bible).map(Bible::name).orElse(cur) : nameOf(f.styleForm.base());
+				String with = cur == null ? "a Style" : nameOf(f.styleForm.base());
 				s.textField(g, Focus.STYLE_NOTE, noteView, f.styleNote, sx + LABEL_W, y, iw - 4 - LABEL_W, new TextFieldView.Style(null, 0,
 					"optional words with " + with + ", e.g. mossy, lived-in", null, null, 0, 1));
 			}
@@ -587,7 +599,22 @@ final class DesignEditor {
 			} else {
 				y = muted(g, explain, sx + LABEL_W, y, iw - 4 - LABEL_W) + 2;
 			}
+			// (U5b) a Style with its own parts: "Use this style's parts" (set mode), with where the parts came from
+			if (!f.ownWords() && f.styleForm.partsOffered()) {
+				label(g, "Parts", sx, y);
+				boolean chosen = f.styleForm.usePartsChosen();
+				Chip c = new Chip(chosen ? "Use this style's parts: on" : "Use this style's parts: off", partsToggle).selected(chosen);
+				int cw = chip(g, "style:parts", c, sx + LABEL_W, y - 4, mx, my);
+				String note = f.styleForm.mix() && chosen ? "a custom mix sends the materials only: Revert to use the parts" : chosen
+					? "set mode: its components and restraint" : "off: its look as guidance (the default)";
+				g.text(font(), TextUtil.ellipsize(font(), note, iw - 4 - LABEL_W - cw - 6), sx + LABEL_W + cw + 6, y + 1, UiStyle.mutedText(), false);
+				y += ROW - 4;
+				y = muted(g, partsProvenance(f.styleForm.base()), sx + LABEL_W, y, iw - 4 - LABEL_W) + 2;
+			}
 		} else {
+			if (!f.ownWords() && f.styleForm.partsOffered()) {
+				s.devControl("style:parts", "Use this style's parts", true, f.styleForm.usePartsChosen(), partsToggle);
+			}
 			for (Bible b : StyleCatalog.withBuiltins(SetFeature.bibles(), LibraryFeature.palettes())) {
 				s.devControl("style:" + b.id(), b.name(), true, b.id().equals(cur), () -> f.pickBible(b));
 			}
@@ -596,21 +623,17 @@ final class DesignEditor {
 		}
 		s.devControl("design:bible", "the Style browser", true, false, () -> StyleBrowserScreen.open(cur, f::pickBible));
 		// ---- Materials
-		String matSummary = f.ownWords() ? "the designer picks them (your own words)" : f.bible != null ? "the Claude-made Style's own (set mode)"
-			: f.styleForm.base() == null ? "none" : f.styleForm.mix() ? "custom mix · based on " + nameOf(f.styleForm.base()) : "from " + f.styleForm.base()
-				.name();
+		String matSummary = f.ownWords() ? "the designer picks them (your own words)" : f.styleForm.base() == null ? "none" : f.styleForm.mix()
+			? "custom mix · based on " + nameOf(f.styleForm.base()) : "from " + f.styleForm.base().name() + (f.bible() != null ? " (with its parts)" : "");
 		y += header(g, materials, "materials", matSummary, x, y, iw, mx, my);
 		if (materials.open()) {
 			int sx = x + 4;
-			if (f.ownWords() || f.styleForm.base() == null && f.bible == null) {
+			if (f.ownWords() || f.styleForm.base() == null) {
 				y = muted(g, "Your own words: no Style, so the designer picks the materials.", sx, y + 2, iw - 4);
 				Button pick = new Button("Pick a style…", () -> StyleBrowserScreen.open(cur, f::pickBible));
 				pick.draw(g, font(), sx, y + 2, pick.width(font()), Button.H, mx, my(my));
 				s.control("materials:pick_style", pick.label(), pick, false);
 				y += Button.H + 6;
-			} else if (f.bible != null) {
-				y = muted(g, "A Claude-made Style designs with its own materials and components (set mode). Duplicate it in the Style browser to "
-					+ "change them.", sx, y + 2, iw - 4) + 2;
 			} else {
 				y = materialRows(g, "design", f.styleForm, f.styleForm::editMain, moreRoles, sx, y + 2, iw - 4, mx, my, e -> f.sendError = e);
 			}
@@ -618,7 +641,7 @@ final class DesignEditor {
 			s.textField(g, Focus.MATERIALS, materialsView, f.materials, sx + LABEL_W, y, iw - 4 - LABEL_W, new TextFieldView.Style(null, 0,
 				"other materials in words (optional), e.g. mossy stone", null, null, 0, 1));
 			y += TextFieldView.BASE_H + 4;
-		} else if (f.styleForm.base() != null && f.bible == null && !f.ownWords() && f.styleForm.mix()) {
+		} else if (f.styleForm.base() != null && !f.ownWords() && f.styleForm.mix()) {
 			s.devControl("style:revert", "Revert", true, false, f.styleForm::revert);
 		}
 		// ---- Features

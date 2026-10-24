@@ -198,6 +198,17 @@ public final class StyleBrowserScreen extends PickerScreen {
 		return menu == null ? null : menu.name().toLowerCase(java.util.Locale.ROOT);
 	}
 
+	/** (U5b) "Add parts…" for the selected Style: the screen with the helper's estimate first. */
+	public void addParts() {
+		StyleCatalog.Card c = selectedCard();
+		menu = null;
+		if (c == null || !c.canAddParts()) {
+			message = c == null ? "Select a style first" : "Owned by a mod: only its owner adds parts";
+			return;
+		}
+		minecraft.gui.setScreen(new AddPartsScreen(c.bible(), this));
+	}
+
 	/** "Describe it": the screen where Claude drafts a Style (a bible job). */
 	public void describe() {
 		menu = null;
@@ -296,7 +307,8 @@ public final class StyleBrowserScreen extends PickerScreen {
 		if (menu == Menu.NEW) {
 			StyleCatalog.Card c = selectedCard();
 			String[][] items = {{"copy", c == null ? "Copy the selected style" : "Copy " + c.bible().name(), "free"}, {"builtin", "Start from a built-in…",
-				"free"}, {"describe", "Describe it (Claude drafts it)…", Claude.costHint()}};
+				"free"}, {"describe", "Describe it (Claude drafts it)…", Claude.costHint()}, {"parts", c == null ? "Add parts to the selected style…"
+					: (c.bible().hasParts() ? "Redraft the parts of " : "Add parts to ") + c.bible().name() + "…", AddPartsScreen.costLine()}};
 			int h = items.length * 30 + 8;
 			menuRect = new int[] {x, y, w, h};
 			Panels.framed(g, x - 2, y - 2, w + 4, h + 4);
@@ -304,7 +316,7 @@ public final class StyleBrowserScreen extends PickerScreen {
 			int yy = y + 4;
 			for (String[] it : items) {
 				Button b = new Button(it[1], () -> menuPick(it[0]));
-				b.disabled(it[0].equals("copy") && c == null);
+				b.disabled(it[0].equals("copy") && c == null || it[0].equals("parts") && (c == null || !c.canAddParts()));
 				b.draw(g, font, x + 4, yy, w - 8, Button.H, mx, my);
 				menuButtons.add(b);
 				g.text(font, TextUtil.ellipsize(font, it[2], w - 12), x + 6, yy + Button.H + 1, UiStyle.mutedText(), false);
@@ -328,12 +340,13 @@ public final class StyleBrowserScreen extends PickerScreen {
 			case "copy" -> duplicateSelected();
 			case "builtin" -> menu = Menu.BUILTIN;
 			case "describe" -> describe();
+			case "parts" -> addParts();
 			default -> {
 			}
 		}
 	}
 
-	/** The "+ New style" menu's items by id (DevBridge): copy, builtin, describe. */
+	/** The "+ New style" menu's items by id (DevBridge): copy, builtin, describe, parts (U5b). */
 	public void menuItem(String id) {
 		menuPick(id);
 	}

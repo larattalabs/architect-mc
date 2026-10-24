@@ -25196,3 +25196,127 @@ Every empty state (no designs, no match, nothing placed, no jobs, helper down) c
 **8. Theming.** Swatches and sheets are the Style's own blocks: the `colors` table that tools/gen-palettes.mjs adds to
 `palettes-fallback.json` (the side face's average from the game's textures, kit/lib/colors.mjs, for every block the Style table, the
 presets and the common role candidates name), else the block's map colour.
+
+## Style unification U5: the hybrid default (U5a), parts for any Style (U5b), medieval's wall (as built)
+
+Branch `slice/U5` (off main 72e8939f). Noah's decisions: docs/PLAN.md "After U4". Evidence U4: its section on `chore/u4-ab`. API: additive
+(the code says `NEXT`), a minor bump at merge. Sidecar feature `bible.parts`, appended last to `FEATURES`.
+
+**1. A Style's own parts.** One rule, in the sidecar (`bibles.ts` `partsOf`) and in Java (`Wire4b.partsOf`):
+- `parts` as stored: every bible job writes it since U5, an "Add parts" job writes it, and a hand save carries it forward;
+- else a built-in's: the components of the library the kit ships for it (`kit/bibles/<id>/components.mjs`: only rustic's), none for the
+  other 15;
+- else a bible job's from before U5 (origin `claude`, or none): its components;
+- else none (a hand-made Style: `bible.save`). Its version folder may hold a copy of the kit's reference library (saves before U5
+  copied it in); that copy is not its own.
+
+`BibleInfo` gains `parts` (and the shape hints `roofLanguage`, `silhouette`, `proportions`, `motifs`). `components` keeps its meaning
+(for a built-in it is now what the kit ships: `[]` but rustic's). **A Style without parts never runs bible set mode**, and no Style ever
+gets another Style's components:
+- `resolve()` hands out a `components.mjs` only when it is the Style's own; a built-in without a library has none (the rustic fallback
+  is gone). `referenceComponents()` is now only a bible job's starting template.
+- `bible.save` no longer copies the reference library into a hand-made version. A hand save of a Style with parts (a new version of
+  the same id) carries the head's `components.mjs` and `parts` forward (they read the roles).
+
+**2. The hybrid default (U5a).**
+- A materials-only request (`DesignRequest.palette`: a Style's roles inline, a preset name) gets, below the request, **"The Style's look:
+  <name> (guidance)"**: its blurb, roof language, the proportions that differ from the defaults (storey, roof pitch, overhang, window
+  rhythm, plinth), silhouette and motifs, each as "lean toward …" (motifs: "use one or two where they fit, none is required").
+  - Hints come from the Style the roles name: the pinned version, else its head. A custom mix takes the hints of the Style it is
+    based on. A preset name gives the built-in's. Plain inputs give none.
+  - No required components, no "follow it over your own taste", no `--restraint` (`claude/brief.ts` `styleHintLines`, `hintsOf`;
+    `sidecar.ts` `paletteHints`).
+- A request whose `bible` names a Style **without parts** (Steward's or any API caller's `withBible`, a group, a remix) gets the same:
+  - the Style's roles as the materials (`bible/bible.json`, `palette({bible})`) and its hints as guidance;
+  - no `components.mjs` in the scratch dir or the entry, and no restraint check (`setMode(d)` gates `--restraint`).
+- **An entry made in set mode before U5** with a Style that has no parts now (a built-in other than rustic, or a hand-made Style: both
+  got the kit's reference library then, and the entry's source imports it) is designed again (versionOf, polish, a report critique)
+  with **its own** `bible/components.mjs`, the library it was built with. Its source still builds. The design stays out of set mode
+  (the hybrid brief, no restraint). That file belongs to the entry; no Style gets it (`sidecar.ts` `designBible`, `entryComponents`).
+- **Set mode is unchanged for a Style with its own parts** (Claude-made bibles, rustic, a Style after "Add parts"): the 4b/5a section,
+  word for word, with its components and restraint (`bibleSection` with `parts` true or absent).
+- Units: `sidecar/test/styles-u5.test.ts` covers the brief (hints present; no component, restraint or "follow it" text), the hybrid
+  for medieval as a bible (rustic keeps set mode), set mode byte-equal for a Claude-made bible, and `partsOf`.
+- **Massing gap (recorded, not fixed):** a massing request carries no palette, so with Massing first (the default for L and plot) the
+  hints reach only the detail pass, after the shape was approved. Queued for the next slice.
+
+**3. "Add parts…" (U5b): `bible.parts {bibleId, version?, owner?, model?, budgetUsd?, opKey?}`.**
+- Acks `{jobId, bibleId, version, from: {id, version}, copy, adopted}`. A bible job seeded from the Style's latest version reuses the
+  bible job machinery (`Bibles.create`, `prepare`, the components pass, the pristine component check, the sheet, `install`):
+  - **no drafting pass**: the Style's own bible.json is the bible (the store's fields dropped; format 2, the default restraint unless it
+    had one), validated by the kit like a draft;
+  - roles, hints, tags, suggestedFeatures, blurb, owner and basedOn are kept; `partsOf {id, version}` records the source; the
+    components pass starts from the Style's own parts (a redraft), else the kit's reference library as the template;
+  - the job writes the next version; earlier versions are never touched. `version` given and no longer the latest is refused.
+- **Ownership** is `bible.save`'s:
+  - the player's Style (no owner, or a player UUID): by the player (no owner, or that UUID); it keeps its origin (a hand-made Style
+    stays `hand`, so the version GC keeps every version);
+  - a mod's Style: only that exact owner;
+  - an id an unfinished bible job holds is refused.
+- **A built-in Style: its parts go on a new hand-made copy**, `bib_<name>_parts` ("<Name> (parts)", version 1, `origin: hand`,
+  `basedOn {<builtin>, 1}`, owner = the caller), not a new version of the built-in. Why this one:
+  - Built-ins are the kit's. Their versions come from the kit (`builtinBible`, `kit/bibles/<id>/`), and every pin of `medieval v1` (the
+    materials-only entries, Steward's `withStyle`) resolves to the kit's record. A version 2 under the built-in id in the player's
+    `bibles/` would shadow it: `resolve(medieval, 1)` would fail once installed versions exist, `Bible.builtin` would turn false (the
+    Style becomes editable and moves to "Yours"), and the player's copy would hide every later kit update of that built-in.
+  - **For the later authoring of all 15 built-ins** (PLAN "After U4", item 3): run "Add parts" on each built-in in a dev game dir
+    (the paid step), review the sheets, then promote each copy's `components.mjs` into `kit/bibles/<id>/components.mjs`, where
+    `builtinComponentsFile` already reads rustic's. Every player then gets them as the built-in's own parts (`parts` from the kit,
+    set mode available for the built-in id, pins unchanged), and the dev copies are discarded. The promotion is a file copy and a
+    kit test; no index or pin migration is needed. A player's own copy (made before the promotion) stays a separate Style.
+- **The estimate first:** `bible.estimate {parts: true}` is the bible job's estimate as an upper bound (parts jobs skip the drafting pass
+  and are not measured on their own yet; they are not recorded into the bible average). The basis says so: "Add parts: at most a
+  bible job (…)". Seed basis today: **$1.16-1.55 and 5-8 min per Style** (no bible job has been measured on this machine yet), so at
+  most about $17-23 for the 15 built-ins without parts.
+- The sim helper (`SimBibleBackend`) takes the template as the parts, through the real component check and sheet: $0.
+
+**4. Java (Since NEXT, additive; Steward constructs none of the changed records).**
+- `Bible.parts()`, a new last record component, and `Bible.hasParts()`. The 1.41.0 canonical constructor stays (21 arguments; it gives a
+  Claude-made bible its components as parts, any other none), as do 1.6.0's and 1.2.0's (`ApiStyleU5Test` finds each by reflection).
+- `Bibles.addParts(bibleId, version, owner)` -> `CompletableFuture<BibleJob>` and `Bibles.estimateParts()` -> `CompletableFuture<Estimate>`:
+  defaults that throw on an older API; the future fails when the helper lacks `bible.parts`.
+- `api-compat`: the 0.44.0 mod jar's whole api surface (2600 members) and the 0.44.0 apitest jar's references still resolve.
+- **Steward RC: not needed** under DEV MODE's rule (a Steward RC only when the API Steward calls changes). Steward calls `BibleRequest`,
+  `GroupRequest`, `DesignRequest` (`withBible`) and reads `BibleJob`/`Bible` ids; none of those changed shape. Steward's settlement
+  bibles are Claude-made (`seedPreset` null): they have their own parts, so their groups stay in set mode exactly as before. The
+  behaviour change Steward can see: a group or design naming a **built-in other than rustic** as its bible now gets the hybrid instead
+  of rustic's components. Steward does not do that (steward-mc greps: no `seedPreset`, no built-in ids passed as a bible).
+
+**5. Medieval's wall.** `PALETTE_PRESETS.medieval.wall` is `white_concrete` (was `white_terracotta`, which renders pink-beige: U4's
+"salmon"). wall_alt stays calcite (wall differs from wall_alt), the test house passes, and role fitness gives no warning. Regenerated:
+`mod/.../palettes-fallback.json`, `kit/test/fixtures/style-parity.json`. The ten older presets' goldens are unchanged (medieval is not in
+them). Cozy's plaster is white_terracotta too: left as authored (not in this slice's scope).
+
+**6. The UI.**
+- **Every Style is picked** (the Design tab no longer sends a Claude-made Style as set mode by its origin).
+- **"Use this style's parts"** (`StyleForm`, NEW mode; the kit twin `formApply ['parts', on]`, `formPartsOn`, view `parts`, `useParts`,
+  `partsOn`; parity fixture sequences for both):
+  - offered only when the picked Style has its own parts;
+  - on when picked for a Claude-made Style (set mode as before U5), off for every other Style (the hybrid default);
+  - on, with the Style's own materials, the request is `{bible, bibleVersion}` instead of the palette; a custom mix sends the palette
+    (the parts read the Style's roles), and the note says "Revert to use the parts";
+  - picking another Style resets it to that Style's default.
+- The Design editor's Style section shows it as a chip with a note ("set mode: its components and restraint" / "off: its look as
+  guidance (the default)") and a provenance line ("5 parts · added with Add parts… (based on medieval v1) · v1", "drafted with the
+  Style by Claude", "shipped with the kit"). Drafts keep the toggle; a draft from before U5 with a set-mode bible restores it on.
+- **The Style browser:** each card's detail says "Parts: N", or "No parts · Add parts… (+ New style)" (": on your copy" for a built-in;
+  "only its owner adds them" for a mod's). The "+ New style" menu has "Add parts to <Style>…" (or "Redraft the parts of…") with the
+  cost line.
+- **The Style editor:** a Parts row ("Parts: N · kept when you save", or "No parts · Add parts…" with the button for an edit; a copy
+  starts without parts).
+- **Add parts** (`AddPartsScreen`): what the job makes (the next version, or a copy of a built-in), then the helper's estimate, then
+  "Draft parts".
+
+**7. Gate (DEV MODE).**
+- **Units:** kit `node --test` (styles, the parity fixture, the whole suite); sidecar `npm run check` (`styles-u5.test.ts`; `groups.test.ts`
+  now uses rustic for its set-mode group); `./gradlew build --offline` (`ApiStyleU5Test`, `StyleFormTest` replaying the parts sequences).
+- **The instant lints** and `step-inputs check`.
+- **In game: `u5-ingame`** (`tools/gateu5.mjs ingame`; client, sim, $0):
+  - medieval's new wall;
+  - the hybrid brief path;
+  - Add parts through the sim, from the browser (a built-in -> its copy) and from the Style editor (a hand-made Style -> v2, v1
+    byte-unchanged);
+  - a mod's Style refused but for its owner;
+  - the parts toggle only for a Style with parts (off by default; on = set mode, its brief with the components);
+  - the test frame in the copy's roles built of white_concrete.
+- `u1-ingame` and `u2-ingame` expect medieval's new wall.

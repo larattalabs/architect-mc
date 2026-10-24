@@ -157,8 +157,13 @@ export interface BriefOptions {
   examples: string[];
   /** what the remix source is, if any */
   remix?: string;
-  /** (4b) the style bible copied into bible/ */
-  bible?: { id: string; version: number; name: string; roles: Record<string, string>; components: string[]; hasProse: boolean; restraint?: { heroMotifs: string[]; accentShareMax: number; detailDensity: string; windowsPerFacadeMin: number } | undefined };
+  /**
+   * (4b) the style bible copied into bible/. (Style unification U5a) `parts`: the Style has its own parts (components), so the
+   * design runs in set mode (components, restraint, "follow it"); without them it gets the hybrid: roles plus `hints` as guidance.
+   */
+  bible?: { id: string; version: number; name: string; roles: Record<string, string>; components: string[]; hasProse: boolean; restraint?: { heroMotifs: string[]; accentShareMax: number; detailDensity: string; windowsPerFacadeMin: number } | undefined; parts?: boolean | undefined; hints?: StyleHints | undefined };
+  /** (Style unification U5a) a materials-only request's Style: its shape hints, as guidance (never set mode) */
+  styleHints?: StyleHints | undefined;
   /** (5a) the kit has PLAYBOOK.md (the design playbook) */
   playbook?: boolean;
   /** (4b) renders of the group's finished earlier-wave items in neighbours/ */
@@ -274,9 +279,93 @@ export function massingFixPrompt(bp: string, problem: string, round: number, max
   return `The sidecar re-checked your massing with a fresh copy of the kit and it did not pass (round ${round} of ${max}):\n${problem}\n\nFix kit/designs/${bp}.mjs (only that file counts), run the build command from BRIEF.md until the check is OK, then end with a one-line summary.`;
 }
 
-/** The style-bible section of BRIEF.md (4b). */
+/**
+ * (Style unification U5a) A Style's shape hints: what a materials-only brief (and a Style without parts) gets as guidance. Only
+ * what the Style has; the default proportions are left out.
+ */
+export interface StyleHints {
+  id: string;
+  version: number;
+  name: string;
+  blurb?: string | undefined;
+  roofLanguage?: string | undefined;
+  silhouette?: string | undefined;
+  proportions?: Record<string, number> | undefined;
+  motifs?: string[] | undefined;
+}
+
+/** The kit's default proportions (kit/lib/bible.mjs DEFAULT_PROPORTIONS): a hint only says what differs. */
+export const DEFAULT_PROPORTIONS: Readonly<Record<string, number>> = { storey: 4, roofPitch: 1, overhang: 1, windowRhythm: 3, plinth: 1 };
+
+const PROPORTION_WORDS: Record<string, (v: number) => string> = {
+  storey: (v) => `storeys about ${v} blocks tall`,
+  roofPitch: (v) => (v === 0 ? 'flat roofs (pitch 0)' : `a roof pitch of about ${v} (1 is 45 degrees; ${v > 1 ? 'steeper' : 'lower'} than the default)`),
+  overhang: (v) => (v === 0 ? 'no eaves overhang' : `eaves overhanging about ${v} block${v === 1 ? '' : 's'}`),
+  windowRhythm: (v) => `a window about every ${v} blocks along a wall`,
+  plinth: (v) => (v === 0 ? 'no plinth' : `a plinth about ${v} block${v === 1 ? '' : 's'} high`),
+};
+
+/** A Style's hints from a bible.json or BibleInfo-like record (motifs as names; the default proportions dropped); undefined without any. */
+export function hintsOf(j: Record<string, unknown> | undefined, pin: { id: string; version: number }): StyleHints | undefined {
+  if (!j) return undefined;
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 300) : undefined);
+  const props: Record<string, number> = {};
+  const p = j.proportions && typeof j.proportions === 'object' ? (j.proportions as Record<string, unknown>) : {};
+  for (const k of Object.keys(PROPORTION_WORDS)) if (typeof p[k] === 'number' && p[k] !== DEFAULT_PROPORTIONS[k]) props[k] = p[k] as number;
+  const motifs = (Array.isArray(j.motifs) ? j.motifs : [])
+    .map((m) => (typeof m === 'string' ? m : typeof (m as { name?: unknown })?.name === 'string' ? (m as { name: string }).name : ''))
+    .filter((m) => m.trim())
+    .slice(0, 6);
+  const h: StyleHints = {
+    id: pin.id,
+    version: pin.version,
+    name: str(j.name) ?? pin.id,
+    ...(str(j.blurb) ? { blurb: str(j.blurb) } : {}),
+    ...(str(j.roofLanguage) ? { roofLanguage: str(j.roofLanguage) } : {}),
+    ...(str(j.silhouette) ? { silhouette: str(j.silhouette) } : {}),
+    ...(Object.keys(props).length ? { proportions: props } : {}),
+    ...(motifs.length ? { motifs } : {}),
+  };
+  return h.blurb || h.roofLanguage || h.silhouette || h.proportions || h.motifs ? h : undefined;
+}
+
+/**
+ * (Style unification U5a) The Style's look as guidance: "lean toward" its description, roof language, proportions, silhouette and
+ * motifs. Never set mode: no components, no "follow it over your own taste", no restraint check. Empty without hints.
+ */
+export function styleHintLines(h: StyleHints | undefined): string[] {
+  if (!h) return [];
+  const props = Object.entries(h.proportions ?? {}).map(([k, v]) => PROPORTION_WORDS[k]?.(v)).filter((x): x is string => !!x);
+  return [
+    `## The Style's look: ${h.name} (guidance)`,
+    '',
+    `The player picked the Style \`${h.id}\`. Its materials are above; here is the look it is known for. Lean toward it where it suits the type and the request; the shapes, the layout and the details stay your call.`,
+    ...(h.blurb ? [`- in short: ${h.blurb}`] : []),
+    ...(h.roofLanguage ? [`- roofs: lean toward ${h.roofLanguage}.`] : []),
+    ...(props.length ? [`- proportions: lean toward ${props.join('; ')}.`] : []),
+    ...(h.silhouette ? [`- silhouette: lean toward ${h.silhouette}.`] : []),
+    ...(h.motifs?.length ? [`- motifs it likes (use one or two where they fit, none is required): ${h.motifs.join(', ')}.`] : []),
+    '',
+  ];
+}
+
+/**
+ * The style-bible section of BRIEF.md (4b). (Style unification U5a) Set mode (the components, "follow it over your own taste", the
+ * restraint) only for a Style with its own parts; a Style without them gets its roles as the materials and its hints as guidance.
+ */
 export function bibleSection(b: NonNullable<BriefOptions['bible']>, bp: string): string[] {
   const roles = Object.entries(b.roles).map(([k, v]) => `\`${k}\` ${v.replace(/^minecraft:/, '')}`).join(', ');
+  if (b.parts === false) {
+    return [
+      `## The Style: ${b.name} (\`${b.id}\` v${b.version})`,
+      '',
+      `The Style's roles are the materials; it has no parts of its own, so the shapes and details are yours. \`bible/bible.json\` holds its roles${b.hasProse ? ' and `bible/bible.md` its description' : ''}.`,
+      `- **Roles are the materials.** Roles: ${roles}. Default palette = the Style's: \`import { palette } from '../lib/kit.mjs'; import { loadBible } from '../lib/bible.mjs'; const BIBLE = loadBible(new URL('../../bible/bible.json', import.meta.url));\` and \`export default function build({ palette: p = palette({ bible: BIBLE }), ... })\`. Every palette field comes from a role (\`p.wall\`, \`p.plaster\` = wall_alt, \`p.stoneTrim\` = trim, \`p.roofStairs\`, \`p.floor\`, \`p.frame\`, \`p.accentPlanks\`, \`p.light\`, \`p.pane\`, \`p.foundation\`, \`p.path\`, plus the wood and stone sets derived from them); extra roles are \`p.roles.<name>\`.`,
+      `- Keep the Style's files as they are (the sidecar puts them back before its check); \`kit/designs/${bp}.mjs\` imports \`../../bible/bible.json\`.`,
+      '',
+      ...styleHintLines(b.hints),
+    ];
+  }
   return [
     `## The style bible: ${b.name} (\`${b.id}\` v${b.version})`,
     '',
@@ -355,6 +444,8 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     ...contextSection(req.context),
     ...(bound ? massingBindingSection(bound.record, m) : []),
     ...(opts.bible ? bibleSection(opts.bible, bp) : []),
+    // (Style unification U5a) a materials-only request: the Style's hints as guidance (the hybrid default; never set mode)
+    ...(!opts.bible && req.palette !== undefined ? styleHintLines(opts.styleHints) : []),
     ...(req.effort === 'small' ? smallSection() : []),
     ...(opts.neighbours?.length
       ? [

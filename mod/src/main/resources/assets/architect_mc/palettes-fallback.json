@@ -285,7 +285,7 @@
       "roof": "spruce",
       "accent": "spruce",
       "roles": {
-        "wall": "minecraft:white_terracotta",
+        "wall": "minecraft:white_concrete",
         "wall_alt": "minecraft:calcite",
         "trim": "minecraft:smooth_stone",
         "roof": "minecraft:spruce_planks",

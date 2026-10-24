@@ -91,7 +91,6 @@ public final class DesignFeature {
 	public static CompletableFuture<dev.larattalabs.architect.api.Bible> saveStyle(@Nullable String name) {
 		DesignForm f = form;
 		return saveStyle(f.styleForm, name, () -> {
-			f.bible = null;
 			f.styleText.clear();
 			f.ownWordsMode = false;
 			f.sendError = null;

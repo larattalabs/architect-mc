@@ -126,8 +126,8 @@ class StyleLookTest {
 		assertTrue(cards.get(0).canEdit() && cards.get(1).canEdit());
 		assertFalse(cards.get(2).canEdit(), "built-in: duplicate only");
 		assertFalse(cards.get(3).canEdit(), "a mod's: duplicate only");
-		assertEquals(List.of("Yours · made by hand · v2", "Based on Rustic v1", "Suggests: Chimney, Porch", "Used by 3 of your designs"), cards.get(0)
-			.details());
+		assertEquals(List.of("Yours · made by hand · v2", "No parts · Add parts… (+ New style)", "Based on Rustic v1", "Suggests: Chimney, Porch",
+			"Used by 3 of your designs"), cards.get(0).details());
 		assertTrue(cards.get(3).details().get(0).startsWith("Steward's settlement Style"));
 		assertEquals("Not used by your designs yet", cards.get(2).details().get(cards.get(2).details().size() - 1));
 		// the archived one stays only while it is the picked one
@@ -136,7 +136,7 @@ class StyleLookTest {
 		List<Bible> all = StyleCatalog.withBuiltins(List.of(mine), Palettes.FALLBACK);
 		assertEquals(1 + Palettes.FALLBACK.presets().size(), all.size());
 		Bible med = all.stream().filter(b -> b.id().equals("medieval")).findFirst().orElseThrow();
-		assertTrue(med.builtin() && !med.editable() && med.roles().get("wall").equals("minecraft:white_terracotta") && !med.tags().isEmpty());
+		assertTrue(med.builtin() && !med.editable() && med.roles().get("wall").equals("minecraft:white_concrete") && !med.tags().isEmpty());
 		assertTrue(StyleCatalog.usage(List.of()).isEmpty());
 	}
 }

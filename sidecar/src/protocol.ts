@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -689,6 +689,12 @@ export const BibleInfo = z.object({
   blurb: z.string().optional().describe('(U1) one line for the Style browser'),
   basedOn: BiblePin.optional().describe('(U1) the Style it started from (a duplicate, or a hand edit of a built-in)'),
   origin: z.enum(['builtin', 'claude', 'hand']).optional().describe('(U1) who made it: a built-in Style, a bible job (claude), or bible.save (hand)'),
+  // (Style unification U5) its own parts, and the shape hints a materials-only design gets as guidance
+  parts: z.array(z.string()).optional().describe("(U5) the Style's OWN parts (components): what set mode uses; empty = none (a built-in other than rustic, a hand-made Style without added parts). A Style without parts never runs set mode"),
+  roofLanguage: z.string().optional().describe('(U5) shape hint'),
+  silhouette: z.string().optional().describe('(U5) shape hint'),
+  proportions: z.record(z.string(), z.number()).optional().describe('(U5) shape hint: storey, roofPitch, overhang, windowRhythm, plinth'),
+  motifs: z.array(z.string()).optional().describe('(U5) shape hint: the motif names'),
 });
 export type BibleInfo = z.infer<typeof BibleInfo>;
 
@@ -702,7 +708,10 @@ export const BibleJob = z.object({
   kind: z.enum(['request', 'revise']),
   bibleId: BibleId.describe('the bible it makes (request: reserved at once) or revises'),
   version: z.number().int().min(1).describe('the version it makes'),
-  request: BibleRequest.extend({ notes: z.string().max(4000).optional() }),
+  request: BibleRequest.extend({
+    notes: z.string().max(4000).optional(),
+    partsOf: BiblePin.optional().describe("(U5b, bible.parts) the Style whose parts this job drafts: its roles and hints are kept, no drafting pass"),
+  }),
   status: BibleJobStatus,
   step: z.string(),
   error: z.string().optional(),
@@ -1107,7 +1116,22 @@ export const DesignEstimateMsg = z
   .refine((m) => [m.group, m.request, m.polish, m.mix].filter((x) => x !== undefined).length === 1, 'send exactly one of group, request, polish and mix');
 export const BibleRequestMsg = z.object({ ...envelope('bible.request'), request: BibleRequest });
 export const BibleReviseMsg = z.object({ ...envelope('bible.revise'), id: BibleId, notes: z.string().trim().min(1).max(4000), model: ModelId.optional(), budgetUsd: BudgetUsd.optional(), critique: z.object({ mode: z.enum(['off', 'report']), model: ModelId.optional() }).optional().describe('(5a) a sheet critique at the end') });
-export const BibleEstimateMsg = z.object({ ...envelope('bible.estimate'), request: BibleRequest.optional() });
+export const BibleEstimateMsg = z.object({ ...envelope('bible.estimate'), request: BibleRequest.optional(), parts: z.boolean().optional().describe('(U5b) an "Add parts" job (bible.parts): the components pass only') });
+/**
+ * (Style unification U5b, feature `bible.parts`) "Add parts…": a bible job that drafts a component set (parts) for an existing Style,
+ * seeded from it: its roles, shape hints, tags and owner are kept (no drafting pass), and the job writes a NEW VERSION of the same
+ * Style. The player's Style: by the player (no owner, or its UUID). A mod's: only by that owner. A built-in Style: a new hand-made
+ * copy of it (`basedOn` the built-in) gets the parts, the built-in stays the kit's. Acks { jobId, bibleId, version, from, copy }.
+ */
+export const BiblePartsMsg = z.object({
+  ...envelope('bible.parts'),
+  bibleId: BibleId.describe('the Style to add parts to (its latest version)'),
+  version: z.number().int().min(1).optional().describe('the version the caller looked at: refused when it is no longer the latest'),
+  owner: Owner.optional().describe('who asks; absent = the player'),
+  model: ModelId.optional(),
+  budgetUsd: BudgetUsd.optional(),
+  opKey: OpKey.optional(),
+});
 export const BibleCancelMsg = z.object({ ...envelope('bible.cancel'), jobId: Id });
 /** (6c 0a, C9) The bible job / group a caller requested with an operation key (any state); absent = never received. */
 export const BibleByKeyMsg = z.object({ ...envelope('bible.byKey'), owner: Owner.optional(), opKey: OpKey });
@@ -1342,6 +1366,7 @@ export const ClientMessage = z.discriminatedUnion('type', [
   BibleArchiveMsg,
   BibleSaveMsg,
   BibleCheckMsg,
+  BiblePartsMsg,
   EntryVersionsMsg,
   EntryDeltaMsg,
   EntryRevertMsg,

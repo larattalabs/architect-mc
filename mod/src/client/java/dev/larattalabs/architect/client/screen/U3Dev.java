@@ -101,7 +101,7 @@ public final class U3Dev {
 				if (cur == null) {
 					StyleForm sf = forWhat.equals("variant") && LibraryFeature.variantForm() != null ? LibraryFeature.variantForm().style()
 						: DesignFeature.form().styleForm;
-					cur = forWhat.equals("design") && DesignFeature.form().bible != null ? DesignFeature.form().bible : sf.base() == null ? null : sf.base().id();
+					cur = sf.base() == null ? null : sf.base().id();
 				}
 				StyleBrowserScreen.open(cur, use(forWhat));
 				return state(mc);
